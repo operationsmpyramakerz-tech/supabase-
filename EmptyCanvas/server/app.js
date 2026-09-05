@@ -4993,11 +4993,12 @@ async function _sbUpdateOrdersByIdsWithQuantities(orderIds = [], basePatch = {},
   if (!ids.length) return [];
 
   const explicitQuantities = quantities && typeof quantities === "object" ? quantities : null;
-  const out = [];
+  const currentRows = await _sbOrderRowsByIds(ids).catch(() => []);
+  const rowById = new Map((currentRows || []).filter(Boolean).map((row) => [String(row?.id ?? ""), row]));
 
-  for (const id of ids) {
+  return await _mapWithConcurrency(ids, 16, async (id) => {
     const patch = { ...basePatch };
-    const row = await supabaseDb.selectById(_sbOrdersTable(), id).catch(() => null);
+    const row = rowById.get(String(id)) || null;
 
     // If this update includes a receipt number, append it to the existing Supabase
     // receipt_number value instead of overwriting it. This restores the old Notion
@@ -5057,9 +5058,28 @@ async function _sbUpdateOrdersByIdsWithQuantities(orderIds = [], basePatch = {},
       }
     }
 
-    out.push(await supabaseDb.updateById(_sbOrdersTable(), id, patch));
-  }
-  return out;
+    return await supabaseDb.updateById(_sbOrdersTable(), id, patch);
+  });
+}
+
+async function _mapWithConcurrency(items = [], concurrency = 12, mapper = async (item) => item) {
+  const list = Array.isArray(items) ? items : [];
+  if (!list.length) return [];
+  const limit = Math.max(1, Math.min(list.length, Number(concurrency) || 1));
+  const results = new Array(list.length);
+  let cursor = 0;
+
+  const worker = async () => {
+    while (true) {
+      const index = cursor;
+      cursor += 1;
+      if (index >= list.length) return;
+      results[index] = await mapper(list[index], index);
+    }
+  };
+
+  await Promise.all(Array.from({ length: limit }, () => worker()));
+  return results;
 }
 
 async function _sbInvalidateOrdersCaches(req = null) {
@@ -22127,25 +22147,24 @@ app.post(
           .map((x) => String(x || "").trim())
           .filter(Boolean);
 
-        const uploadedReceiptFiles = [];
-        for (let index = 0; index < receiptDataUrls.length; index += 1) {
-          const dataUrl = receiptDataUrls[index];
-          const fallbackName = `delivery-receipt-${index + 1}.jpg`;
-          const rawName = String(receiptNames[index] || receiptNames[0] || fallbackName).trim() || fallbackName;
-          const cleanName = rawName.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 120) || fallbackName;
-          const extMatch = cleanName.match(/\.([a-zA-Z0-9]+)$/);
-          const safeExt = extMatch?.[1] ? extMatch[1].toLowerCase() : "jpg";
-          const blobName = `delivery-receipts/${Date.now()}-${index + 1}-${Math.random().toString(36).slice(2, 10)}.${safeExt}`;
-          try {
+        let uploadedReceiptFiles = [];
+        try {
+          uploadedReceiptFiles = await Promise.all(receiptDataUrls.map(async (dataUrl, index) => {
+            const fallbackName = `delivery-receipt-${index + 1}.jpg`;
+            const rawName = String(receiptNames[index] || receiptNames[0] || fallbackName).trim() || fallbackName;
+            const cleanName = rawName.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 120) || fallbackName;
+            const extMatch = cleanName.match(/\.([a-zA-Z0-9]+)$/);
+            const safeExt = extMatch?.[1] ? extMatch[1].toLowerCase() : "jpg";
+            const blobName = `delivery-receipts/${Date.now()}-${index + 1}-${Math.random().toString(36).slice(2, 10)}.${safeExt}`;
             const publicUrl = await uploadToBlobFromBase64(dataUrl, blobName);
-            uploadedReceiptFiles.push({ name: cleanName, url: publicUrl });
-          } catch (uploadErr) {
-            const uploadMessage =
-              String(uploadErr?.message || "").trim() === "SUPABASE_STORAGE_OR_BLOB_TOKEN_MISSING"
-                ? "Supabase Storage upload is not configured."
-                : "Failed to upload order receipt.";
-            return res.status(500).json({ error: uploadMessage });
-          }
+            return { name: cleanName, url: publicUrl };
+          }));
+        } catch (uploadErr) {
+          const uploadMessage =
+            String(uploadErr?.message || "").trim() === "SUPABASE_STORAGE_OR_BLOB_TOKEN_MISSING"
+              ? "Supabase Storage upload is not configured."
+              : "Failed to upload order receipt.";
+          return res.status(500).json({ error: uploadMessage });
         }
 
         const receiptEntries = uploadedReceiptFiles.length
@@ -22163,17 +22182,21 @@ app.post(
         if (receiptEntries.length) basePatch.order_receipt = JSON.stringify(receiptEntries);
 
         const beforeById = new Map((rowsBeforeUpdate || []).filter(Boolean).map((row) => [String(row?.id ?? ""), row]));
-        const updatedRows = [];
-        for (const id of ids) {
-          const beforeRow = beforeById.get(String(id)) || null;
-          const rowPatch = { ...basePatch };
-          if (rnText) {
-            rowPatch.receipt_number = _appendReceiptNumbersText(
-              beforeRow ? _sbExistingOrderReceiptNumber(beforeRow) : "",
-              rnText,
-            );
-          }
-          updatedRows.push(await supabaseDb.updateById(_sbOrdersTable(), id, rowPatch));
+        let updatedRows = [];
+        if (!rnText && typeof supabaseDb.updateByIds === "function") {
+          updatedRows = await supabaseDb.updateByIds(_sbOrdersTable(), ids, basePatch);
+        } else {
+          updatedRows = await _mapWithConcurrency(ids, 16, async (id) => {
+            const beforeRow = beforeById.get(String(id)) || null;
+            const rowPatch = { ...basePatch };
+            if (rnText) {
+              rowPatch.receipt_number = _appendReceiptNumbersText(
+                beforeRow ? _sbExistingOrderReceiptNumber(beforeRow) : "",
+                rnText,
+              );
+            }
+            return await supabaseDb.updateById(_sbOrdersTable(), id, rowPatch);
+          });
         }
 
         const updatedById = new Map((updatedRows || []).filter(Boolean).map((row) => [String(row?.id ?? ""), row]));
@@ -22186,22 +22209,69 @@ app.post(
         const stocktakingSyncResults = [];
         const stocktakingSyncErrors = [];
 
-        for (const id of ids) {
-          const beforeRow = beforeById.get(String(id)) || null;
-          const updatedRow = updatedById.get(String(id)) || (beforeRow ? { ...beforeRow, ...basePatch } : null);
-          if (!updatedRow) continue;
+        try {
+          const rowsForSync = ids
+            .map((id) => updatedById.get(String(id)) || (beforeById.get(String(id)) ? { ...beforeById.get(String(id)), ...basePatch } : null))
+            .filter(Boolean);
+          const serializedForSync = rowsForSync.map((row) => _sbSerializeOrderRow(row));
+          const enrichedForSync = await _sbEnrichOrderGrouping(serializedForSync).catch(() => serializedForSync);
+          const enrichedById = new Map(rowsForSync.map((row, index) => [String(row?.id ?? ""), enrichedForSync[index] || serializedForSync[index]]));
+          const [stocktakingRows, stocktakingSchemaKeys, ownerRow] = await Promise.all([
+            _sbStocktakingRows(),
+            _uaStocktakingColumnKeysFromOpenApi().catch(() => []),
+            rowsForSync[0] ? _sbResolveOrderOwnerTeamRow(rowsForSync[0]).catch(() => null) : Promise.resolve(null),
+          ]);
+          const stocktakingKeys = Array.from(new Set([
+            ...(_sbAllColumnKeys(stocktakingRows || []) || []),
+            ...(stocktakingSchemaKeys || []),
+          ].filter(Boolean)));
 
-          try {
-            const result = await _sbSyncArrivedOrderToStocktaking(updatedRow, {
-              wasArrivedLike: beforeRow ? _sbOrderFinalStatusName(_sbSerializeOrderRow(beforeRow)?.status) : false,
-            });
-            stocktakingSyncResults.push({ orderId: id, ...result });
-          } catch (syncErr) {
-            stocktakingSyncErrors.push({
-              orderId: id,
-              message: String(syncErr?.message || "Failed to sync Stocktaking row.").trim(),
-            });
+          const preparedResults = [];
+          for (const id of ids) {
+            const beforeRow = beforeById.get(String(id)) || null;
+            const updatedRow = updatedById.get(String(id)) || (beforeRow ? { ...beforeRow, ...basePatch } : null);
+            if (!updatedRow) continue;
+            try {
+              const result = await _sbSyncArrivedOrderToStocktaking(updatedRow, {
+                wasArrivedLike: beforeRow ? _sbOrderFinalStatusName(_sbSerializeOrderRow(beforeRow)?.status) : false,
+                stocktakingRows,
+                stocktakingKeys,
+                ownerRow,
+                enrichedItem: enrichedById.get(String(id)) || null,
+                prepareOnly: true,
+              });
+              preparedResults.push({ orderId: id, ...result });
+            } catch (syncErr) {
+              stocktakingSyncErrors.push({
+                orderId: id,
+                message: String(syncErr?.message || "Failed to prepare Stocktaking row.").trim(),
+              });
+            }
           }
+
+          const rowsToInsert = preparedResults.filter((item) => item && item.skipped === false && item.preparedRow);
+          if (rowsToInsert.length) {
+            const requiredColumns = Array.from(new Set(rowsToInsert.flatMap((item) => item.requiredColumns || []).filter(Boolean)));
+            const inserted = await _sbInsertStocktakingRowsSafe(rowsToInsert.map((item) => item.preparedRow), requiredColumns);
+            let insertedIndex = 0;
+            for (const item of preparedResults) {
+              if (!item || item.skipped !== false || !item.preparedRow) {
+                stocktakingSyncResults.push(item);
+                continue;
+              }
+              const created = inserted?.[insertedIndex] || null;
+              insertedIndex += 1;
+              const { preparedRow, requiredColumns: _requiredColumns, ...cleanResult } = item;
+              stocktakingSyncResults.push({ ...cleanResult, createdId: created?.id || null });
+            }
+          } else {
+            stocktakingSyncResults.push(...preparedResults);
+          }
+        } catch (syncErr) {
+          stocktakingSyncErrors.push({
+            orderId: ids[0] || null,
+            message: String(syncErr?.message || "Failed to sync Stocktaking rows.").trim(),
+          });
         }
 
         await _sbInvalidateOrdersCaches();
@@ -30348,6 +30418,44 @@ async function _sbInsertStocktakingRowSafe(row = {}, requiredColumns = []) {
   throw err;
 }
 
+async function _sbInsertStocktakingRowsSafe(rows = [], requiredColumns = []) {
+  let payload = (Array.isArray(rows) ? rows : [])
+    .filter((row) => row && typeof row === "object")
+    .map((row) => _sbCleanInsertRow(row));
+  if (!payload.length) return [];
+
+  const required = new Set((Array.isArray(requiredColumns) ? requiredColumns : []).filter(Boolean));
+  const removed = [];
+
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    try {
+      if (typeof supabaseDb.insertMany === "function") {
+        return await supabaseDb.insertMany(_sbStocktakingTable(), payload);
+      }
+      return await _mapWithConcurrency(payload, 16, (row) => supabaseDb.insert(_sbStocktakingTable(), row));
+    } catch (error) {
+      const missingColumn = _sbStocktakingMissingColumnName(error);
+      if (!missingColumn || !payload.some((row) => Object.prototype.hasOwnProperty.call(row, missingColumn))) throw error;
+      if (required.has(missingColumn)) {
+        const err = new Error(`Missing required Stocktaking column: ${missingColumn}.`);
+        err.status = 400;
+        err.cause = error;
+        throw err;
+      }
+      payload = payload.map((row) => {
+        const next = { ...row };
+        delete next[missingColumn];
+        return next;
+      });
+      removed.push(missingColumn);
+    }
+  }
+
+  const err = new Error(`Failed to insert Stocktaking rows after removing unsupported column(s): ${removed.join(", ")}`);
+  err.status = 500;
+  throw err;
+}
+
 function _sbStocktakingRowsMatchOrderPayload(row = {}, payload = {}) {
   const qtyColumn = String(payload?.quantityColumn || "").trim();
   if (!qtyColumn || !Object.prototype.hasOwnProperty.call(row || {}, qtyColumn)) return false;
@@ -30371,8 +30479,11 @@ function _sbStocktakingRowsMatchOrderPayload(row = {}, payload = {}) {
   return true;
 }
 
-async function _sbBuildArrivedOrderStocktakingPayload(orderRow = {}) {
-  const item = _sbSerializeOrderRow(orderRow);
+async function _sbBuildArrivedOrderStocktakingPayload(orderRow = {}, options = {}) {
+  const serializedItem = _sbSerializeOrderRow(orderRow);
+  const item = options?.enrichedItem && typeof options.enrichedItem === "object"
+    ? options.enrichedItem
+    : serializedItem;
   const orderType = _canonicalOrderTypeLabel(item?.orderType || "");
   const orderTypeKey = _normKeyOrderType(orderType);
   if (
@@ -30382,18 +30493,27 @@ async function _sbBuildArrivedOrderStocktakingPayload(orderRow = {}) {
     return null;
   }
 
-  const ownerRow = await _sbResolveOrderOwnerTeamRow(orderRow);
+  const ownerRow = options?.ownerRow && typeof options.ownerRow === "object"
+    ? options.ownerRow
+    : await _sbResolveOrderOwnerTeamRow(orderRow);
   const schoolName = String(_sbString(_sbValueForLabel(ownerRow || {}, "School")) || "").trim();
   if (!schoolName) {
     throw new Error("Could not determine the requester school/stocktaking column.");
   }
 
-  const rows = await _sbStocktakingRows();
-  const rowKeys = _sbAllColumnKeys(rows || []);
-  const schemaKeys = await _uaStocktakingColumnKeysFromOpenApi().catch(() => []);
-  const keys = Array.from(new Set([...(rowKeys || []), ...(schemaKeys || [])].filter(Boolean)));
+  const rows = Array.isArray(options?.stocktakingRows)
+    ? options.stocktakingRows
+    : await _sbStocktakingRows();
+  let resolvedKeys = Array.isArray(options?.stocktakingKeys)
+    ? options.stocktakingKeys
+    : null;
+  if (!Array.isArray(resolvedKeys)) {
+    const rowKeys = _sbAllColumnKeys(rows || []);
+    const schemaKeys = await _uaStocktakingColumnKeysFromOpenApi().catch(() => []);
+    resolvedKeys = Array.from(new Set([...(rowKeys || []), ...(schemaKeys || [])].filter(Boolean)));
+  }
   const quantityColumn =
-    _sbDetectStocktakingQuantityColumnFromKeys(keys, schoolName) ||
+    _sbDetectStocktakingQuantityColumnFromKeys(resolvedKeys, schoolName) ||
     _sbStocktakingColumnKey(schoolName);
 
   if (!quantityColumn) {
@@ -30439,7 +30559,9 @@ async function _sbBuildArrivedOrderStocktakingPayload(orderRow = {}) {
   const receiptPhotosJson = receiptPhotos.length ? JSON.stringify(receiptPhotos) : null;
 
   const createdFromProposal = /^created\s+from\s+proposal\s*:/i.test(String(item.issueDescription || "").trim());
-  const proposalKitTag = String(item.kitTag || "").trim() || (createdFromProposal ? "Direct components" : "");
+  const proposalKitTag = createdFromProposal
+    ? (String(item.kitTag || "").trim() || "Direct components")
+    : "";
   const componentTag = String(item.productTag || "").trim() || "";
   const stockTag = proposalKitTag || (
     orderTypeKey === _normKeyOrderType("Withdraw Products")
@@ -30449,7 +30571,7 @@ async function _sbBuildArrivedOrderStocktakingPayload(orderRow = {}) {
 
   return {
     rows,
-    keys,
+    keys: resolvedKeys,
     quantityColumn,
     quantity,
     orderType,
@@ -30470,7 +30592,7 @@ async function _sbBuildArrivedOrderStocktakingPayload(orderRow = {}) {
 }
 
 async function _sbSyncArrivedOrderToStocktaking(orderRow = {}, options = {}) {
-  const payload = await _sbBuildArrivedOrderStocktakingPayload(orderRow);
+  const payload = await _sbBuildArrivedOrderStocktakingPayload(orderRow, options);
   if (!payload) return { skipped: true, reason: "unsupported-order-type" };
 
   const keys = payload.keys || [];
@@ -30502,7 +30624,7 @@ async function _sbSyncArrivedOrderToStocktaking(orderRow = {}, options = {}) {
   setFirstExisting(["product_url", "Product URL", "url", "URL", "item_url", "Item URL"], payload.productUrl || null, "product_url");
   setFirstExisting(["unity_price", "unit_price", "Unity Price", "Unit Price", "one_piece_price"], payload.unitPrice, "unit_price");
   setFirstExisting(["tag", "Tag", "tags", "Tags"], payload.stockTag, "tag");
-  setFirstExisting(["component_tag", "Component Tag", "product_tag", "Product Tag"], payload.componentTag || null, "component_tag");
+  setFirstExisting(["product_tag", "Product Tag", "component_tag", "Component Tag"], payload.componentTag || null, "product_tag");
   setFirstExisting(["kit_tag", "Kit Tag", "source_kit", "Source Kit", "kit_name", "Kit Name"], payload.kitTag || null, "kit_tag");
   setFirstExisting(["order_type", "Order Type", "type", "Type"], payload.orderType || null, "order_type");
   setFirstExisting(["receipt_number", "Receipt Number", "store_receipt_number", "Store Receipt Number", "receipt", "Receipt"], payload.receiptText || null, "receipt_number");
@@ -30511,7 +30633,7 @@ async function _sbSyncArrivedOrderToStocktaking(orderRow = {}, options = {}) {
   else if (!keys.length && payload.orderId) row.source_order_id = payload.orderId;
   if (sourceOrderNumberColumn && payload.orderNumber) {
     const orderColumnCanon = _sbCanon(sourceOrderNumberColumn);
-    row[sourceOrderNumberColumn] = orderColumnCanon.includes("orderid")
+    row[sourceOrderNumberColumn] = (orderColumnCanon.includes("orderid") || orderColumnCanon.includes("sourceordernumber"))
       ? payload.orderNumber
       : (payload.orderNumberValue ?? payload.orderNumber);
   }
@@ -30520,6 +30642,16 @@ async function _sbSyncArrivedOrderToStocktaking(orderRow = {}, options = {}) {
   setFirstExisting(["created_at", "Created at", "created_time", "Created time", "notion_created_time"], new Date().toISOString(), "");
 
   row[payload.quantityColumn] = payload.quantity;
+
+  if (options?.prepareOnly) {
+    return {
+      skipped: false,
+      preparedRow: row,
+      requiredColumns: [payload.quantityColumn],
+      quantityColumn: payload.quantityColumn,
+      quantity: payload.quantity,
+    };
+  }
 
   const created = await _sbInsertStocktakingRowSafe(row, [payload.quantityColumn]);
   return { skipped: false, createdId: created?.id || null, quantityColumn: payload.quantityColumn, quantity: payload.quantity };
@@ -30783,12 +30915,41 @@ function _sbStocktakingOrderNumberKey(value = "") {
 
 async function _sbEnrichStocktakingItemsFromOrders(rawRows = [], items = []) {
   const itemList = Array.isArray(items) ? items : [];
+  if (!itemList.length) return itemList;
+
+  // Component-tag sorting must always come from the Products table, even for
+  // older Stocktaking rows that were created before product_tag was stored.
+  let products = [];
+  try { products = await _sbProductsList(); } catch { products = []; }
+  const productByName = new Map();
+  const productByUrl = new Map();
+  for (const product of products || []) {
+    const nameKey = normKey(product?.name || "");
+    const urlKey = String(product?.url || "").trim().toLowerCase();
+    if (nameKey && !productByName.has(nameKey)) productByName.set(nameKey, product);
+    if (urlKey && !productByUrl.has(urlKey)) productByUrl.set(urlKey, product);
+  }
+
+  const productEnrichedItems = itemList.map((item) => {
+    const product = productByName.get(normKey(item?.productName || item?.name || ""))
+      || productByUrl.get(String(item?.url || "").trim().toLowerCase())
+      || null;
+    const productTags = Array.isArray(product?.tags)
+      ? product.tags.map((tag) => String(tag || "").trim()).filter(Boolean)
+      : [];
+    const componentTag = String(item?.componentTag || "").trim()
+      || productTags[0]
+      || item?.tag?.name
+      || "Untagged";
+    return { ...item, componentTag };
+  });
+
   const rawById = new Map((Array.isArray(rawRows) ? rawRows : []).map((row) => [
     String(_sbGet(row, ["id", "ID", "notion_id", "Notion ID"]) ?? "").trim(),
     row,
   ]));
 
-  const refs = itemList.map((item) => {
+  const refs = productEnrichedItems.map((item) => {
     const raw = rawById.get(String(item?.id || "").trim()) || {};
     const sourceOrderRowId =
       String(item?.sourceOrderRowId || _sbGet(raw, ["source_order_id", "Source Order ID", "source_order", "Source Order", "order_row_id", "Order Row ID"]) || "").trim();
@@ -30801,32 +30962,50 @@ async function _sbEnrichStocktakingItemsFromOrders(rawRows = [], items = []) {
       item,
       sourceOrderRowId,
       sourceOrderNumber,
+      receiptUrls: (Array.isArray(item?.receiptPhotos) ? item.receiptPhotos : [])
+        .map((photo) => String(photo?.url || "").trim())
+        .filter(Boolean),
       productKey: normKey(item?.productName || item?.name || ""),
     };
   });
 
-  if (!refs.some((ref) => ref.sourceOrderRowId || ref.sourceOrderNumber)) return itemList;
+  if (!refs.some((ref) => ref.sourceOrderRowId || ref.sourceOrderNumber || ref.receiptUrls.length)) return productEnrichedItems;
 
   const orderRows = await _sbSelectOrdersRows({ approvedOnly: false }).catch(() => []);
-  if (!Array.isArray(orderRows) || !orderRows.length) return itemList;
+  if (!Array.isArray(orderRows) || !orderRows.length) return productEnrichedItems;
 
+  const serializedOrderItems = orderRows.map((row) => _sbSerializeOrderRow(row));
+  const enrichedOrderItems = await _sbEnrichOrderGrouping(serializedOrderItems).catch(() => serializedOrderItems);
   const byRowId = new Map();
   const byOrderProduct = new Map();
-  for (const orderRow of orderRows) {
-    const serialized = _sbSerializeOrderRow(orderRow);
+  const byReceiptProduct = new Map();
+  for (let index = 0; index < orderRows.length; index += 1) {
+    const orderRow = orderRows[index];
+    const serialized = enrichedOrderItems[index] || serializedOrderItems[index] || _sbSerializeOrderRow(orderRow);
     const rowId = String(_sbOrderGet(orderRow, ["id", "ID"]) ?? "").trim();
     if (rowId) byRowId.set(rowId, { raw: orderRow, item: serialized });
 
     const orderKey = _sbStocktakingOrderNumberKey(serialized?.orderId || serialized?.orderIdNumber);
     const productKey = normKey(serialized?.productName || "");
     if (orderKey && productKey) byOrderProduct.set(`${orderKey}|${productKey}`, { raw: orderRow, item: serialized });
+    const receiptUrls = Array.isArray(serialized?.orderReceiptUrls) ? serialized.orderReceiptUrls : [];
+    for (const receiptUrl of receiptUrls) {
+      const url = String(receiptUrl || "").trim();
+      if (url && productKey) byReceiptProduct.set(`${url}|${productKey}`, { raw: orderRow, item: serialized });
+    }
   }
 
-  return refs.map(({ item, sourceOrderRowId, sourceOrderNumber, productKey }) => {
+  return refs.map(({ item, sourceOrderRowId, sourceOrderNumber, receiptUrls, productKey }) => {
     let matched = sourceOrderRowId ? byRowId.get(sourceOrderRowId) : null;
     if (!matched && sourceOrderNumber && productKey) {
       const orderKey = _sbStocktakingOrderNumberKey(sourceOrderNumber);
       if (orderKey) matched = byOrderProduct.get(`${orderKey}|${productKey}`) || null;
+    }
+    if (!matched && productKey && receiptUrls.length) {
+      for (const receiptUrl of receiptUrls) {
+        matched = byReceiptProduct.get(`${receiptUrl}|${productKey}`) || null;
+        if (matched) break;
+      }
     }
     if (!matched?.item) return item;
 
@@ -30834,7 +31013,9 @@ async function _sbEnrichStocktakingItemsFromOrders(rawRows = [], items = []) {
     const orderType = _canonicalOrderTypeLabel(orderItem.orderType || "");
     const orderTypeKey = _normKeyOrderType(orderType);
     const createdFromProposal = /^created\s+from\s+proposal\s*:/i.test(String(orderItem.issueDescription || "").trim());
-    const proposalKitTag = String(orderItem.kitTag || "").trim() || (createdFromProposal ? "Direct components" : "");
+    const proposalKitTag = createdFromProposal
+      ? (String(orderItem.kitTag || "").trim() || "Direct components")
+      : "";
     const stockTag = proposalKitTag || (
       orderTypeKey === _normKeyOrderType("Withdraw Products")
         ? "Withdrawal Components"
@@ -31700,7 +31881,9 @@ app.get(
   "/api/stock",
   requireAuth,
   requirePage("Stocktaking"),
-  cachedJsonRoute(2 * 60, (req) => `cache:api:stock:${cacheKeySafe(`${req.session?.username || ""}:${req.query?.column || ""}`)}:v4`),
+  cachedJsonRoute(2 * 60, (req) => String(req.query?._fresh || "") === "1"
+    ? ""
+    : `cache:api:stock:${cacheKeySafe(`${req.session?.username || ""}:${req.query?.column || ""}`)}:v5`),
   async (req, res) => {
     if (!_sbStocktakingEnabled() && (!teamMembersDatabaseId || !stocktakingDatabaseId)) {
       return res
