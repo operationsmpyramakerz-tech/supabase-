@@ -30217,8 +30217,8 @@ function _sbStocktakingText(value) {
 
 function _stockMovementTagColor(name = "", fallback = "default") {
   const canon = _sbCanon(name);
-  if (canon === "requestproducts" || canon === "requestproduct") return "green";
-  if (canon === "withdrawproducts" || canon === "withdrawproduct" || canon === "withdrawalproducts" || canon === "withdrawalproduct") return "red";
+  if (["requestproducts", "requestproduct", "requestcomponents", "requestcomponent"].includes(canon)) return "green";
+  if (["withdrawproducts", "withdrawproduct", "withdrawalproducts", "withdrawalproduct", "withdrawcomponents", "withdrawcomponent", "withdrawalcomponents", "withdrawalcomponent"].includes(canon)) return "red";
   return fallback || "default";
 }
 
@@ -30355,8 +30355,8 @@ function _sbStocktakingRowsMatchOrderPayload(row = {}, payload = {}) {
   const rowProduct = _sbStocktakingText(_sbGet(row, ["product_name", "Product Name", "product", "Product", "name", "Name", "component", "Component"]));
   if (payload?.productName && rowProduct && normKey(rowProduct) !== normKey(payload.productName)) return false;
 
-  const rowTag = _sbStocktakingText(_sbGet(row, ["tag", "Tag", "tags", "Tags", "order_type", "Order Type", "type", "Type"]));
-  if (payload?.orderType && rowTag && _normKeyOrderType(rowTag) !== _normKeyOrderType(payload.orderType)) return false;
+  const rowTag = _sbStocktakingText(_sbGet(row, ["tag", "Tag", "tags", "Tags"]));
+  if (payload?.stockTag && rowTag && normKey(rowTag) !== normKey(payload.stockTag)) return false;
 
   const rowReceipt = _normalizeMultilineText(
     _sbStocktakingText(_sbGet(row, ["receipt_number", "Receipt Number", "store_receipt_number", "Store Receipt Number", "receipt", "Receipt", "order_receipt", "Order Receipt"])),
@@ -30426,18 +30426,31 @@ async function _sbBuildArrivedOrderStocktakingPayload(orderRow = {}) {
     "",
   );
 
+  const createdFromProposal = /^created\s+from\s+proposal\s*:/i.test(String(item.issueDescription || "").trim());
+  const proposalKitTag = String(item.kitTag || "").trim() || (createdFromProposal ? "Direct components" : "");
+  const componentTag = String(item.productTag || "").trim() || "";
+  const stockTag = proposalKitTag || (
+    orderTypeKey === _normKeyOrderType("Withdraw Products")
+      ? "Withdrawal Components"
+      : "Request Components"
+  );
+
   return {
     rows,
     keys,
     quantityColumn,
     quantity,
     orderType,
+    stockTag,
+    componentTag,
+    kitTag: proposalKitTag || null,
     productName,
     productUrl: item.productUrl || _sbExtractUrl(_sbOrderGet(orderRow, ["product_url", "Product URL", "url", "URL"])) || "",
     unitPrice: Number.isFinite(Number(item.unitPrice)) ? Number(item.unitPrice) : null,
     receiptText,
     orderId: String(_sbOrderGet(orderRow, ["id", "ID"]) ?? "").trim(),
     orderNumber: item.orderId || null,
+    orderNumberValue: Number.isFinite(Number(item.orderIdNumber)) ? Number(item.orderIdNumber) : null,
     ownerName: item.createdByName || _sbOrderOwnerName(orderRow) || "",
     ownerSchool: schoolName,
   };
@@ -30449,7 +30462,7 @@ async function _sbSyncArrivedOrderToStocktaking(orderRow = {}, options = {}) {
 
   const keys = payload.keys || [];
   const sourceOrderColumn = _sbFindStocktakingKey(keys, ["source_order_id", "Source Order ID", "source_order", "Source Order", "order_row_id", "Order Row ID"]);
-  const sourceOrderNumberColumn = _sbFindStocktakingKey(keys, ["order_id", "Order ID", "order_number", "Order Number"]);
+  const sourceOrderNumberColumn = _sbFindStocktakingKey(keys, ["source_order_number", "Source Order Number", "order_id", "Order ID", "order_number", "Order Number"]);
 
   const existingRows = Array.isArray(payload.rows) ? payload.rows : [];
   if (sourceOrderColumn && payload.orderId) {
@@ -30475,11 +30488,19 @@ async function _sbSyncArrivedOrderToStocktaking(orderRow = {}, options = {}) {
 
   setFirstExisting(["product_url", "Product URL", "url", "URL", "item_url", "Item URL"], payload.productUrl || null, "product_url");
   setFirstExisting(["unity_price", "unit_price", "Unity Price", "Unit Price", "one_piece_price"], payload.unitPrice, "unit_price");
-  setFirstExisting(["tag", "Tag", "tags", "Tags", "order_type", "Order Type", "type", "Type"], payload.orderType, "tag");
+  setFirstExisting(["tag", "Tag", "tags", "Tags"], payload.stockTag, "tag");
+  setFirstExisting(["component_tag", "Component Tag", "product_tag", "Product Tag"], payload.componentTag || null, "component_tag");
+  setFirstExisting(["kit_tag", "Kit Tag", "source_kit", "Source Kit", "kit_name", "Kit Name"], payload.kitTag || null, "kit_tag");
+  setFirstExisting(["order_type", "Order Type", "type", "Type"], payload.orderType || null, "order_type");
   setFirstExisting(["receipt_number", "Receipt Number", "store_receipt_number", "Store Receipt Number", "receipt", "Receipt", "order_receipt", "Order Receipt"], payload.receiptText || null, "receipt_number");
   if (sourceOrderColumn) row[sourceOrderColumn] = payload.orderId;
   else if (!keys.length && payload.orderId) row.source_order_id = payload.orderId;
-  if (sourceOrderNumberColumn && payload.orderNumber) row[sourceOrderNumberColumn] = payload.orderNumber;
+  if (sourceOrderNumberColumn && payload.orderNumber) {
+    const orderColumnCanon = _sbCanon(sourceOrderNumberColumn);
+    row[sourceOrderNumberColumn] = orderColumnCanon.includes("orderid")
+      ? payload.orderNumber
+      : (payload.orderNumberValue ?? payload.orderNumber);
+  }
   setFirstExisting(["team_member_name", "Team Member", "requester", "Requester", "created_by", "Created By"], payload.ownerName || null, "team_member_name");
   setFirstExisting(["school", "School", "stocktaking_column", "Stocktaking Column"], payload.ownerSchool || null, "school");
   setFirstExisting(["created_at", "Created at", "created_time", "Created time", "notion_created_time"], new Date().toISOString(), "");
@@ -30697,6 +30718,13 @@ function _sbSerializeStocktakingRow(row = {}, schoolNameOrColumn = "", options =
     _sbExtractUrl(_sbGet(row, ["item_url", "Item URL"])) ||
     null;
   const tagName = _sbStocktakingText(_sbGet(row, ["tag", "Tag", "tags", "Tags"])) || "Untagged";
+  const componentTag = _sbStocktakingText(_sbGet(row, ["component_tag", "Component Tag", "product_tag", "Product Tag"])) || null;
+  const kitTag = _sbStocktakingText(_sbGet(row, ["kit_tag", "Kit Tag", "source_kit", "Source Kit", "kit_name", "Kit Name"])) || null;
+  const sourceOrderRowId = _sbStocktakingText(_sbGet(row, ["source_order_id", "Source Order ID", "source_order", "Source Order", "order_row_id", "Order Row ID"])) || null;
+  const rawOrderNumber = _sbStocktakingText(_sbGet(row, ["source_order_number", "Source Order Number", "order_id", "Order ID", "order_number", "Order Number"])) || "";
+  const orderNumber = rawOrderNumber
+    ? (/^\d+$/.test(rawOrderNumber) ? `ORD-${rawOrderNumber}` : rawOrderNumber)
+    : null;
   const receiptPhotosRaw = _sbGet(row, [
     "receipt_photos", "Receipt Photos", "receipt_photo", "Receipt Photo",
     "receipt_images", "Receipt Images", "receipt_image", "Receipt Image",
@@ -30718,6 +30746,10 @@ function _sbSerializeStocktakingRow(row = {}, schoolNameOrColumn = "", options =
       .map((entry) => ({ name: entry.name || "Receipt photo", url: entry.url })),
     unitPrice: _sbStocktakingNum(_sbGet(row, ["unity_price", "unit_price", "Unity Price", "Unit Price", "one_piece_price"])),
     userName: _sbStocktakingText(_sbGet(row, ["user_name", "username", "User Name", "Username", "created_by", "Created By", "requested_by", "Requested By", "owner_name", "Owner Name", "employee", "Employee"])) || "Unknown user",
+    componentTag,
+    kitTag,
+    orderNumber,
+    sourceOrderRowId,
     inventory: inventoryColumn ? _sbNullableStocktakingNumber(row?.[inventoryColumn]) : null,
     defected: defectedColumn ? _sbNullableStocktakingNumber(row?.[defectedColumn]) : null,
     inventoryColumn: inventoryColumn || null,
@@ -30728,15 +30760,98 @@ function _sbSerializeStocktakingRow(row = {}, schoolNameOrColumn = "", options =
   };
 }
 
+function _sbStocktakingOrderNumberKey(value = "") {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const match = raw.match(/(?:ORD[-\s]*)?(\d+)/i);
+  return match ? String(Number(match[1])) : _sbCanon(raw);
+}
+
+async function _sbEnrichStocktakingItemsFromOrders(rawRows = [], items = []) {
+  const itemList = Array.isArray(items) ? items : [];
+  const rawById = new Map((Array.isArray(rawRows) ? rawRows : []).map((row) => [
+    String(_sbGet(row, ["id", "ID", "notion_id", "Notion ID"]) ?? "").trim(),
+    row,
+  ]));
+
+  const refs = itemList.map((item) => {
+    const raw = rawById.get(String(item?.id || "").trim()) || {};
+    const sourceOrderRowId =
+      String(item?.sourceOrderRowId || _sbGet(raw, ["source_order_id", "Source Order ID", "source_order", "Source Order", "order_row_id", "Order Row ID"]) || "").trim();
+    const sourceOrderNumber = String(
+      item?.orderNumber ||
+      _sbGet(raw, ["source_order_number", "Source Order Number", "order_id", "Order ID", "order_number", "Order Number"]) ||
+      "",
+    ).trim();
+    return {
+      item,
+      sourceOrderRowId,
+      sourceOrderNumber,
+      productKey: normKey(item?.productName || item?.name || ""),
+    };
+  });
+
+  if (!refs.some((ref) => ref.sourceOrderRowId || ref.sourceOrderNumber)) return itemList;
+
+  const orderRows = await _sbSelectOrdersRows({ approvedOnly: false }).catch(() => []);
+  if (!Array.isArray(orderRows) || !orderRows.length) return itemList;
+
+  const byRowId = new Map();
+  const byOrderProduct = new Map();
+  for (const orderRow of orderRows) {
+    const serialized = _sbSerializeOrderRow(orderRow);
+    const rowId = String(_sbOrderGet(orderRow, ["id", "ID"]) ?? "").trim();
+    if (rowId) byRowId.set(rowId, { raw: orderRow, item: serialized });
+
+    const orderKey = _sbStocktakingOrderNumberKey(serialized?.orderId || serialized?.orderIdNumber);
+    const productKey = normKey(serialized?.productName || "");
+    if (orderKey && productKey) byOrderProduct.set(`${orderKey}|${productKey}`, { raw: orderRow, item: serialized });
+  }
+
+  return refs.map(({ item, sourceOrderRowId, sourceOrderNumber, productKey }) => {
+    let matched = sourceOrderRowId ? byRowId.get(sourceOrderRowId) : null;
+    if (!matched && sourceOrderNumber && productKey) {
+      const orderKey = _sbStocktakingOrderNumberKey(sourceOrderNumber);
+      if (orderKey) matched = byOrderProduct.get(`${orderKey}|${productKey}`) || null;
+    }
+    if (!matched?.item) return item;
+
+    const orderItem = matched.item;
+    const orderType = _canonicalOrderTypeLabel(orderItem.orderType || "");
+    const orderTypeKey = _normKeyOrderType(orderType);
+    const createdFromProposal = /^created\s+from\s+proposal\s*:/i.test(String(orderItem.issueDescription || "").trim());
+    const proposalKitTag = String(orderItem.kitTag || "").trim() || (createdFromProposal ? "Direct components" : "");
+    const stockTag = proposalKitTag || (
+      orderTypeKey === _normKeyOrderType("Withdraw Products")
+        ? "Withdrawal Components"
+        : "Request Components"
+    );
+    const componentTag = String(orderItem.productTag || item?.componentTag || "").trim() || item?.tag?.name || "Untagged";
+
+    return {
+      ...item,
+      componentTag,
+      kitTag: stockTag,
+      orderNumber: orderItem.orderId || item?.orderNumber || null,
+      sourceOrderRowId: sourceOrderRowId || String(orderItem.id || "").trim() || null,
+      tag: {
+        name: stockTag,
+        color: _stockMovementTagColor(stockTag, item?.tag?.color || "default"),
+      },
+    };
+  });
+}
+
 async function _sbStocktakingForRequest(req) {
   const rows = await _sbStocktakingRows();
   const selection = await _sbStocktakingSelectionForRequest(req, rows);
   const inventoryColumn = _sbResolveStocktakingSessionColumn(rows, req?.query?.inventoryColumn || req?.query?.inventory_column, "inventory");
   const defectedColumn = _sbResolveStocktakingSessionColumn(rows, req?.query?.defectedColumn || req?.query?.defected_column, "defected");
   const items = rows.map((row) => _sbSerializeStocktakingRow(row, selection.quantityColumn, { inventoryColumn, defectedColumn }));
+  const enrichedItems = await _sbEnrichStocktakingItemsFromOrders(rows, items);
   // Stocktaking must show both incoming Request Products (+qty) and outgoing Withdrawal Products (-qty).
   // Keep zero-only rows hidden so the page still behaves as an active stock/movement view.
-  return items.filter((item) => Number(item.quantity) !== 0);
+  return enrichedItems.filter((item) => Number(item.quantity) !== 0);
 }
 
 // Home global analysis — all Users Center members plus their page access.
