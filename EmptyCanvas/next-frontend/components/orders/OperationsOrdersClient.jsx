@@ -685,7 +685,12 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
     onAction(action, group);
   };
 
-  const exportAction = (options) => onExport({ ...options, sortMode }, group, tab);
+  const exportActionGroup = {
+    ...group,
+    items: tabItems,
+    orderIds: tabItems.map((item) => text(item?.id)).filter(Boolean),
+  };
+  const exportAction = (options) => onExport({ ...options, sortMode }, exportActionGroup, tab);
   const receiveActionGroup = tab === "remaining"
     ? {
         ...group,
