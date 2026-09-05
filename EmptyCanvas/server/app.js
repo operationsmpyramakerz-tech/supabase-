@@ -22278,6 +22278,10 @@ app.post(
         try { await cacheDel(`cache:api:b2b:school-stock:supabase:*`); } catch {}
 
         if (stocktakingSyncErrors.length) {
+          console.error("[stocktaking-sync] mark-arrived failed:", JSON.stringify({
+            orderIds: ids,
+            errors: stocktakingSyncErrors,
+          }));
           return res.status(500).json({
             error: "Status updated but failed to sync some Stocktaking rows.",
             statusUpdated: true,
@@ -30395,8 +30399,9 @@ async function _sbInsertStocktakingRowSafe(row = {}, requiredColumns = []) {
   let payload = _sbCleanInsertRow(row);
   const required = new Set((Array.isArray(requiredColumns) ? requiredColumns : []).filter(Boolean));
   const removed = [];
+  const maxAttempts = Math.max(12, Math.min(64, Object.keys(payload).length + 4));
 
-  for (let attempt = 0; attempt < 12; attempt += 1) {
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     try {
       return await supabaseDb.insert(_sbStocktakingTable(), payload);
     } catch (error) {
@@ -30426,12 +30431,9 @@ async function _sbInsertStocktakingRowsSafe(rows = [], requiredColumns = []) {
 
   const required = new Set((Array.isArray(requiredColumns) ? requiredColumns : []).filter(Boolean));
 
-  // PostgREST bulk inserts require every object in the JSON array to have the
-  // exact same set of keys. Stocktaking rows intentionally differ (for example
-  // proposal rows can have kit_tag while direct components do not), so sending
-  // the whole order in one insertMany() call can fail with PGRST102 even though
-  // every row is valid on its own. Group rows by their key shape, bulk insert
-  // each compatible group, and then restore the original result order.
+  // Bulk insert only rows that share the same key shape. If a bulk request is
+  // rejected for any reason that is specific to one row/type, fall back to the
+  // already-safe single-row path instead of failing the whole delivered order.
   const groups = new Map();
   payload.forEach((row, index) => {
     const shape = Object.keys(row).sort().join("\u0000");
@@ -30445,18 +30447,25 @@ async function _sbInsertStocktakingRowsSafe(rows = [], requiredColumns = []) {
     let groupPayload = entries.map((entry) => ({ ...entry.row }));
     const removed = [];
     let inserted = null;
+    let bulkError = null;
+    const maxAttempts = Math.max(
+      12,
+      Math.min(64, Math.max(0, ...groupPayload.map((row) => Object.keys(row).length)) + 4),
+    );
 
-    for (let attempt = 0; attempt < 12; attempt += 1) {
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       try {
         if (typeof supabaseDb.insertMany === "function" && groupPayload.length > 1) {
           inserted = await supabaseDb.insertMany(_sbStocktakingTable(), groupPayload);
         } else {
           inserted = await _mapWithConcurrency(groupPayload, 16, (row) => supabaseDb.insert(_sbStocktakingTable(), row));
         }
+        bulkError = null;
         break;
       } catch (error) {
+        bulkError = error;
         const missingColumn = _sbStocktakingMissingColumnName(error);
-        if (!missingColumn || !groupPayload.some((row) => Object.prototype.hasOwnProperty.call(row, missingColumn))) throw error;
+        if (!missingColumn || !groupPayload.some((row) => Object.prototype.hasOwnProperty.call(row, missingColumn))) break;
         if (required.has(missingColumn)) {
           const err = new Error(`Missing required Stocktaking column: ${missingColumn}.`);
           err.status = 400;
@@ -30473,9 +30482,23 @@ async function _sbInsertStocktakingRowsSafe(rows = [], requiredColumns = []) {
     }
 
     if (!Array.isArray(inserted)) {
-      const err = new Error(`Failed to insert Stocktaking rows after removing unsupported column(s): ${removed.join(", ")}`);
-      err.status = 500;
-      throw err;
+      // A PostgREST bulk failure can be caused by one value/type while all
+      // individual rows are otherwise valid. Retry the original rows one by
+      // one so a bulk-only failure never blocks Stocktaking synchronization.
+      try {
+        const fallbackRows = await _mapWithConcurrency(
+          entries,
+          8,
+          (entry) => _sbInsertStocktakingRowSafe(entry.row, [...required]),
+        );
+        entries.forEach((entry, index) => {
+          results[entry.index] = fallbackRows[index] || null;
+        });
+        continue;
+      } catch (fallbackError) {
+        if (bulkError && !fallbackError?.cause) fallbackError.cause = bulkError;
+        throw fallbackError;
+      }
     }
 
     entries.forEach((entry, index) => {
@@ -30626,11 +30649,27 @@ async function _sbSyncArrivedOrderToStocktaking(orderRow = {}, options = {}) {
   if (!payload) return { skipped: true, reason: "unsupported-order-type" };
 
   const keys = payload.keys || [];
-  const sourceOrderColumn = _sbFindStocktakingKey(keys, ["source_order_id", "Source Order ID", "source_order", "Source Order", "order_row_id", "Order Row ID"]);
-  const sourceOrderNumberColumn = _sbFindStocktakingKey(keys, ["source_order_number", "Source Order Number", "order_id", "Order ID", "order_number", "Order Number"]);
+  const sourceOrderColumn =
+    _sbFindStocktakingKey(keys, ["source_order_id", "Source Order ID", "source_order", "Source Order", "order_row_id", "Order Row ID"]) ||
+    "source_order_id";
+  const sourceOrderNumberColumn =
+    _sbFindStocktakingKey(keys, ["source_order_number", "Source Order Number", "order_number", "Order Number"]) ||
+    "source_order_number";
+  const productTagColumn =
+    _sbFindStocktakingKey(keys, ["product_tag", "Product Tag", "component_tag", "Component Tag"]) ||
+    "product_tag";
+  const kitTagColumn =
+    _sbFindStocktakingKey(keys, ["kit_tag", "Kit Tag", "source_kit", "Source Kit", "kit_name", "Kit Name"]) ||
+    "kit_tag";
+  const orderTypeColumn =
+    _sbFindStocktakingKey(keys, ["order_type", "Order Type"]) ||
+    "order_type";
+  const receiptPhotosColumn =
+    _sbFindStocktakingKey(keys, ["receipt_photos", "Receipt Photos", "receipt_photo", "Receipt Photo", "receipt_images", "Receipt Images", "receipt_image", "Receipt Image"]) ||
+    "receipt_photos";
 
   const existingRows = Array.isArray(payload.rows) ? payload.rows : [];
-  if (sourceOrderColumn && payload.orderId) {
+  if (payload.orderId) {
     const existingBySource = existingRows.find((row) => String(row?.[sourceOrderColumn] ?? "").trim() === payload.orderId);
     if (existingBySource) return { skipped: true, reason: "already-synced", existingId: existingBySource?.id || null };
   }
@@ -30654,36 +30693,41 @@ async function _sbSyncArrivedOrderToStocktaking(orderRow = {}, options = {}) {
   setFirstExisting(["product_url", "Product URL", "url", "URL", "item_url", "Item URL"], payload.productUrl || null, "product_url");
   setFirstExisting(["unity_price", "unit_price", "Unity Price", "Unit Price", "one_piece_price"], payload.unitPrice, "unit_price");
   setFirstExisting(["tag", "Tag", "tags", "Tags"], payload.stockTag, "tag");
-  setFirstExisting(["product_tag", "Product Tag", "component_tag", "Component Tag"], payload.componentTag || null, "product_tag");
-  setFirstExisting(["kit_tag", "Kit Tag", "source_kit", "Source Kit", "kit_name", "Kit Name"], payload.kitTag || null, "kit_tag");
-  setFirstExisting(["order_type", "Order Type", "type", "Type"], payload.orderType || null, "order_type");
+  if (payload.componentTag) row[productTagColumn] = payload.componentTag;
+  if (payload.kitTag) row[kitTagColumn] = payload.kitTag;
+  if (payload.orderType) row[orderTypeColumn] = payload.orderType;
   setFirstExisting(["receipt_number", "Receipt Number", "store_receipt_number", "Store Receipt Number", "receipt", "Receipt"], payload.receiptText || null, "receipt_number");
-  setFirstExisting(["receipt_photos", "Receipt Photos", "receipt_photo", "Receipt Photo", "receipt_images", "Receipt Images", "receipt_image", "Receipt Image"], payload.receiptPhotos || null, "receipt_photos");
-  if (sourceOrderColumn) row[sourceOrderColumn] = payload.orderId;
-  else if (!keys.length && payload.orderId) row.source_order_id = payload.orderId;
-  if (sourceOrderNumberColumn && payload.orderNumber) {
-    const orderColumnCanon = _sbCanon(sourceOrderNumberColumn);
-    row[sourceOrderNumberColumn] = (orderColumnCanon.includes("orderid") || orderColumnCanon.includes("sourceordernumber"))
-      ? payload.orderNumber
-      : (payload.orderNumberValue ?? payload.orderNumber);
-  }
+  if (payload.receiptPhotos) row[receiptPhotosColumn] = payload.receiptPhotos;
+  if (payload.orderId) row[sourceOrderColumn] = payload.orderId;
+  if (payload.orderNumber) row[sourceOrderNumberColumn] = payload.orderNumber;
+
   setFirstExisting(["team_member_name", "Team Member", "requester", "Requester", "created_by", "Created By"], payload.ownerName || null, "team_member_name");
   setFirstExisting(["school", "School", "stocktaking_column", "Stocktaking Column"], payload.ownerSchool || null, "school");
   setFirstExisting(["created_at", "Created at", "created_time", "Created time", "notion_created_time"], new Date().toISOString(), "");
 
   row[payload.quantityColumn] = payload.quantity;
 
+  const requiredColumns = [
+    payload.quantityColumn,
+    payload.orderId ? sourceOrderColumn : "",
+    payload.orderNumber ? sourceOrderNumberColumn : "",
+    payload.componentTag ? productTagColumn : "",
+    payload.kitTag ? kitTagColumn : "",
+    payload.orderType ? orderTypeColumn : "",
+    payload.receiptPhotos ? receiptPhotosColumn : "",
+  ].filter(Boolean);
+
   if (options?.prepareOnly) {
     return {
       skipped: false,
       preparedRow: row,
-      requiredColumns: [payload.quantityColumn],
+      requiredColumns,
       quantityColumn: payload.quantityColumn,
       quantity: payload.quantity,
     };
   }
 
-  const created = await _sbInsertStocktakingRowSafe(row, [payload.quantityColumn]);
+  const created = await _sbInsertStocktakingRowSafe(row, requiredColumns);
   return { skipped: false, createdId: created?.id || null, quantityColumn: payload.quantityColumn, quantity: payload.quantity };
 }
 
