@@ -30622,6 +30622,20 @@ async function _sbBuildArrivedOrderStocktakingPayload(orderRow = {}, options = {
       : "Request Components"
   );
 
+  const rawSourceOrderId = _sbOrderGet(orderRow, ["id", "ID"]);
+  const sourceOrderIdNumber = Number(rawSourceOrderId);
+  const sourceOrderId = Number.isFinite(sourceOrderIdNumber)
+    ? Math.trunc(sourceOrderIdNumber)
+    : null;
+
+  const rawOrderNumber =
+    item?.orderIdNumber ??
+    _sbOrderGet(orderRow, ["order_number", "Order Number", "Order - ID", "Order ID"]);
+  const parsedOrderNumber = Number(rawOrderNumber);
+  const orderNumberValue = Number.isFinite(parsedOrderNumber)
+    ? Math.trunc(parsedOrderNumber)
+    : null;
+
   return {
     rows,
     keys: resolvedKeys,
@@ -30636,9 +30650,13 @@ async function _sbBuildArrivedOrderStocktakingPayload(orderRow = {}, options = {
     unitPrice: Number.isFinite(Number(item.unitPrice)) ? Number(item.unitPrice) : null,
     receiptText,
     receiptPhotos: receiptPhotosJson,
-    orderId: String(_sbOrderGet(orderRow, ["id", "ID"]) ?? "").trim(),
-    orderNumber: item.orderId || null,
-    orderNumberValue: Number.isFinite(Number(item.orderIdNumber)) ? Number(item.orderIdNumber) : null,
+    // Both Stocktaking link columns are bigint in the current Supabase table.
+    // Keep the real numeric Orders row id in source_order_id and the numeric
+    // business order number in source_order_number. The UI adds "ORD-" when
+    // displaying source_order_number, so never write "ORD-1" to a bigint field.
+    orderId: sourceOrderId,
+    orderNumber: orderNumberValue,
+    orderNumberValue,
     ownerName: item.createdByName || _sbOrderOwnerName(orderRow) || "",
     ownerSchool: schoolName,
   };
@@ -30670,7 +30688,8 @@ async function _sbSyncArrivedOrderToStocktaking(orderRow = {}, options = {}) {
 
   const existingRows = Array.isArray(payload.rows) ? payload.rows : [];
   if (payload.orderId) {
-    const existingBySource = existingRows.find((row) => String(row?.[sourceOrderColumn] ?? "").trim() === payload.orderId);
+    const wantedSourceOrderId = String(payload.orderId).trim();
+    const existingBySource = existingRows.find((row) => String(row?.[sourceOrderColumn] ?? "").trim() === wantedSourceOrderId);
     if (existingBySource) return { skipped: true, reason: "already-synced", existingId: existingBySource?.id || null };
   }
   if (existingRows.some((row) => _sbStocktakingRowsMatchOrderPayload(row, payload))) {
