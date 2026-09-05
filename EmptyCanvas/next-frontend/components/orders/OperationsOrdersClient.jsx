@@ -319,7 +319,7 @@ function groupMatchesTab(group, tab) {
   if (tab === "archive") return group.stage >= 5;
   if (tab === "delivered") return group.stage === 4;
   if (tab === "remaining") return group.stage === 3 && !isMaintenance(group.orderType) && group.hasRemaining;
-  if (tab === "received") return group.stage === 3 && (isMaintenance(group.orderType) || group.hasReceived || !group.hasRemaining);
+  if (tab === "received") return group.stage === 3 && (isMaintenance(group.orderType) || group.hasReceived);
   if (tab === "approved") return group.stage === 2 && group.hasApproved;
   if (tab === "rejected") return group.stage === 2 && group.hasRejected;
   return false;
@@ -332,6 +332,13 @@ function groupsForTab(groups, orders, tab) {
     return buildGroups(scopedRows);
   }
   return groups.filter((group) => groupMatchesTab(group, tab));
+}
+
+function itemsForOperationsTab(items, tab) {
+  const source = Array.isArray(items) ? items : [];
+  if (tab === "remaining") return source.filter((item) => Math.abs(remainingQuantity(item)) > 1e-9);
+  if (tab === "received") return source.filter((item) => Math.abs(receivedQuantity(item)) > 1e-9);
+  return source;
 }
 
 function groupSearchText(group) {
@@ -576,11 +583,7 @@ function downloadBlob(blob, filename) {
 function OperationsOrderCard({ group, tab, onOpen, onCreator }) {
   const type = orderTypeMeta(group.orderType);
   const thumbStyle = { "--co-thumb-bg": type.bg, "--co-thumb-fg": type.fg, "--co-thumb-border": type.bd };
-  const displayItems = tab === "remaining"
-    ? group.items.filter((item) => Math.abs(remainingQuantity(item)) > 1e-9)
-    : tab === "received"
-      ? group.items.filter((item) => Math.abs(receivedQuantity(item)) > 1e-9)
-      : group.items;
+  const displayItems = itemsForOperationsTab(group.items, tab);
   const value = tab === "remaining" ? group.remainingTotal : tab === "received" ? group.receivedTotal : group.total;
   return (
     <article className="co-card next-operations-order-card" role="button" tabIndex={0} aria-label={`Open ${group.orderIdLabel}`} onClick={() => onOpen(group)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen(group); } }}>
@@ -669,7 +672,8 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
   const canCreateWithdrawal = tab === "delivered" && delivered && orderTypeKey(group.orderType) === "requestproducts";
   const canCreateDelivery = tab === "delivered" && delivered && orderTypeKey(group.orderType) === "withdrawproducts";
   const showDownload = !(maintenance && tab === "approved");
-  const groupedItems = groupOrderItems(group.items, sortMode);
+  const tabItems = itemsForOperationsTab(group.items, tab);
+  const groupedItems = groupOrderItems(tabItems, sortMode);
 
   const menuAction = (action) => {
     setMoreOpen(false);
@@ -737,7 +741,7 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
         <div className="next-operations-order-modal-summary" aria-label="Order summary">
           <div><span>Order</span><strong>{group.orderIdLabel}</strong></div>
           <div><span>Date</span><strong>{formatDate(group.latestCreated)}</strong></div>
-          <div><span>Components</span><strong>{group.items.length}</strong></div>
+          <div><span>Components</span><strong>{tabItems.length}</strong></div>
           <div className="next-operations-order-modal-summary__status"><span>Status</span>{group.stage === 2 && group.hasApproved && group.hasRejected ? <MixedStatusPill /> : <StatusPill group={group} />}</div>
         </div>
         <Progress stage={group.stage} />
@@ -1100,6 +1104,7 @@ function ReceiveModal({ state, busy, error, onCancel, onSubmit }) {
   const [receiptNumber, setReceiptNumber] = useState("");
   const [issueDescription, setIssueDescription] = useState("");
   const [quantities, setQuantities] = useState({});
+  const [searchQuery, setSearchQuery] = useState("");
   useEffect(() => {
     if (!group) return;
     const initial = {};
@@ -1107,6 +1112,7 @@ function ReceiveModal({ state, busy, error, onCancel, onSubmit }) {
     setQuantities(initial);
     setReceiptNumber("");
     setIssueDescription("");
+    setSearchQuery("");
   }, [group]);
   useEffect(() => {
     if (!group) return undefined;
@@ -1115,6 +1121,18 @@ function ReceiveModal({ state, busy, error, onCancel, onSubmit }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [group, busy, onCancel]);
   if (!group) return null;
+  const searchNeedle = lower(searchQuery);
+  const visibleItems = group.items.filter((item) => {
+    if (!searchNeedle) return true;
+    return [
+      item?.productName,
+      item?.idCode,
+      item?.displayId,
+      item?.productTag,
+      item?.kitTag,
+      item?.reason,
+    ].map(lower).some((value) => value.includes(searchNeedle));
+  });
   return <div className="co-submodal-overlay is-open next-operations-receive-modal" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onCancel(); }}>
     <form className="co-submodal-dialog next-operations-receive-dialog" role="dialog" aria-modal="true" aria-labelledby="operations-receive-title" onSubmit={(event) => { event.preventDefault(); onSubmit({ receiptNumber, issueDescription, quantities }); }}>
       <button type="button" className="co-submodal-close" onClick={onCancel} aria-label="Close receive components" disabled={busy}/>
@@ -1127,9 +1145,21 @@ function ReceiveModal({ state, busy, error, onCancel, onSubmit }) {
           <label className="next-operations-receive-field"><span className="co-submodal-label">Receipt number <em>Optional</em></span><input className="co-submodal-input" value={receiptNumber} onChange={(event) => setReceiptNumber(event.target.value)} placeholder="One or more receipt numbers" autoComplete="off"/></label>
           <label className="next-operations-receive-field"><span className="co-submodal-label">Issue description <em>Optional</em></span><input className="co-submodal-input" value={issueDescription} onChange={(event) => setIssueDescription(event.target.value)} placeholder="Shared note for received components"/></label>
         </div>
+        <label className="next-operations-receive-search">
+          <input
+            className="co-submodal-input"
+            type="search"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            onKeyDown={(event) => { if (event.key === "Enter") event.preventDefault(); }}
+            placeholder="Search components..."
+            autoComplete="off"
+            aria-label="Search receive components"
+          />
+        </label>
         <section className="next-operations-receive-quantities" aria-labelledby="operations-receive-quantities-title">
-          <div className="next-operations-receive-section-head"><div><span className="next-operations-receive-kicker">Components</span><strong id="operations-receive-quantities-title">Received quantities</strong></div><span className="next-operations-receive-count">{group.items.length}</span></div>
-          <div className="next-operations-receive-list">{group.items.map((item) => {
+          <div className="next-operations-receive-section-head"><div><span className="next-operations-receive-kicker">Components</span><strong id="operations-receive-quantities-title">Received quantities</strong></div><span className="next-operations-receive-count">{visibleItems.length}</span></div>
+          <div className="next-operations-receive-list">{visibleItems.length ? visibleItems.map((item) => {
             const id = text(item?.id);
             const received = receivedQuantity(item);
             const remaining = remainingQuantity(item);
@@ -1138,7 +1168,7 @@ function ReceiveModal({ state, busy, error, onCancel, onSubmit }) {
               <span className="next-operations-receive-info"><span className="next-operations-receive-name">{text(item?.productName) || "Product"}</span><span className="next-operations-receive-sub">Received {formatQuantity(received)} <b>·</b> Remaining {formatQuantity(remaining)}</span></span>
               <span className="next-operations-receive-input-wrap"><span>Qty now</span><input className="co-submodal-input next-operations-receive-input" type="number" min="0" max={maxNow || undefined} step="any" inputMode="decimal" value={quantities[id] ?? ""} onChange={(event) => setQuantities((current) => ({ ...current, [id]: event.target.value }))} aria-label={`Quantity received now for ${text(item?.productName) || "component"}`}/></span>
             </label>;
-          })}</div>
+          }) : <div className="next-operations-receive-empty">No components match your search.</div>}</div>
         </section>
         <div className="co-submodal-error" role="alert" aria-live="polite">{error}</div>
       </div>
