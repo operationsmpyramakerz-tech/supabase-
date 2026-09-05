@@ -666,7 +666,10 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
   const delivered = group.stage === 4;
   const shipping = group.stage === 3;
 
-  const canReceive = tab === "approved" && group.stage === 2 && group.hasApproved && !maintenance;
+  const canReceive = !maintenance && (
+    (tab === "approved" && group.stage === 2 && group.hasApproved)
+    || (tab === "remaining" && group.stage === 3 && group.hasRemaining)
+  );
   const canRejectComponents = tab === "approved" && group.stage === 2 && !maintenance;
   const canDeliver = tab === "received" && shipping;
   const canCreateWithdrawal = tab === "delivered" && delivered && orderTypeKey(group.orderType) === "requestproducts";
@@ -681,9 +684,18 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
   };
 
   const exportAction = (options) => onExport({ ...options, sortMode }, group, tab);
+  const receiveActionGroup = tab === "remaining"
+    ? {
+        ...group,
+        items: tabItems,
+        orderIds: tabItems.map((item) => text(item?.id)).filter(Boolean),
+      }
+    : group;
 
   const renderItem = (item, index) => {
-    const state = itemStatus(item);
+    const state = tab === "remaining"
+      ? { label: "Remaining", className: "status-remaining" }
+      : itemStatus(item);
     const base = baseQuantity(item);
     const received = receivedQuantity(item);
     const remaining = remainingQuantity(item);
@@ -756,7 +768,7 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
           <div className="co-modal-actions ro-actions ro-actions--right">
             {showDownload ? <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => setDownloadOpen(true)} disabled={busy}><ClassicOrderIcon name="download" /><span>Download</span></button> : null}
             <OrderSortButton value={sortMode} onChange={setSortMode} />
-            {canReceive ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction("receive", group)} disabled={busy}><ClassicOrderIcon name="truck" />Received by operations</button> : null}
+            {canReceive ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction("receive", receiveActionGroup)} disabled={busy}><ClassicOrderIcon name="truck" />Received by operations</button> : null}
             {maintenance && tab === "approved" && group.stage === 2 && !archived ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction("technical-visit", group)} disabled={busy}><ClassicOrderIcon name="tool" />Request Technical Visit</button> : null}
             {maintenance && tab === "approved" && group.stage === 2 && !archived ? <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => onAction("maintenance-log", group)} disabled={busy}><ClassicOrderIcon name="clipboard" />Log Maintenance</button> : null}
             {canDeliver ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction(maintenance ? "maintenance-deliver" : "deliver", group)} disabled={busy}><ClassicOrderIcon name="check-circle" />Mark as Delivered</button> : null}
