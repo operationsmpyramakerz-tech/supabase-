@@ -30419,41 +30419,71 @@ async function _sbInsertStocktakingRowSafe(row = {}, requiredColumns = []) {
 }
 
 async function _sbInsertStocktakingRowsSafe(rows = [], requiredColumns = []) {
-  let payload = (Array.isArray(rows) ? rows : [])
+  const payload = (Array.isArray(rows) ? rows : [])
     .filter((row) => row && typeof row === "object")
     .map((row) => _sbCleanInsertRow(row));
   if (!payload.length) return [];
 
   const required = new Set((Array.isArray(requiredColumns) ? requiredColumns : []).filter(Boolean));
-  const removed = [];
 
-  for (let attempt = 0; attempt < 12; attempt += 1) {
-    try {
-      if (typeof supabaseDb.insertMany === "function") {
-        return await supabaseDb.insertMany(_sbStocktakingTable(), payload);
+  // PostgREST bulk inserts require every object in the JSON array to have the
+  // exact same set of keys. Stocktaking rows intentionally differ (for example
+  // proposal rows can have kit_tag while direct components do not), so sending
+  // the whole order in one insertMany() call can fail with PGRST102 even though
+  // every row is valid on its own. Group rows by their key shape, bulk insert
+  // each compatible group, and then restore the original result order.
+  const groups = new Map();
+  payload.forEach((row, index) => {
+    const shape = Object.keys(row).sort().join("\u0000");
+    if (!groups.has(shape)) groups.set(shape, []);
+    groups.get(shape).push({ index, row });
+  });
+
+  const results = new Array(payload.length).fill(null);
+
+  for (const entries of groups.values()) {
+    let groupPayload = entries.map((entry) => ({ ...entry.row }));
+    const removed = [];
+    let inserted = null;
+
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      try {
+        if (typeof supabaseDb.insertMany === "function" && groupPayload.length > 1) {
+          inserted = await supabaseDb.insertMany(_sbStocktakingTable(), groupPayload);
+        } else {
+          inserted = await _mapWithConcurrency(groupPayload, 16, (row) => supabaseDb.insert(_sbStocktakingTable(), row));
+        }
+        break;
+      } catch (error) {
+        const missingColumn = _sbStocktakingMissingColumnName(error);
+        if (!missingColumn || !groupPayload.some((row) => Object.prototype.hasOwnProperty.call(row, missingColumn))) throw error;
+        if (required.has(missingColumn)) {
+          const err = new Error(`Missing required Stocktaking column: ${missingColumn}.`);
+          err.status = 400;
+          err.cause = error;
+          throw err;
+        }
+        groupPayload = groupPayload.map((row) => {
+          const next = { ...row };
+          delete next[missingColumn];
+          return next;
+        });
+        removed.push(missingColumn);
       }
-      return await _mapWithConcurrency(payload, 16, (row) => supabaseDb.insert(_sbStocktakingTable(), row));
-    } catch (error) {
-      const missingColumn = _sbStocktakingMissingColumnName(error);
-      if (!missingColumn || !payload.some((row) => Object.prototype.hasOwnProperty.call(row, missingColumn))) throw error;
-      if (required.has(missingColumn)) {
-        const err = new Error(`Missing required Stocktaking column: ${missingColumn}.`);
-        err.status = 400;
-        err.cause = error;
-        throw err;
-      }
-      payload = payload.map((row) => {
-        const next = { ...row };
-        delete next[missingColumn];
-        return next;
-      });
-      removed.push(missingColumn);
     }
+
+    if (!Array.isArray(inserted)) {
+      const err = new Error(`Failed to insert Stocktaking rows after removing unsupported column(s): ${removed.join(", ")}`);
+      err.status = 500;
+      throw err;
+    }
+
+    entries.forEach((entry, index) => {
+      results[entry.index] = inserted[index] || null;
+    });
   }
 
-  const err = new Error(`Failed to insert Stocktaking rows after removing unsupported column(s): ${removed.join(", ")}`);
-  err.status = 500;
-  throw err;
+  return results;
 }
 
 function _sbStocktakingRowsMatchOrderPayload(row = {}, payload = {}) {
