@@ -487,9 +487,11 @@ function statusVars(group) {
   return STATUS_COLORS[group.state] || STATUS_COLORS["under-supervision"];
 }
 
-function StatusPill({ group, className = "co-status-btn" }) {
-  const vars = statusVars(group);
-  return <span className={className} style={{ "--tag-bg": vars.bg, "--tag-fg": vars.fg, "--tag-border": vars.bd }}>{statusLabel(group)}</span>;
+function StatusPill({ group, tab = "", className = "co-status-btn" }) {
+  const forceShipping = tab === "received" && group.stage === 3;
+  const vars = forceShipping ? STATUS_COLORS.received : statusVars(group);
+  const label = forceShipping ? "Shipping" : statusLabel(group);
+  return <span className={className} style={{ "--tag-bg": vars.bg, "--tag-fg": vars.fg, "--tag-border": vars.bd }}>{label}</span>;
 }
 
 function MixedStatusPill() {
@@ -602,7 +604,7 @@ function OperationsOrderCard({ group, tab, onOpen, onCreator }) {
           <div className="co-est-value">{formatMoney(value)}</div>
         </div>}
         <div className="co-actions">
-          {tab === "all" && group.stage === 2 && group.hasApproved && group.hasRejected ? <MixedStatusPill /> : <StatusPill group={group} />}
+          {tab === "all" && group.stage === 2 && group.hasApproved && group.hasRejected ? <MixedStatusPill /> : <StatusPill group={group} tab={tab} />}
           <button type="button" className="co-right-ico co-creator-btn next-operations-creator-btn" aria-label={`Created by ${group.createdByName || "user"}`} title={`Created by ${group.createdByName || "user"}`} onClick={(event) => { event.preventDefault(); event.stopPropagation(); onCreator?.(event.currentTarget, group); }}><ClassicOrderIcon name="user" /></button>
         </div>
       </div>
@@ -693,12 +695,17 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
     : group;
 
   const renderItem = (item, index) => {
-    const state = tab === "remaining"
-      ? { label: "Remaining", className: "status-remaining" }
-      : itemStatus(item);
     const base = baseQuantity(item);
     const received = receivedQuantity(item);
     const remaining = remainingQuantity(item);
+    const stage = statusIndex(item?.status);
+    const state = tab === "remaining"
+      ? { label: "Remaining", className: "status-remaining" }
+      : tab === "received" && stage === 3
+        ? { label: "Shipping", className: "status-shipped" }
+        : tab === "all" && stage === 3 && !maintenance && Math.abs(remaining) > 1e-9
+          ? { label: "Remaining", className: "status-remaining" }
+          : itemStatus(item);
     const vars = STATUS_COLORS[state.className.replace(/^status-/, "")] || STATUS_COLORS["under-supervision"];
     const safeUrl = text(item?.productUrl ?? item?.product_url);
     const itemId = text(item?.id);
@@ -754,7 +761,7 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
           <div><span>Order</span><strong>{group.orderIdLabel}</strong></div>
           <div><span>Date</span><strong>{formatDate(group.latestCreated)}</strong></div>
           <div><span>Components</span><strong>{tabItems.length}</strong></div>
-          <div className="next-operations-order-modal-summary__status"><span>Status</span>{group.stage === 2 && group.hasApproved && group.hasRejected ? <MixedStatusPill /> : <StatusPill group={group} />}</div>
+          <div className="next-operations-order-modal-summary__status"><span>Status</span>{group.stage === 2 && group.hasApproved && group.hasRejected ? <MixedStatusPill /> : <StatusPill group={group} tab={tab} />}</div>
         </div>
         <Progress stage={group.stage} />
         <div className="co-modal-body">
