@@ -31302,6 +31302,11 @@ async function _sbRenderStocktakingPdf(req, res) {
     .filter((item) => Number(item.quantity) !== 0);
 
   const selectedExportColumns = _parseB2BStockExportColumns(req.query || {}, ["stock", "unityPrice", "totalPrice"]);
+  const exportInstruction = _normalizeOrderExportInstruction(req?.body?.instruction);
+  const exportSignatureLabels = _normalizeOrderExportSignatureLabels(
+    req?.body?.signatureLabels,
+    ["Storekeeper", "Operations", "Delivered to"],
+  );
   const includeInventoryCol = selectedExportColumns.includes("inventory");
   const includeDefectedCol = selectedExportColumns.includes("defected");
 
@@ -31373,6 +31378,51 @@ async function _sbRenderStocktakingPdf(req, res) {
   const right = doc.page.width - doc.page.margins.right;
   const bottom = doc.page.height - doc.page.margins.bottom;
   const contentW = right - left;
+
+  const drawStockInstructionBlock = ({ label, value, isArabic = false }) => {
+    const body = String(value || "").trim();
+    if (!body) return;
+    const padX = 12;
+    const padY = 10;
+    const innerW = contentW - padX * 2;
+    const labelAlign = isArabic ? "right" : "left";
+    const title = String(exportInstruction?.title || "").trim();
+    const showTitle = title && title.toLowerCase() !== "instructions";
+    const titleBelongsHere = showTitle && (_orderExportContainsArabic(title) === isArabic);
+    const labelH = doc.font("Helvetica-Bold").fontSize(10).heightOfString(label, { width: innerW, align: labelAlign });
+    const titleH = titleBelongsHere
+      ? doc.font("Helvetica-Bold").fontSize(9.5).heightOfString(title, { width: innerW, align: labelAlign })
+      : 0;
+    const bodyH = doc.font("Helvetica").fontSize(9).heightOfString(body, { width: innerW, align: labelAlign, lineGap: 2 });
+    const blockH = Math.max(58, padY + labelH + (titleBelongsHere ? titleH + 6 : 0) + bodyH + 16);
+    if (doc.y + blockH > bottom) doc.addPage();
+
+    const blockY = doc.y;
+    doc.save();
+    doc.roundedRect(left, blockY, contentW, blockH, 9).fillAndStroke(
+      isArabic ? "#F7FFFD" : "#FFFCF7",
+      isArabic ? "#99F6E4" : "#FED7AA",
+    );
+    let cursor = blockY + padY;
+    doc.fillColor(isArabic ? "#0F766E" : "#9A3412").font("Helvetica-Bold").fontSize(10)
+      .text(label, left + padX, cursor, { width: innerW, align: labelAlign });
+    cursor += labelH + 4;
+    if (titleBelongsHere) {
+      doc.fillColor(isArabic ? "#0F766E" : "#B45309").font("Helvetica-Bold").fontSize(9.5)
+        .text(title, left + padX, cursor, { width: innerW, align: labelAlign });
+      cursor += titleH + 5;
+    }
+    doc.fillColor(COLORS.text).font("Helvetica").fontSize(9)
+      .text(body, left + padX, cursor, { width: innerW, align: labelAlign, lineGap: 2 });
+    doc.restore();
+    doc.y = blockY + blockH + 9;
+  };
+
+  if (exportInstruction.englishText || exportInstruction.arabicText) {
+    drawStockInstructionBlock({ label: "English Instructions", value: exportInstruction.englishText, isArabic: false });
+    drawStockInstructionBlock({ label: "التعليمات العربية", value: exportInstruction.arabicText, isArabic: true });
+    doc.y += 4;
+  }
 
   doc
     .fillColor(COLORS.text)
@@ -31500,12 +31550,43 @@ async function _sbRenderStocktakingPdf(req, res) {
     y += 12;
   }
 
+  if (exportSignatureLabels.length) {
+    const signatureTitleH = 18;
+    const signatureBoxH = 76;
+    const signatureGap = 12;
+    const neededH = signatureTitleH + signatureBoxH + 18;
+    if (y + neededH > bottom) {
+      doc.addPage();
+      y = doc.page.margins.top;
+    }
+
+    doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(11)
+      .text("Handover confirmation", left, y, { width: contentW });
+    y += signatureTitleH;
+
+    const boxCount = exportSignatureLabels.length;
+    const boxW = (contentW - signatureGap * Math.max(0, boxCount - 1)) / boxCount;
+    exportSignatureLabels.forEach((label, index) => {
+      const x = left + index * (boxW + signatureGap);
+      doc.roundedRect(x, y, boxW, signatureBoxH, 9).strokeColor(COLORS.border).lineWidth(1).stroke();
+      doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(9)
+        .text(label, x + 10, y + 9, { width: boxW - 20 });
+      doc.fillColor(COLORS.muted).font("Helvetica").fontSize(8.5)
+        .text("Name", x + 10, y + 32);
+      doc.moveTo(x + 48, y + 42).lineTo(x + boxW - 10, y + 42).strokeColor(COLORS.border).stroke();
+      doc.fillColor(COLORS.muted).font("Helvetica").fontSize(8.5)
+        .text("Signature", x + 10, y + 54);
+      doc.moveTo(x + 58, y + 64).lineTo(x + boxW - 10, y + 64).strokeColor(COLORS.border).stroke();
+    });
+  }
+
   doc.end();
 }
 
 async function _sbRenderStocktakingExcel(req, res) {
   const items = await _sbStocktakingForRequest(req);
   const selectedExportColumns = _parseB2BStockExportColumns(req.query || {}, ["stock", "unityPrice", "totalPrice"]);
+  const exportInstruction = _normalizeOrderExportInstruction(req?.body?.instruction);
   const ExcelJS = require("exceljs");
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "Operations Hub";
@@ -31514,7 +31595,7 @@ async function _sbRenderStocktakingExcel(req, res) {
 
   const columns = ["Tag", "ID Code", "Component", ...selectedExportColumns.map((key) => _b2bStockExportColumnLabel(key))];
   const columnKeys = ["tag", "idCode", "name", ...selectedExportColumns];
-  ws.columns = columns.map((header, index) => {
+  ws.columns = columns.map((_header, index) => {
     const key = columnKeys[index];
     const widths = {
       tag: 24,
@@ -31527,10 +31608,49 @@ async function _sbRenderStocktakingExcel(req, res) {
       inventory: 14,
       defected: 14,
     };
-    return { header, key, width: widths[key] || 14 };
+    return { key, width: widths[key] || 14 };
   });
-  ws.getRow(1).font = { bold: true };
-  ws.views = [{ state: "frozen", ySplit: 1 }];
+
+  if (exportInstruction.englishText || exportInstruction.arabicText) {
+    const lastColumn = Math.max(1, columns.length);
+    const colLetter = (index) => {
+      let n = Math.max(1, Number(index) || 1);
+      let out = "";
+      while (n > 0) {
+        const rem = (n - 1) % 26;
+        out = String.fromCharCode(65 + rem) + out;
+        n = Math.floor((n - 1) / 26);
+      }
+      return out;
+    };
+    const lastCol = colLetter(lastColumn);
+    const selectedInstructionTitle = String(exportInstruction.title || "").trim();
+    if (selectedInstructionTitle && selectedInstructionTitle.toLowerCase() !== "instructions") {
+      const titleRow = ws.addRow([selectedInstructionTitle]);
+      ws.mergeCells(`A${titleRow.number}:${lastCol}${titleRow.number}`);
+      const titleIsArabic = _orderExportContainsArabic(selectedInstructionTitle);
+      titleRow.getCell(1).font = { bold: true, color: { argb: "FFB45309" } };
+      titleRow.getCell(1).alignment = { horizontal: titleIsArabic ? "right" : "left", vertical: "middle", readingOrder: titleIsArabic ? "rtl" : "ltr" };
+    }
+    const appendInstructionRow = (label, value, isArabic = false) => {
+      if (!String(value || "").trim()) return;
+      const labelRow = ws.addRow([label]);
+      ws.mergeCells(`A${labelRow.number}:${lastCol}${labelRow.number}`);
+      labelRow.getCell(1).font = { bold: true, color: { argb: isArabic ? "FF0F766E" : "FF9A3412" } };
+      labelRow.getCell(1).alignment = { horizontal: isArabic ? "right" : "left", vertical: "middle" };
+      const textRow = ws.addRow([String(value || "").trim()]);
+      ws.mergeCells(`A${textRow.number}:${lastCol}${textRow.number}`);
+      textRow.height = Math.min(140, Math.max(40, 24 + Math.ceil(String(value || "").length / 90) * 15));
+      textRow.getCell(1).alignment = { horizontal: isArabic ? "right" : "left", vertical: "top", wrapText: true, readingOrder: isArabic ? "rtl" : "ltr" };
+      ws.addRow([]);
+    };
+    appendInstructionRow("English Instructions", exportInstruction.englishText, false);
+    appendInstructionRow("التعليمات العربية", exportInstruction.arabicText, true);
+  }
+
+  const stockHeaderRow = ws.addRow(columns);
+  stockHeaderRow.font = { bold: true };
+  ws.views = [{ state: "frozen", ySplit: stockHeaderRow.number }];
 
   const excelValueForColumn = (item, key) => {
     const quantity = Number(item?.quantity) || 0;
