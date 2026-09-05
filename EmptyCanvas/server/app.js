@@ -2501,6 +2501,8 @@ function _uaIsUsefulStocktakingSchoolColumn(key = "") {
   const blocked = new Set([
     "id", "createdat", "updatedat", "importedat", "createdtime", "lasteditedtime", "lasteditedby",
     "name", "product", "products", "productname", "producturl", "itemurl", "url", "tag", "tags",
+    "componenttag", "producttag", "kittag", "sourcekit", "sourceorderid", "sourceordernumber",
+    "orderid", "ordernumber", "ordertype",
     "idcode", "receiptnumber", "receiptphotos", "receiptphoto", "receiptimages", "receiptimage",
     "receipturls", "receipturl", "orderreceipt", "attachments", "files",
     "onekitquantity", "unityprice", "unitprice", "onepieceprice",
@@ -9778,6 +9780,8 @@ async function _sbCreateOrdersFromCart(req, cleanProducts = [], orderType = "") 
       quantity_remaining: qty,
       status: "Under Supervision",
       sv_approval: null,
+      product_tag: Array.isArray(info.tags) ? (info.tags.find((tag) => String(tag || "").trim()) || null) : null,
+      kit_tag: null,
       team_member_name: createdByName,
       issue_description: String(product.issueDescription || "").trim() || null,
       supervisor: null,
@@ -30359,7 +30363,7 @@ function _sbStocktakingRowsMatchOrderPayload(row = {}, payload = {}) {
   if (payload?.stockTag && rowTag && normKey(rowTag) !== normKey(payload.stockTag)) return false;
 
   const rowReceipt = _normalizeMultilineText(
-    _sbStocktakingText(_sbGet(row, ["receipt_number", "Receipt Number", "store_receipt_number", "Store Receipt Number", "receipt", "Receipt", "order_receipt", "Order Receipt"])),
+    _sbStocktakingText(_sbGet(row, ["receipt_number", "Receipt Number", "store_receipt_number", "Store Receipt Number", "receipt", "Receipt"])),
   );
   const wantedReceipt = _normalizeMultilineText(payload?.receiptText || "");
   if (rowReceipt || wantedReceipt) return rowReceipt === wantedReceipt;
@@ -30385,7 +30389,9 @@ async function _sbBuildArrivedOrderStocktakingPayload(orderRow = {}) {
   }
 
   const rows = await _sbStocktakingRows();
-  const keys = _sbAllColumnKeys(rows || []);
+  const rowKeys = _sbAllColumnKeys(rows || []);
+  const schemaKeys = await _uaStocktakingColumnKeysFromOpenApi().catch(() => []);
+  const keys = Array.from(new Set([...(rowKeys || []), ...(schemaKeys || [])].filter(Boolean)));
   const quantityColumn =
     _sbDetectStocktakingQuantityColumnFromKeys(keys, schoolName) ||
     _sbStocktakingColumnKey(schoolName);
@@ -30422,9 +30428,15 @@ async function _sbBuildArrivedOrderStocktakingPayload(orderRow = {}) {
   const receiptText = _normalizeMultilineText(
     item.receiptNumber ||
     _sbOrderText(_sbOrderGet(orderRow, ["receipt_number", "Receipt Number", "Store Receipt Number"])) ||
-    orderReceiptEntries.map((entry) => entry.name || entry.url).filter(Boolean).join("\n") ||
     "",
   );
+  const receiptPhotos = orderReceiptEntries
+    .map((entry, index) => ({
+      name: String(entry?.name || `Receipt photo ${index + 1}`).trim() || `Receipt photo ${index + 1}`,
+      url: String(entry?.url || entry?.publicUrl || entry?.public_url || "").trim(),
+    }))
+    .filter((entry) => entry.url);
+  const receiptPhotosJson = receiptPhotos.length ? JSON.stringify(receiptPhotos) : null;
 
   const createdFromProposal = /^created\s+from\s+proposal\s*:/i.test(String(item.issueDescription || "").trim());
   const proposalKitTag = String(item.kitTag || "").trim() || (createdFromProposal ? "Direct components" : "");
@@ -30448,6 +30460,7 @@ async function _sbBuildArrivedOrderStocktakingPayload(orderRow = {}) {
     productUrl: item.productUrl || _sbExtractUrl(_sbOrderGet(orderRow, ["product_url", "Product URL", "url", "URL"])) || "",
     unitPrice: Number.isFinite(Number(item.unitPrice)) ? Number(item.unitPrice) : null,
     receiptText,
+    receiptPhotos: receiptPhotosJson,
     orderId: String(_sbOrderGet(orderRow, ["id", "ID"]) ?? "").trim(),
     orderNumber: item.orderId || null,
     orderNumberValue: Number.isFinite(Number(item.orderIdNumber)) ? Number(item.orderIdNumber) : null,
@@ -30492,7 +30505,8 @@ async function _sbSyncArrivedOrderToStocktaking(orderRow = {}, options = {}) {
   setFirstExisting(["component_tag", "Component Tag", "product_tag", "Product Tag"], payload.componentTag || null, "component_tag");
   setFirstExisting(["kit_tag", "Kit Tag", "source_kit", "Source Kit", "kit_name", "Kit Name"], payload.kitTag || null, "kit_tag");
   setFirstExisting(["order_type", "Order Type", "type", "Type"], payload.orderType || null, "order_type");
-  setFirstExisting(["receipt_number", "Receipt Number", "store_receipt_number", "Store Receipt Number", "receipt", "Receipt", "order_receipt", "Order Receipt"], payload.receiptText || null, "receipt_number");
+  setFirstExisting(["receipt_number", "Receipt Number", "store_receipt_number", "Store Receipt Number", "receipt", "Receipt"], payload.receiptText || null, "receipt_number");
+  setFirstExisting(["receipt_photos", "Receipt Photos", "receipt_photo", "Receipt Photo", "receipt_images", "Receipt Images", "receipt_image", "Receipt Image"], payload.receiptPhotos || null, "receipt_photos");
   if (sourceOrderColumn) row[sourceOrderColumn] = payload.orderId;
   else if (!keys.length && payload.orderId) row.source_order_id = payload.orderId;
   if (sourceOrderNumberColumn && payload.orderNumber) {
@@ -30739,7 +30753,7 @@ function _sbSerializeStocktakingRow(row = {}, schoolNameOrColumn = "", options =
     oneKitQuantity: _sbStocktakingNum(_sbGet(row, ["one_kit_quantity", "One Kit Quantity", "one kit quantity"])),
     idCode: _sbStocktakingText(_sbGet(row, ["id_code", "ID Code", "id code", "code", "Code"])) || null,
     receiptNumber: _normalizeMultilineText(
-      _sbStocktakingText(_sbGet(row, ["receipt_number", "Receipt Number", "store_receipt_number", "Store Receipt Number", "receipt", "Receipt", "order_receipt", "Order Receipt"])) || "",
+      _sbStocktakingText(_sbGet(row, ["receipt_number", "Receipt Number", "store_receipt_number", "Store Receipt Number", "receipt", "Receipt"])) || "",
     ),
     receiptPhotos: _sbNormalizeOrderReceiptEntries(receiptPhotosRaw, "Receipt photo")
       .filter((entry) => entry?.url)
