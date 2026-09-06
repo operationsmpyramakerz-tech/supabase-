@@ -5633,7 +5633,100 @@ async function _sbProductsMapByName() {
   return map;
 }
 
-async function _sbBuildOrderExportPayload(orderIds = [], req = null) {
+function _normalizeOrderRepeatedComponentMode(value, fallback = "merge") {
+  const raw = String(value || "").trim().toLowerCase().replace(/[\s_]+/g, "-");
+  if (["separate", "split", "keep-separate", "individual"].includes(raw)) return "separate";
+  if (["merge", "merged", "combine", "combined", "group"].includes(raw)) return "merge";
+  return String(fallback || "").toLowerCase() === "separate" ? "separate" : "merge";
+}
+
+async function _sbSplitOrderExportRowsFromProposalSources(rows = [], items = [], productNameMap = new Map(), req = null) {
+  const safeRows = Array.isArray(rows) ? rows : [];
+  const safeItems = Array.isArray(items) ? items : [];
+  if (!safeRows.length) return safeRows;
+
+  let proposalRows = [];
+  let proposalItemRows = [];
+  let kitMembership = new Map();
+  try {
+    [proposalRows, proposalItemRows, kitMembership] = await Promise.all([
+      _sbProposalRows(),
+      _sbProposalItemRows(null),
+      _sbProductKitMembershipHierarchy(),
+    ]);
+  } catch (error) {
+    console.warn("[order export] unable to load proposal source breakdown:", error?.message || error);
+    return safeRows;
+  }
+
+  const proposalIdByName = new Map();
+  for (const proposalRow of proposalRows || []) {
+    const id = String(_sbGet(proposalRow, ["id", "ID"]) ?? "").trim();
+    const name = _sbProposalText(_sbGet(proposalRow, ["name", "Name", "proposal_name", "Proposal Name"]));
+    if (id && name && !proposalIdByName.has(normKey(name))) proposalIdByName.set(normKey(name), id);
+  }
+
+  const itemsByProposal = new Map();
+  for (const rawItem of proposalItemRows || []) {
+    const proposalItem = _sbSerializeProductProposalItem(rawItem);
+    const proposalId = String(proposalItem?.proposalId || "").trim();
+    if (!proposalId) continue;
+    if (!itemsByProposal.has(proposalId)) itemsByProposal.set(proposalId, []);
+    itemsByProposal.get(proposalId).push(proposalItem);
+  }
+
+  const out = [];
+  for (let index = 0; index < safeRows.length; index += 1) {
+    const row = safeRows[index] || {};
+    const item = safeItems[index] || {};
+    const issue = String(item?.issueDescription || "").trim();
+    const match = issue.match(/^created\s+from\s+proposal\s*:\s*(.+)$/i);
+    const proposalName = String(match?.[1] || "").trim();
+    const proposalId = proposalName ? proposalIdByName.get(normKey(proposalName)) : "";
+    if (!proposalId) {
+      out.push(row);
+      continue;
+    }
+
+    const product = productNameMap.get(normKey(row?.component || item?.productName || "")) || null;
+    const productId = String(product?.id || "").trim();
+    const proposalItems = itemsByProposal.get(proposalId) || [];
+    const proposalItem = proposalItems.find((entry) =>
+      (productId && String(entry?.productId || "").trim() === productId)
+      || normKey(entry?.productName || "") === normKey(row?.component || item?.productName || "")
+    );
+
+    const qty = Number(row?.qty) || 0;
+    const sources = proposalItem && qty !== 0
+      ? _sbProposalSourceKitsForTotal(proposalItem?.sourceKits || [], Math.abs(qty))
+      : [];
+    if (!sources.length) {
+      out.push(row);
+      continue;
+    }
+
+    const sign = qty < 0 ? -1 : 1;
+    const memberships = kitMembership?.get(productId) || [];
+    for (const source of sources) {
+      const sourceQty = sign * _sbProposalQuantity(source?.quantity || 1);
+      const membership = memberships.find((entry) =>
+        String(entry?.id || entry?.kitId || "").trim() === String(source?.kitId || "").trim()
+      );
+      out.push({
+        ...row,
+        qty: sourceQty,
+        total: sourceQty * (Number(row?.unit) || 0),
+        kitTag: String(source?.kitName || "").trim() || row?.kitTag || "Unassigned kit",
+        kitFolderName: String(membership?.folderName || "").trim()
+          || (source?.kitId ? "Unfiled Kits" : "Untracked / Direct"),
+      });
+    }
+  }
+
+  return out;
+}
+
+async function _sbBuildOrderExportPayload(orderIds = [], req = null, { repeatedComponentMode = "merge" } = {}) {
   const rowsRaw = await _sbOrderRowsByIds(orderIds);
   if (!rowsRaw.length) {
     const err = new Error("Orders not found");
@@ -5692,8 +5785,13 @@ async function _sbBuildOrderExportPayload(orderIds = [], req = null) {
     });
   }
 
+  const normalizedRepeatedComponentMode = _normalizeOrderRepeatedComponentMode(repeatedComponentMode, "merge");
+  const exportRows = normalizedRepeatedComponentMode === "separate"
+    ? await _sbSplitOrderExportRowsFromProposalSources(rows, items, productNameMap, req)
+    : rows;
+
   const reasonCounts = new Map();
-  for (const row of rows) {
+  for (const row of exportRows) {
     const key = String(row?.reason || "").trim() || "No Reason";
     reasonCounts.set(key, (reasonCounts.get(key) || 0) + 1);
   }
@@ -5702,9 +5800,10 @@ async function _sbBuildOrderExportPayload(orderIds = [], req = null) {
   return {
     rawRows: rowsRaw,
     items,
-    rows,
+    rows: exportRows,
     grandQty,
     grandTotal,
+    repeatedComponentMode: normalizedRepeatedComponentMode,
     createdAt,
     orderIdRange,
     teamMember,
@@ -5893,13 +5992,13 @@ function _sbSafeExportName(value = "order") {
     .slice(0, 60);
 }
 
-async function _sbPipeOrderDeliveryPdf(req, res, orderIds = [], { tab = "", columns = null, instruction = null, sortMode = null, signatureLabels = null } = {}) {
+async function _sbPipeOrderDeliveryPdf(req, res, orderIds = [], { tab = "", columns = null, instruction = null, sortMode = null, signatureLabels = null, repeatedComponentMode = "merge" } = {}) {
   const tabKey = String(tab || "").trim().toLowerCase();
   const selectedExportColumns = _normalizeOrderExportColumns(columns, { tab: tabKey });
   const hideCosts = !selectedExportColumns.includes("unit") && !selectedExportColumns.includes("total");
   const exportInstruction = _normalizeOrderExportInstruction(instruction ?? req?.body?.instruction);
   const exportSortMode = _normalizeOrderExportSortMode(sortMode ?? req?.body?.sortMode);
-  const payload = await _sbBuildOrderExportPayload(orderIds, req);
+  const payload = await _sbBuildOrderExportPayload(orderIds, req, { repeatedComponentMode });
   const exportSignatureLabels = _normalizeOrderExportSignatureLabels(
     signatureLabels ?? req?.body?.signatureLabels,
     payload.receiptView.signatureLabels,
@@ -6037,9 +6136,9 @@ async function _sbPipeOrderMaintenancePdf(req, res, orderIds = []) {
   });
 }
 
-async function _sbPipeOrderExcel(req, res, orderIds = [], { columns = null, tab = "", instruction = null, sortMode = null } = {}) {
+async function _sbPipeOrderExcel(req, res, orderIds = [], { columns = null, tab = "", instruction = null, sortMode = null, repeatedComponentMode = "merge" } = {}) {
   const ExcelJS = require("exceljs");
-  const payload = await _sbBuildOrderExportPayload(orderIds, req);
+  const payload = await _sbBuildOrderExportPayload(orderIds, req, { repeatedComponentMode });
   const selectedColumns = _selectedOrderExportColumnDefs(columns, { tab });
   const exportInstruction = _normalizeOrderExportInstruction(instruction ?? req?.body?.instruction);
   const exportSortMode = _normalizeOrderExportSortMode(sortMode ?? req?.body?.sortMode);
@@ -8213,6 +8312,40 @@ function _proposalExportGroupMode(value) {
   return raw === "kit-tag" || raw === "kits-tag" || raw === "kit" ? "kit-tag" : "component-tag";
 }
 
+function _proposalRepeatedComponentMode(value, fallback = "separate") {
+  const raw = String(value || "").trim().toLowerCase().replace(/[\s_]+/g, "-");
+  if (["merge", "merged", "combine", "combined", "group"].includes(raw)) return "merge";
+  if (["separate", "split", "keep-separate", "individual"].includes(raw)) return "separate";
+  return String(fallback || "").toLowerCase() === "merge" ? "merge" : "separate";
+}
+
+function _proposalSplitRowsBySourceKit(rows = []) {
+  const out = [];
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const totalQuantity = Number(row?.quantity) || 0;
+    const sources = _sbProposalSourceKitsForTotal(row?.sourceKits || row?.source_kits || [], Math.abs(totalQuantity) || 1);
+    if (!sources.length || totalQuantity === 0) {
+      out.push(row);
+      continue;
+    }
+    const sign = totalQuantity < 0 ? -1 : 1;
+    const rawUnitPrice = row?.unitPrice;
+    const unitPrice = Number(rawUnitPrice);
+    const hasUnitPrice = rawUnitPrice !== null && rawUnitPrice !== undefined && rawUnitPrice !== "" && Number.isFinite(unitPrice);
+    sources.forEach((source, sourceIndex) => {
+      const quantity = sign * _sbProposalQuantity(source?.quantity || 1);
+      out.push({
+        ...row,
+        quantity,
+        totalPrice: hasUnitPrice ? unitPrice * quantity : row?.totalPrice,
+        sourceKits: [source],
+        _sourceKey: `${String(source?.kitId || "").trim() || `name:${String(source?.kitName || "").toLowerCase()}`}:${sourceIndex}`,
+      });
+    });
+  }
+  return out;
+}
+
 function _proposalNaturalCompare(a, b) {
   return String(a ?? "").localeCompare(String(b ?? ""), undefined, {
     numeric: true,
@@ -8263,9 +8396,11 @@ async function _sbProductKitMembershipHierarchy() {
   }
 }
 
-function _proposalBuildGroupedRows(rows = [], groupMode = "component-tag", kitMembership = new Map()) {
+function _proposalBuildGroupedRows(rows = [], groupMode = "component-tag", kitMembership = new Map(), repeatedComponentMode = "separate") {
+  const repeatMode = _proposalRepeatedComponentMode(repeatedComponentMode, "separate");
   if (groupMode !== "kit-tag") {
-    return Array.from((rows || []).reduce((map, row) => {
+    const workingRows = repeatMode === "separate" ? _proposalSplitRowsBySourceKit(rows) : (Array.isArray(rows) ? rows : []);
+    return Array.from((workingRows || []).reduce((map, row) => {
       const tag = String(row?.tag || "Uncategorized").trim() || "Uncategorized";
       const key = tag.toLowerCase();
       if (!map.has(key)) map.set(key, { tag, rows: [] });
@@ -8293,13 +8428,28 @@ function _proposalBuildGroupedRows(rows = [], groupMode = "component-tag", kitMe
   };
 
   for (const row of rows || []) {
-    const sources = _sbProposalSourceKits(row?.sourceKits || row?.source_kits);
+    const sources = _sbProposalSourceKitsForTotal(
+      row?.sourceKits || row?.source_kits || [],
+      Math.abs(Number(row?.quantity) || 0) || 1,
+    );
     if (!sources.length) {
       addToHierarchy(row, { folderName: "Untracked / Direct", name: "Direct / legacy components" });
       continue;
     }
 
     const memberships = kitMembership?.get(String(row?.productId || "").trim()) || [];
+    if (repeatMode === "merge") {
+      const primary = _sbProposalPrimarySourceKit(sources) || sources[0];
+      const membership = memberships.find((entry) => String(entry?.id || entry?.kitId || "").trim() === String(primary?.kitId || "").trim());
+      if (membership) addToHierarchy(row, membership);
+      else addToHierarchy(row, {
+        id: primary?.kitId,
+        name: primary?.kitName || (primary?.kitId ? "Untitled kit" : "Direct / legacy components"),
+        folderName: primary?.kitId ? "Unfiled Kits" : "Untracked / Direct",
+      });
+      continue;
+    }
+
     sources.forEach((source, sourceIndex) => {
       const sourceQuantity = _sbProposalQuantity(source?.quantity || 1);
       const rawUnitPrice = row?.unitPrice;
@@ -8337,8 +8487,10 @@ function _proposalBuildGroupedRows(rows = [], groupMode = "component-tag", kitMe
     });
 }
 
-function _proposalBuildCombinedGroupedRows(rows = [], groupMode = "component-tag", kitMembership = new Map(), sources = [], logic = "add") {
-  if (groupMode !== "kit-tag") return _proposalBuildGroupedRows(rows, groupMode, kitMembership);
+function _proposalBuildCombinedGroupedRows(rows = [], groupMode = "component-tag", kitMembership = new Map(), sources = [], logic = "add", repeatedComponentMode = "separate") {
+  const repeatMode = _proposalRepeatedComponentMode(repeatedComponentMode, "separate");
+  if (repeatMode === "merge") return _proposalBuildGroupedRows(rows, groupMode, kitMembership, "merge");
+  if (groupMode !== "kit-tag") return _proposalBuildGroupedRows(rows, groupMode, kitMembership, "separate");
 
   const cleanLogic = _proposalCombineLogic(logic);
   const cleanSources = (Array.isArray(sources) ? sources : []).map((source, index) => ({
@@ -8535,6 +8687,7 @@ async function _sbProductProposalExportData(proposalId, req = null) {
   }
 
   const groupMode = _proposalExportGroupMode(req?.query?.groupBy || req?.query?.sortBy);
+  const repeatedComponentMode = _proposalRepeatedComponentMode(req?.query?.repeatedComponents || req?.query?.repeatedComponentMode, "separate");
   const [productMap, kitMembership] = await Promise.all([
     _sbProductsMapById(),
     groupMode === "kit-tag" ? _sbProductKitMembershipHierarchy() : Promise.resolve(new Map()),
@@ -8563,7 +8716,7 @@ async function _sbProductProposalExportData(proposalId, req = null) {
     return row;
   });
 
-  const groupedRows = _proposalBuildGroupedRows(rows, groupMode, kitMembership);
+  const groupedRows = _proposalBuildGroupedRows(rows, groupMode, kitMembership, repeatedComponentMode);
 
   const totals = rows.reduce((acc, row) => {
     acc.items += 1;
@@ -8572,7 +8725,7 @@ async function _sbProductProposalExportData(proposalId, req = null) {
     return acc;
   }, { items: 0, quantity: 0, total: 0 });
 
-  return { detail, rows, groupedRows, totals, groupMode };
+  return { detail, rows, groupedRows, totals, groupMode, repeatedComponentMode };
 }
 
 function _proposalCombineLogic(value) {
@@ -8627,6 +8780,7 @@ async function _sbProductProposalsCombinedExportData(proposalIds = [], req = nul
   }
 
   const groupMode = _proposalExportGroupMode(req?.query?.groupBy || req?.query?.sortBy);
+  const repeatedComponentMode = _proposalRepeatedComponentMode(req?.query?.repeatedComponents || req?.query?.repeatedComponentMode, "separate");
   const [productMap, kitMembership] = await Promise.all([
     _sbProductsMapById(),
     groupMode === "kit-tag" ? _sbProductKitMembershipHierarchy() : Promise.resolve(new Map()),
@@ -8769,7 +8923,7 @@ async function _sbProductProposalsCombinedExportData(proposalIds = [], req = nul
     };
   }).sort((a, b) => _proposalNaturalCompare(a.name, b.name));
 
-  const groupedRows = _proposalBuildCombinedGroupedRows(rows, groupMode, kitMembership, sources, cleanLogic);
+  const groupedRows = _proposalBuildCombinedGroupedRows(rows, groupMode, kitMembership, sources, cleanLogic, repeatedComponentMode);
 
   const totals = rows.reduce((acc, row) => {
     acc.items += 1;
@@ -8787,7 +8941,7 @@ async function _sbProductProposalsCombinedExportData(proposalIds = [], req = nul
     sourceKitQuantities: row.sourceKitQuantities,
   }));
 
-  return { sources, rows, groupedRows, totals, groupMode, logic: cleanLogic, combinedMeta: _proposalCombinedMeta({ sources, logic: cleanLogic, matrix }) };
+  return { sources, rows, groupedRows, totals, groupMode, repeatedComponentMode, logic: cleanLogic, combinedMeta: _proposalCombinedMeta({ sources, logic: cleanLogic, matrix }) };
 }
 
 function _proposalCombinedTotalQty(row = {}, logic = "add") {
@@ -23395,7 +23549,7 @@ app.post(
   requirePage(["Requested Orders", "Operations Orders", "Maintenance Orders"]),
   async (req, res) => {
     try {
-      const { orderIds, tab, columns, instruction, sortMode, signatureLabels } = req.body || {};
+      const { orderIds, tab, columns, instruction, sortMode, signatureLabels, repeatedComponentMode } = req.body || {};
       if (!Array.isArray(orderIds) || orderIds.length === 0) {
         return res.status(400).json({ error: "orderIds required" });
       }
@@ -23416,7 +23570,7 @@ app.post(
       if (!ids.length) return res.status(400).json({ error: "orderIds required" });
 
       if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
-        return await _sbPipeOrderDeliveryPdf(req, res, ids, { tab, columns, instruction, sortMode, signatureLabels });
+        return await _sbPipeOrderDeliveryPdf(req, res, ids, { tab, columns, instruction, sortMode, signatureLabels, repeatedComponentMode });
       }
 
       const parseNumberProp = (prop) => {
@@ -23966,7 +24120,7 @@ app.post(
   async (req, res) => {
     try {
       const ExcelJS = require("exceljs");
-      const { orderIds, columns, tab, instruction, sortMode } = req.body || {};
+      const { orderIds, columns, tab, instruction, sortMode, repeatedComponentMode } = req.body || {};
       if (!Array.isArray(orderIds) || orderIds.length === 0) {
         return res.status(400).json({ error: "orderIds required" });
       }
@@ -23979,7 +24133,7 @@ app.post(
       if (!ids.length) return res.status(400).json({ error: "orderIds required" });
 
       if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
-        return await _sbPipeOrderExcel(req, res, ids, { columns, tab, instruction, sortMode });
+        return await _sbPipeOrderExcel(req, res, ids, { columns, tab, instruction, sortMode, repeatedComponentMode });
       }
 
       // Helpers
@@ -24483,7 +24637,7 @@ app.post(
   requirePage("Current Orders"),
   async (req, res) => {
     try {
-      const { orderIds, columns, instruction, sortMode, signatureLabels } = req.body || {};
+      const { orderIds, columns, instruction, sortMode, signatureLabels, repeatedComponentMode } = req.body || {};
       if (!Array.isArray(orderIds) || orderIds.length === 0) {
         return res.status(400).json({ error: "orderIds required" });
       }
@@ -24496,7 +24650,7 @@ app.post(
       if (!ids.length) return res.status(400).json({ error: "orderIds required" });
 
       if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
-        return await _sbPipeOrderDeliveryPdf(req, res, ids, { tab: "current", columns, instruction, sortMode, signatureLabels });
+        return await _sbPipeOrderDeliveryPdf(req, res, ids, { tab: "current", columns, instruction, sortMode, signatureLabels, repeatedComponentMode });
       }
 
       const userId = await getSessionUserNotionId(req);
@@ -24778,7 +24932,7 @@ app.post(
   async (req, res) => {
     try {
       const ExcelJS = require("exceljs");
-      const { orderIds, columns, instruction, sortMode } = req.body || {};
+      const { orderIds, columns, instruction, sortMode, repeatedComponentMode } = req.body || {};
       if (!Array.isArray(orderIds) || orderIds.length === 0) {
         return res.status(400).json({ error: "orderIds required" });
       }
@@ -24790,7 +24944,7 @@ app.post(
       if (!ids.length) return res.status(400).json({ error: "orderIds required" });
 
       if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
-        return await _sbPipeOrderExcel(req, res, ids, { columns, tab: "current", instruction, sortMode });
+        return await _sbPipeOrderExcel(req, res, ids, { columns, tab: "current", instruction, sortMode, repeatedComponentMode });
       }
 
       const userId = await getSessionUserNotionId(req);
@@ -36987,7 +37141,7 @@ async function _sbSVOrderRowIfAllowed(req, id) {
     // ====== API: update quantity (number only) ======
 app.post("/api/sv-orders/export/pdf", requireAuth, requirePage("Orders Review"), async (req, res) => {
   try {
-    const { orderIds, columns, instruction, tab, sortMode, signatureLabels } = req.body || {};
+    const { orderIds, columns, instruction, tab, sortMode, signatureLabels, repeatedComponentMode } = req.body || {};
     const ids = (Array.isArray(orderIds) ? orderIds : []).map((value) => String(value || "").trim()).filter(Boolean);
     if (!ids.length) return res.status(400).json({ error: "orderIds required" });
     if (!_sbOrdersEnabled() || !ids.every((id) => /^\d+$/.test(id))) {
@@ -36998,7 +37152,7 @@ app.post("/api/sv-orders/export/pdf", requireAuth, requirePage("Orders Review"),
       if (!access?.row) return res.status(404).json({ error: "Order not found" });
       if (!access.allowed) return res.status(403).json({ error: "Not allowed" });
     }
-    return await _sbPipeOrderDeliveryPdf(req, res, ids, { tab: tab || "review", columns, instruction, sortMode, signatureLabels });
+    return await _sbPipeOrderDeliveryPdf(req, res, ids, { tab: tab || "review", columns, instruction, sortMode, signatureLabels, repeatedComponentMode });
   } catch (error) {
     console.error("POST /api/sv-orders/export/pdf error:", error?.details || error);
     if (!res.headersSent) return res.status(_exportErrorStatus(error)).json({ error: error?.message || "Failed to export PDF" });
@@ -37007,7 +37161,7 @@ app.post("/api/sv-orders/export/pdf", requireAuth, requirePage("Orders Review"),
 
 app.post("/api/sv-orders/export/excel", requireAuth, requirePage("Orders Review"), async (req, res) => {
   try {
-    const { orderIds, columns, instruction, tab, sortMode } = req.body || {};
+    const { orderIds, columns, instruction, tab, sortMode, repeatedComponentMode } = req.body || {};
     const ids = (Array.isArray(orderIds) ? orderIds : []).map((value) => String(value || "").trim()).filter(Boolean);
     if (!ids.length) return res.status(400).json({ error: "orderIds required" });
     if (!_sbOrdersEnabled() || !ids.every((id) => /^\d+$/.test(id))) {
@@ -37018,7 +37172,7 @@ app.post("/api/sv-orders/export/excel", requireAuth, requirePage("Orders Review"
       if (!access?.row) return res.status(404).json({ error: "Order not found" });
       if (!access.allowed) return res.status(403).json({ error: "Not allowed" });
     }
-    return await _sbPipeOrderExcel(req, res, ids, { tab: tab || "review", columns, instruction, sortMode });
+    return await _sbPipeOrderExcel(req, res, ids, { tab: tab || "review", columns, instruction, sortMode, repeatedComponentMode });
   } catch (error) {
     console.error("POST /api/sv-orders/export/excel error:", error?.details || error);
     if (!res.headersSent) return res.status(_exportErrorStatus(error)).json({ error: error?.message || "Failed to export Excel" });
