@@ -1801,3 +1801,11 @@ body.backup-table-modal-open{overflow:hidden !important;}
   .backup-delete-actions .backup-delete-next-btn{grid-row:1;}
   .backup-delete-actions .backup-cancel-btn{grid-row:2;}
 }
+
+/* Database folders: long-press actions pilot (Database page only) */
+.page-backup .backup-folder-main--long-press{
+  -webkit-touch-callout:none;
+  -webkit-user-select:none;
+  user-select:none;
+  touch-action:pan-y;
+}
