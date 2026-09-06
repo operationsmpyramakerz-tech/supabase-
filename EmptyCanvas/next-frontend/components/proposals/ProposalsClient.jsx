@@ -949,7 +949,7 @@ function AddItemsModal({ proposal, products, kits, kitFolders, tags, busy, onClo
   );
 }
 
-function ProposalDownloadModal({ columns, onToggleColumn, onDownload, onClose }) {
+function ProposalDownloadModal({ columns, repeatedComponentMode, onRepeatedComponentModeChange, onToggleColumn, onDownload, onClose }) {
   return (
     <Modal
       title="Download proposal"
@@ -968,6 +968,19 @@ function ProposalDownloadModal({ columns, onToggleColumn, onDownload, onClose })
                 <span>{label}</span>
               </label>
             ))}
+          </div>
+        </div>
+        <div className="proposal-download-modal__columns proposal-download-modal__repeat">
+          <span>Repeated components</span>
+          <div>
+            <label className={repeatedComponentMode === "merge" ? "is-selected" : ""}>
+              <input type="radio" name="proposal-repeated-components" checked={repeatedComponentMode === "merge"} onChange={() => onRepeatedComponentModeChange("merge")} />
+              <span><strong>Combine quantities</strong><small>Add matching component quantities into one row.</small></span>
+            </label>
+            <label className={repeatedComponentMode === "separate" ? "is-selected" : ""}>
+              <input type="radio" name="proposal-repeated-components" checked={repeatedComponentMode === "separate"} onChange={() => onRepeatedComponentModeChange("separate")} />
+              <span><strong>Keep separate</strong><small>Keep repeated components in their original kit/tag rows.</small></span>
+            </label>
           </div>
         </div>
         <div className="proposal-download-modal__actions products-modal__actions">
@@ -1109,6 +1122,7 @@ export default function ProposalsClient({
   const [selectedIds, setSelectedIds] = useState([]);
   const [combineLogic, setCombineLogic] = useState("add");
   const [exportColumns, setExportColumns] = useState(() => EXPORT_COLUMNS.map(([key]) => key));
+  const [repeatedComponentMode, setRepeatedComponentMode] = useState("separate");
   const [combineTotalQty, setCombineTotalQty] = useState(true);
   const [groupBy, setGroupBy] = useState("component-tag");
   const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
@@ -1980,7 +1994,7 @@ export default function ProposalsClient({
   const downloadSingle = (type) => {
     if (!activeDetail?.proposal?.id) return;
     const columns = exportColumns.length ? exportColumns.join(",") : EXPORT_COLUMNS.map(([key]) => key).join(",");
-    const params = new URLSearchParams({ columns, groupBy });
+    const params = new URLSearchParams({ columns, groupBy, repeatedComponents: repeatedComponentMode });
     openDownload(`/api/products/proposals/${encodeURIComponent(activeDetail.proposal.id)}/${type}?${params.toString()}`);
     setDownloadMenuOpen(false);
   };
@@ -1993,6 +2007,7 @@ export default function ProposalsClient({
       columns: exportColumns.join(","),
       totalQty: combineTotalQty ? "1" : "0",
       groupBy,
+      repeatedComponents: repeatedComponentMode,
     });
     openDownload(`/api/products/proposals/combine/${type}?${params.toString()}`);
   };
@@ -2095,6 +2110,8 @@ export default function ProposalsClient({
         {downloadMenuOpen ? (
           <ProposalDownloadModal
             columns={exportColumns}
+            repeatedComponentMode={repeatedComponentMode}
+            onRepeatedComponentModeChange={setRepeatedComponentMode}
             onToggleColumn={toggleExportColumn}
             onDownload={downloadSingle}
             onClose={() => setDownloadMenuOpen(false)}
@@ -2411,6 +2428,37 @@ export default function ProposalsClient({
                   <span className="proposal-combine-logic-option__copy">
                     <strong>By kits tag</strong>
                     <small>Use Folder → Kit grouping and the Kit column in Excel.</small>
+                  </span>
+                </button>
+              </div>
+            </div>
+            <div className="products-field proposal-combine-logic-field">
+              <span>Repeated components</span>
+              <div className="proposal-combine-logic-grid" role="radiogroup" aria-label="Repeated components in export">
+                <button
+                  type="button"
+                  className={`proposal-combine-logic-option ${repeatedComponentMode === "merge" ? "is-selected" : ""}`}
+                  role="radio"
+                  aria-checked={repeatedComponentMode === "merge"}
+                  onClick={() => setRepeatedComponentMode("merge")}
+                >
+                  <span className="proposal-combine-logic-option__check" aria-hidden="true">{repeatedComponentMode === "merge" ? "✓" : ""}</span>
+                  <span className="proposal-combine-logic-option__copy">
+                    <strong>Combine quantities</strong>
+                    <small>Merge matching components into one row.</small>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className={`proposal-combine-logic-option ${repeatedComponentMode === "separate" ? "is-selected" : ""}`}
+                  role="radio"
+                  aria-checked={repeatedComponentMode === "separate"}
+                  onClick={() => setRepeatedComponentMode("separate")}
+                >
+                  <span className="proposal-combine-logic-option__check" aria-hidden="true">{repeatedComponentMode === "separate" ? "✓" : ""}</span>
+                  <span className="proposal-combine-logic-option__copy">
+                    <strong>Keep separate</strong>
+                    <small>Keep repeated components under their original kits/tags.</small>
                   </span>
                 </button>
               </div>
