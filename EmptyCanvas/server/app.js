@@ -6078,11 +6078,15 @@ function _normalizeOrderExportSignatureLabels(value, fallback = []) {
     label.toLowerCase().replace(/[^a-z]/g, ""),
     label,
   ]));
-  const requested = Array.isArray(value) ? value : [];
-  const normalized = requested
-    .map((label) => canonical.get(String(label || "").toLowerCase().replace(/[^a-z]/g, "")))
-    .filter(Boolean);
-  if (normalized.length) return Array.from(new Set(normalized));
+
+  // An explicit array is authoritative, including an empty array. This lets the
+  // download dialog intentionally export a PDF with no signature footer at all.
+  if (Array.isArray(value)) {
+    const normalized = value
+      .map((label) => canonical.get(String(label || "").toLowerCase().replace(/[^a-z]/g, "")))
+      .filter(Boolean);
+    return Array.from(new Set(normalized));
+  }
 
   const fallbackNormalized = (Array.isArray(fallback) ? fallback : [])
     .map((label) => canonical.get(String(label || "").toLowerCase().replace(/[^a-z]/g, "")))
@@ -6395,43 +6399,36 @@ async function _sbPipeOrderExcelProposalStyle(req, res, payload, {
   const instruction = exportInstruction || { title: "", englishText: "", arabicText: "" };
   const instructionLastCol = _orderExcelColumnName(Math.max(2, visualLastCol));
   if (instruction.englishText || instruction.arabicText) {
-    const headingRow = ws.addRow(["Instructions"]);
-    ws.mergeCells(`A${headingRow.number}:${instructionLastCol}${headingRow.number}`);
-    headingRow.height = 22;
-    headingRow.getCell(1).font = { bold: true, color: { argb: "FF9A3412" }, size: 11 };
-    headingRow.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFF7ED" } };
-    headingRow.getCell(1).alignment = { vertical: "middle", horizontal: "left" };
-    headingRow.getCell(1).border = borderThin;
-
     const selectedTitle = String(instruction.title || "").trim();
-    if (selectedTitle && selectedTitle.toLowerCase() !== "instructions") {
-      const titleRow = ws.addRow([selectedTitle]);
-      ws.mergeCells(`A${titleRow.number}:${instructionLastCol}${titleRow.number}`);
-      titleRow.height = 20;
-      const isArabicTitle = _orderExportContainsArabic(selectedTitle);
-      titleRow.getCell(1).font = { bold: true, color: { argb: "FFB45309" } };
-      titleRow.getCell(1).alignment = { horizontal: isArabicTitle ? "right" : "left", readingOrder: isArabicTitle ? "rtl" : "ltr", vertical: "middle", wrapText: true };
-      titleRow.getCell(1).border = borderThin;
-    }
+    const headingText = selectedTitle && selectedTitle.toLowerCase() !== "instructions"
+      ? selectedTitle
+      : "Instructions";
+    const headingRow = ws.addRow([headingText]);
+    ws.mergeCells(`A${headingRow.number}:${instructionLastCol}${headingRow.number}`);
+    headingRow.height = 23;
+    headingRow.getCell(1).font = { bold: true, color: { argb: "FFB42318" }, size: 11 };
+    headingRow.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFF1F2" } };
+    headingRow.getCell(1).alignment = { vertical: "middle", horizontal: "left", wrapText: true };
+    headingRow.getCell(1).border = {
+      top: { style: "thin", color: { argb: "FFF87171" } },
+      left: { style: "thin", color: { argb: "FFF87171" } },
+      bottom: { style: "thin", color: { argb: "FFF87171" } },
+      right: { style: "thin", color: { argb: "FFF87171" } },
+    };
 
-    const addInstructionRow = (label, value, isArabic = false) => {
+    const addInstructionBodyRow = (value, isArabic = false) => {
       const body = String(value || "").trim();
       if (!body) return;
-      const labelRow = ws.addRow([label]);
-      ws.mergeCells(`A${labelRow.number}:${instructionLastCol}${labelRow.number}`);
-      labelRow.getCell(1).font = { bold: true, color: { argb: isArabic ? "FF0F766E" : "FF475467" } };
-      labelRow.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: isArabic ? "FFF0FDFA" : "FFF8FAFC" } };
-      labelRow.getCell(1).alignment = { horizontal: isArabic ? "right" : "left", readingOrder: isArabic ? "rtl" : "ltr", vertical: "middle" };
-      labelRow.getCell(1).border = borderThin;
-
       const bodyRow = ws.addRow([body]);
       ws.mergeCells(`A${bodyRow.number}:${instructionLastCol}${bodyRow.number}`);
       bodyRow.height = Math.min(160, Math.max(46, 30 + Math.ceil(body.length / 90) * 15));
       bodyRow.getCell(1).alignment = { horizontal: isArabic ? "right" : "left", readingOrder: isArabic ? "rtl" : "ltr", vertical: "top", wrapText: true };
+      bodyRow.getCell(1).font = { color: { argb: "FF374151" } };
+      bodyRow.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF8FAFC" } };
       bodyRow.getCell(1).border = borderThin;
     };
-    addInstructionRow("English", instruction.englishText, false);
-    addInstructionRow("العربية", instruction.arabicText, true);
+    addInstructionBodyRow(instruction.englishText, false);
+    addInstructionBodyRow(instruction.arabicText, true);
     ws.addRow([]);
   }
 
