@@ -908,6 +908,9 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
   const [moveDialog, setMoveDialog] = useState(null);
   const [passwordRequest, setPasswordRequest] = useState(null);
   const [folderMenu, setFolderMenu] = useState("");
+  const folderLongPressTimerRef = useRef(null);
+  const folderLongPressStartRef = useRef(null);
+  const suppressFolderClickRef = useRef(false);
   const [combineOpen, setCombineOpen] = useState(false);
   const [detailEdit, setDetailEdit] = useState(false);
   const [createMode, setCreateMode] = useState(false);
@@ -961,6 +964,47 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
       document.removeEventListener("keydown", onKey);
     };
   }, []);
+
+  useEffect(() => () => {
+    if (folderLongPressTimerRef.current) window.clearTimeout(folderLongPressTimerRef.current);
+  }, []);
+
+  function cancelFolderLongPress() {
+    if (folderLongPressTimerRef.current) {
+      window.clearTimeout(folderLongPressTimerRef.current);
+      folderLongPressTimerRef.current = null;
+    }
+    folderLongPressStartRef.current = null;
+  }
+
+  function startFolderLongPress(event, itemKey) {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    cancelFolderLongPress();
+    suppressFolderClickRef.current = false;
+    folderLongPressStartRef.current = { x: event.clientX, y: event.clientY, pointerId: event.pointerId };
+    folderLongPressTimerRef.current = window.setTimeout(() => {
+      folderLongPressTimerRef.current = null;
+      folderLongPressStartRef.current = null;
+      suppressFolderClickRef.current = true;
+      setFolderMenu(itemKey);
+      try { if (navigator.vibrate) navigator.vibrate(28); } catch {}
+    }, 550);
+  }
+
+  function moveFolderLongPress(event) {
+    const start = folderLongPressStartRef.current;
+    if (!start || start.pointerId !== event.pointerId) return;
+    if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > 12) cancelFolderLongPress();
+  }
+
+  function openFolderActionsFromKeyboard(event, itemKey) {
+    if ((event.shiftKey && event.key === "F10") || event.key === "ContextMenu") {
+      event.preventDefault();
+      cancelFolderLongPress();
+      suppressFolderClickRef.current = true;
+      setFolderMenu(itemKey);
+    }
+  }
 
   const productMap = useMemo(() => new Map(products.map((product) => [product.id, product])), [products]);
 
@@ -1683,7 +1727,6 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
     const menuOpen = folderMenu === menuKey;
     return (
       <article className={`products-proposal-folder kit-library-kit ${menuOpen ? "is-menu-open" : ""}`} key={kit.id}>
-        <button type="button" className="proposal-folder-menu-btn" onClick={(event) => { event.stopPropagation(); setFolderMenu((current) => current === menuKey ? "" : menuKey); }} aria-expanded={menuOpen} aria-label={`Actions for ${kit.name}`}><span className="proposal-menu-dots" aria-hidden="true">•••</span></button>
         {menuOpen ? (
           <div className="proposal-folder-menu" onClick={(event) => event.stopPropagation()}>
             <button type="button" onClick={() => { setFolderMenu(""); enterEditKit(kit); }}><FeatherIcon name="edit" /><span>Edit</span></button>
@@ -1692,7 +1735,32 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
             <button type="button" className="is-danger" onClick={() => { setFolderMenu(""); deleteKit(kit); }}><FeatherIcon name="trash" /><span>Delete</span></button>
           </div>
         ) : null}
-        <button type="button" className="products-proposal-folder__main" onClick={() => loadKit(kit.id, { edit: false, adminPassword: "" })} aria-label={`Open ${kit.name}`}>
+        <button
+          type="button"
+          className="products-proposal-folder__main products-proposal-folder__main--long-press"
+          onPointerDown={(event) => startFolderLongPress(event, menuKey)}
+          onPointerMove={moveFolderLongPress}
+          onPointerUp={cancelFolderLongPress}
+          onPointerCancel={cancelFolderLongPress}
+          onPointerLeave={cancelFolderLongPress}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            cancelFolderLongPress();
+            suppressFolderClickRef.current = true;
+            setFolderMenu(menuKey);
+          }}
+          onKeyDown={(event) => openFolderActionsFromKeyboard(event, menuKey)}
+          onClick={() => {
+            if (suppressFolderClickRef.current) {
+              suppressFolderClickRef.current = false;
+              return;
+            }
+            loadKit(kit.id, { edit: false, adminPassword: "" });
+          }}
+          aria-label={`Open ${kit.name}. Press and hold for actions.`}
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+        >
           <span className="proposal-folder-figure" aria-hidden="true">
             <span className="proposal-folder-figure__paper proposal-folder-figure__paper--left" />
             <span className="proposal-folder-figure__paper proposal-folder-figure__paper--middle" />
@@ -1768,14 +1836,38 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
     const kitCount = folderKitCounts.get(folder.id) || 0;
     return (
       <article className={`products-proposal-folder kit-library-folder ${menuOpen ? "is-menu-open" : ""}`} key={folder.id}>
-        <button type="button" className="proposal-folder-menu-btn" onClick={(event) => { event.stopPropagation(); setFolderMenu((current) => current === menuKey ? "" : menuKey); }} aria-expanded={menuOpen} aria-label={`Actions for folder ${folder.name}`}><span className="proposal-menu-dots" aria-hidden="true">•••</span></button>
         {menuOpen ? (
           <div className="proposal-folder-menu" onClick={(event) => event.stopPropagation()}>
             <button type="button" onClick={() => { setFolderMenu(""); renameFolder(folder); }}><FeatherIcon name="edit" /><span>Rename</span></button>
             <button type="button" className="is-danger" onClick={() => { setFolderMenu(""); deleteFolder(folder); }}><FeatherIcon name="trash" /><span>Delete folder</span></button>
           </div>
         ) : null}
-        <button type="button" className="products-proposal-folder__main" onClick={() => openFolder(folder)} aria-label={`Open folder ${folder.name}`}>
+        <button
+          type="button"
+          className="products-proposal-folder__main products-proposal-folder__main--long-press"
+          onPointerDown={(event) => startFolderLongPress(event, menuKey)}
+          onPointerMove={moveFolderLongPress}
+          onPointerUp={cancelFolderLongPress}
+          onPointerCancel={cancelFolderLongPress}
+          onPointerLeave={cancelFolderLongPress}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            cancelFolderLongPress();
+            suppressFolderClickRef.current = true;
+            setFolderMenu(menuKey);
+          }}
+          onKeyDown={(event) => openFolderActionsFromKeyboard(event, menuKey)}
+          onClick={() => {
+            if (suppressFolderClickRef.current) {
+              suppressFolderClickRef.current = false;
+              return;
+            }
+            openFolder(folder);
+          }}
+          aria-label={`Open folder ${folder.name}. Press and hold for actions.`}
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+        >
           <span className="proposal-folder-figure" aria-hidden="true">
             <span className="proposal-folder-figure__paper proposal-folder-figure__paper--left" />
             <span className="proposal-folder-figure__paper proposal-folder-figure__paper--middle" />
