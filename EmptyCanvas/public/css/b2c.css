@@ -80,8 +80,8 @@
 .b2c-folder__name{position:absolute !important;left:11px !important;right:31px !important;top:70px !important;z-index:5 !important;width:auto !important;min-height:0 !important;margin:0 !important;color:#fff !important;font-size:.72rem !important;line-height:1.03 !important;font-weight:850 !important;letter-spacing:-.015em !important;text-align:left !important;display:block !important;overflow:hidden !important;text-overflow:ellipsis !important;white-space:nowrap !important}
 .b2c-folder__caption{position:absolute !important;left:11px !important;right:7px !important;bottom:10px !important;z-index:5 !important;width:auto !important;min-height:0 !important;margin:0 !important;color:rgba(255,255,255,.55) !important;font-size:.58rem !important;line-height:1 !important;font-weight:750 !important;text-align:left !important;display:flex !important;align-items:center !important;gap:4px !important;overflow:hidden !important;text-overflow:ellipsis !important;white-space:nowrap !important}
 .b2c-folder__caption::before{content:'';width:10px;height:10px;flex:0 0 auto;opacity:.76;background:currentColor;-webkit-mask:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>') center / contain no-repeat;mask:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2 2v1"/></svg>') center / contain no-repeat}
-.b2c-folder-actions{position:absolute !important;top:64px !important;right:7px !important;z-index:12 !important}
-.b2c-folder__menu-btn{width:17px !important;height:17px !important;min-width:17px !important;min-height:17px !important;padding:0 !important;border:0 !important;border-radius:999px !important;background:transparent !important;color:rgba(255,255,255,.86) !important;box-shadow:none !important;display:grid !important;place-items:center !important;cursor:pointer !important}
+.b2c-folder-actions{position:absolute !important;top:56px !important;right:0 !important;z-index:12 !important}
+.b2c-folder__menu-btn{width:34px !important;height:34px !important;min-width:34px !important;min-height:34px !important;padding:0 !important;border:0 !important;border-radius:999px !important;background:transparent !important;color:rgba(255,255,255,.86) !important;box-shadow:none !important;display:grid !important;place-items:center !important;cursor:pointer !important}
 .b2c-folder__menu-btn:hover,.b2c-folder__menu-btn[aria-expanded="true"]{background:rgba(255,255,255,.10) !important;color:#fff !important;transform:none !important}
 .b2c-folder__menu-dots{color:rgba(255,255,255,.86) !important;font-size:9px !important;line-height:1 !important;letter-spacing:.7px !important;transform:translateY(-1px) !important;font-weight:950 !important}
 .b2c-folder__actions-menu{position:absolute;top:27px;right:0;z-index:40;width:138px;display:none;padding:7px;border:1px solid rgba(15,23,42,.08);border-radius:16px;background:rgba(255,255,255,.98);box-shadow:0 18px 38px rgba(15,23,42,.18);backdrop-filter:blur(12px)}
@@ -317,15 +317,15 @@ body.b2c-library-page .b2c-folder__caption::before{
 }
 body.b2c-library-page .b2c-folder-actions{
   position:absolute !important;
-  top:64px !important;
-  right:7px !important;
+  top:56px !important;
+  right:0 !important;
   z-index:12 !important;
 }
 body.b2c-library-page .b2c-folder__menu-btn{
-  width:17px !important;
-  height:17px !important;
-  min-width:17px !important;
-  min-height:17px !important;
+  width:34px !important;
+  height:34px !important;
+  min-width:34px !important;
+  min-height:34px !important;
   padding:0 !important;
   border:0 !important;
   border-radius:999px !important;

@@ -1455,13 +1455,13 @@ body.backup-table-modal-open{overflow:hidden !important;}
 }
 .page-backup .backup-folder-menu-btn{
   position:absolute !important;
-  top:64px !important;
-  right:7px !important;
+  top:56px !important;
+  right:0 !important;
   z-index:8 !important;
-  width:17px !important;
-  height:17px !important;
-  min-width:17px !important;
-  min-height:17px !important;
+  width:34px !important;
+  height:34px !important;
+  min-width:34px !important;
+  min-height:34px !important;
   padding:0 !important;
   border:0 !important;
   border-radius:999px !important;
@@ -1705,3 +1705,99 @@ body.backup-table-modal-open{overflow:hidden !important;}
 .page-backup-table .backup-inline-cell-editor input:focus,
 .page-backup-table .backup-inline-cell-editor select:focus,
 .page-backup-table .backup-inline-cell-editor textarea:focus{border-color:#fb923c;box-shadow:0 0 0 3px rgba(249,115,22,.10);}
+
+
+/* 2026-09-06: easier folder actions + Proposal-style delete confirmation */
+.page-backup .backup-folder-menu-btn span{
+  display:inline-flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  width:17px !important;
+  height:17px !important;
+  border-radius:999px !important;
+  font-size:9px !important;
+  line-height:1 !important;
+}
+.page-backup .backup-folder-menu-btn:hover span,
+.page-backup .backup-folder-menu-btn[aria-expanded="true"] span{
+  background:rgba(255,255,255,.10) !important;
+}
+.backup-delete-card{
+  width:min(500px,94vw) !important;
+  padding:22px !important;
+  border-radius:28px !important;
+  border:1px solid rgba(15,23,42,.08) !important;
+  background:#fff !important;
+  box-shadow:0 32px 90px rgba(15,23,42,.26) !important;
+  overflow:hidden !important;
+}
+.backup-delete-head{
+  align-items:center !important;
+  gap:12px !important;
+  padding-right:48px !important;
+  margin-bottom:10px !important;
+}
+.backup-delete-icon{
+  width:50px !important;
+  height:50px !important;
+  flex:0 0 50px !important;
+  display:grid !important;
+  place-items:center !important;
+  border-radius:16px !important;
+  background:linear-gradient(135deg,#fee2e2,#fff7ed) !important;
+  color:#dc2626 !important;
+  border:1px solid rgba(220,38,38,.14) !important;
+}
+.backup-delete-icon svg{width:22px !important;height:22px !important;stroke:#dc2626 !important;}
+.backup-delete-card h2{
+  font-size:24px !important;
+  line-height:1.08 !important;
+  letter-spacing:-.025em !important;
+  color:#17191e !important;
+}
+.backup-delete-copy{
+  margin:12px 0 16px !important;
+  padding:12px 14px !important;
+  border:1px solid rgba(220,38,38,.12) !important;
+  border-radius:16px !important;
+  background:linear-gradient(135deg,rgba(254,242,242,.96),rgba(255,247,237,.88)) !important;
+  color:#7f1d1d !important;
+  font-size:12px !important;
+  line-height:1.5 !important;
+  font-weight:800 !important;
+}
+.backup-delete-card .backup-field{
+  gap:7px !important;
+  padding:12px !important;
+  border-radius:16px !important;
+  background:#fff !important;
+}
+.backup-delete-card .backup-field input{
+  min-height:48px !important;
+  border-radius:13px !important;
+  font-size:13px !important;
+}
+.backup-delete-actions{
+  grid-template-columns:1fr 1fr !important;
+  gap:10px !important;
+  margin-top:16px !important;
+}
+.backup-delete-actions .backup-cancel-btn,
+.backup-delete-actions .backup-delete-next-btn{
+  min-height:48px !important;
+  border-radius:14px !important;
+  font-size:13px !important;
+  font-weight:850 !important;
+}
+.backup-delete-actions .backup-cancel-btn{background:#f0f1f3 !important;border:0 !important;color:#2d333c !important;}
+.backup-delete-actions .backup-delete-next-btn{
+  background:linear-gradient(180deg,#ff3a31,#ef2119) !important;
+  box-shadow:0 10px 22px rgba(239,33,25,.28) !important;
+}
+.backup-delete-actions .backup-delete-next-btn svg{width:18px !important;height:18px !important;flex:0 0 18px !important;}
+@media(max-width:520px){
+  .backup-delete-card{padding:18px !important;border-radius:22px !important;}
+  .backup-delete-actions{grid-template-columns:1fr !important;}
+  .backup-delete-actions .backup-delete-next-btn{grid-row:1;}
+  .backup-delete-actions .backup-cancel-btn{grid-row:2;}
+}

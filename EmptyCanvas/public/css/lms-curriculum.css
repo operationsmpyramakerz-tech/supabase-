@@ -385,17 +385,17 @@
 }
 .curriculum-folder-actions{
   position:absolute;
-  top:64px;
-  right:7px;
+  top:56px;
+  right:0;
   z-index:12;
 }
 .curriculum-folder-menu-btn{
   display:grid;
   place-items:center;
-  width:17px;
-  min-width:17px;
-  height:17px;
-  min-height:17px;
+  width:34px;
+  min-width:34px;
+  height:34px;
+  min-height:34px;
   padding:0;
   border:0;
   border-radius:999px;

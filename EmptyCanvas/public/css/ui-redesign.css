@@ -2883,6 +2883,14 @@ body.ops-login-splash-active .app-container{
   stroke-width: 3.4 !important;
 }
 
+/* Larger tap target for folder 3-dot actions (Kits / Proposals). */
+.proposal-folder-menu-btn {
+  width: 34px !important;
+  height: 34px !important;
+  min-width: 34px !important;
+  min-height: 34px !important;
+}
+
 :is(.msg-inbox-more-dots, .proposal-menu-dots, .ua-member-menu-dots) {
   display: inline-flex !important;
   align-items: center !important;
