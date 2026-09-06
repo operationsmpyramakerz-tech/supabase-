@@ -342,6 +342,70 @@ function itemsForOperationsTab(items, tab) {
   return source;
 }
 
+
+function splitOrderDisplayQuantity(value, breakdown = []) {
+  const sources = Array.isArray(breakdown) ? breakdown : [];
+  const total = roundQty(value);
+  if (!sources.length || Math.abs(total) < 1e-9) return sources.map(() => 0);
+  if (sources.length === 1) return [total];
+
+  const sign = total < 0 ? -1 : 1;
+  const target = Math.max(0, Math.round(Math.abs(total)));
+  const weights = sources.map((source) => Math.max(0, finite(source?.quantity)));
+  const weightTotal = weights.reduce((sum, weight) => sum + weight, 0);
+  if (weightTotal <= 0) return sources.map((_, index) => index === 0 ? total : 0);
+
+  const parts = weights.map((weight, index) => {
+    const raw = (weight * target) / weightTotal;
+    const base = Math.floor(raw);
+    return { index, value: base, fraction: raw - base };
+  });
+  let remaining = target - parts.reduce((sum, part) => sum + part.value, 0);
+  const ranked = parts.slice().sort((a, b) => (b.fraction - a.fraction) || (a.index - b.index));
+  for (let i = 0; remaining > 0 && ranked.length; i = (i + 1) % ranked.length) {
+    ranked[i].value += 1;
+    remaining -= 1;
+  }
+  return parts.sort((a, b) => a.index - b.index).map((part) => sign * part.value);
+}
+
+function expandOrderItemsForDisplay(items = []) {
+  const out = [];
+  for (const item of Array.isArray(items) ? items : []) {
+    const breakdown = (Array.isArray(item?.sourceBreakdown) ? item.sourceBreakdown : [])
+      .filter((source) => Math.abs(finite(source?.quantity)) > 1e-9);
+    if (breakdown.length <= 1) {
+      out.push(item);
+      continue;
+    }
+
+    const requestedParts = splitOrderDisplayQuantity(requestedQuantity(item), breakdown);
+    const baseParts = splitOrderDisplayQuantity(baseQuantity(item), breakdown);
+    const receivedParts = splitOrderDisplayQuantity(receivedQuantity(item), breakdown);
+    const remainingParts = splitOrderDisplayQuantity(remainingQuantity(item), breakdown);
+    const itemId = text(item?.id) || "item";
+
+    breakdown.forEach((source, sourceIndex) => {
+      out.push({
+        ...item,
+        _displayKey: `${itemId}:${text(source?.kitId) || text(source?.kitTag) || sourceIndex}:${sourceIndex}`,
+        _displaySourceIndex: sourceIndex,
+        _displaySourceCount: breakdown.length,
+        sourceBreakdown: [source],
+        kitTag: text(source?.kitTag) || text(item?.kitTag) || "Unassigned kit",
+        kitFolderName: text(source?.kitFolderName) || text(item?.kitFolderName) || "Unfiled Kits",
+        quantity: baseParts[sourceIndex] ?? 0,
+        quantityRequested: requestedParts[sourceIndex] ?? 0,
+        quantityProgress: baseParts[sourceIndex] ?? 0,
+        quantityEditedBySupervisor: baseParts[sourceIndex] ?? 0,
+        quantityReceived: receivedParts[sourceIndex] ?? 0,
+        quantityRemaining: remainingParts[sourceIndex] ?? 0,
+      });
+    });
+  }
+  return out;
+}
+
 function groupSearchText(group) {
   return [
     group.orderIdLabel,
@@ -593,6 +657,7 @@ function OperationsOrderCard({ group, tab, onOpen, onCreator }) {
   const type = orderTypeMeta(group.orderType);
   const thumbStyle = { "--co-thumb-bg": type.bg, "--co-thumb-fg": type.fg, "--co-thumb-border": type.bd };
   const displayItems = itemsForOperationsTab(group.items, tab);
+  const displayItemCount = expandOrderItemsForDisplay(displayItems).length;
   const value = tab === "remaining" ? group.remainingTotal : tab === "received" ? group.receivedTotal : group.total;
   return (
     <article className="co-card next-operations-order-card" role="button" tabIndex={0} aria-label={`Open ${group.orderIdLabel}`} onClick={() => onOpen(group)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen(group); } }}>
@@ -602,7 +667,7 @@ function OperationsOrderCard({ group, tab, onOpen, onCreator }) {
           <div className="co-title">{group.orderIdLabel}</div>
           <div className="next-operations-order-meta"><span className="co-sub">{formatDate(group.latestCreated)}</span></div>
         </div>
-        <div className="co-qty" title={`${displayItems.length} component${displayItems.length === 1 ? "" : "s"}`}>x{displayItems.length}</div>
+        <div className="co-qty" title={`${displayItemCount} component${displayItemCount === 1 ? "" : "s"}`}>x{displayItemCount}</div>
       </div>
       <div className="co-divider" />
       <div className="co-bottom">
@@ -685,7 +750,8 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
   const canCreateDelivery = tab === "delivered" && delivered && orderTypeKey(group.orderType) === "withdrawproducts";
   const showDownload = !(maintenance && tab === "approved");
   const tabItems = itemsForOperationsTab(group.items, tab);
-  const groupedItems = groupOrderItems(tabItems, sortMode);
+  const displayTabItems = expandOrderItemsForDisplay(tabItems);
+  const groupedItems = groupOrderItems(displayTabItems, sortMode);
 
   const menuAction = (action) => {
     setMoreOpen(false);
@@ -734,7 +800,7 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
       ? <span className="sv-qty-diff"><span className="sv-qty-old">{formatQuantity(base)}</span><strong className="sv-qty-new">{formatQuantity(received)}</strong></span>
       : <strong>{formatQuantity(visibleQty)}</strong>;
     const displayTotal = Math.abs(visibleQty) * Math.abs(finite(item?.unitPrice ?? item?.unit_price ?? item?.price));
-    return <div className="co-item" key={itemId || index}>
+    return <div className="co-item" key={text(item?._displayKey) || itemId || index}>
       <div className="co-item-left">
         <div className="co-item-title">
           <div className="co-item-name">{itemName}</div>
@@ -772,7 +838,7 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
         <div className="next-operations-order-modal-summary" aria-label="Order summary">
           <div><span>Order</span><strong>{group.orderIdLabel}</strong></div>
           <div><span>Date</span><strong>{formatDate(group.latestCreated)}</strong></div>
-          <div><span>Components</span><strong>{tabItems.length}</strong></div>
+          <div><span>Components</span><strong>{displayTabItems.length}</strong></div>
           <div className="next-operations-order-modal-summary__status"><span>Status</span>{group.stage === 2 && group.hasApproved && group.hasRejected ? <MixedStatusPill /> : <StatusPill group={group} tab={tab} />}</div>
         </div>
         <Progress stage={group.stage} />
