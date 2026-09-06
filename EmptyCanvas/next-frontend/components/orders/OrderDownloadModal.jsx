@@ -290,7 +290,8 @@ export default function OrderDownloadModal({
             }
           : null,
       });
-      onClose();
+      // Keep the modal open after a successful download so the current choices
+      // remain selected (useful when downloading PDF then Excel with the same setup).
     } catch (downloadError) {
       setError(downloadError?.message || "The file could not be downloaded.");
     } finally {
