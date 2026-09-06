@@ -5675,6 +5675,39 @@ async function _sbSplitOrderExportRowsFromProposalSources(rows = [], items = [],
     itemsByProposal.get(proposalId).push(proposalItem);
   }
 
+  const mergeSources = (proposalItems = [], targetQuantity = 0) => {
+    const sourceMap = new Map();
+    let sourceOrder = 0;
+
+    for (const entry of proposalItems) {
+      const entryQty = _sbProposalQuantity(entry?.quantity || 1);
+      const entrySources = _sbProposalSourceKitsForTotal(entry?.sourceKits || [], entryQty);
+      for (const source of entrySources) {
+        const kitId = String(source?.kitId || "").trim();
+        const kitName = String(source?.kitName || "").trim();
+        const key = kitId || `name:${normKey(kitName || "Direct components")}`;
+        const qty = _sbProposalQuantity(source?.quantity || 1);
+        const existing = sourceMap.get(key);
+        if (existing) {
+          existing.quantity += qty;
+        } else {
+          sourceMap.set(key, {
+            ...source,
+            kitId,
+            kitName: kitName || "Direct components",
+            quantity: qty,
+            order: Number.isFinite(Number(source?.order)) ? Number(source.order) : sourceOrder,
+          });
+          sourceOrder += 1;
+        }
+      }
+    }
+
+    const combined = [...sourceMap.values()].sort((a, b) => Number(a?.order || 0) - Number(b?.order || 0));
+    if (!combined.length) return [];
+    return _sbProposalSourceKitsForTotal(combined, Math.abs(Number(targetQuantity) || 0) || 1);
+  };
+
   const out = [];
   for (let index = 0; index < safeRows.length; index += 1) {
     const row = safeRows[index] || {};
@@ -5691,14 +5724,14 @@ async function _sbSplitOrderExportRowsFromProposalSources(rows = [], items = [],
     const product = productNameMap.get(normKey(row?.component || item?.productName || "")) || null;
     const productId = String(product?.id || "").trim();
     const proposalItems = itemsByProposal.get(proposalId) || [];
-    const proposalItem = proposalItems.find((entry) =>
+    const matchingProposalItems = proposalItems.filter((entry) =>
       (productId && String(entry?.productId || "").trim() === productId)
       || normKey(entry?.productName || "") === normKey(row?.component || item?.productName || "")
     );
 
     const qty = Number(row?.qty) || 0;
-    const sources = proposalItem && qty !== 0
-      ? _sbProposalSourceKitsForTotal(proposalItem?.sourceKits || [], Math.abs(qty))
+    const sources = matchingProposalItems.length && qty !== 0
+      ? mergeSources(matchingProposalItems, Math.abs(qty))
       : [];
     if (!sources.length) {
       out.push(row);
@@ -6136,6 +6169,271 @@ async function _sbPipeOrderMaintenancePdf(req, res, orderIds = []) {
   });
 }
 
+
+async function _sbPipeOrderExcelProposalStyle(req, res, payload, {
+  selectedColumns = [],
+  exportInstruction = null,
+  exportSortMode = "product-tag",
+} = {}) {
+  const ExcelJS = require("exceljs");
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "Operations Hub";
+  wb.created = new Date();
+
+  const ws = wb.addWorksheet("Order");
+  const generatedAt = new Date();
+  const includeKitColumn = exportSortMode === "kit-tag";
+  const excelColumns = [
+    ...(includeKitColumn ? [{ key: "__kitTag", label: "Kit", width: 16, kitTag: true }] : []),
+    ...(Array.isArray(selectedColumns) ? selectedColumns : []).map((col) => ({ ...col, width: col.width || 16 })),
+  ];
+  const lastTableCol = Math.max(1, excelColumns.length);
+  const visualLastCol = Math.max(2, lastTableCol);
+
+  const BORDER_COLOR = { argb: "FF9CA3AF" };
+  const borderThin = {
+    top: { style: "thin", color: BORDER_COLOR },
+    left: { style: "thin", color: BORDER_COLOR },
+    bottom: { style: "thin", color: BORDER_COLOR },
+    right: { style: "thin", color: BORDER_COLOR },
+  };
+  const numberFmtInt = '#,##0;-#,##0;0';
+  const numberFmtDec = '#,##0.##;-#,##0.##;0';
+  const numFmtFor = (value) => {
+    const n = Number(value);
+    return Number.isFinite(n) && Math.abs(n - Math.round(n)) < 1e-9 ? numberFmtInt : numberFmtDec;
+  };
+
+  excelColumns.forEach((col, index) => {
+    ws.getColumn(index + 1).width = col.width || 16;
+  });
+
+  ws.mergeCells(1, 1, 1, visualLastCol);
+  const titleCell = ws.getCell(1, 1);
+  titleCell.value = `Order Report — ${payload.orderIdRange || "Order"}`;
+  titleCell.font = { bold: true, size: 16, color: { argb: "FFFFFFFF" } };
+  titleCell.alignment = { horizontal: "center", vertical: "middle" };
+  titleCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF111827" } };
+  ws.getRow(1).height = 26;
+
+  ws.mergeCells(2, 1, 2, visualLastCol);
+  const metaCell = ws.getCell(2, 1);
+  metaCell.value = `Team member: ${payload.teamMember || "—"}  •  Reason: ${payload.groupReason || "—"}  •  Generated: ${formatDateTime(generatedAt)}`;
+  metaCell.font = { italic: true, size: 10, color: { argb: "FF6B7280" } };
+  metaCell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+  ws.getRow(2).height = 20;
+
+  ws.mergeCells("A3:B3");
+  const summaryHead = ws.getCell("A3");
+  summaryHead.value = "Summary";
+  summaryHead.font = { bold: true, color: { argb: "FFFFFFFF" } };
+  summaryHead.alignment = { horizontal: "center", vertical: "middle" };
+  summaryHead.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1F4E79" } };
+  summaryHead.border = borderThin;
+  ws.getCell("B3").border = borderThin;
+
+  const summaryRows = [
+    ["Total requested items", Number((payload.rows || []).length || 0)],
+    ["Total quantity", Number(payload.grandQty || 0)],
+    ["Total cost", Number(payload.grandTotal || 0)],
+  ];
+  summaryRows.forEach(([label, value], index) => {
+    const rowIndex = 4 + index;
+    const labelCell = ws.getCell(rowIndex, 1);
+    const valueCell = ws.getCell(rowIndex, 2);
+    labelCell.value = label;
+    labelCell.font = { bold: true, color: { argb: "FF111827" } };
+    labelCell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+    labelCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF3F4F6" } };
+    valueCell.value = value;
+    valueCell.numFmt = index === 2 ? '"£"#,##0.00' : numFmtFor(value);
+    valueCell.font = { bold: true, color: { argb: index === 2 ? "FFC2410C" : "FF2563EB" } };
+    valueCell.alignment = { horizontal: "center", vertical: "middle" };
+    labelCell.border = borderThin;
+    valueCell.border = borderThin;
+    ws.getRow(rowIndex).height = 18;
+  });
+
+  ws.addRow([]);
+
+  const instruction = exportInstruction || { title: "", englishText: "", arabicText: "" };
+  const instructionLastCol = _orderExcelColumnName(Math.max(2, visualLastCol));
+  if (instruction.englishText || instruction.arabicText) {
+    const headingRow = ws.addRow(["Instructions"]);
+    ws.mergeCells(`A${headingRow.number}:${instructionLastCol}${headingRow.number}`);
+    headingRow.height = 22;
+    headingRow.getCell(1).font = { bold: true, color: { argb: "FF9A3412" }, size: 11 };
+    headingRow.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFF7ED" } };
+    headingRow.getCell(1).alignment = { vertical: "middle", horizontal: "left" };
+    headingRow.getCell(1).border = borderThin;
+
+    const selectedTitle = String(instruction.title || "").trim();
+    if (selectedTitle && selectedTitle.toLowerCase() !== "instructions") {
+      const titleRow = ws.addRow([selectedTitle]);
+      ws.mergeCells(`A${titleRow.number}:${instructionLastCol}${titleRow.number}`);
+      titleRow.height = 20;
+      const isArabicTitle = _orderExportContainsArabic(selectedTitle);
+      titleRow.getCell(1).font = { bold: true, color: { argb: "FFB45309" } };
+      titleRow.getCell(1).alignment = { horizontal: isArabicTitle ? "right" : "left", readingOrder: isArabicTitle ? "rtl" : "ltr", vertical: "middle", wrapText: true };
+      titleRow.getCell(1).border = borderThin;
+    }
+
+    const addInstructionRow = (label, value, isArabic = false) => {
+      const body = String(value || "").trim();
+      if (!body) return;
+      const labelRow = ws.addRow([label]);
+      ws.mergeCells(`A${labelRow.number}:${instructionLastCol}${labelRow.number}`);
+      labelRow.getCell(1).font = { bold: true, color: { argb: isArabic ? "FF0F766E" : "FF475467" } };
+      labelRow.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: isArabic ? "FFF0FDFA" : "FFF8FAFC" } };
+      labelRow.getCell(1).alignment = { horizontal: isArabic ? "right" : "left", readingOrder: isArabic ? "rtl" : "ltr", vertical: "middle" };
+      labelRow.getCell(1).border = borderThin;
+
+      const bodyRow = ws.addRow([body]);
+      ws.mergeCells(`A${bodyRow.number}:${instructionLastCol}${bodyRow.number}`);
+      bodyRow.height = Math.min(160, Math.max(46, 30 + Math.ceil(body.length / 90) * 15));
+      bodyRow.getCell(1).alignment = { horizontal: isArabic ? "right" : "left", readingOrder: isArabic ? "rtl" : "ltr", vertical: "top", wrapText: true };
+      bodyRow.getCell(1).border = borderThin;
+    };
+    addInstructionRow("English", instruction.englishText, false);
+    addInstructionRow("العربية", instruction.arabicText, true);
+    ws.addRow([]);
+  }
+
+  const headerRowIndex = ws.rowCount + 1;
+  const headerRow = ws.getRow(headerRowIndex);
+  headerRow.height = 20;
+  excelColumns.forEach((col, index) => {
+    const cell = headerRow.getCell(index + 1);
+    cell.value = col.label || col.header || col.key;
+    cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF374151" } };
+    cell.border = borderThin;
+  });
+
+  const KIT_CELL_STYLES = [
+    { fill: "FFD9EAF7", color: "FF1F4E79" },
+    { fill: "FFE2F0D9", color: "FF375623" },
+    { fill: "FFFFE5D0", color: "FF9A3412" },
+    { fill: "FFEDE9FE", color: "FF5B21B6" },
+    { fill: "FFFCE7F3", color: "FF9D174D" },
+    { fill: "FFE0F2FE", color: "FF075985" },
+    { fill: "FFFEF3C7", color: "FF92400E" },
+    { fill: "FFDCFCE7", color: "FF166534" },
+    { fill: "FFFEE2E2", color: "FF991B1B" },
+    { fill: "FFE0E7FF", color: "FF3730A3" },
+  ];
+
+  let visualIndex = 0;
+  const addComponentRow = (item, kitName = "", kitStyle = null) => {
+    const values = excelColumns.map((col) => col.kitTag ? String(kitName || "") : _orderExportCellValue(item, col.key));
+    const row = ws.addRow(values);
+    row.height = 18;
+    excelColumns.forEach((col, index) => {
+      const cell = row.getCell(index + 1);
+      cell.border = borderThin;
+      cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+
+      if (col.kitTag) {
+        const style = kitStyle || KIT_CELL_STYLES[0];
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: style.fill } };
+        cell.font = { bold: true, color: { argb: style.color } };
+      } else if (visualIndex % 2 === 1) {
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF9FAFB" } };
+      }
+
+      if (col.key === "qty") cell.numFmt = numFmtFor(cell.value);
+      if (col.key === "unit" || col.key === "total") cell.numFmt = '"£"#,##0.00';
+      if (col.key === "total") cell.font = { bold: true, color: { argb: "FFC2410C" } };
+
+      if (col.key === "component" && item?.link) {
+        const url = String(item.link || "").trim();
+        if (/^https?:\/\//i.test(url)) {
+          cell.value = { text: String(item.component || cell.value || "Component"), hyperlink: url };
+          cell.font = { color: { argb: "FF2563EB" }, underline: true };
+        }
+      } else if (col.key === "link" && item?.link) {
+        const url = String(item.link || "").trim();
+        if (/^https?:\/\//i.test(url)) {
+          cell.value = { text: url, hyperlink: url };
+          cell.font = { color: { argb: "FF2563EB" }, underline: true };
+        }
+      }
+    });
+    visualIndex += 1;
+  };
+
+  const addMergedHeaderRow = (label, { fill, color, height = 19 } = {}) => {
+    const row = ws.addRow([label]);
+    if (lastTableCol > 1) ws.mergeCells(row.number, 1, row.number, lastTableCol);
+    row.height = height;
+    for (let c = 1; c <= lastTableCol; c += 1) {
+      const cell = row.getCell(c);
+      cell.font = { bold: true, color: { argb: color } };
+      cell.alignment = { horizontal: "left", vertical: "middle" };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: fill } };
+      cell.border = borderThin;
+    }
+    return row;
+  };
+
+  const exportGroups = _groupOrderExportRows(payload.rows || [], exportSortMode);
+  if (!payload.rows?.length) {
+    const row = ws.addRow(["No components found."]);
+    row.font = { italic: true, color: { argb: "FF6B7280" } };
+  } else if (exportSortMode === "kit-tag" && exportGroups.length) {
+    const folders = new Map();
+    for (const group of exportGroups) {
+      const folderName = String(group?.folderName || "Unfiled Kits").trim() || "Unfiled Kits";
+      if (!folders.has(folderName)) folders.set(folderName, []);
+      folders.get(folderName).push(group);
+    }
+
+    for (const [folderName, kitGroups] of folders.entries()) {
+      addMergedHeaderRow(`${folderName} (${kitGroups.length} kit${kitGroups.length === 1 ? "" : "s"})`, {
+        fill: "FF07101F",
+        color: "FFFFFFFF",
+        height: 21,
+      });
+      kitGroups.forEach((group, kitIndex) => {
+        const kitStyle = KIT_CELL_STYLES[kitIndex % KIT_CELL_STYLES.length];
+        (group.rows || []).forEach((item) => addComponentRow(item, group.tag || "Unassigned kit", kitStyle));
+      });
+    }
+  } else if (exportGroups.length) {
+    for (const group of exportGroups) {
+      addMergedHeaderRow(`${group.tag || "Uncategorized"} (${(group.rows || []).length} item${(group.rows || []).length === 1 ? "" : "s"})`, {
+        fill: "FFFFF7ED",
+        color: "FF9A3412",
+        height: 19,
+      });
+      (group.rows || []).forEach((item) => addComponentRow(item));
+    }
+  } else {
+    (payload.rows || []).forEach((item) => addComponentRow(item));
+  }
+
+  const autoFromRow = 3;
+  const autoToRow = ws.rowCount;
+  for (let c = 1; c <= lastTableCol; c += 1) {
+    let maxLen = String(excelColumns[c - 1]?.label || excelColumns[c - 1]?.key || "").length;
+    for (let r = autoFromRow; r <= autoToRow; r += 1) {
+      const value = ws.getRow(r).getCell(c).value;
+      const textValue = value && typeof value === "object" && value.text ? value.text : String(value ?? "");
+      if (textValue) maxLen = Math.max(maxLen, textValue.length);
+    }
+    ws.getColumn(c).width = Math.min(42, Math.max(11, maxLen + 2));
+  }
+
+  ws.views = [{ state: "frozen", ySplit: headerRowIndex }];
+  const fileName = `order_${_sbSafeExportName(payload.orderIdRange)}.xlsx`;
+  const buffer = await wb.xlsx.writeBuffer();
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="${fileName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`);
+  res.setHeader("Cache-Control", "no-store");
+  return res.send(Buffer.from(buffer));
+}
+
 async function _sbPipeOrderExcel(req, res, orderIds = [], { columns = null, tab = "", instruction = null, sortMode = null, repeatedComponentMode = "merge" } = {}) {
   const ExcelJS = require("exceljs");
   const payload = await _sbBuildOrderExportPayload(orderIds, req, { repeatedComponentMode });
@@ -6144,6 +6442,14 @@ async function _sbPipeOrderExcel(req, res, orderIds = [], { columns = null, tab 
   const exportSortMode = _normalizeOrderExportSortMode(sortMode ?? req?.body?.sortMode);
   const first = payload.first || {};
   const isMaintenanceExport = _normKeyOrderType(first.orderType || "") === _normKeyOrderType("Request Maintenance");
+  if (!isMaintenanceExport) {
+    return await _sbPipeOrderExcelProposalStyle(req, res, payload, {
+      selectedColumns,
+      exportInstruction,
+      exportSortMode,
+    });
+  }
+
   const columnCount = Math.max(1, selectedColumns.length);
   const lastCol = _orderExcelColumnName(columnCount);
 

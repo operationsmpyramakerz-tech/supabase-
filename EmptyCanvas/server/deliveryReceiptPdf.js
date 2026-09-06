@@ -273,6 +273,10 @@ async function pipeDeliveryReceiptPDF(
     muted: "#6B7280",
     text: "#111827",
     zebra: "#FAFAFA",
+    headerBg: "#F9FAFB",
+    tableHeadBg: "#F3F4F6",
+    dark: "#050B18",
+    link: "#1D4ED8",
   };
 
   const INCLUDE_FOOTER_SIGNATURE = showFooterSignature !== false;
@@ -524,160 +528,86 @@ async function pipeDeliveryReceiptPDF(
     doc.y += 5;
   }
 
-  // ======== Meta small table (page 1) ========
+  // ======== Proposal-style order summary (page 1) ========
   const { pageW, pageH, mL, mR, mB, contentW } = metrics();
-  const metaX = mL;
-  const metaY = doc.y;
-  const metaW = contentW;
-  const metaColW = metaW / 2;
-  const META = {
-    padX: 10,
-    padTop: 6,
-    padBottom: 8,
-    gapY: 3,
-    labelFont: "Helvetica",
-    labelSize: 9,
-    valueFont: "Helvetica-Bold",
-    valueSize: 11,
-    minRowH: 30,
+
+  ensureSpace(190);
+  doc
+    .fillColor(COLORS.text)
+    .font("Helvetica-Bold")
+    .fontSize(14)
+    .text("Order Summary", mL, doc.y);
+  doc
+    .fillColor(COLORS.muted)
+    .font("Helvetica")
+    .fontSize(9)
+    .text("Order details, quantities and exported components.", mL, doc.y + 4, { width: contentW });
+  doc.moveDown(1.1);
+
+  const infoGap = 12;
+  const infoW = (contentW - infoGap) / 2;
+  const infoH = 38;
+  const infoPadX = 10;
+  const drawInfoBox = (x, y, title, value) => {
+    doc.roundedRect(x, y, infoW, infoH, 8).fillColor(COLORS.headerBg).fill();
+    doc.roundedRect(x, y, infoW, infoH, 8).lineWidth(0.8).strokeColor(COLORS.border).stroke();
+    doc.fillColor(COLORS.muted).font("Helvetica-Bold").fontSize(8.5).text(String(title || ""), x + infoPadX, y + 6, {
+      width: infoW - infoPadX * 2,
+      align: "left",
+    });
+    doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(10).text(String(value || "—"), x + infoPadX, y + 20, {
+      width: infoW - infoPadX * 2,
+      align: "left",
+      ellipsis: true,
+    });
   };
 
-  const metaRows = String(metaLayout || "").toLowerCase() === "teamreasonfirst"
-    ? [
-        [
-          { label: "Team member", value: String(teamMember || "—") },
-          { label: "Reason", value: String(preparedBy || "—") },
-        ],
-        [
-          { label: "Order ID", value: String(orderId || "—") },
-          { label: "Date", value: formatDateTime(generatedAt) },
-        ],
-      ]
-    : [
-        [
-          { label: "Order ID", value: String(orderId || "—") },
-          { label: "Date", value: formatDateTime(generatedAt) },
-        ],
-        [
-          { label: "Team member", value: String(teamMember || "—") },
-          { label: "Prepared by (Operations)", value: String(preparedBy || "—") },
-        ],
-      ];
+  const infoY1 = doc.y;
+  const teamLabel = String(teamMember || "—");
+  const reasonLabel = String(preparedBy || "—");
+  drawInfoBox(mL, infoY1, "Team member", teamLabel);
+  drawInfoBox(mL + infoW + infoGap, infoY1, "Reason", reasonLabel);
+  const infoY2 = infoY1 + infoH + 8;
+  drawInfoBox(mL, infoY2, "Order ID", String(orderId || "—"));
+  drawInfoBox(mL + infoW + infoGap, infoY2, "Date", formatDateTime(generatedAt));
+  doc.y = infoY2 + infoH + 16;
 
-  function measureMetaCellHeight(label, value, w) {
-    const innerW = Math.max(1, w - META.padX * 2);
-    const safeLabel = String(label || "—");
-    const safeValue = String(value || "—");
-
-    doc.font(META.labelFont).fontSize(META.labelSize);
-    const labelH = doc.heightOfString(safeLabel, {
-      width: innerW,
+  const statGap = 10;
+  const statW = (contentW - statGap * 2) / 3;
+  const statY = doc.y;
+  const drawStat = (idx, label, value) => {
+    const x = mL + idx * (statW + statGap);
+    doc.roundedRect(x, statY, statW, 46, 12).fillColor(COLORS.dark).fill();
+    doc.fillColor("#CBD5E1").font("Helvetica-Bold").fontSize(8).text(String(label || ""), x + 12, statY + 10, {
+      width: statW - 24,
       align: "left",
-      lineGap: 0,
     });
-
-    doc.font(META.valueFont).fontSize(META.valueSize);
-    const valueH = doc.heightOfString(safeValue, {
-      width: innerW,
+    doc.fillColor("#FFFFFF").font("Helvetica-Bold").fontSize(13).text(String(value ?? "0"), x + 12, statY + 25, {
+      width: statW - 24,
       align: "left",
-      lineGap: 1,
+      ellipsis: true,
     });
+  };
+  drawStat(0, "COMPONENT ROWS", `${safeRows.length} item${safeRows.length === 1 ? "" : "s"}`);
+  drawStat(1, "TOTAL QUANTITY", Number(grandQty) || 0);
+  drawStat(2, showCosts ? "TOTAL COST" : "GROUPS", showCosts ? moneyGBP(grandTotal) : groups.length);
+  doc.y = statY + 62;
 
-    return Math.max(
-      META.minRowH,
-      META.padTop + labelH + META.gapY + valueH + META.padBottom,
-    );
-  }
-
-  function drawMetaCell(label, value, x, y, w) {
-    const innerW = Math.max(1, w - META.padX * 2);
-    const safeLabel = String(label || "—");
-    const safeValue = String(value || "—");
-
-    doc
-      .fillColor(COLORS.muted)
-      .font(META.labelFont)
-      .fontSize(META.labelSize)
-      .text(safeLabel, x + META.padX, y + META.padTop, {
-        width: innerW,
-        align: "left",
-        lineGap: 0,
-      });
-
-    const labelH = doc
-      .font(META.labelFont)
-      .fontSize(META.labelSize)
-      .heightOfString(safeLabel, {
-        width: innerW,
-        align: "left",
-        lineGap: 0,
-      });
-
-    doc
-      .fillColor(COLORS.text)
-      .font(META.valueFont)
-      .fontSize(META.valueSize)
-      .text(safeValue, x + META.padX, y + META.padTop + labelH + META.gapY, {
-        width: innerW,
-        align: "left",
-        lineGap: 1,
-      });
-  }
-
-  const metaRowHeights = metaRows.map((row) =>
-    Math.max(...row.map((cell) => measureMetaCellHeight(cell.label, cell.value, metaColW))),
-  );
-  const metaH = metaRowHeights.reduce((sum, h) => sum + h, 0);
-
-  doc
-    .roundedRect(metaX, metaY, metaW, metaH, 8)
-    .lineWidth(1)
-    .strokeColor(COLORS.border)
-    .stroke();
-
-  doc
-    .moveTo(metaX + metaColW, metaY)
-    .lineTo(metaX + metaColW, metaY + metaH)
-    .strokeColor(COLORS.border)
-    .stroke();
-
-  let metaDividerY = metaY;
-  metaRowHeights.slice(0, -1).forEach((rowH) => {
-    metaDividerY += rowH;
-    doc
-      .moveTo(metaX, metaDividerY)
-      .lineTo(metaX + metaW, metaDividerY)
-      .strokeColor(COLORS.border)
-      .stroke();
-  });
-
-  let metaRowY = metaY;
-  metaRows.forEach((row, rowIndex) => {
-    drawMetaCell(row[0].label, row[0].value, metaX, metaRowY, metaColW);
-    drawMetaCell(row[1].label, row[1].value, metaX + metaColW, metaRowY, metaColW);
-    metaRowY += metaRowHeights[rowIndex];
-  });
-
-  doc.y = metaY + metaH + 18;
-
-  // ======== Items tables (grouped by Reason) ========
+  // ======== Proposal-style component tables ========
   const tableX = mL;
   const tableW = contentW;
-  const headerH = 26;
-  const cellPadX = 8;
-  const tagBarH = exportGroupMode === "kit-tag" ? 30 : 38;
+  const headerH = 24;
+  const cellPadX = 7;
 
-  // Dynamic columns. If no explicit exportColumns are provided, keep the old defaults:
-  // ID | Component | Qty | Unit | Total, or ID | Component | Qty when showCosts=false.
   const allColumnDefs = [
     { key: "idCode", label: "ID Code", ratio: 0.16, align: "left" },
     { key: "component", label: "Component", ratio: 0.38, align: "left" },
-    { key: "qty", label: "Qty", ratio: 0.09, align: "right" },
+    { key: "qty", label: "Quantity", ratio: 0.10, align: "right" },
     { key: "reason", label: "Reason", ratio: 0.20, align: "left" },
     { key: "issue", label: "Issue", ratio: 0.22, align: "left" },
     { key: "link", label: "Component link", ratio: 0.26, align: "left" },
-    { key: "unit", label: "Unit", ratio: 0.12, align: "right" },
-    { key: "total", label: "Total", ratio: 0.13, align: "right" },
+    { key: "unit", label: "Unit Cost", ratio: 0.12, align: "right" },
+    { key: "total", label: "Total Cost", ratio: 0.13, align: "right" },
   ];
   const defByKey = new Map(allColumnDefs.map((col) => [col.key, col]));
   const defaultKeys = showCosts
@@ -690,7 +620,6 @@ async function pipeDeliveryReceiptPDF(
     .map((key) => String(key || "").trim())
     .filter((key) => defByKey.has(key));
   if (!selectedKeys.length) selectedKeys = defaultKeys.slice();
-  // The table needs at least one descriptive column, otherwise files are hard to read.
   if (!selectedKeys.includes("component")) selectedKeys.unshift("component");
   selectedKeys = Array.from(new Set(selectedKeys));
 
@@ -708,188 +637,195 @@ async function pipeDeliveryReceiptPDF(
     usedW += width;
     return col;
   });
-  const showGrandTotalSummary = columns.some((col) => col.key === "unit" || col.key === "total");
 
-  function drawTagBar(group, count, tagColors) {
+  function drawTableHeader() {
     const y = doc.y;
-    const isKitTag = exportGroupMode === "kit-tag";
-    const folderName = isKitTag ? String(group?.folderName || "Unfiled Kits") : "";
-    const label = isKitTag
-      ? folderName
-      : String(group?.label || (exportGroupMode ? "Product Tag" : "Reason"));
-    const pillText = String(group?.tag || group?.reason || "No Reason");
+    doc.rect(tableX, y, tableW, headerH).fillColor(COLORS.tableHeadBg).fill();
+    doc.rect(tableX, y, tableW, headerH).lineWidth(0.8).strokeColor(COLORS.border).stroke();
 
-    doc
-      .roundedRect(tableX, y, tableW, tagBarH, 10)
-      .fill(tagColors.bg)
-      .strokeColor(tagColors.border)
-      .lineWidth(1)
-      .stroke();
-
-    doc.fillColor(COLORS.muted).font("Helvetica-Bold").fontSize(9);
-    doc.text(label, tableX + 12, y + 7, { width: 72, align: "left" });
-
-    doc.font("Helvetica-Bold").fontSize(10);
-    const pillW = Math.min(330, Math.max(76, doc.widthOfString(pillText) + 24));
-    const pillX = tableX + 78;
-    doc
-      .roundedRect(pillX, y + 5, pillW, 19, 9)
-      .fill(tagColors.pill)
-      .strokeColor(tagColors.border)
-      .lineWidth(1)
-      .stroke();
-    doc.fillColor(tagColors.text).text(pillText, pillX + 11, y + 9, {
-      width: pillW - 22,
-      align: "left",
-      ellipsis: true,
-    });
-
-    doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(9);
-    doc.text(`${Number(count) || 0} items`, tableX + 12, y + 9, {
-      width: tableW - 24,
-      align: "right",
-    });
-
-    doc.y = y + tagBarH + 8;
-  }
-
-  function drawTableHeader(tagColors) {
-    const y = doc.y;
-
-    // background
-    doc.rect(tableX, y, tableW, headerH).fill(tagColors.bg);
-
-    // border
-    doc
-      .rect(tableX, y, tableW, headerH)
-      .lineWidth(1)
-      .strokeColor(tagColors.border)
-      .stroke();
-
-    // labels
-    doc.fillColor(tagColors.text).font("Helvetica-Bold").fontSize(10);
-    columns.forEach((c) => {
-      doc.text(c.label, c.x + cellPadX, y + 8, {
+    doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(8.5);
+    columns.forEach((c, index) => {
+      doc.text(c.label, c.x + cellPadX, y + 7, {
         width: c.width - cellPadX * 2,
         align: c.align,
       });
+      if (index > 0) {
+        doc.moveTo(c.x, y).lineTo(c.x, y + headerH).lineWidth(0.5).strokeColor(COLORS.border).stroke();
+      }
     });
-
-    // bottom line
-    doc
-      .moveTo(tableX, y + headerH)
-      .lineTo(tableX + tableW, y + headerH)
-      .lineWidth(1)
-      .strokeColor(tagColors.border)
-      .stroke();
-
     doc.y = y + headerH;
   }
 
-  for (let gi = 0; gi < groups.length; gi++) {
-    const g = groups[gi];
-    const tagColors = pickTagColors(g.reason);
-    const items = (g.rows || []).slice().sort((a, b) =>
-      String(a?.component || "").localeCompare(String(b?.component || "")),
-    );
+  function drawFolderHeader(folderName, kitCount = 0) {
+    const y = doc.y;
+    doc.rect(tableX, y, tableW, 27).fillColor("#07101F").fill();
+    doc.rect(tableX, y, tableW, 27).lineWidth(0.5).strokeColor("#1F2937").stroke();
+    doc.fillColor("#FFFFFF").font("Helvetica-Bold").fontSize(10).text(String(folderName || "Unfiled Kits"), tableX + cellPadX, y + 8, {
+      width: tableW - 125,
+      align: "left",
+      ellipsis: true,
+    });
+    doc.fillColor("#CBD5E1").font("Helvetica-Bold").fontSize(8).text(`${Number(kitCount) || 0} kit${Number(kitCount) === 1 ? "" : "s"}`, tableX + tableW - 110, y + 9, {
+      width: 103,
+      align: "right",
+    });
+    doc.y = y + 27;
+  }
 
-    const needsTagBar = Boolean(exportTagGroups.length || showReasonTagBarOpt);
-    const groupHeaderHeight = (needsTagBar ? tagBarH + 8 : 0) + headerH + 6;
-    ensureSpace(groupHeaderHeight);
-    const drawGroupHeader = () => {
-      if (needsTagBar) drawTagBar(g, items.length, tagColors);
-      drawTableHeader(tagColors);
+  function drawKitHeader(kitName, count = 0) {
+    const y = doc.y;
+    doc.rect(tableX, y, tableW, 24).fillColor("#FFF7ED").fill();
+    doc.rect(tableX, y, tableW, 24).lineWidth(0.5).strokeColor("#FED7AA").stroke();
+    doc.fillColor("#9A3412").font("Helvetica-Bold").fontSize(9.3).text(String(kitName || "Unassigned kit"), tableX + cellPadX, y + 7, {
+      width: tableW - 110,
+      align: "left",
+      ellipsis: true,
+    });
+    doc.fillColor("#C2410C").font("Helvetica-Bold").fontSize(8).text(`${Number(count) || 0} item${Number(count) === 1 ? "" : "s"}`, tableX + tableW - 100, y + 8, {
+      width: 93,
+      align: "right",
+    });
+    doc.y = y + 24;
+  }
+
+  function drawTagHeader(tag, count = 0) {
+    const y = doc.y;
+    doc.rect(tableX, y, tableW, 24).fillColor("#FFF7ED").fill();
+    doc.rect(tableX, y, tableW, 24).lineWidth(0.5).strokeColor("#FED7AA").stroke();
+    doc.fillColor("#9A3412").font("Helvetica-Bold").fontSize(9.3).text(String(tag || "Uncategorized"), tableX + cellPadX, y + 7, {
+      width: tableW - 110,
+      align: "left",
+      ellipsis: true,
+    });
+    doc.fillColor("#C2410C").font("Helvetica-Bold").fontSize(8).text(`${Number(count) || 0} item${Number(count) === 1 ? "" : "s"}`, tableX + tableW - 100, y + 8, {
+      width: 93,
+      align: "right",
+    });
+    doc.y = y + 24;
+  }
+
+  function drawReasonHeader(reason, count = 0) {
+    const y = doc.y;
+    doc.rect(tableX, y, tableW, 24).fillColor("#F5F3FF").fill();
+    doc.rect(tableX, y, tableW, 24).lineWidth(0.5).strokeColor("#DDD6FE").stroke();
+    doc.fillColor("#5B21B6").font("Helvetica-Bold").fontSize(9.3).text(String(reason || "No Reason"), tableX + cellPadX, y + 7, {
+      width: tableW - 110,
+      align: "left",
+      ellipsis: true,
+    });
+    doc.fillColor("#6D28D9").font("Helvetica-Bold").fontSize(8).text(`${Number(count) || 0} item${Number(count) === 1 ? "" : "s"}`, tableX + tableW - 100, y + 8, {
+      width: 93,
+      align: "right",
+    });
+    doc.y = y + 24;
+  }
+
+  function drawItemRow(r, visualIndex = 0, repeatHeader = null) {
+    const componentLink = normalizeUrl(r.link || r.url || r.componentLink || r.href);
+    const rowData = {
+      idCode: String(r.idCode || ""),
+      component: String(r.component || ""),
+      qty: String(Number(r.qty) || 0),
+      reason: String(r.reason || ""),
+      issue: String(r.issue || r.actualIssueDescription || r.issueDescription || r.reason || ""),
+      link: componentLink || String(r.link || r.url || r.componentLink || r.href || ""),
+      unit: moneyGBP(r.unit),
+      total: moneyGBP(r.total),
     };
-    drawGroupHeader();
 
-    doc.font("Helvetica").fontSize(10).fillColor(COLORS.text);
+    doc.font("Helvetica").fontSize(9);
+    const measuredHeights = columns.map((c) => doc.heightOfString(String(rowData[c.key] || ""), {
+      width: Math.max(1, c.width - cellPadX * 2),
+      align: c.align,
+      lineGap: 1,
+    }));
+    const rowH = Math.max(20, ...measuredHeights) + 8;
+    ensureSpace(rowH + 4, { onNewPage: repeatHeader });
 
-    items.forEach((r, idx) => {
-      const componentLink = normalizeUrl(r.link || r.url || r.componentLink || r.href);
-      const rowData = {
-        idCode: String(r.idCode || ""),
-        component: String(r.component || ""),
-        qty: String(Number(r.qty) || 0),
-        reason: String(r.reason || ""),
-        issue: String(r.issue || r.actualIssueDescription || r.issueDescription || r.reason || ""),
-        link: componentLink || String(r.link || r.url || r.componentLink || r.href || ""),
-        unit: moneyGBP(r.unit),
-        total: moneyGBP(r.total),
-      };
+    const y = doc.y;
+    if (visualIndex % 2 === 1) doc.rect(tableX, y, tableW, rowH).fillColor(COLORS.zebra).fill();
 
-      const measuredHeights = columns.map((c) => doc.heightOfString(String(rowData[c.key] || ""), {
-        width: Math.max(1, c.width - cellPadX * 2),
-        align: c.align,
-      }));
-      const rowH = Math.max(20, ...measuredHeights) + 8;
-
-      ensureSpace(rowH + 6, { onNewPage: drawGroupHeader });
-
-      const y = doc.y;
-
-      // zebra background
-      if (idx % 2 === 0) {
-        doc.rect(tableX, y, tableW, rowH).fill(COLORS.zebra);
-        doc.fillColor(COLORS.text);
-      }
-
-      // grid
-      doc.lineWidth(0.6).strokeColor(COLORS.border);
-      // left / right borders
-      doc.moveTo(tableX, y).lineTo(tableX, y + rowH).stroke();
-      doc.moveTo(tableX + tableW, y).lineTo(tableX + tableW, y + rowH).stroke();
-      for (let i = 1; i < columns.length; i++) {
-        doc.moveTo(columns[i].x, y).lineTo(columns[i].x, y + rowH).stroke();
-      }
-      // row bottom line
-      doc.moveTo(tableX, y + rowH).lineTo(tableX + tableW, y + rowH).stroke();
-
-      // text
-      doc.fillColor(COLORS.text).font("Helvetica").fontSize(10);
-
-      columns.forEach((c) => {
-        const opts = {
-          width: c.width - cellPadX * 2,
-          align: c.align,
-        };
-
-        // Make component name and URL clickable when a valid URL exists.
-        if ((c.key === "component" || c.key === "link") && componentLink) {
-          opts.link = componentLink;
-        }
-
-        doc.text(String(rowData[c.key] || ""), c.x + cellPadX, y + 6, opts);
-      });
-
-      doc.y = y + rowH;
+    doc.rect(tableX, y, tableW, rowH).lineWidth(0.5).strokeColor(COLORS.border).stroke();
+    columns.forEach((c, index) => {
+      if (index > 0) doc.moveTo(c.x, y).lineTo(c.x, y + rowH).lineWidth(0.5).strokeColor(COLORS.border).stroke();
     });
 
-    // space between groups
-    doc.y += 14;
+    doc.fillColor(COLORS.text).font("Helvetica").fontSize(9);
+    columns.forEach((c) => {
+      const opts = {
+        width: c.width - cellPadX * 2,
+        align: c.align,
+        lineGap: 1,
+      };
+      if ((c.key === "component" || c.key === "link") && componentLink) opts.link = componentLink;
+      doc.text(String(rowData[c.key] || ""), c.x + cellPadX, y + 6, opts);
+    });
+    doc.y = y + rowH;
   }
 
-  // ======== Totals summary (last page area, above footer) ========
-  ensureSpace(90);
-  doc.y += 10;
+  let visualIndex = 0;
 
-  const { mL: sumML, contentW: sumContentW } = metrics();
-  const sumW = 220;
-  const sumH = showGrandTotalSummary ? 54 : 34;
-  const sumX = sumML + sumContentW - sumW;
-  const sumY = doc.y;
+  if (exportGroupMode === "kit-tag" && exportTagGroups.length) {
+    const folderGroups = new Map();
+    for (const group of exportTagGroups) {
+      const folderName = String(group?.folderName || "Unfiled Kits").trim() || "Unfiled Kits";
+      if (!folderGroups.has(folderName)) folderGroups.set(folderName, []);
+      folderGroups.get(folderName).push(group);
+    }
 
-  doc.roundedRect(sumX, sumY, sumW, sumH, 10).lineWidth(1).strokeColor(COLORS.border).stroke();
-
-  doc.fillColor(COLORS.muted).font("Helvetica").fontSize(9);
-  doc.text("Total quantity", sumX + 12, sumY + 10, { width: sumW - 24, align: "left" });
-  if (showGrandTotalSummary) {
-    doc.text("Grand total", sumX + 12, sumY + 30, { width: sumW - 24, align: "left" });
-  }
-
-  doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(11);
-  doc.text(String(Number(grandQty) || 0), sumX + 12, sumY + 8, { width: sumW - 24, align: "right" });
-  if (showGrandTotalSummary) {
-    doc.text(moneyGBP(grandTotal), sumX + 12, sumY + 28, { width: sumW - 24, align: "right" });
+    for (const [folderName, kitGroups] of folderGroups.entries()) {
+      ensureSpace(58);
+      drawFolderHeader(folderName, kitGroups.length);
+      for (const group of kitGroups) {
+        const items = (group.rows || []).slice().sort((a, b) => naturalCompare(a?.component, b?.component));
+        const repeatHeader = () => {
+          drawFolderHeader(folderName, kitGroups.length);
+          drawKitHeader(group.tag || "Unassigned kit", items.length);
+          drawTableHeader();
+        };
+        ensureSpace(24 + headerH + 8);
+        drawKitHeader(group.tag || "Unassigned kit", items.length);
+        drawTableHeader();
+        items.forEach((row) => {
+          drawItemRow(row, visualIndex, repeatHeader);
+          visualIndex += 1;
+        });
+        doc.y += 10;
+      }
+      doc.y += 4;
+    }
+  } else if (exportGroupMode === "product-tag" && exportTagGroups.length) {
+    for (const group of exportTagGroups) {
+      const items = (group.rows || []).slice().sort((a, b) => naturalCompare(a?.component, b?.component));
+      const repeatHeader = () => {
+        drawTagHeader(group.tag || "Uncategorized", items.length);
+        drawTableHeader();
+      };
+      ensureSpace(24 + headerH + 8);
+      drawTagHeader(group.tag || "Uncategorized", items.length);
+      drawTableHeader();
+      items.forEach((row) => {
+        drawItemRow(row, visualIndex, repeatHeader);
+        visualIndex += 1;
+      });
+      doc.y += 12;
+    }
+  } else {
+    for (const group of groups) {
+      const items = (group.rows || []).slice().sort((a, b) => naturalCompare(a?.component, b?.component));
+      const repeatHeader = () => {
+        if (showReasonTagBarOpt || groupByReasonOpt) drawReasonHeader(group.reason || "No Reason", items.length);
+        drawTableHeader();
+      };
+      ensureSpace((showReasonTagBarOpt || groupByReasonOpt ? 24 : 0) + headerH + 8);
+      if (showReasonTagBarOpt || groupByReasonOpt) drawReasonHeader(group.reason || "No Reason", items.length);
+      drawTableHeader();
+      items.forEach((row) => {
+        drawItemRow(row, visualIndex, repeatHeader);
+        visualIndex += 1;
+      });
+      doc.y += 12;
+    }
   }
 
   doc.end();
