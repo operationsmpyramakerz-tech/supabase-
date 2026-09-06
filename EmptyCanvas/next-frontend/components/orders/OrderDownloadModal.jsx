@@ -216,8 +216,13 @@ export default function OrderDownloadModal({
   const [error, setError] = useState("");
   const selectorRef = useRef(null);
 
+  const wasOpenRef = useRef(false);
+
   useEffect(() => {
-    if (!open) return;
+    const justOpened = Boolean(open && !wasOpenRef.current);
+    wasOpenRef.current = Boolean(open);
+    if (!justOpened) return;
+
     setColumns(startingColumns);
     setSignatureLabels(startingSignatures);
     setRepeatedComponentMode(String(defaultRepeatedComponentMode || "").toLowerCase() === "separate" ? "separate" : "merge");
