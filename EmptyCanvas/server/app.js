@@ -1147,8 +1147,8 @@ async function clearUserServerCaches(req, opts = {}) {
 
   tasks.push(
     cacheDel("cache:api:orders:requested:v7"),
-    cacheDel("cache:api:orders:requested:supabase:v3:approved"),
-    cacheDel("cache:api:orders:requested:supabase:v3:all-system"),
+    cacheDel("cache:api:orders:requested:supabase:v4:approved"),
+    cacheDel("cache:api:orders:requested:supabase:v4:all-system"),
     cacheDel("cache:api:expenses:users:v1"),
     cacheDel("cache:api:expenses:users:v2"),
     cacheDel("cache:api:expenses:types:v1"),
@@ -4864,6 +4864,9 @@ function _sbSerializeOrderRow(row = {}) {
     productTag: _sbOrderText(_sbOrderGet(row, ["product_tag", "Product Tag", "component_tag", "Component Tag", "tag", "Tag"])) || null,
     kitTag: _sbOrderText(_sbOrderGet(row, ["kit_tag", "Kit Tag", "kit_name", "Kit Name", "source_kit", "Source Kit"])) || null,
     kitFolderName: _sbOrderText(_sbOrderGet(row, ["kit_folder", "Kit Folder", "kit_folder_name", "Kit Folder Name"])) || null,
+    sourceProposalId: _sbOrderText(_sbOrderGet(row, ["source_proposal_id", "Source Proposal ID", "proposal_id", "Proposal ID"])) || null,
+    sourceProposalName: _sbOrderText(_sbOrderGet(row, ["source_proposal_name", "Source Proposal Name", "proposal_name", "Proposal Name"])) || null,
+    sourceKits: _sbProposalSourceKits(_sbOrderGet(row, ["source_kits", "Source Kits", "proposal_source_kits", "Proposal Source Kits"])),
     source: "supabase",
   };
 }
@@ -5087,8 +5090,8 @@ async function _sbInvalidateOrdersCaches(req = null) {
     "cache:api:orders:requested:supabase:v1",
     "cache:api:orders:requested:supabase:v2:approved",
     "cache:api:orders:requested:supabase:v2:all-system",
-    "cache:api:orders:requested:supabase:v3:approved",
-    "cache:api:orders:requested:supabase:v3:all-system",
+    "cache:api:orders:requested:supabase:v4:approved",
+    "cache:api:orders:requested:supabase:v4:all-system",
     "cache:api:orders:current:supabase:v1",
     "cache:api:orders:current:supabase:v1:all",
   ];
@@ -5641,6 +5644,9 @@ function _normalizeOrderRepeatedComponentMode(value, fallback = "merge") {
 }
 
 function _sbOrderProposalName(item = {}) {
+  const persisted = String(item?.sourceProposalName || item?.source_proposal_name || "").trim();
+  if (persisted) return persisted;
+
   const issue = String(item?.issueDescription || item?.issue_description || "").trim();
   const match = issue.match(/^created\s+from\s+proposal\s*:\s*(.+)$/i);
   if (match?.[1]) return String(match[1]).trim();
@@ -5722,21 +5728,25 @@ async function _sbAttachOrderProposalSourceBreakdowns(
   const safeItems = Array.isArray(items) ? items : [];
   if (!safeItems.length) return safeItems;
 
-  const proposalNames = [...new Set(
-    safeItems.map(_sbOrderProposalName).map((name) => String(name || "").trim()).filter(Boolean),
-  )];
-  if (!proposalNames.length) return safeItems;
+  const needsProposalLookup = safeItems.filter((item) =>
+    !_sbProposalSourceKits(item?.sourceKits || item?.source_kits).length
+    && _sbOrderProposalName(item)
+  );
 
   let proposalRows = [];
   let proposalItemRows = [];
-  try {
-    [proposalRows, proposalItemRows] = await Promise.all([
-      _sbProposalRows(),
-      _sbProposalItemRows(null),
-    ]);
-  } catch (error) {
-    console.warn("[orders] unable to load proposal source breakdown:", error?.message || error);
-    return safeItems;
+  if (needsProposalLookup.length) {
+    try {
+      [proposalRows, proposalItemRows] = await Promise.all([
+        _sbProposalRows(),
+        _sbProposalItemRows(null),
+      ]);
+    } catch (error) {
+      console.warn("[orders] unable to load proposal source breakdown:", error?.message || error);
+      // Do not discard persisted source_kits when proposal lookup is unavailable.
+      proposalRows = [];
+      proposalItemRows = [];
+    }
   }
 
   const proposalIdByName = new Map();
@@ -5756,11 +5766,6 @@ async function _sbAttachOrderProposalSourceBreakdowns(
   }
 
   return safeItems.map((item) => {
-    const proposalName = _sbOrderProposalName(item);
-    const proposalId = proposalName ? proposalIdByName.get(normKey(proposalName)) : "";
-    const proposalItems = proposalId ? (itemsByProposal.get(String(proposalId)) || []) : [];
-    if (!proposalItems.length) return item;
-
     const nameKey = normKey(item?.productName || item?.product_name || "");
     const urlKey = String(item?.productUrl || item?.product_url || "").trim().toLowerCase();
     const product = (item?.productId
@@ -5768,14 +5773,27 @@ async function _sbAttachOrderProposalSourceBreakdowns(
       : (productByName.get(nameKey) || productByUrl.get(urlKey) || null));
     const productId = String(item?.productId || product?.id || "").trim();
 
-    const matchingProposalItems = proposalItems.filter((entry) =>
-      (productId && String(entry?.productId || "").trim() === productId)
-      || normKey(entry?.productName || "") === nameKey
-    );
-    if (!matchingProposalItems.length) return item;
+    let proposalName = _sbOrderProposalName(item);
+    let proposalId = String(item?.sourceProposalId || item?.source_proposal_id || "").trim();
+    let sources = _sbProposalSourceKits(item?.sourceKits || item?.source_kits);
 
-    let sources = _sbMergeOrderProposalItemSources(matchingProposalItems);
-    if (!sources.length) return item;
+    // Preferred path: proposal-created order rows persist the exact source_kits JSON.
+    // This makes the order view/export independent from the current proposal contents
+    // and preserves components that intentionally exist in more than one kit.
+    if (!sources.length) {
+      if (!proposalId && proposalName) proposalId = proposalIdByName.get(normKey(proposalName)) || "";
+      const proposalItems = proposalId ? (itemsByProposal.get(String(proposalId)) || []) : [];
+      if (!proposalItems.length) return item;
+
+      const matchingProposalItems = proposalItems.filter((entry) =>
+        (productId && String(entry?.productId || "").trim() === productId)
+        || normKey(entry?.productName || "") === nameKey
+      );
+      if (!matchingProposalItems.length) return item;
+
+      sources = _sbMergeOrderProposalItemSources(matchingProposalItems);
+      if (!sources.length) return item;
+    }
 
     const targetQuantity = Math.abs(Number(
       item?.quantityProgress
@@ -5785,10 +5803,8 @@ async function _sbAttachOrderProposalSourceBreakdowns(
       ?? 0
     )) || sources.reduce((sum, source) => sum + Number(source.quantity || 0), 0);
 
-    // Newer order rows may already represent one source kit. When the saved
-    // quantity matches that source, keep only that source. Older order rows
-    // contain the combined proposal quantity (e.g. 35 = 14 + 21), so they keep
-    // the full source list and are expanded for display/export.
+    // A deliberately split order row can already represent one source kit. For old
+    // combined rows the target equals the sum of all source kits, so all sources stay.
     const storedKitTag = String(item?.kitTag || item?.kit_tag || "").trim();
     const proposalTotal = sources.reduce((sum, source) => sum + Number(source.quantity || 0), 0);
     if (storedKitTag && sources.length > 1 && Math.round(targetQuantity) !== Math.round(proposalTotal)) {
@@ -5819,8 +5835,9 @@ async function _sbAttachOrderProposalSourceBreakdowns(
 
     return {
       ...item,
-      sourceProposalId: String(proposalId || "") || null,
-      sourceProposalName: String(proposalName || "") || null,
+      sourceProposalId: proposalId || null,
+      sourceProposalName: proposalName || null,
+      sourceKits: sources,
       sourceBreakdown,
     };
   });
@@ -8426,6 +8443,7 @@ async function _sbCreateOrderFromProposal(proposalId, body = {}, req = null) {
       order_number: orderNumber,
       order_type: _canonicalOrderTypeLabel("Request Products") || "Request Products",
       notion_created_time: now,
+      product_id: Number.isFinite(Number(item.productId || product.id)) ? Number(item.productId || product.id) : null,
       product_name: product.name || item.productName || "Unknown Product",
       product_url: product.url || null,
       unit_price: Number.isFinite(Number(product.unitPrice)) ? Number(product.unitPrice) : null,
@@ -8437,6 +8455,9 @@ async function _sbCreateOrderFromProposal(proposalId, body = {}, req = null) {
       sv_approval: "Approved",
       product_tag: Array.isArray(product.tags) ? (product.tags.find((tag) => String(tag || "").trim()) || null) : null,
       kit_tag: _sbProposalPrimarySourceKit(item?.sourceKits || item?.source_kits)?.kitName || null,
+      source_proposal_id: detail.proposal.id || pid,
+      source_proposal_name: detail.proposal.name || "Proposal",
+      source_kits: _sbProposalSourceKits(item?.sourceKits || item?.source_kits),
       team_member_id: member.id || null,
       team_member_name: member.name || null,
       issue_description: `Created from proposal: ${detail.proposal.name || "Proposal"}`,
@@ -20886,8 +20907,8 @@ app.get(
 
       if (_sbOrdersEnabled()) {
         const cacheKey = includeAllSystem
-          ? "cache:api:orders:requested:supabase:v3:all-system"
-          : "cache:api:orders:requested:supabase:v3:approved";
+          ? "cache:api:orders:requested:supabase:v4:all-system"
+          : "cache:api:orders:requested:supabase:v4:approved";
         const forceFresh =
           String(req.query?._fresh || "") === "1" ||
           !!req.query?._refresh ||
@@ -22483,8 +22504,8 @@ app.post(
         await _sbInvalidateOrdersCaches(req).catch(() => {});
         await cacheDel("cache:api:orders:requested:supabase:v2:approved").catch(() => {});
         await cacheDel("cache:api:orders:requested:supabase:v2:all-system").catch(() => {});
-        await cacheDel("cache:api:orders:requested:supabase:v3:approved").catch(() => {});
-        await cacheDel("cache:api:orders:requested:supabase:v3:all-system").catch(() => {});
+        await cacheDel("cache:api:orders:requested:supabase:v4:approved").catch(() => {});
+        await cacheDel("cache:api:orders:requested:supabase:v4:all-system").catch(() => {});
 
         const serializedItems = (updatedRows || []).map((row) => {
           const item = _sbSerializeOrderRow(row || {});
