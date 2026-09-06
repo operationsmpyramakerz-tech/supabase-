@@ -433,6 +433,8 @@ function ReviewDetailsModal({ group, activeTab, busyIds, onClose, onQuantitySave
         title={`Download ${group.orderIdLabel}`}
         defaultSignatureLabels={orderTypeKey(group.orderType) === "withdrawproducts" ? ["Received From", "Operations", "Storekeeper"] : ["Storekeeper", "Operations", "Delivered to"]}
         showSignatureOptions={!maintenance}
+        showRepeatedComponentOptions={!maintenance}
+        defaultRepeatedComponentMode="merge"
         onClose={() => setDownloadOpen(false)}
         onDownload={(options) => onExport({ ...options, sortMode }, group, activeTab)}
       />
@@ -779,6 +781,7 @@ export default function OrdersReviewClient({ initialOrders = [], bootstrapWarnin
         instruction: options?.instruction || null,
         signatureLabels: options?.signatureLabels || null,
         sortMode: options?.sortMode || "product-tag",
+        repeatedComponentMode: options?.repeatedComponentMode || "merge",
       }),
     });
     if (response.status === 401) {

@@ -172,6 +172,8 @@ export default function OrderDownloadModal({
   columnOptions = null,
   defaultSignatureLabels = null,
   showSignatureOptions = true,
+  showRepeatedComponentOptions = false,
+  defaultRepeatedComponentMode = "merge",
   onClose,
   onDownload,
 }) {
@@ -202,6 +204,9 @@ export default function OrderDownloadModal({
 
   const [columns, setColumns] = useState(startingColumns);
   const [signatureLabels, setSignatureLabels] = useState(startingSignatures);
+  const [repeatedComponentMode, setRepeatedComponentMode] = useState(
+    String(defaultRepeatedComponentMode || "").toLowerCase() === "separate" ? "separate" : "merge",
+  );
   const [templates, setTemplates] = useState([]);
   const [selectedInstructionId, setSelectedInstructionId] = useState("");
   const [instructionOpen, setInstructionOpen] = useState(false);
@@ -215,6 +220,7 @@ export default function OrderDownloadModal({
     if (!open) return;
     setColumns(startingColumns);
     setSignatureLabels(startingSignatures);
+    setRepeatedComponentMode(String(defaultRepeatedComponentMode || "").toLowerCase() === "separate" ? "separate" : "merge");
     setTemplates(loadTemplates());
     setSelectedInstructionId("");
     setInstructionOpen(false);
@@ -222,7 +228,7 @@ export default function OrderDownloadModal({
     setEditingInstruction(null);
     setBusy(false);
     setError("");
-  }, [open, startingColumns, startingSignatures]);
+  }, [open, startingColumns, startingSignatures, defaultRepeatedComponentMode]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -270,6 +276,7 @@ export default function OrderDownloadModal({
         kind,
         columns,
         signatureLabels: showSignatureOptions ? signatureLabels : null,
+        repeatedComponentMode: showRepeatedComponentOptions ? repeatedComponentMode : null,
         instruction: selectedInstruction
           ? {
               title: selectedInstruction.title,
@@ -322,6 +329,25 @@ export default function OrderDownloadModal({
             ))}
           </div>
         </div>
+
+        {showRepeatedComponentOptions ? (
+          <div className="order-download-section order-download-repeated-components">
+            <div className="order-download-instructions__heading">
+              <span className="order-download-section__label">Repeated components</span>
+              <small>Choose whether identical components are combined or kept as separate rows.</small>
+            </div>
+            <div className="order-download-columns__grid order-download-repeat-grid">
+              <label className={`order-download-column-option order-download-repeat-option ${repeatedComponentMode === "merge" ? "is-selected" : ""}`}>
+                <input type="radio" name="repeated-component-mode" checked={repeatedComponentMode === "merge"} onChange={() => setRepeatedComponentMode("merge")} />
+                <span><strong>Combine quantities</strong><small>Add matching component quantities into one row.</small></span>
+              </label>
+              <label className={`order-download-column-option order-download-repeat-option ${repeatedComponentMode === "separate" ? "is-selected" : ""}`}>
+                <input type="radio" name="repeated-component-mode" checked={repeatedComponentMode === "separate"} onChange={() => setRepeatedComponentMode("separate")} />
+                <span><strong>Keep separate</strong><small>Keep repeated components in their original kit/tag rows.</small></span>
+              </label>
+            </div>
+          </div>
+        ) : null}
 
         {showSignatureOptions ? (
           <div className="order-download-section order-download-signatures">
