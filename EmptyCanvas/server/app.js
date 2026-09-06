@@ -5640,29 +5640,109 @@ function _normalizeOrderRepeatedComponentMode(value, fallback = "merge") {
   return String(fallback || "").toLowerCase() === "separate" ? "separate" : "merge";
 }
 
-async function _sbSplitOrderExportRowsFromProposalSources(rows = [], items = [], productNameMap = new Map(), req = null) {
-  const safeRows = Array.isArray(rows) ? rows : [];
+function _sbOrderProposalName(item = {}) {
+  const issue = String(item?.issueDescription || item?.issue_description || "").trim();
+  const match = issue.match(/^created\s+from\s+proposal\s*:\s*(.+)$/i);
+  if (match?.[1]) return String(match[1]).trim();
+
+  // Proposal-created order rows also keep the proposal name in Reason. Use it
+  // only when the row already carries kit metadata so normal shopping-cart
+  // reasons are never mistaken for proposal names.
+  const kitTag = String(item?.kitTag || item?.kit_tag || "").trim();
+  const reason = String(item?.reason || "").trim();
+  return kitTag && reason && reason.toLowerCase() !== "no reason" ? reason : "";
+}
+
+function _sbMergeOrderProposalItemSources(proposalItems = []) {
+  const sourceMap = new Map();
+  let orderIndex = 0;
+  for (const entry of Array.isArray(proposalItems) ? proposalItems : []) {
+    const entryQty = _sbProposalQuantity(entry?.quantity || 1);
+    const sources = _sbProposalSourceKitsForTotal(entry?.sourceKits || entry?.source_kits || [], entryQty);
+    for (const source of sources) {
+      const kitId = String(source?.kitId || "").trim();
+      const kitName = String(source?.kitName || "").trim() || "Direct components";
+      const key = kitId || `name:${normKey(kitName)}`;
+      const quantity = _sbProposalQuantity(source?.quantity || 1);
+      const current = sourceMap.get(key);
+      if (current) current.quantity += quantity;
+      else {
+        sourceMap.set(key, {
+          kitId,
+          kitName,
+          quantity,
+          order: Number.isFinite(Number(source?.order)) ? Number(source.order) : orderIndex,
+        });
+        orderIndex += 1;
+      }
+    }
+  }
+  return [...sourceMap.values()].sort((a, b) => Number(a?.order || 0) - Number(b?.order || 0));
+}
+
+function _sbScaleOrderSourceBreakdown(sourceRows = [], targetQuantity = 0) {
+  const sources = (Array.isArray(sourceRows) ? sourceRows : [])
+    .map((source, index) => ({
+      ...source,
+      quantity: Math.max(0, Number(source?.quantity) || 0),
+      order: Number.isFinite(Number(source?.order)) ? Number(source.order) : index,
+    }))
+    .filter((source) => source.quantity > 0);
+
+  const target = Math.max(0, Math.round(Math.abs(Number(targetQuantity) || 0)));
+  if (!sources.length || target <= 0) return [];
+  const currentTotal = sources.reduce((sum, source) => sum + Number(source.quantity || 0), 0);
+  if (Math.round(currentTotal) === target) return sources.map((source) => ({ ...source, quantity: Math.round(source.quantity) }));
+  if (sources.length === 1) return [{ ...sources[0], quantity: target }];
+
+  const scaled = sources.map((source, index) => {
+    const raw = (Number(source.quantity || 0) * target) / Math.max(1, currentTotal);
+    const base = Math.floor(raw);
+    return { ...source, quantity: base, _fraction: raw - base, _index: index };
+  });
+  let assigned = scaled.reduce((sum, source) => sum + Number(source.quantity || 0), 0);
+  let remaining = target - assigned;
+  const byFraction = scaled.slice().sort((a, b) => (b._fraction - a._fraction) || (a._index - b._index));
+  for (let i = 0; remaining > 0 && byFraction.length; i = (i + 1) % byFraction.length) {
+    byFraction[i].quantity += 1;
+    remaining -= 1;
+  }
+  return scaled
+    .filter((source) => Number(source.quantity || 0) > 0)
+    .map(({ _fraction, _index, ...source }) => source);
+}
+
+async function _sbAttachOrderProposalSourceBreakdowns(
+  items = [],
+  productByName = new Map(),
+  productByUrl = new Map(),
+  kitMembership = new Map(),
+  req = null,
+) {
   const safeItems = Array.isArray(items) ? items : [];
-  if (!safeRows.length) return safeRows;
+  if (!safeItems.length) return safeItems;
+
+  const proposalNames = [...new Set(
+    safeItems.map(_sbOrderProposalName).map((name) => String(name || "").trim()).filter(Boolean),
+  )];
+  if (!proposalNames.length) return safeItems;
 
   let proposalRows = [];
   let proposalItemRows = [];
-  let kitMembership = new Map();
   try {
-    [proposalRows, proposalItemRows, kitMembership] = await Promise.all([
+    [proposalRows, proposalItemRows] = await Promise.all([
       _sbProposalRows(),
       _sbProposalItemRows(null),
-      _sbProductKitMembershipHierarchy(),
     ]);
   } catch (error) {
-    console.warn("[order export] unable to load proposal source breakdown:", error?.message || error);
-    return safeRows;
+    console.warn("[orders] unable to load proposal source breakdown:", error?.message || error);
+    return safeItems;
   }
 
   const proposalIdByName = new Map();
-  for (const proposalRow of proposalRows || []) {
-    const id = String(_sbGet(proposalRow, ["id", "ID"]) ?? "").trim();
-    const name = _sbProposalText(_sbGet(proposalRow, ["name", "Name", "proposal_name", "Proposal Name"]));
+  for (const row of proposalRows || []) {
+    const id = String(_sbGet(row, ["id", "ID"]) ?? "").trim();
+    const name = _sbProposalText(_sbGet(row, ["name", "Name", "proposal_name", "Proposal Name"]));
     if (id && name && !proposalIdByName.has(normKey(name))) proposalIdByName.set(normKey(name), id);
   }
 
@@ -5675,83 +5755,122 @@ async function _sbSplitOrderExportRowsFromProposalSources(rows = [], items = [],
     itemsByProposal.get(proposalId).push(proposalItem);
   }
 
-  const mergeSources = (proposalItems = [], targetQuantity = 0) => {
-    const sourceMap = new Map();
-    let sourceOrder = 0;
+  return safeItems.map((item) => {
+    const proposalName = _sbOrderProposalName(item);
+    const proposalId = proposalName ? proposalIdByName.get(normKey(proposalName)) : "";
+    const proposalItems = proposalId ? (itemsByProposal.get(String(proposalId)) || []) : [];
+    if (!proposalItems.length) return item;
 
-    for (const entry of proposalItems) {
-      const entryQty = _sbProposalQuantity(entry?.quantity || 1);
-      const entrySources = _sbProposalSourceKitsForTotal(entry?.sourceKits || [], entryQty);
-      for (const source of entrySources) {
-        const kitId = String(source?.kitId || "").trim();
-        const kitName = String(source?.kitName || "").trim();
-        const key = kitId || `name:${normKey(kitName || "Direct components")}`;
-        const qty = _sbProposalQuantity(source?.quantity || 1);
-        const existing = sourceMap.get(key);
-        if (existing) {
-          existing.quantity += qty;
-        } else {
-          sourceMap.set(key, {
-            ...source,
-            kitId,
-            kitName: kitName || "Direct components",
-            quantity: qty,
-            order: Number.isFinite(Number(source?.order)) ? Number(source.order) : sourceOrder,
-          });
-          sourceOrder += 1;
-        }
-      }
+    const nameKey = normKey(item?.productName || item?.product_name || "");
+    const urlKey = String(item?.productUrl || item?.product_url || "").trim().toLowerCase();
+    const product = (item?.productId
+      ? { id: item.productId }
+      : (productByName.get(nameKey) || productByUrl.get(urlKey) || null));
+    const productId = String(item?.productId || product?.id || "").trim();
+
+    const matchingProposalItems = proposalItems.filter((entry) =>
+      (productId && String(entry?.productId || "").trim() === productId)
+      || normKey(entry?.productName || "") === nameKey
+    );
+    if (!matchingProposalItems.length) return item;
+
+    let sources = _sbMergeOrderProposalItemSources(matchingProposalItems);
+    if (!sources.length) return item;
+
+    const targetQuantity = Math.abs(Number(
+      item?.quantityProgress
+      ?? item?.quantityEditedBySupervisor
+      ?? item?.quantityRequested
+      ?? item?.quantity
+      ?? 0
+    )) || sources.reduce((sum, source) => sum + Number(source.quantity || 0), 0);
+
+    // Newer order rows may already represent one source kit. When the saved
+    // quantity matches that source, keep only that source. Older order rows
+    // contain the combined proposal quantity (e.g. 35 = 14 + 21), so they keep
+    // the full source list and are expanded for display/export.
+    const storedKitTag = String(item?.kitTag || item?.kit_tag || "").trim();
+    const proposalTotal = sources.reduce((sum, source) => sum + Number(source.quantity || 0), 0);
+    if (storedKitTag && sources.length > 1 && Math.round(targetQuantity) !== Math.round(proposalTotal)) {
+      const matchingTagSources = sources.filter((source) => normKey(source?.kitName || "") === normKey(storedKitTag));
+      const exactQuantity = matchingTagSources.filter((source) => Math.round(Number(source?.quantity) || 0) === Math.round(targetQuantity));
+      if (exactQuantity.length === 1) sources = exactQuantity;
+      else if (matchingTagSources.length === 1 && targetQuantity <= Number(matchingTagSources[0]?.quantity || 0)) sources = matchingTagSources;
     }
 
-    const combined = [...sourceMap.values()].sort((a, b) => Number(a?.order || 0) - Number(b?.order || 0));
-    if (!combined.length) return [];
-    return _sbProposalSourceKitsForTotal(combined, Math.abs(Number(targetQuantity) || 0) || 1);
-  };
+    sources = _sbScaleOrderSourceBreakdown(sources, targetQuantity);
+    if (!sources.length) return item;
+
+    const memberships = productId ? (kitMembership?.get(String(productId)) || []) : [];
+    const sourceBreakdown = sources.map((source) => {
+      const kitId = String(source?.kitId || "").trim();
+      const membership = memberships.find((entry) =>
+        String(entry?.id || entry?.kitId || "").trim() === kitId
+      );
+      return {
+        kitId: kitId || null,
+        kitTag: String(source?.kitName || "").trim() || "Direct components",
+        kitFolderName: String(membership?.folderName || "").trim()
+          || (kitId ? "Unfiled Kits" : "Untracked / Direct"),
+        quantity: Math.max(0, Number(source?.quantity) || 0),
+        order: Number.isFinite(Number(source?.order)) ? Number(source.order) : 0,
+      };
+    });
+
+    return {
+      ...item,
+      sourceProposalId: String(proposalId || "") || null,
+      sourceProposalName: String(proposalName || "") || null,
+      sourceBreakdown,
+    };
+  });
+}
+
+async function _sbSplitOrderExportRowsFromProposalSources(rows = [], items = [], productNameMap = new Map(), req = null) {
+  const safeRows = Array.isArray(rows) ? rows : [];
+  const safeItems = Array.isArray(items) ? items : [];
+  if (!safeRows.length) return safeRows;
+
+  let exportItems = safeItems;
+  if (!safeItems.some((item) => Array.isArray(item?.sourceBreakdown) && item.sourceBreakdown.length)) {
+    try {
+      exportItems = await _sbAttachOrderProposalSourceBreakdowns(
+        safeItems,
+        productNameMap,
+        new Map(),
+        await _sbProductKitMembershipHierarchy().catch(() => new Map()),
+        req,
+      );
+    } catch (error) {
+      console.warn("[order export] unable to attach proposal source breakdown:", error?.message || error);
+      exportItems = safeItems;
+    }
+  }
 
   const out = [];
   for (let index = 0; index < safeRows.length; index += 1) {
     const row = safeRows[index] || {};
-    const item = safeItems[index] || {};
-    const issue = String(item?.issueDescription || "").trim();
-    const match = issue.match(/^created\s+from\s+proposal\s*:\s*(.+)$/i);
-    const proposalName = String(match?.[1] || "").trim();
-    const proposalId = proposalName ? proposalIdByName.get(normKey(proposalName)) : "";
-    if (!proposalId) {
-      out.push(row);
-      continue;
-    }
-
-    const product = productNameMap.get(normKey(row?.component || item?.productName || "")) || null;
-    const productId = String(product?.id || "").trim();
-    const proposalItems = itemsByProposal.get(proposalId) || [];
-    const matchingProposalItems = proposalItems.filter((entry) =>
-      (productId && String(entry?.productId || "").trim() === productId)
-      || normKey(entry?.productName || "") === normKey(row?.component || item?.productName || "")
-    );
-
+    const item = exportItems[index] || safeItems[index] || {};
     const qty = Number(row?.qty) || 0;
-    const sources = matchingProposalItems.length && qty !== 0
-      ? mergeSources(matchingProposalItems, Math.abs(qty))
-      : [];
-    if (!sources.length) {
+    const sourceBreakdown = Array.isArray(item?.sourceBreakdown) ? item.sourceBreakdown : [];
+    const sources = _sbScaleOrderSourceBreakdown(sourceBreakdown, Math.abs(qty));
+
+    if (!sources.length || qty === 0) {
       out.push(row);
       continue;
     }
 
     const sign = qty < 0 ? -1 : 1;
-    const memberships = kitMembership?.get(productId) || [];
     for (const source of sources) {
-      const sourceQty = sign * _sbProposalQuantity(source?.quantity || 1);
-      const membership = memberships.find((entry) =>
-        String(entry?.id || entry?.kitId || "").trim() === String(source?.kitId || "").trim()
-      );
+      const sourceQty = sign * Math.max(0, Number(source?.quantity) || 0);
+      if (!sourceQty) continue;
       out.push({
         ...row,
         qty: sourceQty,
         total: sourceQty * (Number(row?.unit) || 0),
-        kitTag: String(source?.kitName || "").trim() || row?.kitTag || "Unassigned kit",
-        kitFolderName: String(membership?.folderName || "").trim()
-          || (source?.kitId ? "Unfiled Kits" : "Untracked / Direct"),
+        kitTag: String(source?.kitTag || "").trim() || row?.kitTag || "Unassigned kit",
+        kitFolderName: String(source?.kitFolderName || "").trim() || row?.kitFolderName || "Unfiled Kits",
+        _sourceKitId: String(source?.kitId || "").trim() || null,
       });
     }
   }
@@ -10190,7 +10309,7 @@ async function _sbEnrichOrderGrouping(items = []) {
     if (urlKey && !byUrl.has(urlKey)) byUrl.set(urlKey, product);
   }
 
-  return rows.map((item) => {
+  const enriched = rows.map((item) => {
     const nameKey = normKey(item?.productName);
     const urlKey = String(item?.productUrl || item?.product_url || "").trim().toLowerCase();
     const product = byName.get(nameKey) || byUrl.get(urlKey) || null;
@@ -10225,6 +10344,8 @@ async function _sbEnrichOrderGrouping(items = []) {
       kitFolderName,
     };
   });
+
+  return await _sbAttachOrderProposalSourceBreakdowns(enriched, byName, byUrl, kitMembership, null);
 }
 
 async function _sbNextOrderNumber() {

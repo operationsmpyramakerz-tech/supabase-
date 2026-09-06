@@ -531,7 +531,7 @@ async function pipeDeliveryReceiptPDF(
   // ======== Proposal-style order summary (page 1) ========
   const { pageW, pageH, mL, mR, mB, contentW } = metrics();
 
-  ensureSpace(190);
+  ensureSpace(128);
   doc
     .fillColor(COLORS.text)
     .font("Helvetica-Bold")
@@ -572,26 +572,10 @@ async function pipeDeliveryReceiptPDF(
   drawInfoBox(mL + infoW + infoGap, infoY2, "Date", formatDateTime(generatedAt));
   doc.y = infoY2 + infoH + 16;
 
-  const statGap = 10;
-  const statW = (contentW - statGap * 2) / 3;
-  const statY = doc.y;
-  const drawStat = (idx, label, value) => {
-    const x = mL + idx * (statW + statGap);
-    doc.roundedRect(x, statY, statW, 46, 12).fillColor(COLORS.dark).fill();
-    doc.fillColor("#CBD5E1").font("Helvetica-Bold").fontSize(8).text(String(label || ""), x + 12, statY + 10, {
-      width: statW - 24,
-      align: "left",
-    });
-    doc.fillColor("#FFFFFF").font("Helvetica-Bold").fontSize(13).text(String(value ?? "0"), x + 12, statY + 25, {
-      width: statW - 24,
-      align: "left",
-      ellipsis: true,
-    });
-  };
-  drawStat(0, "COMPONENT ROWS", `${safeRows.length} item${safeRows.length === 1 ? "" : "s"}`);
-  drawStat(1, "TOTAL QUANTITY", Number(grandQty) || 0);
-  drawStat(2, showCosts ? "TOTAL COST" : "GROUPS", showCosts ? moneyGBP(grandTotal) : groups.length);
-  doc.y = statY + 62;
+  // Keep the proposal-style summary compact. The three dark statistic cards
+  // (Component rows / Total quantity / Groups) were intentionally removed so
+  // the component table starts immediately after the order information.
+  doc.y += 2;
 
   // ======== Proposal-style component tables ========
   const tableX = mL;
