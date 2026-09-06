@@ -4803,13 +4803,24 @@ function _sbSerializeOrderRow(row = {}) {
   const createdTime =
     _sbOrderDate(_sbOrderGet(row, ["notion_created_time", "created_time", "created_at", "Created time"])) ||
     new Date().toISOString();
+  const sourceProposalId = _sbOrderText(_sbOrderGet(row, ["source_proposal_id", "Source Proposal ID", "proposal_id", "Proposal ID"])) || null;
+  const sourceProposalName = _sbOrderText(_sbOrderGet(row, ["source_proposal_name", "Source Proposal Name", "proposal_name", "Proposal Name"])) || null;
+  const sourceKits = _sbProposalSourceKits(_sbOrderGet(row, ["source_kits", "Source Kits", "proposal_source_kits", "Proposal Source Kits"]));
+  const rawReason = _sbOrderText(_sbOrderGet(row, ["reason", "Reason"])) || "No Reason";
+  const isProposalGenerated = Boolean(
+    sourceProposalId
+    || sourceProposalName
+    || sourceKits.length
+    || /^created\s+from\s+proposal\s*:/i.test(String(_sbOrderGet(row, ["issue_description", "Issue Description"]) || "").trim())
+  );
+  const displayReason = isProposalGenerated ? "Generated from Proposal" : rawReason;
 
   return {
     id,
     orderId: Number.isFinite(orderNum) ? `ORD-${orderNum}` : (id ? `ORD-${id}` : null),
     orderIdPrefix: Number.isFinite(orderNum) ? "ORD" : null,
     orderIdNumber: Number.isFinite(orderNum) ? orderNum : null,
-    reason: _sbOrderText(_sbOrderGet(row, ["reason", "Reason"])) || "No Reason",
+    reason: displayReason,
     productName,
     productPageId: _sbOrderText(_sbOrderGet(row, ["product_url", "product", "Product"])) || null,
     productUrl: _sbOrderText(_sbOrderGet(row, ["product_url", "Product URL"])) || null,
@@ -4864,9 +4875,9 @@ function _sbSerializeOrderRow(row = {}) {
     productTag: _sbOrderText(_sbOrderGet(row, ["product_tag", "Product Tag", "component_tag", "Component Tag", "tag", "Tag"])) || null,
     kitTag: _sbOrderText(_sbOrderGet(row, ["kit_tag", "Kit Tag", "kit_name", "Kit Name", "source_kit", "Source Kit"])) || null,
     kitFolderName: _sbOrderText(_sbOrderGet(row, ["kit_folder", "Kit Folder", "kit_folder_name", "Kit Folder Name"])) || null,
-    sourceProposalId: _sbOrderText(_sbOrderGet(row, ["source_proposal_id", "Source Proposal ID", "proposal_id", "Proposal ID"])) || null,
-    sourceProposalName: _sbOrderText(_sbOrderGet(row, ["source_proposal_name", "Source Proposal Name", "proposal_name", "Proposal Name"])) || null,
-    sourceKits: _sbProposalSourceKits(_sbOrderGet(row, ["source_kits", "Source Kits", "proposal_source_kits", "Proposal Source Kits"])),
+    sourceProposalId,
+    sourceProposalName,
+    sourceKits,
     source: "supabase",
   };
 }
@@ -5895,6 +5906,38 @@ async function _sbSplitOrderExportRowsFromProposalSources(rows = [], items = [],
   return out;
 }
 
+function _sbPreferredCombinedOrderSource(item = {}) {
+  const sources = Array.isArray(item?.sourceBreakdown) ? item.sourceBreakdown.filter(Boolean) : [];
+  if (!sources.length) return null;
+
+  // When an identical proposal component exists in a Generic Kits kit and in
+  // one or more theme kits, Combine quantities should keep the merged quantity
+  // inside the Generic Kits row instead of creating/retaining a separate theme
+  // group for that component.
+  const genericFolder = sources.find((source) =>
+    normKey(source?.kitFolderName || source?.folderName || "") === normKey("Generic Kits")
+  );
+  if (genericFolder) return genericFolder;
+
+  const genericKitName = sources.find((source) => /\bgeneric\b/i.test(String(source?.kitTag || source?.kitName || "")));
+  return genericKitName || null;
+}
+
+function _sbPlaceCombinedOrderRowsInPreferredKit(rows = [], items = []) {
+  const safeRows = Array.isArray(rows) ? rows : [];
+  const safeItems = Array.isArray(items) ? items : [];
+  return safeRows.map((row, index) => {
+    const source = _sbPreferredCombinedOrderSource(safeItems[index] || {});
+    if (!source) return row;
+    return {
+      ...row,
+      kitTag: String(source?.kitTag || source?.kitName || "").trim() || row?.kitTag || "Unassigned kit",
+      kitFolderName: String(source?.kitFolderName || source?.folderName || "").trim() || row?.kitFolderName || "Unfiled Kits",
+      _sourceKitId: String(source?.kitId || "").trim() || null,
+    };
+  });
+}
+
 async function _sbBuildOrderExportPayload(orderIds = [], req = null, { repeatedComponentMode = "merge" } = {}) {
   const rowsRaw = await _sbOrderRowsByIds(orderIds);
   if (!rowsRaw.length) {
@@ -5957,7 +6000,7 @@ async function _sbBuildOrderExportPayload(orderIds = [], req = null, { repeatedC
   const normalizedRepeatedComponentMode = _normalizeOrderRepeatedComponentMode(repeatedComponentMode, "merge");
   const exportRows = normalizedRepeatedComponentMode === "separate"
     ? await _sbSplitOrderExportRowsFromProposalSources(rows, items, productNameMap, req)
-    : rows;
+    : _sbPlaceCombinedOrderRowsInPreferredKit(rows, items);
 
   const reasonCounts = new Map();
   for (const row of exportRows) {
@@ -6358,7 +6401,15 @@ async function _sbPipeOrderExcelProposalStyle(req, res, payload, {
 
   ws.mergeCells(2, 1, 2, visualLastCol);
   const metaCell = ws.getCell(2, 1);
-  metaCell.value = `Team member: ${payload.teamMember || "—"}  •  Reason: ${payload.groupReason || "—"}  •  Generated: ${formatDateTime(generatedAt)}`;
+  const generatedAtLabel = generatedAt.toLocaleString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Africa/Cairo",
+  });
+  metaCell.value = `Team member: ${payload.teamMember || "—"}  •  Reason: ${payload.groupReason || "—"}  •  Generated: ${generatedAtLabel}`;
   metaCell.font = { italic: true, size: 10, color: { argb: "FF6B7280" } };
   metaCell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
   ws.getRow(2).height = 20;
@@ -8436,7 +8487,7 @@ async function _sbCreateOrderFromProposal(proposalId, body = {}, req = null) {
     const product = productMap.get(String(item.productId || "")) || {};
     const qty = _sbProposalQuantity(item.quantity || 1);
     rows.push({
-      reason: detail.proposal.name || "Proposal",
+      reason: "Generated from Proposal",
       order_number: orderNumber,
       order_type: _canonicalOrderTypeLabel("Request Products") || "Request Products",
       notion_created_time: now,

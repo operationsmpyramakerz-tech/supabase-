@@ -20,6 +20,7 @@ function formatDateTime(date) {
       year: "numeric",
       hour: "2-digit",
       minute: "2-digit",
+      timeZone: "Africa/Cairo",
     });
   } catch {
     return String(date || "-");
@@ -547,12 +548,15 @@ async function pipeDeliveryReceiptPDF(
   const { pageW, pageH, mL, mR, mB, contentW } = metrics();
 
   ensureSpace(128);
+  // Give the section heading equal breathing room above and below so it sits
+  // visually centered between the previous block/header and the info cards.
+  doc.y += 5;
   doc
     .fillColor(COLORS.text)
     .font("Helvetica-Bold")
     .fontSize(14)
     .text("Order Summary", mL, doc.y);
-  doc.moveDown(0.65);
+  doc.moveDown(0.45);
 
   const infoGap = 12;
   const infoW = (contentW - infoGap) / 2;
