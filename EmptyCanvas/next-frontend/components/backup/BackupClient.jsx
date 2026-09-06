@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
+import { confirmDelete as showDeleteConfirm } from "../../lib/client-confirm";
 
 const MAX_CSV_SIZE = 25 * 1024 * 1024;
 
@@ -406,16 +407,16 @@ export default function BackupClient({ initialTables = [] }) {
     if (!password) return setDeleteError("Admin password is required.");
 
     const isAll = Boolean(deleteTarget?.isAll);
-    const confirmed = window.OpsDeleteConfirm?.confirm
-      ? await window.OpsDeleteConfirm.confirm({
-          title: isAll ? "Delete all system data?" : `Delete ${deleteTarget?.pageName || "table data"}?`,
-          itemType: isAll ? "system data" : "table data",
-          itemName: isAll ? "all system data" : (deleteTarget?.pageName || deleteTarget?.tableName || "this table"),
-          message: isAll
-            ? "You’re going to download a complete ZIP backup and then permanently delete all rows from all database tables. This action cannot be undone."
-            : `You’re going to download a CSV backup and then permanently delete every row from “${deleteTarget?.tableName || "this table"}”. This action cannot be undone.`,
-        })
-      : window.confirm(isAll ? "Delete all system data?" : `Delete ${deleteTarget?.pageName || "table data"}?`);
+    const confirmed = await showDeleteConfirm({
+      title: isAll ? "Delete all system data?" : `Delete ${deleteTarget?.pageName || "table data"}?`,
+      itemType: isAll ? "system data" : "table data",
+      itemName: isAll ? "all system data" : (deleteTarget?.pageName || deleteTarget?.tableName || "this table"),
+      message: isAll
+        ? "A complete ZIP backup will download first, then all rows from all database tables will be permanently deleted. This action cannot be undone."
+        : `A CSV backup will download first, then every row from “${deleteTarget?.tableName || "this table"}” will be permanently deleted. This action cannot be undone.`,
+      cancelLabel: "No, keep it.",
+      confirmLabel: "Yes, Delete!",
+    });
     if (!confirmed) return;
 
     setDeleteError("");
