@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { confirmDelete as showDeleteConfirm } from "../../lib/client-confirm";
 
@@ -200,6 +200,9 @@ export default function BackupClient({ initialTables = [] }) {
   const [folderMenu, setFolderMenu] = useState("");
   const [activePageKey, setActivePageKey] = useState("");
   const [search, setSearch] = useState("");
+  const folderLongPressTimerRef = useRef(null);
+  const folderLongPressStartRef = useRef(null);
+  const suppressFolderClickRef = useRef(false);
 
   const pageGroups = useMemo(() => buildDatabasePageGroups(tables), [tables]);
   const activePage = useMemo(() => pageGroups.find((group) => group.key === activePageKey) || null, [pageGroups, activePageKey]);
@@ -256,6 +259,47 @@ export default function BackupClient({ initialTables = [] }) {
       document.removeEventListener("keydown", keyDown);
     };
   }, [folderMenu]);
+
+  useEffect(() => () => {
+    if (folderLongPressTimerRef.current) window.clearTimeout(folderLongPressTimerRef.current);
+  }, []);
+
+  function cancelFolderLongPress() {
+    if (folderLongPressTimerRef.current) {
+      window.clearTimeout(folderLongPressTimerRef.current);
+      folderLongPressTimerRef.current = null;
+    }
+    folderLongPressStartRef.current = null;
+  }
+
+  function startFolderLongPress(event, itemKey) {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    cancelFolderLongPress();
+    suppressFolderClickRef.current = false;
+    folderLongPressStartRef.current = { x: event.clientX, y: event.clientY, pointerId: event.pointerId };
+    folderLongPressTimerRef.current = window.setTimeout(() => {
+      folderLongPressTimerRef.current = null;
+      folderLongPressStartRef.current = null;
+      suppressFolderClickRef.current = true;
+      setFolderMenu(itemKey);
+      try { if (navigator.vibrate) navigator.vibrate(28); } catch {}
+    }, 550);
+  }
+
+  function moveFolderLongPress(event) {
+    const start = folderLongPressStartRef.current;
+    if (!start || start.pointerId !== event.pointerId) return;
+    if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > 12) cancelFolderLongPress();
+  }
+
+  function openFolderActionsFromKeyboard(event, itemKey) {
+    if ((event.shiftKey && event.key === "F10") || event.key === "ContextMenu") {
+      event.preventDefault();
+      cancelFolderLongPress();
+      suppressFolderClickRef.current = true;
+      setFolderMenu(itemKey);
+    }
+  }
 
   useEffect(() => {
     function syncFolderFromUrl() {
@@ -520,18 +564,6 @@ export default function BackupClient({ initialTables = [] }) {
               const menuOpen = folderMenu === item.key;
               return (
                 <article className={`backup-folder-card ${menuOpen ? "is-menu-open" : ""}`} key={item.key || item.tableName}>
-                  <button
-                    type="button"
-                    className="backup-folder-menu-btn"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      setFolderMenu((current) => current === item.key ? "" : item.key);
-                    }}
-                    aria-label={`Actions for ${item.pageName || item.tableName}`}
-                    aria-expanded={menuOpen}
-                  >
-                    <span aria-hidden="true">•••</span>
-                  </button>
                   {menuOpen ? (
                     <div className="backup-folder-menu" onClick={(event) => event.stopPropagation()}>
                       <a href={`/api/backup/tables/${encodeURIComponent(item.key)}/download`} download onClick={() => setFolderMenu("")}>
@@ -547,9 +579,29 @@ export default function BackupClient({ initialTables = [] }) {
                   ) : null}
                   <button
                     type="button"
-                    className="backup-folder-main"
-                    onClick={() => { window.location.href = `/next/backup/${encodeURIComponent(item.key)}?folder=${encodeURIComponent(activePage.key)}`; }}
-                    aria-label={`Open ${item.pageName || item.tableName}`}
+                    className="backup-folder-main backup-folder-main--long-press"
+                    onPointerDown={(event) => startFolderLongPress(event, item.key)}
+                    onPointerMove={moveFolderLongPress}
+                    onPointerUp={cancelFolderLongPress}
+                    onPointerCancel={cancelFolderLongPress}
+                    onPointerLeave={cancelFolderLongPress}
+                    onContextMenu={(event) => {
+                      event.preventDefault();
+                      cancelFolderLongPress();
+                      suppressFolderClickRef.current = true;
+                      setFolderMenu(item.key);
+                    }}
+                    onKeyDown={(event) => openFolderActionsFromKeyboard(event, item.key)}
+                    onClick={() => {
+                      if (suppressFolderClickRef.current) {
+                        suppressFolderClickRef.current = false;
+                        return;
+                      }
+                      window.location.href = `/next/backup/${encodeURIComponent(item.key)}?folder=${encodeURIComponent(activePage.key)}`;
+                    }}
+                    aria-label={`Open ${item.pageName || item.tableName}. Press and hold for actions.`}
+                    aria-haspopup="menu"
+                    aria-expanded={menuOpen}
                   >
                     <span className="backup-folder-figure" aria-hidden="true">
                       <span className="backup-folder-paper backup-folder-paper--left" />
