@@ -2819,3 +2819,12 @@ body.proposals-page:not(.proposal-detail-open) .products-proposals-list{
     width:100% !important;
   }
 }
+
+
+/* Proposal + Kits cards: press and hold anywhere on the card for actions. */
+.products-proposal-folder__main--long-press{
+  -webkit-touch-callout:none;
+  -webkit-user-select:none;
+  user-select:none;
+  touch-action:pan-y;
+}
