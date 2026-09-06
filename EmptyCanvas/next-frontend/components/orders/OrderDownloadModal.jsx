@@ -167,7 +167,6 @@ function InstructionComposer({ onClose, onSave, initialTemplate = null }) {
 export default function OrderDownloadModal({
   open,
   title = "Download order",
-  subtitle = "Choose the columns, signatures and optional instructions, then select the file type.",
   defaultColumns = null,
   columnOptions = null,
   defaultSignatureLabels = null,
@@ -267,7 +266,7 @@ export default function OrderDownloadModal({
 
   const toggleSignature = (label) => {
     setSignatureLabels((current) => {
-      if (current.includes(label)) return current.length === 1 ? current : current.filter((item) => item !== label);
+      if (current.includes(label)) return current.filter((item) => item !== label);
       return [...current, label];
     });
   };
@@ -320,7 +319,6 @@ export default function OrderDownloadModal({
           <span className="order-download-header__icon"><ClassicOrderIcon name="download" /></span>
           <div>
             <h2 id="order-download-title">{title}</h2>
-            <p>{subtitle}</p>
           </div>
         </div>
 
@@ -340,7 +338,6 @@ export default function OrderDownloadModal({
           <div className="order-download-section order-download-repeated-components">
             <div className="order-download-instructions__heading">
               <span className="order-download-section__label">Repeated components</span>
-              <small>Choose whether identical components are combined or kept as separate rows.</small>
             </div>
             <div className="order-download-columns__grid order-download-repeat-grid">
               <label className={`order-download-column-option order-download-repeat-option ${repeatedComponentMode === "merge" ? "is-selected" : ""}`}>
@@ -359,7 +356,6 @@ export default function OrderDownloadModal({
           <div className="order-download-section order-download-signatures">
             <div className="order-download-instructions__heading">
               <span className="order-download-section__label">Signatures</span>
-              <small>Choose the signature boxes shown at the end of the PDF.</small>
             </div>
             <div className="order-download-columns__grid">
               {ORDER_SIGNATURE_OPTIONS.map((label) => (
@@ -375,7 +371,6 @@ export default function OrderDownloadModal({
         <div className="order-download-section order-download-instructions">
           <div className="order-download-instructions__heading">
             <span className="order-download-section__label">Instructions</span>
-            <small>Optional text block shown at the beginning of the exported file.</small>
           </div>
           <div className="order-instruction-select" ref={selectorRef}>
             <button
