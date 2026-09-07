@@ -1321,15 +1321,124 @@ function EditPasswordModal({ state, busy, error, onCancel, onSubmit }) {
   return <div className="co-submodal-overlay is-open" aria-hidden="false"><form className="co-submodal-dialog req-edit-dialog" role="dialog" aria-modal="true" onSubmit={(event) => { event.preventDefault(); onSubmit(password); }}><button type="button" className="co-submodal-close" onClick={onCancel} aria-label="Close"/><div className="co-submodal-header req-edit-header"><div className="req-edit-icon"><ClassicOrderIcon name="edit-2" /></div><div><div className="co-submodal-title">Edit operations order</div><div className="co-submodal-sub">Enter the Operations Orders admin password to continue editing this order.</div></div></div><div className="co-submodal-body"><label className="co-submodal-label">Admin password</label><input className="co-submodal-input" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoFocus disabled={busy}/><div className="co-submodal-error" role="alert">{error}</div></div><div className="co-submodal-actions"><button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancel} disabled={busy}>Cancel</button><button type="submit" className="ro-action-btn ro-action-btn--dark" disabled={busy || !password.trim()}>{busy ? "Checking…" : "Continue"}</button></div></form></div>;
 }
 
+function OperationsModernDropdown({
+  label,
+  value,
+  options = [],
+  onChange,
+  placeholder = "Select option",
+  searchable = false,
+  searchPlaceholder = "Search…",
+  disabled = false,
+}) {
+  const rootRef = useRef(null);
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+
+  const normalizedOptions = (Array.isArray(options) ? options : [])
+    .map((option) => typeof option === "string"
+      ? { value: option, label: option, searchText: option }
+      : {
+          ...option,
+          value: text(option?.value),
+          label: text(option?.label),
+          searchText: text(option?.searchText || `${option?.label || ""} ${option?.meta || ""}`),
+        })
+    .filter((option) => option.value);
+  const selected = normalizedOptions.find((option) => String(option.value) === String(value || "")) || null;
+  const normalizedQuery = lower(query);
+  const visibleOptions = normalizedOptions.filter((option) => (
+    !normalizedQuery || lower(option.searchText || option.label).includes(normalizedQuery)
+  ));
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onPointerDown = (event) => {
+      if (rootRef.current && !rootRef.current.contains(event.target)) setOpen(false);
+    };
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) setQuery("");
+  }, [open, value]);
+
+  return (
+    <div className={`next-operations-modern-select ${open ? "is-open" : ""}`} ref={rootRef}>
+      <span className="co-submodal-label">{label}</span>
+      <button
+        type="button"
+        className="next-operations-modern-select__trigger"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        disabled={disabled}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <span className={selected ? "" : "is-placeholder"}>{selected?.label || placeholder}</span>
+        <ClassicOrderIcon name="chevron-down" />
+      </button>
+      {open ? (
+        <div className="next-operations-modern-select__menu">
+          {searchable ? (
+            <div className="next-operations-modern-select__search-wrap">
+              <input
+                className="next-operations-modern-select__search"
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={searchPlaceholder}
+                autoFocus
+              />
+            </div>
+          ) : null}
+          <div className="next-operations-modern-select__options" role="listbox">
+            {visibleOptions.length ? visibleOptions.map((option) => {
+              const active = String(option.value) === String(value || "");
+              return (
+                <button
+                  type="button"
+                  className={`next-operations-modern-select__option ${active ? "is-selected" : ""}`}
+                  role="option"
+                  aria-selected={active}
+                  key={option.value}
+                  onClick={() => {
+                    onChange(option.value);
+                    setOpen(false);
+                    setQuery("");
+                  }}
+                >
+                  <span className="next-operations-modern-select__option-copy">
+                    <strong>{option.label}</strong>
+                    {option.meta ? <small>{option.meta}</small> : null}
+                  </span>
+                  {active ? <ClassicOrderIcon name="check" /> : null}
+                </button>
+              );
+            }) : <div className="next-operations-modern-select__empty">No matching products.</div>}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function OperationsComponentEditModal({ state, products = [], statusOptions = [], busy, onCancel, onApply }) {
   const item = state?.item || null;
-  const [productSearch, setProductSearch] = useState("");
   const [form, setForm] = useState(null);
+  const [validationError, setValidationError] = useState("");
 
   useEffect(() => {
     if (!item) {
       setForm(null);
-      setProductSearch("");
+      setValidationError("");
       return;
     }
     const requested = Number(item?.requestedQty ?? item?.quantityRequested ?? requestedQuantity(item)) || 0;
@@ -1354,21 +1463,12 @@ function OperationsComponentEditModal({ state, products = [], statusOptions = []
       issueDescription: text(item?.issueDescription ?? item?.issue_description),
       productUrl: text(item?.productUrl ?? item?.product_url ?? matchedProduct?.url),
     });
-    setProductSearch("");
+    setValidationError("");
   }, [item?.id, state?.version, products]);
 
   if (!item || !form) return null;
 
   const isFinalStatus = /(arrived|delivered|received)/i.test(form.status);
-  const normalizedSearch = lower(productSearch);
-  const filteredProducts = (Array.isArray(products) ? products : [])
-    .filter((product) => !normalizedSearch || lower(`${product?.name || ""} ${product?.displayId || ""}`).includes(normalizedSearch))
-    .slice(0, 350);
-  const selectedProduct = products.find((product) => String(product?.id || "") === String(form.productId || ""));
-  if (selectedProduct && !filteredProducts.some((product) => String(product?.id || "") === String(selectedProduct.id))) {
-    filteredProducts.unshift(selectedProduct);
-  }
-
   const num = (value) => {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : 0;
@@ -1380,7 +1480,7 @@ function OperationsComponentEditModal({ state, products = [], statusOptions = []
       ...current,
       requestedQty: value,
       remainingQty: String(roundQty(requested - received)),
-      deliveredQty: isFinalStatus ? String(roundQty(received)) : "0",
+      deliveredQty: /(arrived|delivered|received)/i.test(current.status) ? String(roundQty(received)) : "0",
     };
   });
   const syncReceived = (value) => setForm((current) => {
@@ -1430,6 +1530,7 @@ function OperationsComponentEditModal({ state, products = [], statusOptions = []
       unitPrice: product.unitPrice === null || product.unitPrice === undefined ? "" : String(product.unitPrice),
       productTag: text(product?.tags?.[0]) || current.productTag,
     }));
+    setValidationError("");
   }
 
   function selectStatus(value) {
@@ -1438,13 +1539,25 @@ function OperationsComponentEditModal({ state, products = [], statusOptions = []
       const received = num(current.receivedQty);
       return { ...current, status: value, deliveredQty: final ? String(roundQty(received)) : "0" };
     });
+    setValidationError("");
   }
 
   function submit(event) {
     event.preventDefault();
     const numericKeys = ["requestedQty", "receivedQty", "remainingQty", "deliveredQty"];
-    if (numericKeys.some((key) => !Number.isFinite(Number(form[key])))) return;
-    if (form.unitPrice !== "" && !Number.isFinite(Number(form.unitPrice))) return;
+    if (!form.productId) {
+      setValidationError("Please select a component.");
+      return;
+    }
+    if (!form.status) {
+      setValidationError("Please select a status.");
+      return;
+    }
+    if (numericKeys.some((key) => form[key] === "" || !Number.isFinite(Number(form[key])))) {
+      setValidationError("All quantity fields must contain valid numbers.");
+      return;
+    }
+    setValidationError("");
     onApply({
       id: form.id,
       productId: form.productId,
@@ -1464,34 +1577,66 @@ function OperationsComponentEditModal({ state, products = [], statusOptions = []
   }
 
   const statuses = Array.from(new Set([...(statusOptions || []), form.status].map(text).filter(Boolean)));
+  const productOptions = (Array.isArray(products) ? products : []).map((product) => ({
+    value: String(product?.id || ""),
+    label: text(product?.name) || "Unnamed product",
+    meta: text(product?.displayId),
+    searchText: `${product?.displayId || ""} ${product?.name || ""}`,
+  }));
+  const statusDropdownOptions = statuses.map((status) => ({ value: status, label: status, searchText: status }));
+
   return (
     <div className="co-submodal-overlay is-open next-operations-component-edit-overlay" aria-hidden="false">
       <form className="co-submodal-dialog next-operations-component-edit-dialog" role="dialog" aria-modal="true" onSubmit={submit}>
         <button type="button" className="co-submodal-close" onClick={onCancel} disabled={busy} aria-label="Close component editor" />
-        <div className="co-submodal-header req-edit-header">
+        <div className="co-submodal-header req-edit-header next-operations-component-edit-header">
           <div className="req-edit-icon"><ClassicOrderIcon name="edit-2" /></div>
-          <div><div className="co-submodal-title">Edit component</div><div className="co-submodal-sub">Update this Operations Orders row, then apply it to the pending order changes.</div></div>
+          <div><div className="co-submodal-title">Edit component</div><div className="co-submodal-sub">Save this component to the pending order changes, then use Save changes at the end of Edit mode.</div></div>
         </div>
         <div className="co-submodal-body next-operations-component-edit-body">
-          <div className="next-operations-edit-grid next-operations-edit-grid--wide">
-            <label className="co-submodal-field next-operations-edit-field next-operations-edit-field--wide"><span className="co-submodal-label">Component</span><input className="co-submodal-input" value={productSearch} onChange={(event) => setProductSearch(event.target.value)} placeholder="Search products…" disabled={busy} /><select className="co-submodal-input next-operations-edit-select" value={form.productId} onChange={(event) => selectProduct(event.target.value)} disabled={busy}><option value="">Select component</option>{filteredProducts.map((product) => <option value={product.id} key={product.id}>{product.displayId ? `${product.displayId} — ` : ""}{product.name}</option>)}</select></label>
-            <label className="co-submodal-field next-operations-edit-field"><span className="co-submodal-label">Status</span><select className="co-submodal-input next-operations-edit-select" value={form.status} onChange={(event) => selectStatus(event.target.value)} disabled={busy}>{statuses.map((status) => <option value={status} key={status}>{status}</option>)}</select></label>
-            <label className="co-submodal-field next-operations-edit-field"><span className="co-submodal-label">Unit cost</span><input className="co-submodal-input" type="number" step="any" value={form.unitPrice} onChange={(event) => setForm((current) => ({ ...current, unitPrice: event.target.value }))} disabled={busy} /></label>
+          <div className="next-operations-edit-grid next-operations-edit-grid--primary">
+            <OperationsModernDropdown
+              label="Component"
+              value={form.productId}
+              options={productOptions}
+              onChange={selectProduct}
+              placeholder="Select component"
+              searchable
+              searchPlaceholder="Search by component name or ID code…"
+              disabled={busy}
+            />
+            <OperationsModernDropdown
+              label="Status"
+              value={form.status}
+              options={statusDropdownOptions}
+              onChange={selectStatus}
+              placeholder="Select status"
+              disabled={busy}
+            />
           </div>
-          <div className="next-operations-edit-qty-grid">
-            <label className="co-submodal-field next-operations-edit-field"><span className="co-submodal-label">Requested Qty</span><input className="co-submodal-input" type="number" step="any" value={form.requestedQty} onChange={(event) => syncRequested(event.target.value)} disabled={busy} /></label>
-            <label className="co-submodal-field next-operations-edit-field"><span className="co-submodal-label">Received Qty</span><input className="co-submodal-input" type="number" step="any" value={form.receivedQty} onChange={(event) => syncReceived(event.target.value)} disabled={busy} /></label>
-            <label className="co-submodal-field next-operations-edit-field"><span className="co-submodal-label">Remaining Qty</span><input className="co-submodal-input" type="number" step="any" value={form.remainingQty} onChange={(event) => syncRemaining(event.target.value)} disabled={busy} /></label>
-            <label className="co-submodal-field next-operations-edit-field"><span className="co-submodal-label">Delivered Qty</span><input className="co-submodal-input" type="number" step="any" value={form.deliveredQty} onChange={(event) => syncDelivered(event.target.value)} disabled={busy || !isFinalStatus} /><span className="next-operations-edit-hint">Available when status is Arrived/Delivered.</span></label>
+
+          <div className="next-operations-edit-section">
+            <div className="next-operations-edit-section__title">Quantities</div>
+            <div className="next-operations-edit-qty-grid">
+              <label className="co-submodal-field next-operations-edit-field"><span className="co-submodal-label">Requested Qty</span><input className="co-submodal-input" type="number" step="any" value={form.requestedQty} onChange={(event) => syncRequested(event.target.value)} disabled={busy} /></label>
+              <label className="co-submodal-field next-operations-edit-field"><span className="co-submodal-label">Received Qty</span><input className="co-submodal-input" type="number" step="any" value={form.receivedQty} onChange={(event) => syncReceived(event.target.value)} disabled={busy} /></label>
+              <label className="co-submodal-field next-operations-edit-field"><span className="co-submodal-label">Remaining Qty</span><input className="co-submodal-input" type="number" step="any" value={form.remainingQty} onChange={(event) => syncRemaining(event.target.value)} disabled={busy} /></label>
+              <label className="co-submodal-field next-operations-edit-field"><span className="co-submodal-label">Delivered Qty</span><input className="co-submodal-input" type="number" step="any" value={form.deliveredQty} onChange={(event) => syncDelivered(event.target.value)} disabled={busy || !isFinalStatus} /><span className="next-operations-edit-hint">Available when status is Arrived/Delivered.</span></label>
+            </div>
           </div>
+
           <div className="next-operations-edit-grid">
             <label className="co-submodal-field next-operations-edit-field"><span className="co-submodal-label">Product tag</span><input className="co-submodal-input" value={form.productTag} onChange={(event) => setForm((current) => ({ ...current, productTag: event.target.value }))} disabled={busy} /></label>
             <label className="co-submodal-field next-operations-edit-field"><span className="co-submodal-label">Kit tag</span><input className="co-submodal-input" value={form.kitTag} onChange={(event) => setForm((current) => ({ ...current, kitTag: event.target.value }))} disabled={busy} /></label>
           </div>
           <label className="co-submodal-field next-operations-edit-field next-operations-edit-field--wide"><span className="co-submodal-label">Reason</span><input className="co-submodal-input" value={form.reason} onChange={(event) => setForm((current) => ({ ...current, reason: event.target.value }))} disabled={busy} /></label>
           <label className="co-submodal-field next-operations-edit-field next-operations-edit-field--wide"><span className="co-submodal-label">Issue description</span><textarea className="co-submodal-textarea" rows={3} value={form.issueDescription} onChange={(event) => setForm((current) => ({ ...current, issueDescription: event.target.value }))} disabled={busy} /></label>
+          {validationError ? <div className="co-submodal-error next-operations-component-edit-error" role="alert">{validationError}</div> : null}
         </div>
-        <div className="co-submodal-actions"><button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancel} disabled={busy}>Cancel</button><button type="submit" className="ro-action-btn ro-action-btn--dark" disabled={busy || !form.productId || !form.status}>{busy ? "Applying…" : "Apply changes"}</button></div>
+        <div className="co-submodal-actions next-operations-component-edit-actions">
+          <button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancel} disabled={busy}>Cancel</button>
+          <button type="submit" className="ro-action-btn ro-action-btn--dark" disabled={busy || !form.productId || !form.status}>{busy ? "Saving…" : "Save component"}</button>
+        </div>
       </form>
     </div>
   );
