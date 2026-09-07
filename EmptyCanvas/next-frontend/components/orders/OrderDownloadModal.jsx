@@ -46,37 +46,88 @@ function normalizeTemplate(item) {
   return {
     id: text(item?.id),
     title: text(item?.title),
-    englishText: text(item?.englishText || item?.english || legacy.englishText),
-    arabicText: text(item?.arabicText || item?.arabic || legacy.arabicText),
+    englishText: text(item?.englishText || item?.english_text || item?.english || legacy.englishText),
+    arabicText: text(item?.arabicText || item?.arabic_text || item?.arabic || legacy.arabicText),
   };
 }
 
-function loadTemplates() {
+function loadLegacyTemplates() {
   if (typeof window === "undefined") return [];
   try {
     const parsed = JSON.parse(window.localStorage.getItem(STORAGE_KEY) || "[]");
     return Array.isArray(parsed)
       ? parsed
           .map(normalizeTemplate)
-          .filter((item) => item.id && item.title && (item.englishText || item.arabicText))
+          .filter((item) => item.title && (item.englishText || item.arabicText))
       : [];
   } catch {
     return [];
   }
 }
 
-function saveTemplates(templates) {
+function clearLegacyTemplates() {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(templates));
+    window.localStorage.removeItem(STORAGE_KEY);
   } catch {}
 }
 
-function makeTemplateId() {
-  try {
-    if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
-  } catch {}
-  return `instruction-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+async function instructionApi(path = "", options = {}) {
+  const response = await fetch(`/api/orders/download-instructions${path}`, {
+    credentials: "include",
+    cache: "no-store",
+    ...options,
+    headers: {
+      ...(options.body !== undefined ? { "Content-Type": "application/json" } : {}),
+      ...(options.headers || {}),
+    },
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload?.error || payload?.message || "Saved instructions request failed.");
+  }
+  return payload;
+}
+
+async function loadTemplatesFromDatabase() {
+  const payload = await instructionApi();
+  const source = Array.isArray(payload) ? payload : payload?.items;
+  return (Array.isArray(source) ? source : [])
+    .map(normalizeTemplate)
+    .filter((item) => item.id && item.title && (item.englishText || item.arabicText));
+}
+
+async function createTemplateInDatabase(template) {
+  const payload = await instructionApi("", {
+    method: "POST",
+    body: JSON.stringify({
+      title: text(template?.title),
+      englishText: text(template?.englishText),
+      arabicText: text(template?.arabicText),
+    }),
+  });
+  return normalizeTemplate(payload?.item || payload);
+}
+
+async function updateTemplateInDatabase(template) {
+  const id = text(template?.id);
+  if (!id) return createTemplateInDatabase(template);
+  const payload = await instructionApi(`/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      title: text(template?.title),
+      englishText: text(template?.englishText),
+      arabicText: text(template?.arabicText),
+    }),
+  });
+  return normalizeTemplate(payload?.item || payload);
+}
+
+function templateFingerprint(item) {
+  const normalized = normalizeTemplate(item);
+  return [normalized.title, normalized.englishText, normalized.arabicText]
+    .map((value) => value.toLowerCase())
+    .join("\u0000");
 }
 
 function InstructionComposer({ onClose, onSave, initialTemplate = null }) {
@@ -84,6 +135,8 @@ function InstructionComposer({ onClose, onSave, initialTemplate = null }) {
   const [title, setTitle] = useState(() => text(normalizedInitial.title));
   const [englishBody, setEnglishBody] = useState(() => text(normalizedInitial.englishText));
   const [arabicBody, setArabicBody] = useState(() => text(normalizedInitial.arabicText));
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const titleRef = useRef(null);
 
   useEffect(() => {
@@ -107,15 +160,23 @@ function InstructionComposer({ onClose, onSave, initialTemplate = null }) {
         role="dialog"
         aria-modal="true"
         aria-labelledby="order-instruction-editor-title"
-        onSubmit={(event) => {
+        onSubmit={async (event) => {
           event.preventDefault();
-          if (!canSave) return;
-          onSave({
-            id: text(initialTemplate?.id) || makeTemplateId(),
-            title: text(title),
-            englishText: text(englishBody),
-            arabicText: text(arabicBody),
-          });
+          if (!canSave || saving) return;
+          setSaving(true);
+          setSaveError("");
+          try {
+            await onSave({
+              id: text(initialTemplate?.id),
+              title: text(title),
+              englishText: text(englishBody),
+              arabicText: text(arabicBody),
+            });
+          } catch (saveInstructionError) {
+            setSaveError(saveInstructionError?.message || "Instructions could not be saved.");
+          } finally {
+            setSaving(false);
+          }
         }}
       >
         <button type="button" className="order-download-close" onClick={onClose} aria-label="Close add instructions dialog"><ClassicOrderIcon name="x" /></button>
@@ -155,9 +216,10 @@ function InstructionComposer({ onClose, onSave, initialTemplate = null }) {
             />
           </label>
         </div>
+        {saveError ? <div className="order-download-error" role="alert">{saveError}</div> : null}
         <div className="order-download-actions order-instruction-editor__actions">
-          <button type="button" className="order-download-btn order-download-btn--light" onClick={onClose}>Cancel</button>
-          <button type="submit" className="order-download-btn order-download-btn--dark" disabled={!canSave}><ClassicOrderIcon name="check" /><span>{initialTemplate ? "Save Changes" : "Save Instructions"}</span></button>
+          <button type="button" className="order-download-btn order-download-btn--light" onClick={onClose} disabled={saving}>Cancel</button>
+          <button type="submit" className="order-download-btn order-download-btn--dark" disabled={!canSave || saving}><ClassicOrderIcon name="check" /><span>{saving ? "Saving…" : (initialTemplate ? "Save Changes" : "Save Instructions")}</span></button>
         </div>
       </form>
     </div>
@@ -207,6 +269,7 @@ export default function OrderDownloadModal({
     String(defaultRepeatedComponentMode || "").toLowerCase() === "separate" ? "separate" : "merge",
   );
   const [templates, setTemplates] = useState([]);
+  const [templatesLoading, setTemplatesLoading] = useState(false);
   const [selectedInstructionId, setSelectedInstructionId] = useState("");
   const [instructionOpen, setInstructionOpen] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
@@ -225,7 +288,8 @@ export default function OrderDownloadModal({
     setColumns(startingColumns);
     setSignatureLabels(startingSignatures);
     setRepeatedComponentMode(String(defaultRepeatedComponentMode || "").toLowerCase() === "separate" ? "separate" : "merge");
-    setTemplates(loadTemplates());
+    setTemplates([]);
+    setTemplatesLoading(true);
     setSelectedInstructionId("");
     setInstructionOpen(false);
     setComposerOpen(false);
@@ -233,6 +297,54 @@ export default function OrderDownloadModal({
     setBusy(false);
     setError("");
   }, [open, startingColumns, startingSignatures, defaultRepeatedComponentMode]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        let databaseTemplates = await loadTemplatesFromDatabase();
+        const legacyTemplates = loadLegacyTemplates();
+
+        if (legacyTemplates.length) {
+          const existing = new Set(databaseTemplates.map(templateFingerprint));
+          const missingLegacy = legacyTemplates.filter((item) => !existing.has(templateFingerprint(item)));
+          let migratedAll = true;
+          for (const legacyTemplate of missingLegacy) {
+            try {
+              const created = await createTemplateInDatabase(legacyTemplate);
+              if (created?.id) {
+                databaseTemplates.push(created);
+                existing.add(templateFingerprint(created));
+              }
+            } catch {
+              migratedAll = false;
+            }
+          }
+          if (migratedAll) clearLegacyTemplates();
+        }
+
+        databaseTemplates = databaseTemplates
+          .filter((item, index, all) => all.findIndex((candidate) => candidate.id === item.id) === index)
+          .sort((a, b) => a.title.localeCompare(b.title));
+
+        if (!cancelled) {
+          setTemplates(databaseTemplates);
+          setError("");
+        }
+      } catch (loadError) {
+        if (!cancelled) {
+          setTemplates([]);
+          setError(loadError?.message || "Saved instructions could not be loaded.");
+        }
+      } finally {
+        if (!cancelled) setTemplatesLoading(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -298,17 +410,24 @@ export default function OrderDownloadModal({
     }
   };
 
-  const saveInstruction = (template) => {
-    const exists = templates.some((item) => item.id === template.id);
-    const next = exists
-      ? templates.map((item) => (item.id === template.id ? template : item))
-      : [...templates, template];
-    setTemplates(next);
-    saveTemplates(next);
-    setSelectedInstructionId(template.id);
+  const saveInstruction = async (template) => {
+    const saved = template?.id
+      ? await updateTemplateInDatabase(template)
+      : await createTemplateInDatabase(template);
+    if (!saved?.id) throw new Error("Instructions were saved but no record was returned.");
+
+    setTemplates((current) => {
+      const exists = current.some((item) => item.id === saved.id);
+      const next = exists
+        ? current.map((item) => (item.id === saved.id ? saved : item))
+        : [...current, saved];
+      return next.sort((a, b) => a.title.localeCompare(b.title));
+    });
+    setSelectedInstructionId(saved.id);
     setEditingInstruction(null);
     setComposerOpen(false);
     setInstructionOpen(false);
+    setError("");
   };
 
   return (
@@ -392,6 +511,16 @@ export default function OrderDownloadModal({
                   <span><strong>No instructions</strong><small>Export without an instructions block</small></span>
                   {!selectedInstructionId ? <ClassicOrderIcon name="check" /> : null}
                 </button>
+                {templatesLoading ? (
+                  <div className="order-instruction-select__option" aria-disabled="true">
+                    <span><strong>Loading instructions…</strong><small>Reading saved templates from the database</small></span>
+                  </div>
+                ) : null}
+                {!templatesLoading && templates.length === 0 ? (
+                  <div className="order-instruction-select__option" aria-disabled="true">
+                    <span><strong>No saved instructions yet</strong><small>Add one below and it will be stored in Supabase</small></span>
+                  </div>
+                ) : null}
                 {templates.map((template) => (
                   <button type="button" className={`order-instruction-select__option ${selectedInstructionId === template.id ? "is-selected" : ""}`} key={template.id} onClick={() => { setSelectedInstructionId(template.id); setInstructionOpen(false); }}>
                     <span><strong>{template.title}</strong><small>{template.englishText || template.arabicText}</small></span>
