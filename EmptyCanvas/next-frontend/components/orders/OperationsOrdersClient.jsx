@@ -6,6 +6,17 @@ import { groupOrderItems, OrderGroupHeader, OrderSortButton } from "./OrderGroup
 import OrderDownloadModal from "./OrderDownloadModal";
 import ActionLoadingModal, { useActionLoading } from "../ActionLoadingModal";
 
+const OPERATIONS_EXPORT_COLUMNS = [
+  ["idCode", "ID Code"],
+  ["component", "Component"],
+  ["qty", "Quantity"],
+  ["receivedQty", "Received Qty"],
+  ["remainingQty", "Remaining Qty"],
+  ["deliveredQty", "Delivered Qty"],
+  ["unit", "Unit Cost"],
+  ["total", "Total Cost"],
+];
+
 const STATUS_TABS = [
   { key: "all", label: "All", icon: "layers" },
   { key: "approved", label: "Approved", icon: "check-circle" },
@@ -904,6 +915,7 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
         <OrderDownloadModal
           open={downloadOpen}
           title={`Download ${group.orderIdLabel}`}
+          columnOptions={!maintenance ? OPERATIONS_EXPORT_COLUMNS : null}
           defaultColumns={(tab === "received" || tab === "delivered") ? ["idCode", "component", "qty"] : null}
           defaultSignatureLabels={orderTypeKey(group.orderType) === "withdrawproducts" ? ["Received From", "Operations", "Storekeeper"] : ["Storekeeper", "Operations", "Delivered to"]}
           showSignatureOptions={!maintenance}
