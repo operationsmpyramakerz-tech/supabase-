@@ -602,7 +602,7 @@ function CreatorProfilePopover({ state, onClose }) {
     ["Department", department], ["Position", position], ["Phone", phone], ["Email", email], ["Employee code", employeeCode],
   ].filter(([, value]) => value);
 
-  return <div className="creator-profile-popover is-open next-operations-creator-popover" style={{ left: state.left, top: state.top }} aria-hidden="false"><div className="creator-profile-window" role="dialog" aria-modal="false" aria-label="Created by profile">
+  return <div className="creator-profile-popover is-open next-operations-creator-popover" style={{ left: state.left, top: state.top }} aria-hidden="false"><div className="creator-profile-window" style={state.maxHeight ? { maxHeight: `${state.maxHeight}px` } : undefined} role="dialog" aria-modal="false" aria-label="Created by profile">
     <button type="button" className="creator-profile-close" onClick={onClose} aria-label="Close"><span className="creator-profile-close-x">×</span></button>
     <div className="creator-profile-head"><div className={`creator-profile-avatar ${photoUrl ? "has-image" : ""}`}>{photoUrl ? <img src={photoUrl} alt={name}/> : <span>{initials}</span>}</div><div className="creator-profile-title-wrap"><div className="creator-profile-kicker">Created by</div><div className="creator-profile-name">{name}</div><div className="creator-profile-subtitle">{subtitle}</div></div></div>
     {state.loading ? <div className="creator-profile-state"><span>Loading user details...</span></div> : state.error ? <div className="creator-profile-state creator-profile-state--error"><span>Could not load this user details.</span></div> : <>
@@ -658,7 +658,6 @@ function OperationsOrderCard({ group, tab, onOpen, onCreator }) {
   const thumbStyle = { "--co-thumb-bg": type.bg, "--co-thumb-fg": type.fg, "--co-thumb-border": type.bd };
   const displayItems = itemsForOperationsTab(group.items, tab);
   const displayItemCount = expandOrderItemsForDisplay(displayItems).length;
-  const value = tab === "remaining" ? group.remainingTotal : tab === "received" ? group.receivedTotal : group.total;
   return (
     <article className="co-card next-operations-order-card" role="button" tabIndex={0} aria-label={`Open ${group.orderIdLabel}`} onClick={() => onOpen(group)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen(group); } }}>
       <div className="co-top">
@@ -676,10 +675,7 @@ function OperationsOrderCard({ group, tab, onOpen, onCreator }) {
           <div className="co-est-value next-operations-createdby-name">{group.createdByName || "—"}</div>
         </div>
         <div className="co-actions next-operations-card-summary-actions">
-          <div className="co-est next-operations-card-total">
-            <div className="co-est-label">{isMaintenance(group.orderType) ? "Order Type" : "Estimate Total"}</div>
-            <div className="co-est-value">{isMaintenance(group.orderType) ? "Maintenance request" : formatMoney(value)}</div>
-          </div>
+          {group.stage === 2 && group.hasApproved && group.hasRejected ? <MixedStatusPill /> : <StatusPill group={group} tab={tab} />}
           <button type="button" className="co-right-ico co-creator-btn next-operations-creator-btn" aria-label={`Created by ${group.createdByName || "user"}`} title={`Created by ${group.createdByName || "user"}`} onClick={(event) => { event.preventDefault(); event.stopPropagation(); onCreator?.(event.currentTarget, group); }}><ClassicOrderIcon name="user" /></button>
         </div>
       </div>
@@ -850,7 +846,7 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
           <div><span>Order</span><strong>{group.orderIdLabel}</strong></div>
           <div><span>Date</span><strong>{formatDate(group.latestCreated)}</strong></div>
           <div><span>Components</span><strong>{displayTabItems.length}</strong></div>
-          <div className="next-operations-order-modal-summary__status"><span>Status</span>{group.stage === 2 && group.hasApproved && group.hasRejected ? <MixedStatusPill /> : <StatusPill group={group} tab={tab} />}</div>
+          <div className="next-operations-order-modal-summary__total"><span>{isMaintenance(group.orderType) ? "Order Type" : "Estimate Total"}</span><strong>{isMaintenance(group.orderType) ? "Maintenance request" : formatMoney(group.total)}</strong></div>
         </div>
         <Progress stage={group.stage} />
         <div className="co-modal-body">
@@ -1646,12 +1642,16 @@ export default function OperationsOrdersClient({ initialOrders = [], bootstrapWa
   async function openCreatorProfile(anchor, group) {
     const rect = anchor.getBoundingClientRect();
     const width = Math.min(330, window.innerWidth - 28);
-    const estimatedHeight = Math.min(500, Math.max(240, window.innerHeight - 28));
+    // Keep the profile visually attached to the clicked creator button.
     const left = Math.min(Math.max(14, rect.right - width), Math.max(14, window.innerWidth - width - 14));
-    const below = rect.bottom + 10;
-    const above = rect.top - estimatedHeight - 10;
-    const top = below + estimatedHeight <= window.innerHeight - 14 ? below : Math.max(14, above);
-    const base = { left, top, name: group.createdByName || "Creator", loading: true, profile: null, error: false };
+    const gap = 8;
+    const belowTop = rect.bottom + gap;
+    const belowAvailable = Math.max(0, window.innerHeight - belowTop - 14);
+    const aboveAvailable = Math.max(0, rect.top - gap - 14);
+    const preferBelow = belowAvailable >= 220 || belowAvailable >= aboveAvailable;
+    const maxHeight = Math.max(180, Math.min(520, preferBelow ? belowAvailable : aboveAvailable));
+    const top = preferBelow ? belowTop : Math.max(14, rect.top - gap - maxHeight);
+    const base = { left, top, maxHeight, name: group.createdByName || "Creator", loading: true, profile: null, error: false };
     setCreatorState(base);
     const key = text(group.createdById || group.createdByName);
     if (!key) { setCreatorState({ ...base, loading: false, error: true }); return; }
