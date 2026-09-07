@@ -1321,3 +1321,111 @@
     border-radius: 10px;
   }
 }
+
+/* ===== User Profile v3: symmetric fillet bridge + compact cover editor ===== */
+/*
+   The white bridge is a fixed-width SVG overlay centered on the cover edge.
+   Its shoulders use symmetric Bezier fillets so the flat white panel flows
+   smoothly into the circular avatar frame on both sides.
+*/
+.page-account .profile-cover-section::after{
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -1px;
+  width: 238px;
+  height: 104px;
+  transform: translateX(-50%);
+  pointer-events: none;
+  z-index: 3;
+  background-repeat: no-repeat;
+  background-position: center bottom;
+  background-size: 100% 100%;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 238 104' preserveAspectRatio='none'%3E%3Cpath fill='%23ffffff' d='M0 104V96H30C43 96 49 92 54 80C66 43 87 12 119 12C151 12 172 43 184 80C189 92 195 96 208 96H238V104Z'/%3E%3C/svg%3E");
+}
+
+/* Keep the avatar and its controls above the fillet bridge. */
+.page-account .profile-identity-block,
+.page-account .profile-avatar-section,
+.page-account .profile-avatar-shell{
+  position: relative;
+  z-index: 4;
+}
+.page-account .profile-avatar-display{
+  z-index: 2;
+}
+.page-account .profile-avatar-edit,
+.page-account .profile-avatar-remove{
+  z-index: 6 !important;
+}
+
+/* Compact cover editor: preview the whole image inside the real cover ratio
+   instead of rendering the source image close to its natural portrait size. */
+.page-account .account-image-editor--cover{
+  width: min(92vw, 560px) !important;
+  max-width: 560px !important;
+  max-height: min(86dvh, 650px) !important;
+}
+.page-account .account-image-editor--cover .account-image-editor-head{
+  padding: 13px 15px 10px !important;
+}
+.page-account .account-image-editor--cover .account-image-editor-head p{
+  font-size: .7rem !important;
+  line-height: 1.35;
+}
+.page-account .account-image-editor--cover .account-cover-fit-stage{
+  padding: 10px 15px 2px !important;
+}
+.page-account .account-image-editor--cover .account-cover-fit-preview{
+  width: 100%;
+  min-height: 0 !important;
+  height: auto !important;
+  max-height: none !important;
+  aspect-ratio: 17 / 5;
+  padding: 7px !important;
+  border-radius: 16px !important;
+  overflow: hidden;
+}
+.page-account .account-image-editor--cover .account-cover-fit-preview img{
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  object-fit: contain !important;
+  object-position: center !important;
+  border-radius: 10px !important;
+  box-shadow: none !important;
+}
+.page-account .account-image-editor--cover .account-cover-fit-note{
+  margin: 7px auto 0 !important;
+  padding: 4px 9px !important;
+  font-size: .67rem !important;
+}
+.page-account .account-image-editor--cover .account-image-editor-filename{
+  margin-top: 8px !important;
+}
+.page-account .account-image-editor--cover .account-image-editor-actions{
+  padding-top: 10px !important;
+}
+
+@media (max-width: 768px){
+  .page-account .profile-cover-section::after{
+    width: 188px;
+    height: 82px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 188 82' preserveAspectRatio='none'%3E%3Cpath fill='%23ffffff' d='M0 82V75H24C34 75 39 72 43 63C53 34 69 10 94 10C119 10 135 34 145 63C149 72 154 75 164 75H188V82Z'/%3E%3C/svg%3E");
+  }
+
+  .page-account .account-image-editor--cover{
+    width: min(92vw, 500px) !important;
+    max-width: 500px !important;
+    max-height: calc(100dvh - 28px) !important;
+  }
+  .page-account .account-image-editor--cover .account-cover-fit-stage{
+    padding: 9px 12px 2px !important;
+  }
+  .page-account .account-image-editor--cover .account-cover-fit-preview{
+    aspect-ratio: 17 / 5;
+    padding: 6px !important;
+    border-radius: 14px !important;
+  }
+}
