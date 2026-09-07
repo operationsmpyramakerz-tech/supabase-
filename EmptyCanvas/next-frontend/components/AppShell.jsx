@@ -10,7 +10,6 @@ import {
 } from "./ClassicShellControls";
 
 const MODULE_LINKS = [
-  { label: "LMS", href: "/next/lms", classicHref: "/lms", permissions: [], alwaysVisible: true },
   { label: "Notifications", href: "/next/notifications", classicHref: "/home", permissions: [], alwaysVisible: true },
   { label: "How it works", href: "/next/how-it-works", classicHref: "/how-it-works", permissions: [], alwaysVisible: true },
   { label: "Current Orders", href: "/next/orders", classicHref: "/orders", permissions: ["Current Orders"] },
@@ -42,7 +41,6 @@ const MODULE_LINKS = [
 // routes/profile controls, just like the current Classic interface.
 const CLASSIC_MAIN_LINKS = [
   { label: "Home", href: "/next/home", icon: "home", permissions: [], alwaysVisible: true },
-  { label: "LMS", href: "/next/lms", icon: "book-open", permissions: [], alwaysVisible: true, boundary: "workspace" },
   { label: "Current Orders", href: "/next/orders", icon: "list", permissions: ["Current Orders"] },
   { label: "Orders Review", href: "/next/orders-review", icon: "award", permissions: ["Orders Review"] },
   { label: "Operations Orders", href: "/next/operations-orders", icon: "users", permissions: ["Requested Orders", "Operations Orders"] },
@@ -61,12 +59,6 @@ const CLASSIC_MAIN_LINKS = [
   { label: "Users Center", href: "/next/users-center", icon: "shield", permissions: ["Users Center", "User Access & Data", "User Access and Data", "User Access", "Team Members"], boundary: "users" },
 ];
 
-const LMS_LINKS = [
-  { label: "Overview", href: "/next/lms", key: "", alwaysVisible: true },
-  { label: "Users Center", href: "/next/lms/users-center", key: "lms-users-center" },
-  { label: "Schools", href: "/next/lms/schools", key: "lms-b2b" },
-  { label: "Curriculum", href: "/next/lms/curriculum", key: "lms-curriculum" },
-];
 
 function normalize(value) {
   return String(value || "").trim().toLowerCase();
@@ -79,17 +71,6 @@ function canSee(link, allowedPages) {
   return (link.permissions || []).some((permission) => allowed.has(normalize(permission)));
 }
 
-function lmsAccessKeys(access) {
-  return new Set((Array.isArray(access?.pages) ? access.pages : [])
-    .filter((page) => page?.isEnabled !== false)
-    .map((page) => normalize(page?.pageKey || page?.page_key))
-    .filter(Boolean));
-}
-
-function visibleLmsLinks(access) {
-  const keys = lmsAccessKeys(access);
-  return LMS_LINKS.filter((link) => link.alwaysVisible || access?.isBuiltInAdmin || keys.has(link.key));
-}
 
 function withClassicFlag(value) {
   const raw = String(value || "").trim() || "/home";
@@ -149,82 +130,16 @@ export default function AppShell({
   eyebrow = "Incremental frontend migration",
   activePath = "/next/home",
   classicHrefOverride = "",
-  lmsAccess = null,
   bodyClass = "",
   classicStyles = [],
 }) {
   const allowedPages = Array.isArray(account?.allowedPages) ? account.allowedPages : [];
-  const visibleLinks = MODULE_LINKS.filter((link) => canSee(link, allowedPages));
   const activeLink = MODULE_LINKS.find((link) => isActive(activePath, link.href));
   const classicHref = withClassicFlag(classicHrefOverride || activeLink?.classicHref || "/home");
-  const initials = String(account?.name || account?.username || "U")
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join("") || "U";
-  const inLmsWorkspace = isActive(activePath, "/next/lms");
-  const effectiveLmsAccess = lmsAccess || account?.lmsAccess || null;
-  const permittedLmsLinks = visibleLmsLinks(effectiveLmsAccess);
-  const lmsLinks = inLmsWorkspace
-    ? permittedLmsLinks
-    : permittedLmsLinks.filter((link) => !link.alwaysVisible);
-  const showLmsSubmenu = lmsLinks.length > 0;
   const systemCoverUrl = String(account?.coverPhotoUrl || account?.coverPhoto || "").trim();
   const systemCoverStyle = systemCoverUrl
     ? { "--ops-system-cover-image": `url(${JSON.stringify(systemCoverUrl)})` }
     : undefined;
-
-  // Keep the existing pilot LMS shell untouched in this stage.  LMS has its own
-  // Classic workspace chrome and will be parity-migrated as a dedicated stage.
-  if (inLmsWorkspace) {
-    return (
-      <div className="app-shell">
-        <aside className="sidebar">
-          <a className="brand" href="/next/home" aria-label="Operations Hub Next.js pilot home">
-            <span className="brand-mark">OH</span>
-            <span><strong>Operations Hub</strong><small>Next.js pilot</small></span>
-          </a>
-          <nav className="navigation" aria-label="Main navigation">
-            <a className={`nav-link ${isActive(activePath, "/next/home") ? "active" : ""}`} href="/next/home"><span>Home</span><em>Pilot</em></a>
-            {visibleLinks.map((link) => (
-              <div className={`nav-entry ${link.href === "/next/lms" && showLmsSubmenu ? "nav-entry-open" : ""}`} key={link.href}>
-                <a className={`nav-link ${isActive(activePath, link.href) ? "active" : ""}`} href={link.href}><span>{link.label}</span>{link.href.startsWith("/next/") ? <em>Pilot</em> : null}</a>
-                {link.href === "/next/lms" && showLmsSubmenu ? (
-                  <div className="nav-submenu" aria-label="LMS pages">
-                    {lmsLinks.map((child) => (
-                      <a className={`nav-sublink ${activePath === child.href || (isActive(activePath, child.href) && child.href !== "/next/lms") ? "active" : ""}`} href={child.href} key={child.href}>
-                        <span>{child.label}</span>
-                      </a>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            ))}
-          </nav>
-          <div className="sidebar-footer">
-            <a className={isActive(activePath, "/next/account") ? "active" : ""} href="/next/account">My account</a>
-            <a className={isActive(activePath, "/next/app-install") ? "active" : ""} href="/next/app-install">Install App</a>
-            <a href={classicHref}>Open current interface</a>
-            <a href="/next/migration-status">Migration status</a>
-          </div>
-        </aside>
-        <main className="main-area">
-          <header className="topbar">
-            <div><p className="eyebrow">{eyebrow}</p><h1>{title}</h1></div>
-            <div className="topbar-actions">
-              <NotificationsBell />
-              <a className={`profile ${isActive(activePath, "/next/account") ? "active" : ""}`} href="/next/account">
-                {account?.photoUrl ? <img src={account.photoUrl} alt="" /> : <span>{initials}</span>}
-                <b>{account?.name || account?.username || "User"}</b>
-              </a>
-            </div>
-          </header>
-          {children}
-        </main>
-      </div>
-    );
-  }
 
   const classicLinks = CLASSIC_MAIN_LINKS.filter((link) => canSee(link, allowedPages));
   const combinedBodyClass = [bodyClass, "next-classic-shell-active", systemCoverUrl ? "ops-has-system-cover" : ""].filter(Boolean).join(" ");
