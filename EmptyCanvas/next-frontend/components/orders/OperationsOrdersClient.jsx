@@ -795,10 +795,18 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
       : showReceivedValue && receivedWasEdited
         ? received
         : base;
+    const partialRemainingInAll = tab === "all"
+      && stage === 3
+      && !maintenance
+      && Math.abs(received) > 1e-9
+      && Math.abs(remaining) > 1e-9
+      && Math.abs(remaining) < Math.abs(base) - 1e-9;
     const showReceivedDiff = (tab === "delivered" || tab === "archive") && receivedWasEdited && Math.abs(received - base) > 1e-9;
-    const qtyMarkup = showReceivedDiff
-      ? <span className="sv-qty-diff"><span className="sv-qty-old">{formatQuantity(base)}</span><strong className="sv-qty-new">{formatQuantity(received)}</strong></span>
-      : <strong>{formatQuantity(visibleQty)}</strong>;
+    const qtyMarkup = partialRemainingInAll
+      ? <span className="sv-qty-diff"><span className="sv-qty-old">{formatQuantity(base)}</span><strong className="sv-qty-new">{formatQuantity(remaining)}</strong></span>
+      : showReceivedDiff
+        ? <span className="sv-qty-diff"><span className="sv-qty-old">{formatQuantity(base)}</span><strong className="sv-qty-new">{formatQuantity(received)}</strong></span>
+        : <strong>{formatQuantity(visibleQty)}</strong>;
     const displayTotal = Math.abs(visibleQty) * Math.abs(finite(item?.unitPrice ?? item?.unit_price ?? item?.price));
     return <div className="co-item" key={text(item?._displayKey) || itemId || index}>
       <div className="co-item-left">

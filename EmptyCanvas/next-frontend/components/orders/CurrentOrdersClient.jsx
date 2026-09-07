@@ -10,6 +10,7 @@ const STATUS_TABS = [
   { key: "under-supervision", label: "Under S.V", icon: "eye" },
   { key: "approved", label: "Approved", icon: "check-circle" },
   { key: "rejected", label: "Rejected", icon: "x-circle" },
+  { key: "remaining", label: "Remaining", icon: "pause-circle" },
   { key: "shipped", label: "Shipping", icon: "truck" },
   { key: "arrived", label: "Arrived", icon: "check-circle" },
   { key: "archive", label: "Archive", icon: "archive" },
@@ -57,6 +58,7 @@ const STATUS_COLORS = {
   "under-supervision": { bg: "#FFEDD5", fg: "#9A3412", bd: "#FED7AA" },
   approved: { bg: "#D1FAE5", fg: "#065F46", bd: "#A7F3D0" },
   rejected: { bg: "#FEE2E2", fg: "#B91C1C", bd: "#FECACA" },
+  remaining: { bg: "#FEF3C7", fg: "#92400E", bd: "#FDE68A" },
   shipped: { bg: "#DBEAFE", fg: "#1D4ED8", bd: "#BFDBFE" },
   arrived: { bg: "#D1FAE5", fg: "#065F46", bd: "#A7F3D0" },
   archive: { bg: "#EDE9FE", fg: "#6D28D9", bd: "#DDD6FE" },
@@ -104,14 +106,47 @@ function supervisorEditedQuantity(item) {
   return item?.quantityEditedBySupervisor ?? item?.quantity_edited_by_supervisor ?? item?.quantityProgress ?? item?.quantity_progress;
 }
 
-function effectiveQuantity(item) {
+function baseQuantity(item) {
   const edited = supervisorEditedQuantity(item);
   if (edited !== null && edited !== undefined && edited !== "") return finite(edited);
-  return finite(item?.quantityRequested ?? item?.quantity);
+  const original = item?.quantityRequested ?? item?.quantity_requested;
+  if (original !== null && original !== undefined && original !== "") return finite(original);
+  return finite(item?.quantity);
+}
+
+function receivedQuantity(item) {
+  const value = item?.quantityReceived ?? item?.quantity_received_by_operations;
+  if (value === null || value === undefined || value === "") return 0;
+  return finite(value);
+}
+
+function remainingQuantity(item) {
+  const base = baseQuantity(item);
+  const received = receivedQuantity(item);
+  const storedRaw = item?.quantityRemaining ?? item?.quantity_remaining;
+  const stored = storedRaw === null || storedRaw === undefined || storedRaw === "" ? null : finite(storedRaw);
+  const edited = Boolean(item?.quantityReceivedEdited ?? item?.quantity_received_edited);
+  if (stored !== null) {
+    if (!edited && Math.abs(base) > 1e-9 && Math.abs(received) < 1e-9 && Math.abs(stored) < 1e-9) return base;
+    return stored;
+  }
+  return base - received;
+}
+
+function effectiveQuantity(item) {
+  return baseQuantity(item);
 }
 
 function itemTotal(item) {
   return effectiveQuantity(item) * finite(item?.unitPrice ?? item?.unit_price ?? item?.price);
+}
+
+function hasPartialRemaining(item) {
+  if (statusIndex(item?.status) !== 3) return false;
+  const base = Math.abs(baseQuantity(item));
+  const received = Math.abs(receivedQuantity(item));
+  const remaining = Math.abs(remainingQuantity(item));
+  return base > 1e-9 && received > 1e-9 && remaining > 1e-9 && remaining < base - 1e-9;
 }
 
 function orderTypeKey(value) {
@@ -195,6 +230,7 @@ function statusLabel(tab) {
     "under-supervision": "Under Supervision",
     approved: "Approved",
     rejected: "Rejected",
+    remaining: "Remaining",
     shipped: "Shipping",
     arrived: "Arrived",
     archive: "Archive",
@@ -266,13 +302,23 @@ function buildGroups(rows) {
     const reasons = group.items.map((item) => text(item?.reason)).filter(Boolean);
     const counts = reasons.reduce((acc, reason) => acc.set(reason, (acc.get(reason) || 0) + 1), new Map());
     const reason = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "No reason";
+    const stage = Math.max(...group.items.map((item) => statusIndex(item?.status)), 1);
+    const hasRemaining = group.items.some((item) => Math.abs(remainingQuantity(item)) > 1e-9);
+    const hasReceived = group.items.some((item) => Math.abs(receivedQuantity(item)) > 1e-9);
+    let status = dominantStatus(group.items);
+    if (stage === 3) status = hasRemaining && !isMaintenanceOrder(group.orderType) ? "remaining" : "shipped";
     return {
       ...group,
       reason,
+      stage,
+      hasRemaining,
+      hasReceived,
       orderIdLabel: orderIdLabel(group.items),
       orderIds: group.items.map((item) => text(item?.id)).filter(Boolean),
       total: group.items.reduce((sum, item) => sum + itemTotal(item), 0),
-      status: dominantStatus(group.items),
+      receivedTotal: group.items.reduce((sum, item) => sum + Math.abs(receivedQuantity(item)) * Math.abs(finite(item?.unitPrice ?? item?.unit_price ?? item?.price)), 0),
+      remainingTotal: group.items.reduce((sum, item) => sum + Math.abs(remainingQuantity(item)) * Math.abs(finite(item?.unitPrice ?? item?.unit_price ?? item?.price)), 0),
+      status,
     };
   }).sort((a, b) => dateValue(b.latestCreated) - dateValue(a.latestCreated));
 }
@@ -285,6 +331,25 @@ function groupSearchText(group) {
     group.orderType,
     ...group.items.flatMap((item) => [item?.productName, item?.reason, item?.orderId, item?.createdByName]),
   ].map(text).join(" ").toLowerCase();
+}
+
+function itemsForCurrentTab(items, tab) {
+  const source = Array.isArray(items) ? items : [];
+  if (tab === "remaining") return source.filter((item) => Math.abs(remainingQuantity(item)) > 1e-9);
+  if (tab === "shipped") return source.filter((item) => Math.abs(receivedQuantity(item)) > 1e-9);
+  return source;
+}
+
+function groupsForCurrentTab(groups, orders, tab) {
+  if (tab === "all") return groups;
+  if (tab === "remaining") {
+    return groups.filter((group) => group.stage === 3 && !isMaintenanceOrder(group.orderType) && group.hasRemaining);
+  }
+  if (tab === "shipped") {
+    return groups.filter((group) => group.stage === 3 && (isMaintenanceOrder(group.orderType) || group.hasReceived));
+  }
+  const scopedRows = (Array.isArray(orders) ? orders : []).filter((item) => statusTabForItem(item) === tab);
+  return buildGroups(scopedRows);
 }
 
 function progressIndex(group) {
@@ -423,7 +488,10 @@ function OrderCard({ group, activeTab, onOpen, onReason }) {
   const type = orderTypeMeta(group.orderType, group.orderTypeColor);
   const thumbStyle = { "--co-thumb-bg": type.bg, "--co-thumb-fg": type.fg, "--co-thumb-border": type.bd };
   const reasons = [...new Set(group.items.map(rejectedReason).filter(Boolean))].join("\n");
-  const mixed = activeTab === "all" && hasMixedApprovedRejected(group.items);
+  const mixed = activeTab === "all" && group.stage === 2 && hasMixedApprovedRejected(group.items);
+  const displayItems = itemsForCurrentTab(group.items, activeTab);
+  const displayStatus = activeTab === "remaining" ? "remaining" : activeTab === "shipped" ? "shipped" : group.status;
+  const displayTotal = activeTab === "remaining" ? group.remainingTotal : activeTab === "shipped" ? group.receivedTotal : group.total;
   const progress = group.status === "archive" ? 100 : Math.min(100, progressIndex(group) * 25);
 
   return (
@@ -443,13 +511,13 @@ function OrderCard({ group, activeTab, onOpen, onReason }) {
             <span className="co-sub">{formatDate(group.latestCreated)}</span>
           </div>
         </div>
-        <div className="co-qty" title={`${group.items.length} component${group.items.length === 1 ? "" : "s"}`}>x{group.items.length}</div>
+        <div className="co-qty" title={`${displayItems.length} component${displayItems.length === 1 ? "" : "s"}`}>x{displayItems.length}</div>
       </div>
       <div className="co-divider" />
       <div className="co-bottom">
-        <div className="co-est"><div className="co-est-label">Estimate Total</div><div className="co-est-value">{formatMoney(group.total)}</div></div>
+        <div className="co-est"><div className="co-est-label">Estimate Total</div><div className="co-est-value">{formatMoney(displayTotal)}</div></div>
         <div className="co-actions">
-          {mixed ? <MixedStatusPill /> : <StatusPill status={group.status} reason={reasons} onReason={onReason} />}
+          {mixed ? <MixedStatusPill /> : <StatusPill status={displayStatus} reason={reasons} onReason={onReason} />}
           <span className="next-current-order-progress next-current-order-progress--icon-only" aria-label={`${progress}% workflow progress`} title={`${progress}% workflow progress`}>
             <ClassicOrderIcon name="percent" />
           </span>
@@ -477,7 +545,7 @@ function ProgressTrack({ value }) {
   );
 }
 
-function OrderDetailsModal({ group, busy, onClose, onAction, onReason, onExport }) {
+function OrderDetailsModal({ group, tab, busy, onClose, onAction, onReason, onExport }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const [sortMode, setSortMode] = useState("product-tag");
   const [downloadOpen, setDownloadOpen] = useState(false);
@@ -518,8 +586,10 @@ function OrderDetailsModal({ group, busy, onClose, onAction, onReason, onExport 
   const archived = group.status === "archive";
   const maintenance = isMaintenanceOrder(group.orderType);
   const headerTitle = orderTypeHeaderTitle(group.orderType, group.orderTypeColor, statusLabel(group.status));
-  const groupedItems = groupOrderItems(group.items, sortMode);
+  const tabItems = itemsForCurrentTab(group.items, tab);
+  const groupedItems = groupOrderItems(tabItems, sortMode);
   const reasons = [...new Set(group.items.map(rejectedReason).filter(Boolean))].join("\n");
+  const modalStatus = tab === "remaining" ? "remaining" : tab === "shipped" ? "shipped" : group.status;
 
   const menuAction = (action) => {
     setMoreOpen(false);
@@ -530,10 +600,27 @@ function OrderDetailsModal({ group, busy, onClose, onAction, onReason, onExport 
     const qtyRequested = finite(item?.quantityRequested ?? item?.quantity_requested ?? item?.quantity);
     const qtyEditedRaw = supervisorEditedQuantity(item);
     const hasEdited = qtyEditedRaw !== null && qtyEditedRaw !== undefined && qtyEditedRaw !== "" && finite(qtyEditedRaw) !== qtyRequested;
-    const qty = effectiveQuantity(item);
-    const itemStatus = statusTabForItem(item);
+    const base = baseQuantity(item);
+    const received = receivedQuantity(item);
+    const remaining = remainingQuantity(item);
+    const stage = statusIndex(item?.status);
+    const itemStatus = tab === "remaining"
+      ? "remaining"
+      : tab === "shipped" && stage === 3
+        ? "shipped"
+        : tab === "all" && stage === 3 && !maintenance && Math.abs(remaining) > 1e-9
+          ? "remaining"
+          : statusTabForItem(item);
     const itemReason = rejectedReason(item);
     const safeUrl = text(item?.productUrl);
+    const partialRemaining = tab === "all" && !maintenance && hasPartialRemaining(item);
+    const visibleQty = tab === "remaining" ? remaining : tab === "shipped" && Math.abs(received) > 1e-9 ? received : base;
+    const qtyMarkup = partialRemaining
+      ? <span className="sv-qty-diff"><span className="sv-qty-old">{formatQuantity(base)}</span><strong className="sv-qty-new">{formatQuantity(remaining)}</strong></span>
+      : hasEdited && tab !== "remaining" && tab !== "shipped"
+        ? <span className="sv-qty-diff"><span className="sv-qty-old">{formatQuantity(qtyRequested)}</span><strong className="sv-qty-new">{formatQuantity(base)}</strong></span>
+        : <strong>{formatQuantity(visibleQty)}</strong>;
+    const displayTotal = (tab === "remaining" || tab === "shipped") ? Math.abs(visibleQty) * Math.abs(finite(item?.unitPrice ?? item?.unit_price ?? item?.price)) : itemTotal(item);
     return (
       <div className="co-item" key={text(item?.id) || index}>
         <div className="co-item-left">
@@ -541,10 +628,10 @@ function OrderDetailsModal({ group, busy, onClose, onAction, onReason, onExport 
             <div className="co-item-name">{text(item?.productName) || "Unknown Product"}</div>
             {/^[hH][tT][tT][pP][sS]?:\/\//.test(safeUrl) ? <a className="co-item-link" href={safeUrl} target="_blank" rel="noopener noreferrer" title="Open link" aria-label="Open component link"><ClassicOrderIcon name="external-link" /></a> : null}
           </div>
-          {!maintenance ? <div className="co-item-sub">Unit: {formatMoney(item?.unitPrice)} · Total: {formatMoney(itemTotal(item))}</div> : null}
+          {!maintenance ? <div className="co-item-sub">Unit: {formatMoney(item?.unitPrice)} · Total: {formatMoney(displayTotal)}</div> : null}
         </div>
         <div className="co-item-right">
-          {maintenance ? <div className="co-item-issue-desc">{text(item?.issueDescription || item?.reason) || "—"}</div> : <div className="co-item-total">Qty: {hasEdited ? <span className="sv-qty-diff"><span className="sv-qty-old">{formatQuantity(qtyRequested)}</span><strong className="sv-qty-new">{formatQuantity(qty)}</strong></span> : <strong>{formatQuantity(qtyRequested)}</strong>}</div>}
+          {maintenance ? <div className="co-item-issue-desc">{text(item?.issueDescription || item?.reason) || "—"}</div> : <div className="co-item-total">{tab === "remaining" ? "Qty remaining:" : "Qty:"} {qtyMarkup}</div>}
           <StatusPill status={itemStatus} className="co-item-status" reason={itemReason} onReason={onReason} />
         </div>
       </div>
@@ -571,8 +658,8 @@ function OrderDetailsModal({ group, busy, onClose, onAction, onReason, onExport 
         <div className="next-current-order-modal-summary" aria-label="Order summary">
           <div><span>Order</span><strong>{group.orderIdLabel}</strong></div>
           <div><span>Date</span><strong>{formatDate(group.latestCreated)}</strong></div>
-          <div><span>Components</span><strong>{group.items.length}</strong></div>
-          <div className="next-current-order-modal-summary__status"><span>Status</span>{hasMixedApprovedRejected(group.items) ? <MixedStatusPill /> : <StatusPill status={group.status} reason={reasons} onReason={onReason} />}</div>
+          <div><span>Components</span><strong>{tabItems.length}</strong></div>
+          <div className="next-current-order-modal-summary__status"><span>Status</span>{tab === "all" && group.stage === 2 && hasMixedApprovedRejected(group.items) ? <MixedStatusPill /> : <StatusPill status={modalStatus} reason={reasons} onReason={onReason} />}</div>
         </div>
         <ProgressTrack value={archived ? 4 : progressIndex(group)} />
 
@@ -599,7 +686,7 @@ function OrderDetailsModal({ group, busy, onClose, onAction, onReason, onExport 
           showRepeatedComponentOptions={!maintenance}
           defaultRepeatedComponentMode="merge"
           onClose={() => setDownloadOpen(false)}
-          onDownload={(options) => onExport({ ...options, sortMode }, group)}
+          onDownload={(options) => onExport({ ...options, sortMode }, { ...group, items: tabItems, orderIds: tabItems.map((item) => text(item?.id)).filter(Boolean) })}
         />
       </div>
     </div>
@@ -714,8 +801,8 @@ export default function CurrentOrdersClient({ initialOrders = [], bootstrapWarni
     window.history.replaceState({}, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
   }, [tab, type, query]);
 
-  const statusRows = useMemo(() => tab === "all" ? orders : orders.filter((item) => statusTabForItem(item) === tab), [orders, tab]);
-  const statusGroups = useMemo(() => buildGroups(statusRows), [statusRows]);
+  const allGroups = useMemo(() => buildGroups(orders), [orders]);
+  const statusGroups = useMemo(() => groupsForCurrentTab(allGroups, orders, tab), [allGroups, orders, tab]);
   const typeOptions = useMemo(() => {
     const counts = new Map();
     const sample = new Map();
@@ -917,7 +1004,7 @@ export default function CurrentOrdersClient({ initialOrders = [], bootstrapWarni
         </div>
       </section>
 
-      <OrderDetailsModal group={selected} busy={busy} onClose={() => setSelected(null)} onAction={beginAction} onReason={setReasonView} onExport={exportOrder} />
+      <OrderDetailsModal group={selected} tab={tab} busy={busy} onClose={() => setSelected(null)} onAction={beginAction} onReason={setReasonView} onExport={exportOrder} />
       <PasswordModal state={actionState} busy={busy} error={actionError} onCancel={() => { if (!busy) { setActionState(null); setActionError(""); } }} onSubmit={submitAction} />
       <DeleteConfirmationModal state={deleteConfirm} busy={busy} onCancel={() => { if (!busy) setDeleteConfirm(null); }} onConfirm={confirmDelete} />
       <RejectedReasonModal reason={reasonView} onClose={() => setReasonView("")} />
