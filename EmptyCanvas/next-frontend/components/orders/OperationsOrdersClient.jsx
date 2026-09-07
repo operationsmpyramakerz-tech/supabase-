@@ -212,6 +212,12 @@ function maintenanceIssueText(item = {}) {
   return text(item?.issueDescription ?? item?.reason) || "—";
 }
 
+function visibleIssueDescription(item = {}) {
+  const value = text(item?.issueDescription);
+  if (/^created from proposal:/i.test(value)) return "";
+  return value;
+}
+
 function groupKey(item, index) {
   const number = Number(item?.orderIdNumber);
   if (Number.isFinite(number)) return `order:${number}`;
@@ -820,7 +826,7 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
           {/^https?:\/\//i.test(safeUrl) ? <a className="co-item-link" href={safeUrl} target="_blank" rel="noopener noreferrer" title="Open link" aria-label={`Open link for ${itemName}`} onClick={(event) => event.stopPropagation()}><ClassicOrderIcon name="external-link" /></a> : null}
         </div>
         {!maintenance ? <div className="co-item-sub">Unit: {formatMoney(item?.unitPrice ?? item?.unit_price ?? item?.price)} · Total: {formatMoney(displayTotal)}</div> : null}
-        {text(item?.issueDescription) ? <div className="co-item-issue-desc">{text(item.issueDescription)}</div> : null}
+        {visibleIssueDescription(item) ? <div className="co-item-issue-desc">{visibleIssueDescription(item)}</div> : null}
         {text(item?.actualIssueDescription) ? <div className="co-item-issue-desc"><b>Actual issue:</b> {text(item.actualIssueDescription)}</div> : null}
         {text(item?.repairAction) ? <div className="co-item-issue-desc"><b>Repair:</b> {text(item.repairAction)}</div> : null}
       </div>
