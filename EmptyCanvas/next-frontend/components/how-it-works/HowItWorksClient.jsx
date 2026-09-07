@@ -11,7 +11,7 @@ const ROUTE_MAP = {
   "maintenance-orders": "/next/maintenance-orders",
   "create-order": "/next/orders/new",
   stocktaking: "/next/stocktaking",
-  b2b: "/next/lms/schools",
+  b2b: "/b2b",
   tasks: "/next/task-management",
   expenses: "/next/expenses",
   "expenses-users": "/next/expenses/users",
@@ -78,15 +78,15 @@ const TOKEN_ROUTE_MAP = new Map([
   ["customer form", "/next/b2c/forms"],
   ["b2c customer form", "/next/b2c/forms"],
   ["/b2c/form", "/next/b2c/forms"],
-  ["b2b", "/next/lms/schools"],
-  ["/b2b", "/next/lms/schools"],
-  ["lms", "/next/lms"],
-  ["lms-users-center", "/next/lms/users-center"],
-  ["lms-b2b", "/next/lms/schools"],
-  ["lms-curriculum", "/next/lms/curriculum"],
-  ["lms users center", "/next/lms/users-center"],
-  ["lms schools", "/next/lms/schools"],
-  ["lms curriculum", "/next/lms/curriculum"],
+  ["b2b", "/b2b"],
+  ["/b2b", "/b2b"],
+  ["lms", "/lms"],
+  ["lms-users-center", "/lms/user-access"],
+  ["lms-b2b", "/lms/b2b"],
+  ["lms-curriculum", "/lms/curriculum"],
+  ["lms users center", "/lms/user-access"],
+  ["lms schools", "/lms/b2b"],
+  ["lms curriculum", "/lms/curriculum"],
   ["account", "/next/account"],
   ["/account", "/next/account"],
 ]);
@@ -97,6 +97,11 @@ function normalize(value) {
 
 function normalizePath(value) {
   return normalize(value).replace(/\/+$/, "");
+}
+
+function isLegacyLmsToken(value) {
+  const token = normalizePath(value);
+  return token === "lms" || token.startsWith("lms-") || token.startsWith("lms ") || token.startsWith("/lms");
 }
 
 function titleFromToken(raw) {
@@ -189,13 +194,8 @@ function moduleOrderIndex(id) {
 }
 
 function visibleModulesFor(account) {
-  const allowedPages = [...(Array.isArray(account?.allowedPages) ? account.allowedPages : [])];
-  const lmsPages = Array.isArray(account?.lmsAccess?.pages) ? account.lmsAccess.pages : [];
-  for (const page of lmsPages) {
-    if (page?.isEnabled === false) continue;
-    const key = String(page?.pageKey || page?.page_key || "").trim();
-    if (key) allowedPages.push(key);
-  }
+  const allowedPages = [...(Array.isArray(account?.allowedPages) ? account.allowedPages : [])]
+    .filter((value) => !isLegacyLmsToken(value));
   const allowedSet = buildAllowedSet(allowedPages);
   const detailed = MODULES.filter((module) => moduleVisible(module, allowedSet));
   const mapped = new Set();
