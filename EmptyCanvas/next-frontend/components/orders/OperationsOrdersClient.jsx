@@ -909,7 +909,6 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, editMode, o
       <div className="co-item-right">
         <div className="co-item-total">{tab === "remaining" ? "Qty remaining:" : "Qty:"} {qtyMarkup}</div>
         <span className="co-item-status" style={{ "--tag-bg": vars.bg, "--tag-fg": vars.fg, "--tag-border": vars.bd }}>{state.label}</span>
-        {isEditing ? <span className="next-operations-edit-item-hint"><ClassicOrderIcon name="edit-2" /> Edit</span> : null}
         {!isEditing && canRejectComponents && itemId ? <button className="btn btn-danger btn-xs req-ops-reject" type="button" title="Reject component" disabled={busy} onClick={(event) => { event.stopPropagation(); onAction("reject", { ...group, orderIds: [itemId], actionScope: "component", actionItemName: itemName }); }}><ClassicOrderIcon name="x" /> Reject</button> : null}
       </div>
     </div>;
