@@ -4535,6 +4535,12 @@ body.ops-has-system-cover:not(.shell-embedded) .main-content::before{
   opacity: 0.96 !important;
 }
 
+/* Next.js shell only: fit the full saved cover across the system canvas instead of zoom-cropping it. */
+body.next-classic-shell-active.ops-has-system-cover:not(.shell-embedded) .main-content::before{
+  background-size: 100% 100% !important;
+  background-position: center center !important;
+}
+
 body.ops-has-system-cover:not(.shell-embedded) .main-content::after{
   display: none !important;
 }
