@@ -1333,7 +1333,8 @@
   content: "";
   position: absolute;
   left: 50%;
-  bottom: -1px;
+  /* Lower the white fillet so its straight edge sits exactly on the cover edge. */
+  bottom: -10px;
   width: 410px;
   height: 130px;
   transform: translateX(-50%);
