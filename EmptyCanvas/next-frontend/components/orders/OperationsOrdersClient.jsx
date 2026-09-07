@@ -671,12 +671,15 @@ function OperationsOrderCard({ group, tab, onOpen, onCreator }) {
       </div>
       <div className="co-divider" />
       <div className="co-bottom">
-        {isMaintenance(group.orderType) ? <div className="co-est next-operations-maintenance-card-note"><div className="co-est-label">Maintenance request</div></div> : <div className="co-est">
-          <div className="co-est-label">Estimate Total</div>
-          <div className="co-est-value">{formatMoney(value)}</div>
-        </div>}
-        <div className="co-actions">
-          {tab === "all" && group.stage === 2 && group.hasApproved && group.hasRejected ? <MixedStatusPill /> : <StatusPill group={group} tab={tab} />}
+        <div className="co-est next-operations-createdby-summary">
+          <div className="co-est-label">Created by</div>
+          <div className="co-est-value next-operations-createdby-name">{group.createdByName || "—"}</div>
+        </div>
+        <div className="co-actions next-operations-card-summary-actions">
+          <div className="co-est next-operations-card-total">
+            <div className="co-est-label">{isMaintenance(group.orderType) ? "Order Type" : "Estimate Total"}</div>
+            <div className="co-est-value">{isMaintenance(group.orderType) ? "Maintenance request" : formatMoney(value)}</div>
+          </div>
           <button type="button" className="co-right-ico co-creator-btn next-operations-creator-btn" aria-label={`Created by ${group.createdByName || "user"}`} title={`Created by ${group.createdByName || "user"}`} onClick={(event) => { event.preventDefault(); event.stopPropagation(); onCreator?.(event.currentTarget, group); }}><ClassicOrderIcon name="user" /></button>
         </div>
       </div>
