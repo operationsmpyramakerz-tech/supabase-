@@ -14755,3 +14755,181 @@ body.operations-orders-page .next-classic-orders-parity .next-operations-order-c
     border-width: 2px !important;
   }
 }
+
+/* Operations Orders — inline admin component editor (new system only) */
+body.operations-orders-page .next-classic-orders-parity .next-operations-edit-mode-badge {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 7;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid #fed7aa;
+  border-radius: 999px;
+  background: #fff7ed;
+  color: #c2410c;
+  font-size: 12px;
+  font-weight: 800;
+  box-shadow: 0 8px 18px rgba(194, 65, 12, .10);
+}
+
+body.operations-orders-page .next-classic-orders-parity .next-operations-edit-mode-badge svg {
+  width: 15px;
+  height: 15px;
+}
+
+body.operations-orders-page .next-classic-orders-parity .next-operations-edit-mode-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 11px;
+  border: 1px solid #fed7aa;
+  border-radius: 12px;
+  background: #fffaf4;
+  color: #9a3412;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+body.operations-orders-page .next-classic-orders-parity .next-operations-edit-mode-note svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+}
+
+body.operations-orders-page .next-classic-orders-parity .co-item.next-operations-editable-item {
+  position: relative;
+  cursor: pointer;
+  border-color: #fdba74 !important;
+  background: linear-gradient(180deg, #fff 0%, #fffaf5 100%) !important;
+  box-shadow: 0 0 0 1px rgba(251, 146, 60, .10), 0 7px 18px rgba(124, 45, 18, .06);
+  transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+
+body.operations-orders-page .next-classic-orders-parity .co-item.next-operations-editable-item:hover,
+body.operations-orders-page .next-classic-orders-parity .co-item.next-operations-editable-item:focus-visible {
+  border-color: #f97316 !important;
+  box-shadow: 0 0 0 2px rgba(249, 115, 22, .12), 0 9px 22px rgba(124, 45, 18, .09);
+  outline: none;
+}
+
+body.operations-orders-page .next-classic-orders-parity .next-operations-edit-item-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 22px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: #fff7ed;
+  color: #c2410c;
+  font-size: 9px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+body.operations-orders-page .next-classic-orders-parity .next-operations-edit-item-hint svg {
+  width: 11px;
+  height: 11px;
+}
+
+body.operations-orders-page .next-classic-orders-parity .next-operations-edit-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 9px;
+  margin-top: 12px;
+  padding: 12px 0 2px;
+  border-top: 1px solid #e5e7eb;
+}
+
+body.operations-orders-page .next-operations-component-edit-overlay {
+  z-index: 10080;
+}
+
+body.operations-orders-page .next-operations-component-edit-dialog {
+  width: min(620px, calc(100vw - 28px));
+  max-height: min(760px, calc(100vh - 32px));
+  border-radius: 22px;
+  overflow: hidden;
+}
+
+body.operations-orders-page .next-operations-component-edit-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+}
+
+body.operations-orders-page .next-operations-edit-grid,
+body.operations-orders-page .next-operations-edit-qty-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+body.operations-orders-page .next-operations-edit-grid--wide {
+  grid-template-columns: minmax(0, 1.45fr) minmax(0, .8fr) minmax(0, .75fr);
+}
+
+body.operations-orders-page .next-operations-edit-field {
+  min-width: 0;
+  margin: 0;
+}
+
+body.operations-orders-page .next-operations-edit-field--wide {
+  width: 100%;
+}
+
+body.operations-orders-page .next-operations-edit-select {
+  margin-top: 7px;
+  appearance: auto;
+}
+
+body.operations-orders-page .next-operations-edit-hint {
+  display: block;
+  margin-top: 4px;
+  color: #94a3b8;
+  font-size: 9px;
+  line-height: 1.25;
+}
+
+body.operations-orders-page .next-operations-component-edit-dialog .co-submodal-input,
+body.operations-orders-page .next-operations-component-edit-dialog .co-submodal-textarea {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+body.operations-orders-page .next-operations-component-edit-dialog .co-submodal-textarea {
+  resize: vertical;
+}
+
+@media (max-width: 720px) {
+  body.operations-orders-page .next-classic-orders-parity .next-operations-edit-mode-badge {
+    top: 12px;
+    left: 12px;
+    min-height: 30px;
+    padding: 0 9px;
+    font-size: 10px;
+  }
+
+  body.operations-orders-page .next-operations-edit-grid,
+  body.operations-orders-page .next-operations-edit-grid--wide,
+  body.operations-orders-page .next-operations-edit-qty-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  body.operations-orders-page .next-operations-edit-field--wide:first-child {
+    grid-column: 1 / -1;
+  }
+
+  body.operations-orders-page .next-operations-component-edit-dialog {
+    width: min(540px, calc(100vw - 18px));
+    max-height: calc(100vh - 18px);
+    border-radius: 18px;
+  }
+}
