@@ -5896,13 +5896,33 @@ async function _sbSplitOrderExportRowsFromProposalSources(rows = [], items = [],
       continue;
     }
 
+    const sourceKey = (source = {}) => [
+      String(source?.kitId || "").trim(),
+      normKey(source?.kitTag || source?.kitName || ""),
+      normKey(source?.kitFolderName || source?.folderName || ""),
+    ].join("|");
+    const scaledMetricMap = (value) => {
+      const numeric = Number(value) || 0;
+      if (Math.abs(numeric) <= 1e-9) return new Map();
+      const metricSources = _sbScaleOrderSourceBreakdown(sourceBreakdown, Math.abs(numeric));
+      const metricSign = numeric < 0 ? -1 : 1;
+      return new Map(metricSources.map((source) => [sourceKey(source), metricSign * Math.max(0, Number(source?.quantity) || 0)]));
+    };
+    const receivedBySource = scaledMetricMap(row?.receivedQty);
+    const remainingBySource = scaledMetricMap(row?.remainingQty);
+    const deliveredBySource = scaledMetricMap(row?.deliveredQty);
+
     const sign = qty < 0 ? -1 : 1;
     for (const source of sources) {
       const sourceQty = sign * Math.max(0, Number(source?.quantity) || 0);
       if (!sourceQty) continue;
+      const key = sourceKey(source);
       out.push({
         ...row,
         qty: sourceQty,
+        receivedQty: receivedBySource.get(key) || 0,
+        remainingQty: remainingBySource.get(key) || 0,
+        deliveredQty: deliveredBySource.get(key) || 0,
         total: sourceQty * (Number(row?.unit) || 0),
         kitTag: String(source?.kitTag || "").trim() || row?.kitTag || "Unassigned kit",
         kitFolderName: String(source?.kitFolderName || "").trim() || row?.kitFolderName || "Unfiled Kits",
@@ -5978,6 +5998,22 @@ async function _sbBuildOrderExportPayload(orderIds = [], req = null, { repeatedC
       ? item.quantityReceived
       : (item.quantityProgress !== null && typeof item.quantityProgress !== "undefined" ? item.quantityProgress : item.quantity);
     const qty = Number.isFinite(Number(qtyCandidate)) ? Number(qtyCandidate) : 0;
+    const baseQtyCandidate = item.quantity !== null && typeof item.quantity !== "undefined"
+      ? item.quantity
+      : (item.quantityRequested !== null && typeof item.quantityRequested !== "undefined" ? item.quantityRequested : qty);
+    const baseQty = Number.isFinite(Number(baseQtyCandidate)) ? Number(baseQtyCandidate) : 0;
+    const receivedQty = item.quantityReceived !== null && typeof item.quantityReceived !== "undefined"
+      && Number.isFinite(Number(item.quantityReceived))
+      ? Number(item.quantityReceived)
+      : 0;
+    const remainingQty = item.quantityRemaining !== null && typeof item.quantityRemaining !== "undefined"
+      && Number.isFinite(Number(item.quantityRemaining))
+      ? Number(item.quantityRemaining)
+      : roundOrderQty(baseQty - receivedQty);
+    const finalDeliveryStage = /(arrived|delivered|received|archive)/i.test(String(item.status || ""));
+    const deliveredQty = finalDeliveryStage
+      ? (Math.abs(receivedQty) > 1e-9 ? receivedQty : baseQty)
+      : 0;
     const unitCandidate = item.unitPrice !== null && typeof item.unitPrice !== "undefined" ? item.unitPrice : prod?.unitPrice;
     const unit = Number.isFinite(Number(unitCandidate)) ? Number(unitCandidate) : 0;
     const total = qty * unit;
@@ -5987,6 +6023,9 @@ async function _sbBuildOrderExportPayload(orderIds = [], req = null, { repeatedC
       idCode: prod?.displayId || "",
       component: item.productName || prod?.name || "Unknown Product",
       qty,
+      receivedQty,
+      remainingQty,
+      deliveredQty,
       reason: item.reason || "No Reason",
       issue: item.actualIssueDescription || item.issueDescription || item.reason || "No Issue",
       issueDescription: item.issueDescription || null,
@@ -6039,6 +6078,9 @@ const ORDER_EXPORT_COLUMN_DEFS = [
   { key: "idCode", label: "ID Code", width: 14 },
   { key: "component", label: "Component", width: 36 },
   { key: "qty", label: "Quantity", width: 12 },
+  { key: "receivedQty", label: "Received Qty", width: 14 },
+  { key: "remainingQty", label: "Remaining Qty", width: 14 },
+  { key: "deliveredQty", label: "Delivered Qty", width: 14 },
   { key: "reason", label: "Reason", width: 24 },
   { key: "issue", label: "Issue", width: 34 },
   { key: "link", label: "Component link", width: 54 },
@@ -6200,6 +6242,9 @@ function _orderExportCellValue(row = {}, key = "") {
     case "idCode": return row.idCode || "";
     case "component": return row.component || "";
     case "qty": return Number(row.qty) || 0;
+    case "receivedQty": return Number(row.receivedQty) || 0;
+    case "remainingQty": return Number(row.remainingQty) || 0;
+    case "deliveredQty": return Number(row.deliveredQty) || 0;
     case "reason": return row.reason || "";
     case "issue": return row.issue || row.actualIssueDescription || row.issueDescription || row.reason || "";
     case "link": return row.link || row.url || row.componentLink || row.href || "";
@@ -6534,7 +6579,7 @@ async function _sbPipeOrderExcelProposalStyle(req, res, payload, {
         cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF9FAFB" } };
       }
 
-      if (col.key === "qty") cell.numFmt = numFmtFor(cell.value);
+      if (["qty", "receivedQty", "remainingQty", "deliveredQty"].includes(col.key)) cell.numFmt = numFmtFor(cell.value);
       if (col.key === "unit" || col.key === "total") cell.numFmt = '"£"#,##0.00';
       if (col.key === "total") cell.font = { bold: true, color: { argb: "FFC2410C" } };
 
