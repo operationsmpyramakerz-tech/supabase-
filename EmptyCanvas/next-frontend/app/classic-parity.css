@@ -14591,8 +14591,9 @@ body.operations-orders-page .next-classic-orders-parity .next-operations-order-c
 
   body.operations-orders-page .next-classic-orders-parity .next-operations-order-card .next-operations-creator-label {
     max-width: 118px;
+    margin-right: -10px;
     padding-left: 8px;
-    padding-right: 7px;
+    padding-right: 17px;
     font-size: 8.5px;
   }
 
@@ -14679,8 +14680,8 @@ body.operations-orders-page .next-classic-orders-parity .next-operations-order-c
   align-items: center;
   height: 30px;
   max-width: 150px;
-  margin-right: -2px;
-  padding: 0 10px 0 11px;
+  margin-right: -11px;
+  padding: 0 20px 0 11px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
