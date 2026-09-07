@@ -1322,26 +1322,27 @@
   }
 }
 
-/* ===== User Profile v3: symmetric fillet bridge + compact cover editor ===== */
+/* ===== User Profile v4: wide symmetric cover-to-avatar fillet ===== */
 /*
-   The white bridge is a fixed-width SVG overlay centered on the cover edge.
-   Its shoulders use symmetric Bezier fillets so the flat white panel flows
-   smoothly into the circular avatar frame on both sides.
+   Match the reference composition: the white content panel rises into the
+   cover with two broad, symmetric fillets that meet the avatar's white ring.
+   The bridge is deliberately wider than the avatar so the transition starts
+   well before the circle instead of looking like two small rectangular ears.
 */
 .page-account .profile-cover-section::after{
   content: "";
   position: absolute;
   left: 50%;
   bottom: -1px;
-  width: 238px;
-  height: 104px;
+  width: 410px;
+  height: 130px;
   transform: translateX(-50%);
   pointer-events: none;
   z-index: 3;
   background-repeat: no-repeat;
   background-position: center bottom;
   background-size: 100% 100%;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 238 104' preserveAspectRatio='none'%3E%3Cpath fill='%23ffffff' d='M0 104V96H30C43 96 49 92 54 80C66 43 87 12 119 12C151 12 172 43 184 80C189 92 195 96 208 96H238V104Z'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 410 130' preserveAspectRatio='none'%3E%3Cpath fill='%23ffffff' d='M0 130V119H62C91 119 101 109 109 84C121 46 147 12 205 12C263 12 289 46 301 84C309 109 319 119 348 119H410V130Z'/%3E%3C/svg%3E");
 }
 
 /* Keep the avatar and its controls above the fillet bridge. */
@@ -1410,9 +1411,9 @@
 
 @media (max-width: 768px){
   .page-account .profile-cover-section::after{
-    width: 188px;
-    height: 82px;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 188 82' preserveAspectRatio='none'%3E%3Cpath fill='%23ffffff' d='M0 82V75H24C34 75 39 72 43 63C53 34 69 10 94 10C119 10 135 34 145 63C149 72 154 75 164 75H188V82Z'/%3E%3C/svg%3E");
+    width: 320px;
+    height: 104px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 320 104' preserveAspectRatio='none'%3E%3Cpath fill='%23ffffff' d='M0 104V94H48C70 94 78 86 84 68C94 39 114 8 160 8C206 8 226 39 236 68C242 86 250 94 272 94H320V104Z'/%3E%3C/svg%3E");
   }
 
   .page-account .account-image-editor--cover{
