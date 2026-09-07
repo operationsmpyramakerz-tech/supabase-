@@ -680,14 +680,15 @@ function OperationsOrderCard({ group, tab, onOpen, onCreator }) {
         <div className="co-qty" title={`${displayItemCount} component${displayItemCount === 1 ? "" : "s"}`}>x{displayItemCount}</div>
       </div>
       <div className="co-divider" />
-      <div className="co-bottom">
-        <div className="co-est next-operations-createdby-summary">
-          <div className="co-est-label">Created by</div>
-          <div className="co-est-value next-operations-createdby-name">{group.createdByName || "—"}</div>
+      <div className="co-bottom next-operations-card-bottom">
+        <div className="next-operations-card-status">
+          {group.stage === 2 && group.hasApproved && group.hasRejected ? <MixedStatusPill /> : <StatusPill group={group} tab={tab} />}
         </div>
         <div className="co-actions next-operations-card-summary-actions">
-          {group.stage === 2 && group.hasApproved && group.hasRejected ? <MixedStatusPill /> : <StatusPill group={group} tab={tab} />}
-          <button type="button" className="co-right-ico co-creator-btn next-operations-creator-btn" aria-label={`Created by ${group.createdByName || "user"}`} title={`Created by ${group.createdByName || "user"}`} onClick={(event) => { event.preventDefault(); event.stopPropagation(); onCreator?.(event.currentTarget, group); }}><ClassicOrderIcon name="user" /></button>
+          <button type="button" className="co-creator-btn next-operations-creator-btn" aria-label={`Created by ${group.createdByName || "user"}`} title={`Created by ${group.createdByName || "user"}`} onClick={(event) => { event.preventDefault(); event.stopPropagation(); onCreator?.(event.currentTarget, group); }}>
+            <span className="next-operations-creator-label">{group.createdByName || "—"}</span>
+            <span className="next-operations-creator-icon"><ClassicOrderIcon name="user" /></span>
+          </button>
         </div>
       </div>
     </article>
