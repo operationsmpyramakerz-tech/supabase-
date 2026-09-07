@@ -72,9 +72,6 @@ const NEXT_ROUTE_MAP = [
   ["/events/components", "/next/event-components"],
   ["/events/calendar", "/next/events-calendar"],
   ["/expenses/users", "/next/expenses/users"],
-  ["/lms/user-access", "/next/lms/users-center"],
-  ["/lms/curriculum", "/next/lms/curriculum"],
-  ["/lms/b2b", "/next/lms/schools"],
   ["/b2c/database", "/next/b2c/database"],
   ["/b2c/form", "/next/b2c/forms"],
   ["/task-management", "/next/task-management"],
@@ -89,7 +86,6 @@ const NEXT_ROUTE_MAP = [
   ["/kpis", "/next/kpis"],
   ["/kits", "/next/kits"],
   ["/orders", "/next/orders"],
-  ["/lms", "/next/lms"],
   ["/dashboard", "/next/home"],
   ["/home", "/next/home"],
 ];
