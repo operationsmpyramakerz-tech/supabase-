@@ -89,31 +89,43 @@ async function loadImage(dataUrl) {
   });
 }
 
-async function imageDataUrl(file, kind) {
+async function croppedImageDataUrl(file, kind, crop, viewportWidth, viewportHeight) {
   const raw = await readFileAsDataUrl(file);
-  const type = lower(file?.type);
-  const fileName = lower(file?.name);
-  if (type === "image/gif" || type === "image/svg+xml" || /\.(gif|svg)$/i.test(fileName)) return raw;
+  const image = await loadImage(raw);
+  const sourceWidth = Math.max(1, image.naturalWidth || image.width || 1);
+  const sourceHeight = Math.max(1, image.naturalHeight || image.height || 1);
+  const frameWidth = Math.max(1, Number(viewportWidth) || (kind === "cover" ? 680 : 360));
+  const frameHeight = Math.max(1, Number(viewportHeight) || (kind === "cover" ? 200 : 360));
+  const zoom = Math.max(1, Math.min(3, Number(crop?.zoom) || 1));
+  const baseScale = Math.max(frameWidth / sourceWidth, frameHeight / sourceHeight);
+  const displayScale = baseScale * zoom;
+  const cropWidth = Math.min(sourceWidth, frameWidth / displayScale);
+  const cropHeight = Math.min(sourceHeight, frameHeight / displayScale);
+  const centerX = (sourceWidth / 2) - ((Number(crop?.x) || 0) / displayScale);
+  const centerY = (sourceHeight / 2) - ((Number(crop?.y) || 0) / displayScale);
+  const sx = Math.max(0, Math.min(sourceWidth - cropWidth, centerX - cropWidth / 2));
+  const sy = Math.max(0, Math.min(sourceHeight - cropHeight, centerY - cropHeight / 2));
 
-  try {
-    const image = await loadImage(raw);
-    const maxWidth = kind === "cover" ? 1920 : 1400;
-    const maxHeight = kind === "cover" ? 1080 : 1400;
-    const sourceWidth = Math.max(1, image.naturalWidth || image.width || 1);
-    const sourceHeight = Math.max(1, image.naturalHeight || image.height || 1);
-    const scale = Math.min(1, maxWidth / sourceWidth, maxHeight / sourceHeight);
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.max(1, Math.round(sourceWidth * scale));
-    canvas.height = Math.max(1, Math.round(sourceHeight * scale));
-    const context = canvas.getContext("2d", { alpha: true });
-    if (!context) return raw;
-    context.drawImage(image, 0, 0, canvas.width, canvas.height);
-    let compressed = canvas.toDataURL("image/webp", 0.74);
-    if (!compressed.startsWith("data:image/webp")) compressed = canvas.toDataURL("image/jpeg", 0.76);
-    return compressed && compressed.length < raw.length ? compressed : raw;
-  } catch {
-    return raw;
-  }
+  const outputWidth = kind === "cover" ? 1700 : 900;
+  const outputHeight = kind === "cover" ? 500 : 900;
+  const canvas = document.createElement("canvas");
+  canvas.width = outputWidth;
+  canvas.height = outputHeight;
+  const context = canvas.getContext("2d", { alpha: false });
+  if (!context) throw new Error("The image crop could not be prepared.");
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, outputWidth, outputHeight);
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
+  context.drawImage(image, sx, sy, cropWidth, cropHeight, 0, 0, outputWidth, outputHeight);
+  let result = canvas.toDataURL("image/webp", kind === "cover" ? 0.84 : 0.88);
+  if (!result.startsWith("data:image/webp")) result = canvas.toDataURL("image/jpeg", kind === "cover" ? 0.86 : 0.9);
+  return result;
+}
+
+function clampCropOffset(value, displaySize, frameSize) {
+  const limit = Math.max(0, (displaySize - frameSize) / 2);
+  return Math.max(-limit, Math.min(limit, Number(value) || 0));
 }
 
 async function requestJson(url, options = {}, { redirectOn401 = true } = {}) {
@@ -283,7 +295,18 @@ function ImageUploadModal({ imageRequest, onClose, onSaved }) {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [crop, setCrop] = useState({ zoom: 1, x: 0, y: 0 });
+  const [imageMeta, setImageMeta] = useState({ width: 0, height: 0 });
+  const cropViewportRef = useRef(null);
+  const dragRef = useRef(null);
   const kind = imageRequest?.kind === "cover" ? "cover" : "profile";
+  const label = kind === "cover" ? "Cover photo" : "Profile picture";
+
+  useEffect(() => {
+    setCrop({ zoom: 1, x: 0, y: 0 });
+    setImageMeta({ width: 0, height: 0 });
+    setError("");
+  }, [imageRequest?.preview, kind]);
 
   useEffect(() => {
     function handleKeyDown(event) {
@@ -292,7 +315,57 @@ function ImageUploadModal({ imageRequest, onClose, onSaved }) {
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [busy, onClose]);
-  const label = kind === "cover" ? "Cover photo" : "Profile picture";
+
+  function clampPosition(x, y, zoom) {
+    const viewport = cropViewportRef.current;
+    if (!viewport || !imageMeta.width || !imageMeta.height) return { x: 0, y: 0 };
+    const rect = viewport.getBoundingClientRect();
+    const baseScale = Math.max(rect.width / imageMeta.width, rect.height / imageMeta.height);
+    const displayWidth = imageMeta.width * baseScale * zoom;
+    const displayHeight = imageMeta.height * baseScale * zoom;
+    return {
+      x: clampCropOffset(x, displayWidth, rect.width),
+      y: clampCropOffset(y, displayHeight, rect.height),
+    };
+  }
+
+  function changeZoom(value) {
+    const zoom = Math.max(1, Math.min(3, Number(value) || 1));
+    setCrop((current) => {
+      const position = clampPosition(current.x, current.y, zoom);
+      return { zoom, ...position };
+    });
+  }
+
+  function resetCrop() {
+    setCrop({ zoom: 1, x: 0, y: 0 });
+  }
+
+  function handlePointerDown(event) {
+    if (busy) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    dragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      cropX: crop.x,
+      cropY: crop.y,
+    };
+  }
+
+  function handlePointerMove(event) {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId || busy) return;
+    const nextX = drag.cropX + (event.clientX - drag.startX);
+    const nextY = drag.cropY + (event.clientY - drag.startY);
+    setCrop((current) => ({ ...current, ...clampPosition(nextX, nextY, current.zoom) }));
+  }
+
+  function handlePointerEnd(event) {
+    if (dragRef.current?.pointerId === event.pointerId) dragRef.current = null;
+    try { event.currentTarget.releasePointerCapture?.(event.pointerId); } catch {}
+  }
 
   async function submit(event) {
     event.preventDefault();
@@ -305,7 +378,15 @@ function ImageUploadModal({ imageRequest, onClose, onSaved }) {
         method: "POST",
         body: JSON.stringify({ currentPassword }),
       }, { redirectOn401: false });
-      const dataUrl = await imageDataUrl(imageRequest.file, kind);
+
+      const viewport = cropViewportRef.current?.getBoundingClientRect();
+      const dataUrl = await croppedImageDataUrl(
+        imageRequest.file,
+        kind,
+        crop,
+        viewport?.width,
+        viewport?.height,
+      );
       const endpoint = kind === "cover" ? "/api/account/cover-photo" : "/api/account/profile-picture";
       const result = await requestJson(endpoint, {
         method: "POST",
@@ -321,27 +402,75 @@ function ImageUploadModal({ imageRequest, onClose, onSaved }) {
   }
 
   return (
-    <div className="ex-modal" style={{ display: "flex" }} aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
-      <form className="ex-modal-box" role="dialog" aria-modal="true" aria-label={`Change ${label}`} onSubmit={submit}>
-        <h3 className="ex-modal-title">Change {label}</h3>
-        {imageRequest?.preview ? (
-          <div className={`account-image-preview account-image-preview--${kind}`} aria-label={`${label} preview`}>
-            <img src={imageRequest.preview} alt={`${label} preview`} />
+    <div className="ex-modal account-image-editor-layer" style={{ display: "flex" }} aria-hidden="false">
+      <form className={`ex-modal-box account-image-editor account-image-editor--${kind}`} role="dialog" aria-modal="true" aria-label={`Change ${label}`} onSubmit={submit}>
+        <div className="account-image-editor-head">
+          <div className="account-image-editor-headcopy">
+            <span className="account-image-editor-icon"><Icon name="image" size={20} /></span>
+            <div>
+              <h3 className="ex-modal-title">Change {label}</h3>
+              <p>Drag the image to choose the visible area, then zoom if needed.</p>
+            </div>
           </div>
-        ) : null}
-        <label className="field-label"><Icon name="image" size={16} /> Selected image</label>
-        <div className="password-wrapper">
-          <input className="ex-input" type="text" value={imageRequest?.file?.name || ""} readOnly />
+          <button className="account-image-editor-close" type="button" onClick={onClose} disabled={busy} aria-label="Close"><Icon name="x" size={18} /></button>
         </div>
+
+        <div className="account-crop-stage">
+          <div
+            ref={cropViewportRef}
+            className={`account-crop-viewport account-crop-viewport--${kind}`}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerEnd}
+            onPointerCancel={handlePointerEnd}
+            aria-label={`Crop ${label}`}
+          >
+            {imageRequest?.preview ? (
+              <img
+                className="account-crop-image"
+                src={imageRequest.preview}
+                alt={`${label} crop preview`}
+                draggable="false"
+                onLoad={(event) => {
+                  const element = event.currentTarget;
+                  setImageMeta({ width: element.naturalWidth || 1, height: element.naturalHeight || 1 });
+                  setCrop({ zoom: 1, x: 0, y: 0 });
+                }}
+                style={{ transform: `translate3d(${crop.x}px, ${crop.y}px, 0) scale(${crop.zoom})` }}
+              />
+            ) : null}
+            <span className="account-crop-grid" aria-hidden="true" />
+            {kind === "profile" ? <span className="account-crop-profile-ring" aria-hidden="true" /> : null}
+          </div>
+          <div className="account-crop-hint">Drag to reposition</div>
+        </div>
+
+        <div className="account-crop-controls">
+          <span className="account-crop-zoom-label">Zoom</span>
+          <input
+            className="account-crop-zoom"
+            type="range"
+            min="1"
+            max="3"
+            step="0.01"
+            value={crop.zoom}
+            onChange={(event) => changeZoom(event.target.value)}
+            aria-label="Zoom image"
+          />
+          <button className="account-crop-reset" type="button" onClick={resetCrop} disabled={busy}>Reset</button>
+        </div>
+
+        <div className="account-image-editor-filename"><Icon name="image" size={15} /><span>{imageRequest?.file?.name || "Selected image"}</span></div>
+
         <label className="field-label"><Icon name="lock" size={16} /> Current password</label>
-        <div className="password-wrapper has-toggle">
-          <input autoFocus className="ex-input" type={showCurrentPassword ? "text" : "password"} value={currentPassword} onChange={(event) => { setCurrentPassword(event.target.value); setError(""); }} autoComplete="current-password" />
+        <div className="password-wrapper has-toggle account-image-editor-password">
+          <input className="ex-input" type={showCurrentPassword ? "text" : "password"} value={currentPassword} onChange={(event) => { setCurrentPassword(event.target.value); setError(""); }} autoComplete="current-password" placeholder="Enter your current password" />
           <PasswordToggle visible={showCurrentPassword} onToggle={() => setShowCurrentPassword((current) => !current)} label="current password" />
         </div>
         {error ? <div className="ex-error" style={{ display: "block" }} role="alert">{error}</div> : null}
-        <div className="ex-modal-actions">
-          <button className="ex-btn ex-primary" type="submit" disabled={busy}>{busy ? "Uploading..." : "Upload"}</button>
-          <button className="ex-btn ex-danger" type="button" onClick={onClose} disabled={busy}>Close</button>
+        <div className="ex-modal-actions account-image-editor-actions">
+          <button className="ex-btn account-image-editor-cancel" type="button" onClick={onClose} disabled={busy}>Cancel</button>
+          <button className="ex-btn ex-primary account-image-editor-save" type="submit" disabled={busy}>{busy ? "Saving…" : `Save ${kind === "cover" ? "cover" : "photo"}`}</button>
         </div>
       </form>
     </div>
