@@ -2997,12 +2997,12 @@ function _uaAppPageIsStocktaking(page = {}) {
   return values.some((value) => _sbCanon(value) === "stocktaking" || /(^|\/)stocktaking(?:$|[/?#])/i.test(value));
 }
 
-async function _uaEnsureGeneratedStocktakingColumnForMember(memberId = "", memberName = "") {
+async function _uaEnsureGeneratedStocktakingColumnForMember(memberId = "", memberName = "", { rows: suppliedRows = null } = {}) {
   const id = String(memberId || "").trim();
   const label = _uaGeneratedStocktakingColumnName(memberName);
   if (!id || !label || !_sbTeamMembersEnabled() || !_sbStocktakingEnabled()) return null;
 
-  const rows = await _sbSelectTeamMembersRows();
+  const rows = Array.isArray(suppliedRows) && suppliedRows.length ? suppliedRows : await _sbSelectTeamMembersRows();
   const member = (rows || []).find((row) => String(_sbGet(row, ["id", "ID"]) ?? "").trim() === id) || null;
   if (!member) {
     const err = new Error("Team member was not found while preparing Stocktaking access.");
@@ -3176,14 +3176,14 @@ async function _sbSvAccessPayloadForMember(memberId = "") {
   return { memberId: id, memberName: _sbString(_sbValueForLabel(target, "Name")) || "", members, summary: { enabledCount } };
 }
 
-async function _sbSaveSvAccessForMember(memberId = "", members = []) {
+async function _sbSaveSvAccessForMember(memberId = "", members = [], { rows: suppliedRows = null, returnPayload = true } = {}) {
   const id = String(memberId || "").trim();
   if (!id) {
     const err = new Error("Missing team member ID.");
     err.status = 400;
     throw err;
   }
-  const rows = await _sbSelectTeamMembersRows();
+  const rows = Array.isArray(suppliedRows) && suppliedRows.length ? suppliedRows : await _sbSelectTeamMembersRows();
   const target = (rows || []).find((row) => String(_sbGet(row, ["id", "ID"]) ?? "") === id) || null;
   if (!target) {
     const err = new Error("Team member was not found.");
@@ -3250,6 +3250,14 @@ async function _sbSaveSvAccessForMember(memberId = "", members = []) {
 
   await _uaClearUserAccessCaches(id);
   await clearSVOrdersRouteCaches({ session: { username: _sbString(_sbValueForLabel(target, "Name")) } }).catch(() => {});
+  if (!returnPayload) {
+    return {
+      memberId: id,
+      memberName: _sbString(_sbValueForLabel(target, "Name")) || "",
+      members: enabledRows.map((row) => _sbSerializeSvAccessMember(row, true)),
+      summary: { enabledCount: enabledRows.length },
+    };
+  }
   return _sbSvAccessPayloadForMember(id);
 }
 
@@ -3867,7 +3875,7 @@ async function _sbPageAccessPayloadForMember(teamMemberId) {
   return { pages: items, summary: _sbPageAccessSummaryFromRows(items.map((x) => ({ ...x, page_key: x.pageKey, page_name: x.pageName, is_enabled: x.isEnabled, access_level: x.accessLevel }))) };
 }
 
-async function _sbSavePageAccessForMember(teamMemberId, entries = [], { teamMemberName = "", grantedBy = "" } = {}) {
+async function _sbSavePageAccessForMember(teamMemberId, entries = [], { teamMemberName = "", grantedBy = "", teamRows = null } = {}) {
   const memberId = String(teamMemberId || "").trim();
   if (!memberId) {
     const err = new Error("Missing team member ID.");
@@ -3938,7 +3946,7 @@ async function _sbSavePageAccessForMember(teamMemberId, entries = [], { teamMemb
 
   const stocktakingEnabled = Array.from(incomingByPageId.values()).some(({ page, entry }) => !!entry?.isEnabled && _uaAppPageIsStocktaking(page));
   if (stocktakingEnabled) {
-    await _uaEnsureGeneratedStocktakingColumnForMember(memberId, teamMemberName);
+    await _uaEnsureGeneratedStocktakingColumnForMember(memberId, teamMemberName, { rows: teamRows });
   }
 
   // Two bulk operations instead of one sequential PATCH per page.
@@ -20751,8 +20759,36 @@ app.post(
 
         const created = await supabaseDb.insert(_sbTeamMembersTable(), writeRow);
         const createdId = String(_sbGet(created || {}, ["id", "ID"]) ?? "").trim();
+        const allRows = [...(rows || []), created || writeRow];
+        const pageAccess = Array.isArray(req.body?.pageAccess) ? req.body.pageAccess : null;
+        const svAccess = Array.isArray(req.body?.svAccess) ? req.body.svAccess : null;
+
+        // Creation used to require three browser round-trips (member, page
+        // access, then S.V access) plus a blocking directory refresh. Save the
+        // related access data here in parallel so the create flow completes in
+        // one request.
+        const relatedWrites = [];
+        if (createdId && pageAccess?.length) {
+          relatedWrites.push(_sbSavePageAccessForMember(createdId, pageAccess, {
+            teamMemberName: name,
+            grantedBy: String(req.session?.username || "Admin").trim() || "Admin",
+            teamRows: allRows,
+          }));
+        }
+        if (createdId && svAccess?.length) {
+          relatedWrites.push(_sbSaveSvAccessForMember(createdId, svAccess, {
+            rows: allRows,
+            returnPayload: false,
+          }));
+        }
+        if (relatedWrites.length) await Promise.all(relatedWrites);
+
         await _uaClearUserAccessCaches(createdId);
-        const editableFields = await _uaEnrichEditableFieldsForSupabase(_sbOrderedEditableFieldsFromRows([...(rows || []), created || {}]), [...(rows || []), created || {}]);
+
+        // The client only needs the created member ID immediately. Avoid the
+        // expensive editable-field enrichment here; the Users Center directory
+        // refreshes its full enriched schema in the background.
+        const editableFields = _sbOrderedEditableFieldsFromRows(allRows);
         const member = _sbSerializeTeamMemberRow(created || writeRow, editableFields);
         return res.json({ ok: true, member, source: "supabase" });
       }
