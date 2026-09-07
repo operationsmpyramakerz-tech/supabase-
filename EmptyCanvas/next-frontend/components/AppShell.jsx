@@ -40,7 +40,7 @@ const MODULE_LINKS = [
 // Backup, Notifications and How-it-works stay available through their direct
 // routes/profile controls, just like the current Classic interface.
 const CLASSIC_MAIN_LINKS = [
-  { label: "Home", href: "/next/home", icon: "home", permissions: [], alwaysVisible: true },
+  { label: "Home", href: "/next/home", icon: "home", permissions: [], alwaysVisible: true, boundary: "workspace" },
   { label: "Current Orders", href: "/next/orders", icon: "list", permissions: ["Current Orders"] },
   { label: "Orders Review", href: "/next/orders-review", icon: "award", permissions: ["Orders Review"] },
   { label: "Operations Orders", href: "/next/operations-orders", icon: "users", permissions: ["Requested Orders", "Operations Orders"] },
