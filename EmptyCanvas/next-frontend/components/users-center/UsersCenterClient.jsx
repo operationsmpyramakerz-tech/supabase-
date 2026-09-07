@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import ActionLoadingModal, { useActionLoading } from "../ActionLoadingModal";
 
 function text(value) { return String(value ?? "").trim(); }
 function lower(value) { return text(value).toLowerCase(); }
@@ -303,11 +304,68 @@ function MemberForm({ member, selectedDepartment, editableFields, departments, p
   ]), [editableFields]);
   const [values, setValues] = useState(() => Object.fromEntries(schema.map((field) => [field.name, member ? fieldValue(member, field.name) : (fieldKey(field.name) === "department" ? selectedDepartment?.name || "" : "")])));
   const [busy, setBusy] = useState(false); const [error, setError] = useState("");
+  const { actionLoading, startActionLoading, finishActionLoading } = useActionLoading();
   const isEdit = !!member; const hasOrdersReview = memberHasPage(member, pageAccessRows, "Orders Review"); const hasStocktaking = memberHasPage(member, pageAccessRows, "Stocktaking"); const hasSchoolPages = ["Stocktaking", "Current Orders", "Shopping Cart"].some((name) => memberHasPage(member, pageAccessRows, name));
   const nameFieldName = schema.find((field) => fieldKey(field.name) === "name")?.name || "Name";
   const autoStocktakingColumn = generatedStocktakingColumnName(values[nameFieldName]);
   function setField(name, value) { setValues((current) => ({ ...current, [name]: value })); }
-  async function submit(event) { event.preventDefault(); const nameField = nameFieldName; if (!text(values[nameField])) return setError("Please enter the team member name."); setBusy(true); setError(""); try { const endpoint = isEdit ? `/api/user-access/team-members/${encodeURIComponent(member.id)}` : "/api/user-access/team-members"; const fields = { ...values }; if (hasStocktaking && autoStocktakingColumn) { const schoolField = schema.find((field) => fieldKey(field.name) === "school"); if (schoolField) fields[schoolField.name] = autoStocktakingColumn; } for (const field of schema) { if (["ua_page_access_manager", "ua_sv_access_manager"].includes(field.type) || ["allowedpages", "svschools"].includes(fieldKey(field.name))) delete fields[field.name]; } const body = await requestJson(endpoint, { method: isEdit ? "PATCH" : "POST", body: JSON.stringify({ fields }) }); const savedMember = body.member || member; if (!isEdit && savedMember?.id && pageAccessRows?.length) await requestJson(`/api/user-access/team-members/${encodeURIComponent(savedMember.id)}/page-access`, { method: "PATCH", body: JSON.stringify({ pages: pageAccessRows.map((row) => ({ pageId: row.pageId, pageKey: row.pageKey, isEnabled: !!row.isEnabled, accessLevel: row.accessLevel })) }) }); if (!isEdit && savedMember?.id && hasOrdersReview && svRows?.length) await requestJson(`/api/user-access/team-members/${encodeURIComponent(savedMember.id)}/sv-access`, { method: "PATCH", body: JSON.stringify({ members: svRows.filter((row) => row.isEnabled).map((row) => ({ memberId: row.memberId })) }) }); await onSaved(body); onClose(); } catch (err) { setError(err.message); } finally { setBusy(false); } }
+  async function submit(event) {
+    event.preventDefault();
+    const nameField = nameFieldName;
+    if (!text(values[nameField])) return setError("Please enter the team member name.");
+
+    setBusy(true);
+    setError("");
+    startActionLoading({
+      title: isEdit ? "Saving team member" : "Creating team member",
+      message: isEdit ? "Updating the user record…" : "Creating the account and applying access settings…",
+    });
+
+    try {
+      const endpoint = isEdit ? `/api/user-access/team-members/${encodeURIComponent(member.id)}` : "/api/user-access/team-members";
+      const fields = { ...values };
+      if (hasStocktaking && autoStocktakingColumn) {
+        const schoolField = schema.find((field) => fieldKey(field.name) === "school");
+        if (schoolField) fields[schoolField.name] = autoStocktakingColumn;
+      }
+      for (const field of schema) {
+        if (["ua_page_access_manager", "ua_sv_access_manager"].includes(field.type) || ["allowedpages", "svschools"].includes(fieldKey(field.name))) delete fields[field.name];
+      }
+
+      const payload = { fields };
+      if (!isEdit) {
+        payload.pageAccess = (pageAccessRows || []).map((row) => ({
+          pageId: row.pageId,
+          pageKey: row.pageKey,
+          isEnabled: !!row.isEnabled,
+          accessLevel: row.accessLevel,
+        }));
+        payload.svAccess = hasOrdersReview
+          ? (svRows || []).filter((row) => row.isEnabled).map((row) => ({ memberId: row.memberId }))
+          : [];
+      }
+
+      const body = await requestJson(endpoint, {
+        method: isEdit ? "PATCH" : "POST",
+        body: JSON.stringify(payload),
+      });
+
+      // Refresh the directory in the background. It should not keep the user
+      // waiting after the member and permissions have already been saved.
+      try { onSaved?.(body); } catch {}
+
+      await finishActionLoading(
+        "done",
+        isEdit ? "Team member updated successfully." : "Team member created successfully.",
+      );
+      onClose();
+    } catch (err) {
+      setError(err.message);
+      await finishActionLoading("failed", err.message || "The team member could not be saved.");
+    } finally {
+      setBusy(false);
+    }
+  }
   function renderField(field) {
     const key = fieldKey(field.name); const value = values[field.name] ?? ""; const type = field.type || "rich_text";
     if (type === "ua_page_access_manager" || key === "allowedpages") return <PageAccessManager key={field.name} summary={accessSummaryText(pageAccessRows, member)} onOpen={onOpenPageAccess}/>;
@@ -324,7 +382,10 @@ function MemberForm({ member, selectedDepartment, editableFields, departments, p
     const inputType = key === "password" ? "password" : type === "email" ? "email" : type === "number" ? "number" : type === "phone_number" ? "tel" : type === "date" ? "date" : "text";
     return <label className="ua-form-field" key={field.name}><span>{field.name}</span><input type={inputType} required={!!field.required || type === "title"} value={value} onChange={(event) => setField(field.name, event.target.value)}/></label>;
   }
-  return <Modal title={isEdit ? "Edit Team Member" : "Add Team Member"} subtitle={isEdit ? `${member?.name || "User"} • Update user data.` : `${selectedDepartment?.name || "Department"} • Create a new Team Members record.`} onClose={onClose} modalClass="ua-modal--form" icon="user" closeDisabled={busy} zIndex={10000} footer={<><button type="button" className="ua-btn ua-btn--light" onClick={onClose} disabled={busy}>Cancel</button><button type="submit" form="ua-next-member-form" className="ua-btn ua-btn--dark" disabled={busy}><UAIcon name="save"/><span>{busy ? "Saving..." : isEdit ? "Save Changes" : "Create Member"}</span></button></>}><form id="ua-next-member-form" onSubmit={submit}><div className="ua-form-grid">{schema.map(renderField)}</div>{error ? <div className="ua-form-error">{error}</div> : null}</form></Modal>;
+  return <>
+    <Modal title={isEdit ? "Edit Team Member" : "Add Team Member"} subtitle={isEdit ? `${member?.name || "User"} • Update user data.` : `${selectedDepartment?.name || "Department"} • Create a new Team Members record.`} onClose={onClose} modalClass="ua-modal--form" icon="user" closeDisabled={busy} zIndex={10000} footer={<><button type="button" className="ua-btn ua-btn--light" onClick={onClose} disabled={busy}>Cancel</button><button type="submit" form="ua-next-member-form" className="ua-btn ua-btn--dark" disabled={busy}><UAIcon name="save"/><span>{busy ? "Saving..." : isEdit ? "Save Changes" : "Create Member"}</span></button></>}><form id="ua-next-member-form" onSubmit={submit}><div className="ua-form-grid">{schema.map(renderField)}</div>{error ? <div className="ua-form-error">{error}</div> : null}</form></Modal>
+    <ActionLoadingModal state={actionLoading} zIndex={12050} />
+  </>;
 }
 
 function MoveMemberModal({ member, departments, onClose, onSaved }) {
@@ -396,7 +457,7 @@ export default function UsersCenterClient({ initialDirectory, initialSignupReque
     {passwordAction ? <PasswordModal action={passwordAction} onClose={() => setPasswordAction(null)} onVerified={async () => { const action = passwordAction.action; setPasswordAction(null); try { await action(); } catch (err) { notify("error", "Action failed", err.message); } }}/> : null}
     {confirm ? <ConfirmModal value={confirm} onClose={() => setConfirm(null)}/> : null}
     {departmentForm ? <DepartmentForm department={departmentForm.department} onClose={() => setDepartmentForm(null)} onSaved={async (body) => { const next = await refresh(); const createdId = text(body?.department?.id || body?.departmentId); if (!departmentForm.department && createdId && next.departments.some((department) => department.id === createdId)) navigateDepartment(createdId); notify("success", departmentForm.department ? "Department updated" : "Department added", body?.message || "Department saved."); }}/> : null}
-    {memberForm ? <MemberForm member={memberForm.member} selectedDepartment={selectedDepartment} editableFields={directory.editableFields} departments={directory.departments} pageAccessRows={pageAccessRows} svRows={svRows} notify={notify} onOpenPageAccess={() => setPageAccessOpen(true)} onOpenSvAccess={() => setSvAccessOpen(true)} onClose={() => { setMemberForm(null); setPageAccessRows([]); setSvRows([]); }} onSaved={async () => { await refresh(); notify("success", memberForm.member ? "Updated" : "Created", memberForm.member ? "Team member data updated." : "New team member added."); }}/> : null}
+    {memberForm ? <MemberForm member={memberForm.member} selectedDepartment={selectedDepartment} editableFields={directory.editableFields} departments={directory.departments} pageAccessRows={pageAccessRows} svRows={svRows} notify={notify} onOpenPageAccess={() => setPageAccessOpen(true)} onOpenSvAccess={() => setSvAccessOpen(true)} onClose={() => { setMemberForm(null); setPageAccessRows([]); setSvRows([]); }} onSaved={() => { const wasEdit = !!memberForm.member; notify("success", wasEdit ? "Updated" : "Created", wasEdit ? "Team member data updated." : "New team member added."); refresh().catch((error) => notify("error", "Refresh failed", error?.message || "Users Center could not refresh.")); }}/> : null}
     {moveMember ? <MoveMemberModal member={moveMember} departments={directory.departments} onClose={() => setMoveMember(null)} onSaved={async (body, targetId) => { await refresh(); navigateDepartment(targetId); notify("success", "Member moved", body?.message || "Team member moved successfully."); }}/> : null}
     {pageAccessOpen && memberForm ? <PageAccessModal member={memberForm.member} draftRows={pageAccessRows} onDraftRows={setPageAccessRows} onClose={() => setPageAccessOpen(false)} protect={protect} onSaved={async (rows) => { setPageAccessRows(rows); if (memberForm.member) await refresh(); notify("success", memberForm.member ? "Page access updated" : "Page access prepared", memberForm.member ? "Page permissions were saved." : "Page access will be saved after creating the member."); }}/> : null}
     {svAccessOpen && memberForm ? <SvAccessModal member={memberForm.member} allMembers={allMembers} draftRows={svRows} onDraftRows={setSvRows} onClose={() => setSvAccessOpen(false)} protect={protect} onSaved={async (rows) => { setSvRows(rows); if (memberForm.member) await refresh(); notify("success", memberForm.member ? "Orders Supervision updated" : "Orders Supervision prepared", memberForm.member ? "Orders Review visibility was saved." : "Orders Review visibility will be saved after creating the member."); }}/> : null}
