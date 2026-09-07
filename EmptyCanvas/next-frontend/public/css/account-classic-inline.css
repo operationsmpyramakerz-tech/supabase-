@@ -861,3 +861,350 @@
 .page-account .account-classic-loading-file { height: 70px; border: 1px solid #E6EBF2; border-radius: 18px; }
 @keyframes accountClassicShimmer { to { background-position: -220% 0; } }
 
+
+/* ===== User Profile: Facebook-style cover/avatar composition + modern crop editor ===== */
+.page-account .account-panel--profile.account-profile-modern{
+  width: min(100%, 820px) !important;
+  border-radius: 30px !important;
+  background: #fff !important;
+  border: 1px solid rgba(226,232,240,.95) !important;
+  box-shadow: 0 24px 60px rgba(15,23,42,.10) !important;
+  overflow: hidden !important;
+}
+.page-account .profile-hero-section{
+  padding-bottom: 1.35rem !important;
+  margin-bottom: .8rem !important;
+}
+.page-account .profile-cover-section{
+  height: clamp(180px, 23vw, 244px) !important;
+  margin: 18px 18px 0 !important;
+}
+.page-account .profile-cover-display{
+  border-radius: 26px !important;
+  background: #e5e7eb !important;
+  box-shadow: inset 0 0 0 1px rgba(15,23,42,.04);
+}
+.page-account .profile-cover-image,
+.page-account .profile-cover-fallback{
+  border-radius: inherit;
+}
+.page-account .profile-identity-block{
+  margin-top: -76px !important;
+  padding: 0 1rem !important;
+}
+.page-account .profile-avatar-section{
+  margin-bottom: .75rem !important;
+}
+.page-account .profile-avatar-shell{
+  width: 150px !important;
+  height: 150px !important;
+}
+.page-account .profile-avatar-display{
+  border: 0 !important;
+  box-shadow: 0 0 0 7px #fff, 0 16px 34px rgba(15,23,42,.22) !important;
+}
+.page-account .profile-avatar-edit{
+  right: -4px !important;
+  bottom: 8px !important;
+  width: 40px !important;
+  height: 40px !important;
+  border-radius: 50% !important;
+  background: #fff !important;
+  box-shadow: 0 8px 20px rgba(15,23,42,.18) !important;
+}
+.page-account .profile-avatar-remove{
+  top: -7px !important;
+  right: -7px !important;
+}
+.page-account .profile-cover-edit{
+  right: 16px !important;
+  bottom: 16px !important;
+  width: 40px !important;
+  height: 40px !important;
+  border-radius: 13px !important;
+}
+
+.page-account .account-image-editor-layer{
+  padding: 18px;
+  background: rgba(8,15,28,.66) !important;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  overflow: auto;
+}
+.page-account .account-image-editor{
+  width: min(94vw, 720px) !important;
+  max-width: 720px !important;
+  max-height: calc(100dvh - 36px);
+  overflow: auto;
+  padding: 0 !important;
+  border-radius: 28px !important;
+  border: 1px solid rgba(226,232,240,.9);
+  box-shadow: 0 28px 80px rgba(2,6,23,.34) !important;
+  background: #fff !important;
+}
+.page-account .account-image-editor-head{
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 20px 22px 16px;
+  border-bottom: 1px solid #edf0f4;
+}
+.page-account .account-image-editor-headcopy{
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.page-account .account-image-editor-icon{
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  color: #c65d20;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+}
+.page-account .account-image-editor .ex-modal-title{
+  margin: 0 !important;
+  color: #111827;
+  font-size: 1.2rem !important;
+  font-weight: 850 !important;
+  line-height: 1.2;
+}
+.page-account .account-image-editor-head p{
+  margin: 4px 0 0;
+  color: #7b8494;
+  font-size: .82rem;
+  line-height: 1.35;
+}
+.page-account .account-image-editor-close{
+  width: 38px;
+  height: 38px;
+  min-width: 38px;
+  padding: 0;
+  border: 1px solid #e5e7eb;
+  border-radius: 50%;
+  background: #f8fafc;
+  color: #111827;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.page-account .account-image-editor-close:hover{ background: #f1f5f9; }
+.page-account .account-crop-stage{
+  padding: 18px 22px 10px;
+  display: grid;
+  place-items: center;
+}
+.page-account .account-crop-viewport{
+  position: relative;
+  overflow: hidden;
+  background: #0f172a;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  box-shadow: 0 16px 42px rgba(15,23,42,.18);
+}
+.page-account .account-crop-viewport:active{ cursor: grabbing; }
+.page-account .account-crop-viewport--cover{
+  width: 100%;
+  aspect-ratio: 17 / 5;
+  border-radius: 20px;
+}
+.page-account .account-crop-viewport--profile{
+  width: min(360px, 68vw);
+  aspect-ratio: 1 / 1;
+  border-radius: 50%;
+}
+.page-account .account-crop-image{
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none !important;
+  max-height: none !important;
+  object-fit: cover;
+  object-position: center;
+  transform-origin: 50% 50%;
+  will-change: transform;
+  pointer-events: none;
+  -webkit-user-drag: none;
+}
+.page-account .account-crop-grid{
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: .55;
+  background:
+    linear-gradient(to right, transparent 33.15%, rgba(255,255,255,.58) 33.25%, rgba(255,255,255,.58) 33.55%, transparent 33.65%, transparent 66.45%, rgba(255,255,255,.58) 66.55%, rgba(255,255,255,.58) 66.85%, transparent 66.95%),
+    linear-gradient(to bottom, transparent 33.15%, rgba(255,255,255,.58) 33.25%, rgba(255,255,255,.58) 33.55%, transparent 33.65%, transparent 66.45%, rgba(255,255,255,.58) 66.55%, rgba(255,255,255,.58) 66.85%, transparent 66.95%);
+}
+.page-account .account-crop-profile-ring{
+  position: absolute;
+  inset: 7px;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,.92);
+  box-shadow: 0 0 0 999px rgba(2,6,23,.18);
+  pointer-events: none;
+}
+.page-account .account-crop-hint{
+  margin-top: 10px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: .76rem;
+  font-weight: 700;
+}
+.page-account .account-crop-controls{
+  margin: 0 22px;
+  padding: 12px 14px;
+  display: grid;
+  grid-template-columns: auto minmax(0,1fr) auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #e8edf3;
+  border-radius: 15px;
+  background: #fafbfc;
+}
+.page-account .account-crop-zoom-label{
+  color: #334155;
+  font-size: .78rem;
+  font-weight: 800;
+}
+.page-account .account-crop-zoom{
+  width: 100%;
+  accent-color: #c65d20;
+}
+.page-account .account-crop-reset{
+  border: 0;
+  border-radius: 10px;
+  padding: 7px 10px;
+  background: #fff;
+  color: #475569;
+  box-shadow: inset 0 0 0 1px #e2e8f0;
+  font-size: .75rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+.page-account .account-image-editor-filename{
+  margin: 12px 22px 0;
+  min-height: 38px;
+  padding: 8px 11px;
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 1px solid #eef2f7;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: .77rem;
+  overflow: hidden;
+}
+.page-account .account-image-editor-filename span{
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.page-account .account-image-editor > .field-label{
+  margin: 14px 22px 6px !important;
+  color: #334155;
+  font-size: .8rem;
+}
+.page-account .account-image-editor-password{
+  margin: 0 22px 4px !important;
+}
+.page-account .account-image-editor-password .ex-input{
+  min-height: 46px;
+  border-radius: 13px;
+  border-color: #dbe2ea;
+  font-size: .9rem;
+}
+.page-account .account-image-editor .ex-error{
+  margin: 8px 22px 0 !important;
+  font-size: .8rem !important;
+}
+.page-account .account-image-editor-actions{
+  margin: 16px 0 0 !important;
+  padding: 14px 22px 20px;
+  display: grid !important;
+  grid-template-columns: 1fr 1.35fr;
+  gap: 10px;
+  border-top: 1px solid #edf0f4;
+}
+.page-account .account-image-editor-actions .ex-btn{
+  min-height: 44px;
+  border-radius: 13px !important;
+  font-weight: 800;
+}
+.page-account .account-image-editor-cancel{
+  background: #fff !important;
+  color: #334155 !important;
+  box-shadow: inset 0 0 0 1px #dbe2ea;
+}
+.page-account .account-image-editor-save{
+  background: #0f172a !important;
+  color: #fff !important;
+}
+.page-account .account-image-editor-save:hover{ background: #020617 !important; }
+
+@media (max-width: 768px){
+  .page-account .profile-cover-section{
+    height: 150px !important;
+    margin: 12px 12px 0 !important;
+  }
+  .page-account .profile-cover-display{ border-radius: 20px !important; }
+  .page-account .profile-identity-block{ margin-top: -58px !important; }
+  .page-account .profile-avatar-shell{
+    width: 116px !important;
+    height: 116px !important;
+  }
+  .page-account .profile-avatar-display{
+    box-shadow: 0 0 0 6px #fff, 0 12px 28px rgba(15,23,42,.22) !important;
+  }
+  .page-account .profile-avatar-edit{
+    width: 34px !important;
+    height: 34px !important;
+    right: -3px !important;
+    bottom: 5px !important;
+  }
+  .page-account .account-image-editor-layer{
+    padding: 10px;
+    align-items: center;
+  }
+  .page-account .account-image-editor{
+    width: min(96vw, 680px) !important;
+    max-height: calc(100dvh - 20px);
+    border-radius: 22px !important;
+  }
+  .page-account .account-image-editor-head{ padding: 15px 16px 12px; }
+  .page-account .account-image-editor-icon{
+    width: 38px;
+    height: 38px;
+    min-width: 38px;
+    border-radius: 12px;
+  }
+  .page-account .account-image-editor .ex-modal-title{ font-size: 1.04rem !important; }
+  .page-account .account-image-editor-head p{ font-size: .72rem; }
+  .page-account .account-image-editor-close{
+    width: 34px;
+    height: 34px;
+    min-width: 34px;
+  }
+  .page-account .account-crop-stage{ padding: 14px 16px 8px; }
+  .page-account .account-crop-viewport--cover{
+    aspect-ratio: 17 / 5;
+    border-radius: 14px;
+  }
+  .page-account .account-crop-viewport--profile{ width: min(300px, 72vw); }
+  .page-account .account-crop-controls{ margin: 0 16px; }
+  .page-account .account-image-editor-filename,
+  .page-account .account-image-editor > .field-label,
+  .page-account .account-image-editor .ex-error{ margin-left: 16px !important; margin-right: 16px !important; }
+  .page-account .account-image-editor-password{ margin-left: 16px !important; margin-right: 16px !important; }
+  .page-account .account-image-editor-actions{ padding: 12px 16px 16px; }
+}
