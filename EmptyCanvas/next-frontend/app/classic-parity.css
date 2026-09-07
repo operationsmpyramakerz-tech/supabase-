@@ -4579,7 +4579,7 @@ body.operations-orders-page .next-classic-orders-parity .next-operations-order-c
 }
 
 body.operations-orders-page .next-classic-orders-parity .next-operations-order-card .co-est-label {
-  font-size: 10px;
+  font-size: 8px;
 }
 
 body.operations-orders-page .next-classic-orders-parity .next-operations-order-card .co-est-value {
@@ -4601,9 +4601,8 @@ body.operations-orders-page .next-classic-orders-parity .next-operations-order-c
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  /* The responsive .co-est-value rule below renders this at 16px on tablets.
-     Keep the creator name at exactly half of that visual size. */
-  font-size: 8px !important;
+  /* Creator name: increased by 30% from the previous 8px value. */
+  font-size: 10.4px !important;
   line-height: 1.2;
 }
 
