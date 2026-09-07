@@ -164,6 +164,12 @@ function remainingQuantity(item) {
   return roundQty(base - received);
 }
 
+function deliveredQuantity(item) {
+  const explicit = item?.deliveredQty ?? item?.quantityDelivered ?? item?.quantity_delivered;
+  if (explicit !== null && explicit !== undefined && explicit !== "") return roundQty(explicit);
+  return /(arrived|delivered|received)/i.test(text(item?.status)) ? receivedQuantity(item) : 0;
+}
+
 function effectiveQuantity(item) {
   return baseQuantity(item);
 }
@@ -708,10 +714,11 @@ function Progress({ stage }) {
   );
 }
 
-function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
+function OrderModal({ group, tab, busy, onClose, onAction, onExport, editMode, onPatchEditItem, onSaveEdit, onCancelEdit }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const [downloadOpen, setDownloadOpen] = useState(false);
   const [sortMode, setSortMode] = useState("product-tag");
+  const [editItemState, setEditItemState] = useState(null);
   const moreRef = useRef(null);
 
   useEffect(() => {
@@ -719,11 +726,16 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
     document.body.classList.add("co-modal-open");
     const onKey = (event) => {
       if (event.key !== "Escape") return;
+      if (editItemState) {
+        setEditItemState(null);
+        return;
+      }
       if (downloadOpen || moreOpen) {
         setDownloadOpen(false);
         setMoreOpen(false);
         return;
       }
+      if (editMode) return;
       onClose();
     };
     const onPointerDown = (event) => {
@@ -736,12 +748,13 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
       window.removeEventListener("keydown", onKey);
       document.removeEventListener("pointerdown", onPointerDown);
     };
-  }, [group, onClose, moreOpen, downloadOpen]);
+  }, [group, onClose, moreOpen, downloadOpen, editMode, editItemState]);
 
   useEffect(() => {
     setMoreOpen(false);
     setDownloadOpen(false);
     setSortMode("product-tag");
+    setEditItemState(null);
   }, [group?.key, tab]);
 
   if (!group) return null;
@@ -760,7 +773,38 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
   const canCreateWithdrawal = tab === "delivered" && delivered && orderTypeKey(group.orderType) === "requestproducts";
   const canCreateDelivery = tab === "delivered" && delivered && orderTypeKey(group.orderType) === "withdrawproducts";
   const showDownload = !(maintenance && tab === "approved");
-  const tabItems = itemsForOperationsTab(group.items, tab);
+  const isEditing = Boolean(editMode && editMode.groupKey === group.key);
+  const editItemsById = editMode?.itemsById || {};
+  const editChanges = editMode?.changes || {};
+  const applyEditDraft = (item) => {
+    const id = text(item?.id);
+    const serverItem = editItemsById[id] || {};
+    const patch = editChanges[id] || {};
+    if (!id || (!Object.keys(serverItem).length && !Object.keys(patch).length)) return item;
+    const requestedQty = patch.requestedQty ?? serverItem.requestedQty ?? item?.quantityRequested;
+    const receivedQty = patch.receivedQty ?? serverItem.receivedQty ?? item?.quantityReceived;
+    const remainingQty = patch.remainingQty ?? serverItem.remainingQty ?? item?.quantityRemaining;
+    return {
+      ...item,
+      ...serverItem,
+      ...patch,
+      productName: patch.productName ?? serverItem.productName ?? item?.productName,
+      productUrl: patch.productUrl ?? serverItem.productUrl ?? item?.productUrl,
+      unitPrice: patch.unitPrice ?? serverItem.unitPrice ?? item?.unitPrice,
+      productTag: patch.productTag ?? serverItem.productTag ?? item?.productTag,
+      kitTag: patch.kitTag ?? serverItem.kitTag ?? item?.kitTag,
+      status: patch.status ?? serverItem.status ?? item?.status,
+      quantityRequested: requestedQty,
+      quantity: requestedQty,
+      quantityProgress: null,
+      quantityEditedBySupervisor: null,
+      quantityReceived: receivedQty,
+      quantityRemaining: remainingQty,
+      quantityReceivedEdited: true,
+      deliveredQty: patch.deliveredQty ?? serverItem.deliveredQty ?? deliveredQuantity(item),
+    };
+  };
+  const tabItems = itemsForOperationsTab(group.items, tab).map(applyEditDraft);
   const displayTabItems = expandOrderItemsForDisplay(tabItems);
   const groupedItems = groupOrderItems(displayTabItems, sortMode);
 
@@ -819,7 +863,19 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
         ? <span className="sv-qty-diff"><span className="sv-qty-old">{formatQuantity(base)}</span><strong className="sv-qty-new">{formatQuantity(received)}</strong></span>
         : <strong>{formatQuantity(visibleQty)}</strong>;
     const displayTotal = Math.abs(visibleQty) * Math.abs(finite(item?.unitPrice ?? item?.unit_price ?? item?.price));
-    return <div className="co-item" key={text(item?._displayKey) || itemId || index}>
+    const openEditor = () => {
+      if (!isEditing || !itemId) return;
+      setEditItemState({ item: applyEditDraft(item), version: Date.now() });
+    };
+    return <div
+      className={`co-item ${isEditing ? "next-operations-editable-item" : ""}`}
+      key={text(item?._displayKey) || itemId || index}
+      role={isEditing ? "button" : undefined}
+      tabIndex={isEditing ? 0 : undefined}
+      onClick={openEditor}
+      onKeyDown={isEditing ? (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openEditor(); } } : undefined}
+      aria-label={isEditing ? `Edit ${itemName}` : undefined}
+    >
       <div className="co-item-left">
         <div className="co-item-title">
           <div className="co-item-name">{itemName}</div>
@@ -833,15 +889,16 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
       <div className="co-item-right">
         <div className="co-item-total">{tab === "remaining" ? "Qty remaining:" : "Qty:"} {qtyMarkup}</div>
         <span className="co-item-status" style={{ "--tag-bg": vars.bg, "--tag-fg": vars.fg, "--tag-border": vars.bd }}>{state.label}</span>
-        {canRejectComponents && itemId ? <button className="btn btn-danger btn-xs req-ops-reject" type="button" title="Reject component" disabled={busy} onClick={() => onAction("reject", { ...group, orderIds: [itemId], actionScope: "component", actionItemName: itemName })}><ClassicOrderIcon name="x" /> Reject</button> : null}
+        {isEditing ? <span className="next-operations-edit-item-hint"><ClassicOrderIcon name="edit-2" /> Edit</span> : null}
+        {!isEditing && canRejectComponents && itemId ? <button className="btn btn-danger btn-xs req-ops-reject" type="button" title="Reject component" disabled={busy} onClick={(event) => { event.stopPropagation(); onAction("reject", { ...group, orderIds: [itemId], actionScope: "component", actionItemName: itemName }); }}><ClassicOrderIcon name="x" /> Reject</button> : null}
       </div>
     </div>;
   };
 
   return (
-    <div className="co-modal-overlay is-open" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <div className="co-modal-overlay is-open" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget && !isEditing) onClose(); }}>
       <div className="co-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="operations-order-title">
-        <div className="co-modal-more" ref={moreRef}>
+        {!isEditing ? <div className="co-modal-more" ref={moreRef}>
           <button type="button" className="co-modal-more-btn" aria-label="Order actions" aria-haspopup="menu" aria-expanded={moreOpen} onClick={() => setMoreOpen((value) => !value)}>
             <span className="co-modal-more-dots" aria-hidden="true">⋮</span>
           </button>
@@ -850,7 +907,7 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
             {!archived ? <button type="button" className="co-modal-more-item" role="menuitem" onClick={() => menuAction("archive")}><ClassicOrderIcon name="archive" /><span>Archive</span></button> : null}
             {archived ? <button type="button" className="co-modal-more-item" role="menuitem" onClick={() => menuAction("unarchive")}><ClassicOrderIcon name="rotate-ccw" /><span>UnArchive</span></button> : null}
           </div> : null}
-        </div>
+        </div> : <div className="next-operations-edit-mode-badge"><ClassicOrderIcon name="edit-2" /><span>Edit mode</span></div>}
 
         <button type="button" className="co-modal-close" onClick={onClose} aria-label="Close order details" />
         <div className="co-modal-header"><div className="co-modal-head-left"><div className="co-modal-status" id="operations-order-title">{type.label}</div><div className="co-modal-status-sub" hidden /></div></div>
@@ -893,7 +950,7 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
             {group.rejectedReason ? <div className="co-meta-row co-meta-row--reason co-meta-row--reject-reason"><span>Rejected reason</span><strong>{group.rejectedReason}</strong></div> : null}
           </div>
 
-          <div className="co-modal-actions ro-actions ro-actions--right">
+          {!isEditing ? <div className="co-modal-actions ro-actions ro-actions--right">
             {showDownload ? <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => setDownloadOpen(true)} disabled={busy}><ClassicOrderIcon name="download" /><span>Download</span></button> : null}
             <OrderSortButton value={sortMode} onChange={setSortMode} />
             {canReceive ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction("receive", receiveActionGroup)} disabled={busy}><ClassicOrderIcon name="truck" />Received by operations</button> : null}
@@ -902,7 +959,7 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
             {canDeliver ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction(maintenance ? "maintenance-deliver" : "deliver", group)} disabled={busy}><ClassicOrderIcon name="check-circle" />Mark as Delivered</button> : null}
             {canCreateWithdrawal ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction("withdrawal", group)} disabled={busy}><ClassicOrderIcon name="repeat" />Create Withdrawal</button> : null}
             {canCreateDelivery ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction("delivery", group)} disabled={busy}><ClassicOrderIcon name="package" />Create Delivery</button> : null}
-          </div>
+          </div> : <div className="next-operations-edit-mode-note"><ClassicOrderIcon name="info" /><span>Tap any component to edit its product, status and quantities.</span></div>}
 
           <div className="co-modal-items order-component-groups">
             {groupedItems.map((section) => (
@@ -912,6 +969,7 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
               </section>
             ))}
           </div>
+          {isEditing ? <div className="next-operations-edit-footer"><button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancelEdit} disabled={busy}>Cancel</button><button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onSaveEdit(editChanges)} disabled={busy || !Object.keys(editChanges).length}>{busy ? "Saving…" : "Save changes"}</button></div> : null}
         </div>
         <OrderDownloadModal
           open={downloadOpen}
@@ -924,6 +982,17 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport }) {
           defaultRepeatedComponentMode="merge"
           onClose={() => setDownloadOpen(false)}
           onDownload={exportAction}
+        />
+        <OperationsComponentEditModal
+          state={editItemState}
+          products={editMode?.products || []}
+          statusOptions={editMode?.statusOptions || []}
+          busy={busy}
+          onCancel={() => setEditItemState(null)}
+          onApply={(patch) => {
+            onPatchEditItem(patch);
+            setEditItemState(null);
+          }}
         />
       </div>
     </div>
@@ -1233,6 +1302,182 @@ function EditPasswordModal({ state, busy, error, onCancel, onSubmit }) {
   return <div className="co-submodal-overlay is-open" aria-hidden="false"><form className="co-submodal-dialog req-edit-dialog" role="dialog" aria-modal="true" onSubmit={(event) => { event.preventDefault(); onSubmit(password); }}><button type="button" className="co-submodal-close" onClick={onCancel} aria-label="Close"/><div className="co-submodal-header req-edit-header"><div className="req-edit-icon"><ClassicOrderIcon name="edit-2" /></div><div><div className="co-submodal-title">Edit operations order</div><div className="co-submodal-sub">Enter the Operations Orders admin password to continue editing this order.</div></div></div><div className="co-submodal-body"><label className="co-submodal-label">Admin password</label><input className="co-submodal-input" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoFocus disabled={busy}/><div className="co-submodal-error" role="alert">{error}</div></div><div className="co-submodal-actions"><button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancel} disabled={busy}>Cancel</button><button type="submit" className="ro-action-btn ro-action-btn--dark" disabled={busy || !password.trim()}>{busy ? "Checking…" : "Continue"}</button></div></form></div>;
 }
 
+function OperationsComponentEditModal({ state, products = [], statusOptions = [], busy, onCancel, onApply }) {
+  const item = state?.item || null;
+  const [productSearch, setProductSearch] = useState("");
+  const [form, setForm] = useState(null);
+
+  useEffect(() => {
+    if (!item) {
+      setForm(null);
+      setProductSearch("");
+      return;
+    }
+    const requested = Number(item?.requestedQty ?? item?.quantityRequested ?? requestedQuantity(item)) || 0;
+    const received = Number(item?.receivedQty ?? item?.quantityReceived ?? receivedQuantity(item)) || 0;
+    const remaining = Number(item?.remainingQty ?? item?.quantityRemaining ?? remainingQuantity(item)) || 0;
+    const delivered = Number(item?.deliveredQty ?? deliveredQuantity(item)) || 0;
+    const matchedProduct = products.find((product) => String(product?.id || "") === String(item?.productId || ""))
+      || products.find((product) => lower(product?.name) === lower(item?.productName));
+    setForm({
+      id: text(item?.id),
+      productId: text(matchedProduct?.id || item?.productId),
+      productName: text(matchedProduct?.name || item?.productName),
+      status: text(item?.status) || "In Progress",
+      requestedQty: String(requested),
+      receivedQty: String(received),
+      remainingQty: String(remaining),
+      deliveredQty: String(delivered),
+      unitPrice: String(item?.unitPrice ?? item?.unit_price ?? item?.price ?? matchedProduct?.unitPrice ?? ""),
+      productTag: text(item?.productTag ?? item?.product_tag) || text(matchedProduct?.tags?.[0]),
+      kitTag: text(item?.kitTag ?? item?.kit_tag),
+      reason: text(item?.reason),
+      issueDescription: text(item?.issueDescription ?? item?.issue_description),
+      productUrl: text(item?.productUrl ?? item?.product_url ?? matchedProduct?.url),
+    });
+    setProductSearch("");
+  }, [item?.id, state?.version, products]);
+
+  if (!item || !form) return null;
+
+  const isFinalStatus = /(arrived|delivered|received)/i.test(form.status);
+  const normalizedSearch = lower(productSearch);
+  const filteredProducts = (Array.isArray(products) ? products : [])
+    .filter((product) => !normalizedSearch || lower(`${product?.name || ""} ${product?.displayId || ""}`).includes(normalizedSearch))
+    .slice(0, 350);
+  const selectedProduct = products.find((product) => String(product?.id || "") === String(form.productId || ""));
+  if (selectedProduct && !filteredProducts.some((product) => String(product?.id || "") === String(selectedProduct.id))) {
+    filteredProducts.unshift(selectedProduct);
+  }
+
+  const num = (value) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+  const syncRequested = (value) => setForm((current) => {
+    const requested = num(value);
+    const received = num(current.receivedQty);
+    return {
+      ...current,
+      requestedQty: value,
+      remainingQty: String(roundQty(requested - received)),
+      deliveredQty: isFinalStatus ? String(roundQty(received)) : "0",
+    };
+  });
+  const syncReceived = (value) => setForm((current) => {
+    const requested = num(current.requestedQty);
+    const received = num(value);
+    return {
+      ...current,
+      receivedQty: value,
+      remainingQty: String(roundQty(requested - received)),
+      deliveredQty: /(arrived|delivered|received)/i.test(current.status) ? String(roundQty(received)) : "0",
+    };
+  });
+  const syncRemaining = (value) => setForm((current) => {
+    const requested = num(current.requestedQty);
+    const remaining = num(value);
+    const received = roundQty(requested - remaining);
+    return {
+      ...current,
+      remainingQty: value,
+      receivedQty: String(received),
+      deliveredQty: /(arrived|delivered|received)/i.test(current.status) ? String(received) : "0",
+    };
+  });
+  const syncDelivered = (value) => setForm((current) => {
+    if (!/(arrived|delivered|received)/i.test(current.status)) return current;
+    const requested = num(current.requestedQty);
+    const delivered = num(value);
+    return {
+      ...current,
+      deliveredQty: value,
+      receivedQty: String(delivered),
+      remainingQty: String(roundQty(requested - delivered)),
+    };
+  });
+
+  function selectProduct(productId) {
+    const product = products.find((entry) => String(entry?.id || "") === String(productId || ""));
+    if (!product) {
+      setForm((current) => ({ ...current, productId }));
+      return;
+    }
+    setForm((current) => ({
+      ...current,
+      productId: String(product.id),
+      productName: text(product.name),
+      productUrl: text(product.url),
+      unitPrice: product.unitPrice === null || product.unitPrice === undefined ? "" : String(product.unitPrice),
+      productTag: text(product?.tags?.[0]) || current.productTag,
+    }));
+  }
+
+  function selectStatus(value) {
+    setForm((current) => {
+      const final = /(arrived|delivered|received)/i.test(value);
+      const received = num(current.receivedQty);
+      return { ...current, status: value, deliveredQty: final ? String(roundQty(received)) : "0" };
+    });
+  }
+
+  function submit(event) {
+    event.preventDefault();
+    const numericKeys = ["requestedQty", "receivedQty", "remainingQty", "deliveredQty"];
+    if (numericKeys.some((key) => !Number.isFinite(Number(form[key])))) return;
+    if (form.unitPrice !== "" && !Number.isFinite(Number(form.unitPrice))) return;
+    onApply({
+      id: form.id,
+      productId: form.productId,
+      productName: form.productName,
+      productUrl: form.productUrl,
+      status: form.status,
+      requestedQty: roundQty(Number(form.requestedQty)),
+      receivedQty: roundQty(Number(form.receivedQty)),
+      remainingQty: roundQty(Number(form.remainingQty)),
+      deliveredQty: roundQty(Number(form.deliveredQty)),
+      unitPrice: form.unitPrice === "" ? null : Number(form.unitPrice),
+      productTag: form.productTag,
+      kitTag: form.kitTag,
+      reason: form.reason,
+      issueDescription: form.issueDescription,
+    });
+  }
+
+  const statuses = Array.from(new Set([...(statusOptions || []), form.status].map(text).filter(Boolean)));
+  return (
+    <div className="co-submodal-overlay is-open next-operations-component-edit-overlay" aria-hidden="false">
+      <form className="co-submodal-dialog next-operations-component-edit-dialog" role="dialog" aria-modal="true" onSubmit={submit}>
+        <button type="button" className="co-submodal-close" onClick={onCancel} disabled={busy} aria-label="Close component editor" />
+        <div className="co-submodal-header req-edit-header">
+          <div className="req-edit-icon"><ClassicOrderIcon name="edit-2" /></div>
+          <div><div className="co-submodal-title">Edit component</div><div className="co-submodal-sub">Update this Operations Orders row, then apply it to the pending order changes.</div></div>
+        </div>
+        <div className="co-submodal-body next-operations-component-edit-body">
+          <div className="next-operations-edit-grid next-operations-edit-grid--wide">
+            <label className="co-submodal-field next-operations-edit-field next-operations-edit-field--wide"><span className="co-submodal-label">Component</span><input className="co-submodal-input" value={productSearch} onChange={(event) => setProductSearch(event.target.value)} placeholder="Search products…" disabled={busy} /><select className="co-submodal-input next-operations-edit-select" value={form.productId} onChange={(event) => selectProduct(event.target.value)} disabled={busy}><option value="">Select component</option>{filteredProducts.map((product) => <option value={product.id} key={product.id}>{product.displayId ? `${product.displayId} — ` : ""}{product.name}</option>)}</select></label>
+            <label className="co-submodal-field next-operations-edit-field"><span className="co-submodal-label">Status</span><select className="co-submodal-input next-operations-edit-select" value={form.status} onChange={(event) => selectStatus(event.target.value)} disabled={busy}>{statuses.map((status) => <option value={status} key={status}>{status}</option>)}</select></label>
+            <label className="co-submodal-field next-operations-edit-field"><span className="co-submodal-label">Unit cost</span><input className="co-submodal-input" type="number" step="any" value={form.unitPrice} onChange={(event) => setForm((current) => ({ ...current, unitPrice: event.target.value }))} disabled={busy} /></label>
+          </div>
+          <div className="next-operations-edit-qty-grid">
+            <label className="co-submodal-field next-operations-edit-field"><span className="co-submodal-label">Requested Qty</span><input className="co-submodal-input" type="number" step="any" value={form.requestedQty} onChange={(event) => syncRequested(event.target.value)} disabled={busy} /></label>
+            <label className="co-submodal-field next-operations-edit-field"><span className="co-submodal-label">Received Qty</span><input className="co-submodal-input" type="number" step="any" value={form.receivedQty} onChange={(event) => syncReceived(event.target.value)} disabled={busy} /></label>
+            <label className="co-submodal-field next-operations-edit-field"><span className="co-submodal-label">Remaining Qty</span><input className="co-submodal-input" type="number" step="any" value={form.remainingQty} onChange={(event) => syncRemaining(event.target.value)} disabled={busy} /></label>
+            <label className="co-submodal-field next-operations-edit-field"><span className="co-submodal-label">Delivered Qty</span><input className="co-submodal-input" type="number" step="any" value={form.deliveredQty} onChange={(event) => syncDelivered(event.target.value)} disabled={busy || !isFinalStatus} /><span className="next-operations-edit-hint">Available when status is Arrived/Delivered.</span></label>
+          </div>
+          <div className="next-operations-edit-grid">
+            <label className="co-submodal-field next-operations-edit-field"><span className="co-submodal-label">Product tag</span><input className="co-submodal-input" value={form.productTag} onChange={(event) => setForm((current) => ({ ...current, productTag: event.target.value }))} disabled={busy} /></label>
+            <label className="co-submodal-field next-operations-edit-field"><span className="co-submodal-label">Kit tag</span><input className="co-submodal-input" value={form.kitTag} onChange={(event) => setForm((current) => ({ ...current, kitTag: event.target.value }))} disabled={busy} /></label>
+          </div>
+          <label className="co-submodal-field next-operations-edit-field next-operations-edit-field--wide"><span className="co-submodal-label">Reason</span><input className="co-submodal-input" value={form.reason} onChange={(event) => setForm((current) => ({ ...current, reason: event.target.value }))} disabled={busy} /></label>
+          <label className="co-submodal-field next-operations-edit-field next-operations-edit-field--wide"><span className="co-submodal-label">Issue description</span><textarea className="co-submodal-textarea" rows={3} value={form.issueDescription} onChange={(event) => setForm((current) => ({ ...current, issueDescription: event.target.value }))} disabled={busy} /></label>
+        </div>
+        <div className="co-submodal-actions"><button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancel} disabled={busy}>Cancel</button><button type="submit" className="ro-action-btn ro-action-btn--dark" disabled={busy || !form.productId || !form.status}>{busy ? "Applying…" : "Apply changes"}</button></div>
+      </form>
+    </div>
+  );
+}
+
 function ArchiveModal({ state, busy, error, onCancel, onSubmit }) {
   const [password, setPassword] = useState("");
   useEffect(() => setPassword(""), [state?.group?.key]);
@@ -1332,6 +1577,7 @@ export default function OperationsOrdersClient({ initialOrders = [], bootstrapWa
   const [actionError, setActionError] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
+  const [editMode, setEditMode] = useState(null);
   const [creatorState, setCreatorState] = useState(null);
   const [maintenanceOptions, setMaintenanceOptions] = useState(null);
   const creatorProfileCache = useRef(new Map());
@@ -1487,12 +1733,18 @@ export default function OperationsOrdersClient({ initialOrders = [], bootstrapWa
         const data = await readJson(response);
         if (response.status === 401) throw new Error("Wrong password. Please try again.");
         if (!response.ok) throw new Error(data?.error || "Failed to start editing this order.");
-        const editKey = writeOperationsEditTransfer(data, group);
-        const editUrl = new URL("/next/orders/new", window.location.origin);
-        editUrl.searchParams.set("edit", "1");
-        if (data?.orderType) editUrl.searchParams.set("type", String(data.orderType));
-        if (editKey) editUrl.searchParams.set("editKey", editKey);
-        window.location.href = `${editUrl.pathname}${editUrl.search}`;
+        const items = Array.isArray(data?.items) ? data.items : [];
+        const itemsById = Object.fromEntries(items.map((item) => [text(item?.id), item]).filter(([id]) => id));
+        setEditMode({
+          groupKey: group.key,
+          password,
+          itemsById,
+          products: Array.isArray(data?.products) ? data.products : [],
+          statusOptions: Array.isArray(data?.statusOptions) ? data.statusOptions : ["In Progress", "Shipped", "Arrived"],
+          changes: {},
+        });
+        setActionState(null);
+        setActionError("");
         return;
       } else if (action === "approve") {
         await postJson("/api/orders/operations/approval", { ids: group.orderIds, decision: "Approved" });
@@ -1608,6 +1860,51 @@ export default function OperationsOrdersClient({ initialOrders = [], bootstrapWa
     }
   }
 
+  function patchOperationsEditItem(patch) {
+    const id = text(patch?.id);
+    if (!id) return;
+    setEditMode((current) => current ? {
+      ...current,
+      changes: {
+        ...(current.changes || {}),
+        [id]: { ...(current.changes?.[id] || {}), ...patch, id },
+      },
+    } : current);
+  }
+
+  async function saveOperationsEdit(changes) {
+    if (!editMode || !selected) return;
+    const itemUpdates = Object.values(changes || {}).filter((entry) => entry && text(entry?.id));
+    if (!itemUpdates.length) return;
+    setBusy(true);
+    setActionError("");
+    startActionLoading({ title: "Saving order changes", message: "Updating the selected Operations Orders components…" });
+    try {
+      await postJson("/api/orders/operations/details-edit", {
+        orderIds: selected.orderIds,
+        adminPassword: editMode.password,
+        itemUpdates,
+      });
+      await finishActionLoading("done", "Operations order changes were saved.");
+      await refreshOrders();
+      setEditMode(null);
+      setSelected(null);
+      setNotice("Operations order changes saved.");
+      window.setTimeout(() => setNotice(""), 3500);
+    } catch (error) {
+      const message = error?.message || "Failed to save Operations order changes.";
+      await finishActionLoading("failed", message);
+      setActionError(message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function cancelOperationsEdit() {
+    setEditMode(null);
+    setActionError("");
+  }
+
   async function exportOrder(options, group, selectedTab) {
     const kind = options?.kind === "excel" ? "excel" : "pdf";
     setBusy(true);
@@ -1700,7 +1997,18 @@ export default function OperationsOrdersClient({ initialOrders = [], bootstrapWa
         </div>
       </section>
 
-      <OrderModal group={selected} tab={tab} busy={busy} onClose={() => setSelected(null)} onAction={beginAction} onExport={exportOrder} />
+      <OrderModal
+        group={selected}
+        tab={tab}
+        busy={busy}
+        onClose={() => { setSelected(null); setEditMode(null); }}
+        onAction={beginAction}
+        onExport={exportOrder}
+        editMode={editMode}
+        onPatchEditItem={patchOperationsEditItem}
+        onSaveEdit={saveOperationsEdit}
+        onCancelEdit={cancelOperationsEdit}
+      />
       <RejectModal state={actionState?.action === "reject" ? actionState : null} busy={busy} error={actionError} onCancel={() => setActionState(null)} onSubmit={submitAction} />
       <EditPasswordModal state={actionState?.action === "edit" ? actionState : null} busy={busy} error={actionError} onCancel={() => setActionState(null)} onSubmit={submitAction} />
       <ArchiveModal state={actionState?.action === "archive" ? actionState : null} busy={busy} error={actionError} onCancel={() => setActionState(null)} onSubmit={submitAction} />
