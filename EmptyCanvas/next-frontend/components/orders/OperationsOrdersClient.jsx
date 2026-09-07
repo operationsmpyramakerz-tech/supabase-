@@ -720,6 +720,10 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, editMode, o
   const [sortMode, setSortMode] = useState("product-tag");
   const [editItemState, setEditItemState] = useState(null);
   const moreRef = useRef(null);
+  // Keep Edit mode on exactly the same grouping/sort the user was viewing
+  // before opening the admin edit flow. The edit UI hides the Sort control,
+  // so its grouping must not drift while the order switches into Edit mode.
+  const editSortModeRef = useRef("product-tag");
 
   useEffect(() => {
     if (!group) return undefined;
@@ -806,9 +810,11 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, editMode, o
   };
   const tabItems = itemsForOperationsTab(group.items, tab).map(applyEditDraft);
   const displayTabItems = expandOrderItemsForDisplay(tabItems);
-  const groupedItems = groupOrderItems(displayTabItems, sortMode);
+  const effectiveSortMode = isEditing ? editSortModeRef.current : sortMode;
+  const groupedItems = groupOrderItems(displayTabItems, effectiveSortMode);
 
   const menuAction = (action) => {
+    if (action === "edit") editSortModeRef.current = sortMode;
     setMoreOpen(false);
     onAction(action, group);
   };
@@ -964,7 +970,7 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, editMode, o
           <div className="co-modal-items order-component-groups">
             {groupedItems.map((section) => (
               <section className="order-component-group" key={`${section.folderName || "products"}:${section.tag}`}>
-                <OrderGroupHeader group={section} mode={sortMode} />
+                <OrderGroupHeader group={section} mode={effectiveSortMode} />
                 <div className="order-component-group__items">{section.items.map(renderItem)}</div>
               </section>
             ))}
