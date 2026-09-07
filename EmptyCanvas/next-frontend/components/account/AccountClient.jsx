@@ -123,6 +123,33 @@ async function croppedImageDataUrl(file, kind, crop, viewportWidth, viewportHeig
   return result;
 }
 
+async function fittedCoverImageDataUrl(file) {
+  const raw = await readFileAsDataUrl(file);
+  const image = await loadImage(raw);
+  const sourceWidth = Math.max(1, image.naturalWidth || image.width || 1);
+  const sourceHeight = Math.max(1, image.naturalHeight || image.height || 1);
+  const maxWidth = 2400;
+  const maxHeight = 1800;
+  const resizeScale = Math.min(1, maxWidth / sourceWidth, maxHeight / sourceHeight);
+  const outputWidth = Math.max(1, Math.round(sourceWidth * resizeScale));
+  const outputHeight = Math.max(1, Math.round(sourceHeight * resizeScale));
+
+  const canvas = document.createElement("canvas");
+  canvas.width = outputWidth;
+  canvas.height = outputHeight;
+  const context = canvas.getContext("2d", { alpha: false });
+  if (!context) throw new Error("The cover image could not be prepared.");
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, outputWidth, outputHeight);
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
+  context.drawImage(image, 0, 0, sourceWidth, sourceHeight, 0, 0, outputWidth, outputHeight);
+
+  let result = canvas.toDataURL("image/webp", 0.88);
+  if (!result.startsWith("data:image/webp")) result = canvas.toDataURL("image/jpeg", 0.9);
+  return result;
+}
+
 function clampCropOffset(value, displaySize, frameSize) {
   const limit = Math.max(0, (displaySize - frameSize) / 2);
   return Math.max(-limit, Math.min(limit, Number(value) || 0));
@@ -380,13 +407,15 @@ function ImageUploadModal({ imageRequest, onClose, onSaved }) {
       }, { redirectOn401: false });
 
       const viewport = cropViewportRef.current?.getBoundingClientRect();
-      const dataUrl = await croppedImageDataUrl(
-        imageRequest.file,
-        kind,
-        crop,
-        viewport?.width,
-        viewport?.height,
-      );
+      const dataUrl = kind === "cover"
+        ? await fittedCoverImageDataUrl(imageRequest.file)
+        : await croppedImageDataUrl(
+            imageRequest.file,
+            kind,
+            crop,
+            viewport?.width,
+            viewport?.height,
+          );
       const endpoint = kind === "cover" ? "/api/account/cover-photo" : "/api/account/profile-picture";
       const result = await requestJson(endpoint, {
         method: "POST",
@@ -409,56 +438,67 @@ function ImageUploadModal({ imageRequest, onClose, onSaved }) {
             <span className="account-image-editor-icon"><Icon name="image" size={20} /></span>
             <div>
               <h3 className="ex-modal-title">Change {label}</h3>
-              <p>Drag the image to choose the visible area, then zoom if needed.</p>
+              <p>{kind === "profile" ? "Drag the image to choose the visible area, then zoom if needed." : "The full cover image will be saved without cropping and fitted automatically across the system."}</p>
             </div>
           </div>
           <button className="account-image-editor-close" type="button" onClick={onClose} disabled={busy} aria-label="Close"><Icon name="x" size={18} /></button>
         </div>
 
-        <div className="account-crop-stage">
-          <div
-            ref={cropViewportRef}
-            className={`account-crop-viewport account-crop-viewport--${kind}`}
-            onPointerDown={handlePointerDown}
-            onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerEnd}
-            onPointerCancel={handlePointerEnd}
-            aria-label={`Crop ${label}`}
-          >
-            {imageRequest?.preview ? (
-              <img
-                className="account-crop-image"
-                src={imageRequest.preview}
-                alt={`${label} crop preview`}
-                draggable="false"
-                onLoad={(event) => {
-                  const element = event.currentTarget;
-                  setImageMeta({ width: element.naturalWidth || 1, height: element.naturalHeight || 1 });
-                  setCrop({ zoom: 1, x: 0, y: 0 });
-                }}
-                style={{ transform: `translate3d(${crop.x}px, ${crop.y}px, 0) scale(${crop.zoom})` }}
-              />
-            ) : null}
-            <span className="account-crop-grid" aria-hidden="true" />
-            {kind === "profile" ? <span className="account-crop-profile-ring" aria-hidden="true" /> : null}
-          </div>
-          <div className="account-crop-hint">Drag to reposition</div>
-        </div>
+        {kind === "profile" ? (
+          <>
+            <div className="account-crop-stage">
+              <div
+                ref={cropViewportRef}
+                className="account-crop-viewport account-crop-viewport--profile"
+                onPointerDown={handlePointerDown}
+                onPointerMove={handlePointerMove}
+                onPointerUp={handlePointerEnd}
+                onPointerCancel={handlePointerEnd}
+                aria-label="Crop profile picture"
+              >
+                {imageRequest?.preview ? (
+                  <img
+                    className="account-crop-image"
+                    src={imageRequest.preview}
+                    alt="Profile picture crop preview"
+                    draggable="false"
+                    onLoad={(event) => {
+                      const element = event.currentTarget;
+                      setImageMeta({ width: element.naturalWidth || 1, height: element.naturalHeight || 1 });
+                      setCrop({ zoom: 1, x: 0, y: 0 });
+                    }}
+                    style={{ transform: `translate3d(${crop.x}px, ${crop.y}px, 0) scale(${crop.zoom})` }}
+                  />
+                ) : null}
+                <span className="account-crop-grid" aria-hidden="true" />
+                <span className="account-crop-profile-ring" aria-hidden="true" />
+              </div>
+              <div className="account-crop-hint">Drag to reposition</div>
+            </div>
 
-        <div className="account-crop-controls">
-          <span className="account-crop-zoom-label">Zoom</span>
-          <input
-            className="account-crop-zoom"
-            type="range"
-            min="1"
-            max="3"
-            step="0.01"
-            value={crop.zoom}
-            onChange={(event) => changeZoom(event.target.value)}
-            aria-label="Zoom image"
-          />
-          <button className="account-crop-reset" type="button" onClick={resetCrop} disabled={busy}>Reset</button>
-        </div>
+            <div className="account-crop-controls">
+              <span className="account-crop-zoom-label">Zoom</span>
+              <input
+                className="account-crop-zoom"
+                type="range"
+                min="1"
+                max="3"
+                step="0.01"
+                value={crop.zoom}
+                onChange={(event) => changeZoom(event.target.value)}
+                aria-label="Zoom image"
+              />
+              <button className="account-crop-reset" type="button" onClick={resetCrop} disabled={busy}>Reset</button>
+            </div>
+          </>
+        ) : (
+          <div className="account-cover-fit-stage">
+            <div className="account-cover-fit-preview" aria-label="Cover photo preview">
+              {imageRequest?.preview ? <img src={imageRequest.preview} alt="Cover photo preview" draggable="false" /> : null}
+            </div>
+            <div className="account-cover-fit-note">Full image • no crop • automatic system fit</div>
+          </div>
+        )}
 
         <div className="account-image-editor-filename"><Icon name="image" size={15} /><span>{imageRequest?.file?.name || "Selected image"}</span></div>
 
