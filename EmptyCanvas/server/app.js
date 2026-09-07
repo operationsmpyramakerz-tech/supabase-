@@ -24073,6 +24073,102 @@ app.post(
 );
 
 
+function _orderDownloadInstructionsTable() {
+  return String(process.env.SUPABASE_ORDER_DOWNLOAD_INSTRUCTIONS_TABLE || "order_download_instructions").trim() || "order_download_instructions";
+}
+
+function _normalizeOrderDownloadInstructionRow(row = {}) {
+  return {
+    id: String(row?.id || "").trim(),
+    title: String(row?.title || "").trim(),
+    englishText: String(row?.english_text ?? row?.englishText ?? "").trim(),
+    arabicText: String(row?.arabic_text ?? row?.arabicText ?? "").trim(),
+    createdBy: String(row?.created_by ?? row?.createdBy ?? "").trim(),
+    createdAt: row?.created_at || row?.createdAt || null,
+    updatedAt: row?.updated_at || row?.updatedAt || null,
+  };
+}
+
+function _orderDownloadInstructionPayload(body = {}) {
+  const title = String(body?.title || "").trim().slice(0, 120);
+  const englishText = String(body?.englishText ?? body?.english_text ?? "").trim().slice(0, 2000);
+  const arabicText = String(body?.arabicText ?? body?.arabic_text ?? "").trim().slice(0, 2000);
+  if (!title) {
+    const error = new Error("Instruction title is required.");
+    error.status = 400;
+    throw error;
+  }
+  if (!englishText && !arabicText) {
+    const error = new Error("Add English or Arabic instructions before saving.");
+    error.status = 400;
+    throw error;
+  }
+  return { title, english_text: englishText, arabic_text: arabicText };
+}
+
+app.get(
+  "/api/orders/download-instructions",
+  requireAuth,
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      const rows = await supabaseDb.selectAll(_orderDownloadInstructionsTable(), {
+        limit: 500,
+        order: "updated_at.desc",
+        select: "id,title,english_text,arabic_text,created_by,created_at,updated_at",
+      });
+      return res.json({
+        items: (Array.isArray(rows) ? rows : [])
+          .map(_normalizeOrderDownloadInstructionRow)
+          .filter((item) => item.id && item.title && (item.englishText || item.arabicText)),
+      });
+    } catch (error) {
+      console.error("GET /api/orders/download-instructions error:", error?.details || error);
+      return res.status(Number(error?.status) || 500).json({
+        error: error?.message || "Failed to load saved instructions.",
+      });
+    }
+  },
+);
+
+app.post(
+  "/api/orders/download-instructions",
+  requireAuth,
+  async (req, res) => {
+    try {
+      const payload = _orderDownloadInstructionPayload(req.body || {});
+      payload.created_by = String(req.session?.username || req.session?.name || "").trim() || null;
+      const row = await supabaseDb.insert(_orderDownloadInstructionsTable(), payload);
+      return res.status(201).json({ item: _normalizeOrderDownloadInstructionRow(row || {}) });
+    } catch (error) {
+      console.error("POST /api/orders/download-instructions error:", error?.details || error);
+      return res.status(Number(error?.status) || 500).json({
+        error: error?.message || "Failed to save instructions.",
+      });
+    }
+  },
+);
+
+app.patch(
+  "/api/orders/download-instructions/:id",
+  requireAuth,
+  async (req, res) => {
+    try {
+      const id = String(req.params?.id || "").trim();
+      if (!id) return res.status(400).json({ error: "Instruction id is required." });
+      const payload = _orderDownloadInstructionPayload(req.body || {});
+      const row = await supabaseDb.updateById(_orderDownloadInstructionsTable(), id, payload);
+      if (!row) return res.status(404).json({ error: "Saved instructions were not found." });
+      return res.json({ item: _normalizeOrderDownloadInstructionRow(row) });
+    } catch (error) {
+      console.error("PATCH /api/orders/download-instructions/:id error:", error?.details || error);
+      return res.status(Number(error?.status) || 500).json({
+        error: error?.message || "Failed to update instructions.",
+      });
+    }
+  },
+);
+
 // Export requested order to PDF (Delivery receipt)
 // Body: { orderIds: [notionPageId, ...] }
 app.post(
