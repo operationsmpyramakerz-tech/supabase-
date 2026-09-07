@@ -667,8 +667,6 @@ function downloadBlob(blob, filename) {
 function OperationsOrderCard({ group, tab, onOpen, onCreator }) {
   const type = orderTypeMeta(group.orderType);
   const thumbStyle = { "--co-thumb-bg": type.bg, "--co-thumb-fg": type.fg, "--co-thumb-border": type.bd };
-  const displayItems = itemsForOperationsTab(group.items, tab);
-  const displayItemCount = expandOrderItemsForDisplay(displayItems).length;
   return (
     <article className="co-card next-operations-order-card" role="button" tabIndex={0} aria-label={`Open ${group.orderIdLabel}`} onClick={() => onOpen(group)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen(group); } }}>
       <div className="co-top">
@@ -677,14 +675,10 @@ function OperationsOrderCard({ group, tab, onOpen, onCreator }) {
           <div className="co-title">{group.orderIdLabel}</div>
           <div className="next-operations-order-meta"><span className="co-sub">{formatDate(group.latestCreated)}</span></div>
         </div>
-        <div className="co-qty" title={`${displayItemCount} component${displayItemCount === 1 ? "" : "s"}`}>x{displayItemCount}</div>
-      </div>
-      <div className="co-divider" />
-      <div className="co-bottom next-operations-card-bottom">
-        <div className="next-operations-card-status">
-          {group.stage === 2 && group.hasApproved && group.hasRejected ? <MixedStatusPill /> : <StatusPill group={group} tab={tab} />}
-        </div>
-        <div className="co-actions next-operations-card-summary-actions">
+        <div className="next-operations-card-head-actions">
+          <div className="next-operations-card-status">
+            {group.stage === 2 && group.hasApproved && group.hasRejected ? <MixedStatusPill /> : <StatusPill group={group} tab={tab} />}
+          </div>
           <button type="button" className="co-creator-btn next-operations-creator-btn" aria-label={`Created by ${group.createdByName || "user"}`} title={`Created by ${group.createdByName || "user"}`} onClick={(event) => { event.preventDefault(); event.stopPropagation(); onCreator?.(event.currentTarget, group); }}>
             <span className="next-operations-creator-label">{group.createdByName || "—"}</span>
             <span className="next-operations-creator-icon"><ClassicOrderIcon name="user" /></span>
