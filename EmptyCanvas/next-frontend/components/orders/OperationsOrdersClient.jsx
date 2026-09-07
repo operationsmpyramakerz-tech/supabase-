@@ -1242,12 +1242,6 @@ function ReceiveModal({ state, busy, error, onCancel, onSubmit }) {
     setIssueDescription("");
     setSearchQuery("");
   }, [group]);
-  useEffect(() => {
-    if (!group) return undefined;
-    const onKey = (event) => { if (event.key === "Escape" && !busy) onCancel(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [group, busy, onCancel]);
   if (!group) return null;
   const searchNeedle = lower(searchQuery);
   const visibleItems = group.items.filter((item) => {
@@ -1261,9 +1255,8 @@ function ReceiveModal({ state, busy, error, onCancel, onSubmit }) {
       item?.reason,
     ].map(lower).some((value) => value.includes(searchNeedle));
   });
-  return <div className="co-submodal-overlay is-open next-operations-receive-modal" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onCancel(); }}>
+  return <div className="co-submodal-overlay is-open next-operations-receive-modal" aria-hidden="false">
     <form className="co-submodal-dialog next-operations-receive-dialog" role="dialog" aria-modal="true" aria-labelledby="operations-receive-title" onSubmit={(event) => { event.preventDefault(); onSubmit({ receiptNumber, issueDescription, quantities }); }}>
-      <button type="button" className="co-submodal-close" onClick={onCancel} aria-label="Close receive components" disabled={busy}/>
       <div className="co-submodal-header next-operations-receive-header">
         <div className="req-edit-icon"><ClassicOrderIcon name="truck" /></div>
         <div><div className="co-submodal-title" id="operations-receive-title">Receive components</div><div className="co-submodal-sub">Confirm the receipt details and the quantity received now.</div></div>
