@@ -36,12 +36,12 @@ export function useActionLoading() {
   return { actionLoading: state, startActionLoading, finishActionLoading };
 }
 
-export default function ActionLoadingModal({ state }) {
+export default function ActionLoadingModal({ state, zIndex = null }) {
   if (!state?.open) return null;
   const status = state.status || "loading";
 
   return (
-    <div className="action-loading-overlay" role="presentation">
+    <div className="action-loading-overlay" role="presentation" style={zIndex ? { zIndex } : undefined}>
       <section className={`action-loading-modal is-${status}`} role="status" aria-live="polite" aria-label={state.title || "Loading"}>
         <div className="action-loading-visual" aria-hidden="true">
           {status === "loading" ? (
