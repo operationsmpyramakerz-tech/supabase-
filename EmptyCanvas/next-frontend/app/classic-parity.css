@@ -4601,11 +4601,17 @@ body.operations-orders-page .next-classic-orders-parity .next-operations-order-c
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 16px;
+  font-size: 14px;
+  line-height: 1.2;
 }
 
 body.operations-orders-page .next-classic-orders-parity .next-operations-order-card .next-operations-card-summary-actions {
   align-items: center;
+}
+
+body.operations-orders-page .next-classic-orders-parity .next-operations-order-card .next-operations-card-summary-actions > .co-status-btn,
+body.operations-orders-page .next-classic-orders-parity .next-operations-order-card .next-operations-card-summary-actions > .sv-mixed-approval-pill {
+  flex: 0 0 auto;
 }
 
 body.operations-orders-page .next-classic-orders-parity .next-operations-order-card .next-operations-card-total {
@@ -4683,6 +4689,12 @@ body.operations-orders-page .next-classic-orders-parity .next-operations-order-m
   font-size: 12px;
   font-weight: 900;
   overflow-wrap: anywhere;
+}
+
+body.operations-orders-page .next-classic-orders-parity .next-operations-order-modal-summary__total strong {
+  font-size: 13px;
+  white-space: nowrap;
+  overflow-wrap: normal;
 }
 
 body.operations-orders-page .next-classic-orders-parity .next-operations-order-modal-summary__status .co-status-btn,
