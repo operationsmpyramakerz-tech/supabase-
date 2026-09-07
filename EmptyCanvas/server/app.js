@@ -30441,8 +30441,59 @@ app.post(
         return res.status(500).json({ error: "Supabase orders/products are not configured." });
       }
 
-      const result = await _sbInitOrderEditFromRows(req, orderIds);
-      return res.json(result);
+      const ids = orderIds
+        .map((x) => String(x || "").trim())
+        .filter(Boolean)
+        .filter((x) => /^\d+$/.test(String(x)));
+      if (!ids.length) {
+        return res.status(400).json({ error: "Operations inline edit is available for Supabase orders only." });
+      }
+
+      const [rows, lookups] = await Promise.all([
+        _sbOrderRowsByIds(ids),
+        _sbBuildProductLookupsForOrderEdit(),
+      ]);
+      if (!rows.length) return res.status(404).json({ error: "Orders not found." });
+
+      const items = rows.map((row) => {
+        const serialized = _sbSerializeOrderRow(row);
+        const product = _sbResolveOrderRowProduct(row, lookups);
+        const status = String(serialized?.status || "In Progress").trim() || "In Progress";
+        const isDelivered = /(arrived|delivered|received)/i.test(status);
+        const requestedQty = Number(serialized?.quantityRequested ?? serialized?.quantity ?? 0) || 0;
+        const receivedQty = Number(serialized?.quantityReceived ?? 0) || 0;
+        const remainingQty = Number(serialized?.quantityRemaining ?? (requestedQty - receivedQty)) || 0;
+        const deliveredQty = isDelivered ? receivedQty : 0;
+        return {
+          ...serialized,
+          productId: String(product?.id || _sbOrderGet(row, ["product_id", "productId", "product_page_id", "productPageId"]) || "").trim() || null,
+          requestedQty,
+          receivedQty,
+          remainingQty,
+          deliveredQty,
+          unitPrice: Number.isFinite(Number(serialized?.unitPrice)) ? Number(serialized.unitPrice) : null,
+        };
+      });
+
+      const statusOptions = [];
+      const addStatus = (value) => {
+        const clean = String(value || "").trim();
+        if (!clean) return;
+        if (!statusOptions.some((item) => norm(item) === norm(clean))) statusOptions.push(clean);
+      };
+      addStatus("In Progress");
+      addStatus("Shipped");
+      addStatus("Arrived");
+      rows.forEach((row) => addStatus(_sbOrderText(_sbOrderGet(row, ["status", "Status"]))));
+
+      return res.json({
+        ok: true,
+        source: "supabase",
+        count: items.length,
+        items,
+        products: Array.isArray(lookups?.products) ? lookups.products : [],
+        statusOptions,
+      });
     } catch (e) {
       console.error("operations edit init error:", e?.details || e);
       return res.status(e?.status || 500).json({ error: e?.message || "Failed to init edit" });
@@ -30553,6 +30604,7 @@ app.post(
       const {
         orderIds,
         adminPassword,
+        itemUpdates,
         receiptNumber,
         receiptNumbers,
         quantities,
@@ -30664,6 +30716,15 @@ app.post(
         removedPhotoUrls.size > 0;
 
       const quantityMap = quantities && typeof quantities === "object" ? quantities : {};
+      const normalizedItemUpdates = Array.isArray(itemUpdates)
+        ? itemUpdates.filter((entry) => entry && typeof entry === "object")
+        : [];
+      const itemUpdateById = new Map(
+        normalizedItemUpdates
+          .map((entry) => [String(entry?.id || entry?.orderId || entry?.order_id || "").trim(), entry])
+          .filter(([id]) => id),
+      );
+      const productMap = itemUpdateById.size ? await _sbProductsMapById().catch(() => new Map()) : new Map();
       const beforeById = new Map((rowsBeforeUpdate || []).filter(Boolean).map((row) => [String(row?.id ?? ""), row]));
       const updatedRows = [];
 
@@ -30671,6 +30732,83 @@ app.post(
         const beforeRow = beforeById.get(String(id)) || null;
         if (!beforeRow) continue;
         const patch = {};
+        const itemUpdate = itemUpdateById.get(String(id)) || null;
+
+        if (itemUpdate) {
+          const has = (key) => Object.prototype.hasOwnProperty.call(itemUpdate, key);
+          const numberField = (key, label) => {
+            if (!has(key)) return null;
+            const value = Number(itemUpdate[key]);
+            if (!Number.isFinite(value)) {
+              const error = new Error(`${label} must be a valid number.`);
+              error.status = 400;
+              throw error;
+            }
+            return roundOrderQty(value);
+          };
+
+          if (has("productId")) {
+            const productId = String(itemUpdate.productId || "").trim();
+            const product = productMap.get(productId) || null;
+            if (!product?.id) {
+              return res.status(400).json({ error: "The selected Product component was not found." });
+            }
+            patch.product_id = Number.isFinite(Number(product.id)) ? Number(product.id) : String(product.id);
+            patch.product_name = String(product.name || "Unknown Product").trim() || "Unknown Product";
+            patch.product_url = product.url || null;
+            patch.unit_price = Number.isFinite(Number(product.unitPrice)) ? Number(product.unitPrice) : null;
+            patch.product_tag = firstProductTagForServer(product);
+          }
+
+          if (has("unitPrice")) {
+            patch.unit_price = itemUpdate.unitPrice === null || itemUpdate.unitPrice === ""
+              ? null
+              : numberField("unitPrice", "Unit cost");
+          }
+          if (has("productTag")) patch.product_tag = String(itemUpdate.productTag || "").trim() || null;
+          if (has("kitTag")) patch.kit_tag = String(itemUpdate.kitTag || "").trim() || null;
+          if (has("reason")) patch.reason = String(itemUpdate.reason || "").trim() || null;
+          if (has("issueDescription")) patch.issue_description = String(itemUpdate.issueDescription || "").replace(/\r\n/g, "\n").trim() || null;
+
+          if (has("status")) {
+            const status = String(itemUpdate.status || "").trim();
+            if (!status) return res.status(400).json({ error: "Status is required." });
+            patch.status = status;
+          }
+
+          const serializedBefore = _sbSerializeOrderRow(beforeRow);
+          const requestedQty = has("requestedQty")
+            ? numberField("requestedQty", "Requested quantity")
+            : roundOrderQty(Number(serializedBefore?.quantityRequested ?? serializedBefore?.quantity ?? 0) || 0);
+          let receivedQty = has("receivedQty")
+            ? numberField("receivedQty", "Received quantity")
+            : roundOrderQty(Number(serializedBefore?.quantityReceived ?? 0) || 0);
+          let remainingQty = has("remainingQty")
+            ? numberField("remainingQty", "Remaining quantity")
+            : roundOrderQty(Number(serializedBefore?.quantityRemaining ?? (requestedQty - receivedQty)) || 0);
+
+          const nextStatus = String(has("status") ? itemUpdate.status : serializedBefore?.status || "").trim();
+          const finalStatus = /(arrived|delivered|received)/i.test(nextStatus);
+          if (has("deliveredQty")) {
+            const deliveredQty = numberField("deliveredQty", "Delivered quantity");
+            if (finalStatus) {
+              receivedQty = deliveredQty;
+              remainingQty = roundOrderQty(requestedQty - deliveredQty);
+            } else if (Math.abs(deliveredQty) > 1e-9) {
+              return res.status(400).json({ error: "Delivered quantity can only be greater than zero when the status is Arrived/Delivered." });
+            }
+          }
+
+          if (has("requestedQty")) {
+            patch.quantity_requested = requestedQty;
+            patch.quantity_progress = requestedQty;
+            patch.quantity_edited_by_supervisor = null;
+          }
+          if (has("receivedQty") || has("remainingQty") || has("requestedQty") || has("deliveredQty")) {
+            patch.quantity_received_by_operations = receivedQty;
+            patch.quantity_remaining = remainingQty;
+          }
+        }
 
         if (receiptTextProvided) {
           patch.receipt_number = receiptText || null;
@@ -30711,9 +30849,13 @@ app.post(
         const serialized = _sbSerializeOrderRow(row || {});
         return _sbOrderFinalStatusName(serialized?.status);
       });
+      const rowsPreviouslyInStock = rowsBeforeUpdate.filter((row) => {
+        const serialized = _sbSerializeOrderRow(row || {});
+        return _sbOrderFinalStatusName(serialized?.status);
+      });
       const stocktakingSyncResults = [];
       const stocktakingSyncErrors = [];
-      if (rowsNeedingStockSync.length) {
+      if (rowsNeedingStockSync.length || rowsPreviouslyInStock.length) {
         await _sbDeleteStocktakingRowsForOrderRows(rowsBeforeUpdate);
         for (const row of rowsNeedingStockSync) {
           const id = String(_sbOrderGet(row, ["id", "ID"]) ?? "").trim();
