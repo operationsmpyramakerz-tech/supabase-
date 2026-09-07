@@ -792,11 +792,25 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, editMode, o
       ...item,
       ...serverItem,
       ...patch,
-      productName: patch.productName ?? serverItem.productName ?? item?.productName,
-      productUrl: patch.productUrl ?? serverItem.productUrl ?? item?.productUrl,
+      // The edit/init endpoint returns the raw persisted order row. The normal
+      // Operations Orders view is already enriched with the proposal/kit
+      // grouping metadata used by the Sort menu. Keep that presentation
+      // identity from the currently displayed row so simply entering Edit mode
+      // cannot move a component to another kit/product group. Explicit edits
+      // still win through `patch`.
+      productName: patch.productName ?? item?.productName ?? serverItem.productName,
+      productUrl: patch.productUrl ?? item?.productUrl ?? serverItem.productUrl,
       unitPrice: patch.unitPrice ?? serverItem.unitPrice ?? item?.unitPrice,
-      productTag: patch.productTag ?? serverItem.productTag ?? item?.productTag,
-      kitTag: patch.kitTag ?? serverItem.kitTag ?? item?.kitTag,
+      productTag: patch.productTag ?? item?.productTag ?? serverItem.productTag,
+      productTags: patch.productTag
+        ? [patch.productTag]
+        : (Array.isArray(item?.productTags) ? item.productTags : serverItem.productTags),
+      kitTag: patch.kitTag ?? item?.kitTag ?? serverItem.kitTag,
+      kitFolderName: item?.kitFolderName ?? serverItem.kitFolderName,
+      kitTags: Array.isArray(item?.kitTags) ? item.kitTags : serverItem.kitTags,
+      kitMemberships: Array.isArray(item?.kitMemberships) ? item.kitMemberships : serverItem.kitMemberships,
+      sourceKits: Array.isArray(item?.sourceKits) ? item.sourceKits : serverItem.sourceKits,
+      sourceBreakdown: Array.isArray(item?.sourceBreakdown) ? item.sourceBreakdown : serverItem.sourceBreakdown,
       status: patch.status ?? serverItem.status ?? item?.status,
       quantityRequested: requestedQty,
       quantity: requestedQty,
