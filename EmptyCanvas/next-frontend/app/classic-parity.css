@@ -4592,6 +4592,32 @@ body.operations-orders-page .next-classic-orders-parity .next-operations-order-c
   gap: 7px;
 }
 
+body.operations-orders-page .next-classic-orders-parity .next-operations-order-card .next-operations-createdby-summary {
+  min-width: 0;
+}
+
+body.operations-orders-page .next-classic-orders-parity .next-operations-order-card .next-operations-createdby-name {
+  max-width: min(320px, 42vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 16px;
+}
+
+body.operations-orders-page .next-classic-orders-parity .next-operations-order-card .next-operations-card-summary-actions {
+  align-items: center;
+}
+
+body.operations-orders-page .next-classic-orders-parity .next-operations-order-card .next-operations-card-total {
+  min-width: 132px;
+  text-align: right;
+}
+
+body.operations-orders-page .next-classic-orders-parity .next-operations-order-card .next-operations-card-total .co-est-value {
+  white-space: nowrap;
+}
+
+
 body.operations-orders-page .next-classic-orders-parity .next-operations-order-card .co-status-btn {
   min-height: 30px;
   padding: 6px 11px;
