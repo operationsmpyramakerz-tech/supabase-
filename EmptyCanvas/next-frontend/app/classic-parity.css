@@ -15494,3 +15494,158 @@ body.operations-orders-page .next-classic-orders-parity .order-component-search_
     width:min(250px,52vw);
   }
 }
+
+/* ===== Classic shell · modern expandable global search ===== */
+.classic-app-shell .main-header .searchbar.system-header-search{
+  --system-search-size:42px;
+  position:relative;
+  display:flex !important;
+  align-items:center;
+  flex:0 0 var(--system-search-size) !important;
+  width:var(--system-search-size) !important;
+  max-width:none !important;
+  min-width:var(--system-search-size);
+  height:var(--system-search-size);
+  margin:0 !important;
+  padding:0 !important;
+  gap:0 !important;
+  overflow:hidden;
+  order:0 !important;
+  border:1px solid #e4e7ec !important;
+  border-radius:13px !important;
+  background:#f8fafc !important;
+  box-shadow:0 1px 2px rgba(16,24,40,.04),0 6px 18px rgba(16,24,40,.06) !important;
+  transition:
+    width .34s cubic-bezier(.22,1,.36,1),
+    flex-basis .34s cubic-bezier(.22,1,.36,1),
+    border-color .24s ease,
+    box-shadow .24s ease,
+    background-color .24s ease;
+}
+.classic-app-shell .main-header .searchbar.system-header-search.is-expanded{
+  flex-basis:min(390px,36vw) !important;
+  width:min(390px,36vw) !important;
+  border-color:#d9dee7 !important;
+  background:#fff !important;
+  box-shadow:0 1px 2px rgba(16,24,40,.04),0 10px 24px rgba(16,24,40,.08) !important;
+}
+.classic-app-shell .main-header .system-header-search__toggle,
+.classic-app-shell .main-header .system-header-search__close{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  padding:0;
+  border:0;
+  cursor:pointer;
+  transition:transform .2s ease,background-color .2s ease,color .2s ease,opacity .2s ease;
+}
+.classic-app-shell .main-header .system-header-search__toggle{
+  position:relative;
+  z-index:2;
+  flex:0 0 var(--system-search-size);
+  width:var(--system-search-size);
+  height:var(--system-search-size);
+  border-radius:12px;
+  background:#101828;
+  color:#fff;
+}
+.classic-app-shell .main-header .system-header-search.is-expanded .system-header-search__toggle{
+  flex-basis:34px;
+  width:34px;
+  height:34px;
+  margin-left:3px;
+  border-radius:10px;
+}
+.classic-app-shell .main-header .system-header-search__toggle:hover{
+  background:#1d2939;
+  transform:scale(1.03);
+}
+.classic-app-shell .main-header .system-header-search__toggle:active{
+  transform:scale(.97);
+}
+.classic-app-shell .main-header .system-header-search__toggle svg,
+.classic-app-shell .main-header .system-header-search__close svg{
+  width:17px;
+  height:17px;
+  color:currentColor;
+}
+.classic-app-shell .main-header .searchbar.system-header-search .system-header-search__input,
+.classic-app-shell .main-header .searchbar.system-header-search .system-header-search__input:focus,
+.classic-app-shell .main-header .searchbar.system-header-search .system-header-search__input:focus-visible{
+  flex:1 1 auto;
+  width:0;
+  min-width:0;
+  height:100%;
+  padding:0 !important;
+  border:0 !important;
+  border-left:0 !important;
+  border-right:0 !important;
+  outline:0 !important;
+  background:transparent !important;
+  box-shadow:none !important;
+  color:#1d2939;
+  font:inherit;
+  font-size:13px;
+  font-weight:650;
+  opacity:0;
+  transform:translateX(-7px);
+  pointer-events:none;
+  -webkit-appearance:none;
+  appearance:none;
+  transition:opacity .2s ease .08s,transform .28s cubic-bezier(.22,1,.36,1) .04s;
+}
+.classic-app-shell .main-header .searchbar.system-header-search.is-expanded .system-header-search__input{
+  width:auto;
+  padding:0 10px 0 9px !important;
+  opacity:1;
+  transform:translateX(0);
+  pointer-events:auto;
+  caret-color:#101828;
+}
+.classic-app-shell .main-header .system-header-search__input::placeholder{
+  color:#98a2b3 !important;
+  font-weight:600 !important;
+}
+.classic-app-shell .main-header .system-header-search__input::-webkit-search-decoration,
+.classic-app-shell .main-header .system-header-search__input::-webkit-search-cancel-button,
+.classic-app-shell .main-header .system-header-search__input::-webkit-search-results-button,
+.classic-app-shell .main-header .system-header-search__input::-webkit-search-results-decoration{
+  -webkit-appearance:none;
+  appearance:none;
+}
+.classic-app-shell .main-header .system-header-search__close{
+  flex:0 0 30px;
+  width:30px;
+  min-width:30px;
+  height:30px;
+  margin-right:4px;
+  border-radius:9px;
+  background:#f2f4f7;
+  color:#667085;
+  opacity:0;
+  transform:scale(.75) translateX(8px);
+  pointer-events:none;
+}
+.classic-app-shell .main-header .system-header-search.is-expanded .system-header-search__close{
+  opacity:1;
+  transform:scale(1) translateX(0);
+  pointer-events:auto;
+}
+.classic-app-shell .main-header .system-header-search__close:hover{
+  background:#eaecf0;
+  color:#1d2939;
+}
+@media (max-width:720px){
+  .classic-app-shell .main-header .searchbar.system-header-search.is-expanded{
+    flex-basis:min(300px,44vw) !important;
+    width:min(300px,44vw) !important;
+  }
+}
+@media (prefers-reduced-motion:reduce){
+  .classic-app-shell .main-header .searchbar.system-header-search,
+  .classic-app-shell .main-header .system-header-search__toggle,
+  .classic-app-shell .main-header .system-header-search__close,
+  .classic-app-shell .main-header .system-header-search__input{
+    transition:none !important;
+  }
+}
