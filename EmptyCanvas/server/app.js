@@ -4891,24 +4891,45 @@ function _sbSerializeOrderRow(row = {}) {
 }
 
 async function _sbSelectOrdersRows({ approvedOnly = false } = {}) {
+  // PostgREST/Supabase commonly caps a single SELECT response at 1000 rows,
+  // even when a larger `limit` is requested. Operations Orders stores one DB
+  // row per component, so a handful of large orders can cross that cap and make
+  // older order groups disappear from every tab. Fetch the ordered rows in
+  // explicit pages so the UI always receives the complete order history.
+  const pageSize = 1000;
+  const selectPaged = async (extraParams = {}) => {
+    const allRows = [];
+    let offset = 0;
+
+    while (true) {
+      const page = await supabaseDb.select(_sbOrdersTable(), {
+        select: "*",
+        order: "notion_created_time.desc,id.desc",
+        limit: pageSize,
+        offset,
+        ...extraParams,
+      });
+      const chunk = Array.isArray(page) ? page : [];
+      if (!chunk.length) break;
+
+      allRows.push(...chunk);
+      offset += chunk.length;
+      if (chunk.length < pageSize) break;
+    }
+
+    return allRows;
+  };
+
   if (approvedOnly) {
     try {
-      const rows = await supabaseDb.select(_sbOrdersTable(), {
-        select: "*",
+      const rows = await selectPaged({
         sv_approval: _sbPostgrestIlike("approved", { contains: true }),
-        order: "notion_created_time.desc,id.desc",
-        limit: 5000,
       });
-      return (Array.isArray(rows) ? rows : [])
-        .filter((row) => norm(_sbOrderGet(row, ["sv_approval", "S.V Approval", "SV Approval"])) === "approved");
+      return rows.filter((row) => norm(_sbOrderGet(row, ["sv_approval", "S.V Approval", "SV Approval"])) === "approved");
     } catch {}
   }
 
-  const rows = await supabaseDb.selectAll(_sbOrdersTable(), {
-    limit: 5000,
-    order: "notion_created_time.desc,id.desc",
-  });
-  const list = Array.isArray(rows) ? rows : [];
+  const list = await selectPaged();
   if (!approvedOnly) return list;
   return list.filter((row) => norm(_sbOrderGet(row, ["sv_approval", "S.V Approval", "SV Approval"])) === "approved");
 }
@@ -5111,6 +5132,8 @@ async function _sbInvalidateOrdersCaches(req = null) {
     "cache:api:orders:requested:supabase:v2:all-system",
     "cache:api:orders:requested:supabase:v4:approved",
     "cache:api:orders:requested:supabase:v4:all-system",
+    "cache:api:orders:requested:supabase:v5:approved",
+    "cache:api:orders:requested:supabase:v5:all-system",
     "cache:api:orders:current:supabase:v1",
     "cache:api:orders:current:supabase:v1:all",
   ];
@@ -21135,8 +21158,8 @@ app.get(
 
       if (_sbOrdersEnabled()) {
         const cacheKey = includeAllSystem
-          ? "cache:api:orders:requested:supabase:v4:all-system"
-          : "cache:api:orders:requested:supabase:v4:approved";
+          ? "cache:api:orders:requested:supabase:v5:all-system"
+          : "cache:api:orders:requested:supabase:v5:approved";
         const forceFresh =
           String(req.query?._fresh || "") === "1" ||
           !!req.query?._refresh ||
