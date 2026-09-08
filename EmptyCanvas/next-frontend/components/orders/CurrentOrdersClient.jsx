@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import ClassicOrderIcon from "./ClassicOrderIcon";
 import { groupOrderItems, OrderGroupHeader, OrderSortButton } from "./OrderGrouping";
 import OrderDownloadModal from "./OrderDownloadModal";
+import OrderComponentSearch, { matchesOrderComponentSearch } from "./OrderComponentSearch";
 
 const STATUS_TABS = [
   { key: "all", label: "All", icon: "layers" },
@@ -549,6 +550,7 @@ function OrderDetailsModal({ group, tab, busy, onClose, onAction, onReason, onEx
   const [moreOpen, setMoreOpen] = useState(false);
   const [sortMode, setSortMode] = useState("product-tag");
   const [downloadOpen, setDownloadOpen] = useState(false);
+  const [componentSearch, setComponentSearch] = useState("");
   const moreRef = useRef(null);
 
   useEffect(() => {
@@ -580,14 +582,17 @@ function OrderDetailsModal({ group, tab, busy, onClose, onAction, onReason, onEx
     };
   }, [group, moreOpen, downloadOpen, onClose]);
 
-  useEffect(() => { setMoreOpen(false); setDownloadOpen(false); setSortMode("product-tag"); }, [group?.key]);
+  useEffect(() => { setMoreOpen(false); setDownloadOpen(false); setSortMode("product-tag"); setComponentSearch(""); }, [group?.key, tab]);
   if (!group) return null;
 
   const archived = group.status === "archive";
   const maintenance = isMaintenanceOrder(group.orderType);
   const headerTitle = orderTypeHeaderTitle(group.orderType, group.orderTypeColor, statusLabel(group.status));
   const tabItems = itemsForCurrentTab(group.items, tab);
-  const groupedItems = groupOrderItems(tabItems, sortMode);
+  const searchedTabItems = componentSearch.trim()
+    ? tabItems.filter((item) => matchesOrderComponentSearch(item, componentSearch))
+    : tabItems;
+  const groupedItems = groupOrderItems(searchedTabItems, sortMode);
   const reasons = [...new Set(group.items.map(rejectedReason).filter(Boolean))].join("\n");
   const modalStatus = tab === "remaining" ? "remaining" : tab === "shipped" ? "shipped" : group.status;
 
@@ -665,7 +670,8 @@ function OrderDetailsModal({ group, tab, busy, onClose, onAction, onReason, onEx
 
         <div className="co-modal-body">
           {!maintenance ? <div className="co-modal-meta"><div className="co-meta-row co-meta-row--reason"><span>Reason</span><strong>{group.reason}</strong></div></div> : null}
-          <div className="co-modal-actions ro-actions ro-actions--right order-group-sort-actions">
+          <div className="co-modal-actions ro-actions ro-actions--right order-group-sort-actions order-modal-search-actions">
+            <OrderComponentSearch key={`${group.key}:${tab}`} value={componentSearch} onChange={setComponentSearch} disabled={busy} />
             <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => setDownloadOpen(true)} disabled={busy}><ClassicOrderIcon name="download" /><span>Download</span></button>
             <OrderSortButton value={sortMode} onChange={setSortMode} />
           </div>
@@ -675,7 +681,7 @@ function OrderDetailsModal({ group, tab, busy, onClose, onAction, onReason, onEx
                 <OrderGroupHeader group={section} mode={sortMode} />
                 <div className="order-component-group__items">{section.items.map(renderItem)}</div>
               </section>
-            )) : <div className="muted">No items.</div>}
+            )) : <div className="order-component-search-empty">{componentSearch.trim() ? "No matching components." : "No items."}</div>}
           </div>
         </div>
         <OrderDownloadModal

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import ClassicOrderIcon from "./ClassicOrderIcon";
 import { groupOrderItems, OrderGroupHeader, OrderSortButton } from "./OrderGrouping";
 import OrderDownloadModal from "./OrderDownloadModal";
+import OrderComponentSearch, { matchesOrderComponentSearch } from "./OrderComponentSearch";
 
 const REVIEW_TABS = [
   { key: "all", label: "All", icon: "layers" },
@@ -322,6 +323,7 @@ function ReviewDetailsModal({ group, activeTab, busyIds, onClose, onQuantitySave
   const [editingQty, setEditingQty] = useState("");
   const [sortMode, setSortMode] = useState("product-tag");
   const [downloadOpen, setDownloadOpen] = useState(false);
+  const [componentSearch, setComponentSearch] = useState("");
   const moreRef = useRef(null);
 
   useEffect(() => {
@@ -353,7 +355,7 @@ function ReviewDetailsModal({ group, activeTab, busyIds, onClose, onQuantitySave
     };
   }, [group, moreOpen, downloadOpen, onClose]);
 
-  useEffect(() => { setMoreOpen(false); setEditingQty(""); setDownloadOpen(false); setSortMode("product-tag"); }, [group?.key]);
+  useEffect(() => { setMoreOpen(false); setEditingQty(""); setDownloadOpen(false); setSortMode("product-tag"); setComponentSearch(""); }, [group?.key, activeTab]);
   if (!group) return null;
 
   const archived = group.archived;
@@ -364,7 +366,10 @@ function ReviewDetailsModal({ group, activeTab, busyIds, onClose, onQuantitySave
   const showUnarchive = archived || activeTab === "archive";
   const maintenance = isMaintenanceOrder(group.orderType);
   const headerTitle = orderTypeHeaderTitle(group.orderType, group.orderTypeColor, statusLabel(approval));
-  const groupedItems = groupOrderItems(group.items, sortMode);
+  const searchedItems = componentSearch.trim()
+    ? group.items.filter((item) => matchesOrderComponentSearch(item, componentSearch))
+    : group.items;
+  const groupedItems = groupOrderItems(searchedItems, sortMode);
   const state = archived ? "archive" : approval;
 
   const menuAction = (action) => {
@@ -414,7 +419,8 @@ function ReviewDetailsModal({ group, activeTab, busyIds, onClose, onQuantitySave
       <ProgressTrack value={archived ? 4 : workflowProgress(group)} />
       <div className="co-modal-body">
         {!maintenance ? <div className="co-modal-meta"><div className="co-meta-row co-meta-row--reason"><span>Reason</span><strong>{group.reason}</strong></div></div> : null}
-        <div className="co-modal-actions ro-actions ro-actions--right order-group-sort-actions">
+        <div className="co-modal-actions ro-actions ro-actions--right order-group-sort-actions order-modal-search-actions">
+          <OrderComponentSearch key={`${group.key}:${activeTab}`} value={componentSearch} onChange={setComponentSearch} />
           <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => setDownloadOpen(true)}><ClassicOrderIcon name="download" /><span>Download</span></button>
           <OrderSortButton value={sortMode} onChange={setSortMode} />
         </div>
@@ -425,7 +431,7 @@ function ReviewDetailsModal({ group, activeTab, busyIds, onClose, onQuantitySave
               <OrderGroupHeader group={section} mode={sortMode} />
               <div className="order-component-group__items">{section.items.map(renderItem)}</div>
             </section>
-          )) : <div className="muted">No items.</div>}
+          )) : <div className="order-component-search-empty">{componentSearch.trim() ? "No matching components." : "No items."}</div>}
         </div>
       </div>
       <OrderDownloadModal

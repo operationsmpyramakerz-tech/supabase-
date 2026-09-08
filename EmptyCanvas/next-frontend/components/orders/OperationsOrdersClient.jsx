@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import ClassicOrderIcon from "./ClassicOrderIcon";
 import { groupOrderItems, OrderGroupHeader, OrderSortButton } from "./OrderGrouping";
 import OrderDownloadModal from "./OrderDownloadModal";
+import OrderComponentSearch, { matchesOrderComponentSearch } from "./OrderComponentSearch";
 import ActionLoadingModal, { useActionLoading } from "../ActionLoadingModal";
 
 const OPERATIONS_EXPORT_COLUMNS = [
@@ -718,6 +719,7 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, editMode, o
   const [moreOpen, setMoreOpen] = useState(false);
   const [downloadOpen, setDownloadOpen] = useState(false);
   const [sortMode, setSortMode] = useState("product-tag");
+  const [componentSearch, setComponentSearch] = useState("");
   const [editItemState, setEditItemState] = useState(null);
   const moreRef = useRef(null);
   // Keep Edit mode on exactly the same grouping/sort the user was viewing
@@ -758,6 +760,7 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, editMode, o
     setMoreOpen(false);
     setDownloadOpen(false);
     setSortMode("product-tag");
+    setComponentSearch("");
     setEditItemState(null);
   }, [group?.key, tab]);
 
@@ -824,8 +827,11 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, editMode, o
   };
   const tabItems = itemsForOperationsTab(group.items, tab).map(applyEditDraft);
   const displayTabItems = expandOrderItemsForDisplay(tabItems);
+  const searchedDisplayItems = componentSearch.trim()
+    ? displayTabItems.filter((item) => matchesOrderComponentSearch(item, componentSearch))
+    : displayTabItems;
   const effectiveSortMode = isEditing ? editSortModeRef.current : sortMode;
-  const groupedItems = groupOrderItems(displayTabItems, effectiveSortMode);
+  const groupedItems = groupOrderItems(searchedDisplayItems, effectiveSortMode);
 
   const menuAction = (action) => {
     if (action === "edit") editSortModeRef.current = sortMode;
@@ -969,7 +975,8 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, editMode, o
             {group.rejectedReason ? <div className="co-meta-row co-meta-row--reason co-meta-row--reject-reason"><span>Rejected reason</span><strong>{group.rejectedReason}</strong></div> : null}
           </div>
 
-          {!isEditing ? <div className="co-modal-actions ro-actions ro-actions--right">
+          {!isEditing ? <div className="co-modal-actions ro-actions ro-actions--right order-modal-search-actions">
+            <OrderComponentSearch key={`${group.key}:${tab}`} value={componentSearch} onChange={setComponentSearch} disabled={busy} />
             {showDownload ? <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => setDownloadOpen(true)} disabled={busy}><ClassicOrderIcon name="download" /><span>Download</span></button> : null}
             <OrderSortButton value={sortMode} onChange={setSortMode} />
             {canReceive ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction("receive", receiveActionGroup)} disabled={busy}><ClassicOrderIcon name="truck" />Received by operations</button> : null}
@@ -981,12 +988,12 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, editMode, o
           </div> : <div className="next-operations-edit-mode-note"><ClassicOrderIcon name="info" /><span>Tap any component to edit its product, status and quantities.</span></div>}
 
           <div className="co-modal-items order-component-groups">
-            {groupedItems.map((section) => (
+            {groupedItems.length ? groupedItems.map((section) => (
               <section className="order-component-group" key={`${section.folderName || "products"}:${section.tag}`}>
                 <OrderGroupHeader group={section} mode={effectiveSortMode} />
                 <div className="order-component-group__items">{section.items.map(renderItem)}</div>
               </section>
-            ))}
+            )) : <div className="order-component-search-empty">{componentSearch.trim() ? "No matching components." : "No items."}</div>}
           </div>
           {isEditing ? <div className="next-operations-edit-footer"><button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancelEdit} disabled={busy}>Cancel</button><button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onSaveEdit(editChanges)} disabled={busy || !Object.keys(editChanges).length}>{busy ? "Saving…" : "Save changes"}</button></div> : null}
         </div>
