@@ -1007,7 +1007,14 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, editMode, o
             {canDeliver ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction(maintenance ? "maintenance-deliver" : "deliver", group)} disabled={busy}><ClassicOrderIcon name="check-circle" />Mark as Delivered</button> : null}
             {canCreateWithdrawal ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction("withdrawal", group)} disabled={busy}><ClassicOrderIcon name="repeat" />Create Withdrawal</button> : null}
             {canCreateDelivery ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction("delivery", group)} disabled={busy}><ClassicOrderIcon name="package" />Create Delivery</button> : null}
-          </div> : <div className="next-operations-edit-mode-note"><ClassicOrderIcon name="info" /><span>Tap any component to edit its product, status and quantities.</span></div>}
+          </div> : <>
+            <div className="co-modal-actions ro-actions ro-actions--right order-modal-search-actions next-operations-edit-actions">
+              <OrderComponentSearch key={`${group.key}:${tab}:edit`} value={componentSearch} onChange={setComponentSearch} disabled={busy} />
+              <button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancelEdit} disabled={busy}>Cancel</button>
+              <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onSaveEdit(editChanges)} disabled={busy || !Object.keys(editChanges).length}>{busy ? "Saving…" : "Save changes"}</button>
+            </div>
+            <div className="next-operations-edit-mode-note"><ClassicOrderIcon name="info" /><span>Tap any component to edit its product, status and quantities.</span></div>
+          </>}
 
           <div className="co-modal-items order-component-groups">
             {groupedItems.length ? groupedItems.map((section) => (
@@ -1017,7 +1024,6 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, editMode, o
               </section>
             )) : <div className="order-component-search-empty">{componentSearch.trim() ? "No matching components." : "No items."}</div>}
           </div>
-          {isEditing ? <div className="next-operations-edit-footer"><button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancelEdit} disabled={busy}>Cancel</button><button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onSaveEdit(editChanges)} disabled={busy || !Object.keys(editChanges).length}>{busy ? "Saving…" : "Save changes"}</button></div> : null}
         </div>
         <OrderDownloadModal
           open={downloadOpen}
