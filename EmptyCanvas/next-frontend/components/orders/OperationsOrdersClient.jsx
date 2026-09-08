@@ -799,7 +799,10 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, editMode, o
     const requestedQty = patch.requestedQty ?? (splitDisplay ? item?.quantityRequested : (serverItem.requestedQty ?? item?.quantityRequested));
     const receivedQty = patch.receivedQty ?? (splitDisplay ? item?.quantityReceived : (serverItem.receivedQty ?? item?.quantityReceived));
     const remainingQty = patch.remainingQty ?? (splitDisplay ? item?.quantityRemaining : (serverItem.remainingQty ?? item?.quantityRemaining));
-    const deliveredQty = patch.deliveredQty ?? (splitDisplay ? deliveredQuantity(item) : (serverItem.deliveredQty ?? deliveredQuantity(item)));
+    const effectiveStatus = patch.status ?? serverItem.status ?? item?.status;
+    const deliveredQty = patch.deliveredQty ?? (splitDisplay
+      ? (/(arrived|delivered|received)/i.test(text(effectiveStatus)) ? roundQty(receivedQty) : 0)
+      : (serverItem.deliveredQty ?? deliveredQuantity(item)));
     return {
       ...item,
       ...serverItem,
@@ -827,6 +830,14 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, editMode, o
       sourceKits: Array.isArray(item?.sourceKits) ? item.sourceKits : serverItem.sourceKits,
       sourceBreakdown: Array.isArray(item?.sourceBreakdown) ? item.sourceBreakdown : serverItem.sourceBreakdown,
       status: patch.status ?? serverItem.status ?? item?.status,
+      // Keep both API-style aliases and the normalized display fields scoped to
+      // this visible kit row. `serverItem` contains the aggregate values for the
+      // shared database row, so leaving requestedQty/receivedQty/etc. untouched
+      // makes the Edit component modal show the sum of all kit memberships.
+      requestedQty,
+      receivedQty,
+      remainingQty,
+      deliveredQty,
       quantityRequested: requestedQty,
       quantity: requestedQty,
       quantityProgress: null,
@@ -834,7 +845,6 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, editMode, o
       quantityReceived: receivedQty,
       quantityRemaining: remainingQty,
       quantityReceivedEdited: true,
-      deliveredQty,
     };
   };
   const tabItems = itemsForOperationsTab(group.items, tab).map(applyEditDraft);
@@ -1460,10 +1470,22 @@ function OperationsComponentEditModal({ state, products = [], statusOptions = []
       setValidationError("");
       return;
     }
-    const requested = Number(item?.requestedQty ?? item?.quantityRequested ?? requestedQuantity(item)) || 0;
-    const received = Number(item?.receivedQty ?? item?.quantityReceived ?? receivedQuantity(item)) || 0;
-    const remaining = Number(item?.remainingQty ?? item?.quantityRemaining ?? remainingQuantity(item)) || 0;
-    const delivered = Number(item?.deliveredQty ?? deliveredQuantity(item)) || 0;
+    const sourceSpecific = Number(item?._displaySourceCount || 0) > 1;
+    // For proposal components that appear in multiple kit tags, the visible row
+    // already carries the correctly split quantity. Prefer those per-kit fields
+    // over the aggregate edit/init aliases returned for the shared DB row.
+    const requested = Number(sourceSpecific
+      ? (item?.quantityRequested ?? requestedQuantity(item))
+      : (item?.requestedQty ?? item?.quantityRequested ?? requestedQuantity(item))) || 0;
+    const received = Number(sourceSpecific
+      ? (item?.quantityReceived ?? receivedQuantity(item))
+      : (item?.receivedQty ?? item?.quantityReceived ?? receivedQuantity(item))) || 0;
+    const remaining = Number(sourceSpecific
+      ? (item?.quantityRemaining ?? remainingQuantity(item))
+      : (item?.remainingQty ?? item?.quantityRemaining ?? remainingQuantity(item))) || 0;
+    const delivered = Number(sourceSpecific
+      ? (/(arrived|delivered|received)/i.test(text(item?.status)) ? received : 0)
+      : (item?.deliveredQty ?? deliveredQuantity(item))) || 0;
     const matchedProduct = products.find((product) => String(product?.id || "") === String(item?.productId || ""))
       || products.find((product) => lower(product?.name) === lower(item?.productName));
     setForm({
