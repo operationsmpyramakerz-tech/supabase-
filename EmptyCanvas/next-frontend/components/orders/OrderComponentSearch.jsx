@@ -31,7 +31,7 @@ export function matchesOrderComponentSearch(item, query) {
   return fields.some((value) => normalized(value).includes(needle));
 }
 
-export default function OrderComponentSearch({ value = "", onChange, disabled = false, ariaLabel = "Search components" }) {
+export default function OrderComponentSearch({ value = "", onChange, disabled = false, ariaLabel = "Search components", collapseOnToggle = false }) {
   const [expanded, setExpanded] = useState(Boolean(value));
   const inputRef = useRef(null);
 
@@ -41,8 +41,13 @@ export default function OrderComponentSearch({ value = "", onChange, disabled = 
     return () => window.cancelAnimationFrame(frame);
   }, [expanded]);
 
-  const openSearch = () => {
+  const toggleSearch = () => {
     if (disabled) return;
+    if (expanded && collapseOnToggle) {
+      onChange?.("");
+      setExpanded(false);
+      return;
+    }
     if (!expanded) setExpanded(true);
     else inputRef.current?.focus();
   };
@@ -57,10 +62,10 @@ export default function OrderComponentSearch({ value = "", onChange, disabled = 
       <button
         type="button"
         className="order-component-search__toggle"
-        onClick={openSearch}
-        aria-label={ariaLabel}
+        onClick={toggleSearch}
+        aria-label={expanded && collapseOnToggle ? "Close component search" : ariaLabel}
         aria-expanded={expanded}
-        title={ariaLabel}
+        title={expanded && collapseOnToggle ? "Close search" : ariaLabel}
         disabled={disabled}
       >
         <ClassicOrderIcon name="search" />

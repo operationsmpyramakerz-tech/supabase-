@@ -998,7 +998,7 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, editMode, o
           </div>
 
           {!isEditing ? <div className="co-modal-actions ro-actions ro-actions--right order-modal-search-actions">
-            <OrderComponentSearch key={`${group.key}:${tab}`} value={componentSearch} onChange={setComponentSearch} disabled={busy} />
+            <OrderComponentSearch key={`${group.key}:${tab}`} value={componentSearch} onChange={setComponentSearch} disabled={busy} collapseOnToggle />
             {showDownload ? <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => setDownloadOpen(true)} disabled={busy}><ClassicOrderIcon name="download" /><span>Download</span></button> : null}
             <OrderSortButton value={sortMode} onChange={setSortMode} />
             {canReceive ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction("receive", receiveActionGroup)} disabled={busy}><ClassicOrderIcon name="truck" />Received by operations</button> : null}
@@ -1009,7 +1009,7 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, editMode, o
             {canCreateDelivery ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction("delivery", group)} disabled={busy}><ClassicOrderIcon name="package" />Create Delivery</button> : null}
           </div> : <>
             <div className="co-modal-actions ro-actions ro-actions--right order-modal-search-actions next-operations-edit-actions">
-              <OrderComponentSearch key={`${group.key}:${tab}:edit`} value={componentSearch} onChange={setComponentSearch} disabled={busy} />
+              <OrderComponentSearch key={`${group.key}:${tab}:edit`} value={componentSearch} onChange={setComponentSearch} disabled={busy} collapseOnToggle />
               <button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancelEdit} disabled={busy}>Cancel</button>
               <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onSaveEdit(editChanges)} disabled={busy || !Object.keys(editChanges).length}>{busy ? "Saving…" : "Save changes"}</button>
             </div>
