@@ -785,12 +785,21 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, editMode, o
   const editChanges = editMode?.changes || {};
   const applyEditDraft = (item) => {
     const id = text(item?.id);
+    const displayKey = text(item?._displayKey) || id;
     const serverItem = editItemsById[id] || {};
-    const patch = editChanges[id] || {};
+    const patch = editChanges[displayKey] || editChanges[id] || {};
     if (!id || (!Object.keys(serverItem).length && !Object.keys(patch).length)) return item;
-    const requestedQty = patch.requestedQty ?? serverItem.requestedQty ?? item?.quantityRequested;
-    const receivedQty = patch.receivedQty ?? serverItem.receivedQty ?? item?.quantityReceived;
-    const remainingQty = patch.remainingQty ?? serverItem.remainingQty ?? item?.quantityRemaining;
+
+    // Proposal-generated orders can persist one database row for a component that
+    // belongs to multiple kits. The normal order view expands that row into one
+    // visible line per kit. In Edit mode those visible lines must keep their own
+    // quantities instead of being replaced by the aggregate quantity returned by
+    // edit/init for the shared database row.
+    const splitDisplay = Number(item?._displaySourceCount || 0) > 1;
+    const requestedQty = patch.requestedQty ?? (splitDisplay ? item?.quantityRequested : (serverItem.requestedQty ?? item?.quantityRequested));
+    const receivedQty = patch.receivedQty ?? (splitDisplay ? item?.quantityReceived : (serverItem.receivedQty ?? item?.quantityReceived));
+    const remainingQty = patch.remainingQty ?? (splitDisplay ? item?.quantityRemaining : (serverItem.remainingQty ?? item?.quantityRemaining));
+    const deliveredQty = patch.deliveredQty ?? (splitDisplay ? deliveredQuantity(item) : (serverItem.deliveredQty ?? deliveredQuantity(item)));
     return {
       ...item,
       ...serverItem,
@@ -801,6 +810,9 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, editMode, o
       // identity from the currently displayed row so simply entering Edit mode
       // cannot move a component to another kit/product group. Explicit edits
       // still win through `patch`.
+      _displayKey: item?._displayKey,
+      _displaySourceIndex: item?._displaySourceIndex,
+      _displaySourceCount: item?._displaySourceCount,
       productName: patch.productName ?? item?.productName ?? serverItem.productName,
       productUrl: patch.productUrl ?? item?.productUrl ?? serverItem.productUrl,
       unitPrice: patch.unitPrice ?? serverItem.unitPrice ?? item?.unitPrice,
@@ -822,11 +834,11 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, editMode, o
       quantityReceived: receivedQty,
       quantityRemaining: remainingQty,
       quantityReceivedEdited: true,
-      deliveredQty: patch.deliveredQty ?? serverItem.deliveredQty ?? deliveredQuantity(item),
+      deliveredQty,
     };
   };
   const tabItems = itemsForOperationsTab(group.items, tab).map(applyEditDraft);
-  const displayTabItems = expandOrderItemsForDisplay(tabItems);
+  const displayTabItems = expandOrderItemsForDisplay(tabItems).map(applyEditDraft);
   const searchedDisplayItems = componentSearch.trim()
     ? displayTabItems.filter((item) => matchesOrderComponentSearch(item, componentSearch))
     : displayTabItems;
@@ -1565,8 +1577,16 @@ function OperationsComponentEditModal({ state, products = [], statusOptions = []
       return;
     }
     setValidationError("");
+    const source = Array.isArray(item?.sourceBreakdown) ? item.sourceBreakdown[0] : null;
+    const sourceSpecific = Number(item?._displaySourceCount || 0) > 1;
     onApply({
       id: form.id,
+      editKey: text(item?._displayKey) || form.id,
+      sourceSpecific,
+      sourceIndex: Number.isInteger(item?._displaySourceIndex) ? item._displaySourceIndex : null,
+      sourceCount: Number.isInteger(item?._displaySourceCount) ? item._displaySourceCount : null,
+      sourceKitId: text(source?.kitId),
+      sourceKitName: text(source?.kitTag || form.kitTag),
       productId: form.productId,
       productName: form.productName,
       productUrl: form.productUrl,
@@ -2034,11 +2054,12 @@ export default function OperationsOrdersClient({ initialOrders = [], bootstrapWa
   function patchOperationsEditItem(patch) {
     const id = text(patch?.id);
     if (!id) return;
+    const editKey = text(patch?.editKey) || id;
     setEditMode((current) => current ? {
       ...current,
       changes: {
         ...(current.changes || {}),
-        [id]: { ...(current.changes?.[id] || {}), ...patch, id },
+        [editKey]: { ...(current.changes?.[editKey] || {}), ...patch, id, editKey },
       },
     } : current);
   }
