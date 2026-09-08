@@ -1,5 +1,6 @@
 import NotificationsBell from "./notifications/NotificationsBell";
 import UserProfileMenu from "./UserProfileMenu";
+import HeaderSearch from "./HeaderSearch";
 import TaskManagementSidebarFlyout from "./task-management/TaskManagementSidebarFlyout";
 import {
   BodyClassSync,
@@ -185,10 +186,7 @@ export default function AppShell({
               <div className="left">
                 <HeaderMenuToggle />
                 <div className="dash-title">{title}</div>
-                <div className="searchbar" role="search">
-                  <ClassicIcon name="search" />
-                  <input type="search" placeholder="Search" aria-label={`Search in ${title}`} />
-                </div>
+                <HeaderSearch title={title} />
               </div>
               <div className="right topbar-right">
                 <NotificationsBell classic />
