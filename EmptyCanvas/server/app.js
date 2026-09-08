@@ -5322,6 +5322,105 @@ async function _sbUpdateOrderRowSafe(id, row = {}) {
   throw err;
 }
 
+function _sbOperationsSplitQtyBySources(value, sources = []) {
+  const list = Array.isArray(sources) ? sources : [];
+  if (!list.length) return [];
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || Math.abs(numeric) < 1e-9) return list.map(() => 0);
+
+  const sign = numeric < 0 ? -1 : 1;
+  const targetAbs = Math.abs(numeric);
+  const weights = list.map((source) => Math.max(0, Number(source?.quantity) || 0));
+  const weightTotal = weights.reduce((sum, weight) => sum + weight, 0);
+  if (weightTotal <= 0) {
+    return list.map((_, index) => index === 0 ? roundOrderQty(numeric) : 0);
+  }
+
+  // Keep integer order quantities exactly aligned with the client display split
+  // (largest-remainder allocation). Decimal quantities stay proportional.
+  if (Math.abs(targetAbs - Math.round(targetAbs)) < 1e-9) {
+    const target = Math.round(targetAbs);
+    const parts = weights.map((weight, index) => {
+      const raw = (weight * target) / weightTotal;
+      const base = Math.floor(raw);
+      return { index, value: base, fraction: raw - base };
+    });
+    let remaining = target - parts.reduce((sum, part) => sum + part.value, 0);
+    const ranked = parts.slice().sort((a, b) => (b.fraction - a.fraction) || (a.index - b.index));
+    for (let i = 0; remaining > 0 && ranked.length; i = (i + 1) % ranked.length) {
+      ranked[i].value += 1;
+      remaining -= 1;
+    }
+    return parts.sort((a, b) => a.index - b.index).map((part) => sign * part.value);
+  }
+
+  const result = weights.map((weight) => roundOrderQty(sign * targetAbs * weight / weightTotal));
+  const difference = roundOrderQty(numeric - result.reduce((sum, part) => sum + part, 0));
+  if (Math.abs(difference) > 1e-9) result[result.length - 1] = roundOrderQty(result[result.length - 1] + difference);
+  return result;
+}
+
+function _sbOperationsSourceKey(source = {}, index = 0) {
+  const kitId = String(source?.kitId || source?.kit_id || source?.id || "").trim();
+  const kitName = String(source?.kitName || source?.kit_name || source?.name || "").trim();
+  return kitId ? `id:${kitId}` : `name:${normKey(kitName)}:${index}`;
+}
+
+function _sbOperationsSplitOrderRow(row = {}) {
+  const sources = _sbProposalSourceKits(_sbOrderGet(row, ["source_kits", "Source Kits", "proposal_source_kits", "Proposal Source Kits"]));
+  if (sources.length <= 1) return null;
+
+  const serialized = _sbSerializeOrderRow(row);
+  const requested = Number(serialized?.quantityRequested ?? serialized?.quantity ?? 0) || 0;
+  const base = Number(serialized?.quantity ?? requested) || 0;
+  const received = Number(serialized?.quantityReceived ?? 0) || 0;
+  const remaining = Number(serialized?.quantityRemaining ?? (base - received)) || 0;
+  const editedRaw = serialized?.quantityEditedBySupervisor;
+  const requestedParts = _sbOperationsSplitQtyBySources(requested, sources);
+  const baseParts = _sbOperationsSplitQtyBySources(base, sources);
+  const receivedParts = _sbOperationsSplitQtyBySources(received, sources);
+  const remainingParts = _sbOperationsSplitQtyBySources(remaining, sources);
+  const editedParts = editedRaw === null || typeof editedRaw === "undefined"
+    ? sources.map(() => null)
+    : _sbOperationsSplitQtyBySources(Number(editedRaw) || 0, sources);
+
+  return sources.map((source, index) => {
+    const requestedQty = roundOrderQty(requestedParts[index] ?? 0);
+    const sourceQuantity = Math.abs(requestedQty);
+    const cleanSource = {
+      kitId: String(source?.kitId || "").trim(),
+      kitName: String(source?.kitName || "").trim(),
+      quantity: sourceQuantity,
+      order: Number.isFinite(Number(source?.order)) ? Number(source.order) : index,
+    };
+    return {
+      source: cleanSource,
+      sourceIndex: index,
+      sourceKey: _sbOperationsSourceKey(cleanSource, index),
+      row: {
+        ...(row || {}),
+        quantity_requested: requestedQty,
+        quantity_progress: roundOrderQty(baseParts[index] ?? requestedQty),
+        quantity_edited_by_supervisor: editedParts[index],
+        quantity_received_by_operations: roundOrderQty(receivedParts[index] ?? 0),
+        quantity_remaining: roundOrderQty(remainingParts[index] ?? ((baseParts[index] ?? requestedQty) - (receivedParts[index] ?? 0))),
+        kit_tag: cleanSource.kitName || null,
+        source_kits: [cleanSource],
+      },
+    };
+  });
+}
+
+function _sbOperationsCloneOrderInsertRow(row = {}) {
+  const clone = { ...(row || {}) };
+  // `id` is the Supabase primary key. Legacy/import identifiers can also be
+  // unique, so never copy them when materializing a second physical row.
+  ["id", "ID", "notion_page_id", "notion_id", "page_id", "notionPageId"].forEach((key) => {
+    if (Object.prototype.hasOwnProperty.call(clone, key)) delete clone[key];
+  });
+  return _sbCleanInsertRow(clone);
+}
+
 async function _sbBuildProductLookupsForOrderEdit() {
   const products = await _sbProductsList().catch(() => []);
   const byId = new Map();
@@ -30719,123 +30818,236 @@ app.post(
       const normalizedItemUpdates = Array.isArray(itemUpdates)
         ? itemUpdates.filter((entry) => entry && typeof entry === "object")
         : [];
-      const itemUpdateById = new Map(
-        normalizedItemUpdates
-          .map((entry) => [String(entry?.id || entry?.orderId || entry?.order_id || "").trim(), entry])
-          .filter(([id]) => id),
-      );
-      const productMap = itemUpdateById.size ? await _sbProductsMapById().catch(() => new Map()) : new Map();
+      const itemUpdatesById = new Map();
+      for (const entry of normalizedItemUpdates) {
+        const id = String(entry?.id || entry?.orderId || entry?.order_id || "").trim();
+        if (!id) continue;
+        if (!itemUpdatesById.has(id)) itemUpdatesById.set(id, []);
+        itemUpdatesById.get(id).push(entry);
+      }
+      const productMap = itemUpdatesById.size ? await _sbProductsMapById().catch(() => new Map()) : new Map();
       const beforeById = new Map((rowsBeforeUpdate || []).filter(Boolean).map((row) => [String(row?.id ?? ""), row]));
       const updatedRows = [];
+      const combinedReceiptFiles = [...keepReceiptEntries, ...uploadedReceiptFiles];
+      const receiptPhotosValue = combinedReceiptFiles.length ? JSON.stringify(combinedReceiptFiles) : null;
+      const globalReceiptPatch = {};
+      if (receiptTextProvided) globalReceiptPatch.receipt_number = receiptText || null;
+      if (shouldReplaceReceiptPhotos) {
+        // Always replace the operation receipt photos with exactly the list saved from the edit modal.
+        // Clearing these alias columns prevents old imported/legacy receipt photos from reappearing in the UI.
+        globalReceiptPatch.order_receipt = receiptPhotosValue;
+        globalReceiptPatch.delivery_receipt = receiptPhotosValue;
+        globalReceiptPatch.receipt_photos = receiptPhotosValue;
+        globalReceiptPatch.maintenance_receipt = receiptPhotosValue;
+      }
+
+      const buildItemPatch = (beforeRow, itemUpdate, sourceMeta = null) => {
+        if (!itemUpdate) return {};
+        const patch = {};
+        const has = (key) => Object.prototype.hasOwnProperty.call(itemUpdate, key);
+        const numberField = (key, label) => {
+          if (!has(key)) return null;
+          const value = Number(itemUpdate[key]);
+          if (!Number.isFinite(value)) {
+            const error = new Error(`${label} must be a valid number.`);
+            error.status = 400;
+            throw error;
+          }
+          return roundOrderQty(value);
+        };
+
+        if (has("productId")) {
+          const productId = String(itemUpdate.productId || "").trim();
+          const product = productMap.get(productId) || null;
+          if (!product?.id) {
+            const error = new Error("The selected Product component was not found.");
+            error.status = 400;
+            throw error;
+          }
+          patch.product_id = Number.isFinite(Number(product.id)) ? Number(product.id) : String(product.id);
+          patch.product_name = String(product.name || "Unknown Product").trim() || "Unknown Product";
+          patch.product_url = product.url || null;
+          patch.unit_price = Number.isFinite(Number(product.unitPrice)) ? Number(product.unitPrice) : null;
+          patch.product_tag = firstProductTagForServer(product);
+        }
+
+        if (has("unitPrice")) {
+          patch.unit_price = itemUpdate.unitPrice === null || itemUpdate.unitPrice === ""
+            ? null
+            : numberField("unitPrice", "Unit cost");
+        }
+        if (has("productTag")) patch.product_tag = String(itemUpdate.productTag || "").trim() || null;
+        if (has("kitTag")) patch.kit_tag = String(itemUpdate.kitTag || "").trim() || null;
+        if (has("reason")) patch.reason = String(itemUpdate.reason || "").trim() || null;
+        if (has("issueDescription")) patch.issue_description = String(itemUpdate.issueDescription || "").replace(/\r\n/g, "\n").trim() || null;
+
+        if (has("status")) {
+          const status = String(itemUpdate.status || "").trim();
+          if (!status) {
+            const error = new Error("Status is required.");
+            error.status = 400;
+            throw error;
+          }
+          patch.status = status;
+        }
+
+        const serializedBefore = _sbSerializeOrderRow(beforeRow);
+        const requestedQty = has("requestedQty")
+          ? numberField("requestedQty", "Requested quantity")
+          : roundOrderQty(Number(serializedBefore?.quantityRequested ?? serializedBefore?.quantity ?? 0) || 0);
+        let receivedQty = has("receivedQty")
+          ? numberField("receivedQty", "Received quantity")
+          : roundOrderQty(Number(serializedBefore?.quantityReceived ?? 0) || 0);
+        let remainingQty = has("remainingQty")
+          ? numberField("remainingQty", "Remaining quantity")
+          : roundOrderQty(Number(serializedBefore?.quantityRemaining ?? (requestedQty - receivedQty)) || 0);
+
+        const nextStatus = String(has("status") ? itemUpdate.status : serializedBefore?.status || "").trim();
+        const finalStatus = /(arrived|delivered|received)/i.test(nextStatus);
+        if (has("deliveredQty")) {
+          const deliveredQty = numberField("deliveredQty", "Delivered quantity");
+          if (finalStatus) {
+            receivedQty = deliveredQty;
+            remainingQty = roundOrderQty(requestedQty - deliveredQty);
+          } else if (Math.abs(deliveredQty) > 1e-9) {
+            const error = new Error("Delivered quantity can only be greater than zero when the status is Arrived/Delivered.");
+            error.status = 400;
+            throw error;
+          }
+        }
+
+        if (has("requestedQty")) {
+          patch.quantity_requested = requestedQty;
+          patch.quantity_progress = requestedQty;
+          patch.quantity_edited_by_supervisor = null;
+        }
+        if (has("receivedQty") || has("remainingQty") || has("requestedQty") || has("deliveredQty")) {
+          patch.quantity_received_by_operations = receivedQty;
+          patch.quantity_remaining = remainingQty;
+        }
+
+        // Once a shared proposal row is materialized into one physical row per
+        // kit source, keep the source_kits JSON aligned with that row's edited
+        // quantity/tag. This prevents the order view from recombining it later.
+        if (sourceMeta) {
+          const kitName = has("kitTag")
+            ? String(itemUpdate.kitTag || "").trim()
+            : String(sourceMeta?.kitName || itemUpdate?.sourceKitName || "").trim();
+          const sourceQuantity = Math.abs(requestedQty);
+          patch.kit_tag = kitName || null;
+          patch.source_kits = [{
+            kitId: String(sourceMeta?.kitId || itemUpdate?.sourceKitId || "").trim(),
+            kitName,
+            quantity: sourceQuantity,
+            order: Number.isFinite(Number(sourceMeta?.order)) ? Number(sourceMeta.order) : 0,
+          }];
+        }
+
+        return patch;
+      };
+
+      const applyQuantityMapPatch = (beforeRow, rawQty) => {
+        const value = Number(rawQty);
+        if (!Number.isFinite(value)) {
+          const error = new Error("Quantity received must be a valid number.");
+          error.status = 400;
+          throw error;
+        }
+        const serialized = _sbSerializeOrderRow(beforeRow);
+        const base = Number(serialized?.quantity) || 0;
+        let nextQty = roundOrderQty(value);
+        if (base < 0 && nextQty > 0) nextQty = -Math.abs(nextQty);
+        const clampedQty = clampOrderQtyToBase(base, nextQty);
+        return {
+          quantity_received_by_operations: clampedQty,
+          quantity_remaining: roundOrderQty(base - clampedQty),
+        };
+      };
 
       for (const id of ids) {
         const beforeRow = beforeById.get(String(id)) || null;
         if (!beforeRow) continue;
-        const patch = {};
-        const itemUpdate = itemUpdateById.get(String(id)) || null;
+        const updatesForId = itemUpdatesById.get(String(id)) || [];
+        const sourceSpecificUpdates = updatesForId.filter((entry) => entry?.sourceSpecific === true || Number(entry?.sourceCount || 0) > 1);
+        const splitRows = sourceSpecificUpdates.length ? _sbOperationsSplitOrderRow(beforeRow) : null;
 
-        if (itemUpdate) {
-          const has = (key) => Object.prototype.hasOwnProperty.call(itemUpdate, key);
-          const numberField = (key, label) => {
-            if (!has(key)) return null;
-            const value = Number(itemUpdate[key]);
-            if (!Number.isFinite(value)) {
-              const error = new Error(`${label} must be a valid number.`);
-              error.status = 400;
-              throw error;
+        if (splitRows && splitRows.length > 1) {
+          const updateBySourceIndex = new Map();
+          const updateBySourceId = new Map();
+          const updateBySourceName = new Map();
+          sourceSpecificUpdates.forEach((entry) => {
+            const index = Number(entry?.sourceIndex);
+            if (Number.isInteger(index) && index >= 0) updateBySourceIndex.set(index, entry);
+            const kitId = String(entry?.sourceKitId || "").trim();
+            if (kitId) updateBySourceId.set(kitId, entry);
+            const kitName = normKey(entry?.sourceKitName || "");
+            if (kitName) updateBySourceName.set(kitName, entry);
+          });
+
+          const quantityOverride = Object.prototype.hasOwnProperty.call(quantityMap, String(id))
+            ? Number(quantityMap[String(id)])
+            : null;
+          if (quantityOverride !== null && !Number.isFinite(quantityOverride)) {
+            const error = new Error("Quantity received must be a valid number.");
+            error.status = 400;
+            throw error;
+          }
+          const quantityParts = quantityOverride === null
+            ? null
+            : _sbOperationsSplitQtyBySources(quantityOverride, splitRows.map((entry) => entry.source));
+
+          const materializedRows = splitRows.map((splitEntry, sourceIndex) => {
+            const source = splitEntry.source || {};
+            const itemUpdate = updateBySourceId.get(String(source?.kitId || "").trim())
+              || updateBySourceIndex.get(sourceIndex)
+              || updateBySourceName.get(normKey(source?.kitName || ""))
+              || null;
+            const patch = buildItemPatch(splitEntry.row, itemUpdate, source);
+            if (quantityParts) {
+              Object.assign(patch, applyQuantityMapPatch(splitEntry.row, quantityParts[sourceIndex] ?? 0));
             }
-            return roundOrderQty(value);
-          };
+            return {
+              ...splitEntry,
+              finalRow: { ...splitEntry.row, ...patch, ...globalReceiptPatch },
+              updatePatch: {
+                quantity_requested: splitEntry.row.quantity_requested,
+                quantity_progress: splitEntry.row.quantity_progress,
+                quantity_edited_by_supervisor: splitEntry.row.quantity_edited_by_supervisor,
+                quantity_received_by_operations: splitEntry.row.quantity_received_by_operations,
+                quantity_remaining: splitEntry.row.quantity_remaining,
+                kit_tag: splitEntry.row.kit_tag,
+                source_kits: splitEntry.row.source_kits,
+                ...patch,
+                ...globalReceiptPatch,
+              },
+            };
+          });
 
-          if (has("productId")) {
-            const productId = String(itemUpdate.productId || "").trim();
-            const product = productMap.get(productId) || null;
-            if (!product?.id) {
-              return res.status(400).json({ error: "The selected Product component was not found." });
+          // Insert the extra physical rows first. If anything fails, clean them
+          // up and leave the original aggregate row untouched.
+          const insertedRows = [];
+          try {
+            for (let index = 1; index < materializedRows.length; index += 1) {
+              const inserted = await _sbInsertOrderRowSafe(_sbOperationsCloneOrderInsertRow(materializedRows[index].finalRow));
+              insertedRows.push(inserted);
             }
-            patch.product_id = Number.isFinite(Number(product.id)) ? Number(product.id) : String(product.id);
-            patch.product_name = String(product.name || "Unknown Product").trim() || "Unknown Product";
-            patch.product_url = product.url || null;
-            patch.unit_price = Number.isFinite(Number(product.unitPrice)) ? Number(product.unitPrice) : null;
-            patch.product_tag = firstProductTagForServer(product);
-          }
-
-          if (has("unitPrice")) {
-            patch.unit_price = itemUpdate.unitPrice === null || itemUpdate.unitPrice === ""
-              ? null
-              : numberField("unitPrice", "Unit cost");
-          }
-          if (has("productTag")) patch.product_tag = String(itemUpdate.productTag || "").trim() || null;
-          if (has("kitTag")) patch.kit_tag = String(itemUpdate.kitTag || "").trim() || null;
-          if (has("reason")) patch.reason = String(itemUpdate.reason || "").trim() || null;
-          if (has("issueDescription")) patch.issue_description = String(itemUpdate.issueDescription || "").replace(/\r\n/g, "\n").trim() || null;
-
-          if (has("status")) {
-            const status = String(itemUpdate.status || "").trim();
-            if (!status) return res.status(400).json({ error: "Status is required." });
-            patch.status = status;
-          }
-
-          const serializedBefore = _sbSerializeOrderRow(beforeRow);
-          const requestedQty = has("requestedQty")
-            ? numberField("requestedQty", "Requested quantity")
-            : roundOrderQty(Number(serializedBefore?.quantityRequested ?? serializedBefore?.quantity ?? 0) || 0);
-          let receivedQty = has("receivedQty")
-            ? numberField("receivedQty", "Received quantity")
-            : roundOrderQty(Number(serializedBefore?.quantityReceived ?? 0) || 0);
-          let remainingQty = has("remainingQty")
-            ? numberField("remainingQty", "Remaining quantity")
-            : roundOrderQty(Number(serializedBefore?.quantityRemaining ?? (requestedQty - receivedQty)) || 0);
-
-          const nextStatus = String(has("status") ? itemUpdate.status : serializedBefore?.status || "").trim();
-          const finalStatus = /(arrived|delivered|received)/i.test(nextStatus);
-          if (has("deliveredQty")) {
-            const deliveredQty = numberField("deliveredQty", "Delivered quantity");
-            if (finalStatus) {
-              receivedQty = deliveredQty;
-              remainingQty = roundOrderQty(requestedQty - deliveredQty);
-            } else if (Math.abs(deliveredQty) > 1e-9) {
-              return res.status(400).json({ error: "Delivered quantity can only be greater than zero when the status is Arrived/Delivered." });
+            const firstUpdated = await _sbUpdateOrderRowSafe(id, materializedRows[0].updatePatch);
+            updatedRows.push(firstUpdated, ...insertedRows);
+          } catch (splitError) {
+            for (const inserted of insertedRows) {
+              const insertedId = String(_sbOrderGet(inserted, ["id", "ID"]) ?? "").trim();
+              if (insertedId) await supabaseDb.deleteById(_sbOrdersTable(), insertedId).catch(() => {});
             }
+            throw splitError;
           }
-
-          if (has("requestedQty")) {
-            patch.quantity_requested = requestedQty;
-            patch.quantity_progress = requestedQty;
-            patch.quantity_edited_by_supervisor = null;
-          }
-          if (has("receivedQty") || has("remainingQty") || has("requestedQty") || has("deliveredQty")) {
-            patch.quantity_received_by_operations = receivedQty;
-            patch.quantity_remaining = remainingQty;
-          }
+          continue;
         }
 
-        if (receiptTextProvided) {
-          patch.receipt_number = receiptText || null;
-        }
-        if (shouldReplaceReceiptPhotos) {
-          const combinedReceiptFiles = [...keepReceiptEntries, ...uploadedReceiptFiles];
-          const receiptPhotosValue = combinedReceiptFiles.length ? JSON.stringify(combinedReceiptFiles) : null;
-          // Always replace the operation receipt photos with exactly the list saved from the edit modal.
-          // Clearing these alias columns prevents old imported/legacy receipt photos from reappearing in the UI.
-          patch.order_receipt = receiptPhotosValue;
-          patch.delivery_receipt = receiptPhotosValue;
-          patch.receipt_photos = receiptPhotosValue;
-          patch.maintenance_receipt = receiptPhotosValue;
-        }
+        const itemUpdate = updatesForId[updatesForId.length - 1] || null;
+        const patch = { ...buildItemPatch(beforeRow, itemUpdate), ...globalReceiptPatch };
 
         if (Object.prototype.hasOwnProperty.call(quantityMap, String(id))) {
-          const rawQty = Number(quantityMap[String(id)]);
-          if (!Number.isFinite(rawQty)) {
-            return res.status(400).json({ error: "Quantity received must be a valid number." });
-          }
-          const serialized = _sbSerializeOrderRow(beforeRow);
-          const base = Number(serialized?.quantity) || 0;
-          let nextQty = roundOrderQty(rawQty);
-          if (base < 0 && nextQty > 0) nextQty = -Math.abs(nextQty);
-          const clampedQty = clampOrderQtyToBase(base, nextQty);
-          patch.quantity_received_by_operations = clampedQty;
-          patch.quantity_remaining = roundOrderQty(base - clampedQty);
+          Object.assign(patch, applyQuantityMapPatch(beforeRow, quantityMap[String(id)]));
         }
 
         if (!Object.keys(patch).length) {
@@ -30872,7 +31084,10 @@ app.post(
       try { await cacheDel("cache:api:orders:requested:v7"); } catch {}
       try { await cacheDel("cache:api:b2b:school-stock:supabase:v1"); } catch {}
 
-      const freshRowsAfterUpdate = await _sbOrderRowsByIds(ids).catch(() => updatedRows);
+      const responseIds = updatedRows
+        .map((row) => String(_sbOrderGet(row, ["id", "ID"]) ?? "").trim())
+        .filter(Boolean);
+      const freshRowsAfterUpdate = await _sbOrderRowsByIds(responseIds.length ? responseIds : ids).catch(() => updatedRows);
       const responseRows = Array.isArray(freshRowsAfterUpdate) && freshRowsAfterUpdate.length ? freshRowsAfterUpdate : updatedRows;
 
       if (stocktakingSyncErrors.length) {
