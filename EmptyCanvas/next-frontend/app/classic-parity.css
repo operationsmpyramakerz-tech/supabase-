@@ -15497,7 +15497,7 @@ body.operations-orders-page .next-classic-orders-parity .order-component-search_
 
 /* ===== Classic shell · modern expandable global search ===== */
 .classic-app-shell .main-header .searchbar.system-header-search{
-  --system-search-size:42px;
+  --system-search-size:44px;
   position:relative;
   display:flex !important;
   align-items:center;
@@ -15512,7 +15512,7 @@ body.operations-orders-page .next-classic-orders-parity .order-component-search_
   overflow:hidden;
   order:0 !important;
   border:1px solid #e4e7ec !important;
-  border-radius:13px !important;
+  border-radius:999px !important;
   background:#f8fafc !important;
   box-shadow:0 1px 2px rgba(16,24,40,.04),0 6px 18px rgba(16,24,40,.06) !important;
   transition:
@@ -15545,7 +15545,7 @@ body.operations-orders-page .next-classic-orders-parity .order-component-search_
   flex:0 0 var(--system-search-size);
   width:var(--system-search-size);
   height:var(--system-search-size);
-  border-radius:12px;
+  border-radius:999px;
   background:#101828;
   color:#fff;
 }
@@ -15554,7 +15554,7 @@ body.operations-orders-page .next-classic-orders-parity .order-component-search_
   width:34px;
   height:34px;
   margin-left:3px;
-  border-radius:10px;
+  border-radius:999px;
 }
 .classic-app-shell .main-header .system-header-search__toggle:hover{
   background:#1d2939;
