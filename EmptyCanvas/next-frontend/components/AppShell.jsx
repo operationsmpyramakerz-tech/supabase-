@@ -186,9 +186,9 @@ export default function AppShell({
               <div className="left">
                 <HeaderMenuToggle />
                 <div className="dash-title">{title}</div>
-                <HeaderSearch title={title} />
               </div>
               <div className="right topbar-right">
+                <HeaderSearch title={title} />
                 <NotificationsBell classic />
                 <UserProfileMenu account={account} />
               </div>
