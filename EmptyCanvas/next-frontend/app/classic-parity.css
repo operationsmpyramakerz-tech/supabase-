@@ -16237,3 +16237,315 @@ body.operations-orders-page .next-classic-orders-parity .next-operations-order-c
     max-height: 86px !important;
   }
 }
+
+/* ========================================================================
+   Mobile bottom sidebar / page dock — responsive pass 2
+   2026-09-09
+   Keep desktop untouched.  On phones the page navigation is a compact,
+   predictable two-part dock: Home + horizontally scrollable page icons.
+   This intentionally overrides the older desktop boundary spacing and the
+   oversized first/active mobile item rules that were stretching the dock.
+   ===================================================================== */
+@media (max-width: 768px) {
+  :root {
+    --mobile-home-block-w: 56px;
+    --mobile-home-gap: 8px;
+    --mobile-home-bridge-w: 0px;
+    --mobile-pages-right-gap: 0px;
+    --mobile-pages-block-radius: 20px;
+  }
+
+  body.next-classic-shell-active .classic-app-shell > .sidebar,
+  body.next-classic-shell-active.sidebar-collapsed .classic-app-shell > .sidebar,
+  body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host {
+    position: fixed !important;
+    left: 12px !important;
+    right: 12px !important;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 8px) !important;
+    width: auto !important;
+    min-width: 0 !important;
+    height: 58px !important;
+    min-height: 58px !important;
+    max-height: 58px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    overflow: visible !important;
+    z-index: 1600 !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell > .sidebar .sidebar-header,
+  body.next-classic-shell-active .classic-app-shell > .sidebar .sidebar-footer {
+    display: none !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .sidebar-nav {
+    display: grid !important;
+    grid-template-columns: var(--mobile-home-block-w) minmax(0, 1fr) !important;
+    align-items: center !important;
+    column-gap: var(--mobile-home-gap) !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    height: 58px !important;
+    min-height: 58px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-home-rail,
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-clip {
+    box-sizing: border-box !important;
+    height: 58px !important;
+    min-height: 58px !important;
+    max-height: 58px !important;
+    margin: 0 !important;
+    border: 0 !important;
+    border-radius: 20px !important;
+    background: #0b0c10 !important;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, .22) !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-home-rail {
+    width: var(--mobile-home-block-w) !important;
+    min-width: var(--mobile-home-block-w) !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 0 !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-home-rail::after {
+    content: none !important;
+    display: none !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-clip {
+    min-width: 0 !important;
+    width: 100% !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    overscroll-behavior-x: contain !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+    scroll-snap-type: x proximity !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-clip::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list {
+    box-sizing: border-box !important;
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    width: max-content !important;
+    min-width: 100% !important;
+    height: 58px !important;
+    min-height: 58px !important;
+    margin: 0 !important;
+    padding: 4px 6px !important;
+    gap: 4px !important;
+    list-style: none !important;
+  }
+
+  /* Desktop separators must not reserve vertical space inside a horizontal dock. */
+  body.next-classic-shell-active:not(.page-lms) .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list > li,
+  body.next-classic-shell-active:not(.page-lms) .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list > li.sidebar-workspace-boundary,
+  body.next-classic-shell-active:not(.page-lms) .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list > li.sidebar-users-boundary,
+  body.next-classic-shell-active:not(.page-lms) .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list > li:has(> a.nav-link[href="/lms"]),
+  body.next-classic-shell-active:not(.page-lms) .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list > li:has(> a.nav-link[href="/user-access"]) {
+    position: relative !important;
+    flex: 0 0 auto !important;
+    width: auto !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    scroll-snap-align: center !important;
+  }
+
+  body.next-classic-shell-active:not(.page-lms) .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list > li::before,
+  body.next-classic-shell-active:not(.page-lms) .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list > li::after {
+    content: none !important;
+    display: none !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .nav-label {
+    display: none !important;
+  }
+
+  /* All page buttons use one compact footprint.  Explicit first-child rules
+     neutralize the legacy "first page behaves like Home" mobile styling. */
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list .nav-link,
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list > li:first-child .nav-link {
+    box-sizing: border-box !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex: 0 0 38px !important;
+    width: 38px !important;
+    min-width: 38px !important;
+    height: 38px !important;
+    min-height: 38px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    gap: 0 !important;
+    border: 1px solid transparent !important;
+    border-radius: 13px !important;
+    background: transparent !important;
+    color: rgba(255,255,255,.72) !important;
+    box-shadow: none !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list .nav-link svg,
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list > li:first-child .nav-link svg {
+    box-sizing: border-box !important;
+    width: 18px !important;
+    height: 18px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    color: currentColor !important;
+    stroke: currentColor !important;
+    box-shadow: none !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list .nav-link:hover,
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list > li:first-child .nav-link:hover {
+    background: rgba(255,255,255,.08) !important;
+    color: #fff !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list .nav-link.active,
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list > li:first-child .nav-link.active {
+    flex-basis: 44px !important;
+    width: 44px !important;
+    min-width: 44px !important;
+    height: 44px !important;
+    min-height: 44px !important;
+    padding: 0 !important;
+    border: 1.5px solid #0b0c10 !important;
+    border-radius: 15px !important;
+    background: #fff !important;
+    color: #0b0c10 !important;
+    box-shadow: 0 8px 18px rgba(0,0,0,.20) !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list .nav-link.active svg,
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list > li:first-child .nav-link.active svg {
+    width: 19px !important;
+    height: 19px !important;
+    padding: 0 !important;
+    background: transparent !important;
+    color: #0b0c10 !important;
+    stroke: currentColor !important;
+    box-shadow: none !important;
+  }
+
+  /* Home stays separate, but no longer consumes a quarter of a phone screen. */
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-home-rail > li {
+    display: block !important;
+    width: auto !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-home-rail .nav-link,
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-home-rail .nav-link.active {
+    box-sizing: border-box !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 48px !important;
+    min-width: 48px !important;
+    height: 48px !important;
+    min-height: 48px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: 0 !important;
+    border-radius: 17px !important;
+    background: transparent !important;
+    color: rgba(255,255,255,.94) !important;
+    box-shadow: none !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-home-rail .nav-link svg,
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-home-rail .nav-link.active svg {
+    box-sizing: content-box !important;
+    width: 18px !important;
+    height: 18px !important;
+    padding: 8px !important;
+    margin: 0 !important;
+    border-radius: 999px !important;
+    background: rgba(255,255,255,.09) !important;
+    color: currentColor !important;
+    stroke: currentColor !important;
+    box-shadow: none !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-home-rail .nav-link.active svg {
+    background: #fff !important;
+    color: #0b0c10 !important;
+    stroke: currentColor !important;
+    box-shadow: 0 8px 18px rgba(255,255,255,.12) !important;
+  }
+
+  /* Reserve only the space the repaired dock actually occupies. */
+  body.next-classic-shell-active .classic-app-shell .main-content {
+    padding-bottom: calc(74px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+}
+
+@media (max-width: 390px) {
+  :root {
+    --mobile-home-block-w: 52px;
+    --mobile-home-gap: 6px;
+  }
+
+  body.next-classic-shell-active .classic-app-shell > .sidebar,
+  body.next-classic-shell-active.sidebar-collapsed .classic-app-shell > .sidebar,
+  body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host {
+    left: 9px !important;
+    right: 9px !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list {
+    gap: 3px !important;
+    padding-inline: 5px !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list .nav-link,
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list > li:first-child .nav-link {
+    flex-basis: 36px !important;
+    width: 36px !important;
+    min-width: 36px !important;
+    height: 36px !important;
+    min-height: 36px !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list .nav-link.active,
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list > li:first-child .nav-link.active {
+    flex-basis: 42px !important;
+    width: 42px !important;
+    min-width: 42px !important;
+    height: 42px !important;
+    min-height: 42px !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-home-rail .nav-link,
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-home-rail .nav-link.active {
+    width: 44px !important;
+    min-width: 44px !important;
+    height: 44px !important;
+    min-height: 44px !important;
+  }
+}
