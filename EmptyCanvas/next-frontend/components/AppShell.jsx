@@ -1,3 +1,4 @@
+import Link from "next/link";
 import NotificationsBell from "./notifications/NotificationsBell";
 import UserProfileMenu from "./UserProfileMenu";
 import HeaderSearch from "./HeaderSearch";
@@ -6,7 +7,6 @@ import {
   BodyClassSync,
   ClassicSidebarBootstrap,
   ClassicSidebarViewportKeeper,
-  ClassicMobileDockStructure,
   HeaderMenuToggle,
   SidebarBrandToggle,
 } from "./ClassicShellControls";
@@ -154,7 +154,6 @@ export default function AppShell({
       {classicStyles.map((href) => <link rel="stylesheet" href={href} key={href} />)}
       <BodyClassSync className={combinedBodyClass} />
       <ClassicSidebarBootstrap />
-      <ClassicMobileDockStructure />
       <ClassicSidebarViewportKeeper />
       <TaskManagementSidebarFlyout allowedPages={allowedPages} activePath={activePath} />
 
@@ -171,10 +170,10 @@ export default function AppShell({
                   key={link.href}
                   className={link.boundary === "workspace" ? "sidebar-workspace-boundary" : link.boundary === "users" ? "sidebar-users-boundary" : ""}
                 >
-                  <a className={`nav-link ${isActive(activePath, link.href) ? "active" : ""}`} href={link.href} title={link.label} aria-label={link.label}>
+                  <Link className={`nav-link ${isActive(activePath, link.href) ? "active" : ""}`} href={link.href} prefetch title={link.label} aria-label={link.label}>
                     <ClassicIcon name={link.icon} />
                     <span className="nav-label">{link.label}</span>
-                  </a>
+                  </Link>
                 </li>
               ))}
             </ul>

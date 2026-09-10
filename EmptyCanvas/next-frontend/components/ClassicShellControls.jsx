@@ -18,7 +18,7 @@ function toggleCollapsed() {
 }
 
 export function BodyClassSync({ className = "" }) {
-  useEffect(() => {
+  useLayoutEffect(() => {
     const classes = String(className || "").split(/\s+/).filter(Boolean);
     classes.forEach((value) => document.body.classList.add(value));
     return () => classes.forEach((value) => document.body.classList.remove(value));
@@ -122,8 +122,14 @@ export function ClassicSidebarViewportKeeper() {
     const nav = document.querySelector(".classic-app-shell .sidebar-nav");
     if (!(nav instanceof HTMLElement)) return undefined;
 
+    const mobile = window.matchMedia("(max-width: 768px)").matches;
     const pagesClip = nav.querySelector(":scope > .mobile-dock-pages-clip");
-    const horizontalScroller = pagesClip instanceof HTMLElement ? pagesClip : null;
+    // The Next shell now keeps one stable DOM shape during navigation. On
+    // mobile the plain nav itself is the horizontal scroller; if a legacy
+    // structured wrapper is ever present, use that wrapper instead.
+    const horizontalScroller = pagesClip instanceof HTMLElement
+      ? pagesClip
+      : mobile ? nav : null;
 
     try {
       if (horizontalScroller) {
@@ -142,8 +148,11 @@ export function ClassicSidebarViewportKeeper() {
       if (horizontalScroller && horizontalScroller.contains(active)) {
         const clipRect = horizontalScroller.getBoundingClientRect();
         const activeRect = active.getBoundingClientRect();
-        if (activeRect.left < clipRect.left + 8) {
-          horizontalScroller.scrollLeft -= (clipRect.left + 8) - activeRect.left;
+        const home = nav.querySelector(".nav-list > li:first-child");
+        const homeWidth = home instanceof HTMLElement ? home.getBoundingClientRect().width : 0;
+        const leftGuard = clipRect.left + (horizontalScroller === nav ? homeWidth + 18 : 8);
+        if (activeRect.left < leftGuard) {
+          horizontalScroller.scrollLeft -= leftGuard - activeRect.left;
         } else if (activeRect.right > clipRect.right - 8) {
           horizontalScroller.scrollLeft += activeRect.right - (clipRect.right - 8);
         }
@@ -161,6 +170,7 @@ export function ClassicSidebarViewportKeeper() {
 
     const frame = window.requestAnimationFrame(keepActiveVisible);
     const rememberVertical = () => {
+      if (horizontalScroller === nav) return;
       try { sessionStorage.setItem(SIDEBAR_SCROLL_KEY, String(nav.scrollTop)); } catch {}
     };
     const rememberHorizontal = () => {
@@ -169,14 +179,86 @@ export function ClassicSidebarViewportKeeper() {
     };
 
     nav.addEventListener("scroll", rememberVertical, { passive: true });
-    horizontalScroller?.addEventListener("scroll", rememberHorizontal, { passive: true });
+    if (horizontalScroller && horizontalScroller !== nav) {
+      horizontalScroller.addEventListener("scroll", rememberHorizontal, { passive: true });
+    } else if (horizontalScroller === nav) {
+      nav.addEventListener("scroll", rememberHorizontal, { passive: true });
+    }
+
+    // Faster phone swipes without changing the desktop sidebar. We only take
+    // over gestures that are clearly horizontal, so vertical page scrolling is
+    // unaffected. The multiplier deliberately stays modest to preserve control.
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let touchStartLeft = 0;
+    let lastTouchX = 0;
+    let horizontalGesture = false;
+    let moveFrame = 0;
+    let desiredLeft = 0;
+    const SWIPE_MULTIPLIER = 1.55;
+
+    const onTouchStart = (event) => {
+      if (!horizontalScroller || event.touches.length !== 1) return;
+      const touch = event.touches[0];
+      touchStartX = touch.clientX;
+      touchStartY = touch.clientY;
+      lastTouchX = touch.clientX;
+      touchStartLeft = horizontalScroller.scrollLeft;
+      desiredLeft = touchStartLeft;
+      horizontalGesture = false;
+    };
+
+    const onTouchMove = (event) => {
+      if (!horizontalScroller || event.touches.length !== 1) return;
+      const touch = event.touches[0];
+      const dx = touch.clientX - touchStartX;
+      const dy = touch.clientY - touchStartY;
+      lastTouchX = touch.clientX;
+
+      if (!horizontalGesture) {
+        if (Math.abs(dx) < 6 || Math.abs(dx) <= Math.abs(dy) * 1.05) return;
+        horizontalGesture = true;
+      }
+
+      event.preventDefault();
+      desiredLeft = touchStartLeft - (dx * SWIPE_MULTIPLIER);
+      if (!moveFrame) {
+        moveFrame = window.requestAnimationFrame(() => {
+          moveFrame = 0;
+          horizontalScroller.scrollLeft = desiredLeft;
+        });
+      }
+    };
+
+    const onTouchEnd = () => {
+      if (!horizontalScroller || !horizontalGesture) return;
+      const totalDx = lastTouchX - touchStartX;
+      // A small extra glide makes long lists feel less heavy without the
+      // exaggerated snap/overshoot of full custom inertia.
+      horizontalScroller.scrollBy({ left: -(totalDx * 0.28), behavior: "smooth" });
+      horizontalGesture = false;
+    };
+
+    horizontalScroller?.addEventListener("touchstart", onTouchStart, { passive: true });
+    horizontalScroller?.addEventListener("touchmove", onTouchMove, { passive: false });
+    horizontalScroller?.addEventListener("touchend", onTouchEnd, { passive: true });
+    horizontalScroller?.addEventListener("touchcancel", onTouchEnd, { passive: true });
 
     return () => {
       window.cancelAnimationFrame(frame);
+      if (moveFrame) window.cancelAnimationFrame(moveFrame);
       rememberVertical();
       rememberHorizontal();
       nav.removeEventListener("scroll", rememberVertical);
-      horizontalScroller?.removeEventListener("scroll", rememberHorizontal);
+      if (horizontalScroller && horizontalScroller !== nav) {
+        horizontalScroller.removeEventListener("scroll", rememberHorizontal);
+      } else if (horizontalScroller === nav) {
+        nav.removeEventListener("scroll", rememberHorizontal);
+      }
+      horizontalScroller?.removeEventListener("touchstart", onTouchStart);
+      horizontalScroller?.removeEventListener("touchmove", onTouchMove);
+      horizontalScroller?.removeEventListener("touchend", onTouchEnd);
+      horizontalScroller?.removeEventListener("touchcancel", onTouchEnd);
     };
   }, []);
   return null;

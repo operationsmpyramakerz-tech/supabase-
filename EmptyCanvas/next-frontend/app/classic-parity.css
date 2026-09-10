@@ -17143,3 +17143,425 @@ body.operations-orders-page .next-classic-orders-parity .next-operations-order-c
     min-height: 40px !important;
   }
 }
+
+/* ========================================================================
+   Mobile shell stabilization pass 2 — compact dock + faster navigation
+   2026-09-10
+   Keep the same plain sidebar DOM for the live shell and route loading shell.
+   This removes the visible geometry jump that used to happen when JavaScript
+   rebuilt the mobile dock after navigation.
+   ===================================================================== */
+@media (max-width: 768px) {
+  :root {
+    --mobile-dock-bg: #0B0C10;
+    --mobile-home-block-w: 76px;
+    --mobile-home-gap: 14px;
+    --mobile-home-bridge-w: 8px;
+    --mobile-pages-right-gap: 4px;
+    --mobile-pages-block-radius: 25px;
+    --mobile-main-bottom-space: calc(98px + env(safe-area-inset-bottom, 0px));
+    --mobile-main-scroll-space: calc(108px + env(safe-area-inset-bottom, 0px));
+    --next-mobile-dock-safe-space: calc(102px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* One fixed geometry for the live shell and the loading shell. */
+  body.next-classic-shell-active .classic-app-shell > .sidebar,
+  body.next-classic-shell-active.sidebar-collapsed .classic-app-shell > .sidebar,
+  body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host,
+  body.next-classic-shell-active .classic-app-shell > .sidebar.next-stable-loading-sidebar {
+    left: 10px !important;
+    right: 10px !important;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 10px) !important;
+    min-height: 68px !important;
+    height: 68px !important;
+    max-height: 68px !important;
+  }
+
+  /* Stable/plain Next dock: Home remains sticky while the page icons move. */
+  body.next-classic-shell-active .classic-app-shell > .sidebar:not(.mobile-dock-structured-host) .sidebar-nav {
+    min-height: 68px !important;
+    height: 68px !important;
+    max-height: 68px !important;
+    overflow-x: scroll !important;
+    overflow-y: hidden !important;
+    touch-action: pan-x !important;
+    overscroll-behavior-x: contain !important;
+    scroll-behavior: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell > .sidebar:not(.mobile-dock-structured-host)::before {
+    left: calc(var(--mobile-home-block-w) + var(--mobile-home-gap)) !important;
+    right: var(--mobile-pages-right-gap) !important;
+    border-radius: var(--mobile-pages-block-radius) !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell > .sidebar:not(.mobile-dock-structured-host) .sidebar-nav > .nav-list {
+    min-height: 68px !important;
+    height: 68px !important;
+    gap: 7px !important;
+    padding: 3px 10px 3px 0 !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell > .sidebar:not(.mobile-dock-structured-host) .sidebar-nav > .nav-list > li:first-child {
+    margin-right: var(--mobile-home-gap) !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell > .sidebar:not(.mobile-dock-structured-host) .sidebar-nav > .nav-list > li:first-child::before {
+    border-radius: var(--mobile-pages-block-radius) !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell > .sidebar:not(.mobile-dock-structured-host) .sidebar-nav > .nav-list > li:first-child::after {
+    left: calc(100% + 3px) !important;
+    width: var(--mobile-home-bridge-w) !important;
+    height: 20px !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell > .sidebar:not(.mobile-dock-structured-host) .sidebar-nav > .nav-list > li:first-child + li {
+    margin-left: 8px !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell > .sidebar:not(.mobile-dock-structured-host) .sidebar-nav .nav-link {
+    flex-basis: 36px !important;
+    width: 36px !important;
+    min-width: 36px !important;
+    height: 36px !important;
+    min-height: 36px !important;
+    border-radius: 13px !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell > .sidebar:not(.mobile-dock-structured-host) .sidebar-nav .nav-link svg {
+    width: 18px !important;
+    height: 18px !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell > .sidebar:not(.mobile-dock-structured-host) .sidebar-nav .nav-link.active {
+    width: 42px !important;
+    min-width: 42px !important;
+    height: 42px !important;
+    min-height: 42px !important;
+    border-radius: 15px !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell > .sidebar:not(.mobile-dock-structured-host) .sidebar-nav > .nav-list > li:first-child .nav-link,
+  body.next-classic-shell-active .classic-app-shell > .sidebar:not(.mobile-dock-structured-host) .sidebar-nav > .nav-list > li:first-child .nav-link.active {
+    width: var(--mobile-home-block-w) !important;
+    min-width: var(--mobile-home-block-w) !important;
+    height: 58px !important;
+    min-height: 58px !important;
+    border-radius: 22px !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell > .sidebar:not(.mobile-dock-structured-host) .sidebar-nav > .nav-list > li:first-child .nav-link svg,
+  body.next-classic-shell-active .classic-app-shell > .sidebar:not(.mobile-dock-structured-host) .sidebar-nav > .nav-list > li:first-child .nav-link.active svg {
+    width: 20px !important;
+    height: 20px !important;
+    padding: 10px !important;
+  }
+
+  /* Legacy structured DOM fallback gets the exact same dimensions. */
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .sidebar-nav,
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-home-rail,
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-clip,
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list {
+    min-height: 68px !important;
+    height: 68px !important;
+    max-height: 68px !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list {
+    gap: 7px !important;
+    padding: 3px 10px !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list .nav-link {
+    width: 36px !important;
+    min-width: 36px !important;
+    height: 36px !important;
+    min-height: 36px !important;
+    border-radius: 13px !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list .nav-link.active {
+    width: 42px !important;
+    min-width: 42px !important;
+    height: 42px !important;
+    min-height: 42px !important;
+    border-radius: 15px !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list .nav-link svg {
+    width: 18px !important;
+    height: 18px !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-home-rail .nav-link,
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-home-rail .nav-link.active {
+    width: var(--mobile-home-block-w) !important;
+    min-width: var(--mobile-home-block-w) !important;
+    height: 58px !important;
+    min-height: 58px !important;
+    border-radius: 22px !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-home-rail .nav-link svg,
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-home-rail .nav-link.active svg {
+    width: 20px !important;
+    height: 20px !important;
+    padding: 10px !important;
+  }
+
+  /* Reserve only the space the smaller dock really needs. */
+  body.next-classic-shell-active .classic-app-shell .main-content > main,
+  body.next-classic-shell-active .classic-app-shell .main-content > main.container,
+  body.next-classic-shell-active .classic-app-shell .main-content > main.container-full-width,
+  body.next-classic-shell-active .classic-app-shell .main-content > main.page-body,
+  body.next-classic-shell-active .classic-app-shell .main-content > main.tasks-v2-main {
+    padding-bottom: var(--next-mobile-dock-safe-space) !important;
+    scroll-padding-bottom: var(--next-mobile-dock-safe-space) !important;
+  }
+
+  /* Operations Orders list cards: slightly smaller so more content stays
+     between the top bar and the dock on phones. */
+  body.operations-orders-page .next-classic-orders-parity #requested-list {
+    gap: 7px !important;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .next-operations-order-card {
+    padding: 7px 8px !important;
+    border-radius: 16px !important;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .next-operations-order-card .co-top {
+    grid-template-columns: 40px minmax(0, 1fr) auto !important;
+    gap: 7px !important;
+    min-height: 52px !important;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .next-operations-order-card .co-thumb {
+    width: 40px !important;
+    height: 40px !important;
+    border-radius: 12px !important;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .next-operations-order-card .co-thumb svg {
+    width: 19px !important;
+    height: 19px !important;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .next-operations-order-card .co-title {
+    font-size: 14px !important;
+    line-height: 1.08 !important;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .next-operations-order-meta {
+    margin-top: 3px !important;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .next-operations-order-meta .co-sub {
+    font-size: 9px !important;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .next-operations-order-card .next-operations-card-head-actions {
+    min-width: 82px !important;
+    max-width: 122px !important;
+    gap: 3px !important;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .next-operations-order-card .next-operations-card-head-actions .co-status-btn,
+  body.operations-orders-page .next-classic-orders-parity .next-operations-order-card .next-operations-card-head-actions .sv-mixed-approval-pill {
+    min-height: 24px !important;
+    padding: 4px 8px !important;
+    font-size: 8.5px !important;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .next-operations-order-card .next-operations-creator-label {
+    height: 24px !important;
+    max-width: 100px !important;
+    margin-right: -9px !important;
+    padding: 0 16px 0 8px !important;
+    font-size: 8px !important;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .next-operations-order-card .next-operations-creator-btn,
+  body.operations-orders-page .next-classic-orders-parity .next-operations-order-card .next-operations-creator-icon {
+    min-width: 28px !important;
+    width: 28px !important;
+    height: 28px !important;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .next-operations-order-card .next-operations-creator-icon svg {
+    width: 13px !important;
+    height: 13px !important;
+  }
+
+  /* Order details modal must live between the fixed header and bottom dock,
+     not underneath either of them. */
+  body.operations-orders-page.order-modal-fit-screen .co-modal-overlay {
+    align-items: flex-start !important;
+    padding: 66px 8px calc(86px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  body.operations-orders-page.order-modal-fit-screen .next-classic-orders-parity .co-modal-dialog {
+    width: 100% !important;
+    max-width: none !important;
+    max-height: calc(100dvh - 152px - env(safe-area-inset-bottom, 0px)) !important;
+    padding: 10px 9px 8px !important;
+    border-radius: 20px !important;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .co-modal-status {
+    font-size: 24px !important;
+    line-height: 1.05 !important;
+    padding-right: 38px !important;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .co-modal-close,
+  body.operations-orders-page .next-classic-orders-parity .co-modal-more-btn {
+    width: 30px !important;
+    height: 30px !important;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .co-modal-close {
+    top: 9px !important;
+    right: 9px !important;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .co-modal-more {
+    top: 9px !important;
+    left: 9px !important;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .next-operations-order-modal-summary {
+    gap: 5px !important;
+    margin-top: 7px !important;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .next-operations-order-modal-summary > div {
+    min-height: 44px !important;
+    padding: 6px 7px !important;
+    border-radius: 11px !important;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .next-operations-order-modal-summary > div > span:first-child {
+    font-size: 7px !important;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .next-operations-order-modal-summary strong {
+    font-size: 9px !important;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .co-track-pill {
+    margin-top: 8px !important;
+    padding: 8px 10px !important;
+    gap: 6px !important;
+    border-radius: 16px !important;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .co-track-step {
+    width: 36px !important;
+    height: 36px !important;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .co-track-step svg {
+    width: 16px !important;
+    height: 16px !important;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .co-track-conn {
+    height: 7px !important;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .co-modal-body {
+    margin-top: 8px !important;
+    gap: 8px !important;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .co-meta-row {
+    padding: 7px 8px !important;
+    font-size: 9px !important;
+    border-radius: 11px !important;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .co-meta-row--reason {
+    min-height: 42px !important;
+    margin-top: 5px !important;
+    padding: 7px 9px !important;
+    border-radius: 13px !important;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .co-meta-row--reason strong {
+    padding: 7px 9px !important;
+    font-size: 10.5px !important;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .co-modal-actions.ro-actions {
+    gap: 6px !important;
+    margin-top: 3px !important;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .co-modal-actions .ro-action-btn,
+  body.operations-orders-page .next-classic-orders-parity .order-sort-trigger {
+    min-height: 31px !important;
+    padding: 6px 8px !important;
+    border-radius: 9px !important;
+    font-size: 8.5px !important;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .order-component-groups {
+    gap: 6px !important;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .order-component-group {
+    gap: 5px !important;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .order-component-group__head {
+    min-height: 37px !important;
+    padding: 6px 8px !important;
+    border-radius: 11px !important;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .order-component-group__items {
+    gap: 5px !important;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .co-item {
+    gap: 6px !important;
+    padding: 6px 8px !important;
+    border-radius: 11px !important;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .co-item-name {
+    font-size: 9.25px !important;
+    line-height: 1.2 !important;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .co-item-link {
+    width: 21px !important;
+    height: 21px !important;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .co-item-link svg {
+    width: 11px !important;
+    height: 11px !important;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .co-item-sub,
+  body.operations-orders-page .next-classic-orders-parity .co-item-issue-desc {
+    margin-top: 1px !important;
+    font-size: 7.75px !important;
+    line-height: 1.25 !important;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .co-item-right,
+  body.operations-orders-page .next-classic-orders-parity .co-item-total {
+    font-size: 8px !important;
+  }
+
+  body.operations-orders-page .next-classic-orders-parity .co-item-status {
+    margin-top: 3px !important;
+    padding: 3px 6px !important;
+    font-size: 7.5px !important;
+  }
+}
