@@ -209,17 +209,26 @@ const SUMMARY_TONE = {
   maintenance: "orange",
 };
 
+
+function toRouterPath(href) {
+  const raw = String(href || "/");
+  if (raw === "/next") return "/";
+  if (raw.startsWith("/next/")) return raw.slice(5) || "/";
+  return raw;
+}
+
 function useCardNavigation(href) {
   const router = useRouter();
   return {
     onClick: (event) => {
-      if (event.target.closest("button, a, input, select")) return;
-      router.push(href);
+      if (event.target.closest("button, a, input, select, .home-orders-analysis, .home-global-analysis, .home-stock-analysis")) return;
+      router.push(toRouterPath(href));
     },
     onKeyDown: (event) => {
+      if (event.target.closest("button, a, input, select, .home-orders-analysis, .home-global-analysis, .home-stock-analysis")) return;
       if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
-        router.push(href);
+        router.push(toRouterPath(href));
       }
     },
   };
@@ -394,7 +403,8 @@ function GlobalAnalysisControl({ users = [], selectedUser = "all", selectedDurat
     else params.set(name, String(value));
     const query = params.toString();
     close();
-    startTransition(() => router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false }));
+    const targetPath = toRouterPath(pathname);
+    startTransition(() => router.replace(query ? `${targetPath}?${query}` : targetPath, { scroll: false }));
   };
 
   return (
