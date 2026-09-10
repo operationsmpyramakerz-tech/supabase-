@@ -22,8 +22,15 @@ function toggleCollapsed() {
 }
 
 export function BodyClassSync({ className = "" }) {
-  useEffect(() => {
+  useLayoutEffect(() => {
     const classes = String(className || "").split(/\s+/).filter(Boolean);
+
+    // Route loading UIs and the fully-rendered pages both depend on these body
+    // classes for their final spacing/geometry.  Applying them in a normal
+    // effect allows one browser paint with the generic Classic dimensions,
+    // then a second paint with the page-specific dimensions — which makes the
+    // shell visibly jump during navigation.  A layout effect runs in the same
+    // commit, before paint, so loading and settled states use one geometry.
     classes.forEach((value) => document.body.classList.add(value));
     return () => classes.forEach((value) => document.body.classList.remove(value));
   }, [className]);
