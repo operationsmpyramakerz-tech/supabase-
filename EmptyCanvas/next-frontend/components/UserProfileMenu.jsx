@@ -8,6 +8,7 @@ const BACKUP_PERMISSIONS = ["Backup", "Back up", "Database", "System Database", 
 const HARD_REFRESH_MARKER_KEY = "ops.hardRefresh.pendingAt";
 const CHROME_CACHE_KEY = "ops.ui.chrome.v1";
 const ALLOWED_PAGES_KEY = "allowedPages";
+const ALLOWED_PAGES_COOKIE = "ops_ui_allowed_pages_v1";
 
 function normalize(value) {
   return String(value || "").trim().toLowerCase();
@@ -267,6 +268,7 @@ export default function UserProfileMenu({ account }) {
     setLoggingOut(true);
     try { await fetch("/api/logout", { method: "POST", credentials: "include" }); } catch {}
     try { sessionStorage.clear(); } catch {}
+    try { document.cookie = `${ALLOWED_PAGES_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`; } catch {}
     try {
       localStorage.removeItem("ui.sidebarMini");
       localStorage.removeItem("ui.sidebarCollapsed");

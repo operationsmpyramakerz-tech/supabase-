@@ -8,6 +8,7 @@ const SIDEBAR_SCROLL_LEFT_KEY = "ui.sidebarScrollLeft";
 
 const CHROME_CACHE_KEY = "ops.ui.chrome.v1";
 const ALLOWED_PAGES_KEY = "allowedPages";
+const ALLOWED_PAGES_COOKIE = "ops_ui_allowed_pages_v1";
 
 function setCollapsed(collapsed) {
   if (typeof document === "undefined") return;
@@ -43,6 +44,14 @@ export function ClassicChromeAccessSync({ account }) {
 
     try {
       sessionStorage.setItem(ALLOWED_PAGES_KEY, JSON.stringify(allowedPages));
+    } catch {}
+
+    // Server-rendered route loading states cannot read sessionStorage/localStorage.
+    // Keep a compact permission snapshot in a same-site cookie so the loading
+    // sidebar can render the exact same authorized links before hydration.
+    try {
+      const encoded = encodeURIComponent(JSON.stringify(allowedPages));
+      document.cookie = `${ALLOWED_PAGES_COOKIE}=${encoded}; Path=/; Max-Age=43200; SameSite=Lax`;
     } catch {}
 
     try {

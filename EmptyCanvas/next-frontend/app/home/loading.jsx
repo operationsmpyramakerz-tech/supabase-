@@ -1,5 +1,3 @@
-"use client";
-
 import { BodyClassSync } from "../../components/ClassicShellControls";
 import { ClassicStableLoadingHeader, ClassicStableLoadingSidebar } from "../../components/ClassicStableLoadingChrome";
 

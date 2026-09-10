@@ -1,10 +1,9 @@
-"use client";
-
-import { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { cache } from "react";
+import { cookies } from "next/headers";
 import { BodyClassSync, ClassicMobileDockStructure, ClassicSidebarViewportKeeper } from "./ClassicShellControls";
+import { fetchLegacyJson } from "../lib/legacy-api";
 
-const CHROME_CACHE_KEY = "ops.ui.chrome.v1";
-
+const ALLOWED_PAGES_COOKIE = "ops_ui_allowed_pages_v1";
 
 const CLASSIC_MAIN_LINKS = [
   { label: "Home", href: "/next/home", icon: "home", permissions: [], alwaysVisible: true, boundary: "workspace" },
@@ -80,44 +79,53 @@ function UserIcon() {
   );
 }
 
-function readCachedChrome() {
-  if (typeof window === "undefined") return null;
-
-  let cached = null;
+function parseAllowedPagesCookie(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
   try {
-    const raw = JSON.parse(localStorage.getItem(CHROME_CACHE_KEY) || "null");
-    if (raw && typeof raw === "object") cached = raw;
-  } catch {}
+    const decoded = decodeURIComponent(raw);
+    const parsed = JSON.parse(decoded);
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+}
 
-  // The login flow stores the current user's access list in sessionStorage.
-  // Prefer it over the longer-lived chrome cache so a previous user's pages
-  // can never flash in the loading sidebar during a route transition.
+const readStableChrome = cache(async () => {
+  const cookieStore = await cookies();
+  const fromCookie = parseAllowedPagesCookie(cookieStore.get(ALLOWED_PAGES_COOKIE)?.value);
+  if (Array.isArray(fromCookie)) {
+    return { allowedPages: fromCookie, name: "", photoUrl: "" };
+  }
+
+  // First request after deploying this fix may not have the UI cookie yet.
+  // Fall back to the authenticated account endpoint so the loading sidebar is
+  // still permission-correct rather than collapsing to Home only.
   try {
-    const sessionAllowed = JSON.parse(sessionStorage.getItem("allowedPages") || "null");
-    if (Array.isArray(sessionAllowed)) {
-      cached = { ...(cached || {}), allowedPages: sessionAllowed };
+    const response = await fetchLegacyJson("/api/account", { timeoutMs: 4000 });
+    if (response.ok && response.data && typeof response.data === "object") {
+      return {
+        allowedPages: Array.isArray(response.data.allowedPages) ? response.data.allowedPages : [],
+        name: String(response.data.name || response.data.username || "").trim(),
+        photoUrl: String(response.data.photoUrl || "").trim(),
+      };
     }
   } catch {}
 
-  return cached;
-}
+  return { allowedPages: [], name: "", photoUrl: "" };
+});
 
-export function ClassicStableLoadingSidebar({ activeIndex = -1 }) {
-  const [cache, setCache] = useState(null);
-
-  useLayoutEffect(() => {
-    // Resolve permissions before the browser paints the loading shell. This
-    // keeps the same authorized page set visible while navigating without
-    // briefly exposing links the current user cannot access.
-    setCache(readCachedChrome());
-  }, []);
-
-  const links = useMemo(() => {
-    const allowed = Array.isArray(cache?.allowedPages) ? cache.allowedPages : [];
-    return CLASSIC_MAIN_LINKS
-      .map((link, originalIndex) => ({ ...link, originalIndex }))
-      .filter((link) => canSee(link, allowed));
-  }, [cache]);
+export async function ClassicStableLoadingSidebar({ activeIndex = -1 }) {
+  const chrome = await readStableChrome();
+  const allowed = Array.isArray(chrome?.allowedPages) ? chrome.allowedPages : [];
+  const links = CLASSIC_MAIN_LINKS
+    .map((link, originalIndex) => ({ ...link, originalIndex }))
+    .filter((link) => canSee(link, allowed));
 
   return (
     <aside className="sidebar next-stable-loading-sidebar" aria-label="Main navigation">
@@ -149,15 +157,10 @@ export function ClassicStableLoadingSidebar({ activeIndex = -1 }) {
   );
 }
 
-export function ClassicStableLoadingHeader({ title = "Home" }) {
-  const [cache, setCache] = useState(null);
-
-  useEffect(() => {
-    setCache(readCachedChrome());
-  }, []);
-
-  const photoUrl = String(cache?.photoUrl || "").trim();
-  const name = String(cache?.name || cache?.username || "User").trim() || "User";
+export async function ClassicStableLoadingHeader({ title = "Home" }) {
+  const chrome = await readStableChrome();
+  const photoUrl = String(chrome?.photoUrl || "").trim();
+  const name = String(chrome?.name || "User").trim() || "User";
 
   return (
     <header className="main-header dash-header dash-hide-row2 next-stable-loading-header">
@@ -176,7 +179,6 @@ export function ClassicStableLoadingHeader({ title = "Home" }) {
     </header>
   );
 }
-
 
 export function ClassicStableLoadingShell({
   title = "Home",

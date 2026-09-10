@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 const MODES = Object.freeze({ LOGIN: "login", RECOVERY: "recovery", SIGNUP: "signup" });
+const ALLOWED_PAGES_COOKIE = "ops_ui_allowed_pages_v1";
 
 function safeMessage(message, fallback) {
   const value = String(message || "").trim();
@@ -25,6 +26,10 @@ function warmAccountCache(account, fallbackUsername) {
 
   try { if (name) localStorage.setItem("username", name); } catch {}
   try { sessionStorage.setItem("allowedPages", JSON.stringify(allowedPages)); } catch {}
+  try {
+    const encoded = encodeURIComponent(JSON.stringify(allowedPages));
+    document.cookie = `${ALLOWED_PAGES_COOKIE}=${encoded}; Path=/; Max-Age=43200; SameSite=Lax`;
+  } catch {}
   try {
     localStorage.setItem("ops.ui.chrome.v1", JSON.stringify({
       name,
@@ -121,6 +126,12 @@ export default function LoginClient({ requestedNext = "/next/home", backendAvail
       redirecting = true;
       const transitionStartedAt = Date.now();
       setLoginSuccess(true);
+
+      // The login response already contains the current user's resolved access.
+      // Persist it immediately so the very first Next.js loading shell cannot
+      // inherit a previous session's sidebar permissions while /api/account loads.
+      warmAccountCache({ allowedPages: Array.isArray(result?.allowedPages) ? result.allowedPages : [] }, username);
+
       try {
         const accountResponse = await fetch(`/api/account?_next_login_check=${Date.now()}`, {
           credentials: "same-origin",
