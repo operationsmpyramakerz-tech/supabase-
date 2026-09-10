@@ -16999,3 +16999,147 @@ body.operations-orders-page .next-classic-orders-parity .next-operations-order-c
     padding-bottom: var(--mobile-main-bottom-space) !important;
   }
 }
+
+/* ========================================================================
+   Shell stability pass — mobile dock scroll, safe page end and loading chrome
+   2026-09-09
+   ===================================================================== */
+
+/* Keep the real header/sidebar visible with the same geometry while Home and
+   order pages are waiting for their server bootstrap data. */
+.next-stable-loading-sidebar .next-stable-loading-nav {
+  cursor: default !important;
+  pointer-events: none !important;
+}
+
+.classic-app-shell .main-header .next-stable-loading-header-button {
+  box-sizing: border-box !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex: 0 0 44px !important;
+  width: 44px !important;
+  min-width: 44px !important;
+  height: 44px !important;
+  min-height: 44px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 1px solid #e4e7ec !important;
+  border-radius: 999px !important;
+  box-shadow: 0 1px 2px rgba(16,24,40,.04), 0 6px 18px rgba(16,24,40,.06) !important;
+  pointer-events: none !important;
+}
+
+.classic-app-shell .main-header .next-stable-loading-header-button.system-header-search__toggle {
+  background: #101828 !important;
+  color: #fff !important;
+}
+
+.classic-app-shell .main-header .next-stable-loading-header-button.notif-bell-btn {
+  background: #fff !important;
+  color: #101828 !important;
+}
+
+.classic-app-shell .main-header .next-stable-loading-header-button svg {
+  width: 18px !important;
+  height: 18px !important;
+}
+
+.classic-app-shell .main-header .next-stable-loading-user {
+  box-sizing: border-box !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex: 0 0 44px !important;
+  width: 44px !important;
+  min-width: 44px !important;
+  height: 44px !important;
+  min-height: 44px !important;
+  overflow: hidden !important;
+  border-radius: 999px !important;
+  pointer-events: none !important;
+}
+
+.classic-app-shell .main-header .next-stable-loading-user .header-user__avatar {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+}
+
+.classic-app-shell .main-header .next-stable-loading-user__fallback {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 100% !important;
+  height: 100% !important;
+  border: 2px solid rgba(249,115,22,.85) !important;
+  border-radius: inherit !important;
+  background: #fff !important;
+  color: #101828 !important;
+}
+
+.classic-app-shell .main-header .next-stable-loading-user__fallback svg {
+  width: 20px !important;
+  height: 20px !important;
+}
+
+@media (max-width: 768px) {
+  :root {
+    --next-mobile-dock-safe-space: calc(116px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* The page itself is the vertical scroller. Reserve real space inside that
+     scroller so the final card/row can always move completely above the dock. */
+  body.next-classic-shell-active .classic-app-shell .main-content {
+    padding-bottom: 0 !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell .main-content > main,
+  body.next-classic-shell-active .classic-app-shell .main-content > main.container,
+  body.next-classic-shell-active .classic-app-shell .main-content > main.container-full-width,
+  body.next-classic-shell-active .classic-app-shell .main-content > main.page-body,
+  body.next-classic-shell-active .classic-app-shell .main-content > main.tasks-v2-main {
+    box-sizing: border-box !important;
+    padding-bottom: var(--next-mobile-dock-safe-space) !important;
+    scroll-padding-bottom: var(--next-mobile-dock-safe-space) !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell .main-content > main > :last-child {
+    scroll-margin-bottom: 16px !important;
+  }
+
+  /* Once the client shell mounts, Home and the page list are deliberately two
+     independent rails. Only the pages rail scrolls horizontally. */
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-clip {
+    overflow-x: scroll !important;
+    overflow-y: hidden !important;
+    touch-action: pan-x !important;
+    overscroll-behavior-x: contain !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+    cursor: grab;
+  }
+
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-clip:active {
+    cursor: grabbing;
+  }
+
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list {
+    width: max-content !important;
+    min-width: max-content !important;
+    padding-right: 18px !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-home-rail {
+    list-style: none !important;
+  }
+
+  .classic-app-shell .main-header .next-stable-loading-header-button,
+  .classic-app-shell .main-header .next-stable-loading-user {
+    flex-basis: 40px !important;
+    width: 40px !important;
+    min-width: 40px !important;
+    height: 40px !important;
+    min-height: 40px !important;
+  }
+}
