@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { BodyClassSync, ClassicMobileDockStructure, ClassicSidebarViewportKeeper } from "./ClassicShellControls";
 
 const CHROME_CACHE_KEY = "ops.ui.chrome.v1";
@@ -58,7 +58,7 @@ function normalize(value) {
 function canSee(link, allowedPages) {
   if (link?.alwaysVisible) return true;
   const allowed = new Set((Array.isArray(allowedPages) ? allowedPages : []).map(normalize));
-  if (!allowed.size) return true;
+  if (!allowed.size) return false;
   return (link.permissions || []).some((permission) => allowed.has(normalize(permission)));
 }
 
@@ -81,17 +81,34 @@ function UserIcon() {
 }
 
 function readCachedChrome() {
+  if (typeof window === "undefined") return null;
+
+  let cached = null;
   try {
     const raw = JSON.parse(localStorage.getItem(CHROME_CACHE_KEY) || "null");
-    if (raw && typeof raw === "object") return raw;
+    if (raw && typeof raw === "object") cached = raw;
   } catch {}
-  return null;
+
+  // The login flow stores the current user's access list in sessionStorage.
+  // Prefer it over the longer-lived chrome cache so a previous user's pages
+  // can never flash in the loading sidebar during a route transition.
+  try {
+    const sessionAllowed = JSON.parse(sessionStorage.getItem("allowedPages") || "null");
+    if (Array.isArray(sessionAllowed)) {
+      cached = { ...(cached || {}), allowedPages: sessionAllowed };
+    }
+  } catch {}
+
+  return cached;
 }
 
 export function ClassicStableLoadingSidebar({ activeIndex = -1 }) {
   const [cache, setCache] = useState(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    // Resolve permissions before the browser paints the loading shell. This
+    // keeps the same authorized page set visible while navigating without
+    // briefly exposing links the current user cannot access.
     setCache(readCachedChrome());
   }, []);
 
