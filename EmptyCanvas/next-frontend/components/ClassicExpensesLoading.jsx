@@ -1,6 +1,7 @@
 "use client";
 
 import { BodyClassSync } from "./ClassicShellControls";
+import { ClassicStableLoadingHeader, ClassicStableLoadingSidebar } from "./ClassicStableLoadingChrome";
 
 const SIDEBAR_ITEMS = 18;
 
@@ -19,12 +20,9 @@ export default function ClassicExpensesLoading({ users = false }) {
       <BodyClassSync className={`${bodyClass} next-classic-shell-active`} />
 
       <div className="app-container classic-app-shell next-classic-expenses-loading" aria-label={`Loading ${title}`}>
-        <aside className="sidebar" aria-hidden="true">
-          <div className="sidebar-header"><div className="sidebar-brand-toggle next-classic-loading-brand"><img className="brand-logo-full" src="/images/Logo%20horizontal.png" alt="" /><img className="brand-logo-icon" src="/images/logo.png" alt="" /></div></div>
-          <nav className="sidebar-nav"><ul className="nav-list">{Array.from({ length: SIDEBAR_ITEMS }).map((_, index) => <li key={index} className={index === 1 || index === 17 ? `sidebar-${index === 1 ? "workspace" : "users"}-boundary` : ""}><span className={`nav-link next-classic-loading-nav ${index === activeIndex ? "active" : ""}`}><span className="next-classic-loading-nav-icon" /></span></li>)}</ul></nav>
-        </aside>
+        <ClassicStableLoadingSidebar activeIndex={users ? 13 : 12} />
         <div className="main-content">
-          <header className="main-header dash-header dash-hide-row2"><div className="header-row1"><div className="left"><div className="menu-toggle next-classic-loading-menu"><img className="menu-toggle-logo" src="/images/logo.png" alt="" /></div><div className="dash-title">{title}</div><div className="searchbar next-classic-loading-search"><span className="next-classic-loading-line" /></div></div><div className="right topbar-right"><span className="next-classic-loading-circle" /><span className="next-classic-loading-avatar" /></div></div></header>
+          <ClassicStableLoadingHeader title={title} />
           <main className="container-full-width next-classic-page-content">
             {users ? (
               <div className="expenses-layout next-expense-users-classic-parity"><div className="user-tabs">{Array.from({ length: 6 }).map((_, index) => <span className="user-tab next-expenses-loading-user-card" key={index}><span className="next-expenses-loading-line wide"/><span className="user-tab__divider"/><span className="next-expenses-loading-line amount"/><span className="next-expenses-loading-line"/></span>)}</div></div>

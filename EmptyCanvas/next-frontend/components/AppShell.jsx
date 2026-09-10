@@ -6,6 +6,7 @@ import {
   BodyClassSync,
   ClassicSidebarBootstrap,
   ClassicSidebarViewportKeeper,
+  ClassicMobileDockStructure,
   HeaderMenuToggle,
   SidebarBrandToggle,
 } from "./ClassicShellControls";
@@ -40,7 +41,7 @@ const MODULE_LINKS = [
 // Matches the final Classic Operations Hub sidebar order.  System History,
 // Backup, Notifications and How-it-works stay available through their direct
 // routes/profile controls, just like the current Classic interface.
-const CLASSIC_MAIN_LINKS = [
+export const CLASSIC_MAIN_LINKS = [
   { label: "Home", href: "/next/home", icon: "home", permissions: [], alwaysVisible: true, boundary: "workspace" },
   { label: "Current Orders", href: "/next/orders", icon: "list", permissions: ["Current Orders"] },
   { label: "Orders Review", href: "/next/orders-review", icon: "award", permissions: ["Orders Review"] },
@@ -83,7 +84,7 @@ function withClassicFlag(value) {
   return `${beforeHash}${separator}classic=1${hash}`;
 }
 
-function isActive(activePath, href) {
+export function isActive(activePath, href) {
   const current = String(activePath || "").replace(/\/$/, "") || "/";
   const target = String(href || "").replace(/\/$/, "") || "/";
   if (current === target) return true;
@@ -98,7 +99,7 @@ function isActive(activePath, href) {
   return !moreSpecificOwner;
 }
 
-function ClassicIcon({ name }) {
+export function ClassicIcon({ name }) {
   const common = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true };
   const paths = {
     home: <><path d="M3 11l9-8 9 8"/><path d="M5 10v11h14V10"/><path d="M9 21v-6h6v6"/></>,
@@ -153,6 +154,7 @@ export default function AppShell({
       {classicStyles.map((href) => <link rel="stylesheet" href={href} key={href} />)}
       <BodyClassSync className={combinedBodyClass} />
       <ClassicSidebarBootstrap />
+      <ClassicMobileDockStructure />
       <ClassicSidebarViewportKeeper />
       <TaskManagementSidebarFlyout allowedPages={allowedPages} activePath={activePath} />
 

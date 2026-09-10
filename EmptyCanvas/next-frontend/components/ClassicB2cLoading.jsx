@@ -1,6 +1,7 @@
 "use client";
 
 import { BodyClassSync } from "./ClassicShellControls";
+import { ClassicStableLoadingHeader, ClassicStableLoadingSidebar } from "./ClassicStableLoadingChrome";
 
 const SIDEBAR_ITEMS = 18;
 
@@ -16,12 +17,9 @@ export default function ClassicB2cLoading({ mode = "library" }) {
       <link rel="stylesheet" href="/css/b2c.css?v=b2c-formula-calculator-v2" />
       <BodyClassSync className={bodyClass} />
       <div className="app-container classic-app-shell next-classic-b2c-loading" aria-label={table ? "Loading B2C table" : forms ? "Loading B2C Forms" : "Loading B2C Database"}>
-        <aside className="sidebar" aria-hidden="true">
-          <div className="sidebar-header"><div className="sidebar-brand-toggle next-classic-loading-brand"><img className="brand-logo-full" src="/images/Logo%20horizontal.png" alt="" /><img className="brand-logo-icon" src="/images/logo.png" alt="" /></div></div>
-          <nav className="sidebar-nav"><ul className="nav-list">{Array.from({ length: SIDEBAR_ITEMS }).map((_, index) => <li key={index} className={index === 1 || index === 17 ? `sidebar-${index === 1 ? "workspace" : "users"}-boundary` : ""}><span className={`nav-link next-classic-loading-nav ${index === 9 ? "active" : ""}`}><span className="next-classic-loading-nav-icon" /></span></li>)}</ul></nav>
-        </aside>
+        <ClassicStableLoadingSidebar activeIndex={8} />
         <div className="main-content">
-          <header className="main-header dash-header dash-hide-row2"><div className="header-row1"><div className="left"><div className="menu-toggle next-classic-loading-menu"><img className="menu-toggle-logo" src="/images/logo.png" alt="" /></div><div className="dash-title">{forms ? "Forms" : "Database"}</div><div className="searchbar next-classic-loading-search"><span className="next-classic-loading-line" /></div></div><div className="right topbar-right"><span className="next-classic-loading-circle" /><span className="next-classic-loading-avatar" /></div></div></header>
+          <ClassicStableLoadingHeader title={forms ? "Forms" : "Database"} />
           <main className="container-full-width next-classic-page-content">
             <main className="b2c-shell">
               {table ? (
