@@ -17508,3 +17508,177 @@ body.operations-orders-page .next-classic-orders-parity .next-operations-order-c
     box-shadow: 0 12px 24px rgba(255,255,255,.16) !important;
   }
 }
+
+/* ========================================================================
+   Mobile order details — compact viewport-safe dialog
+   2026-09-10
+   Keep Current / Review / Operations / Maintenance order details fully inside
+   the usable mobile viewport, clear of the fixed header and bottom dock.
+   Desktop/tablet layouts are intentionally untouched.
+   ===================================================================== */
+@media (max-width: 768px) {
+  body.order-modal-fit-screen.current-orders-page .next-classic-orders-parity .co-modal-overlay.is-open,
+  body.order-modal-fit-screen.orders-review-page .next-classic-orders-parity .co-modal-overlay.is-open,
+  body.order-modal-fit-screen.operations-orders-page .next-classic-orders-parity .co-modal-overlay.is-open,
+  body.order-modal-fit-screen.page-maintenance-orders .next-classic-maintenance-parity .co-modal-overlay.is-open {
+    box-sizing: border-box !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 86px 16px calc(132px + env(safe-area-inset-bottom, 0px)) !important;
+    overflow: hidden !important;
+  }
+
+  body.order-modal-fit-screen.current-orders-page .next-classic-orders-parity .co-modal-dialog,
+  body.order-modal-fit-screen.orders-review-page .next-classic-orders-parity .co-modal-dialog,
+  body.order-modal-fit-screen.operations-orders-page .next-classic-orders-parity .co-modal-dialog,
+  body.order-modal-fit-screen.page-maintenance-orders .next-classic-maintenance-parity .co-modal-dialog {
+    box-sizing: border-box !important;
+    width: min(560px, calc(100vw - 32px)) !important;
+    max-width: 560px !important;
+    min-height: 0 !important;
+    max-height: min(78dvh, calc(100dvh - 218px - env(safe-area-inset-bottom, 0px))) !important;
+    margin: 0 !important;
+    padding: 10px 10px 9px !important;
+    border-radius: 20px !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    overscroll-behavior: contain !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  body.order-modal-fit-screen.current-orders-page .next-classic-orders-parity .co-modal-header,
+  body.order-modal-fit-screen.orders-review-page .next-classic-orders-parity .co-modal-header,
+  body.order-modal-fit-screen.operations-orders-page .next-classic-orders-parity .co-modal-header,
+  body.order-modal-fit-screen.page-maintenance-orders .next-classic-maintenance-parity .co-modal-header {
+    min-height: 38px !important;
+    height: 38px !important;
+    padding: 0 44px !important;
+  }
+
+  body.order-modal-fit-screen.current-orders-page .next-classic-orders-parity .co-modal-status,
+  body.order-modal-fit-screen.orders-review-page .next-classic-orders-parity .co-modal-status,
+  body.order-modal-fit-screen.operations-orders-page .next-classic-orders-parity .co-modal-status,
+  body.order-modal-fit-screen.page-maintenance-orders .next-classic-maintenance-parity .co-modal-status {
+    font-size: clamp(20px, 5.8vw, 24px) !important;
+    line-height: 1.05 !important;
+    padding-right: 0 !important;
+  }
+
+  body.order-modal-fit-screen.current-orders-page .next-classic-orders-parity .co-modal-close,
+  body.order-modal-fit-screen.current-orders-page .next-classic-orders-parity .co-modal-more-btn,
+  body.order-modal-fit-screen.orders-review-page .next-classic-orders-parity .co-modal-close,
+  body.order-modal-fit-screen.orders-review-page .next-classic-orders-parity .co-modal-more-btn,
+  body.order-modal-fit-screen.operations-orders-page .next-classic-orders-parity .co-modal-close,
+  body.order-modal-fit-screen.operations-orders-page .next-classic-orders-parity .co-modal-more-btn,
+  body.order-modal-fit-screen.page-maintenance-orders .next-classic-maintenance-parity .co-modal-close,
+  body.order-modal-fit-screen.page-maintenance-orders .next-classic-maintenance-parity .co-modal-more-btn {
+    width: 30px !important;
+    min-width: 30px !important;
+    height: 30px !important;
+    min-height: 30px !important;
+  }
+
+  body.order-modal-fit-screen.current-orders-page .next-classic-orders-parity .co-modal-close,
+  body.order-modal-fit-screen.orders-review-page .next-classic-orders-parity .co-modal-close,
+  body.order-modal-fit-screen.operations-orders-page .next-classic-orders-parity .co-modal-close,
+  body.order-modal-fit-screen.page-maintenance-orders .next-classic-maintenance-parity .co-modal-close {
+    top: 8px !important;
+    right: 8px !important;
+  }
+
+  body.order-modal-fit-screen.current-orders-page .next-classic-orders-parity .co-modal-more,
+  body.order-modal-fit-screen.orders-review-page .next-classic-orders-parity .co-modal-more,
+  body.order-modal-fit-screen.operations-orders-page .next-classic-orders-parity .co-modal-more,
+  body.order-modal-fit-screen.page-maintenance-orders .next-classic-maintenance-parity .co-modal-more {
+    top: 8px !important;
+    left: 8px !important;
+  }
+
+  body.order-modal-fit-screen .next-classic-orders-parity .next-current-order-modal-summary,
+  body.order-modal-fit-screen .next-classic-orders-parity .next-review-order-modal-summary,
+  body.order-modal-fit-screen .next-classic-orders-parity .next-operations-order-modal-summary,
+  body.order-modal-fit-screen.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-modal-summary {
+    gap: 5px !important;
+    margin-top: 7px !important;
+  }
+
+  body.order-modal-fit-screen .next-classic-orders-parity .next-current-order-modal-summary > div,
+  body.order-modal-fit-screen .next-classic-orders-parity .next-review-order-modal-summary > div,
+  body.order-modal-fit-screen .next-classic-orders-parity .next-operations-order-modal-summary > div,
+  body.order-modal-fit-screen.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-modal-summary > div {
+    min-height: 44px !important;
+    gap: 2px !important;
+    padding: 6px 7px !important;
+    border-radius: 11px !important;
+  }
+
+  body.order-modal-fit-screen .next-classic-orders-parity .co-track-pill,
+  body.order-modal-fit-screen.page-maintenance-orders .next-classic-maintenance-parity .co-track-pill {
+    margin-top: 8px !important;
+    padding: 8px 9px !important;
+    gap: 5px !important;
+  }
+
+  body.order-modal-fit-screen .next-classic-orders-parity .co-track-step,
+  body.order-modal-fit-screen.page-maintenance-orders .next-classic-maintenance-parity .co-track-step {
+    width: 36px !important;
+    height: 36px !important;
+  }
+
+  body.order-modal-fit-screen .next-classic-orders-parity .co-track-step svg,
+  body.order-modal-fit-screen.page-maintenance-orders .next-classic-maintenance-parity .co-track-step svg {
+    width: 16px !important;
+    height: 16px !important;
+  }
+
+  body.order-modal-fit-screen .next-classic-orders-parity .co-track-conn,
+  body.order-modal-fit-screen.page-maintenance-orders .next-classic-maintenance-parity .co-track-conn {
+    height: 7px !important;
+  }
+
+  body.order-modal-fit-screen .next-classic-orders-parity .co-modal-body,
+  body.order-modal-fit-screen.page-maintenance-orders .next-classic-maintenance-parity .co-modal-body {
+    margin-top: 8px !important;
+    gap: 7px !important;
+  }
+
+  body.order-modal-fit-screen .next-classic-orders-parity .co-meta-row,
+  body.order-modal-fit-screen.page-maintenance-orders .next-classic-maintenance-parity .co-meta-row {
+    padding: 7px 8px !important;
+    border-radius: 10px !important;
+    font-size: 9px !important;
+  }
+
+  body.order-modal-fit-screen .next-classic-orders-parity .order-component-groups,
+  body.order-modal-fit-screen.page-maintenance-orders .next-classic-maintenance-parity .order-component-groups {
+    gap: 6px !important;
+  }
+
+  body.order-modal-fit-screen .next-classic-orders-parity .order-component-group__head,
+  body.order-modal-fit-screen.page-maintenance-orders .next-classic-maintenance-parity .order-component-group__head {
+    min-height: 38px !important;
+    padding: 6px 8px !important;
+    border-radius: 10px !important;
+  }
+
+  body.order-modal-fit-screen .next-classic-orders-parity .co-item,
+  body.order-modal-fit-screen.page-maintenance-orders .next-classic-maintenance-parity .co-item {
+    gap: 6px !important;
+    padding: 7px 8px !important;
+    border-radius: 10px !important;
+  }
+
+  body.order-modal-fit-screen .next-classic-orders-parity .co-item-name,
+  body.order-modal-fit-screen.page-maintenance-orders .next-classic-maintenance-parity .co-item-name {
+    font-size: 9.5px !important;
+    line-height: 1.22 !important;
+  }
+
+  body.order-modal-fit-screen .next-classic-orders-parity .co-item-sub,
+  body.order-modal-fit-screen .next-classic-orders-parity .co-item-issue-desc,
+  body.order-modal-fit-screen.page-maintenance-orders .next-classic-maintenance-parity .co-item-sub,
+  body.order-modal-fit-screen.page-maintenance-orders .next-classic-maintenance-parity .co-item-issue-desc {
+    font-size: 8px !important;
+    line-height: 1.25 !important;
+  }
+}
