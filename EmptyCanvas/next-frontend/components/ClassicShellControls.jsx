@@ -32,7 +32,17 @@ export function BodyClassSync({ className = "" }) {
     // shell visibly jump during navigation.  A layout effect runs in the same
     // commit, before paint, so loading and settled states use one geometry.
     classes.forEach((value) => document.body.classList.add(value));
-    return () => classes.forEach((value) => document.body.classList.remove(value));
+    return () => {
+      // Keep the shared shell class alive across App Router route transitions.
+      // Loading fallbacks are streamed before their client effects hydrate; if
+      // the previous page removes this class first, the shell briefly falls
+      // back to the legacy spacing and the whole page appears to jump.
+      // Page-specific classes are still cleaned normally.
+      classes.forEach((value) => {
+        if (value === "next-classic-shell-active") return;
+        document.body.classList.remove(value);
+      });
+    };
   }, [className]);
   return null;
 }

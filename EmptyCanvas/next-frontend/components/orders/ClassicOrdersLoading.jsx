@@ -1,8 +1,6 @@
 import { BodyClassSync } from "../ClassicShellControls";
 import { ClassicStableLoadingHeader, ClassicStableLoadingSidebar } from "../ClassicStableLoadingChrome";
 
-const SIDEBAR_ITEMS = 18;
-
 function LoadingCard() {
   return (
     <article className="co-card next-classic-order-card-loading" aria-hidden="true">
@@ -24,7 +22,46 @@ function LoadingCard() {
   );
 }
 
+function layoutFor(bodyClass = "") {
+  if (bodyClass.includes("operations-orders-page")) {
+    return {
+      rootClass: "next-classic-orders-parity next-classic-operations-parity",
+      toolbarWrapClass: "next-operations-orders-toolbar-wrap",
+      surfaceClass: "operations-orders-list-surface next-classic-orders-loading-section",
+      surfaceId: "operations-orders-list",
+      listId: "requested-list",
+    };
+  }
+  if (bodyClass.includes("maintenance-orders")) {
+    return {
+      rootClass: "next-classic-orders-parity next-classic-maintenance-parity",
+      toolbarWrapClass: "next-maintenance-orders-toolbar-wrap",
+      surfaceClass: "next-maintenance-orders-list-surface next-classic-orders-loading-section",
+      surfaceId: undefined,
+      listId: "requested-list",
+    };
+  }
+  if (bodyClass.includes("orders-review-page")) {
+    return {
+      rootClass: "next-classic-orders-parity",
+      toolbarWrapClass: "next-orders-review-toolbar-wrap",
+      surfaceClass: "orders-review-list-surface next-classic-orders-loading-section",
+      surfaceId: "sv-orders",
+      listId: "sv-list",
+    };
+  }
+  return {
+    rootClass: "next-classic-orders-parity",
+    toolbarWrapClass: "next-current-orders-toolbar-wrap",
+    surfaceClass: "card next-classic-orders-loading-section",
+    surfaceId: "current-orders",
+    listId: "orders-list",
+  };
+}
+
 export default function ClassicOrdersLoading({ title = "Current Orders", bodyClass = "current-orders-page", activeIndex = 2, tabs = 7 }) {
+  const layout = layoutFor(bodyClass);
+
   return (
     <>
       <link rel="stylesheet" href="/css/style.css?v=bidi-mixed-v1" />
@@ -38,31 +75,38 @@ export default function ClassicOrdersLoading({ title = "Current Orders", bodyCla
         <div className="main-content">
           <ClassicStableLoadingHeader title={title} />
 
-          <main className="container-full-width next-classic-page-content next-classic-orders-parity">
-            <div className="orders-toolbar next-classic-orders-loading-toolbar" aria-hidden="true">
-              <div className="orders-toolbar__scroll">
-                <div className="portfolio-tabs portfolio-tabs--iconic">
-                  {Array.from({ length: tabs }).map((_, index) => (
-                    <span className={`tab-portfolio order-status-tab ${index === 0 ? "active" : ""}`} key={index}>
-                      <span className="order-status-tab__icon next-classic-order-loading-tab-icon" />
+          {/* Match the settled AppShell hierarchy exactly: the page-specific
+              orders wrapper lives INSIDE the shared main canvas, not on the
+              <main> itself. This keeps padding/insets identical while loading. */}
+          <main className="container-full-width next-classic-page-content">
+            <section className={layout.rootClass}>
+              <div className={layout.toolbarWrapClass}>
+                <div className="orders-toolbar next-classic-orders-loading-toolbar" aria-hidden="true">
+                  <div className="orders-toolbar__scroll">
+                    <div className="portfolio-tabs portfolio-tabs--iconic">
+                      {Array.from({ length: tabs }).map((_, index) => (
+                        <span className={`tab-portfolio order-status-tab ${index === 0 ? "active" : ""}`} key={index}>
+                          <span className="order-status-tab__icon next-classic-order-loading-tab-icon" />
+                          <span className="order-status-tab__copy"><span className="next-classic-order-loading-tab-label" /></span>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="orders-toolbar__divider" />
+                  <div className="orders-type-filter">
+                    <span className="orders-type-filter__button next-classic-order-loading-filter">
+                      <span className="next-classic-order-loading-tab-icon" />
                       <span className="next-classic-order-loading-tab-label" />
                     </span>
-                  ))}
+                  </div>
                 </div>
               </div>
-              <div className="orders-toolbar__divider" />
-              <div className="orders-type-filter">
-                <span className="orders-type-filter__button next-classic-order-loading-filter">
-                  <span className="next-classic-order-loading-tab-icon" />
-                  <span className="next-classic-order-loading-tab-label" />
-                </span>
-              </div>
-            </div>
 
-            <section className="card next-classic-orders-loading-section">
-              <div className="co-cards">
-                {Array.from({ length: 8 }).map((_, index) => <LoadingCard key={index} />)}
-              </div>
+              <section className={layout.surfaceClass} id={layout.surfaceId}>
+                <div className="co-cards" id={layout.listId}>
+                  {Array.from({ length: 8 }).map((_, index) => <LoadingCard key={index} />)}
+                </div>
+              </section>
             </section>
           </main>
         </div>

@@ -17868,3 +17868,125 @@ body.page-home .next-home-stock-analysis__menu button {
     width: min(272px, calc(100vw - 24px)) !important;
   }
 }
+
+/* ========================================================================
+   Route transition geometry lock — 2026-09-10
+   Keep loading fallbacks on the exact same DOM spacing as their settled page.
+   The previous Shopping Cart loader placed its page padding directly on the
+   shared <main>, so container-full-width's !important padding won and the
+   target page shifted when the real child mounted. The loader also rendered a
+   large grid that does not exist on the initial settled Shopping Cart screen.
+   These skeleton modifiers reuse the real order-type classes, so dimensions,
+   gaps and breakpoints are inherited from the settled component itself.
+   ===================================================================== */
+.classic-cart-loading-page-stable {
+  pointer-events: none !important;
+}
+
+.classic-cart-loading-order-type-step {
+  margin-bottom: 1.5rem !important;
+}
+
+.classic-cart-order-type-btn--loading {
+  cursor: default !important;
+  transform: none !important;
+}
+
+.classic-cart-order-type-btn--loading::before {
+  opacity: 0 !important;
+}
+
+.classic-cart-loading-block {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  background: #eef1f5 !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+.classic-cart-loading-block::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.82), transparent);
+  animation: classicCartStableShimmer 1.35s infinite;
+}
+
+@keyframes classicCartStableShimmer {
+  to { transform: translateX(100%); }
+}
+
+.classic-cart-loading-kicker {
+  color: transparent !important;
+}
+
+.classic-cart-loading-block--kicker {
+  width: 92px;
+  height: 9px;
+  border-radius: 999px;
+}
+
+.classic-cart-loading-block--heading {
+  width: min(250px, 56vw);
+  height: 30px;
+  border-radius: 10px;
+}
+
+.classic-cart-loading-block--icon {
+  width: 60px !important;
+  height: 60px !important;
+  min-width: 60px !important;
+  border-radius: 20px !important;
+}
+
+.classic-cart-loading-block--title {
+  width: min(180px, 82%);
+  height: 14px;
+  margin-top: 3px;
+  border-radius: 999px;
+}
+
+.classic-cart-loading-block--copy,
+.classic-cart-loading-block--copy-short {
+  width: min(220px, 94%);
+  height: 10px;
+  border-radius: 999px;
+}
+
+.classic-cart-loading-block--copy-short {
+  width: min(150px, 68%);
+}
+
+.classic-cart-loading-block--arrow {
+  width: 36px !important;
+  height: 36px !important;
+  min-width: 36px !important;
+  border-radius: 12px !important;
+}
+
+@media (max-width: 900px) {
+  .classic-cart-loading-block--icon {
+    width: 60px !important;
+    height: 60px !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .classic-cart-loading-block--heading {
+    height: 26px;
+  }
+  .classic-cart-loading-block--icon {
+    width: 54px !important;
+    height: 54px !important;
+    min-width: 54px !important;
+    border-radius: 18px !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .classic-cart-loading-block::after {
+    animation: none !important;
+  }
+}
