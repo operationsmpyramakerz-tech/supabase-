@@ -4,6 +4,7 @@ import HeaderSearch from "./HeaderSearch";
 import TaskManagementSidebarFlyout from "./task-management/TaskManagementSidebarFlyout";
 import {
   BodyClassSync,
+  ClassicChromeAccessSync,
   ClassicSidebarBootstrap,
   ClassicSidebarViewportKeeper,
   ClassicMobileDockStructure,
@@ -153,6 +154,7 @@ export default function AppShell({
       <link rel="stylesheet" href="/css/page-canvas-fix.css?v=page-canvas-single-layer-v3" />
       {classicStyles.map((href) => <link rel="stylesheet" href={href} key={href} />)}
       <BodyClassSync className={combinedBodyClass} />
+      <ClassicChromeAccessSync account={account} />
       <ClassicSidebarBootstrap />
       <ClassicMobileDockStructure />
       <ClassicSidebarViewportKeeper />

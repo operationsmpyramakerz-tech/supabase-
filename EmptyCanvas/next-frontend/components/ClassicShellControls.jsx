@@ -6,6 +6,9 @@ const COLLAPSED_KEY = "ui.sidebarCollapsed";
 const SIDEBAR_SCROLL_KEY = "ui.sidebarScrollTop";
 const SIDEBAR_SCROLL_LEFT_KEY = "ui.sidebarScrollLeft";
 
+const CHROME_CACHE_KEY = "ops.ui.chrome.v1";
+const ALLOWED_PAGES_KEY = "allowedPages";
+
 function setCollapsed(collapsed) {
   if (typeof document === "undefined") return;
   document.body.classList.toggle("sidebar-collapsed", Boolean(collapsed));
@@ -23,6 +26,45 @@ export function BodyClassSync({ className = "" }) {
     classes.forEach((value) => document.body.classList.add(value));
     return () => classes.forEach((value) => document.body.classList.remove(value));
   }, [className]);
+  return null;
+}
+
+
+export function ClassicChromeAccessSync({ account }) {
+  const hasAllowedPages = Array.isArray(account?.allowedPages);
+  const allowedPages = hasAllowedPages ? account.allowedPages : null;
+
+  useLayoutEffect(() => {
+    // Keep the loading/transition shell on the exact same permission snapshot
+    // as the fully rendered page.  The loading sidebar cannot read the server
+    // account prop directly, so persist the current user's resolved access as
+    // soon as the live shell mounts.
+    if (!hasAllowedPages) return;
+
+    try {
+      sessionStorage.setItem(ALLOWED_PAGES_KEY, JSON.stringify(allowedPages));
+    } catch {}
+
+    try {
+      let current = {};
+      try {
+        const parsed = JSON.parse(localStorage.getItem(CHROME_CACHE_KEY) || "null");
+        if (parsed && typeof parsed === "object") current = parsed;
+      } catch {}
+
+      const name = String(account?.name || account?.username || current?.name || current?.username || "").trim();
+      const photoUrl = String(account?.photoUrl || account?.profilePicture || current?.photoUrl || "").trim();
+
+      localStorage.setItem(CHROME_CACHE_KEY, JSON.stringify({
+        ...current,
+        ...(name ? { name, username: name } : {}),
+        ...(photoUrl ? { photoUrl } : {}),
+        allowedPages,
+        savedAt: Date.now(),
+      }));
+    } catch {}
+  }, [account, allowedPages, hasAllowedPages]);
+
   return null;
 }
 
