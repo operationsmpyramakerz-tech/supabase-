@@ -17996,3 +17996,23 @@ body.page-home .next-home-stock-analysis__menu button {
     animation: none !important;
   }
 }
+
+/* ========================================================================
+   Desktop sidebar viewport continuity during App Router loading
+   2026-09-10
+   Preserve the exact vertical sidebar viewport while a route loading shell is
+   server-rendered. The live shell stores its scrollTop in a same-site cookie;
+   the loading shell applies that offset on its first frame, then the hydrated
+   viewport keeper restores the native scroll position before the next paint.
+   ===================================================================== */
+@media (min-width: 769px) {
+  .classic-app-shell > .sidebar.next-stable-loading-sidebar:not(.sidebar-viewport-restored) > .sidebar-nav {
+    overflow-y: hidden !important;
+  }
+
+  .classic-app-shell > .sidebar.next-stable-loading-sidebar:not(.sidebar-viewport-restored) > .sidebar-nav > .nav-list {
+    transform: translate3d(0, calc(-1 * var(--next-loading-sidebar-scroll-top, 0px)), 0) !important;
+    transform-origin: top left !important;
+    will-change: transform;
+  }
+}

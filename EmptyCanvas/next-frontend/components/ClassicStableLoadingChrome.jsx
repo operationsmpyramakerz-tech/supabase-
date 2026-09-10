@@ -5,6 +5,8 @@ import { fetchLegacyJson } from "../lib/legacy-api";
 import ClassicStableLoadingNavItem from "./ClassicStableLoadingNavItem";
 
 const ALLOWED_PAGES_COOKIE = "ops_ui_allowed_pages_v1";
+const SIDEBAR_SCROLL_COOKIE = "ops_ui_sidebar_scroll_top_v1";
+const SIDEBAR_SCROLL_LEFT_COOKIE = "ops_ui_sidebar_scroll_left_v1";
 
 const CLASSIC_MAIN_LINKS = [
   { label: "Home", href: "/next/home", icon: "home", permissions: [], alwaysVisible: true, boundary: "workspace" },
@@ -99,9 +101,11 @@ function parseAllowedPagesCookie(value) {
 
 const readStableChrome = cache(async () => {
   const cookieStore = await cookies();
+  const scrollTop = Math.max(0, Number(cookieStore.get(SIDEBAR_SCROLL_COOKIE)?.value) || 0);
+  const scrollLeft = Math.max(0, Number(cookieStore.get(SIDEBAR_SCROLL_LEFT_COOKIE)?.value) || 0);
   const fromCookie = parseAllowedPagesCookie(cookieStore.get(ALLOWED_PAGES_COOKIE)?.value);
   if (Array.isArray(fromCookie)) {
-    return { allowedPages: fromCookie, name: "", photoUrl: "" };
+    return { allowedPages: fromCookie, name: "", photoUrl: "", scrollTop, scrollLeft };
   }
 
   // First request after deploying this fix may not have the UI cookie yet.
@@ -114,11 +118,13 @@ const readStableChrome = cache(async () => {
         allowedPages: Array.isArray(response.data.allowedPages) ? response.data.allowedPages : [],
         name: String(response.data.name || response.data.username || "").trim(),
         photoUrl: String(response.data.photoUrl || "").trim(),
+        scrollTop,
+        scrollLeft,
       };
     }
   } catch {}
 
-  return { allowedPages: [], name: "", photoUrl: "" };
+  return { allowedPages: [], name: "", photoUrl: "", scrollTop, scrollLeft };
 });
 
 export async function ClassicStableLoadingSidebar({ activeIndex = -1 }) {
@@ -128,9 +134,13 @@ export async function ClassicStableLoadingSidebar({ activeIndex = -1 }) {
     .map((link, originalIndex) => ({ ...link, originalIndex }))
     .filter((link) => canSee(link, allowed));
   const visibleHrefs = links.map((link) => link.href);
+  const loadingViewportStyle = {
+    "--next-loading-sidebar-scroll-top": `${Math.round(chrome?.scrollTop || 0)}px`,
+    "--next-loading-sidebar-scroll-left": `${Math.round(chrome?.scrollLeft || 0)}px`,
+  };
 
   return (
-    <aside className="sidebar next-stable-loading-sidebar" aria-label="Main navigation">
+    <aside className="sidebar next-stable-loading-sidebar" aria-label="Main navigation" style={loadingViewportStyle}>
       <ClassicMobileDockStructure />
       <ClassicSidebarViewportKeeper />
       <div className="sidebar-header">

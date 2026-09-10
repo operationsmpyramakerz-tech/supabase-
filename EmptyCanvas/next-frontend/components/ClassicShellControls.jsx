@@ -5,6 +5,8 @@ import { useEffect, useLayoutEffect } from "react";
 const COLLAPSED_KEY = "ui.sidebarCollapsed";
 const SIDEBAR_SCROLL_KEY = "ui.sidebarScrollTop";
 const SIDEBAR_SCROLL_LEFT_KEY = "ui.sidebarScrollLeft";
+const SIDEBAR_SCROLL_COOKIE = "ops_ui_sidebar_scroll_top_v1";
+const SIDEBAR_SCROLL_LEFT_COOKIE = "ops_ui_sidebar_scroll_left_v1";
 
 const CHROME_CACHE_KEY = "ops.ui.chrome.v1";
 const ALLOWED_PAGES_KEY = "allowedPages";
@@ -186,24 +188,45 @@ export function ClassicMobileDockStructure() {
 }
 
 export function ClassicSidebarViewportKeeper() {
-  useEffect(() => {
-    const nav = document.querySelector(".classic-app-shell .sidebar-nav");
-    if (!(nav instanceof HTMLElement)) return undefined;
+  useLayoutEffect(() => {
+    const sidebar = document.querySelector(".classic-app-shell .sidebar");
+    const nav = sidebar?.querySelector(":scope > .sidebar-nav");
+    if (!(sidebar instanceof HTMLElement) || !(nav instanceof HTMLElement)) return undefined;
 
     const pagesClip = nav.querySelector(":scope > .mobile-dock-pages-clip");
     const horizontalScroller = pagesClip instanceof HTMLElement ? pagesClip : null;
 
+    let hadSavedViewport = false;
     try {
       if (horizontalScroller) {
-        const savedLeft = Number(sessionStorage.getItem(SIDEBAR_SCROLL_LEFT_KEY));
-        if (Number.isFinite(savedLeft) && savedLeft > 0) horizontalScroller.scrollLeft = savedLeft;
+        const rawSavedLeft = sessionStorage.getItem(SIDEBAR_SCROLL_LEFT_KEY);
+        const savedLeft = rawSavedLeft === null ? NaN : Number(rawSavedLeft);
+        if (Number.isFinite(savedLeft) && savedLeft >= 0) {
+          horizontalScroller.scrollLeft = savedLeft;
+          hadSavedViewport = true;
+        }
       } else {
-        const saved = Number(sessionStorage.getItem(SIDEBAR_SCROLL_KEY));
-        if (Number.isFinite(saved) && saved > 0) nav.scrollTop = saved;
+        const rawSaved = sessionStorage.getItem(SIDEBAR_SCROLL_KEY);
+        const saved = rawSaved === null ? NaN : Number(rawSaved);
+        if (Number.isFinite(saved) && saved >= 0) {
+          nav.scrollTop = saved;
+          hadSavedViewport = true;
+        }
       }
     } catch {}
 
+    // The loading sidebar uses a server-rendered visual offset so its first
+    // streamed frame already matches the previous sidebar viewport. Once the
+    // actual DOM scroll position has been restored, remove that visual fallback
+    // before the browser paints the hydrated state.
+    sidebar.classList.add("sidebar-viewport-restored");
+
     const keepActiveVisible = () => {
+      // Preserve an existing viewport exactly during route transitions. The
+      // destination item was visible when the user clicked it, so re-centering
+      // the active item here only creates the visible jump we want to avoid.
+      if (hadSavedViewport) return;
+
       const active = nav.querySelector(".nav-link.active");
       if (!(active instanceof HTMLElement)) return;
 
@@ -227,24 +250,50 @@ export function ClassicSidebarViewportKeeper() {
       }
     };
 
-    const frame = window.requestAnimationFrame(keepActiveVisible);
-    const rememberVertical = () => {
-      try { sessionStorage.setItem(SIDEBAR_SCROLL_KEY, String(nav.scrollTop)); } catch {}
+    const persistCookie = (name, value) => {
+      try {
+        const safeValue = Math.max(0, Math.round(Number(value) || 0));
+        document.cookie = `${name}=${safeValue}; Path=/; Max-Age=43200; SameSite=Lax`;
+      } catch {}
     };
+
+    const rememberVertical = () => {
+      const value = Math.max(0, nav.scrollTop || 0);
+      try { sessionStorage.setItem(SIDEBAR_SCROLL_KEY, String(value)); } catch {}
+      persistCookie(SIDEBAR_SCROLL_COOKIE, value);
+    };
+
     const rememberHorizontal = () => {
       if (!horizontalScroller) return;
-      try { sessionStorage.setItem(SIDEBAR_SCROLL_LEFT_KEY, String(horizontalScroller.scrollLeft)); } catch {}
+      const value = Math.max(0, horizontalScroller.scrollLeft || 0);
+      try { sessionStorage.setItem(SIDEBAR_SCROLL_LEFT_KEY, String(value)); } catch {}
+      persistCookie(SIDEBAR_SCROLL_LEFT_COOKIE, value);
     };
+
+    const rememberViewport = () => {
+      rememberVertical();
+      rememberHorizontal();
+    };
+
+    const frame = window.requestAnimationFrame(() => {
+      keepActiveVisible();
+      rememberViewport();
+    });
 
     nav.addEventListener("scroll", rememberVertical, { passive: true });
     horizontalScroller?.addEventListener("scroll", rememberHorizontal, { passive: true });
+    // Persist the exact current viewport before an anchor navigation starts so
+    // the server-rendered loading sidebar receives the latest position cookie.
+    nav.addEventListener("pointerdown", rememberViewport, true);
+    nav.addEventListener("click", rememberViewport, true);
 
     return () => {
       window.cancelAnimationFrame(frame);
-      rememberVertical();
-      rememberHorizontal();
+      rememberViewport();
       nav.removeEventListener("scroll", rememberVertical);
       horizontalScroller?.removeEventListener("scroll", rememberHorizontal);
+      nav.removeEventListener("pointerdown", rememberViewport, true);
+      nav.removeEventListener("click", rememberViewport, true);
     };
   }, []);
   return null;
