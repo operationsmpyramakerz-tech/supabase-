@@ -17682,3 +17682,92 @@ body.operations-orders-page .next-classic-orders-parity .next-operations-order-c
     line-height: 1.25 !important;
   }
 }
+
+/* =========================================================
+   Next shell · compact user profile menu
+   Keep the same visual language while reducing the menu footprint so the
+   avatar dropdown feels proportional to the compact header/mobile UI.
+   ========================================================= */
+.user-menu-panel--portal{
+  width: 286px !important;
+  max-width: calc(100vw - 24px) !important;
+}
+
+.user-menu-panel--portal .user-menu-shell{
+  border-radius: 22px !important;
+  padding: 10px !important;
+}
+
+.user-menu-panel--portal .user-menu-user{
+  gap: 10px !important;
+  padding: 7px 8px 9px !important;
+  border-radius: 16px !important;
+}
+
+.user-menu-panel--portal .user-menu-user__avatar{
+  width: 42px !important;
+  height: 42px !important;
+  box-shadow: 0 0 0 3px rgba(234,88,12,0.12) !important;
+}
+
+.user-menu-panel--portal .user-menu-user__name{
+  font-size: 13px !important;
+}
+
+.user-menu-panel--portal .user-menu-user__role{
+  margin-top: 2px !important;
+  font-size: 11px !important;
+}
+
+.user-menu-panel--portal .user-menu-item{
+  gap: 10px !important;
+  padding: 8px 10px !important;
+  border-radius: 13px !important;
+  font-size: 13px !important;
+}
+
+.user-menu-panel--portal .user-menu-item .umi-ico{
+  width: 21px !important;
+  height: 21px !important;
+}
+
+.user-menu-panel--portal .user-menu-item .umi-ico svg,
+.user-menu-panel--portal .user-menu-item .umi-ico i{
+  width: 16px !important;
+  height: 16px !important;
+}
+
+.user-menu-panel--portal .user-menu-sep{
+  margin: 7px 7px !important;
+}
+
+.user-menu-panel--portal .user-menu-sep.user-menu-sep--tight{
+  margin: 6px 7px 7px !important;
+}
+
+.user-menu-panel--portal .user-menu-item.user-menu-item--refresh{
+  margin-top: 7px !important;
+}
+
+@media (max-width: 768px){
+  .user-menu-panel--portal{
+    width: 276px !important;
+    max-width: calc(100vw - 24px) !important;
+  }
+
+  .user-menu-panel--portal .user-menu-shell{
+    border-radius: 20px !important;
+    padding: 9px !important;
+  }
+
+  .user-menu-panel--portal .user-menu-user__avatar{
+    width: 40px !important;
+    height: 40px !important;
+  }
+
+  .user-menu-panel--portal .user-menu-item{
+    min-height: 0 !important;
+    padding: 7px 9px !important;
+    font-size: 12.5px !important;
+  }
+}
