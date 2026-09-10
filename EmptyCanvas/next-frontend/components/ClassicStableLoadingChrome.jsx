@@ -2,6 +2,7 @@ import { cache } from "react";
 import { cookies } from "next/headers";
 import { BodyClassSync, ClassicMobileDockStructure, ClassicSidebarViewportKeeper } from "./ClassicShellControls";
 import { fetchLegacyJson } from "../lib/legacy-api";
+import ClassicStableLoadingNavItem from "./ClassicStableLoadingNavItem";
 
 const ALLOWED_PAGES_COOKIE = "ops_ui_allowed_pages_v1";
 
@@ -126,6 +127,7 @@ export async function ClassicStableLoadingSidebar({ activeIndex = -1 }) {
   const links = CLASSIC_MAIN_LINKS
     .map((link, originalIndex) => ({ ...link, originalIndex }))
     .filter((link) => canSee(link, allowed));
+  const visibleHrefs = links.map((link) => link.href);
 
   return (
     <aside className="sidebar next-stable-loading-sidebar" aria-label="Main navigation">
@@ -140,15 +142,17 @@ export async function ClassicStableLoadingSidebar({ activeIndex = -1 }) {
       <nav className="sidebar-nav" aria-label="Loading navigation">
         <ul className="nav-list">
           {links.map((link) => (
-            <li
+            <ClassicStableLoadingNavItem
               key={link.href}
-              className={link.boundary === "workspace" ? "sidebar-workspace-boundary" : link.boundary === "users" ? "sidebar-users-boundary" : ""}
+              href={link.href}
+              allHrefs={visibleHrefs}
+              fallbackActive={link.originalIndex === activeIndex}
+              itemClassName={link.boundary === "workspace" ? "sidebar-workspace-boundary" : link.boundary === "users" ? "sidebar-users-boundary" : ""}
+              label={link.label}
             >
-              <span className={`nav-link next-stable-loading-nav ${link.originalIndex === activeIndex ? "active" : ""}`} title={link.label}>
-                <ClassicIcon name={link.icon} />
-                <span className="nav-label">{link.label}</span>
-              </span>
-            </li>
+              <ClassicIcon name={link.icon} />
+              <span className="nav-label">{link.label}</span>
+            </ClassicStableLoadingNavItem>
           ))}
         </ul>
       </nav>
