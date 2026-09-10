@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { BodyClassSync, ClassicSidebarBootstrap, ClassicSidebarViewportKeeper } from "./ClassicShellControls";
+import { BodyClassSync, ClassicMobileDockStructure, ClassicSidebarViewportKeeper } from "./ClassicShellControls";
 
 const CHROME_CACHE_KEY = "ops.ui.chrome.v1";
 
@@ -104,7 +104,7 @@ export function ClassicStableLoadingSidebar({ activeIndex = -1 }) {
 
   return (
     <aside className="sidebar next-stable-loading-sidebar" aria-label="Main navigation">
-      <ClassicSidebarBootstrap />
+      <ClassicMobileDockStructure />
       <ClassicSidebarViewportKeeper />
       <div className="sidebar-header">
         <div className="sidebar-brand-toggle next-classic-loading-brand">
