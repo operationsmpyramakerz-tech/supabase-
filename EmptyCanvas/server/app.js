@@ -1076,6 +1076,7 @@ const SUPABASE_CACHE_KEYS = Object.freeze({
   appPages: (assignableOnly, activeOnly) => `cache:supabase:app-pages:a${assignableOnly ? 1 : 0}:x${activeOnly ? 1 : 0}:v1`,
   pageAccessMember: (memberId) => `cache:supabase:page-access:member:${cacheKeySafe(memberId)}:v1`,
   pageAccessAll: "cache:supabase:page-access:all:v1",
+  homeAnalysisUsers: "cache:api:home:analysis-users:supabase:v2",
   departments: "cache:supabase:user-access:departments:v1",
   accountWithAccess: (memberId) => `cache:supabase:account-with-access:${cacheKeySafe(memberId)}:v1`,
   lmsPages: (assignableOnly, activeOnly) => `cache:supabase:lms-pages:a${assignableOnly ? 1 : 0}:x${activeOnly ? 1 : 0}:v1`,
@@ -1092,6 +1093,7 @@ async function clearSupabaseMemberAccessCaches(memberId, { includeLms = true, in
   }
   if (includeDirectory) {
     tasks.push(cacheDel(SUPABASE_CACHE_KEYS.pageAccessAll));
+    tasks.push(cacheDel(SUPABASE_CACHE_KEYS.homeAnalysisUsers));
     tasks.push(cacheDel("cache:api:user-access:team-members:supabase:v1"));
     tasks.push(cacheDel(USER_ACCESS_CACHE_KEY));
   }
@@ -2666,6 +2668,7 @@ async function _uaClearUserAccessCaches(memberId = "") {
     cacheDel(USER_ACCESS_CACHE_KEY),
     cacheDel("cache:api:user-access:team-members:supabase:v1"),
     cacheDel(SUPABASE_CACHE_KEYS.pageAccessAll),
+    cacheDel(SUPABASE_CACHE_KEYS.homeAnalysisUsers),
     cacheDel(SUPABASE_CACHE_KEYS.departments),
     memberId ? cacheDel(SUPABASE_CACHE_KEYS.pageAccessMember(memberId)) : Promise.resolve(),
     memberId ? cacheDel(SUPABASE_CACHE_KEYS.accountWithAccess(memberId)) : Promise.resolve(),
@@ -28067,6 +28070,9 @@ async function _pageBootstrapNotifications(req) {
 async function _pageBootstrapHome(req) {
   const loaders = [
     _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+    // Load the analysis directory with the rest of Home so the Users dropdown
+    // is ready immediately instead of starting a slow request when it is opened.
+    _pageBootstrapLoad('/api/home/analysis-users', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/home/analysis-users')),
   ];
 
   if (_pageBootstrapHasPageAccess(req, 'Current Orders')) {
@@ -32350,39 +32356,62 @@ async function _sbStocktakingForRequest(req) {
 }
 
 // Home global analysis — all Users Center members plus their page access.
-app.get(
-  "/api/home/analysis-users",
-  requireAuth,
-  async (req, res) => {
-    res.set("Cache-Control", "no-store");
-    try {
-      if (!_sbTeamMembersEnabled()) return res.json({ users: [], source: "unavailable" });
-      const rows = await _sbSelectTeamMembersRows();
+// Resolve page access in bulk. The old implementation called the page-access
+// resolver once per member, which made the Home Users dropdown progressively
+// slower as the team grew.
+async function _sbHomeAnalysisUsers() {
+  if (!_sbTeamMembersEnabled()) return [];
+
+  return await cacheGetOrSet(
+    SUPABASE_CACHE_KEYS.homeAnalysisUsers,
+    60,
+    async () => {
+      const [memberRows, allAccessRows] = await Promise.all([
+        _sbSelectTeamMembersRows(),
+        _sbSelectAllPageAccessView().catch((error) => {
+          console.warn("[home-analysis] bulk page-access lookup failed; using legacy allowed-pages columns:", error?.message || error);
+          return [];
+        }),
+      ]);
+
+      const accessByMember = _sbGroupPageAccessRowsByMember(allAccessRows);
       const users = [];
-      for (const row of rows || []) {
+
+      for (const row of memberRows || []) {
         const id = String(_sbGet(row, ["id", "ID"]) ?? "").trim();
         const name = _sbString(_sbValueForLabel(row, "Name")) || "Unnamed";
         if (!id || !name) continue;
-        let allowedPages = [];
-        try {
-          const access = await _sbAccountPayloadWithAccess(row, name);
-          allowedPages = Array.isArray(access?.accountPayload?.allowedPages)
-            ? access.accountPayload.allowedPages
-            : [];
-        } catch (accessError) {
-          console.warn("[home-analysis] failed to resolve user access:", id, accessError?.message || accessError);
-        }
+
+        const accessRows = accessByMember.get(id) || [];
+        const allowedPages = accessRows.length
+          ? _sbPageAccessSummaryFromRows(accessRows).allowedPages
+          : expandAllowedForUI(_sbExtractAllowedPages(row));
+
         users.push({
           id,
           name,
           username: _sbString(_sbValueForLabel(row, "Username")) || name,
           email: _sbString(_sbValueForLabel(row, "Email")) || "",
           employeeCode: _sbString(_sbValueForLabel(row, "Employee Code")) || "",
-          allowedPages,
+          allowedPages: Array.isArray(allowedPages) ? allowedPages : [],
         });
       }
+
       users.sort((a, b) => String(a.name).localeCompare(String(b.name)));
-      return res.json({ users, source: "supabase" });
+      return users;
+    },
+    { memoryTtlSeconds: 20 },
+  );
+}
+
+app.get(
+  "/api/home/analysis-users",
+  requireAuth,
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      const users = await _sbHomeAnalysisUsers();
+      return res.json({ users, source: _sbTeamMembersEnabled() ? "supabase" : "unavailable" });
     } catch (error) {
       console.error("GET /api/home/analysis-users error:", error?.details || error?.body || error);
       return res.status(error?.status || 500).json({ error: error?.message || "Failed to load analysis users." });

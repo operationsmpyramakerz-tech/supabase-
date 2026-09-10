@@ -132,14 +132,17 @@ function itemOwnerValues(item = {}) {
   ].flatMap((value) => Array.isArray(value) ? value : [value]).map(lower).filter(Boolean);
 }
 
-function groupMatchesUser(group, user) {
+function itemMatchesUser(item, user) {
   if (!user) return true;
   const targets = [user.id, user.name, user.username, user.email, user.employeeCode].map(lower).filter(Boolean);
   if (!targets.length) return true;
-  return (Array.isArray(group?.items) ? group.items : []).some((item) => {
-    const owners = itemOwnerValues(item);
-    return targets.some((target) => owners.some((owner) => owner === target || owner.includes(target) || target.includes(owner)));
-  });
+  const owners = itemOwnerValues(item);
+  return targets.some((target) => owners.some((owner) => owner === target || owner.includes(target) || target.includes(owner)));
+}
+
+function groupMatchesUser(group, user) {
+  if (!user) return true;
+  return (Array.isArray(group?.items) ? group.items : []).some((item) => itemMatchesUser(item, user));
 }
 
 function summarizeGroupList(groups, definitions, bucketFn) {
@@ -302,26 +305,35 @@ export default async function HomePage({ searchParams }) {
   const showStock = hasAccess(account, ["Stocktaking", "/stocktaking"]);
   const showExpenses = hasAccess(account, ["Expenses", "/expenses"]);
 
-  let analysisUsers = [];
-  if (requestedUserId !== "all") {
-    const analysisUsersResponse = await fetchLegacyJson("/api/home/analysis-users", { timeoutMs: 12000 });
-    analysisUsers = analysisUsersResponse.ok && Array.isArray(analysisUsersResponse.data?.users)
-      ? analysisUsersResponse.data.users
-      : [];
-  }
+  // The Users directory is part of the Home bootstrap now, so the dropdown is
+  // immediately usable and a selected user can be resolved by both id and name.
+  const analysisUsersPayload = getResource(resources, "/api/home/analysis-users", null);
+  const analysisUsers = Array.isArray(analysisUsersPayload?.users) ? analysisUsersPayload.users : [];
+  const analysisUsersReady = Boolean(analysisUsersPayload && Array.isArray(analysisUsersPayload?.users));
   const selectedUser = requestedUserId === "all"
     ? null
     : (analysisUsers.find((user) => String(user.id) === String(requestedUserId)) || { id: requestedUserId });
 
   let stockRows = Array.isArray(defaultStockRows) ? defaultStockRows : [];
   let expensePayload = defaultExpensePayload && typeof defaultExpensePayload === "object" ? defaultExpensePayload : { items: [] };
+  let selectedSystemRows = null;
+
   if (selectedUser) {
-    const [stockResponse, expenseResponse] = await Promise.all([
+    const [stockResponse, expenseResponse, allOrdersResponse] = await Promise.all([
       showStock ? fetchLegacyJson(`/api/home/stocktaking-users/${encodeURIComponent(requestedUserId)}`, { timeoutMs: 15000 }) : Promise.resolve(null),
       showExpenses ? fetchLegacyJson(`/api/home/analysis-users/${encodeURIComponent(requestedUserId)}/expenses`, { timeoutMs: 15000 }) : Promise.resolve(null),
+      // Current Orders is normally scoped to the signed-in user. For the global
+      // Home analysis we need the system-wide source, then filter it to the
+      // selected member so every order card reflects that member, not the viewer.
+      (showCurrent || showReview || showOperations || showMaintenance)
+        ? fetchLegacyJson("/api/orders/requested?scope=all-system", { timeoutMs: 15000 })
+        : Promise.resolve(null),
     ]);
     stockRows = stockResponse?.ok && Array.isArray(stockResponse.data?.items) ? stockResponse.data.items : [];
     expensePayload = expenseResponse?.ok && Array.isArray(expenseResponse.data?.items) ? { items: expenseResponse.data.items } : { items: [] };
+    selectedSystemRows = allOrdersResponse?.ok && Array.isArray(allOrdersResponse.data)
+      ? allOrdersResponse.data.filter((row) => itemMatchesUser(row, selectedUser))
+      : null;
   }
 
   const applyGlobalFilters = (groups) => filterGroupsByTime(
@@ -329,11 +341,24 @@ export default async function HomePage({ searchParams }) {
     globalDuration,
   );
 
-  const currentGroups = applyGlobalFilters(groupRows(Array.isArray(currentRows) ? currentRows : []));
-  const reviewGroups = applyGlobalFilters(groupRows(reviewRows));
-  const requestedGroups = groupRows(Array.isArray(requestedRows) ? requestedRows : []);
-  const operationsGroups = applyGlobalFilters(requestedGroups.filter((group) => orderTypeBucket(group) !== "maintenance"));
-  const maintenanceGroups = applyGlobalFilters(requestedGroups.filter((group) => orderTypeBucket(group) === "maintenance"));
+  const selectedRowsAvailable = Array.isArray(selectedSystemRows);
+  const selectedApprovedRows = selectedRowsAvailable
+    ? selectedSystemRows.filter((row) => lower(row.svApproval ?? row.sv_approval ?? row.approval) === "approved")
+    : null;
+
+  const currentGroups = selectedRowsAvailable
+    ? filterGroupsByTime(groupRows(selectedSystemRows), globalDuration)
+    : applyGlobalFilters(groupRows(Array.isArray(currentRows) ? currentRows : []));
+  const reviewGroups = selectedRowsAvailable
+    ? filterGroupsByTime(groupRows(selectedSystemRows), globalDuration)
+    : applyGlobalFilters(groupRows(reviewRows));
+  const requestedGroups = groupRows(selectedApprovedRows ?? (Array.isArray(requestedRows) ? requestedRows : []));
+  const operationsGroups = selectedRowsAvailable
+    ? filterGroupsByTime(requestedGroups.filter((group) => orderTypeBucket(group) !== "maintenance"), globalDuration)
+    : applyGlobalFilters(requestedGroups.filter((group) => orderTypeBucket(group) !== "maintenance"));
+  const maintenanceGroups = selectedRowsAvailable
+    ? filterGroupsByTime(requestedGroups.filter((group) => orderTypeBucket(group) === "maintenance"), globalDuration)
+    : applyGlobalFilters(requestedGroups.filter((group) => orderTypeBucket(group) === "maintenance"));
 
   const currentStatusDefinitions = [
     { key: "progress", label: "In progress", color: "#f97316" },
@@ -379,6 +404,7 @@ export default async function HomePage({ searchParams }) {
 
       <HomeOverviewClient
         analysisUsers={analysisUsers}
+        analysisUsersReady={analysisUsersReady}
         selectedUser={requestedUserId}
         selectedDuration={globalDuration}
         currentMatrix={currentMatrix}

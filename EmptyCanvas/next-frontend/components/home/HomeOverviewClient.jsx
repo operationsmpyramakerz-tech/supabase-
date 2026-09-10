@@ -347,7 +347,7 @@ function GlobalSelect({ value, options, open, onToggle, onChoose }) {
   );
 }
 
-function GlobalAnalysisControl({ users = [], selectedUser = "all", selectedDuration = "all" }) {
+function GlobalAnalysisControl({ users = [], usersReady = false, selectedUser = "all", selectedDuration = "all" }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -355,7 +355,7 @@ function GlobalAnalysisControl({ users = [], selectedUser = "all", selectedDurat
   const [open, setOpen] = useState(false);
   const [openSelect, setOpenSelect] = useState("");
   const [availableUsers, setAvailableUsers] = useState(users);
-  const [usersLoaded, setUsersLoaded] = useState(users.length > 0);
+  const [usersLoaded, setUsersLoaded] = useState(usersReady || users.length > 0);
   const [usersLoading, setUsersLoading] = useState(false);
   const [isPending, startTransition] = useTransition();
   const close = () => {
@@ -365,11 +365,23 @@ function GlobalAnalysisControl({ users = [], selectedUser = "all", selectedDurat
   useOutsideClose(ref, close);
 
   useEffect(() => {
-    if (users.length) {
+    if (usersReady || users.length) {
       setAvailableUsers(users);
       setUsersLoaded(true);
+      try {
+        window.sessionStorage.setItem("erp-home-analysis-users-v1", JSON.stringify(users));
+      } catch {}
+      return;
     }
-  }, [users]);
+
+    try {
+      const cached = JSON.parse(window.sessionStorage.getItem("erp-home-analysis-users-v1") || "[]");
+      if (Array.isArray(cached) && cached.length) {
+        setAvailableUsers(cached);
+        setUsersLoaded(true);
+      }
+    } catch {}
+  }, [users, usersReady]);
 
   const loadUsers = async () => {
     if (usersLoaded || usersLoading) return;
@@ -377,7 +389,11 @@ function GlobalAnalysisControl({ users = [], selectedUser = "all", selectedDurat
     try {
       const response = await fetch("/api/home/analysis-users", { credentials: "same-origin", cache: "no-store" });
       const payload = response.ok ? await response.json().catch(() => ({})) : {};
-      setAvailableUsers(Array.isArray(payload?.users) ? payload.users : []);
+      const loadedUsers = Array.isArray(payload?.users) ? payload.users : [];
+      setAvailableUsers(loadedUsers);
+      try {
+        window.sessionStorage.setItem("erp-home-analysis-users-v1", JSON.stringify(loadedUsers));
+      } catch {}
     } catch {
       setAvailableUsers([]);
     } finally {
@@ -543,6 +559,7 @@ function StockCard({ tagSummaries = {}, tags = [] }) {
 
 export default function HomeOverviewClient({
   analysisUsers = [],
+  analysisUsersReady = false,
   selectedUser = "all",
   selectedDuration = "all",
   currentMatrix,
@@ -566,7 +583,7 @@ export default function HomeOverviewClient({
           <Icon name="activity" />
           Overview
         </h2>
-        <GlobalAnalysisControl users={analysisUsers} selectedUser={selectedUser} selectedDuration={selectedDuration} />
+        <GlobalAnalysisControl users={analysisUsers} usersReady={analysisUsersReady} selectedUser={selectedUser} selectedDuration={selectedDuration} />
       </div>
 
       <div className="stats home-kpis">
