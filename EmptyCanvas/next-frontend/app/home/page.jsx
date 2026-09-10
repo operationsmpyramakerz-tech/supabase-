@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import AppShell from "../../components/AppShell";
-import { DashboardNotice, ExpensesCard, OrdersCard, QuickActionsCard, RecentOrdersCard, ScopeCard, StockCard } from "../../components/home/DashboardCards";
+import { DashboardNotice, QuickActionsCard, RecentOrdersCard, ScopeCard } from "../../components/home/DashboardCards";
+import HomeOverviewClient from "../../components/home/HomeOverviewClient";
 import { fetchLegacyJson } from "../../lib/legacy-api";
 
 export const dynamic = "force-dynamic";
@@ -68,6 +69,132 @@ function summarizeGroups(rows, definitions, bucketFn, filterFn = () => true) {
     bucket.cost += group.cost;
   });
   return { total: groups.length, totalCost: groups.reduce((sum, group) => sum + group.cost, 0), buckets };
+}
+
+const TYPE_ANALYSIS_DEFINITIONS = [
+  { key: "request", label: "Request", color: "#176b3a" },
+  { key: "withdrawal", label: "Withdrawal", color: "#dc2626" },
+  { key: "maintenance", label: "Maintenance", color: "#eab308" },
+];
+
+function optionText(value) {
+  if (Array.isArray(value)) return value.map(optionText).filter(Boolean).join(", ");
+  if (value && typeof value === "object") return text(value.name ?? value.label ?? value.title ?? value.value);
+  return text(value);
+}
+
+function orderTypeBucket(group = {}) {
+  const rows = Array.isArray(group.items) ? group.items : [];
+  const candidates = [
+    group.orderType,
+    group.order_type,
+    group.type,
+    ...rows.flatMap((row) => [row.orderType, row.order_type, row.type, row.requestType, row.request_type]),
+  ];
+  for (const candidate of candidates) {
+    const key = lower(optionText(candidate)).replace(/[^a-z0-9]+/g, "");
+    if (!key) continue;
+    if (/(withdraw|withdrawal)/.test(key)) return "withdrawal";
+    if (/(maintenance|requestmaintenance)/.test(key)) return "maintenance";
+    if (/(request|delivery|product)/.test(key)) return "request";
+  }
+  return "request";
+}
+
+function groupCreatedDate(group = {}) {
+  const dates = (Array.isArray(group.items) ? group.items : [])
+    .map((row) => new Date(rowDate(row) || 0))
+    .filter((date) => Number.isFinite(date.getTime()));
+  if (!dates.length) return null;
+  return new Date(Math.max(...dates.map((date) => date.getTime())));
+}
+
+function filterGroupsByTime(groups = [], range = "all") {
+  const source = Array.isArray(groups) ? groups : [];
+  if (range === "all") return source;
+  const now = new Date();
+  const from = new Date(now);
+  if (range === "week") from.setDate(from.getDate() - 7);
+  else if (range === "month") from.setMonth(from.getMonth() - 1);
+  else if (range === "year") from.setFullYear(from.getFullYear() - 1);
+  else return source;
+  return source.filter((group) => {
+    const date = groupCreatedDate(group);
+    return date && date >= from && date <= now;
+  });
+}
+
+function itemOwnerValues(item = {}) {
+  return [
+    item.createdById, item.createdByName, item.teamMemberId, item.teamMemberName,
+    item.userId, item.userName, item.username, item.requestedBy, item.ownerName,
+    item.createdBy, item.requesterName,
+  ].flatMap((value) => Array.isArray(value) ? value : [value]).map(lower).filter(Boolean);
+}
+
+function groupMatchesUser(group, user) {
+  if (!user) return true;
+  const targets = [user.id, user.name, user.username, user.email, user.employeeCode].map(lower).filter(Boolean);
+  if (!targets.length) return true;
+  return (Array.isArray(group?.items) ? group.items : []).some((item) => {
+    const owners = itemOwnerValues(item);
+    return targets.some((target) => owners.some((owner) => owner === target || owner.includes(target) || target.includes(owner)));
+  });
+}
+
+function summarizeGroupList(groups, definitions, bucketFn) {
+  const safeGroups = Array.isArray(groups) ? groups : [];
+  const buckets = definitions.map((definition) => ({ ...definition, count: 0, cost: 0 }));
+  const byKey = new Map(buckets.map((bucket) => [bucket.key, bucket]));
+  safeGroups.forEach((group) => {
+    const bucket = byKey.get(bucketFn(group)) || buckets[0];
+    bucket.count += 1;
+    bucket.cost += number(group.cost);
+  });
+  return {
+    total: safeGroups.length,
+    totalCost: safeGroups.reduce((sum, group) => sum + number(group.cost), 0),
+    buckets,
+  };
+}
+
+function analysisMatrix(groups, statusDefinitions, statusBucketFn) {
+  const result = { status: {}, type: {} };
+  for (const mode of ["status", "type"]) {
+    const definitions = mode === "type" ? TYPE_ANALYSIS_DEFINITIONS : statusDefinitions;
+    const bucketFn = mode === "type" ? orderTypeBucket : statusBucketFn;
+    for (const range of ["all", "week", "month", "year"]) {
+      result[mode][range] = summarizeGroupList(filterGroupsByTime(groups, range), definitions, bucketFn);
+    }
+  }
+  return result;
+}
+
+function filterItemsByDuration(items = [], duration = "all") {
+  const source = Array.isArray(items) ? items : [];
+  if (duration === "all") return source;
+  const now = new Date();
+  const from = new Date(now);
+  if (duration === "week") from.setDate(from.getDate() - 7);
+  else if (duration === "month") from.setMonth(from.getMonth() - 1);
+  else if (duration === "year") from.setFullYear(from.getFullYear() - 1);
+  else return source;
+  return source.filter((item) => {
+    const date = new Date(item.date ?? item.createdAt ?? item.created_at ?? 0);
+    return Number.isFinite(date.getTime()) && date >= from && date <= now;
+  });
+}
+
+function stockTagName(item = {}) {
+  return text(item?.tag?.name ?? item?.tag) || "Untagged";
+}
+
+function stockTagAnalysis(rows = []) {
+  const source = Array.isArray(rows) ? rows : [];
+  const tags = Array.from(new Set(source.map(stockTagName).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+  const summaries = { all: stockSummary(source) };
+  tags.forEach((tag) => { summaries[tag] = stockSummary(source.filter((row) => stockTagName(row) === tag)); });
+  return { tags, summaries };
 }
 function stockSummary(rows = []) {
   return (Array.isArray(rows) ? rows : []).reduce((summary, row) => {
@@ -145,7 +272,12 @@ function getResource(map, prefix, fallback) {
   return fallback;
 }
 
-export default async function HomePage() {
+export default async function HomePage({ searchParams }) {
+  const params = await Promise.resolve(searchParams || {});
+  const requestedUserId = text(Array.isArray(params?.analysisUser) ? params.analysisUser[0] : params?.analysisUser) || "all";
+  const requestedDuration = text(Array.isArray(params?.analysisDuration) ? params.analysisDuration[0] : params?.analysisDuration) || "all";
+  const globalDuration = ["all", "week", "month", "year"].includes(requestedDuration) ? requestedDuration : "all";
+
   const response = await fetchLegacyJson("/api/page-bootstrap?scope=home", { timeoutMs: 25000 });
   if (response.status === 401 || response.status === 403) redirect("/login?next=/next/home");
   if (!response.ok || !response.data?.ok) {
@@ -155,36 +287,14 @@ export default async function HomePage() {
   const resources = resourceMap(response.data);
   const account = getResource(resources, "/api/account", null);
   if (!account) redirect("/login?next=/next/home");
+
   const currentRows = getResource(resources, "/api/orders", []);
   const requestedRows = getResource(resources, "/api/orders/requested", []);
   const reviewPayload = getResource(resources, "/api/sv-orders", []);
   const reviewRows = Array.isArray(reviewPayload) ? reviewPayload : (Array.isArray(reviewPayload?.items) ? reviewPayload.items : []);
-  const stockRows = getResource(resources, "/api/stock", []);
-  const expensePayload = getResource(resources, "/api/expenses", { items: [] });
+  const defaultStockRows = getResource(resources, "/api/stock", []);
+  const defaultExpensePayload = getResource(resources, "/api/expenses", { items: [] });
 
-  const current = summarizeGroups(currentRows, [
-    { key: "progress", label: "In progress", color: "#f97316" },
-    { key: "completed", label: "Completed", color: "#168455" },
-    { key: "rejected", label: "Rejected", color: "#dc2626" },
-  ], bucketCurrent);
-  const review = summarizeGroups(reviewRows, [
-    { key: "pending", label: "Pending", color: "#f97316" },
-    { key: "approved", label: "Approved", color: "#168455" },
-    { key: "rejected", label: "Rejected", color: "#dc2626" },
-  ], bucketReview);
-  const operations = summarizeGroups(requestedRows, [
-    { key: "pending", label: "Pending", color: "#f97316" },
-    { key: "received", label: "Received", color: "#101828" },
-    { key: "delivered", label: "Delivered", color: "#168455" },
-  ], bucketOperations, (row) => !lower(row.orderType ?? row.order_type ?? row.type).includes("maintenance"));
-  const maintenance = summarizeGroups(requestedRows, [
-    { key: "pending", label: "Pending", color: "#f97316" },
-    { key: "progress", label: "In progress", color: "#18223a" },
-    { key: "completed", label: "Completed", color: "#168455" },
-  ], bucketMaintenance, (row) => lower(row.orderType ?? row.order_type ?? row.type).includes("maintenance"));
-
-  const recent = recentOrders(currentRows);
-  const actions = quickActions(account);
   const showCurrent = hasAccess(account, ["Current Orders", "/orders"]);
   const showReview = hasAccess(account, ["Orders Review", "/orders/sv-orders"]);
   const showOperations = hasAccess(account, ["Requested Orders", "Operations Orders", "/orders/requested"]);
@@ -192,6 +302,71 @@ export default async function HomePage() {
   const showStock = hasAccess(account, ["Stocktaking", "/stocktaking"]);
   const showExpenses = hasAccess(account, ["Expenses", "/expenses"]);
 
+  let analysisUsers = [];
+  if (requestedUserId !== "all") {
+    const analysisUsersResponse = await fetchLegacyJson("/api/home/analysis-users", { timeoutMs: 12000 });
+    analysisUsers = analysisUsersResponse.ok && Array.isArray(analysisUsersResponse.data?.users)
+      ? analysisUsersResponse.data.users
+      : [];
+  }
+  const selectedUser = requestedUserId === "all"
+    ? null
+    : (analysisUsers.find((user) => String(user.id) === String(requestedUserId)) || { id: requestedUserId });
+
+  let stockRows = Array.isArray(defaultStockRows) ? defaultStockRows : [];
+  let expensePayload = defaultExpensePayload && typeof defaultExpensePayload === "object" ? defaultExpensePayload : { items: [] };
+  if (selectedUser) {
+    const [stockResponse, expenseResponse] = await Promise.all([
+      showStock ? fetchLegacyJson(`/api/home/stocktaking-users/${encodeURIComponent(requestedUserId)}`, { timeoutMs: 15000 }) : Promise.resolve(null),
+      showExpenses ? fetchLegacyJson(`/api/home/analysis-users/${encodeURIComponent(requestedUserId)}/expenses`, { timeoutMs: 15000 }) : Promise.resolve(null),
+    ]);
+    stockRows = stockResponse?.ok && Array.isArray(stockResponse.data?.items) ? stockResponse.data.items : [];
+    expensePayload = expenseResponse?.ok && Array.isArray(expenseResponse.data?.items) ? { items: expenseResponse.data.items } : { items: [] };
+  }
+
+  const applyGlobalFilters = (groups) => filterGroupsByTime(
+    (Array.isArray(groups) ? groups : []).filter((group) => groupMatchesUser(group, selectedUser)),
+    globalDuration,
+  );
+
+  const currentGroups = applyGlobalFilters(groupRows(Array.isArray(currentRows) ? currentRows : []));
+  const reviewGroups = applyGlobalFilters(groupRows(reviewRows));
+  const requestedGroups = groupRows(Array.isArray(requestedRows) ? requestedRows : []);
+  const operationsGroups = applyGlobalFilters(requestedGroups.filter((group) => orderTypeBucket(group) !== "maintenance"));
+  const maintenanceGroups = applyGlobalFilters(requestedGroups.filter((group) => orderTypeBucket(group) === "maintenance"));
+
+  const currentStatusDefinitions = [
+    { key: "progress", label: "In progress", color: "#f97316" },
+    { key: "completed", label: "Completed", color: "#168455" },
+    { key: "rejected", label: "Rejected", color: "#dc2626" },
+  ];
+  const reviewStatusDefinitions = [
+    { key: "pending", label: "Pending", color: "#f97316" },
+    { key: "approved", label: "Approved", color: "#168455" },
+    { key: "rejected", label: "Rejected", color: "#dc2626" },
+  ];
+  const operationsStatusDefinitions = [
+    { key: "pending", label: "Pending", color: "#f97316" },
+    { key: "received", label: "Received", color: "#101828" },
+    { key: "delivered", label: "Delivered", color: "#168455" },
+  ];
+  const maintenanceStatusDefinitions = [
+    { key: "pending", label: "Pending", color: "#f97316" },
+    { key: "progress", label: "In progress", color: "#18223a" },
+    { key: "completed", label: "Completed", color: "#168455" },
+  ];
+
+  const currentMatrix = analysisMatrix(currentGroups, currentStatusDefinitions, bucketCurrent);
+  const reviewMatrix = analysisMatrix(reviewGroups, reviewStatusDefinitions, bucketReview);
+  const operationsMatrix = analysisMatrix(operationsGroups, operationsStatusDefinitions, bucketOperations);
+  const maintenanceSummary = summarizeGroupList(maintenanceGroups, maintenanceStatusDefinitions, bucketMaintenance);
+  const stockAnalysis = stockTagAnalysis(stockRows);
+  const filteredExpenseItems = filterItemsByDuration(Array.isArray(expensePayload?.items) ? expensePayload.items : [], globalDuration);
+  const homeExpenseSummary = expensesSummary({ items: filteredExpenseItems });
+
+  const current = currentMatrix.status.all;
+  const recent = recentOrders(currentRows);
+  const actions = quickActions(account);
   return (
     <AppShell
       account={account}
@@ -202,30 +377,24 @@ export default async function HomePage() {
     >
       <DashboardNotice omitted={response.data.omitted || []} />
 
-      <section aria-label="Overview" className="card home-card home-card--hero">
-        <div className="home-section-head">
-          <h2 className="home-section-title">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></svg>
-            Overview
-          </h2>
-          <div className="home-global-analysis">
-            <button className="home-global-analysis__trigger" type="button" aria-expanded="false" title="User/duration filters will be enabled in the behavior-parity stage">
-              <span className="home-global-analysis__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></svg></span>
-              <strong>Analysis</strong>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9" /></svg>
-            </button>
-          </div>
-        </div>
-
-        <div className="stats home-kpis">
-          {showCurrent ? <OrdersCard title="Current orders" href="/next/orders" variant="current" {...current} /> : null}
-          {showReview ? <OrdersCard title="Orders review" href="/next/orders-review" variant="review" {...review} /> : null}
-          {showOperations ? <OrdersCard title="Operations orders" href="/next/operations-orders" variant="operations" {...operations} /> : null}
-          {showMaintenance ? <OrdersCard title="Maintenance orders" href="/next/maintenance-orders" variant="maintenance" {...maintenance} /> : null}
-          {showStock ? <StockCard summary={stockSummary(stockRows)} /> : null}
-          {showExpenses ? <ExpensesCard summary={expensesSummary(expensePayload)} /> : null}
-        </div>
-      </section>
+      <HomeOverviewClient
+        analysisUsers={analysisUsers}
+        selectedUser={requestedUserId}
+        selectedDuration={globalDuration}
+        currentMatrix={currentMatrix}
+        reviewMatrix={reviewMatrix}
+        operationsMatrix={operationsMatrix}
+        maintenanceSummary={maintenanceSummary}
+        stockTagSummaries={stockAnalysis.summaries}
+        stockTags={stockAnalysis.tags}
+        expenseSummary={homeExpenseSummary}
+        showCurrent={showCurrent}
+        showReview={showReview}
+        showOperations={showOperations}
+        showMaintenance={showMaintenance}
+        showStock={showStock}
+        showExpenses={showExpenses}
+      />
 
       <section aria-label="Details" className="home-grid">
         {showCurrent ? <RecentOrdersCard orders={recent} totalGroups={current.total} /> : null}

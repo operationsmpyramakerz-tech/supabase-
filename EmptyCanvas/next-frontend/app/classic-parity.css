@@ -17771,3 +17771,100 @@ body.operations-orders-page .next-classic-orders-parity .next-operations-order-c
     font-size: 12.5px !important;
   }
 }
+
+/* ========================================================================
+   Home analysis behavior parity + ring centering
+   2026-09-10
+   Keeps the new Next.js Home visuals while restoring the Classic analysis
+   dropdown behavior.  The explicit 50% anchor also removes the small visual
+   left shift from the Current Orders donut labels.
+   ===================================================================== */
+body.page-home .home-orders-ring__center,
+body.page-home .home-summary-ring__center {
+  position: absolute !important;
+  inset: auto !important;
+  left: 50% !important;
+  top: 50% !important;
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  transform: translate(-50%, -50%) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+  box-sizing: border-box !important;
+}
+
+body.page-home .home-orders-ring__center > *,
+body.page-home .home-summary-ring__center > * {
+  align-self: center !important;
+  text-align: center !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
+body.page-home .home-card--hero,
+body.page-home .home-kpis,
+body.page-home .home-orders-performance,
+body.page-home .home-summary-performance {
+  overflow: visible !important;
+}
+
+body.page-home .next-home-global-analysis__menu {
+  position: absolute !important;
+  right: 0 !important;
+  top: calc(100% + 10px) !important;
+  z-index: 2147483000 !important;
+  width: min(310px, calc(100vw - 30px)) !important;
+  padding: 15px !important;
+  overflow: visible !important;
+  border: 1px solid rgba(15, 23, 42, .10) !important;
+  border-radius: 18px !important;
+  background: rgba(255, 255, 255, .985) !important;
+  box-shadow: 0 24px 65px rgba(15, 23, 42, .24), 0 4px 14px rgba(15, 23, 42, .09) !important;
+  backdrop-filter: blur(18px) !important;
+  -webkit-backdrop-filter: blur(18px) !important;
+  color: #111827 !important;
+}
+
+body.page-home .next-home-stock-analysis__menu {
+  position: absolute !important;
+  right: 0 !important;
+  top: calc(100% + 8px) !important;
+  z-index: 2147483000 !important;
+  width: min(280px, calc(100vw - 30px)) !important;
+  padding: 14px !important;
+  overflow: visible !important;
+  border: 1px solid rgba(15, 23, 42, .10) !important;
+  border-radius: 18px !important;
+  background: rgba(255, 255, 255, .985) !important;
+  box-shadow: 0 24px 65px rgba(15, 23, 42, .24), 0 4px 14px rgba(15, 23, 42, .10) !important;
+  color: #111827 !important;
+}
+
+body.page-home .next-home-analysis-menu,
+body.page-home .next-home-global-analysis__menu,
+body.page-home .next-home-stock-analysis__menu {
+  cursor: default !important;
+}
+
+body.page-home .next-home-analysis-menu button,
+body.page-home .next-home-global-analysis__menu button,
+body.page-home .next-home-stock-analysis__menu button {
+  touch-action: manipulation;
+}
+
+@media (max-width: 700px) {
+  body.page-home .next-home-global-analysis__menu {
+    right: -2px !important;
+    width: min(292px, calc(100vw - 24px)) !important;
+  }
+
+  body.page-home .next-home-stock-analysis__menu {
+    right: -4px !important;
+    width: min(272px, calc(100vw - 24px)) !important;
+  }
+}
