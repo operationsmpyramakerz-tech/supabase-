@@ -7,18 +7,24 @@
  * declarations that live inline in public/login.html rather than login.css.
  */
 
-body.next-classic-shell-active .classic-app-shell .sidebar {
+/* Keep the Classic sidebar geometry independent from the route body class.
+   During App Router loading, BodyClassSync can briefly be between commits.
+   globals.css also defines .sidebar with 22px/16px padding + 24px gap; if this
+   reset depends on next-classic-shell-active, the logo drops ~22px and the
+   first page icon drops another ~24px. Apply the reset directly to the shell
+   sidebar so loading and settled states stay pixel-identical. */
+.classic-app-shell > .sidebar {
   padding: 0 !important;
   gap: 0 !important;
   color: #f8f9ff;
 }
 
-body.next-classic-shell-active .classic-app-shell .sidebar-brand-toggle {
+.classic-app-shell > .sidebar .sidebar-brand-toggle {
   border: 0;
   background: transparent;
 }
 
-body.next-classic-shell-active .classic-app-shell .sidebar-nav .nav-link {
+.classic-app-shell > .sidebar .sidebar-nav .nav-link {
   font-size: 14px;
   text-decoration: none;
 }
@@ -129,7 +135,7 @@ body.next-classic-shell-active .classic-app-shell {
   }
 }
 
-body.next-classic-shell-active .classic-app-shell .sidebar-nav {
+.classic-app-shell > .sidebar .sidebar-nav {
   min-height: 0 !important;
   overflow-y: auto !important;
   overflow-x: hidden !important;
@@ -140,13 +146,13 @@ body.next-classic-shell-active .classic-app-shell .sidebar-nav {
   scroll-padding-block: 12px 24px;
 }
 
-body.next-classic-shell-active .classic-app-shell .sidebar-nav .nav-list {
+.classic-app-shell > .sidebar .sidebar-nav .nav-list {
   flex: 0 0 auto !important;
   min-height: max-content;
   padding-bottom: 14px !important;
 }
 
-body.next-classic-shell-active .classic-app-shell .sidebar-nav .nav-list > li {
+.classic-app-shell > .sidebar .sidebar-nav .nav-list > li {
   flex: 0 0 auto !important;
 }
 
