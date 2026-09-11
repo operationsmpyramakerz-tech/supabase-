@@ -397,8 +397,15 @@ export function ClassicSidebarActiveIndicator() {
         indicator.style.opacity = "0";
         return;
       }
+
+      // Keep the settled page on the native .nav-link.active surface. The
+      // travelling tile is only needed while a navigation is actually moving.
+      // Leaving it visible after hydration can place the white tile above the
+      // mobile SVG in a separate stacking context, which makes the active icon
+      // look blank. Prime its geometry here, then keep it hidden until click.
       moveIndicator(active, true);
-      sidebar.classList.add("sidebar-active-indicator-ready");
+      indicator.style.opacity = "0";
+      sidebar.classList.remove("sidebar-active-indicator-ready", "sidebar-active-indicator-animating");
     };
 
     // The mobile dock DOM is restructured in a sibling layout effect. Waiting
@@ -429,9 +436,22 @@ export function ClassicSidebarActiveIndicator() {
 
       event.preventDefault();
       clearTargets();
+
+      // Start from the currently active button using an instant frame, then
+      // enable the shared travelling surface and animate to the destination.
+      // After navigation the new page falls back to its normal active button,
+      // so the icon can never be covered by a persistent overlay.
+      const currentActive = nav.querySelector(".nav-link.active");
+      if (currentActive instanceof HTMLElement) {
+        moveIndicator(currentActive, true);
+      }
+
       link.classList.add("is-indicator-target");
-      sidebar.classList.add("sidebar-active-indicator-animating");
-      moveIndicator(link, reduceMotion());
+      sidebar.classList.add("sidebar-active-indicator-ready", "sidebar-active-indicator-animating");
+
+      // Commit the starting geometry/background removal before travelling.
+      indicator.getBoundingClientRect();
+      requestAnimationFrame(() => moveIndicator(link, reduceMotion()));
 
       if (navigationTimer) window.clearTimeout(navigationTimer);
       const delay = reduceMotion() ? 0 : 230;
@@ -445,8 +465,18 @@ export function ClassicSidebarActiveIndicator() {
         ? visualTarget
         : nav.querySelector(".nav-link.active");
       if (!(target instanceof HTMLElement)) return;
+
       indicator.classList.add("is-instant");
       moveIndicator(target, true);
+
+      // ResizeObserver/scroll callbacks also run after the settled page mounts.
+      // They used to turn the primed indicator visible again even though the
+      // navigation animation had finished, which covered the active mobile SVG
+      // with a plain white tile. Keep the indicator hidden unless an actual
+      // navigation animation currently owns it.
+      if (!sidebar.classList.contains("sidebar-active-indicator-ready")) {
+        indicator.style.opacity = "0";
+      }
     };
 
     const resizeObserver = typeof ResizeObserver === "function"
