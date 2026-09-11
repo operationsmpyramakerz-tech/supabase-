@@ -91,46 +91,66 @@ export default function TaskManagementSidebarFlyout({ allowedPages = [], activeP
       parent.classList.add("active");
     }
 
-    let panel = document.getElementById("task-management-subpage-flyout-next");
+    let panel = document.getElementById("task-management-secondary-sidebar-next");
     if (!(panel instanceof HTMLElement)) {
-      panel = document.createElement("div");
-      panel.id = "task-management-subpage-flyout-next";
-      panel.className = "task-management-subpage-flyout";
-      panel.hidden = true;
+      panel = document.createElement("aside");
+      panel.id = "task-management-secondary-sidebar-next";
+      panel.className = "task-management-secondary-sidebar";
       panel.setAttribute("role", "menu");
       panel.setAttribute("aria-label", "Task Management pages");
+      panel.setAttribute("aria-hidden", "true");
       document.body.appendChild(panel);
     }
 
     const renderPanel = () => {
       const latestPath = String(window.location.pathname || currentPath).replace(/\/+$/, "");
-      panel.innerHTML = `<div class="task-management-subpage-flyout__list">${pages.map((page) => {
+      panel.innerHTML = `<div class="task-management-secondary-sidebar__rail">${pages.map((page) => {
         const active = latestPath === page.route || latestPath.startsWith(`${page.route}/`);
-        return `<a class="task-management-subpage-flyout__link${active ? " is-active" : ""}" href="${page.route}" role="menuitem">${iconSvg(page.icon)}<span>${page.label}</span></a>`;
+        return `<a class="task-management-secondary-sidebar__link${active ? " is-active" : ""}" href="${page.route}" role="menuitem" aria-label="${page.label}">${iconSvg(page.icon)}<span>${page.label}</span></a>`;
       }).join("")}</div>`;
     };
 
     const positionPanel = () => {
       const rect = parent.getBoundingClientRect();
-      const width = Math.min(224, Math.max(160, window.innerWidth - 24));
-      const left = Math.min(window.innerWidth - width - 12, Math.max(12, rect.right + 10));
-      const estimatedHeight = 10 + (pages.length * 46) + 10;
-      const top = Math.min(window.innerHeight - estimatedHeight - 12, Math.max(12, rect.top - 10));
-      panel.style.left = `${left}px`;
-      panel.style.top = `${top}px`;
+      const sidebar = parent.closest(".sidebar");
+      const isMobileDock = window.matchMedia("(max-width: 768px)").matches;
+
+      if (isMobileDock) {
+        panel.style.removeProperty("left");
+        panel.style.removeProperty("top");
+        panel.style.removeProperty("height");
+        return;
+      }
+
+      const sidebarRect = sidebar instanceof HTMLElement ? sidebar.getBoundingClientRect() : rect;
+      const panelHeight = Math.max(156, panel.offsetHeight || (pages.length * 52 + 28));
+      const viewportPadding = 14;
+      const idealTop = rect.top + (rect.height / 2) - (panelHeight / 2);
+      const top = Math.min(window.innerHeight - panelHeight - viewportPadding, Math.max(viewportPadding, idealTop));
+
+      // Tuck the secondary rail underneath the primary black sidebar so the
+      // opening motion feels like it is sliding out from behind it.
+      panel.style.left = `${Math.round(sidebarRect.right - 18)}px`;
+      panel.style.top = `${Math.round(top)}px`;
     };
 
     const closePanel = () => {
-      panel.hidden = true;
       panel.classList.remove("is-open");
+      panel.setAttribute("aria-hidden", "true");
       parent.setAttribute("aria-expanded", "false");
     };
 
     const openPanel = () => {
       renderPanel();
+      panel.classList.add("is-positioning");
+      panel.setAttribute("aria-hidden", "false");
       positionPanel();
-      panel.hidden = false;
-      requestAnimationFrame(() => panel.classList.add("is-open"));
+      // Force one layout frame so the closed transform is committed before the
+      // panel slides out from behind the primary sidebar.
+      requestAnimationFrame(() => {
+        panel.classList.remove("is-positioning");
+        requestAnimationFrame(() => panel.classList.add("is-open"));
+      });
       parent.setAttribute("aria-expanded", "true");
     };
 
@@ -143,6 +163,13 @@ export default function TaskManagementSidebarFlyout({ allowedPages = [], activeP
       }
       if (panel.classList.contains("is-open")) closePanel();
       else openPanel();
+    };
+
+    const onPanelClick = (event) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest("a.task-management-secondary-sidebar__link")) {
+        closePanel();
+      }
     };
 
     const onDocumentPointer = (event) => {
@@ -160,17 +187,22 @@ export default function TaskManagementSidebarFlyout({ allowedPages = [], activeP
       if (panel.classList.contains("is-open")) positionPanel();
     };
 
+    renderPanel();
     parent.addEventListener("click", onParentClick);
+    panel.addEventListener("click", onPanelClick);
     document.addEventListener("pointerdown", onDocumentPointer);
     document.addEventListener("keydown", onKeyDown);
     window.addEventListener("resize", onViewportChange);
+    window.addEventListener("orientationchange", onViewportChange);
     window.addEventListener("scroll", onViewportChange, true);
 
     return () => {
       parent.removeEventListener("click", onParentClick);
+      panel.removeEventListener("click", onPanelClick);
       document.removeEventListener("pointerdown", onDocumentPointer);
       document.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("resize", onViewportChange);
+      window.removeEventListener("orientationchange", onViewportChange);
       window.removeEventListener("scroll", onViewportChange, true);
       closePanel();
       panel.remove();
