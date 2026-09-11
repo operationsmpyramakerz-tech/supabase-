@@ -11,6 +11,7 @@ const SIDEBAR_SCROLL_LEFT_COOKIE = "ops_ui_sidebar_scroll_left_v1";
 const CHROME_CACHE_KEY = "ops.ui.chrome.v1";
 const ALLOWED_PAGES_KEY = "allowedPages";
 const ALLOWED_PAGES_COOKIE = "ops_ui_allowed_pages_v1";
+const COVER_URL_COOKIE = "ops_ui_cover_url_v1";
 
 function setCollapsed(collapsed) {
   if (typeof document === "undefined") return;
@@ -66,6 +67,19 @@ export function ClassicChromeAccessSync({ account }) {
       root.classList.add("ops-has-persistent-cover");
       root.style.setProperty("--ops-system-cover-image", `url(${JSON.stringify(coverPhotoUrl)})`);
 
+      // Persist the cover URL in a compact same-site cookie as well.  Route
+      // loading fallbacks can be server-rendered before this client component
+      // hydrates (and a hard navigation starts with a fresh <html> node), so
+      // local/session storage alone cannot prevent the white cover flash.
+      // RootLayout reads this cookie and seeds the class/CSS variable in the
+      // very first HTML response.
+      try {
+        const encodedCover = encodeURIComponent(coverPhotoUrl);
+        if (encodedCover.length < 3600) {
+          document.cookie = `${COVER_URL_COOKIE}=${encodedCover}; Path=/; Max-Age=2592000; SameSite=Lax`;
+        }
+      } catch {}
+
       // Warm the decoded image once. Subsequent route transitions reuse the
       // same browser resource while only the page content changes.
       try {
@@ -76,6 +90,9 @@ export function ClassicChromeAccessSync({ account }) {
     } else {
       root.classList.remove("ops-has-persistent-cover");
       root.style.removeProperty("--ops-system-cover-image");
+      try {
+        document.cookie = `${COVER_URL_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`;
+      } catch {}
     }
 
     // Keep the loading/transition shell on the exact same permission snapshot
