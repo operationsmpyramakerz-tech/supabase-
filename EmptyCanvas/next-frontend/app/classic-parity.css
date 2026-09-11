@@ -18242,3 +18242,47 @@ body.page-home .next-home-stock-analysis__menu button {
     height: 54px !important;
   }
 }
+
+/* ========================================================================
+   Task Management secondary sidebar icon visibility — mobile/desktop
+   2026-09-11
+   The global border-box rule was shrinking the SVG drawing area because the
+   flyout icon itself also has padding. Keep the SVG glyph at its intended
+   size, then force clear inactive/active contrast.
+   ===================================================================== */
+.task-management-secondary-sidebar__link svg {
+  box-sizing: content-box !important;
+  display: block !important;
+  flex: 0 0 auto !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  overflow: visible !important;
+}
+
+.task-management-secondary-sidebar__link:not(.is-active) svg {
+  color: #FFFFFF !important;
+  stroke: #FFFFFF !important;
+}
+
+.task-management-secondary-sidebar__link:not(.is-active) svg :is(path, line, polyline, polygon, circle, rect) {
+  stroke: #FFFFFF !important;
+  vector-effect: non-scaling-stroke;
+}
+
+.task-management-secondary-sidebar__link.is-active svg {
+  color: #0B0C10 !important;
+  stroke: #0B0C10 !important;
+}
+
+.task-management-secondary-sidebar__link.is-active svg :is(path, line, polyline, polygon, circle, rect) {
+  stroke: #0B0C10 !important;
+  vector-effect: non-scaling-stroke;
+}
+
+@media (max-width: 768px) {
+  .task-management-secondary-sidebar__link svg {
+    width: 17px !important;
+    height: 17px !important;
+    padding: 6px !important;
+  }
+}
