@@ -18370,3 +18370,33 @@ body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indi
   }
 }
 
+
+/* ========================================================================
+   Mobile sidebar active icon contrast after travelling-indicator animation
+   2026-09-11
+   The moving white selection tile is a sibling of the links, so explicitly
+   keep the destination/active icon dark while that white tile is underneath.
+   ===================================================================== */
+@media (max-width: 768px) {
+  body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready .mobile-dock-pages-list .nav-link.active,
+  body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready .mobile-dock-pages-list .nav-link.is-indicator-target,
+  body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready:not(.mobile-dock-structured-host) .sidebar-nav > .nav-list > li:not(:first-child) .nav-link.active,
+  body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready:not(.mobile-dock-structured-host) .sidebar-nav > .nav-list > li:not(:first-child) .nav-link.is-indicator-target {
+    color: #0b0c10 !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready .mobile-dock-pages-list .nav-link.active svg,
+  body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready .mobile-dock-pages-list .nav-link.is-indicator-target svg,
+  body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready:not(.mobile-dock-structured-host) .sidebar-nav > .nav-list > li:not(:first-child) .nav-link.active svg,
+  body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready:not(.mobile-dock-structured-host) .sidebar-nav > .nav-list > li:not(:first-child) .nav-link.is-indicator-target svg {
+    color: #0b0c10 !important;
+    stroke: #0b0c10 !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready .mobile-dock-pages-list .nav-link.active svg :is(path, line, polyline, polygon, circle, rect),
+  body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready .mobile-dock-pages-list .nav-link.is-indicator-target svg :is(path, line, polyline, polygon, circle, rect),
+  body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready:not(.mobile-dock-structured-host) .sidebar-nav > .nav-list > li:not(:first-child) .nav-link.active svg :is(path, line, polyline, polygon, circle, rect),
+  body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready:not(.mobile-dock-structured-host) .sidebar-nav > .nav-list > li:not(:first-child) .nav-link.is-indicator-target svg :is(path, line, polyline, polygon, circle, rect) {
+    stroke: #0b0c10 !important;
+  }
+}
