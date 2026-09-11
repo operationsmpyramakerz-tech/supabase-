@@ -1,3 +1,4 @@
+import Link from "next/link";
 import NotificationsBell from "./notifications/NotificationsBell";
 import UserProfileMenu from "./UserProfileMenu";
 import HeaderSearch from "./HeaderSearch";
@@ -76,6 +77,16 @@ function canSee(link, allowedPages) {
   return (link.permissions || []).some((permission) => allowed.has(normalize(permission)));
 }
 
+
+function toNextClientHref(value) {
+  const raw = String(value || "").trim() || "/";
+  // next.config.mjs mounts this app at basePath=/next. <Link> adds the base
+  // path automatically, so feed it the route-local pathname to avoid
+  // /next/next/... while still rendering the same public URL.
+  if (raw === "/next") return "/";
+  if (raw.startsWith("/next/")) return raw.slice(5) || "/";
+  return raw;
+}
 
 function withClassicFlag(value) {
   const raw = String(value || "").trim() || "/home";
@@ -189,10 +200,16 @@ export default function AppShell({
                   key={link.href}
                   className={link.boundary === "workspace" ? "sidebar-workspace-boundary" : link.boundary === "users" ? "sidebar-users-boundary" : ""}
                 >
-                  <a className={`nav-link ${isClassicNavActive(activePath, link.href) ? "active" : ""}`} href={link.href} title={link.label} aria-label={link.label}>
+                  <Link
+                    className={`nav-link ${isClassicNavActive(activePath, link.href) ? "active" : ""}`}
+                    href={toNextClientHref(link.href)}
+                    prefetch={true}
+                    title={link.label}
+                    aria-label={link.label}
+                  >
                     <ClassicIcon name={link.icon} />
                     <span className="nav-label">{link.label}</span>
-                  </a>
+                  </Link>
                 </li>
               ))}
             </ul>

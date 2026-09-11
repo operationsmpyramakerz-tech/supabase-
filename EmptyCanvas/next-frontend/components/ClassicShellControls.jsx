@@ -53,8 +53,31 @@ export function BodyClassSync({ className = "" }) {
 export function ClassicChromeAccessSync({ account }) {
   const hasAllowedPages = Array.isArray(account?.allowedPages);
   const allowedPages = hasAllowedPages ? account.allowedPages : null;
+  const coverPhotoUrl = String(account?.coverPhotoUrl || account?.coverPhoto || "").trim();
 
   useLayoutEffect(() => {
+    // Keep the system cover on the persistent <html> element instead of only
+    // on the route-owned .main-content node. Next.js swaps that node for each
+    // route loading fallback; keeping the cover variable/class at the root
+    // means navigation can replace only the page content without flashing the
+    // white loading canvas or re-resolving the cover image every time.
+    const root = document.documentElement;
+    if (coverPhotoUrl) {
+      root.classList.add("ops-has-persistent-cover");
+      root.style.setProperty("--ops-system-cover-image", `url(${JSON.stringify(coverPhotoUrl)})`);
+
+      // Warm the decoded image once. Subsequent route transitions reuse the
+      // same browser resource while only the page content changes.
+      try {
+        const image = new Image();
+        image.decoding = "async";
+        image.src = coverPhotoUrl;
+      } catch {}
+    } else {
+      root.classList.remove("ops-has-persistent-cover");
+      root.style.removeProperty("--ops-system-cover-image");
+    }
+
     // Keep the loading/transition shell on the exact same permission snapshot
     // as the fully rendered page.  The loading sidebar cannot read the server
     // account prop directly, so persist the current user's resolved access as
@@ -87,11 +110,12 @@ export function ClassicChromeAccessSync({ account }) {
         ...current,
         ...(name ? { name, username: name } : {}),
         ...(photoUrl ? { photoUrl } : {}),
+        ...(coverPhotoUrl ? { coverPhotoUrl } : {}),
         allowedPages,
         savedAt: Date.now(),
       }));
     } catch {}
-  }, [account, allowedPages, hasAllowedPages]);
+  }, [account, allowedPages, hasAllowedPages, coverPhotoUrl]);
 
   return null;
 }

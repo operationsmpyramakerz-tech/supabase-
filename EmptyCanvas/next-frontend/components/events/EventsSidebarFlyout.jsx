@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 
 const PAGES = Object.freeze([
   {
@@ -74,7 +75,15 @@ function iconSvg(name) {
   return `<svg ${common}><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>`;
 }
 
+function toNextClientRoute(value) {
+  const raw = String(value || "").trim() || "/";
+  if (raw === "/next") return "/";
+  if (raw.startsWith("/next/")) return raw.slice(5) || "/";
+  return raw;
+}
+
 export default function EventsSidebarFlyout({ allowedPages = [], activePath = "" }) {
+  const router = useRouter();
   useEffect(() => {
     const pages = allowedEventPages(allowedPages);
     const parent = document.querySelector('.classic-app-shell a.nav-link[href="/next/events"]');
@@ -160,7 +169,7 @@ export default function EventsSidebarFlyout({ allowedPages = [], activePath = ""
       event.preventDefault();
       event.stopPropagation();
       if (pages.length === 1) {
-        window.location.assign(pages[0].route);
+        router.push(toNextClientRoute(pages[0].route));
         return;
       }
       if (panel.classList.contains("is-open")) closePanel();
@@ -169,7 +178,11 @@ export default function EventsSidebarFlyout({ allowedPages = [], activePath = ""
 
     const onPanelClick = (event) => {
       const target = event.target;
-      if (target instanceof Element && target.closest("a.events-secondary-sidebar__link")) closePanel();
+      const link = target instanceof Element ? target.closest("a.events-secondary-sidebar__link") : null;
+      if (!(link instanceof HTMLAnchorElement)) return;
+      event.preventDefault();
+      closePanel();
+      router.push(toNextClientRoute(link.getAttribute("href") || link.pathname));
     };
 
     const onDocumentPointer = (event) => {
@@ -207,7 +220,7 @@ export default function EventsSidebarFlyout({ allowedPages = [], activePath = ""
       closePanel();
       panel.remove();
     };
-  }, [allowedPages, activePath]);
+  }, [allowedPages, activePath, router]);
 
   return null;
 }

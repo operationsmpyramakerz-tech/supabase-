@@ -18443,3 +18443,62 @@ body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indi
     stroke: #0b0c10 !important;
   }
 }
+
+/* ========================================================================
+   Persistent system cover during App Router navigation — 2026-09-11
+   ------------------------------------------------------------------------
+   The live AppShell previously kept --ops-system-cover-image only on the
+   route-owned .main-content element.  Next.js replaces that node with each
+   loading.jsx fallback, so the cover disappeared and the generic white canvas
+   was painted while data loaded.  ClassicChromeAccessSync now keeps the cover
+   value on <html>; these rules make both live and loading shells consume the
+   same persistent cover layer.  Result: the cover stays visually fixed while
+   only page content/skeletons change.
+   ===================================================================== */
+html.ops-has-persistent-cover body:not(.login-page):not(.pwa-offline):not(.pwa-start) .classic-app-shell > .main-content {
+  position: relative !important;
+  isolation: isolate !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+}
+
+html.ops-has-persistent-cover body:not(.login-page):not(.pwa-offline):not(.pwa-start) .classic-app-shell > .main-content::before {
+  content: "" !important;
+  display: block !important;
+  position: absolute !important;
+  inset: 0 !important;
+  width: auto !important;
+  height: auto !important;
+  border-radius: var(--ui-radius-main, 36px) !important;
+  background-image:
+    linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.16) 100%),
+    var(--ops-system-cover-image) !important;
+  background-size: 100% 100% !important;
+  background-position: center center !important;
+  background-repeat: no-repeat !important;
+  opacity: 0.96 !important;
+  pointer-events: none !important;
+  z-index: 0 !important;
+}
+
+html.ops-has-persistent-cover body:not(.login-page):not(.pwa-offline):not(.pwa-start) .classic-app-shell > .main-content::after {
+  display: none !important;
+  content: none !important;
+}
+
+html.ops-has-persistent-cover body:not(.login-page):not(.pwa-offline):not(.pwa-start) .classic-app-shell > .main-content > header,
+html.ops-has-persistent-cover body:not(.login-page):not(.pwa-offline):not(.pwa-start) .classic-app-shell > .main-content > main,
+html.ops-has-persistent-cover body:not(.login-page):not(.pwa-offline):not(.pwa-start) .classic-app-shell > .main-content > .ops-shell-host-main {
+  position: relative !important;
+  z-index: 1 !important;
+}
+
+/* Route loading fallbacks must never repaint the generic white system canvas
+   over a cover that is already active on the persistent root. */
+html.ops-has-persistent-cover .classic-app-shell[class*="next-classic-"][class*="-loading"] > .main-content,
+html.ops-has-persistent-cover .classic-app-shell.next-classic-stable-loading > .main-content {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+}
