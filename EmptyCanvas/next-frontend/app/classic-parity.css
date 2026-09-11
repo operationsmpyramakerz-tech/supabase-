@@ -18400,3 +18400,46 @@ body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indi
     stroke: #0b0c10 !important;
   }
 }
+
+/* ========================================================================
+   Mobile active-indicator stacking fix
+   2026-09-11
+   The mobile pages list/home rail created their own low z-index stacking
+   contexts. The travelling white indicator (z-index: 5) therefore painted on
+   top of the SVG after the real page finished loading, making the active icon
+   look white/missing. Flatten those intermediate stacking contexts and keep
+   the actual nav content above the moving indicator.
+   ===================================================================== */
+@media (max-width: 768px) {
+  body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready.mobile-dock-structured-host .mobile-dock-home-rail,
+  body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready.mobile-dock-structured-host .mobile-dock-pages-list {
+    z-index: auto !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready.mobile-dock-structured-host .mobile-dock-home-rail > li,
+  body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready.mobile-dock-structured-host .mobile-dock-pages-list > li,
+  body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready.mobile-dock-structured-host .mobile-dock-home-rail .nav-link,
+  body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready.mobile-dock-structured-host .mobile-dock-pages-list .nav-link {
+    position: relative !important;
+    z-index: 7 !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready.mobile-dock-structured-host .mobile-dock-home-rail .nav-link svg,
+  body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready.mobile-dock-structured-host .mobile-dock-pages-list .nav-link svg {
+    position: relative !important;
+    z-index: 8 !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready.mobile-dock-structured-host .mobile-dock-pages-list .nav-link.active,
+  body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready.mobile-dock-structured-host .mobile-dock-pages-list .nav-link.is-indicator-target {
+    color: #0b0c10 !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready.mobile-dock-structured-host .mobile-dock-pages-list .nav-link.active svg,
+  body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready.mobile-dock-structured-host .mobile-dock-pages-list .nav-link.is-indicator-target svg,
+  body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready.mobile-dock-structured-host .mobile-dock-pages-list .nav-link.active svg :is(path, line, polyline, polygon, circle, rect),
+  body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready.mobile-dock-structured-host .mobile-dock-pages-list .nav-link.is-indicator-target svg :is(path, line, polyline, polygon, circle, rect) {
+    color: #0b0c10 !important;
+    stroke: #0b0c10 !important;
+  }
+}
