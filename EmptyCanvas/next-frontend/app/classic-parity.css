@@ -18176,3 +18176,69 @@ body.page-home .next-home-stock-analysis__menu button {
     transform: none;
   }
 }
+
+/* ========================================================================
+   Task Management secondary sidebar polish
+   2026-09-11
+   - Keep desktop secondary-page icons clearly visible on the dark rail.
+   - On mobile, the secondary rail belongs only to the right/pages dock block;
+     the separate Home block remains completely outside it.
+   ===================================================================== */
+
+/* Explicit strokes avoid older/global svg rules washing the flyout icons out. */
+.task-management-secondary-sidebar__link:not(.is-active) svg {
+  color: #F8FAFC !important;
+  stroke: #F8FAFC !important;
+  background: rgba(255, 255, 255, 0.12) !important;
+}
+
+.task-management-secondary-sidebar__link:not(.is-active) svg :is(path, line, polyline, polygon, circle, rect) {
+  stroke: #F8FAFC !important;
+}
+
+.task-management-secondary-sidebar__link.is-active svg {
+  color: #0B0C10 !important;
+  stroke: #0B0C10 !important;
+  background: #F2F4F7 !important;
+}
+
+.task-management-secondary-sidebar__link.is-active svg :is(path, line, polyline, polygon, circle, rect) {
+  stroke: #0B0C10 !important;
+}
+
+@media (max-width: 768px) {
+  /*
+   * Match the exact horizontal footprint of the primary pages block:
+   *   shell left + Home block + Classic gap  -> panel left
+   *   shell right + pages right inset        -> panel right
+   * This deliberately excludes the separate Home rail.
+   */
+  .task-management-secondary-sidebar {
+    left: calc(12px + var(--mobile-home-block-w, 88px) + var(--mobile-home-gap, 18px)) !important;
+    right: calc(12px + var(--mobile-pages-right-gap, 8px)) !important;
+    width: auto !important;
+    top: auto !important;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 18px) !important;
+    min-height: 148px !important;
+    height: 148px !important;
+    padding: 10px 10px 84px !important;
+    border-radius: 24px 24px var(--mobile-pages-block-radius, 30px) var(--mobile-pages-block-radius, 30px) !important;
+    box-shadow: 0 -16px 34px rgba(15,23,42,.18) !important;
+    transform: translateY(calc(100% - 80px)) !important;
+    transform-origin: center bottom !important;
+  }
+
+  .task-management-secondary-sidebar.is-open {
+    transform: translateY(0) !important;
+  }
+
+  .task-management-secondary-sidebar__rail {
+    width: 100% !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+
+  .task-management-secondary-sidebar__link {
+    min-height: 54px !important;
+    height: 54px !important;
+  }
+}
