@@ -299,6 +299,187 @@ export function ClassicSidebarViewportKeeper() {
   return null;
 }
 
+
+export function ClassicSidebarActiveIndicator() {
+  useLayoutEffect(() => {
+    const sidebar = document.querySelector(".classic-app-shell > .sidebar");
+    if (!(sidebar instanceof HTMLElement)) return undefined;
+
+    const nav = sidebar.querySelector(":scope > .sidebar-nav");
+    if (!(nav instanceof HTMLElement)) return undefined;
+
+    const existing = sidebar.querySelector(":scope > .sidebar-active-indicator");
+    existing?.remove();
+
+    const indicator = document.createElement("span");
+    indicator.className = "sidebar-active-indicator is-instant";
+    indicator.setAttribute("aria-hidden", "true");
+    sidebar.appendChild(indicator);
+
+    let visualTarget = null;
+    let navigationTimer = 0;
+    let frame = 0;
+
+    const isMobile = () => window.matchMedia("(max-width: 768px)").matches;
+    const reduceMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    const visualRectForLink = (link) => {
+      if (!(link instanceof HTMLElement)) return null;
+      const sidebarRect = sidebar.getBoundingClientRect();
+      let targetRect = link.getBoundingClientRect();
+      let radius = window.getComputedStyle(link).borderRadius || "16px";
+
+      // On the mobile dock Home uses a circular white surface behind the icon,
+      // while page items use the rounded-square active surface. Measure the
+      // exact visual surface rather than the much wider Home link container.
+      if (isMobile()) {
+        const href = String(link.getAttribute("href") || "");
+        if (href === "/next/home") {
+          const icon = link.querySelector("svg");
+          if (icon instanceof SVGElement) {
+            targetRect = icon.getBoundingClientRect();
+            radius = "999px";
+          }
+        } else {
+          // Inactive mobile page links are slightly smaller than the active
+          // surface. Animate the white tile to the final active footprint so it
+          // does not shrink while travelling to the destination icon.
+          const activeSize = window.innerWidth <= 390 ? 42 : 44;
+          const cx = targetRect.left + (targetRect.width / 2);
+          const cy = targetRect.top + (targetRect.height / 2);
+          targetRect = {
+            left: cx - (activeSize / 2),
+            top: cy - (activeSize / 2),
+            width: activeSize,
+            height: activeSize,
+          };
+          radius = window.innerWidth <= 390 ? "14px" : "15px";
+        }
+      }
+
+      return {
+        x: targetRect.left - sidebarRect.left,
+        y: targetRect.top - sidebarRect.top,
+        width: targetRect.width,
+        height: targetRect.height,
+        radius,
+      };
+    };
+
+    const moveIndicator = (link, instant = false) => {
+      if (!(link instanceof HTMLElement)) return;
+      const rect = visualRectForLink(link);
+      if (!rect) return;
+
+      visualTarget = link;
+      if (instant) indicator.classList.add("is-instant");
+      indicator.style.width = `${Math.max(0, rect.width)}px`;
+      indicator.style.height = `${Math.max(0, rect.height)}px`;
+      indicator.style.borderRadius = rect.radius;
+      indicator.style.transform = `translate3d(${rect.x}px, ${rect.y}px, 0)`;
+      indicator.style.opacity = "1";
+
+      if (instant) {
+        // Force the geometry to commit before enabling transitions so the first
+        // render never flies in from the top-left corner of the sidebar.
+        indicator.getBoundingClientRect();
+        requestAnimationFrame(() => indicator.classList.remove("is-instant"));
+      }
+    };
+
+    const clearTargets = () => {
+      sidebar.querySelectorAll(".nav-link.is-indicator-target").forEach((item) => item.classList.remove("is-indicator-target"));
+    };
+
+    const initialize = () => {
+      const active = nav.querySelector(".nav-link.active");
+      if (!(active instanceof HTMLElement)) {
+        indicator.style.opacity = "0";
+        return;
+      }
+      moveIndicator(active, true);
+      sidebar.classList.add("sidebar-active-indicator-ready");
+    };
+
+    // The mobile dock DOM is restructured in a sibling layout effect. Waiting
+    // one frame guarantees we measure the final geometry without exposing a
+    // visible static-to-animated jump.
+    frame = requestAnimationFrame(initialize);
+
+    const onClick = (event) => {
+      if (!(event instanceof MouseEvent) || event.defaultPrevented) return;
+      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+
+      const origin = event.target;
+      const link = origin instanceof Element ? origin.closest("a.nav-link") : null;
+      if (!(link instanceof HTMLAnchorElement) || !sidebar.contains(link)) return;
+      if (link.target && link.target !== "_self") return;
+      if (link.hasAttribute("download")) return;
+
+      const rawHref = String(link.getAttribute("href") || "").trim();
+      // Task Management and Events are parent buttons that open the approved
+      // secondary sidebar instead of navigating directly. Their own handlers
+      // stay fully in control of those interactions.
+      if (rawHref === "/next/task-management" || rawHref === "/next/events") return;
+
+      let destination;
+      try { destination = new URL(link.href, window.location.href); } catch { return; }
+      if (destination.origin !== window.location.origin) return;
+      if (destination.pathname === window.location.pathname && destination.search === window.location.search) return;
+
+      event.preventDefault();
+      clearTargets();
+      link.classList.add("is-indicator-target");
+      sidebar.classList.add("sidebar-active-indicator-animating");
+      moveIndicator(link, reduceMotion());
+
+      if (navigationTimer) window.clearTimeout(navigationTimer);
+      const delay = reduceMotion() ? 0 : 230;
+      navigationTimer = window.setTimeout(() => {
+        window.location.assign(destination.href);
+      }, delay);
+    };
+
+    const syncToCurrentTarget = () => {
+      const target = visualTarget instanceof HTMLElement && document.contains(visualTarget)
+        ? visualTarget
+        : nav.querySelector(".nav-link.active");
+      if (!(target instanceof HTMLElement)) return;
+      indicator.classList.add("is-instant");
+      moveIndicator(target, true);
+    };
+
+    const resizeObserver = typeof ResizeObserver === "function"
+      ? new ResizeObserver(() => syncToCurrentTarget())
+      : null;
+    resizeObserver?.observe(sidebar);
+    resizeObserver?.observe(nav);
+
+    const pagesClip = nav.querySelector(":scope > .mobile-dock-pages-clip");
+    nav.addEventListener("scroll", syncToCurrentTarget, { passive: true });
+    pagesClip?.addEventListener("scroll", syncToCurrentTarget, { passive: true });
+    sidebar.addEventListener("click", onClick);
+    window.addEventListener("resize", syncToCurrentTarget);
+    window.addEventListener("orientationchange", syncToCurrentTarget);
+
+    return () => {
+      if (frame) cancelAnimationFrame(frame);
+      if (navigationTimer) window.clearTimeout(navigationTimer);
+      resizeObserver?.disconnect();
+      nav.removeEventListener("scroll", syncToCurrentTarget);
+      pagesClip?.removeEventListener("scroll", syncToCurrentTarget);
+      sidebar.removeEventListener("click", onClick);
+      window.removeEventListener("resize", syncToCurrentTarget);
+      window.removeEventListener("orientationchange", syncToCurrentTarget);
+      clearTargets();
+      sidebar.classList.remove("sidebar-active-indicator-ready", "sidebar-active-indicator-animating");
+      indicator.remove();
+    };
+  }, []);
+
+  return null;
+}
+
 export function SidebarBrandToggle() {
   return (
     <div

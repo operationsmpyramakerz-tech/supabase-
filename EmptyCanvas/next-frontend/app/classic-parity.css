@@ -18287,3 +18287,86 @@ body.page-home .next-home-stock-analysis__menu button {
     padding: 6px !important;
   }
 }
+
+/* ========================================================================
+   Main sidebar active-page travel animation
+   2026-09-11
+   Keep one physical white selection surface and slide/morph it to the page the
+   user chooses, instead of letting one .active background disappear while a
+   new one appears after navigation.  The indicator is positioned from the
+   rendered sidebar geometry, so it follows both desktop vertical navigation
+   and the mobile horizontal dock without changing page layout.
+   ===================================================================== */
+.classic-app-shell > .sidebar {
+  --sidebar-active-indicator-duration: 230ms;
+}
+
+.classic-app-shell > .sidebar > .sidebar-active-indicator {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 5;
+  display: block;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+  background: #fff;
+  border: 1.5px solid #0b0c10;
+  box-sizing: border-box;
+  box-shadow: 0 10px 24px rgba(0,0,0,.18);
+  will-change: transform, width, height, border-radius;
+  transition:
+    transform var(--sidebar-active-indicator-duration) cubic-bezier(.22,.78,.24,1),
+    width var(--sidebar-active-indicator-duration) cubic-bezier(.22,.78,.24,1),
+    height var(--sidebar-active-indicator-duration) cubic-bezier(.22,.78,.24,1),
+    border-radius var(--sidebar-active-indicator-duration) cubic-bezier(.22,.78,.24,1),
+    opacity 120ms ease;
+}
+
+.classic-app-shell > .sidebar > .sidebar-active-indicator.is-instant {
+  transition: none !important;
+}
+
+/* The travelling indicator owns the white surface.  Keep link content above it
+   and remove only the duplicated background/shadow from the active anchor. */
+body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready .sidebar-nav .nav-link {
+  position: relative;
+  z-index: 7;
+}
+
+body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready .sidebar-nav .nav-link.active,
+body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready .sidebar-nav .nav-link.is-indicator-target {
+  background: transparent !important;
+  box-shadow: none !important;
+  border-color: transparent !important;
+}
+
+body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready .sidebar-nav .nav-link.is-indicator-target {
+  color: #0b0c10 !important;
+}
+
+body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-animating .sidebar-nav .nav-link.active:not(.is-indicator-target) {
+  color: rgba(255,255,255,.72) !important;
+}
+
+/* On mobile Home's active white surface belongs to the padded SVG circle. The
+   JS indicator measures that circle exactly, so suppress the old duplicate. */
+@media (max-width: 768px) {
+  body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready .mobile-dock-home-rail .nav-link.active svg,
+  body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready:not(.mobile-dock-structured-host) .sidebar-nav > .nav-list > li:first-child .nav-link.active svg {
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  .classic-app-shell > .sidebar > .sidebar-active-indicator {
+    box-shadow: 0 10px 22px rgba(0,0,0,.20);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .classic-app-shell > .sidebar > .sidebar-active-indicator {
+    transition: none !important;
+  }
+}
+

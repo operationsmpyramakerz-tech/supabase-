@@ -8,6 +8,7 @@ import {
   ClassicChromeAccessSync,
   ClassicSidebarBootstrap,
   ClassicSidebarViewportKeeper,
+  ClassicSidebarActiveIndicator,
   ClassicMobileDockStructure,
   HeaderMenuToggle,
   SidebarBrandToggle,
@@ -171,6 +172,7 @@ export default function AppShell({
       <ClassicSidebarBootstrap />
       <ClassicMobileDockStructure />
       <ClassicSidebarViewportKeeper />
+      <ClassicSidebarActiveIndicator />
       <TaskManagementSidebarFlyout allowedPages={allowedPages} activePath={activePath} />
       <EventsSidebarFlyout allowedPages={allowedPages} activePath={activePath} />
 
