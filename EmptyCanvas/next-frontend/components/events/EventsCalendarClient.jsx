@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import EventIcon from "./EventIcon";
 
 const STATUS_LABELS = {
   submitted: "Submitted",
@@ -254,14 +255,11 @@ export default function EventsCalendarClient({ account, initialEvents = [], boot
   const access = useMemo(() => allowedSet(account), [account]);
   const canCreate = access.has("event requests");
   const canOpenRequests = access.has("event requests");
-  const canOpenComponents = access.has("event components");
   const [events, setEvents] = useState(Array.isArray(initialEvents) ? initialEvents : []);
   const [month, setMonth] = useState(() => startOfMonth(new Date()));
   const [selectedKey, setSelectedKey] = useState(() => dateKey(new Date()));
   const [activeList, setActiveList] = useState("upcoming");
   const [activeEvent, setActiveEvent] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
 
   const selectedDate = useMemo(() => localDay(selectedKey) || startOfDay(new Date()), [selectedKey]);
   const today = useMemo(() => startOfDay(new Date()), []);
@@ -294,27 +292,6 @@ export default function EventsCalendarClient({ account, initialEvents = [], boot
 
   const selectedDayEvents = useMemo(() => eventsForDate(selectedDate), [datedEvents, selectedKey]);
   const list = activeList === "past" ? past : upcoming;
-  const activeMonthEvents = useMemo(() => datedEvents.filter((event) => {
-    const start = startDate(event);
-    const end = endDate(event);
-    const first = new Date(month.getFullYear(), month.getMonth(), 1);
-    const last = new Date(month.getFullYear(), month.getMonth() + 1, 0);
-    return start && end && start <= last && end >= first;
-  }), [datedEvents, month]);
-
-  async function refresh() {
-    setLoading(true);
-    setError("");
-    try {
-      const payload = await requestJson(`/api/events?_ts=${Date.now()}`);
-      setEvents(Array.isArray(payload?.events) ? payload.events : []);
-    } catch (refreshError) {
-      setError(refreshError?.message || "Unable to refresh the schedule.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
   function selectDate(day) {
     setSelectedKey(dateKey(day));
     if (day.getFullYear() !== month.getFullYear() || day.getMonth() !== month.getMonth()) {
@@ -331,106 +308,113 @@ export default function EventsCalendarClient({ account, initialEvents = [], boot
   }
 
   return (
-    <section className="events-shell events-calendar-shell next-events-calendar-page">
-      <section className="events-calendar-workspace" aria-label="Event schedule">
+    <section className="events-shell events-calendar-shell">
+      <section className="events-calendar-workspace" aria-labelledby="eventsCalendarTitle">
         <div className="events-calendar-workspace__top">
-          <div><span className="events-eyebrow">Event schedule</span></div>
+          <div>
+            <span className="events-eyebrow"><EventIcon name="calendar" /> Event schedule</span>
+            <h2 className="events-visually-hidden" id="eventsCalendarTitle">Calendar</h2>
+          </div>
           <div className="events-calendar-toolbar">
-            <button type="button" className="events-secondary-btn" onClick={() => selectDate(new Date())}>Today</button>
-            <button type="button" className="events-secondary-btn" onClick={refresh} disabled={loading}>{loading ? "Refreshing…" : "Refresh"}</button>
-            {canCreate ? <button type="button" className="events-primary-btn" onClick={openNewEvent}>＋ Add New Event</button> : null}
+            <button type="button" className="events-secondary-btn events-calendar-today" onClick={() => selectDate(new Date())}><EventIcon name="crosshair" /><span>Today</span></button>
+            {canCreate ? <button type="button" className="events-primary-btn" onClick={openNewEvent}><EventIcon name="plus-circle" /><span>Add New Event</span></button> : null}
           </div>
         </div>
 
-        {bootstrapWarnings.length ? <div className="next-inline-warning">Some optional calendar data could not be loaded. The available schedule is shown below.</div> : null}
-        {error ? <div className="next-inline-warning next-inline-warning--error">{error}</div> : null}
+        <div className="events-calendar-layout">
+          <section className="events-calendar-card" aria-label="Monthly event calendar">
+            <div className="events-calendar-card__header">
+              <button type="button" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))} className="events-calendar-nav" aria-label="Previous month"><EventIcon name="chevron-left" /></button>
+              <div className="events-calendar-month-title"><h3>{month.toLocaleDateString("en-GB", { month: "long" })}</h3><span>{month.getFullYear()}</span></div>
+              <button type="button" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))} className="events-calendar-nav" aria-label="Next month"><EventIcon name="chevron-right" /></button>
+            </div>
 
-      <div className="events-calendar-layout next-events-calendar-layout">
-        <section className="events-calendar-card next-events-calendar-card">
-          <header className="events-calendar-card__header">
-            <button type="button" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))} className="events-calendar-nav" aria-label="Previous month">‹</button>
-            <div className="events-calendar-month-title"><h3>{month.toLocaleDateString("en-GB", { month: "long" })}</h3><span>{month.getFullYear()}</span></div>
-            <button type="button" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))} className="events-calendar-nav" aria-label="Next month">›</button>
-          </header>
+            <div className="events-calendar-weekdays" aria-hidden="true">
+              {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => <span key={day}>{day}</span>)}
+            </div>
 
-          <div className="events-calendar-weekdays next-events-calendar-weekdays" aria-hidden="true">
-            {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => <span key={day}>{day}</span>)}
-          </div>
+            <div className="events-calendar-grid" aria-live="polite">
+              {calendarDays.map((day) => {
+                const scheduled = eventsForDate(day);
+                const outside = day.getMonth() !== month.getMonth();
+                const selected = dateKey(day) === selectedKey;
+                const current = sameDay(day, today);
+                const markers = scheduled.slice(0, 3);
+                return (
+                  <button
+                    type="button"
+                    key={dateKey(day)}
+                    className={`events-calendar-day${outside ? " is-outside" : ""}${selected ? " is-selected" : ""}${current ? " is-today" : ""}${scheduled.length ? " has-events" : ""}`}
+                    onClick={() => selectDate(day)}
+                    aria-pressed={selected}
+                    aria-label={`${formatDate(day, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}${scheduled.length ? `, ${scheduled.length} scheduled event${scheduled.length === 1 ? "" : "s"}` : ""}`}
+                  >
+                    <span className="events-calendar-day__number">{day.getDate()}</span>
+                    {scheduled.length ? (
+                      <span className="events-calendar-day__markers">
+                        {markers.map((event, index) => <i className={`events-calendar-marker events-calendar-marker--${typeClass(event)}`} key={`${event.id}-${index}`} />)}
+                        {scheduled.length > markers.length ? <span className="events-calendar-more">+{scheduled.length - markers.length}</span> : null}
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
 
-          <div className="events-calendar-grid next-events-calendar-grid">
-            {calendarDays.map((day) => {
-              const scheduled = eventsForDate(day);
-              const outside = day.getMonth() !== month.getMonth();
-              const selected = dateKey(day) === selectedKey;
-              const current = sameDay(day, today);
-              const markers = scheduled.slice(0, 3);
-              return (
-                <button
-                  type="button"
-                  key={dateKey(day)}
-                  className={`events-calendar-day ${outside ? "is-outside " : ""}${selected ? "is-selected " : ""}${current ? "is-today " : ""}${scheduled.length ? "has-events" : ""}`.trim()}
-                  onClick={() => selectDate(day)}
-                  aria-pressed={selected}
-                  aria-label={`${formatDate(day, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}${scheduled.length ? `, ${scheduled.length} event${scheduled.length === 1 ? "" : "s"}` : ""}`}
-                >
-                  <span className="events-calendar-day__number day-number">{day.getDate()}</span>
-                  {scheduled.length ? (
-                    <span className="events-calendar-day__markers day-markers">
-                      {markers.map((event, index) => <i className={`type-${typeClass(event)}`} key={`${event.id}-${index}`} />)}
-                      {scheduled.length > markers.length ? <b>+{scheduled.length - markers.length}</b> : null}
-                    </span>
-                  ) : null}
-                </button>
-              );
-            })}
-          </div>
-
-          <footer className="events-calendar-legend next-events-calendar-legend">
-            <span><i className="selected" /> Selected date</span>
-            <span><i className="scheduled" /> Event scheduled</span>
-          </footer>
-        </section>
-
-        <aside className="events-calendar-sidebar next-events-calendar-side">
-          <section className="next-events-calendar-selected-card">
-            <header><div><small>Selected date</small><h3>{formatDate(selectedDate, { weekday: "long", day: "2-digit", month: "long" })}</h3></div><b>{selectedDayEvents.length}</b></header>
-            <div className="next-events-calendar-selected-list">
-              {selectedDayEvents.length ? selectedDayEvents.map((event) => (
-                <button type="button" key={event.id} onClick={() => setActiveEvent(event)}>
-                  <i className={`type-${typeClass(event)}`} />
-                  <span><strong>{event.eventName || "Untitled Event"}</strong><small>{event.organizationName || event.governorate || typeLabel(event)}</small></span>
-                  <StatusPill status={event.status} />
-                </button>
-              )) : <div className="next-events-calendar-empty"><strong>No events on this date</strong><span>Select another date or create a new event.</span></div>}
+            <div className="events-calendar-legend">
+              <span><i className="events-calendar-dot events-calendar-dot--selected" />Selected date</span>
+              <span><i className="events-calendar-dot events-calendar-dot--has-events" />Event scheduled</span>
             </div>
           </section>
 
-          <section className="events-calendar-events-card next-events-calendar-list-card">
-            <div className="events-calendar-list-tabs next-events-calendar-tabs">
-              <button type="button" className={`events-calendar-list-tab${activeList === "upcoming" ? " is-active active" : ""}`} onClick={() => setActiveList("upcoming")}><span>Upcoming</span><b>{upcoming.length}</b></button>
-              <button type="button" className={`events-calendar-list-tab${activeList === "past" ? " is-active active" : ""}`} onClick={() => setActiveList("past")}><span>Past</span><b>{past.length}</b></button>
-            </div>
-            <div className="events-calendar-section-heading next-events-calendar-list-head"><div><small>{activeList === "past" ? "Before today" : `From ${formatDate(selectedDate, { day: "2-digit", month: "short", year: "numeric" })}`}</small><h3>{activeList === "past" ? "Past Events" : "Upcoming Events"}</h3></div><b>{list.length}</b></div>
-            <div className="events-calendar-upcoming-list next-events-calendar-event-list">
-              {list.length ? list.map((event) => (
-                <button type="button" className="events-calendar-upcoming-item" key={event.id} onClick={() => setActiveEvent(event)}>
-                  <span className="events-calendar-upcoming-item__date event-date"><strong>{formatDate(startDate(event), { day: "2-digit", month: "short" })}</strong><small>{startDate(event)?.getFullYear() || "—"}</small></span>
-                  <span className="events-calendar-upcoming-item__body event-copy"><small>{event.organizationName || event.governorate || "Event execution"}</small><strong>{event.eventName || "Untitled Event"}</strong><em>{typeLabel(event)} · {event.governorate || "Location to be confirmed"}</em></span>
-                  <span className="event-arrow">↗</span>
+          <aside className="events-calendar-sidebar">
+            <section className="events-calendar-events-card" aria-labelledby="eventsCalendarListTitle">
+              <div className="events-calendar-list-tabs" role="tablist" aria-label="Event schedule lists">
+                <button type="button" role="tab" aria-selected={activeList === "upcoming"} className={`events-calendar-list-tab${activeList === "upcoming" ? " is-active" : ""}`} onClick={() => setActiveList("upcoming")}>
+                  <EventIcon name="clock" /><span>Upcoming Events</span><b>{upcoming.length}</b>
                 </button>
-              )) : <div className="next-events-calendar-empty"><strong>{activeList === "past" ? "No past events" : "No upcoming events"}</strong><span>{activeList === "past" ? "Completed event history will appear here." : "No active events are scheduled from the selected date onward."}</span></div>}
-            </div>
-          </section>
-        </aside>
-      </div>
+                <button type="button" role="tab" aria-selected={activeList === "past"} className={`events-calendar-list-tab${activeList === "past" ? " is-active" : ""}`} onClick={() => setActiveList("past")}>
+                  <EventIcon name="archive" /><span>Past Events</span><b>{past.length}</b>
+                </button>
+              </div>
 
-      <div className="next-events-calendar-footer-actions">
-        {canOpenRequests ? <a className="events-secondary-btn secondary-button" href="/next/events">Event Requests</a> : null}
-        {canOpenComponents ? <a className="events-secondary-btn secondary-button" href="/next/event-components">Event Components</a> : null}
-        <a className="events-secondary-btn secondary-button" href="/events/calendar?classic=1">Open classic Calendar</a>
-      </div>
+              <div className="events-calendar-events-card__body">
+                <div className="events-calendar-section-heading">
+                  <div>
+                    <span className="events-calendar-section-label">{activeList === "past" ? "Before today" : `From ${formatDate(selectedDate, { day: "numeric", month: "short", year: "numeric" })}`}</span>
+                    <h3 id="eventsCalendarListTitle">{activeList === "past" ? "Past Events" : "Upcoming Events"}</h3>
+                  </div>
+                  <span className="events-calendar-count">{list.length}</span>
+                </div>
 
+                <div className="events-calendar-upcoming-list" role="tabpanel">
+                  {list.length ? list.map((event) => (
+                    <button type="button" className="events-calendar-upcoming-item" key={event.id} onClick={() => setActiveEvent(event)}>
+                      <span className="events-calendar-upcoming-item__date">
+                        <strong>{formatDate(startDate(event), { day: "2-digit", month: "short" })}</strong>
+                        <small>{String(event.eventStartDate || "").slice(0, 4) || "—"}</small>
+                      </span>
+                      <span className="events-calendar-upcoming-item__body">
+                        <span className="events-calendar-upcoming-item__meta">{event.organizationName || event.governorate || "Event execution"}</span>
+                        <strong>{event.eventName || "Untitled Event"}</strong>
+                        <small>{typeLabel(event)} · {event.governorate || "Location to be confirmed"}</small>
+                      </span>
+                      <EventIcon name="arrow-up-right" />
+                    </button>
+                  )) : (
+                    <div className="events-calendar-empty events-calendar-empty--compact">
+                      <EventIcon name="calendar" />
+                      <strong>{activeList === "past" ? "No past events" : "No upcoming events"}</strong>
+                      <span>{activeList === "past" ? "Completed event history will appear here." : "No active events are scheduled from the selected date onward."}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </section>
+          </aside>
+        </div>
       </section>
+
       <DetailsModal event={activeEvent} canOpenRequests={canOpenRequests} onClose={() => setActiveEvent(null)} />
     </section>
   );

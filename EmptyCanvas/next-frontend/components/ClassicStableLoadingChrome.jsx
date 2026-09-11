@@ -14,7 +14,7 @@ const CLASSIC_MAIN_LINKS = [
   { label: "Orders Review", href: "/next/orders-review", icon: "award", permissions: ["Orders Review"] },
   { label: "Operations Orders", href: "/next/operations-orders", icon: "users", permissions: ["Requested Orders", "Operations Orders"] },
   { label: "Maintenance Orders", href: "/next/maintenance-orders", icon: "tool", permissions: ["Maintenance Orders"] },
-  { label: "Events", href: "/next/events", icon: "calendar", permissions: ["Event Requests", "Events"] },
+  { label: "Events", href: "/next/events", icon: "calendar", permissions: ["Event Requests", "Event Calendar", "Event Components", "Events", "/events", "/events/requests", "/events/calendar", "/events/components"] },
   { label: "Shopping Cart", href: "/next/orders/new", icon: "shopping-cart", permissions: ["Create New Order", "Shopping Cart", "Cart", "/orders/new"] },
   { label: "Stocktaking", href: "/next/stocktaking", icon: "archive", permissions: ["Stocktaking"] },
   { label: "B2C", href: "/next/b2c", icon: "user-plus", permissions: ["B2C", "Customer Database", "B2C Customer Database", "Customer Form", "B2C Customer Form", "/b2c/database", "/b2c/form"] },

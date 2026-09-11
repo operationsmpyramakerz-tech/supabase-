@@ -18112,7 +18112,8 @@ body.page-home .next-home-stock-analysis__menu button {
 }
 
 /* Keep the task parent visually engaged while its second rail is open. */
-.classic-app-shell a.nav-link[href="/next/task-management"][aria-expanded="true"] {
+.classic-app-shell a.nav-link[href="/next/task-management"][aria-expanded="true"],
+.classic-app-shell a.nav-link[href="/next/events"][aria-expanded="true"] {
   background: #fff !important;
   color: #0B0C10 !important;
   box-shadow: 0 12px 26px rgba(255,255,255,.12), 0 12px 24px rgba(0,0,0,.16) !important;

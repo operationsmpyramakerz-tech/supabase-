@@ -1,12 +1,22 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import EventIcon from "./EventIcon";
 
 const STANDARD_CATEGORIES = [
   { code: "project", label: "Project Resource" },
   { code: "marketing_material", label: "Marketing Material" },
   { code: "venue_equipment", label: "Venue Equipment" },
 ];
+
+
+const FILTER_CATEGORIES = Object.freeze([
+  { code: "all", label: "All", icon: "layers" },
+  { code: "project", label: "Project Resource", icon: "cpu" },
+  { code: "marketing_material", label: "Marketing Material", icon: "image" },
+  { code: "venue_equipment", label: "Venue Equipment", icon: "tool" },
+  { code: "other", label: "Other", icon: "more-horizontal" },
+]);
 
 const OWNERSHIP_LABELS = {
   company_owned: "Company Owned",
@@ -396,32 +406,44 @@ function ComponentCard({ component, categoryLabel, canEdit, canDelete, onEdit, o
   const active = component?.isActive !== false;
 
   return (
-    <article className={`events-component-card next-event-component-card${active ? "" : " is-inactive"}`}>
-      <div className="events-component-card__photo next-event-component-card-photo">
-        {photo ? <img src={photo} alt={`${component?.name || "Event component"} photo`} loading="lazy" /> : <span>EC</span>}
-        <em className={active ? "active" : "inactive"}>{active ? "Active" : "Inactive"}</em>
+    <article className={`events-component-card${active ? "" : " is-inactive"}`}>
+      <div className="events-component-card__top">
+        <span className="events-component-badge"><EventIcon name="layers" />{categoryLabel}</span>
+        <span className={`events-status ${active ? "events-status--approved" : "events-status--cancelled"}`}>{active ? "Active" : "Inactive"}</span>
       </div>
-      <div className="events-component-card__body next-event-component-card-body">
-        <div className="events-stage2k-component-badges next-event-component-badges">
-          <span>{categoryLabel}</span>
-          <span>{OWNERSHIP_LABELS[external ? "external_rental" : "company_owned"]}</span>
-        </div>
-        <h3>{component?.name || "Untitled component"}</h3>
-        <p>{text(component?.description) || "No description was added."}</p>
-        <div className="events-stage2k-component-metrics next-event-component-metrics">
-          <div><small>Default qty.</small><strong>{number(component?.defaultQuantity || 0)}</strong></div>
-          <div><small>Operating</small><strong>{money(operating)}</strong></div>
-          {external ? <div><small>Rental</small><strong>{money(rental)}</strong></div> : null}
-          <div className="unit"><small>Cost / unit</small><strong>{money(unit)}</strong></div>
+
+      <div className="events-component-card__photo">
+        {photo ? <img src={photo} alt={`${component?.name || "Event component"} photo`} loading="lazy" /> : <EventIcon name="box" />}
+      </div>
+
+      <div className="events-component-card__body">
+        <h3 title={component?.name || ""}>{component?.name || "Untitled component"}</h3>
+        <p>{text(component?.description) || "No description added yet."}</p>
+      </div>
+
+      <div className="events-component-card__meta">
+        <div><span>Source type</span><strong>{OWNERSHIP_LABELS[external ? "external_rental" : "company_owned"]}</strong></div>
+        <div><span>Default qty.</span><strong>{component?.defaultQuantity ?? 1}</strong></div>
+      </div>
+
+      <div className="events-component-card__cost">
+        <div><span>Event cost / unit</span><strong>{money(unit)}</strong></div>
+        <div className="events-component-card__cost-breakdown">
+          {external ? <><span>Rental {money(rental)}</span><span>Operating {money(operating)}</span></> : <span>Operating {money(operating)}</span>}
         </div>
       </div>
-      <footer>
-        <div>{link ? <a href={link} target="_blank" rel="noreferrer">Open link ↗</a> : <span>No reference link</span>}</div>
+
+      <div className="events-component-card__footer">
         <div>
-          {canEdit ? <button type="button" className="events-secondary-btn secondary-button" onClick={() => onEdit(component)}>Edit</button> : null}
-          {canDelete ? <button type="button" className="danger-button" onClick={() => onDelete(component)}>Delete</button> : null}
+          {link ? <a className="events-component-card__link" href={link} target="_blank" rel="noreferrer"><EventIcon name="external-link" /><span>Open Link</span></a> : <span className="events-component-card__no-link">No link</span>}
         </div>
-      </footer>
+        {canEdit ? (
+          <div className="events-component-card__actions">
+            <button type="button" className="events-action-btn" onClick={() => onEdit(component)}><EventIcon name="edit-3" /><span>Edit</span></button>
+            {canDelete ? <button type="button" className="events-action-btn events-action-btn--danger" onClick={() => onDelete(component)} aria-label="Delete component"><EventIcon name="trash-2" /></button> : null}
+          </div>
+        ) : null}
+      </div>
     </article>
   );
 }
@@ -432,7 +454,8 @@ export default function EventComponentsClient({ account, initialComponents, init
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("all");
   const [status, setStatus] = useState("all");
-  const [sort, setSort] = useState("name");
+  const [statusFilterOpen, setStatusFilterOpen] = useState(false);
+  const statusFilterRef = useRef(null);
   const [formMode, setFormMode] = useState("");
   const [form, setForm] = useState(EMPTY_FORM);
   const [formBusy, setFormBusy] = useState(false);
@@ -444,9 +467,22 @@ export default function EventComponentsClient({ account, initialComponents, init
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState("");
-  const [refreshing, setRefreshing] = useState(false);
   const [toast, setToast] = useState(null);
   const initialCreateHandled = useRef(false);
+
+  useEffect(() => {
+    const onPointerDown = (event) => {
+      const root = statusFilterRef.current;
+      if (root && !root.contains(event.target)) setStatusFilterOpen(false);
+    };
+    const onKeyDown = (event) => { if (event.key === "Escape") setStatusFilterOpen(false); };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, []);
 
   useEffect(() => {
     const input = document.querySelector(".classic-app-shell .main-header .searchbar input");
@@ -470,32 +506,31 @@ export default function EventComponentsClient({ account, initialComponents, init
 
   const filtered = useMemo(() => {
     const q = lower(query);
-    const rows = components.filter((component) => {
+    return components.filter((component) => {
       const active = component?.isActive !== false;
       if (status === "active" && !active) return false;
       if (status === "inactive" && active) return false;
-      if (category !== "all" && text(component?.category) !== category) return false;
+
+      const componentCategory = text(component?.category) || "other";
+      if (category === "other") {
+        if (!(componentCategory === "other" || /^custom_/i.test(componentCategory))) return false;
+      } else if (category !== "all" && componentCategory !== category) {
+        return false;
+      }
+
       if (!q) return true;
-      return [component?.name, component?.description, component?.linkUrl, categoryMap.get(text(component?.category)), OWNERSHIP_LABELS[component?.ownershipType]]
+      return [component?.name, component?.description, component?.linkUrl, categoryMap.get(componentCategory), OWNERSHIP_LABELS[component?.ownershipType]]
         .map(lower)
         .join(" ")
         .includes(q);
     });
+  }, [components, query, category, status, categoryMap]);
 
-    return rows.sort((a, b) => {
-      if (sort === "cost-desc") return number(b?.unitCost) - number(a?.unitCost);
-      if (sort === "cost-asc") return number(a?.unitCost) - number(b?.unitCost);
-      if (sort === "category") return text(categoryMap.get(text(a?.category))).localeCompare(text(categoryMap.get(text(b?.category)))) || text(a?.name).localeCompare(text(b?.name));
-      return text(a?.name).localeCompare(text(b?.name));
-    });
-  }, [components, query, category, status, sort, categoryMap]);
-
-  const summary = useMemo(() => {
-    const active = components.filter((item) => item?.isActive !== false).length;
-    const rentals = components.filter((item) => item?.ownershipType === "external_rental").length;
-    const totalUnitCost = components.reduce((sum, item) => sum + Math.max(0, number(item?.unitCost)), 0);
-    return { total: components.length, active, inactive: components.length - active, rentals, totalUnitCost };
-  }, [components]);
+  const statusOptions = useMemo(() => [
+    { key: "all", label: "All statuses", icon: "layers", count: components.length },
+    { key: "active", label: "Active", icon: "check-circle", count: components.filter((item) => item?.isActive !== false).length },
+    { key: "inactive", label: "Inactive", icon: "x-circle", count: components.filter((item) => item?.isActive === false).length },
+  ], [components]);
 
   function patchForm(key, value) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -597,23 +632,6 @@ export default function EventComponentsClient({ account, initialComponents, init
     return next;
   }
 
-  async function refreshAll() {
-    if (refreshing) return;
-    setRefreshing(true);
-    try {
-      const [componentsPayload, categoriesPayload] = await Promise.all([
-        requestJson(`/api/events/components?_ts=${Date.now()}`),
-        requestJson(`/api/events/component-categories?_ts=${Date.now()}`),
-      ]);
-      setComponents(Array.isArray(componentsPayload?.components) ? componentsPayload.components : []);
-      setCategories(normalizeCategories(categoriesPayload?.categories));
-      setToast({ type: "success", title: "Event Components", message: "Catalogue data was refreshed." });
-    } catch (error) {
-      setToast({ type: "error", title: "Event Components", message: error?.message || "Could not refresh the catalogue." });
-    } finally {
-      setRefreshing(false);
-    }
-  }
 
   async function submitForm(event) {
     event.preventDefault();
@@ -699,59 +717,106 @@ export default function EventComponentsClient({ account, initialComponents, init
   }
 
   return (
-    <section className="events-shell events-panel events-components-workspace next-event-components-page">
+    <section className="events-shell">
       <Toast toast={toast} onClose={() => setToast(null)} />
 
-      {bootstrapWarnings.length ? (
-        <div className="next-bootstrap-warning">Some catalogue resources were omitted during initial loading. Use Refresh to retry them.</div>
-      ) : null}
-
-      <div className="events-panel__header events-components-workspace__header events-components-workspace__header--actions-only">
-        <h3 className="events-visually-hidden">Event Components</h3>
-        <div className="events-list-controls events-components-workspace__controls">
-          {canEdit ? <button type="button" className="events-primary-btn" onClick={() => requestForm("create")}>＋ Add Event Component</button> : null}
-        </div>
-      </div>
-
-      <div className="events-orders-toolbar events-component-filters-toolbar" aria-label="Event component filters">
-        <div className="events-orders-toolbar__scroll">
-          <div className="events-orders-tabs" role="tablist" aria-label="Event component categories">
-            {[{code:"all",label:"All"}, ...categories].map((item) => (
-              <button type="button" role="tab" aria-selected={category === item.code} className={`events-order-status-tab${category === item.code ? " is-active" : ""}`} onClick={() => setCategory(item.code)} key={item.code}>
-                <span className="order-status-tab__icon" aria-hidden="true">{item.code === "all" ? "▦" : "◇"}</span>
-                <span className="order-status-tab__label">{item.label}</span>
+      <section className="events-panel events-components-workspace">
+        <div className="events-panel__header events-components-workspace__header events-components-workspace__header--actions-only">
+          <h3 className="events-visually-hidden">Event Components</h3>
+          <input className="events-global-search-bridge" type="search" aria-label="Search event components" tabIndex={-1} readOnly />
+          <div className="events-list-controls events-components-workspace__controls">
+            {canEdit ? (
+              <button type="button" className="events-primary-btn" onClick={() => requestForm("create")}>
+                <EventIcon name="plus-circle" /><span>Add Event Component</span>
               </button>
-            ))}
+            ) : null}
           </div>
         </div>
-        <label className="events-stage2k-filter"><span>Status</span><select value={status} onChange={(event) => setStatus(event.target.value)}><option value="all">All statuses</option><option value="active">Active</option><option value="inactive">Inactive</option></select></label>
-        <label className="events-stage2k-filter"><span>Sort</span><select value={sort} onChange={(event) => setSort(event.target.value)}><option value="name">Name A–Z</option><option value="category">Category</option><option value="cost-desc">Cost high to low</option><option value="cost-asc">Cost low to high</option></select></label>
-        <button type="button" className="events-secondary-btn" onClick={refreshAll} disabled={refreshing}>{refreshing ? "Refreshing..." : "Refresh"}</button>
-      </div>
 
-      <div className="events-stage2k-results-line"><span>{filtered.length} of {components.length} components</span><span>Access: {accessLevel === "admin" ? "Admin" : accessLevel === "edit" ? "Edit with Admin authorization" : "View only"}</span></div>
+        <div className="events-orders-toolbar events-component-filters-toolbar" aria-label="Event component filters">
+          <div className="events-orders-toolbar__scroll">
+            <div className="events-orders-tabs" role="tablist" aria-label="Event component categories">
+              {FILTER_CATEGORIES.map((item) => (
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={category === item.code}
+                  className={`events-order-status-tab${category === item.code ? " is-active" : ""}`}
+                  onClick={() => setCategory(item.code)}
+                  key={item.code}
+                >
+                  <span className="order-status-tab__icon"><EventIcon name={item.icon} /></span>
+                  <span className="order-status-tab__label">{item.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
 
-      {filtered.length ? (
-        <div className="events-component-cards next-event-components-grid">
-          {filtered.map((component) => (
-            <ComponentCard
-              component={component}
-              categoryLabel={categoryMap.get(text(component?.category)) || "Other"}
-              canEdit={canEdit}
-              canDelete={canDelete}
-              onEdit={(item) => requestForm("edit", item)}
-              onDelete={setDeleteTarget}
-              key={component?.id || component?.name}
-            />
-          ))}
+          <div
+            ref={statusFilterRef}
+            className={`orders-type-filter events-type-filter events-component-status-filter${statusFilterOpen ? " is-open" : ""}${status !== "all" ? " is-filtered" : ""}`}
+          >
+            <button
+              type="button"
+              className="orders-type-filter__button"
+              aria-haspopup="menu"
+              aria-expanded={statusFilterOpen}
+              aria-label="Filter event components by status"
+              onClick={() => setStatusFilterOpen((open) => !open)}
+            >
+              <span className="orders-type-filter__button-icon"><EventIcon name="filter" /></span>
+              <span className="orders-type-filter__button-label">Filter by status</span>
+              <span className="orders-type-filter__button-dot" hidden={status === "all"} />
+            </button>
+
+            {!statusFilterOpen ? null : (
+              <div className="orders-type-filter__panel" role="menu" aria-label="Filter event components by status">
+                <div className="orders-type-filter__panel-head">
+                  <div className="orders-type-filter__panel-title">Filter by status</div>
+                  <div className="orders-type-filter__panel-sub">{components.length} component{components.length === 1 ? "" : "s"}</div>
+                </div>
+                <div className="orders-type-filter__options">
+                  {statusOptions.map((option) => (
+                    <button
+                      type="button"
+                      className={`orders-type-filter__option${option.key === status ? " is-active" : ""}`}
+                      role="menuitemradio"
+                      aria-checked={option.key === status}
+                      key={option.key}
+                      onClick={() => { setStatus(option.key); setStatusFilterOpen(false); }}
+                    >
+                      <span className="orders-type-filter__option-icon"><EventIcon name={option.icon} /></span>
+                      <span className="orders-type-filter__option-body">
+                        <span className="orders-type-filter__option-title">{option.label}</span>
+                        <span className="orders-type-filter__option-sub">{option.count} component{option.count === 1 ? "" : "s"}</span>
+                      </span>
+                      <span className="orders-type-filter__option-check"><EventIcon name="check" /></span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
-      ) : (
-        <div className="events-empty events-component-cards__empty next-events-empty">
-          <span>EC</span>
-          <h3>No components match this view</h3>
-          <p>Change the search or filters, or add a new catalogue record.</p>
-        </div>
-      )}
+
+        {filtered.length ? (
+          <div className="events-component-cards" aria-live="polite">
+            {filtered.map((component) => (
+              <ComponentCard
+                component={component}
+                categoryLabel={categoryMap.get(text(component?.category)) || "Other"}
+                canEdit={canEdit}
+                canDelete={canDelete}
+                onEdit={(item) => requestForm("edit", item)}
+                onDelete={setDeleteTarget}
+                key={component?.id || component?.name}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="events-empty events-component-cards__empty"><EventIcon name="layers" /><span>No event components match this view.</span></div>
+        )}
+      </section>
 
       <ComponentFormModal
         mode={formMode}

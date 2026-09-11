@@ -2,6 +2,7 @@ import NotificationsBell from "./notifications/NotificationsBell";
 import UserProfileMenu from "./UserProfileMenu";
 import HeaderSearch from "./HeaderSearch";
 import TaskManagementSidebarFlyout from "./task-management/TaskManagementSidebarFlyout";
+import EventsSidebarFlyout from "./events/EventsSidebarFlyout";
 import {
   BodyClassSync,
   ClassicChromeAccessSync,
@@ -48,7 +49,7 @@ export const CLASSIC_MAIN_LINKS = [
   { label: "Orders Review", href: "/next/orders-review", icon: "award", permissions: ["Orders Review"] },
   { label: "Operations Orders", href: "/next/operations-orders", icon: "users", permissions: ["Requested Orders", "Operations Orders"] },
   { label: "Maintenance Orders", href: "/next/maintenance-orders", icon: "tool", permissions: ["Maintenance Orders"] },
-  { label: "Events", href: "/next/events", icon: "calendar", permissions: ["Event Requests", "Events"] },
+  { label: "Events", href: "/next/events", icon: "calendar", permissions: ["Event Requests", "Event Calendar", "Event Components", "Events", "/events", "/events/requests", "/events/calendar", "/events/components"] },
   { label: "Shopping Cart", href: "/next/orders/new", icon: "shopping-cart", permissions: ["Create New Order", "Shopping Cart", "Cart", "/orders/new"] },
   { label: "Stocktaking", href: "/next/stocktaking", icon: "archive", permissions: ["Stocktaking"] },
   { label: "B2C", href: "/next/b2c", icon: "user-plus", permissions: ["B2C", "Customer Database", "B2C Customer Database", "Customer Form", "B2C Customer Form", "/b2c/database", "/b2c/form"] },
@@ -98,6 +99,18 @@ export function isActive(activePath, href) {
       (current === candidate || current.startsWith(`${candidate}/`));
   });
   return !moreSpecificOwner;
+}
+
+function isClassicNavActive(activePath, href) {
+  const current = String(activePath || "").replace(/\/+$/, "") || "/";
+  if (href === "/next/events") {
+    return current === "/next/events"
+      || current === "/next/events-calendar"
+      || current.startsWith("/next/events-calendar/")
+      || current === "/next/event-components"
+      || current.startsWith("/next/event-components/");
+  }
+  return isActive(activePath, href);
 }
 
 export function ClassicIcon({ name }) {
@@ -159,6 +172,7 @@ export default function AppShell({
       <ClassicMobileDockStructure />
       <ClassicSidebarViewportKeeper />
       <TaskManagementSidebarFlyout allowedPages={allowedPages} activePath={activePath} />
+      <EventsSidebarFlyout allowedPages={allowedPages} activePath={activePath} />
 
       <div className="app-container classic-app-shell">
         <aside className="sidebar">
@@ -173,7 +187,7 @@ export default function AppShell({
                   key={link.href}
                   className={link.boundary === "workspace" ? "sidebar-workspace-boundary" : link.boundary === "users" ? "sidebar-users-boundary" : ""}
                 >
-                  <a className={`nav-link ${isActive(activePath, link.href) ? "active" : ""}`} href={link.href} title={link.label} aria-label={link.label}>
+                  <a className={`nav-link ${isClassicNavActive(activePath, link.href) ? "active" : ""}`} href={link.href} title={link.label} aria-label={link.label}>
                     <ClassicIcon name={link.icon} />
                     <span className="nav-label">{link.label}</span>
                   </a>

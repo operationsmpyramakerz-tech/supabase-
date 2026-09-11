@@ -20,7 +20,18 @@ function normalizePath(value) {
 
 function resolvedActiveHref(pathname, hrefs) {
   const current = normalizePath(pathname);
-  const matches = (Array.isArray(hrefs) ? hrefs : [])
+  const candidates = Array.isArray(hrefs) ? hrefs : [];
+
+  // Event Calendar and Event Components are sibling Next routes, but Classic
+  // exposes all three Event pages through one parent sidebar icon. Keep that
+  // parent active during route loading too, so it does not flash inactive.
+  const isEventsChild = current === "/events-calendar"
+    || current.startsWith("/events-calendar/")
+    || current === "/event-components"
+    || current.startsWith("/event-components/");
+  if (isEventsChild && candidates.includes("/next/events")) return "/next/events";
+
+  const matches = candidates
     .map((href) => ({ href, normalized: normalizePath(href) }))
     .filter(({ normalized }) => (
       current === normalized ||

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import EventIcon from "./EventIcon";
 
 const STATUS_LABELS = {
   submitted: "Submitted",
@@ -17,6 +18,15 @@ const TYPE_LABELS = {
   exhibition: "Exhibition",
   other: "Other",
 };
+const TYPE_ICONS = {
+  tech_day: "cpu",
+  seminar: "mic",
+  steam_fair: "star",
+  competition: "award",
+  exhibition: "image",
+  other: "calendar",
+};
+
 
 function text(value) {
   return String(value ?? "").trim();
@@ -357,6 +367,8 @@ export default function EventsClient({ account, initialEvents = [], bootstrapWar
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [eventType, setEventType] = useState("all");
+  const [typeFilterOpen, setTypeFilterOpen] = useState(false);
+  const typeFilterRef = useRef(null);
   const [activeEvent, setActiveEvent] = useState(null);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState(null);
@@ -364,6 +376,20 @@ export default function EventsClient({ account, initialEvents = [], bootstrapWar
   const [authorizationError, setAuthorizationError] = useState("");
   const [confirmation, setConfirmation] = useState(null);
   const [profileState, setProfileState] = useState(null);
+
+  useEffect(() => {
+    const onPointerDown = (event) => {
+      const root = typeFilterRef.current;
+      if (root && !root.contains(event.target)) setTypeFilterOpen(false);
+    };
+    const onKeyDown = (event) => { if (event.key === "Escape") setTypeFilterOpen(false); };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, []);
 
   useEffect(() => {
     const input = document.querySelector(".classic-app-shell .main-header .searchbar input");
@@ -383,11 +409,12 @@ export default function EventsClient({ account, initialEvents = [], bootstrapWar
     const counts = new Map();
     for (const event of events) {
       const key = typeKey(event);
-      const current = counts.get(key) || { key, label: typeLabel(event), count: 0 };
+      const rawType = lower(event?.eventType) || "other";
+      const current = counts.get(key) || { key, label: typeLabel(event), icon: TYPE_ICONS[rawType] || "calendar", count: 0 };
       current.count += 1;
       counts.set(key, current);
     }
-    return [{ key: "all", label: "All event types", count: events.length }, ...[...counts.values()].sort((a, b) => a.label.localeCompare(b.label))];
+    return [{ key: "all", label: "All event types", icon: "layers", count: events.length }, ...[...counts.values()].sort((a, b) => a.label.localeCompare(b.label))];
   }, [events]);
 
   const filtered = useMemo(() => {
@@ -542,72 +569,127 @@ export default function EventsClient({ account, initialEvents = [], bootstrapWar
   };
 
   return (
-    <section className="events-shell events-request-workspace next-events-page">
+    <section className="events-shell">
       <Toast toast={toast} onClose={() => setToast(null)} />
 
-      {bootstrapWarnings.length ? <div className="next-bootstrap-warning">Some Events resources were delayed. The page remains available and can be refreshed.</div> : null}
+      <section className="events-request-workspace" aria-labelledby="eventsListTitle">
+        <h3 className="events-visually-hidden" id="eventsListTitle">Event Requests</h3>
+        <input className="events-global-search-bridge" type="search" aria-label="Search event requests" tabIndex={-1} readOnly />
 
-      <div className="events-orders-toolbar" aria-label="Event request status">
-        <div className="events-orders-toolbar__scroll">
-          <div className="events-orders-tabs" role="tablist" aria-label="Event request status tabs">
-            {["all", "submitted", "in_progress", "completed", "cancelled"].map((key) => (
-              <button
-                type="button"
-                role="tab"
-                aria-selected={status === key}
-                className={`events-order-status-tab${status === key ? " is-active" : ""}`}
-                onClick={() => setStatus(key)}
-                key={key}
-              >
-                <span className="order-status-tab__icon" aria-hidden="true">{key === "all" ? "▦" : key === "submitted" ? "↗" : key === "in_progress" ? "◌" : key === "completed" ? "✓" : "×"}</span>
-                <span className="order-status-tab__label">{key === "all" ? "All" : STATUS_LABELS[key]}</span>
-              </button>
-            ))}
+        <div className="events-orders-toolbar" aria-label="Event request status">
+          <div className="events-orders-toolbar__scroll">
+            <div className="events-orders-tabs" role="tablist" aria-label="Event request status tabs">
+              {[
+                { key: "all", label: "All", icon: "layers" },
+                { key: "submitted", label: "Submitted", icon: "send" },
+                { key: "in_progress", label: "In progress", icon: "activity" },
+                { key: "completed", label: "Done", icon: "check" },
+                { key: "cancelled", label: "Cancelled", icon: "x-circle" },
+              ].map((item) => (
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={status === item.key}
+                  className={`events-order-status-tab${status === item.key ? " is-active" : ""}`}
+                  onClick={() => setStatus(item.key)}
+                  key={item.key}
+                >
+                  <span className="order-status-tab__icon"><EventIcon name={item.icon} /></span>
+                  <span className="order-status-tab__label">{item.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div
+            ref={typeFilterRef}
+            className={`orders-type-filter events-type-filter${typeFilterOpen ? " is-open" : ""}${eventType !== "all" ? " is-filtered" : ""}`}
+          >
+            <button
+              type="button"
+              className="orders-type-filter__button"
+              aria-haspopup="menu"
+              aria-expanded={typeFilterOpen}
+              aria-label="Filter event requests by event type"
+              onClick={() => setTypeFilterOpen((open) => !open)}
+            >
+              <span className="orders-type-filter__button-icon"><EventIcon name="filter" /></span>
+              <span className="orders-type-filter__button-label">Filter</span>
+              <span className="orders-type-filter__button-dot" hidden={eventType === "all"} />
+            </button>
+
+            {!typeFilterOpen ? null : (
+              <div className="orders-type-filter__panel" role="menu" aria-label="Filter event requests by event type">
+                <div className="orders-type-filter__panel-head">
+                  <div className="orders-type-filter__panel-title">Filter by event type</div>
+                  <div className="orders-type-filter__panel-sub">{events.length} event{events.length === 1 ? "" : "s"}</div>
+                </div>
+                <div className="orders-type-filter__options">
+                  {typeOptions.map((option) => (
+                    <button
+                      type="button"
+                      className={`orders-type-filter__option${option.key === eventType ? " is-active" : ""}`}
+                      role="menuitemradio"
+                      aria-checked={option.key === eventType}
+                      key={option.key}
+                      onClick={() => { setEventType(option.key); setTypeFilterOpen(false); }}
+                    >
+                      <span className="orders-type-filter__option-icon"><EventIcon name={option.icon} /></span>
+                      <span className="orders-type-filter__option-body">
+                        <span className="orders-type-filter__option-title">{option.label}</span>
+                        <span className="orders-type-filter__option-sub">{option.count} event{option.count === 1 ? "" : "s"}</span>
+                      </span>
+                      <span className="orders-type-filter__option-check"><EventIcon name="check" /></span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
-        <label className="events-stage2k-filter" aria-label="Filter event type">
-          <span>Filter</span>
-          <select value={eventType} onChange={(event) => setEventType(event.target.value)}>
-            {typeOptions.map((option) => <option value={option.key} key={option.key}>{option.label} ({option.count})</option>)}
-          </select>
-        </label>
-        <button type="button" className="events-secondary-btn events-stage2k-refresh" onClick={() => refreshEvents().catch((error) => setToast({ type: "error", title: "Events", message: error.message }))}>Refresh</button>
-        {canRequestActions ? <a href="/next/events/new" className="events-primary-btn events-stage2k-new">+ New event</a> : null}
-      </div>
 
-      {filtered.length ? (
-        <div className="events-request-cards">
-          {filtered.map((event) => {
-            const mapUrl = safeUrl(event.locationUrl);
-            const typeClass = (lower(event.eventType) || "other").replace(/[^a-z0-9_]/g, "") || "other";
-            return (
-              <article className="events-request-card co-card" key={event.id} onClick={() => openDetails(event)} role="button" tabIndex={0} onKeyDown={(keyEvent) => { if (keyEvent.key === "Enter" || keyEvent.key === " ") openDetails(event); }}>
-                <div className="co-top">
-                  <span className={`events-request-card__thumb events-request-card__thumb--${typeClass}`} aria-hidden="true">◈</span>
-                  <div className="co-main">
-                    <div className="co-title">{event.eventCode || "Pending reference"}</div>
-                    <div className="co-sub">{formatDateRange(event)}</div>
-                    <div className="co-createdby">{event.eventName || "Untitled Event"}</div>
+        {filtered.length ? (
+          <div className="events-request-cards" aria-live="polite">
+            {filtered.map((event) => {
+              const mapUrl = safeUrl(event.locationUrl);
+              const rawType = lower(event.eventType) || "other";
+              const typeClass = rawType.replace(/[^a-z0-9_]/g, "") || "other";
+              const typeIcon = TYPE_ICONS[rawType] || "calendar";
+              return (
+                <article className="events-request-card co-card" key={event.id} onClick={() => openDetails(event)} role="button" tabIndex={0} onKeyDown={(keyEvent) => { if (keyEvent.key === "Enter" || keyEvent.key === " ") openDetails(event); }}>
+                  <div className="co-top">
+                    <span className={`events-request-card__thumb events-request-card__thumb--${typeClass}`}><EventIcon name={typeIcon} /></span>
+                    <div className="co-main">
+                      <div className="co-title">{event.eventCode || "Pending reference"}</div>
+                      <div className="co-sub">{formatDateRange(event)}</div>
+                      <div className="co-createdby">{event.eventName || "Untitled Event"}</div>
+                    </div>
+                    <div className="events-request-card__count">{typeLabel(event)}</div>
                   </div>
-                  <div className="events-request-card__count">{typeLabel(event)}</div>
-                </div>
-                <div className="co-divider" />
-                <div className="co-bottom">
-                  <div className="co-est">
-                    {mapUrl ? <a className="events-request-card__location events-request-card__location-link" href={mapUrl} target="_blank" rel="noreferrer" onClick={(clickEvent) => clickEvent.stopPropagation()}>⌖ <span>{event.governorate || "Open location"}</span></a> : <span className="events-request-card__location is-disabled">⌖ <span>{event.governorate || "Location to be confirmed"}</span></span>}
+                  <div className="co-divider" />
+                  <div className="co-bottom">
+                    <div className="co-est">
+                      {mapUrl ? (
+                        <a className="events-request-card__location events-request-card__location-link" href={mapUrl} target="_blank" rel="noreferrer" onClick={(clickEvent) => clickEvent.stopPropagation()}>
+                          <EventIcon name="map-pin" /><span>{event.governorate || "Open location"}</span>
+                        </a>
+                      ) : (
+                        <span className="events-request-card__location is-disabled"><EventIcon name="map-pin" /><span>{event.governorate || "Location to be confirmed"}</span></span>
+                      )}
+                    </div>
+                    <div className="co-actions">
+                      <StatusPill status={event.status} />
+                      <button type="button" className="co-right-ico co-creator-btn" onClick={(clickEvent) => openProfile(event, clickEvent)} aria-label={`Created by ${event.requesterName || "creator"}`} title={`Created by ${event.requesterName || "creator"}`}><EventIcon name="user" /></button>
+                    </div>
                   </div>
-                  <div className="co-actions">
-                    <StatusPill status={event.status} />
-                    <button type="button" className="co-right-ico co-creator-btn" onClick={(clickEvent) => openProfile(event, clickEvent)} aria-label={`Created by ${event.requesterName || "creator"}`}>◎</button>
-                  </div>
-                </div>
-              </article>
-            );
-          })}
-        </div>
-      ) : (
-        <div className="events-empty"><span>◇</span><span>No event requests match this view.</span></div>
-      )}
+                </article>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="events-empty"><EventIcon name="calendar" /><span>No event requests match this view.</span></div>
+        )}
+      </section>
 
       <EventsDetailsModal
         event={activeEvent}
