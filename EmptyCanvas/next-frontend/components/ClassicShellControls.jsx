@@ -12,6 +12,7 @@ const CHROME_CACHE_KEY = "ops.ui.chrome.v1";
 const ALLOWED_PAGES_KEY = "allowedPages";
 const ALLOWED_PAGES_COOKIE = "ops_ui_allowed_pages_v1";
 const COVER_URL_COOKIE = "ops_ui_cover_url_v1";
+const PROFILE_URL_COOKIE = "ops_ui_profile_url_v1";
 
 function setCollapsed(collapsed) {
   if (typeof document === "undefined") return;
@@ -55,6 +56,7 @@ export function ClassicChromeAccessSync({ account }) {
   const hasAllowedPages = Array.isArray(account?.allowedPages);
   const allowedPages = hasAllowedPages ? account.allowedPages : null;
   const coverPhotoUrl = String(account?.coverPhotoUrl || account?.coverPhoto || "").trim();
+  const profilePhotoUrl = String(account?.photoUrl || account?.profilePicture || account?.profile_picture || "").trim();
 
   useLayoutEffect(() => {
     // Keep the system cover on the persistent <html> element instead of only
@@ -95,6 +97,32 @@ export function ClassicChromeAccessSync({ account }) {
       } catch {}
     }
 
+    // Keep the profile photo on the persistent <html> element as well. Route
+    // loading fallbacks replace the live header, so seeding the same photo at
+    // the root prevents the avatar from briefly falling back to initials/user
+    // icon while the destination page is loading.
+    if (profilePhotoUrl) {
+      root.classList.add("ops-has-persistent-profile");
+      root.style.setProperty("--ops-profile-image", `url(${JSON.stringify(profilePhotoUrl)})`);
+      try {
+        const encodedProfile = encodeURIComponent(profilePhotoUrl);
+        if (encodedProfile.length < 3600) {
+          document.cookie = `${PROFILE_URL_COOKIE}=${encodedProfile}; Path=/; Max-Age=2592000; SameSite=Lax`;
+        }
+      } catch {}
+      try {
+        const image = new Image();
+        image.decoding = "async";
+        image.src = profilePhotoUrl;
+      } catch {}
+    } else {
+      root.classList.remove("ops-has-persistent-profile");
+      root.style.removeProperty("--ops-profile-image");
+      try {
+        document.cookie = `${PROFILE_URL_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`;
+      } catch {}
+    }
+
     // Keep the loading/transition shell on the exact same permission snapshot
     // as the fully rendered page.  The loading sidebar cannot read the server
     // account prop directly, so persist the current user's resolved access as
@@ -132,7 +160,7 @@ export function ClassicChromeAccessSync({ account }) {
         savedAt: Date.now(),
       }));
     } catch {}
-  }, [account, allowedPages, hasAllowedPages, coverPhotoUrl]);
+  }, [account, allowedPages, hasAllowedPages, coverPhotoUrl, profilePhotoUrl]);
 
   return null;
 }

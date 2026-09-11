@@ -5,6 +5,7 @@ import { fetchLegacyJson } from "../lib/legacy-api";
 import ClassicStableLoadingNavItem from "./ClassicStableLoadingNavItem";
 
 const ALLOWED_PAGES_COOKIE = "ops_ui_allowed_pages_v1";
+const PROFILE_URL_COOKIE = "ops_ui_profile_url_v1";
 const SIDEBAR_SCROLL_COOKIE = "ops_ui_sidebar_scroll_top_v1";
 const SIDEBAR_SCROLL_LEFT_COOKIE = "ops_ui_sidebar_scroll_left_v1";
 
@@ -99,13 +100,29 @@ function parseAllowedPagesCookie(value) {
   }
 }
 
+function parseHttpUrlCookie(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  let decoded = raw;
+  try { decoded = decodeURIComponent(raw); } catch {}
+  decoded = String(decoded || "").trim();
+  if (!decoded || decoded.length > 3200) return "";
+  try {
+    const parsed = new URL(decoded);
+    return parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed.toString() : "";
+  } catch {
+    return "";
+  }
+}
+
 const readStableChrome = cache(async () => {
   const cookieStore = await cookies();
   const scrollTop = Math.max(0, Number(cookieStore.get(SIDEBAR_SCROLL_COOKIE)?.value) || 0);
   const scrollLeft = Math.max(0, Number(cookieStore.get(SIDEBAR_SCROLL_LEFT_COOKIE)?.value) || 0);
   const fromCookie = parseAllowedPagesCookie(cookieStore.get(ALLOWED_PAGES_COOKIE)?.value);
+  const profileUrl = parseHttpUrlCookie(cookieStore.get(PROFILE_URL_COOKIE)?.value);
   if (Array.isArray(fromCookie)) {
-    return { allowedPages: fromCookie, name: "", photoUrl: "", scrollTop, scrollLeft };
+    return { allowedPages: fromCookie, name: "", photoUrl: profileUrl, scrollTop, scrollLeft };
   }
 
   // First request after deploying this fix may not have the UI cookie yet.
@@ -117,14 +134,14 @@ const readStableChrome = cache(async () => {
       return {
         allowedPages: Array.isArray(response.data.allowedPages) ? response.data.allowedPages : [],
         name: String(response.data.name || response.data.username || "").trim(),
-        photoUrl: String(response.data.photoUrl || "").trim(),
+        photoUrl: String(response.data.photoUrl || response.data.profilePicture || profileUrl || "").trim(),
         scrollTop,
         scrollLeft,
       };
     }
   } catch {}
 
-  return { allowedPages: [], name: "", photoUrl: "", scrollTop, scrollLeft };
+  return { allowedPages: [], name: "", photoUrl: profileUrl, scrollTop, scrollLeft };
 });
 
 export async function ClassicStableLoadingSidebar({ activeIndex = -1 }) {
@@ -186,7 +203,9 @@ export async function ClassicStableLoadingHeader({ title = "Home" }) {
           <span className="system-header-search__toggle next-stable-loading-header-button" aria-hidden="true"><ClassicIcon name="search" /></span>
           <span className="notif-bell-btn next-stable-loading-header-button" aria-hidden="true"><BellIcon /></span>
           <span className="header-user next-stable-loading-user" aria-label={name}>
-            {photoUrl ? <img className="header-user__avatar" src={photoUrl} alt="" /> : <span className="next-stable-loading-user__fallback"><UserIcon /></span>}
+            <span className="header-user__avatar next-stable-loading-user__avatar" aria-hidden="true">
+              {photoUrl ? <img className="header-user__img" src={photoUrl} alt="" /> : <span className="next-stable-loading-user__fallback"><UserIcon /></span>}
+            </span>
           </span>
         </div>
       </div>

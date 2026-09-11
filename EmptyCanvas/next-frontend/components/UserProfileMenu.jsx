@@ -9,6 +9,7 @@ const HARD_REFRESH_MARKER_KEY = "ops.hardRefresh.pendingAt";
 const CHROME_CACHE_KEY = "ops.ui.chrome.v1";
 const ALLOWED_PAGES_KEY = "allowedPages";
 const ALLOWED_PAGES_COOKIE = "ops_ui_allowed_pages_v1";
+const PROFILE_URL_COOKIE = "ops_ui_profile_url_v1";
 
 function normalize(value) {
   return String(value || "").trim().toLowerCase();
@@ -173,8 +174,33 @@ export default function UserProfileMenu({ account }) {
 
   const displayName = String(profileAccount?.name || profileAccount?.username || "User").trim() || "User";
   const role = String(profileAccount?.position || profileAccount?.department || "").trim();
-  const photoUrl = String(profileAccount?.photoUrl || "").trim();
+  const photoUrl = String(profileAccount?.photoUrl || profileAccount?.profilePicture || "").trim();
   const allowedPages = Array.isArray(profileAccount?.allowedPages) ? profileAccount.allowedPages : [];
+
+  useEffect(() => {
+    // Keep the persistent transition avatar synchronized when a profile photo
+    // is changed from the Account page without requiring a full page reload.
+    const root = document.documentElement;
+    if (photoUrl) {
+      root.classList.add("ops-has-persistent-profile");
+      root.style.setProperty("--ops-profile-image", `url(${JSON.stringify(photoUrl)})`);
+      try {
+        const encoded = encodeURIComponent(photoUrl);
+        if (encoded.length < 3600) {
+          document.cookie = `${PROFILE_URL_COOKIE}=${encoded}; Path=/; Max-Age=2592000; SameSite=Lax`;
+        }
+      } catch {}
+      try {
+        const image = new Image();
+        image.decoding = "async";
+        image.src = photoUrl;
+      } catch {}
+    } else {
+      root.classList.remove("ops-has-persistent-profile");
+      root.style.removeProperty("--ops-profile-image");
+      try { document.cookie = `${PROFILE_URL_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`; } catch {}
+    }
+  }, [photoUrl]);
   const canSeeHistory = useMemo(() => hasPermission(allowedPages, HISTORY_PERMISSIONS), [allowedPages]);
   const canSeeBackup = useMemo(() => hasPermission(allowedPages, BACKUP_PERMISSIONS), [allowedPages]);
 
@@ -269,6 +295,7 @@ export default function UserProfileMenu({ account }) {
     try { await fetch("/api/logout", { method: "POST", credentials: "include" }); } catch {}
     try { sessionStorage.clear(); } catch {}
     try { document.cookie = `${ALLOWED_PAGES_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`; } catch {}
+    try { document.cookie = `${PROFILE_URL_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`; } catch {}
     try {
       localStorage.removeItem("ui.sidebarMini");
       localStorage.removeItem("ui.sidebarCollapsed");

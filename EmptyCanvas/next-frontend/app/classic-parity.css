@@ -18537,3 +18537,35 @@ html.ops-has-persistent-cover body:not(.login-page):not(.pwa-offline):not(.pwa-s
   pointer-events: none !important;
   z-index: 0 !important;
 }
+
+
+/* ========================================================================
+   Persistent header profile photo during App Router navigation — 2026-09-11
+   Mirrors the persistent cover strategy: RootLayout seeds the last resolved
+   profile photo on <html>, while loading headers reuse that exact image behind
+   their avatar content. The browser therefore never needs to show a generic
+   user glyph between pages while the next route is streaming/hydrating.
+   ===================================================================== */
+html.ops-has-persistent-profile .classic-app-shell .main-header .next-stable-loading-user .header-user__avatar {
+  background-image: var(--ops-profile-image) !important;
+  background-size: cover !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+}
+
+.classic-app-shell .main-header .next-stable-loading-user .next-stable-loading-user__avatar {
+  box-sizing: border-box !important;
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  overflow: hidden !important;
+  border-radius: inherit !important;
+}
+
+.classic-app-shell .main-header .next-stable-loading-user .next-stable-loading-user__avatar .header-user__img {
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  border-radius: inherit !important;
+}

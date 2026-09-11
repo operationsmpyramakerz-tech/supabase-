@@ -5,6 +5,7 @@ import "./classic-parity.css";
 import "./system-ui.css";
 
 const COVER_URL_COOKIE = "ops_ui_cover_url_v1";
+const PROFILE_URL_COOKIE = "ops_ui_profile_url_v1";
 
 function readCoverUrlFromCookie(value) {
   const raw = String(value || "").trim();
@@ -44,13 +45,21 @@ export const metadata = {
 export default async function RootLayout({ children }) {
   const cookieStore = await cookies();
   const coverUrl = readCoverUrlFromCookie(cookieStore.get(COVER_URL_COOKIE)?.value);
-  const coverStyle = coverUrl ? { "--ops-system-cover-image": coverCssValue(coverUrl) } : undefined;
+  const profileUrl = readCoverUrlFromCookie(cookieStore.get(PROFILE_URL_COOKIE)?.value);
+  const rootClasses = [
+    coverUrl ? "ops-has-persistent-cover" : "",
+    profileUrl ? "ops-has-persistent-profile" : "",
+  ].filter(Boolean).join(" ");
+  const rootStyle = {
+    ...(coverUrl ? { "--ops-system-cover-image": coverCssValue(coverUrl) } : {}),
+    ...(profileUrl ? { "--ops-profile-image": coverCssValue(profileUrl) } : {}),
+  };
 
   return (
     <html
       lang="en"
-      className={coverUrl ? "ops-has-persistent-cover" : undefined}
-      style={coverStyle}
+      className={rootClasses || undefined}
+      style={Object.keys(rootStyle).length ? rootStyle : undefined}
       suppressHydrationWarning
     >
       <body>
