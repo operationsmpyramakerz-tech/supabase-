@@ -3,13 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 
 const FIELD_META = [
-  { key: "name", label: "Name", type: "text", required: true },
-  { key: "department", label: "Department", type: "text" },
-  { key: "position", label: "Position", type: "text" },
-  { key: "phone", label: "Phone", type: "text", placeholder: "e.g. 0123456789" },
-  { key: "email", label: "Email", type: "email", placeholder: "e.g. name@company.com" },
-  { key: "employeeCode", label: "Employee Code", type: "number" },
-  { key: "password", label: "Password", type: "password", required: true, placeholder: "New password" },
+  { key: "name", label: "Username", type: "text", required: true, placeholder: "Enter username" },
+  { key: "department", label: "Department", type: "text", placeholder: "Add department" },
+  { key: "position", label: "Position", type: "text", placeholder: "Add position" },
+  { key: "phone", label: "Phone", type: "text", placeholder: "Add phone number" },
+  { key: "email", label: "Email", type: "email", placeholder: "Add email address" },
+  { key: "employeeCode", label: "Employee code", type: "number", placeholder: "Add employee code" },
+  { key: "password", label: "Password", type: "password", required: true, placeholder: "Set a new password" },
 ];
 
 function text(value) {
@@ -543,9 +543,14 @@ function RemoveImageModal({ kind, busy, onClose, onConfirm }) {
   );
 }
 
+function fieldHasValue(account, field) {
+  if (field.key === "password") return account.passwordSet === true;
+  return Boolean(text(account?.[field.key]));
+}
+
 function fieldDisplay(account, field) {
-  if (field.key === "password") return account.passwordSet ? "••••••••" : "—";
-  return text(account?.[field.key]) || "—";
+  if (field.key === "password") return account.passwordSet ? "••••••••" : (field.placeholder || "Set password");
+  return text(account?.[field.key]) || field.placeholder || "Not added";
 }
 
 export default function AccountClient({ initialAccount }) {
@@ -656,17 +661,22 @@ export default function AccountClient({ initialAccount }) {
           </section>
 
           <div className="profile-fields-list">
-            {FIELD_META.map((field) => (
-              <section className="profile-field-card" data-field={field.key} key={field.key}>
-                <div className="profile-field-label">{field.label}</div>
-                <div className={`profile-field-box ${field.key === "password" ? "profile-field-box--password" : ""}`}>
-                  <span className="profile-field-value">{fieldDisplay(account, field)}</span>
-                  <button className="profile-field-edit acc-action acc-edit" type="button" aria-label={`Edit ${field.label}`} title={`Edit ${field.label}`} onClick={() => setEditField(field)}>
-                    <Icon name="edit" size={16} />
-                  </button>
-                </div>
-              </section>
-            ))}
+            {FIELD_META.map((field) => {
+              const hasValue = fieldHasValue(account, field);
+              return (
+                <section className="profile-field-card" data-field={field.key} key={field.key}>
+                  <div className={`profile-field-box ${field.key === "password" ? "profile-field-box--password" : ""}`}>
+                    <div className="profile-field-copy">
+                      <div className="profile-field-label">{field.label}</div>
+                      <span className={`profile-field-value ${hasValue ? "" : "is-placeholder"}`}>{fieldDisplay(account, field)}</span>
+                    </div>
+                    <button className="profile-field-edit acc-action acc-edit" type="button" aria-label={`Edit ${field.label}`} title={`Edit ${field.label}`} onClick={() => setEditField(field)}>
+                      <Icon name="edit" size={16} />
+                    </button>
+                  </div>
+                </section>
+              );
+            })}
           </div>
 
           <section className="profile-files-media-section" aria-label="Files and media">
