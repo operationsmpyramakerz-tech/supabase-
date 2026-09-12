@@ -377,7 +377,7 @@ export function ClassicSidebarActiveIndicator() {
     const nav = sidebar.querySelector(":scope > .sidebar-nav");
     if (!(nav instanceof HTMLElement)) return undefined;
 
-    const existing = sidebar.querySelector(":scope > .sidebar-active-indicator");
+    const existing = sidebar.querySelector(".sidebar-active-indicator");
     existing?.remove();
 
     const indicator = document.createElement("span");
@@ -386,15 +386,48 @@ export function ClassicSidebarActiveIndicator() {
     sidebar.appendChild(indicator);
 
     let visualTarget = null;
+    let indicatorHost = sidebar;
     let navigationTimer = 0;
     let frame = 0;
 
     const isMobile = () => window.matchMedia("(max-width: 768px)").matches;
     const reduceMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+    const hostForLink = (link) => {
+      if (!(link instanceof HTMLElement) || !isMobile()) return sidebar;
+      const pagesClip = nav.querySelector(":scope > .mobile-dock-pages-clip");
+      if (pagesClip instanceof HTMLElement && pagesClip.contains(link)) return pagesClip;
+      const homeRail = nav.querySelector(":scope > .mobile-dock-home-rail");
+      if (homeRail instanceof HTMLElement && homeRail.contains(link)) return homeRail;
+      return sidebar;
+    };
+
+    const ensureIndicatorHost = (host) => {
+      const nextHost = host instanceof HTMLElement ? host : sidebar;
+      if (indicatorHost === nextHost && indicator.parentElement === nextHost) return;
+      indicatorHost = nextHost;
+      indicator.classList.add("is-instant");
+      nextHost.appendChild(indicator);
+      indicator.getBoundingClientRect();
+      requestAnimationFrame(() => indicator.classList.remove("is-instant"));
+    };
+
+    const syncIndicatorIcon = (link) => {
+      indicator.replaceChildren();
+      if (!isMobile()) return;
+      const sourceIcon = link instanceof HTMLElement ? link.querySelector("svg") : null;
+      if (!(sourceIcon instanceof SVGElement)) return;
+      const clone = sourceIcon.cloneNode(true);
+      clone.removeAttribute("aria-hidden");
+      clone.setAttribute("focusable", "false");
+      clone.classList.add("sidebar-active-indicator__icon");
+      indicator.appendChild(clone);
+    };
+
     const visualRectForLink = (link) => {
       if (!(link instanceof HTMLElement)) return null;
-      const sidebarRect = sidebar.getBoundingClientRect();
+      const host = hostForLink(link);
+      const hostRect = host.getBoundingClientRect();
       let targetRect = link.getBoundingClientRect();
       let radius = window.getComputedStyle(link).borderRadius || "16px";
 
@@ -426,9 +459,12 @@ export function ClassicSidebarActiveIndicator() {
         }
       }
 
+      const scrollLeft = host instanceof HTMLElement ? host.scrollLeft || 0 : 0;
+      const scrollTop = host instanceof HTMLElement ? host.scrollTop || 0 : 0;
       return {
-        x: targetRect.left - sidebarRect.left,
-        y: targetRect.top - sidebarRect.top,
+        host,
+        x: targetRect.left - hostRect.left + scrollLeft,
+        y: targetRect.top - hostRect.top + scrollTop,
         width: targetRect.width,
         height: targetRect.height,
         radius,
@@ -440,6 +476,8 @@ export function ClassicSidebarActiveIndicator() {
       const rect = visualRectForLink(link);
       if (!rect) return;
 
+      ensureIndicatorHost(rect.host);
+      syncIndicatorIcon(link);
       visualTarget = link;
       if (instant) indicator.classList.add("is-instant");
       indicator.style.width = `${Math.max(0, rect.width)}px`;
@@ -503,6 +541,13 @@ export function ClassicSidebarActiveIndicator() {
       if (destination.origin !== window.location.origin) return;
       if (destination.pathname === window.location.pathname && destination.search === window.location.search) return;
 
+      const currentActive = nav.querySelector(".nav-link.active");
+      if (isMobile() && currentActive instanceof HTMLElement && hostForLink(currentActive) !== hostForLink(link)) {
+        // Home is intentionally isolated from the horizontally scrolling pages rail.
+        // Do not animate a tile across those two different clipped containers.
+        return;
+      }
+
       event.preventDefault();
       clearTargets();
 
@@ -510,7 +555,6 @@ export function ClassicSidebarActiveIndicator() {
       // enable the shared travelling surface and animate to the destination.
       // After navigation the new page falls back to its normal active button,
       // so the icon can never be covered by a persistent overlay.
-      const currentActive = nav.querySelector(".nav-link.active");
       if (currentActive instanceof HTMLElement) {
         moveIndicator(currentActive, true);
       }

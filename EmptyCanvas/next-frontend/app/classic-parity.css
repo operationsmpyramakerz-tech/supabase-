@@ -19193,3 +19193,59 @@ html.ops-has-persistent-profile .classic-app-shell .main-header .next-stable-loa
     height: 44px !important;
   }
 }
+
+/* ========================================================================
+   Mobile sidebar sliding stability fix — 2026-09-12
+   Keep the travelling active tile inside the same clipped rail as the icons.
+   This prevents the tile/icon from painting outside the rounded sidebar while
+   horizontally sliding and keeps a real SVG visible inside the moving tile.
+   ===================================================================== */
+@media (max-width: 768px) {
+  body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host .mobile-dock-pages-clip,
+  body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host .mobile-dock-home-rail {
+    position: relative !important;
+    isolation: isolate !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host .mobile-dock-pages-clip {
+    clip-path: inset(0 round var(--mobile-pages-block-radius)) !important;
+    -webkit-clip-path: inset(0 round var(--mobile-pages-block-radius)) !important;
+    contain: paint !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host .mobile-dock-pages-list {
+    scroll-padding-inline: 14px !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host .mobile-dock-pages-clip > .sidebar-active-indicator,
+  body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host .mobile-dock-home-rail > .sidebar-active-indicator {
+    z-index: 5 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    overflow: hidden !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host .sidebar-active-indicator__icon {
+    position: relative !important;
+    z-index: 1 !important;
+    flex: 0 0 auto !important;
+    width: 20px !important;
+    height: 20px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    color: #0b0c10 !important;
+    stroke: #0b0c10 !important;
+    fill: none !important;
+    pointer-events: none !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host .sidebar-active-indicator__icon :is(path, line, polyline, polygon, circle, rect) {
+    stroke: #0b0c10 !important;
+    vector-effect: non-scaling-stroke;
+  }
+
+  body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-animating.mobile-dock-structured-host .mobile-dock-pages-list .nav-link.is-indicator-target svg {
+    opacity: 0 !important;
+  }
+}
