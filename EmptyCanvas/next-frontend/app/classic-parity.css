@@ -18884,3 +18884,191 @@ html.ops-has-persistent-profile .classic-app-shell .main-header .next-stable-loa
     gap: 6px !important;
   }
 }
+
+/* ========================================================================
+   Current Orders + Orders Review — exact mobile toolbar parity with
+   Operations Orders
+   2026-09-12
+   ------------------------------------------------------------------------
+   Operations Orders is the visual source of truth. Keep the visible status
+   rail at the same footprint even when Current Orders has more tabs than fit
+   on screen; the extra tabs scroll inside the rail instead of changing its
+   width or corner geometry.
+   ===================================================================== */
+@media (max-width: 768px) {
+  body.current-orders-page .next-classic-orders-parity .next-current-orders-toolbar-wrap,
+  body.orders-review-page .next-classic-orders-parity .next-orders-review-toolbar-wrap {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    margin: 0 0 9px !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  /* Orders Review had an extra 20px visual inset on mobile. Remove only that
+     inset so its toolbar begins/ends on the same guides as Operations Orders. */
+  body.orders-review-page .next-classic-orders-parity .next-orders-review-toolbar-wrap {
+    width: calc(100% + 40px) !important;
+    max-width: none !important;
+    margin-left: -20px !important;
+    margin-right: -20px !important;
+  }
+
+  body.current-orders-page .next-classic-orders-parity .orders-toolbar,
+  body.orders-review-page .next-classic-orders-parity .orders-toolbar {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) 52px !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+
+  /* The viewport itself owns the white rounded rail. This guarantees the
+     exact same visible width/corners as Operations Orders even when the inner
+     tab row is wider and horizontally scrollable. */
+  body.current-orders-page .next-classic-orders-parity .orders-toolbar__scroll,
+  body.orders-review-page .next-classic-orders-parity .orders-toolbar__scroll {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    min-height: 52px !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    border: 0 !important;
+    border-radius: 16px !important;
+    background: rgba(255, 255, 255, .96) !important;
+    box-shadow: 0 8px 20px rgba(15, 23, 42, .055) !important;
+    scrollbar-width: none !important;
+    overscroll-behavior-x: contain !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  body.current-orders-page .next-classic-orders-parity .orders-toolbar__scroll::-webkit-scrollbar,
+  body.orders-review-page .next-classic-orders-parity .orders-toolbar__scroll::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  body.current-orders-page .next-classic-orders-parity .orders-toolbar .portfolio-tabs,
+  body.orders-review-page .next-classic-orders-parity .orders-toolbar .portfolio-tabs {
+    display: flex !important;
+    width: max-content !important;
+    min-width: max-content !important;
+    min-height: 52px !important;
+    align-items: center !important;
+    gap: 3px !important;
+    margin: 0 !important;
+    padding: 4px !important;
+    border: 0 !important;
+    border-radius: 16px !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  body.current-orders-page .next-classic-orders-parity .orders-toolbar .tab-portfolio,
+  body.orders-review-page .next-classic-orders-parity .orders-toolbar .tab-portfolio {
+    flex: 0 0 42px !important;
+    width: 42px !important;
+    min-width: 42px !important;
+    max-width: 42px !important;
+    height: 42px !important;
+    min-height: 42px !important;
+    margin: 0 !important;
+    padding: 5px !important;
+    gap: 6px !important;
+    justify-content: center !important;
+    border: 0 !important;
+    border-radius: 12px !important;
+    box-shadow: none !important;
+    overflow: hidden !important;
+  }
+
+  body.current-orders-page .next-classic-orders-parity .orders-toolbar .tab-portfolio.active,
+  body.current-orders-page .next-classic-orders-parity .orders-toolbar .tab-portfolio.is-active,
+  body.orders-review-page .next-classic-orders-parity .orders-toolbar .tab-portfolio.active,
+  body.orders-review-page .next-classic-orders-parity .orders-toolbar .tab-portfolio.is-active {
+    flex: 0 0 auto !important;
+    width: auto !important;
+    min-width: 88px !important;
+    max-width: none !important;
+    padding: 5px 9px !important;
+    justify-content: flex-start !important;
+    border-radius: 12px !important;
+    background: #050816 !important;
+    color: #fff !important;
+    box-shadow: 0 9px 20px rgba(2, 6, 23, .16) !important;
+  }
+
+  body.current-orders-page .next-classic-orders-parity .order-status-tab__icon,
+  body.orders-review-page .next-classic-orders-parity .order-status-tab__icon {
+    flex: 0 0 28px !important;
+    width: 28px !important;
+    height: 28px !important;
+    border-radius: 9px !important;
+  }
+
+  body.current-orders-page .next-classic-orders-parity .order-status-tab__icon svg,
+  body.orders-review-page .next-classic-orders-parity .order-status-tab__icon svg {
+    width: 15px !important;
+    height: 15px !important;
+  }
+
+  body.current-orders-page .next-classic-orders-parity .order-status-tab__copy,
+  body.orders-review-page .next-classic-orders-parity .order-status-tab__copy {
+    display: none !important;
+  }
+
+  body.current-orders-page .next-classic-orders-parity .tab-portfolio.active .order-status-tab__copy,
+  body.current-orders-page .next-classic-orders-parity .tab-portfolio.is-active .order-status-tab__copy,
+  body.orders-review-page .next-classic-orders-parity .tab-portfolio.active .order-status-tab__copy,
+  body.orders-review-page .next-classic-orders-parity .tab-portfolio.is-active .order-status-tab__copy {
+    display: grid !important;
+  }
+
+  body.current-orders-page .next-classic-orders-parity .order-status-tab__label,
+  body.orders-review-page .next-classic-orders-parity .order-status-tab__label {
+    max-width: none !important;
+    overflow: visible !important;
+    font-size: 10px !important;
+    line-height: 1.05 !important;
+    white-space: nowrap !important;
+    text-overflow: clip !important;
+  }
+
+  body.current-orders-page .next-classic-orders-parity .orders-toolbar__divider,
+  body.orders-review-page .next-classic-orders-parity .orders-toolbar__divider {
+    display: none !important;
+  }
+
+  body.current-orders-page .next-classic-orders-parity .orders-type-filter,
+  body.orders-review-page .next-classic-orders-parity .orders-type-filter {
+    width: 52px !important;
+    min-width: 52px !important;
+    max-width: 52px !important;
+  }
+
+  body.current-orders-page .next-classic-orders-parity .orders-type-filter__button,
+  body.orders-review-page .next-classic-orders-parity .orders-type-filter__button {
+    width: 52px !important;
+    min-width: 52px !important;
+    max-width: 52px !important;
+    height: 52px !important;
+    min-height: 52px !important;
+    padding: 0 !important;
+    justify-content: center !important;
+    border: 0 !important;
+    border-radius: 16px !important;
+    background: #fff !important;
+    box-shadow: 0 8px 20px rgba(15, 23, 42, .055) !important;
+  }
+}
