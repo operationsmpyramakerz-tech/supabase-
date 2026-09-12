@@ -3,13 +3,74 @@
 import { useEffect, useRef, useState } from "react";
 
 const FIELD_META = [
-  { key: "name", label: "Username", type: "text", required: true, placeholder: "Enter username" },
-  { key: "department", label: "Department", type: "text", placeholder: "Add department" },
-  { key: "position", label: "Position", type: "text", placeholder: "Add position" },
-  { key: "phone", label: "Phone", type: "text", placeholder: "Add phone number" },
-  { key: "email", label: "Email", type: "email", placeholder: "Add email address" },
-  { key: "employeeCode", label: "Employee code", type: "number", placeholder: "Add employee code" },
-  { key: "password", label: "Password", type: "password", required: true, placeholder: "Set a new password" },
+  {
+    key: "name",
+    label: "Username",
+    type: "text",
+    required: true,
+    placeholder: "Enter username",
+    helper: "This name is shown across the system.",
+    maxLength: 80,
+    autoComplete: "username",
+  },
+  {
+    key: "department",
+    label: "Department",
+    type: "text",
+    placeholder: "Add department",
+    helper: "Your primary team or department.",
+    maxLength: 80,
+    autoComplete: "organization",
+  },
+  {
+    key: "position",
+    label: "Position",
+    type: "text",
+    placeholder: "Add position",
+    helper: "Your current role or job title.",
+    maxLength: 100,
+    autoComplete: "organization-title",
+  },
+  {
+    key: "phone",
+    label: "Phone",
+    type: "tel",
+    placeholder: "Add phone number",
+    helper: "Use a reachable phone number.",
+    maxLength: 32,
+    inputMode: "tel",
+    autoComplete: "tel",
+  },
+  {
+    key: "email",
+    label: "Email",
+    type: "email",
+    placeholder: "Add email address",
+    helper: "Use an email address you can access.",
+    maxLength: 160,
+    inputMode: "email",
+    autoComplete: "email",
+  },
+  {
+    key: "employeeCode",
+    label: "Employee code",
+    type: "text",
+    placeholder: "Add employee code",
+    helper: "Numbers only.",
+    maxLength: 30,
+    inputMode: "numeric",
+    autoComplete: "off",
+  },
+  {
+    key: "password",
+    label: "Password",
+    type: "password",
+    required: true,
+    placeholder: "Enter a new password",
+    helper: "Use at least 8 characters.",
+    maxLength: 128,
+    autoComplete: "new-password",
+  },
 ];
 
 function text(value) {
@@ -232,86 +293,238 @@ function PasswordToggle({ visible, onToggle, label }) {
   );
 }
 
+function normalizeEditValue(field, rawValue) {
+  return String(rawValue ?? "").trim();
+}
+
+function validateEditValue(field, rawValue) {
+  const value = normalizeEditValue(field, rawValue);
+  if (field?.required && !value) return `${field.label} is required.`;
+  if (!value) return "";
+
+  if (field?.maxLength && value.length > field.maxLength) {
+    return `${field.label} must be ${field.maxLength} characters or fewer.`;
+  }
+
+  if (field?.key === "name" && value.length < 2) {
+    return "Username must be at least 2 characters.";
+  }
+  if (field?.key === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(value)) {
+    return "Enter a valid email address.";
+  }
+  if (field?.key === "phone" && !/^\+?[0-9][0-9\s().-]{5,30}$/.test(value)) {
+    return "Enter a valid phone number.";
+  }
+  if (field?.key === "employeeCode" && !/^\d+$/.test(value)) {
+    return "Employee code can contain numbers only.";
+  }
+  if (field?.key === "password" && value.length < 8) {
+    return "Password must be at least 8 characters.";
+  }
+  return "";
+}
+
 function EditFieldModal({ field, account, onClose, onSaved }) {
   const isPassword = field?.key === "password";
-  const [value, setValue] = useState(isPassword ? "" : text(account?.[field?.key]));
+  const originalValue = isPassword ? "" : text(account?.[field?.key]);
+  const [value, setValue] = useState(originalValue);
   const [currentPassword, setCurrentPassword] = useState("");
   const [showValue, setShowValue] = useState(false);
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [serverError, setServerError] = useState("");
+  const [valueTouched, setValueTouched] = useState(false);
+  const [passwordTouched, setPasswordTouched] = useState(false);
+  const [discardPrompt, setDiscardPrompt] = useState(false);
+  const valueInputRef = useRef(null);
+
+  const normalizedValue = normalizeEditValue(field, value);
+  const dirty = isPassword ? normalizedValue.length > 0 : normalizedValue !== originalValue;
+  const valueError = valueTouched ? validateEditValue(field, value) : "";
+  const passwordError = passwordTouched && !text(currentPassword) ? "Current password is required." : "";
+  const canSubmit = dirty && !busy;
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => valueInputRef.current?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  function requestClose() {
+    if (busy) return;
+    if (dirty) {
+      setDiscardPrompt(true);
+      return;
+    }
+    onClose();
+  }
 
   useEffect(() => {
     function handleKeyDown(event) {
-      if (event.key === "Escape" && !busy) onClose();
+      if (event.key === "Escape") {
+        event.preventDefault();
+        requestClose();
+      }
     }
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [busy, onClose]);
+  }, [busy, dirty]);
 
   async function submit(event) {
     event.preventDefault();
-    const nextValue = String(value ?? "").trim();
-    if (field?.required && !nextValue) return setError(`${field.label} cannot be empty.`);
-    if (!text(currentPassword)) return setError("Current password is required.");
-    setBusy(true);
-    setError("");
-    try {
-      await requestJson("/api/account/verify-password", {
-        method: "POST",
-        body: JSON.stringify({ currentPassword }),
-      }, { redirectOn401: false });
+    setValueTouched(true);
+    setPasswordTouched(true);
+    setDiscardPrompt(false);
+    setServerError("");
 
+    const fieldError = validateEditValue(field, value);
+    if (fieldError || !dirty || !text(currentPassword)) return;
+
+    setBusy(true);
+    try {
+      // PATCH already verifies the current password. Avoiding a separate verify request
+      // keeps the save flow faster while preserving the same server-side protection.
       await requestJson("/api/account", {
         method: "PATCH",
-        body: JSON.stringify({ currentPassword, [field.key]: nextValue || null }),
+        body: JSON.stringify({ currentPassword, [field.key]: normalizedValue || null }),
       }, { redirectOn401: false });
 
       const refreshed = await requestJson("/api/account", {}, { redirectOn401: true });
       onSaved(normalizeAccount(refreshed), `${field.label} updated successfully.`);
       onClose();
     } catch (saveError) {
-      setError(saveError?.status === 401 ? "invalid password" : (saveError?.message || "The account field could not be updated."));
+      const message = saveError?.status === 401
+        ? "The current password is incorrect."
+        : (saveError?.message || "We couldn't save this change. Please try again.");
+      setServerError(message);
     } finally {
       setBusy(false);
     }
   }
 
+  const valueErrorId = `account-edit-${field.key}-error`;
+  const passwordErrorId = `account-edit-${field.key}-password-error`;
+  const helperId = `account-edit-${field.key}-helper`;
+  const titleId = `account-edit-${field.key}-title`;
+  const descriptionId = `account-edit-${field.key}-description`;
+
   return (
-    <div className="ex-modal" style={{ display: "flex" }} aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
-      <form className="ex-modal-box" role="dialog" aria-modal="true" aria-label={`Edit ${field.label}`} onSubmit={submit}>
-        <h3 className="ex-modal-title">Edit {field.label}</h3>
-        <label className="field-label"><Icon name="edit" size={16} /> {field.label}</label>
-        <div className={`password-wrapper ${isPassword ? "has-toggle" : ""}`}>
-          <input
-            autoFocus
-            className="ex-input"
-            type={isPassword ? (showValue ? "text" : "password") : (field.type || "text")}
-            value={value}
-            onChange={(event) => { setValue(event.target.value); setError(""); }}
-            placeholder={field.placeholder || ""}
-            autoComplete={isPassword ? "new-password" : undefined}
-          />
-          {isPassword ? <PasswordToggle visible={showValue} onToggle={() => setShowValue((current) => !current)} label="new password" /> : null}
+    <div
+      className="ex-modal account-edit-field-layer"
+      style={{ display: "flex" }}
+      aria-hidden="false"
+      onMouseDown={(event) => { if (event.target === event.currentTarget) requestClose(); }}
+    >
+      <form
+        className="ex-modal-box account-edit-field-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={descriptionId}
+        aria-busy={busy}
+        onSubmit={submit}
+      >
+        <header className="account-edit-field-head">
+          <div className="account-edit-field-headcopy">
+            <span className="account-edit-field-icon" aria-hidden="true"><Icon name={isPassword ? "lock" : "edit"} size={20} /></span>
+            <div>
+              <div className="account-edit-field-title-row">
+                <h3 className="ex-modal-title" id={titleId}>Edit {field.label}</h3>
+                {dirty ? <span className="account-edit-dirty-badge">Unsaved</span> : null}
+              </div>
+              <p id={descriptionId}>{isPassword ? "Choose a new password, then confirm with your current password." : "Update this detail, then confirm with your current password to save securely."}</p>
+            </div>
+          </div>
+          <button className="account-edit-field-close" type="button" onClick={requestClose} disabled={busy} aria-label="Close edit dialog"><Icon name="x" size={18} /></button>
+        </header>
+
+        <div className="account-edit-field-body">
+          <div className="account-edit-control-group">
+            <div className="account-edit-label-row">
+              <label htmlFor={`account-edit-${field.key}`}>{field.label}{field.required ? <span className="account-edit-required" aria-hidden="true">*</span> : null}</label>
+              {!isPassword && field.maxLength ? <span className="account-edit-count">{normalizedValue.length}/{field.maxLength}</span> : null}
+            </div>
+            <div className={`account-edit-input-shell ${isPassword ? "account-edit-input-shell--password" : ""} ${valueError ? "is-invalid" : dirty ? "is-dirty" : ""}`}>
+              <input
+                ref={valueInputRef}
+                id={`account-edit-${field.key}`}
+                className="ex-input account-edit-input"
+                type={isPassword ? (showValue ? "text" : "password") : (field.type || "text")}
+                value={value}
+                onChange={(event) => {
+                  setValue(event.target.value);
+                  setServerError("");
+                  setDiscardPrompt(false);
+                  if (valueTouched) setValueTouched(true);
+                }}
+                onBlur={() => setValueTouched(true)}
+                placeholder={field.placeholder || ""}
+                autoComplete={field.autoComplete || undefined}
+                inputMode={field.inputMode || undefined}
+                maxLength={field.maxLength || undefined}
+                autoCapitalize={["name", "email", "employeeCode"].includes(field.key) ? "none" : undefined}
+                autoCorrect={["name", "email", "phone", "employeeCode", "password"].includes(field.key) ? "off" : undefined}
+                spellCheck={["name", "email", "phone", "employeeCode", "password"].includes(field.key) ? false : undefined}
+                aria-invalid={!!valueError}
+                aria-describedby={`${helperId}${valueError ? ` ${valueErrorId}` : ""}`}
+              />
+              {isPassword ? <PasswordToggle visible={showValue} onToggle={() => setShowValue((current) => !current)} label="new password" /> : null}
+            </div>
+            <div className="account-edit-support-row">
+              <span className="account-edit-helper" id={helperId}>{field.helper || "Changes apply after you save."}</span>
+              {dirty && !valueError ? <span className="account-edit-valid"><Icon name="check" size={14} /> Ready</span> : null}
+            </div>
+            {valueError ? <div className="account-edit-inline-error" id={valueErrorId} role="alert"><Icon name="alert" size={15} />{valueError}</div> : null}
+          </div>
+
+          <div className="account-edit-security-card">
+            <div className="account-edit-security-copy">
+              <span className="account-edit-security-icon" aria-hidden="true"><Icon name="lock" size={17} /></span>
+              <div><strong>Confirm your identity</strong><span>Enter your current password to authorize this change.</span></div>
+            </div>
+            <div className={`account-edit-input-shell account-edit-password-shell ${passwordError ? "is-invalid" : ""}`}>
+              <input
+                id={`account-edit-${field.key}-current-password`}
+                className="ex-input account-edit-input"
+                type={showCurrentPassword ? "text" : "password"}
+                value={currentPassword}
+                onChange={(event) => {
+                  setCurrentPassword(event.target.value);
+                  setServerError("");
+                  setDiscardPrompt(false);
+                }}
+                onBlur={() => setPasswordTouched(true)}
+                placeholder="Current password"
+                autoComplete="current-password"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                aria-invalid={!!passwordError}
+                aria-describedby={passwordError ? passwordErrorId : undefined}
+              />
+              <PasswordToggle visible={showCurrentPassword} onToggle={() => setShowCurrentPassword((current) => !current)} label="current password" />
+            </div>
+            {passwordError ? <div className="account-edit-inline-error" id={passwordErrorId} role="alert"><Icon name="alert" size={15} />{passwordError}</div> : null}
+          </div>
+
+          {serverError ? <div className="account-edit-server-error" role="alert"><Icon name="alert" size={17} /><div><strong>Couldn't save changes</strong><span>{serverError}</span></div></div> : null}
+
+          {discardPrompt ? (
+            <div className="account-edit-discard" role="alert">
+              <div><strong>Discard unsaved changes?</strong><span>Your changes to {field.label.toLowerCase()} will be lost.</span></div>
+              <div className="account-edit-discard-actions">
+                <button type="button" onClick={() => setDiscardPrompt(false)}>Keep editing</button>
+                <button type="button" className="is-danger" onClick={onClose}>Discard</button>
+              </div>
+            </div>
+          ) : null}
         </div>
 
-        <label className="field-label"><Icon name="lock" size={16} /> Current password</label>
-        <div className="password-wrapper has-toggle">
-          <input
-            className="ex-input"
-            type={showCurrentPassword ? "text" : "password"}
-            value={currentPassword}
-            onChange={(event) => { setCurrentPassword(event.target.value); setError(""); }}
-            autoComplete="current-password"
-          />
-          <PasswordToggle visible={showCurrentPassword} onToggle={() => setShowCurrentPassword((current) => !current)} label="current password" />
-        </div>
-
-        {error ? <div className="ex-error" style={{ display: "block" }} role="alert">{error}</div> : null}
-        <div className="ex-modal-actions">
-          <button className="ex-btn ex-primary" type="submit" disabled={busy}>{busy ? "Saving..." : "Submit"}</button>
-          <button className="ex-btn ex-danger" type="button" onClick={onClose} disabled={busy}>Close</button>
-        </div>
+        <footer className="account-edit-field-actions">
+          <button className="account-edit-cancel" type="button" onClick={requestClose} disabled={busy}>Cancel</button>
+          <button className="account-edit-save" type="submit" disabled={!canSubmit}>
+            {busy ? <><span className="account-edit-spinner" aria-hidden="true" />Saving…</> : <><Icon name="check" size={17} />Save changes</>}
+          </button>
+        </footer>
       </form>
     </div>
   );
