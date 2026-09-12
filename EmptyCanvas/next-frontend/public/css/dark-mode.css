@@ -1253,3 +1253,217 @@ html[data-theme="dark"] body.page-account .account-confirm-card.account-remove-i
 html[data-theme="dark"] body.page-account .account-confirm-card.account-remove-image-modal .account-confirm-cancel:hover:not(:disabled){
   background: #202938 !important;
 }
+
+/* ------------------------------------------------------------------------
+   Dark mode navigation contrast — white sidebar + black page buttons
+   2026-09-12
+   ------------------------------------------------------------------------
+   In dark mode the page navigation intentionally inverts the default shell:
+   the rail itself stays bright/white while navigation controls use black for
+   their selected state. This applies to the desktop rail, mobile bottom dock,
+   the travelling active-page indicator, and the approved secondary page rail.
+   Geometry is unchanged; only visual tokens are overridden here.
+   --------------------------------------------------------------------- */
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar {
+  background: #ffffff !important;
+  border-color: #e5e7eb !important;
+  box-shadow: 18px 0 44px rgba(0, 0, 0, .22) !important;
+}
+
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar .sidebar-nav {
+  scrollbar-color: rgba(11, 12, 16, .30) transparent !important;
+}
+
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar .sidebar-nav::-webkit-scrollbar-thumb {
+  background: rgba(11, 12, 16, .30) !important;
+}
+
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar .sidebar-nav .nav-link,
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar .sidebar-nav .nav-link:not(.active) {
+  background: transparent !important;
+  color: #111827 !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar .sidebar-nav .nav-link svg,
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar .sidebar-nav .nav-link:not(.active) svg {
+  color: currentColor !important;
+  stroke: currentColor !important;
+}
+
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar .sidebar-nav .nav-link:hover,
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar .sidebar-nav .nav-link:not(.active):hover {
+  background: #f2f4f7 !important;
+  color: #0b0c10 !important;
+}
+
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar .sidebar-nav .nav-link.active,
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar .sidebar-nav .nav-link.is-indicator-target,
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell a.nav-link[href="/next/task-management"][aria-expanded="true"],
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell a.nav-link[href="/next/events"][aria-expanded="true"] {
+  background: #0b0c10 !important;
+  color: #ffffff !important;
+  border-color: #0b0c10 !important;
+  box-shadow: 0 12px 26px rgba(11, 12, 16, .22) !important;
+}
+
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar .sidebar-nav .nav-link.active svg,
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar .sidebar-nav .nav-link.is-indicator-target svg,
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell a.nav-link[href="/next/task-management"][aria-expanded="true"] svg,
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell a.nav-link[href="/next/events"][aria-expanded="true"] svg {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+  background: transparent !important;
+}
+
+/* The moving selection surface must use the same black selected-button token. */
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar > .sidebar-active-indicator {
+  background: #0b0c10 !important;
+  border-color: #0b0c10 !important;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, .28) !important;
+}
+
+/* While the travelling surface owns the background, keep selected glyphs white. */
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready .sidebar-nav .nav-link.active,
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready .sidebar-nav .nav-link.is-indicator-target {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  color: #ffffff !important;
+}
+
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready .sidebar-nav .nav-link.active svg,
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready .sidebar-nav .nav-link.is-indicator-target svg,
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready .sidebar-nav .nav-link.active svg :is(path, line, polyline, polygon, circle, rect),
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready .sidebar-nav .nav-link.is-indicator-target svg :is(path, line, polyline, polygon, circle, rect) {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+}
+
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-animating .sidebar-nav .nav-link.active:not(.is-indicator-target) {
+  color: #111827 !important;
+}
+
+@media (max-width: 768px) {
+  /* The outer mobile aside remains transparent by design; these are the two
+     visible dock surfaces the user sees. */
+  html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host {
+    background: transparent !important;
+    border-color: transparent !important;
+    box-shadow: none !important;
+  }
+
+  html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-home-rail,
+  html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-clip {
+    background: #ffffff !important;
+    border-color: #e5e7eb !important;
+    box-shadow: 0 12px 28px rgba(0, 0, 0, .20) !important;
+  }
+
+  html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list .nav-link,
+  html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list .nav-link:not(.active),
+  html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-home-rail .nav-link,
+  html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-home-rail .nav-link:not(.active) {
+    background: transparent !important;
+    color: #111827 !important;
+    border-color: transparent !important;
+    box-shadow: none !important;
+  }
+
+  html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list .nav-link:hover,
+  html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-home-rail .nav-link:hover {
+    background: #f2f4f7 !important;
+    color: #0b0c10 !important;
+  }
+
+  html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list .nav-link.active,
+  html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list > li:first-child .nav-link.active {
+    background: #0b0c10 !important;
+    color: #ffffff !important;
+    border-color: #0b0c10 !important;
+    box-shadow: 0 10px 22px rgba(11, 12, 16, .24) !important;
+  }
+
+  html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list .nav-link.active svg,
+  html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list > li:first-child .nav-link.active svg {
+    color: #ffffff !important;
+    stroke: #ffffff !important;
+  }
+
+  /* Home uses the circular SVG surface rather than the whole anchor. */
+  html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-home-rail .nav-link.active {
+    background: transparent !important;
+    color: #ffffff !important;
+    border-color: transparent !important;
+    box-shadow: none !important;
+  }
+
+  html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-home-rail .nav-link.active svg {
+    background: #0b0c10 !important;
+    color: #ffffff !important;
+    stroke: #ffffff !important;
+    box-shadow: 0 10px 22px rgba(11, 12, 16, .24) !important;
+  }
+
+  /* During the travel animation the black indicator replaces native active
+     backgrounds, including Home's circular surface. */
+  html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready.mobile-dock-structured-host .mobile-dock-home-rail .nav-link.active svg,
+  html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready.mobile-dock-structured-host .mobile-dock-pages-list .nav-link.active,
+  html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready.mobile-dock-structured-host .mobile-dock-pages-list .nav-link.is-indicator-target {
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready.mobile-dock-structured-host .mobile-dock-home-rail .nav-link.active,
+  html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready.mobile-dock-structured-host .mobile-dock-home-rail .nav-link.active svg,
+  html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready.mobile-dock-structured-host .mobile-dock-pages-list .nav-link.active,
+  html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready.mobile-dock-structured-host .mobile-dock-pages-list .nav-link.is-indicator-target,
+  html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready.mobile-dock-structured-host .mobile-dock-pages-list .nav-link.active svg,
+  html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready.mobile-dock-structured-host .mobile-dock-pages-list .nav-link.is-indicator-target svg,
+  html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready.mobile-dock-structured-host .mobile-dock-pages-list .nav-link.active svg :is(path, line, polyline, polygon, circle, rect),
+  html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready.mobile-dock-structured-host .mobile-dock-pages-list .nav-link.is-indicator-target svg :is(path, line, polyline, polygon, circle, rect) {
+    color: #ffffff !important;
+    stroke: #ffffff !important;
+  }
+}
+
+/* Secondary page rail follows the same white-rail/black-button language. */
+html[data-theme="dark"] body .task-management-secondary-sidebar {
+  background: #ffffff !important;
+  border-color: #e5e7eb !important;
+  box-shadow: 16px 18px 38px rgba(0, 0, 0, .22) !important;
+}
+
+html[data-theme="dark"] body .task-management-secondary-sidebar__link,
+html[data-theme="dark"] body .task-management-secondary-sidebar__link:not(.is-active) {
+  background: transparent !important;
+  color: #111827 !important;
+  border-color: transparent !important;
+}
+
+html[data-theme="dark"] body .task-management-secondary-sidebar__link:not(.is-active) svg,
+html[data-theme="dark"] body .task-management-secondary-sidebar__link:not(.is-active) svg :is(path, line, polyline, polygon, circle, rect) {
+  background: #f2f4f7 !important;
+  color: #111827 !important;
+  stroke: #111827 !important;
+}
+
+html[data-theme="dark"] body .task-management-secondary-sidebar__link:hover {
+  background: #f2f4f7 !important;
+  color: #0b0c10 !important;
+}
+
+html[data-theme="dark"] body .task-management-secondary-sidebar__link.is-active {
+  background: #0b0c10 !important;
+  color: #ffffff !important;
+  border-color: #0b0c10 !important;
+  box-shadow: 0 10px 22px rgba(11, 12, 16, .22) !important;
+}
+
+html[data-theme="dark"] body .task-management-secondary-sidebar__link.is-active svg,
+html[data-theme="dark"] body .task-management-secondary-sidebar__link.is-active svg :is(path, line, polyline, polygon, circle, rect) {
+  background: #1c2028 !important;
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+}

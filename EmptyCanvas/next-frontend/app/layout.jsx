@@ -76,7 +76,7 @@ export default async function RootLayout({ children }) {
       <head>
         <meta name="color-scheme" content="light dark" />
         <meta id="ops-theme-color" name="theme-color" content={theme === "dark" ? "#080b11" : "#ffffff"} />
-        <link rel="stylesheet" href="/next/css/dark-mode.css?v=theme-v1" />
+        <link rel="stylesheet" href="/next/css/dark-mode.css?v=theme-v2-white-nav" />
         <script dangerouslySetInnerHTML={{ __html: themeBootstrap }} />
       </head>
       <body>
