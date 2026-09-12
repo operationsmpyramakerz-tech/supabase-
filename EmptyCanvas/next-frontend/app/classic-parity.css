@@ -15817,8 +15817,8 @@ body.operations-orders-page .next-classic-orders-parity .next-operations-order-c
 
   body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-home-rail,
   body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-clip {
-    height: 68px !important;
-    min-height: 68px !important;
+    height: var(--orders-toolbar-control-height) !important;
+    min-height: var(--orders-toolbar-control-height) !important;
     border-radius: 24px !important;
   }
 
@@ -15953,8 +15953,8 @@ body.operations-orders-page .next-classic-orders-parity .next-operations-order-c
   body.operations-orders-page .next-classic-orders-parity .orders-type-filter__button {
     width: 52px !important;
     min-width: 52px !important;
-    height: 52px !important;
-    min-height: 52px !important;
+    height: var(--orders-toolbar-control-height) !important;
+    min-height: var(--orders-toolbar-control-height) !important;
     padding: 0 !important;
     justify-content: center !important;
     border-radius: 16px !important;
@@ -18912,9 +18912,11 @@ html.ops-has-persistent-profile .classic-app-shell .main-header .next-stable-loa
 
   :is(body.current-orders-page, body.orders-review-page, body.operations-orders-page)
   .next-classic-orders-parity .orders-toolbar {
+    --orders-toolbar-control-height: 68px;
+    --orders-toolbar-control-radius: 26px;
     display: grid !important;
     grid-template-columns: minmax(0, 1fr) 52px !important;
-    align-items: stretch !important;
+    align-items: center !important;
     gap: 8px !important;
     width: 100% !important;
     max-width: 100% !important;
@@ -18932,13 +18934,13 @@ html.ops-has-persistent-profile .classic-app-shell .main-header .next-stable-loa
     width: 100% !important;
     max-width: 100% !important;
     min-width: 0 !important;
-    height: 68px !important;
-    min-height: 68px !important;
+    height: var(--orders-toolbar-control-height) !important;
+    min-height: var(--orders-toolbar-control-height) !important;
     padding: 0 8px !important;
     overflow-x: auto !important;
     overflow-y: hidden !important;
     border: 0 !important;
-    border-radius: 26px !important;
+    border-radius: var(--orders-toolbar-control-radius) !important;
     background: #fff !important;
     box-shadow: 0 18px 40px rgba(15, 23, 42, .14) !important;
     scrollbar-width: none !important;
@@ -19084,8 +19086,9 @@ html.ops-has-persistent-profile .classic-app-shell .main-header .next-stable-loa
     width: 52px !important;
     min-width: 52px !important;
     max-width: 52px !important;
-    height: 52px !important;
-    min-height: 52px !important;
+    height: var(--orders-toolbar-control-height) !important;
+    min-height: var(--orders-toolbar-control-height) !important;
+    align-self: center !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
@@ -19097,15 +19100,15 @@ html.ops-has-persistent-profile .classic-app-shell .main-header .next-stable-loa
     width: 52px !important;
     min-width: 52px !important;
     max-width: 52px !important;
-    height: 52px !important;
-    min-height: 52px !important;
+    height: var(--orders-toolbar-control-height) !important;
+    min-height: var(--orders-toolbar-control-height) !important;
     padding: 0 !important;
     display: inline-flex !important;
     align-items: center !important;
     justify-content: center !important;
     gap: 0 !important;
     border: 0 !important;
-    border-radius: 16px !important;
+    border-radius: var(--orders-toolbar-control-radius) !important;
     background: #fff !important;
     color: #0b0c10 !important;
     box-shadow: 0 8px 20px rgba(15, 23, 42, .055) !important;
@@ -19158,10 +19161,16 @@ html.ops-has-persistent-profile .classic-app-shell .main-header .next-stable-loa
 
 @media (max-width: 420px) {
   :is(body.current-orders-page, body.orders-review-page, body.operations-orders-page)
+  .next-classic-orders-parity .orders-toolbar {
+    --orders-toolbar-control-height: 62px;
+    --orders-toolbar-control-radius: 24px;
+  }
+
+  :is(body.current-orders-page, body.orders-review-page, body.operations-orders-page)
   .next-classic-orders-parity .orders-toolbar__scroll {
-    height: 62px !important;
-    min-height: 62px !important;
-    border-radius: 24px !important;
+    height: var(--orders-toolbar-control-height) !important;
+    min-height: var(--orders-toolbar-control-height) !important;
+    border-radius: var(--orders-toolbar-control-radius) !important;
   }
 
   :is(body.current-orders-page, body.orders-review-page, body.operations-orders-page)
