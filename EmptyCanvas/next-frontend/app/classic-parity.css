@@ -18886,18 +18886,18 @@ html.ops-has-persistent-profile .classic-app-shell .main-header .next-stable-loa
 }
 
 /* ========================================================================
-   Current Orders + Orders Review — exact mobile toolbar parity with
-   Operations Orders
+   Orders toolbar — one shared mobile geometry
    2026-09-12
    ------------------------------------------------------------------------
-   Operations Orders is the visual source of truth. Keep the visible status
-   rail at the same footprint even when Current Orders has more tabs than fit
-   on screen; the extra tabs scroll inside the rail instead of changing its
-   width or corner geometry.
+   Operations Orders is the single visual source of truth.  These selectors
+   deliberately style all three routes together so Current Orders and Orders
+   Review cannot drift in width, height, radius, spacing, active-tab size or
+   filter-button geometry.
    ===================================================================== */
 @media (max-width: 768px) {
-  body.current-orders-page .next-classic-orders-parity .next-current-orders-toolbar-wrap,
-  body.orders-review-page .next-classic-orders-parity .next-orders-review-toolbar-wrap {
+  :is(body.current-orders-page, body.orders-review-page, body.operations-orders-page)
+  .next-classic-orders-parity
+  :is(.next-current-orders-toolbar-wrap, .next-orders-review-toolbar-wrap, .next-operations-orders-toolbar-wrap) {
     display: block !important;
     width: 100% !important;
     max-width: 100% !important;
@@ -18910,17 +18910,8 @@ html.ops-has-persistent-profile .classic-app-shell .main-header .next-stable-loa
     box-shadow: none !important;
   }
 
-  /* Orders Review had an extra 20px visual inset on mobile. Remove only that
-     inset so its toolbar begins/ends on the same guides as Operations Orders. */
-  body.orders-review-page .next-classic-orders-parity .next-orders-review-toolbar-wrap {
-    width: calc(100% + 40px) !important;
-    max-width: none !important;
-    margin-left: -20px !important;
-    margin-right: -20px !important;
-  }
-
-  body.current-orders-page .next-classic-orders-parity .orders-toolbar,
-  body.orders-review-page .next-classic-orders-parity .orders-toolbar {
+  :is(body.current-orders-page, body.orders-review-page, body.operations-orders-page)
+  .next-classic-orders-parity .orders-toolbar {
     display: grid !important;
     grid-template-columns: minmax(0, 1fr) 52px !important;
     align-items: stretch !important;
@@ -18928,44 +18919,50 @@ html.ops-has-persistent-profile .classic-app-shell .main-header .next-stable-loa
     width: 100% !important;
     max-width: 100% !important;
     min-width: 0 !important;
-    margin: 0 !important;
+    margin: 10px 0 18px !important;
     padding: 0 !important;
     overflow: visible !important;
   }
 
-  /* The viewport itself owns the white rounded rail. This guarantees the
-     exact same visible width/corners as Operations Orders even when the inner
-     tab row is wider and horizontally scrollable. */
-  body.current-orders-page .next-classic-orders-parity .orders-toolbar__scroll,
-  body.orders-review-page .next-classic-orders-parity .orders-toolbar__scroll {
-    display: block !important;
+  :is(body.current-orders-page, body.orders-review-page, body.operations-orders-page)
+  .next-classic-orders-parity .orders-toolbar__scroll {
+    order: 0 !important;
+    display: flex !important;
+    align-items: center !important;
     width: 100% !important;
     max-width: 100% !important;
     min-width: 0 !important;
-    min-height: 52px !important;
+    height: 68px !important;
+    min-height: 68px !important;
+    padding: 0 8px !important;
     overflow-x: auto !important;
     overflow-y: hidden !important;
     border: 0 !important;
-    border-radius: 16px !important;
-    background: rgba(255, 255, 255, .96) !important;
-    box-shadow: 0 8px 20px rgba(15, 23, 42, .055) !important;
+    border-radius: 26px !important;
+    background: #fff !important;
+    box-shadow: 0 18px 40px rgba(15, 23, 42, .14) !important;
     scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
     overscroll-behavior-x: contain !important;
     -webkit-overflow-scrolling: touch !important;
   }
 
-  body.current-orders-page .next-classic-orders-parity .orders-toolbar__scroll::-webkit-scrollbar,
-  body.orders-review-page .next-classic-orders-parity .orders-toolbar__scroll::-webkit-scrollbar {
+  :is(body.current-orders-page, body.orders-review-page, body.operations-orders-page)
+  .next-classic-orders-parity .orders-toolbar__scroll::-webkit-scrollbar {
     display: none !important;
+    width: 0 !important;
+    height: 0 !important;
   }
 
-  body.current-orders-page .next-classic-orders-parity .orders-toolbar .portfolio-tabs,
-  body.orders-review-page .next-classic-orders-parity .orders-toolbar .portfolio-tabs {
+  :is(body.current-orders-page, body.orders-review-page, body.operations-orders-page)
+  .next-classic-orders-parity .orders-toolbar .portfolio-tabs {
     display: flex !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
     width: max-content !important;
     min-width: max-content !important;
+    height: 100% !important;
     min-height: 52px !important;
-    align-items: center !important;
     gap: 3px !important;
     margin: 0 !important;
     padding: 4px !important;
@@ -18973,31 +18970,46 @@ html.ops-has-persistent-profile .classic-app-shell .main-header .next-stable-loa
     border-radius: 16px !important;
     background: transparent !important;
     box-shadow: none !important;
+    overflow: visible !important;
   }
 
-  body.current-orders-page .next-classic-orders-parity .orders-toolbar .tab-portfolio,
-  body.orders-review-page .next-classic-orders-parity .orders-toolbar .tab-portfolio {
-    flex: 0 0 42px !important;
+  :is(body.current-orders-page, body.orders-review-page, body.operations-orders-page)
+  .next-classic-orders-parity .orders-toolbar .portfolio-tabs::before {
+    content: none !important;
+    display: none !important;
+  }
+
+  :is(body.current-orders-page, body.orders-review-page, body.operations-orders-page)
+  .next-classic-orders-parity .orders-toolbar .tab-portfolio {
+    position: relative !important;
+    z-index: 1 !important;
+    display: inline-flex !important;
+    flex: 0 0 48px !important;
     width: 42px !important;
     min-width: 42px !important;
-    max-width: 42px !important;
-    height: 42px !important;
+    max-width: none !important;
+    height: 48px !important;
     min-height: 42px !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 6px !important;
     margin: 0 !important;
     padding: 5px !important;
-    gap: 6px !important;
-    justify-content: center !important;
     border: 0 !important;
     border-radius: 12px !important;
+    background: transparent !important;
+    color: #0b0c10 !important;
     box-shadow: none !important;
     overflow: hidden !important;
   }
 
-  body.current-orders-page .next-classic-orders-parity .orders-toolbar .tab-portfolio.active,
-  body.current-orders-page .next-classic-orders-parity .orders-toolbar .tab-portfolio.is-active,
-  body.orders-review-page .next-classic-orders-parity .orders-toolbar .tab-portfolio.active,
-  body.orders-review-page .next-classic-orders-parity .orders-toolbar .tab-portfolio.is-active {
-    flex: 0 0 auto !important;
+  :is(body.current-orders-page, body.orders-review-page, body.operations-orders-page)
+  .next-classic-orders-parity .orders-toolbar .tab-portfolio.active,
+  :is(body.current-orders-page, body.orders-review-page, body.operations-orders-page)
+  .next-classic-orders-parity .orders-toolbar .tab-portfolio.is-active,
+  :is(body.current-orders-page, body.orders-review-page, body.operations-orders-page)
+  .next-classic-orders-parity .orders-toolbar .tab-portfolio[aria-selected="true"] {
+    flex-basis: 48px !important;
     width: auto !important;
     min-width: 88px !important;
     max-width: none !important;
@@ -19009,66 +19021,162 @@ html.ops-has-persistent-profile .classic-app-shell .main-header .next-stable-loa
     box-shadow: 0 9px 20px rgba(2, 6, 23, .16) !important;
   }
 
-  body.current-orders-page .next-classic-orders-parity .order-status-tab__icon,
-  body.orders-review-page .next-classic-orders-parity .order-status-tab__icon {
+  :is(body.current-orders-page, body.orders-review-page, body.operations-orders-page)
+  .next-classic-orders-parity .order-status-tab__icon {
+    display: grid !important;
+    place-items: center !important;
     flex: 0 0 28px !important;
     width: 28px !important;
     height: 28px !important;
+    border: 0 !important;
     border-radius: 9px !important;
+    background: transparent !important;
+    color: currentColor !important;
+    box-shadow: none !important;
   }
 
-  body.current-orders-page .next-classic-orders-parity .order-status-tab__icon svg,
-  body.orders-review-page .next-classic-orders-parity .order-status-tab__icon svg {
+  :is(body.current-orders-page, body.orders-review-page, body.operations-orders-page)
+  .next-classic-orders-parity .order-status-tab__icon svg {
     width: 15px !important;
     height: 15px !important;
   }
 
-  body.current-orders-page .next-classic-orders-parity .order-status-tab__copy,
-  body.orders-review-page .next-classic-orders-parity .order-status-tab__copy {
+  :is(body.current-orders-page, body.orders-review-page, body.operations-orders-page)
+  .next-classic-orders-parity .order-status-tab__copy {
     display: none !important;
   }
 
-  body.current-orders-page .next-classic-orders-parity .tab-portfolio.active .order-status-tab__copy,
-  body.current-orders-page .next-classic-orders-parity .tab-portfolio.is-active .order-status-tab__copy,
-  body.orders-review-page .next-classic-orders-parity .tab-portfolio.active .order-status-tab__copy,
-  body.orders-review-page .next-classic-orders-parity .tab-portfolio.is-active .order-status-tab__copy {
+  :is(body.current-orders-page, body.orders-review-page, body.operations-orders-page)
+  .next-classic-orders-parity .tab-portfolio.active .order-status-tab__copy,
+  :is(body.current-orders-page, body.orders-review-page, body.operations-orders-page)
+  .next-classic-orders-parity .tab-portfolio.is-active .order-status-tab__copy,
+  :is(body.current-orders-page, body.orders-review-page, body.operations-orders-page)
+  .next-classic-orders-parity .tab-portfolio[aria-selected="true"] .order-status-tab__copy {
     display: grid !important;
   }
 
-  body.current-orders-page .next-classic-orders-parity .order-status-tab__label,
-  body.orders-review-page .next-classic-orders-parity .order-status-tab__label {
+  :is(body.current-orders-page, body.orders-review-page, body.operations-orders-page)
+  .next-classic-orders-parity .order-status-tab__label {
+    position: static !important;
+    display: block !important;
+    width: auto !important;
+    height: auto !important;
     max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
     overflow: visible !important;
+    clip: auto !important;
+    color: inherit !important;
     font-size: 10px !important;
     line-height: 1.05 !important;
     white-space: nowrap !important;
     text-overflow: clip !important;
   }
 
-  body.current-orders-page .next-classic-orders-parity .orders-toolbar__divider,
-  body.orders-review-page .next-classic-orders-parity .orders-toolbar__divider {
+  :is(body.current-orders-page, body.orders-review-page, body.operations-orders-page)
+  .next-classic-orders-parity .orders-toolbar__divider {
     display: none !important;
   }
 
-  body.current-orders-page .next-classic-orders-parity .orders-type-filter,
-  body.orders-review-page .next-classic-orders-parity .orders-type-filter {
+  :is(body.current-orders-page, body.orders-review-page, body.operations-orders-page)
+  .next-classic-orders-parity .orders-type-filter {
+    order: 2 !important;
     width: 52px !important;
     min-width: 52px !important;
     max-width: 52px !important;
+    height: 52px !important;
+    min-height: 52px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    position: relative !important;
   }
 
-  body.current-orders-page .next-classic-orders-parity .orders-type-filter__button,
-  body.orders-review-page .next-classic-orders-parity .orders-type-filter__button {
+  :is(body.current-orders-page, body.orders-review-page, body.operations-orders-page)
+  .next-classic-orders-parity .orders-type-filter__button {
     width: 52px !important;
     min-width: 52px !important;
     max-width: 52px !important;
     height: 52px !important;
     min-height: 52px !important;
     padding: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
     justify-content: center !important;
+    gap: 0 !important;
     border: 0 !important;
     border-radius: 16px !important;
     background: #fff !important;
+    color: #0b0c10 !important;
     box-shadow: 0 8px 20px rgba(15, 23, 42, .055) !important;
+  }
+
+  :is(body.current-orders-page, body.orders-review-page, body.operations-orders-page)
+  .next-classic-orders-parity .orders-type-filter__button-icon {
+    width: 38px !important;
+    height: 38px !important;
+    margin: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    color: #0b0c10 !important;
+    box-shadow: none !important;
+  }
+
+  :is(body.current-orders-page, body.orders-review-page, body.operations-orders-page)
+  .next-classic-orders-parity .orders-type-filter__button-icon svg {
+    width: 22px !important;
+    height: 22px !important;
+  }
+
+  :is(body.current-orders-page, body.orders-review-page, body.operations-orders-page)
+  .next-classic-orders-parity .orders-type-filter__button-label {
+    display: none !important;
+  }
+
+  :is(body.current-orders-page, body.orders-review-page, body.operations-orders-page)
+  .next-classic-orders-parity .orders-type-filter__button-dot {
+    position: absolute !important;
+    top: 8px !important;
+    right: 8px !important;
+  }
+
+  :is(body.current-orders-page, body.orders-review-page, body.operations-orders-page)
+  .next-classic-orders-parity .orders-type-filter__panel {
+    position: fixed !important;
+    top: auto !important;
+    right: 12px !important;
+    bottom: calc(88px + env(safe-area-inset-bottom, 0px)) !important;
+    left: 12px !important;
+    width: auto !important;
+    max-height: min(420px, 64vh) !important;
+    overflow-y: auto !important;
+  }
+}
+
+@media (max-width: 420px) {
+  :is(body.current-orders-page, body.orders-review-page, body.operations-orders-page)
+  .next-classic-orders-parity .orders-toolbar__scroll {
+    height: 62px !important;
+    min-height: 62px !important;
+    border-radius: 24px !important;
+  }
+
+  :is(body.current-orders-page, body.orders-review-page, body.operations-orders-page)
+  .next-classic-orders-parity .orders-toolbar .tab-portfolio {
+    flex-basis: 44px !important;
+    height: 44px !important;
+  }
+
+  :is(body.current-orders-page, body.orders-review-page, body.operations-orders-page)
+  .next-classic-orders-parity .orders-toolbar .tab-portfolio.active,
+  :is(body.current-orders-page, body.orders-review-page, body.operations-orders-page)
+  .next-classic-orders-parity .orders-toolbar .tab-portfolio.is-active,
+  :is(body.current-orders-page, body.orders-review-page, body.operations-orders-page)
+  .next-classic-orders-parity .orders-toolbar .tab-portfolio[aria-selected="true"] {
+    flex-basis: 44px !important;
+    height: 44px !important;
   }
 }
