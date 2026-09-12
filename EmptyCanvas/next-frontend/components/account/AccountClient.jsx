@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 const FIELD_META = [
   {
@@ -739,22 +740,38 @@ function RemoveImageModal({ kind, busy, onClose, onConfirm }) {
     function handleKeyDown(event) {
       if (event.key === "Escape" && !busy) onClose();
     }
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", handleKeyDown);
+    };
   }, [busy, onClose]);
 
-  return (
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <div className="account-confirm-layer" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
-      <section className="account-confirm-card" role="dialog" aria-modal="true" aria-labelledby="account-remove-title">
-        <span className="account-confirm-icon"><Icon name="alert" size={23} /></span>
-        <h3 id="account-remove-title">Remove {label}?</h3>
-        <p>You’re going to remove the current {label} and restore the default image. This action cannot be undone.</p>
+      <section className="account-confirm-card account-remove-image-modal" role="alertdialog" aria-modal="true" aria-labelledby="account-remove-title" aria-describedby="account-remove-description">
+        <button className="account-confirm-close" type="button" aria-label="Close confirmation" onClick={onClose} disabled={busy}>
+          <Icon name="x" size={18} />
+        </button>
+        <span className="account-confirm-icon" aria-hidden="true"><Icon name="alert" size={22} /></span>
+        <div className="account-confirm-copy">
+          <h3 id="account-remove-title">Remove {label}?</h3>
+          <p id="account-remove-description">This will remove the current {label} and restore the default image. This action cannot be undone.</p>
+        </div>
         <div className="account-confirm-actions">
-          <button className="account-confirm-cancel" type="button" onClick={onClose} disabled={busy}>Cancel</button>
-          <button className="account-confirm-remove" type="button" onClick={onConfirm} disabled={busy}>{busy ? "Removing…" : "Remove"}</button>
+          <button className="account-confirm-cancel" type="button" onClick={onClose} disabled={busy} autoFocus>Cancel</button>
+          <button className="account-confirm-remove" type="button" onClick={onConfirm} disabled={busy}>
+            {busy ? <span className="account-confirm-spinner" aria-hidden="true" /> : null}
+            <span>{busy ? "Removing…" : "Remove"}</span>
+          </button>
         </div>
       </section>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

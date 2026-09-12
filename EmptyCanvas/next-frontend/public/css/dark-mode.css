@@ -1211,3 +1211,45 @@ html[data-theme="dark"] body.page-backup :is(
   border-color: #2b3544 !important;
   color: #f8fafc !important;
 }
+
+/* User Profile: remove image confirmation */
+html[data-theme="dark"] body.page-account .account-confirm-layer{
+  background: rgba(2, 6, 12, .66) !important;
+}
+
+html[data-theme="dark"] body.page-account .account-confirm-card.account-remove-image-modal{
+  background: #11161f !important;
+  border-color: #2b3544 !important;
+  color: #f8fafc !important;
+  box-shadow: 0 28px 72px rgba(0,0,0,.48), 0 8px 24px rgba(0,0,0,.28) !important;
+}
+
+html[data-theme="dark"] body.page-account .account-confirm-card.account-remove-image-modal h3{
+  color: #f8fafc !important;
+}
+
+html[data-theme="dark"] body.page-account .account-confirm-card.account-remove-image-modal p{
+  color: #98a2b3 !important;
+}
+
+html[data-theme="dark"] body.page-account .account-confirm-card.account-remove-image-modal .account-confirm-close{
+  background: #1a2230 !important;
+  border-color: #303b4c !important;
+  color: #cbd5e1 !important;
+}
+
+html[data-theme="dark"] body.page-account .account-confirm-card.account-remove-image-modal .account-confirm-icon{
+  background: rgba(217,45,32,.14) !important;
+  border-color: rgba(248,113,113,.22) !important;
+  color: #f97066 !important;
+}
+
+html[data-theme="dark"] body.page-account .account-confirm-card.account-remove-image-modal .account-confirm-cancel{
+  background: #171e29 !important;
+  border-color: #334155 !important;
+  color: #e5e7eb !important;
+}
+
+html[data-theme="dark"] body.page-account .account-confirm-card.account-remove-image-modal .account-confirm-cancel:hover:not(:disabled){
+  background: #202938 !important;
+}
