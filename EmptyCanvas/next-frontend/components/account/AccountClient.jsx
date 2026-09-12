@@ -258,6 +258,8 @@ function Icon({ name, size = 18 }) {
     alert: <><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></>,
     eye: <><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></>,
     eyeOff: <><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a20.7 20.7 0 0 1 5.06-6.94"/><path d="M1 1l22 22"/><path d="M9.88 9.88A3 3 0 0 0 12 15a3 3 0 0 0 2.12-.88"/></>,
+    sun: <><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></>,
+    moon: <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"/>,
   };
   return <svg {...common}>{paths[name] || paths.file}</svg>;
 }
@@ -766,6 +768,36 @@ function fieldDisplay(account, field) {
   return text(account?.[field.key]) || field.placeholder || "Not added";
 }
 
+const THEME_STORAGE_KEY = "ops_ui_theme_v1";
+
+function currentTheme() {
+  if (typeof document === "undefined") return "light";
+  const fromRoot = String(document.documentElement?.dataset?.theme || "").toLowerCase();
+  if (fromRoot === "dark" || fromRoot === "light") return fromRoot;
+  try {
+    const stored = String(localStorage.getItem(THEME_STORAGE_KEY) || "").toLowerCase();
+    if (stored === "dark" || stored === "light") return stored;
+  } catch {}
+  return "light";
+}
+
+function applyTheme(theme) {
+  const next = theme === "dark" ? "dark" : "light";
+  if (typeof document === "undefined") return next;
+  const root = document.documentElement;
+  root.dataset.theme = next;
+  root.classList.toggle("ops-theme-dark", next === "dark");
+  root.style.colorScheme = next;
+  const themeColor = document.getElementById("ops-theme-color");
+  if (themeColor) themeColor.setAttribute("content", next === "dark" ? "#080b11" : "#ffffff");
+  try { localStorage.setItem(THEME_STORAGE_KEY, next); } catch {}
+  try {
+    document.cookie = `${THEME_STORAGE_KEY}=${next}; Path=/; Max-Age=31536000; SameSite=Lax`;
+  } catch {}
+  try { window.dispatchEvent(new CustomEvent("ops:theme-changed", { detail: { theme: next } })); } catch {}
+  return next;
+}
+
 export default function AccountClient({ initialAccount }) {
   const [account, setAccount] = useState(() => normalizeAccount(initialAccount));
   const [editField, setEditField] = useState(null);
@@ -773,8 +805,32 @@ export default function AccountClient({ initialAccount }) {
   const [toast, setToast] = useState(null);
   const [busyAction, setBusyAction] = useState("");
   const [removeRequest, setRemoveRequest] = useState("");
+  const [theme, setTheme] = useState("light");
   const profileInputRef = useRef(null);
   const coverInputRef = useRef(null);
+
+  useEffect(() => {
+    const syncTheme = () => setTheme(currentTheme());
+    syncTheme();
+    const handleThemeChanged = (event) => {
+      const next = String(event?.detail?.theme || currentTheme()).toLowerCase();
+      setTheme(next === "dark" ? "dark" : "light");
+    };
+    const handleStorage = (event) => {
+      if (!event || event.key === THEME_STORAGE_KEY) syncTheme();
+    };
+    window.addEventListener("ops:theme-changed", handleThemeChanged);
+    window.addEventListener("storage", handleStorage);
+    return () => {
+      window.removeEventListener("ops:theme-changed", handleThemeChanged);
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, []);
+
+  function toggleTheme() {
+    const next = theme === "dark" ? "light" : "dark";
+    setTheme(applyTheme(next));
+  }
 
   function showToast(type, title, message) {
     setToast({ type, title, message });
@@ -870,6 +926,30 @@ export default function AccountClient({ initialAccount }) {
               </div>
               <h2 className="profile-identity-name">{displayName}</h2>
               <div className="profile-identity-subtitle">{subtitle}</div>
+            </div>
+          </section>
+
+          <section className="profile-appearance-section" aria-label="Appearance settings">
+            <div className="profile-appearance-row">
+              <span className="profile-appearance-icon" aria-hidden="true"><Icon name={theme === "dark" ? "moon" : "sun"} size={18} /></span>
+              <div className="profile-appearance-copy">
+                <div className="profile-appearance-label">Theme</div>
+                <div className="profile-appearance-value">{theme === "dark" ? "Dark mode" : "Light mode"}</div>
+              </div>
+              <button
+                type="button"
+                className={`profile-theme-switch ${theme === "dark" ? "is-dark" : ""}`}
+                role="switch"
+                aria-checked={theme === "dark"}
+                aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+                onClick={toggleTheme}
+              >
+                <span className="profile-theme-switch__track" aria-hidden="true">
+                  <span className="profile-theme-switch__thumb">
+                    <Icon name={theme === "dark" ? "moon" : "sun"} size={14} />
+                  </span>
+                </span>
+              </button>
             </div>
           </section>
 

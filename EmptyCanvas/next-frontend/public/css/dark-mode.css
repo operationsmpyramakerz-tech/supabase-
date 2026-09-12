@@ -1,0 +1,1213 @@
+/* ========================================================================
+   Operations Hub theme system — 2026-09-12
+   ------------------------------------------------------------------------
+   - Light stays the default to preserve the existing product appearance.
+   - Dark mode is controlled by html[data-theme="dark"].
+   - The preference is persisted by AccountClient in localStorage + cookie and
+     is server-seeded by RootLayout so route loading states do not flash light.
+   - This file intentionally loads after the existing app styles and uses a
+     small set of high-specificity overrides to theme both the modern Next UI
+     and the Classic-parity surfaces without changing page logic/geometry.
+   ===================================================================== */
+
+:root {
+  --ops-theme-accent: #f47b20;
+  --ops-theme-accent-strong: #ff8b3d;
+  --ops-theme-transition: 180ms ease;
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --background: #080b11;
+  --surface: #11161f;
+  --surface-soft: #171d27;
+  --text: #f7f9fc;
+  --muted: #98a2b3;
+  --line: #2a3443;
+  --shadow: 0 18px 48px rgba(0, 0, 0, .34);
+  --ops-dark-canvas: #080b11;
+  --ops-dark-surface: #11161f;
+  --ops-dark-surface-2: #171d27;
+  --ops-dark-surface-3: #1d2531;
+  --ops-dark-line: #2b3544;
+  --ops-dark-line-soft: #222b38;
+  --ops-dark-text: #f8fafc;
+  --ops-dark-text-2: #d7dee8;
+  --ops-dark-muted: #98a2b3;
+  --ops-dark-muted-2: #7f8a9a;
+  --ops-dark-shadow: 0 18px 48px rgba(0, 0, 0, .38);
+}
+
+html[data-theme="dark"] body {
+  background: var(--ops-dark-canvas) !important;
+  color: var(--ops-dark-text) !important;
+}
+
+html[data-theme="dark"] body,
+html[data-theme="dark"] body * {
+  scrollbar-color: #465162 #11161f;
+}
+
+/* Smooth theme changes without animating layout. */
+html[data-theme="dark"] body,
+html[data-theme="dark"] body .classic-app-shell > .main-content,
+html[data-theme="dark"] body .classic-app-shell .main-header,
+html[data-theme="dark"] body .classic-app-shell .dash-title,
+html[data-theme="dark"] body .classic-app-shell .notif-bell-btn,
+html[data-theme="dark"] body .classic-app-shell .header-user,
+html[data-theme="dark"] body .classic-app-shell .account-mini,
+html[data-theme="dark"] body .card,
+html[data-theme="dark"] body input,
+html[data-theme="dark"] body select,
+html[data-theme="dark"] body textarea,
+html[data-theme="dark"] body button {
+  transition-property: background-color, border-color, color, box-shadow;
+  transition-duration: var(--ops-theme-transition);
+  transition-timing-function: ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-theme="dark"] body,
+  html[data-theme="dark"] body * {
+    transition-duration: 0s !important;
+  }
+}
+
+/* ------------------------------------------------------------------------
+   User Profile — theme control (visible in both themes)
+   --------------------------------------------------------------------- */
+html body.page-account .profile-appearance-section {
+  margin: 14px 22px 0 !important;
+}
+
+html body.page-account .profile-appearance-row {
+  min-height: 68px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 12px 11px 14px;
+  border: 1px solid #e9edf2;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, .96);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, .045);
+}
+
+html body.page-account .profile-appearance-icon {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  color: #c35a17;
+  background: #fff4e9;
+}
+
+html body.page-account .profile-appearance-copy {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: grid;
+  gap: 3px;
+}
+
+html body.page-account .profile-appearance-label {
+  color: #111827;
+  font-size: .9rem;
+  line-height: 1.15;
+  font-weight: 800;
+  letter-spacing: -.01em;
+}
+
+html body.page-account .profile-appearance-value {
+  color: #9ca3af;
+  font-size: .8rem;
+  line-height: 1.35;
+  font-weight: 600;
+}
+
+html body.page-account .profile-theme-switch {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: 0 0 auto;
+  width: 54px;
+  height: 44px;
+  min-width: 54px;
+  min-height: 44px;
+  margin: -5px 0;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+  outline: none;
+}
+
+html body.page-account .profile-theme-switch__track {
+  position: relative;
+  width: 54px;
+  height: 34px;
+  display: block;
+  border-radius: 999px;
+  border: 1px solid #dfe4ea;
+  background: #edf0f4;
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, .05);
+  transition: background-color .2s ease, border-color .2s ease;
+}
+
+html body.page-account .profile-theme-switch__thumb {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #667085;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, .16);
+  transform: translateX(0);
+  transition: transform .22s cubic-bezier(.2,.8,.2,1), color .2s ease, background-color .2s ease;
+}
+
+html body.page-account .profile-theme-switch.is-dark .profile-theme-switch__track {
+  border-color: #d8661b;
+  background: linear-gradient(135deg, #e56e20, #f68a3d);
+}
+
+html body.page-account .profile-theme-switch.is-dark .profile-theme-switch__thumb {
+  color: #0f172a;
+  transform: translateX(20px);
+}
+
+html body.page-account .profile-theme-switch:focus-visible .profile-theme-switch__track {
+  outline: 3px solid rgba(244, 123, 32, .24);
+  outline-offset: 3px;
+}
+
+@media (max-width: 768px) {
+  html body.page-account .profile-appearance-section {
+    margin-inline: 12px !important;
+    margin-top: 12px !important;
+  }
+
+  html body.page-account .profile-appearance-row {
+    min-height: 62px;
+    padding: 9px 10px 9px 12px;
+    border-radius: 16px;
+  }
+
+  html body.page-account .profile-appearance-icon {
+    width: 36px;
+    height: 36px;
+    flex-basis: 36px;
+  }
+
+  html body.page-account .profile-appearance-label { font-size: .86rem; }
+  html body.page-account .profile-appearance-value { font-size: .78rem; }
+}
+
+/* ------------------------------------------------------------------------
+   Persistent canvas + cover photo
+   --------------------------------------------------------------------- */
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell {
+  background: #05070b !important;
+}
+
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .main-content {
+  background-color: var(--ops-dark-canvas) !important;
+  color: var(--ops-dark-text) !important;
+}
+
+html[data-theme="dark"].ops-has-persistent-cover body:not(.login-page):not(.pwa-offline):not(.pwa-start) .classic-app-shell > .main-content {
+  background: transparent !important;
+}
+
+html[data-theme="dark"].ops-has-persistent-cover body:not(.login-page):not(.pwa-offline):not(.pwa-start) .classic-app-shell > .main-content::before,
+html[data-theme="dark"].ops-has-persistent-cover body:not(.login-page):not(.pwa-offline):not(.pwa-start) .classic-app-shell[class*="next-classic-"][class*="-loading"] > .main-content::before,
+html[data-theme="dark"].ops-has-persistent-cover body:not(.login-page):not(.pwa-offline):not(.pwa-start) .classic-app-shell.next-classic-stable-loading > .main-content::before,
+html[data-theme="dark"].ops-has-persistent-cover body:not(.login-page):not(.pwa-offline):not(.pwa-start) .classic-app-shell.next-classic-home-loading > .main-content::before {
+  background-image:
+    linear-gradient(180deg, rgba(3, 6, 12, .38) 0%, rgba(3, 6, 12, .56) 100%),
+    var(--ops-system-cover-image) !important;
+  opacity: 1 !important;
+}
+
+/* ------------------------------------------------------------------------
+   Shell chrome — sidebar, header, dropdowns, search, notifications
+   --------------------------------------------------------------------- */
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar {
+  background: #080a0f !important;
+  border-color: #202631 !important;
+  box-shadow: 18px 0 44px rgba(0, 0, 0, .2) !important;
+}
+
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell .sidebar-nav .nav-link {
+  color: #c8d0dc !important;
+}
+
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell .sidebar-nav .nav-link:hover {
+  background: #171c25 !important;
+  color: #fff !important;
+}
+
+/* Keep the established moving active indicator high contrast. */
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar .sidebar-active-indicator,
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell .sidebar-nav .nav-link.active,
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell .sidebar-nav .nav-link.is-indicator-target {
+  border-color: rgba(255,255,255,.92) !important;
+}
+
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell .main-header {
+  color: var(--ops-dark-text) !important;
+}
+
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell .main-header .dash-title {
+  background: rgba(17, 22, 31, .96) !important;
+  border-color: #303947 !important;
+  color: #f8fafc !important;
+  box-shadow: 0 10px 28px rgba(0,0,0,.22) !important;
+}
+
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell .main-header :is(.notif-bell-btn, .header-user, a.account-mini) {
+  background: rgba(17, 22, 31, .96) !important;
+  border-color: #303947 !important;
+  color: #f8fafc !important;
+  box-shadow: 0 10px 28px rgba(0,0,0,.2) !important;
+}
+
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell .main-header :is(.notif-bell-btn, .header-user, a.account-mini) svg {
+  color: #f8fafc !important;
+  stroke: currentColor !important;
+}
+
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell .main-header .searchbar.system-header-search.is-expanded {
+  background: #11161f !important;
+  border-color: #303947 !important;
+  box-shadow: 0 14px 36px rgba(0,0,0,.28) !important;
+}
+
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell .main-header .system-header-search__input {
+  color: #f8fafc !important;
+  caret-color: #ff8b3d !important;
+}
+
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell .main-header .system-header-search__input::placeholder {
+  color: #7f8a9a !important;
+}
+
+html[data-theme="dark"] body .user-profile-menu,
+html[data-theme="dark"] body .user-profile-dropdown,
+html[data-theme="dark"] body .profile-dropdown,
+html[data-theme="dark"] body .next-notif-bell__panel {
+  background: #121821 !important;
+  border-color: #2b3544 !important;
+  color: #f8fafc !important;
+  box-shadow: 0 26px 70px rgba(0,0,0,.5) !important;
+}
+
+html[data-theme="dark"] body .next-notif-bell__row {
+  background: #151b25 !important;
+  border-color: #283241 !important;
+  color: #f5f7fb !important;
+}
+
+/* ------------------------------------------------------------------------
+   Generic form and modal primitives
+   --------------------------------------------------------------------- */
+html[data-theme="dark"] body :is(input, select, textarea) {
+  color: #f7f9fc;
+  accent-color: var(--ops-theme-accent-strong);
+}
+
+html[data-theme="dark"] body :is(input, select, textarea):not([type="range"]):not([type="checkbox"]):not([type="radio"]):not([type="file"]) {
+  background-color: #151b25 !important;
+  border-color: #303a49 !important;
+  color: #f7f9fc !important;
+  box-shadow: none;
+}
+
+html[data-theme="dark"] body :is(input, textarea)::placeholder {
+  color: #748091 !important;
+  opacity: 1;
+}
+
+html[data-theme="dark"] body :is(input, select, textarea):focus {
+  border-color: #d96b24 !important;
+  box-shadow: 0 0 0 3px rgba(244, 123, 32, .14) !important;
+}
+
+html[data-theme="dark"] body option {
+  background: #151b25;
+  color: #f8fafc;
+}
+
+html[data-theme="dark"] body :is(
+  .state-card,
+  .ex-modal-box,
+  .next-modal,
+  .next-order-modal,
+  .next-password-modal,
+  .review-editor-modal,
+  .operations-action-modal,
+  .maintenance-log-modal,
+  .stock-export-modal,
+  .expense-modal,
+  .next-product-modal,
+  .next-tag-modal,
+  .next-task-modal,
+  .tm-dialog,
+  .next-kpi-modal,
+  .next-users-modal,
+  .next-users-submodal form,
+  .next-lms-role-modal,
+  .next-expense-users-modal__card,
+  .next-proposals-modal__card,
+  .next-b2c-modal__card,
+  .next-b2c-table-modal__card,
+  .next-b2c-forms-modal__card,
+  .next-account-modal__card,
+  .next-history-modal__card,
+  .next-backup-modal__card,
+  .next-receipt-lightbox > section
+) {
+  background: var(--ops-dark-surface) !important;
+  border-color: var(--ops-dark-line) !important;
+  color: var(--ops-dark-text) !important;
+  box-shadow: var(--ops-dark-shadow) !important;
+}
+
+html[data-theme="dark"] body :is(
+  .next-order-modal__header,
+  .next-order-modal__actions,
+  .review-editor-modal > header,
+  .review-editor-modal > footer,
+  .operations-action-modal > header,
+  .operations-action-modal > footer,
+  .maintenance-log-modal > header,
+  .maintenance-log-modal > footer,
+  .stock-export-modal > header,
+  .stock-export-modal > footer,
+  .next-expense-users-modal__card > header,
+  .next-expense-users-modal__card > footer,
+  .next-b2c-table-modal__card > header,
+  .next-account-modal__card > header,
+  .next-history-modal__card > header
+) {
+  background: #151b25 !important;
+  border-color: #2b3544 !important;
+}
+
+html[data-theme="dark"] body :is(table, thead, tbody, tr, th, td) {
+  border-color: #2a3443;
+}
+
+html[data-theme="dark"] body :is(th, td) {
+  color: inherit;
+}
+
+/* ------------------------------------------------------------------------
+   Home dashboard
+   --------------------------------------------------------------------- */
+html[data-theme="dark"] body.page-home :is(
+  .dashboard-overview,
+  .dashboard-card,
+  .bucket-row,
+  .expense-chart,
+  .dashboard-notice,
+  .recent-orders-card,
+  .quick-actions-card
+) {
+  background: rgba(17, 22, 31, .96) !important;
+  border-color: #2b3544 !important;
+  color: #f8fafc !important;
+  box-shadow: 0 16px 40px rgba(0,0,0,.24) !important;
+}
+
+html[data-theme="dark"] body.page-home :is(.ring-track) { stroke: #303a49 !important; }
+html[data-theme="dark"] body.page-home :is(.ring-center span, .dashboard-card p, .dashboard-card small, .bucket-row small) { color: #98a2b3 !important; }
+html[data-theme="dark"] body.page-home .analysis-chip:not(.analysis-chip--green) {
+  background: #171d27 !important;
+  color: #f8fafc !important;
+  border-color: #303a49 !important;
+}
+
+/* ------------------------------------------------------------------------
+   Orders: Current, Review, Operations, Maintenance + order details
+   --------------------------------------------------------------------- */
+html[data-theme="dark"] body:is(.current-orders-page,.orders-review-page,.operations-orders-page,.page-maintenance-orders) .next-classic-orders-parity .orders-toolbar,
+html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .orders-toolbar {
+  background: transparent !important;
+}
+
+html[data-theme="dark"] body:is(.current-orders-page,.orders-review-page,.operations-orders-page,.page-maintenance-orders) .next-classic-orders-parity .orders-toolbar__scroll,
+html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .orders-toolbar__scroll {
+  background: rgba(17, 22, 31, .96) !important;
+  border-color: #2b3544 !important;
+  box-shadow: 0 14px 34px rgba(0,0,0,.23) !important;
+}
+
+html[data-theme="dark"] body:is(.current-orders-page,.orders-review-page,.operations-orders-page,.page-maintenance-orders) .next-classic-orders-parity .orders-toolbar .tab-portfolio:not(.active):not(.is-active),
+html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .orders-toolbar .tab-portfolio:not(.active):not(.is-active) {
+  color: #f5f7fb !important;
+  background: transparent !important;
+}
+
+html[data-theme="dark"] body:is(.current-orders-page,.orders-review-page,.operations-orders-page,.page-maintenance-orders) .next-classic-orders-parity .orders-toolbar .tab-portfolio:not(.active):not(.is-active) svg,
+html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .orders-toolbar .tab-portfolio:not(.active):not(.is-active) svg {
+  color: #e8edf5 !important;
+  stroke: currentColor !important;
+}
+
+html[data-theme="dark"] body:is(.current-orders-page,.orders-review-page,.operations-orders-page,.page-maintenance-orders) .next-classic-orders-parity .orders-type-filter__button,
+html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .orders-type-filter__button {
+  background: #151b25 !important;
+  border-color: #2b3544 !important;
+  color: #f8fafc !important;
+  box-shadow: 0 12px 30px rgba(0,0,0,.22) !important;
+}
+
+html[data-theme="dark"] body:is(.current-orders-page,.orders-review-page,.operations-orders-page,.page-maintenance-orders) .next-classic-orders-parity .orders-type-filter__panel,
+html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .orders-type-filter__panel {
+  background: #11161f !important;
+  border-color: #2b3544 !important;
+  box-shadow: 0 24px 58px rgba(0,0,0,.45) !important;
+}
+
+html[data-theme="dark"] body:is(.current-orders-page,.orders-review-page,.operations-orders-page,.page-maintenance-orders) .next-classic-orders-parity .orders-type-filter__option,
+html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .orders-type-filter__option {
+  background: #151b25 !important;
+  border-color: #293341 !important;
+  color: #f8fafc !important;
+}
+
+html[data-theme="dark"] body:is(.current-orders-page,.orders-review-page,.operations-orders-page,.page-maintenance-orders) .next-classic-orders-parity .co-card,
+html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .co-card,
+html[data-theme="dark"] body :is(.next-order-card, .maintenance-log-card, .maintenance-reports, .review-editor-list) {
+  background: rgba(17, 22, 31, .96) !important;
+  border-color: #2b3544 !important;
+  color: #f8fafc !important;
+  box-shadow: 0 16px 38px rgba(0,0,0,.24) !important;
+}
+
+html[data-theme="dark"] body :is(.co-card, .next-order-card, .maintenance-log-card) :is(h1,h2,h3,h4,strong,b) { color: #f8fafc !important; }
+html[data-theme="dark"] body :is(.co-card, .next-order-card, .maintenance-log-card) :is(p,small,.muted) { color: #98a2b3 !important; }
+html[data-theme="dark"] body :is(.next-orders-empty, .next-task-empty, .tm-empty-state) {
+  background: rgba(17,22,31,.88) !important;
+  border-color: #313b4a !important;
+  color: #98a2b3 !important;
+}
+
+/* ------------------------------------------------------------------------
+   Stocktaking, Products, Kits, Proposals
+   --------------------------------------------------------------------- */
+html[data-theme="dark"] body :is(
+  .stock-search,
+  .stock-view-toggle,
+  .stock-group-card,
+  .stock-flat-table-wrap,
+  .products-next-stats article,
+  .products-next-search,
+  .products-next-toolbar > select,
+  .products-next-view,
+  .products-next-group,
+  .next-product-card,
+  .products-next-table-wrap,
+  .next-proposals-stats article,
+  .next-proposals-detail-stats article,
+  .next-proposals-toolbar,
+  .next-proposal-card,
+  .next-proposals-detail-card,
+  .next-proposals-qty
+) {
+  background: rgba(17, 22, 31, .96) !important;
+  border-color: #2b3544 !important;
+  color: #f8fafc !important;
+  box-shadow: 0 14px 34px rgba(0,0,0,.2) !important;
+}
+
+html[data-theme="dark"] body :is(.next-product-card__actions button, .products-next-row-actions button, .next-proposals-icon-btn, .next-proposals-detail-actions button, .next-proposals-product-picker > button) {
+  background: #1a212c !important;
+  border-color: #313b4a !important;
+  color: #e7edf6 !important;
+}
+
+html[data-theme="dark"] body .products-next-tags button:not(.active) {
+  background: #151b25 !important;
+  border-color: #2b3544 !important;
+  color: #cbd5e1 !important;
+}
+
+/* ------------------------------------------------------------------------
+   Expenses
+   --------------------------------------------------------------------- */
+html[data-theme="dark"] body:is(.expenses-page,.expenses-users-page) :is(
+  .expenses-balance-card,
+  .expenses-monthly-card,
+  .expenses-types-card-next,
+  .expenses-ledger-card,
+  .expense-action-row > button,
+  .expenses-ledger-actions button,
+  .expenses-toolbar > label,
+  .next-expense-users-modal__card,
+  .next-expense-users-transaction,
+  .next-expense-users-past-toggle button
+) {
+  background: rgba(17, 22, 31, .96) !important;
+  border-color: #2b3544 !important;
+  color: #f8fafc !important;
+  box-shadow: 0 14px 36px rgba(0,0,0,.22) !important;
+}
+
+html[data-theme="dark"] body:is(.expenses-page,.expenses-users-page) :is(.expense-transaction, .next-expense-users-transaction) {
+  border-color: #2a3443 !important;
+}
+
+/* ------------------------------------------------------------------------
+   Tasks + Events
+   --------------------------------------------------------------------- */
+html[data-theme="dark"] body.task-management-page {
+  --tm-ink: #f7f9fc;
+  --tm-muted: #98a2b3;
+  --tm-line: #2b3544;
+  --tm-violet-soft: #2a2448;
+  --tm-green-soft: #153429;
+  --tm-blue-soft: #172d4e;
+  --tm-orange-soft: #3b291a;
+  --tm-red-soft: #3d2024;
+  background: #080b11 !important;
+}
+
+html[data-theme="dark"] body.task-management-page :is(
+  .tm-search,
+  .tm-ticket-card,
+  .tm-empty-state,
+  .tm-dialog,
+  .tm-field input,
+  .tm-field textarea,
+  .tm-field select,
+  .next-task-viewbar,
+  .next-task-summary-grid article,
+  .next-task-panel,
+  .next-task-toolbar,
+  .next-task-card,
+  .next-task-workflow-card
+) {
+  background: #11161f !important;
+  border-color: #2b3544 !important;
+  color: #f8fafc !important;
+}
+
+html[data-theme="dark"] body.events-page :is(
+  .next-events-summary-card,
+  .next-events-toolbar,
+  .next-events-card,
+  .next-events-detail-item,
+  .next-events-item-list article,
+  .next-events-calendar-summary article,
+  .next-events-calendar-card,
+  .next-events-calendar-selected-card,
+  .next-events-calendar-list-card,
+  .next-event-components-summary-grid article,
+  .next-event-components-toolbar,
+  .next-event-component-card,
+  .next-event-form-section,
+  .next-event-repeat-row,
+  .next-event-cost-summary article
+) {
+  background: rgba(17, 22, 31, .96) !important;
+  border-color: #2b3544 !important;
+  color: #f8fafc !important;
+}
+
+html[data-theme="dark"] body.events-page .next-events-tabs button:not(.active) {
+  color: #cbd5e1 !important;
+}
+
+/* ------------------------------------------------------------------------
+   KPIs, Users Center, LMS, B2C
+   --------------------------------------------------------------------- */
+html[data-theme="dark"] body :is(
+  .next-kpi-graph-card,
+  .next-kpi-score-card,
+  .next-kpi-panel,
+  .next-kpi-review-row,
+  .next-kpi-standard-cards > button,
+  .next-users-stats article,
+  .next-users-toolbar,
+  .next-users-directory-section,
+  .next-users-members-section,
+  .next-users-member-grid > article,
+  .next-users-access-groups,
+  .next-users-sv-list > label,
+  .next-lms-kpi,
+  .next-lms-panel,
+  .next-lms-users-summary article,
+  .next-lms-users-workspace,
+  .next-lms-builder,
+  .next-lms-builder-rolebar,
+  .next-lms-builder-node,
+  .next-lms-schools-summary article,
+  .next-lms-schools-toolbar,
+  .next-lms-school-card,
+  .next-lms-schools-empty,
+  .next-lms-school-form,
+  .next-lms-school-details,
+  .lms-home-hero,
+  .lms-kpi-card,
+  .lms-panel,
+  .lms-recent-item,
+  .next-b2c-stats article,
+  .next-b2c-library,
+  .next-b2c-search,
+  .next-b2c-card,
+  .next-b2c-table-workspace,
+  .next-b2c-table-stats article,
+  .next-b2c-form-card,
+  .next-b2c-active-form
+) {
+  background: rgba(17, 22, 31, .96) !important;
+  border-color: #2b3544 !important;
+  color: #f8fafc !important;
+  box-shadow: 0 14px 36px rgba(0,0,0,.2) !important;
+}
+
+html[data-theme="dark"] body :is(.lms-home-hero h1, .lms-kpi-card strong, .lms-panel-head h2, .lms-recent-item strong) {
+  color: #f8fafc !important;
+}
+
+html[data-theme="dark"] body :is(.lms-home-hero p, .lms-kpi-card span, .lms-kpi-card small, .lms-recent-item small) {
+  color: #98a2b3 !important;
+}
+
+/* ------------------------------------------------------------------------
+   History, Backup, Notifications, SOP / How-it-works, App Install
+   --------------------------------------------------------------------- */
+html[data-theme="dark"] body :is(
+  .next-history-summary article,
+  .next-history-toolbar,
+  .next-history-list-card,
+  .next-history-list-card--parity,
+  .next-history-detail-item,
+  .next-backup-summary article,
+  .next-backup-toolbar,
+  .next-backup-list-card,
+  .next-backup-table-card,
+  .next-notifications-stat,
+  .next-notifications-push,
+  .next-notifications-workspace,
+  .next-notifications-row,
+  .next-sop-kpis article,
+  .next-sop-toolbar,
+  .next-sop-module,
+  .next-sop-flow-step,
+  .next-sop-steps article,
+  .next-app-install-device,
+  .next-app-install-status-grid article,
+  .next-app-install-panel
+) {
+  background: rgba(17, 22, 31, .96) !important;
+  border-color: #2b3544 !important;
+  color: #f8fafc !important;
+  box-shadow: 0 14px 36px rgba(0,0,0,.2) !important;
+}
+
+/* ------------------------------------------------------------------------
+   User Profile page
+   --------------------------------------------------------------------- */
+html[data-theme="dark"] body.page-account .account-panel--profile.account-profile-modern {
+  background: #0f141c !important;
+  border-color: #293341 !important;
+  color: #f8fafc !important;
+  box-shadow: 0 22px 52px rgba(0,0,0,.32) !important;
+}
+
+html[data-theme="dark"] body.page-account .profile-field-box,
+html[data-theme="dark"] body.page-account .profile-appearance-row,
+html[data-theme="dark"] body.page-account .profile-files-media-section,
+html[data-theme="dark"] body.page-account .profile-media-file-card {
+  background: #151b25 !important;
+  border-color: #2d3746 !important;
+  color: #f8fafc !important;
+  box-shadow: 0 8px 26px rgba(0,0,0,.22) !important;
+}
+
+html[data-theme="dark"] body.page-account .profile-field-card:hover .profile-field-box,
+html[data-theme="dark"] body.page-account .profile-media-file-card:hover {
+  background: #19212c !important;
+  border-color: #3a4657 !important;
+}
+
+html[data-theme="dark"] body.page-account :is(.profile-field-label, .profile-appearance-label, .profile-files-media-title, .profile-media-file-name, .profile-identity-name) {
+  color: #f8fafc !important;
+}
+
+html[data-theme="dark"] body.page-account :is(.profile-field-value, .profile-appearance-value, .profile-files-media-sub, .profile-media-file-url, .profile-identity-subtitle) {
+  color: #98a2b3 !important;
+}
+
+html[data-theme="dark"] body.page-account .profile-field-value.is-placeholder {
+  color: #667284 !important;
+}
+
+html[data-theme="dark"] body.page-account .profile-field-edit.acc-action.acc-edit,
+html[data-theme="dark"] body.page-account .profile-appearance-icon {
+  background: #202733 !important;
+  color: #d7dee8 !important;
+}
+
+html[data-theme="dark"] body.page-account .profile-field-edit.acc-action.acc-edit:hover {
+  background: #293241 !important;
+  color: #fff !important;
+}
+
+html[data-theme="dark"] body.page-account .profile-theme-switch__track {
+  background: #252e3b;
+  border-color: #354151;
+}
+
+html[data-theme="dark"] body.page-account .profile-theme-switch__thumb {
+  background: #f8fafc;
+}
+
+html[data-theme="dark"] body.page-account .account-edit-field-modal,
+html[data-theme="dark"] body.page-account .account-image-editor,
+html[data-theme="dark"] body.page-account .account-remove-image-modal {
+  background: #11161f !important;
+  border-color: #2b3544 !important;
+  color: #f8fafc !important;
+}
+
+html[data-theme="dark"] body.page-account .account-edit-field-modal :is(h2,h3,label,strong),
+html[data-theme="dark"] body.page-account .account-image-editor :is(h2,h3,label,strong) {
+  color: #f8fafc !important;
+}
+
+html[data-theme="dark"] body.page-account .account-edit-field-modal :is(p,small,.account-edit-field-help),
+html[data-theme="dark"] body.page-account .account-image-editor :is(p,small) {
+  color: #98a2b3 !important;
+}
+
+/* ------------------------------------------------------------------------
+   Generic typography + separators inside themed surfaces
+   --------------------------------------------------------------------- */
+html[data-theme="dark"] body.next-classic-shell-active .next-classic-page-content :is(h1,h2,h3,h4,h5,h6) {
+  color: #f8fafc;
+}
+
+html[data-theme="dark"] body.next-classic-shell-active .next-classic-page-content :is(.muted, .subtitle, .description, small) {
+  color: #98a2b3;
+}
+
+html[data-theme="dark"] body.next-classic-shell-active .next-classic-page-content hr {
+  border-color: #2b3544 !important;
+}
+
+/* Loading skeletons should be visibly dark and stable during navigation. */
+html[data-theme="dark"] body :is(.skeleton, [class*="shimmer"], [class*="loading-line"], [class*="loading-field"], [class*="loading-card"]) {
+  --ops-dark-skeleton-a: #171d27;
+  --ops-dark-skeleton-b: #202835;
+}
+
+html[data-theme="dark"] body .skeleton,
+html[data-theme="dark"] body [class*="next-"][class*="shimmer"] {
+  background: linear-gradient(90deg, #171d27, #222b38, #171d27) !important;
+  background-size: 220% 100% !important;
+}
+
+/* ------------------------------------------------------------------------
+   Login / standalone surfaces also honor the saved preference.
+   --------------------------------------------------------------------- */
+html[data-theme="dark"] body :is(.next-login-page, .next-login-shell, .standalone-state) {
+  background-color: #080b11 !important;
+  color: #f8fafc !important;
+}
+
+html[data-theme="dark"] body :is(.next-login-card, .login-card, .next-pwa-gate__card) {
+  background: #11161f !important;
+  border-color: #2b3544 !important;
+  color: #f8fafc !important;
+  box-shadow: 0 24px 64px rgba(0,0,0,.42) !important;
+}
+
+/* ------------------------------------------------------------------------
+   Classic Home parity surfaces used by the current dashboard
+   --------------------------------------------------------------------- */
+html[data-theme="dark"] body.page-home :is(
+  .home-kpi:nth-child(1),
+  .home-kpi:nth-child(2),
+  .home-kpi:nth-child(3),
+  .home-kpi:nth-child(4),
+  .home-orders-performance,
+  .home-summary-performance,
+  .home-orders-status,
+  .home-summary-status,
+  .home-analytics-card--white,
+  .home-panel--white,
+  .home-list-card,
+  .home-list-card--orders,
+  .home-list-card--tasks,
+  .home-item,
+  .home-action,
+  .home-modules-card,
+  .home-module,
+  .home-orders-analysis__trigger,
+  .home-orders-analysis__menu,
+  .home-analysis-select__trigger,
+  .home-analysis-select__menu,
+  .home-stock-analysis__trigger,
+  .home-stock-analysis__menu,
+  .home-stock-analysis__menu--portal,
+  .home-stock-filter__trigger,
+  .home-stock-filter__options,
+  .home-global-analysis__trigger,
+  .home-global-analysis__menu--portal,
+  .home-global-select__trigger,
+  .home-global-select__options,
+  .home-expense-analytics-card,
+  .home-expense-year-select,
+  .home-expense-year-select__trigger,
+  .home-expense-year-select__options,
+  .home-expense-monthly-chart
+) {
+  background: rgba(17, 22, 31, .96) !important;
+  border-color: #2b3544 !important;
+  color: #f8fafc !important;
+}
+
+html[data-theme="dark"] body.page-home :is(
+  .home-orders-analysis__option:hover,
+  .home-orders-analysis__option.is-selected,
+  .home-analysis-select__option:hover,
+  .home-analysis-select__option.is-selected,
+  .home-stock-filter__option:hover,
+  .home-stock-filter__option.is-selected,
+  .home-global-select__option:hover,
+  .home-global-select__option.is-selected,
+  .home-expense-year-select__option:hover,
+  .home-expense-year-select__option.is-selected
+) {
+  background: #202835 !important;
+  color: #fff !important;
+}
+
+html[data-theme="dark"] body.page-home :is(
+  .home-orders-ring__track,
+  .home-summary-ring__track
+) { stroke: #394454 !important; }
+
+html[data-theme="dark"] body.page-home :is(
+  .home-orders-ring__center span,
+  .home-orders-ring__center small,
+  .home-summary-ring__center span,
+  .home-summary-ring__center small,
+  .home-orders-status small,
+  .home-summary-status small,
+  .home-card-subtitle,
+  .card-subtitle
+) { color: #98a2b3 !important; }
+
+/* Keep purposefully colored Home cards colored, but make their white inner
+   chips compatible with dark mode. */
+html[data-theme="dark"] body.page-home :is(.home-stock-card, .home-panel--navy, .home-list-card--dark) {
+  color: #f8fafc !important;
+}
+html[data-theme="dark"] body.page-home :is(.home-stock-card__metrics > div, .home-scope-row) {
+  border-color: rgba(255,255,255,.13) !important;
+}
+
+/* ------------------------------------------------------------------------
+   Classic Products / Kits / Proposals parity surfaces
+   --------------------------------------------------------------------- */
+html[data-theme="dark"] body.products-page :is(
+  .products-hero,
+  .products-search,
+  .products-stat-card,
+  .products-filter-panel,
+  .products-results .products-group,
+  .products-group,
+  .products-loading-card,
+  .products-empty,
+  .products-error,
+  .product-card,
+  .products-modal,
+  .products-proposals-view,
+  .products-proposal-folder,
+  .products-proposal-tool-card,
+  .products-proposal-table-card,
+  .products-proposals-empty,
+  .products-modern-select,
+  .products-modern-select__menu,
+  .products-modern-select__option,
+  .products-tag-filter-btn,
+  .products-tags,
+  .products-tag-option,
+  .products-group-menu,
+  .product-card__menu,
+  .products-upload-field__picker,
+  .products-upload-file
+) {
+  background: #11161f !important;
+  border-color: #2b3544 !important;
+  color: #f8fafc !important;
+  box-shadow: 0 14px 36px rgba(0,0,0,.2) !important;
+}
+
+html[data-theme="dark"] body.products-page :is(
+  .products-modern-select__option:hover,
+  .products-modern-select__option.is-selected,
+  .products-tag-option:hover,
+  .product-card__menu button:hover,
+  .products-group-menu button:hover
+) {
+  background: #202835 !important;
+  color: #fff !important;
+}
+
+html[data-theme="dark"] body.products-page :is(.product-card__badge, .products-view-pill, .products-tag-chip:not(.is-active), .products-mini-metric) {
+  background: #1b222e !important;
+  border-color: #303a49 !important;
+  color: #cbd5e1 !important;
+}
+
+html[data-theme="dark"] body.proposals-page :is(
+  .proposals-tabs,
+  .proposal-search-select__button,
+  .proposal-search-select__menu,
+  .proposal-search-select__option,
+  .proposal-folder-menu,
+  .proposal-total-block,
+  .proposal-total-block > div,
+  .proposals-folders-card,
+  .proposal-create-mode-note,
+  .proposal-combined-info-card,
+  .proposal-delete-confirm-modal__warning,
+  .proposal-combine-name-field input,
+  .proposal-logic-field select,
+  .next-proposals-modern-select__trigger,
+  .next-proposals-modern-select__menu,
+  .proposal-combine-multi__trigger,
+  .proposal-combine-multi__menu,
+  .proposal-download-modal,
+  .proposal-receipt-preview-card,
+  .proposal-send-stock-text-field,
+  .proposal-receipt-upload-field
+) {
+  background: #11161f !important;
+  border-color: #2b3544 !important;
+  color: #f8fafc !important;
+}
+
+html[data-theme="dark"] body.proposals-page :is(
+  .proposal-search-select__option:hover,
+  .proposal-search-select__option.is-selected,
+  .next-proposals-modern-select__option:hover,
+  .next-proposals-modern-select__option.is-selected,
+  .proposal-combine-multi__option:hover,
+  .proposal-combine-multi__option.is-selected
+) {
+  background: #202835 !important;
+  color: #fff !important;
+}
+
+/* ------------------------------------------------------------------------
+   Classic Stocktaking parity surfaces
+   --------------------------------------------------------------------- */
+html[data-theme="dark"] body.stocktaking-page :is(
+  .stocktaking-product-picker__menu,
+  .stocktaking-product-picker__search,
+  .stocktaking-tag-picker__menu,
+  .stocktaking-tag-picker__new,
+  .stocktaking-receipt-upload,
+  .stocktaking-inventory-modal__card,
+  .stocktaking-inventory-field,
+  .stocktaking-folder,
+  .stocktaking-card,
+  .stocktaking-table-wrap
+) {
+  background: #11161f !important;
+  border-color: #2b3544 !important;
+  color: #f8fafc !important;
+}
+
+html[data-theme="dark"] body.stocktaking-page :is(.stocktaking-product-picker__option:hover, .stocktaking-tag-picker__option:hover) {
+  background: #202835 !important;
+}
+
+/* ------------------------------------------------------------------------
+   Classic Expenses parity surfaces
+   --------------------------------------------------------------------- */
+html[data-theme="dark"] body.expenses-page :is(
+  .expenses-analytics-card,
+  .expenses-activity-card,
+  .expenses-year-select,
+  .expenses-ledger-head,
+  .expenses-content,
+  .expense-ledger-row,
+  .order-select__dropdown,
+  .order-select__trigger,
+  .expense-modern-select__menu,
+  .expense-modern-select__selected
+) {
+  background: #11161f !important;
+  border-color: #2b3544 !important;
+  color: #f8fafc !important;
+}
+
+html[data-theme="dark"] body.expenses-page .expense-ledger-row:hover {
+  background: #19212c !important;
+}
+
+html[data-theme="dark"] body.expenses-users-page :is(
+  .expense-shots-modal__card,
+  .expense-shots-modal__item,
+  .expense-user-action-card,
+  .expense-user-action-field,
+  .expense-user-card,
+  .expense-user-details
+) {
+  background: #11161f !important;
+  border-color: #2b3544 !important;
+  color: #f8fafc !important;
+}
+
+/* ------------------------------------------------------------------------
+   Users Center parity surfaces
+   --------------------------------------------------------------------- */
+html[data-theme="dark"] body.user-access-page :is(
+  .ua-hero,
+  .ua-folders-panel,
+  .ua-members-panel,
+  .ua-search,
+  .ua-folder,
+  .ua-member-card,
+  .ua-empty,
+  .ua-error,
+  .ua-loading-card,
+  .ua-modal,
+  .ua-detail-file,
+  .ua-profile-preview,
+  .ua-file-pick,
+  .ua-page-access-row,
+  .ua-sv-access-row,
+  .ua-member-menu,
+  .ua-modern-select-button,
+  .ua-modern-select-menu,
+  .ua-signup-request-card,
+  .ua-signup-empty,
+  .ua-page-access-group--events,
+  .ua-page-access-group--task-management,
+  .ua-page-access-group--b2c
+) {
+  background: #11161f !important;
+  border-color: #2b3544 !important;
+  color: #f8fafc !important;
+}
+
+html[data-theme="dark"] body.user-access-page :is(
+  .ua-modern-option:hover,
+  .ua-modern-option.is-selected,
+  .ua-folder:hover,
+  .ua-member-menu button:hover
+) {
+  background: #202835 !important;
+  color: #fff !important;
+}
+
+/* ------------------------------------------------------------------------
+   KPI parity surfaces
+   --------------------------------------------------------------------- */
+html[data-theme="dark"] body.kpis-page :is(
+  .kpis-hero,
+  .kpis-chart,
+  .kpis-table,
+  .kpis-standard-card,
+  .kpis-modal-panel,
+  .kpis-item-row,
+  .kpis-score-section,
+  .kpis-current-user,
+  .kpis-section-card,
+  .kpis-modern-select__button,
+  .kpis-modern-select__menu,
+  .kpis-empty-editor,
+  .kpis-inline-dialog__panel,
+  .kpis-filter-summary span,
+  .kpis-filter-grid label,
+  .kpis-standard-detail-hero,
+  .kpis-standard-detail-score,
+  .kpis-standard-detail-grid > div,
+  .kpis-standard-detail-section,
+  .kpis-standard-detail-row,
+  .kpis-transition-loader,
+  .kpis-score-section--modern,
+  .kpis-score-subcard,
+  .kpis-score-input-card,
+  .kpis-score-percent-card,
+  .kpis-standard-detail-row--card,
+  .kpis-score-readonly-card,
+  .kpis-score-readonly-notes > div,
+  .kpis-overall-evaluation,
+  .kpis-empty-evaluation,
+  .kpis-evaluation-row,
+  .kpis-standard-detail-evaluations,
+  .kpis-standard-detail-evaluation,
+  .kpis-evidence-card,
+  .kpis-evidence-upload
+) {
+  background: #11161f !important;
+  border-color: #2b3544 !important;
+  color: #f8fafc !important;
+}
+
+html[data-theme="dark"] body.kpis-page :is(.kpis-modern-select__option:hover, .kpis-modern-select__option.is-selected, .kpis-review-tab:hover, .kpis-review-tab.is-active) {
+  background: #202835 !important;
+  color: #fff !important;
+}
+
+/* ------------------------------------------------------------------------
+   History parity surfaces
+   --------------------------------------------------------------------- */
+html[data-theme="dark"] body :is(.page-history,.history-page) :is(
+  .history-hero,
+  .history-filters,
+  .history-list-card,
+  .history-row,
+  .history-empty,
+  .history-modal-card,
+  .history-detail-item,
+  .history-json,
+  .history-filter-card,
+  .history-choice-button,
+  .history-choice-menu,
+  .history-confirm-card,
+  .history-confirm-field,
+  .history-final-card,
+  .creator-profile-window
+) {
+  background: #11161f !important;
+  border-color: #2b3544 !important;
+  color: #f8fafc !important;
+}
+
+html[data-theme="dark"] body :is(.page-history,.history-page) :is(.history-choice-option:hover, .history-choice-option.is-selected) {
+  background: #202835 !important;
+  color: #fff !important;
+}
+
+/* ------------------------------------------------------------------------
+   Backup parity surfaces
+   --------------------------------------------------------------------- */
+html[data-theme="dark"] body.page-backup :is(
+  .backup-hero,
+  .backup-list-card,
+  .backup-folder-card,
+  .backup-page-folder-card,
+  .backup-table-card,
+  .backup-modal-card
+) {
+  background: #11161f !important;
+  border-color: #2b3544 !important;
+  color: #f8fafc !important;
+}

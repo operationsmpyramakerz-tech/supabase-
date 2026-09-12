@@ -178,6 +178,7 @@ export default function AppShell({
       <link rel="stylesheet" href="/css/ui-redesign.css?v=sidebar-page-label-frame-v3" />
       <link rel="stylesheet" href="/css/page-canvas-fix.css?v=page-canvas-single-layer-v3" />
       {classicStyles.map((href) => <link rel="stylesheet" href={href} key={href} />)}
+      <link rel="stylesheet" href="/next/css/dark-mode.css?v=theme-v1" />
       <BodyClassSync className={combinedBodyClass} />
       <ClassicChromeAccessSync account={account} />
       <ClassicSidebarBootstrap />
