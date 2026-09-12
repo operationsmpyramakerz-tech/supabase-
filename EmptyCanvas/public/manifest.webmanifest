@@ -3,7 +3,7 @@
   "name": "Operations Hub",
   "short_name": "Operations",
   "description": "Operations Hub internal ERP web application.",
-  "start_url": "/next/pwa-start",
+  "start_url": "/next/home",
   "scope": "/",
   "display": "standalone",
   "display_override": [

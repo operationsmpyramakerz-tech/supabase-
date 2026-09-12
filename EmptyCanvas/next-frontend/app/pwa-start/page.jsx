@@ -1,12 +1,18 @@
-import PwaStartClient from "../../components/pwa/PwaStartClient";
+import { redirect } from "next/navigation";
+import { fetchLegacyJson } from "../../lib/legacy-api";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = {
-  title: "Opening Operations Hub",
-  description: "Launch the installed Operations Hub application.",
-};
+// Keep this route as a compatibility entry point for already-installed PWA
+// versions whose saved start_url still points at /next/pwa-start. Do not render
+// an intermediate launcher/splash screen: resolve the session on the server and
+// send the user straight to the correct destination.
+export default async function PwaStartPage() {
+  const accountResponse = await fetchLegacyJson("/api/account", { timeoutMs: 7000 });
 
-export default function PwaStartPage() {
-  return <PwaStartClient />;
+  if (accountResponse.ok && accountResponse.data) {
+    redirect("/home");
+  }
+
+  redirect("/login");
 }

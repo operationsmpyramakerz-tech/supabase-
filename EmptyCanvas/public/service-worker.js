@@ -1,6 +1,6 @@
 // Operations Hub PWA Service Worker
 // Bump this value whenever we change static assets so old deployments don't stay cached.
-const CACHE_NAME = "ops-cache-next-pwa-v19";
+const CACHE_NAME = "ops-cache-next-pwa-v20";
 
 const PRECACHE_URLS = [
   "/pwa-start.html",
@@ -100,7 +100,12 @@ self.addEventListener("fetch", (event) => {
 
   // Shared runtime behavior changes frequently and must not wait for a second
   // page load before the new deployment is used.
-  if (url.pathname === "/js/common-ui.js" || url.pathname === "/js/direct-storage-upload.js") {
+  if (
+    url.pathname === "/js/common-ui.js" ||
+    url.pathname === "/js/direct-storage-upload.js" ||
+    url.pathname === "/manifest.webmanifest" ||
+    url.pathname === "/manifest.json"
+  ) {
     event.respondWith(networkFirstStatic(req));
     return;
   }
