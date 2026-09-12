@@ -16728,7 +16728,10 @@ body.operations-orders-page .next-classic-orders-parity .next-operations-order-c
   }
 
   body.next-classic-shell-active .classic-app-shell > .sidebar:not(.mobile-dock-structured-host) .sidebar-nav > .nav-list > li:first-child + li {
-    margin-left: 12px !important;
+    /* Match the structured dock first-icon inset exactly:
+       pages rail begins after Home + 18px, then the first page icon sits 14px
+       inside it. The flex gap already contributes 10px, so only 4px is needed. */
+    margin-left: 4px !important;
   }
 
   body.next-classic-shell-active .classic-app-shell > .sidebar:not(.mobile-dock-structured-host) .nav-label {
@@ -17316,7 +17319,8 @@ body.operations-orders-page .next-classic-orders-parity .next-operations-order-c
   }
 
   .classic-app-shell > .sidebar.next-stable-loading-sidebar:not(.mobile-dock-structured-host) > .sidebar-nav > .nav-list > li:first-child + li {
-    margin-left: 12px !important;
+    /* Keep server-rendered loading geometry identical to the hydrated dock. */
+    margin-left: 4px !important;
   }
 
   /* ---------- Structured loading DOM (after hydration) ---------- */
