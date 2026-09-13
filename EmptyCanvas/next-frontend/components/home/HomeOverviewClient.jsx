@@ -355,7 +355,7 @@ function GlobalAnalysisControl({ users = [], usersReady = false, selectedUser = 
   const [open, setOpen] = useState(false);
   const [openSelect, setOpenSelect] = useState("");
   const [availableUsers, setAvailableUsers] = useState(users);
-  const [usersLoaded, setUsersLoaded] = useState(usersReady || users.length > 0);
+  const [usersLoaded, setUsersLoaded] = useState(usersReady);
   const [usersLoading, setUsersLoading] = useState(false);
   const [isPending, startTransition] = useTransition();
   const close = () => {
@@ -365,13 +365,15 @@ function GlobalAnalysisControl({ users = [], usersReady = false, selectedUser = 
   useOutsideClose(ref, close);
 
   useEffect(() => {
-    if (usersReady || users.length) {
+    if (users.length) {
       setAvailableUsers(users);
-      setUsersLoaded(true);
-      try {
-        window.sessionStorage.setItem("erp-home-analysis-users-v1", JSON.stringify(users));
-      } catch {}
-      return;
+      if (usersReady) {
+        setUsersLoaded(true);
+        try {
+          window.sessionStorage.setItem("erp-home-analysis-users-v1", JSON.stringify(users));
+        } catch {}
+        return;
+      }
     }
 
     try {

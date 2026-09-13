@@ -26,6 +26,7 @@ const {
   getDiagnostics: getDirectStorageDiagnostics,
 } = require("./directStorage");
 const { createNextFrontendProxy, getNextFrontendDiagnostics } = require("./nextFrontendProxy");
+const { buildHomeOverview, itemMatchesUser: homeItemMatchesUser } = require("./homeOverview");
 
 // B2C formulas are evaluated through a local, dependency-free parser with a
 // closed grammar and function allow-list. This avoids executing user input as
@@ -5186,6 +5187,42 @@ async function _sbCurrentOrdersPayload(req, { forceFresh = false } = {}) {
     .sort((a, b) => new Date(b?.createdTime || 0) - new Date(a?.createdTime || 0));
 }
 
+async function _sbCurrentOrdersHomeSummaryPayload(req, { forceFresh = false } = {}) {
+  const username = String(req?.session?.username || "").trim();
+  const cacheKey = `cache:api:orders:current-home-summary:supabase:v1:${normKey(username || "all")}`;
+  const load = async () => {
+    let rows;
+    try {
+      rows = await _sbSelectOrdersRows({
+        approvedOnly: false,
+        memberName: username,
+        select: _SB_OPERATIONS_SUMMARY_SELECT,
+      });
+    } catch (error) {
+      console.warn("[home] current orders summary projection unavailable; using compatibility query:", error?.message || error);
+      rows = await _sbSelectOrdersRows({ approvedOnly: false, memberName: username });
+    }
+    return (rows || []).map(_sbSerializeOperationsSummaryRow);
+  };
+
+  const summaryRows = forceFresh
+    ? await (async () => {
+        await cacheDel(cacheKey);
+        const fresh = await load();
+        _memSet(cacheKey, fresh, 60);
+        await _redisSet(cacheKey, fresh, 60);
+        return fresh;
+      })()
+    : await cacheGetOrSet(cacheKey, 60, load);
+
+  const recent = _trimRecentOrdersForRequest(req);
+  const ids = new Set((summaryRows || []).map((order) => String(order?.id || "")));
+  const extras = recent.filter((row) => !ids.has(String(row?.id || "")));
+  return (summaryRows || [])
+    .concat(extras)
+    .sort((a, b) => new Date(b?.createdTime || 0) - new Date(a?.createdTime || 0));
+}
+
 async function _sbUpdateOrdersByIds(orderIds = [], patch = {}) {
   const ids = (Array.isArray(orderIds) ? orderIds : [])
     .map((x) => String(x || "").trim())
@@ -5373,7 +5410,10 @@ async function _sbInvalidateOrdersCaches(req = null) {
     "cache:api:orders:current:supabase:v1:all",
   ];
   const username = String(req?.session?.username || "").trim();
-  if (username) keys.push(`cache:api:orders:current:supabase:v1:${normKey(username)}`);
+  if (username) {
+    keys.push(`cache:api:orders:current:supabase:v1:${normKey(username)}`);
+    keys.push(`cache:api:orders:current-home-summary:supabase:v1:${normKey(username)}`);
+  }
   await Promise.all(Array.from(new Set(keys)).map((key) => cacheDel(key)));
 }
 
@@ -25340,35 +25380,155 @@ async function _pageBootstrapNotifications(req) {
   return Promise.all(loaders);
 }
 
-async function _pageBootstrapHome(req) {
-  const loaders = [
-    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapAccountPayload(req)),
-    // Load the analysis directory with the rest of Home so the Users dropdown
-    // is ready immediately instead of starting a slow request when it is opened.
-    _pageBootstrapLoad('/api/home/analysis-users', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/home/analysis-users')),
-  ];
+async function _homeCurrentStockRows(req) {
+  if (!_sbStocktakingEnabled()) return [];
+  const rows = await _sbStocktakingRows();
+  const selection = await _sbStocktakingSelectionForRequest(req, rows);
+  return (rows || [])
+    .map((row) => _sbSerializeStocktakingRow(row, selection.quantityColumn))
+    .filter((item) => Number(item.quantity) !== 0);
+}
 
-  if (_pageBootstrapHasPageAccess(req, 'Current Orders')) {
-    loaders.push(_pageBootstrapLoad('/api/orders', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/orders')));
+async function _homeSelectedStockRows(memberId) {
+  if (!_sbTeamMembersEnabled() || !_sbStocktakingEnabled()) return [];
+  const member = await _sbFindTeamMemberById(String(memberId || "").trim());
+  if (!member) return [];
+  const name = _sbString(_sbValueForLabel(member, "Name")) || "Unnamed";
+  const stocktakingColumn = _sbStocktakingText(_sbValueForLabel(member, "School"));
+  if (!stocktakingColumn) return [];
+  const rows = await _sbStocktakingRows();
+  const resolvedColumn = _sbDetectStocktakingQuantityColumn((rows || [])[0] || {}, stocktakingColumn);
+  if (!resolvedColumn) return [];
+  return rows
+    .map((row) => ({ ..._sbSerializeStocktakingRow(row, resolvedColumn), userName: name }))
+    .filter((item) => Number(item.quantity) !== 0);
+}
+
+async function _homeSelectedExpenseItems(memberId) {
+  if (!_sbExpensesEnabled()) return [];
+  const rows = await _sbSelectExpensesRows();
+  return _sbExpenseRowsForMemberId(rows, String(memberId || "").trim()).map(_sbSerializeExpenseRow);
+}
+
+async function _homeOverviewPayload(req) {
+  const requestedUserId = String(req.query?.analysisUser || "all").trim() || "all";
+  const requestedDuration = String(req.query?.analysisDuration || "all").trim().toLowerCase();
+  const duration = ["all", "week", "month", "year"].includes(requestedDuration) ? requestedDuration : "all";
+
+  const showCurrent = _pageBootstrapHasPageAccess(req, 'Current Orders');
+  const showReview = _pageBootstrapHasPageAccess(req, 'Orders Review');
+  const showOperations = _pageBootstrapHasPageAccess(req, 'Requested Orders') || _pageBootstrapHasPageAccess(req, 'Operations Orders');
+  const showMaintenance = _pageBootstrapHasPageAccess(req, 'Maintenance Orders');
+  const showStock = _pageBootstrapHasPageAccess(req, 'Stocktaking');
+  const showExpenses = _pageBootstrapHasPageAccess(req, 'Expenses');
+  const needsOrderOverview = showCurrent || showReview || showOperations || showMaintenance;
+
+  let selectedUser = null;
+  if (requestedUserId !== "all") {
+    if (_sbTeamMembersEnabled()) {
+      const users = await _sbHomeAnalysisUsers();
+      selectedUser = users.find((user) => String(user.id) === requestedUserId) || { id: requestedUserId };
+    } else {
+      selectedUser = { id: requestedUserId };
+    }
   }
-  if (_pageBootstrapHasPageAccess(req, 'Requested Orders') || _pageBootstrapHasPageAccess(req, 'Operations Orders') || _pageBootstrapHasPageAccess(req, 'Maintenance Orders')) {
-    loaders.push(_pageBootstrapLoad('/api/orders/requested?mode=summary', 15_000, () =>
-      _sbOrdersEnabled()
+
+  const selectedRowsPromise = selectedUser && needsOrderOverview
+    ? (_sbOrdersEnabled()
+        ? _sbRequestedOrdersSummaryPayload({ includeAllSystem: true })
+        : _pageBootstrapFetchExistingRoute(req, '/api/orders/requested?scope=all-system&mode=summary', 20_000))
+    : Promise.resolve(null);
+
+  const currentPromise = showCurrent
+    ? (_sbOrdersEnabled()
+        ? _sbCurrentOrdersHomeSummaryPayload(req)
+        : _pageBootstrapFetchExistingRoute(req, '/api/orders', 20_000))
+    : Promise.resolve([]);
+
+  const requestedPromise = (!selectedUser && (showOperations || showMaintenance))
+    ? (_sbOrdersEnabled()
         ? _sbRequestedOrdersSummaryPayload({ includeAllSystem: false })
-        : _pageBootstrapFetchExistingRoute(req, '/api/orders/requested')
-    ));
-  }
-  if (_pageBootstrapHasPageAccess(req, 'Orders Review')) {
-    loaders.push(_pageBootstrapLoad('/api/sv-orders?tab=all', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/sv-orders?tab=all')));
-  }
-  if (_pageBootstrapHasPageAccess(req, 'Stocktaking')) {
-    loaders.push(_pageBootstrapLoad('/api/stock', 20_000, () => _pageBootstrapFetchExistingRoute(req, '/api/stock')));
-  }
-  if (_pageBootstrapHasPageAccess(req, 'Expenses')) {
-    loaders.push(_pageBootstrapLoad('/api/expenses', 20_000, () => _pageBootstrapFetchExistingRoute(req, '/api/expenses')));
-  }
+        : _pageBootstrapFetchExistingRoute(req, '/api/orders/requested?mode=summary', 20_000))
+    : Promise.resolve([]);
 
-  return Promise.all(loaders);
+  const reviewPromise = (!selectedUser && showReview)
+    ? (_sbOrdersEnabled()
+        ? _sbSVOrdersHomeSummaryList(req)
+        : _pageBootstrapFetchExistingRoute(req, '/api/sv-orders?tab=all', 20_000))
+    : Promise.resolve([]);
+
+  const stockPromise = showStock
+    ? (selectedUser
+        ? (_sbStocktakingEnabled()
+            ? _homeSelectedStockRows(requestedUserId)
+            : _pageBootstrapFetchExistingRoute(req, `/api/home/stocktaking-users/${encodeURIComponent(requestedUserId)}`, 20_000).then((body) => Array.isArray(body?.items) ? body.items : []))
+        : (_sbStocktakingEnabled()
+            ? _homeCurrentStockRows(req)
+            : _pageBootstrapFetchExistingRoute(req, '/api/stock', 20_000)))
+    : Promise.resolve([]);
+
+  const expensesPromise = showExpenses
+    ? (selectedUser
+        ? (_sbExpensesEnabled()
+            ? _homeSelectedExpenseItems(requestedUserId)
+            : _pageBootstrapFetchExistingRoute(req, `/api/home/analysis-users/${encodeURIComponent(requestedUserId)}/expenses`, 20_000).then((body) => Array.isArray(body?.items) ? body.items : []))
+        : (_sbExpensesEnabled()
+            ? _sbSelectExpensesForCurrentUser(req).then(({ rows }) => (rows || []).map(_sbSerializeExpenseRow))
+            : _pageBootstrapFetchExistingRoute(req, '/api/expenses', 20_000).then((body) => Array.isArray(body?.items) ? body.items : [])))
+    : Promise.resolve([]);
+
+  const [currentRows, requestedRows, reviewRows, stockRows, expenseItems, selectedSystemRows] = await Promise.all([
+    currentPromise,
+    requestedPromise,
+    reviewPromise,
+    stockPromise,
+    expensesPromise,
+    selectedRowsPromise,
+  ]);
+
+  const overview = buildHomeOverview({
+    currentRows: Array.isArray(currentRows) ? currentRows : [],
+    reviewRows: Array.isArray(reviewRows) ? reviewRows : [],
+    requestedRows: Array.isArray(requestedRows) ? requestedRows : [],
+    selectedSystemRows: Array.isArray(selectedSystemRows)
+      ? selectedSystemRows.filter((row) => homeItemMatchesUser(row, selectedUser))
+      : null,
+    selectedUser,
+    duration,
+    stockRows: Array.isArray(stockRows) ? stockRows : [],
+    expenseItems: Array.isArray(expenseItems) ? expenseItems : [],
+  });
+
+  return {
+    ...overview,
+    selectedUser: selectedUser && selectedUser.id ? {
+      id: String(selectedUser.id),
+      name: selectedUser.name || selectedUser.username || String(selectedUser.id),
+      username: selectedUser.username || selectedUser.name || "",
+    } : null,
+    selectedUserId: requestedUserId,
+    selectedDuration: duration,
+    showCurrent,
+    showReview,
+    showOperations,
+    showMaintenance,
+    showStock,
+    showExpenses,
+  };
+}
+
+async function _pageBootstrapHome(req) {
+  const query = new URLSearchParams();
+  const analysisUser = String(req.query?.analysisUser || "").trim();
+  const analysisDuration = String(req.query?.analysisDuration || "").trim();
+  if (analysisUser && analysisUser !== "all") query.set("analysisUser", analysisUser);
+  if (analysisDuration && analysisDuration !== "all") query.set("analysisDuration", analysisDuration);
+  const overviewUrl = `/api/home/overview${query.toString() ? `?${query.toString()}` : ""}`;
+
+  return Promise.all([
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapAccountPayload(req)),
+    _pageBootstrapLoad(overviewUrl, 10_000, () => _homeOverviewPayload(req)),
+  ]);
 }
 
 function _pageBootstrapHasPageAccess(req, pageName) {
@@ -35185,6 +35345,7 @@ async function clearSVOrdersRouteCaches(req) {
         keys.push(cacheDel(`cache:api:sv-orders:${usernameKey}:${tab}:${version}`));
       }
     }
+    keys.push(cacheDel(`cache:api:sv-orders-home-summary:${usernameKey}:v1`));
     await Promise.all(keys);
   } catch (e) {
     console.warn("clearSVOrdersRouteCaches failed:", e?.message || e);
@@ -35422,6 +35583,33 @@ async function _sbSVOrdersList(req, label = "Not Started") {
     return norm(_sbSVApprovalLabel(_sbOrderGet(row, ["sv_approval", "S.V Approval", "SV Approval"]))) === wanted;
   });
   return _sbEnrichOrderGrouping(filtered.map(_sbSerializeSVOrderRow));
+}
+
+async function _sbSVOrdersHomeSummaryList(req) {
+  const usernameKey = cacheKeySafe(req?.session?.username || "");
+  const cacheKey = `cache:api:sv-orders-home-summary:${usernameKey}:v1`;
+  return await cacheGetOrSet(cacheKey, 30, async () => {
+    const visible = await _sbVisibleSVInfo(req);
+    if (!visible.ids.length && !visible.names.length) return [];
+
+    let rows;
+    try {
+      rows = await _sbSelectOrdersRows({ approvedOnly: false, select: _SB_OPERATIONS_SUMMARY_SELECT });
+    } catch (error) {
+      console.warn("[home] orders review summary projection unavailable; using compatibility query:", error?.message || error);
+      rows = await _sbSelectOrdersRows({ approvedOnly: false });
+    }
+
+    return (rows || [])
+      .filter((row) => {
+        if (!_sbOrderVisibleToSV(row, visible)) return false;
+        const issueDescription = _sbOrderText(_sbOrderGet(row, ["issue_description", "Issue Description"]));
+        if (/^created from proposal:/i.test(issueDescription)) return false;
+        const statusKey = norm(_sbOrderGet(row, ["status", "Status"]));
+        return !/archive|archived/.test(statusKey);
+      })
+      .map(_sbSerializeOperationsSummaryRow);
+  });
 }
 
 async function _sbSVOrderRowIfAllowed(req, id) {
