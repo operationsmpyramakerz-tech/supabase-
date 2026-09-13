@@ -318,6 +318,37 @@ function QuantityEditor({ item, busy, onSave, onCancel }) {
   </form>;
 }
 
+function ReviewDetailsLoadState({ group, loading, error, onRetry, onClose }) {
+  useEffect(() => {
+    if (!group) return undefined;
+    const onKey = (event) => { if (event.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    document.body.classList.add("co-modal-open");
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.classList.remove("co-modal-open");
+    };
+  }, [group, onClose]);
+  if (!group) return null;
+  return <div className="co-modal-overlay is-open" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <div className="co-modal-dialog next-review-order-modal" role="dialog" aria-modal="true" aria-label={`${group.orderIdLabel} review details`}>
+      <button type="button" className="co-modal-close" onClick={onClose} aria-label="Close order details" />
+      <div className="co-modal-header"><div className="co-modal-head-left"><div className="co-modal-status">Order review</div></div></div>
+      <div className="next-review-order-modal-summary" aria-label="Review order summary">
+        <div><span>Order</span><strong>{group.orderIdLabel}</strong></div>
+        <div><span>Date</span><strong>{formatDate(group.latestCreated)}</strong></div>
+        <div><span>Components</span><strong>{group.items.length}</strong></div>
+      </div>
+      <div className="co-modal-body">
+        <div className={`creator-profile-state ${error ? "creator-profile-state--error" : ""}`}>
+          <span>{error || (loading ? "Loading order details..." : "Preparing order details...")}</span>
+          {error ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={onRetry}>Try again</button> : null}
+        </div>
+      </div>
+    </div>
+  </div>;
+}
+
 function ReviewDetailsModal({ group, activeTab, busyIds, onClose, onQuantitySave, onDecision, onBulkDecision, onPasswordAction, onReason, onExport }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const [editingQty, setEditingQty] = useState("");
@@ -592,6 +623,9 @@ export default function OrdersReviewClient({ initialOrders = [], bootstrapWarnin
   const [editorBusy, setEditorBusy] = useState(false);
   const [reasonView, setReasonView] = useState("");
   const [creatorState, setCreatorState] = useState(null);
+  const [detailGroups, setDetailGroups] = useState(() => new Map());
+  const [detailLoadingKey, setDetailLoadingKey] = useState("");
+  const [detailError, setDetailError] = useState("");
   const creatorProfileCache = useRef(new Map());
 
   useClassicHeaderSearch(query, setQuery, "Search by reason or item...");
@@ -634,7 +668,8 @@ export default function OrdersReviewClient({ initialOrders = [], bootstrapWarnin
   }, [creatorState]);
 
   const allGroups = useMemo(() => buildGroups(orders), [orders]);
-  const selected = useMemo(() => allGroups.find((group) => group.key === selectedKey) || null, [allGroups, selectedKey]);
+  const selectedSummary = useMemo(() => allGroups.find((group) => group.key === selectedKey) || null, [allGroups, selectedKey]);
+  const selected = selectedKey ? (detailGroups.get(selectedKey) || null) : null;
   const statusRows = useMemo(() => {
     if (tab === "all") return orders.filter((item) => !isArchived(item));
     if (tab === "archive") return orders.filter(isArchived);
@@ -664,16 +699,74 @@ export default function OrdersReviewClient({ initialOrders = [], bootstrapWarnin
     setNotice(message);
     window.setTimeout(() => setNotice(""), 3500);
   }
+  function closeReviewDetails() {
+    setSelectedKey("");
+    setDetailLoadingKey("");
+    setDetailError("");
+  }
+  function patchDetailItem(id, patch) {
+    const targetId = text(id);
+    if (!targetId) return;
+    setDetailGroups((current) => {
+      let changed = false;
+      const next = new Map(current);
+      for (const [key, group] of next.entries()) {
+        if (!(group?.items || []).some((item) => text(item?.id) === targetId)) continue;
+        const items = group.items.map((item) => text(item?.id) === targetId ? { ...item, ...patch } : item);
+        const rebuilt = buildGroups(items)[0];
+        if (rebuilt) next.set(key, { ...rebuilt, key });
+        changed = true;
+      }
+      return changed ? next : current;
+    });
+  }
+  async function openReviewDetails(group, { force = false } = {}) {
+    if (!group?.key) return;
+    setSelectedKey(group.key);
+    setDetailError("");
+    if (!force && detailGroups.has(group.key)) return;
+    setDetailLoadingKey(group.key);
+    try {
+      const response = await fetch("/api/sv-orders/details", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        cache: "no-store",
+        body: JSON.stringify({ orderIds: group.orderIds || [] }),
+      });
+      if (response.status === 401) {
+        window.location.href = "/login?next=/next/orders-review";
+        return;
+      }
+      const data = await readJson(response);
+      if (!response.ok) throw new Error(data?.error || "Failed to load order details.");
+      const rows = Array.isArray(data) ? data : (Array.isArray(data?.items) ? data.items : []);
+      const groups = buildGroups(rows);
+      const detail = groups.find((candidate) => candidate.key === group.key) || groups[0] || null;
+      if (!detail) throw new Error("No order details were returned.");
+      setDetailGroups((current) => {
+        const next = new Map(current);
+        next.set(group.key, { ...detail, key: group.key });
+        return next;
+      });
+    } catch (error) {
+      setDetailError(error?.message || "Order details could not be loaded.");
+    } finally {
+      setDetailLoadingKey((current) => current === group.key ? "" : current);
+    }
+  }
   async function refreshOrders() {
     const [activeResponse, archiveResponse] = await Promise.all([
-      fetch("/api/sv-orders?tab=all", { credentials: "include", cache: "no-store" }),
-      fetch("/api/sv-orders?tab=archive", { credentials: "include", cache: "no-store" }),
+      fetch("/api/sv-orders?tab=all&mode=summary", { credentials: "include", cache: "no-store" }),
+      fetch("/api/sv-orders?tab=archive&mode=summary", { credentials: "include", cache: "no-store" }),
     ]);
     if (activeResponse.status === 401 || archiveResponse.status === 401) { window.location.href = "/login?next=/next/orders-review"; return; }
     const [activeData, archiveData] = await Promise.all([readJson(activeResponse), readJson(archiveResponse)]);
     if (!activeResponse.ok) throw new Error(activeData?.error || "Failed to refresh review orders.");
     if (!archiveResponse.ok) throw new Error(archiveData?.error || "Failed to refresh archived review orders.");
     setOrders([...(Array.isArray(activeData) ? activeData : []), ...(Array.isArray(archiveData) ? archiveData : [])]);
+    setDetailGroups(new Map());
+    setDetailError("");
   }
   async function updateDecision(item, decision, rejectedReason = "") {
     const id = text(item?.id);
@@ -683,7 +776,9 @@ export default function OrdersReviewClient({ initialOrders = [], bootstrapWarnin
       const response = await fetch(`/api/sv-orders/${encodeURIComponent(id)}/approval`, { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ decision, rejectedReason }) });
       const data = await readJson(response);
       if (!response.ok) throw new Error(data?.error || "Failed to update approval.");
-      setOrders((current) => current.map((row) => text(row?.id) === id ? { ...row, approval: normalizeApproval(decision), rejectedReason: normalizeApproval(decision) === "Rejected" ? text(rejectedReason) : "", status: data?.status || row?.status } : row));
+      const patch = { approval: normalizeApproval(decision), rejectedReason: normalizeApproval(decision) === "Rejected" ? text(rejectedReason) : "", status: data?.status };
+      setOrders((current) => current.map((row) => text(row?.id) === id ? { ...row, ...patch, status: data?.status || row?.status } : row));
+      patchDetailItem(id, { ...patch, status: data?.status || item?.status });
       showNotice(`Component marked as ${normalizeApproval(decision)}.`);
     } finally {
       setBusyIds((current) => { const next = new Set(current); next.delete(id); return next; });
@@ -719,7 +814,9 @@ export default function OrdersReviewClient({ initialOrders = [], bootstrapWarnin
       const response = await fetch(`/api/sv-orders/${encodeURIComponent(id)}/quantity`, { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ value: number }) });
       const data = await readJson(response);
       if (!response.ok) throw new Error(data?.error || "Failed to update quantity.");
-      setOrders((current) => current.map((row) => text(row?.id) === id ? { ...row, quantityEdited: data?.cleared ? null : finite(data?.value, number) } : row));
+      const quantityEdited = data?.cleared ? null : finite(data?.value, number);
+      setOrders((current) => current.map((row) => text(row?.id) === id ? { ...row, quantityEdited } : row));
+      patchDetailItem(id, { quantityEdited });
       showNotice("Quantity updated.");
     } catch (error) { showNotice(error?.message || "Quantity could not be updated."); } finally { setBusyIds((current) => { const next = new Set(current); next.delete(id); return next; }); }
   }
@@ -745,7 +842,7 @@ export default function OrdersReviewClient({ initialOrders = [], bootstrapWarnin
       const data = await readJson(response);
       if (response.status === 401) throw new Error("The verified password is no longer valid.");
       if (!response.ok) throw new Error(data?.error || "Review decisions could not be updated.");
-      await refreshOrders(); setEditorState(null); showNotice("Review decisions updated.");
+      await refreshOrders(); setEditorState(null); setSelectedKey(""); showNotice("Review decisions updated.");
     } catch (error) { setEditorError(error?.message || "Review decisions could not be updated."); } finally { setEditorBusy(false); }
   }
   async function openCreatorProfile(anchor, group) {
@@ -819,9 +916,10 @@ export default function OrdersReviewClient({ initialOrders = [], bootstrapWarnin
       </div>
     </div>
 
-    <section className="orders-review-list-surface" id="sv-orders"><div className="co-cards" id="sv-list">{visibleGroups.length ? visibleGroups.map((group) => <OrderReviewCard group={group} activeTab={tab} onOpen={(value) => setSelectedKey(value.key)} onCreator={openCreatorProfile} key={group.key}/>) : <div className="ops-no-data-state" role="status" aria-live="polite"><img className="ops-no-data-state__image" src="/next/images/no-data-illustration.png" alt="" loading="lazy"/><div className="ops-no-data-state__text">Sorry, No data available</div></div>}</div></section>
+    <section className="orders-review-list-surface" id="sv-orders"><div className="co-cards" id="sv-list">{visibleGroups.length ? visibleGroups.map((group) => <OrderReviewCard group={group} activeTab={tab} onOpen={openReviewDetails} onCreator={openCreatorProfile} key={group.key}/>) : <div className="ops-no-data-state" role="status" aria-live="polite"><img className="ops-no-data-state__image" src="/next/images/no-data-illustration.png" alt="" loading="lazy"/><div className="ops-no-data-state__text">Sorry, No data available</div></div>}</div></section>
 
-    <ReviewDetailsModal group={selected} activeTab={tab} busyIds={busyIds} onClose={() => setSelectedKey("")} onQuantitySave={saveQuantity} onDecision={beginDecision} onBulkDecision={beginBulkDecision} onPasswordAction={beginPasswordAction} onReason={setReasonView} onExport={exportOrder}/>
+    {selectedKey && !selected ? <ReviewDetailsLoadState group={selectedSummary} loading={detailLoadingKey === selectedKey} error={detailError} onRetry={() => selectedSummary && openReviewDetails(selectedSummary, { force: true })} onClose={closeReviewDetails}/> : null}
+    <ReviewDetailsModal group={selected} activeTab={tab} busyIds={busyIds} onClose={closeReviewDetails} onQuantitySave={saveQuantity} onDecision={beginDecision} onBulkDecision={beginBulkDecision} onPasswordAction={beginPasswordAction} onReason={setReasonView} onExport={exportOrder}/>
     <PasswordModal state={passwordState} busy={passwordBusy} error={passwordError} onCancel={() => { if (!passwordBusy) { setPasswordState(null); setPasswordError(""); } }} onSubmit={submitPasswordAction}/>
     <RejectionModal state={rejectionState} busy={rejectionBusy} error={rejectionError} onCancel={() => { if (!rejectionBusy) { setRejectionState(null); setRejectionError(""); } }} onSubmit={submitRejection}/>
     <ReviewEditorModal state={editorState} busy={editorBusy} error={editorError} onCancel={() => { if (!editorBusy) { setEditorState(null); setEditorError(""); } }} onSubmit={submitReviewEditor}/>

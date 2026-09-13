@@ -25175,6 +25175,17 @@ async function _pageBootstrapOrderTracking(req, groupId) {
 }
 
 async function _pageBootstrapOrdersReview(req) {
+  if (_sbOrdersEnabled()) {
+    // Load the lightweight review list once, then split active/archive from the
+    // same cached payload. Full component details are fetched only when a user
+    // opens an order.
+    const summaryPromise = _sbSVOrdersSummaryBuckets(req);
+    return Promise.all([
+      _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapAccountPayload(req)),
+      _pageBootstrapLoad('/api/sv-orders?tab=all', 20_000, async () => (await summaryPromise).active || []),
+      _pageBootstrapLoad('/api/sv-orders?tab=archive', 20_000, async () => (await summaryPromise).archive || []),
+    ]);
+  }
   return Promise.all([
     _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapAccountPayload(req)),
     _pageBootstrapLoad('/api/sv-orders?tab=all', 20_000, () => _pageBootstrapFetchExistingRoute(req, '/api/sv-orders?tab=all', 20_000)),
@@ -35345,6 +35356,7 @@ async function clearSVOrdersRouteCaches(req) {
         keys.push(cacheDel(`cache:api:sv-orders:${usernameKey}:${tab}:${version}`));
       }
     }
+    keys.push(cacheDel(`cache:api:sv-orders-summary:${usernameKey}:v1`));
     keys.push(cacheDel(`cache:api:sv-orders-home-summary:${usernameKey}:v1`));
     await Promise.all(keys);
   } catch (e) {
@@ -35585,6 +35597,110 @@ async function _sbSVOrdersList(req, label = "Not Started") {
   return _sbEnrichOrderGrouping(filtered.map(_sbSerializeSVOrderRow));
 }
 
+const _SB_SV_REVIEW_SUMMARY_SELECT = [
+  "id",
+  "reason",
+  "order_number",
+  "order_type",
+  "notion_created_time",
+  "product_name",
+  "unit_price",
+  "quantity_requested",
+  "quantity_progress",
+  "quantity_edited_by_supervisor",
+  "status",
+  "issue_description",
+  "sv_approval",
+  "rejected_reason",
+  "operations_approval",
+  "team_member_id",
+  "team_member_name",
+].join(",");
+
+function _sbSVSummaryRow(row = {}) {
+  return { ..._sbSerializeSVOrderRow(row), summaryOnly: true };
+}
+
+async function _sbSVOrdersSummaryBuckets(req, { forceFresh = false } = {}) {
+  const usernameKey = cacheKeySafe(req?.session?.username || "");
+  const cacheKey = `cache:api:sv-orders-summary:${usernameKey}:v1`;
+  const load = async () => {
+    const visible = await _sbVisibleSVInfo(req);
+    if (!visible.ids.length && !visible.names.length) return { active: [], archive: [] };
+
+    let rows;
+    try {
+      rows = await _sbSelectOrdersRows({ approvedOnly: false, select: _SB_SV_REVIEW_SUMMARY_SELECT });
+    } catch (error) {
+      console.warn("[orders-review] summary projection unavailable; using compatibility query:", error?.message || error);
+      rows = await _sbSelectOrdersRows({ approvedOnly: false });
+    }
+
+    const active = [];
+    const archive = [];
+    for (const row of rows || []) {
+      if (!_sbOrderVisibleToSV(row, visible)) continue;
+      // Proposal-generated orders are pre-approved at creation time and skip the
+      // Orders Review stage entirely. Keep them in Current/Operations Orders only.
+      const issueDescription = _sbOrderText(_sbOrderGet(row, ["issue_description", "Issue Description"]));
+      if (/^created from proposal:/i.test(issueDescription)) continue;
+      const serialized = _sbSVSummaryRow(row);
+      const statusKey = norm(_sbOrderGet(row, ["status", "Status"]));
+      if (/archive|archived/.test(statusKey)) archive.push(serialized);
+      else active.push(serialized);
+    }
+    return { active, archive };
+  };
+
+  if (forceFresh) {
+    await cacheDel(cacheKey);
+    const fresh = await load();
+    _memSet(cacheKey, fresh, 30);
+    await _redisSet(cacheKey, fresh, 30);
+    return fresh;
+  }
+  return await cacheGetOrSet(cacheKey, 30, load);
+}
+
+async function _sbSVOrdersSummaryPayload(req, label = null, options = {}) {
+  const buckets = await _sbSVOrdersSummaryBuckets(req, options);
+  if (String(label || "") === "__archive__") return buckets.archive || [];
+  const active = Array.isArray(buckets.active) ? buckets.active : [];
+  if (!label) return active;
+  const wanted = norm(label);
+  return active.filter((row) => norm(_sbSVApprovalLabel(row?.approval ?? row?.svApproval)) === wanted);
+}
+
+async function _sbSVOrderDetailsByIds(req, orderIds = []) {
+  const ids = Array.from(new Set((Array.isArray(orderIds) ? orderIds : [])
+    .map((id) => String(id || "").trim())
+    .filter(Boolean)))
+    .slice(0, 500);
+  if (!ids.length) return [];
+
+  const rows = await supabaseDb.selectByIds(_sbOrdersTable(), ids, {
+    idColumn: "id",
+    select: "*",
+    order: "notion_created_time.desc,id.desc",
+    limit: Math.max(500, ids.length),
+  });
+  const visible = await _sbVisibleSVInfo(req);
+  if (!visible.ids.length && !visible.names.length) return [];
+
+  const allowed = (Array.isArray(rows) ? rows : []).filter((row) => {
+    if (!_sbOrderVisibleToSV(row, visible)) return false;
+    const issueDescription = _sbOrderText(_sbOrderGet(row, ["issue_description", "Issue Description"]));
+    return !/^created from proposal:/i.test(issueDescription);
+  });
+  const allowedIds = new Set(allowed.map((row) => String(_sbOrderGet(row, ["id", "ID"]) ?? "").trim()).filter(Boolean));
+  if (ids.some((id) => !allowedIds.has(id))) {
+    const error = new Error("One or more order components are not available for this reviewer.");
+    error.status = 403;
+    throw error;
+  }
+  return await _sbEnrichOrderGrouping(allowed.map(_sbSerializeSVOrderRow));
+}
+
 async function _sbSVOrdersHomeSummaryList(req) {
   const usernameKey = cacheKeySafe(req?.session?.username || "");
   const cacheKey = `cache:api:sv-orders-home-summary:${usernameKey}:v1`;
@@ -35770,6 +35886,23 @@ app.post("/api/sv-orders/:id/quantity", requireAuth, requirePage("Orders Review"
   }
 });
 
+// ====== API: lazily load full details for one Orders Review group ======
+app.post("/api/sv-orders/details", requireAuth, requirePage("Orders Review"), async (req, res) => {
+  try {
+    if (!_sbOrdersEnabled()) return res.status(400).json({ error: "Lazy review details require Supabase orders." });
+    const ids = (Array.isArray(req.body?.orderIds) ? req.body.orderIds : [])
+      .map((id) => String(id || "").trim())
+      .filter(Boolean);
+    if (!ids.length) return res.status(400).json({ error: "orderIds required" });
+    const items = await _sbSVOrderDetailsByIds(req, ids);
+    res.set("Cache-Control", "no-store");
+    return res.json(items);
+  } catch (error) {
+    console.error("POST /api/sv-orders/details error:", error?.details || error);
+    return res.status(error?.status || 500).json({ error: error?.message || "Failed to load order review details" });
+  }
+});
+
 // ====== API: list S.V orders (optionally filtered by tab) ======
 app.get("/api/sv-orders", requireAuth, requirePage("Orders Review"), async (req, res) => {
   try {
@@ -35784,6 +35917,13 @@ app.get("/api/sv-orders", requireAuth, requirePage("Orders Review"), async (req,
     else if (tab === "rejected") label = "Rejected";
     else if (tab === "not-started" || tab === "not started") label = "Not Started";
     else if (!tab) label = "Not Started"; // backward compatible default
+
+    const summaryOnly = String(req.query.mode || "").trim().toLowerCase() === "summary";
+    if (_sbOrdersEnabled() && summaryOnly) {
+      const items = await _sbSVOrdersSummaryPayload(req, label);
+      res.set("Cache-Control", "no-store");
+      return res.json(items);
+    }
 
     const cacheTabKey = label === "__archive__" ? "archive" : (label ? String(label).toLowerCase().replace(/\s+/g, "-") : "all");
     const usernameKey = cacheKeySafe(req?.session?.username || "");
