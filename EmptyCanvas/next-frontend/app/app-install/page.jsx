@@ -21,7 +21,7 @@ export default async function AppInstallPage() {
           <h1>The App Install center could not load</h1>
           <p>{accountResponse.error || accountResponse.data?.error || "The current ERP API is temporarily unavailable."}</p>
           <div className="actions">
-            <a className="primary-button" href="/pwa-start?classic=1">Open classic app launcher</a>
+            <a className="primary-button" href="/next/app-install">Try again</a>
             <a className="secondary-button" href="/next/home">Return to Home</a>
           </div>
         </section>
@@ -35,7 +35,6 @@ export default async function AppInstallPage() {
       title="Install Operations Hub"
       eyebrow="Progressive Web App and device installation"
       activePath="/next/app-install"
-      classicHrefOverride="/pwa-start?classic=1"
     >
       <AppInstallClient initialLinks={linksResponse.ok ? (linksResponse.data || {}) : {}} />
     </AppShell>

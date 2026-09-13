@@ -177,9 +177,9 @@ app.use(express.text({ type: ['text/csv', 'application/csv', 'application/vnd.ms
 
 // Canonicalize direct requests for legacy HTML documents before express.static
 // can serve them. All browser workspaces now have route-level authentication
-// and a Next.js replacement, while ?classic=1 remains available through the
-// canonical route. This closes the old `/home.html`-style bypass without
-// deleting the classic files that are still used by the rollback renderer.
+// and a Next.js replacement. Direct .html requests are canonicalized before
+// static files can bypass route-level authentication. Legacy files remain on
+// disk temporarily only while their shared assets are migrated.
 const LEGACY_HTML_ROUTE_ALIASES = Object.freeze({
   'index.html': '/',
   'login.html': '/login',
@@ -36375,7 +36375,7 @@ app.get(
       const nextFrontendEnabled = envEnabled(process.env.ENABLE_NEXT_FRONTEND);
       const configuredCutover = String(process.env.ENABLE_NEXT_ROUTE_CUTOVER || "").trim();
       const nextRouteCutoverEnabled = configuredCutover ? envEnabled(configuredCutover) : nextFrontendEnabled;
-      if (nextRouteCutoverEnabled && !envEnabled(req.query?.classic)) {
+      if (nextRouteCutoverEnabled) {
         const params = new URLSearchParams();
         const ids = String(req.query?.ids || "").trim();
         if (ids) params.set("ids", ids);

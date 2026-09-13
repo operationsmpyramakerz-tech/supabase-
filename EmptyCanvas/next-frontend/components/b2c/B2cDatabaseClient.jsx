@@ -226,7 +226,7 @@ export default function B2cDatabaseClient({ initialPayload, bootstrapWarnings = 
   return (
     <main className="b2c-shell next-b2c-classic-library">
       <Toast toast={toast} onClose={() => setToast(null)} />
-      {bootstrapWarnings.length ? <div className="next-b2c-classic-warning"><strong>Some B2C resources did not finish loading.</strong><span>Refresh this page or use the Classic interface while the service recovers.</span><a href="/b2c/database?classic=1">Classic Database</a></div> : null}
+      {bootstrapWarnings.length ? <div className="next-b2c-classic-warning"><strong>Some B2C resources did not finish loading.</strong><span>Refresh this page while the service recovers.</span></div> : null}
       <section className="b2c-library-workspace" aria-labelledby="b2cDatabaseTitle">
         <div className="b2c-library-workspace__head">
           <div><span className="b2c-eyebrow">B2C data workspace</span><h2 id="b2cDatabaseTitle">Your databases</h2><p>Create independent customer data tables. Every table keeps its own properties, records, forms, and record-ID sequence.</p></div>

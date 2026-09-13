@@ -6,9 +6,9 @@ import { fetchLegacyJson } from "../../../lib/legacy-api";
 export const dynamic = "force-dynamic";
 
 const VIEW_MAP = {
-  "all-tasks": { key: "all", title: "All Tasks", classic: "/task-management/all-tasks?classic=1" },
-  "my-tasks": { key: "my", title: "My Tasks", classic: "/task-management/my-tasks?classic=1" },
-  "delegated-tasks": { key: "delegated", title: "Delegated Tasks", classic: "/task-management/delegated-tasks?classic=1" },
+  "all-tasks": { key: "all", title: "All Tasks" },
+  "my-tasks": { key: "my", title: "My Tasks" },
+  "delegated-tasks": { key: "delegated", title: "Delegated Tasks" },
 };
 
 function resourceMap(bundle) {
@@ -71,7 +71,7 @@ export default async function TaskManagementViewPage({ params }) {
           <h1>The new Task Management page could not load</h1>
           <p>{response.error || response.data?.error || "The current ERP API is temporarily unavailable."}</p>
           <div className="actions">
-            <a className="primary-button" href={config.classic}>Open classic Task Management</a>
+            <a className="primary-button" href={`/next/task-management/${resolvedParams.view}`}>Try again</a>
             <a className="secondary-button" href="/next/home">Return to Home</a>
           </div>
         </section>
@@ -103,7 +103,6 @@ export default async function TaskManagementViewPage({ params }) {
         initialMeta={meta || { ok: true, view: config.key, departments: [], currentUser: {}, accessLevel: "view" }}
         initialTickets={Array.isArray(list?.tickets) ? list.tickets : []}
         availableViews={allowedViews(account)}
-        classicHref={config.classic}
         bootstrapWarnings={response.data.omitted || []}
       />
       </AppShell>

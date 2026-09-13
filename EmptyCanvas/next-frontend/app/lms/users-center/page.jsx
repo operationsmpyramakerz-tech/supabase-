@@ -58,7 +58,7 @@ export default async function LmsUsersCenterPage({ searchParams }) {
           <h1>The new LMS Users Center could not load</h1>
           <p>{response.error || response.data?.error || "The current ERP API is temporarily unavailable."}</p>
           <div className="actions">
-            <a className="primary-button" href="/lms/user-access?classic=1">Open classic Users Center</a>
+            <a className="primary-button" href="/next/lms/users-center">Try again</a>
             <a className="secondary-button" href="/next/lms">Return to LMS</a>
           </div>
         </section>
@@ -89,7 +89,6 @@ export default async function LmsUsersCenterPage({ searchParams }) {
       title="LMS Users Center"
       eyebrow="Learning teams and structures"
       activePath="/next/lms/users-center"
-      classicHrefOverride="/lms/user-access"
       lmsAccess={getResource(resources, "/api/lms/session-access", { ok: true, pages: [] })}
     >
       <LmsUsersCenterClient

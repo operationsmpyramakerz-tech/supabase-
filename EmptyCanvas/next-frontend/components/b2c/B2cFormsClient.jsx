@@ -634,7 +634,6 @@ export default function B2cFormsClient({ account, initialPayload, initialSelecte
         <div className="next-b2c-classic-warning" role="status">
           <strong>Some B2C resources did not finish loading.</strong>
           <span>Refresh this page or use the Classic interface while the service recovers.</span>
-          <a href="/b2c/form?classic=1">Classic Forms</a>
         </div>
       ) : null}
 

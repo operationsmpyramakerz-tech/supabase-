@@ -48,7 +48,7 @@ export default async function LmsCurriculumPage({ searchParams }) {
           <h1>The new LMS Curriculum page could not load</h1>
           <p>{response.error || response.data?.error || "The current ERP API is temporarily unavailable."}</p>
           <div className="actions">
-            <a className="primary-button" href="/lms/curriculum?classic=1">Open classic Curriculum</a>
+            <a className="primary-button" href="/next/lms/curriculum">Try again</a>
             <a className="secondary-button" href="/next/lms">Return to LMS</a>
           </div>
         </section>
@@ -69,7 +69,6 @@ export default async function LmsCurriculumPage({ searchParams }) {
       title="LMS Curriculum"
       eyebrow="Themes, grades, and protected learning resources"
       activePath="/next/lms/curriculum"
-      classicHrefOverride="/lms/curriculum"
       lmsAccess={access}
     >
       <LmsCurriculumClient

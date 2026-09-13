@@ -52,7 +52,7 @@ export default async function LmsSchoolWorkspacePage({ params }) {
           <h1>The school workspace could not load</h1>
           <p>{response.error || response.data?.error || "The ERP API is temporarily unavailable."}</p>
           <div className="actions">
-            <a className="primary-button" href={`/lms/b2b/school/${encodeURIComponent(schoolId)}?classic=1`}>Open classic workspace</a>
+            <a className="primary-button" href={`/next/lms/schools/${encodeURIComponent(schoolId)}`}>Try again</a>
             <a className="secondary-button" href="/next/lms/schools">Return to Schools</a>
           </div>
         </section>
@@ -69,7 +69,7 @@ export default async function LmsSchoolWorkspacePage({ params }) {
 
   if (!school) {
     return (
-      <AppShell account={account} title="LMS School" eyebrow="School operations" activePath={`/next/lms/schools/${schoolId}`} classicHrefOverride={`/lms/b2b/school/${encodeURIComponent(schoolId)}`} lmsAccess={access}>
+      <AppShell account={account} title="LMS School" eyebrow="School operations" activePath={`/next/lms/schools/${schoolId}`} lmsAccess={access}>
         <main className="standalone-state">
           <section className="state-card">
             <span className="status-dot warning" />
@@ -88,7 +88,6 @@ export default async function LmsSchoolWorkspacePage({ params }) {
       title={school?.name || school?.fields?.school_name || "LMS School"}
       eyebrow="School operations and stocktaking"
       activePath={`/next/lms/schools/${schoolId}`}
-      classicHrefOverride={`/lms/b2b/school/${encodeURIComponent(schoolId)}`}
       lmsAccess={access}
     >
       <LmsSchoolWorkspaceClient

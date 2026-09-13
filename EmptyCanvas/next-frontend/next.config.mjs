@@ -37,11 +37,11 @@ const nextConfig = {
 
   // The production pilot is deployed as a separate Vercel project. The Next
   // browser code intentionally keeps using the existing same-origin /api URLs
-  // so cookies, uploads, downloads, and legacy fallbacks continue to behave as
+  // so cookies, uploads, downloads, and shared root-level assets continue to behave as
   // they did in the Express application. A fallback rewrite turns requests
   // that do not belong to the Next app into a reverse proxy to the existing ERP.
   //
-  // `basePath: false` is important here: /api, /images, /home?classic=1, etc.
+  // `basePath: false` is important here: /api and shared root-level static assets
   // live at the deployment root while the Next application itself lives under
   // /next. Next filesystem/pages are evaluated before this fallback, therefore
   // /next/* stays inside this project.

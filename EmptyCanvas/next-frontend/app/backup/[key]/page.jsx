@@ -54,7 +54,6 @@ export default async function BackupTablePage({ params, searchParams }) {
       title={initialTable.pageName || "Database Table"}
       eyebrow="Database table"
       activePath="/next/backup"
-      classicHrefOverride="/backup"
       bodyClass="page-backup page-backup-table"
       classicStyles={["/css/backup.css?v=database-page-folders-v1"]}
     >

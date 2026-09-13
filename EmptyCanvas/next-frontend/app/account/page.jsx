@@ -18,7 +18,7 @@ export default async function AccountPage() {
           <h1>The new Account page could not load</h1>
           <p>{response.error || response.data?.error || "The current ERP API is temporarily unavailable."}</p>
           <div className="actions">
-            <a className="primary-button" href="/account?classic=1">Open classic Account</a>
+            <a className="primary-button" href="/next/account">Try again</a>
             <a className="secondary-button" href="/next/home">Return to Home</a>
           </div>
         </section>
@@ -32,7 +32,6 @@ export default async function AccountPage() {
       title="User Profile"
       eyebrow="Profile, security and personal workspace"
       activePath="/next/account"
-      classicHrefOverride="/account"
       bodyClass="page-account"
       classicStyles={["/css/account-classic-inline.css?v=next-stage-2o-account"]}
     >

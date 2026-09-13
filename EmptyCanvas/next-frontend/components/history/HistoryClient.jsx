@@ -674,7 +674,6 @@ export default function HistoryClient({ account, initialRows, bootstrapWarnings 
           <div className="next-history-hero-tags"><span>{text(account?.name || account?.username) || "Current user"}</span><span>Up to 1,000 recent records</span>{bootstrapWarnings.length ? <span>{bootstrapWarnings.length} bootstrap warning{bootstrapWarnings.length === 1 ? "" : "s"}</span> : null}</div>
         </div>
         <div className="next-history-hero-actions">
-          <a href="/history?classic=1">Classic History</a>
           <button type="button" className="danger" onClick={() => setShowClear(true)}>Clear all</button>
         </div>
       </section>

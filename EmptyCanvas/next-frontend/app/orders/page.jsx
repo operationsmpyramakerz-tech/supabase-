@@ -16,7 +16,7 @@ function UnavailableState({ message, forbidden = false }) {
         <h1>{forbidden ? "Current Orders is not available" : "The new Current Orders page could not load"}</h1>
         <p>{message}</p>
         <div className="actions">
-          {!forbidden ? <a className="primary-button" href="/orders?classic=1">Open classic Current Orders</a> : null}
+          {!forbidden ? <a className="primary-button" href="/next/orders">Try again</a> : null}
           <a className={forbidden ? "primary-button" : "secondary-button"} href="/next/home">Return to Home</a>
         </div>
       </section>

@@ -1114,7 +1114,6 @@ export default function ShoppingCartClient({
           <div className="dashboard-notice">
             <strong>Partial initial data</strong>
             <span>One Shopping Cart resource was not available.</span>
-            <a href="/orders/new?classic=1">Classic page</a>
           </div>
         ) : null}
         <TypeSelection orderTypes={orderTypes} onChoose={chooseType} />
@@ -1137,7 +1136,6 @@ export default function ShoppingCartClient({
         <div className="dashboard-notice">
           <strong>Partial initial data</strong>
           <span>One Shopping Cart resource was not available.</span>
-          <a href="/orders/new?classic=1">Classic page</a>
         </div>
       ) : null}
 

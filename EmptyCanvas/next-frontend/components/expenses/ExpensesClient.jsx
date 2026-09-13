@@ -1114,7 +1114,7 @@ export default function ExpensesClient({ account, initialPayload = {}, initialTy
 
   return (
     <>
-      {bootstrapWarnings.length ? <div className="dashboard-notice" role="status"><strong>Some expense options could not refresh.</strong><span>The loaded transactions remain available, and the Classic page can still be opened as a fallback.</span><a href="/expenses?classic=1">Open classic Expenses</a></div> : null}
+      {bootstrapWarnings.length ? <div className="dashboard-notice" role="status"><strong>Some expense options could not refresh.</strong><span>The loaded transactions remain available while the missing options recover.</span></div> : null}
       {toast ? <div className={`next-toast next-toast--${toast.type}`} role="status"><span>{toast.type === "success" ? "✓" : toast.type === "error" ? "!" : "i"}</span><strong>{toast.message}</strong><button onClick={() => setToast(null)}>×</button></div> : null}
 
       <div className="expenses-layout expenses-dashboard next-expenses-classic-parity">

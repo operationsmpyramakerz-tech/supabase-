@@ -1288,7 +1288,7 @@ function RejectedInfoModal({ reason, onClose }) {
   return <div className="tm-overlay tm-overlay--top" role="dialog" aria-modal="true"><div className="tm-overlay__backdrop" onClick={onClose} /><section className="tm-dialog tm-dialog--rejected-info"><div className="tm-dialog__top"><div><span className="tm-eyebrow">Rejected task</span><h2>Rejected reason</h2></div><button type="button" className="tm-icon-btn" onClick={onClose}><FeatherIcon name="x" /></button></div><div className="tm-rejected-info__message">{reason}</div><div className="tm-dialog__actions"><button type="button" className="tm-btn tm-btn--primary" onClick={onClose}>Close</button></div></section></div>;
 }
 
-export default function TaskManagementClient({ view, initialMeta, initialTickets, availableViews, classicHref, account = {}, bootstrapWarnings = [] }) {
+export default function TaskManagementClient({ view, initialMeta, initialTickets, availableViews, account = {}, bootstrapWarnings = [] }) {
   const [tickets, setTickets] = useState(Array.isArray(initialTickets) ? initialTickets : []);
   const [meta, setMeta] = useState(initialMeta || {});
   const [status, setStatus] = useState("all");

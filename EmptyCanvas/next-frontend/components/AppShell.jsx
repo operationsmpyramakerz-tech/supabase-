@@ -17,30 +17,30 @@ import {
 } from "./ClassicShellControls";
 
 const MODULE_LINKS = [
-  { label: "Notifications", href: "/next/notifications", classicHref: "/home", permissions: [], alwaysVisible: true },
-  { label: "How it works", href: "/next/how-it-works", classicHref: "/how-it-works", permissions: [], alwaysVisible: true },
-  { label: "Current Orders", href: "/next/orders", classicHref: "/orders", permissions: ["Current Orders"] },
-  { label: "Orders Review", href: "/next/orders-review", classicHref: "/orders/sv-orders", permissions: ["Orders Review"] },
-  { label: "Operations Orders", href: "/next/operations-orders", classicHref: "/orders/requested", permissions: ["Requested Orders", "Operations Orders"] },
-  { label: "Maintenance Orders", href: "/next/maintenance-orders", classicHref: "/orders/maintenance-orders", permissions: ["Maintenance Orders"] },
-  { label: "Shopping Cart", href: "/next/orders/new", classicHref: "/orders/new", permissions: ["Create New Order", "Shopping Cart", "Cart", "/orders/new"] },
-  { label: "Stocktaking", href: "/next/stocktaking", classicHref: "/stocktaking", permissions: ["Stocktaking"] },
-  { label: "Events", href: "/next/events", classicHref: "/events", permissions: ["Event Requests"] },
-  { label: "New Event Request", href: "/next/events/new", classicHref: "/events/new", permissions: ["Event Requests"] },
-  { label: "Event Calendar", href: "/next/events-calendar", classicHref: "/events/calendar", permissions: ["Event Calendar"] },
-  { label: "Event Components", href: "/next/event-components", classicHref: "/events/components", permissions: ["Event Components"] },
-  { label: "Products", href: "/next/products", classicHref: "/products", permissions: ["Products"] },
-  { label: "Proposals", href: "/next/proposals", classicHref: "/proposals", permissions: ["Proposals", "Products"] },
-  { label: "Kits", href: "/next/kits", classicHref: "/kits", permissions: ["Kits", "Proposals", "Products"] },
-  { label: "B2C Database", href: "/next/b2c/database", classicHref: "/b2c/database", permissions: ["B2C", "Customer Database", "B2C Customer Database", "/b2c/database"] },
-  { label: "B2C Forms", href: "/next/b2c/forms", classicHref: "/b2c/form", permissions: ["B2C", "Customer Form", "B2C Customer Form", "Customer Database", "B2C Customer Database", "/b2c/form"] },
-  { label: "Task Management", href: "/next/task-management", classicHref: "/task-management", permissions: ["All Tasks", "My Tasks", "Delegated Tasks", "Task Management", "/task-management", "/task-management/all-tasks", "/task-management/my-tasks", "/task-management/delegated-tasks"] },
-  { label: "Expenses", href: "/next/expenses", classicHref: "/expenses", permissions: ["Expenses"] },
-  { label: "Expenses Users", href: "/next/expenses/users", classicHref: "/expenses/users", permissions: ["Expenses Users"] },
-  { label: "KPIs", href: "/next/kpis", classicHref: "/kpis", permissions: ["KPIs"] },
-  { label: "Users Center", href: "/next/users-center", classicHref: "/user-access", permissions: ["Users Center", "User Access & Data", "User Access and Data", "User Access", "Team Members"] },
-  { label: "System History", href: "/next/history", classicHref: "/history", permissions: ["History", "System History", "Audit History", "Audit Log", "System Audit", "/history"] },
-  { label: "Database Backup", href: "/next/backup", classicHref: "/backup", permissions: ["Backup", "Back Up", "Database", "System Database", "System Backup", "Data Backup", "/backup"] },
+  { label: "Notifications", href: "/next/notifications", permissions: [], alwaysVisible: true },
+  { label: "How it works", href: "/next/how-it-works", permissions: [], alwaysVisible: true },
+  { label: "Current Orders", href: "/next/orders", permissions: ["Current Orders"] },
+  { label: "Orders Review", href: "/next/orders-review", permissions: ["Orders Review"] },
+  { label: "Operations Orders", href: "/next/operations-orders", permissions: ["Requested Orders", "Operations Orders"] },
+  { label: "Maintenance Orders", href: "/next/maintenance-orders", permissions: ["Maintenance Orders"] },
+  { label: "Shopping Cart", href: "/next/orders/new", permissions: ["Create New Order", "Shopping Cart", "Cart", "/orders/new"] },
+  { label: "Stocktaking", href: "/next/stocktaking", permissions: ["Stocktaking"] },
+  { label: "Events", href: "/next/events", permissions: ["Event Requests"] },
+  { label: "New Event Request", href: "/next/events/new", permissions: ["Event Requests"] },
+  { label: "Event Calendar", href: "/next/events-calendar", permissions: ["Event Calendar"] },
+  { label: "Event Components", href: "/next/event-components", permissions: ["Event Components"] },
+  { label: "Products", href: "/next/products", permissions: ["Products"] },
+  { label: "Proposals", href: "/next/proposals", permissions: ["Proposals", "Products"] },
+  { label: "Kits", href: "/next/kits", permissions: ["Kits", "Proposals", "Products"] },
+  { label: "B2C Database", href: "/next/b2c/database", permissions: ["B2C", "Customer Database", "B2C Customer Database", "/b2c/database"] },
+  { label: "B2C Forms", href: "/next/b2c/forms", permissions: ["B2C", "Customer Form", "B2C Customer Form", "Customer Database", "B2C Customer Database", "/b2c/form"] },
+  { label: "Task Management", href: "/next/task-management", permissions: ["All Tasks", "My Tasks", "Delegated Tasks", "Task Management", "/task-management", "/task-management/all-tasks", "/task-management/my-tasks", "/task-management/delegated-tasks"] },
+  { label: "Expenses", href: "/next/expenses", permissions: ["Expenses"] },
+  { label: "Expenses Users", href: "/next/expenses/users", permissions: ["Expenses Users"] },
+  { label: "KPIs", href: "/next/kpis", permissions: ["KPIs"] },
+  { label: "Users Center", href: "/next/users-center", permissions: ["Users Center", "User Access & Data", "User Access and Data", "User Access", "Team Members"] },
+  { label: "System History", href: "/next/history", permissions: ["History", "System History", "Audit History", "Audit Log", "System Audit", "/history"] },
+  { label: "Database Backup", href: "/next/backup", permissions: ["Backup", "Back Up", "Database", "System Database", "System Backup", "Data Backup", "/backup"] },
 ];
 
 // Matches the final Classic Operations Hub sidebar order.  System History,
@@ -89,15 +89,6 @@ function toNextClientHref(value) {
   return raw;
 }
 
-function withClassicFlag(value) {
-  const raw = String(value || "").trim() || "/home";
-  const hashIndex = raw.indexOf("#");
-  const beforeHash = hashIndex >= 0 ? raw.slice(0, hashIndex) : raw;
-  const hash = hashIndex >= 0 ? raw.slice(hashIndex) : "";
-  if (/(?:\?|&)classic=(?:1|true|yes|on)(?:&|$)/i.test(beforeHash)) return raw;
-  const separator = beforeHash.includes("?") ? "&" : "?";
-  return `${beforeHash}${separator}classic=1${hash}`;
-}
 
 export function isActive(activePath, href) {
   const current = String(activePath || "").replace(/\/$/, "") || "/";
@@ -158,13 +149,10 @@ export default function AppShell({
   title = "Home",
   eyebrow = "Incremental frontend migration",
   activePath = "/next/home",
-  classicHrefOverride = "",
   bodyClass = "",
   classicStyles = [],
 }) {
   const allowedPages = Array.isArray(account?.allowedPages) ? account.allowedPages : [];
-  const activeLink = MODULE_LINKS.find((link) => isActive(activePath, link.href));
-  const classicHref = withClassicFlag(classicHrefOverride || activeLink?.classicHref || "/home");
   const systemCoverUrl = String(account?.coverPhotoUrl || account?.coverPhoto || "").trim();
   const systemCoverStyle = systemCoverUrl
     ? { "--ops-system-cover-image": `url(${JSON.stringify(systemCoverUrl)})` }

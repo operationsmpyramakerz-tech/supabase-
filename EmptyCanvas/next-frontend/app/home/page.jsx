@@ -284,7 +284,7 @@ export default async function HomePage({ searchParams }) {
   const response = await fetchLegacyJson("/api/page-bootstrap?scope=home", { timeoutMs: 25000 });
   if (response.status === 401 || response.status === 403) redirect("/login?next=/next/home");
   if (!response.ok || !response.data?.ok) {
-    return <main className="standalone-state"><section className="state-card"><span className="status-dot warning" /><h1>The new Home could not load</h1><p>{response.error || response.data?.error || "The current ERP API is temporarily unavailable."}</p><a className="primary-button" href="/home?classic=1">Open classic Home</a></section></main>;
+    return <main className="standalone-state"><section className="state-card"><span className="status-dot warning" /><h1>The new Home could not load</h1><p>{response.error || response.data?.error || "The current ERP API is temporarily unavailable."}</p><a className="primary-button" href="/next/home">Try again</a></section></main>;
   }
 
   const resources = resourceMap(response.data);

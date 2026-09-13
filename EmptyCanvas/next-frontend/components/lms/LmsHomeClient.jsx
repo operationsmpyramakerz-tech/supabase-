@@ -150,8 +150,7 @@ export default function LmsHomeClient({ initialOverview, access, omitted = [] })
       {omitted.length ? (
         <div className="dashboard-notice" role="status">
           <strong>Some LMS data could not refresh.</strong>
-          <span>The available sections are shown below; the classic LMS remains available.</span>
-          <a href="/lms?classic=1">Open classic LMS</a>
+          <span>The available sections are shown below. Use Refresh data to retry the missing resources.</span>
         </div>
       ) : null}
 
@@ -162,7 +161,6 @@ export default function LmsHomeClient({ initialOverview, access, omitted = [] })
           <p>Live visibility across schools, learning teams, curriculum structures, and published resources.</p>
         </div>
         <div className="next-lms-hero-actions">
-          <a href="/lms?classic=1">Classic LMS</a>
           <button type="button" onClick={refresh} disabled={loading}>{loading ? "Refreshing…" : "Refresh data"}</button>
         </div>
       </section>

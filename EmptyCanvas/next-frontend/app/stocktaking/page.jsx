@@ -29,7 +29,7 @@ function UnavailableState({ message, forbidden = false }) {
         <h1>{forbidden ? "Stocktaking is not available" : "The new Stocktaking page could not load"}</h1>
         <p>{message}</p>
         <div className="actions">
-          {!forbidden ? <a className="primary-button" href="/stocktaking?classic=1">Open classic Stocktaking</a> : null}
+          {!forbidden ? <a className="primary-button" href="/next/stocktaking">Try again</a> : null}
           <a className={forbidden ? "primary-button" : "secondary-button"} href="/next/home">Return to Home</a>
         </div>
       </section>
@@ -82,7 +82,6 @@ export default async function StocktakingPage() {
       title="Stocktaking"
       eyebrow="Live inventory overview"
       activePath="/next/stocktaking"
-      classicHrefOverride="/stocktaking"
       bodyClass="stocktaking-page"
     >
       <StocktakingClient initialColumns={columns} />

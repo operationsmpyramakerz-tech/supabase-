@@ -473,7 +473,7 @@ export default function B2cTableWorkspaceClient({ databaseId, initialPayload, bo
   return (
     <main className="b2c-shell next-b2c-table-classic-page">
       <Toast toast={toast} onClose={() => setToast(null)} />
-      {bootstrapWarnings.length ? <div className="next-b2c-classic-warning"><strong>Some workspace resources were delayed.</strong><span>Refresh the table or use the Classic workspace while the service recovers.</span><a href={`/b2c/database/${encodeURIComponent(databaseId)}?classic=1`}>Classic workspace</a></div> : null}
+      {bootstrapWarnings.length ? <div className="next-b2c-classic-warning"><strong>Some workspace resources were delayed.</strong><span>Refresh the table while the service recovers.</span></div> : null}
 
       <section className="b2c-table-workspace" aria-label={database?.name || "B2C Table"}>
         <div className="b2c-table-view-head b2c-table-view-head--compact">

@@ -436,7 +436,6 @@ export default function HowItWorksClient({ account }) {
           <div className="next-sop-hero-actions">
             <a href="/next/home" className="primary-button"><GuideIcon name="home" size={15} /> Open Home</a>
             <a href="/next/account" className="secondary-button"><GuideIcon name="user" size={15} /> My Account</a>
-            <a href="/how-it-works?classic=1" className="secondary-button"><GuideIcon name="external" size={15} /> Classic guide</a>
           </div>
         </div>
         <div className="next-sop-kpis" aria-label="Guide summary">

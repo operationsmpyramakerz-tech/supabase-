@@ -564,7 +564,7 @@ export default function ExpensesUsersClient({ initialUsersPayload, bootstrapWarn
   };
 
   return <>
-    {bootstrapWarnings.length ? <div className="dashboard-notice" role="status"><strong>Some expense-user data was delayed.</strong><span>The loaded balances remain available and can be refreshed automatically when a user is opened.</span><a href="/expenses/users?classic=1">Open classic Expenses Users</a></div> : null}
+    {bootstrapWarnings.length ? <div className="dashboard-notice" role="status"><strong>Some expense-user data was delayed.</strong><span>The loaded balances remain available and can be refreshed automatically when a user is opened.</span></div> : null}
     <main className="expenses-layout next-expense-users-classic-parity">
       <div className="user-tabs">
         {busy ? <div className="loader" /> : users.length ? users.map((user) => {

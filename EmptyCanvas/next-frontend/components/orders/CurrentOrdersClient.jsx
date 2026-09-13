@@ -980,7 +980,7 @@ export default function CurrentOrdersClient({ initialOrders = [], bootstrapWarni
 
   return (
     <section className="next-classic-orders-parity">
-      {bootstrapWarnings.length ? <div className="dashboard-notice"><strong>Partial data</strong><span>One resource was not available during the initial load.</span><a href="/orders?classic=1">Classic page</a></div> : null}
+      {bootstrapWarnings.length ? <div className="dashboard-notice"><strong>Partial data</strong><span>One resource was not available during the initial load.</span></div> : null}
       {notice ? <div className="orders-parity-success" role="status"><ClassicOrderIcon name="check-circle" />{notice}</div> : null}
 
       <div className="next-current-orders-toolbar-wrap">

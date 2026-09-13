@@ -53,7 +53,7 @@ export default async function B2cTableWorkspacePage({ params }) {
           <h1>The B2C table workspace could not load</h1>
           <p>{response.error || response.data?.error || "The ERP API is temporarily unavailable."}</p>
           <div className="actions">
-            <a className="primary-button" href={`/b2c/database/${encodedId}?classic=1`}>Open classic workspace</a>
+            <a className="primary-button" href={`/next/b2c/database/${encodedId}`}>Try again</a>
             <a className="secondary-button" href="/next/b2c/database">Return to Databases</a>
           </div>
         </section>
@@ -74,7 +74,6 @@ export default async function B2cTableWorkspacePage({ params }) {
         title="B2C Table"
         eyebrow="Customer data workspace"
         activePath={`/next/b2c/database/${databaseId}`}
-        classicHrefOverride={`/b2c/database/${encodedId}`}
         bodyClass="b2c-page b2c-table-view-page"
         classicStyles={["/css/b2c.css?v=b2c-formula-calculator-v2"]}
       >
@@ -96,7 +95,6 @@ export default async function B2cTableWorkspacePage({ params }) {
       title="Database"
       eyebrow="B2C customer data"
       activePath={`/next/b2c/database/${databaseId}`}
-      classicHrefOverride={`/b2c/database/${encodedId}`}
       bodyClass="b2c-page b2c-table-view-page"
       classicStyles={["/css/b2c.css?v=b2c-formula-calculator-v2"]}
     >

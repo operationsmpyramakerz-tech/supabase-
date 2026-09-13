@@ -33,7 +33,7 @@ export default async function NotificationsPage() {
           <p>{response.error || response.data?.error || "The current ERP API is temporarily unavailable."}</p>
           <div className="actions">
             <a className="primary-button" href="/next/home">Return to Home</a>
-            <a className="secondary-button" href="/home?classic=1">Open classic Home</a>
+            
           </div>
         </section>
       </main>
@@ -51,7 +51,6 @@ export default async function NotificationsPage() {
       title="Notifications"
       eyebrow="Personal ERP activity and device alerts"
       activePath="/next/notifications"
-      classicHrefOverride="/home"
     >
       <NotificationsClient
         initialItems={Array.isArray(notifications?.items) ? notifications.items : []}

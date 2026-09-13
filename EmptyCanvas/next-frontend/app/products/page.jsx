@@ -40,7 +40,7 @@ export default async function ProductsPage() {
           <h1>The new Products page could not load</h1>
           <p>{gate.error || "The current ERP authentication service is temporarily unavailable."}</p>
           <div className="actions">
-            <a className="primary-button" href="/products?classic=1">Open classic Products</a>
+            <a className="primary-button" href="/next/products">Try again</a>
             <a className="secondary-button" href="/next/home">Return to Home</a>
           </div>
         </section>

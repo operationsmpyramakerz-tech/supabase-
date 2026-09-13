@@ -2252,7 +2252,7 @@ export default function OperationsOrdersClient({ initialOrders = [], bootstrapWa
   return (
     <section className="next-classic-orders-parity next-classic-operations-parity">
       <ActionLoadingModal state={actionLoading} />
-      {bootstrapWarnings.length ? <div className="dashboard-notice"><strong>Partial data</strong><span>One resource was not available during the initial load.</span><a href="/orders/requested?classic=1">Classic page</a></div> : null}
+      {bootstrapWarnings.length ? <div className="dashboard-notice"><strong>Partial data</strong><span>One resource was not available during the initial load.</span></div> : null}
       {notice ? <div className="orders-parity-success" role="status"><ClassicOrderIcon name="check-circle" />{notice}</div> : null}
 
       <div className="next-operations-orders-toolbar-wrap">

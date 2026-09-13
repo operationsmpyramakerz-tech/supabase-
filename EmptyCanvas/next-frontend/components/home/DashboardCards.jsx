@@ -202,8 +202,7 @@ export function DashboardNotice({ omitted = [] }) {
   return (
     <div className="dashboard-notice" role="status">
       <strong>Some dashboard sections could not refresh.</strong>
-      <span>The current interface remains available while these resources recover.</span>
-      <a href="/home?classic=1">Open classic Home</a>
+      <span>The rest of the dashboard remains available while these resources recover.</span>
     </div>
   );
 }

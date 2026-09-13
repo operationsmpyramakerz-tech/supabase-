@@ -29,7 +29,6 @@ export default async function LoginPage({ searchParams }) {
     <LoginClient
       requestedNext={requestedNext}
       backendAvailable={accountResponse.status !== 503}
-      classicLoginHref={`/login?classic=1${query?.next ? `&next=${encodeURIComponent(String(query.next))}` : ""}`}
     />
   );
 }

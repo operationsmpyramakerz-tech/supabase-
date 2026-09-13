@@ -646,7 +646,7 @@ export default function ProductsClient({ initialCatalog = {}, bootstrapWarnings 
 
   return (
     <section className="products-shell next-products-classic-parity">
-      {bootstrapWarnings.length ? <div className="dashboard-notice" role="status"><strong>Some catalogue data may be temporarily unavailable.</strong><span>The classic Products page remains available while the resource recovers.</span><a href="/products?classic=1">Open classic Products</a></div> : null}
+      {bootstrapWarnings.length ? <div className="dashboard-notice" role="status"><strong>Some catalogue data may be temporarily unavailable.</strong><span>The loaded catalogue remains available while the missing resource recovers.</span></div> : null}
 
       <section className="products-filter-panel" aria-label="Product tag filter">
         <div className="products-tag-filter-wrap" ref={filterRef} onClick={(event) => event.stopPropagation()}>

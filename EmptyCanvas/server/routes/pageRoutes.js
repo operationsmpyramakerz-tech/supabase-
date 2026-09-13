@@ -67,10 +67,9 @@ function createPageRouter(options = {}) {
     return envEnabled(process.env.ENABLE_NEXT_FRONTEND);
   }
 
-  // Once all browser workspaces have a Next.js replacement, the classic URLs
-  // can become compatibility entry points. The cutover follows
-  // ENABLE_NEXT_FRONTEND by default, but can be rolled back independently by
-  // setting ENABLE_NEXT_ROUTE_CUTOVER=false in the legacy ERP deployment.
+  // Legacy browser URLs are compatibility entry points only. The cutover follows
+  // ENABLE_NEXT_FRONTEND by default and can only be rolled back at deployment
+  // level with ENABLE_NEXT_ROUTE_CUTOVER=false; there is no browser query bypass.
   function nextRouteCutoverEnabled() {
     const configured = String(process.env.ENABLE_NEXT_ROUTE_CUTOVER || "").trim();
     if (!configured) return nextFrontendEnabled();
@@ -88,46 +87,6 @@ function createPageRouter(options = {}) {
     const original = String(req.originalUrl || "");
     const index = original.indexOf("?");
     return index >= 0 ? original.slice(index) : "";
-  }
-
-  function wantsClassicPage(req) {
-    return envEnabled(req.query?.classic);
-  }
-
-  // Keep the old helper name for the public Login/PWA entry points.
-  function wantsClassicLogin(req) {
-    return wantsClassicPage(req);
-  }
-
-  function sameOriginReferrer(req) {
-    const raw = String(req.get("referer") || req.get("referrer") || "").trim();
-    if (!raw) return null;
-    try {
-      const base = `${req.protocol || "https"}://${req.get("host") || "localhost"}`;
-      const url = new URL(raw, base);
-      if (url.host && req.get("host") && url.host !== req.get("host")) return null;
-      return url;
-    } catch {
-      return null;
-    }
-  }
-
-  function cameFromNextInterface(req) {
-    const referrer = sameOriginReferrer(req);
-    if (!referrer) return false;
-    return referrer.pathname === "/next" || referrer.pathname.startsWith("/next/");
-  }
-
-  function cameFromClassicFallback(req) {
-    const referrer = sameOriginReferrer(req);
-    return !!referrer && envEnabled(referrer.searchParams.get("classic"));
-  }
-
-  function classicRequestUrl(req) {
-    const params = originalQueryParams(req);
-    params.set("classic", "1");
-    const query = params.toString();
-    return `${req.path || "/"}${query ? `?${query}` : ""}`;
   }
 
   function mergedTargetUrl(req, target, { preserveQuery = true, query = {} } = {}) {
@@ -152,34 +111,23 @@ function createPageRouter(options = {}) {
     return `${url.pathname}${queryString ? `?${queryString}` : ""}${url.hash || ""}`;
   }
 
-  function classicRedirectTarget(req, target) {
+  function legacyRedirectTarget(req, target) {
     const url = new URL(String(target || "/home"), "http://operations-hub.local");
     const incoming = originalQueryParams(req);
     incoming.delete("classic");
     for (const [key, value] of incoming.entries()) {
       if (!url.searchParams.has(key)) url.searchParams.append(key, value);
     }
-    if (nextRouteCutoverEnabled() || wantsClassicPage(req)) url.searchParams.set("classic", "1");
     const queryString = url.searchParams.toString();
     return `${url.pathname}${queryString ? `?${queryString}` : ""}`;
   }
 
   /**
-   * Redirect a migrated classic URL to its Next.js replacement.
-   *
-   * `?classic=1` is the durable escape hatch. Existing "Open classic" links
-   * in the Next.js pilot also keep working during the cutover: a request that
-   * originated from /next is normalized to the same URL with ?classic=1.
+   * Redirect a migrated legacy URL to its Next.js replacement. User-facing
+   * rollback query flags are intentionally ignored; rollback is deployment-only.
    */
   function maybeRedirectMigratedRoute(req, res, target, options = {}) {
     if (!nextRouteCutoverEnabled()) return false;
-    if (wantsClassicPage(req)) return false;
-
-    if (cameFromNextInterface(req) || cameFromClassicFallback(req)) {
-      res.redirect(classicRequestUrl(req));
-      return true;
-    }
-
     res.redirect(mergedTargetUrl(req, target, options));
     return true;
   }
@@ -212,13 +160,13 @@ function createPageRouter(options = {}) {
   // Public PWA entry points must remain before all authenticated page routes.
   router.get("/pwa-start", (req, res) => {
     disableBrowserCache(res);
-    if (nextFrontendEnabled() && !wantsClassicLogin(req)) return res.redirect("/next/pwa-start");
+    if (nextFrontendEnabled()) return res.redirect("/next/pwa-start");
     return sendPublicFile(res, "pwa-start.html");
   });
 
   router.get("/pwa-offline", (req, res) => {
     disableBrowserCache(res);
-    if (nextFrontendEnabled() && !wantsClassicLogin(req)) return res.redirect("/next/pwa-offline");
+    if (nextFrontendEnabled()) return res.redirect("/next/pwa-offline");
     return sendPublicFile(res, "pwa-offline.html");
   });
 
@@ -230,7 +178,7 @@ function createPageRouter(options = {}) {
 
   router.get("/login", (req, res) => {
     if (req.session?.authenticated) return res.redirect(nextFrontendEnabled() ? "/next/home" : "/home");
-    if (nextFrontendEnabled() && !wantsClassicLogin(req)) {
+    if (nextFrontendEnabled()) {
       return res.redirect(`/next/login${loginQuerySuffix(req)}`);
     }
     return sendPublicFile(res, "login.html");
@@ -244,7 +192,7 @@ function createPageRouter(options = {}) {
 
   router.get("/dashboard", auth, (req, res) => {
     if (maybeRedirectMigratedRoute(req, res, "/next/home")) return;
-    return res.redirect(wantsClassicPage(req) ? "/home?classic=1" : "/home");
+    return res.redirect("/home");
   });
 
   router.get("/home", auth, (req, res) =>
@@ -295,7 +243,7 @@ function createPageRouter(options = {}) {
 
   // Orders Review was historically registered late in app.js, outside this
   // browser-page router. Keep it here with the rest of the migrated pages so
-  // the production cutover and ?classic=1 rollback behave consistently.
+  // the production cutover behaves consistently.
   router.get("/orders/sv-orders", auth, pageAccess("Orders Review"), (req, res) =>
     serveMigratedPage(req, res, "/next/orders-review", "sv-orders.html"),
   );
@@ -303,7 +251,7 @@ function createPageRouter(options = {}) {
   router.get("/orders/tracking", auth, pageAccess("Current Orders"), (req, res) => {
     // The legacy repository no longer contains order-tracking.html. Keep old
     // bookmarks valid by routing them to the migrated tracker whenever the
-    // Next.js frontend is enabled, even if ?classic=1 was appended manually.
+    // Next.js frontend is enabled; legacy query flags are ignored.
     if (nextFrontendEnabled()) return res.redirect(mergedTargetUrl(req, "/next/orders/tracking"));
     return res.redirect("/orders");
   });
@@ -321,7 +269,7 @@ function createPageRouter(options = {}) {
 
   router.get("/orders/new", auth, pageAccess("Create New Order"), (req, res) => {
     if (maybeRedirectMigratedRoute(req, res, "/next/orders/new")) return;
-    return res.redirect(classicRedirectTarget(req, "/orders/new/products"));
+    return res.redirect(legacyRedirectTarget(req, "/orders/new/products"));
   });
 
   router.get(
@@ -337,7 +285,7 @@ function createPageRouter(options = {}) {
     pageAccess(["Event Calendar", "Event Requests", "Event Components"]),
     (req, res) => {
       if (maybeRedirectMigratedRoute(req, res, nextEventsTarget(req))) return;
-      return res.redirect(classicRedirectTarget(req, preferredEventsRoute(req)));
+      return res.redirect(legacyRedirectTarget(req, preferredEventsRoute(req)));
     },
   );
 
@@ -363,7 +311,7 @@ function createPageRouter(options = {}) {
       // has been granted. The create API still enforces the same authorization.
       if (maybeRedirectMigratedRoute(req, res, "/next/event-components", { query: { create: "1" } })) return;
       if (!canCreateEventComponent(req)) {
-        return res.redirect(classicRedirectTarget(req, "/events/components?adminAuthorization=required"));
+        return res.redirect(legacyRedirectTarget(req, "/events/components?adminAuthorization=required"));
       }
       return sendAppPage(req, res, "events-components-new.html");
     },
@@ -379,7 +327,7 @@ function createPageRouter(options = {}) {
     pageAccess(["Customer Database", "Customer Form", "B2C"]),
     (req, res) => {
       if (maybeRedirectMigratedRoute(req, res, nextB2cTarget(req))) return;
-      return res.redirect(classicRedirectTarget(req, preferredB2cRoute(req)));
+      return res.redirect(legacyRedirectTarget(req, preferredB2cRoute(req)));
     },
   );
 
@@ -417,7 +365,7 @@ function createPageRouter(options = {}) {
     pageAccess(["All Tasks", "My Tasks", "Delegated Tasks", "Task Management"]),
     (req, res) => {
       if (maybeRedirectMigratedRoute(req, res, nextTaskTarget(req))) return;
-      return res.redirect(classicRedirectTarget(req, preferredTaskRoute(req)));
+      return res.redirect(legacyRedirectTarget(req, preferredTaskRoute(req)));
     },
   );
 
@@ -468,12 +416,12 @@ function createPageRouter(options = {}) {
         : {};
     if (maybeRedirectMigratedRoute(req, res, "/next/lms/schools", { query })) return;
     const suffix = req.path.replace(/^\/b2b/, "");
-    return res.redirect(classicRedirectTarget(req, `/lms/b2b${suffix}`));
+    return res.redirect(legacyRedirectTarget(req, `/lms/b2b${suffix}`));
   });
 
   router.get("/b2b/school/:id", auth, (req, res) => {
     if (maybeRedirectMigratedRoute(req, res, `/next/lms/schools/${encodeURIComponent(req.params.id)}`)) return;
-    return res.redirect(classicRedirectTarget(req, `/lms/b2b/school/${encodeURIComponent(req.params.id)}`));
+    return res.redirect(legacyRedirectTarget(req, `/lms/b2b/school/${encodeURIComponent(req.params.id)}`));
   });
 
   router.get("/account", auth, (req, res) =>
@@ -494,7 +442,7 @@ function createPageRouter(options = {}) {
 
   router.get("/notifications", auth, (req, res) => {
     if (maybeRedirectMigratedRoute(req, res, "/next/notifications")) return;
-    return res.redirect(classicRedirectTarget(req, "/home"));
+    return res.redirect(legacyRedirectTarget(req, "/home"));
   });
 
   router.get("/expenses", auth, pageAccess("Expenses"), (req, res) =>

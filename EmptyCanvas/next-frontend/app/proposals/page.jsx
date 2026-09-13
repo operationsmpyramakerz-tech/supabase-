@@ -15,7 +15,7 @@ export default async function ProposalsPage() {
     return <main className="standalone-state"><section className="state-card"><span className="status-dot warning" /><h1>Proposals is not available</h1><p>Your account does not have access to the Proposals or Products module.</p><a className="primary-button" href="/next/home">Return to Home</a></section></main>;
   }
   if (!gate.ok || !gate.account) {
-    return <main className="standalone-state"><section className="state-card"><span className="status-dot warning" /><h1>The new Proposals page could not load</h1><p>{gate.error || "The authentication service is temporarily unavailable."}</p><div className="actions"><a className="primary-button" href="/proposals?classic=1">Open classic Proposals</a><a className="secondary-button" href="/next/home">Return to Home</a></div></section></main>;
+    return <main className="standalone-state"><section className="state-card"><span className="status-dot warning" /><h1>The new Proposals page could not load</h1><p>{gate.error || "The authentication service is temporarily unavailable."}</p><div className="actions"><a className="primary-button" href="/next/proposals">Try again</a><a className="secondary-button" href="/next/home">Return to Home</a></div></section></main>;
   }
 
   const [catalogResult, proposalsResult, kitsResult, kitFoldersResult, membersResult] = await Promise.allSettled([

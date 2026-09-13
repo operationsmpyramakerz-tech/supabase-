@@ -63,7 +63,7 @@ function EyeIcon({ off = false }) {
   return <svg className="icon-eye" width="20" height="20" {...common}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>;
 }
 
-export default function LoginClient({ requestedNext = "/next/home", backendAvailable = true, classicLoginHref = "/login?classic=1" }) {
+export default function LoginClient({ requestedNext = "/next/home", backendAvailable = true }) {
   const [mode, setMode] = useState(MODES.LOGIN);
   const [busy, setBusy] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
