@@ -714,9 +714,11 @@ export default function ShoppingCartClient({
       ) : null}
 
       <div className="classic-cart-type-pill">
-        <button className="classic-cart-back-btn" type="button" onClick={backToTypes} aria-label={editMode ? "Back to Current Orders" : "Back to order types"}>
-          <CartSvgIcon name="arrow-left" size={16}/>
-        </button>
+        {editMode ? (
+          <button className="classic-cart-back-btn" type="button" onClick={backToTypes} aria-label="Back to Current Orders">
+            <CartSvgIcon name="arrow-left" size={16}/>
+          </button>
+        ) : null}
         <span className={`classic-cart-type-value ${typeTheme}`}>
           <span className="classic-cart-type-value-icon"><CartSvgIcon name={meta.icon} size={16}/></span>
           <span>{selectedType}</span>

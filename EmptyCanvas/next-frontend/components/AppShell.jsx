@@ -4,6 +4,7 @@ import UserProfileMenu from "./UserProfileMenu";
 import HeaderSearch from "./HeaderSearch";
 import TaskManagementSidebarFlyout from "./task-management/TaskManagementSidebarFlyout";
 import EventsSidebarFlyout from "./events/EventsSidebarFlyout";
+import ShoppingCartSidebarFlyout from "./orders/ShoppingCartSidebarFlyout";
 import {
   BodyClassSync,
   ClassicChromeAccessSync,
@@ -187,6 +188,7 @@ export default function AppShell({
       <ClassicSidebarActiveIndicator />
       <TaskManagementSidebarFlyout allowedPages={allowedPages} activePath={activePath} />
       <EventsSidebarFlyout allowedPages={allowedPages} activePath={activePath} />
+      <ShoppingCartSidebarFlyout allowedPages={allowedPages} activePath={activePath} />
 
       <div className="app-container classic-app-shell">
         <aside className="sidebar">
