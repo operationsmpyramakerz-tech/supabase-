@@ -1856,6 +1856,7 @@ export default function OperationsOrdersClient({ initialOrders = [], bootstrapWa
   const [creatorState, setCreatorState] = useState(null);
   const [maintenanceOptions, setMaintenanceOptions] = useState(null);
   const creatorProfileCache = useRef(new Map());
+  const orderDetailsCache = useRef(new Map());
   const { actionLoading, startActionLoading, finishActionLoading } = useActionLoading();
 
   useClassicHeaderSearch(query, setQuery, "Search by reason or user...");
@@ -1920,14 +1921,55 @@ export default function OperationsOrdersClient({ initialOrders = [], bootstrapWa
   }, [tabGroups, type, query]);
 
   async function refreshOrders() {
-    const response = await fetch("/api/orders/requested?scope=all-system&_fresh=1", { credentials: "include", cache: "no-store" });
+    const response = await fetch("/api/orders/requested?scope=all-system&mode=summary&_fresh=1", { credentials: "include", cache: "no-store" });
     if (response.status === 401) {
       window.location.href = "/login?next=/next/operations-orders";
       return;
     }
     const data = await readJson(response);
     if (!response.ok) throw new Error(data?.error || "Failed to refresh Operations Orders.");
+    orderDetailsCache.current.clear();
     setOrders(Array.isArray(data) ? data : []);
+  }
+
+  async function openOrderDetails(group) {
+    if (!group) return;
+    const needsDetails = (Array.isArray(group.items) ? group.items : []).some((item) => Boolean(item?.summaryOnly));
+    if (!needsDetails) {
+      setSelected(group);
+      return;
+    }
+
+    const cacheKey = text(group.key || group.orderIdLabel || group.orderIds?.join("|"));
+    const cached = cacheKey ? orderDetailsCache.current.get(cacheKey) : null;
+    if (cached) {
+      setSelected(cached);
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/orders/requested/details", {
+        method: "POST",
+        credentials: "include",
+        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderIds: group.orderIds }),
+      });
+      if (response.status === 401) {
+        window.location.href = "/login?next=/next/operations-orders";
+        return;
+      }
+      const data = await readJson(response);
+      if (!response.ok) throw new Error(data?.error || "Failed to load order details.");
+      const detailedGroups = buildGroups(Array.isArray(data) ? data : []);
+      const detailed = detailedGroups.find((item) => item.key === group.key) || detailedGroups[0];
+      if (!detailed) throw new Error("This order no longer exists or has no components.");
+      if (cacheKey) orderDetailsCache.current.set(cacheKey, detailed);
+      setSelected(detailed);
+    } catch (error) {
+      setNotice(error?.message || "Failed to load order details.");
+      window.setTimeout(() => setNotice(""), 4500);
+    }
   }
 
   async function beginAction(action, group) {
@@ -2269,7 +2311,7 @@ export default function OperationsOrdersClient({ initialOrders = [], bootstrapWa
 
       <section className="operations-orders-list-surface" id="operations-orders-list">
         <div className="co-cards" id="requested-list">
-          {visibleGroups.length ? visibleGroups.map((group) => <OperationsOrderCard group={group} tab={tab} onOpen={setSelected} onCreator={openCreatorProfile} key={group.key} />) : <div className="ops-no-data-state" role="status" aria-live="polite"><img className="ops-no-data-state__image" src="/next/images/no-data-illustration.png" alt="" loading="lazy"/><div className="ops-no-data-state__text">Sorry, No data available</div></div>}
+          {visibleGroups.length ? visibleGroups.map((group) => <OperationsOrderCard group={group} tab={tab} onOpen={openOrderDetails} onCreator={openCreatorProfile} key={group.key} />) : <div className="ops-no-data-state" role="status" aria-live="polite"><img className="ops-no-data-state__image" src="/next/images/no-data-illustration.png" alt="" loading="lazy"/><div className="ops-no-data-state__text">Sorry, No data available</div></div>}
         </div>
       </section>
 

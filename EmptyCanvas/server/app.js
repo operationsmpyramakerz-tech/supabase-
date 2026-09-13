@@ -4901,7 +4901,7 @@ function _sbSerializeOrderRow(row = {}) {
   };
 }
 
-async function _sbSelectOrdersRows({ approvedOnly = false, maintenanceOnly = false, memberName = "" } = {}) {
+async function _sbSelectOrdersRows({ approvedOnly = false, maintenanceOnly = false, memberName = "", select = "*" } = {}) {
   // PostgREST/Supabase commonly caps a single SELECT response at 1000 rows.
   // Keep explicit paging, but push page-specific filters into PostgreSQL first
   // so Current Orders and Maintenance Orders do not download the full system
@@ -4913,7 +4913,7 @@ async function _sbSelectOrdersRows({ approvedOnly = false, maintenanceOnly = fal
 
     while (true) {
       const page = await supabaseDb.select(_sbOrdersTable(), {
-        select: "*",
+        select: select || "*",
         order: "notion_created_time.desc,id.desc",
         limit: pageSize,
         offset,
@@ -5005,6 +5005,121 @@ async function _sbRequestedOrdersPayload({ includeAllSystem = false, forceFresh 
   }
 
   return await cacheGetOrSet(cacheKey, 60, load);
+}
+
+
+const _SB_OPERATIONS_SUMMARY_SELECT = [
+  "id",
+  "reason",
+  "order_number",
+  "order_type",
+  "notion_created_time",
+  "product_name",
+  "unit_price",
+  "quantity_requested",
+  "quantity_progress",
+  "quantity_edited_by_supervisor",
+  "quantity_received_by_operations",
+  "quantity_remaining",
+  "status",
+  "issue_description",
+  "actual_issue_description",
+  "repair_action",
+  "resolution_method",
+  "operations_approval",
+  "rejected_reason",
+  "receipt_number",
+  "team_member_id",
+  "team_member_name",
+  "person_received_by_operations",
+  "sv_approval",
+].join(",");
+
+function _sbSerializeOperationsSummaryRow(row = {}) {
+  const item = _sbSerializeOrderRow(row);
+  return {
+    id: item.id,
+    orderId: item.orderId,
+    orderIdPrefix: item.orderIdPrefix,
+    orderIdNumber: item.orderIdNumber,
+    reason: item.reason,
+    productName: item.productName,
+    unitPrice: item.unitPrice,
+    quantityRequested: item.quantityRequested,
+    quantityProgress: item.quantityProgress,
+    quantityEditedBySupervisor: item.quantityEditedBySupervisor,
+    quantityReceived: item.quantityReceived,
+    quantityRemaining: item.quantityRemaining,
+    quantityReceivedEdited: item.quantityReceivedEdited,
+    quantity: item.quantity,
+    status: item.status,
+    statusColor: item.statusColor,
+    orderType: item.orderType,
+    orderTypeColor: item.orderTypeColor,
+    issueDescription: item.issueDescription,
+    actualIssueDescription: item.actualIssueDescription,
+    repairAction: item.repairAction,
+    resolutionMethod: item.resolutionMethod,
+    operationsByName: item.operationsByName,
+    operationsApproval: item.operationsApproval,
+    rejectedReason: item.rejectedReason,
+    receiptNumber: item.receiptNumber,
+    createdTime: item.createdTime,
+    createdById: item.createdById,
+    createdByName: item.createdByName,
+    svApproval: item.svApproval,
+    summaryOnly: true,
+    source: "supabase",
+  };
+}
+
+async function _sbRequestedOrdersSummaryList({ includeAllSystem = false } = {}) {
+  let rows;
+  try {
+    rows = await _sbSelectOrdersRows({
+      approvedOnly: !includeAllSystem,
+      select: _SB_OPERATIONS_SUMMARY_SELECT,
+    });
+  } catch (error) {
+    // A customized/older Supabase schema may be missing a recently added
+    // summary column. Keep the optimized response shape while falling back to
+    // SELECT * so the page never becomes unavailable because of that schema.
+    console.warn("[orders] summary column projection unavailable; using full-row compatibility query:", error?.message || error);
+    rows = await _sbSelectOrdersRows({ approvedOnly: !includeAllSystem });
+  }
+  return rows.map(_sbSerializeOperationsSummaryRow);
+}
+
+async function _sbRequestedOrdersSummaryPayload({ includeAllSystem = false, forceFresh = false } = {}) {
+  const cacheKey = includeAllSystem
+    ? "cache:api:orders:requested-summary:supabase:v1:all-system"
+    : "cache:api:orders:requested-summary:supabase:v1:approved";
+  const load = async () => _sbRequestedOrdersSummaryList({ includeAllSystem });
+
+  if (forceFresh) {
+    await cacheDel(cacheKey);
+    const fresh = await load();
+    _memSet(cacheKey, fresh, 60);
+    await _redisSet(cacheKey, fresh, 60);
+    return fresh;
+  }
+
+  return await cacheGetOrSet(cacheKey, 60, load);
+}
+
+async function _sbRequestedOrderDetailsByIds(orderIds = []) {
+  const ids = Array.from(new Set((Array.isArray(orderIds) ? orderIds : [])
+    .map((id) => String(id || "").trim())
+    .filter(Boolean)))
+    .slice(0, 500);
+  if (!ids.length) return [];
+  const rows = await supabaseDb.selectByIds(_sbOrdersTable(), ids, {
+    idColumn: "id",
+    select: "*",
+    order: "notion_created_time.desc,id.desc",
+    limit: Math.max(500, ids.length),
+  });
+  return _sbEnrichOrderGrouping((Array.isArray(rows) ? rows : []).map(_sbSerializeOrderRow));
 }
 
 async function _sbCurrentOrdersList(req) {
@@ -5251,6 +5366,8 @@ async function _sbInvalidateOrdersCaches(req = null) {
     "cache:api:orders:requested:supabase:v4:all-system",
     "cache:api:orders:requested:supabase:v5:approved",
     "cache:api:orders:requested:supabase:v5:all-system",
+    "cache:api:orders:requested-summary:supabase:v1:approved",
+    "cache:api:orders:requested-summary:supabase:v1:all-system",
     "cache:api:orders:maintenance:supabase:v1",
     "cache:api:orders:current:supabase:v1",
     "cache:api:orders:current:supabase:v1:all",
@@ -18194,6 +18311,8 @@ app.get(
     try {
       const requestedScope = String(req.query?.scope || req.query?.view || "").trim().toLowerCase();
       const requestedType = String(req.query?.type || req.query?.orderType || "").trim().toLowerCase();
+      const requestedMode = String(req.query?.mode || req.query?.payload || "").trim().toLowerCase();
+      const summaryOnly = ["summary", "list", "cards"].includes(requestedMode);
       const maintenanceOnly = ["maintenance", "request-maintenance", "requestmaintenance"].includes(requestedScope)
         || ["maintenance", "request-maintenance", "requestmaintenance"].includes(requestedType);
       const includeAllSystem = ["all", "all-system", "system", "system-all"].includes(requestedScope)
@@ -18205,6 +18324,7 @@ app.get(
           !!req.query?._refresh ||
           String(req.get("x-ops-hard-refresh") || "") === "1";
         if (maintenanceOnly) return res.json(await _sbMaintenanceOrdersPayload({ forceFresh }));
+        if (summaryOnly) return res.json(await _sbRequestedOrdersSummaryPayload({ includeAllSystem, forceFresh }));
         return res.json(await _sbRequestedOrdersPayload({ includeAllSystem, forceFresh }));
       }
 
@@ -18829,6 +18949,36 @@ const createdTime = page.created_time;
     } catch (e) {
       console.error(e);
       res.status(500).json({ error: "Failed to fetch requested orders" });
+    }
+  },
+);
+
+// Full Operations Order component details are loaded only when a card is opened.
+// The list itself uses the lightweight summary payload above.
+app.post(
+  "/api/orders/requested/details",
+  requireAuth,
+  requirePage(["Requested Orders", "Operations Orders"]),
+  async (req, res) => {
+    try {
+      const orderIds = Array.from(new Set((Array.isArray(req.body?.orderIds) ? req.body.orderIds : [])
+        .map((id) => String(id || "").trim())
+        .filter(Boolean)))
+        .slice(0, 500);
+      if (!orderIds.length) return res.status(400).json({ error: "orderIds required" });
+
+      if (_sbOrdersEnabled()) {
+        return res.json(await _sbRequestedOrderDetailsByIds(orderIds));
+      }
+
+      // Legacy compatibility only. The active ERP uses Supabase, but keeping
+      // this path avoids changing the old backend contract during cleanup.
+      const all = await _pageBootstrapFetchExistingRoute(req, "/api/orders/requested?scope=all-system", 25_000);
+      const wanted = new Set(orderIds);
+      return res.json((Array.isArray(all) ? all : []).filter((item) => wanted.has(String(item?.id || ""))));
+    } catch (error) {
+      console.error("POST /api/orders/requested/details error:", error?.message || error);
+      return res.status(500).json({ error: error?.message || "Failed to load order details." });
     }
   },
 );
@@ -24995,9 +25145,9 @@ async function _pageBootstrapOrdersReview(req) {
 async function _pageBootstrapOperationsOrders(req) {
   return Promise.all([
     _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapAccountPayload(req)),
-    _pageBootstrapLoad('/api/orders/requested?scope=all-system', 25_000, () =>
+    _pageBootstrapLoad('/api/orders/requested?scope=all-system&mode=summary', 25_000, () =>
       _sbOrdersEnabled()
-        ? _sbRequestedOrdersPayload({ includeAllSystem: true })
+        ? _sbRequestedOrdersSummaryPayload({ includeAllSystem: true })
         : _pageBootstrapFetchExistingRoute(req, '/api/orders/requested?scope=all-system', 25_000)
     ),
   ]);
@@ -25202,7 +25352,11 @@ async function _pageBootstrapHome(req) {
     loaders.push(_pageBootstrapLoad('/api/orders', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/orders')));
   }
   if (_pageBootstrapHasPageAccess(req, 'Requested Orders') || _pageBootstrapHasPageAccess(req, 'Operations Orders') || _pageBootstrapHasPageAccess(req, 'Maintenance Orders')) {
-    loaders.push(_pageBootstrapLoad('/api/orders/requested', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/orders/requested')));
+    loaders.push(_pageBootstrapLoad('/api/orders/requested?mode=summary', 15_000, () =>
+      _sbOrdersEnabled()
+        ? _sbRequestedOrdersSummaryPayload({ includeAllSystem: false })
+        : _pageBootstrapFetchExistingRoute(req, '/api/orders/requested')
+    ));
   }
   if (_pageBootstrapHasPageAccess(req, 'Orders Review')) {
     loaders.push(_pageBootstrapLoad('/api/sv-orders?tab=all', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/sv-orders?tab=all')));

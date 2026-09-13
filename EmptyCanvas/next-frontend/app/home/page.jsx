@@ -326,7 +326,7 @@ export default async function HomePage({ searchParams }) {
       // Home analysis we need the system-wide source, then filter it to the
       // selected member so every order card reflects that member, not the viewer.
       (showCurrent || showReview || showOperations || showMaintenance)
-        ? fetchLegacyJson("/api/orders/requested?scope=all-system", { timeoutMs: 15000 })
+        ? fetchLegacyJson("/api/orders/requested?scope=all-system&mode=summary", { timeoutMs: 15000 })
         : Promise.resolve(null),
     ]);
     stockRows = stockResponse?.ok && Array.isArray(stockResponse.data?.items) ? stockResponse.data.items : [];
