@@ -175,12 +175,10 @@ app.use(express.urlencoded({ extended: true }));
 // Keep JSON support below in the import route for backwards compatibility.
 app.use(express.text({ type: ['text/csv', 'application/csv', 'application/vnd.ms-excel', 'text/plain'], limit: '30mb' }));
 
-// Canonicalize direct requests for legacy HTML documents before express.static
-// can serve them. All browser workspaces now have route-level authentication
-// and a Next.js replacement. Direct .html requests are canonicalized before
-// static files can bypass route-level authentication. Legacy files remain on
-// disk temporarily only while their shared assets are migrated.
-const LEGACY_HTML_ROUTE_ALIASES = Object.freeze({
+// Classic HTML documents have been removed. Keep their old filenames only as
+// compatibility redirects so bookmarks cannot fall through to a static file or
+// bypass the authenticated Next.js browser routes.
+const REMOVED_CLASSIC_HTML_REDIRECTS = Object.freeze({
   'index.html': '/',
   'login.html': '/login',
   'home.html': '/home',
@@ -219,19 +217,30 @@ const LEGACY_HTML_ROUTE_ALIASES = Object.freeze({
   'notifications.html': '/notifications',
   'expenses.html': '/expenses',
   'expenses-users.html': '/expenses/users',
+  'pwa-start.html': '/pwa-start',
+  'pwa-offline.html': '/pwa-offline',
 });
 
 app.use((req, res, next) => {
   if (req.method !== 'GET' && req.method !== 'HEAD') return next();
   const key = String(req.path || '').replace(/^\/+/, '').toLowerCase();
-  const target = LEGACY_HTML_ROUTE_ALIASES[key];
+  const target = REMOVED_CLASSIC_HTML_REDIRECTS[key];
   if (!target) return next();
 
+  const redirectUrl = new URL(target, 'http://operations-hub.local');
   const original = String(req.originalUrl || '');
   const queryIndex = original.indexOf('?');
-  const suffix = queryIndex >= 0 ? original.slice(queryIndex) : '';
+  if (queryIndex >= 0) {
+    const incoming = new URLSearchParams(original.slice(queryIndex + 1));
+    incoming.delete('classic');
+    for (const [name, value] of incoming.entries()) {
+      if (!redirectUrl.searchParams.has(name)) redirectUrl.searchParams.append(name, value);
+    }
+  }
+  const query = redirectUrl.searchParams.toString();
+  const destination = `${redirectUrl.pathname}${query ? `?${query}` : ''}`;
   res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-  return res.redirect(302, `${target}${suffix}`);
+  return res.redirect(302, destination);
 });
 
 app.use(
@@ -12310,10 +12319,9 @@ app.get("/api/storage/direct-diagnostics", requireAuth, (req, res) => {
   return res.json({ ok: true, storage: getDirectStorageDiagnostics() });
 });
 
-// --- Page Serving Routes --- //
-// Browser pages are isolated from the API implementation. The router receives
-// the existing auth/access middleware by dependency injection, so this refactor
-// changes structure only and preserves the current permission behavior.
+// --- Browser Route Compatibility --- //
+// Classic HTML pages are retired. Historical browser URLs still pass through
+// the existing auth/access middleware, then redirect to their Next.js routes.
 app.use(
   createPageRouter({
     publicDir: path.join(__dirname, "..", "public"),
@@ -12322,7 +12330,6 @@ app.use(
     requireLmsPageAccess,
     userAccessPageAliases: USER_ACCESS_PAGE_ALIASES,
     eventsPreferredRoute: _eventsPreferredRoute,
-    hasEventsComponentCreateAccess: _hasEventsComponentCreateAccess,
     b2cPreferredRoute: _b2cPreferredRoute,
     taskManagementPreferredRoute: _taskManagementPreferredRoute,
   }),
@@ -14397,11 +14404,8 @@ app.get("/api/app-download-links", requireAuth, (req, res) => {
     ""
   );
 
-  const nextFrontendEnabled = ["1", "true", "yes", "on"].includes(
-    String(process.env.ENABLE_NEXT_FRONTEND || "").trim().toLowerCase(),
-  );
-  const pwaStartPath = nextFrontendEnabled ? "/next/pwa-start" : "/pwa-start";
-  const installPagePath = nextFrontendEnabled ? "/next/app-install" : "/pwa-start";
+  const pwaStartPath = "/next/pwa-start";
+  const installPagePath = "/next/app-install";
 
   res.json({
     androidUrl,
@@ -36369,102 +36373,11 @@ app.get(
   "/orders/order-receipt-viewer",
   requireAuth,
   requirePage(["Expenses", "Expenses Users"]),
-  async (req, res) => {
-    try {
-      const envEnabled = (value) => ["1", "true", "yes", "on"].includes(String(value || "").trim().toLowerCase());
-      const nextFrontendEnabled = envEnabled(process.env.ENABLE_NEXT_FRONTEND);
-      const configuredCutover = String(process.env.ENABLE_NEXT_ROUTE_CUTOVER || "").trim();
-      const nextRouteCutoverEnabled = configuredCutover ? envEnabled(configuredCutover) : nextFrontendEnabled;
-      if (nextRouteCutoverEnabled) {
-        const params = new URLSearchParams();
-        const ids = String(req.query?.ids || "").trim();
-        if (ids) params.set("ids", ids);
-        return res.redirect(`/next/orders/receipt-viewer${params.toString() ? `?${params.toString()}` : ""}`);
-      }
-      const payload = await _loadOrderReceiptViewerItems(req.query?.ids || "");
-      const items = payload.items || [];
-
-      if (!items.length) {
-        const html = `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Order receipt</title>
-  <style>
-    body{margin:0;padding:24px;font-family:Inter,Arial,sans-serif;background:#f8fafc;color:#0f172a;}
-    .card{max-width:560px;margin:40px auto;background:#fff;border:1px solid #e2e8f0;border-radius:22px;padding:24px;box-shadow:0 20px 50px rgba(15,23,42,.12)}
-    h1{margin:0 0 10px;font-size:24px}
-    p{margin:0;color:#475569;line-height:1.7}
-  </style>
-</head>
-<body>
-  <div class="card">
-    <h1>Order receipt</h1>
-    <p>No files or links were found in the <strong>Order receipt</strong> field for this order.</p>
-  </div>
-</body>
-</html>`;
-        res.setHeader("Cache-Control", "no-store");
-        return res.status(404).send(html);
-      }
-
-      if (items.length === 1) {
-        res.setHeader("Cache-Control", "no-store");
-        return res.redirect(items[0].url);
-      }
-
-      const galleryHtml = items.map((item, index) => {
-        const safeUrl = escapeHtml(item.url);
-        const safeName = escapeHtml(item.name || `Receipt ${index + 1}`);
-        const isImage = item.type === "image";
-        return `
-          <a class="receipt-card" href="${safeUrl}" target="_blank" rel="noopener noreferrer">
-            <div class="receipt-card__preview">${isImage ? `<img src="${safeUrl}" alt="${safeName}" loading="lazy" />` : `<span>${safeName}</span>`}</div>
-            <div class="receipt-card__meta">
-              <strong>${safeName}</strong>
-              <span>Open receipt</span>
-            </div>
-          </a>
-        `;
-      }).join("");
-
-      const html = `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Order receipt</title>
-  <style>
-    body{margin:0;padding:24px;font-family:Inter,Arial,sans-serif;background:#f8fafc;color:#0f172a;}
-    .wrap{max-width:960px;margin:0 auto;}
-    h1{margin:0 0 10px;font-size:28px;}
-    p{margin:0 0 20px;color:#475569;line-height:1.7;}
-    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;}
-    .receipt-card{display:flex;flex-direction:column;overflow:hidden;text-decoration:none;color:inherit;background:#fff;border:1px solid #e2e8f0;border-radius:22px;box-shadow:0 18px 40px rgba(15,23,42,.10)}
-    .receipt-card__preview{aspect-ratio:4/3;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#eef2ff,#f8fafc);padding:12px;}
-    .receipt-card__preview img{width:100%;height:100%;object-fit:cover;border-radius:14px;display:block;}
-    .receipt-card__preview span{padding:12px 14px;border-radius:999px;background:#fff;border:1px solid #dbeafe;color:#1d4ed8;font-weight:700;text-align:center;}
-    .receipt-card__meta{display:flex;flex-direction:column;gap:6px;padding:16px 18px 18px;}
-    .receipt-card__meta strong{font-size:16px;line-height:1.4;word-break:break-word;}
-    .receipt-card__meta span{color:#2563eb;font-size:14px;font-weight:700;}
-  </style>
-</head>
-<body>
-  <div class="wrap">
-    <h1>Order receipt</h1>
-    <p>Open any file or link saved in the <strong>Order receipt</strong> field.</p>
-    <div class="grid">${galleryHtml}</div>
-  </div>
-</body>
-</html>`;
-
-      res.setHeader("Cache-Control", "no-store");
-      return res.send(html);
-    } catch (err) {
-      console.error("/orders/order-receipt-viewer error:", err?.body || err);
-      return res.status(err?.status || 500).send(err?.status === 400 ? "Missing order ids" : "Failed to open order receipt");
-    }
+  (req, res) => {
+    const params = new URLSearchParams();
+    const ids = String(req.query?.ids || "").trim();
+    if (ids) params.set("ids", ids);
+    return res.redirect(302, `/next/orders/receipt-viewer${params.toString() ? `?${params.toString()}` : ""}`);
   },
 );
 
