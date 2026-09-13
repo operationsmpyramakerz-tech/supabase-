@@ -19319,3 +19319,30 @@ html.ops-has-persistent-profile .classic-app-shell .main-header .next-stable-loa
     opacity: 0 !important;
   }
 }
+
+/* ========================================================================
+   Orders Review — exact mobile toolbar width parity with Operations Orders
+   2026-09-12
+   ------------------------------------------------------------------------
+   Orders Review sits inside a route wrapper that leaves an extra 20px inset
+   on each side on mobile. Compensate only the floating toolbar so its outer
+   footprint lines up with Operations Orders without changing order cards,
+   tab sizing, filter sizing, or desktop layout.
+   ===================================================================== */
+@media (max-width: 768px) {
+  body.orders-review-page .next-classic-orders-parity {
+    overflow-x: visible !important;
+  }
+
+  body.orders-review-page .next-classic-orders-parity .next-orders-review-toolbar-wrap {
+    position: relative !important;
+    left: -20px !important;
+    width: calc(100% + 40px) !important;
+    max-width: none !important;
+  }
+
+  body.orders-review-page .next-classic-orders-parity .next-orders-review-toolbar-wrap .orders-toolbar {
+    width: 100% !important;
+    max-width: none !important;
+  }
+}
