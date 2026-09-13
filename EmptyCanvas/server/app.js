@@ -29704,6 +29704,10 @@ if (cleanedProducts.length === 0) {
   return res.status(400).json({ success: false, message: "Missing products." });
 }
 
+if (_isRequestMaintenance && cleanedProducts.length > 1) {
+  return res.status(400).json({ success: false, message: "Request Maintenance supports one component only." });
+}
+
 // Request Maintenance: Qty is not used; require Issue Description instead.
 if (_isRequestMaintenance) {
   if (cleanedProducts.some(p => !p.schoolId)) {

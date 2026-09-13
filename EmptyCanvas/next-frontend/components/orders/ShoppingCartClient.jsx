@@ -606,12 +606,12 @@ function ProductPicker({ products, type, item, onClose, onSave }) {
           <div className="classic-cart-picker-head-copy">
             <span>{item ? "Edit cart item" : "Add to cart"}</span>
             <h3 id="classic-cart-modal-title">{item ? "Edit component" : isWithdraw(type) ? "Add to Withdraw Products" : isMaintenance(type) ? "Add Maintenance Item" : "Add to Request Products"}</h3>
-            <p>{item ? "Update this component without changing the rest of the cart." : "Choose a component directly or add all components from one or more kits."}</p>
+            <p>{item ? "Update this component without changing the rest of the cart." : maintenance ? "Choose one component and describe the maintenance issue." : "Choose a component directly or add all components from one or more kits."}</p>
           </div>
           <button className="classic-cart-picker-close" type="button" onClick={onClose} disabled={submitting} aria-label="Close"><CartSvgIcon name="x" size={22}/></button>
         </header>
 
-        {!item ? (
+        {!item && !maintenance ? (
           <div className="classic-cart-picker-tabs" role="tablist" aria-label="Add source">
             <button type="button" className={mode === "product" ? "is-active" : ""} onClick={() => switchMode("product")} role="tab" aria-selected={mode === "product"}>
               <CartSvgIcon name="package" size={18}/><span><strong>Component</strong><small>Select one product</small></span>
@@ -952,6 +952,14 @@ export default function ShoppingCartClient({
   };
 
   const savePickerSelection = async (selection) => {
+    if (maintenance && selection?.mode === "kit") {
+      throw new Error("Maintenance requests can include only one component.");
+    }
+
+    if (maintenance && !picker?.item && cart.length >= 1) {
+      throw new Error("A maintenance request can include only one component.");
+    }
+
     if (selection?.mode === "kit") {
       const entries = Array.isArray(selection?.selections) ? selection.selections : [];
       if (!entries.length) throw new Error("Choose at least one kit.");
@@ -1056,8 +1064,12 @@ export default function ShoppingCartClient({
       setNotice({ type: "error", title: "Reason required", message: withdraw ? "Enter the withdrawal reason." : "Enter the order reason." });
       return;
     }
+    if (maintenance && cart.length > 1) {
+      setNotice({ type: "error", title: "One component only", message: "A maintenance request can include only one component. Remove the extra component before submitting." });
+      return;
+    }
     if (maintenance && cart.some((item) => !text(item.issueDescription))) {
-      setNotice({ type: "error", title: "Issue Description required", message: "Every maintenance product must include an Issue Description." });
+      setNotice({ type: "error", title: "Issue Description required", message: "The maintenance component must include an Issue Description." });
       return;
     }
     if (!text(password)) {
@@ -1189,11 +1201,11 @@ export default function ShoppingCartClient({
               </div>
             )}
 
-            {cart.length ? (
+            {cart.length && !maintenance ? (
               <div className="classic-cart-footer">
                 <button className="classic-cart-update-btn" type="button" onClick={() => setPicker({ item: null })}>
                   <CartSvgIcon name="plus" size={17}/>
-                  <span>{withdraw ? "Add to Withdraw Cart" : maintenance ? "Add Maintenance Item" : "Add to Cart"}</span>
+                  <span>{withdraw ? "Add to Withdraw Cart" : "Add to Cart"}</span>
                 </button>
               </div>
             ) : null}
