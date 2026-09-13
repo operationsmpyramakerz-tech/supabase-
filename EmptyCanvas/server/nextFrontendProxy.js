@@ -128,6 +128,21 @@ function createNextFrontendProxy(options = {}) {
   return function nextFrontendProxy(req, res, next) {
     if (!requestMatchesBasePath(req, basePath)) return next();
 
+    // Recover safely from stale client bundles that accidentally included the
+    // configured Next basePath twice (for example /next/next/home). The Next
+    // router already applies /next, so those URLs are never valid application
+    // routes. Redirect them before proxying so an old tab/cache cannot strand
+    // the user on a deployment 404.
+    const incomingUrl = String(req.originalUrl || req.url || basePath);
+    try {
+      const parsedIncoming = new URL(incomingUrl, "http://operations.local");
+      const duplicateBase = `${basePath}${basePath}`;
+      if (parsedIncoming.pathname === duplicateBase || parsedIncoming.pathname.startsWith(`${duplicateBase}/`)) {
+        const correctedPath = parsedIncoming.pathname.slice(basePath.length) || basePath;
+        return res.redirect(307, `${correctedPath}${parsedIncoming.search}`);
+      }
+    } catch {}
+
     if (!enabled) {
       diagnostics.unavailable += 1;
       return unavailableResponse(req, res, "Enable the pilot with ENABLE_NEXT_FRONTEND=true after building the Next.js frontend.");

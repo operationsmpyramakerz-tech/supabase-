@@ -572,7 +572,12 @@ export function ClassicSidebarActiveIndicator() {
       if (navigationTimer) window.clearTimeout(navigationTimer);
       const delay = reduceMotion() ? 0 : 230;
       navigationTimer = window.setTimeout(() => {
-        const nextHref = `${destination.pathname}${destination.search}${destination.hash}`;
+        const pathname = destination.pathname === "/next"
+          ? "/"
+          : destination.pathname.startsWith("/next/")
+            ? destination.pathname.slice(5) || "/"
+            : destination.pathname;
+        const nextHref = `${pathname}${destination.search}${destination.hash}`;
         router.push(nextHref);
       }, delay);
     };

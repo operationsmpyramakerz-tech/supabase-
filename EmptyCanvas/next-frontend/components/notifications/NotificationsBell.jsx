@@ -151,7 +151,12 @@ export default function NotificationsBell({ classic = false }) {
     const target = modernNotificationUrl(item?.url);
     if (!target) return;
     if (target.startsWith("/")) {
-      router.push(target);
+      const clientRoute = target === "/next"
+        ? "/"
+        : target.startsWith("/next/")
+          ? target.slice(5) || "/"
+          : target;
+      router.push(clientRoute);
       return;
     }
     window.location.href = target;
@@ -202,7 +207,7 @@ export default function NotificationsBell({ classic = false }) {
             </div>
 
             <div className="notif-center-footer">
-              <Link className="notif-center-seeall" href="/next/notifications" prefetch={true}>See All</Link>
+              <Link className="notif-center-seeall" href="/notifications" prefetch={true}>See All</Link>
             </div>
           </div>
         </div>

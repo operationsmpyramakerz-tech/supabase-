@@ -271,8 +271,9 @@ export default function UserProfileMenu({ account }) {
   function navigate(href) {
     closeMenu({ immediate: true });
     const target = String(href || "").trim();
-    if (target.startsWith("/next/")) {
-      router.push(target);
+    if (target === "/next" || target.startsWith("/next/")) {
+      const clientRoute = target === "/next" ? "/" : target.slice(5) || "/";
+      router.push(clientRoute);
       return;
     }
     window.location.href = target;
