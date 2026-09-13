@@ -3,7 +3,7 @@ import AppShell from "../../components/AppShell";
 import ExpensesClient from "../../components/expenses/ExpensesClient";
 import { fetchLegacyJson } from "../../lib/legacy-api";
 import { getLegacyAccountGate } from "../../lib/products-auth";
-import { cashInFromOptions, expenseTypeOptions, expensesForAccount } from "../../lib/expenses-data";
+import { cashInFromOptions, expenseOrderOptions, expenseTypeOptions, expensesForAccount } from "../../lib/expenses-data";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -62,7 +62,10 @@ export default async function ExpensesPage() {
       warnings.push("Cash-in options recovery path used.");
       return await legacyPayload("/api/expenses/cash-in-from/options", { success: true, options: [] });
     }),
-    legacyPayload("/api/expenses/orders/options", { success: true, options: [] }),
+    expenseOrderOptions().then((options) => ({ success: true, source: "supabase-next", options })).catch(async () => {
+      warnings.push("Expense order options recovery path used.");
+      return await legacyPayload("/api/expenses/orders/options", { success: true, options: [] });
+    }),
   ]);
 
   if (!Array.isArray(ordersPayload?.options)) warnings.push("Order options are temporarily unavailable.");

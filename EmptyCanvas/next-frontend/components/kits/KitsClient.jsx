@@ -1166,7 +1166,7 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
     setDownloadMenuOpen(false);
     setSortMenuOpen(false);
     setSendToStockOpen(true);
-    requestJson(`/api/user-access/team-members?_fresh=1&_ts=${Date.now()}`)
+    requestJson(`/next/api/team-members?_fresh=1&_ts=${Date.now()}`)
       .then((body) => setMembers(normalizeUsersCenterMembers(body)))
       .catch((error) => notify(error?.message || "Users Center members could not be refreshed.", "error"));
   };

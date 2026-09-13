@@ -1,10 +1,10 @@
 import { redirect } from "next/navigation";
 import AppShell from "../../components/AppShell";
 import ProposalsClient from "../../components/proposals/ProposalsClient";
-import { fetchLegacyJson } from "../../lib/legacy-api";
 import { getLegacyAccountGate } from "../../lib/products-auth";
 import { getProductsCatalog } from "../../lib/products-service";
 import { listKitFolders, listKits, listProposals } from "../../lib/proposal-kit-service";
+import { listTeamMembersLite } from "../../lib/team-members-service";
 
 export const dynamic = "force-dynamic";
 
@@ -23,21 +23,22 @@ export default async function ProposalsPage() {
     listProposals(gate.account),
     listKits(gate.account),
     listKitFolders(gate.account),
-    fetchLegacyJson("/api/user-access/team-members?_fresh=1&_ts=" + Date.now(), { timeoutMs: 20000 }),
+    listTeamMembersLite(),
   ]);
 
   const catalog = catalogResult.status === "fulfilled" ? catalogResult.value : { ok: false, products: [], tagsCatalog: [], unitsCatalog: [] };
   const proposals = proposalsResult.status === "fulfilled" ? { ok: true, source: "supabase-next", proposals: proposalsResult.value } : { ok: false, proposals: [] };
   const kits = kitsResult.status === "fulfilled" ? { ok: true, source: "supabase-next", kits: kitsResult.value } : { ok: false, kits: [] };
   const kitFolders = kitFoldersResult.status === "fulfilled" ? { ok: true, source: "supabase-next", folders: kitFoldersResult.value } : { ok: false, folders: [] };
-  const membersResponse = membersResult.status === "fulfilled" ? membersResult.value : null;
-  const members = membersResponse?.ok && membersResponse?.data ? membersResponse.data : { ok: false, members: [] };
+  const members = membersResult.status === "fulfilled"
+    ? { ok: true, source: "supabase-next", members: membersResult.value }
+    : { ok: false, source: "supabase-next", members: [] };
   const warnings = [];
   if (catalogResult.status === "rejected") warnings.push({ url: "/next/api/products", error: catalogResult.reason?.message || "Products could not load." });
   if (proposalsResult.status === "rejected") warnings.push({ url: "/next/api/products/proposals", error: proposalsResult.reason?.message || "Proposals could not load." });
   if (kitsResult.status === "rejected") warnings.push({ url: "/next/api/products/kits", error: kitsResult.reason?.message || "Kits could not load." });
   if (kitFoldersResult.status === "rejected") warnings.push({ url: "/next/api/products/kit-folders", error: kitFoldersResult.reason?.message || "Kit folders could not load." });
-  if (!membersResponse?.ok) warnings.push({ url: "/api/user-access/team-members", error: membersResponse?.error || "Users Center members could not load." });
+  if (membersResult.status === "rejected") warnings.push({ url: "/next/api/team-members", error: membersResult.reason?.message || "Users Center members could not load." });
 
   return (
     <AppShell account={gate.account} title="Proposals" eyebrow="Reusable quotation workspace" activePath="/next/proposals" bodyClass="products-page proposals-page" pageStyles={["/next/css/products.css?v=products-manual-image-v1", "/next/css/proposals.css?v=b2b-addname-transparent-pdf-v1"]}>

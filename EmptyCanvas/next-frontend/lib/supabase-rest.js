@@ -79,13 +79,21 @@ export async function supabaseRequest(pathname, options = {}) {
     1000,
     Math.min(120000, Number(options.timeoutMs || process.env.SUPABASE_REQUEST_TIMEOUT_MS || 15000) || 15000),
   );
-  const requestedAttempts = Number(options.attempts || process.env.SUPABASE_READ_ATTEMPTS || 3) || 3;
-  const maxAttempts = method === "GET" ? Math.max(1, Math.min(3, requestedAttempts)) : 1;
+  // Treat timeoutMs as a total request budget, not a fresh timeout for every
+  // retry. The old behavior could turn a 15s read into ~45s during a transient
+  // Supabase/network issue, which was especially visible during page navigation.
+  const requestedAttempts = Number(options.attempts || process.env.SUPABASE_READ_ATTEMPTS || 2) || 2;
+  const maxAttempts = method === "GET" ? Math.max(1, Math.min(2, requestedAttempts)) : 1;
   let lastError = null;
+  const startedAt = Date.now();
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const elapsed = Date.now() - startedAt;
+    const remainingMs = timeoutMs - elapsed;
+    if (remainingMs <= 0) break;
+
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    const timeout = setTimeout(() => controller.abort(), remainingMs);
 
     try {
       const headers = {
@@ -125,15 +133,20 @@ export async function supabaseRequest(pathname, options = {}) {
         current.status = 504;
       }
       lastError = current;
-      const canRetry = method === "GET" && attempt < maxAttempts && retryableStatus(current?.status);
+      const budgetLeft = timeoutMs - (Date.now() - startedAt);
+      const canRetry = method === "GET" && attempt < maxAttempts && retryableStatus(current?.status) && budgetLeft > 220;
       if (!canRetry) throw current;
-      await wait(attempt === 1 ? 180 : 420);
+      await wait(Math.min(140, Math.max(0, budgetLeft - 80)));
     } finally {
       clearTimeout(timeout);
     }
   }
 
-  throw lastError || new Error("Supabase request failed.");
+  if (lastError) throw lastError;
+  const timeoutError = new Error(`Supabase request timed out after ${timeoutMs} ms.`);
+  timeoutError.code = "SUPABASE_TIMEOUT";
+  timeoutError.status = 504;
+  throw timeoutError;
 }
 
 export async function select(table, params = {}) {

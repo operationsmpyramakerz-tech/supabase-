@@ -228,6 +228,76 @@ function teamMembersTable() {
   return text(process.env.SUPABASE_TEAM_MEMBERS_TABLE) || "team_members";
 }
 
+function ordersTable() {
+  return text(process.env.SUPABASE_ORDERS_TABLE) || "orders";
+}
+
+let expenseOrderOptionsCache = null;
+let expenseOrderOptionsInflight = null;
+
+function orderNumber(value) {
+  if (value === null || typeof value === "undefined" || value === "") return null;
+  const parsed = Number(String(value).replace(/[^0-9.-]/g, ""));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+export async function expenseOrderOptions({ fresh = false } = {}) {
+  const now = Date.now();
+  if (!fresh && expenseOrderOptionsCache && expenseOrderOptionsCache.expiresAt > now) {
+    return expenseOrderOptionsCache.value;
+  }
+  if (!fresh && expenseOrderOptionsInflight) return await expenseOrderOptionsInflight;
+
+  const load = async () => {
+    // Match the old Express endpoint, but ask PostgreSQL only for the fields
+    // needed by the Expenses order picker and filter approved rows in the DB.
+    const rows = await select(ordersTable(), {
+      select: "id,order_number,order_type,sv_approval,notion_created_time",
+      sv_approval: "ilike.*approved*",
+      order: "notion_created_time.desc,id.desc",
+      limit: "5000",
+    });
+
+    const groups = new Map();
+    for (const row of Array.isArray(rows) ? rows : []) {
+      const num = orderNumber(valueFor(row, ["order_number", "Order - ID", "Order ID"]));
+      const rowId = text(valueFor(row, ["id", "ID"]));
+      const displayId = num !== null ? `ORD-${num}` : (rowId ? `ORD-${rowId}` : "Order");
+      const key = num !== null ? `ord:${num}` : `row:${rowId || displayId}`;
+      const type = text(valueFor(row, ["order_type", "Order Type"])) || "Request Products";
+      if (!groups.has(key)) {
+        groups.set(key, {
+          id: key,
+          key,
+          orderId: displayId,
+          orderType: type,
+          label: [displayId, type].filter(Boolean).join(" - "),
+          relationIds: [],
+          receiptEntries: [],
+          trackingGroupId: key,
+          trackingUrl: `/orders/tracking?groupId=${encodeURIComponent(key)}`,
+        });
+      }
+      const group = groups.get(key);
+      if (rowId && !group.relationIds.includes(rowId)) group.relationIds.push(rowId);
+    }
+
+    return [...groups.values()]
+      .sort((a, b) => String(b.orderId || "").localeCompare(String(a.orderId || ""), undefined, { numeric: true }))
+      .slice(0, 300);
+  };
+
+  const pending = load();
+  if (!fresh) expenseOrderOptionsInflight = pending;
+  try {
+    const options = await pending;
+    expenseOrderOptionsCache = { value: options, expiresAt: Date.now() + 60_000 };
+    return options;
+  } finally {
+    if (!fresh) expenseOrderOptionsInflight = null;
+  }
+}
+
 function ilike(value, contains = true) {
   const safe = text(value).replace(/[%*_]/g, (match) => `\\${match}`);
   return `ilike.${contains ? `*${safe}*` : safe}`;

@@ -1455,7 +1455,7 @@ export default function ProposalsClient({
         requestJson(`/next/api/products/proposals?_ts=${Date.now()}`),
         requestJson(`/next/api/products/kits?_ts=${Date.now()}`),
         requestJson(`/next/api/products/kit-folders?_ts=${Date.now()}`),
-        requestJson(`/api/user-access/team-members?_fresh=1&_ts=${Date.now()}`),
+        requestJson(`/next/api/team-members?_fresh=1&_ts=${Date.now()}`),
         requestJson(`/next/api/products?_ts=${Date.now()}`),
       ]);
       setProposals((proposalBody.proposals || []).map(normalizeProposal));
@@ -1957,7 +1957,7 @@ export default function ProposalsClient({
     setDownloadMenuOpen(false);
     setSortMenuOpen(false);
     setMakeOrderOpen(true);
-    requestJson(`/api/user-access/team-members?_fresh=1&_ts=${Date.now()}`)
+    requestJson(`/next/api/team-members?_fresh=1&_ts=${Date.now()}`)
       .then((body) => setMembers(normalizeUsersCenterMembers(body)))
       .catch((error) => notify(error?.message || "Users Center members could not be refreshed.", "error"));
   };
