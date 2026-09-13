@@ -33,7 +33,7 @@ const { createNextFrontendProxy, getNextFrontendDiagnostics } = require("./nextF
 // JavaScript while keeping the same evaluator available to the browser.
 let b2cFormulaEngine = null;
 try {
-  b2cFormulaEngine = require(path.join(__dirname, "..", "public", "js", "b2c-formula-engine.js"));
+  b2cFormulaEngine = require("./b2cFormulaEngine");
 } catch (error) {
   console.warn("[b2c] formula engine could not be loaded:", error?.message || error);
 }
@@ -253,7 +253,7 @@ app.use(
       // Shared navigation and page-access behavior must always refresh after a
       // deployment; otherwise a browser can keep an older sidebar script even
       // after a user receives a newly enabled page permission.
-      if (["common-ui.js", "direct-storage-upload.js", "ui-redesign.css", "lms-curriculum.js", "lms-curriculum.css"].some((name) => filePath.endsWith(name))) {
+      if (["ui-redesign.css"].some((name) => filePath.endsWith(name))) {
         res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
       }
       if (filePath.endsWith("manifest.webmanifest") || filePath.endsWith("manifest.json")) {
@@ -11985,7 +11985,7 @@ function requirePage(pageNameOrNames) {
     }
 
     // View can load and read the page, but cannot call action endpoints.
-    // Read-only browser guards are also applied by common-ui.js, while this
+    // Browser-side controls mirror these restrictions, while this
     // server-side guard prevents direct API calls from changing data.
     const method = String(req.method || "GET").toUpperCase();
     const pathName = String(req.path || "");

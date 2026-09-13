@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import ERPDirectStorage from "../../lib/direct-storage-upload";
 
 const TYPE_LABELS = {
   text: "Text", number: "Number", select: "Select", multi_select: "Multi-select",
@@ -10,7 +11,6 @@ const TYPE_LABELS = {
 const VALUELESS_OPERATORS = new Set(["has_value", "is_empty", "is_checked", "not_checked"]);
 const FORM_ACCESS_ALIASES = ["customer form", "b2c customer form", "b2c", "/b2c", "/b2c/form"];
 const DATABASE_ACCESS_ALIASES = ["customer database", "b2c customer database", "b2c", "/b2c", "/b2c/database"];
-let directStorageLoader = null;
 
 function text(value) { return String(value ?? "").trim(); }
 function lower(value) { return text(value).toLowerCase(); }
@@ -101,28 +101,6 @@ function fileToDataUrl(file) {
     reader.readAsDataURL(file);
   });
 }
-function ensureDirectStorage() {
-  if (typeof window === "undefined") return Promise.resolve(null);
-  if (window.ERPDirectStorage?.uploadFile) return Promise.resolve(window.ERPDirectStorage);
-  if (directStorageLoader) return directStorageLoader;
-  directStorageLoader = new Promise((resolve) => {
-    const existing = document.querySelector('script[data-next-direct-storage="true"]');
-    const finish = () => resolve(window.ERPDirectStorage || null);
-    if (existing) {
-      existing.addEventListener("load", finish, { once: true });
-      existing.addEventListener("error", () => resolve(null), { once: true });
-      return;
-    }
-    const script = document.createElement("script");
-    script.src = "/js/direct-storage-upload.js";
-    script.async = true;
-    script.dataset.nextDirectStorage = "true";
-    script.onload = finish;
-    script.onerror = () => resolve(null);
-    document.head.appendChild(script);
-  });
-  return directStorageLoader;
-}
 async function uploadFile(file, onProgress = () => {}) {
   if (!file || !file.size) throw new Error("Choose a valid file first.");
   if (file.size > 10 * 1024 * 1024) throw new Error(`${file.name} is larger than 10 MB.`);
@@ -136,9 +114,7 @@ async function uploadFile(file, onProgress = () => {}) {
     onProgress({ percent: 100, stage: "complete" });
     return payload?.file || null;
   };
-  const direct = await ensureDirectStorage();
-  if (!direct?.uploadFile) return fallback();
-  return direct.uploadFile({ scope: "b2c", file, fallback, onProgress });
+  return ERPDirectStorage.uploadFile({ scope: "b2c", file, fallback, onProgress });
 }
 function emptyValues(fields) {
   return Object.fromEntries(fields.map((field) => [field.key, field.type === "checkbox" ? false : field.type === "multi_select" ? [] : ""]));

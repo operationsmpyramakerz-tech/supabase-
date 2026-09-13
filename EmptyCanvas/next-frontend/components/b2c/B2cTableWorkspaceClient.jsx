@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import B2CFormulaEngine from "../../lib/b2c-formula-engine";
 
 const FIELD_TYPES = [
   ["text", "Text"], ["number", "Number"], ["select", "Select"], ["multi_select", "Multi-select"],
@@ -78,25 +79,6 @@ async function uploadFiles(files, onProgress = () => {}) {
   }
   return uploaded;
 }
-function loadFormulaEngine() {
-  if (typeof window === "undefined") return Promise.resolve(null);
-  if (window.B2CFormulaEngine) return Promise.resolve(window.B2CFormulaEngine);
-  const existing = document.querySelector('script[data-next-b2c-formula-engine="true"]');
-  if (existing) return new Promise((resolve, reject) => {
-    existing.addEventListener("load", () => resolve(window.B2CFormulaEngine || null), { once: true });
-    existing.addEventListener("error", () => reject(new Error("Formula engine failed to load.")), { once: true });
-  });
-  return new Promise((resolve, reject) => {
-    const script = document.createElement("script");
-    script.src = "/js/b2c-formula-engine.js";
-    script.async = true;
-    script.dataset.nextB2cFormulaEngine = "true";
-    script.onload = () => resolve(window.B2CFormulaEngine || null);
-    script.onerror = () => reject(new Error("Formula engine failed to load."));
-    document.head.appendChild(script);
-  });
-}
-
 function Toast({ toast, onClose }) {
   if (!toast) return null;
   return (
@@ -376,9 +358,7 @@ export default function B2cTableWorkspaceClient({ databaseId, initialPayload, bo
   const [schemaOpen, setSchemaOpen] = useState(false);
   const [busy, setBusy] = useState("");
   const [toast, setToast] = useState(null);
-  const [formulaEngine, setFormulaEngine] = useState(null);
-
-  useEffect(() => { loadFormulaEngine().then(setFormulaEngine).catch(() => {}); }, []);
+  const formulaEngine = B2CFormulaEngine;
   useEffect(() => { setPage(1); }, [query, sort, pageSize]);
   useEffect(() => {
     const input = document.querySelector(".classic-app-shell .main-header .searchbar input");
