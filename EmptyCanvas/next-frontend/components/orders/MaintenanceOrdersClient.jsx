@@ -1005,7 +1005,7 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
   }, [groups, tab, type, query]);
 
   async function refreshOrders() {
-    const response = await fetch("/api/orders/requested?scope=all-system&_fresh=1", { credentials: "include", cache: "no-store" });
+    const response = await fetch("/api/orders/requested?scope=maintenance&_fresh=1", { credentials: "include", cache: "no-store" });
     if (response.status === 401) {
       window.location.href = "/login?next=/next/maintenance-orders";
       return;

@@ -4901,12 +4901,11 @@ function _sbSerializeOrderRow(row = {}) {
   };
 }
 
-async function _sbSelectOrdersRows({ approvedOnly = false } = {}) {
-  // PostgREST/Supabase commonly caps a single SELECT response at 1000 rows,
-  // even when a larger `limit` is requested. Operations Orders stores one DB
-  // row per component, so a handful of large orders can cross that cap and make
-  // older order groups disappear from every tab. Fetch the ordered rows in
-  // explicit pages so the UI always receives the complete order history.
+async function _sbSelectOrdersRows({ approvedOnly = false, maintenanceOnly = false, memberName = "" } = {}) {
+  // PostgREST/Supabase commonly caps a single SELECT response at 1000 rows.
+  // Keep explicit paging, but push page-specific filters into PostgreSQL first
+  // so Current Orders and Maintenance Orders do not download the full system
+  // history only to discard most of it in Node.js.
   const pageSize = 1000;
   const selectPaged = async (extraParams = {}) => {
     const allRows = [];
@@ -4931,18 +4930,56 @@ async function _sbSelectOrdersRows({ approvedOnly = false } = {}) {
     return allRows;
   };
 
-  if (approvedOnly) {
-    try {
-      const rows = await selectPaged({
-        sv_approval: _sbPostgrestIlike("approved", { contains: true }),
-      });
-      return rows.filter((row) => norm(_sbOrderGet(row, ["sv_approval", "S.V Approval", "SV Approval"])) === "approved");
-    } catch {}
+  const cleanMemberName = String(memberName || "")
+    .trim()
+    .replace(/[,*%()]/g, " ")
+    .replace(/\s+/g, " ");
+
+  const exactFilter = (rows = []) => (Array.isArray(rows) ? rows : []).filter((row) => {
+    if (approvedOnly && norm(_sbOrderGet(row, ["sv_approval", "S.V Approval", "SV Approval"])) !== "approved") return false;
+    if (maintenanceOnly) {
+      const orderType = _sbOrderGet(row, ["order_type", "Order Type", "orderType", "OrderType"]);
+      if (_normKeyOrderType(orderType) !== _normKeyOrderType("Request Maintenance")) return false;
+    }
+    if (cleanMemberName) {
+      // Preserve the legacy Current Orders visibility rule exactly after the DB
+      // pre-filter: rows without a creator remain visible, otherwise the stored
+      // team-member name must match the signed-in username in either direction.
+      const username = norm(cleanMemberName);
+      const by = norm(_sbOrderGet(row, ["team_member_name", "teams_members", "Teams Members", "supervisor", "Supervisor"]));
+      if (by && !by.includes(username) && !username.includes(by)) return false;
+    }
+    return true;
+  });
+
+  const query = {};
+  if (approvedOnly) query.sv_approval = _sbPostgrestIlike("approved", { contains: true });
+  if (maintenanceOnly) query.order_type = _sbPostgrestIlike("maintenance", { contains: true });
+  if (cleanMemberName) {
+    // The full display name is normally enough. Add the first token as a
+    // compatibility candidate for older rows that stored a shortened name,
+    // then apply the exact legacy comparison above before returning data.
+    const candidates = Array.from(new Set([
+      cleanMemberName,
+      cleanMemberName.split(/\s+/)[0] || "",
+    ].map((value) => String(value || "").trim()).filter((value) => value.length >= 2)));
+    const clauses = candidates.map((value) => `team_member_name.ilike.*${value}*`);
+    clauses.push("team_member_name.is.null", "team_member_name.eq.");
+    query.or = `(${clauses.join(",")})`;
   }
 
-  const list = await selectPaged();
-  if (!approvedOnly) return list;
-  return list.filter((row) => norm(_sbOrderGet(row, ["sv_approval", "S.V Approval", "SV Approval"])) === "approved");
+  if (Object.keys(query).length) {
+    try {
+      return exactFilter(await selectPaged(query));
+    } catch (error) {
+      // Compatibility fallback for an older/custom Supabase schema that is
+      // missing one of the filter columns. The page keeps working exactly as
+      // before, only without the query-level optimization for that request.
+      console.warn("[orders] filtered Supabase query unavailable; using compatibility scan:", error?.message || error);
+    }
+  }
+
+  return exactFilter(await selectPaged());
 }
 
 async function _sbRequestedOrdersList({ includeAllSystem = false } = {}) {
@@ -4971,15 +5008,34 @@ async function _sbRequestedOrdersPayload({ includeAllSystem = false, forceFresh 
 }
 
 async function _sbCurrentOrdersList(req) {
-  const rows = await _sbSelectOrdersRows({ approvedOnly: false });
-  const username = norm(req?.session?.username || "");
-  const filtered = username
-    ? rows.filter((row) => {
-        const by = norm(_sbOrderGet(row, ["team_member_name", "teams_members", "Teams Members", "supervisor", "Supervisor"]));
-        return !by || by.includes(username) || username.includes(by);
-      })
-    : rows;
-  return _sbEnrichOrderGrouping(filtered.map(_sbSerializeOrderRow));
+  const username = String(req?.session?.username || "").trim();
+  const rows = await _sbSelectOrdersRows({ approvedOnly: false, memberName: username });
+  // Current Orders does not render proposal/kit grouping metadata. Returning
+  // the serialized order rows directly avoids loading the full Products + Kits
+  // catalogs on every Current Orders cache miss.
+  return rows.map(_sbSerializeOrderRow);
+}
+
+async function _sbMaintenanceOrdersList() {
+  const rows = await _sbSelectOrdersRows({ approvedOnly: false, maintenanceOnly: true });
+  // Maintenance Orders only needs the data stored on each maintenance row; it
+  // does not use product-tag / kit hierarchy enrichment.
+  return rows.map(_sbSerializeOrderRow);
+}
+
+async function _sbMaintenanceOrdersPayload({ forceFresh = false } = {}) {
+  const cacheKey = "cache:api:orders:maintenance:supabase:v1";
+  const load = async () => _sbMaintenanceOrdersList();
+
+  if (forceFresh) {
+    await cacheDel(cacheKey);
+    const fresh = await load();
+    _memSet(cacheKey, fresh, 60);
+    await _redisSet(cacheKey, fresh, 60);
+    return fresh;
+  }
+
+  return await cacheGetOrSet(cacheKey, 60, load);
 }
 
 function _trimRecentOrdersForRequest(req) {
@@ -5195,6 +5251,7 @@ async function _sbInvalidateOrdersCaches(req = null) {
     "cache:api:orders:requested:supabase:v4:all-system",
     "cache:api:orders:requested:supabase:v5:approved",
     "cache:api:orders:requested:supabase:v5:all-system",
+    "cache:api:orders:maintenance:supabase:v1",
     "cache:api:orders:current:supabase:v1",
     "cache:api:orders:current:supabase:v1:all",
   ];
@@ -18136,6 +18193,9 @@ app.get(
     res.set("Cache-Control", "no-store");
     try {
       const requestedScope = String(req.query?.scope || req.query?.view || "").trim().toLowerCase();
+      const requestedType = String(req.query?.type || req.query?.orderType || "").trim().toLowerCase();
+      const maintenanceOnly = ["maintenance", "request-maintenance", "requestmaintenance"].includes(requestedScope)
+        || ["maintenance", "request-maintenance", "requestmaintenance"].includes(requestedType);
       const includeAllSystem = ["all", "all-system", "system", "system-all"].includes(requestedScope)
         || String(req.query?.allSystem || req.query?.includeAllSystem || "") === "1";
 
@@ -18144,6 +18204,7 @@ app.get(
           String(req.query?._fresh || "") === "1" ||
           !!req.query?._refresh ||
           String(req.get("x-ops-hard-refresh") || "") === "1";
+        if (maintenanceOnly) return res.json(await _sbMaintenanceOrdersPayload({ forceFresh }));
         return res.json(await _sbRequestedOrdersPayload({ includeAllSystem, forceFresh }));
       }
 
@@ -24945,10 +25006,10 @@ async function _pageBootstrapOperationsOrders(req) {
 async function _pageBootstrapMaintenanceOrders(req) {
   return Promise.all([
     _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapAccountPayload(req)),
-    _pageBootstrapLoad('/api/orders/requested?scope=all-system', 25_000, () =>
+    _pageBootstrapLoad('/api/orders/requested?scope=maintenance', 20_000, () =>
       _sbOrdersEnabled()
-        ? _sbRequestedOrdersPayload({ includeAllSystem: true })
-        : _pageBootstrapFetchExistingRoute(req, '/api/orders/requested?scope=all-system', 25_000)
+        ? _sbMaintenanceOrdersPayload()
+        : _pageBootstrapFetchExistingRoute(req, '/api/orders/requested?scope=maintenance', 20_000)
     ),
     _pageBootstrapLoad('/api/orders/requested/maintenance-form-options', 5 * 60_000, () => _maintenanceFormOptionsPayload()),
   ]);
