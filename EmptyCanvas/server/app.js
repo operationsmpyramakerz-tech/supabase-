@@ -4884,6 +4884,7 @@ function _sbSerializeOrderRow(row = {}) {
     assignedToName: _sbOrderText(_sbOrderGet(row, ["supervisor", "Supervisor"])) || "",
     svApproval: _sbOrderText(_sbOrderGet(row, ["sv_approval", "S.V Approval", "SV Approval"])) || null,
     productTag: _sbOrderText(_sbOrderGet(row, ["product_tag", "Product Tag", "component_tag", "Component Tag", "tag", "Tag"])) || null,
+    customizeId: _sbOrderText(_sbOrderGet(row, ["customize_id", "Customize ID", "custom_id", "Custom ID"])) || null,
     kitTag: _sbOrderText(_sbOrderGet(row, ["kit_tag", "Kit Tag", "kit_name", "Kit Name", "source_kit", "Source Kit"])) || null,
     kitFolderName: _sbOrderText(_sbOrderGet(row, ["kit_folder", "Kit Folder", "kit_folder_name", "Kit Folder Name"])) || null,
     sourceProposalId,
@@ -5326,8 +5327,9 @@ async function _sbOrderRowsByIds(ids = []) {
   return cleanIds.map((id) => byId.get(String(id))).filter(Boolean);
 }
 
-async function _sbUpdateOrderRowSafe(id, row = {}) {
+async function _sbUpdateOrderRowSafe(id, row = {}, requiredColumns = []) {
   let payload = { ...(row || {}) };
+  const required = new Set((Array.isArray(requiredColumns) ? requiredColumns : []).filter(Boolean));
   const removed = [];
   for (let attempt = 0; attempt < 10; attempt += 1) {
     try {
@@ -5339,6 +5341,12 @@ async function _sbUpdateOrderRowSafe(id, row = {}) {
         (message.match(/column ['"]([^'"]+)['"]/i) || [])[1] ||
         "";
       if (!missingColumn || !Object.prototype.hasOwnProperty.call(payload, missingColumn)) throw error;
+      if (required.has(missingColumn)) {
+        const err = new Error(`Missing required Orders column: ${missingColumn}. Run the Customize ID SQL migration first.`);
+        err.status = 400;
+        err.cause = error;
+        throw err;
+      }
       delete payload[missingColumn];
       removed.push(missingColumn);
     }
@@ -6145,7 +6153,7 @@ async function _sbBuildOrderExportPayload(orderIds = [], req = null, { repeatedC
     grandQty += qty;
     grandTotal += total;
     rows.push({
-      idCode: prod?.displayId || "",
+      idCode: item?.customizeId || prod?.displayId || "",
       component: item.productName || prod?.name || "Unknown Product",
       qty,
       receivedQty,
@@ -8553,8 +8561,9 @@ async function _sbVerifyTeamMemberPassword(memberId, password) {
 }
 
 
-async function _sbInsertOrderRowSafe(row = {}) {
+async function _sbInsertOrderRowSafe(row = {}, requiredColumns = []) {
   let payload = { ...(row || {}) };
+  const required = new Set((Array.isArray(requiredColumns) ? requiredColumns : []).filter(Boolean));
   const removed = [];
   for (let attempt = 0; attempt < 10; attempt += 1) {
     try {
@@ -8566,6 +8575,12 @@ async function _sbInsertOrderRowSafe(row = {}) {
         (message.match(/column ['"]([^'"]+)['"]/i) || [])[1] ||
         "";
       if (!missingColumn || !Object.prototype.hasOwnProperty.call(payload, missingColumn)) throw error;
+      if (required.has(missingColumn)) {
+        const err = new Error(`Missing required Orders column: ${missingColumn}. Run the Customize ID SQL migration first.`);
+        err.status = 400;
+        err.cause = error;
+        throw err;
+      }
       delete payload[missingColumn];
       removed.push(missingColumn);
     }
@@ -30595,6 +30610,8 @@ app.post(
         return {
           ...serialized,
           productId: String(product?.id || _sbOrderGet(row, ["product_id", "productId", "product_page_id", "productPageId"]) || "").trim() || null,
+          productIdCode: String(product?.displayId || "").trim() || null,
+          effectiveIdCode: String(serialized?.customizeId || product?.displayId || "").trim() || null,
           requestedQty,
           receivedQty,
           remainingQty,
@@ -30906,6 +30923,7 @@ app.post(
             : numberField("unitPrice", "Unit cost");
         }
         if (has("productTag")) patch.product_tag = String(itemUpdate.productTag || "").trim() || null;
+        if (has("customizeId")) patch.customize_id = String(itemUpdate.customizeId || "").trim() || null;
         if (has("kitTag")) patch.kit_tag = String(itemUpdate.kitTag || "").trim() || null;
         if (has("reason")) patch.reason = String(itemUpdate.reason || "").trim() || null;
         if (has("issueDescription")) patch.issue_description = String(itemUpdate.issueDescription || "").replace(/\r\n/g, "\n").trim() || null;
@@ -31057,10 +31075,19 @@ app.post(
           const insertedRows = [];
           try {
             for (let index = 1; index < materializedRows.length; index += 1) {
-              const inserted = await _sbInsertOrderRowSafe(_sbOperationsCloneOrderInsertRow(materializedRows[index].finalRow));
+              const insertRow = _sbOperationsCloneOrderInsertRow(materializedRows[index].finalRow);
+              const inserted = await _sbInsertOrderRowSafe(
+                insertRow,
+                Object.prototype.hasOwnProperty.call(insertRow, "customize_id") ? ["customize_id"] : [],
+              );
               insertedRows.push(inserted);
             }
-            const firstUpdated = await _sbUpdateOrderRowSafe(id, materializedRows[0].updatePatch);
+            const firstPatch = materializedRows[0].updatePatch;
+            const firstUpdated = await _sbUpdateOrderRowSafe(
+              id,
+              firstPatch,
+              Object.prototype.hasOwnProperty.call(firstPatch, "customize_id") ? ["customize_id"] : [],
+            );
             updatedRows.push(firstUpdated, ...insertedRows);
           } catch (splitError) {
             for (const inserted of insertedRows) {
@@ -31083,7 +31110,11 @@ app.post(
           updatedRows.push(beforeRow);
           continue;
         }
-        updatedRows.push(await _sbUpdateOrderRowSafe(id, patch));
+        updatedRows.push(await _sbUpdateOrderRowSafe(
+          id,
+          patch,
+          Object.prototype.hasOwnProperty.call(patch, "customize_id") ? ["customize_id"] : [],
+        ));
       }
 
       const rowsNeedingStockSync = updatedRows.filter((row) => {
@@ -31809,6 +31840,8 @@ async function _sbBuildArrivedOrderStocktakingPayload(orderRow = {}, options = {
     String(item.productName || "").trim() ||
     _sbOrderText(_sbOrderGet(orderRow, ["product_name", "Product Name", "product", "Product"])) ||
     "Untitled Product";
+  const productIdCodeMap = await _getProductsNameToIdCodeMap().catch(() => new Map());
+  const productIdCode = String(productIdCodeMap.get(_normNameKey(productName)) || "").trim() || null;
 
   const orderReceiptEntries = _sbParseScreenshotEntries(_sbOrderGet(orderRow, ["order_receipt", "Order Receipt", "delivery_receipt", "Delivery Receipt", "receipt_photos", "Receipt Photos"]));
   const receiptText = _normalizeMultilineText(
@@ -31859,6 +31892,8 @@ async function _sbBuildArrivedOrderStocktakingPayload(orderRow = {}, options = {
     componentTag,
     kitTag: proposalKitTag || null,
     productName,
+    productIdCode,
+    customizeId: String(item?.customizeId || _sbOrderText(_sbOrderGet(orderRow, ["customize_id", "Customize ID", "custom_id", "Custom ID"])) || "").trim() || null,
     productUrl: item.productUrl || _sbExtractUrl(_sbOrderGet(orderRow, ["product_url", "Product URL", "url", "URL"])) || "",
     unitPrice: Number.isFinite(Number(item.unitPrice)) ? Number(item.unitPrice) : null,
     receiptText,
@@ -31898,6 +31933,12 @@ async function _sbSyncArrivedOrderToStocktaking(orderRow = {}, options = {}) {
   const receiptPhotosColumn =
     _sbFindStocktakingKey(keys, ["receipt_photos", "Receipt Photos", "receipt_photo", "Receipt Photo", "receipt_images", "Receipt Images", "receipt_image", "Receipt Image"]) ||
     "receipt_photos";
+  const idCodeColumn =
+    _sbFindStocktakingKey(keys, ["id_code", "ID Code", "id code", "code", "Code"]) ||
+    "id_code";
+  const customizeIdColumn =
+    _sbFindStocktakingKey(keys, ["customize_id", "Customize ID", "custom_id", "Custom ID"]) ||
+    "customize_id";
 
   const existingRows = Array.isArray(payload.rows) ? payload.rows : [];
   if (payload.orderId) {
@@ -31930,6 +31971,8 @@ async function _sbSyncArrivedOrderToStocktaking(orderRow = {}, options = {}) {
   if (payload.orderType) row[orderTypeColumn] = payload.orderType;
   setFirstExisting(["receipt_number", "Receipt Number", "store_receipt_number", "Store Receipt Number", "receipt", "Receipt"], payload.receiptText || null, "receipt_number");
   if (payload.receiptPhotos) row[receiptPhotosColumn] = payload.receiptPhotos;
+  if (payload.productIdCode) row[idCodeColumn] = payload.productIdCode;
+  if (payload.customizeId) row[customizeIdColumn] = payload.customizeId;
   if (payload.orderId) row[sourceOrderColumn] = payload.orderId;
   if (payload.orderNumber) row[sourceOrderNumberColumn] = payload.orderNumber;
 
@@ -31947,6 +31990,8 @@ async function _sbSyncArrivedOrderToStocktaking(orderRow = {}, options = {}) {
     payload.kitTag ? kitTagColumn : "",
     payload.orderType ? orderTypeColumn : "",
     payload.receiptPhotos ? receiptPhotosColumn : "",
+    payload.productIdCode ? idCodeColumn : "",
+    payload.customizeId ? customizeIdColumn : "",
   ].filter(Boolean);
 
   if (options?.prepareOnly) {
@@ -32182,6 +32227,8 @@ function _sbSerializeStocktakingRow(row = {}, schoolNameOrColumn = "", options =
     "receipt_images", "Receipt Images", "receipt_image", "Receipt Image",
     "order_receipt", "Order Receipt", "attachments", "Attachments", "files", "Files",
   ]);
+  const customizeId = _sbStocktakingText(_sbGet(row, ["customize_id", "Customize ID", "custom_id", "Custom ID"])) || null;
+  const originalIdCode = _sbStocktakingText(_sbGet(row, ["id_code", "ID Code", "id code", "code", "Code"])) || null;
   return {
     id: String(_sbGet(row, ["id", "ID", "notion_id", "Notion ID"]) ?? ""),
     name,
@@ -32189,7 +32236,9 @@ function _sbSerializeStocktakingRow(row = {}, schoolNameOrColumn = "", options =
     url,
     quantity: _sbStocktakingNum(quantityColumn ? row?.[quantityColumn] : 0),
     oneKitQuantity: _sbStocktakingNum(_sbGet(row, ["one_kit_quantity", "One Kit Quantity", "one kit quantity"])),
-    idCode: _sbStocktakingText(_sbGet(row, ["id_code", "ID Code", "id code", "code", "Code"])) || null,
+    idCode: customizeId || originalIdCode,
+    originalIdCode,
+    customizeId,
     receiptNumber: _normalizeMultilineText(
       _sbStocktakingText(_sbGet(row, ["receipt_number", "Receipt Number", "store_receipt_number", "Store Receipt Number", "receipt", "Receipt"])) || "",
     ),

@@ -1353,7 +1353,7 @@ function EditPasswordModal({ state, busy, error, onCancel, onSubmit }) {
   const [password, setPassword] = useState("");
   useEffect(() => setPassword(""), [state?.group?.key]);
   if (!state) return null;
-  return <div className="co-submodal-overlay is-open" aria-hidden="false"><form className="co-submodal-dialog req-edit-dialog" role="dialog" aria-modal="true" onSubmit={(event) => { event.preventDefault(); onSubmit(password); }}><button type="button" className="co-submodal-close" onClick={onCancel} aria-label="Close"/><div className="co-submodal-header req-edit-header"><div className="req-edit-icon"><ClassicOrderIcon name="edit-2" /></div><div><div className="co-submodal-title">Edit operations order</div><div className="co-submodal-sub">Enter the Operations Orders admin password to continue editing this order.</div></div></div><div className="co-submodal-body"><label className="co-submodal-label">Admin password</label><input className="co-submodal-input" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoFocus disabled={busy}/><div className="co-submodal-error" role="alert">{error}</div></div><div className="co-submodal-actions"><button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancel} disabled={busy}>Cancel</button><button type="submit" className="ro-action-btn ro-action-btn--dark" disabled={busy || !password.trim()}>{busy ? "Checking…" : "Continue"}</button></div></form></div>;
+  return <div className="co-submodal-overlay is-open" aria-hidden="false"><form className="co-submodal-dialog req-edit-dialog" role="dialog" aria-modal="true" onSubmit={(event) => { event.preventDefault(); onSubmit(password); }}><button type="button" className="co-submodal-close" onClick={onCancel} aria-label="Close"/><div className="co-submodal-header req-edit-header"><div className="req-edit-icon"><ClassicOrderIcon name="edit-2" /></div><div><div className="co-submodal-title">Edit operations order</div></div></div><div className="co-submodal-body"><label className="co-submodal-label">Admin password</label><input className="co-submodal-input" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoFocus disabled={busy}/><div className="co-submodal-error" role="alert">{error}</div></div><div className="co-submodal-actions"><button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancel} disabled={busy}>Cancel</button><button type="submit" className="ro-action-btn ro-action-btn--dark" disabled={busy || !password.trim()}>{busy ? "Checking…" : "Continue"}</button></div></form></div>;
 }
 
 function OperationsModernDropdown({
@@ -1469,11 +1469,14 @@ function OperationsComponentEditModal({ state, products = [], statusOptions = []
   const item = state?.item || null;
   const [form, setForm] = useState(null);
   const [validationError, setValidationError] = useState("");
+  const [customizeIdOpen, setCustomizeIdOpen] = useState(false);
+  const customizeIdInputRef = useRef(null);
 
   useEffect(() => {
     if (!item) {
       setForm(null);
       setValidationError("");
+      setCustomizeIdOpen(false);
       return;
     }
     const sourceSpecific = Number(item?._displaySourceCount || 0) > 1;
@@ -1509,7 +1512,10 @@ function OperationsComponentEditModal({ state, products = [], statusOptions = []
       reason: text(item?.reason),
       issueDescription: text(item?.issueDescription ?? item?.issue_description),
       productUrl: text(item?.productUrl ?? item?.product_url ?? matchedProduct?.url),
+      productIdCode: text(item?.productIdCode ?? item?.idCode ?? matchedProduct?.displayId),
+      customizeId: text(item?.customizeId ?? item?.customize_id),
     });
+    setCustomizeIdOpen(Boolean(text(item?.customizeId ?? item?.customize_id)));
     setValidationError("");
   }, [item?.id, state?.version, products]);
 
@@ -1576,7 +1582,10 @@ function OperationsComponentEditModal({ state, products = [], statusOptions = []
       productUrl: text(product.url),
       unitPrice: product.unitPrice === null || product.unitPrice === undefined ? "" : String(product.unitPrice),
       productTag: text(product?.tags?.[0]) || current.productTag,
+      productIdCode: text(product?.displayId),
+      customizeId: String(current?.productId || "") === String(product.id) ? current.customizeId : "",
     }));
+    if (String(form?.productId || "") !== String(product.id)) setCustomizeIdOpen(false);
     setValidationError("");
   }
 
@@ -1628,6 +1637,7 @@ function OperationsComponentEditModal({ state, products = [], statusOptions = []
       kitTag: form.kitTag,
       reason: form.reason,
       issueDescription: form.issueDescription,
+      customizeId: text(form.customizeId) || null,
     });
   }
 
@@ -1668,6 +1678,49 @@ function OperationsComponentEditModal({ state, products = [], statusOptions = []
               placeholder="Select status"
               disabled={busy}
             />
+          </div>
+
+          <div className="next-operations-custom-id-row">
+            <label className="co-submodal-field next-operations-edit-field next-operations-custom-id-display">
+              <span className="co-submodal-label">ID</span>
+              <input
+                className="co-submodal-input"
+                value={text(form.productIdCode)}
+                placeholder="No ID"
+                readOnly
+                aria-label="Component ID"
+              />
+            </label>
+            <button
+              type="button"
+              className={`next-operations-customize-id-btn ${customizeIdOpen ? "is-active" : ""}`}
+              onClick={() => {
+                setCustomizeIdOpen((current) => {
+                  const next = !current;
+                  if (!current) window.setTimeout(() => customizeIdInputRef.current?.focus(), 20);
+                  return next;
+                });
+              }}
+              disabled={busy}
+            >
+              <ClassicOrderIcon name="edit-2" />
+              <span>Customize ID</span>
+            </button>
+            {customizeIdOpen ? (
+              <label className="co-submodal-field next-operations-edit-field next-operations-custom-id-input">
+                <span className="co-submodal-label">Customized ID</span>
+                <input
+                  ref={customizeIdInputRef}
+                  className="co-submodal-input"
+                  type="text"
+                  value={form.customizeId}
+                  onChange={(event) => setForm((current) => ({ ...current, customizeId: event.target.value }))}
+                  placeholder={text(form.productIdCode) ? `Original ID: ${text(form.productIdCode)}` : "Enter a temporary ID"}
+                  disabled={busy}
+                />
+                <span className="next-operations-edit-hint">Saved only for this order component and its Stocktaking row.</span>
+              </label>
+            ) : null}
           </div>
 
           <div className="next-operations-edit-section">

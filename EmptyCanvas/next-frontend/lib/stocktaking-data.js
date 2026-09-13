@@ -105,6 +105,8 @@ function serializeRow(row = {}, quantityColumn = "") {
     urlValue(valueFor(row, ["product_url", "Product URL"])) ||
     urlValue(valueFor(row, ["item_url", "Item URL"]));
   const tagName = text(valueFor(row, ["tag", "Tag", "tags", "Tags"])) || "Untagged";
+  const customizeId = text(valueFor(row, ["customize_id", "Customize ID", "custom_id", "Custom ID"])) || null;
+  const originalIdCode = text(valueFor(row, ["id_code", "ID Code", "id code", "code", "Code"])) || null;
 
   return {
     id: text(valueFor(row, ["id", "ID", "notion_id", "Notion ID"])),
@@ -113,7 +115,9 @@ function serializeRow(row = {}, quantityColumn = "") {
     url,
     quantity: number(quantityColumn ? row?.[quantityColumn] : 0),
     oneKitQuantity: number(valueFor(row, ["one_kit_quantity", "One Kit Quantity", "one kit quantity"])),
-    idCode: text(valueFor(row, ["id_code", "ID Code", "id code", "code", "Code"])) || null,
+    idCode: customizeId || originalIdCode,
+    originalIdCode,
+    customizeId,
     receiptNumber: text(valueFor(row, ["receipt_number", "Receipt Number", "store_receipt_number", "Store Receipt Number", "receipt", "Receipt", "order_receipt", "Order Receipt"])),
     unitPrice: number(valueFor(row, ["unity_price", "unit_price", "Unity Price", "Unit Price", "one_piece_price"])),
     userName: text(valueFor(row, ["user_name", "username", "User Name", "Username", "created_by", "Created By", "requested_by", "Requested By", "owner_name", "Owner Name", "employee", "Employee"])) || "Unknown user",
