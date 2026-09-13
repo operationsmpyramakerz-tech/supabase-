@@ -1,7 +1,6 @@
 import Script from "next/script";
 import { cookies } from "next/headers";
 import "./globals.css";
-import "./classic-parity.css";
 import "./system-ui.css";
 
 const COVER_URL_COOKIE = "ops_ui_cover_url_v1";

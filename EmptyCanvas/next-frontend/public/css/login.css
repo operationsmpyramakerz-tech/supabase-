@@ -1338,3 +1338,103 @@ body.login-inline-success-active .login-logo-stage.is-running[data-logo-animatio
     animation-iteration-count: 1 !important;
   }
 }
+
+/* =========================================================
+   Login-only parity rules
+   Moved out of the authenticated shell stylesheet so the login route no
+   longer downloads the full ERP parity bundle.
+   ========================================================= */
+body.next-classic-login-active .login-card {
+  animation: classicLoginCardSlideUp .8s ease-out forwards;
+}
+
+@keyframes classicLoginCardSlideUp {
+  from { opacity: 0; transform: translateY(50px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+body.next-classic-login-active .login-logo {
+  animation: classicLoginLogoFloat 3s infinite ease-in-out;
+}
+
+@keyframes classicLoginLogoFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-15px); }
+}
+
+body.next-classic-login-active .input-with-icon { position: relative; }
+body.next-classic-login-active .input-with-icon .input-icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #9ca3af;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 2;
+}
+body.next-classic-login-active .input-with-icon .input-icon svg { width: 18px; height: 18px; }
+body.next-classic-login-active .input-with-icon input { padding-left: 2.65rem; }
+body.next-classic-login-active .input-with-icon:focus-within .input-icon { color: #d97706; }
+body.next-classic-login-active .login-btn {
+  position: relative;
+  overflow: hidden;
+  transition: all .4s ease;
+}
+body.next-classic-login-active .login-btn:hover:not(:disabled) {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 25px rgba(102,126,234,.3);
+}
+body.next-classic-login-active .toggle-password { transition: all .3s ease; }
+body.next-classic-login-active .toggle-password:hover {
+  background: rgba(0,0,0,.05);
+  border-radius: 50%;
+}
+body.next-classic-login-active .error-message { animation: classicLoginShake .6s ease-in-out; }
+
+@keyframes classicLoginShake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-10px); }
+  40%, 80% { transform: translateX(10px); }
+}
+
+.next-classic-login-loading-card {
+  opacity: 1;
+  transform: none;
+  animation: none;
+}
+.next-classic-login-loading-form { display: grid; gap: 14px; }
+.next-classic-login-loading-field,
+.next-classic-login-loading-button,
+.next-classic-login-loading-link {
+  position: relative;
+  overflow: hidden;
+  background: #eef1f5;
+}
+.next-classic-login-loading-field::after,
+.next-classic-login-loading-button::after,
+.next-classic-login-loading-link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.72), transparent);
+  animation: nextClassicLoginShimmer 1.35s infinite;
+}
+@keyframes nextClassicLoginShimmer { 100% { transform: translateX(100%); } }
+.next-classic-login-loading-field { height: 48px; border-radius: 10px; }
+.next-classic-login-loading-link { width: 92px; height: 12px; border-radius: 999px; justify-self: end; }
+.next-classic-login-loading-button { height: 48px; border-radius: 10px; }
+
+@media (prefers-reduced-motion: reduce) {
+  body.next-classic-login-active .login-card,
+  body.next-classic-login-active .login-logo,
+  body.next-classic-login-active .error-message,
+  .next-classic-login-loading-field::after,
+  .next-classic-login-loading-button::after,
+  .next-classic-login-loading-link::after {
+    animation: none !important;
+  }
+}

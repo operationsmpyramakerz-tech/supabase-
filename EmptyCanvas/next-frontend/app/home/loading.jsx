@@ -1,3 +1,4 @@
+import ShellStyleLinks from "../../components/ShellStyleLinks";
 import { BodyClassSync } from "../../components/ClassicShellControls";
 import { ClassicStableLoadingHeader, ClassicStableLoadingSidebar } from "../../components/ClassicStableLoadingChrome";
 
@@ -6,9 +7,7 @@ const SIDEBAR_ITEMS = 14;
 export default function LoadingHome() {
   return (
     <>
-      <link rel="stylesheet" href="/next/css/style.css?v=bidi-mixed-v1" />
-      <link rel="stylesheet" href="/next/css/ui-redesign.css?v=sidebar-page-label-frame-v3" />
-      <link rel="stylesheet" href="/next/css/page-canvas-fix.css?v=page-canvas-single-layer-v3" />
+      <ShellStyleLinks />
       <link rel="stylesheet" href="/next/css/home.css?v=home-expenses-dark-card-v1" />
       <BodyClassSync className="page-home next-classic-shell-active" />
 

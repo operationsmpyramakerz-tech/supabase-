@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import {
   modernNotificationUrl,
@@ -27,6 +29,7 @@ async function requestJson(url, options = {}) {
 }
 
 export default function NotificationsBell({ classic = false }) {
+  const router = useRouter();
   const [items, setItems] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [open, setOpen] = useState(false);
@@ -146,7 +149,12 @@ export default function NotificationsBell({ classic = false }) {
     await markRead(item);
     setOpen(false);
     const target = modernNotificationUrl(item?.url);
-    if (target) window.location.href = target;
+    if (!target) return;
+    if (target.startsWith("/")) {
+      router.push(target);
+      return;
+    }
+    window.location.href = target;
   }
 
   if (classic) {
@@ -194,7 +202,7 @@ export default function NotificationsBell({ classic = false }) {
             </div>
 
             <div className="notif-center-footer">
-              <a className="notif-center-seeall" href="/next/notifications">See All</a>
+              <Link className="notif-center-seeall" href="/next/notifications" prefetch={true}>See All</Link>
             </div>
           </div>
         </div>

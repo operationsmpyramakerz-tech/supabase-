@@ -1,3 +1,4 @@
+import ShellStyleLinks from "./ShellStyleLinks";
 import { BodyClassSync } from "./ClassicShellControls";
 import { ClassicStableLoadingHeader, ClassicStableLoadingSidebar } from "./ClassicStableLoadingChrome";
 
@@ -6,9 +7,7 @@ const SIDEBAR_ITEMS = 18;
 export default function ClassicUsersCenterLoading() {
   return (
     <>
-      <link rel="stylesheet" href="/next/css/style.css?v=bidi-mixed-v1" />
-      <link rel="stylesheet" href="/next/css/ui-redesign.css?v=sidebar-page-label-frame-v3" />
-      <link rel="stylesheet" href="/next/css/page-canvas-fix.css?v=page-canvas-single-layer-v3" />
+      <ShellStyleLinks />
       <link rel="stylesheet" href="/next/css/user-access.css?v=next-stage-2m-users-center" />
       <BodyClassSync className="user-access-page next-classic-shell-active" />
       <div className="app-container classic-app-shell next-classic-users-loading" aria-label="Loading Users Center">

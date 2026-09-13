@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 
 const HISTORY_PERMISSIONS = ["History", "System History", "Audit History", "Audit Log", "System Audit", "/history"];
@@ -129,6 +130,7 @@ async function clearServerCaches() {
 }
 
 export default function UserProfileMenu({ account }) {
+  const router = useRouter();
   const triggerRef = useRef(null);
   const panelRef = useRef(null);
   const closeTimerRef = useRef(0);
@@ -268,7 +270,12 @@ export default function UserProfileMenu({ account }) {
 
   function navigate(href) {
     closeMenu({ immediate: true });
-    window.location.href = href;
+    const target = String(href || "").trim();
+    if (target.startsWith("/next/")) {
+      router.push(target);
+      return;
+    }
+    window.location.href = target;
   }
 
   async function hardRefresh() {

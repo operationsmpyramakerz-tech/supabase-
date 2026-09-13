@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect } from "react";
+import { useRouter } from "next/navigation";
 
 const COLLAPSED_KEY = "ui.sidebarCollapsed";
 const SIDEBAR_SCROLL_KEY = "ui.sidebarScrollTop";
@@ -370,6 +371,8 @@ export function ClassicSidebarViewportKeeper() {
 
 
 export function ClassicSidebarActiveIndicator() {
+  const router = useRouter();
+
   useLayoutEffect(() => {
     const sidebar = document.querySelector(".classic-app-shell > .sidebar");
     if (!(sidebar instanceof HTMLElement)) return undefined;
@@ -569,7 +572,8 @@ export function ClassicSidebarActiveIndicator() {
       if (navigationTimer) window.clearTimeout(navigationTimer);
       const delay = reduceMotion() ? 0 : 230;
       navigationTimer = window.setTimeout(() => {
-        window.location.assign(destination.href);
+        const nextHref = `${destination.pathname}${destination.search}${destination.hash}`;
+        router.push(nextHref);
       }, delay);
     };
 
@@ -618,7 +622,7 @@ export function ClassicSidebarActiveIndicator() {
       sidebar.classList.remove("sidebar-active-indicator-ready", "sidebar-active-indicator-animating");
       indicator.remove();
     };
-  }, []);
+  }, [router]);
 
   return null;
 }

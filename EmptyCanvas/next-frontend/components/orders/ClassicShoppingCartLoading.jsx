@@ -1,12 +1,11 @@
+import ShellStyleLinks from "../ShellStyleLinks";
 import { BodyClassSync } from "../ClassicShellControls";
 import { ClassicStableLoadingHeader, ClassicStableLoadingSidebar } from "../ClassicStableLoadingChrome";
 
 export default function ClassicShoppingCartLoading() {
   return (
     <>
-      <link rel="stylesheet" href="/next/css/style.css?v=bidi-mixed-v1" />
-      <link rel="stylesheet" href="/next/css/ui-redesign.css?v=sidebar-page-label-frame-v3" />
-      <link rel="stylesheet" href="/next/css/page-canvas-fix.css?v=page-canvas-single-layer-v3" />
+      <ShellStyleLinks />
       <BodyClassSync className="shopping-cart-page next-classic-shell-active" />
 
       <div className="app-container classic-app-shell next-classic-orders-loading" aria-label="Loading Shopping Cart">
