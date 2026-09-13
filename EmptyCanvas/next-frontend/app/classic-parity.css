@@ -14276,6 +14276,12 @@ body.operations-orders-page .next-classic-orders-parity .req-ops-reject {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+  /* Keep search on its own row. Action buttons then pair beneath it:
+     Download | Sort, and in Edit mode Cancel | Save changes. */
+  body.operations-orders-page .next-classic-orders-parity .order-modal-search-actions > .order-component-search {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
   body.operations-orders-page .next-classic-orders-parity .co-modal-actions .ro-action-btn,
   body.operations-orders-page .next-classic-orders-parity .order-sort-menu-wrap,
   body.operations-orders-page .next-classic-orders-parity .order-sort-trigger {
@@ -15241,15 +15247,77 @@ body.operations-orders-page .next-operations-component-edit-actions .ro-action-b
   }
 
   body.operations-orders-page .next-operations-component-edit-dialog {
-    width: min(540px, calc(100vw - 18px));
-    max-height: calc(100vh - 18px);
-    padding: 14px 14px 0;
-    border-radius: 19px;
+    width: min(500px, calc(100vw - 28px));
+    /* Reserve the bottom-dock area so the footer actions never sit behind it. */
+    max-height: min(690px, calc(100dvh - 160px));
+    padding: 12px 12px 0;
+    border-radius: 18px;
+  }
+
+  body.operations-orders-page .next-operations-component-edit-header {
+    padding-right: 42px;
+  }
+
+  body.operations-orders-page .next-operations-component-edit-header .req-edit-icon {
+    width: 42px;
+    height: 42px;
+    min-width: 42px;
+    border-radius: 14px;
+  }
+
+  body.operations-orders-page .next-operations-component-edit-header .co-submodal-title {
+    font-size: 20px;
+    line-height: 1.05;
+  }
+
+  body.operations-orders-page .next-operations-component-edit-body {
+    gap: 8px;
+    margin-top: 9px;
+    padding: 1px 3px 10px 0;
+  }
+
+  body.operations-orders-page .next-operations-edit-grid,
+  body.operations-orders-page .next-operations-edit-qty-grid {
+    gap: 8px;
+  }
+
+  body.operations-orders-page .next-operations-edit-section {
+    gap: 7px;
+    padding: 10px;
+    border-radius: 15px;
+  }
+
+  body.operations-orders-page .next-operations-component-edit-dialog .co-submodal-label {
+    margin-bottom: 5px;
+    font-size: 10px;
+  }
+
+  body.operations-orders-page .next-operations-component-edit-dialog .co-submodal-input,
+  body.operations-orders-page .next-operations-modern-select__trigger {
+    min-height: 39px;
+  }
+
+  body.operations-orders-page .next-operations-component-edit-dialog .co-submodal-input {
+    padding: 8px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+  }
+
+  body.operations-orders-page .next-operations-component-edit-dialog .co-submodal-textarea {
+    min-height: 68px;
+    padding: 9px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+  }
+
+  body.operations-orders-page .next-operations-edit-hint {
+    margin-top: 3px;
+    font-size: 8px;
   }
 
   body.operations-orders-page .next-operations-component-edit-actions {
-    margin: 0 -14px;
-    padding: 10px 14px 12px;
+    margin: 0 -12px;
+    padding: 9px 12px 10px;
   }
 
   body.operations-orders-page .next-operations-component-edit-actions .ro-action-btn {

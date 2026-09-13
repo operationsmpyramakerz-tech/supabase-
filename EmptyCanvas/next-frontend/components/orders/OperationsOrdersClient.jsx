@@ -1646,7 +1646,7 @@ function OperationsComponentEditModal({ state, products = [], statusOptions = []
         <button type="button" className="co-submodal-close" onClick={onCancel} disabled={busy} aria-label="Close component editor" />
         <div className="co-submodal-header req-edit-header next-operations-component-edit-header">
           <div className="req-edit-icon"><ClassicOrderIcon name="edit-2" /></div>
-          <div><div className="co-submodal-title">Edit component</div><div className="co-submodal-sub">Save this component to the pending order changes, then use Save changes at the end of Edit mode.</div></div>
+          <div><div className="co-submodal-title">Edit component</div></div>
         </div>
         <div className="co-submodal-body next-operations-component-edit-body">
           <div className="next-operations-edit-grid next-operations-edit-grid--primary">
