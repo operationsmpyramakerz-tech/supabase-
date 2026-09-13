@@ -4953,6 +4953,23 @@ async function _sbRequestedOrdersList({ includeAllSystem = false } = {}) {
   return _sbEnrichOrderGrouping(rows.map(_sbSerializeOrderRow));
 }
 
+async function _sbRequestedOrdersPayload({ includeAllSystem = false, forceFresh = false } = {}) {
+  const cacheKey = includeAllSystem
+    ? "cache:api:orders:requested:supabase:v5:all-system"
+    : "cache:api:orders:requested:supabase:v5:approved";
+  const load = async () => _sbRequestedOrdersList({ includeAllSystem });
+
+  if (forceFresh) {
+    await cacheDel(cacheKey);
+    const fresh = await load();
+    _memSet(cacheKey, fresh, 60);
+    await _redisSet(cacheKey, fresh, 60);
+    return fresh;
+  }
+
+  return await cacheGetOrSet(cacheKey, 60, load);
+}
+
 async function _sbCurrentOrdersList(req) {
   const rows = await _sbSelectOrdersRows({ approvedOnly: false });
   const username = norm(req?.session?.username || "");
@@ -4963,6 +4980,39 @@ async function _sbCurrentOrdersList(req) {
       })
     : rows;
   return _sbEnrichOrderGrouping(filtered.map(_sbSerializeOrderRow));
+}
+
+function _trimRecentOrdersForRequest(req) {
+  const RECENT_TTL_MS = 10 * 60 * 1000;
+  let recent = Array.isArray(req?.session?.recentOrders) ? req.session.recentOrders : [];
+  recent = recent.filter((row) => {
+    const createdAt = new Date(row?.createdTime || 0).getTime();
+    return Number.isFinite(createdAt) && Date.now() - createdAt < RECENT_TTL_MS;
+  });
+  try { req.session.recentOrders = recent; } catch {}
+  return recent;
+}
+
+async function _sbCurrentOrdersPayload(req, { forceFresh = false } = {}) {
+  const recent = _trimRecentOrdersForRequest(req);
+  const cacheKey = `cache:api:orders:current:supabase:v1:${normKey(req?.session?.username || "all")}`;
+  const load = async () => _sbCurrentOrdersList(req);
+
+  const allOrders = forceFresh
+    ? await (async () => {
+        await cacheDel(cacheKey);
+        const fresh = await load();
+        _memSet(cacheKey, fresh, 60);
+        await _redisSet(cacheKey, fresh, 60);
+        return fresh;
+      })()
+    : await cacheGetOrSet(cacheKey, 60, load);
+
+  const ids = new Set((allOrders || []).map((order) => String(order?.id || "")));
+  const extras = recent.filter((row) => !ids.has(String(row?.id || "")));
+  return (allOrders || [])
+    .concat(extras)
+    .sort((a, b) => new Date(b?.createdTime || 0) - new Date(a?.createdTime || 0));
 }
 
 async function _sbUpdateOrdersByIds(orderIds = [], patch = {}) {
@@ -16714,29 +16764,11 @@ app.get(
 
     try {
       if (_sbOrdersEnabled()) {
-        const cacheKey = `cache:api:orders:current:supabase:v1:${normKey(req.session?.username || "all")}`;
         const forceFresh =
           String(req.query?._fresh || "") === "1" ||
           !!req.query?._refresh ||
           String(req.get("x-ops-hard-refresh") || "") === "1";
-        const load = async () => _sbCurrentOrdersList(req);
-        const allOrders = forceFresh
-          ? await (async () => {
-              await cacheDel(cacheKey);
-              const fresh = await load();
-              _memSet(cacheKey, fresh, 60);
-              await _redisSet(cacheKey, fresh, 60);
-              return fresh;
-            })()
-          : await cacheGetOrSet(cacheKey, 60, load);
-
-        const ids = new Set((allOrders || []).map((o) => String(o.id || "")));
-        const extras = recent.filter((r) => !ids.has(String(r.id || "")));
-        return res.json(
-          (allOrders || [])
-            .concat(extras)
-            .sort((a, b) => new Date(b.createdTime || 0) - new Date(a.createdTime || 0)),
-        );
+        return res.json(await _sbCurrentOrdersPayload(req, { forceFresh }));
       }
 
       const userId = await getSessionUserNotionId(req);
@@ -18108,24 +18140,11 @@ app.get(
         || String(req.query?.allSystem || req.query?.includeAllSystem || "") === "1";
 
       if (_sbOrdersEnabled()) {
-        const cacheKey = includeAllSystem
-          ? "cache:api:orders:requested:supabase:v5:all-system"
-          : "cache:api:orders:requested:supabase:v5:approved";
         const forceFresh =
           String(req.query?._fresh || "") === "1" ||
           !!req.query?._refresh ||
           String(req.get("x-ops-hard-refresh") || "") === "1";
-        const load = async () => _sbRequestedOrdersList({ includeAllSystem });
-        const data = forceFresh
-          ? await (async () => {
-              await cacheDel(cacheKey);
-              const fresh = await load();
-              _memSet(cacheKey, fresh, 60);
-              await _redisSet(cacheKey, fresh, 60);
-              return fresh;
-            })()
-          : await cacheGetOrSet(cacheKey, 60, load);
-        return res.json(data);
+        return res.json(await _sbRequestedOrdersPayload({ includeAllSystem, forceFresh }));
       }
 
       // Cache version is bumped when response logic/shape changes.
@@ -19683,6 +19702,43 @@ app.post(
   },
 );
 
+async function _maintenanceFormOptionsPayload() {
+  let resolutionMethods = [
+    { name: "In-facility", color: "green" },
+    { name: "Not Applicable", color: "purple" },
+    { name: "On-site", color: "brown" },
+    { name: "Remote", color: "yellow" },
+  ];
+
+  if (ordersDatabaseId) {
+    try {
+      const dbProps = await getOrdersDBProps();
+      const resolutionMethodPropName = await detectResolutionMethodPropName();
+      const resolutionMethodMeta = resolutionMethodPropName
+        ? dbProps?.[resolutionMethodPropName] || null
+        : null;
+
+      const fromSchema = notionSelectOrStatusOptions(resolutionMethodMeta)
+        .map((opt) => ({
+          name: String(opt?.name || "").trim(),
+          color: opt?.color || null,
+        }))
+        .filter((opt) => opt.name);
+
+      if (fromSchema.length) resolutionMethods = fromSchema;
+    } catch (schemaError) {
+      console.warn("maintenance-form-options: Notion schema unavailable, using Supabase-safe defaults.", schemaError?.message || schemaError);
+    }
+  }
+
+  const spareParts = await listMaintenanceReplacementProducts();
+  return {
+    resolutionMethods,
+    spareParts,
+    source: _sbProductsEnabled() ? "supabase" : "notion",
+  };
+}
+
 app.get(
   "/api/orders/requested/maintenance-form-options",
   requireAuth,
@@ -19691,43 +19747,7 @@ app.get(
     res.set("Cache-Control", "no-store");
 
     try {
-      let resolutionMethods = [
-        { name: "In-facility", color: "green" },
-        { name: "Not Applicable", color: "purple" },
-        { name: "On-site", color: "brown" },
-        { name: "Remote", color: "yellow" },
-      ];
-
-      // Legacy Notion schema can still provide configured select/status colors.
-      // If it is not configured anymore, keep the stable Supabase-safe defaults above.
-      if (ordersDatabaseId) {
-        try {
-          const dbProps = await getOrdersDBProps();
-          const resolutionMethodPropName = await detectResolutionMethodPropName();
-          const resolutionMethodMeta = resolutionMethodPropName
-            ? dbProps?.[resolutionMethodPropName] || null
-            : null;
-
-          const fromSchema = notionSelectOrStatusOptions(resolutionMethodMeta)
-            .map((opt) => ({
-              name: String(opt?.name || "").trim(),
-              color: opt?.color || null,
-            }))
-            .filter((opt) => opt.name);
-
-          if (fromSchema.length) resolutionMethods = fromSchema;
-        } catch (schemaError) {
-          console.warn("maintenance-form-options: Notion schema unavailable, using Supabase-safe defaults.", schemaError?.message || schemaError);
-        }
-      }
-
-      const spareParts = await listMaintenanceReplacementProducts();
-
-      return res.json({
-        resolutionMethods,
-        spareParts,
-        source: _sbProductsEnabled() ? "supabase" : "notion",
-      });
+      return res.json(await _maintenanceFormOptionsPayload());
     } catch (e) {
       console.error("maintenance-form-options error:", e?.details || e?.body || e);
       return res.status(500).json({ error: "Failed to load maintenance form options" });
@@ -24592,6 +24612,36 @@ app.post('/api/events/:id/archive', requireAuth, requirePage('Event Requests'), 
 // -----------------------------------------------------------------------------
 // Page bootstrap bundles
 // -----------------------------------------------------------------------------
+// Resolve the signed-in account directly from the Supabase-backed session when
+// possible. Previously every page bootstrap performed an HTTP request back into
+// this same Express app just to call /api/account. That added a network hop and
+// another auth middleware pass to every page navigation.
+async function _pageBootstrapAccountPayload(req) {
+  if (_sbTeamMembersEnabled() && req.session?.userSupabaseId) {
+    try {
+      const accessBundle = await _sbCachedAccountPayloadWithAccessForMember(
+        req.session.userSupabaseId,
+        req.session.username || "",
+      );
+      if (accessBundle?.accountPayload) {
+        const { accountPayload, allowedNormalized, pageAccessRows } = accessBundle;
+        try {
+          req.session.username = accountPayload.username || req.session.username || "";
+          req.session.allowedPages = allowedNormalized;
+          req.session.pageAccess = pageAccessRows;
+          req.session.accountCache = accountPayload;
+          req.session.accountCacheTs = Date.now();
+        } catch {}
+        return accountPayload;
+      }
+    } catch (error) {
+      console.warn("[page-bootstrap] direct account lookup failed; using /api/account fallback:", error?.message || error);
+    }
+  }
+
+  return await _pageBootstrapFetchExistingRoute(req, "/api/account");
+}
+
 // A small number of data-heavy pages used to open several independent API
 // requests at the same time.  The browser now asks for one page bootstrap
 // bundle, while the server loads the same resources in parallel.  Each original
@@ -24624,7 +24674,7 @@ function _pageBootstrapEventsList(rows = []) {
 
 async function _pageBootstrapEventsNew(req) {
   const loaders = [
-    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapAccountPayload(req)),
     _pageBootstrapLoad('/api/events/types', 5 * 60_000, async () => ({
       ok: true,
       types: await _eventsListTypeOptions(),
@@ -24662,7 +24712,7 @@ async function _pageBootstrapEventsNew(req) {
 
 async function _pageBootstrapEventsComponents(req) {
   return Promise.all([
-    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapAccountPayload(req)),
     _pageBootstrapLoad('/api/events/components', 2 * 60_000, async () => {
       const rows = await supabaseDb.request(`/${encodeURIComponent(_sbEventComponentsTable())}?select=*&order=is_active.desc,name.asc&limit=1000`);
       return { ok: true, components: (Array.isArray(rows) ? rows : []).map(_eventsSerializeComponent) };
@@ -24676,7 +24726,7 @@ async function _pageBootstrapEventsComponents(req) {
 
 async function _pageBootstrapExpenses(req) {
   const loaders = [
-    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapAccountPayload(req)),
   ];
 
   if (!_sbExpensesEnabled()) {
@@ -24746,7 +24796,7 @@ async function _pageBootstrapExpenses(req) {
 
 async function _pageBootstrapExpensesUsers(req) {
   const loaders = [
-    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapAccountPayload(req)),
   ];
 
   if (_sbExpensesEnabled()) {
@@ -24818,21 +24868,21 @@ async function _pageBootstrapFetchExistingRoute(req, pathname, timeoutMs = 10_00
 async function _pageBootstrapOrderReceipts(req, ids) {
   const encodedIds = encodeURIComponent(String(ids || ""));
   return Promise.all([
-    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapAccountPayload(req)),
     _pageBootstrapLoad(`/api/orders/order-receipts?ids=${encodedIds}`, 15_000, () => _loadOrderReceiptViewerItems(ids)),
   ]);
 }
 
 async function _pageBootstrapHistory(req) {
   return Promise.all([
-    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapAccountPayload(req)),
     _pageBootstrapLoad('/api/history?limit=1000', 10_000, () => _pageBootstrapFetchExistingRoute(req, '/api/history?limit=1000', 35_000)),
   ]);
 }
 
 async function _pageBootstrapBackup(req) {
   return Promise.all([
-    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapAccountPayload(req)),
     _pageBootstrapLoad('/api/backup/tables', 60_000, async () => ({
       ok: true,
       tables: _backupCatalog().map((item) => ({
@@ -24850,8 +24900,12 @@ async function _pageBootstrapBackup(req) {
 
 async function _pageBootstrapCurrentOrders(req) {
   return Promise.all([
-    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
-    _pageBootstrapLoad('/api/orders', 20_000, () => _pageBootstrapFetchExistingRoute(req, '/api/orders', 20_000)),
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapAccountPayload(req)),
+    _pageBootstrapLoad('/api/orders', 20_000, () =>
+      _sbOrdersEnabled()
+        ? _sbCurrentOrdersPayload(req)
+        : _pageBootstrapFetchExistingRoute(req, '/api/orders', 20_000)
+    ),
   ]);
 }
 
@@ -24864,14 +24918,14 @@ async function _pageBootstrapOrderTracking(req, groupId) {
   }
   const trackingUrl = `/api/orders/tracking?groupId=${encodeURIComponent(cleanGroupId)}`;
   return Promise.all([
-    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapAccountPayload(req)),
     _pageBootstrapLoad(trackingUrl, 10_000, () => _pageBootstrapFetchExistingRoute(req, trackingUrl, 25_000)),
   ]);
 }
 
 async function _pageBootstrapOrdersReview(req) {
   return Promise.all([
-    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapAccountPayload(req)),
     _pageBootstrapLoad('/api/sv-orders?tab=all', 20_000, () => _pageBootstrapFetchExistingRoute(req, '/api/sv-orders?tab=all', 20_000)),
     _pageBootstrapLoad('/api/sv-orders?tab=archive', 20_000, () => _pageBootstrapFetchExistingRoute(req, '/api/sv-orders?tab=archive', 20_000)),
   ]);
@@ -24879,36 +24933,44 @@ async function _pageBootstrapOrdersReview(req) {
 
 async function _pageBootstrapOperationsOrders(req) {
   return Promise.all([
-    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
-    _pageBootstrapLoad('/api/orders/requested?scope=all-system', 25_000, () => _pageBootstrapFetchExistingRoute(req, '/api/orders/requested?scope=all-system', 25_000)),
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapAccountPayload(req)),
+    _pageBootstrapLoad('/api/orders/requested?scope=all-system', 25_000, () =>
+      _sbOrdersEnabled()
+        ? _sbRequestedOrdersPayload({ includeAllSystem: true })
+        : _pageBootstrapFetchExistingRoute(req, '/api/orders/requested?scope=all-system', 25_000)
+    ),
   ]);
 }
 
 async function _pageBootstrapMaintenanceOrders(req) {
   return Promise.all([
-    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
-    _pageBootstrapLoad('/api/orders/requested?scope=all-system', 25_000, () => _pageBootstrapFetchExistingRoute(req, '/api/orders/requested?scope=all-system', 25_000)),
-    _pageBootstrapLoad('/api/orders/requested/maintenance-form-options', 5 * 60_000, () => _pageBootstrapFetchExistingRoute(req, '/api/orders/requested/maintenance-form-options', 20_000)),
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapAccountPayload(req)),
+    _pageBootstrapLoad('/api/orders/requested?scope=all-system', 25_000, () =>
+      _sbOrdersEnabled()
+        ? _sbRequestedOrdersPayload({ includeAllSystem: true })
+        : _pageBootstrapFetchExistingRoute(req, '/api/orders/requested?scope=all-system', 25_000)
+    ),
+    _pageBootstrapLoad('/api/orders/requested/maintenance-form-options', 5 * 60_000, () => _maintenanceFormOptionsPayload()),
   ]);
 }
 
 async function _pageBootstrapStocktaking(req) {
   return Promise.all([
-    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapAccountPayload(req)),
     _pageBootstrapLoad('/api/stock/columns', 30_000, () => _pageBootstrapFetchExistingRoute(req, '/api/stock/columns', 25_000)),
   ]);
 }
 
 async function _pageBootstrapProducts(req) {
   return Promise.all([
-    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapAccountPayload(req)),
     _pageBootstrapLoad('/api/products', 2 * 60_000, () => _sbProductsCatalogPayload()),
   ]);
 }
 
 async function _pageBootstrapProposals(req) {
   return Promise.all([
-    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapAccountPayload(req)),
     _pageBootstrapLoad('/api/products', 2 * 60_000, () => _sbProductsCatalogPayload()),
     _pageBootstrapLoad('/api/products/proposals', 20_000, async () => ({
       ok: true,
@@ -24930,7 +24992,7 @@ async function _pageBootstrapProposals(req) {
 
 async function _pageBootstrapKits(req) {
   return Promise.all([
-    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapAccountPayload(req)),
     _pageBootstrapLoad('/api/products', 2 * 60_000, () => _sbProductsCatalogPayload()),
     _pageBootstrapLoad('/api/products/kits', 30_000, async () => ({
       ok: true,
@@ -24942,7 +25004,7 @@ async function _pageBootstrapKits(req) {
 
 async function _pageBootstrapB2cDatabase(req) {
   return Promise.all([
-    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapAccountPayload(req)),
     _pageBootstrapLoad('/api/b2c/databases', 30_000, () => _pageBootstrapFetchExistingRoute(req, '/api/b2c/databases', 35_000)),
   ]);
 }
@@ -24950,7 +25012,7 @@ async function _pageBootstrapB2cDatabase(req) {
 async function _pageBootstrapB2cForms(req) {
   const formId = String(req.query?.form || req.query?.formId || '').trim();
   const loaders = [
-    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapAccountPayload(req)),
     _pageBootstrapLoad('/api/b2c/forms', 30_000, () => _pageBootstrapFetchExistingRoute(req, '/api/b2c/forms', 35_000)),
   ];
 
@@ -24971,14 +25033,14 @@ async function _pageBootstrapB2cTable(req, databaseId) {
   }
   const recordsUrl = `/api/b2c/databases/${encodeURIComponent(cleanId)}/records`;
   return Promise.all([
-    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapAccountPayload(req)),
     _pageBootstrapLoad(recordsUrl, 15_000, () => _pageBootstrapFetchExistingRoute(req, recordsUrl, 45_000)),
   ]);
 }
 
 async function _pageBootstrapKpis(req) {
   return Promise.all([
-    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapAccountPayload(req)),
     _pageBootstrapLoad('/api/kpis/meta', 60_000, () => _pageBootstrapFetchExistingRoute(req, '/api/kpis/meta', 25_000)),
     _pageBootstrapLoad('/api/kpis/reviews', 20_000, () => _pageBootstrapFetchExistingRoute(req, '/api/kpis/reviews', 25_000)),
     _pageBootstrapLoad('/api/kpis/graph', 20_000, () => _pageBootstrapFetchExistingRoute(req, '/api/kpis/graph', 25_000)),
@@ -24987,7 +25049,7 @@ async function _pageBootstrapKpis(req) {
 
 async function _pageBootstrapUsersCenter(req) {
   return Promise.all([
-    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapAccountPayload(req)),
     _pageBootstrapLoad('/api/user-access/team-members', 2 * 60_000, () => _pageBootstrapFetchExistingRoute(req, '/api/user-access/team-members', 35_000)),
     _pageBootstrapLoad('/api/user-access/signup-requests?status=pending', 30_000, () => _pageBootstrapFetchExistingRoute(req, '/api/user-access/signup-requests?status=pending', 20_000)),
   ]);
@@ -25002,7 +25064,7 @@ async function _pageBootstrapTaskManagement(req, view) {
   }
   const query = `view=${encodeURIComponent(cleanView)}`;
   return Promise.all([
-    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapAccountPayload(req)),
     _pageBootstrapLoad(`/api/task-management/meta?${query}`, 30_000, () => _pageBootstrapFetchExistingRoute(req, `/api/task-management/meta?${query}`, 20_000)),
     _pageBootstrapLoad(`/api/task-management?${query}`, 10_000, () => _pageBootstrapFetchExistingRoute(req, `/api/task-management?${query}`, 35_000)),
   ]);
@@ -25010,7 +25072,7 @@ async function _pageBootstrapTaskManagement(req, view) {
 
 async function _pageBootstrapEvents(req) {
   return Promise.all([
-    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapAccountPayload(req)),
     _pageBootstrapLoad('/api/events', 20_000, () => _pageBootstrapFetchExistingRoute(req, '/api/events', 25_000)),
   ]);
 }
@@ -25018,7 +25080,7 @@ async function _pageBootstrapEvents(req) {
 async function _pageBootstrapShoppingCart(req) {
   const requestedType = String(req.query?.type || '').trim();
   const loaders = [
-    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapAccountPayload(req)),
     _pageBootstrapLoad('/api/order-types', 10 * 60_000, () => _pageBootstrapFetchExistingRoute(req, '/api/order-types', 25_000)),
     _pageBootstrapLoad('/api/components', 20 * 60_000, () => _pageBootstrapFetchExistingRoute(req, '/api/components', 35_000)),
   ];
@@ -25033,7 +25095,7 @@ async function _pageBootstrapShoppingCart(req) {
 
 async function _pageBootstrapNotifications(req) {
   const loaders = [
-    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapAccountPayload(req)),
   ];
 
   loaders.push(_pageBootstrapLoad('/api/notifications?limit=80', 5_000, async () => {
@@ -25069,7 +25131,7 @@ async function _pageBootstrapNotifications(req) {
 
 async function _pageBootstrapHome(req) {
   const loaders = [
-    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/account')),
+    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapAccountPayload(req)),
     // Load the analysis directory with the rest of Home so the Users dropdown
     // is ready immediately instead of starting a slow request when it is opened.
     _pageBootstrapLoad('/api/home/analysis-users', 15_000, () => _pageBootstrapFetchExistingRoute(req, '/api/home/analysis-users')),

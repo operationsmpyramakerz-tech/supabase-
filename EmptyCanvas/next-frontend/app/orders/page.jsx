@@ -1,12 +1,24 @@
 import { redirect } from "next/navigation";
 import AppShell from "../../components/AppShell";
-import CurrentOrdersNextBridge from "../../components/orders/CurrentOrdersNextBridge";
+import CurrentOrdersClient from "../../components/orders/CurrentOrdersClient";
 import { fetchLegacyJson } from "../../lib/legacy-api";
-import { getLegacyAccountGate } from "../../lib/products-auth";
-import { currentOrdersForAccount } from "../../lib/orders-data";
 
 export const dynamic = "force-dynamic";
-export const revalidate = 0;
+
+function resourceMap(bundle) {
+  const map = new Map();
+  for (const resource of Array.isArray(bundle?.resources) ? bundle.resources : []) {
+    map.set(String(resource?.url || ""), resource?.body);
+  }
+  return map;
+}
+
+function getResource(map, prefix, fallback = null) {
+  for (const [url, body] of map.entries()) {
+    if (url === prefix || url.startsWith(prefix)) return body;
+  }
+  return fallback;
+}
 
 function UnavailableState({ message, forbidden = false }) {
   return (
@@ -24,46 +36,34 @@ function UnavailableState({ message, forbidden = false }) {
   );
 }
 
-async function legacyOrdersFallback() {
-  const response = await fetchLegacyJson("/api/orders?_fresh=1", { timeoutMs: 20000 });
-  return response.ok && Array.isArray(response.data) ? response.data : null;
-}
-
 export default async function CurrentOrdersPage() {
-  const gate = await getLegacyAccountGate(["Current Orders"]);
+  const response = await fetchLegacyJson("/api/page-bootstrap?scope=current-orders", { timeoutMs: 25000 });
 
-  if (gate.status === 401) redirect("/login?next=/next/orders");
-  if (gate.status === 403) {
+  if (response.status === 401) redirect("/login?next=/next/orders");
+  if (response.status === 403) {
     return <UnavailableState forbidden message="Your account does not have access to the Current Orders page." />;
   }
-  if (!gate.ok || !gate.account) {
-    return <UnavailableState message={gate.error || "The current ERP authentication service is temporarily unavailable."} />;
+  if (!response.ok || !response.data?.ok) {
+    return <UnavailableState message={response.error || response.data?.error || "The current ERP API is temporarily unavailable."} />;
   }
 
-  const warnings = [];
-  let orders;
+  const resources = resourceMap(response.data);
+  const account = getResource(resources, "/api/account", null);
+  const orders = getResource(resources, "/api/orders", []);
 
-  try {
-    orders = await currentOrdersForAccount(gate.account);
-  } catch (directError) {
-    orders = await legacyOrdersFallback();
-    if (!orders) {
-      return <UnavailableState message={directError?.message || "Current Orders data is temporarily unavailable."} />;
-    }
-    warnings.push("Current Orders recovery path used.");
-  }
+  if (!account) redirect("/login?next=/next/orders");
 
   return (
     <AppShell
-      account={gate.account}
+      account={account}
       title="Current Orders"
       eyebrow="Live order portfolio"
       activePath="/next/orders"
       bodyClass="order-modal-fit-screen current-orders-page"
     >
-      <CurrentOrdersNextBridge
+      <CurrentOrdersClient
         initialOrders={Array.isArray(orders) ? orders : []}
-        bootstrapWarnings={warnings}
+        bootstrapWarnings={response.data.omitted || []}
       />
     </AppShell>
   );
