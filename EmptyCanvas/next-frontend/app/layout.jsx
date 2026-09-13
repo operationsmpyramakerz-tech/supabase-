@@ -1,4 +1,5 @@
 import Script from "next/script";
+import InternalNavigationBridge from "../components/InternalNavigationBridge";
 import { cookies } from "next/headers";
 import "./globals.css";
 import "./system-ui.css";
@@ -79,6 +80,7 @@ export default async function RootLayout({ children }) {
         <script dangerouslySetInnerHTML={{ __html: themeBootstrap }} />
       </head>
       <body>
+        <InternalNavigationBridge />
         {children}
         <Script src="/pwa-register.js" strategy="afterInteractive" />
       </body>

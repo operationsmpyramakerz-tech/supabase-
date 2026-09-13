@@ -523,6 +523,25 @@ export function ClassicSidebarActiveIndicator() {
     // visible static-to-animated jump.
     frame = requestAnimationFrame(initialize);
 
+    const prefetchLink = (target) => {
+      const origin = target instanceof Element ? target : null;
+      const link = origin?.closest?.("a.nav-link");
+      if (!(link instanceof HTMLAnchorElement) || !sidebar.contains(link)) return;
+      const rawHref = String(link.getAttribute("href") || "").trim();
+      if (!rawHref || rawHref === "/next/task-management" || rawHref === "/next/events") return;
+      let destination;
+      try { destination = new URL(link.href, window.location.href); } catch { return; }
+      if (destination.origin !== window.location.origin) return;
+      const pathname = destination.pathname === "/next"
+        ? "/"
+        : destination.pathname.startsWith("/next/")
+          ? destination.pathname.slice(5) || "/"
+          : destination.pathname;
+      try { router.prefetch(`${pathname}${destination.search}${destination.hash}`); } catch {}
+    };
+
+    const onPrefetchIntent = (event) => prefetchLink(event.target);
+
     const onClick = (event) => {
       if (!(event instanceof MouseEvent) || event.defaultPrevented) return;
       if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -570,16 +589,19 @@ export function ClassicSidebarActiveIndicator() {
       requestAnimationFrame(() => moveIndicator(link, reduceMotion()));
 
       if (navigationTimer) window.clearTimeout(navigationTimer);
-      const delay = reduceMotion() ? 0 : 230;
-      navigationTimer = window.setTimeout(() => {
-        const pathname = destination.pathname === "/next"
-          ? "/"
-          : destination.pathname.startsWith("/next/")
-            ? destination.pathname.slice(5) || "/"
-            : destination.pathname;
-        const nextHref = `${pathname}${destination.search}${destination.hash}`;
-        router.push(nextHref);
-      }, delay);
+      const pathname = destination.pathname === "/next"
+        ? "/"
+        : destination.pathname.startsWith("/next/")
+          ? destination.pathname.slice(5) || "/"
+          : destination.pathname;
+      const nextHref = `${pathname}${destination.search}${destination.hash}`;
+
+      // Start the route request immediately and let the travelling indicator
+      // animate while Next.js is fetching/rendering the destination. The old
+      // implementation waited 230ms before even starting navigation, adding a
+      // fixed delay to every sidebar click.
+      try { router.prefetch(nextHref); } catch {}
+      navigationTimer = window.setTimeout(() => router.push(nextHref), 0);
     };
 
     const syncToCurrentTarget = () => {
@@ -610,6 +632,9 @@ export function ClassicSidebarActiveIndicator() {
     const pagesClip = nav.querySelector(":scope > .mobile-dock-pages-clip");
     nav.addEventListener("scroll", syncToCurrentTarget, { passive: true });
     pagesClip?.addEventListener("scroll", syncToCurrentTarget, { passive: true });
+    sidebar.addEventListener("pointerover", onPrefetchIntent, { passive: true });
+    sidebar.addEventListener("focusin", onPrefetchIntent);
+    sidebar.addEventListener("pointerdown", onPrefetchIntent, { passive: true });
     sidebar.addEventListener("click", onClick);
     window.addEventListener("resize", syncToCurrentTarget);
     window.addEventListener("orientationchange", syncToCurrentTarget);
@@ -620,6 +645,9 @@ export function ClassicSidebarActiveIndicator() {
       resizeObserver?.disconnect();
       nav.removeEventListener("scroll", syncToCurrentTarget);
       pagesClip?.removeEventListener("scroll", syncToCurrentTarget);
+      sidebar.removeEventListener("pointerover", onPrefetchIntent);
+      sidebar.removeEventListener("focusin", onPrefetchIntent);
+      sidebar.removeEventListener("pointerdown", onPrefetchIntent);
       sidebar.removeEventListener("click", onClick);
       window.removeEventListener("resize", syncToCurrentTarget);
       window.removeEventListener("orientationchange", syncToCurrentTarget);
