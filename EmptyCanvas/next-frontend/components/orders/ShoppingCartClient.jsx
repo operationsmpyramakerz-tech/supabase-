@@ -704,7 +704,7 @@ export default function ShoppingCartClient({
         : "theme-default";
 
   return (
-    <section className={`classic-cart-page ${maintenance ? "is-maintenance" : ""}`}>
+    <section className={`classic-cart-page ${maintenance ? "is-maintenance" : ""} ${typeTheme}`}>
       {bootstrapWarnings.length ? (
         <div className="dashboard-notice">
           <strong>Partial initial data</strong>
@@ -713,16 +713,20 @@ export default function ShoppingCartClient({
         </div>
       ) : null}
 
-      <div className="classic-cart-type-pill">
+      <div className={`classic-cart-type-pill ${typeTheme}`}>
         {editMode ? (
           <button className="classic-cart-back-btn" type="button" onClick={backToTypes} aria-label="Back to Current Orders">
             <CartSvgIcon name="arrow-left" size={16}/>
           </button>
         ) : null}
-        <span className={`classic-cart-type-value ${typeTheme}`}>
-          <span className="classic-cart-type-value-icon"><CartSvgIcon name={meta.icon} size={16}/></span>
-          <span>{selectedType}</span>
-        </span>
+        <div className="classic-cart-flow-heading">
+          <span className="classic-cart-flow-heading-icon"><CartSvgIcon name={meta.icon} size={20}/></span>
+          <span className="classic-cart-flow-heading-copy">
+            <small>Shopping flow</small>
+            <strong>{selectedType}</strong>
+            <span>{meta.description}</span>
+          </span>
+        </div>
         <span className={`classic-cart-save-state ${saveState === "Save failed" ? "is-error" : ""}`}>{saveState}</span>
       </div>
 
@@ -754,15 +758,29 @@ export default function ShoppingCartClient({
               </div>
             ) : (
               <div className="classic-cart-empty">
-                <strong>Sorry, No data available</strong>
+                <button
+                  className={`classic-cart-add-new ${typeTheme}`}
+                  type="button"
+                  onClick={() => setPicker({ item: null })}
+                  aria-label={`Add new item to ${selectedType}`}
+                >
+                  <span className="classic-cart-add-new-copy">
+                    <strong>Add new</strong>
+                    <small>{maintenance ? "Add a product and describe the maintenance issue" : withdraw ? "Select products to withdraw from stock" : "Select products or supplies for this request"}</small>
+                  </span>
+                  <span className="classic-cart-add-new-plus"><CartSvgIcon name="plus" size={30}/></span>
+                </button>
               </div>
             )}
 
-            <div className="classic-cart-footer">
-              <button className="classic-cart-update-btn" type="button" onClick={() => setPicker({ item: null })}>
-                {withdraw ? "Update Withdraw Cart" : "Update Cart"}
-              </button>
-            </div>
+            {cart.length ? (
+              <div className="classic-cart-footer">
+                <button className="classic-cart-update-btn" type="button" onClick={() => setPicker({ item: null })}>
+                  <CartSvgIcon name="plus" size={17}/>
+                  <span>{withdraw ? "Add to Withdraw Cart" : maintenance ? "Add Maintenance Item" : "Add to Cart"}</span>
+                </button>
+              </div>
+            ) : null}
           </div>
         </section>
 
