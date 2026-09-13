@@ -9,10 +9,10 @@ export default function ClassicB2cLoading({ mode = "library" }) {
   const bodyClass = `b2c-page ${table ? "b2c-table-view-page" : forms ? "b2c-form-page" : "b2c-database-page b2c-library-page"} next-classic-shell-active`;
   return (
     <>
-      <link rel="stylesheet" href="/css/style.css?v=bidi-mixed-v1" />
-      <link rel="stylesheet" href="/css/ui-redesign.css?v=sidebar-page-label-frame-v3" />
-      <link rel="stylesheet" href="/css/page-canvas-fix.css?v=page-canvas-single-layer-v3" />
-      <link rel="stylesheet" href="/css/b2c.css?v=b2c-formula-calculator-v2" />
+      <link rel="stylesheet" href="/next/css/style.css?v=bidi-mixed-v1" />
+      <link rel="stylesheet" href="/next/css/ui-redesign.css?v=sidebar-page-label-frame-v3" />
+      <link rel="stylesheet" href="/next/css/page-canvas-fix.css?v=page-canvas-single-layer-v3" />
+      <link rel="stylesheet" href="/next/css/b2c.css?v=b2c-formula-calculator-v2" />
       <BodyClassSync className={bodyClass} />
       <div className="app-container classic-app-shell next-classic-b2c-loading" aria-label={table ? "Loading B2C table" : forms ? "Loading B2C Forms" : "Loading B2C Database"}>
         <ClassicStableLoadingSidebar activeIndex={8} />

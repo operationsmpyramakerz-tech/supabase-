@@ -40,7 +40,7 @@ export default async function ProposalsPage() {
   if (!membersResponse?.ok) warnings.push({ url: "/api/user-access/team-members", error: membersResponse?.error || "Users Center members could not load." });
 
   return (
-    <AppShell account={gate.account} title="Proposals" eyebrow="Reusable quotation workspace" activePath="/next/proposals" bodyClass="products-page proposals-page" classicStyles={["/css/products.css?v=products-manual-image-v1", "/css/proposals.css?v=b2b-addname-transparent-pdf-v1"]}>
+    <AppShell account={gate.account} title="Proposals" eyebrow="Reusable quotation workspace" activePath="/next/proposals" bodyClass="products-page proposals-page" pageStyles={["/next/css/products.css?v=products-manual-image-v1", "/next/css/proposals.css?v=b2b-addname-transparent-pdf-v1"]}>
       <ProposalsClient account={gate.account} initialCatalog={catalog} initialProposals={proposals} initialKits={kits} initialKitFolders={kitFolders} initialMembers={members} bootstrapWarnings={warnings} />
     </AppShell>
   );

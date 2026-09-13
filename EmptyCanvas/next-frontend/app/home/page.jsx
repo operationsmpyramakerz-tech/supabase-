@@ -398,7 +398,7 @@ export default async function HomePage({ searchParams }) {
       title="Home"
       activePath="/next/home"
       bodyClass="page-home"
-      classicStyles={["/css/home.css?v=home-expenses-dark-card-v1"]}
+      pageStyles={["/next/css/home.css?v=home-expenses-dark-card-v1"]}
     >
       <DashboardNotice omitted={response.data.omitted || []} />
 

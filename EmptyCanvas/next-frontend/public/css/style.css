@@ -24,8 +24,7 @@ body{
   color:var(--text-primary);
   line-height:1.6;
   transition:padding-left .3s ease;
-  /* NEW: app background */
-  background: var(--bg-main) url('/images/App-background.png') center top / cover no-repeat fixed;
+  background: var(--bg-main);
 }
 @media (max-width:768px){
   body{ background-attachment: scroll; background-size: cover; }
@@ -38,7 +37,7 @@ body.sidebar-collapsed{ padding-left:0; }
    ================================= */
 .login-container{
   display:flex; justify-content:center; align-items:center; height:100vh;
-  background-image:url('/images/login-background.jpg');
+  background: var(--bg-main);
   background-size:cover; background-position:center;
 }
 .login-card{

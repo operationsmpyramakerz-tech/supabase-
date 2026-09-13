@@ -3635,7 +3635,7 @@ body.login-success-active {
   display: block;
   width: 100%;
   height: 100%;
-  background-image: url("/images/logo.png");
+  background-image: url("/next/images/logo.png");
   background-repeat: no-repeat;
   background-size: 400% 400%;
   transform-origin: center;

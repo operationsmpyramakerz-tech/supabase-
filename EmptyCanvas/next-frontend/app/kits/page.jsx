@@ -31,7 +31,7 @@ export default async function KitsPage() {
   if (foldersResult.status === "rejected") warnings.push({ url: "/next/api/products/kit-folders", error: foldersResult.reason?.message || "Kit folders could not load." });
 
   return (
-    <AppShell account={gate.account} title="Kits" eyebrow="Reusable product bundles" activePath="/next/kits" bodyClass="products-page proposals-page kits-page" classicStyles={["/css/products.css?v=products-manual-image-v1", "/css/proposals.css?v=b2b-addname-transparent-pdf-v1"]}>
+    <AppShell account={gate.account} title="Kits" eyebrow="Reusable product bundles" activePath="/next/kits" bodyClass="products-page proposals-page kits-page" pageStyles={["/next/css/products.css?v=products-manual-image-v1", "/next/css/proposals.css?v=b2b-addname-transparent-pdf-v1"]}>
       <KitsClient account={gate.account} initialCatalog={catalog} initialKits={kits} initialFolders={folders} bootstrapWarnings={warnings} />
     </AppShell>
   );

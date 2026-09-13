@@ -55,7 +55,7 @@ export default async function BackupTablePage({ params, searchParams }) {
       eyebrow="Database table"
       activePath="/next/backup"
       bodyClass="page-backup page-backup-table"
-      classicStyles={["/css/backup.css?v=database-page-folders-v1"]}
+      pageStyles={["/next/css/backup.css?v=database-page-folders-v1"]}
     >
       <BackupTableClient tableKey={tableKey} initialTable={initialTable} backFolder={backFolder} />
     </AppShell>

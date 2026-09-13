@@ -65,7 +65,7 @@
     }
 
     /* Restore legacy expenses one-column layout.
-       Global /css/style.css defines .expenses-layout as a grid for an old mobile UI,
+       Global /next/css/style.css defines .expenses-layout as a grid for an old mobile UI,
        which splits these pages into columns. These pages should remain stacked. */
     main.expenses-layout {
       display: block !important;

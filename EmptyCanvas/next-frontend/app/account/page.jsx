@@ -33,7 +33,7 @@ export default async function AccountPage() {
       eyebrow="Profile, security and personal workspace"
       activePath="/next/account"
       bodyClass="page-account"
-      classicStyles={["/css/account-classic-inline.css?v=next-stage-2o-account"]}
+      pageStyles={["/next/css/account-classic-inline.css?v=next-stage-2o-account"]}
     >
       <AccountClient initialAccount={response.data} />
     </AppShell>

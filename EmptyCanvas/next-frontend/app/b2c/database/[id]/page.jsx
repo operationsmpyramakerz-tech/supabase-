@@ -75,7 +75,7 @@ export default async function B2cTableWorkspacePage({ params }) {
         eyebrow="Customer data workspace"
         activePath={`/next/b2c/database/${databaseId}`}
         bodyClass="b2c-page b2c-table-view-page"
-        classicStyles={["/css/b2c.css?v=b2c-formula-calculator-v2"]}
+        pageStyles={["/next/css/b2c.css?v=b2c-formula-calculator-v2"]}
       >
         <main className="standalone-state">
           <section className="state-card">
@@ -96,7 +96,7 @@ export default async function B2cTableWorkspacePage({ params }) {
       eyebrow="B2C customer data"
       activePath={`/next/b2c/database/${databaseId}`}
       bodyClass="b2c-page b2c-table-view-page"
-      classicStyles={["/css/b2c.css?v=b2c-formula-calculator-v2"]}
+      pageStyles={["/next/css/b2c.css?v=b2c-formula-calculator-v2"]}
     >
       <B2cTableWorkspaceClient
         databaseId={databaseId}

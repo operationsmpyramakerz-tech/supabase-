@@ -1256,7 +1256,7 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
       </div>
 
       <section className="next-maintenance-orders-list-surface">
-        <div className="co-cards" id="requested-list">{visibleGroups.length ? visibleGroups.map((group) => <MaintenanceCard group={group} onOpen={setSelected} onCreator={openCreatorProfile} key={group.key} />) : <div className="ops-no-data-state" role="status" aria-live="polite"><img className="ops-no-data-state__image" src="/images/no-data-illustration.png" alt="" loading="lazy" /><div className="ops-no-data-state__text">Sorry, No data available</div></div>}</div>
+        <div className="co-cards" id="requested-list">{visibleGroups.length ? visibleGroups.map((group) => <MaintenanceCard group={group} onOpen={setSelected} onCreator={openCreatorProfile} key={group.key} />) : <div className="ops-no-data-state" role="status" aria-live="polite"><img className="ops-no-data-state__image" src="/next/images/no-data-illustration.png" alt="" loading="lazy" /><div className="ops-no-data-state__text">Sorry, No data available</div></div>}</div>
       </section>
 
       <MaintenanceDetailsModal group={selected} busy={busy} onClose={() => setSelected(null)} onLog={openLog} onDone={(group) => { setActionError(""); setDoneGroup(group); }} onExport={exportOrder} onAction={beginAction} />

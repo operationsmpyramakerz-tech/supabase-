@@ -162,8 +162,8 @@ export async function ClassicStableLoadingSidebar({ activeIndex = -1 }) {
       <ClassicSidebarViewportKeeper />
       <div className="sidebar-header">
         <div className="sidebar-brand-toggle next-classic-loading-brand">
-          <img className="brand-logo-full" src="/images/Logo%20horizontal.png" alt="" />
-          <img className="brand-logo-icon" src="/images/logo.png" alt="" />
+          <img className="brand-logo-full" src="/next/images/Logo%20horizontal.png" alt="" />
+          <img className="brand-logo-icon" src="/next/images/logo.png" alt="" />
         </div>
       </div>
       <nav className="sidebar-nav" aria-label="Loading navigation">
@@ -220,15 +220,15 @@ export function ClassicStableLoadingShell({
   children,
   mainClassName = "container-full-width next-classic-page-content",
   ariaLabel = "Loading page",
-  classicStyles = [],
+  pageStyles = [],
 }) {
   const classes = [bodyClass, "next-classic-shell-active"].filter(Boolean).join(" ");
   return (
     <>
-      <link rel="stylesheet" href="/css/style.css?v=bidi-mixed-v1" />
-      <link rel="stylesheet" href="/css/ui-redesign.css?v=sidebar-page-label-frame-v3" />
-      <link rel="stylesheet" href="/css/page-canvas-fix.css?v=page-canvas-single-layer-v3" />
-      {classicStyles.map((href) => <link rel="stylesheet" href={href} key={href} />)}
+      <link rel="stylesheet" href="/next/css/style.css?v=bidi-mixed-v1" />
+      <link rel="stylesheet" href="/next/css/ui-redesign.css?v=sidebar-page-label-frame-v3" />
+      <link rel="stylesheet" href="/next/css/page-canvas-fix.css?v=page-canvas-single-layer-v3" />
+      {pageStyles.map((href) => <link rel="stylesheet" href={href} key={href} />)}
       <BodyClassSync className={classes} />
       <div className="app-container classic-app-shell next-classic-stable-loading" aria-label={ariaLabel}>
         <ClassicStableLoadingSidebar activeIndex={activeIndex} />

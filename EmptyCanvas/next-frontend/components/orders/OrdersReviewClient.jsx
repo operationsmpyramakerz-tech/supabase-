@@ -819,7 +819,7 @@ export default function OrdersReviewClient({ initialOrders = [], bootstrapWarnin
       </div>
     </div>
 
-    <section className="orders-review-list-surface" id="sv-orders"><div className="co-cards" id="sv-list">{visibleGroups.length ? visibleGroups.map((group) => <OrderReviewCard group={group} activeTab={tab} onOpen={(value) => setSelectedKey(value.key)} onCreator={openCreatorProfile} key={group.key}/>) : <div className="ops-no-data-state" role="status" aria-live="polite"><img className="ops-no-data-state__image" src="/images/no-data-illustration.png" alt="" loading="lazy"/><div className="ops-no-data-state__text">Sorry, No data available</div></div>}</div></section>
+    <section className="orders-review-list-surface" id="sv-orders"><div className="co-cards" id="sv-list">{visibleGroups.length ? visibleGroups.map((group) => <OrderReviewCard group={group} activeTab={tab} onOpen={(value) => setSelectedKey(value.key)} onCreator={openCreatorProfile} key={group.key}/>) : <div className="ops-no-data-state" role="status" aria-live="polite"><img className="ops-no-data-state__image" src="/next/images/no-data-illustration.png" alt="" loading="lazy"/><div className="ops-no-data-state__text">Sorry, No data available</div></div>}</div></section>
 
     <ReviewDetailsModal group={selected} activeTab={tab} busyIds={busyIds} onClose={() => setSelectedKey("")} onQuantitySave={saveQuantity} onDecision={beginDecision} onBulkDecision={beginBulkDecision} onPasswordAction={beginPasswordAction} onReason={setReasonView} onExport={exportOrder}/>
     <PasswordModal state={passwordState} busy={passwordBusy} error={passwordError} onCancel={() => { if (!passwordBusy) { setPasswordState(null); setPasswordError(""); } }} onSubmit={submitPasswordAction}/>

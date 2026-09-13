@@ -227,7 +227,7 @@ export default function LoginClient({ requestedNext = "/next/home", backendAvail
 
   return (
     <>
-      <link rel="stylesheet" href="/css/login.css?v=concept-2-pulse-settle-v1" />
+      <link rel="stylesheet" href="/next/css/login.css?v=concept-2-pulse-settle-v1" />
       <div className="login-container">
         <div className="login-card" aria-live="polite">
           <div className="login-header">
@@ -235,7 +235,7 @@ export default function LoginClient({ requestedNext = "/next/home", backendAvail
               <i /><i /><i /><i /><i /><i /><i /><i />
             </span>
             <span className={`login-logo-stage ${loginSuccess ? "is-running" : ""}`} id="loginLogoStage" data-logo-animation="pulse">
-              <img src="/images/logo.png" alt="Logo" className="login-logo" />
+              <img src="/next/images/logo.png" alt="Logo" className="login-logo" />
               <span className="login-inline-logo-pieces" aria-hidden="true">
                 <span className="login-inline-logo-pulse-echo" style={{ "--d": "0.00s" }} />
                 <span className="login-inline-logo-pulse-echo" style={{ "--d": "0.16s" }} />
@@ -245,7 +245,7 @@ export default function LoginClient({ requestedNext = "/next/home", backendAvail
               <span className="login-inline-logo-flare login-inline-logo-flare--one" aria-hidden="true" />
               <span className="login-inline-logo-flare login-inline-logo-flare--two" aria-hidden="true" />
             </span>
-            <img src="/images/pyramakerz-wordmark.png" alt="Pyramakerz" className="login-wordmark" />
+            <img src="/next/images/pyramakerz-wordmark.png" alt="Pyramakerz" className="login-wordmark" />
             <h1 className="login-brand-title">Pyramakerz</h1>
             <p className="login-subtitle" aria-hidden="true" />
           </div>

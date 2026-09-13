@@ -2269,7 +2269,7 @@ export default function OperationsOrdersClient({ initialOrders = [], bootstrapWa
 
       <section className="operations-orders-list-surface" id="operations-orders-list">
         <div className="co-cards" id="requested-list">
-          {visibleGroups.length ? visibleGroups.map((group) => <OperationsOrderCard group={group} tab={tab} onOpen={setSelected} onCreator={openCreatorProfile} key={group.key} />) : <div className="ops-no-data-state" role="status" aria-live="polite"><img className="ops-no-data-state__image" src="/images/no-data-illustration.png" alt="" loading="lazy"/><div className="ops-no-data-state__text">Sorry, No data available</div></div>}
+          {visibleGroups.length ? visibleGroups.map((group) => <OperationsOrderCard group={group} tab={tab} onOpen={setSelected} onCreator={openCreatorProfile} key={group.key} />) : <div className="ops-no-data-state" role="status" aria-live="polite"><img className="ops-no-data-state__image" src="/next/images/no-data-illustration.png" alt="" loading="lazy"/><div className="ops-no-data-state__text">Sorry, No data available</div></div>}
         </div>
       </section>
 

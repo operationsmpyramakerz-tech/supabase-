@@ -1,14 +1,14 @@
 export default function LoginLoading() {
   return (
     <>
-      <link rel="stylesheet" href="/css/login.css?v=concept-2-pulse-settle-v1" />
+      <link rel="stylesheet" href="/next/css/login.css?v=concept-2-pulse-settle-v1" />
       <div className="login-container" aria-label="Loading sign in">
         <div className="login-card next-classic-login-loading-card">
           <div className="login-header">
             <span className="login-logo-stage">
-              <img src="/images/logo.png" alt="Logo" className="login-logo" />
+              <img src="/next/images/logo.png" alt="Logo" className="login-logo" />
             </span>
-            <img src="/images/pyramakerz-wordmark.png" alt="Pyramakerz" className="login-wordmark" />
+            <img src="/next/images/pyramakerz-wordmark.png" alt="Pyramakerz" className="login-wordmark" />
             <h1 className="login-brand-title">Pyramakerz</h1>
             <p className="login-subtitle" aria-hidden="true" />
           </div>

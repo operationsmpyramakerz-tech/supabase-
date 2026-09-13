@@ -88,8 +88,8 @@ export default async function TaskManagementViewPage({ params }) {
 
   return (
     <>
-      <link rel="stylesheet" href="/css/task-management.css?v=task-management-stable-status-frame-v24" />
-      <link rel="stylesheet" href="/css/task-management-next-parity.css?v=classic-parity-v3-workflow" />
+      <link rel="stylesheet" href="/next/css/task-management.css?v=task-management-stable-status-frame-v24" />
+      <link rel="stylesheet" href="/next/css/task-management-next-parity.css?v=classic-parity-v3-workflow" />
       <AppShell
       account={account}
       title={config.title}

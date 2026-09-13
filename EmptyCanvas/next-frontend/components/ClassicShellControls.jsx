@@ -639,8 +639,8 @@ export function SidebarBrandToggle() {
         }
       }}
     >
-      <img className="brand-logo-full" src="/images/Logo%20horizontal.png" alt="Company logo" />
-      <img className="brand-logo-icon" src="/images/logo.png" alt="" aria-hidden="true" />
+      <img className="brand-logo-full" src="/next/images/Logo%20horizontal.png" alt="Company logo" />
+      <img className="brand-logo-icon" src="/next/images/logo.png" alt="" aria-hidden="true" />
     </div>
   );
 }
@@ -648,7 +648,7 @@ export function SidebarBrandToggle() {
 export function HeaderMenuToggle() {
   return (
     <button id="menu-toggle" type="button" className="menu-toggle" aria-label="Toggle dashboard" onClick={toggleCollapsed}>
-      <img className="menu-toggle-logo" src="/images/logo.png" alt="" />
+      <img className="menu-toggle-logo" src="/next/images/logo.png" alt="" />
     </button>
   );
 }

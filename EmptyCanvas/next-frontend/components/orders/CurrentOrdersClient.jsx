@@ -1005,7 +1005,7 @@ export default function CurrentOrdersClient({ initialOrders = [], bootstrapWarni
       <section className="card" id="current-orders">
         <div className="co-cards" id="orders-list">
           {visibleGroups.length ? visibleGroups.map((group) => <OrderCard group={group} activeTab={tab} onOpen={setSelected} onReason={setReasonView} key={group.key} />) : (
-            <div className="ops-no-data-state" role="status" aria-live="polite"><img className="ops-no-data-state__image" src="/images/no-data-illustration.png" alt="" loading="lazy"/><div className="ops-no-data-state__text">Sorry, No data available</div></div>
+            <div className="ops-no-data-state" role="status" aria-live="polite"><img className="ops-no-data-state__image" src="/next/images/no-data-illustration.png" alt="" loading="lazy"/><div className="ops-no-data-state__text">Sorry, No data available</div></div>
           )}
         </div>
       </section>

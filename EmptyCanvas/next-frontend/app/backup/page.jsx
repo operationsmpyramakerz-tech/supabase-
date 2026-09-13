@@ -65,7 +65,7 @@ export default async function BackupPage() {
       eyebrow="Backup, restore and database control"
       activePath="/next/backup"
       bodyClass="page-backup"
-      classicStyles={["/css/backup.css?v=database-original-folders-v1"]}
+      pageStyles={["/next/css/backup.css?v=database-original-folders-v1"]}
     >
       <BackupClient
         initialTables={Array.isArray(backupPayload?.tables) ? backupPayload.tables : []}

@@ -2,7 +2,7 @@
  * Stage 2 visual parity bridge.
  *
  * The authenticated Next.js shell intentionally reuses the current Classic
- * Operations Hub styles through /css/style.css + /css/ui-redesign.css.  These
+ * Operations Hub styles through /next/css/style.css + /next/css/ui-redesign.css.  These
  * small rules only neutralize pilot-specific globals and restore the few login
  * declarations that live inline in public/login.html rather than login.css.
  */
@@ -2832,7 +2832,7 @@ body.kpis-page .next-kpi-score-notes a{color:#c2410c;font-weight:950}
 
 /* ==========================================================================
    Stage 2M — Users Center Classic parity
-   The page now reuses public/css/user-access.css. These bridge rules only
+   The page now reuses next-frontend/public/css/user-access.css. These bridge rules only
    cover React-specific wrappers, modal layering, loading placeholders, and
    small integration details that do not exist in the legacy HTML.
    ========================================================================== */

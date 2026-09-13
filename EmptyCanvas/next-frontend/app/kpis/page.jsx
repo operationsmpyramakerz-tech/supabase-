@@ -68,7 +68,7 @@ export default async function KpisPage() {
       eyebrow="Employee performance management"
       activePath="/next/kpis"
       bodyClass="kpis-page"
-      classicStyles={["/css/kpis.css?v=next-stage-2l-kpis"]}
+      pageStyles={["/next/css/kpis.css?v=next-stage-2l-kpis"]}
     >
       <KpisClient
         initialMeta={meta}
