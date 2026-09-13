@@ -23,7 +23,6 @@ function createPageRouter(options = {}) {
     publicDir,
     requireAuth,
     requirePage,
-    requireLmsPageAccess,
     userAccessPageAliases = [],
     eventsPreferredRoute,
     b2cPreferredRoute,
@@ -37,7 +36,6 @@ function createPageRouter(options = {}) {
 
   const auth = requireFunction("requireAuth", requireAuth);
   const pageAccess = requireFunction("requirePage", requirePage);
-  const lmsPageAccess = requireFunction("requireLmsPageAccess", requireLmsPageAccess);
   const preferredEventsRoute = requireFunction("eventsPreferredRoute", eventsPreferredRoute);
   const preferredB2cRoute = requireFunction("b2cPreferredRoute", b2cPreferredRoute);
   const preferredTaskRoute = requireFunction(
@@ -133,30 +131,8 @@ function createPageRouter(options = {}) {
 
   router.get("/dashboard", auth, (req, res) => redirectNext(req, res, "/next/home"));
   router.get("/home", auth, (req, res) => redirectNext(req, res, "/next/home"));
-  router.get("/lms", auth, (req, res) => redirectNext(req, res, "/next/lms"));
-
   router.get("/user-access", auth, pageAccess(userAccessPageAliases), (req, res) =>
     redirectNext(req, res, "/next/users-center"),
-  );
-
-  router.get("/lms/user-access", auth, lmsPageAccess("lms-users-center"), (req, res) =>
-    redirectNext(req, res, "/next/lms/users-center"),
-  );
-
-  router.get(
-    "/lms/user-access/:role(supervisors|team-leaders|instructors|co-instructors|school-coordinators|students|parents)",
-    auth,
-    lmsPageAccess("lms-users-center"),
-    (req, res) => redirectNext(req, res, "/next/lms/users-center", { query: { tab: req.params.role } }),
-  );
-
-  router.get(
-    ["/lms/curriculum", "/lms/curriculum/:id", "/lms/curriculum/:id/grade/:gradeId"],
-    auth,
-    lmsPageAccess("lms-curriculum"),
-    (req, res) => redirectNext(req, res, "/next/lms/curriculum", {
-      query: { theme: req.params.id, grade: req.params.gradeId },
-    }),
   );
 
   router.get("/orders", auth, pageAccess("Current Orders"), (req, res) =>
@@ -256,36 +232,6 @@ function createPageRouter(options = {}) {
 
   router.get("/kpis", auth, pageAccess("KPIs"), (req, res) =>
     redirectNext(req, res, "/next/kpis"),
-  );
-
-  router.get(
-    ["/lms/b2b", "/lms/b2b/new", "/lms/b2b/edit/:id"],
-    auth,
-    lmsPageAccess("lms-b2b"),
-    (req, res) => {
-      const query = req.path === "/lms/b2b/new"
-        ? { action: "new" }
-        : req.params.id
-          ? { edit: req.params.id }
-          : {};
-      return redirectNext(req, res, "/next/lms/schools", { query });
-    },
-  );
-  router.get("/lms/b2b/school/:id", auth, lmsPageAccess("lms-b2b"), (req, res) =>
-    redirectNext(req, res, `/next/lms/schools/${encodeURIComponent(req.params.id)}`),
-  );
-
-  // Preserve old B2B bookmarks, but there is no Classic B2B page anymore.
-  router.get(["/b2b", "/b2b/new", "/b2b/edit/:id"], auth, (req, res) => {
-    const query = req.path === "/b2b/new"
-      ? { action: "new" }
-      : req.params.id
-        ? { edit: req.params.id }
-        : {};
-    return redirectNext(req, res, "/next/lms/schools", { query });
-  });
-  router.get("/b2b/school/:id", auth, (req, res) =>
-    redirectNext(req, res, `/next/lms/schools/${encodeURIComponent(req.params.id)}`),
   );
 
   router.get("/account", auth, (req, res) => redirectNext(req, res, "/next/account"));

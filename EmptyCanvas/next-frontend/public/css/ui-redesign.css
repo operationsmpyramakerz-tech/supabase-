@@ -236,7 +236,7 @@ body.permissions-loading:not(.permissions-ready) .main-header{
 
 /* Sidebar profile (avatar at the top of the sidebar)
    ✅ New requirement: remove it completely */
-.sidebar-profile{ display: none !important; }
+
 
 .sidebar-nav{
   /*
@@ -449,83 +449,25 @@ body.ops-has-system-cover:not(.shell-embedded) .ops-shell-frame{
 }
 
 /* Lead (left) round button – injected by JS */
-.gh-lead-btn{
-  width: 46px;
-  height: 46px;
-  border-radius: 999px;
-  border: none;
-  cursor: pointer;
-  background: var(--ui-green-accent);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 14px 30px rgba(0,0,0,0.25);
-}
-.gh-lead-btn:hover{ filter: brightness(0.98); transform: translateY(-1px); }
-.gh-lead-btn:active{ transform: translateY(0); }
-.gh-lead-btn svg{ width: 22px; height: 22px; color: #0B351D; }
+
+
+
+
 
 /* Wave group (match the reference green header) */
-.gh-wave{
-  /* height of the pill (also used to place the bottom notch via box-shadow) */
-  --wave-h: 52px;
-  /* The notch color should match the darker header background behind the wave */
-  --notch-bg: #0B351D;
 
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 12px;
-  height: var(--wave-h);
-  background: rgba(45,107,59,0.98);
-  border-radius: 999px;
-  box-shadow:
-    inset 0 0 0 1px rgba(255,255,255,0.10),
-    0 16px 44px rgba(0,0,0,0.22);
-  max-width: 720px;
-  width: min(720px, 100%);
-  position: relative;
-  overflow: visible;
-}
 
 /* "Wave" notches (top + bottom) — cuts are created by drawing circles in the background color */
-.gh-wave::before,
-.gh-wave::after{
-  content: "";
-  position: absolute;
-  pointer-events: none;
-  border-radius: 999px;
-  background: var(--notch-bg);
-  opacity: 1;
-}
+
 
 /* Notch between search and bell */
-.gh-wave::before{
-  width: 34px;
-  height: 34px;
-  top: calc(-17px + 2px);
-  /* Center the notch in the gap between search and bell */
-  left: calc(100% - 112px);
-  transform: translateX(-50%);
-  box-shadow: 0 var(--wave-h) 0 var(--notch-bg);
-}
+
 
 /* Notch between bell and avatar */
-.gh-wave::after{
-  width: 30px;
-  height: 30px;
-  top: calc(-15px + 2px);
-  /* Center the notch in the gap between bell and avatar */
-  left: calc(100% - 58px);
-  transform: translateX(-50%);
-  box-shadow: 0 var(--wave-h) 0 var(--notch-bg);
-}
+
 
 /* Ensure content stays above the notch layers */
-.gh-wave > *{
-  position: relative;
-  z-index: 1;
-}
+
 
 /* Make the searchbar blend inside wave */
 .gh-wave .searchbar{
@@ -590,38 +532,14 @@ body.ops-has-system-cover:not(.shell-embedded) .ops-shell-frame{
 }
 
 /* Avatar (account-mini) -> circle */
-.gh-wave .account-mini{
-  width: 40px;
-  height: 40px;
-  border-radius: 999px;
-  padding: 0 !important;
-  background: transparent !important;
-  border: 2px solid rgba(255,255,255,0.22) !important;
-  box-shadow: 0 10px 22px rgba(0,0,0,0.22);
-  overflow: hidden;
-}
+
 .gh-wave .account-mini .label{ display: none !important; }
-.gh-wave .account-mini .ico-circle{
-  width: 40px;
-  height: 40px;
-  border-radius: 999px;
-  background: transparent;
-  box-shadow: none;
-}
-.gh-wave .account-mini .ico-circle img{ width: 26px; height: 26px; }
+
+
 
 /* "See all" action link inside the notification panel header */
-.notif-action-link{
-  text-decoration: none;
-  font-weight: 800;
-  font-size: 12px;
-  padding: 6px 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(226,232,240,0.8);
-  background: #F8FAFC;
-  color: #0F172A;
-}
-.notif-action-link:hover{ filter: brightness(0.98); }
+
+
 
 /* Panel drop-down position tweak */
 .notif-panel{
@@ -676,10 +594,7 @@ body.ops-has-system-cover:not(.shell-embedded) .ops-shell-frame{
     padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
   }
 
-  .gh-wave{
-    width: 100%;
-    max-width: 100%;
-  }
+  
 }
 
 /* Desktop: show the menu toggle only when the sidebar is closed, so it can be reopened */
@@ -924,10 +839,10 @@ body.has-floating-search .main-header .searchbar{
 
 .header-user__img{ width: 100%; height: 100%; object-fit: cover; display: block; }
 .header-user__fallback{ font-size: 12px; font-weight: 900; color: #0F172A; }
-.header-user__name{ display: none !important; }
+
 
 @media (max-width: 700px){
-  .header-user__name{ display: none; }
+  
   .main-header .searchbar{ flex: 1 1 auto; max-width: none; }
 }
 
@@ -938,9 +853,7 @@ body.has-floating-search .main-header .searchbar{
 
 .notif-wrap{ position: relative; }
 
-.header-message-btn{
-  flex: 0 0 auto;
-}
+
 
 .header-message-btn,
 .notif-bell-btn,
@@ -1126,109 +1039,38 @@ body.has-floating-search .main-header .searchbar{
 /* --------------------------------------------
    Search icon button + floating search bar
    -------------------------------------------- */
-.search-icon-btn{
-  width: 44px;
-  height: 44px;
-  min-width: 44px;
-  min-height: 44px;
-  padding: 0 !important;
-  border-radius: 999px;
-  border: 1px solid rgba(15,23,42,0.06) !important;
-  background: rgba(243,244,246,0.95) !important;
-  box-shadow: 0 16px 36px rgba(15,23,42,0.10) !important;
-  box-sizing: border-box;
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  cursor: pointer;
-  color: #0F172A !important;
-  flex: 0 0 44px;
-  transition: transform 150ms ease, background 150ms ease;
-}
 
-.search-icon-btn:hover{
-  background: rgba(226,232,240,0.95) !important;
-}
+
+
 
 /* Feather icon inserted via JS (data-feather="search") */
-.search-icon-btn svg{
-  display: block;
-  width: 20px;
-  height: 20px;
-}
 
-.search-icon-btn svg *{
-  stroke-width: 2.6;
-}
 
-.search-icon-btn .search-icon-svg{
-  display: block;
-  width: 20px;
-  height: 20px;
-  color: inherit;
-  stroke: currentColor;
-  fill: none;
-}
 
-.search-icon-btn .search-icon-svg path{
-  stroke: currentColor;
-}
 
-.search-icon-btn:active{
-  transform: translateY(1px);
-  background: rgba(15,23,42,0.08);
-}
 
-.floating-search-panel{
-  min-width: 320px;
-  max-width: 520px;
-  padding: 14px;
-  border-radius: 18px;
-  background: rgba(255,255,255,0.92);
-  border: 1px solid rgba(0,0,0,0.06);
-  box-shadow: 0 24px 60px rgba(0,0,0,0.18);
-  backdrop-filter: blur(12px);
 
-  /* Open/close animation */
-  opacity: 0;
-  transform: translateY(-10px) scale(0.98);
-  transform-origin: top right;
-  transition: opacity 170ms ease, transform 170ms ease;
-  will-change: opacity, transform;
-}
+
+
+
+
+
 
 .floating-search-panel.is-open{
   opacity: 1;
   transform: translateY(0) scale(1);
 }
 
-.floating-search-inner{
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border-radius: 14px;
-  background: rgba(255,255,255,0.9);
-  border: 1px solid rgba(0,0,0,0.06);
-}
 
-.floating-search-inner input{
-  border: none;
-  outline: none;
-  width: 100%;
-  font-size: 14px;
-  background: transparent;
-}
+
+
 
 .main-header .header-row1 .right > *,
 .main-header .topbar-right > *{
   flex: 0 0 auto;
 }
 
-.search-icon-btn .search-icon-svg circle,
-.search-icon-btn .search-icon-svg line{
-  stroke: currentColor;
-}
+
 
 @media (max-width: 768px){
   .main-header .header-row1{
@@ -2180,11 +2022,7 @@ body.page-shell-host .main-content{
   to { transform: rotate(360deg); }
 }
 
-html body.shell-embedded,
-body.shell-embedded{
-  background: transparent !important;
-  overflow: hidden !important;
-}
+
 
 body.shell-embedded .app-container{
   position: static !important;
@@ -2397,396 +2235,109 @@ body.ops-login-splash-active .app-container{
   color: #2563EB;
 }
 
-.app-download-overlay{
-  position: fixed;
-  inset: 0;
-  z-index: 1000000;
-  display: grid;
-  place-items: center;
-  padding: 22px;
-  background: rgba(15,23,42,0.42);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-}
 
-.app-download-overlay[hidden]{
-  display: none !important;
-}
 
-.app-download-modal{
-  width: min(520px, calc(100vw - 34px));
-  position: relative;
-  background: #FFFFFF;
-  border: 1px solid rgba(234,88,12,0.16);
-  border-radius: 30px;
-  padding: 26px;
-  box-shadow: 0 30px 90px rgba(15,23,42,0.22);
-  animation: appDownloadPopIn 220ms cubic-bezier(.22, 1, .36, 1);
-}
+
+
+
 
 @keyframes appDownloadPopIn{
   from{ opacity: 0; transform: translateY(10px) scale(.96); }
   to{ opacity: 1; transform: translateY(0) scale(1); }
 }
 
-.app-download-close{
-  position: absolute;
-  top: 18px;
-  right: 18px;
-  width: 44px;
-  height: 44px;
-  border-radius: 16px;
-  border: 1px solid rgba(226,232,240,0.95);
-  background: #F8FAFC;
-  color: #0F172A;
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-  font-weight: 900;
-  font-size: 24px;
-  line-height: 1;
-  transition: transform 180ms ease, background 180ms ease, border-color 180ms ease;
-}
 
-.app-download-close:hover{
-  transform: translateY(-1px);
-  background: #FFF7ED;
-  border-color: rgba(234,88,12,0.3);
-}
 
-.app-download-close svg{
-  width: 20px;
-  height: 20px;
-}
 
-.app-download-close svg + span{
-  display: none;
-}
 
-.app-download-head{
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding-right: 50px;
-  margin-bottom: 22px;
-}
 
-.app-download-icon{
-  width: 60px;
-  height: 60px;
-  border-radius: 22px;
-  display: grid;
-  place-items: center;
-  background: linear-gradient(135deg, #FFF7ED, #FFFFFF);
-  border: 1px solid rgba(234,88,12,0.16);
-  color: #EA580C;
-  box-shadow: 0 14px 34px rgba(234,88,12,0.12);
-  flex: 0 0 auto;
-}
 
-.app-download-icon svg{
-  width: 27px;
-  height: 27px;
-}
 
-.app-download-kicker{
-  color: #C2410C;
-  font-weight: 900;
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: .04em;
-  margin-bottom: 4px;
-}
 
-.app-download-head h2{
-  margin: 0;
-  color: #0F172A;
-  font-size: clamp(24px, 4vw, 34px);
-  line-height: 1.02;
-  letter-spacing: -0.04em;
-}
 
-.app-download-head p{
-  margin: 8px 0 0;
-  color: #64748B;
-  font-size: 14px;
-  font-weight: 750;
-  line-height: 1.5;
-}
 
-.app-download-body{
-  display: grid;
-  gap: 12px;
-}
 
-.app-download-loading{
-  min-height: 112px;
-  border-radius: 22px;
-  display: grid;
-  place-items: center;
-  background: #F8FAFC;
-  border: 1px solid rgba(226,232,240,0.9);
-  color: #64748B;
-  font-weight: 850;
-}
 
-.app-download-option{
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 16px;
-  border-radius: 22px;
-  border: 1px solid rgba(226,232,240,0.96);
-  background: linear-gradient(135deg, #FFFFFF, #F8FAFC);
-  color: #0F172A;
-  text-decoration: none;
-  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
-}
 
-.app-download-option:hover{
-  transform: translateY(-2px);
-  border-color: rgba(234,88,12,0.32);
-  box-shadow: 0 18px 40px rgba(15,23,42,0.08);
-}
 
-.app-download-option--disabled{
-  opacity: 0.58;
-  cursor: not-allowed;
-}
 
-.app-download-option--disabled:hover{
-  transform: none;
-  border-color: rgba(226,232,240,0.96);
-  box-shadow: none;
-}
 
-.app-download-option__icon{
-  width: 48px;
-  height: 48px;
-  border-radius: 18px;
-  display: grid;
-  place-items: center;
-  background: #0F172A;
-  color: #FFFFFF;
-  flex: 0 0 auto;
-}
 
-.app-download-option__icon svg{
-  width: 22px;
-  height: 22px;
-}
 
-.app-download-option__text{
-  min-width: 0;
-  flex: 1 1 auto;
-  display: grid;
-  gap: 4px;
-}
 
-.app-download-option__text strong{
-  color: #0F172A;
-  font-weight: 950;
-  font-size: 15px;
-}
 
-.app-download-option__text small{
-  color: #64748B;
-  font-weight: 750;
-  font-size: 12px;
-}
 
-.app-download-option__arrow{
-  width: 34px;
-  height: 34px;
-  border-radius: 14px;
-  display: grid;
-  place-items: center;
-  background: #F1F5F9;
-  color: #334155;
-  flex: 0 0 auto;
-}
 
-.app-download-option__arrow svg{
-  width: 17px;
-  height: 17px;
-}
 
-.app-download-note{
-  display: grid;
-  gap: 5px;
-  padding: 14px 16px;
-  border-radius: 20px;
-  background: linear-gradient(135deg, rgba(255,247,237,0.95), rgba(255,255,255,0.96));
-  border: 1px solid rgba(234,88,12,0.16);
-  color: #475569;
-  font-weight: 750;
-  font-size: 12px;
-  line-height: 1.45;
-}
 
-.app-download-note strong{
-  color: #0F172A;
-  font-weight: 950;
-  font-size: 14px;
-}
 
-.app-download-option--button{
-  width: 100%;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
 
-.app-download-option--button:active{
-  transform: translateY(0) scale(.99);
-}
 
-.app-download-divider{
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 6px 0 0;
-  color: #94A3B8;
-  font-size: 11px;
-  font-weight: 950;
-  text-transform: uppercase;
-  letter-spacing: .06em;
-}
 
-.app-download-divider::before,
-.app-download-divider::after{
-  content: "";
-  height: 1px;
-  background: rgba(226,232,240,0.95);
-  flex: 1 1 auto;
-}
 
-.app-download-status{
-  padding: 14px 16px;
-  border-radius: 20px;
-  border: 1px solid rgba(226,232,240,0.95);
-  background: #F8FAFC;
-  color: #475569;
-}
 
-.app-download-status[hidden]{
-  display: none !important;
-}
 
-.app-download-status__title{
-  color: #0F172A;
-  font-weight: 950;
-  font-size: 13px;
-  line-height: 1.45;
-}
 
-.app-download-status--success{
-  border-color: rgba(34,197,94,0.28);
-  background: rgba(240,253,244,0.96);
-}
 
-.app-download-status--warning{
-  border-color: rgba(245,158,11,0.28);
-  background: rgba(255,251,235,0.96);
-}
 
-.app-download-status--info{
-  border-color: rgba(37,99,235,0.18);
-  background: rgba(239,246,255,0.96);
-}
 
-.app-download-steps{
-  margin: 10px 0 0;
-  padding-left: 20px;
-  display: grid;
-  gap: 6px;
-  color: #475569;
-  font-size: 12px;
-  font-weight: 750;
-  line-height: 1.45;
-}
 
-.app-download-steps strong{
-  color: #0F172A;
-  font-weight: 950;
-}
 
-.app-download-diagnostic{
-  padding: 13px 15px;
-  border-radius: 18px;
-  border: 1px solid rgba(37,99,235,0.18);
-  background: rgba(239,246,255,0.96);
-  color: #334155;
-  font-size: 12px;
-  font-weight: 800;
-  line-height: 1.45;
-}
 
-.app-download-diagnostic strong{
-  color: #0F172A;
-  font-weight: 950;
-}
 
-.app-download-diagnostic--success{
-  border-color: rgba(34,197,94,0.26);
-  background: rgba(240,253,244,0.96);
-  color: #166534;
-}
 
-.app-download-diagnostic--warning{
-  border-color: rgba(245,158,11,0.30);
-  background: rgba(255,251,235,0.96);
-  color: #92400E;
-}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 /* Mail shortcut is header-only; match the other circular topbar controls. */
-.header-message-btn{
-  width: 44px !important;
-  height: 44px !important;
-  min-width: 44px !important;
-  min-height: 44px !important;
-  border-radius: 999px !important;
-  border: 1px solid rgba(15,23,42,0.08) !important;
-  background: #0b1020 !important;
-  color: #fff !important;
-  box-shadow: 0 16px 36px rgba(15,23,42,0.16) !important;
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  position: relative !important;
-}
-.header-message-btn[hidden],
-.header-message-btn[style*="display: none"]{
-  display: none !important;
-}
-.header-message-btn svg,
-.header-message-btn i{
-  width: 20px !important;
-  height: 20px !important;
-  color: currentColor !important;
-}
+
+
+
 .header-message-btn.is-active{
   background: #0b1020 !important;
   color: #fff !important;
 }
-.header-message-unread-dot{
-  position: absolute;
-  top: 3px;
-  right: 3px;
-  width: 11px;
-  height: 11px;
-  border-radius: 999px;
-  background: #ef4444;
-  border: 2px solid #fff;
-  box-shadow: 0 0 0 3px rgba(239,68,68,.12);
-  opacity: 0;
-  transform: scale(.7);
-  transition: opacity .16s ease, transform .16s ease;
-}
-.header-message-btn.has-unread .header-message-unread-dot{
-  opacity: 1;
-  transform: scale(1);
-}
+
+
 
 /* =========================================================
    Mobile dock transparent clearance
@@ -3092,9 +2643,7 @@ input.ops-auto-dir-rtl{
   transform: translateY(0) scale(1);
 }
 
-.floating-search-panel{
-  transition: opacity 210ms cubic-bezier(.22, 1, .36, 1), transform 210ms cubic-bezier(.22, 1, .36, 1);
-}
+
 
 @media (prefers-reduced-motion: reduce){
   .user-menu-shell,
@@ -3390,29 +2939,12 @@ input.ops-auto-dir-rtl{
 .notif-row.is-swipe-read{
   background: rgba(34, 197, 94, 0.12);
 }
-.notif-row__swipe-hint{
-  position: absolute;
-  inset: 0 auto 0 10px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: #16A34A;
-  font-size: 12px;
-  font-weight: 900;
-  opacity: 0;
-  pointer-events: none;
-  transform: translateX(-8px);
-  transition: opacity .15s ease, transform .15s ease;
-}
+
 .notif-row.is-swiping .notif-row__swipe-hint{
   opacity: 1;
   transform: translateX(0);
 }
-.notif-row__swipe-hint svg{
-  width: 16px;
-  height: 16px;
-  stroke-width: 3;
-}
+
 @media (max-width: 480px){
   .notif-center-head{
     gap: 10px;
@@ -3448,23 +2980,7 @@ input.ops-auto-dir-rtl{
   margin-top: 8px;
   border-top: 0 !important;
 }
-.notif-row__surface{
-  position: relative;
-  z-index: 2;
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  width: 100%;
-  min-width: 0;
-  padding: 12px 8px;
-  border-radius: 18px;
-  background: #FFFFFF;
-  border: 1px solid rgba(226,232,240,0.86);
-  box-shadow: 0 8px 18px rgba(15,23,42,0.035);
-  transform: translateX(var(--notif-swipe-x, 0px));
-  transition: transform .18s ease, background .18s ease, box-shadow .18s ease;
-  box-sizing: border-box;
-}
+
 .notif-row.is-unread .notif-row__surface{
   background: #FFFFFF;
 }
@@ -3480,31 +2996,8 @@ input.ops-auto-dir-rtl{
   background: rgba(240, 253, 244, 0.96);
   border-color: rgba(34, 197, 94, 0.26);
 }
-.notif-row__swipe-hint{
-  position: absolute !important;
-  z-index: 1 !important;
-  inset: 0 auto 0 0 !important;
-  width: 104px;
-  display: inline-flex !important;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  padding: 0 12px 0 10px;
-  color: #15803D;
-  background: linear-gradient(90deg, rgba(34,197,94,0.18), rgba(34,197,94,0.05));
-  font-size: 12px;
-  font-weight: 900;
-  opacity: 1 !important;
-  transform: none !important;
-  pointer-events: none;
-  box-sizing: border-box;
-}
-.notif-row__swipe-hint svg{
-  width: 17px;
-  height: 17px;
-  stroke-width: 3;
-  flex: 0 0 auto;
-}
+
+
 .notif-row__content{
   flex: 1 1 auto;
   min-width: 0;
@@ -3514,20 +3007,14 @@ input.ops-auto-dir-rtl{
   min-width: 0;
   max-width: 100%;
 }
-.notif-row__title-text{
-  display: block;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+
 .notif-row__time{
   flex: 0 0 auto;
 }
 @media (max-width: 480px){
   .notif-row{ min-height: 64px; }
-  .notif-row__surface{ padding: 11px 7px; gap: 10px; }
-  .notif-row__swipe-hint{ width: 96px; font-size: 11.5px; }
+  
+  
 }
 
 /* Shared icon-only after-login transition.
@@ -3536,144 +3023,31 @@ body.login-success-active {
   overflow: hidden !important;
 }
 
-.login-success-splash {
-  --logo-size: clamp(112px, 12vw, 156px);
-  --logo-start-x: 50vw;
-  --logo-start-y: 50vh;
-  --logo-start-scale: .42;
-  position: fixed;
-  inset: 0;
-  z-index: 2147483647;
-  display: grid;
-  place-items: center;
-  background: rgba(255, 255, 255, 0.48);
-  backdrop-filter: blur(18px) saturate(1.08);
-  -webkit-backdrop-filter: blur(18px) saturate(1.08);
-  overflow: hidden;
-  opacity: 0;
-  pointer-events: none;
-  animation: loginSplashFadeIn 0.18s ease-out forwards;
-}
 
-.login-success-splash[hidden] {
-  display: none !important;
-}
 
-.login-success-splash::before,
-.login-success-splash::after,
-.login-success-splash__ambient {
-  content: "";
-  position: absolute;
-  inset: auto;
-  border-radius: 999px;
-  pointer-events: none;
-}
 
-.login-success-splash::before {
-  width: min(72vmax, 980px);
-  height: min(72vmax, 980px);
-  background:
-    radial-gradient(circle, rgba(234, 88, 12, 0.18) 0 7%, rgba(251, 146, 60, 0.10) 18%, transparent 62%);
-  filter: blur(6px);
-  animation: loginLogoAura 2.1s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
 
-.login-success-splash::after {
-  width: calc(var(--logo-size) + 112px);
-  height: calc(var(--logo-size) + 112px);
-  border: 1px solid rgba(234, 88, 12, 0.18);
-  box-shadow:
-    0 0 0 18px rgba(255, 255, 255, 0.24),
-    inset 0 0 62px rgba(251, 146, 60, 0.08),
-    0 28px 90px rgba(15, 23, 42, 0.12);
-  animation: loginLogoOuterRing 2.15s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
 
-.login-success-splash__ambient {
-  inset: -10%;
-  background:
-    radial-gradient(circle at 18% 24%, rgba(234, 88, 12, 0.10), transparent 18%),
-    radial-gradient(circle at 78% 28%, rgba(15, 23, 42, 0.08), transparent 20%),
-    radial-gradient(circle at 62% 82%, rgba(251, 146, 60, 0.12), transparent 24%);
-  filter: blur(16px);
-  animation: loginLogoAmbient 2.2s ease-in-out infinite alternate;
-}
 
-.login-success-splash__stage {
-  position: relative;
-  z-index: 2;
-  width: var(--logo-size);
-  height: var(--logo-size);
-  display: grid;
-  place-items: center;
-  transform-origin: center;
-  animation: loginLogoTravel 2.18s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
 
-.login-success-splash__halo {
-  position: absolute;
-  inset: -22px;
-  border-radius: 34px;
-  background:
-    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.96), rgba(255, 247, 237, 0.84) 48%, rgba(255, 255, 255, 0) 70%);
-  box-shadow:
-    0 34px 82px rgba(124, 45, 18, 0.18),
-    0 0 0 1px rgba(234, 88, 12, 0.08);
-  animation: loginLogoHalo 2.08s ease both;
-}
 
-.login-success-splash__logo-grid {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  grid-template-rows: repeat(4, 1fr);
-  filter: drop-shadow(0 26px 42px rgba(124, 45, 18, 0.22));
-}
 
-.login-success-splash__piece {
-  display: block;
-  width: 100%;
-  height: 100%;
-  background-image: url("/next/images/logo.png");
-  background-repeat: no-repeat;
-  background-size: 400% 400%;
-  transform-origin: center;
-  will-change: transform, opacity, filter;
-  animation: loginLogoPieceBreak 2.06s cubic-bezier(0.16, 1, 0.3, 1) var(--d, 0s) both;
-}
 
-.login-success-splash__solid-logo {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  opacity: 0;
-  transform: scale(.9);
-  filter: drop-shadow(0 28px 42px rgba(124, 45, 18, 0.20));
-  animation: loginLogoSolidReveal 2.12s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
 
-.login-success-splash__wordmark,
-.login-success-splash__ring,
-.login-success-splash__burst,
-.login-success-splash__logo-wrap,
-.login-success-splash__logo {
-  display: none !important;
-}
 
-.sr-only {
-  position: absolute !important;
-  width: 1px !important;
-  height: 1px !important;
-  padding: 0 !important;
-  margin: -1px !important;
-  overflow: hidden !important;
-  clip: rect(0, 0, 0, 0) !important;
-  white-space: nowrap !important;
-  border: 0 !important;
-}
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 @keyframes loginSplashFadeIn {
   to { opacity: 1; }
@@ -3764,19 +3138,11 @@ body.login-success-active {
 }
 
 @media (max-width: 560px) {
-  .login-success-splash {
-    --logo-size: clamp(96px, 30vw, 136px);
-  }
+  
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .login-success-splash,
-  .login-success-splash *,
-  .login-success-splash::before,
-  .login-success-splash::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-  }
+  
 }
 
 /* =========================================
@@ -4622,593 +3988,4 @@ body.proposals-page .products-proposal-detail{
   :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page) .orders-toolbar .tab-portfolio[aria-selected="true"] .order-status-tab__label{
     font-size: .76rem !important;
   }
-}
-
-/* =========================================================
-   LMS workspace switch
-   The main ERP sidebar exposes LMS as a top-level workspace.
-   Inside LMS the brand area becomes Back while LMS pages remain visible.
-   ========================================================= */
-.page-lms .sidebar-nav{
-  display:block!important;
-  flex:1 1 auto;
-  min-height:0;
-  overflow-y:auto;
-}
-.page-lms .sidebar-footer{
-  display:none!important;
-}
-.page-lms .sidebar-nav .nav-list{
-  display:flex!important;
-  flex-direction:column;
-}
-
-.page-lms .sidebar-header{
-  justify-content:center!important;
-  padding:18px 10px!important;
-}
-
-.page-lms .lms-sidebar-back{
-  width:100%;
-  min-height:52px;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  gap:10px;
-  border:1px solid rgba(255,255,255,.18);
-  border-radius:17px;
-  color:#fff;
-  background:rgba(255,255,255,.08);
-  text-decoration:none;
-  font-weight:900;
-  transition:transform .18s ease,background .18s ease,border-color .18s ease;
-}
-.page-lms .lms-sidebar-back:hover{
-  transform:translateY(-1px);
-  background:rgba(255,255,255,.14);
-  border-color:rgba(255,255,255,.3);
-}
-.page-lms .lms-sidebar-back svg{width:23px;height:23px;stroke-width:2.5}
-body.sidebar-collapsed.page-lms .lms-sidebar-back span{display:none}
-body.sidebar-collapsed.page-lms .lms-sidebar-back{width:52px;padding:0}
-
-.page-lms .lms-workspace{
-  min-height:calc(100vh - 178px);
-}
-.page-lms .lms-workspace__canvas{
-  min-height:calc(100vh - 210px);
-  border-radius:28px;
-  background:#fff;
-  border:1px solid rgba(15,23,42,.07);
-  box-shadow:0 18px 55px rgba(15,23,42,.08);
-}
-
-@media(max-width:768px){
-  .page-lms .sidebar-header{padding:10px 8px!important}
-  .page-lms .lms-sidebar-back{min-height:48px;border-radius:15px}
-  .page-lms .lms-sidebar-back span{display:none}
-  .page-lms .lms-workspace{min-height:calc(100vh - 145px)}
-  .page-lms .lms-workspace__canvas{min-height:calc(100vh - 175px);border-radius:22px}
-}
-
-/* =========================================================
-   LMS workspace navigation polish
-   ========================================================= */
-/*
- * Main-sidebar workspace boundaries.
- *
- * Route-based :has() selectors render the separators as soon as the matching
- * link exists, without waiting for the async account/permission request. The
- * JS classes remain as a compatibility fallback. Because each line belongs to
- * the same <li> as its page, display:none from permissions hides the line too.
- */
-body:not(.page-lms) .sidebar .nav-list > li:is(
-  .sidebar-workspace-boundary,
-  :has(> a.nav-link[href="/lms"])
-){
-  position:relative;
-  margin-bottom:18px!important;
-  padding-bottom:18px!important;
-}
-body:not(.page-lms) .sidebar .nav-list > li:is(
-  .sidebar-workspace-boundary,
-  :has(> a.nav-link[href="/lms"])
-)::after{
-  content:"";
-  position:absolute;
-  left:12px;
-  right:12px;
-  bottom:0;
-  height:1px;
-  border-radius:999px;
-  background:linear-gradient(90deg,transparent,rgba(255,255,255,.28) 18%,rgba(255,255,255,.28) 82%,transparent);
-  pointer-events:none;
-}
-
-/* The Users Center divider is owned by Users Center itself. If permissions
-   remove/hide that page, this separator disappears with it automatically. */
-body:not(.page-lms) .sidebar .nav-list > li:is(
-  .sidebar-users-boundary,
-  :has(> a.nav-link[href="/user-access"])
-){
-  position:relative;
-  margin-top:18px!important;
-  padding-top:18px!important;
-}
-body:not(.page-lms) .sidebar .nav-list > li:is(
-  .sidebar-users-boundary,
-  :has(> a.nav-link[href="/user-access"])
-)::before{
-  content:"";
-  position:absolute;
-  left:12px;
-  right:12px;
-  top:0;
-  height:1px;
-  border-radius:999px;
-  background:linear-gradient(90deg,transparent,rgba(255,255,255,.28) 18%,rgba(255,255,255,.28) 82%,transparent);
-  pointer-events:none;
-}
-body.sidebar-collapsed:not(.page-lms) .sidebar .nav-list > li:is(
-  .sidebar-workspace-boundary,
-  :has(> a.nav-link[href="/lms"])
-)::after,
-body.sidebar-collapsed:not(.page-lms) .sidebar .nav-list > li:is(
-  .sidebar-users-boundary,
-  :has(> a.nav-link[href="/user-access"])
-)::before{
-  left:9px;
-  right:9px;
-}
-
-/* LMS back control is deliberately icon-only and replaces the logo. */
-.page-lms .lms-sidebar-back{
-  width:54px!important;
-  min-width:54px;
-  min-height:54px;
-  padding:0!important;
-  border-radius:18px;
-  background:linear-gradient(145deg,rgba(255,255,255,.16),rgba(255,255,255,.07));
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.16),0 10px 26px rgba(0,0,0,.18);
-}
-.page-lms .lms-sidebar-back:hover{
-  transform:translateX(-2px) translateY(-1px);
-  background:linear-gradient(145deg,rgba(255,255,255,.23),rgba(255,255,255,.10));
-}
-.page-lms .lms-sidebar-back:active{transform:translateX(-1px) scale(.96)}
-.page-lms .lms-sidebar-back span{display:none!important}
-.page-lms .lms-sidebar-back svg{width:25px;height:25px;stroke-width:2.35}
-
-/* Cross-page workspace switch animation. */
-body.workspace-switch-enter .sidebar,
-body.workspace-switch-enter .main-content{
-  opacity:0;
-}
-body.workspace-switch-enter.page-lms .sidebar{transform:translateX(-34px)}
-body.workspace-switch-enter.page-lms .main-content{transform:translateX(22px)}
-body.workspace-switch-enter:not(.page-lms) .sidebar{transform:translateX(34px)}
-body.workspace-switch-enter:not(.page-lms) .main-content{transform:translateX(-22px)}
-body.workspace-switch-enter.workspace-switch-enter-active .sidebar,
-body.workspace-switch-enter.workspace-switch-enter-active .main-content{
-  opacity:1;
-  transform:translateX(0);
-  transition:opacity .42s cubic-bezier(.22,.8,.25,1),transform .48s cubic-bezier(.22,.8,.25,1);
-}
-body.workspace-switch-leaving{overflow:hidden}
-body.workspace-switch-leaving .sidebar,
-body.workspace-switch-leaving .main-content{
-  transition:opacity .28s ease,transform .32s cubic-bezier(.4,0,.2,1)!important;
-  pointer-events:none;
-}
-body.workspace-switch-leaving.workspace-switch-to-lms .sidebar{
-  opacity:0;
-  transform:translateX(-38px);
-}
-body.workspace-switch-leaving.workspace-switch-to-lms .main-content{
-  opacity:.18;
-  transform:translateX(20px);
-}
-body.workspace-switch-leaving.workspace-switch-to-main .sidebar{
-  opacity:0;
-  transform:translateX(38px);
-}
-body.workspace-switch-leaving.workspace-switch-to-main .main-content{
-  opacity:.18;
-  transform:translateX(-20px);
-}
-
-@media (prefers-reduced-motion:reduce){
-  body.workspace-switch-enter .sidebar,
-  body.workspace-switch-enter .main-content,
-  body.workspace-switch-enter.workspace-switch-enter-active .sidebar,
-  body.workspace-switch-enter.workspace-switch-enter-active .main-content,
-  body.workspace-switch-leaving .sidebar,
-  body.workspace-switch-leaving .main-content{
-    transition:none!important;
-    transform:none!important;
-  }
-}
-
-/* LMS Schools navigation icon */
-.lms-school-nav-icon{
-  width:22px;
-  height:22px;
-  display:block;
-  flex:0 0 auto;
-  fill:none;
-  stroke:currentColor;
-  stroke-width:1.75;
-  stroke-linecap:round;
-  stroke-linejoin:round;
-}
-
-
-/* =========================================================
-   LMS fixed workspace controls
-   Keep Back and LMS Home visually identical on every LMS page.
-   ========================================================= */
-body.page-lms .sidebar .sidebar-header > .lms-sidebar-back,
-body.page-lms .sidebar .sidebar-header > .lms-sidebar-back--fixed{
-  width:54px!important;
-  min-width:54px!important;
-  height:54px!important;
-  min-height:54px!important;
-  padding:0!important;
-  margin:0 auto!important;
-  display:flex!important;
-  align-items:center!important;
-  justify-content:center!important;
-  border:1px solid rgba(255,255,255,.18)!important;
-  border-radius:18px!important;
-  color:#fff!important;
-  background:linear-gradient(145deg,rgba(255,255,255,.16),rgba(255,255,255,.07))!important;
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.16),0 10px 26px rgba(0,0,0,.18)!important;
-  text-decoration:none!important;
-  opacity:1!important;
-  visibility:visible!important;
-}
-body.page-lms .sidebar .sidebar-header > .lms-sidebar-back svg,
-body.page-lms .sidebar .sidebar-header > .lms-sidebar-back--fixed svg{
-  width:25px!important;
-  height:25px!important;
-  stroke:currentColor!important;
-  stroke-width:2.35!important;
-}
-body.page-lms .lms-sidebar .nav-list a.lms-home-anchor{
-  width:54px!important;
-  min-width:54px!important;
-  height:54px!important;
-  min-height:54px!important;
-  margin-inline:auto!important;
-  padding:0!important;
-  display:flex!important;
-  align-items:center!important;
-  justify-content:center!important;
-  border:2px solid rgba(255,255,255,.92)!important;
-  border-radius:18px!important;
-  color:#111827!important;
-  background:#fff!important;
-  box-shadow:0 0 0 2px rgba(8,12,20,.94),0 10px 24px rgba(0,0,0,.22)!important;
-}
-body.page-lms .lms-sidebar .nav-list a.lms-home-anchor:hover{
-  transform:translateY(-1px)!important;
-  background:#fff!important;
-}
-body.page-lms .lms-sidebar .nav-list a.lms-home-anchor svg{
-  width:23px!important;
-  height:23px!important;
-  stroke:currentColor!important;
-  stroke-width:2.2!important;
-}
-body.page-lms .lms-sidebar .nav-list a.lms-home-anchor .nav-label{display:none!important}
-
-/* =========================================================
-   LMS canonical sidebar — fixed order, geometry and controls
-   Back / Home / Users Center / Schools / Curriculum must stay
-   identical on every /lms page regardless of page markup.
-   ========================================================= */
-body.page-lms .lms-sidebar{
-  --lms-nav-size:54px;
-}
-body.page-lms .lms-sidebar .sidebar-header{
-  min-height:78px!important;
-  flex:0 0 78px!important;
-  display:flex!important;
-  align-items:center!important;
-  justify-content:center!important;
-  padding:12px 8px!important;
-}
-body.page-lms .lms-sidebar .sidebar-header > :not(.lms-sidebar-back):not(.lms-sidebar-back--fixed){
-  display:none!important;
-}
-body.page-lms .lms-sidebar .sidebar-nav{
-  display:block!important;
-  overflow:visible!important;
-  padding:0!important;
-}
-body.page-lms .lms-sidebar .sidebar-nav > .nav-list{
-  display:grid!important;
-  grid-template-columns:var(--lms-nav-size)!important;
-  grid-auto-rows:var(--lms-nav-size)!important;
-  justify-content:center!important;
-  align-content:start!important;
-  gap:14px!important;
-  margin:0!important;
-  padding:0 8px!important;
-  list-style:none!important;
-}
-body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li{
-  width:var(--lms-nav-size)!important;
-  height:var(--lms-nav-size)!important;
-  min-width:var(--lms-nav-size)!important;
-  min-height:var(--lms-nav-size)!important;
-  margin:0!important;
-  padding:0!important;
-  display:block!important;
-  position:relative!important;
-}
-body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li > a.nav-link{
-  box-sizing:border-box!important;
-  width:var(--lms-nav-size)!important;
-  height:var(--lms-nav-size)!important;
-  min-width:var(--lms-nav-size)!important;
-  min-height:var(--lms-nav-size)!important;
-  margin:0!important;
-  padding:0!important;
-  display:flex!important;
-  align-items:center!important;
-  justify-content:center!important;
-  gap:0!important;
-  border:1px solid transparent!important;
-  border-radius:18px!important;
-  color:rgba(255,255,255,.88)!important;
-  background:transparent!important;
-  box-shadow:none!important;
-  transform:none!important;
-}
-body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li > a.nav-link:hover{
-  color:#fff!important;
-  background:rgba(255,255,255,.09)!important;
-  transform:none!important;
-}
-body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li > a.nav-link.active{
-  color:#111827!important;
-  background:#fff!important;
-  border-color:rgba(255,255,255,.95)!important;
-  box-shadow:0 0 0 2px rgba(8,12,20,.94),0 10px 24px rgba(0,0,0,.22)!important;
-}
-body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li > a.nav-link svg,
-body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li > a.nav-link .lms-school-nav-icon{
-  width:23px!important;
-  height:23px!important;
-  min-width:23px!important;
-  min-height:23px!important;
-  stroke:currentColor!important;
-  stroke-width:2!important;
-  display:block!important;
-  flex:0 0 23px!important;
-}
-body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li > a.nav-link .nav-label{
-  display:none!important;
-}
-/* Home follows the same fixed geometry; only the current page is highlighted. */
-body.page-lms .lms-sidebar .nav-list a.lms-home-anchor:not(.active){
-  color:rgba(255,255,255,.88)!important;
-  background:transparent!important;
-  border-color:transparent!important;
-  box-shadow:none!important;
-}
-body.page-lms .lms-sidebar .nav-list a.lms-home-anchor.active{
-  color:#111827!important;
-  background:#fff!important;
-  border-color:rgba(255,255,255,.95)!important;
-  box-shadow:0 0 0 2px rgba(8,12,20,.94),0 10px 24px rgba(0,0,0,.22)!important;
-}
-@media(max-width:768px){
-  body.page-lms .lms-sidebar{--lms-nav-size:48px}
-  body.page-lms .lms-sidebar .sidebar-header{min-height:66px!important;flex-basis:66px!important;padding:9px 6px!important}
-  body.page-lms .lms-sidebar .sidebar-nav > .nav-list{gap:12px!important;padding:0 6px!important}
-  body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li > a.nav-link{border-radius:15px!important}
-}
-
-/* =========================================================
-   LMS sidebar hierarchy v8
-   Logo / Back / Home / separator / LMS pages
-   ========================================================= */
-body.page-lms .sidebar.lms-sidebar .sidebar-header{
-  min-height:72px!important;
-  height:72px!important;
-  flex:0 0 72px!important;
-  display:flex!important;
-  align-items:center!important;
-  justify-content:center!important;
-  padding:10px 8px!important;
-}
-body.page-lms .sidebar.lms-sidebar .sidebar-header > *{display:none!important}
-body.page-lms .sidebar.lms-sidebar .sidebar-header > .lms-sidebar-logo{
-  width:48px!important;
-  height:48px!important;
-  display:flex!important;
-  align-items:center!important;
-  justify-content:center!important;
-  margin:0!important;
-  padding:0!important;
-  background:transparent!important;
-}
-body.page-lms .sidebar.lms-sidebar .sidebar-header > .lms-sidebar-logo img{
-  width:38px!important;
-  height:38px!important;
-  display:block!important;
-  object-fit:contain!important;
-}
-body.page-lms .lms-sidebar .sidebar-nav > .nav-list{
-  grid-auto-rows:auto!important;
-  gap:12px!important;
-}
-body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li{
-  width:var(--lms-nav-size)!important;
-  height:var(--lms-nav-size)!important;
-}
-body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li.lms-home-boundary{
-  height:calc(var(--lms-nav-size) + 18px)!important;
-  min-height:calc(var(--lms-nav-size) + 18px)!important;
-  padding-bottom:18px!important;
-  margin-bottom:2px!important;
-  border-bottom:1px solid rgba(255,255,255,.15)!important;
-}
-body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li.lms-back-item > a.nav-link{
-  color:#fff!important;
-  background:linear-gradient(145deg,rgba(255,255,255,.16),rgba(255,255,255,.07))!important;
-  border-color:rgba(255,255,255,.18)!important;
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.16),0 10px 26px rgba(0,0,0,.18)!important;
-}
-body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li.lms-back-item > a.nav-link:hover{
-  color:#fff!important;
-  background:linear-gradient(145deg,rgba(255,255,255,.23),rgba(255,255,255,.10))!important;
-  border-color:rgba(255,255,255,.30)!important;
-}
-body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li.lms-back-item > a.nav-link.active{
-  color:#fff!important;
-  background:linear-gradient(145deg,rgba(255,255,255,.16),rgba(255,255,255,.07))!important;
-  border-color:rgba(255,255,255,.18)!important;
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.16),0 10px 26px rgba(0,0,0,.18)!important;
-}
-@media(max-width:768px){
-  body.page-lms .sidebar.lms-sidebar .sidebar-header{
-    min-height:62px!important;
-    height:62px!important;
-    flex-basis:62px!important;
-    padding:8px 6px!important;
-  }
-  body.page-lms .sidebar.lms-sidebar .sidebar-header > .lms-sidebar-logo{width:44px!important;height:44px!important}
-  body.page-lms .sidebar.lms-sidebar .sidebar-header > .lms-sidebar-logo img{width:34px!important;height:34px!important}
-  body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li.lms-home-boundary{
-    height:calc(var(--lms-nav-size) + 16px)!important;
-    min-height:calc(var(--lms-nav-size) + 16px)!important;
-    padding-bottom:16px!important;
-  }
-}
-
-
-/* =========================================================
-   LMS logo size lock v9
-   Prevent page-specific image rules from enlarging the brand mark.
-   ========================================================= */
-body.page-lms .sidebar.lms-sidebar .sidebar-header > .lms-sidebar-logo{
-  width:48px!important;
-  height:48px!important;
-  min-width:48px!important;
-  min-height:48px!important;
-  max-width:48px!important;
-  max-height:48px!important;
-  display:flex!important;
-  align-items:center!important;
-  justify-content:center!important;
-  overflow:hidden!important;
-  margin:0!important;
-  padding:0!important;
-  background:transparent!important;
-}
-body.page-lms .sidebar.lms-sidebar .sidebar-header > .lms-sidebar-logo > img{
-  width:38px!important;
-  height:38px!important;
-  min-width:38px!important;
-  min-height:38px!important;
-  max-width:38px!important;
-  max-height:38px!important;
-  display:block!important;
-  object-fit:contain!important;
-  object-position:center!important;
-  margin:0!important;
-  padding:0!important;
-}
-@media(max-width:768px){
-  body.page-lms .sidebar.lms-sidebar .sidebar-header > .lms-sidebar-logo{
-    width:44px!important; height:44px!important; min-width:44px!important; min-height:44px!important; max-width:44px!important; max-height:44px!important;
-  }
-  body.page-lms .sidebar.lms-sidebar .sidebar-header > .lms-sidebar-logo > img{
-    width:34px!important; height:34px!important; min-width:34px!important; min-height:34px!important; max-width:34px!important; max-height:34px!important;
-  }
-}
-
-/* =========================================================
-   LMS Back button — transparent arrow-only style v10
-   Keep the Back action as a full accessible nav target while
-   visually matching the plain arrow used on Curriculum pages.
-   ========================================================= */
-body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li.lms-back-item > a.nav-link,
-body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li.lms-back-item > a.nav-link:hover,
-body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li.lms-back-item > a.nav-link:focus-visible,
-body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li.lms-back-item > a.nav-link:active,
-body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li.lms-back-item > a.nav-link.active{
-  background:transparent!important;
-  border-color:transparent!important;
-  box-shadow:none!important;
-  color:#fff!important;
-}
-body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li.lms-back-item > a.nav-link svg{
-  color:#fff!important;
-  stroke:#fff!important;
-  opacity:1!important;
-}
-body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li.lms-back-item > a.nav-link:hover svg,
-body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li.lms-back-item > a.nav-link:focus-visible svg{
-  transform:translateX(-2px);
-}
-
-/* =========================================================
-   LMS stable separators and final Users Center action v11
-   The Home divider stays visible on every LMS route. Users
-   Center is always the final shield action with its own line.
-   ========================================================= */
-body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li.lms-home-boundary,
-body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li.lms-users-boundary{
-  position:relative!important;
-  box-sizing:border-box!important;
-  border:0!important;
-}
-body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li.lms-home-boundary{
-  height:calc(var(--lms-nav-size) + 18px)!important;
-  min-height:calc(var(--lms-nav-size) + 18px)!important;
-  padding:0 0 18px!important;
-  margin:0 0 2px!important;
-}
-body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li.lms-home-boundary::after{
-  content:'';
-  position:absolute;
-  left:6px;
-  right:6px;
-  bottom:0;
-  height:1px;
-  border-radius:999px;
-  background:rgba(255,255,255,.24);
-  box-shadow:0 1px 0 rgba(0,0,0,.16);
-  pointer-events:none;
-}
-body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li.lms-users-boundary{
-  height:calc(var(--lms-nav-size) + 18px)!important;
-  min-height:calc(var(--lms-nav-size) + 18px)!important;
-  padding:18px 0 0!important;
-  margin:2px 0 0!important;
-}
-body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li.lms-users-boundary::before{
-  content:'';
-  position:absolute;
-  left:6px;
-  right:6px;
-  top:0;
-  height:1px;
-  border-radius:999px;
-  background:rgba(255,255,255,.24);
-  box-shadow:0 1px 0 rgba(0,0,0,.16);
-  pointer-events:none;
-}
-@media(max-width:768px){
-  body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li.lms-home-boundary,
-  body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li.lms-users-boundary{
-    height:calc(var(--lms-nav-size) + 16px)!important;
-    min-height:calc(var(--lms-nav-size) + 16px)!important;
-  }
-  body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li.lms-home-boundary{padding-bottom:16px!important}
-  body.page-lms .lms-sidebar .sidebar-nav > .nav-list > li.lms-users-boundary{padding-top:16px!important}
 }

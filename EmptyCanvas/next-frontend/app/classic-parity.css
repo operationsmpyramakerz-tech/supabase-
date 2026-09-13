@@ -16473,11 +16473,10 @@ body.operations-orders-page .next-classic-orders-parity .next-operations-order-c
   }
 
   /* Desktop separators must not reserve vertical space inside a horizontal dock. */
-  body.next-classic-shell-active:not(.page-lms) .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list > li,
-  body.next-classic-shell-active:not(.page-lms) .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list > li.sidebar-workspace-boundary,
-  body.next-classic-shell-active:not(.page-lms) .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list > li.sidebar-users-boundary,
-  body.next-classic-shell-active:not(.page-lms) .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list > li:has(> a.nav-link[href="/lms"]),
-  body.next-classic-shell-active:not(.page-lms) .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list > li:has(> a.nav-link[href="/user-access"]) {
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list > li,
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list > li.sidebar-workspace-boundary,
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list > li.sidebar-users-boundary,
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list > li:has(> a.nav-link[href="/user-access"]) {
     position: relative !important;
     flex: 0 0 auto !important;
     width: auto !important;
@@ -16487,8 +16486,8 @@ body.operations-orders-page .next-classic-orders-parity .next-operations-order-c
     scroll-snap-align: center !important;
   }
 
-  body.next-classic-shell-active:not(.page-lms) .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list > li::before,
-  body.next-classic-shell-active:not(.page-lms) .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list > li::after {
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list > li::before,
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list > li::after {
     content: none !important;
     display: none !important;
   }
@@ -16781,7 +16780,7 @@ body.operations-orders-page .next-classic-orders-parity .next-operations-order-c
   }
 
   /* Remove desktop workspace separators/margins from the horizontal dock. */
-  body.next-classic-shell-active:not(.page-lms) .classic-app-shell > .sidebar:not(.mobile-dock-structured-host) .sidebar-nav > .nav-list > li {
+  body.next-classic-shell-active .classic-app-shell > .sidebar:not(.mobile-dock-structured-host) .sidebar-nav > .nav-list > li {
     position: relative !important;
     display: block !important;
     flex: 0 0 auto !important;
@@ -16792,8 +16791,8 @@ body.operations-orders-page .next-classic-orders-parity .next-operations-order-c
     z-index: 1 !important;
   }
 
-  body.next-classic-shell-active:not(.page-lms) .classic-app-shell > .sidebar:not(.mobile-dock-structured-host) .sidebar-nav > .nav-list > li::before,
-  body.next-classic-shell-active:not(.page-lms) .classic-app-shell > .sidebar:not(.mobile-dock-structured-host) .sidebar-nav > .nav-list > li::after {
+  body.next-classic-shell-active .classic-app-shell > .sidebar:not(.mobile-dock-structured-host) .sidebar-nav > .nav-list > li::before,
+  body.next-classic-shell-active .classic-app-shell > .sidebar:not(.mobile-dock-structured-host) .sidebar-nav > .nav-list > li::after {
     content: none !important;
     display: none !important;
   }
@@ -17015,7 +17014,7 @@ body.operations-orders-page .next-classic-orders-parity .next-operations-order-c
     list-style: none !important;
   }
 
-  body.next-classic-shell-active:not(.page-lms) .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list > li {
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list > li {
     position: relative !important;
     display: block !important;
     flex: 0 0 auto !important;
@@ -17025,8 +17024,8 @@ body.operations-orders-page .next-classic-orders-parity .next-operations-order-c
     padding: 0 !important;
   }
 
-  body.next-classic-shell-active:not(.page-lms) .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list > li::before,
-  body.next-classic-shell-active:not(.page-lms) .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list > li::after {
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list > li::before,
+  body.next-classic-shell-active .classic-app-shell .sidebar.mobile-dock-structured-host .mobile-dock-pages-list > li::after {
     content: none !important;
     display: none !important;
   }

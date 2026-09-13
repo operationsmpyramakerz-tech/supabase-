@@ -362,7 +362,6 @@ html[data-theme="dark"] body :is(
   .next-kpi-modal,
   .next-users-modal,
   .next-users-submodal form,
-  .next-lms-role-modal,
   .next-expense-users-modal__card,
   .next-proposals-modal__card,
   .next-b2c-modal__card,
@@ -627,7 +626,7 @@ html[data-theme="dark"] body.events-page .next-events-tabs button:not(.active) {
 }
 
 /* ------------------------------------------------------------------------
-   KPIs, Users Center, LMS, B2C
+   KPIs, Users Center, B2C
    --------------------------------------------------------------------- */
 html[data-theme="dark"] body :is(
   .next-kpi-graph-card,
@@ -642,23 +641,6 @@ html[data-theme="dark"] body :is(
   .next-users-member-grid > article,
   .next-users-access-groups,
   .next-users-sv-list > label,
-  .next-lms-kpi,
-  .next-lms-panel,
-  .next-lms-users-summary article,
-  .next-lms-users-workspace,
-  .next-lms-builder,
-  .next-lms-builder-rolebar,
-  .next-lms-builder-node,
-  .next-lms-schools-summary article,
-  .next-lms-schools-toolbar,
-  .next-lms-school-card,
-  .next-lms-schools-empty,
-  .next-lms-school-form,
-  .next-lms-school-details,
-  .lms-home-hero,
-  .lms-kpi-card,
-  .lms-panel,
-  .lms-recent-item,
   .next-b2c-stats article,
   .next-b2c-library,
   .next-b2c-search,
@@ -672,14 +654,6 @@ html[data-theme="dark"] body :is(
   border-color: #2b3544 !important;
   color: #f8fafc !important;
   box-shadow: 0 14px 36px rgba(0,0,0,.2) !important;
-}
-
-html[data-theme="dark"] body :is(.lms-home-hero h1, .lms-kpi-card strong, .lms-panel-head h2, .lms-recent-item strong) {
-  color: #f8fafc !important;
-}
-
-html[data-theme="dark"] body :is(.lms-home-hero p, .lms-kpi-card span, .lms-kpi-card small, .lms-recent-item small) {
-  color: #98a2b3 !important;
 }
 
 /* ------------------------------------------------------------------------

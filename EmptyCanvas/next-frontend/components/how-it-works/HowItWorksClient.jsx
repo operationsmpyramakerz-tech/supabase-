@@ -78,15 +78,6 @@ const TOKEN_ROUTE_MAP = new Map([
   ["customer form", "/next/b2c/forms"],
   ["b2c customer form", "/next/b2c/forms"],
   ["/b2c/form", "/next/b2c/forms"],
-  ["b2b", "/b2b"],
-  ["/b2b", "/b2b"],
-  ["lms", "/lms"],
-  ["lms-users-center", "/lms/user-access"],
-  ["lms-b2b", "/lms/b2b"],
-  ["lms-curriculum", "/lms/curriculum"],
-  ["lms users center", "/lms/user-access"],
-  ["lms schools", "/lms/b2b"],
-  ["lms curriculum", "/lms/curriculum"],
   ["account", "/next/account"],
   ["/account", "/next/account"],
 ]);
@@ -99,16 +90,9 @@ function normalizePath(value) {
   return normalize(value).replace(/\/+$/, "");
 }
 
-function isLegacyLmsToken(value) {
-  const token = normalizePath(value);
-  return token === "lms" || token.startsWith("lms-") || token.startsWith("lms ") || token.startsWith("/lms");
-}
-
 function titleFromToken(raw) {
   const value = String(raw || "").trim();
   if (!value) return "Extra module";
-  const friendly = { "lms-users-center": "LMS Users Center", "lms-b2b": "LMS Schools", "lms-curriculum": "LMS Curriculum" }[normalize(value)];
-  if (friendly) return friendly;
   if (value.startsWith("/")) {
     const slug = value.replace(/^\/+/, "").replace(/\/+|[-_]+/g, " ").trim();
     return slug ? slug.replace(/\b\w/g, (char) => char.toUpperCase()) : "Extra module";
@@ -195,7 +179,11 @@ function moduleOrderIndex(id) {
 
 function visibleModulesFor(account) {
   const allowedPages = [...(Array.isArray(account?.allowedPages) ? account.allowedPages : [])]
-    .filter((value) => !isLegacyLmsToken(value));
+    // Ignore stale LMS permission rows that may remain in the database.
+    .filter((value) => {
+      const token = normalizePath(value);
+      return token !== "lms" && !token.startsWith("lms-") && !token.startsWith("lms ") && !token.startsWith("/lms");
+    });
   const allowedSet = buildAllowedSet(allowedPages);
   const detailed = MODULES.filter((module) => moduleVisible(module, allowedSet));
   const mapped = new Set();
