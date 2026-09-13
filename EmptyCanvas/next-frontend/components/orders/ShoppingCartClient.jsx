@@ -86,6 +86,23 @@ function normalizeProduct(product, index = 0) {
   };
 }
 
+function normalizeKit(kit, index = 0) {
+  return {
+    id: text(kit?.id) || `kit-${index}`,
+    name: text(kit?.name) || "Untitled kit",
+    folderId: text(kit?.folderId || kit?.folder_id),
+    itemsCount: Math.max(0, Math.round(number(kit?.itemsCount))),
+    createdBy: text(kit?.createdBy || kit?.created_by),
+  };
+}
+
+function normalizeKitFolder(folder, index = 0) {
+  return {
+    id: text(folder?.id) || `kit-folder-${index}`,
+    name: text(folder?.name) || "Untitled folder",
+  };
+}
+
 function normalizeDraftItem(item) {
   return {
     id: text(item?.id),
@@ -242,6 +259,12 @@ function CartSvgIcon({ name, size = 18 }) {
     "arrow-left": <><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></>,
     "external-link": <><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></>,
     plus: <><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></>,
+    search: <><circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16.65" y2="16.65"/></>,
+    "chevron-down": <polyline points="6 9 12 15 18 9"/>,
+    package: <><path d="M16.5 9.4 7.55 4.24"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.29 7 12 12 20.71 7"/><line x1="12" y1="22" x2="12" y2="12"/></>,
+    folder: <path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>,
+    check: <polyline points="20 6 9 17 4 12"/>,
+    x: <><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>,
   };
   return <svg {...common}>{icons[name] || icons.grid}</svg>;
 }
@@ -282,55 +305,399 @@ function TypeSelection({ orderTypes, onChoose }) {
   );
 }
 
+function ProductCombobox({ products, value, onChange, disabled = false }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const rootRef = useRef(null);
+  const selected = products.find((product) => product.id === value) || null;
+  const needle = text(query).toLowerCase();
+  const filtered = useMemo(() => {
+    if (!needle) return products;
+    return products.filter((product) => [product.name, product.displayId, product.unit, ...(product.tags || [])]
+      .some((part) => text(part).toLowerCase().includes(needle)));
+  }, [products, needle]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const close = (event) => {
+      if (!rootRef.current?.contains(event.target)) setOpen(false);
+    };
+    const escape = (event) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [open]);
+
+  return (
+    <div className={`classic-cart-combobox ${open ? "is-open" : ""}`} ref={rootRef}>
+      <button
+        className={`classic-cart-combobox-trigger ${selected ? "has-value" : ""}`}
+        type="button"
+        onClick={() => { if (!disabled) { setOpen((current) => !current); setQuery(""); } }}
+        aria-expanded={open}
+        disabled={disabled}
+      >
+        <span className="classic-cart-combobox-media">
+          {selected?.imageUrl ? <img src={selected.imageUrl} alt="" /> : <CartSvgIcon name="package" size={20}/>} 
+        </span>
+        <span className="classic-cart-combobox-copy">
+          <small>{selected ? "Selected component" : "Component"}</small>
+          <strong>{selected?.name || "Select a component"}</strong>
+          <em>{selected ? [selected.displayId || "No ID", selected.unit || "Unit"].join(" · ") : "Search by name, ID, tag or unit"}</em>
+        </span>
+        <span className="classic-cart-combobox-arrow"><CartSvgIcon name="chevron-down" size={18}/></span>
+      </button>
+
+      {open ? (
+        <div className="classic-cart-combobox-panel" role="listbox" aria-label="Products">
+          <label className="classic-cart-combobox-search">
+            <CartSvgIcon name="search" size={18}/>
+            <input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search components..." autoComplete="off" />
+            <span>{filtered.length}</span>
+          </label>
+          <div className="classic-cart-combobox-list">
+            {filtered.map((product) => {
+              const active = product.id === value;
+              return (
+                <button
+                  type="button"
+                  className={`classic-cart-combobox-option ${active ? "is-selected" : ""}`}
+                  key={product.id}
+                  onClick={() => { onChange(product.id); setOpen(false); setQuery(""); }}
+                  role="option"
+                  aria-selected={active}
+                >
+                  <span className="classic-cart-combobox-option-media">
+                    {product.imageUrl ? <img src={product.imageUrl} alt="" /> : <CartSvgIcon name="package" size={18}/>} 
+                  </span>
+                  <span className="classic-cart-combobox-option-copy">
+                    <strong>{product.name}</strong>
+                    <small>{[product.displayId || "No ID", product.unit || "Unit"].join(" · ")}</small>
+                  </span>
+                  <span className="classic-cart-combobox-option-price">{formatMoney(product.unitPrice)}</span>
+                  {active ? <span className="classic-cart-combobox-option-check"><CartSvgIcon name="check" size={16}/></span> : null}
+                </button>
+              );
+            })}
+            {!filtered.length ? <div className="classic-cart-combobox-empty">No components match “{query}”.</div> : null}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function KitBrowserDialog({ kits, folders, selectedKits, onToggleKit, onQuantityChange, onClose, loading, error, onRetry }) {
+  const [activeFolderId, setActiveFolderId] = useState("");
+  const [query, setQuery] = useState("");
+  const activeFolder = folders.find((folder) => folder.id === activeFolderId) || null;
+  const needle = text(query).toLowerCase();
+  const folderCounts = useMemo(() => {
+    const map = new Map();
+    kits.forEach((kit) => {
+      if (kit.folderId) map.set(kit.folderId, (map.get(kit.folderId) || 0) + 1);
+    });
+    return map;
+  }, [kits]);
+  const visibleFolders = useMemo(() => {
+    if (activeFolderId) return [];
+    if (!needle) return folders;
+    return folders.filter((folder) => folder.name.toLowerCase().includes(needle));
+  }, [activeFolderId, folders, needle]);
+  const visibleKits = useMemo(() => {
+    let rows = activeFolderId
+      ? kits.filter((kit) => kit.folderId === activeFolderId)
+      : needle
+        ? kits
+        : kits.filter((kit) => !kit.folderId);
+    if (needle) rows = rows.filter((kit) => kit.name.toLowerCase().includes(needle));
+    return rows;
+  }, [activeFolderId, kits, needle]);
+  const selectedCount = Object.keys(selectedKits || {}).length;
+
+  return (
+    <div className="classic-cart-kit-browser-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <section className="classic-cart-kit-browser" role="dialog" aria-modal="true" aria-label="Select kits">
+        <header className="classic-cart-kit-browser-head">
+          <div>
+            <span>Kit library</span>
+            <h3>{activeFolder ? activeFolder.name : "Select kits"}</h3>
+            <p>{activeFolder ? "Choose one or more kits from this folder." : "Browse folders or choose unfiled kits."}</p>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Close"><CartSvgIcon name="x" size={20}/></button>
+        </header>
+
+        <div className="classic-cart-kit-browser-toolbar">
+          {activeFolder ? (
+            <button type="button" className="classic-cart-kit-browser-back" onClick={() => { setActiveFolderId(""); setQuery(""); }}>
+              <CartSvgIcon name="arrow-left" size={16}/> All kits
+            </button>
+          ) : <span className="classic-cart-kit-browser-location">Folders & kits</span>}
+          <label className="classic-cart-kit-browser-search">
+            <CartSvgIcon name="search" size={17}/>
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search kits..." autoComplete="off" />
+          </label>
+          <span className="classic-cart-kit-browser-count">{selectedCount} selected</span>
+        </div>
+
+        <div className="classic-cart-kit-browser-grid">
+          {loading ? (
+            <div className="classic-cart-kit-browser-status"><span className="classic-cart-loading-spinner"/><strong>Loading kit library...</strong></div>
+          ) : error ? (
+            <div className="classic-cart-kit-browser-status is-error"><strong>Kit library unavailable</strong><span>{error}</span><button type="button" onClick={onRetry}>Try again</button></div>
+          ) : (
+            <>
+              {visibleFolders.map((folder) => (
+                <button type="button" className="classic-cart-kit-folder-card" key={folder.id} onClick={() => { setActiveFolderId(folder.id); setQuery(""); }}>
+                  <span className="classic-cart-kit-folder-icon"><CartSvgIcon name="folder" size={24}/></span>
+                  <span><strong>{folder.name}</strong><small>{folderCounts.get(folder.id) || 0} kit{(folderCounts.get(folder.id) || 0) === 1 ? "" : "s"}</small></span>
+                  <CartSvgIcon name="arrow-right" size={18}/>
+                </button>
+              ))}
+              {visibleKits.map((kit) => {
+                const selected = Object.prototype.hasOwnProperty.call(selectedKits || {}, kit.id);
+                const qty = selected ? selectedKits[kit.id] : 1;
+                return (
+                  <article className={`classic-cart-kit-card ${selected ? "is-selected" : ""}`} key={kit.id}>
+                    <button type="button" className="classic-cart-kit-card-main" onClick={() => onToggleKit(kit.id)} aria-pressed={selected}>
+                      <span className="classic-cart-kit-card-icon"><CartSvgIcon name="layers" size={22}/></span>
+                      <span className="classic-cart-kit-card-copy"><strong>{kit.name}</strong><small>{kit.itemsCount} component{kit.itemsCount === 1 ? "" : "s"}{kit.createdBy ? ` · ${kit.createdBy}` : ""}</small></span>
+                      <span className="classic-cart-kit-card-check">{selected ? <CartSvgIcon name="check" size={16}/> : <CartSvgIcon name="plus" size={16}/>}</span>
+                    </button>
+                    {selected ? (
+                      <label className="classic-cart-kit-card-qty" onClick={(event) => event.stopPropagation()}>
+                        <span>Kit Qty</span>
+                        <input type="number" min="1" step="1" inputMode="numeric" value={qty} onChange={(event) => onQuantityChange(kit.id, event.target.value)} />
+                      </label>
+                    ) : null}
+                  </article>
+                );
+              })}
+              {!visibleFolders.length && !visibleKits.length ? <div className="classic-cart-kit-browser-status"><strong>No kits found here.</strong><span>Try another folder or search term.</span></div> : null}
+            </>
+          )}
+        </div>
+
+        <footer className="classic-cart-kit-browser-footer">
+          <span><strong>{selectedCount}</strong> kit{selectedCount === 1 ? "" : "s"} selected</span>
+          <button type="button" onClick={onClose}>Use selected kits</button>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
 function ProductPicker({ products, type, item, onClose, onSave }) {
   const maintenance = isMaintenance(type);
+  const withdraw = isWithdraw(type);
+  const [mode, setMode] = useState("product");
   const [selectedId, setSelectedId] = useState(text(item?.id));
   const [qty, setQty] = useState(item?.quantity || 1);
   const [issueDescription, setIssueDescription] = useState(text(item?.issueDescription));
+  const [selectedKits, setSelectedKits] = useState({});
+  const [kits, setKits] = useState([]);
+  const [kitFolders, setKitFolders] = useState([]);
+  const [kitBrowserOpen, setKitBrowserOpen] = useState(false);
+  const [kitLibraryLoaded, setKitLibraryLoaded] = useState(false);
+  const [kitLibraryLoading, setKitLibraryLoading] = useState(false);
+  const [kitLibraryError, setKitLibraryError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
   const selected = products.find((product) => product.id === selectedId) || null;
+  const selectedKitCount = Object.keys(selectedKits).length;
+  const selectedKitNames = Object.keys(selectedKits).map((id) => kits.find((kit) => kit.id === id)?.name).filter(Boolean);
 
-  const submit = () => {
-    if (!selected) return setError("Select a product first.");
-    if (maintenance && !text(issueDescription)) return setError("Issue Description is required for maintenance requests.");
-    if (!maintenance && quantity(qty, 0) <= 0) return setError("Quantity must be greater than zero.");
-    onSave({ id: selected.id, quantity: maintenance ? 1 : quantity(qty, 1), issueDescription: maintenance ? text(issueDescription) : "", schoolId: text(item?.schoolId) });
+  const loadKitLibrary = async () => {
+    if (kitLibraryLoading) return;
+    setKitLibraryLoading(true);
+    setKitLibraryError("");
+    try {
+      const [kitsBody, foldersBody] = await Promise.all([
+        requestJson(`/next/api/products/kits?_ts=${Date.now()}`),
+        requestJson(`/next/api/products/kit-folders?_ts=${Date.now()}`),
+      ]);
+      setKits((Array.isArray(kitsBody?.kits) ? kitsBody.kits : []).map(normalizeKit));
+      setKitFolders((Array.isArray(foldersBody?.folders) ? foldersBody.folders : []).map(normalizeKitFolder));
+      setKitLibraryLoaded(true);
+    } catch (loadError) {
+      setKitLibraryError(loadError?.message || "The kit library could not be loaded.");
+    } finally {
+      setKitLibraryLoading(false);
+    }
   };
 
+  useEffect(() => {
+    if (mode === "kit" && !kitLibraryLoaded && !kitLibraryLoading && !kitLibraryError) loadKitLibrary();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode]);
+
+  const switchMode = (nextMode) => {
+    if (item) return;
+    setMode(nextMode);
+    setError("");
+    if (nextMode === "kit" && !kitLibraryLoaded && !kitLibraryLoading) loadKitLibrary();
+  };
+
+  const toggleKit = (kitId) => {
+    setSelectedKits((current) => {
+      const next = { ...current };
+      if (Object.prototype.hasOwnProperty.call(next, kitId)) delete next[kitId];
+      else next[kitId] = 1;
+      return next;
+    });
+    setError("");
+  };
+
+  const setKitQuantity = (kitId, value) => {
+    const parsed = Math.max(1, Math.round(number(value, 1) || 1));
+    setSelectedKits((current) => ({ ...current, [kitId]: parsed }));
+  };
+
+  const submit = async () => {
+    setError("");
+    if (mode === "product") {
+      if (!selected) return setError("Select a component first.");
+      if (maintenance && !text(issueDescription)) return setError("Issue Description is required for maintenance requests.");
+      if (!maintenance && quantity(qty, 0) <= 0) return setError("Quantity must be greater than zero.");
+      setSubmitting(true);
+      try {
+        await onSave({
+          mode: "product",
+          item: { id: selected.id, quantity: maintenance ? 1 : quantity(qty, 1), issueDescription: maintenance ? text(issueDescription) : "", schoolId: text(item?.schoolId) },
+        });
+      } catch (saveError) {
+        setError(saveError?.message || "The component could not be added.");
+        setSubmitting(false);
+      }
+      return;
+    }
+
+    const selections = Object.entries(selectedKits).map(([kitId, kitQty]) => ({ id: kitId, quantity: Math.max(1, Math.round(number(kitQty, 1) || 1)) }));
+    if (!selections.length) return setError("Choose at least one kit.");
+    if (maintenance && !text(issueDescription)) return setError("Issue Description is required for maintenance requests.");
+    setSubmitting(true);
+    try {
+      await onSave({ mode: "kit", selections, issueDescription: maintenance ? text(issueDescription) : "" });
+    } catch (saveError) {
+      setError(saveError?.message || "The selected kit could not be added.");
+      setSubmitting(false);
+    }
+  };
+
+  const actionLabel = item
+    ? "Save changes"
+    : mode === "kit"
+      ? selectedKitCount
+        ? `Add ${selectedKitCount} Kit${selectedKitCount === 1 ? "" : "s"}`
+        : "Add Kits"
+      : "Add component";
+
   return (
-    <div className="classic-cart-modal-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section className="classic-cart-modal-card" role="dialog" aria-modal="true" aria-labelledby="classic-cart-modal-title">
-        <h3 className="classic-cart-modal-title" id="classic-cart-modal-title">{isWithdraw(type) ? "Update Withdraw Cart" : "Update Cart"}</h3>
-        <div className={`classic-cart-modal-grid ${maintenance ? "is-maintenance" : ""}`}>
-          <label className="classic-cart-mfield full">
-            <span>Product <em>*</em></span>
-            <select value={selectedId} onChange={(event) => { setSelectedId(event.target.value); setError(""); }} aria-label="Product">
-              <option value="">Select product...</option>
-              {products.map((product) => <option value={product.id} key={product.id}>{product.name}{product.displayId ? ` · ${product.displayId}` : ""}{product.unit ? ` · ${product.unit}` : ""}</option>)}
-            </select>
-          </label>
-          {!maintenance ? (
-            <label className="classic-cart-mfield">
-              <span>Qty <em>*</em></span>
-              <div className="classic-cart-qty-input-with-unit">
-                <input type="number" min="0.01" step="0.01" value={qty} onChange={(event) => setQty(event.target.value)} />
-                <b className={!selected?.unit ? "is-placeholder" : ""}>{selected?.unit || "Unit"}</b>
-              </div>
-            </label>
+    <div className="classic-cart-modal-overlay classic-cart-picker-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !submitting) onClose(); }}>
+      <section className="classic-cart-modal-card classic-cart-modal-card--modern" role="dialog" aria-modal="true" aria-labelledby="classic-cart-modal-title">
+        <header className="classic-cart-picker-head">
+          <span className="classic-cart-picker-head-icon"><CartSvgIcon name={isMaintenance(type) ? "tool" : isWithdraw(type) ? "log-out" : "shopping-cart"} size={24}/></span>
+          <div className="classic-cart-picker-head-copy">
+            <span>{item ? "Edit cart item" : "Add to cart"}</span>
+            <h3 id="classic-cart-modal-title">{item ? "Edit component" : isWithdraw(type) ? "Add to Withdraw Products" : isMaintenance(type) ? "Add Maintenance Item" : "Add to Request Products"}</h3>
+            <p>{item ? "Update this component without changing the rest of the cart." : "Choose a component directly or add all components from one or more kits."}</p>
+          </div>
+          <button className="classic-cart-picker-close" type="button" onClick={onClose} disabled={submitting} aria-label="Close"><CartSvgIcon name="x" size={22}/></button>
+        </header>
+
+        {!item ? (
+          <div className="classic-cart-picker-tabs" role="tablist" aria-label="Add source">
+            <button type="button" className={mode === "product" ? "is-active" : ""} onClick={() => switchMode("product")} role="tab" aria-selected={mode === "product"}>
+              <CartSvgIcon name="package" size={18}/><span><strong>Component</strong><small>Select one product</small></span>
+            </button>
+            <button type="button" className={mode === "kit" ? "is-active" : ""} onClick={() => switchMode("kit")} role="tab" aria-selected={mode === "kit"}>
+              <CartSvgIcon name="layers" size={18}/><span><strong>Kit</strong><small>Add a reusable kit</small></span>
+            </button>
+          </div>
+        ) : null}
+
+        <div className="classic-cart-picker-body">
+          {mode === "product" ? (
+            <div className="classic-cart-picker-section">
+              <div className="classic-cart-picker-label-row"><span>Component <em>*</em></span><small>{products.length} available</small></div>
+              <ProductCombobox products={products} value={selectedId} onChange={(id) => { setSelectedId(id); setError(""); }} disabled={submitting}/>
+
+              {!maintenance ? (
+                <div className="classic-cart-picker-qty-row">
+                  <label className="classic-cart-modern-field">
+                    <span>Quantity <em>*</em></span>
+                    <div className="classic-cart-modern-qty">
+                      <input type="number" min="0.01" step="0.01" value={qty} onChange={(event) => setQty(event.target.value)} disabled={submitting}/>
+                      <b>{selected?.unit || "Unit"}</b>
+                    </div>
+                  </label>
+                  {selected ? (
+                    <div className="classic-cart-picker-product-summary">
+                      <span>Estimated total</span><strong>{formatMoney(selected.unitPrice * quantity(qty, 1))}</strong>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
           ) : (
-            <label className="classic-cart-mfield full">
-              <span>Issue Description <em>*</em></span>
-              <textarea value={issueDescription} onChange={(event) => setIssueDescription(event.target.value)} placeholder="Describe the issue..." rows={4} />
-            </label>
+            <div className="classic-cart-picker-section classic-cart-picker-section--kit">
+              <div className="classic-cart-picker-label-row"><span>Kits <em>*</em></span><small>{kitLibraryLoaded ? `${kits.length} available` : "Kit library"}</small></div>
+              <button
+                type="button"
+                className={`classic-cart-kit-trigger ${selectedKitCount ? "has-value" : ""}`}
+                onClick={() => { if (!kitLibraryLoaded && !kitLibraryLoading) loadKitLibrary(); setKitBrowserOpen(true); }}
+                disabled={submitting}
+              >
+                <span className="classic-cart-kit-trigger-icon"><CartSvgIcon name="layers" size={22}/></span>
+                <span className="classic-cart-kit-trigger-copy">
+                  <small>Kit library</small>
+                  <strong>{selectedKitCount ? `${selectedKitCount} kit${selectedKitCount === 1 ? "" : "s"} selected` : "Select kits"}</strong>
+                  <em>{selectedKitCount ? selectedKitNames.slice(0, 3).join(" · ") + (selectedKitCount > 3 ? ` +${selectedKitCount - 3}` : "") : "Browse folders, search and choose quantities"}</em>
+                </span>
+                <CartSvgIcon name="arrow-right" size={19}/>
+              </button>
+              {kitLibraryError && !kitBrowserOpen ? <button className="classic-cart-kit-inline-error" type="button" onClick={loadKitLibrary}>Kit library unavailable — tap to retry</button> : null}
+            </div>
           )}
-          {error ? <p className="classic-cart-modal-error full">{error}</p> : null}
+
+          {maintenance ? (
+            <label className="classic-cart-modern-field classic-cart-modern-field--issue">
+              <span>Issue Description <em>*</em></span>
+              <textarea value={issueDescription} onChange={(event) => setIssueDescription(event.target.value)} placeholder={mode === "kit" ? "Describe the issue that applies to the selected kit components..." : "Describe the issue..."} rows={3} disabled={submitting}/>
+              {mode === "kit" ? <small>This description will be applied to every component added from the selected kits.</small> : null}
+            </label>
+          ) : null}
+
+          {error ? <p className="classic-cart-modal-error">{error}</p> : null}
         </div>
-        <div className="classic-cart-modal-actions">
-          <button className="classic-cart-btn-ghost" type="button" onClick={onClose}>Close</button>
-          <button className="classic-cart-btn-solid" type="button" onClick={submit}>{item ? "Update" : "Add"}</button>
-        </div>
+
+        <footer className="classic-cart-picker-actions">
+          <button className="classic-cart-btn-ghost" type="button" onClick={onClose} disabled={submitting}>Cancel</button>
+          <button className="classic-cart-btn-solid" type="button" onClick={submit} disabled={submitting}>
+            {submitting ? <><span className="classic-cart-button-spinner"/> Adding...</> : actionLabel}
+          </button>
+        </footer>
       </section>
+
+      {kitBrowserOpen ? (
+        <KitBrowserDialog
+          kits={kits}
+          folders={kitFolders}
+          selectedKits={selectedKits}
+          onToggleKit={toggleKit}
+          onQuantityChange={setKitQuantity}
+          onClose={() => setKitBrowserOpen(false)}
+          loading={kitLibraryLoading}
+          error={kitLibraryError}
+          onRetry={loadKitLibrary}
+        />
+      ) : null}
     </div>
   );
 }
@@ -584,10 +951,59 @@ export default function ShoppingCartClient({
     setPassword("");
   };
 
-  const savePickerItem = async (draftItem) => {
+  const savePickerSelection = async (selection) => {
+    if (selection?.mode === "kit") {
+      const entries = Array.isArray(selection?.selections) ? selection.selections : [];
+      if (!entries.length) throw new Error("Choose at least one kit.");
+      const next = [...cart];
+      let addedComponents = 0;
+
+      for (const entry of entries) {
+        const kitId = text(entry?.id);
+        const multiplier = Math.max(1, Math.round(number(entry?.quantity, 1) || 1));
+        if (!kitId) continue;
+        const kitBody = await requestJson(`/next/api/products/kits/${encodeURIComponent(kitId)}?_ts=${Date.now()}`);
+        const kitItems = Array.isArray(kitBody?.items) ? kitBody.items : [];
+        for (const kitItem of kitItems) {
+          const productId = text(kitItem?.productId || kitItem?.product_id);
+          if (!productId) continue;
+          const sourceQuantity = Math.max(1, Math.round(number(kitItem?.quantity, 1) || 1)) * multiplier;
+          const targetIndex = next.findIndex((row) => row.id === productId);
+          if (targetIndex >= 0) {
+            if (maintenance) {
+              next[targetIndex] = {
+                ...next[targetIndex],
+                quantity: 1,
+                issueDescription: text(selection?.issueDescription) || next[targetIndex].issueDescription,
+              };
+            } else {
+              next[targetIndex] = {
+                ...next[targetIndex],
+                quantity: quantity(next[targetIndex].quantity, 1) + sourceQuantity,
+              };
+            }
+          } else {
+            next.push(normalizeDraftItem({
+              id: productId,
+              quantity: maintenance ? 1 : sourceQuantity,
+              reason,
+              issueDescription: maintenance ? text(selection?.issueDescription) : "",
+            }));
+          }
+          addedComponents += 1;
+        }
+      }
+
+      if (!addedComponents) throw new Error("The selected kit has no components.");
+      setCart(next);
+      await persistDraft(next);
+      setPicker(null);
+      return;
+    }
+
+    const draftItem = selection?.item || selection;
     const next = [...cart];
     const previousId = text(picker?.item?.id);
-    const existingIndex = next.findIndex((item) => item.id === draftItem.id);
     if (previousId && previousId !== draftItem.id) {
       const previousIndex = next.findIndex((item) => item.id === previousId);
       if (previousIndex >= 0) next.splice(previousIndex, 1);
@@ -597,8 +1013,8 @@ export default function ShoppingCartClient({
     if (targetIndex >= 0) next[targetIndex] = normalized;
     else next.push(normalized);
     setCart(next);
-    setPicker(null);
     await persistDraft(next);
+    setPicker(null);
   };
 
   const deleteItem = async (item) => {
@@ -834,7 +1250,7 @@ export default function ShoppingCartClient({
           type={selectedType}
           item={picker.item}
           onClose={() => setPicker(null)}
-          onSave={savePickerItem}
+          onSave={savePickerSelection}
         />
       ) : null}
 
