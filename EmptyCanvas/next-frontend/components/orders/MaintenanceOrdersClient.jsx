@@ -437,16 +437,19 @@ function MaintenanceCard({ group, onOpen, onCreator }) {
   return (
     <article className="co-card next-maintenance-order-card" role="button" tabIndex={0} aria-label={`Open ${group.orderIdLabel}`} onClick={() => onOpen(group)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen(group); } }}>
       <div className="co-top">
-        <div className="co-thumb co-thumb--order-type" style={thumbStyle} title="Request Maintenance"><ClassicOrderIcon name="tool" /></div>
-        <div className="co-main"><div className="co-title">{group.orderIdLabel}</div><div className="co-sub">{formatDate(group.latestCreated)}</div></div>
-        <div className="co-qty">x{group.items.length}</div>
-      </div>
-      <div className="co-divider" />
-      <div className="co-bottom">
-        <div className="co-est next-maintenance-card-note"><div className="co-est-label">Maintenance request</div></div>
-        <div className="co-actions">
-          <span className="co-status-btn" style={{ "--tag-bg": vars.bg, "--tag-fg": vars.fg, "--tag-border": vars.bd }}>{group.state.label}</span>
-          <button type="button" className="co-right-ico co-creator-btn next-maintenance-creator-btn" aria-label={`Created by ${group.createdByName || "user"}`} title={`Created by ${group.createdByName || "user"}`} onClick={(event) => { event.preventDefault(); event.stopPropagation(); onCreator(event.currentTarget, group); }}><ClassicOrderIcon name="user" /></button>
+        <div className="co-thumb co-thumb--order-type" style={thumbStyle} title="Request Maintenance" aria-label="Request Maintenance"><ClassicOrderIcon name="tool" /></div>
+        <div className="co-main">
+          <div className="co-title">{group.orderIdLabel}</div>
+          <div className="next-maintenance-order-meta"><span className="co-sub">{formatDate(group.latestCreated)}</span></div>
+        </div>
+        <div className="next-maintenance-card-head-actions">
+          <div className="next-maintenance-card-status">
+            <span className="co-status-btn" style={{ "--tag-bg": vars.bg, "--tag-fg": vars.fg, "--tag-border": vars.bd }}>{group.state.label}</span>
+          </div>
+          <button type="button" className="co-creator-btn next-maintenance-creator-btn" aria-label={`Created by ${group.createdByName || "user"}`} title={`Created by ${group.createdByName || "user"}`} onClick={(event) => { event.preventDefault(); event.stopPropagation(); onCreator(event.currentTarget, group); }}>
+            <span className="next-maintenance-creator-label">{group.createdByName || "—"}</span>
+            <span className="next-maintenance-creator-icon"><ClassicOrderIcon name="user" /></span>
+          </button>
         </div>
       </div>
     </article>
@@ -516,7 +519,28 @@ function MaintenanceDetailsModal({ group, busy, onClose, onLog, onDone, onExport
             </div>
 
             <div className="co-modal-items next-maintenance-modal-items">
-              {[...group.items].sort((a, b) => text(a?.productName).localeCompare(text(b?.productName), undefined, { sensitivity: "base", numeric: true })).map((item, index) => <div className="co-item next-maintenance-modal-item" key={text(item?.id) || index}><div className="co-item-left"><div className="co-item-title"><div className="co-item-name">{text(item?.productName) || "Component"}</div></div></div><div className="co-item-right"><div className="co-item-issue-desc">{issueText(item)}</div></div></div>)}
+              {[...group.items].sort((a, b) => text(a?.productName).localeCompare(text(b?.productName), undefined, { sensitivity: "base", numeric: true })).map((item, index) => {
+                const loggedDetails = [
+                  ["Resolution method", text(item?.resolutionMethod)],
+                  ["Actual issue", text(item?.actualIssueDescription)],
+                  ["Repair action", text(item?.repairAction)],
+                ].filter((entry) => entry[1]);
+                return <section className="co-item next-maintenance-modal-item" key={text(item?.id) || index}>
+                  <div className="next-maintenance-modal-item__head">
+                    <span className="next-maintenance-modal-item__icon"><ClassicOrderIcon name="tool" /></span>
+                    <span className="next-maintenance-modal-item__identity">
+                      <span className="next-maintenance-modal-item__kicker">Component {index + 1}</span>
+                      <strong className="next-maintenance-modal-item__name">{text(item?.productName) || "Component"}</strong>
+                      {text(item?.idCode ?? item?.displayId) ? <span className="next-maintenance-modal-item__id">ID: {text(item?.idCode ?? item?.displayId)}</span> : null}
+                    </span>
+                  </div>
+                  <div className="next-maintenance-modal-item__issue">
+                    <span>Issue description</span>
+                    <p>{issueText(item)}</p>
+                  </div>
+                  {loggedDetails.length ? <div className="next-maintenance-modal-item__log-grid">{loggedDetails.map(([label, value]) => <div className="next-maintenance-modal-item__log" key={label}><span>{label}</span><strong>{value}</strong></div>)}</div> : null}
+                </section>;
+              })}
             </div>
           </div>
         </div>

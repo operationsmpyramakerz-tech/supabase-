@@ -2,7 +2,7 @@ const PDFDocument = require("pdfkit");
 const path = require("path");
 const { attachPageNumbers } = require("./pdfPageNumbers");
 const { drawStocktakingHeader } = require("./pdfHeader");
-const { enableArabicPdf, ensurePdfArabicSupport } = require("./pdfArabicSupport");
+const { containsArabic, enableArabicPdf, ensurePdfArabicSupport, withNativeArabicPdfText } = require("./pdfArabicSupport");
 
 function formatDateTime(date) {
   try {
@@ -29,6 +29,50 @@ function money(value) {
   const n = Number(value);
   if (!Number.isFinite(n)) return "£0.00";
   return `£${n.toFixed(2)}`;
+}
+
+// PDFKit/fontkit can shape Arabic glyphs, but it does not fully reorder RTL
+// word runs. Keep Arabic logical text in native-shaping mode and reverse the
+// visual word order per line so the final PDF reads naturally from right to left.
+function reverseRtlWordsForNativePdfLine(value) {
+  const words = String(value || "").trim().match(/\S+/g) || [];
+  return words.reverse().join(" ");
+}
+
+function prepareNativeRtlPdfText(doc, value, maxWidth) {
+  const input = String(value || "").replace(/\r\n?/g, "\n");
+  if (!input) return "";
+
+  const width = Number(maxWidth);
+  const canMeasure = doc && typeof doc.widthOfString === "function" && Number.isFinite(width) && width > 0;
+
+  return input
+    .split("\n")
+    .map((sourceLine) => {
+      const rawLine = String(sourceLine || "").trim();
+      if (!rawLine) return "";
+
+      const words = rawLine.match(/\S+/g) || [];
+      if (!canMeasure || words.length <= 1) return reverseRtlWordsForNativePdfLine(rawLine);
+
+      const logicalLines = [];
+      let current = [];
+      for (const word of words) {
+        const candidate = current.concat(word);
+        const visualCandidate = candidate.slice().reverse().join(" ");
+        const candidateWidth = doc.widthOfString(visualCandidate);
+        if (current.length && candidateWidth > width) {
+          logicalLines.push(current);
+          current = [word];
+        } else {
+          current = candidate;
+        }
+      }
+      if (current.length) logicalLines.push(current);
+
+      return logicalLines.map((logicalLine) => logicalLine.slice().reverse().join(" ")).join("\n");
+    })
+    .join("\n");
 }
 
 function uniqueTextList(value) {
@@ -169,17 +213,35 @@ async function pipeMaintenanceReceiptPDF(params = {}, stream) {
     doc.moveDown(0.35);
   };
 
+  const makeValueLayout = (value, width, fontSize = 8.8, fontName = "Helvetica", lineGap = 1) => {
+    const raw = ensureText(value);
+    const isArabic = containsArabic(raw);
+    const build = () => {
+      doc.font(fontName).fontSize(fontSize);
+      const display = isArabic ? prepareNativeRtlPdfText(doc, raw, width) : raw;
+      const align = isArabic ? "right" : "left";
+      const height = doc.heightOfString(display, { width, lineGap, align });
+      return { display, isArabic, align, height };
+    };
+    return isArabic ? withNativeArabicPdfText(doc, build) : build();
+  };
+
+  const drawValueLayout = (layout, x, y, width, { fontName = "Helvetica", fontSize = 8.8, lineGap = 1, color = COLORS.text, align } = {}) => {
+    const render = () => doc.fillColor(color).font(fontName).fontSize(fontSize).text(layout.display, x, y, {
+      width,
+      lineGap,
+      align: align || layout.align,
+    });
+    return layout.isArabic ? withNativeArabicPdfText(doc, render) : render();
+  };
+
   const drawMetaCard = (x, y, w, label, value) => {
-    const text = ensureText(value);
-    doc.font("Helvetica").fontSize(10);
-    const h = Math.max(52, doc.heightOfString(text, { width: w - 22 }) + 34);
+    const layout = makeValueLayout(value, w - 22, 10.5, "Helvetica-Bold", 1);
+    const h = Math.max(52, layout.height + 34);
     doc.save();
     doc.roundedRect(x, y, w, h, 13).fillAndStroke("#FFFFFF", COLORS.border);
     doc.fillColor(COLORS.muted).font("Helvetica-Bold").fontSize(8.5).text(label, x + 11, y + 10, { width: w - 22 });
-    doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(10.5).text(text, x + 11, y + 27, {
-      width: w - 22,
-      lineGap: 1,
-    });
+    drawValueLayout(layout, x + 11, y + 27, w - 22, { fontName: "Helvetica-Bold", fontSize: 10.5, lineGap: 1 });
     doc.restore();
     return h;
   };
@@ -198,10 +260,7 @@ async function pipeMaintenanceReceiptPDF(params = {}, stream) {
     doc.y = y + Math.max(...heights) + 14;
   };
 
-  const textHeight = (value, width, fontSize = 8.8) => {
-    doc.font("Helvetica").fontSize(fontSize);
-    return doc.heightOfString(ensureText(value), { width, lineGap: 1 });
-  };
+  const textHeight = (value, width, fontSize = 8.8) => makeValueLayout(value, width, fontSize, "Helvetica", 1).height;
 
   const measureSmallField = (w, value) => {
     const valueH = textHeight(value, w - 18, 8.8);
@@ -209,15 +268,12 @@ async function pipeMaintenanceReceiptPDF(params = {}, stream) {
   };
 
   const drawSmallField = (x, y, w, label, value) => {
-    const h = measureSmallField(w, value);
-    const valueText = ensureText(value);
+    const layout = makeValueLayout(value, w - 18, 8.8, "Helvetica", 1);
+    const h = Math.max(46, 10 + 10 + 4 + layout.height + 10);
     doc.save();
     doc.roundedRect(x, y, w, h, 9).fillAndStroke(COLORS.soft, COLORS.border);
     doc.fillColor(COLORS.muted).font("Helvetica-Bold").fontSize(8).text(label, x + 9, y + 9, { width: w - 18 });
-    doc.fillColor(COLORS.text).font("Helvetica").fontSize(8.8).text(valueText, x + 9, y + 24, {
-      width: w - 18,
-      lineGap: 1,
-    });
+    drawValueLayout(layout, x + 9, y + 24, w - 18, { fontName: "Helvetica", fontSize: 8.8, lineGap: 1 });
     doc.restore();
     return h;
   };
@@ -264,13 +320,14 @@ async function pipeMaintenanceReceiptPDF(params = {}, stream) {
       const nameText = ensureText(part.name, "Spare part");
       const isEmptyRow = !safeParts.length || part.empty;
       const currentNameW = isEmptyRow ? w - 18 : nameW;
-      const rowH = Math.max(23, textHeight(nameText, currentNameW, 8.4) + 13);
+      const nameLayout = makeValueLayout(nameText, currentNameW, isEmptyRow ? 8.6 : 8.4, isEmptyRow ? "Helvetica-Bold" : "Helvetica", 1);
+      const rowH = Math.max(23, nameLayout.height + 13);
       if (idx > 0) doc.moveTo(x, rowY).lineTo(x + w, rowY).strokeColor(COLORS.border).stroke();
       if (isEmptyRow) {
-        doc.fillColor(COLORS.muted).font("Helvetica-Bold").fontSize(8.6).text(nameText, x + 9, rowY + 7, { width: w - 18, align: "center" });
+        drawValueLayout(nameLayout, x + 9, rowY + 7, w - 18, { fontName: "Helvetica-Bold", fontSize: 8.6, lineGap: 1, color: COLORS.muted, align: nameLayout.isArabic ? "right" : "center" });
       } else {
         doc.fillColor(COLORS.muted).font("Helvetica-Bold").fontSize(8.4).text(String(idx + 1), x + 9, rowY + 7, { width: numW });
-        doc.fillColor(COLORS.text).font("Helvetica").fontSize(8.4).text(nameText, x + 9 + numW, rowY + 7, { width: nameW, lineGap: 1 });
+        drawValueLayout(nameLayout, x + 9 + numW, rowY + 7, nameW, { fontName: "Helvetica", fontSize: 8.4, lineGap: 1 });
         doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(8.4).text(String(Number(part.qty) || 1), x + 9 + numW + nameW + 4, rowY + 7, { width: qtyW, align: "right" });
         doc.fillColor(COLORS.text).font("Helvetica").fontSize(8.4).text(money(part.unit), x + w - unitW - totalW - 14, rowY + 7, { width: unitW, align: "right" });
         doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(8.4).text(money(part.total), x + w - totalW - 10, rowY + 7, { width: totalW, align: "right" });
