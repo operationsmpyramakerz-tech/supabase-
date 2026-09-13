@@ -1,5 +1,10 @@
 import { cookies, headers } from "next/headers";
 
+const ACCOUNT_BRIDGE_CACHE_TTL_MS = 15_000;
+const ACCOUNT_BRIDGE_CACHE_MAX_ENTRIES = 250;
+const _accountBridgeCache = new Map();
+const _accountBridgeInflight = new Map();
+
 function encodeCookie(value) {
   return encodeURIComponent(String(value ?? ""));
 }
@@ -42,6 +47,39 @@ function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function accountBridgeCacheKey(url, cookieValue) {
+  if (url.pathname !== "/api/account" || url.search) return "";
+  const session = String(cookieValue || "").trim();
+  return session ? `${url.origin}|${session}` : "";
+}
+
+function accountBridgeCacheGet(key) {
+  if (!key) return null;
+  const entry = _accountBridgeCache.get(key);
+  if (!entry) return null;
+  if (entry.expiresAt <= Date.now()) {
+    _accountBridgeCache.delete(key);
+    return null;
+  }
+  return entry.value;
+}
+
+function accountBridgeCacheSet(key, value) {
+  if (!key || !value?.ok || Number(value?.status) !== 200) return;
+  if (_accountBridgeCache.size >= ACCOUNT_BRIDGE_CACHE_MAX_ENTRIES) {
+    const firstKey = _accountBridgeCache.keys().next().value;
+    if (firstKey) _accountBridgeCache.delete(firstKey);
+  }
+  _accountBridgeCache.set(key, {
+    value,
+    expiresAt: Date.now() + ACCOUNT_BRIDGE_CACHE_TTL_MS,
+  });
+}
+
+function retryableGetStatus(status) {
+  return [408, 425, 429, 500, 502, 503, 504].includes(Number(status));
+}
+
 export async function fetchLegacyJson(pathname, options = {}) {
   const origin = backendOrigin();
   if (!origin) {
@@ -56,68 +94,109 @@ export async function fetchLegacyJson(pathname, options = {}) {
 
   const [cookieStore, headerStore] = await Promise.all([cookies(), headers()]);
   const url = new URL(String(pathname || "/"), origin);
+  // timeoutMs is a total request budget. Previously it was applied once per
+  // retry, so a 15 s request could block navigation for roughly 45 s.
   const timeoutMs = Math.max(1000, Number(options.timeoutMs || 8000) || 8000);
   const hasBody = typeof options.body !== "undefined" && options.body !== null;
   const body = hasBody && typeof options.body !== "string" ? JSON.stringify(options.body) : options.body;
   const method = String(options.method || "GET").toUpperCase();
-  const maxAttempts = method === "GET" ? 3 : 1;
-  let lastError = "Legacy API is unavailable.";
+  const requestedAttempts = Number(options.maxAttempts);
+  const maxAttempts = method === "GET"
+    ? Math.max(1, Math.min(2, Number.isFinite(requestedAttempts) ? Math.round(requestedAttempts) : 2))
+    : 1;
+  const cookieValue = cookieHeader(cookieStore);
+  const cacheKey = method === "GET" && !hasBody ? accountBridgeCacheKey(url, cookieValue) : "";
 
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
-
-    try {
-      const response = await fetch(url, {
-        method,
-        cache: "no-store",
-        redirect: "manual",
-        signal: controller.signal,
-        headers: {
-          accept: "application/json",
-          cookie: cookieHeader(cookieStore),
-          "x-forwarded-host": headerStore.get("host") || "",
-          "x-forwarded-proto": headerStore.get("x-forwarded-proto") || "https",
-          "x-operations-hub-frontend": "next-pilot",
-          ...(hasBody ? { "content-type": "application/json" } : {}),
-          ...(options.headers || {}),
-        },
-        body: hasBody ? body : undefined,
-      });
-
-      let data = null;
-      const contentType = String(response.headers.get("content-type") || "");
-      if (contentType.includes("application/json")) {
-        data = await response.json().catch(() => null);
-      }
-
-      if (method === "GET" && attempt < maxAttempts && [408, 425, 429, 500, 502, 503, 504].includes(response.status)) {
-        await wait(attempt === 1 ? 180 : 420);
-        continue;
-      }
-
-      return {
-        ok: response.ok,
-        status: response.status,
-        data,
-        location: response.headers.get("location") || "",
-      };
-    } catch (error) {
-      lastError = error?.name === "AbortError"
-        ? `Legacy API timed out after ${timeoutMs}ms.`
-        : (error?.message || "Legacy API is unavailable.");
-      if (method !== "GET" || attempt >= maxAttempts) break;
-      await wait(attempt === 1 ? 180 : 420);
-    } finally {
-      clearTimeout(timeout);
-    }
+  if (cacheKey && options.fresh !== true) {
+    const cached = accountBridgeCacheGet(cacheKey);
+    if (cached) return cached;
+    if (_accountBridgeInflight.has(cacheKey)) return await _accountBridgeInflight.get(cacheKey);
   }
 
-  return {
-    ok: false,
-    status: 503,
-    data: null,
-    location: "",
-    error: lastError,
+  const run = async () => {
+    let lastError = "Legacy API is unavailable.";
+    const startedAt = Date.now();
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      const elapsed = Date.now() - startedAt;
+      const remainingMs = timeoutMs - elapsed;
+      if (remainingMs <= 0) {
+        lastError = `Legacy API timed out after ${timeoutMs}ms.`;
+        break;
+      }
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), remainingMs);
+
+      try {
+        const response = await fetch(url, {
+          method,
+          cache: "no-store",
+          redirect: "manual",
+          signal: controller.signal,
+          headers: {
+            accept: "application/json",
+            cookie: cookieValue,
+            "x-forwarded-host": headerStore.get("host") || "",
+            "x-forwarded-proto": headerStore.get("x-forwarded-proto") || "https",
+            "x-operations-hub-frontend": "next-pilot",
+            ...(hasBody ? { "content-type": "application/json" } : {}),
+            ...(options.headers || {}),
+          },
+          body: hasBody ? body : undefined,
+        });
+
+        let data = null;
+        const contentType = String(response.headers.get("content-type") || "");
+        if (contentType.includes("application/json")) {
+          data = await response.json().catch(() => null);
+        }
+
+        if (method === "GET" && attempt < maxAttempts && retryableGetStatus(response.status)) {
+          const budgetLeft = timeoutMs - (Date.now() - startedAt);
+          if (budgetLeft > 180) {
+            await wait(Math.min(120, Math.max(0, budgetLeft - 50)));
+            continue;
+          }
+        }
+
+        return {
+          ok: response.ok,
+          status: response.status,
+          data,
+          location: response.headers.get("location") || "",
+        };
+      } catch (error) {
+        lastError = error?.name === "AbortError"
+          ? `Legacy API timed out after ${timeoutMs}ms.`
+          : (error?.message || "Legacy API is unavailable.");
+        if (method !== "GET" || attempt >= maxAttempts) break;
+        const budgetLeft = timeoutMs - (Date.now() - startedAt);
+        if (budgetLeft <= 180) break;
+        await wait(Math.min(120, Math.max(0, budgetLeft - 50)));
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
+
+    return {
+      ok: false,
+      status: 503,
+      data: null,
+      location: "",
+      error: lastError,
+    };
   };
+
+  if (!cacheKey || options.fresh === true) return await run();
+
+  const pending = run();
+  _accountBridgeInflight.set(cacheKey, pending);
+  try {
+    const result = await pending;
+    accountBridgeCacheSet(cacheKey, result);
+    return result;
+  } finally {
+    _accountBridgeInflight.delete(cacheKey);
+  }
 }

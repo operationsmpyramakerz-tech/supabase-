@@ -10,6 +10,70 @@ import {
   uploadStorageObject,
 } from "./supabase-rest";
 
+const PRODUCT_READ_CACHE_TTL_MS = 30_000;
+const PRODUCT_READ_CACHE_MAX_ENTRIES = 12;
+const _productReadCache = new Map();
+const _productReadInflight = new Map();
+
+function productReadCacheGet(key) {
+  const entry = _productReadCache.get(key);
+  if (!entry) return null;
+  if (entry.expiresAt <= Date.now()) {
+    _productReadCache.delete(key);
+    return null;
+  }
+  return entry.value;
+}
+
+function productReadCacheSet(key, value, ttlMs = PRODUCT_READ_CACHE_TTL_MS) {
+  if (_productReadCache.size >= PRODUCT_READ_CACHE_MAX_ENTRIES && !_productReadCache.has(key)) {
+    const firstKey = _productReadCache.keys().next().value;
+    if (firstKey) _productReadCache.delete(firstKey);
+  }
+  _productReadCache.set(key, { value, expiresAt: Date.now() + Math.max(1000, Number(ttlMs) || PRODUCT_READ_CACHE_TTL_MS) });
+}
+
+async function productCachedRead(key, loader, { fresh = false, ttlMs = PRODUCT_READ_CACHE_TTL_MS } = {}) {
+  if (!fresh) {
+    const cached = productReadCacheGet(key);
+    if (cached !== null) return cached;
+    if (_productReadInflight.has(key)) return await _productReadInflight.get(key);
+  }
+
+  const pending = Promise.resolve().then(loader);
+  if (!fresh) _productReadInflight.set(key, pending);
+  try {
+    const value = await pending;
+    productReadCacheSet(key, value, ttlMs);
+    return value;
+  } finally {
+    if (!fresh) _productReadInflight.delete(key);
+  }
+}
+
+function invalidateProductReadCaches(...keys) {
+  const wanted = keys.flat().map((key) => String(key || "").trim()).filter(Boolean);
+  if (!wanted.length) {
+    _productReadCache.clear();
+    _productReadInflight.clear();
+    return;
+  }
+  for (const key of wanted) {
+    const variants = key === "tags"
+      ? ["tags:tolerant", "tags:strict"]
+      : key === "units"
+        ? ["units:tolerant", "units:strict"]
+        : [key];
+    for (const variant of variants) {
+      _productReadCache.delete(variant);
+      _productReadInflight.delete(variant);
+    }
+  }
+  // The combined catalog depends on products, tags, and units.
+  _productReadCache.delete("catalog");
+  _productReadInflight.delete("catalog");
+}
+
 function text(value) {
   return String(value ?? "").trim();
 }
@@ -87,18 +151,54 @@ function missingTable(error) {
   );
 }
 
-async function productRows() {
+async function productRows({ fresh = false } = {}) {
   const { productsTable } = getSupabaseConfig();
-  return await selectAll(productsTable, { limit: 5000, order: "name.asc,id.asc" });
+  return await productCachedRead(
+    "products",
+    () => selectAll(productsTable, { limit: 5000, order: "name.asc,id.asc" }),
+    { fresh },
+  );
 }
 
-export async function getProductsCatalog() {
-  const config = getSupabaseConfig();
-  const [rows, tagRows, unitRows] = await Promise.all([
-    productRows(),
-    selectAll(config.productTagsTable, { limit: 1000, order: "name.asc" }).catch(() => []),
-    selectAll(config.productUnitsTable, { limit: 1000, order: "name.asc" }).catch(() => []),
-  ]);
+async function productTagRows({ fresh = false, tolerant = true } = {}) {
+  const { productTagsTable } = getSupabaseConfig();
+  return await productCachedRead(
+    tolerant ? "tags:tolerant" : "tags:strict",
+    async () => {
+      try {
+        return await selectAll(productTagsTable, { limit: 1000, order: "name.asc" });
+      } catch (error) {
+        if (tolerant || missingTable(error)) return [];
+        throw error;
+      }
+    },
+    { fresh },
+  );
+}
+
+async function productUnitRows({ fresh = false, tolerant = true } = {}) {
+  const { productUnitsTable } = getSupabaseConfig();
+  return await productCachedRead(
+    tolerant ? "units:tolerant" : "units:strict",
+    async () => {
+      try {
+        return await selectAll(productUnitsTable, { limit: 1000, order: "name.asc" });
+      } catch (error) {
+        if (tolerant) return [];
+        throw error;
+      }
+    },
+    { fresh },
+  );
+}
+
+export async function getProductsCatalog({ fresh = false } = {}) {
+  return await productCachedRead("catalog", async () => {
+    const [rows, tagRows, unitRows] = await Promise.all([
+      productRows({ fresh }),
+      productTagRows({ fresh, tolerant: true }),
+      productUnitRows({ fresh, tolerant: true }),
+    ]);
 
   const products = rows.map(serializeProduct).filter((product) => product.id && product.name);
   const tagsFromProducts = products.flatMap((product) => product.tags || []);
@@ -106,13 +206,14 @@ export async function getProductsCatalog() {
   const unitsFromProducts = products.map((product) => text(product.unit)).filter(Boolean);
   const unitsFromTable = unitRows.map((row) => text(pick(row, ["name", "unit", "Name", "Unit"]))).filter(Boolean);
 
-  return {
-    ok: true,
-    source: "supabase-next",
-    products,
-    tagsCatalog: mergeUnique([...tagsFromProducts, ...tagsFromTable]),
-    unitsCatalog: mergeUnique([...unitsFromProducts, ...unitsFromTable]),
-  };
+    return {
+      ok: true,
+      source: "supabase-next",
+      products,
+      tagsCatalog: mergeUnique([...tagsFromProducts, ...tagsFromTable]),
+      unitsCatalog: mergeUnique([...unitsFromProducts, ...unitsFromTable]),
+    };
+  }, { fresh });
 }
 
 function normalizeProductPayload(body = {}, { partial = false } = {}) {
@@ -275,7 +376,7 @@ function primaryKeyDuplicate(error) {
 async function nextNumericProductId() {
   let maxId = 0;
   let found = false;
-  for (const row of await productRows()) {
+  for (const row of await productRows({ fresh: true })) {
     const value = Number(pick(row, ["id", "ID"]));
     if (!Number.isSafeInteger(value) || value < 0) continue;
     found = true;
@@ -309,6 +410,7 @@ export async function createProduct(body = {}) {
     if (lastError) throw lastError;
   }
 
+  invalidateProductReadCaches("products");
   return serializeProduct(created || row);
 }
 
@@ -322,6 +424,7 @@ export async function updateProduct(productId, body = {}) {
   const prepared = await prepareProductBody(body);
   const patch = normalizeProductPayload(prepared, { partial: true });
   const updated = await updateById(getSupabaseConfig().productsTable, id, patch);
+  invalidateProductReadCaches("products");
   return serializeProduct(updated || { ...patch, id });
 }
 
@@ -332,21 +435,25 @@ export async function deleteProduct(productId) {
     error.status = 400;
     throw error;
   }
-  return await deleteById(getSupabaseConfig().productsTable, id);
+  const deleted = await deleteById(getSupabaseConfig().productsTable, id);
+  invalidateProductReadCaches("products");
+  return deleted;
 }
 
-export async function listProductUnits() {
-  const config = getSupabaseConfig();
-  const rows = await selectAll(config.productUnitsTable, { limit: 1000, order: "name.asc" }).catch((error) => {
+export async function listProductUnits({ fresh = false } = {}) {
+  let rows;
+  try {
+    rows = await productUnitRows({ fresh, tolerant: false });
+  } catch (error) {
     if (missingTable(error)) {
       const tableError = new Error("Product units table is not created yet. Please run products_units_migration.sql in Supabase first.");
       tableError.status = 400;
       throw tableError;
     }
     throw error;
-  });
+  }
   const fromTable = rows.map((row) => text(pick(row, ["name", "unit", "Name", "Unit"]))).filter(Boolean);
-  const fromProducts = (await productRows()).map(serializeProduct).map((product) => product.unit).filter(Boolean);
+  const fromProducts = (await productRows({ fresh })).map(serializeProduct).map((product) => product.unit).filter(Boolean);
   return mergeUnique([...fromTable, ...fromProducts]);
 }
 
@@ -357,7 +464,7 @@ export async function createProductUnit(name) {
     error.status = 400;
     throw error;
   }
-  const existing = await listProductUnits();
+  const existing = await listProductUnits({ fresh: true });
   const match = existing.find((unit) => norm(unit) === norm(clean));
   if (match) return { name: match, alreadyExists: true };
 
@@ -370,17 +477,14 @@ export async function createProductUnit(name) {
     }
     throw error;
   });
+  invalidateProductReadCaches("units");
   return { name: text(pick(created || row, ["name", "unit", "Name", "Unit"])) || clean, alreadyExists: false };
 }
 
-export async function listProductTags() {
-  const config = getSupabaseConfig();
-  const rows = await selectAll(config.productTagsTable, { limit: 1000, order: "name.asc" }).catch((error) => {
-    if (missingTable(error)) return [];
-    throw error;
-  });
+export async function listProductTags({ fresh = false } = {}) {
+  const rows = await productTagRows({ fresh, tolerant: false });
   const tableTags = rows.map((row) => text(pick(row, ["name", "tag", "Name", "Tag"]))).filter(Boolean);
-  const productTags = (await productRows()).map(serializeProduct).map(firstTag).filter(Boolean);
+  const productTags = (await productRows({ fresh })).map(serializeProduct).map(firstTag).filter(Boolean);
   return mergeUnique([...tableTags, ...productTags]);
 }
 
@@ -391,7 +495,7 @@ export async function createProductTag(name) {
     error.status = 400;
     throw error;
   }
-  const existing = await listProductTags();
+  const existing = await listProductTags({ fresh: true });
   const match = existing.find((tag) => norm(tag) === norm(clean));
   if (match) return { name: match, alreadyExists: true };
 
@@ -404,6 +508,7 @@ export async function createProductTag(name) {
     }
     throw error;
   });
+  invalidateProductReadCaches("tags");
   return { name: text(pick(created || row, ["name", "tag", "Name", "Tag"])) || clean, alreadyExists: false };
 }
 
@@ -426,7 +531,7 @@ export async function renameProductTag(oldTag, newTag) {
     throw error;
   }
 
-  const products = (await productRows()).map(serializeProduct);
+  const products = (await productRows({ fresh: true })).map(serializeProduct);
   const matches = products.filter((product) => norm(firstTag(product)) === norm(fromTag));
   if (!matches.length) {
     const error = new Error("No products were found under this tag.");
@@ -444,6 +549,7 @@ export async function renameProductTag(oldTag, newTag) {
     updatedRows.push(...batch);
   }
 
+  invalidateProductReadCaches("products", "tags");
   return {
     oldTag: fromTag,
     newTag: toTag,
@@ -465,7 +571,7 @@ export async function deleteProductTag(tagName) {
     throw error;
   }
 
-  const products = (await productRows()).map(serializeProduct);
+  const products = (await productRows({ fresh: true })).map(serializeProduct);
   const matches = products.filter((product) => norm(firstTag(product)) === norm(tag));
   for (let i = 0; i < matches.length; i += 120) {
     await updateByIds(
@@ -475,12 +581,13 @@ export async function deleteProductTag(tagName) {
     );
   }
 
-  const rows = await selectAll(getSupabaseConfig().productTagsTable, { limit: 1000, order: "name.asc" }).catch(() => []);
+  const rows = await productTagRows({ fresh: true, tolerant: true });
   for (const row of rows) {
     const rowName = text(pick(row, ["name", "tag", "tags", "Name", "Tag"]));
     const rowId = pick(row, ["id", "ID"]);
     if (rowId && norm(rowName) === norm(tag)) await deleteById(getSupabaseConfig().productTagsTable, rowId);
   }
 
+  invalidateProductReadCaches("products", "tags");
   return { deletedTag: tag, movedCount: matches.length };
 }
