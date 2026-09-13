@@ -15,8 +15,35 @@ function sortByName(rows) { return [...(rows || [])].sort((a, b) => text(a?.name
 function pageToken(value) { return lower(value).replace(/[^a-z0-9]/g, ""); }
 function normalizeAccessLevel(value) { const raw = lower(value); return raw === "admin" ? "admin" : raw === "view" ? "view" : "edit"; }
 function accessLevelLabel(value) { const level = normalizeAccessLevel(value); return level === "admin" ? "Admin" : level === "view" ? "View" : "Edit"; }
-function fileLinks(value) { return String(value || "").split(/\n+/).map((item) => item.trim()).filter(Boolean); }
-function fileLabel(url, index) { let label = ""; try { const parsed = new URL(url); label = decodeURIComponent(parsed.pathname.split("/").filter(Boolean).pop() || "") || parsed.hostname; } catch { label = String(url || "").split("/").filter(Boolean).pop() || ""; } label = label.replace(/^\d+-[a-f0-9]+-/i, "").replace(/[_-]?image_?\d*/i, "").trim(); return !label || label.length > 28 ? `File ${index + 1}` : label; }
+function fileLabel(url, index) { let label = ""; try { const parsed = new URL(url); label = decodeURIComponent(parsed.pathname.split("/").filter(Boolean).pop() || "") || parsed.hostname; } catch { label = String(url || "").split("/").filter(Boolean).pop() || ""; } label = label.replace(/^\d+-[a-f0-9]+-/i, "").replace(/[_-]?image_?\d*/i, "").trim(); return !label || label.length > 48 ? `File ${index + 1}` : label; }
+function normalizeMediaEntry(item, index = 0) {
+  if (!item) return null;
+  if (typeof item === "string") { const url = text(item); return url ? { name: fileLabel(url, index), url } : null; }
+  const url = text(item?.url || item?.href || item?.publicUrl || item?.public_url);
+  if (!url) return null;
+  const hasExplicitName = Object.prototype.hasOwnProperty.call(item, "name");
+  const explicitName = hasExplicitName ? String(item?.name ?? "") : text(item?.label || item?.title || item?.filename);
+  return { name: hasExplicitName ? explicitName : (explicitName || fileLabel(url, index)), url };
+}
+function parseMediaEntries(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    const list = Array.isArray(parsed) ? parsed : [parsed];
+    const entries = list.map((item, index) => normalizeMediaEntry(item, index)).filter(Boolean);
+    if (entries.length) return entries;
+  } catch {}
+  return raw.split(/\n+/).map((item, index) => normalizeMediaEntry(item, index)).filter(Boolean);
+}
+function serializeMediaEntries(entries) {
+  const clean = (Array.isArray(entries) ? entries : []).map((item, index) => {
+    const url = text(item?.url);
+    if (!url) return null;
+    return { name: String(item?.name ?? ""), url };
+  }).filter(Boolean);
+  return clean.length ? JSON.stringify(clean) : "";
+}
 
 const MEMBER_FORM_FIELD_ORDER = ["profilepicture", "employeecode", "name", "password", "phone", "email", "department", "position", "filesmedia", "svschools", "allowedpages", "school"];
 function orderEditableFieldsForForm(fields = []) {
@@ -256,10 +283,82 @@ function ProfileUploadField({ field, value, onChange, notify }) {
 }
 
 function FileLinksField({ field, value, onChange, notify }) {
-  const [uploading, setUploading] = useState(false); const [status, setStatus] = useState("Uploaded files and pasted links are saved as compact buttons."); const [link, setLink] = useState(""); const links = fileLinks(value);
-  async function choose(files) { const list = Array.from(files || []); if (!list.length) return; setUploading(true); setStatus(`Uploading ${list.length} file${list.length === 1 ? "" : "s"}...`); try { const urls = []; for (const file of list) { const body = await uploadUserFile(file, "files-media"); if (body?.url) urls.push(body.url); } onChange([...links, ...urls].join("\n")); setStatus(`${urls.length} file${urls.length === 1 ? "" : "s"} uploaded. Save changes to apply.`); notify("success", "Uploaded", `${urls.length} file${urls.length === 1 ? "" : "s"} uploaded.`); } catch (err) { setStatus(err.message); notify("error", "Upload failed", err.message); } finally { setUploading(false); } }
-  function insert() { const clean = text(link); if (!clean) return; onChange([...links, clean].join("\n")); setLink(""); setStatus("Link inserted. Save changes to apply it."); }
-  return <div className="ua-form-field ua-form-field--wide ua-upload-field ua-upload-field--files"><span>{field.name}</span><textarea className="ua-files-raw" rows="4" value={value} onChange={(event) => onChange(event.target.value)} aria-label={`${field.name} raw links`}/><div className="ua-file-chip-list">{links.length ? links.map((url, index) => <a className="ua-file-chip" href={url} target="_blank" rel="noopener noreferrer" title={url} key={`${url}-${index}`}><UAIcon name="paperclip"/><span>{fileLabel(url, index)}</span></a>) : <div className="ua-file-chip-empty">No files or links yet.</div>}</div><div className="ua-upload-row"><label className="ua-file-pick ua-file-pick--small"><UAIcon name="paperclip"/><span>{uploading ? "Uploading..." : "Upload file"}</span><input type="file" multiple disabled={uploading} onChange={(event) => { choose(event.target.files); event.target.value = ""; }}/></label><input type="url" value={link} onChange={(event) => setLink(event.target.value)} placeholder="Insert external link"/><button type="button" className="ua-mini-btn" onClick={insert}>Insert link</button></div><small>{status}</small></div>;
+  const [uploading, setUploading] = useState(false);
+  const [status, setStatus] = useState("Add a clear display name so this file or link is easy to recognize everywhere the user profile appears.");
+  const [fileName, setFileName] = useState("");
+  const [linkName, setLinkName] = useState("");
+  const [link, setLink] = useState("");
+  const entries = useMemo(() => parseMediaEntries(value), [value]);
+
+  function saveEntries(next) { onChange(serializeMediaEntries(next)); }
+  function patchEntry(index, patch) { saveEntries(entries.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item)); }
+  function removeEntry(index) { saveEntries(entries.filter((_, itemIndex) => itemIndex !== index)); setStatus("File or link removed. Save changes to apply it."); }
+
+  async function choose(files) {
+    const list = Array.from(files || []);
+    if (!list.length) return;
+    setUploading(true);
+    setStatus(`Uploading ${list.length} file${list.length === 1 ? "" : "s"}...`);
+    try {
+      const added = [];
+      for (let index = 0; index < list.length; index += 1) {
+        const file = list[index];
+        const body = await uploadUserFile(file, "files-media");
+        if (!body?.url) continue;
+        const custom = text(fileName);
+        const displayName = custom
+          ? (list.length === 1 ? custom : `${custom} ${index + 1}`)
+          : text(body?.name || file?.name) || fileLabel(body.url, entries.length + added.length);
+        added.push({ name: displayName, url: body.url });
+      }
+      saveEntries([...entries, ...added]);
+      setFileName("");
+      setStatus(`${added.length} file${added.length === 1 ? "" : "s"} uploaded. Save changes to apply.`);
+      notify("success", "Uploaded", `${added.length} file${added.length === 1 ? "" : "s"} uploaded.`);
+    } catch (err) {
+      setStatus(err.message);
+      notify("error", "Upload failed", err.message);
+    } finally { setUploading(false); }
+  }
+
+  function insert() {
+    const cleanUrl = text(link);
+    if (!cleanUrl) return notify("warning", "Missing link", "Paste the external link first.");
+    if (!/^https?:\/\//i.test(cleanUrl)) return notify("warning", "Invalid link", "Use a full link starting with http:// or https://.");
+    const displayName = text(linkName) || fileLabel(cleanUrl, entries.length);
+    saveEntries([...entries, { name: displayName, url: cleanUrl }]);
+    setLink("");
+    setLinkName("");
+    setStatus("Link added. Save changes to apply it.");
+  }
+
+  return <div className="ua-form-field ua-form-field--wide ua-upload-field ua-upload-field--files">
+    <span>{field.name}</span>
+    <textarea className="ua-files-raw" rows="4" value={value} readOnly aria-label={`${field.name} structured data`}/>
+    <div className="ua-file-chip-list ua-media-entry-list">
+      {entries.length ? entries.map((item, index) => <div className="ua-media-entry" key={`${item.url}-${index}`}>
+        <div className="ua-media-entry__icon"><UAIcon name="paperclip"/></div>
+        <div className="ua-media-entry__body">
+          <label className="ua-media-entry__name"><span>Display name</span><input type="text" value={item.name} onChange={(event) => patchEntry(index, { name: event.target.value })} onBlur={(event) => { if (!text(event.target.value)) patchEntry(index, { name: fileLabel(item.url, index) }); }} placeholder="e.g. Location"/></label>
+          <a className="ua-media-entry__url" href={item.url} target="_blank" rel="noopener noreferrer" title={item.url}>{item.url}</a>
+        </div>
+        <button type="button" className="ua-media-entry__remove" onClick={() => removeEntry(index)} aria-label={`Remove ${item.name || "file"}`} title="Remove"><UAIcon name="trash"/></button>
+      </div>) : <div className="ua-file-chip-empty">No files or links yet.</div>}
+    </div>
+    <div className="ua-media-add-grid">
+      <div className="ua-media-add-card">
+        <div className="ua-media-add-card__heading"><UAIcon name="upload"/><div><strong>Upload file</strong><small>Add a custom name before choosing the file.</small></div></div>
+        <input type="text" value={fileName} onChange={(event) => setFileName(event.target.value)} placeholder="File name (optional)"/>
+        <label className="ua-file-pick ua-file-pick--small ua-file-pick--wide"><UAIcon name="paperclip"/><span>{uploading ? "Uploading..." : "Choose file"}</span><input type="file" multiple disabled={uploading} onChange={(event) => { choose(event.target.files); event.target.value = ""; }}/></label>
+      </div>
+      <div className="ua-media-add-card">
+        <div className="ua-media-add-card__heading"><UAIcon name="paperclip"/><div><strong>External link</strong><small>Name links like Location, Drive folder, Contract, etc.</small></div></div>
+        <input type="text" value={linkName} onChange={(event) => setLinkName(event.target.value)} placeholder="Link name (e.g. Location)"/>
+        <div className="ua-media-link-row"><input type="url" value={link} onChange={(event) => setLink(event.target.value)} placeholder="https://..."/><button type="button" className="ua-mini-btn" onClick={insert}>Add link</button></div>
+      </div>
+    </div>
+    <small>{status}</small>
+  </div>;
 }
 
 function PageAccessManager({ summary, onOpen }) {

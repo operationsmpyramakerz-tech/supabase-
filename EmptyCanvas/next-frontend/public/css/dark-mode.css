@@ -1090,6 +1090,9 @@ html[data-theme="dark"] body.user-access-page :is(
   .ua-detail-file,
   .ua-profile-preview,
   .ua-file-pick,
+  .ua-media-entry,
+  .ua-media-add-card,
+  .ua-media-entry__name input,
   .ua-page-access-row,
   .ua-sv-access-row,
   .ua-member-menu,
@@ -1115,6 +1118,34 @@ html[data-theme="dark"] body.user-access-page :is(
   background: #202835 !important;
   color: #fff !important;
 }
+
+html[data-theme="dark"] body.user-access-page :is(
+  .ua-media-add-card__heading strong,
+  .ua-media-entry__name > span,
+  .ua-media-entry__url
+) {
+  color: #e5e7eb !important;
+}
+
+html[data-theme="dark"] body.user-access-page :is(
+  .ua-media-add-card > input,
+  .ua-media-link-row input
+) {
+  background: #0f141c !important;
+  border-color: #2b3544 !important;
+  color: #f8fafc !important;
+}
+
+html[data-theme="dark"] body.user-access-page .ua-media-entry__icon {
+  background: rgba(228, 101, 32, 0.12) !important;
+  border-color: rgba(228, 101, 32, 0.28) !important;
+}
+
+html[data-theme="dark"] body.user-access-page .ua-media-entry__remove {
+  background: rgba(180, 35, 24, 0.16) !important;
+  color: #fda29b !important;
+}
+
 
 /* ------------------------------------------------------------------------
    KPI parity surfaces

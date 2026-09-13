@@ -2672,6 +2672,7 @@ async function _uaClearUserAccessCaches(memberId = "") {
     cacheDel(SUPABASE_CACHE_KEYS.departments),
     memberId ? cacheDel(SUPABASE_CACHE_KEYS.pageAccessMember(memberId)) : Promise.resolve(),
     memberId ? cacheDel(SUPABASE_CACHE_KEYS.accountWithAccess(memberId)) : Promise.resolve(),
+    memberId ? cacheDel(`cache:api:team-member-public:supabase:${cacheKeySafe(memberId)}:v1`) : Promise.resolve(),
     memberId ? cacheDel(SUPABASE_CACHE_KEYS.lmsPageAccessMember(memberId)) : Promise.resolve(),
   ]);
 }
