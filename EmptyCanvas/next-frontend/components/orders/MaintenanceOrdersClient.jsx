@@ -151,6 +151,7 @@ function normalizeSpareEntries(item = {}) {
 
 function itemHasMaintenanceLog(item = {}) {
   return Boolean(
+    text(item?.serialNumber) ||
     text(item?.resolutionMethod) ||
     text(item?.actualIssueDescription) ||
     text(item?.repairAction) ||
@@ -521,6 +522,7 @@ function MaintenanceDetailsModal({ group, busy, onClose, onLog, onDone, onExport
             <div className="co-modal-items next-maintenance-modal-items">
               {[...group.items].sort((a, b) => text(a?.productName).localeCompare(text(b?.productName), undefined, { sensitivity: "base", numeric: true })).map((item, index) => {
                 const loggedDetails = [
+                  ["Serial number", text(item?.serialNumber)],
                   ["Resolution method", text(item?.resolutionMethod)],
                   ["Actual issue", text(item?.actualIssueDescription)],
                   ["Repair action", text(item?.repairAction)],
@@ -590,6 +592,7 @@ function emptyLogForItem(item) {
     orderId: text(item?.id),
     productName: text(item?.productName) || "Component",
     issueDescription: issueText(item),
+    serialNumber: text(item?.serialNumber),
     resolutionMethod: text(item?.resolutionMethod),
     actualIssueDescription: text(item?.actualIssueDescription),
     repairAction: text(item?.repairAction),
@@ -652,6 +655,7 @@ function MaintenanceLogModal({ group, options, busy, error, onCancel, onSubmit }
       }).filter((part) => part.id || part.name);
       return {
         orderId: entry.orderId,
+        serialNumber: text(entry.serialNumber),
         resolutionMethod: text(entry.resolutionMethod),
         actualIssueDescription: text(entry.actualIssueDescription),
         repairAction: text(entry.repairAction),
@@ -667,12 +671,13 @@ function MaintenanceLogModal({ group, options, busy, error, onCancel, onSubmit }
     <div className="co-submodal-overlay is-open next-maintenance-log-overlay" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onCancel(); }}>
       <form className="co-submodal-dialog req-maintenance-log-dialog next-maintenance-log-dialog" role="dialog" aria-modal="true" onSubmit={submit}>
         <button type="button" className="co-submodal-close" onClick={onCancel} disabled={busy} aria-label="Close" />
-        <div className="co-submodal-header next-maintenance-log-header"><div className="req-edit-icon"><ClassicOrderIcon name="clipboard" /></div><div><div className="co-submodal-title">Log Maintenance</div><div className="co-submodal-sub">Save the maintenance work details for this order.</div></div></div>
+        <div className="co-submodal-header next-maintenance-log-header"><div className="req-edit-icon"><ClassicOrderIcon name="clipboard" /></div><div><div className="co-submodal-title">Log Maintenance</div></div></div>
         <div className="co-submodal-body req-maintenance-log-body">
           <div className="req-maintenance-log-items">
             {logs.map((entry, logIndex) => <section className="req-maintenance-log-card next-maintenance-log-card" key={entry.orderId || logIndex}>
               <div className="req-maintenance-log-card__head"><div><div className="req-maintenance-log-card__label">Component {logIndex + 1}</div><div className="req-maintenance-log-card__title">{entry.productName}</div><div className="req-maintenance-log-card__issue"><span>Issue:</span> {entry.issueDescription}</div></div></div>
               <div className="req-maintenance-log-card__fields">
+                <label className="co-submodal-field next-maintenance-serial-field"><span className="co-submodal-label">Serial Number</span><input className="co-submodal-input" type="text" value={entry.serialNumber} onChange={(event) => patchLog(logIndex, { serialNumber: event.target.value })} disabled={busy} placeholder="Enter equipment serial number" autoComplete="off" /></label>
                 <label className="co-submodal-field"><span className="co-submodal-label">Resolution Method</span><ModernSelect value={entry.resolutionMethod} options={resolutionMethods} placeholder="Select resolution method" onChange={(value) => patchLog(logIndex, { resolutionMethod: value })} disabled={busy} ariaLabel={`Resolution method for ${entry.productName}`} /></label>
                 <label className="co-submodal-field"><span className="co-submodal-label">The Actual Issue Description</span><textarea className="co-submodal-textarea" value={entry.actualIssueDescription} onChange={(event) => patchLog(logIndex, { actualIssueDescription: event.target.value })} disabled={busy} rows={4} placeholder="Write the actual issue description" /></label>
                 <label className="co-submodal-field"><span className="co-submodal-label">Repair Action</span><textarea className="co-submodal-textarea" value={entry.repairAction} onChange={(event) => patchLog(logIndex, { repairAction: event.target.value })} disabled={busy} rows={4} placeholder="Write the repair action" /></label>
@@ -883,7 +888,7 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
   }
 
   async function saveLog(perItemLogs) {
-    const logsWithDetails = perItemLogs.filter((entry) => text(entry?.resolutionMethod) || text(entry?.actualIssueDescription) || text(entry?.repairAction) || (Array.isArray(entry?.spareParts) && entry.spareParts.length));
+    const logsWithDetails = perItemLogs.filter((entry) => text(entry?.serialNumber) || text(entry?.resolutionMethod) || text(entry?.actualIssueDescription) || text(entry?.repairAction) || (Array.isArray(entry?.spareParts) && entry.spareParts.length));
     if (!logsWithDetails.length) {
       setActionError("Please fill maintenance details for at least one component. Spare parts are optional.");
       return;

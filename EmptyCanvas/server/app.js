@@ -4850,6 +4850,7 @@ function _sbSerializeOrderRow(row = {}) {
     orderType,
     orderTypeColor: _sbOrderTypeColor(orderType),
     issueDescription: _sbOrderText(_sbOrderGet(row, ["issue_description", "Issue Description"])) || null,
+    serialNumber: _sbOrderText(_sbOrderGet(row, ["serial_number", "Serial Number"])) || null,
     actualIssueDescription: _sbOrderText(_sbOrderGet(row, ["actual_issue_description", "Actual Issue Description"])) || null,
     repairAction: _sbOrderText(_sbOrderGet(row, ["repair_action", "Repair Action"])) || null,
     resolutionMethod: _sbOrderText(_sbOrderGet(row, ["resolution_method", "Resolution Method"])) || null,
@@ -6506,6 +6507,7 @@ async function _sbPipeOrderMaintenancePdf(req, res, orderIds = []) {
     idCode: payload.rows?.[index]?.idCode || "",
     component: item.productName || payload.rows?.[index]?.component || "Unknown Product",
     issueDescription: item.issueDescription || item.reason || "No Issue",
+    serialNumber: item.serialNumber || "—",
     actualIssueDescription: item.actualIssueDescription || "—",
     repairAction: item.repairAction || "—",
     resolutionMethod: item.resolutionMethod || "—",
@@ -6527,6 +6529,7 @@ async function _sbPipeOrderMaintenancePdf(req, res, orderIds = []) {
       teamMember: payload.teamMember,
       operationsBy: payload.operationsBy,
       issueDescription: first.issueDescription || "—",
+      serialNumber: first.serialNumber || "—",
       actualIssueDescription: first.actualIssueDescription || "—",
       repairAction: first.repairAction || "—",
       resolutionMethod: first.resolutionMethod || "—",
@@ -22639,6 +22642,7 @@ app.post(
       const {
         orderIds,
         resolutionMethod,
+        serialNumber,
         actualIssueDescription,
         repairAction,
         sparePartId,
@@ -22664,6 +22668,7 @@ app.post(
         const logById = new Map();
 
         const normalizeLogEntry = (entry = {}) => {
+          const serialNumberText = String(entry?.serialNumber || serialNumber || "").trim();
           const resolutionMethodText = String(entry?.resolutionMethod || resolutionMethod || "").trim();
           const actualIssueDescriptionText = String(entry?.actualIssueDescription || actualIssueDescription || "")
             .replace(/\r\n/g, "\n")
@@ -22692,6 +22697,7 @@ app.post(
               ? entry.sparePartEntries
               : [];
           return {
+            serialNumberText,
             resolutionMethodText,
             actualIssueDescriptionText,
             repairActionText,
@@ -22729,6 +22735,7 @@ app.post(
           const sparePartText = _maintenanceSparePartEntriesToText(normalizedEntries);
 
           const patch = { updated_at: new Date().toISOString() };
+          if (log.serialNumberText) patch.serial_number = log.serialNumberText;
           if (log.resolutionMethodText) patch.resolution_method = log.resolutionMethodText;
           if (log.actualIssueDescriptionText) patch.actual_issue_description = log.actualIssueDescriptionText;
           if (log.repairActionText) patch.repair_action = log.repairActionText;
@@ -22739,6 +22746,7 @@ app.post(
           return {
             patch,
             response: {
+              serialNumber: log.serialNumberText || null,
               resolutionMethod: log.resolutionMethodText || null,
               actualIssueDescription: log.actualIssueDescriptionText || null,
               repairAction: log.repairActionText || null,
@@ -22758,11 +22766,12 @@ app.post(
         for (const id of ids) {
           const entryLog = logById.get(String(id)) || fallbackLog;
           const built = await buildPatchForLog(entryLog);
-          const detailKeys = ["resolution_method", "actual_issue_description", "repair_action", "spare_parts_replaced"];
+          const detailKeys = ["serial_number", "resolution_method", "actual_issue_description", "repair_action", "spare_parts_replaced"];
           const hasDetailsForRow = detailKeys.some((key) => String(built.patch?.[key] || "").trim());
           hasAnyDetails = hasAnyDetails || hasDetailsForRow;
           if (!hasDetailsForRow && !moveToArrived && !moveToShipping) continue;
-          const updatedRow = await _sbUpdateByIdWithMissingColumnFallback(_sbOrdersTable(), id, built.patch, []);
+          const requiredColumns = built.patch?.serial_number ? ["serial_number"] : [];
+          const updatedRow = await _sbUpdateByIdWithMissingColumnFallback(_sbOrdersTable(), id, built.patch, requiredColumns);
           updatedRows.push(updatedRow);
           responseById.set(String(id), built.response);
         }

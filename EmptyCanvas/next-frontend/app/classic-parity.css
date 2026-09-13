@@ -6149,9 +6149,9 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
 }
 
 .next-maintenance-log-dialog {
-  width: min(800px, calc(100vw - 28px)) !important;
-  max-width: 800px !important;
-  max-height: min(90dvh, 860px) !important;
+  width: min(860px, calc(100vw - 28px)) !important;
+  max-width: 860px !important;
+  max-height: min(88dvh, 840px) !important;
   display: flex !important;
   flex-direction: column !important;
   padding: 0 !important;
@@ -6166,9 +6166,9 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 13px;
   margin: 0 !important;
-  padding: 20px 58px 16px 20px !important;
+  padding: 18px 62px 16px 20px !important;
   border-bottom: 1px solid #eef2f6;
   background: linear-gradient(180deg, #fff 0%, #fbfdff 100%);
 }
@@ -6229,38 +6229,63 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
 }
 
 .next-maintenance-log-dialog .req-maintenance-log-card__head {
-  margin-bottom: 14px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid #eef2f6;
+  margin-bottom: 16px;
+  padding: 13px 14px;
+  border: 1px solid #ffedd5;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #fffaf5 0%, #ffffff 72%);
 }
 
 .next-maintenance-log-dialog .req-maintenance-log-card__label {
-  color: #f97316;
+  color: #c2410c;
   font-size: 9px;
-  letter-spacing: .08em;
+  font-weight: 900;
+  letter-spacing: .10em;
+  text-transform: uppercase;
 }
 
 .next-maintenance-log-dialog .req-maintenance-log-card__title {
   margin-top: 4px;
   color: #0f172a;
   font-size: 16px;
+  font-weight: 900;
+  letter-spacing: -.015em;
 }
 
 .next-maintenance-log-dialog .req-maintenance-log-card__issue {
-  margin-top: 7px;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(251, 146, 60, .16);
   color: #64748b;
   font-size: 11px;
+  line-height: 1.45;
+}
+
+.next-maintenance-log-dialog .req-maintenance-log-card__issue span {
+  flex: 0 0 auto;
+  color: #9a3412;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .06em;
+  text-transform: uppercase;
 }
 
 .next-maintenance-log-dialog .req-maintenance-log-card__fields {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 14px 12px;
 }
 
-.next-maintenance-log-dialog .req-maintenance-log-card__fields > .co-submodal-field:first-child,
 .next-maintenance-log-dialog .req-maintenance-log-card__spares {
   grid-column: 1 / -1;
+}
+
+.next-maintenance-log-dialog .next-maintenance-serial-field .co-submodal-input {
+  font-weight: 800;
+  letter-spacing: .02em;
 }
 
 .next-maintenance-log-dialog .co-submodal-label {
@@ -6277,6 +6302,22 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   border-radius: 12px;
   background: #fbfdff;
   box-shadow: none;
+  transition: border-color .16s ease, box-shadow .16s ease, background .16s ease;
+}
+
+.next-maintenance-log-dialog .co-submodal-input {
+  width: 100%;
+  min-height: 43px;
+  padding: 0 12px;
+  box-sizing: border-box;
+}
+
+.next-maintenance-log-dialog .co-submodal-textarea:focus,
+.next-maintenance-log-dialog .co-submodal-input:focus,
+.next-maintenance-log-dialog .next-maintenance-modern-select.is-open .next-maintenance-modern-select__trigger {
+  border-color: #fdba74;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, .09);
 }
 
 .next-maintenance-log-dialog .co-submodal-textarea {
@@ -6284,13 +6325,60 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   resize: vertical;
 }
 
+.next-maintenance-log-dialog .req-maintenance-log-card__spares {
+  margin-top: 2px;
+  padding: 13px;
+  border: 1px solid #e8edf3;
+  border-radius: 15px;
+  background: #f8fafc;
+}
+
+.next-maintenance-log-dialog .req-maintenance-spare-head {
+  margin-bottom: 8px;
+}
+
+.next-maintenance-log-dialog .req-maintenance-spare-list {
+  display: grid;
+  gap: 8px;
+}
+
 .next-maintenance-log-dialog .req-maintenance-spare-row {
-  grid-template-columns: minmax(0, 1fr) 96px 40px;
+  grid-template-columns: minmax(0, 1fr) 96px 42px;
   gap: 8px;
   padding: 9px;
   border-color: #e7ebf1;
   border-radius: 14px;
   background: #f8fafc;
+}
+
+.next-maintenance-log-dialog .req-maintenance-spare-row > * {
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.next-maintenance-log-dialog .req-maintenance-spare-row__remove {
+  position: static !important;
+  width: 42px !important;
+  min-width: 42px !important;
+  max-width: 42px !important;
+  height: 43px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  align-self: end !important;
+  justify-self: end;
+  display: grid !important;
+  place-items: center;
+  border-radius: 12px !important;
+  box-sizing: border-box;
+  transform: none !important;
+}
+
+.next-maintenance-log-dialog .req-maintenance-spare-row__remove span {
+  width: auto !important;
+  height: auto !important;
+  display: block !important;
+  line-height: 1 !important;
+  transform: translateY(-1px);
 }
 
 .next-maintenance-log-dialog .req-maintenance-spare-add--full {
@@ -6305,7 +6393,8 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   margin: 0 !important;
   padding: 13px 18px 16px !important;
   border-top: 1px solid #eef2f6;
-  background: #fff;
+  background: rgba(255, 255, 255, .98);
+  box-shadow: 0 -10px 26px rgba(15, 23, 42, .035);
 }
 
 /* Modern custom selects inside the shared maintenance logger. */
@@ -6535,7 +6624,6 @@ body.operations-orders-page .next-maintenance-upload-field {
     gap: 10px;
   }
 
-  .next-maintenance-log-dialog .req-maintenance-log-card__fields > .co-submodal-field:first-child,
   .next-maintenance-log-dialog .req-maintenance-log-card__spares {
     grid-column: auto;
   }
@@ -6544,6 +6632,18 @@ body.operations-orders-page .next-maintenance-upload-field {
     grid-template-columns: minmax(0, 1fr) 76px 36px;
     gap: 7px;
     padding: 8px;
+  }
+
+  .next-maintenance-log-dialog .req-maintenance-spare-row__remove {
+    width: 36px !important;
+    min-width: 36px !important;
+    max-width: 36px !important;
+    height: 43px !important;
+  }
+
+  .next-maintenance-log-dialog .req-maintenance-log-card__issue {
+    display: grid;
+    gap: 3px;
   }
 
   .next-maintenance-log-dialog > .co-submodal-actions {

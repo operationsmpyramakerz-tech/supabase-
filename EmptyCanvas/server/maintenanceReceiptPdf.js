@@ -130,6 +130,7 @@ function buildComponentLogs(params = {}) {
       idCode: ensureText(item?.idCode, ""),
       component: ensureText(item?.component, "Unknown Component"),
       issueDescription: ensureText(item?.issueDescription || item?.issue, "No Issue"),
+      serialNumber: ensureText(item?.serialNumber, "—"),
       actualIssueDescription: ensureText(item?.actualIssueDescription),
       repairAction: ensureText(item?.repairAction),
       resolutionMethod: ensureText(item?.resolutionMethod),
@@ -142,6 +143,7 @@ function buildComponentLogs(params = {}) {
     idCode: ensureText(row?.idCode, ""),
     component: ensureText(row?.component, "Unknown Component"),
     issueDescription: ensureText(params.issueDescription || row?.issue || row?.reason, "No Issue"),
+    serialNumber: ensureText(row?.serialNumber || params.serialNumber, "—"),
     actualIssueDescription: ensureText(params.actualIssueDescription),
     repairAction: ensureText(params.repairAction),
     resolutionMethod: ensureText(params.resolutionMethod),
@@ -370,7 +372,11 @@ async function pipeMaintenanceReceiptPDF(params = {}, stream) {
       doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(11.5).text(`Maintenance for Component ${index + 1}${suffix}`, mL + 12, y + 12, {
         width: contentW - 24,
       });
-      const subtitle = [item.idCode ? `ID: ${item.idCode}` : "", item.component].filter(Boolean).join("  •  ");
+      const subtitle = [
+        item.idCode ? `ID: ${item.idCode}` : "",
+        item.serialNumber && item.serialNumber !== "—" ? `Serial: ${item.serialNumber}` : "",
+        item.component,
+      ].filter(Boolean).join("  •  ");
       doc.fillColor(COLORS.muted).font("Helvetica").fontSize(9.2).text(subtitle || "Unknown Component", mL + 12, y + 30, {
         width: contentW - 24,
       });
