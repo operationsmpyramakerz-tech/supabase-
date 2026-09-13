@@ -21167,7 +21167,7 @@ app.get(
 app.get(
   "/api/orders/requested",
   requireAuth,
-  requirePage(["Requested Orders", "Operations Orders", "Maintenance Orders"]),
+  requirePage(["Requested Orders", "Operations Orders"]),
   async (req, res) => {
     if (!_sbOrdersEnabled() && !ordersDatabaseId)
       return res.status(500).json({ error: "Orders DB not configured" });
@@ -22433,6 +22433,179 @@ app.post(
     } catch (e) {
       console.error("archive requested order error:", e?.body || e);
       return res.status(500).json({ error: "Failed to archive order" });
+    }
+  },
+);
+
+
+// Archive a Maintenance Orders group (Status => "Archive") — requires the
+// Maintenance Orders admin password and only accepts Request Maintenance rows.
+app.post(
+  "/api/orders/maintenance/archive",
+  requireAuth,
+  requirePage("Maintenance Orders"),
+  async (req, res) => {
+    try {
+      const { orderIds, adminPassword } = req.body || {};
+      if (!Array.isArray(orderIds) || orderIds.length === 0) {
+        return res.status(400).json({ error: "orderIds required" });
+      }
+
+      const pwd = String(adminPassword || "").trim();
+      if (!pwd) return res.status(400).json({ error: "adminPassword required" });
+      const adminOk = await _verifyPageAdminPassword(req, pwd, "Maintenance Orders");
+      if (!adminOk) return res.status(401).json({ error: "Invalid admin password" });
+
+      const ids = orderIds
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)
+        .map((value) => (looksLikeNotionId(value) ? toHyphenatedUUID(value) : value));
+      if (!ids.length) return res.status(400).json({ error: "orderIds required" });
+
+      if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
+        const rows = await _sbOrderRowsByIds(ids);
+        if (!rows.length) return res.status(404).json({ error: "Orders not found." });
+        const invalid = rows.find((row) => {
+          const serialized = _sbSerializeOrderRow(row);
+          return normKey(serialized?.orderType || "") !== normKey("Request Maintenance");
+        });
+        if (invalid) return res.status(400).json({ error: "Only Request Maintenance orders can be archived here." });
+
+        await _sbUpdateOrdersByIds(ids, { status: "Archive" });
+        await _sbInvalidateOrdersCaches(req).catch(() => {});
+        await cacheDel("cache:api:orders:requested:v7").catch(() => {});
+        return res.json({ success: true, status: "Archive", statusColor: "purple", source: "supabase" });
+      }
+
+      const pages = await mapWithConcurrency(ids, 3, async (id) => notion.pages.retrieve({ page_id: id }));
+      for (const id of ids) {
+        const page = pages.get(id);
+        const type = _extractOrderTypeInfo(page?.properties || {}).orderType;
+        if (normKey(type || "") !== normKey("Request Maintenance")) {
+          return res.status(400).json({ error: "Only Request Maintenance orders can be archived here." });
+        }
+      }
+
+      const statusProp = await detectStatusPropName();
+      const dbProps = await getOrdersDBProps();
+      const dbPropMeta = dbProps?.[statusProp] || null;
+      let statusType = dbPropMeta?.type;
+      if (!statusType) statusType = pages.get(ids[0])?.properties?.[statusProp]?.type;
+      const value = statusType === "status"
+        ? { status: { name: "Archive" } }
+        : { select: { name: "Archive" } };
+
+      await Promise.all(ids.map((id) => notion.pages.update({ page_id: id, properties: { [statusProp]: value } })));
+      await cacheDel("cache:api:orders:requested:v7").catch(() => {});
+      return res.json({ success: true, status: "Archive", statusColor: "purple", source: "notion" });
+    } catch (error) {
+      console.error("archive maintenance order error:", error?.body || error);
+      return res.status(error?.status || 500).json({ error: error?.message || "Failed to archive maintenance order" });
+    }
+  },
+);
+
+
+// Init edit for a Maintenance Orders group. This uses the same Shopping Cart
+// edit session as Current Orders, but is scoped to Request Maintenance rows and
+// protected by the Maintenance Orders admin password/access.
+app.post(
+  "/api/orders/maintenance/edit/init",
+  requireAuth,
+  requirePage("Maintenance Orders"),
+  async (req, res) => {
+    try {
+      const { orderIds, adminPassword } = req.body || {};
+      if (!Array.isArray(orderIds) || orderIds.length === 0) {
+        return res.status(400).json({ error: "orderIds required" });
+      }
+
+      const pwd = String(adminPassword || "").trim();
+      if (!pwd) return res.status(400).json({ error: "adminPassword required" });
+      const adminOk = await _verifyPageAdminPassword(req, pwd, "Maintenance Orders");
+      if (!adminOk) return res.status(401).json({ error: "Invalid admin password" });
+
+      const ids = orderIds
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)
+        .map((value) => (looksLikeNotionId(value) ? toHyphenatedUUID(value) : value));
+      if (!ids.length) return res.status(400).json({ error: "orderIds required" });
+
+      if (_sbOrdersEnabled() && _sbProductsEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
+        const rows = await _sbOrderRowsByIds(ids);
+        if (!rows.length) return res.status(404).json({ error: "Orders not found." });
+        const invalid = rows.find((row) => {
+          const serialized = _sbSerializeOrderRow(row);
+          return normKey(serialized?.orderType || "") !== normKey("Request Maintenance");
+        });
+        if (invalid) return res.status(400).json({ error: "Only Request Maintenance orders can be edited here." });
+
+        const result = await _sbInitOrderEditFromRows(req, ids);
+        return res.json(result);
+      }
+
+      return res.status(400).json({ error: "Maintenance order editing is available for Supabase orders only." });
+    } catch (error) {
+      console.error("maintenance edit init error:", error?.details || error);
+      return res.status(error?.status || 500).json({ error: error?.message || "Failed to init maintenance edit" });
+    }
+  },
+);
+
+// Permanently delete a Maintenance Orders group — requires the Maintenance
+// Orders admin password. Supabase rows are deleted; legacy Notion rows are
+// archived because the Notion API does not expose a permanent-delete action.
+app.post(
+  "/api/orders/maintenance/delete",
+  requireAuth,
+  requirePage("Maintenance Orders"),
+  async (req, res) => {
+    try {
+      const { orderIds, adminPassword } = req.body || {};
+      if (!Array.isArray(orderIds) || orderIds.length === 0) {
+        return res.status(400).json({ error: "orderIds required" });
+      }
+
+      const pwd = String(adminPassword || "").trim();
+      if (!pwd) return res.status(400).json({ error: "adminPassword required" });
+      const adminOk = await _verifyPageAdminPassword(req, pwd, "Maintenance Orders");
+      if (!adminOk) return res.status(401).json({ error: "Invalid admin password" });
+
+      const ids = orderIds
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)
+        .map((value) => (looksLikeNotionId(value) ? toHyphenatedUUID(value) : value));
+      if (!ids.length) return res.status(400).json({ error: "orderIds required" });
+
+      if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
+        const rows = await _sbOrderRowsByIds(ids);
+        if (!rows.length) return res.status(404).json({ error: "Orders not found." });
+        const invalid = rows.find((row) => {
+          const serialized = _sbSerializeOrderRow(row);
+          return normKey(serialized?.orderType || "") !== normKey("Request Maintenance");
+        });
+        if (invalid) return res.status(400).json({ error: "Only Request Maintenance orders can be deleted here." });
+
+        const deleted = await supabaseDb.deleteByIds(_sbOrdersTable(), ids);
+        await _sbInvalidateOrdersCaches(req).catch(() => {});
+        await cacheDel("cache:api:orders:requested:v7").catch(() => {});
+        return res.json({ success: true, deleted: Array.isArray(deleted) ? deleted.length : ids.length, source: "supabase" });
+      }
+
+      const pages = await mapWithConcurrency(ids, 3, async (id) => notion.pages.retrieve({ page_id: id }));
+      for (const id of ids) {
+        const page = pages.get(id);
+        const type = _extractOrderTypeInfo(page?.properties || {}).orderType;
+        if (normKey(type || "") !== normKey("Request Maintenance")) {
+          return res.status(400).json({ error: "Only Request Maintenance orders can be deleted here." });
+        }
+      }
+      await Promise.all(ids.map((id) => notion.pages.update({ page_id: id, archived: true })));
+      await cacheDel("cache:api:orders:requested:v7").catch(() => {});
+      return res.json({ success: true, deleted: ids.length, source: "notion" });
+    } catch (error) {
+      console.error("delete maintenance order error:", error?.body || error);
+      return res.status(error?.status || 500).json({ error: error?.message || "Failed to delete maintenance order" });
     }
   },
 );

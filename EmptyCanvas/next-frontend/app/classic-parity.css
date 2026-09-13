@@ -20629,3 +20629,24 @@ html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-p
   border-color: #2b3544;
   background: #151b25;
 }
+
+/* Maintenance Orders — destructive action confirmation from the order details menu. */
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-delete-confirm {
+  z-index: 1400;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-delete-confirm .co-confirm-icon {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #dc2626;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-delete-confirm__danger {
+  background: #dc2626;
+  color: #fff;
+  border-color: #dc2626;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-delete-confirm__danger:hover {
+  background: #b91c1c;
+}

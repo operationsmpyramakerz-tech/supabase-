@@ -16,6 +16,31 @@ const MAINTENANCE_STATUS_COLORS = {
   done: { bg: "#D1FAE5", fg: "#047857", bd: "#A7F3D0" },
 };
 
+const MAINTENANCE_ACTIONS = {
+  edit: {
+    title: "Edit maintenance order",
+    description: "Enter the Maintenance Orders admin password to edit this order.",
+    button: "Continue",
+    endpoint: "/api/orders/maintenance/edit/init",
+    icon: "edit-2",
+  },
+  archive: {
+    title: "Archive maintenance order",
+    description: "Enter the Maintenance Orders admin password to move this order to Archive.",
+    button: "Archive",
+    endpoint: "/api/orders/maintenance/archive",
+    icon: "archive",
+  },
+  delete: {
+    title: "Delete maintenance order",
+    description: "Enter the Maintenance Orders admin password to permanently delete this order.",
+    button: "Delete",
+    endpoint: "/api/orders/maintenance/delete",
+    icon: "trash-2",
+    danger: true,
+  },
+};
+
 function text(value) {
   return String(value ?? "").trim();
 }
@@ -403,6 +428,34 @@ function MaintenanceFilter({ value, onChange, count }) {
   );
 }
 
+function writeMaintenanceEditTransfer(data, group) {
+  try {
+    const products = Array.isArray(data?.products) ? data.products : [];
+    if (!products.length) return "";
+    const reason = text(data?.reason || group?.reason || products.find((item) => text(item?.reason))?.reason);
+    const orderType = text(data?.orderType || "Request Maintenance");
+    const patched = products.map((item) => ({ ...item, reason: text(item?.reason) || reason }));
+    const editKey = `maintenance-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    const payload = JSON.stringify({ products: patched, reason, orderType, source: "maintenance-orders-next", ts: Date.now() });
+    const typeKey = orderTypeKey(orderType) || "requestmaintenance";
+    const keys = [
+      `shopping_cart:edit_payload:v2:${editKey}`,
+      `shopping_cart:edit_fallback:v1:${typeKey}`,
+      "shopping_cart:edit_fallback:v1:default",
+    ];
+    for (const storage of [window.sessionStorage, window.localStorage]) {
+      try {
+        keys.forEach((key) => storage.setItem(key, payload));
+        storage.setItem("shopping_cart:edit_pending:v2", JSON.stringify({ key: editKey, orderType, reason, ts: Date.now() }));
+        storage.setItem("shopping_cart:edit_target_type:v1", orderType);
+      } catch {}
+    }
+    return editKey;
+  } catch {
+    return "";
+  }
+}
+
 function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
@@ -477,17 +530,40 @@ function ReceiptPhotosModal({ group, onClose }) {
   );
 }
 
-function MaintenanceDetailsModal({ group, busy, onClose, onLog, onDone, onExport }) {
+function MaintenanceDetailsModal({ group, busy, onClose, onLog, onDone, onExport, onAction }) {
   const [photosOpen, setPhotosOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef(null);
+  useEffect(() => {
+    setPhotosOpen(false);
+    setMoreOpen(false);
+  }, [group?.key]);
   useEffect(() => {
     if (!group) return undefined;
     document.body.classList.add("co-modal-open");
-    setPhotosOpen(false);
-    const onKey = (event) => { if (event.key === "Escape" && !photosOpen) onClose(); };
+    const onKey = (event) => {
+      if (event.key !== "Escape") return;
+      if (photosOpen) return;
+      if (moreOpen) { setMoreOpen(false); return; }
+      onClose();
+    };
+    const onPointerDown = (event) => {
+      if (moreOpen && moreRef.current && !moreRef.current.contains(event.target)) setMoreOpen(false);
+    };
     window.addEventListener("keydown", onKey);
-    return () => { document.body.classList.remove("co-modal-open"); window.removeEventListener("keydown", onKey); };
-  }, [group, onClose, photosOpen]);
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => {
+      document.body.classList.remove("co-modal-open");
+      window.removeEventListener("keydown", onKey);
+      document.removeEventListener("pointerdown", onPointerDown);
+    };
+  }, [group, onClose, photosOpen, moreOpen]);
   if (!group) return null;
+
+  const menuAction = (action) => {
+    setMoreOpen(false);
+    onAction(action, group);
+  };
 
   const canLog = group.state.key === "not-started";
   const canDone = group.state.key === "in-progress";
@@ -498,6 +574,16 @@ function MaintenanceDetailsModal({ group, busy, onClose, onLog, onDone, onExport
     <>
       <div className="co-modal-overlay is-open" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
         <div className="co-modal-dialog next-maintenance-details-dialog" role="dialog" aria-modal="true" aria-label={`${group.orderIdLabel} maintenance details`}>
+          <div className="co-modal-more" ref={moreRef}>
+            <button type="button" className="co-modal-more-btn" aria-label="Order actions" aria-haspopup="menu" aria-expanded={moreOpen} onClick={() => setMoreOpen((value) => !value)}>
+              <span className="co-modal-more-dots" aria-hidden="true">⋮</span>
+            </button>
+            {moreOpen ? <div className="co-modal-more-panel" role="menu" aria-label="Order actions">
+              <button type="button" className="co-modal-more-item" role="menuitem" onClick={() => menuAction("edit")}><ClassicOrderIcon name="edit-2" /><span>Edit</span></button>
+              <button type="button" className="co-modal-more-item" role="menuitem" onClick={() => menuAction("archive")}><ClassicOrderIcon name="archive" /><span>Archive</span></button>
+              <button type="button" className="co-modal-more-item co-modal-more-item--danger" role="menuitem" onClick={() => menuAction("delete")}><ClassicOrderIcon name="trash-2" /><span>Delete</span></button>
+            </div> : null}
+          </div>
           <button type="button" className="co-modal-close" onClick={onClose} aria-label="Close order details" />
           <div className="co-modal-header"><div className="co-modal-head-left"><div className="co-modal-status">Request Maintenance</div></div></div>
           <div className="next-maintenance-order-modal-summary" aria-label="Maintenance order summary">
@@ -792,6 +878,66 @@ function MarkDoneModal({ group, busy, error, onCancel, onSubmit }) {
   );
 }
 
+function MaintenanceActionPasswordModal({ state, busy, error, onCancel, onSubmit }) {
+  const [password, setPassword] = useState("");
+  useEffect(() => setPassword(""), [state?.action, state?.group?.key]);
+  useEffect(() => {
+    if (!state) return undefined;
+    const onKey = (event) => { if (event.key === "Escape" && !busy) onCancel(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [state, busy, onCancel]);
+  if (!state) return null;
+  const config = MAINTENANCE_ACTIONS[state.action];
+  if (!config) return null;
+  return (
+    <div className="co-submodal-overlay is-open req-edit-modal" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onCancel(); }}>
+      <form className="co-submodal-dialog req-edit-dialog" role="dialog" aria-modal="true" onSubmit={(event) => { event.preventDefault(); onSubmit(password); }}>
+        <button type="button" className="co-submodal-close" onClick={onCancel} aria-label="Close admin password dialog" />
+        <div className="co-submodal-header req-edit-header">
+          <div className={`req-edit-icon ${config.danger ? "req-edit-icon--danger" : ""}`} aria-hidden="true"><ClassicOrderIcon name={config.icon} /></div>
+          <div><div className="co-submodal-title">{config.title}</div><div className="co-submodal-sub">{config.description}</div></div>
+        </div>
+        <div className="co-submodal-body">
+          <label className="co-submodal-label" htmlFor="maintenance-order-admin-password">Admin password</label>
+          <input id="maintenance-order-admin-password" className="co-submodal-input" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoFocus autoComplete="current-password" placeholder="••••••••" disabled={busy} />
+          <div className="co-submodal-error" role="alert" aria-live="polite">{error}</div>
+        </div>
+        <div className="co-submodal-actions">
+          <button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancel} disabled={busy}>Cancel</button>
+          <button type="submit" className={`ro-action-btn ${config.danger ? "ro-action-btn--danger" : "ro-action-btn--dark"}`} disabled={busy || !password.trim()}>{busy ? "Working…" : config.button}</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function MaintenanceDeleteConfirmationModal({ state, busy, onCancel, onConfirm }) {
+  useEffect(() => {
+    if (!state) return undefined;
+    const onKey = (event) => { if (event.key === "Escape" && !busy) onCancel(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [state, busy, onCancel]);
+  if (!state) return null;
+  const count = state.group?.items?.length || state.group?.orderIds?.length || 1;
+  return (
+    <div className="co-confirm-overlay is-open next-maintenance-order-delete-confirm" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onCancel(); }}>
+      <div className="co-confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="maintenanceOrderDeleteTitle" aria-describedby="maintenanceOrderDeleteMessage">
+        <div className="co-confirm-icon" aria-hidden="true"><ClassicOrderIcon name="trash-2" /></div>
+        <div className="co-confirm-title" id="maintenanceOrderDeleteTitle">Delete {state.group?.orderIdLabel || "maintenance order"}?</div>
+        <div className="co-confirm-message" id="maintenanceOrderDeleteMessage">
+          You’re going to permanently delete this maintenance order and its {count} saved component{count === 1 ? "" : "s"}. This action cannot be undone.
+        </div>
+        <div className="co-confirm-actions">
+          <button type="button" className="co-confirm-btn co-confirm-btn--light" onClick={onCancel} disabled={busy}>Cancel</button>
+          <button type="button" className="co-confirm-btn co-confirm-btn--dark next-maintenance-order-delete-confirm__danger" onClick={onConfirm} disabled={busy}>{busy ? "Deleting…" : "Delete permanently"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function MaintenanceOrdersClient({ initialOrders = [], initialOptions = {}, bootstrapWarnings = [] }) {
   const [orders, setOrders] = useState(Array.isArray(initialOrders) ? initialOrders : []);
   const [options, setOptions] = useState(initialOptions && typeof initialOptions === "object" ? initialOptions : {});
@@ -801,6 +947,8 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
   const [selected, setSelected] = useState(null);
   const [logGroup, setLogGroup] = useState(null);
   const [doneGroup, setDoneGroup] = useState(null);
+  const [actionState, setActionState] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [actionError, setActionError] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
@@ -865,6 +1013,89 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
     const data = await readJson(response);
     if (!response.ok) throw new Error(data?.error || "Failed to refresh Maintenance Orders.");
     setOrders(Array.isArray(data) ? data : []);
+  }
+
+  function beginAction(action, group) {
+    setActionError("");
+    setActionState({ action, group });
+  }
+
+  async function runProtectedAction(action, group, password) {
+    const config = MAINTENANCE_ACTIONS[action];
+    if (!config) throw new Error("Unsupported maintenance action.");
+    const response = await fetch(config.endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ orderIds: group.orderIds, adminPassword: password }),
+    });
+    const data = await readJson(response) || {};
+    if (response.status === 401) {
+      const error = new Error("Wrong password. Please try again.");
+      error.status = 401;
+      throw error;
+    }
+    if (!response.ok) {
+      const error = new Error(data?.error || `Failed to ${action} maintenance order.`);
+      error.status = response.status;
+      throw error;
+    }
+    return data;
+  }
+
+  async function submitAction(password) {
+    if (!actionState) return;
+    const { action, group } = actionState;
+    setActionError("");
+
+    if (action === "delete") {
+      setActionState(null);
+      setDeleteConfirm({ group, password });
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const data = await runProtectedAction(action, group, password);
+      if (action === "edit") {
+        const editKey = writeMaintenanceEditTransfer(data, group);
+        const editUrl = new URL("/next/orders/new/request-maintenance", window.location.origin);
+        editUrl.searchParams.set("edit", "1");
+        if (editKey) editUrl.searchParams.set("editKey", editKey);
+        window.location.href = `${editUrl.pathname}${editUrl.search}`;
+        return;
+      }
+
+      await refreshOrders();
+      setActionState(null);
+      setSelected(null);
+      setNotice("Maintenance order moved to Archive.");
+      window.setTimeout(() => setNotice(""), 3500);
+    } catch (error) {
+      setActionError(error?.message || "The action could not be completed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirmDelete() {
+    if (!deleteConfirm?.group) return;
+    const { group, password } = deleteConfirm;
+    setBusy(true);
+    try {
+      await runProtectedAction("delete", group, password);
+      await refreshOrders();
+      setDeleteConfirm(null);
+      setSelected(null);
+      setNotice("Maintenance order deleted successfully.");
+      window.setTimeout(() => setNotice(""), 3500);
+    } catch (error) {
+      setDeleteConfirm(null);
+      setActionState({ action: "delete", group });
+      setActionError(error?.message || "The maintenance order could not be deleted.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function ensureOptions() {
@@ -1028,7 +1259,9 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
         <div className="co-cards" id="requested-list">{visibleGroups.length ? visibleGroups.map((group) => <MaintenanceCard group={group} onOpen={setSelected} onCreator={openCreatorProfile} key={group.key} />) : <div className="ops-no-data-state" role="status" aria-live="polite"><img className="ops-no-data-state__image" src="/images/no-data-illustration.png" alt="" loading="lazy" /><div className="ops-no-data-state__text">Sorry, No data available</div></div>}</div>
       </section>
 
-      <MaintenanceDetailsModal group={selected} busy={busy} onClose={() => setSelected(null)} onLog={openLog} onDone={(group) => { setActionError(""); setDoneGroup(group); }} onExport={exportOrder} />
+      <MaintenanceDetailsModal group={selected} busy={busy} onClose={() => setSelected(null)} onLog={openLog} onDone={(group) => { setActionError(""); setDoneGroup(group); }} onExport={exportOrder} onAction={beginAction} />
+      <MaintenanceActionPasswordModal state={actionState} busy={busy} error={actionError} onCancel={() => { setActionState(null); setActionError(""); }} onSubmit={submitAction} />
+      <MaintenanceDeleteConfirmationModal state={deleteConfirm} busy={busy} onCancel={() => setDeleteConfirm(null)} onConfirm={confirmDelete} />
       <MaintenanceLogModal group={logGroup} options={options} busy={busy} error={actionError} onCancel={() => { setLogGroup(null); setActionError(""); }} onSubmit={saveLog} />
       <MarkDoneModal group={doneGroup} busy={busy} error={actionError} onCancel={() => { setDoneGroup(null); setActionError(""); }} onSubmit={markDone} />
       <CreatorProfilePopover state={creatorState} onClose={() => setCreatorState(null)} />
