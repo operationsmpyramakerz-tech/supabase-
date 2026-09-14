@@ -1,0 +1,178 @@
+/* ==========================================================================
+   Stage 2M — Users Center Classic parity
+   The page now reuses next-frontend/public/css/user-access.css. These bridge rules only
+   cover React-specific wrappers, modal layering, loading placeholders, and
+   small integration details that do not exist in the legacy HTML.
+   ========================================================================== */
+.user-access-page .next-classic-page-content {
+  padding-bottom: 36px;
+}
+
+.next-ua-workspace {
+  width: 100%;
+}
+
+
+
+
+
+
+
+.next-ua-modal-layer > .ua-modal {
+  z-index: 1;
+}
+
+
+
+.next-ua-form,
+.next-ua-member-form {
+  display: grid;
+  gap: 16px;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+.next-ua-submodal {
+  position: relative;
+  z-index: 1;
+}
+
+.user-access-page .ua-folder__open {
+  border: 0;
+  cursor: pointer;
+}
+
+.user-access-page .ua-member-card__actions {
+  grid-template-columns: 1fr;
+}
+
+.user-access-page .ua-member-menu-btn[aria-expanded="true"] {
+  background: #0b1220;
+  color: #fff;
+}
+
+.user-access-page .ua-folder-actions .ua-refresh,
+.user-access-page .ua-members-actions .ua-refresh {
+  min-height: 46px;
+  height: 46px;
+  border-radius: 16px;
+}
+
+.user-access-page .ua-signup-request-avatar {
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.user-access-page .ua-signup-request-status {
+  white-space: nowrap;
+}
+
+.next-classic-users-loading .ua-folder {
+  cursor: default;
+  pointer-events: none;
+}
+
+.next-ua-loading-actions {
+  width: 100%;
+}
+
+.next-ua-loading-pill,
+.next-ua-loading-button,
+.next-ua-loading-square,
+.next-ua-loading-copy i {
+  display: block;
+  background: linear-gradient(90deg, #eef1f5, #f8fafc, #eef1f5);
+  background-size: 200% 100%;
+  animation: nextClassicUaShimmer 1.35s linear infinite;
+}
+
+.next-ua-loading-pill {
+  width: 86px;
+  height: 34px;
+  border-radius: 999px;
+}
+
+.next-ua-loading-button {
+  width: 150px;
+  height: 46px;
+  border-radius: 16px;
+}
+
+.next-ua-loading-square {
+  width: 52px;
+  height: 52px;
+  border-radius: 18px;
+}
+
+.next-ua-loading-copy {
+  flex: 1 1 auto;
+  display: grid;
+  gap: 8px;
+}
+
+.next-ua-loading-copy i {
+  width: 72%;
+  height: 12px;
+  border-radius: 999px;
+}
+
+.next-ua-loading-copy i + i {
+  width: 48%;
+  height: 9px;
+}
+
+@keyframes nextClassicUaShimmer {
+  to { background-position: -200% 0; }
+}
+
+@media (max-width: 760px) {
+  
+
+  
+
+  .next-ua-inline-actions .ua-btn {
+    width: 100%;
+  }
+
+  
+
+  .ua-modal__actions:has(.next-ua-footer-summary) {
+    flex-wrap: wrap;
+  }
+
+  
+}

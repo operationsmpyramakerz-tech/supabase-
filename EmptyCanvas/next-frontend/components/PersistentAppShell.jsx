@@ -23,15 +23,19 @@ function routePerformanceStyles(localPath) {
   // exact extractions from the tail of classic-parity.css, so the route keeps
   // the same cascade while unrelated pages avoid parsing those selectors.
   if (["/orders", "/orders-review", "/operations-orders"].includes(localPath)) {
-    return ["/next/css/orders-performance.css?v=css-phase1"];
+    return [
+      "/next/css/orders-performance.css?v=css-phase1",
+      "/next/css/order-mobile-performance.css?v=css-phase3",
+    ];
   }
   if (localPath === "/maintenance-orders") {
-    return ["/next/css/maintenance-orders.css?v=css-phase1"];
+    return [
+      "/next/css/maintenance-orders.css?v=css-phase1",
+      "/next/css/order-mobile-performance.css?v=css-phase3",
+    ];
   }
-  if (localPath.startsWith("/orders/new/request-products")
-    || localPath.startsWith("/orders/new/withdraw-products")
-    || localPath.startsWith("/orders/new/request-maintenance")) {
-    return ["/next/css/shopping-cart.css?v=css-phase1"];
+  if (localPath === "/orders/new" || localPath.startsWith("/orders/new/")) {
+    return ["/next/css/shopping-cart.css?v=css-phase3"];
   }
   if (localPath === "/products") {
     return ["/next/css/products-stocktaking-performance.css?v=css-phase2"];
@@ -59,6 +63,23 @@ function routePerformanceStyles(localPath) {
   }
   if (localPath === "/b2c" || localPath.startsWith("/b2c/")) {
     return ["/next/css/b2c-performance.css?v=css-phase2"];
+  }
+  if (localPath === "/home") {
+    return ["/next/css/home-performance.css?v=css-phase3"];
+  }
+  if (localPath === "/task-management" || localPath.startsWith("/task-management/")) {
+    return ["/next/css/task-management-performance.css?v=css-phase3"];
+  }
+  if (localPath === "/events" || localPath.startsWith("/events/")
+    || localPath === "/events-calendar" || localPath.startsWith("/events-calendar/")
+    || localPath === "/event-components" || localPath.startsWith("/event-components/")) {
+    return ["/next/css/events-performance.css?v=css-phase3"];
+  }
+  if (localPath === "/kpis" || localPath.startsWith("/kpis/")) {
+    return ["/next/css/kpis-performance.css?v=css-phase3"];
+  }
+  if (localPath === "/users-center" || localPath.startsWith("/users-center/")) {
+    return ["/next/css/users-center-performance.css?v=css-phase3"];
   }
   return [];
 }
