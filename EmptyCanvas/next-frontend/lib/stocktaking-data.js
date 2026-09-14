@@ -4,8 +4,14 @@ import { listTeamMembersLite } from "./team-members-service";
 import { getSupabaseConfig, selectAll, storagePublicUrl } from "./supabase-rest";
 
 const STOCK_ROWS_CACHE_TTL_MS = 20_000;
+const STOCK_SCHEMA_CACHE_TTL_MS = 5 * 60_000;
+const STOCK_PROJECTION_CACHE_TTL_MS = 20_000;
 let stockRowsCache = null;
 let stockRowsInflight = null;
+let stockSchemaCache = null;
+let stockSchemaInflight = null;
+const stockProjectionCache = new Map();
+const stockProjectionInflight = new Map();
 
 function text(value) {
   if (value === null || typeof value === "undefined") return "";
@@ -100,8 +106,7 @@ function findKey(keys = [], aliases = []) {
   return "";
 }
 
-function findQuantityColumn(rows = [], schoolName = "") {
-  const keys = allKeys(rows);
+function findQuantityColumnFromKeys(keys = [], schoolName = "") {
   if (!keys.length) return "";
   const base = stockColumnKey(schoolName);
   const candidates = [
@@ -129,6 +134,10 @@ function findQuantityColumn(rows = [], schoolName = "") {
     if (fuzzy) return fuzzy;
   }
   return "";
+}
+
+function findQuantityColumn(rows = [], schoolName = "") {
+  return findQuantityColumnFromKeys(allKeys(rows), schoolName);
 }
 
 function isInventoryMetaColumn(key = "") {
@@ -328,10 +337,100 @@ async function loadStockRows({ fresh = false } = {}) {
   }
 }
 
-function resolveRequestedColumn(rows = [], requested = "") {
+const STOCK_DETAIL_METADATA_ALIASES = [
+  "id", "ID", "notion_id", "Notion ID",
+  "name", "Name", "component", "Component", "product_name", "Product Name", "product", "Product",
+  "url", "URL", "product_url", "Product URL", "item_url", "Item URL",
+  "tag", "Tag", "tags", "Tags",
+  "component_tag", "Component Tag", "product_tag", "Product Tag",
+  "kit_tag", "Kit Tag", "source_kit", "Source Kit", "kit_name", "Kit Name",
+  "source_order_id", "Source Order ID", "source_order", "Source Order", "order_row_id", "Order Row ID",
+  "source_order_number", "Source Order Number", "order_id", "Order ID", "order_number", "Order Number",
+  "receipt_photos", "Receipt Photos", "receipt_photo", "Receipt Photo", "receipt_images", "Receipt Images",
+  "receipt_image", "Receipt Image", "order_receipt", "Order Receipt", "attachments", "Attachments", "files", "Files",
+  "customize_id", "Customize ID", "custom_id", "Custom ID", "id_code", "ID Code", "id code", "code", "Code",
+  "one_kit_quantity", "One Kit Quantity", "one kit quantity",
+  "receipt_number", "Receipt Number", "store_receipt_number", "Store Receipt Number", "receipt", "Receipt",
+  "unity_price", "unit_price", "Unity Price", "Unit Price", "one_piece_price",
+  "user_name", "username", "User Name", "Username", "created_by", "Created By", "requested_by", "Requested By",
+  "owner_name", "Owner Name", "employee", "Employee",
+];
+const STOCK_DETAIL_METADATA_KEYS = new Set(STOCK_DETAIL_METADATA_ALIASES.map(canonical));
+
+function quoteStockSelectColumn(value) {
+  const raw = text(value);
+  if (!raw) return "";
+  if (/^[A-Za-z_][A-Za-z0-9_$]*$/.test(raw)) return raw;
+  return `"${raw.replace(/"/g, '""')}"`;
+}
+
+function stockProjectionKey(keys = []) {
+  return [...new Set((keys || []).map(text).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b))
+    .join("\u001f");
+}
+
+async function loadStockSchemaKeys({ fresh = false } = {}) {
+  const now = Date.now();
+  if (!fresh && stockRowsCache?.expiresAt > now && Array.isArray(stockRowsCache?.value) && stockRowsCache.value.length) {
+    return allKeys(stockRowsCache.value);
+  }
+  if (!fresh && stockSchemaCache && stockSchemaCache.expiresAt > now) return stockSchemaCache.value;
+  if (!fresh && stockSchemaInflight) return await stockSchemaInflight;
+
+  const pending = selectAll(stocktakingTable(), { limit: 1 });
+  if (!fresh) stockSchemaInflight = pending;
+  try {
+    const sampleRows = await pending;
+    const keys = allKeys(Array.isArray(sampleRows) ? sampleRows : []);
+    stockSchemaCache = { value: keys, expiresAt: Date.now() + STOCK_SCHEMA_CACHE_TTL_MS };
+    return keys;
+  } finally {
+    if (!fresh) stockSchemaInflight = null;
+  }
+}
+
+async function loadStockProjection(keys = [], { fresh = false } = {}) {
+  const uniqueKeys = [...new Set((keys || []).map(text).filter(Boolean))];
+  if (!uniqueKeys.length) return [];
+  const selectExpr = uniqueKeys.map(quoteStockSelectColumn).filter(Boolean).join(",");
+  // Extremely wide customized schemas can exceed safe URL sizes. Falling back
+  // to the compatibility full-row query is safer than risking a 414 response.
+  if (!selectExpr || selectExpr.length > 7000) return null;
+
+  const cacheKey = stockProjectionKey(uniqueKeys);
+  const now = Date.now();
+  const cached = stockProjectionCache.get(cacheKey);
+  if (!fresh && cached?.expiresAt > now) return cached.value;
+  if (!fresh && stockProjectionInflight.has(cacheKey)) return await stockProjectionInflight.get(cacheKey);
+
+  const hasName = uniqueKeys.includes("name");
+  const hasId = uniqueKeys.includes("id");
+  const pending = selectAll(stocktakingTable(), {
+    limit: 5000,
+    select: selectExpr,
+    order: hasName ? `name.asc${hasId ? ",id.asc" : ""}` : "",
+  });
+  if (!fresh) stockProjectionInflight.set(cacheKey, pending);
+  try {
+    const loaded = await pending;
+    const rows = Array.isArray(loaded) ? loaded : [];
+    stockProjectionCache.set(cacheKey, { value: rows, expiresAt: Date.now() + STOCK_PROJECTION_CACHE_TTL_MS });
+    if (stockProjectionCache.size > 40) {
+      for (const [key, entry] of stockProjectionCache.entries()) {
+        if (entry?.expiresAt <= Date.now()) stockProjectionCache.delete(key);
+      }
+      if (stockProjectionCache.size > 40) stockProjectionCache.delete(stockProjectionCache.keys().next().value);
+    }
+    return rows;
+  } finally {
+    if (!fresh) stockProjectionInflight.delete(cacheKey);
+  }
+}
+
+function resolveRequestedColumnFromKeys(keys = [], requested = "") {
   const raw = text(requested);
   if (!raw) return "";
-  const keys = allKeys(rows);
   const resolved = keys.find((key) => key === raw) || findKey(keys, [raw]);
   if (!resolved || !usefulStockFolderColumn(resolved) || isInventoryMetaColumn(resolved)) {
     const error = new Error("The selected Stocktaking column is not available.");
@@ -341,10 +440,9 @@ function resolveRequestedColumn(rows = [], requested = "") {
   return resolved;
 }
 
-function resolveSessionColumn(rows = [], requested = "", kind = "") {
+function resolveSessionColumnFromKeys(keys = [], requested = "", kind = "") {
   const raw = text(requested);
   if (!raw) return "";
-  const keys = allKeys(rows);
   const resolved = keys.find((key) => key === raw) || findKey(keys, [raw]);
   if (!resolved) {
     const error = new Error(`The selected ${kind || "inventory"} column is not available.`);
@@ -363,6 +461,21 @@ function resolveSessionColumn(rows = [], requested = "", kind = "") {
     throw error;
   }
   return resolved;
+}
+
+function stockDetailProjectionKeys(schemaKeys = [], extraKeys = []) {
+  return [...new Set([
+    ...schemaKeys.filter((key) => STOCK_DETAIL_METADATA_KEYS.has(canonical(key))),
+    ...(extraKeys || []).map(text).filter(Boolean),
+  ])];
+}
+
+function resolveRequestedColumn(rows = [], requested = "") {
+  return resolveRequestedColumnFromKeys(allKeys(rows), requested);
+}
+
+function resolveSessionColumn(rows = [], requested = "", kind = "") {
+  return resolveSessionColumnFromKeys(allKeys(rows), requested, kind);
 }
 
 async function enrichComponentTags(items = []) {
@@ -389,19 +502,35 @@ async function enrichComponentTags(items = []) {
 }
 
 export async function listStocktakingFolders({ fresh = false } = {}) {
-  const [rows, members] = await Promise.all([
-    loadStockRows({ fresh }),
-    listTeamMembersLite({ fresh }),
-  ]);
+  const membersPromise = listTeamMembersLite({ fresh });
   const folderBlocked = new Set([
     "sourceorderid", "sourceordernumber", "orderid", "ordernumber", "teammemberid", "teammembername",
     "userid", "username", "createdby", "ownername", "employee", "school", "stocktakingcolumn",
   ]);
-  const keys = allKeys(rows).filter((key) => usefulStockFolderColumn(key) && !folderBlocked.has(canonical(key)) && !isInventoryMetaColumn(key));
+  let rows = null;
+  let keys = [];
+
+  try {
+    const schemaKeys = await loadStockSchemaKeys({ fresh });
+    keys = schemaKeys.filter((key) => usefulStockFolderColumn(key) && !folderBlocked.has(canonical(key)) && !isInventoryMetaColumn(key));
+    // The folder screen only needs the dynamic stock quantity columns to
+    // calculate item counts/totals. Avoid downloading receipts, URLs, tags and
+    // all other row metadata before a folder is opened.
+    rows = await loadStockProjection(keys, { fresh });
+  } catch (error) {
+    console.warn("[stocktaking] lightweight folder projection unavailable; using full-row compatibility query:", error?.message || error);
+  }
+
+  if (!Array.isArray(rows)) {
+    rows = await loadStockRows({ fresh });
+    keys = allKeys(rows).filter((key) => usefulStockFolderColumn(key) && !folderBlocked.has(canonical(key)) && !isInventoryMetaColumn(key));
+  }
+
+  const members = await membersPromise;
 
   const memberByColumn = new Map();
   for (const member of Array.isArray(members) ? members : []) {
-    const exactResolved = member?.stocktakingColumn ? findQuantityColumn(rows, member.stocktakingColumn) : "";
+    const exactResolved = member?.stocktakingColumn ? findQuantityColumnFromKeys(keys, member.stocktakingColumn) : "";
     if (exactResolved && keys.includes(exactResolved) && !memberByColumn.has(exactResolved)) memberByColumn.set(exactResolved, member);
     const bases = new Set([ownerBase(member?.name), ownerBase(member?.stocktakingColumn)].filter(Boolean));
     if (!bases.size) continue;
@@ -436,13 +565,36 @@ export async function listStocktakingFolders({ fresh = false } = {}) {
 }
 
 export async function stocktakingForColumn(column, { inventoryColumn = "", defectedColumn = "", fresh = false } = {}) {
-  const rows = await loadStockRows({ fresh });
-  const quantityColumn = resolveRequestedColumn(rows, column);
-  const inventory = resolveSessionColumn(rows, inventoryColumn, "inventory");
-  const defected = resolveSessionColumn(rows, defectedColumn, "defected");
+  let rows = null;
+  let quantityColumn = "";
+  let inventory = "";
+  let defected = "";
+
+  try {
+    const schemaKeys = await loadStockSchemaKeys({ fresh });
+    quantityColumn = resolveRequestedColumnFromKeys(schemaKeys, column);
+    inventory = resolveSessionColumnFromKeys(schemaKeys, inventoryColumn, "inventory");
+    defected = resolveSessionColumnFromKeys(schemaKeys, defectedColumn, "defected");
+    const projectionKeys = stockDetailProjectionKeys(schemaKeys, [quantityColumn, inventory, defected]);
+    // Once a folder is opened, fetch only that folder quantity plus the fields
+    // actually rendered/edited by Stocktaking. Other schools' quantity columns
+    // and historical inventory columns are intentionally excluded.
+    rows = await loadStockProjection(projectionKeys, { fresh });
+  } catch (error) {
+    console.warn("[stocktaking] targeted folder projection unavailable; using full-row compatibility query:", error?.message || error);
+  }
+
+  if (!Array.isArray(rows)) {
+    rows = await loadStockRows({ fresh });
+    quantityColumn = resolveRequestedColumn(rows, column);
+    inventory = resolveSessionColumn(rows, inventoryColumn, "inventory");
+    defected = resolveSessionColumn(rows, defectedColumn, "defected");
+  }
+
   const items = rows
     .map((row) => serializeRow(row, quantityColumn, { inventoryColumn: inventory, defectedColumn: defected }))
-    .filter((item) => Number(item.quantity) !== 0);
+    .filter((item) => Number(item.quantity) !== 0)
+    .sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || ""), undefined, { numeric: true, sensitivity: "base" }) || String(a?.id || "").localeCompare(String(b?.id || "")));
   return await enrichComponentTags(items);
 }
 
@@ -452,9 +604,9 @@ export async function listStocktakingProducts({ fresh = false } = {}) {
 }
 
 export async function stocktakingForAccount(account = {}, { fresh = false } = {}) {
-  const [memberRows, stockRows] = await Promise.all([
+  const [memberRows, schemaKeys] = await Promise.all([
     selectAll(teamMembersTable(), { limit: 5000, order: "name.asc,id.asc" }),
-    loadStockRows({ fresh }),
+    loadStockSchemaKeys({ fresh }).catch(() => []),
   ]);
 
   const member = (memberRows || []).find((row) => accountMatchesMember(account, row)) || null;
@@ -465,7 +617,21 @@ export async function stocktakingForAccount(account = {}, { fresh = false } = {}
     throw error;
   }
 
-  const quantityColumn = findQuantityColumn(stockRows, schoolName);
+  let stockRows = null;
+  let quantityColumn = "";
+  try {
+    quantityColumn = findQuantityColumnFromKeys(schemaKeys, schoolName);
+    if (!quantityColumn) throw new Error(`Could not determine the Stocktaking quantity column for ${schoolName}.`);
+    stockRows = await loadStockProjection(stockDetailProjectionKeys(schemaKeys, [quantityColumn]), { fresh });
+  } catch (error) {
+    console.warn("[stocktaking] targeted account projection unavailable; using full-row compatibility query:", error?.message || error);
+  }
+
+  if (!Array.isArray(stockRows)) {
+    stockRows = await loadStockRows({ fresh });
+    quantityColumn = findQuantityColumn(stockRows, schoolName);
+  }
+
   if (!quantityColumn) {
     const error = new Error(`Could not determine the Stocktaking quantity column for ${schoolName}.`);
     error.status = 404;
@@ -474,6 +640,7 @@ export async function stocktakingForAccount(account = {}, { fresh = false } = {}
 
   const items = (stockRows || [])
     .map((row) => serializeRow(row, quantityColumn))
-    .filter((item) => Number(item.quantity) !== 0);
+    .filter((item) => Number(item.quantity) !== 0)
+    .sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || ""), undefined, { numeric: true, sensitivity: "base" }) || String(a?.id || "").localeCompare(String(b?.id || "")));
   return await enrichComponentTags(items);
 }
