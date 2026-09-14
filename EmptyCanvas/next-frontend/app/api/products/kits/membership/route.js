@@ -4,12 +4,14 @@ import { errorResponse, gateResponse, kitGate } from "../../../../../lib/proposa
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request) {
   const gate = await kitGate();
   if (!gate.ok) return gateResponse(gate);
   try {
+    const url = new URL(request.url);
+    const fresh = url.searchParams.get("_fresh") === "1";
     return NextResponse.json(
-      { ok: true, source: "supabase-next", membership: await listKitMembership() },
+      { ok: true, source: "supabase-next", membership: await listKitMembership({ fresh }) },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {

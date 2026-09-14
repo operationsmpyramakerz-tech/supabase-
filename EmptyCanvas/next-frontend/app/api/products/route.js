@@ -15,12 +15,14 @@ function errorResponse(error, fallback) {
   );
 }
 
-export async function GET() {
+export async function GET(request) {
   const gate = await getLegacyAccountGate(["Products", "Proposals"]);
   if (!gate.ok) return gateResponse(gate);
 
   try {
-    return NextResponse.json(await getProductsCatalog(), {
+    const url = new URL(request.url);
+    const fresh = url.searchParams.get("_fresh") === "1";
+    return NextResponse.json(await getProductsCatalog({ fresh }), {
       status: 200,
       headers: { "Cache-Control": "no-store" },
     });

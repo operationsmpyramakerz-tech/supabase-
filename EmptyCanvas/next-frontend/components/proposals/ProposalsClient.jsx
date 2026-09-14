@@ -1452,11 +1452,11 @@ export default function ProposalsClient({
     setBusy(true);
     try {
       const [proposalBody, kitBody, kitFolderBody, memberBody, productBody] = await Promise.all([
-        requestJson(`/next/api/products/proposals?_ts=${Date.now()}`),
-        requestJson(`/next/api/products/kits?_ts=${Date.now()}`),
-        requestJson(`/next/api/products/kit-folders?_ts=${Date.now()}`),
+        requestJson(`/next/api/products/proposals?_fresh=1&_ts=${Date.now()}`),
+        requestJson(`/next/api/products/kits?_fresh=1&_ts=${Date.now()}`),
+        requestJson(`/next/api/products/kit-folders?_fresh=1&_ts=${Date.now()}`),
         requestJson(`/next/api/team-members?_fresh=1&_ts=${Date.now()}`),
-        requestJson(`/next/api/products?_ts=${Date.now()}`),
+        requestJson(`/next/api/products?_fresh=1&_ts=${Date.now()}`),
       ]);
       setProposals((proposalBody.proposals || []).map(normalizeProposal));
       setKits((kitBody.kits || []).map(normalizeKit));

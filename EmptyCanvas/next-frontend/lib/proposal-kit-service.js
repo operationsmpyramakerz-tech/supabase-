@@ -81,6 +81,73 @@ function kitFoldersTable() {
   return text(process.env.SUPABASE_PRODUCT_KIT_FOLDERS_TABLE || "product_kit_folders") || "product_kit_folders";
 }
 
+// Cache only account-independent Supabase snapshots. Permission-derived fields
+// such as `canEdit` are applied after the current account gate resolves, so a
+// cached row set can never leak one user's authorization state to another.
+const PROPOSAL_KIT_READ_CACHE_TTL_MS = 20_000;
+const PROPOSAL_KIT_READ_CACHE_MAX_ENTRIES = 8;
+const proposalKitReadCache = new Map();
+const proposalKitReadInflight = new Map();
+let proposalKitCacheGeneration = 0;
+
+function proposalKitCacheGet(key) {
+  const entry = proposalKitReadCache.get(key);
+  if (!entry) return null;
+  if (entry.expiresAt <= Date.now()) {
+    proposalKitReadCache.delete(key);
+    return null;
+  }
+  return entry.value;
+}
+
+function proposalKitCacheSet(key, value, ttlMs = PROPOSAL_KIT_READ_CACHE_TTL_MS) {
+  if (proposalKitReadCache.size >= PROPOSAL_KIT_READ_CACHE_MAX_ENTRIES && !proposalKitReadCache.has(key)) {
+    const oldest = proposalKitReadCache.keys().next().value;
+    if (oldest) proposalKitReadCache.delete(oldest);
+  }
+  proposalKitReadCache.set(key, {
+    value,
+    expiresAt: Date.now() + Math.max(1000, Number(ttlMs) || PROPOSAL_KIT_READ_CACHE_TTL_MS),
+  });
+}
+
+async function proposalKitCachedRead(key, loader, { fresh = false, ttlMs = PROPOSAL_KIT_READ_CACHE_TTL_MS } = {}) {
+  if (!fresh) {
+    const cached = proposalKitCacheGet(key);
+    if (cached !== null) return cached;
+    if (proposalKitReadInflight.has(key)) return await proposalKitReadInflight.get(key);
+  }
+
+  const generation = proposalKitCacheGeneration;
+  const pending = Promise.resolve().then(loader);
+  if (!fresh) proposalKitReadInflight.set(key, pending);
+  try {
+    const value = await pending;
+    // If a write invalidated caches while this read was in flight, never let
+    // the older snapshot repopulate the cache after the mutation completed.
+    if (generation === proposalKitCacheGeneration) proposalKitCacheSet(key, value, ttlMs);
+    return value;
+  } finally {
+    if (!fresh) proposalKitReadInflight.delete(key);
+  }
+}
+
+function invalidateProposalKitReadCaches(...prefixes) {
+  proposalKitCacheGeneration += 1;
+  const wanted = prefixes.flat().map((value) => text(value)).filter(Boolean);
+  if (!wanted.length) {
+    proposalKitReadCache.clear();
+    proposalKitReadInflight.clear();
+    return;
+  }
+  for (const key of [...proposalKitReadCache.keys()]) {
+    if (wanted.some((prefix) => key === prefix || key.startsWith(`${prefix}:`))) proposalKitReadCache.delete(key);
+  }
+  for (const key of [...proposalKitReadInflight.keys()]) {
+    if (wanted.some((prefix) => key === prefix || key.startsWith(`${prefix}:`))) proposalKitReadInflight.delete(key);
+  }
+}
+
 function accountIdentity(account = {}) {
   const id = text(
     account.id ?? account.userId ?? account.user_id ?? account.memberId ?? account.member_id ??
@@ -254,15 +321,18 @@ async function proposalItemCountsForHeaders(headers = []) {
   return itemCounts;
 }
 
-export async function listProposals(account) {
+export async function listProposals(account, { fresh = false } = {}) {
   // `account` may be a promise. This lets page loaders start the safe Supabase
   // reads at the same time as the permission gate instead of serializing them.
-  // The rows are only returned to the page after the gate has succeeded.
+  // Only raw shared rows/counts are cached; `canEdit` is calculated afterward.
   const accountPromise = Promise.resolve(account || {});
-  const headers = await selectAll(proposalTable(), { limit: 5000, order: "updated_at.desc,created_at.desc" });
-  const itemCounts = await proposalItemCountsForHeaders(headers);
+  const snapshot = await proposalKitCachedRead("proposals:list", async () => {
+    const headers = await selectAll(proposalTable(), { limit: 5000, order: "updated_at.desc,created_at.desc" });
+    const itemCounts = await proposalItemCountsForHeaders(headers);
+    return { headers, itemCounts };
+  }, { fresh });
   const resolvedAccount = await accountPromise;
-  return headers.map((row) => proposalHeader(row, itemCounts.get(text(row.id)) || 0, resolvedAccount));
+  return snapshot.headers.map((row) => proposalHeader(row, snapshot.itemCounts.get(text(row.id)) || 0, resolvedAccount));
 }
 
 export async function getProposal(id, account) {
@@ -292,6 +362,7 @@ export async function createProposal(name, account) {
   if (identity.id) row.created_by_id = identity.id;
   if (identity.name) row.created_by = identity.name;
   const created = await insert(proposalTable(), row);
+  invalidateProposalKitReadCaches("proposals");
   return proposalHeader(created || row, 0, account);
 }
 
@@ -360,6 +431,7 @@ export async function createProposalWithItems(name, items, account) {
       timeoutMs: 120000,
     });
     await updateById(proposalTable(), created.id, { updated_at: now });
+    invalidateProposalKitReadCaches("proposals");
     return { ...created, itemsCount: rows.length, updatedAt: now };
   } catch (error) {
     try { await deleteRowsByForeignKey(proposalItemsTable(), "proposal_id", created.id); } catch {}
@@ -383,6 +455,7 @@ export async function updateProposal(id, body, account) {
     throw error;
   }
   const updated = await updateById(proposalTable(), id, { name, updated_at: new Date().toISOString() });
+  invalidateProposalKitReadCaches("proposals");
   const suppliedCount = Number(body?.itemsCount);
   const itemCount = Number.isFinite(suppliedCount) && suppliedCount >= 0
     ? Math.round(suppliedCount)
@@ -396,6 +469,7 @@ export async function deleteProposal(id, body, account) {
   await requireOwnerOrAdmin(current, account, body?.adminPassword);
   await deleteRowsByForeignKey(proposalItemsTable(), "proposal_id", id);
   await deleteById(proposalTable(), id);
+  invalidateProposalKitReadCaches("proposals");
 }
 
 export async function copyProposal(id, name, account) {
@@ -419,6 +493,7 @@ export async function copyProposal(id, name, account) {
       updated_at: now,
     });
   }
+  invalidateProposalKitReadCaches("proposals");
   return { ...created, itemsCount: sourceItems.length };
 }
 
@@ -470,6 +545,7 @@ export async function addProposalProduct(proposalId, body, account) {
     });
   }
   await updateById(proposalTable(), proposalId, { updated_at: now });
+  invalidateProposalKitReadCaches("proposals");
   return await getProposal(proposalId, account);
 }
 
@@ -490,6 +566,7 @@ export async function updateProposalItem(proposalId, itemId, body, account) {
   const now = new Date().toISOString();
   await updateById(proposalItemsTable(), itemId, { quantity: positiveInt(body?.quantity), updated_at: now });
   await updateById(proposalTable(), proposalId, { updated_at: now });
+  invalidateProposalKitReadCaches("proposals");
   return await getProposal(proposalId, account);
 }
 
@@ -509,12 +586,17 @@ export async function deleteProposalItem(proposalId, itemId, body, account) {
   }
   await deleteById(proposalItemsTable(), itemId);
   await updateById(proposalTable(), proposalId, { updated_at: new Date().toISOString() });
+  invalidateProposalKitReadCaches("proposals");
   return await getProposal(proposalId, account);
 }
 
-export async function listKitFolders(account) {
+export async function listKitFolders(account, { fresh = false } = {}) {
   const [rows, resolvedAccount] = await Promise.all([
-    selectAll(kitFoldersTable(), { limit: 5000, order: "updated_at.desc,created_at.desc" }),
+    proposalKitCachedRead(
+      "kit-folders:list",
+      () => selectAll(kitFoldersTable(), { limit: 5000, order: "updated_at.desc,created_at.desc" }),
+      { fresh, ttlMs: 30_000 },
+    ),
     Promise.resolve(account || {}),
   ]);
   return rows.map((row) => kitFolderHeader(row, resolvedAccount));
@@ -533,6 +615,7 @@ export async function createKitFolder(name, account) {
   if (identity.id) row.created_by_id = identity.id;
   if (identity.name) row.created_by = identity.name;
   const created = await insert(kitFoldersTable(), row);
+  invalidateProposalKitReadCaches("kit-folders");
   return kitFolderHeader(created || row, account);
 }
 
@@ -551,6 +634,7 @@ export async function updateKitFolder(id, body, account) {
     throw error;
   }
   const updated = await updateById(kitFoldersTable(), id, { name, updated_at: new Date().toISOString() });
+  invalidateProposalKitReadCaches("kit-folders");
   return kitFolderHeader(updated || { ...current, name }, account);
 }
 
@@ -559,23 +643,30 @@ export async function deleteKitFolder(id, body, account) {
   if (!current) return;
   await requireOwnerOrAdmin(current, account, body?.adminPassword);
   await deleteById(kitFoldersTable(), id);
+  invalidateProposalKitReadCaches("kit-folders", "kits");
 }
 
-export async function listKits(account) {
-  const [headers, items, resolvedAccount] = await Promise.all([
-    selectAll(kitsTable(), { limit: 5000, order: "updated_at.desc,created_at.desc" }),
-    selectAll(kitItemsTable(), { limit: 5000, order: "created_at.asc" }),
+async function kitListSnapshot({ fresh = false } = {}) {
+  return await proposalKitCachedRead("kits:snapshot", async () => {
+    const [headers, items] = await Promise.all([
+      selectAll(kitsTable(), { limit: 5000, order: "updated_at.desc,created_at.desc" }),
+      selectAll(kitItemsTable(), { limit: 5000, order: "created_at.asc" }),
+    ]);
+    return { headers, items };
+  }, { fresh });
+}
+
+export async function listKits(account, { fresh = false } = {}) {
+  const [snapshot, resolvedAccount] = await Promise.all([
+    kitListSnapshot({ fresh }),
     Promise.resolve(account || {}),
   ]);
-  const itemCounts = counts(items, "kit_id");
-  return headers.map((row) => kitHeader(row, itemCounts.get(text(row.id)) || 0, resolvedAccount));
+  const itemCounts = counts(snapshot.items, "kit_id");
+  return snapshot.headers.map((row) => kitHeader(row, itemCounts.get(text(row.id)) || 0, resolvedAccount));
 }
 
-export async function listKitMembership() {
-  const [headers, items] = await Promise.all([
-    selectAll(kitsTable(), { limit: 5000, order: "name.asc,created_at.asc" }),
-    selectAll(kitItemsTable(), { limit: 5000, order: "created_at.asc" }),
-  ]);
+export async function listKitMembership({ fresh = false } = {}) {
+  const { headers, items } = await kitListSnapshot({ fresh });
   const kitNames = new Map(headers.map((row) => [text(row.id), text(row.name) || "Untitled kit"]));
   const byProduct = new Map();
   for (const item of items || []) {
@@ -621,6 +712,7 @@ export async function createKit(name, account, folderId = "") {
   if (identity.id) row.created_by_id = identity.id;
   if (identity.name) row.created_by = identity.name;
   const created = await insert(kitsTable(), row);
+  invalidateProposalKitReadCaches("kits");
   return kitHeader(created || row, 0, account);
 }
 
@@ -646,6 +738,7 @@ export async function updateKit(id, body, account) {
     patch.folder_id = folderId || null;
   }
   const updated = await updateById(kitsTable(), id, patch);
+  invalidateProposalKitReadCaches("kits");
   const items = await rowsByForeignKey(kitItemsTable(), "kit_id", id);
   return kitHeader(updated || { ...current, name }, items.length, account);
 }
@@ -656,6 +749,7 @@ export async function deleteKit(id, body, account) {
   await requireOwnerOrAdmin(current, account, body?.adminPassword);
   await deleteRowsByForeignKey(kitItemsTable(), "kit_id", id);
   await deleteById(kitsTable(), id);
+  invalidateProposalKitReadCaches("kits");
 }
 
 export async function copyKit(id, name, account) {
@@ -678,6 +772,7 @@ export async function copyKit(id, name, account) {
       updated_at: now,
     });
   }
+  invalidateProposalKitReadCaches("kits");
   return { ...created, itemsCount: sourceItems.length };
 }
 
@@ -717,6 +812,7 @@ export async function addKitProduct(kitId, body, account) {
     });
   }
   await updateById(kitsTable(), kitId, { updated_at: now });
+  invalidateProposalKitReadCaches("kits");
   return await getKit(kitId, account);
 }
 
@@ -737,6 +833,7 @@ export async function updateKitItem(kitId, itemId, body, account) {
   const now = new Date().toISOString();
   await updateById(kitItemsTable(), itemId, { quantity: positiveInt(body?.quantity), updated_at: now });
   await updateById(kitsTable(), kitId, { updated_at: now });
+  invalidateProposalKitReadCaches("kits");
   return await getKit(kitId, account);
 }
 
@@ -756,5 +853,6 @@ export async function deleteKitItem(kitId, itemId, body, account) {
   }
   await deleteById(kitItemsTable(), itemId);
   await updateById(kitsTable(), kitId, { updated_at: new Date().toISOString() });
+  invalidateProposalKitReadCaches("kits");
   return await getKit(kitId, account);
 }

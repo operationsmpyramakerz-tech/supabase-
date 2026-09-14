@@ -1228,9 +1228,9 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
   const refreshKits = async () => {
     try {
       const [kitBody, productBody, folderBody] = await Promise.all([
-        requestJson(`/next/api/products/kits?_ts=${Date.now()}`),
-        requestJson(`/next/api/products?_ts=${Date.now()}`),
-        requestJson(`/next/api/products/kit-folders?_ts=${Date.now()}`),
+        requestJson(`/next/api/products/kits?_fresh=1&_ts=${Date.now()}`),
+        requestJson(`/next/api/products?_fresh=1&_ts=${Date.now()}`),
+        requestJson(`/next/api/products/kit-folders?_fresh=1&_ts=${Date.now()}`),
       ]);
       setKits((kitBody.kits || []).map(normalizeKit));
       setProducts((productBody.products || []).map(normalizeProduct));
