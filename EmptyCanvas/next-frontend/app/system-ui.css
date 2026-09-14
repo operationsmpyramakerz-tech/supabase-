@@ -95,3 +95,72 @@
 @media (prefers-reduced-motion: reduce) {
   .next-proposals-toast { animation: none !important; }
 }
+
+/* -------------------------------------------------------------------------
+ * Persistent App Router shell
+ *
+ * RootLayout now keeps the authenticated Classic chrome mounted while sibling
+ * routes change. Legacy loading components still contain their own temporary
+ * sidebar/header markup; when they are rendered inside the persistent content
+ * outlet, flatten that temporary shell to its page skeleton only. This avoids
+ * a nested/duplicated sidebar during streamed route loading without requiring
+ * every existing loading.jsx to be rewritten at once.
+ * ---------------------------------------------------------------------- */
+body.persistent-app-shell
+  .classic-app-shell > .main-content > .next-classic-page-content
+  > .app-container.classic-app-shell[class*="next-classic-"][class*="-loading"] {
+  display: block !important;
+  position: static !important;
+  width: 100% !important;
+  min-height: 0 !important;
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+body.persistent-app-shell
+  .classic-app-shell > .main-content > .next-classic-page-content
+  > .app-container.classic-app-shell[class*="next-classic-"][class*="-loading"]
+  > .sidebar {
+  display: none !important;
+}
+
+body.persistent-app-shell
+  .classic-app-shell > .main-content > .next-classic-page-content
+  > .app-container.classic-app-shell[class*="next-classic-"][class*="-loading"]
+  > .main-content {
+  display: block !important;
+  position: static !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  height: auto !important;
+  max-height: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: visible !important;
+  background: transparent !important;
+}
+
+body.persistent-app-shell
+  .classic-app-shell > .main-content > .next-classic-page-content
+  > .app-container.classic-app-shell[class*="next-classic-"][class*="-loading"]
+  > .main-content > .main-header {
+  display: none !important;
+}
+
+body.persistent-app-shell
+  .classic-app-shell > .main-content > .next-classic-page-content
+  > .app-container.classic-app-shell[class*="next-classic-"][class*="-loading"]
+  > .main-content > .next-classic-page-content {
+  width: 100% !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}

@@ -1,4 +1,8 @@
+"use client";
+
 import ShellStyleLinks from "./ShellStyleLinks";
+import { useLayoutEffect } from "react";
+import { usePersistentShellContext } from "./PersistentShellContext";
 import Link from "next/link";
 import NotificationsBell from "./notifications/NotificationsBell";
 import UserProfileMenu from "./UserProfileMenu";
@@ -153,6 +157,7 @@ export default function AppShell({
   bodyClass = "",
   pageStyles = [],
 }) {
+  const persistentShell = usePersistentShellContext();
   const allowedPages = Array.isArray(account?.allowedPages) ? account.allowedPages : [];
   const systemCoverUrl = String(account?.coverPhotoUrl || account?.coverPhoto || "").trim();
   const systemCoverStyle = systemCoverUrl
@@ -161,6 +166,26 @@ export default function AppShell({
 
   const classicLinks = CLASSIC_MAIN_LINKS.filter((link) => canSee(link, allowedPages));
   const combinedBodyClass = [bodyClass, "next-classic-shell-active", systemCoverUrl ? "ops-has-system-cover" : ""].filter(Boolean).join(" ");
+
+  useLayoutEffect(() => {
+    if (!persistentShell?.persistent || typeof persistentShell.registerPage !== "function") return;
+    persistentShell.registerPage({ account, title, activePath });
+  }, [persistentShell, account, title, activePath]);
+
+  // RootLayout now owns one long-lived AppShell. Page-level AppShell instances
+  // remain in place so the migration does not require moving/deleting routes;
+  // inside the persistent shell they only apply page-specific styles/classes
+  // and refresh the chrome account/title metadata.
+  if (persistentShell?.persistent) {
+    return (
+      <>
+        {pageStyles.map((href) => <link rel="stylesheet" href={href} key={href} />)}
+        <BodyClassSync className={combinedBodyClass} />
+        <ClassicChromeAccessSync account={account} />
+        {children}
+      </>
+    );
+  }
 
   return (
     <>
@@ -171,7 +196,7 @@ export default function AppShell({
       <ClassicSidebarBootstrap />
       <ClassicMobileDockStructure />
       <ClassicSidebarViewportKeeper />
-      <ClassicSidebarActiveIndicator />
+      <ClassicSidebarActiveIndicator activePath={activePath} />
       <TaskManagementSidebarFlyout allowedPages={allowedPages} activePath={activePath} />
       <EventsSidebarFlyout allowedPages={allowedPages} activePath={activePath} />
       <ShoppingCartSidebarFlyout allowedPages={allowedPages} activePath={activePath} />

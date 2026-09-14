@@ -1,5 +1,6 @@
 import Script from "next/script";
 import InternalNavigationBridge from "../components/InternalNavigationBridge";
+import PersistentAppShell from "../components/PersistentAppShell";
 import { cookies } from "next/headers";
 import "./globals.css";
 import "./system-ui.css";
@@ -7,6 +8,7 @@ import "./system-ui.css";
 const COVER_URL_COOKIE = "ops_ui_cover_url_v1";
 const PROFILE_URL_COOKIE = "ops_ui_profile_url_v1";
 const THEME_COOKIE = "ops_ui_theme_v1";
+const ALLOWED_PAGES_COOKIE = "ops_ui_allowed_pages_v1";
 
 
 function normalizeTheme(value) {
@@ -38,6 +40,23 @@ function coverCssValue(url) {
   return url ? `url(${JSON.stringify(url)})` : undefined;
 }
 
+function readAllowedPagesFromCookie(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return [];
+  try {
+    const decoded = decodeURIComponent(raw);
+    const parsed = JSON.parse(decoded);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+}
+
 export const metadata = {
   title: "Operations Hub — Next.js Pilot",
   description: "Incremental Next.js frontend for Operations Hub.",
@@ -53,6 +72,11 @@ export default async function RootLayout({ children }) {
   const coverUrl = readCoverUrlFromCookie(cookieStore.get(COVER_URL_COOKIE)?.value);
   const profileUrl = readCoverUrlFromCookie(cookieStore.get(PROFILE_URL_COOKIE)?.value);
   const theme = normalizeTheme(cookieStore.get(THEME_COOKIE)?.value);
+  const shellAccount = {
+    allowedPages: readAllowedPagesFromCookie(cookieStore.get(ALLOWED_PAGES_COOKIE)?.value),
+    photoUrl: profileUrl,
+    coverPhotoUrl: coverUrl,
+  };
   const rootClasses = [
     coverUrl ? "ops-has-persistent-cover" : "",
     profileUrl ? "ops-has-persistent-profile" : "",
@@ -81,7 +105,9 @@ export default async function RootLayout({ children }) {
       </head>
       <body>
         <InternalNavigationBridge />
-        {children}
+        <PersistentAppShell initialAccount={shellAccount}>
+          {children}
+        </PersistentAppShell>
         <Script src="/pwa-register.js" strategy="afterInteractive" />
       </body>
     </html>

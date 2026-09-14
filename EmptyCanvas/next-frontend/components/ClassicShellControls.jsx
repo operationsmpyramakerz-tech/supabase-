@@ -370,7 +370,7 @@ export function ClassicSidebarViewportKeeper() {
 }
 
 
-export function ClassicSidebarActiveIndicator() {
+export function ClassicSidebarActiveIndicator({ activePath = "" }) {
   const router = useRouter();
 
   useLayoutEffect(() => {
@@ -655,7 +655,7 @@ export function ClassicSidebarActiveIndicator() {
       sidebar.classList.remove("sidebar-active-indicator-ready", "sidebar-active-indicator-animating");
       indicator.remove();
     };
-  }, [router]);
+  }, [router, activePath]);
 
   return null;
 }
