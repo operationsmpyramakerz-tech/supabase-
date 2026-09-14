@@ -5108,6 +5108,392 @@ async function _sbRequestedOrdersSummaryPayload({ includeAllSystem = false, forc
   return await cacheGetOrSet(cacheKey, 60, load);
 }
 
+// -----------------------------------------------------------------------------
+// Paged order summaries
+// -----------------------------------------------------------------------------
+// Operations Orders and Orders Review are grouped by business order_number.
+// Paging raw component rows can split one order across pages, so the optimized
+// path first selects a small page of distinct order numbers, then loads the
+// projected summary rows only for those complete groups. The legacy full-list
+// summary endpoints stay untouched for compatibility with other consumers.
+const _SB_ORDER_GROUP_PAGE_DEFAULT = 36;
+const _SB_ORDER_GROUP_PAGE_MAX = 80;
+
+function _sbOrderGroupPageLimit(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return _SB_ORDER_GROUP_PAGE_DEFAULT;
+  return Math.max(10, Math.min(_SB_ORDER_GROUP_PAGE_MAX, Math.floor(parsed)));
+}
+
+function _sbOrderPageCursor(value) {
+  if (value === null || value === undefined || String(value).trim() === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function _sbOrderPageText(value) {
+  return String(value ?? "").trim().replace(/[,*%()]/g, " ").replace(/\s+/g, " ");
+}
+
+function _sbOrderPageTypeLabel(value) {
+  const key = String(value || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (key === "requestproducts") return "Request Products";
+  if (key === "withdrawproducts") return "Withdraw Products";
+  if (key === "requestmaintenance") return "Request Maintenance";
+  return "";
+}
+
+function _sbOrderPageStatusIndex(value) {
+  const status = norm(value).replace(/[_-]+/g, " ");
+  if (/(archive|archived)/.test(status)) return 5;
+  if (/(arrived|delivered|received)/.test(status)) return 4;
+  if (/(shipped|shipping|on the way|delivering|prepared)/.test(status)) return 3;
+  if (/(in progress|inprogress|progress|approved)/.test(status)) return 2;
+  return 1;
+}
+
+function _sbOrderPageApprovalKey(value) {
+  const state = norm(value).replace(/[_.-]+/g, " ");
+  if (state.includes("reject")) return "rejected";
+  if (state.includes("approv")) return "approved";
+  return "not-started";
+}
+
+function _sbOrderPageDecision(item = {}) {
+  const operations = _sbOrderPageApprovalKey(item.operationsApproval ?? item.operations_approval);
+  const supervisor = _sbOrderPageApprovalKey(item.svApproval ?? item.sv_approval ?? item.approval);
+  if (operations === "rejected" || supervisor === "rejected" || _sbOrderText(item.rejectedReason ?? item.rejected_reason)) return "rejected";
+  if (operations === "approved" || supervisor === "approved" || _sbOrderPageStatusIndex(item.status) === 2) return "approved";
+  return "not-started";
+}
+
+function _sbOrderPageNumber(item = {}) {
+  const direct = Number(item.orderIdNumber ?? item.order_number);
+  if (Number.isFinite(direct)) return direct;
+  const raw = String(item.orderId || "");
+  const match = raw.match(/(\d+)/);
+  return match ? Number(match[1]) : null;
+}
+
+function _sbOrderPageGroupRows(rows = []) {
+  const map = new Map();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const n = _sbOrderPageNumber(row);
+    const key = Number.isFinite(n) ? String(n) : `row:${String(row?.id || "")}`;
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(row);
+  }
+  return [...map.entries()]
+    .map(([key, items]) => ({ key, orderNumber: Number.isFinite(Number(key)) ? Number(key) : null, items }))
+    .sort((a, b) => (b.orderNumber ?? -Infinity) - (a.orderNumber ?? -Infinity));
+}
+
+function _sbOperationsPageGroupMeta(items = []) {
+  const stage = Math.max(1, ...(items || []).map((item) => _sbOrderPageStatusIndex(item?.status)));
+  const decisions = (items || []).map(_sbOrderPageDecision);
+  const hasApproved = decisions.includes("approved");
+  const hasRejected = decisions.includes("rejected");
+  const hasRemaining = (items || []).some((item) => Math.abs(Number(item?.quantityRemaining ?? item?.quantity_remaining ?? 0) || 0) > 1e-9);
+  const hasReceived = (items || []).some((item) => Math.abs(Number(item?.quantityReceived ?? item?.quantity_received_by_operations ?? 0) || 0) > 1e-9);
+  const orderType = _sbOrderText(items?.[0]?.orderType ?? items?.[0]?.order_type);
+  const maintenance = _normKeyOrderType(orderType) === _normKeyOrderType("Request Maintenance");
+  return { stage, hasApproved, hasRejected, hasRemaining, hasReceived, maintenance, orderType };
+}
+
+function _sbOperationsPageGroupMatches(items = [], tab = "all") {
+  const cleanTab = String(tab || "all").trim().toLowerCase();
+  if (cleanTab === "approved" || cleanTab === "rejected") {
+    return (items || []).some((item) => _sbOrderPageStatusIndex(item?.status) === 2 && _sbOrderPageDecision(item) === cleanTab);
+  }
+  const meta = _sbOperationsPageGroupMeta(items);
+  if (cleanTab === "all") return meta.stage < 5;
+  if (cleanTab === "archive") return meta.stage >= 5;
+  if (cleanTab === "delivered") return meta.stage === 4;
+  if (cleanTab === "remaining") return meta.stage === 3 && !meta.maintenance && meta.hasRemaining;
+  if (cleanTab === "received") return meta.stage === 3 && (meta.maintenance || meta.hasReceived);
+  return true;
+}
+
+function _sbOperationsPageRowsForTab(items = [], tab = "all") {
+  const cleanTab = String(tab || "all").trim().toLowerCase();
+  if (cleanTab === "approved" || cleanTab === "rejected") {
+    return (items || []).filter((item) => _sbOrderPageStatusIndex(item?.status) === 2 && _sbOrderPageDecision(item) === cleanTab);
+  }
+  return items || [];
+}
+
+function _sbOrderPageGroupSearchText(items = []) {
+  return (items || []).flatMap((item) => [
+    item?.orderId, item?.orderIdNumber, item?.reason, item?.createdByName, item?.teamMemberId,
+    item?.orderType, item?.productName, item?.issueDescription, item?.actualIssueDescription,
+    item?.repairAction, item?.resolutionMethod, item?.operationsByName, item?.receiptNumber, item?.rejectedReason,
+  ]).map((value) => norm(value)).join(" ");
+}
+
+function _sbOrderPageVisibilityLogic(visible = null) {
+  if (!visible) return null;
+  const clauses = [];
+  for (const id of Array.isArray(visible.ids) ? visible.ids : []) {
+    const clean = String(id || "").replace(/[^0-9A-Za-z_-]/g, "");
+    if (clean) clauses.push(`team_member_id.eq.${clean}`);
+  }
+  for (const name of Array.isArray(visible.names) ? visible.names : []) {
+    const clean = _sbOrderPageText(name);
+    if (clean) clauses.push(`team_member_name.ilike.*${clean}*`);
+  }
+  return clauses.length ? clauses : null;
+}
+
+function _sbOrderPageSearchLogic(query = "") {
+  const clean = _sbOrderPageText(query);
+  if (!clean) return null;
+  const numeric = clean.match(/^(?:ord[-\s]*)?(\d+)$/i);
+  if (numeric) return { orderNumber: Number(numeric[1]), clauses: null };
+  return {
+    orderNumber: null,
+    clauses: [
+      `reason.ilike.*${clean}*`,
+      `team_member_name.ilike.*${clean}*`,
+      `product_name.ilike.*${clean}*`,
+      `issue_description.ilike.*${clean}*`,
+      `actual_issue_description.ilike.*${clean}*`,
+      `repair_action.ilike.*${clean}*`,
+      `resolution_method.ilike.*${clean}*`,
+      `person_received_by_operations.ilike.*${clean}*`,
+      `receipt_number.ilike.*${clean}*`,
+      `rejected_reason.ilike.*${clean}*`,
+    ],
+  };
+}
+
+function _sbOrderPageStatusLogic(tab = "all", { review = false } = {}) {
+  const cleanTab = String(tab || "all").trim().toLowerCase();
+  if (review) {
+    if (cleanTab === "archive") return [`status.ilike.*archive*`];
+    if (cleanTab === "approved") return [`sv_approval.ilike.*approved*`];
+    if (cleanTab === "rejected") return [`sv_approval.ilike.*rejected*`];
+    // Not Started may be stored as text, NULL or an empty value across old
+    // migrations. Keep candidate paging broad here and apply the exact legacy
+    // normalization after the projected rows are loaded.
+    if (cleanTab === "not-started") return null;
+    return null;
+  }
+  if (cleanTab === "archive") return [`status.ilike.*archive*`];
+  if (cleanTab === "delivered") return [`status.ilike.*arrived*`, `status.ilike.*delivered*`, `status.ilike.*received*`];
+  if (cleanTab === "remaining" || cleanTab === "received") return [`status.ilike.*shipped*`, `status.ilike.*shipping*`, `status.ilike.*prepared*`, `status.ilike.*delivering*`];
+  if (cleanTab === "approved" || cleanTab === "rejected") return [`status.ilike.*progress*`, `status.ilike.*approved*`];
+  return null;
+}
+
+function _sbOrderPageLogicalParams({ visibility = null, query = "", tab = "all", review = false, type = "all" } = {}) {
+  const params = {};
+  const logicGroups = [];
+  const visibilityClauses = _sbOrderPageVisibilityLogic(visibility);
+  if (visibilityClauses?.length) logicGroups.push(visibilityClauses);
+  const search = _sbOrderPageSearchLogic(query);
+  if (Number.isFinite(search?.orderNumber)) params.order_number = `eq.${search.orderNumber}`;
+  else if (search?.clauses?.length) logicGroups.push(search.clauses);
+  const statusClauses = _sbOrderPageStatusLogic(tab, { review });
+  if (statusClauses?.length) logicGroups.push(statusClauses);
+  const typeLabel = _sbOrderPageTypeLabel(type);
+  if (typeLabel) params.order_type = _sbPostgrestIlike(typeLabel, { contains: true });
+  if (logicGroups.length === 1) params.or = `(${logicGroups[0].join(",")})`;
+  else if (logicGroups.length > 1) params.and = `(${logicGroups.map((clauses) => `or(${clauses.join(",")})`).join(",")})`;
+  return params;
+}
+
+async function _sbOrderPageCandidateNumbers({ cursor = null, scanGroups = 90, logicalParams = {} } = {}) {
+  const wanted = Math.max(20, Math.min(240, Number(scanGroups) || 90));
+  const unique = [];
+  const seen = new Set();
+  let offset = 0;
+  let exhausted = false;
+  const rowChunk = 1000;
+  const paramsBase = { ...logicalParams };
+  const directNumber = String(paramsBase.order_number || "").startsWith("eq.") ? Number(String(paramsBase.order_number).slice(3)) : null;
+
+  while (unique.length < wanted + 1 && !exhausted && offset < 12000) {
+    const params = {
+      select: "order_number",
+      order: "order_number.desc",
+      limit: rowChunk,
+      offset,
+      ...paramsBase,
+    };
+    if (!Number.isFinite(directNumber)) {
+      const parsedCursor = _sbOrderPageCursor(cursor);
+      if (parsedCursor !== null) params.order_number = `lt.${parsedCursor}`;
+      else if (!params.order_number) params.order_number = "not.is.null";
+    }
+    const rows = await supabaseDb.select(_sbOrdersTable(), params);
+    const chunk = Array.isArray(rows) ? rows : [];
+    for (const row of chunk) {
+      const n = _sbOrderNum(row?.order_number);
+      if (!Number.isFinite(n) || seen.has(n)) continue;
+      seen.add(n);
+      unique.push(n);
+      if (unique.length >= wanted + 1) break;
+    }
+    if (chunk.length < rowChunk || Number.isFinite(directNumber)) exhausted = true;
+    else offset += chunk.length;
+  }
+
+  return { numbers: unique.slice(0, wanted), hasMore: unique.length > wanted || !exhausted };
+}
+
+async function _sbOrderPageRowsByNumbers(numbers = [], selectExpr = "*") {
+  const unique = Array.from(new Set((Array.isArray(numbers) ? numbers : []).map(Number).filter(Number.isFinite)));
+  if (!unique.length) return [];
+  const out = [];
+  for (let i = 0; i < unique.length; i += 24) {
+    const batch = unique.slice(i, i + 24);
+    const rows = await supabaseDb.select(_sbOrdersTable(), {
+      select: selectExpr,
+      order: "order_number.desc,notion_created_time.desc,id.desc",
+      order_number: `in.(${batch.join(",")})`,
+      limit: 5000,
+    });
+    if (Array.isArray(rows)) out.push(...rows);
+  }
+  return out;
+}
+
+async function _sbRequestedOrdersPagedSummary({ tab = "all", type = "all", query = "", cursor = null, limit = _SB_ORDER_GROUP_PAGE_DEFAULT } = {}) {
+  const pageLimit = _sbOrderGroupPageLimit(limit);
+  const output = [];
+  let nextCursor = _sbOrderPageCursor(cursor);
+  let hasMore = true;
+  let loops = 0;
+
+  while (output.length < pageLimit && hasMore && loops < 10) {
+    loops += 1;
+    const logicalParams = _sbOrderPageLogicalParams({ query, tab, review: false, type });
+    let candidates;
+    try {
+      candidates = await _sbOrderPageCandidateNumbers({ cursor: nextCursor, scanGroups: Math.max(pageLimit * 2, 60), logicalParams });
+    } catch (error) {
+      console.warn("[operations-orders] paged DB filters unavailable; retrying with order-number paging only:", error?.message || error);
+      candidates = await _sbOrderPageCandidateNumbers({ cursor: nextCursor, scanGroups: Math.max(pageLimit * 2, 60), logicalParams: {} });
+    }
+    if (!candidates.numbers.length) { hasMore = false; break; }
+
+    let rawRows;
+    try { rawRows = await _sbOrderPageRowsByNumbers(candidates.numbers, _SB_OPERATIONS_SUMMARY_SELECT); }
+    catch (error) {
+      console.warn("[operations-orders] paged summary projection unavailable; using full-row compatibility query:", error?.message || error);
+      rawRows = await _sbOrderPageRowsByNumbers(candidates.numbers, "*");
+    }
+    const serialized = (rawRows || []).map(_sbSerializeOperationsSummaryRow);
+    const groups = _sbOrderPageGroupRows(serialized);
+    const byNumber = new Map(groups.map((group) => [group.orderNumber, group.items]));
+    const typeKey = String(type || "all").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+    const directSearch = _sbOrderPageSearchLogic(query);
+    const needle = Number.isFinite(directSearch?.orderNumber) ? "" : norm(query);
+
+    for (const orderNumber of candidates.numbers) {
+      const items = byNumber.get(orderNumber) || [];
+      nextCursor = orderNumber;
+      if (!items.length || !_sbOperationsPageGroupMatches(items, tab)) continue;
+      if (typeKey && typeKey !== "all") {
+        const itemTypeKey = _normKeyOrderType(items[0]?.orderType || "");
+        if (itemTypeKey !== typeKey) continue;
+      }
+      if (needle && !_sbOrderPageGroupSearchText(items).includes(needle)) continue;
+      output.push(..._sbOperationsPageRowsForTab(items, tab));
+      if (_sbOrderPageGroupRows(output).length >= pageLimit) break;
+    }
+    const outputGroupCount = _sbOrderPageGroupRows(output).length;
+    hasMore = candidates.hasMore;
+    if (outputGroupCount >= pageLimit || !hasMore) break;
+  }
+
+  const pageGroups = _sbOrderPageGroupRows(output).slice(0, pageLimit);
+  const items = pageGroups.flatMap((group) => group.items);
+  return {
+    items,
+    pageInfo: {
+      limit: pageLimit,
+      groupCount: pageGroups.length,
+      hasMore: !!hasMore,
+      nextCursor: hasMore && _sbOrderPageCursor(nextCursor) !== null ? _sbOrderPageCursor(nextCursor) : null,
+    },
+  };
+}
+
+async function _sbSVOrdersPagedSummary(req, { tab = "all", type = "all", query = "", cursor = null, limit = _SB_ORDER_GROUP_PAGE_DEFAULT } = {}) {
+  const pageLimit = _sbOrderGroupPageLimit(limit);
+  const visible = await _sbVisibleSVInfo(req);
+  if (!visible.ids.length && !visible.names.length) return { items: [], pageInfo: { limit: pageLimit, groupCount: 0, hasMore: false, nextCursor: null } };
+
+  const outputGroups = [];
+  let nextCursor = _sbOrderPageCursor(cursor);
+  let hasMore = true;
+  let loops = 0;
+  const cleanTab = String(tab || "all").trim().toLowerCase().replace(/[\s_]+/g, "-");
+
+  while (outputGroups.length < pageLimit && hasMore && loops < 12) {
+    loops += 1;
+    const logicalParams = _sbOrderPageLogicalParams({ visibility: visible, query, tab: cleanTab, review: true, type });
+    let candidates;
+    try {
+      candidates = await _sbOrderPageCandidateNumbers({ cursor: nextCursor, scanGroups: Math.max(pageLimit * 2, 60), logicalParams });
+    } catch (error) {
+      console.warn("[orders-review] paged DB filters unavailable; retrying with order-number paging only:", error?.message || error);
+      candidates = await _sbOrderPageCandidateNumbers({ cursor: nextCursor, scanGroups: Math.max(pageLimit * 3, 80), logicalParams: {} });
+    }
+    if (!candidates.numbers.length) { hasMore = false; break; }
+
+    let rawRows;
+    try { rawRows = await _sbOrderPageRowsByNumbers(candidates.numbers, _SB_SV_REVIEW_SUMMARY_SELECT); }
+    catch (error) {
+      console.warn("[orders-review] paged summary projection unavailable; using full-row compatibility query:", error?.message || error);
+      rawRows = await _sbOrderPageRowsByNumbers(candidates.numbers, "*");
+    }
+
+    const allowed = (rawRows || []).filter((row) => {
+      if (!_sbOrderVisibleToSV(row, visible)) return false;
+      const issueDescription = _sbOrderText(_sbOrderGet(row, ["issue_description", "Issue Description"]));
+      if (/^created from proposal:/i.test(issueDescription)) return false;
+      const statusKey = norm(_sbOrderGet(row, ["status", "Status"]));
+      const archived = /archive|archived/.test(statusKey);
+      if (cleanTab === "archive") return archived;
+      if (archived) return false;
+      if (cleanTab === "approved" || cleanTab === "rejected" || cleanTab === "not-started") {
+        return _sbOrderPageApprovalKey(_sbOrderGet(row, ["sv_approval", "S.V Approval", "SV Approval"])) === cleanTab;
+      }
+      return true;
+    }).map(_sbSVSummaryRow);
+
+    const groups = _sbOrderPageGroupRows(allowed);
+    const byNumber = new Map(groups.map((group) => [group.orderNumber, group.items]));
+    const typeKey = String(type || "all").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+    const directSearch = _sbOrderPageSearchLogic(query);
+    const needle = Number.isFinite(directSearch?.orderNumber) ? "" : norm(query);
+    for (const orderNumber of candidates.numbers) {
+      nextCursor = orderNumber;
+      const items = byNumber.get(orderNumber) || [];
+      if (!items.length) continue;
+      if (typeKey && typeKey !== "all" && _normKeyOrderType(items[0]?.orderType || "") !== typeKey) continue;
+      if (needle && !_sbOrderPageGroupSearchText(items).includes(needle)) continue;
+      outputGroups.push({ orderNumber, items });
+      if (outputGroups.length >= pageLimit) break;
+    }
+    hasMore = candidates.hasMore;
+    if (outputGroups.length >= pageLimit || !hasMore) break;
+  }
+
+  const pageGroups = outputGroups.slice(0, pageLimit);
+  return {
+    items: pageGroups.flatMap((group) => group.items),
+    pageInfo: {
+      limit: pageLimit,
+      groupCount: pageGroups.length,
+      hasMore: !!hasMore,
+      nextCursor: hasMore && _sbOrderPageCursor(nextCursor) !== null ? _sbOrderPageCursor(nextCursor) : null,
+    },
+  };
+}
+
 async function _sbRequestedOrderDetailsByIds(orderIds = []) {
   const ids = Array.from(new Set((Array.isArray(orderIds) ? orderIds : [])
     .map((id) => String(id || "").trim())
@@ -18663,8 +19049,18 @@ app.get(
           String(req.query?._fresh || "") === "1" ||
           !!req.query?._refresh ||
           String(req.get("x-ops-hard-refresh") || "") === "1";
+        const pagedSummary = summaryOnly && String(req.query?.paged || req.query?.pageMode || "") === "1";
         if (maintenanceOnly && summaryOnly) return res.json(await _sbMaintenanceOrdersSummaryPayload({ forceFresh }));
         if (maintenanceOnly) return res.json(await _sbMaintenanceOrdersPayload({ forceFresh }));
+        if (pagedSummary && includeAllSystem) {
+          return res.json(await _sbRequestedOrdersPagedSummary({
+            tab: req.query?.tab || "all",
+            type: req.query?.orderTypeKey || req.query?.filterType || req.query?.type || "all",
+            query: req.query?.q || req.query?.search || "",
+            cursor: req.query?.cursor,
+            limit: req.query?.limit,
+          }));
+        }
         if (summaryOnly) return res.json(await _sbRequestedOrdersSummaryPayload({ includeAllSystem, forceFresh }));
         return res.json(await _sbRequestedOrdersPayload({ includeAllSystem, forceFresh }));
       }
@@ -25509,29 +25905,28 @@ async function _pageBootstrapOrderTracking(req, groupId) {
 
 async function _pageBootstrapOrdersReview(req) {
   if (_sbOrdersEnabled()) {
-    // Load the lightweight review list once, then split active/archive from the
-    // same cached payload. Full component details are fetched only when a user
-    // opens an order.
-    const summaryPromise = _sbSVOrdersSummaryBuckets(req);
+    // Only the first active page is required to paint Orders Review. Archive and
+    // other tabs are loaded on demand by the client, so opening the page no
+    // longer scans the entire review history.
     return Promise.all([
       _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapAccountPayload(req)),
-      _pageBootstrapLoad('/api/sv-orders?tab=all', 20_000, async () => (await summaryPromise).active || []),
-      _pageBootstrapLoad('/api/sv-orders?tab=archive', 20_000, async () => (await summaryPromise).archive || []),
+      _pageBootstrapLoad('/api/sv-orders?tab=all&mode=summary&paged=1', 20_000, () =>
+        _sbSVOrdersPagedSummary(req, { tab: 'all' })
+      ),
     ]);
   }
   return Promise.all([
     _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapAccountPayload(req)),
     _pageBootstrapLoad('/api/sv-orders?tab=all', 20_000, () => _pageBootstrapFetchExistingRoute(req, '/api/sv-orders?tab=all', 20_000)),
-    _pageBootstrapLoad('/api/sv-orders?tab=archive', 20_000, () => _pageBootstrapFetchExistingRoute(req, '/api/sv-orders?tab=archive', 20_000)),
   ]);
 }
 
 async function _pageBootstrapOperationsOrders(req) {
   return Promise.all([
     _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapAccountPayload(req)),
-    _pageBootstrapLoad('/api/orders/requested?scope=all-system&mode=summary', 25_000, () =>
+    _pageBootstrapLoad('/api/orders/requested?scope=all-system&mode=summary&paged=1', 25_000, () =>
       _sbOrdersEnabled()
-        ? _sbRequestedOrdersSummaryPayload({ includeAllSystem: true })
+        ? _sbRequestedOrdersPagedSummary({ tab: 'all' })
         : _pageBootstrapFetchExistingRoute(req, '/api/orders/requested?scope=all-system', 25_000)
     ),
   ]);
@@ -36253,6 +36648,18 @@ app.get("/api/sv-orders", requireAuth, requirePage("Orders Review"), async (req,
     else if (!tab) label = "Not Started"; // backward compatible default
 
     const summaryOnly = String(req.query.mode || "").trim().toLowerCase() === "summary";
+    const pagedSummary = summaryOnly && String(req.query?.paged || req.query?.pageMode || "") === "1";
+    if (_sbOrdersEnabled() && pagedSummary) {
+      const page = await _sbSVOrdersPagedSummary(req, {
+        tab: tab || "all",
+        type: req.query?.orderTypeKey || req.query?.filterType || req.query?.type || "all",
+        query: req.query?.q || req.query?.search || "",
+        cursor: req.query?.cursor,
+        limit: req.query?.limit,
+      });
+      res.set("Cache-Control", "no-store");
+      return res.json(page);
+    }
     if (_sbOrdersEnabled() && summaryOnly) {
       const items = await _sbSVOrdersSummaryPayload(req, label);
       res.set("Cache-Control", "no-store");

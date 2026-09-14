@@ -1842,8 +1842,10 @@ function ConfirmModal({ state, busy, error, onCancel, onSubmit }) {
   return <div className="co-submodal-overlay is-open" aria-hidden="false"><form className="co-submodal-dialog" role="dialog" aria-modal="true" onSubmit={(event) => { event.preventDefault(); onSubmit(isDeliver ? { files: receiptPhotos } : {}); }}><button type="button" className="co-submodal-close" onClick={onCancel} aria-label="Close"/><div className="co-submodal-header req-edit-header"><div className="req-edit-icon"><ClassicOrderIcon name={config[3]} /></div><div><div className="co-submodal-title">{config[0]}</div><div className="co-submodal-sub">{config[1]}</div></div></div><div className="co-submodal-body">{isDeliver ? <div className="co-submodal-field"><span className="co-submodal-label">Receipt photos <em>Required</em></span><input ref={receiptPhotosInputRef} className="co-upload-field__input" type="file" accept="image/*" multiple hidden required onChange={(event) => setReceiptPhotos(Array.from(event.target.files || []))} disabled={busy} /><button type="button" className="co-upload-field next-maintenance-upload-field" onClick={() => receiptPhotosInputRef.current?.click()} disabled={busy}><span className="co-upload-field__icon"><ClassicOrderIcon name="upload-cloud" /></span><span className="co-upload-field__content"><span className="co-upload-field__title">{receiptPhotos.length ? `${receiptPhotos.length} photo${receiptPhotos.length === 1 ? "" : "s"} selected` : "Choose receipt photos"}</span><span className="co-upload-field__meta">{receiptPhotos.length ? receiptPhotos.map((file) => file.name).join(" • ") : "PNG, JPG or WEBP"}</span></span></button></div> : null}<div className="co-submodal-error" role="alert">{error}</div></div><div className="co-submodal-actions"><button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancel} disabled={busy}>Cancel</button><button type="submit" className="ro-action-btn ro-action-btn--dark" disabled={busy || (isDeliver && !receiptPhotos.length)}>{busy ? (isDeliver ? "Uploading…" : "Working…") : config[2]}</button></div></form></div>;
 }
 
-export default function OperationsOrdersClient({ initialOrders = [], bootstrapWarnings = [] }) {
+export default function OperationsOrdersClient({ initialOrders = [], initialPageInfo = null, bootstrapWarnings = [] }) {
   const [orders, setOrders] = useState(Array.isArray(initialOrders) ? initialOrders : []);
+  const [pageInfo, setPageInfo] = useState(initialPageInfo || { hasMore: false, nextCursor: null, limit: 36 });
+  const [listLoading, setListLoading] = useState(false);
   const [tab, setTab] = useState("all");
   const [type, setType] = useState("all");
   const [query, setQuery] = useState("");
@@ -1857,6 +1859,8 @@ export default function OperationsOrdersClient({ initialOrders = [], bootstrapWa
   const [maintenanceOptions, setMaintenanceOptions] = useState(null);
   const creatorProfileCache = useRef(new Map());
   const orderDetailsCache = useRef(new Map());
+  const listRequestRef = useRef(0);
+  const initialFilterKeyRef = useRef("all|all|");
   const { actionLoading, startActionLoading, finishActionLoading } = useActionLoading();
 
   useClassicHeaderSearch(query, setQuery, "Search by reason or user...");
@@ -1876,6 +1880,19 @@ export default function OperationsOrdersClient({ initialOrders = [], bootstrapWa
     if (!query.trim()) params.delete("q"); else params.set("q", query.trim());
     const search = params.toString();
     window.history.replaceState({}, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
+  }, [tab, type, query]);
+
+  useEffect(() => {
+    const key = `${tab}|${type}|${query.trim()}`;
+    if (key === initialFilterKeyRef.current) return undefined;
+    initialFilterKeyRef.current = key;
+    const timer = window.setTimeout(() => {
+      fetchOrdersPage({ reset: true }).catch((error) => {
+        setNotice(error?.message || "Failed to load Operations Orders.");
+        window.setTimeout(() => setNotice(""), 4000);
+      });
+    }, query.trim() ? 300 : 0);
+    return () => window.clearTimeout(timer);
   }, [tab, type, query]);
 
   useEffect(() => {
@@ -1920,16 +1937,50 @@ export default function OperationsOrdersClient({ initialOrders = [], bootstrapWa
     });
   }, [tabGroups, type, query]);
 
-  async function refreshOrders() {
-    const response = await fetch("/api/orders/requested?scope=all-system&mode=summary&_fresh=1", { credentials: "include", cache: "no-store" });
-    if (response.status === 401) {
-      window.location.href = "/login?next=/next/operations-orders";
-      return;
+  async function fetchOrdersPage({ reset = true, fresh = false } = {}) {
+    const requestId = ++listRequestRef.current;
+    setListLoading(true);
+    try {
+      const params = new URLSearchParams({
+        scope: "all-system",
+        mode: "summary",
+        paged: "1",
+        tab,
+        filterType: type,
+        limit: String(pageInfo?.limit || 36),
+      });
+      if (query.trim()) params.set("q", query.trim());
+      if (!reset && pageInfo?.nextCursor !== null && pageInfo?.nextCursor !== undefined) params.set("cursor", String(pageInfo.nextCursor));
+      if (fresh) params.set("_fresh", "1");
+      const response = await fetch(`/api/orders/requested?${params.toString()}`, { credentials: "include", cache: "no-store" });
+      if (response.status === 401) {
+        window.location.href = "/login?next=/next/operations-orders";
+        return;
+      }
+      const data = await readJson(response);
+      if (!response.ok) throw new Error(data?.error || "Failed to load Operations Orders.");
+      if (requestId !== listRequestRef.current) return;
+      const items = Array.isArray(data) ? data : (Array.isArray(data?.items) ? data.items : []);
+      const nextPageInfo = !Array.isArray(data) && data?.pageInfo ? data.pageInfo : { hasMore: false, nextCursor: null, limit: pageInfo?.limit || 36 };
+      setOrders((current) => {
+        if (reset) return items;
+        const map = new Map((Array.isArray(current) ? current : []).map((item) => [text(item?.id), item]));
+        items.forEach((item) => map.set(text(item?.id), item));
+        return [...map.values()];
+      });
+      setPageInfo(nextPageInfo);
+      if (reset) {
+        orderDetailsCache.current.clear();
+        setSelected(null);
+        setEditMode(null);
+      }
+    } finally {
+      if (requestId === listRequestRef.current) setListLoading(false);
     }
-    const data = await readJson(response);
-    if (!response.ok) throw new Error(data?.error || "Failed to refresh Operations Orders.");
-    orderDetailsCache.current.clear();
-    setOrders(Array.isArray(data) ? data : []);
+  }
+
+  async function refreshOrders() {
+    return fetchOrdersPage({ reset: true, fresh: true });
   }
 
   async function openOrderDetails(group) {
@@ -2311,8 +2362,9 @@ export default function OperationsOrdersClient({ initialOrders = [], bootstrapWa
 
       <section className="operations-orders-list-surface" id="operations-orders-list">
         <div className="co-cards" id="requested-list">
-          {visibleGroups.length ? visibleGroups.map((group) => <OperationsOrderCard group={group} tab={tab} onOpen={openOrderDetails} onCreator={openCreatorProfile} key={group.key} />) : <div className="ops-no-data-state" role="status" aria-live="polite"><img className="ops-no-data-state__image" src="/next/images/no-data-illustration.png" alt="" loading="lazy"/><div className="ops-no-data-state__text">Sorry, No data available</div></div>}
+          {visibleGroups.length ? visibleGroups.map((group) => <OperationsOrderCard group={group} tab={tab} onOpen={openOrderDetails} onCreator={openCreatorProfile} key={group.key} />) : listLoading ? <div className="ops-no-data-state" role="status" aria-live="polite"><div className="ops-no-data-state__text">Loading orders…</div></div> : <div className="ops-no-data-state" role="status" aria-live="polite"><img className="ops-no-data-state__image" src="/next/images/no-data-illustration.png" alt="" loading="lazy"/><div className="ops-no-data-state__text">Sorry, No data available</div></div>}
         </div>
+        {pageInfo?.hasMore ? <div style={{ display: "flex", justifyContent: "center", padding: "16px 0 4px" }}><button type="button" className="ro-action-btn ro-action-btn--light" disabled={listLoading} onClick={() => fetchOrdersPage({ reset: false }).catch((error) => { setNotice(error?.message || "Failed to load more orders."); window.setTimeout(() => setNotice(""), 4000); })}>{listLoading ? "Loading…" : "Load more orders"}</button></div> : null}
       </section>
 
       <OrderModal

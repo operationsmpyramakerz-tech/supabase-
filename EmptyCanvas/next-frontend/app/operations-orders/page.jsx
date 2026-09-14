@@ -55,7 +55,11 @@ export default async function OperationsOrdersPage() {
 
   const resources = resourceMap(response.data);
   const account = getResource(resources, "/api/account", null);
-  const orders = getResource(resources, "/api/orders/requested", []);
+  const ordersPayload = getResource(resources, "/api/orders/requested", []);
+  const orders = Array.isArray(ordersPayload)
+    ? ordersPayload
+    : (Array.isArray(ordersPayload?.items) ? ordersPayload.items : []);
+  const pageInfo = !Array.isArray(ordersPayload) && ordersPayload?.pageInfo ? ordersPayload.pageInfo : null;
 
   if (!account) redirect("/login?next=/next/operations-orders");
 
@@ -69,6 +73,7 @@ export default async function OperationsOrdersPage() {
     >
       <OperationsOrdersClient
         initialOrders={Array.isArray(orders) ? orders : []}
+        initialPageInfo={pageInfo}
         bootstrapWarnings={response.data.omitted || []}
       />
     </AppShell>

@@ -604,8 +604,10 @@ function CreatorProfilePopover({ state, onClose }) {
     </>}
   </div></div>;
 }
-export default function OrdersReviewClient({ initialOrders = [], bootstrapWarnings = [] }) {
+export default function OrdersReviewClient({ initialOrders = [], initialPageInfo = null, bootstrapWarnings = [] }) {
   const [orders, setOrders] = useState(Array.isArray(initialOrders) ? initialOrders : []);
+  const [pageInfo, setPageInfo] = useState(initialPageInfo || { hasMore: false, nextCursor: null, limit: 36 });
+  const [listLoading, setListLoading] = useState(false);
   const [tab, setTab] = useState("all");
   const [type, setType] = useState("all");
   const [query, setQuery] = useState("");
@@ -627,6 +629,8 @@ export default function OrdersReviewClient({ initialOrders = [], bootstrapWarnin
   const [detailLoadingKey, setDetailLoadingKey] = useState("");
   const [detailError, setDetailError] = useState("");
   const creatorProfileCache = useRef(new Map());
+  const listRequestRef = useRef(0);
+  const initialFilterKeyRef = useRef("all|all|");
 
   useClassicHeaderSearch(query, setQuery, "Search by reason or item...");
 
@@ -646,6 +650,15 @@ export default function OrdersReviewClient({ initialOrders = [], bootstrapWarnin
     if (!query.trim()) params.delete("q"); else params.set("q", query.trim());
     const search = params.toString();
     window.history.replaceState({}, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
+  }, [tab, type, query]);
+  useEffect(() => {
+    const key = `${tab}|${type}|${query.trim()}`;
+    if (key === initialFilterKeyRef.current) return undefined;
+    initialFilterKeyRef.current = key;
+    const timer = window.setTimeout(() => {
+      fetchReviewPage({ reset: true }).catch((error) => showNotice(error?.message || "Failed to load review orders."));
+    }, query.trim() ? 300 : 0);
+    return () => window.clearTimeout(timer);
   }, [tab, type, query]);
   useEffect(() => {
     const close = (event) => {
@@ -755,18 +768,45 @@ export default function OrdersReviewClient({ initialOrders = [], bootstrapWarnin
       setDetailLoadingKey((current) => current === group.key ? "" : current);
     }
   }
+  async function fetchReviewPage({ reset = true } = {}) {
+    const requestId = ++listRequestRef.current;
+    setListLoading(true);
+    try {
+      const params = new URLSearchParams({
+        tab,
+        mode: "summary",
+        paged: "1",
+        filterType: type,
+        limit: String(pageInfo?.limit || 36),
+      });
+      if (query.trim()) params.set("q", query.trim());
+      if (!reset && pageInfo?.nextCursor !== null && pageInfo?.nextCursor !== undefined) params.set("cursor", String(pageInfo.nextCursor));
+      const response = await fetch(`/api/sv-orders?${params.toString()}`, { credentials: "include", cache: "no-store" });
+      if (response.status === 401) { window.location.href = "/login?next=/next/orders-review"; return; }
+      const data = await readJson(response);
+      if (!response.ok) throw new Error(data?.error || "Failed to load review orders.");
+      if (requestId !== listRequestRef.current) return;
+      const items = Array.isArray(data) ? data : (Array.isArray(data?.items) ? data.items : []);
+      const nextPageInfo = !Array.isArray(data) && data?.pageInfo ? data.pageInfo : { hasMore: false, nextCursor: null, limit: pageInfo?.limit || 36 };
+      setOrders((current) => {
+        if (reset) return items;
+        const map = new Map((Array.isArray(current) ? current : []).map((item) => [text(item?.id), item]));
+        items.forEach((item) => map.set(text(item?.id), item));
+        return [...map.values()];
+      });
+      setPageInfo(nextPageInfo);
+      if (reset) {
+        setSelectedKey("");
+        setDetailGroups(new Map());
+        setDetailError("");
+      }
+    } finally {
+      if (requestId === listRequestRef.current) setListLoading(false);
+    }
+  }
+
   async function refreshOrders() {
-    const [activeResponse, archiveResponse] = await Promise.all([
-      fetch("/api/sv-orders?tab=all&mode=summary", { credentials: "include", cache: "no-store" }),
-      fetch("/api/sv-orders?tab=archive&mode=summary", { credentials: "include", cache: "no-store" }),
-    ]);
-    if (activeResponse.status === 401 || archiveResponse.status === 401) { window.location.href = "/login?next=/next/orders-review"; return; }
-    const [activeData, archiveData] = await Promise.all([readJson(activeResponse), readJson(archiveResponse)]);
-    if (!activeResponse.ok) throw new Error(activeData?.error || "Failed to refresh review orders.");
-    if (!archiveResponse.ok) throw new Error(archiveData?.error || "Failed to refresh archived review orders.");
-    setOrders([...(Array.isArray(activeData) ? activeData : []), ...(Array.isArray(archiveData) ? archiveData : [])]);
-    setDetailGroups(new Map());
-    setDetailError("");
+    return fetchReviewPage({ reset: true });
   }
   async function updateDecision(item, decision, rejectedReason = "") {
     const id = text(item?.id);
@@ -916,7 +956,7 @@ export default function OrdersReviewClient({ initialOrders = [], bootstrapWarnin
       </div>
     </div>
 
-    <section className="orders-review-list-surface" id="sv-orders"><div className="co-cards" id="sv-list">{visibleGroups.length ? visibleGroups.map((group) => <OrderReviewCard group={group} activeTab={tab} onOpen={openReviewDetails} onCreator={openCreatorProfile} key={group.key}/>) : <div className="ops-no-data-state" role="status" aria-live="polite"><img className="ops-no-data-state__image" src="/next/images/no-data-illustration.png" alt="" loading="lazy"/><div className="ops-no-data-state__text">Sorry, No data available</div></div>}</div></section>
+    <section className="orders-review-list-surface" id="sv-orders"><div className="co-cards" id="sv-list">{visibleGroups.length ? visibleGroups.map((group) => <OrderReviewCard group={group} activeTab={tab} onOpen={openReviewDetails} onCreator={openCreatorProfile} key={group.key}/>) : listLoading ? <div className="ops-no-data-state" role="status" aria-live="polite"><div className="ops-no-data-state__text">Loading orders…</div></div> : <div className="ops-no-data-state" role="status" aria-live="polite"><img className="ops-no-data-state__image" src="/next/images/no-data-illustration.png" alt="" loading="lazy"/><div className="ops-no-data-state__text">Sorry, No data available</div></div>}</div>{pageInfo?.hasMore ? <div style={{ display: "flex", justifyContent: "center", padding: "16px 0 4px" }}><button type="button" className="ro-action-btn ro-action-btn--light" disabled={listLoading} onClick={() => fetchReviewPage({ reset: false }).catch((error) => showNotice(error?.message || "Failed to load more orders."))}>{listLoading ? "Loading…" : "Load more orders"}</button></div> : null}</section>
 
     {selectedKey && !selected ? <ReviewDetailsLoadState group={selectedSummary} loading={detailLoadingKey === selectedKey} error={detailError} onRetry={() => selectedSummary && openReviewDetails(selectedSummary, { force: true })} onClose={closeReviewDetails}/> : null}
     <ReviewDetailsModal group={selected} activeTab={tab} busyIds={busyIds} onClose={closeReviewDetails} onQuantitySave={saveQuantity} onDecision={beginDecision} onBulkDecision={beginBulkDecision} onPasswordAction={beginPasswordAction} onReason={setReasonView} onExport={exportOrder}/>

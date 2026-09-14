@@ -55,15 +55,11 @@ export default async function OrdersReviewPage() {
 
   const resources = resourceMap(response.data);
   const account = getResource(resources, "/api/account", null);
-  const activePayload = resources.get("/api/sv-orders?tab=all") ?? [];
-  const archivedPayload = resources.get("/api/sv-orders?tab=archive") ?? [];
-  const activeOrders = Array.isArray(activePayload)
+  const activePayload = getResource(resources, "/api/sv-orders?tab=all", []);
+  const orders = Array.isArray(activePayload)
     ? activePayload
     : (Array.isArray(activePayload?.items) ? activePayload.items : []);
-  const archivedOrders = Array.isArray(archivedPayload)
-    ? archivedPayload
-    : (Array.isArray(archivedPayload?.items) ? archivedPayload.items : []);
-  const orders = [...activeOrders, ...archivedOrders];
+  const pageInfo = !Array.isArray(activePayload) && activePayload?.pageInfo ? activePayload.pageInfo : null;
 
   if (!account) redirect("/login?next=/next/orders-review");
 
@@ -77,6 +73,7 @@ export default async function OrdersReviewPage() {
     >
       <OrdersReviewClient
         initialOrders={orders}
+        initialPageInfo={pageInfo}
         bootstrapWarnings={response.data.omitted || []}
       />
     </AppShell>
