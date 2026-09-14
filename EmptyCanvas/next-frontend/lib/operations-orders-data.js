@@ -88,7 +88,7 @@ function statusIndex(value) {
   if (/(archive|archived)/.test(status)) return 5;
   if (/(arrived|delivered|received)/.test(status)) return 4;
   if (/(shipped|shipping|on the way|delivering|prepared)/.test(status)) return 3;
-  if (/(in progress|inprogress|progress)/.test(status)) return 2;
+  if (/(in progress|inprogress|progress|approved)/.test(status)) return 2;
   return 1;
 }
 
@@ -186,13 +186,155 @@ function pageLimit(value) {
   return Math.max(10, Math.min(PAGE_MAX, Math.floor(parsed)));
 }
 
-async function candidateNumbers({ cursor = null, scanGroups = 90 } = {}) {
+function pageCursor(value) {
+  if (value === null || value === undefined || String(value).trim() === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function orderTypeKey(value) {
+  return String(value || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function orderTypeLabel(value) {
+  const key = orderTypeKey(value);
+  if (key === "requestproducts") return "Request Products";
+  if (key === "withdrawproducts") return "Withdraw Products";
+  if (key === "requestmaintenance") return "Request Maintenance";
+  return "";
+}
+
+function approvalKey(value) {
+  const state = norm(value).replace(/[_.-]+/g, " ");
+  if (state.includes("reject")) return "rejected";
+  if (state.includes("approv")) return "approved";
+  return "not-started";
+}
+
+function decision(item = {}) {
+  const operations = approvalKey(item.operationsApproval ?? item.operations_approval);
+  const supervisor = approvalKey(item.svApproval ?? item.sv_approval ?? item.approval);
+  if (operations === "rejected" || supervisor === "rejected" || text(item.rejectedReason ?? item.rejected_reason)) return "rejected";
+  if (operations === "approved" || supervisor === "approved" || statusIndex(item.status) === 2) return "approved";
+  return "not-started";
+}
+
+function groupMeta(items = []) {
+  const stage = Math.max(1, ...items.map((item) => statusIndex(item?.status)));
+  const hasRemaining = items.some((item) => Math.abs(Number(item?.quantityRemaining ?? item?.quantity_remaining ?? 0) || 0) > 1e-9);
+  const hasReceived = items.some((item) => Math.abs(Number(item?.quantityReceived ?? item?.quantity_received_by_operations ?? 0) || 0) > 1e-9);
+  const rawType = text(items?.[0]?.orderType ?? items?.[0]?.order_type);
+  const maintenance = orderTypeKey(rawType) === "requestmaintenance";
+  return { stage, hasRemaining, hasReceived, maintenance };
+}
+
+function groupMatchesTab(items = [], tab = "all") {
+  const cleanTab = String(tab || "all").trim().toLowerCase();
+  if (cleanTab === "approved" || cleanTab === "rejected") {
+    return items.some((item) => statusIndex(item?.status) === 2 && decision(item) === cleanTab);
+  }
+  const meta = groupMeta(items);
+  if (cleanTab === "all") return meta.stage < 5;
+  if (cleanTab === "archive") return meta.stage >= 5;
+  if (cleanTab === "delivered") return meta.stage === 4;
+  if (cleanTab === "remaining") return meta.stage === 3 && !meta.maintenance && meta.hasRemaining;
+  if (cleanTab === "received") return meta.stage === 3 && (meta.maintenance || meta.hasReceived);
+  return true;
+}
+
+function rowsForTab(items = [], tab = "all") {
+  const cleanTab = String(tab || "all").trim().toLowerCase();
+  if (cleanTab === "approved" || cleanTab === "rejected") {
+    return items.filter((item) => statusIndex(item?.status) === 2 && decision(item) === cleanTab);
+  }
+  return items;
+}
+
+function groupSearchText(items = []) {
+  return items.flatMap((item) => [
+    item?.orderId,
+    item?.orderIdNumber,
+    item?.reason,
+    item?.createdByName,
+    item?.createdById,
+    item?.orderType,
+    item?.productName,
+    item?.issueDescription,
+    item?.actualIssueDescription,
+    item?.repairAction,
+    item?.resolutionMethod,
+    item?.operationsByName,
+    item?.receiptNumber,
+    item?.rejectedReason,
+  ]).map((value) => norm(value)).join(" ");
+}
+
+function filterText(value) {
+  return String(value ?? "").trim().replace(/[,*%()]/g, " ").replace(/\s+/g, " ");
+}
+
+function searchLogic(query = "") {
+  const clean = filterText(query);
+  if (!clean) return null;
+  const numeric = clean.match(/^(?:ord[-\s]*)?(\d+)$/i);
+  if (numeric) return { orderNumber: Number(numeric[1]), clauses: null };
+  return {
+    orderNumber: null,
+    clauses: [
+      `reason.ilike.*${clean}*`,
+      `team_member_name.ilike.*${clean}*`,
+      `product_name.ilike.*${clean}*`,
+      `issue_description.ilike.*${clean}*`,
+      `actual_issue_description.ilike.*${clean}*`,
+      `repair_action.ilike.*${clean}*`,
+      `resolution_method.ilike.*${clean}*`,
+      `person_received_by_operations.ilike.*${clean}*`,
+      `receipt_number.ilike.*${clean}*`,
+      `rejected_reason.ilike.*${clean}*`,
+    ],
+  };
+}
+
+function statusLogic(tab = "all") {
+  const cleanTab = String(tab || "all").trim().toLowerCase();
+  if (cleanTab === "archive") return ["status.ilike.*archive*"];
+  if (cleanTab === "delivered") return ["status.ilike.*arrived*", "status.ilike.*delivered*", "status.ilike.*received*"];
+  if (cleanTab === "remaining" || cleanTab === "received") {
+    return ["status.ilike.*shipped*", "status.ilike.*shipping*", "status.ilike.*prepared*", "status.ilike.*delivering*"];
+  }
+  if (cleanTab === "approved" || cleanTab === "rejected") return ["status.ilike.*progress*", "status.ilike.*approved*"];
+  return null;
+}
+
+function logicalParams({ query = "", tab = "all", type = "all" } = {}) {
+  const params = {};
+  const logicGroups = [];
+  const search = searchLogic(query);
+  if (Number.isFinite(search?.orderNumber)) params.order_number = `eq.${search.orderNumber}`;
+  else if (search?.clauses?.length) logicGroups.push(search.clauses);
+
+  const statusClauses = statusLogic(tab);
+  if (statusClauses?.length) logicGroups.push(statusClauses);
+
+  const typeLabel = orderTypeLabel(type);
+  if (typeLabel) params.order_type = `ilike.*${typeLabel.replace(/[*%]/g, "")}*`;
+
+  if (logicGroups.length === 1) params.or = `(${logicGroups[0].join(",")})`;
+  else if (logicGroups.length > 1) params.and = `(${logicGroups.map((clauses) => `or(${clauses.join(",")})`).join(",")})`;
+  return params;
+}
+
+async function candidateNumbers({ cursor = null, scanGroups = 90, filters = {} } = {}) {
   const wanted = Math.max(20, Math.min(240, Number(scanGroups) || 90));
   const unique = [];
   const seen = new Set();
   let offset = 0;
   let exhausted = false;
   const rowChunk = 1000;
+  const base = { ...(filters || {}) };
+  const directNumber = String(base.order_number || "").startsWith("eq.")
+    ? Number(String(base.order_number).slice(3))
+    : null;
 
   while (unique.length < wanted + 1 && !exhausted && offset < 12000) {
     const params = {
@@ -200,8 +342,13 @@ async function candidateNumbers({ cursor = null, scanGroups = 90 } = {}) {
       order: "order_number.desc",
       limit: String(rowChunk),
       offset: String(offset),
-      order_number: cursor === null || cursor === undefined || String(cursor).trim() === "" ? "not.is.null" : `lt.${Number(cursor)}`,
+      ...base,
     };
+    if (!Number.isFinite(directNumber)) {
+      const parsedCursor = pageCursor(cursor);
+      if (parsedCursor !== null) params.order_number = `lt.${parsedCursor}`;
+      else if (!params.order_number) params.order_number = "not.is.null";
+    }
     const rows = await select(tableName(), params);
     const chunk = Array.isArray(rows) ? rows : [];
     for (const row of chunk) {
@@ -211,7 +358,7 @@ async function candidateNumbers({ cursor = null, scanGroups = 90 } = {}) {
       unique.push(orderNumber);
       if (unique.length >= wanted + 1) break;
     }
-    if (chunk.length < rowChunk) exhausted = true;
+    if (chunk.length < rowChunk || Number.isFinite(directNumber)) exhausted = true;
     else offset += chunk.length;
   }
 
@@ -224,18 +371,23 @@ async function candidateNumbers({ cursor = null, scanGroups = 90 } = {}) {
 async function rowsByNumbers(numbers = []) {
   const clean = [...new Set(numbers.map(Number).filter(Number.isFinite))];
   if (!clean.length) return [];
-  const baseParams = {
-    order_number: `in.(${clean.join(",")})`,
-    order: "order_number.desc,notion_created_time.desc,id.desc",
-    limit: String(Math.max(1000, clean.length * 200)),
-  };
-  try {
-    const rows = await select(tableName(), { ...baseParams, select: SUMMARY_SELECT });
-    return Array.isArray(rows) ? rows : [];
-  } catch {
-    const rows = await select(tableName(), { ...baseParams, select: "*" });
-    return Array.isArray(rows) ? rows : [];
+  const out = [];
+  for (let index = 0; index < clean.length; index += 24) {
+    const batch = clean.slice(index, index + 24);
+    const baseParams = {
+      order_number: `in.(${batch.join(",")})`,
+      order: "order_number.desc,notion_created_time.desc,id.desc",
+      limit: "5000",
+    };
+    try {
+      const rows = await select(tableName(), { ...baseParams, select: SUMMARY_SELECT });
+      if (Array.isArray(rows)) out.push(...rows);
+    } catch {
+      const rows = await select(tableName(), { ...baseParams, select: "*" });
+      if (Array.isArray(rows)) out.push(...rows);
+    }
   }
+  return out;
 }
 
 function groupRows(rows = []) {
@@ -250,17 +402,40 @@ function groupRows(rows = []) {
   return groups;
 }
 
-export async function loadOperationsOrdersInitialPage({ limit = PAGE_LIMIT } = {}) {
+export async function loadOperationsOrdersPage({
+  tab = "all",
+  type = "all",
+  query = "",
+  cursor = null,
+  limit = PAGE_LIMIT,
+} = {}) {
   if (!isSupabaseConfigured()) return null;
   const safeLimit = pageLimit(limit);
   const outputGroups = [];
-  let nextCursor = null;
+  let nextCursor = pageCursor(cursor);
   let hasMore = true;
   let loops = 0;
 
   while (outputGroups.length < safeLimit && hasMore && loops < 12) {
     loops += 1;
-    const candidates = await candidateNumbers({ cursor: nextCursor, scanGroups: Math.max(safeLimit * 2, 60) });
+    const filters = logicalParams({ query, tab, type });
+    let candidates;
+    try {
+      candidates = await candidateNumbers({
+        cursor: nextCursor,
+        scanGroups: Math.max(safeLimit * 2, 60),
+        filters,
+      });
+    } catch {
+      // Older/custom schemas can reject one of the projected filter columns.
+      // Keep the optimized order-number paging and apply the exact filters in
+      // JavaScript rather than falling all the way back to a full-table scan.
+      candidates = await candidateNumbers({
+        cursor: nextCursor,
+        scanGroups: Math.max(safeLimit * 2, 60),
+        filters: {},
+      });
+    }
     if (!candidates.numbers.length) {
       hasMore = false;
       break;
@@ -268,20 +443,24 @@ export async function loadOperationsOrdersInitialPage({ limit = PAGE_LIMIT } = {
 
     const rows = await rowsByNumbers(candidates.numbers);
     const groups = groupRows(rows);
+    const cleanType = orderTypeKey(type);
+    const directSearch = searchLogic(query);
+    const needle = Number.isFinite(directSearch?.orderNumber) ? "" : norm(query);
     let processedCandidates = 0;
+
     for (const orderNumber of candidates.numbers) {
       processedCandidates += 1;
       nextCursor = orderNumber;
       const items = groups.get(orderNumber) || [];
-      if (!items.length) continue;
-      const stage = Math.max(1, ...items.map((item) => statusIndex(item?.status)));
-      if (stage >= 5) continue;
-      outputGroups.push({ orderNumber, items });
+      if (!items.length || !groupMatchesTab(items, tab)) continue;
+      if (cleanType && cleanType !== "all" && orderTypeKey(items[0]?.orderType || "") !== cleanType) continue;
+      if (needle && !groupSearchText(items).includes(needle)) continue;
+      outputGroups.push({ orderNumber, items: rowsForTab(items, tab) });
       if (outputGroups.length >= safeLimit) break;
     }
-    // `candidateNumbers.hasMore` only tells us whether there are groups beyond
-    // the scanned candidate window. If this page filled up before consuming
-    // the whole current window, those lower order numbers are also "more".
+
+    // There can still be unconsumed groups inside the current candidate window
+    // even when Supabase itself has no rows beyond that window.
     hasMore = candidates.hasMore || processedCandidates < candidates.numbers.length;
     if (outputGroups.length >= safeLimit || !hasMore) break;
   }
@@ -293,7 +472,11 @@ export async function loadOperationsOrdersInitialPage({ limit = PAGE_LIMIT } = {
       limit: safeLimit,
       groupCount: pageGroups.length,
       hasMore: !!hasMore,
-      nextCursor: hasMore && Number.isFinite(Number(nextCursor)) ? Number(nextCursor) : null,
+      nextCursor: hasMore && pageCursor(nextCursor) !== null ? pageCursor(nextCursor) : null,
     },
   };
+}
+
+export async function loadOperationsOrdersInitialPage({ limit = PAGE_LIMIT } = {}) {
+  return await loadOperationsOrdersPage({ tab: "all", type: "all", query: "", cursor: null, limit });
 }

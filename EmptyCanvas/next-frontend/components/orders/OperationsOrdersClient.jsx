@@ -1952,7 +1952,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
       if (query.trim()) params.set("q", query.trim());
       if (!reset && pageInfo?.nextCursor !== null && pageInfo?.nextCursor !== undefined) params.set("cursor", String(pageInfo.nextCursor));
       if (fresh) params.set("_fresh", "1");
-      const response = await fetch(`/api/orders/requested?${params.toString()}`, { credentials: "include", cache: "no-store" });
+      const response = await fetch(`/api/orders/requested/paged-summary?${params.toString()}`, { credentials: "include", cache: "no-store" });
       if (response.status === 401) {
         window.location.href = "/login?next=/next/operations-orders";
         return;
