@@ -5180,6 +5180,40 @@ async function _sbCurrentOrderDetailsByIds(req, orderIds = []) {
   return visible.map(_sbSerializeOrderRow);
 }
 
+const _SB_MAINTENANCE_SUMMARY_SELECT = [
+  "id",
+  "reason",
+  "order_number",
+  "order_type",
+  "notion_created_time",
+  "product_name",
+  "unit_price",
+  "quantity_requested",
+  "quantity_progress",
+  "quantity_edited_by_supervisor",
+  "quantity_received_by_operations",
+  "quantity_remaining",
+  "status",
+  "issue_description",
+  "serial_number",
+  "actual_issue_description",
+  "repair_action",
+  "resolution_method",
+  "spare_parts_replaced",
+  "receipt_number",
+  "team_member_id",
+  "team_member_name",
+  "person_received_by_operations",
+].join(",");
+
+function _sbSerializeMaintenanceSummaryRow(row = {}) {
+  return {
+    ..._sbSerializeOrderRow(row),
+    summaryOnly: true,
+    source: "supabase",
+  };
+}
+
 async function _sbMaintenanceOrdersList() {
   const rows = await _sbSelectOrdersRows({ approvedOnly: false, maintenanceOnly: true });
   // Maintenance Orders only needs the data stored on each maintenance row; it
@@ -5187,9 +5221,66 @@ async function _sbMaintenanceOrdersList() {
   return rows.map(_sbSerializeOrderRow);
 }
 
+async function _sbMaintenanceOrdersSummaryList() {
+  let rows;
+  try {
+    rows = await _sbSelectOrdersRows({
+      approvedOnly: false,
+      maintenanceOnly: true,
+      select: _SB_MAINTENANCE_SUMMARY_SELECT,
+    });
+  } catch (error) {
+    // Customized/older schemas can miss a recently introduced maintenance
+    // column. Keep the page available while preserving summary semantics.
+    console.warn("[maintenance-orders] summary projection unavailable; using compatibility query:", error?.message || error);
+    rows = await _sbSelectOrdersRows({ approvedOnly: false, maintenanceOnly: true });
+  }
+  return (rows || []).map(_sbSerializeMaintenanceSummaryRow);
+}
+
+async function _sbMaintenanceOrderDetailsByIds(orderIds = []) {
+  const ids = Array.from(new Set((Array.isArray(orderIds) ? orderIds : [])
+    .map((id) => String(id || "").trim())
+    .filter(Boolean)))
+    .slice(0, 500);
+  if (!ids.length) return [];
+
+  const rows = await supabaseDb.selectByIds(_sbOrdersTable(), ids, {
+    idColumn: "id",
+    select: "*",
+    order: "notion_created_time.desc,id.desc",
+    limit: Math.max(500, ids.length),
+  });
+  const maintenanceRows = (Array.isArray(rows) ? rows : []).filter((row) =>
+    _normKeyOrderType(_sbOrderGet(row, ["order_type", "Order Type", "orderType", "OrderType"])) === _normKeyOrderType("Request Maintenance")
+  );
+  const visibleIds = new Set(maintenanceRows.map((row) => String(_sbOrderGet(row, ["id", "ID"]) ?? "").trim()).filter(Boolean));
+  if (ids.some((id) => !visibleIds.has(id))) {
+    const error = new Error("One or more maintenance order components are not available.");
+    error.status = 404;
+    throw error;
+  }
+  return maintenanceRows.map(_sbSerializeOrderRow);
+}
+
 async function _sbMaintenanceOrdersPayload({ forceFresh = false } = {}) {
   const cacheKey = "cache:api:orders:maintenance:supabase:v1";
   const load = async () => _sbMaintenanceOrdersList();
+
+  if (forceFresh) {
+    await cacheDel(cacheKey);
+    const fresh = await load();
+    _memSet(cacheKey, fresh, 60);
+    await _redisSet(cacheKey, fresh, 60);
+    return fresh;
+  }
+
+  return await cacheGetOrSet(cacheKey, 60, load);
+}
+
+async function _sbMaintenanceOrdersSummaryPayload({ forceFresh = false } = {}) {
+  const cacheKey = "cache:api:orders:maintenance-summary:supabase:v1";
+  const load = async () => _sbMaintenanceOrdersSummaryList();
 
   if (forceFresh) {
     await cacheDel(cacheKey);
@@ -5479,6 +5570,7 @@ async function _sbInvalidateOrdersCaches(req = null) {
     "cache:api:orders:requested-summary:supabase:v1:approved",
     "cache:api:orders:requested-summary:supabase:v1:all-system",
     "cache:api:orders:maintenance:supabase:v1",
+    "cache:api:orders:maintenance-summary:supabase:v1",
     "cache:api:orders:current:supabase:v1",
     "cache:api:orders:current:supabase:v1:all",
     "cache:api:orders:current-summary:supabase:v1:all",
@@ -18571,6 +18663,7 @@ app.get(
           String(req.query?._fresh || "") === "1" ||
           !!req.query?._refresh ||
           String(req.get("x-ops-hard-refresh") || "") === "1";
+        if (maintenanceOnly && summaryOnly) return res.json(await _sbMaintenanceOrdersSummaryPayload({ forceFresh }));
         if (maintenanceOnly) return res.json(await _sbMaintenanceOrdersPayload({ forceFresh }));
         if (summaryOnly) return res.json(await _sbRequestedOrdersSummaryPayload({ includeAllSystem, forceFresh }));
         return res.json(await _sbRequestedOrdersPayload({ includeAllSystem, forceFresh }));
@@ -19227,6 +19320,34 @@ app.post(
     } catch (error) {
       console.error("POST /api/orders/requested/details error:", error?.message || error);
       return res.status(500).json({ error: error?.message || "Failed to load order details." });
+    }
+  },
+);
+
+// Maintenance Orders list uses a lightweight payload; full component details
+// are fetched only when the user opens a maintenance order.
+app.post(
+  "/api/orders/requested/maintenance-details",
+  requireAuth,
+  requirePage(["Maintenance Orders", "Requested Orders", "Operations Orders"]),
+  async (req, res) => {
+    try {
+      const orderIds = Array.from(new Set((Array.isArray(req.body?.orderIds) ? req.body.orderIds : [])
+        .map((id) => String(id || "").trim())
+        .filter(Boolean)))
+        .slice(0, 500);
+      if (!orderIds.length) return res.status(400).json({ error: "orderIds required" });
+
+      if (_sbOrdersEnabled()) {
+        return res.json(await _sbMaintenanceOrderDetailsByIds(orderIds));
+      }
+
+      const all = await _pageBootstrapFetchExistingRoute(req, "/api/orders/requested?scope=maintenance", 25_000);
+      const wanted = new Set(orderIds);
+      return res.json((Array.isArray(all) ? all : []).filter((item) => wanted.has(String(item?.id || ""))));
+    } catch (error) {
+      console.error("POST /api/orders/requested/maintenance-details error:", error?.message || error);
+      return res.status(error?.status || 500).json({ error: error?.message || "Failed to load maintenance order details." });
     }
   },
 );
@@ -25419,12 +25540,13 @@ async function _pageBootstrapOperationsOrders(req) {
 async function _pageBootstrapMaintenanceOrders(req) {
   return Promise.all([
     _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapAccountPayload(req)),
-    _pageBootstrapLoad('/api/orders/requested?scope=maintenance', 20_000, () =>
+    _pageBootstrapLoad('/api/orders/requested?scope=maintenance&mode=summary', 20_000, () =>
       _sbOrdersEnabled()
-        ? _sbMaintenanceOrdersPayload()
+        ? _sbMaintenanceOrdersSummaryPayload()
         : _pageBootstrapFetchExistingRoute(req, '/api/orders/requested?scope=maintenance', 20_000)
     ),
-    _pageBootstrapLoad('/api/orders/requested/maintenance-form-options', 5 * 60_000, () => _maintenanceFormOptionsPayload()),
+    // Maintenance form options (including replacement products) are intentionally
+    // lazy-loaded when Log Maintenance is opened instead of blocking page startup.
   ]);
 }
 

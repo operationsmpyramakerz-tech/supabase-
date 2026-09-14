@@ -954,6 +954,7 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
   const [notice, setNotice] = useState("");
   const [creatorState, setCreatorState] = useState(null);
   const creatorProfileCache = useRef(new Map());
+  const orderDetailsCache = useRef(new Map());
 
   useClassicHeaderSearch(query, setQuery, "Search by issue, product, or user...");
 
@@ -1005,14 +1006,55 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
   }, [groups, tab, type, query]);
 
   async function refreshOrders() {
-    const response = await fetch("/api/orders/requested?scope=maintenance&_fresh=1", { credentials: "include", cache: "no-store" });
+    const response = await fetch("/api/orders/requested?scope=maintenance&mode=summary&_fresh=1", { credentials: "include", cache: "no-store" });
     if (response.status === 401) {
       window.location.href = "/login?next=/next/maintenance-orders";
       return;
     }
     const data = await readJson(response);
     if (!response.ok) throw new Error(data?.error || "Failed to refresh Maintenance Orders.");
+    orderDetailsCache.current.clear();
     setOrders(Array.isArray(data) ? data : []);
+  }
+
+  async function openOrderDetails(group) {
+    if (!group) return;
+    const needsDetails = (Array.isArray(group.items) ? group.items : []).some((item) => Boolean(item?.summaryOnly));
+    if (!needsDetails) {
+      setSelected(group);
+      return;
+    }
+
+    const cacheKey = text(group.key || group.orderIdLabel || group.orderIds?.join("|"));
+    const cached = cacheKey ? orderDetailsCache.current.get(cacheKey) : null;
+    if (cached) {
+      setSelected(cached);
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/orders/requested/maintenance-details", {
+        method: "POST",
+        credentials: "include",
+        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderIds: group.orderIds }),
+      });
+      if (response.status === 401) {
+        window.location.href = "/login?next=/next/maintenance-orders";
+        return;
+      }
+      const data = await readJson(response);
+      if (!response.ok) throw new Error(data?.error || "Failed to load maintenance order details.");
+      const detailedGroups = buildGroups(Array.isArray(data) ? data : []);
+      const detailed = detailedGroups.find((item) => item.key === group.key) || detailedGroups[0];
+      if (!detailed) throw new Error("This maintenance order no longer exists or has no components.");
+      if (cacheKey) orderDetailsCache.current.set(cacheKey, detailed);
+      setSelected(detailed);
+    } catch (error) {
+      setNotice(error?.message || "Failed to load maintenance order details.");
+      window.setTimeout(() => setNotice(""), 4500);
+    }
   }
 
   function beginAction(action, group) {
@@ -1256,7 +1298,7 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
       </div>
 
       <section className="next-maintenance-orders-list-surface">
-        <div className="co-cards" id="requested-list">{visibleGroups.length ? visibleGroups.map((group) => <MaintenanceCard group={group} onOpen={setSelected} onCreator={openCreatorProfile} key={group.key} />) : <div className="ops-no-data-state" role="status" aria-live="polite"><img className="ops-no-data-state__image" src="/next/images/no-data-illustration.png" alt="" loading="lazy" /><div className="ops-no-data-state__text">Sorry, No data available</div></div>}</div>
+        <div className="co-cards" id="requested-list">{visibleGroups.length ? visibleGroups.map((group) => <MaintenanceCard group={group} onOpen={openOrderDetails} onCreator={openCreatorProfile} key={group.key} />) : <div className="ops-no-data-state" role="status" aria-live="polite"><img className="ops-no-data-state__image" src="/next/images/no-data-illustration.png" alt="" loading="lazy" /><div className="ops-no-data-state__text">Sorry, No data available</div></div>}</div>
       </section>
 
       <MaintenanceDetailsModal group={selected} busy={busy} onClose={() => setSelected(null)} onLog={openLog} onDone={(group) => { setActionError(""); setDoneGroup(group); }} onExport={exportOrder} onAction={beginAction} />
