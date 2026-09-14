@@ -5132,6 +5132,54 @@ async function _sbCurrentOrdersList(req) {
   return rows.map(_sbSerializeOrderRow);
 }
 
+async function _sbCurrentOrdersSummaryList(req) {
+  const username = String(req?.session?.username || "").trim();
+  let rows;
+  try {
+    rows = await _sbSelectOrdersRows({
+      approvedOnly: false,
+      memberName: username,
+      select: _SB_OPERATIONS_SUMMARY_SELECT,
+    });
+  } catch (error) {
+    // Keep older/custom Supabase schemas compatible. The optimized projection
+    // is preferred, but a missing summary column must never make Current Orders
+    // unavailable.
+    console.warn("[current-orders] summary projection unavailable; using compatibility query:", error?.message || error);
+    rows = await _sbSelectOrdersRows({ approvedOnly: false, memberName: username });
+  }
+  return (rows || []).map(_sbSerializeOperationsSummaryRow);
+}
+
+async function _sbCurrentOrderDetailsByIds(req, orderIds = []) {
+  const ids = Array.from(new Set((Array.isArray(orderIds) ? orderIds : [])
+    .map((id) => String(id || "").trim())
+    .filter(Boolean)))
+    .slice(0, 500);
+  if (!ids.length) return [];
+
+  const rows = await supabaseDb.selectByIds(_sbOrdersTable(), ids, {
+    idColumn: "id",
+    select: "*",
+    order: "notion_created_time.desc,id.desc",
+    limit: Math.max(500, ids.length),
+  });
+  const username = norm(req?.session?.username || "");
+  const visible = (Array.isArray(rows) ? rows : []).filter((row) => {
+    if (!username) return true;
+    const by = norm(_sbOrderGet(row, ["team_member_name", "teams_members", "Teams Members", "supervisor", "Supervisor"]));
+    return !by || by.includes(username) || username.includes(by);
+  });
+
+  const visibleIds = new Set(visible.map((row) => String(_sbOrderGet(row, ["id", "ID"]) ?? "").trim()).filter(Boolean));
+  if (ids.some((id) => !visibleIds.has(id))) {
+    const error = new Error("One or more order components are not available for this account.");
+    error.status = 404;
+    throw error;
+  }
+  return visible.map(_sbSerializeOrderRow);
+}
+
 async function _sbMaintenanceOrdersList() {
   const rows = await _sbSelectOrdersRows({ approvedOnly: false, maintenanceOnly: true });
   // Maintenance Orders only needs the data stored on each maintenance row; it
@@ -5183,6 +5231,31 @@ async function _sbCurrentOrdersPayload(req, { forceFresh = false } = {}) {
   const ids = new Set((allOrders || []).map((order) => String(order?.id || "")));
   const extras = recent.filter((row) => !ids.has(String(row?.id || "")));
   return (allOrders || [])
+    .concat(extras)
+    .sort((a, b) => new Date(b?.createdTime || 0) - new Date(a?.createdTime || 0));
+}
+
+async function _sbCurrentOrdersSummaryPayload(req, { forceFresh = false } = {}) {
+  const recent = _trimRecentOrdersForRequest(req);
+  const cacheKey = `cache:api:orders:current-summary:supabase:v1:${normKey(req?.session?.username || "all")}`;
+  const load = async () => _sbCurrentOrdersSummaryList(req);
+
+  const summaryRows = forceFresh
+    ? await (async () => {
+        await cacheDel(cacheKey);
+        const fresh = await load();
+        _memSet(cacheKey, fresh, 60);
+        await _redisSet(cacheKey, fresh, 60);
+        return fresh;
+      })()
+    : await cacheGetOrSet(cacheKey, 60, load);
+
+  // recentOrders can contain a just-created full row while Supabase/legacy
+  // propagation catches up. Keeping it here preserves the existing immediate
+  // visibility behavior; mixed full/summary rows are intentionally supported.
+  const ids = new Set((summaryRows || []).map((order) => String(order?.id || "")));
+  const extras = recent.filter((row) => !ids.has(String(row?.id || "")));
+  return (summaryRows || [])
     .concat(extras)
     .sort((a, b) => new Date(b?.createdTime || 0) - new Date(a?.createdTime || 0));
 }
@@ -5408,10 +5481,12 @@ async function _sbInvalidateOrdersCaches(req = null) {
     "cache:api:orders:maintenance:supabase:v1",
     "cache:api:orders:current:supabase:v1",
     "cache:api:orders:current:supabase:v1:all",
+    "cache:api:orders:current-summary:supabase:v1:all",
   ];
   const username = String(req?.session?.username || "").trim();
   if (username) {
     keys.push(`cache:api:orders:current:supabase:v1:${normKey(username)}`);
+    keys.push(`cache:api:orders:current-summary:supabase:v1:${normKey(username)}`);
     keys.push(`cache:api:orders:current-home-summary:supabase:v1:${normKey(username)}`);
   }
   await Promise.all(Array.from(new Set(keys)).map((key) => cacheDel(key)));
@@ -16982,7 +17057,10 @@ app.get(
           String(req.query?._fresh || "") === "1" ||
           !!req.query?._refresh ||
           String(req.get("x-ops-hard-refresh") || "") === "1";
-        return res.json(await _sbCurrentOrdersPayload(req, { forceFresh }));
+        const summaryOnly = String(req.query?.mode || "").trim().toLowerCase() === "summary";
+        return res.json(summaryOnly
+          ? await _sbCurrentOrdersSummaryPayload(req, { forceFresh })
+          : await _sbCurrentOrdersPayload(req, { forceFresh }));
       }
 
       const userId = await getSessionUserNotionId(req);
@@ -17276,6 +17354,222 @@ app.get(
 );
 
 
+// Full Current Orders component details are loaded only when a card is opened.
+// The initial page/list uses a lightweight summary projection for faster navigation.
+app.post(
+  "/api/orders/details",
+  requireAuth,
+  requirePage("Current Orders"),
+  async (req, res) => {
+    try {
+      const orderIds = Array.from(new Set((Array.isArray(req.body?.orderIds) ? req.body.orderIds : [])
+        .map((id) => String(id || "").trim())
+        .filter(Boolean)))
+        .slice(0, 500);
+      if (!orderIds.length) return res.status(400).json({ error: "orderIds required" });
+
+      if (_sbOrdersEnabled()) {
+        return res.json(await _sbCurrentOrderDetailsByIds(req, orderIds));
+      }
+
+      // Legacy compatibility: reuse the existing Current Orders list and only
+      // return the rows belonging to the opened card.
+      const all = await _pageBootstrapFetchExistingRoute(req, "/api/orders", 20_000);
+      const wanted = new Set(orderIds);
+      return res.json((Array.isArray(all) ? all : []).filter((item) => wanted.has(String(item?.id || ""))));
+    } catch (error) {
+      console.error("POST /api/orders/details error:", error?.message || error);
+      return res.status(error?.status || 500).json({ error: error?.message || "Failed to load order details." });
+    }
+  },
+);
+
+
+
+function _sbOrderVisibleToCurrentUser(req, row = {}) {
+  const username = norm(req?.session?.username || "");
+  if (!username) return true;
+  const by = norm(_sbOrderGet(row, ["team_member_name", "teams_members", "Teams Members", "supervisor", "Supervisor"]));
+  return !by || by.includes(username) || username.includes(by);
+}
+
+async function _sbProductsMapForOrderItems(items = []) {
+  if (!_sbProductsEnabled()) return new Map();
+  const names = Array.from(new Set((Array.isArray(items) ? items : [])
+    .map((item) => String(item?.productName || "").trim())
+    .filter(Boolean)));
+  if (!names.length) return new Map();
+
+  try {
+    const quoted = names
+      .map((name) => `"${String(name).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`)
+      .join(",");
+    const rows = await supabaseDb.select(_sbProductsTable(), {
+      select: "*",
+      name: `in.(${quoted})`,
+      limit: Math.max(50, names.length * 2),
+    });
+    const map = new Map();
+    for (const row of Array.isArray(rows) ? rows : []) {
+      const product = _sbSerializeProductRow(row);
+      const key = normKey(product?.name || "");
+      if (key && !map.has(key)) map.set(key, product);
+    }
+    return map;
+  } catch (error) {
+    // Keep customized/older product schemas compatible while preferring the
+    // targeted lookup on the normal Supabase schema.
+    console.warn("[order-tracking] targeted product lookup unavailable; using catalog fallback:", error?.message || error);
+    return _sbProductsMapByName().catch(() => new Map());
+  }
+}
+
+async function _sbOrderTrackingPayload(req, groupIdRaw) {
+  const cleanRef = String(groupIdRaw || "").trim();
+  const supabaseOrderRef = cleanRef.match(/^(?:ord(?:er)?[:\-]?)?(\d+)$/i);
+  if (!supabaseOrderRef) {
+    const error = new Error("Missing or invalid groupId.");
+    error.status = 400;
+    throw error;
+  }
+
+  const explicitOrderNumber = /^(?:ord(?:er)?[:\-]?)/i.test(cleanRef)
+    ? Number(supabaseOrderRef[1])
+    : null;
+  const bareNumber = /^\d+$/.test(cleanRef) ? Number(cleanRef) : null;
+  const username = String(req?.session?.username || "").trim();
+
+  let baseRow = null;
+  let targetOrderNumber = Number.isFinite(explicitOrderNumber) ? explicitOrderNumber : null;
+  let groupRows = [];
+  let directLookupFailed = false;
+
+  // A bare number historically meant either the physical row id or the order
+  // number. Try the row id first so old copied links retain the same behavior.
+  if (!Number.isFinite(targetOrderNumber) && Number.isFinite(bareNumber)) {
+    try {
+      const row = await supabaseDb.selectById(_sbOrdersTable(), String(bareNumber));
+      if (row && _sbOrderVisibleToCurrentUser(req, row)) {
+        baseRow = row;
+        targetOrderNumber = _sbOrderNum(_sbOrderGet(row, ["order_number", "Order - ID", "Order ID"]));
+      }
+    } catch (error) {
+      directLookupFailed = true;
+      console.warn("[order-tracking] direct row lookup unavailable; using compatibility path:", error?.message || error);
+    }
+  }
+
+  const loadByOrderNumber = async (orderNumber) => {
+    const rows = await supabaseDb.select(_sbOrdersTable(), {
+      select: "*",
+      order_number: `eq.${Number(orderNumber)}`,
+      order: "notion_created_time.desc,id.desc",
+      limit: 500,
+    });
+    return (Array.isArray(rows) ? rows : []).filter((row) => _sbOrderVisibleToCurrentUser(req, row));
+  };
+
+  if (!directLookupFailed && Number.isFinite(targetOrderNumber)) {
+    try {
+      groupRows = await loadByOrderNumber(targetOrderNumber);
+      if (!baseRow) baseRow = groupRows[0] || null;
+    } catch (error) {
+      directLookupFailed = true;
+      console.warn("[order-tracking] direct order-number lookup unavailable; using compatibility path:", error?.message || error);
+    }
+  }
+
+  // If the bare id did not resolve to a visible row, interpret it as an order
+  // number exactly like the previous tracking endpoint did.
+  if (!directLookupFailed && !baseRow && Number.isFinite(bareNumber)) {
+    try {
+      targetOrderNumber = bareNumber;
+      groupRows = await loadByOrderNumber(targetOrderNumber);
+      baseRow = groupRows[0] || null;
+    } catch (error) {
+      directLookupFailed = true;
+      console.warn("[order-tracking] bare-number lookup unavailable; using compatibility path:", error?.message || error);
+    }
+  }
+
+  if (directLookupFailed) {
+    const scopedRows = await _sbSelectOrdersRows({ approvedOnly: false, memberName: username });
+    if (!Number.isFinite(targetOrderNumber) && Number.isFinite(bareNumber)) {
+      baseRow = (scopedRows || []).find((row) => String(_sbOrderGet(row, ["id", "ID"]) ?? "") === String(bareNumber)) || null;
+      if (baseRow) targetOrderNumber = _sbOrderNum(_sbOrderGet(baseRow, ["order_number", "Order - ID", "Order ID"]));
+    }
+    if (!baseRow && Number.isFinite(targetOrderNumber)) {
+      baseRow = (scopedRows || []).find((row) => {
+        const n = _sbOrderNum(_sbOrderGet(row, ["order_number", "Order - ID", "Order ID"]));
+        return Number.isFinite(n) && Number(n) === Number(targetOrderNumber);
+      }) || null;
+    }
+    if (!baseRow && Number.isFinite(bareNumber)) {
+      targetOrderNumber = bareNumber;
+      baseRow = (scopedRows || []).find((row) => {
+        const n = _sbOrderNum(_sbOrderGet(row, ["order_number", "Order - ID", "Order ID"]));
+        return Number.isFinite(n) && Number(n) === Number(targetOrderNumber);
+      }) || null;
+    }
+    if (baseRow && !Number.isFinite(targetOrderNumber)) {
+      targetOrderNumber = _sbOrderNum(_sbOrderGet(baseRow, ["order_number", "Order - ID", "Order ID"]));
+    }
+    groupRows = (scopedRows || []).filter((row) => {
+      const n = _sbOrderNum(_sbOrderGet(row, ["order_number", "Order - ID", "Order ID"]));
+      return Number.isFinite(n) && Number.isFinite(targetOrderNumber)
+        ? Number(n) === Number(targetOrderNumber)
+        : String(_sbOrderGet(row, ["id", "ID"]) ?? "") === String(_sbOrderGet(baseRow, ["id", "ID"]) ?? "");
+    });
+  }
+
+  if (!baseRow) {
+    const error = new Error("Order not found.");
+    error.status = 404;
+    throw error;
+  }
+
+  const base = _sbSerializeOrderRow(baseRow);
+  if (!Number.isFinite(targetOrderNumber)) targetOrderNumber = base.orderIdNumber;
+  if (!groupRows.length) groupRows = [baseRow];
+
+  const serializedItems = groupRows.map(_sbSerializeOrderRow);
+  const productNameMap = await _sbProductsMapForOrderItems(serializedItems);
+  const items = serializedItems.map((item) => {
+    const product = productNameMap.get(normKey(item.productName || "")) || null;
+    return {
+      ...item,
+      productImage: item.productImage || product?.imageUrl || null,
+      productUrl: item.productUrl || product?.url || null,
+      unitPrice: Number.isFinite(Number(item.unitPrice))
+        ? Number(item.unitPrice)
+        : (Number.isFinite(Number(product?.unitPrice)) ? Number(product.unitPrice) : null),
+    };
+  });
+
+  const allArrived = items.length > 0 && items.every((item) => /(arrived|delivered|received)/i.test(String(item.status || "")));
+  const stage = allArrived ? 3 : 2;
+  const estimateTotal = items.reduce((sum, item) => sum + (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0), 0);
+  const totalQty = items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+
+  return {
+    groupId: String(_sbOrderGet(baseRow, ["id", "ID"]) ?? cleanRef),
+    requestedGroupId: cleanRef,
+    orderId: base.orderId || (Number.isFinite(targetOrderNumber) ? `ORD-${targetOrderNumber}` : null),
+    orderNumber: Number.isFinite(targetOrderNumber) ? targetOrderNumber : null,
+    orderType: base.orderType || null,
+    createdByName: base.createdByName || null,
+    reason: base.reason || "No Reason",
+    createdTime: base.createdTime,
+    stage,
+    headerTitle: stage === 3 ? "Delivered" : "On the way",
+    headerSubtitle: stage === 3 ? "Your cargo has arrived." : "Your cargo is on delivery.",
+    eta: null,
+    totals: { itemsCount: items.length, totalQty, estimateTotal },
+    items,
+    source: "supabase",
+  };
+}
+
 // Order Tracking (Current Orders) — fetch a whole "order group" by representative page id
 app.get(
   "/api/orders/tracking",
@@ -17294,97 +17588,11 @@ app.get(
     res.set("Cache-Control", "no-store");
 
     try {
-      // Supabase links historically used three different references for the same
-      // order group: a numeric row id, `ord:<order number>`, and `ORD-<order number>`.
-      // Accept all of them so existing Expenses/notifications links keep working.
-      // The result is scoped to the signed-in user just like the legacy Notion path.
+      // Supabase tracking now resolves the requested row/order directly instead
+      // of scanning the full orders table, while preserving the legacy link forms.
       const supabaseOrderRef = groupIdRaw.match(/^(?:ord(?:er)?[:\-]?)?(\d+)$/i);
       if (_sbOrdersEnabled() && supabaseOrderRef) {
-        const allRows = await _sbSelectOrdersRows({ approvedOnly: false });
-        const username = norm(req.session?.username || "");
-        const scopedRows = username
-          ? (allRows || []).filter((row) => {
-              const by = norm(_sbOrderGet(row, ["team_member_name", "teams_members", "Teams Members", "supervisor", "Supervisor"]));
-              return !by || by.includes(username) || username.includes(by);
-            })
-          : (allRows || []);
-
-        const explicitOrderNumber = /^(?:ord(?:er)?[:\-]?)/i.test(groupIdRaw)
-          ? Number(supabaseOrderRef[1])
-          : null;
-        let baseRow = null;
-        let targetOrderNumber = Number.isFinite(explicitOrderNumber) ? explicitOrderNumber : null;
-
-        if (!Number.isFinite(targetOrderNumber) && /^\d+$/.test(groupIdRaw)) {
-          baseRow = scopedRows.find((row) => String(_sbOrderGet(row, ["id", "ID"]) ?? "") === groupIdRaw) || null;
-          if (baseRow) {
-            targetOrderNumber = _sbOrderNum(_sbOrderGet(baseRow, ["order_number", "Order - ID", "Order ID"]));
-          }
-        }
-
-        if (!baseRow && Number.isFinite(targetOrderNumber)) {
-          baseRow = scopedRows.find((row) => {
-            const n = _sbOrderNum(_sbOrderGet(row, ["order_number", "Order - ID", "Order ID"]));
-            return Number.isFinite(n) && Number(n) === Number(targetOrderNumber);
-          }) || null;
-        }
-
-        // A bare number can also be an order number when an old row id is no
-        // longer present. This fallback keeps copied tracking links durable.
-        if (!baseRow && /^\d+$/.test(groupIdRaw)) {
-          const fallbackOrderNumber = Number(groupIdRaw);
-          baseRow = scopedRows.find((row) => {
-            const n = _sbOrderNum(_sbOrderGet(row, ["order_number", "Order - ID", "Order ID"]));
-            return Number.isFinite(n) && Number(n) === fallbackOrderNumber;
-          }) || null;
-          if (baseRow) targetOrderNumber = fallbackOrderNumber;
-        }
-
-        if (!baseRow) return res.status(404).json({ error: "Order not found." });
-        const base = _sbSerializeOrderRow(baseRow);
-        if (!Number.isFinite(targetOrderNumber)) targetOrderNumber = base.orderIdNumber;
-
-        const groupRows = scopedRows.filter((row) => {
-          const n = _sbOrderNum(_sbOrderGet(row, ["order_number", "Order - ID", "Order ID"]));
-          return Number.isFinite(n) && Number.isFinite(targetOrderNumber)
-            ? Number(n) === Number(targetOrderNumber)
-            : String(_sbOrderGet(row, ["id", "ID"]) ?? "") === String(_sbOrderGet(baseRow, ["id", "ID"]) ?? "");
-        });
-
-        const productNameMap = await _sbProductsMapByName().catch(() => new Map());
-        const items = (groupRows.length ? groupRows : [baseRow]).map((row) => {
-          const item = _sbSerializeOrderRow(row);
-          const product = productNameMap.get(normKey(item.productName || "")) || null;
-          return {
-            ...item,
-            productImage: item.productImage || product?.imageUrl || null,
-            productUrl: item.productUrl || product?.url || null,
-            unitPrice: Number.isFinite(Number(item.unitPrice)) ? Number(item.unitPrice) : (Number.isFinite(Number(product?.unitPrice)) ? Number(product.unitPrice) : null),
-          };
-        });
-        const reason = base.reason || "No Reason";
-        const createdTime = base.createdTime;
-        const allArrived = items.length > 0 && items.every((i) => /(arrived|delivered|received)/i.test(String(i.status || "")));
-        const stage = allArrived ? 3 : 2;
-        const estimateTotal = items.reduce((sum, it) => sum + (Number(it.quantity) || 0) * (Number(it.unitPrice) || 0), 0);
-        const totalQty = items.reduce((sum, it) => sum + (Number(it.quantity) || 0), 0);
-        return res.json({
-          groupId: String(_sbOrderGet(baseRow, ["id", "ID"]) ?? groupIdRaw),
-          requestedGroupId: groupIdRaw,
-          orderId: base.orderId || (Number.isFinite(targetOrderNumber) ? `ORD-${targetOrderNumber}` : null),
-          orderNumber: Number.isFinite(targetOrderNumber) ? targetOrderNumber : null,
-          orderType: base.orderType || null,
-          createdByName: base.createdByName || null,
-          reason,
-          createdTime,
-          stage,
-          headerTitle: stage === 3 ? "Delivered" : "On the way",
-          headerSubtitle: stage === 3 ? "Your cargo has arrived." : "Your cargo is on delivery.",
-          eta: null,
-          totals: { itemsCount: items.length, totalQty, estimateTotal },
-          items,
-          source: "supabase",
-        });
+        return res.json(await _sbOrderTrackingPayload(req, groupIdRaw));
       }
 
       if (!looksLikeNotionId(groupIdRaw)) {
@@ -25152,9 +25360,9 @@ async function _pageBootstrapBackup(req) {
 async function _pageBootstrapCurrentOrders(req) {
   return Promise.all([
     _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapAccountPayload(req)),
-    _pageBootstrapLoad('/api/orders', 20_000, () =>
+    _pageBootstrapLoad('/api/orders?mode=summary', 20_000, () =>
       _sbOrdersEnabled()
-        ? _sbCurrentOrdersPayload(req)
+        ? _sbCurrentOrdersSummaryPayload(req)
         : _pageBootstrapFetchExistingRoute(req, '/api/orders', 20_000)
     ),
   ]);
@@ -25170,7 +25378,11 @@ async function _pageBootstrapOrderTracking(req, groupId) {
   const trackingUrl = `/api/orders/tracking?groupId=${encodeURIComponent(cleanGroupId)}`;
   return Promise.all([
     _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapAccountPayload(req)),
-    _pageBootstrapLoad(trackingUrl, 10_000, () => _pageBootstrapFetchExistingRoute(req, trackingUrl, 25_000)),
+    _pageBootstrapLoad(trackingUrl, 10_000, () =>
+      _sbOrdersEnabled()
+        ? _sbOrderTrackingPayload(req, cleanGroupId)
+        : _pageBootstrapFetchExistingRoute(req, trackingUrl, 25_000)
+    ),
   ]);
 }
 

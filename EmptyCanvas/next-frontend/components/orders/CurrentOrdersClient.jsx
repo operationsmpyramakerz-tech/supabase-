@@ -785,6 +785,7 @@ export default function CurrentOrdersClient({ initialOrders = [], bootstrapWarni
   const [notice, setNotice] = useState("");
   const [reasonView, setReasonView] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const orderDetailsCache = useRef(new Map());
 
   useClassicHeaderSearch(query, setQuery, "Search orders by reason...");
 
@@ -847,14 +848,55 @@ export default function CurrentOrdersClient({ initialOrders = [], bootstrapWarni
   }, [statusGroups, type, query]);
 
   async function refreshOrders() {
-    const response = await fetch("/api/orders?_fresh=1", { credentials: "include", cache: "no-store" });
+    const response = await fetch("/api/orders?mode=summary&_fresh=1", { credentials: "include", cache: "no-store" });
     if (response.status === 401) {
       window.location.href = "/login?next=/next/orders";
       return;
     }
     const data = await response.json().catch(() => null);
     if (!response.ok) throw new Error(data?.error || "Failed to refresh orders.");
+    orderDetailsCache.current.clear();
     setOrders(Array.isArray(data) ? data : []);
+  }
+
+  async function openOrderDetails(group) {
+    if (!group) return;
+    const needsDetails = (Array.isArray(group.items) ? group.items : []).some((item) => Boolean(item?.summaryOnly));
+    if (!needsDetails) {
+      setSelected(group);
+      return;
+    }
+
+    const cacheKey = text(group.key || group.orderIdLabel || group.orderIds?.join("|"));
+    const cached = cacheKey ? orderDetailsCache.current.get(cacheKey) : null;
+    if (cached) {
+      setSelected(cached);
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/orders/details", {
+        method: "POST",
+        credentials: "include",
+        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderIds: group.orderIds }),
+      });
+      if (response.status === 401) {
+        window.location.href = "/login?next=/next/orders";
+        return;
+      }
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error || "Failed to load order details.");
+      const detailedGroups = buildGroups(Array.isArray(data) ? data : []);
+      const detailed = detailedGroups.find((item) => item.key === group.key) || detailedGroups[0];
+      if (!detailed) throw new Error("This order no longer exists or has no components.");
+      if (cacheKey) orderDetailsCache.current.set(cacheKey, detailed);
+      setSelected(detailed);
+    } catch (error) {
+      setNotice(error?.message || "Failed to load order details.");
+      window.setTimeout(() => setNotice(""), 4500);
+    }
   }
 
   function beginAction(action, group) {
@@ -1004,7 +1046,7 @@ export default function CurrentOrdersClient({ initialOrders = [], bootstrapWarni
 
       <section className="card" id="current-orders">
         <div className="co-cards" id="orders-list">
-          {visibleGroups.length ? visibleGroups.map((group) => <OrderCard group={group} activeTab={tab} onOpen={setSelected} onReason={setReasonView} key={group.key} />) : (
+          {visibleGroups.length ? visibleGroups.map((group) => <OrderCard group={group} activeTab={tab} onOpen={openOrderDetails} onReason={setReasonView} key={group.key} />) : (
             <div className="ops-no-data-state" role="status" aria-live="polite"><img className="ops-no-data-state__image" src="/next/images/no-data-illustration.png" alt="" loading="lazy"/><div className="ops-no-data-state__text">Sorry, No data available</div></div>
           )}
         </div>
