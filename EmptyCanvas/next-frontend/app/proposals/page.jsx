@@ -9,7 +9,19 @@ import { listTeamMembersLite } from "../../lib/team-members-service";
 export const dynamic = "force-dynamic";
 
 export default async function ProposalsPage() {
-  const gate = await getLegacyAccountGate(["Proposals", "Products"]);
+  // Run the permission gate and read-only page data in parallel. Ownership
+  // flags still use the resolved account, and nothing is rendered on a failed gate.
+  const gatePromise = getLegacyAccountGate(["Proposals", "Products"]);
+  const accountPromise = gatePromise.then((result) => result?.account || {}).catch(() => ({}));
+  const dataPromise = Promise.allSettled([
+    getProductsCatalog(),
+    listProposals(accountPromise),
+    listKits(accountPromise),
+    listKitFolders(accountPromise),
+    listTeamMembersLite(),
+  ]);
+
+  const gate = await gatePromise;
   if (gate.status === 401) redirect("/login?next=/next/proposals");
   if (gate.status === 403) {
     return <main className="standalone-state"><section className="state-card"><span className="status-dot warning" /><h1>Proposals is not available</h1><p>Your account does not have access to the Proposals or Products module.</p><a className="primary-button" href="/next/home">Return to Home</a></section></main>;
@@ -18,13 +30,7 @@ export default async function ProposalsPage() {
     return <main className="standalone-state"><section className="state-card"><span className="status-dot warning" /><h1>The new Proposals page could not load</h1><p>{gate.error || "The authentication service is temporarily unavailable."}</p><div className="actions"><a className="primary-button" href="/next/proposals">Try again</a><a className="secondary-button" href="/next/home">Return to Home</a></div></section></main>;
   }
 
-  const [catalogResult, proposalsResult, kitsResult, kitFoldersResult, membersResult] = await Promise.allSettled([
-    getProductsCatalog(),
-    listProposals(gate.account),
-    listKits(gate.account),
-    listKitFolders(gate.account),
-    listTeamMembersLite(),
-  ]);
+  const [catalogResult, proposalsResult, kitsResult, kitFoldersResult, membersResult] = await dataPromise;
 
   const catalog = catalogResult.status === "fulfilled" ? catalogResult.value : { ok: false, products: [], tagsCatalog: [], unitsCatalog: [] };
   const proposals = proposalsResult.status === "fulfilled" ? { ok: true, source: "supabase-next", proposals: proposalsResult.value } : { ok: false, proposals: [] };

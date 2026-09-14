@@ -255,9 +255,14 @@ async function proposalItemCountsForHeaders(headers = []) {
 }
 
 export async function listProposals(account) {
+  // `account` may be a promise. This lets page loaders start the safe Supabase
+  // reads at the same time as the permission gate instead of serializing them.
+  // The rows are only returned to the page after the gate has succeeded.
+  const accountPromise = Promise.resolve(account || {});
   const headers = await selectAll(proposalTable(), { limit: 5000, order: "updated_at.desc,created_at.desc" });
   const itemCounts = await proposalItemCountsForHeaders(headers);
-  return headers.map((row) => proposalHeader(row, itemCounts.get(text(row.id)) || 0, account));
+  const resolvedAccount = await accountPromise;
+  return headers.map((row) => proposalHeader(row, itemCounts.get(text(row.id)) || 0, resolvedAccount));
 }
 
 export async function getProposal(id, account) {
@@ -508,8 +513,11 @@ export async function deleteProposalItem(proposalId, itemId, body, account) {
 }
 
 export async function listKitFolders(account) {
-  const rows = await selectAll(kitFoldersTable(), { limit: 5000, order: "updated_at.desc,created_at.desc" });
-  return rows.map((row) => kitFolderHeader(row, account));
+  const [rows, resolvedAccount] = await Promise.all([
+    selectAll(kitFoldersTable(), { limit: 5000, order: "updated_at.desc,created_at.desc" }),
+    Promise.resolve(account || {}),
+  ]);
+  return rows.map((row) => kitFolderHeader(row, resolvedAccount));
 }
 
 export async function createKitFolder(name, account) {
@@ -554,12 +562,13 @@ export async function deleteKitFolder(id, body, account) {
 }
 
 export async function listKits(account) {
-  const [headers, items] = await Promise.all([
+  const [headers, items, resolvedAccount] = await Promise.all([
     selectAll(kitsTable(), { limit: 5000, order: "updated_at.desc,created_at.desc" }),
     selectAll(kitItemsTable(), { limit: 5000, order: "created_at.asc" }),
+    Promise.resolve(account || {}),
   ]);
   const itemCounts = counts(items, "kit_id");
-  return headers.map((row) => kitHeader(row, itemCounts.get(text(row.id)) || 0, account));
+  return headers.map((row) => kitHeader(row, itemCounts.get(text(row.id)) || 0, resolvedAccount));
 }
 
 export async function listKitMembership() {

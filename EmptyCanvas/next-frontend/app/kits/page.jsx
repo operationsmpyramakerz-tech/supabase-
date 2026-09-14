@@ -8,7 +8,17 @@ import { listKitFolders, listKits } from "../../lib/proposal-kit-service";
 export const dynamic = "force-dynamic";
 
 export default async function KitsPage() {
-  const gate = await getLegacyAccountGate(["Kits", "Proposals", "Products"]);
+  // Start authentication and the read-only Supabase queries together. The data
+  // promise is not consumed/rendered until the permission gate succeeds.
+  const gatePromise = getLegacyAccountGate(["Kits", "Proposals", "Products"]);
+  const accountPromise = gatePromise.then((result) => result?.account || {}).catch(() => ({}));
+  const dataPromise = Promise.allSettled([
+    getProductsCatalog(),
+    listKits(accountPromise),
+    listKitFolders(accountPromise),
+  ]);
+
+  const gate = await gatePromise;
   if (gate.status === 401) redirect("/login?next=/next/kits");
   if (gate.status === 403) {
     return <main className="standalone-state"><section className="state-card"><span className="status-dot warning" /><h1>Kits is not available</h1><p>Your account does not have access to the Kits, Proposals or Products module.</p><a className="primary-button" href="/next/home">Return to Home</a></section></main>;
@@ -17,11 +27,7 @@ export default async function KitsPage() {
     return <main className="standalone-state"><section className="state-card"><span className="status-dot warning" /><h1>The new Kits page could not load</h1><p>{gate.error || "The authentication service is temporarily unavailable."}</p><div className="actions"><a className="primary-button" href="/next/kits">Try again</a><a className="secondary-button" href="/next/home">Return to Home</a></div></section></main>;
   }
 
-  const [catalogResult, kitsResult, foldersResult] = await Promise.allSettled([
-    getProductsCatalog(),
-    listKits(gate.account),
-    listKitFolders(gate.account),
-  ]);
+  const [catalogResult, kitsResult, foldersResult] = await dataPromise;
   const catalog = catalogResult.status === "fulfilled" ? catalogResult.value : { ok: false, products: [], tagsCatalog: [], unitsCatalog: [] };
   const kits = kitsResult.status === "fulfilled" ? { ok: true, source: "supabase-next", kits: kitsResult.value } : { ok: false, kits: [] };
   const folders = foldersResult.status === "fulfilled" ? { ok: true, source: "supabase-next", folders: foldersResult.value } : { ok: false, folders: [] };

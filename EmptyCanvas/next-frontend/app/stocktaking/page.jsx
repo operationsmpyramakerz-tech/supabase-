@@ -24,8 +24,26 @@ function UnavailableState({ message, forbidden = false }) {
   );
 }
 
+async function loadInitialStocktakingColumns() {
+  try {
+    return { columns: await listStocktakingFolders(), error: "" };
+  } catch (error) {
+    const directError = error?.message || "Stocktaking columns are temporarily unavailable.";
+    // Compatibility fallback only. Normal Supabase deployments stay entirely
+    // on the direct Next read path. This fallback also runs independently of
+    // the account gate so it does not reintroduce sequential startup latency.
+    const legacy = await fetchLegacyJson("/api/stock/columns", { timeoutMs: 20_000 });
+    if (legacy.ok && legacy.data?.ok && Array.isArray(legacy.data?.columns)) {
+      return { columns: legacy.data.columns, error: "" };
+    }
+    return { columns: null, error: directError };
+  }
+}
+
 export default async function StocktakingPage() {
-  const gate = await getLegacyAccountGate(["Stocktaking"]);
+  const gatePromise = getLegacyAccountGate(["Stocktaking"]);
+  const columnsPromise = loadInitialStocktakingColumns();
+  const gate = await gatePromise;
 
   if (gate.status === 401) redirect("/login?next=/next/stocktaking");
   if (!gate.ok && gate.status === 403) {
@@ -35,20 +53,7 @@ export default async function StocktakingPage() {
     return <UnavailableState message={gate.error || "Stocktaking authentication is temporarily unavailable."} />;
   }
 
-  let columns = null;
-  let columnsError = "";
-  try {
-    columns = await listStocktakingFolders();
-  } catch (error) {
-    columnsError = error?.message || "Stocktaking columns are temporarily unavailable.";
-    // Compatibility fallback only. Normal Supabase deployments stay entirely
-    // on the direct Next read path.
-    const legacy = await fetchLegacyJson("/api/stock/columns", { timeoutMs: 20_000 });
-    if (legacy.ok && legacy.data?.ok && Array.isArray(legacy.data?.columns)) {
-      columns = legacy.data.columns;
-      columnsError = "";
-    }
-  }
+  const { columns, error: columnsError } = await columnsPromise;
 
   if (!Array.isArray(columns)) {
     return <UnavailableState message={columnsError || "Stocktaking data is temporarily unavailable."} />;
