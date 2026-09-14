@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import LoginClient from "../../components/auth/LoginClient";
-import { fetchLegacyJson } from "../../lib/legacy-api";
+import { getLegacyAccountGate } from "../../lib/products-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -14,9 +14,9 @@ function safeNext(value) {
 export default async function LoginPage({ searchParams }) {
   const query = await Promise.resolve(searchParams);
   const requestedNext = safeNext(query?.next);
-  const accountResponse = await fetchLegacyJson("/api/account", { timeoutMs: 7000 });
+  const gate = await getLegacyAccountGate([]);
 
-  if (accountResponse.ok && accountResponse.data) {
+  if (gate.ok && gate.account) {
     if (requestedNext.startsWith("/next/")) {
       // redirect() receives an app-relative path because this Next.js app is
       // deployed with basePath=/next.
@@ -28,7 +28,7 @@ export default async function LoginPage({ searchParams }) {
   return (
     <LoginClient
       requestedNext={requestedNext}
-      backendAvailable={accountResponse.status !== 503}
+      backendAvailable={gate.status !== 503}
     />
   );
 }

@@ -1,13 +1,13 @@
 import AppShell from "../../components/AppShell";
 import HowItWorksClient from "../../components/how-it-works/HowItWorksClient";
-import { fetchLegacyJson } from "../../lib/legacy-api";
+import { getLegacyAccountGate } from "../../lib/products-auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function HowItWorksPage() {
-  const response = await fetchLegacyJson("/api/account", { timeoutMs: 15000 });
+  const gate = await getLegacyAccountGate([]);
 
-  if (response.status === 401) {
+  if (gate.status === 401) {
     return (
       <main className="standalone-state">
         <section className="state-card">
@@ -20,13 +20,13 @@ export default async function HowItWorksPage() {
     );
   }
 
-  if (!response.ok || !response.data) {
+  if (!gate.ok || !gate.account) {
     return (
       <main className="standalone-state">
         <section className="state-card">
           <span className="status-dot warning" />
           <h1>The new How it works page could not load</h1>
-          <p>{response.error || response.data?.error || "The current ERP API is temporarily unavailable."}</p>
+          <p>{gate.error || "The current ERP API is temporarily unavailable."}</p>
           <div className="actions">
             <a className="primary-button" href="/next/how-it-works">Try again</a>
             <a className="secondary-button" href="/next/home">Return to Home</a>
@@ -38,12 +38,12 @@ export default async function HowItWorksPage() {
 
   return (
     <AppShell
-      account={response.data}
+      account={gate.account}
       title="How it works"
       eyebrow="Operations SOP and workflow guide"
       activePath="/next/how-it-works"
     >
-      <HowItWorksClient account={response.data} />
+      <HowItWorksClient account={gate.account} />
     </AppShell>
   );
 }

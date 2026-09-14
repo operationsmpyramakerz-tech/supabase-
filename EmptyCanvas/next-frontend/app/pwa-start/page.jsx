@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { fetchLegacyJson } from "../../lib/legacy-api";
+import { getLegacyAccountGate } from "../../lib/products-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -8,9 +8,9 @@ export const dynamic = "force-dynamic";
 // an intermediate launcher/splash screen: resolve the session on the server and
 // send the user straight to the correct destination.
 export default async function PwaStartPage() {
-  const accountResponse = await fetchLegacyJson("/api/account", { timeoutMs: 7000 });
+  const gate = await getLegacyAccountGate([]);
 
-  if (accountResponse.ok && accountResponse.data) {
+  if (gate.ok && gate.account) {
     redirect("/home");
   }
 

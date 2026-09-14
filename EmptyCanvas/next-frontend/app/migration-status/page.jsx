@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import AppShell from "../../components/AppShell";
-import { fetchLegacyJson } from "../../lib/legacy-api";
+import { getLegacyAccountGate } from "../../lib/products-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -47,12 +47,12 @@ const steps = [
 ];
 
 export default async function MigrationStatusPage() {
-  const accountResponse = await fetchLegacyJson("/api/account", { timeoutMs: 9000 });
-  if (accountResponse.status === 401 || accountResponse.status === 403) redirect("/login?next=/next/migration-status");
-  if (!accountResponse.ok || !accountResponse.data) redirect("/home");
+  const gate = await getLegacyAccountGate([]);
+  if (gate.status === 401 || gate.status === 403) redirect("/login?next=/next/migration-status");
+  if (!gate.ok || !gate.account) redirect("/home");
 
   return (
-    <AppShell account={accountResponse.data} activePath="/next/migration-status">
+    <AppShell account={gate.account} activePath="/next/migration-status">
       <section className="status-page">
         <article className="wide-card status-intro">
           <div>

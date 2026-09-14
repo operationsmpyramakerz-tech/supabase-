@@ -2,7 +2,7 @@ import ShellStyleLinks from "./ShellStyleLinks";
 import { cache } from "react";
 import { cookies } from "next/headers";
 import { BodyClassSync, ClassicMobileDockStructure, ClassicSidebarViewportKeeper } from "./ClassicShellControls";
-import { fetchLegacyJson } from "../lib/legacy-api";
+import { getLegacyAccountGate } from "../lib/products-auth";
 import ClassicStableLoadingNavItem from "./ClassicStableLoadingNavItem";
 
 const ALLOWED_PAGES_COOKIE = "ops_ui_allowed_pages_v1";
@@ -127,15 +127,15 @@ const readStableChrome = cache(async () => {
   }
 
   // First request after deploying this fix may not have the UI cookie yet.
-  // Fall back to the authenticated account endpoint so the loading sidebar is
-  // still permission-correct rather than collapsing to Home only.
+  // Fall back to the shared account gate so the loading sidebar stays
+  // permission-correct without forcing an Express cold start when direct session validation is available.
   try {
-    const response = await fetchLegacyJson("/api/account", { timeoutMs: 4000 });
-    if (response.ok && response.data && typeof response.data === "object") {
+    const gate = await getLegacyAccountGate([]);
+    if (gate.ok && gate.account && typeof gate.account === "object") {
       return {
-        allowedPages: Array.isArray(response.data.allowedPages) ? response.data.allowedPages : [],
-        name: String(response.data.name || response.data.username || "").trim(),
-        photoUrl: String(response.data.photoUrl || response.data.profilePicture || profileUrl || "").trim(),
+        allowedPages: Array.isArray(gate.account.allowedPages) ? gate.account.allowedPages : [],
+        name: String(gate.account.name || gate.account.username || "").trim(),
+        photoUrl: String(gate.account.photoUrl || gate.account.profilePicture || profileUrl || "").trim(),
         scrollTop,
         scrollLeft,
       };

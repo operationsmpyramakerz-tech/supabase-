@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { fetchLegacyJson } from "../../lib/legacy-api";
+import { getLegacyAccountGate } from "../../lib/products-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -21,11 +21,11 @@ function allowedTokens(values = []) {
 }
 
 export default async function TaskManagementIndexPage() {
-  const response = await fetchLegacyJson("/api/account", { timeoutMs: 9000 });
-  if (response.status === 401 || response.status === 403) redirect("/login?next=/next/task-management");
-  if (!response.ok || !response.data) redirect("/home");
+  const gate = await getLegacyAccountGate([]);
+  if (gate.status === 401 || gate.status === 403) redirect("/login?next=/next/task-management");
+  if (!gate.ok || !gate.account) redirect("/home");
 
-  const allowed = allowedTokens(response.data.allowedPages);
+  const allowed = allowedTokens(gate.account.allowedPages);
   const broad = allowed.has("task management") || allowed.has("taskmanagement") || allowed.has("department tickets") || allowed.has("/task-management") || allowed.has("task-management");
   if (broad || allowed.has("all tasks") || allowed.has("/task-management/all-tasks") || allowed.has("task-management/all-tasks")) redirect("/next/task-management/all-tasks");
   if (allowed.has("my tasks") || allowed.has("/task-management/my-tasks") || allowed.has("task-management/my-tasks")) redirect("/next/task-management/my-tasks");
