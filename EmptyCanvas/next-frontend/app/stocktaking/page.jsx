@@ -2,24 +2,11 @@ import { redirect } from "next/navigation";
 import AppShell from "../../components/AppShell";
 import StocktakingClient from "../../components/stocktaking/StocktakingClient";
 import { fetchLegacyJson } from "../../lib/legacy-api";
+import { getLegacyAccountGate } from "../../lib/products-auth";
+import { listStocktakingFolders } from "../../lib/stocktaking-data";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
-
-function resourceMap(bundle) {
-  const map = new Map();
-  for (const resource of Array.isArray(bundle?.resources) ? bundle.resources : []) {
-    map.set(String(resource?.url || ""), resource?.body);
-  }
-  return map;
-}
-
-function getResource(map, prefix, fallback = null) {
-  for (const [url, body] of map.entries()) {
-    if (url === prefix || url.startsWith(prefix)) return body;
-  }
-  return fallback;
-}
 
 function UnavailableState({ message, forbidden = false }) {
   return (
@@ -37,48 +24,39 @@ function UnavailableState({ message, forbidden = false }) {
   );
 }
 
-async function loadStocktakingBootstrap() {
-  const response = await fetchLegacyJson("/api/page-bootstrap?scope=stocktaking", { timeoutMs: 45000 });
-  if (!response.ok || !response.data?.ok) return { response, account: null, columns: null, columnsError: "" };
+export default async function StocktakingPage() {
+  const gate = await getLegacyAccountGate(["Stocktaking"]);
 
-  const resources = resourceMap(response.data);
-  const account = getResource(resources, "/api/account", null);
-  const bootstrapColumns = getResource(resources, "/api/stock/columns", null);
-  let columns = bootstrapColumns?.ok && Array.isArray(bootstrapColumns?.columns) ? bootstrapColumns.columns : null;
+  if (gate.status === 401) redirect("/login?next=/next/stocktaking");
+  if (!gate.ok && gate.status === 403) {
+    return <UnavailableState forbidden message="Your account does not have access to Stocktaking." />;
+  }
+  if (!gate.ok || !gate.account) {
+    return <UnavailableState message={gate.error || "Stocktaking authentication is temporarily unavailable."} />;
+  }
+
+  let columns = null;
   let columnsError = "";
-
-  if (!Array.isArray(columns)) {
-    const direct = await fetchLegacyJson("/api/stock/columns?_fresh=1", { timeoutMs: 30000 });
-    if (direct.status === 401) return { response: direct, account: null, columns: null, columnsError: "" };
-    if (direct.status === 403) return { response: direct, account, columns: null, columnsError: "" };
-    if (direct.ok && direct.data?.ok && Array.isArray(direct.data?.columns)) {
-      columns = direct.data.columns;
-    } else {
-      columnsError = direct.data?.error || direct.error || "Stocktaking columns are temporarily unavailable.";
+  try {
+    columns = await listStocktakingFolders();
+  } catch (error) {
+    columnsError = error?.message || "Stocktaking columns are temporarily unavailable.";
+    // Compatibility fallback only. Normal Supabase deployments stay entirely
+    // on the direct Next read path.
+    const legacy = await fetchLegacyJson("/api/stock/columns", { timeoutMs: 20_000 });
+    if (legacy.ok && legacy.data?.ok && Array.isArray(legacy.data?.columns)) {
+      columns = legacy.data.columns;
+      columnsError = "";
     }
   }
 
-  return { response, account, columns, columnsError };
-}
-
-export default async function StocktakingPage() {
-  const { response, account, columns, columnsError } = await loadStocktakingBootstrap();
-
-  if (response.status === 401) redirect("/login?next=/next/stocktaking");
-  if (response.status === 403) {
-    return <UnavailableState forbidden message="Your account does not have access to Stocktaking." />;
-  }
-  if (!response.ok || !response.data?.ok || !account || !Array.isArray(columns)) {
-    return (
-      <UnavailableState
-        message={columnsError || response.error || response.data?.error || "Stocktaking data is temporarily unavailable."}
-      />
-    );
+  if (!Array.isArray(columns)) {
+    return <UnavailableState message={columnsError || "Stocktaking data is temporarily unavailable."} />;
   }
 
   return (
     <AppShell
-      account={account}
+      account={gate.account}
       title="Stocktaking"
       eyebrow="Live inventory overview"
       activePath="/next/stocktaking"

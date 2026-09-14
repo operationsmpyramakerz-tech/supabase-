@@ -845,14 +845,15 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [columns.map((item) => item.key).join("|")]);
 
-  async function loadColumn(column, session = inventorySession) {
+  async function loadColumn(column, session = inventorySession, { fresh = false } = {}) {
     setLoading(true);
     setError("");
     try {
-      const params = new URLSearchParams({ column: column.key, _fresh: "1" });
+      const params = new URLSearchParams({ column: column.key });
+      if (fresh) params.set("_fresh", "1");
       if (session?.inventoryColumn) params.set("inventoryColumn", session.inventoryColumn);
       if (session?.defectedColumn) params.set("defectedColumn", session.defectedColumn);
-      const response = await fetch(`/api/stock?${params.toString()}`, {
+      let response = await fetch(`/next/api/stock?${params.toString()}`, {
         method: "GET",
         credentials: "include",
         cache: "no-store",
@@ -861,7 +862,22 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
         window.location.href = "/login?next=/next/stocktaking";
         return;
       }
-      const body = await response.json().catch(() => null);
+      let body = await response.json().catch(() => null);
+      // Compatibility fallback: keep the existing Express read path available
+      // if a deployment has an older/atypical Stocktaking schema that the new
+      // direct Supabase reader cannot resolve yet.
+      if (!response.ok || !Array.isArray(body)) {
+        response = await fetch(`/api/stock?${params.toString()}`, {
+          method: "GET",
+          credentials: "include",
+          cache: "no-store",
+        });
+        if (response.status === 401) {
+          window.location.href = "/login?next=/next/stocktaking";
+          return;
+        }
+        body = await response.json().catch(() => null);
+      }
       if (!response.ok || !Array.isArray(body)) throw new Error(body?.error || "Failed to load this Stocktaking folder.");
       setStock(body);
     } catch (loadError) {
@@ -898,7 +914,7 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
       };
       setInventorySession(session);
       setInventorySetupOpen(false);
-      await loadColumn(activeColumn, session);
+      await loadColumn(activeColumn, session, { fresh: true });
       return session;
     } finally {
       setInventoryBusy(false);
@@ -940,19 +956,23 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
     setInventoryFinishOpen(false);
     setInventorySession(null);
     setInventorySaveError("");
-    if (activeColumn) loadColumn(activeColumn, null);
+    if (activeColumn) loadColumn(activeColumn, null, { fresh: true });
   }
 
   async function loadProducts() {
     if (products.length) return products;
     setProductsLoading(true);
     try {
-      const response = await fetch(`/api/stock/products?_fresh=1&_ts=${Date.now()}`, { credentials: "include", cache: "no-store" });
+      let response = await fetch(`/next/api/stock/products?_ts=${Date.now()}`, { credentials: "include", cache: "no-store" });
       if (response.status === 401) {
         window.location.href = "/login?next=/next/stocktaking";
         return [];
       }
-      const body = await response.json().catch(() => ({}));
+      let body = await response.json().catch(() => ({}));
+      if (!response.ok || body?.ok === false) {
+        response = await fetch(`/api/stock/products?_ts=${Date.now()}`, { credentials: "include", cache: "no-store" });
+        body = await response.json().catch(() => ({}));
+      }
       if (!response.ok || body?.ok === false) throw new Error(body?.error || "Products could not be loaded.");
       const list = (Array.isArray(body?.products) ? body.products : [])
         .map((product) => ({
@@ -1192,7 +1212,7 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
       }
       if (!response.ok || body?.ok === false) throw new Error(body?.error || "The new Stocktaking row could not be saved.");
       cancelNewRow();
-      await loadColumn(activeColumn, inventorySession);
+      await loadColumn(activeColumn, inventorySession, { fresh: true });
     } catch (saveError) {
       setEditError(saveError?.message || "The new Stocktaking row could not be saved.");
     } finally {

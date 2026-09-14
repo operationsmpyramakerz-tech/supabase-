@@ -2,23 +2,10 @@ import { redirect } from "next/navigation";
 import AppShell from "../../../components/AppShell";
 import OrderReceiptViewerClient from "../../../components/orders/OrderReceiptViewerClient";
 import { fetchLegacyJson } from "../../../lib/legacy-api";
+import { loadOrderReceiptViewerItems } from "../../../lib/order-receipts-data";
+import { getLegacyAccountGate } from "../../../lib/products-auth";
 
 export const dynamic = "force-dynamic";
-
-function resourceMap(bundle) {
-  const map = new Map();
-  for (const resource of Array.isArray(bundle?.resources) ? bundle.resources : []) {
-    map.set(String(resource?.url || ""), resource?.body);
-  }
-  return map;
-}
-
-function getResource(map, prefix, fallback = null) {
-  for (const [url, body] of map.entries()) {
-    if (url === prefix || url.startsWith(`${prefix}?`)) return body;
-  }
-  return fallback;
-}
 
 function normalize(value) {
   return String(value || "").trim().toLowerCase();
@@ -41,11 +28,10 @@ export default async function OrderReceiptViewerPage({ searchParams }) {
     );
   }
 
-  const response = await fetchLegacyJson(`/api/page-bootstrap?scope=order-receipts&ids=${encodeURIComponent(ids)}`, { timeoutMs: 35000 });
   const nextPath = `/next/orders/receipt-viewer?ids=${encodeURIComponent(ids)}`;
-
-  if (response.status === 401) redirect(`/login?next=${encodeURIComponent(nextPath)}`);
-  if (response.status === 403) {
+  const gate = await getLegacyAccountGate(["Expenses", "Expenses Users"]);
+  if (gate.status === 401) redirect(`/login?next=${encodeURIComponent(nextPath)}`);
+  if (!gate.ok && gate.status === 403) {
     return (
       <main className="standalone-state">
         <section className="state-card">
@@ -57,29 +43,47 @@ export default async function OrderReceiptViewerPage({ searchParams }) {
       </main>
     );
   }
-
-  if (!response.ok || !response.data?.ok) {
+  if (!gate.ok || !gate.account) {
     return (
       <main className="standalone-state">
         <section className="state-card">
           <span className="status-dot warning" />
           <h1>The receipt viewer could not load</h1>
-          <p>{response.error || response.data?.error || "The current ERP API is temporarily unavailable."}</p>
+          <p>{gate.error || "The authentication service is temporarily unavailable."}</p>
           <div className="actions"><a className="primary-button" href={nextPath}>Try again</a><a className="secondary-button" href="/next/home">Return Home</a></div>
         </section>
       </main>
     );
   }
 
-  const resources = resourceMap(response.data);
-  const account = getResource(resources, "/api/account");
-  if (!account) redirect(`/login?next=${encodeURIComponent(nextPath)}`);
+  let payload = null;
+  const warnings = [];
+  try {
+    payload = await loadOrderReceiptViewerItems(ids);
+  } catch (error) {
+    // Keep legacy IDs working while old expense links phase out.
+    const legacy = await fetchLegacyJson(`/api/orders/order-receipts?ids=${encodeURIComponent(ids)}`, { timeoutMs: 20_000 });
+    if (legacy.ok && legacy.data) {
+      payload = legacy.data;
+    } else {
+      return (
+        <main className="standalone-state">
+          <section className="state-card">
+            <span className="status-dot warning" />
+            <h1>The receipt viewer could not load</h1>
+            <p>{legacy.error || legacy.data?.error || error?.message || "Receipt data is temporarily unavailable."}</p>
+            <div className="actions"><a className="primary-button" href={nextPath}>Try again</a><a className="secondary-button" href="/next/home">Return Home</a></div>
+          </section>
+        </main>
+      );
+    }
+  }
 
+  const account = gate.account;
   const allowed = new Set((Array.isArray(account.allowedPages) ? account.allowedPages : []).map(normalize));
   const canExpenses = allowed.has("expenses");
   const canExpensesUsers = allowed.has("expenses users");
   const activePath = canExpenses ? "/next/expenses" : canExpensesUsers ? "/next/expenses/users" : "/next/home";
-  const payload = getResource(resources, "/api/orders/order-receipts", { ok: true, items: [], ids: ids.split(",") });
 
   return (
     <AppShell
@@ -90,10 +94,10 @@ export default async function OrderReceiptViewerPage({ searchParams }) {
     >
       <OrderReceiptViewerClient
         ids={ids}
-        initialPayload={payload}
+        initialPayload={payload || { ok: true, items: [], ids: ids.split(",") }}
         canExpenses={canExpenses}
         canExpensesUsers={canExpensesUsers}
-        bootstrapWarnings={response.data.omitted || []}
+        bootstrapWarnings={warnings}
       />
     </AppShell>
   );

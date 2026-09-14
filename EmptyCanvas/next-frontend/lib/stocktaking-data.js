@@ -1,5 +1,11 @@
 import "server-only";
-import { selectAll } from "./supabase-rest";
+import { getProductsCatalog } from "./products-service";
+import { listTeamMembersLite } from "./team-members-service";
+import { getSupabaseConfig, selectAll, storagePublicUrl } from "./supabase-rest";
+
+const STOCK_ROWS_CACHE_TTL_MS = 20_000;
+let stockRowsCache = null;
+let stockRowsInflight = null;
 
 function text(value) {
   if (value === null || typeof value === "undefined") return "";
@@ -15,6 +21,12 @@ function number(value) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function nullableNumber(value) {
+  if (value === null || typeof value === "undefined" || String(value).trim() === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function canonical(value) {
   return text(value)
     .normalize("NFKC")
@@ -28,10 +40,18 @@ function stockColumnKey(value) {
     .normalize("NFKC")
     .toLowerCase()
     .replace(/&/g, " and ")
+    .replace(/%/g, " percent ")
     .replace(/[’'"`]/g, "")
     .replace(/[^\p{L}\p{N}]+/gu, "_")
     .replace(/^_+|_+$/g, "")
     .replace(/_+/g, "_");
+}
+
+function titleCase(value) {
+  return text(value)
+    .replace(/_/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/\b\w/g, (match) => match.toUpperCase());
 }
 
 function valueFor(row, aliases = []) {
@@ -49,15 +69,15 @@ function valueFor(row, aliases = []) {
 function urlValue(value) {
   const raw = text(value);
   if (!raw) return null;
-  if (/^https?:\/\//i.test(raw)) return raw;
+  if (/^(https?:|data:image\/)/i.test(raw)) return raw;
   if (/^www\./i.test(raw)) return `https://${raw}`;
   return null;
 }
 
 function movementColor(name) {
   const token = canonical(name);
-  if (token === "requestproducts" || token === "requestproduct") return "green";
-  if (["withdrawproducts", "withdrawproduct", "withdrawalproducts", "withdrawalproduct"].includes(token)) return "red";
+  if (["requestproducts", "requestproduct", "requestcomponents", "requestcomponent"].includes(token)) return "green";
+  if (["withdrawproducts", "withdrawproduct", "withdrawalproducts", "withdrawalproduct", "withdrawcomponents", "withdrawcomponent", "withdrawalcomponents", "withdrawalcomponent"].includes(token)) return "red";
   return "default";
 }
 
@@ -69,10 +89,20 @@ function allKeys(rows = []) {
   return [...seen];
 }
 
+function findKey(keys = [], aliases = []) {
+  const byCanonical = new Map((keys || []).map((key) => [canonical(key), key]));
+  for (const alias of aliases || []) {
+    const exact = (keys || []).find((key) => key === alias);
+    if (exact) return exact;
+    const hit = byCanonical.get(canonical(alias));
+    if (hit) return hit;
+  }
+  return "";
+}
+
 function findQuantityColumn(rows = [], schoolName = "") {
   const keys = allKeys(rows);
   if (!keys.length) return "";
-  const byCanonical = new Map(keys.map((key) => [canonical(key), key]));
   const base = stockColumnKey(schoolName);
   const candidates = [
     schoolName,
@@ -88,16 +118,133 @@ function findQuantityColumn(rows = [], schoolName = "") {
     "stock",
   ].filter(Boolean);
 
-  for (const candidate of candidates) {
-    const exact = keys.find((key) => key === candidate);
-    if (exact) return exact;
-    const hit = byCanonical.get(canonical(candidate));
-    if (hit) return hit;
+  const direct = findKey(keys, candidates);
+  if (direct) return direct;
+  if (base) {
+    const fuzzy = keys.find((key) => {
+      const normalized = stockColumnKey(key);
+      return normalized === base || normalized === `${base}_done` || normalized === `${base}_2nd_term`
+        || (normalized.includes(base) && /(done|stock|quantity|2nd_term)/i.test(normalized));
+    });
+    if (fuzzy) return fuzzy;
   }
   return "";
 }
 
-function serializeRow(row = {}, quantityColumn = "") {
+function isInventoryMetaColumn(key = "") {
+  const raw = text(key).toLowerCase();
+  const token = canonical(raw);
+  if (!/(inventory|defected|defecated)/i.test(token)) return false;
+  return /\d{4}[_-]\d{2}[_-]\d{2}/.test(raw) || /\d{8}$/.test(token);
+}
+
+function usefulStockFolderColumn(key = "") {
+  const token = canonical(key);
+  if (!token) return false;
+  const blocked = new Set([
+    "id", "createdat", "updatedat", "importedat", "createdtime", "lasteditedtime", "lasteditedby",
+    "name", "product", "products", "productname", "producturl", "itemurl", "url", "tag", "tags",
+    "componenttag", "producttag", "kittag", "sourcekit", "sourceorderid", "sourceordernumber",
+    "orderid", "ordernumber", "ordertype", "teammemberid", "teammembername", "userid", "username",
+    "createdby", "ownername", "employee", "school", "stocktakingcolumn",
+    "idcode", "customizeid", "receiptnumber", "receiptphotos", "receiptphoto", "receiptimages", "receiptimage",
+    "receipturls", "receipturl", "orderreceipt", "attachments", "files",
+    "onekitquantity", "unityprice", "unitprice", "onepieceprice", "totalprice", "totalcost", "totalquantity",
+    "allprice", "manualquantitytopurchase", "quantitytopurchase", "allschoolsneed", "allschoolsquantities",
+    "allschoolsstock", "schoolkit", "schooltotalquantites", "schooltotalquantities",
+  ]);
+  if (blocked.has(token)) return false;
+  if (/^(g|grade)\d/.test(token)) return false;
+  if (/^(checkbox|button|a|b|c)$/.test(token)) return false;
+  return true;
+}
+
+function ownerBase(value = "") {
+  let key = stockColumnKey(value);
+  let previous = "";
+  while (key && key !== previous) {
+    previous = key;
+    key = key.replace(/_(?:2nd_term|second_term|done|stock|quantity)$/i, "");
+  }
+  return key;
+}
+
+function receiptPublicUrl(value, bucketOverride = "") {
+  const raw = text(value);
+  if (!raw || /^null$/i.test(raw)) return "";
+  if (/^(https?:|data:image\/)/i.test(raw)) return raw;
+  try {
+    const { storageBucket } = getSupabaseConfig();
+    const bucket = text(bucketOverride || storageBucket);
+    let pathValue = raw.replace(/^\/+/, "").replace(/^object\/public\//i, "").replace(/^storage\/v1\/object\/public\//i, "").split("?")[0];
+    if (bucket && pathValue.toLowerCase().startsWith(`${bucket.toLowerCase()}/`)) pathValue = pathValue.slice(bucket.length + 1);
+    return storagePublicUrl(pathValue, bucket || null) || "";
+  } catch {
+    return "";
+  }
+}
+
+function receiptName(value, fallback = "Receipt photo") {
+  const raw = text(value);
+  if (!raw) return fallback;
+  try {
+    const parsed = new URL(raw, "https://placeholder.invalid");
+    const last = decodeURIComponent(parsed.pathname.split("/").filter(Boolean).pop() || "");
+    return last || fallback;
+  } catch {}
+  const last = raw.split(/[?#]/)[0].split(/[\\/]/).filter(Boolean).pop();
+  return text(last) || fallback;
+}
+
+function normalizeReceiptEntries(rawValue, fallbackPrefix = "Receipt photo") {
+  const out = [];
+  const seen = new Set();
+  const add = (entry, index = 0) => {
+    if (entry === null || typeof entry === "undefined") return;
+    if (Array.isArray(entry)) {
+      entry.forEach((item, itemIndex) => add(item, itemIndex));
+      return;
+    }
+    if (typeof entry === "object") {
+      const rawUrl = text(entry.url || entry.href || entry.publicUrl || entry.public_url || entry.signedUrl || entry.signedURL || entry.file?.url || entry.external?.url || entry.path || entry.fullPath || entry.full_path || entry.storagePath || entry.storage_path || entry.key || entry.Key);
+      const bucket = text(entry.bucket || entry.bucketName || entry.bucket_name);
+      const url = receiptPublicUrl(rawUrl, bucket);
+      const name = text(entry.name || entry.filename || entry.fileName || entry.originalName || entry.original_name) || receiptName(rawUrl, `${fallbackPrefix} ${index + 1}`);
+      if (!url) return;
+      if (seen.has(url)) return;
+      seen.add(url);
+      out.push({ name, url });
+      return;
+    }
+    const raw = text(entry);
+    if (!raw || /^null$/i.test(raw)) return;
+    const url = receiptPublicUrl(raw);
+    if (!url || seen.has(url)) return;
+    seen.add(url);
+    out.push({ name: receiptName(raw, `${fallbackPrefix} ${index + 1}`), url });
+  };
+
+  if (Array.isArray(rawValue) || (rawValue && typeof rawValue === "object")) {
+    add(rawValue, 0);
+    return out;
+  }
+  const raw = text(rawValue);
+  if (!raw || /^null$/i.test(raw)) return out;
+  try {
+    const parsed = JSON.parse(raw);
+    add(parsed, 0);
+    if (out.length) return out;
+  } catch {}
+  const urls = raw.match(/https?:\/\/[^\s,"'<>]+/gi) || [];
+  if (urls.length) {
+    urls.forEach((url, index) => add(url, index));
+    return out;
+  }
+  raw.split(/[\n,]+/).map((part) => part.trim()).filter(Boolean).forEach((part, index) => add(part, index));
+  return out;
+}
+
+function serializeRow(row = {}, quantityColumn = "", { inventoryColumn = "", defectedColumn = "" } = {}) {
   const name = text(valueFor(row, ["name", "Name", "component", "Component", "product_name", "Product Name"])) || "Untitled";
   const productName = text(valueFor(row, ["product_name", "Product Name", "product", "Product"])) || name;
   const url =
@@ -105,6 +252,15 @@ function serializeRow(row = {}, quantityColumn = "") {
     urlValue(valueFor(row, ["product_url", "Product URL"])) ||
     urlValue(valueFor(row, ["item_url", "Item URL"]));
   const tagName = text(valueFor(row, ["tag", "Tag", "tags", "Tags"])) || "Untagged";
+  const componentTag = text(valueFor(row, ["component_tag", "Component Tag", "product_tag", "Product Tag"])) || null;
+  const kitTag = text(valueFor(row, ["kit_tag", "Kit Tag", "source_kit", "Source Kit", "kit_name", "Kit Name"])) || null;
+  const sourceOrderRowId = text(valueFor(row, ["source_order_id", "Source Order ID", "source_order", "Source Order", "order_row_id", "Order Row ID"])) || null;
+  const rawOrderNumber = text(valueFor(row, ["source_order_number", "Source Order Number", "order_id", "Order ID", "order_number", "Order Number"]));
+  const orderNumber = rawOrderNumber ? (/^\d+$/.test(rawOrderNumber) ? `ORD-${rawOrderNumber}` : rawOrderNumber) : null;
+  const receiptPhotosRaw = valueFor(row, [
+    "receipt_photos", "Receipt Photos", "receipt_photo", "Receipt Photo", "receipt_images", "Receipt Images",
+    "receipt_image", "Receipt Image", "order_receipt", "Order Receipt", "attachments", "Attachments", "files", "Files",
+  ]);
   const customizeId = text(valueFor(row, ["customize_id", "Customize ID", "custom_id", "Custom ID"])) || null;
   const originalIdCode = text(valueFor(row, ["id_code", "ID Code", "id code", "code", "Code"])) || null;
 
@@ -119,11 +275,20 @@ function serializeRow(row = {}, quantityColumn = "") {
     originalIdCode,
     customizeId,
     receiptNumber: text(valueFor(row, ["receipt_number", "Receipt Number", "store_receipt_number", "Store Receipt Number", "receipt", "Receipt", "order_receipt", "Order Receipt"])),
+    receiptPhotos: normalizeReceiptEntries(receiptPhotosRaw, "Receipt photo"),
     unitPrice: number(valueFor(row, ["unity_price", "unit_price", "Unity Price", "Unit Price", "one_piece_price"])),
     userName: text(valueFor(row, ["user_name", "username", "User Name", "Username", "created_by", "Created By", "requested_by", "Requested By", "owner_name", "Owner Name", "employee", "Employee"])) || "Unknown user",
+    componentTag,
+    kitTag,
+    orderNumber,
+    sourceOrderRowId,
+    inventory: inventoryColumn ? nullableNumber(row?.[inventoryColumn]) : null,
+    defected: defectedColumn ? nullableNumber(row?.[defectedColumn]) : null,
+    inventoryColumn: inventoryColumn || null,
+    defectedColumn: defectedColumn || null,
     tag: { name: tagName, color: movementColor(tagName) },
     quantityColumn: quantityColumn || null,
-    source: "supabase",
+    source: "supabase-next",
   };
 }
 
@@ -131,14 +296,9 @@ function accountMatchesMember(account = {}, row = {}) {
   const accountId = text(account.id || account.userId || account.userSupabaseId);
   const rowId = text(valueFor(row, ["id", "ID"]));
   if (accountId && rowId && accountId === rowId) return true;
-
   const accountNames = [account.username, account.name].map(canonical).filter(Boolean);
-  const rowNames = [
-    valueFor(row, ["Username", "username"]),
-    valueFor(row, ["Name", "name"]),
-  ].map(canonical).filter(Boolean);
+  const rowNames = [valueFor(row, ["Username", "username"]), valueFor(row, ["Name", "name"])].map(canonical).filter(Boolean);
   if (accountNames.some((name) => rowNames.includes(name))) return true;
-
   const accountEmail = canonical(account.email);
   const rowEmail = canonical(valueFor(row, ["Email", "email"]));
   return !!accountEmail && !!rowEmail && accountEmail === rowEmail;
@@ -152,10 +312,149 @@ function teamMembersTable() {
   return text(process.env.SUPABASE_TEAM_MEMBERS_TABLE) || "team_members";
 }
 
-export async function stocktakingForAccount(account = {}) {
+async function loadStockRows({ fresh = false } = {}) {
+  const now = Date.now();
+  if (!fresh && stockRowsCache && stockRowsCache.expiresAt > now) return stockRowsCache.value;
+  if (!fresh && stockRowsInflight) return await stockRowsInflight;
+  const pending = selectAll(stocktakingTable(), { limit: 5000, order: "name.asc,id.asc" });
+  if (!fresh) stockRowsInflight = pending;
+  try {
+    const loaded = await pending;
+    const rows = Array.isArray(loaded) ? loaded : [];
+    stockRowsCache = { value: rows, expiresAt: Date.now() + STOCK_ROWS_CACHE_TTL_MS };
+    return rows;
+  } finally {
+    if (!fresh) stockRowsInflight = null;
+  }
+}
+
+function resolveRequestedColumn(rows = [], requested = "") {
+  const raw = text(requested);
+  if (!raw) return "";
+  const keys = allKeys(rows);
+  const resolved = keys.find((key) => key === raw) || findKey(keys, [raw]);
+  if (!resolved || !usefulStockFolderColumn(resolved) || isInventoryMetaColumn(resolved)) {
+    const error = new Error("The selected Stocktaking column is not available.");
+    error.status = 404;
+    throw error;
+  }
+  return resolved;
+}
+
+function resolveSessionColumn(rows = [], requested = "", kind = "") {
+  const raw = text(requested);
+  if (!raw) return "";
+  const keys = allKeys(rows);
+  const resolved = keys.find((key) => key === raw) || findKey(keys, [raw]);
+  if (!resolved) {
+    const error = new Error(`The selected ${kind || "inventory"} column is not available.`);
+    error.status = 404;
+    throw error;
+  }
+  const token = canonical(resolved);
+  if (kind === "inventory" && !token.includes("inventory")) {
+    const error = new Error("Invalid Inventory column.");
+    error.status = 400;
+    throw error;
+  }
+  if (kind === "defected" && !token.includes("defected") && !token.includes("defecated")) {
+    const error = new Error("Invalid Defecated column.");
+    error.status = 400;
+    throw error;
+  }
+  return resolved;
+}
+
+async function enrichComponentTags(items = []) {
+  if (!(items || []).some((item) => !text(item?.componentTag))) return items;
+  try {
+    const catalog = await getProductsCatalog();
+    const byName = new Map();
+    const byUrl = new Map();
+    for (const product of Array.isArray(catalog?.products) ? catalog.products : []) {
+      const nameKey = canonical(product?.name);
+      const urlKey = text(product?.url).toLowerCase();
+      if (nameKey && !byName.has(nameKey)) byName.set(nameKey, product);
+      if (urlKey && !byUrl.has(urlKey)) byUrl.set(urlKey, product);
+    }
+    return (items || []).map((item) => {
+      if (text(item?.componentTag)) return item;
+      const product = byName.get(canonical(item?.productName || item?.name)) || byUrl.get(text(item?.url).toLowerCase()) || null;
+      const firstProductTag = (Array.isArray(product?.tags) ? product.tags : []).map(text).find(Boolean);
+      return { ...item, componentTag: firstProductTag || item?.tag?.name || "Untagged" };
+    });
+  } catch {
+    return items;
+  }
+}
+
+export async function listStocktakingFolders({ fresh = false } = {}) {
+  const [rows, members] = await Promise.all([
+    loadStockRows({ fresh }),
+    listTeamMembersLite({ fresh }),
+  ]);
+  const folderBlocked = new Set([
+    "sourceorderid", "sourceordernumber", "orderid", "ordernumber", "teammemberid", "teammembername",
+    "userid", "username", "createdby", "ownername", "employee", "school", "stocktakingcolumn",
+  ]);
+  const keys = allKeys(rows).filter((key) => usefulStockFolderColumn(key) && !folderBlocked.has(canonical(key)) && !isInventoryMetaColumn(key));
+
+  const memberByColumn = new Map();
+  for (const member of Array.isArray(members) ? members : []) {
+    const exactResolved = member?.stocktakingColumn ? findQuantityColumn(rows, member.stocktakingColumn) : "";
+    if (exactResolved && keys.includes(exactResolved) && !memberByColumn.has(exactResolved)) memberByColumn.set(exactResolved, member);
+    const bases = new Set([ownerBase(member?.name), ownerBase(member?.stocktakingColumn)].filter(Boolean));
+    if (!bases.size) continue;
+    for (const key of keys) {
+      if (memberByColumn.has(key)) continue;
+      const keyBase = ownerBase(key);
+      if (keyBase && bases.has(keyBase)) memberByColumn.set(key, member);
+    }
+  }
+
+  return keys.map((key) => {
+    let itemsCount = 0;
+    let total = 0;
+    for (const row of rows) {
+      if (typeof row?.[key] === "boolean") continue;
+      const value = Number(row?.[key]);
+      if (!Number.isFinite(value) || value === 0) continue;
+      itemsCount += 1;
+      total += value;
+    }
+    const owner = memberByColumn.get(key) || null;
+    const fallback = titleCase(key).replace(/\s+Stock$/i, "").trim() || titleCase(key);
+    return {
+      key,
+      label: owner?.name || fallback,
+      userId: owner?.id || null,
+      stocktakingLabel: owner?.stocktakingColumn || titleCase(key),
+      itemsCount,
+      total,
+    };
+  }).filter((item) => item.itemsCount > 0).sort((a, b) => String(a.label || "").localeCompare(String(b.label || "")));
+}
+
+export async function stocktakingForColumn(column, { inventoryColumn = "", defectedColumn = "", fresh = false } = {}) {
+  const rows = await loadStockRows({ fresh });
+  const quantityColumn = resolveRequestedColumn(rows, column);
+  const inventory = resolveSessionColumn(rows, inventoryColumn, "inventory");
+  const defected = resolveSessionColumn(rows, defectedColumn, "defected");
+  const items = rows
+    .map((row) => serializeRow(row, quantityColumn, { inventoryColumn: inventory, defectedColumn: defected }))
+    .filter((item) => Number(item.quantity) !== 0);
+  return await enrichComponentTags(items);
+}
+
+export async function listStocktakingProducts({ fresh = false } = {}) {
+  const catalog = await getProductsCatalog({ fresh });
+  return Array.isArray(catalog?.products) ? catalog.products : [];
+}
+
+export async function stocktakingForAccount(account = {}, { fresh = false } = {}) {
   const [memberRows, stockRows] = await Promise.all([
     selectAll(teamMembersTable(), { limit: 5000, order: "name.asc,id.asc" }),
-    selectAll(stocktakingTable(), { limit: 5000, order: "name.asc,id.asc" }),
+    loadStockRows({ fresh }),
   ]);
 
   const member = (memberRows || []).find((row) => accountMatchesMember(account, row)) || null;
@@ -173,7 +472,8 @@ export async function stocktakingForAccount(account = {}) {
     throw error;
   }
 
-  return (stockRows || [])
+  const items = (stockRows || [])
     .map((row) => serializeRow(row, quantityColumn))
     .filter((item) => Number(item.quantity) !== 0);
+  return await enrichComponentTags(items);
 }
