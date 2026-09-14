@@ -1,0 +1,346 @@
+/* Extracted from classic-parity.css during CSS Performance Phase 1.
+   Route-scoped bundle; source order inside each extracted block is preserved. */
+
+/* Maintenance Orders — compact Operations Orders card parity + clearer details
+   ------------------------------------------------------------------------- */
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-card {
+  padding: 10px 13px !important;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-card .co-top {
+  display: grid !important;
+  grid-template-columns: auto minmax(0, 1fr) auto !important;
+  align-items: center !important;
+  gap: 11px !important;
+  min-height: 66px !important;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-card .co-main {
+  min-width: 0;
+  align-self: center !important;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-card .co-qty,
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-card .co-divider,
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-card .co-bottom {
+  display: none !important;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-meta {
+  margin-top: 5px;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-card-head-actions {
+  min-width: 112px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 5px;
+  margin-left: auto;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-card-status {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-card-head-actions .co-status-btn {
+  flex: 0 0 auto;
+  min-height: 30px;
+  margin: 0;
+  padding: 6px 11px;
+  border: 1px solid var(--tag-border, #e5e7eb);
+  border-radius: 999px;
+  background: var(--tag-bg, #f3f4f6);
+  color: var(--tag-fg, #374151);
+  font-size: 10px;
+  font-weight: 850;
+  line-height: 1;
+  box-shadow: none;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-card .next-maintenance-creator-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 0 !important;
+  width: auto !important;
+  min-width: 34px !important;
+  height: 34px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  background: transparent !important;
+  color: #fff !important;
+  overflow: visible !important;
+  box-shadow: none !important;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-creator-label {
+  display: flex;
+  align-items: center;
+  height: 30px;
+  max-width: 150px;
+  margin-right: -11px;
+  padding: 0 20px 0 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-radius: 999px 4px 4px 999px;
+  background: #020617;
+  color: #fff;
+  font-size: 9.5px;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: 0 7px 16px rgba(2, 6, 23, .12);
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-creator-icon {
+  position: relative;
+  z-index: 1;
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #020617;
+  color: #fff;
+  box-shadow: 0 7px 16px rgba(2, 6, 23, .16);
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-creator-icon svg {
+  display: block;
+  width: 15px !important;
+  height: 15px !important;
+  margin: 0 !important;
+  transform: none !important;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog {
+  width: min(720px, calc(100vw - 24px));
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-items {
+  display: grid;
+  gap: 10px;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item {
+  display: block !important;
+  padding: 12px !important;
+  border: 1px solid #e7ebf1;
+  border-radius: 17px;
+  background: #fff;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, .045);
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__head {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__icon {
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #fde68a;
+  border-radius: 12px;
+  background: #fef3c7;
+  color: #92400e;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__icon svg {
+  width: 19px;
+  height: 19px;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__identity {
+  min-width: 0;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__kicker,
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__issue > span,
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__log > span {
+  color: #94a3b8;
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: .055em;
+  text-transform: uppercase;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__name {
+  min-width: 0;
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__id {
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__issue {
+  margin-top: 11px;
+  padding: 11px 12px;
+  border: 1px solid #f3dfb2;
+  border-radius: 13px;
+  background: #fffaf0;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__issue > span {
+  color: #b45309;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__issue p {
+  margin: 5px 0 0;
+  color: #334155;
+  font-size: 11.5px;
+  font-weight: 750;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__log-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 9px;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__log {
+  min-width: 0;
+  min-height: 56px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 9px 10px;
+  border: 1px solid #e7ebf1;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__log strong {
+  color: #334155;
+  font-size: 10.5px;
+  font-weight: 750;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 720px) {
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-card {
+    padding: 9px 10px !important;
+    border-radius: 18px !important;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-card .co-top {
+    grid-template-columns: 46px minmax(0, 1fr) auto !important;
+    gap: 9px !important;
+    min-height: 62px !important;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-card .co-thumb {
+    width: 46px !important;
+    height: 46px !important;
+    border-radius: 14px !important;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-card .co-thumb svg {
+    width: 21px !important;
+    height: 21px !important;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-card-head-actions {
+    min-width: 92px;
+    max-width: 138px;
+    gap: 4px;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-creator-label {
+    height: 27px;
+    max-width: 112px;
+    margin-right: -10px;
+    padding: 0 18px 0 9px;
+    font-size: 8.5px;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-creator-icon {
+    width: 31px;
+    min-width: 31px;
+    height: 31px;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__log-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item {
+  border-color: #2b3544;
+  background: rgba(17, 22, 31, .96);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, .2);
+}
+
+html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__name {
+  color: #f8fafc;
+}
+
+html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__id,
+html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__issue p,
+html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__log strong {
+  color: #cbd5e1;
+}
+
+html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__issue {
+  border-color: #60491f;
+  background: #201b12;
+}
+
+html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__log {
+  border-color: #2b3544;
+  background: #151b25;
+}
+
+/* Maintenance Orders — destructive action confirmation from the order details menu. */
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-delete-confirm {
+  z-index: 1400;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-delete-confirm .co-confirm-icon {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #dc2626;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-delete-confirm__danger {
+  background: #dc2626;
+  color: #fff;
+  border-color: #dc2626;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-delete-confirm__danger:hover {
+  background: #b91c1c;
+}
+

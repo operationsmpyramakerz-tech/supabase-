@@ -18,6 +18,24 @@ function publicPathname(localPath) {
   return localPath === "/" ? "/next" : `/next${localPath}`;
 }
 
+function routePerformanceStyles(localPath) {
+  // Keep large late-stage parity rules off the global shell. These bundles are
+  // exact extractions from the tail of classic-parity.css, so the route keeps
+  // the same cascade while unrelated pages avoid parsing those selectors.
+  if (["/orders", "/orders-review", "/operations-orders"].includes(localPath)) {
+    return ["/next/css/orders-performance.css?v=css-phase1"];
+  }
+  if (localPath === "/maintenance-orders") {
+    return ["/next/css/maintenance-orders.css?v=css-phase1"];
+  }
+  if (localPath.startsWith("/orders/new/request-products")
+    || localPath.startsWith("/orders/new/withdraw-products")
+    || localPath.startsWith("/orders/new/request-maintenance")) {
+    return ["/next/css/shopping-cart.css?v=css-phase1"];
+  }
+  return [];
+}
+
 function routeDefaults(localPath) {
   const exact = {
     "/home": { title: "Home", activePath: "/next/home" },
@@ -91,6 +109,7 @@ export default function PersistentAppShell({ initialAccount = null, children }) 
   const rawPathname = usePathname();
   const localPath = localPathname(rawPathname);
   const defaults = useMemo(() => routeDefaults(localPath), [localPath]);
+  const performanceStyles = useMemo(() => routePerformanceStyles(localPath), [localPath]);
   const [registered, setRegistered] = useState(null);
   const [cachedAccount, setCachedAccount] = useState(null);
 
@@ -146,6 +165,7 @@ export default function PersistentAppShell({ initialAccount = null, children }) 
       title={title}
       activePath={activePath}
       bodyClass="persistent-app-shell"
+      pageStyles={performanceStyles}
     >
       <PersistentShellProvider registerPage={registerPage}>
         {children}
