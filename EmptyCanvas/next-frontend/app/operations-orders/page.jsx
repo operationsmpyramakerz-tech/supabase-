@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import AppShell from "../../components/AppShell";
 import OperationsOrdersClient from "../../components/orders/OperationsOrdersClient";
 import { fetchLegacyJson } from "../../lib/legacy-api";
+import { getLegacyAccountGate } from "../../lib/products-auth";
+import { loadOperationsOrdersInitialPage } from "../../lib/operations-orders-data";
 
 export const dynamic = "force-dynamic";
 
@@ -21,10 +23,17 @@ function getResource(map, prefix, fallback = null) {
 }
 
 export default async function OperationsOrdersPage() {
-  const response = await fetchLegacyJson("/api/page-bootstrap?scope=operations-orders", { timeoutMs: 35000 });
+  // Fast path: keep the permission check and the first paged order query inside
+  // the Next/Supabase runtime. Both are independent, so start them together.
+  // If the direct order read is unavailable for an older/custom deployment,
+  // fall back to the established Legacy page-bootstrap response unchanged.
+  const [gate, directOrders] = await Promise.all([
+    getLegacyAccountGate(["Requested Orders", "Operations Orders"]),
+    loadOperationsOrdersInitialPage().catch(() => null),
+  ]);
 
-  if (response.status === 401) redirect("/login?next=/next/operations-orders");
-  if (response.status === 403) {
+  if (gate.status === 401) redirect("/login?next=/next/operations-orders");
+  if (gate.status === 403) {
     return (
       <main className="standalone-state">
         <section className="state-card">
@@ -37,25 +46,46 @@ export default async function OperationsOrdersPage() {
     );
   }
 
-  if (!response.ok || !response.data?.ok) {
-    return (
-      <main className="standalone-state">
-        <section className="state-card">
-          <span className="status-dot warning" />
-          <h1>The new Operations Orders page could not load</h1>
-          <p>{response.error || response.data?.error || "The current ERP API is temporarily unavailable."}</p>
-          <div className="actions">
-            <a className="primary-button" href="/next/operations-orders">Try again</a>
-            <a className="secondary-button" href="/next/home">Return to Home</a>
-          </div>
-        </section>
-      </main>
-    );
+  let account = gate.ok ? gate.account : null;
+  let ordersPayload = directOrders;
+  let bootstrapWarnings = [];
+
+  if (!gate.ok || !ordersPayload) {
+    const response = await fetchLegacyJson("/api/page-bootstrap?scope=operations-orders", { timeoutMs: 35000 });
+    if (response.status === 401) redirect("/login?next=/next/operations-orders");
+    if (response.status === 403) {
+      return (
+        <main className="standalone-state">
+          <section className="state-card">
+            <span className="status-dot warning" />
+            <h1>Operations Orders is not available</h1>
+            <p>Your account does not have access to Operations Orders.</p>
+            <a className="primary-button" href="/next/home">Return to Home</a>
+          </section>
+        </main>
+      );
+    }
+    if (!response.ok || !response.data?.ok) {
+      return (
+        <main className="standalone-state">
+          <section className="state-card">
+            <span className="status-dot warning" />
+            <h1>The new Operations Orders page could not load</h1>
+            <p>{response.error || response.data?.error || gate.error || "The current ERP API is temporarily unavailable."}</p>
+            <div className="actions">
+              <a className="primary-button" href="/next/operations-orders">Try again</a>
+              <a className="secondary-button" href="/next/home">Return to Home</a>
+            </div>
+          </section>
+        </main>
+      );
+    }
+    const resources = resourceMap(response.data);
+    account = getResource(resources, "/api/account", null);
+    ordersPayload = getResource(resources, "/api/orders/requested", []);
+    bootstrapWarnings = response.data.omitted || [];
   }
 
-  const resources = resourceMap(response.data);
-  const account = getResource(resources, "/api/account", null);
-  const ordersPayload = getResource(resources, "/api/orders/requested", []);
   const orders = Array.isArray(ordersPayload)
     ? ordersPayload
     : (Array.isArray(ordersPayload?.items) ? ordersPayload.items : []);
@@ -74,7 +104,7 @@ export default async function OperationsOrdersPage() {
       <OperationsOrdersClient
         initialOrders={Array.isArray(orders) ? orders : []}
         initialPageInfo={pageInfo}
-        bootstrapWarnings={response.data.omitted || []}
+        bootstrapWarnings={bootstrapWarnings}
       />
     </AppShell>
   );
