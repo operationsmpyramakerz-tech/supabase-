@@ -13322,51 +13322,57 @@ function _historySerializeRow(row = {}, context = {}) {
   };
 }
 
+async function _historyListPayload(query = {}) {
+  if (!supabaseDb.isConfigured()) {
+    const error = new Error('Supabase is not configured.');
+    error.status = 500;
+    throw error;
+  }
+
+  const limitRaw = Number(query?.limit || 80);
+  const safeLimit = Math.max(1, Math.min(1000, Number.isFinite(limitRaw) ? limitRaw : 80));
+  const params = {
+    select: '*',
+    order: 'created_at.desc,id.desc',
+    limit: safeLimit,
+  };
+
+  const page = String(query?.page || '').trim();
+  const actor = String(query?.actor || '').trim();
+  const action = String(query?.action || '').trim();
+  const from = String(query?.from || '').trim();
+  const to = String(query?.to || '').trim();
+
+  if (page) params.page_name = `ilike.*${page.replace(/[*,]/g, '')}*`;
+  if (actor) params.actor_name = `ilike.*${actor.replace(/[*,]/g, '')}*`;
+  if (action) params.action_label = `ilike.*${action.replace(/[*,]/g, '')}*`;
+  if (/^\d{4}-\d{2}-\d{2}/.test(from)) params.created_at = `gte.${from}`;
+  if (/^\d{4}-\d{2}-\d{2}/.test(to)) params.created_at = params.created_at ? `${params.created_at}&created_at=lte.${to}` : `lte.${to}`;
+
+  // If both from/to are supplied the helper cannot express duplicate keys in params,
+  // so fall back to a direct REST query string for this narrow case.
+  let rows;
+  if (from && to && /^\d{4}-\d{2}-\d{2}/.test(from) && /^\d{4}-\d{2}-\d{2}/.test(to)) {
+    const qs = new URLSearchParams({ select: '*', order: 'created_at.desc,id.desc', limit: String(safeLimit) });
+    if (page) qs.set('page_name', `ilike.*${page.replace(/[*,]/g, '')}*`);
+    if (actor) qs.set('actor_name', `ilike.*${actor.replace(/[*,]/g, '')}*`);
+    if (action) qs.set('action_label', `ilike.*${action.replace(/[*,]/g, '')}*`);
+    qs.append('created_at', `gte.${from}`);
+    qs.append('created_at', `lte.${to}`);
+    rows = await supabaseDb.request(`/${encodeURIComponent(HISTORY_TABLE)}?${qs.toString()}`);
+  } else {
+    rows = await supabaseDb.select(HISTORY_TABLE, params);
+  }
+
+  const visibleRows = (Array.isArray(rows) ? rows : []).filter(_historyShouldExposeRow);
+  const orderMap = await _historyBuildOrderMap(visibleRows);
+  return { ok: true, rows: visibleRows.map((row) => _historySerializeRow(row, { orderMap })) };
+}
+
 app.get('/api/history', requireAuth, requirePage("History"), async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
-    if (!supabaseDb.isConfigured()) {
-      return res.status(500).json({ ok: false, error: 'Supabase is not configured.' });
-    }
-
-    const limitRaw = Number(req.query?.limit || 80);
-    const safeLimit = Math.max(1, Math.min(1000, Number.isFinite(limitRaw) ? limitRaw : 80));
-    const params = {
-      select: '*',
-      order: 'created_at.desc,id.desc',
-      limit: safeLimit,
-    };
-
-    const page = String(req.query?.page || '').trim();
-    const actor = String(req.query?.actor || '').trim();
-    const action = String(req.query?.action || '').trim();
-    const from = String(req.query?.from || '').trim();
-    const to = String(req.query?.to || '').trim();
-
-    if (page) params.page_name = `ilike.*${page.replace(/[*,]/g, '')}*`;
-    if (actor) params.actor_name = `ilike.*${actor.replace(/[*,]/g, '')}*`;
-    if (action) params.action_label = `ilike.*${action.replace(/[*,]/g, '')}*`;
-    if (/^\d{4}-\d{2}-\d{2}/.test(from)) params.created_at = `gte.${from}`;
-    if (/^\d{4}-\d{2}-\d{2}/.test(to)) params.created_at = params.created_at ? `${params.created_at}&created_at=lte.${to}` : `lte.${to}`;
-
-    // If both from/to are supplied the helper cannot express duplicate keys in params,
-    // so fall back to a direct REST query string for this narrow case.
-    let rows;
-    if (from && to && /^\d{4}-\d{2}-\d{2}/.test(from) && /^\d{4}-\d{2}-\d{2}/.test(to)) {
-      const qs = new URLSearchParams({ select: '*', order: 'created_at.desc,id.desc', limit: String(safeLimit) });
-      if (page) qs.set('page_name', `ilike.*${page.replace(/[*,]/g, '')}*`);
-      if (actor) qs.set('actor_name', `ilike.*${actor.replace(/[*,]/g, '')}*`);
-      if (action) qs.set('action_label', `ilike.*${action.replace(/[*,]/g, '')}*`);
-      qs.append('created_at', `gte.${from}`);
-      qs.append('created_at', `lte.${to}`);
-      rows = await supabaseDb.request(`/${encodeURIComponent(HISTORY_TABLE)}?${qs.toString()}`);
-    } else {
-      rows = await supabaseDb.select(HISTORY_TABLE, params);
-    }
-
-    const visibleRows = (Array.isArray(rows) ? rows : []).filter(_historyShouldExposeRow);
-    const orderMap = await _historyBuildOrderMap(visibleRows);
-    return res.json({ ok: true, rows: visibleRows.map((row) => _historySerializeRow(row, { orderMap })) });
+    return res.json(await _historyListPayload(req.query));
   } catch (error) {
     console.error('GET /api/history error:', error?.details || error);
     const msg = String(error?.message || 'Failed to load history.');
@@ -25852,7 +25858,9 @@ async function _pageBootstrapOrderReceipts(req, ids) {
 async function _pageBootstrapHistory(req) {
   return Promise.all([
     _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapAccountPayload(req)),
-    _pageBootstrapLoad('/api/history?limit=1000', 10_000, () => _pageBootstrapFetchExistingRoute(req, '/api/history?limit=1000', 35_000)),
+    // History used to call this same Express process over HTTP again. Reuse the
+    // exact route loader directly so page startup has one less network/auth hop.
+    _pageBootstrapLoad('/api/history?limit=1000', 10_000, () => _historyListPayload({ limit: 1000 })),
   ]);
 }
 

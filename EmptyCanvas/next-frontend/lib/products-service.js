@@ -14,6 +14,7 @@ const PRODUCT_READ_CACHE_TTL_MS = 30_000;
 const PRODUCT_READ_CACHE_MAX_ENTRIES = 12;
 const _productReadCache = new Map();
 const _productReadInflight = new Map();
+let productReadCacheGeneration = 0;
 
 function productReadCacheGet(key) {
   const entry = _productReadCache.get(key);
@@ -40,18 +41,22 @@ async function productCachedRead(key, loader, { fresh = false, ttlMs = PRODUCT_R
     if (_productReadInflight.has(key)) return await _productReadInflight.get(key);
   }
 
+  const generation = productReadCacheGeneration;
   const pending = Promise.resolve().then(loader);
   if (!fresh) _productReadInflight.set(key, pending);
   try {
     const value = await pending;
-    productReadCacheSet(key, value, ttlMs);
+    // A mutation may invalidate this cache while the Supabase read is still in
+    // flight. Do not let that older read repopulate a stale product snapshot.
+    if (generation === productReadCacheGeneration) productReadCacheSet(key, value, ttlMs);
     return value;
   } finally {
-    if (!fresh) _productReadInflight.delete(key);
+    if (!fresh && _productReadInflight.get(key) === pending) _productReadInflight.delete(key);
   }
 }
 
 function invalidateProductReadCaches(...keys) {
+  productReadCacheGeneration += 1;
   const wanted = keys.flat().map((key) => String(key || "").trim()).filter(Boolean);
   if (!wanted.length) {
     _productReadCache.clear();
@@ -193,6 +198,7 @@ async function productUnitRows({ fresh = false, tolerant = true } = {}) {
 }
 
 export async function getProductsCatalog({ fresh = false } = {}) {
+  if (fresh) invalidateProductReadCaches();
   return await productCachedRead("catalog", async () => {
     const [rows, tagRows, unitRows] = await Promise.all([
       productRows({ fresh }),
@@ -441,6 +447,7 @@ export async function deleteProduct(productId) {
 }
 
 export async function listProductUnits({ fresh = false } = {}) {
+  if (fresh) invalidateProductReadCaches("units", "products");
   let rows;
   try {
     rows = await productUnitRows({ fresh, tolerant: false });
@@ -482,6 +489,7 @@ export async function createProductUnit(name) {
 }
 
 export async function listProductTags({ fresh = false } = {}) {
+  if (fresh) invalidateProductReadCaches("tags", "products");
   const rows = await productTagRows({ fresh, tolerant: false });
   const tableTags = rows.map((row) => text(pick(row, ["name", "tag", "Name", "Tag"]))).filter(Boolean);
   const productTags = (await productRows({ fresh })).map(serializeProduct).map(firstTag).filter(Boolean);
