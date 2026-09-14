@@ -33,6 +33,33 @@ function routePerformanceStyles(localPath) {
     || localPath.startsWith("/orders/new/request-maintenance")) {
     return ["/next/css/shopping-cart.css?v=css-phase1"];
   }
+  if (localPath === "/products") {
+    return ["/next/css/products-stocktaking-performance.css?v=css-phase2"];
+  }
+  if (localPath === "/stocktaking") {
+    return [
+      "/next/css/products-stocktaking-performance.css?v=css-phase2",
+      "/next/css/stocktaking-performance.css?v=css-phase2",
+      "/next/css/stocktaking-proposals-performance.css?v=css-phase2",
+      "/next/css/stocktaking-after-shared-performance.css?v=css-phase2",
+    ];
+  }
+  if (localPath === "/kits") {
+    return ["/next/css/proposals-kits-performance.css?v=css-phase2"];
+  }
+  if (localPath === "/proposals") {
+    return [
+      "/next/css/proposals-kits-performance.css?v=css-phase2",
+      "/next/css/stocktaking-proposals-performance.css?v=css-phase2",
+      "/next/css/proposals-after-stock-performance.css?v=css-phase2",
+    ];
+  }
+  if (localPath === "/expenses" || localPath === "/expenses/users") {
+    return ["/next/css/expenses-performance.css?v=css-phase2"];
+  }
+  if (localPath === "/b2c" || localPath.startsWith("/b2c/")) {
+    return ["/next/css/b2c-performance.css?v=css-phase2"];
+  }
   return [];
 }
 
