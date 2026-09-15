@@ -1,5 +1,5 @@
 import "server-only";
-import { isSupabaseConfigured, select, selectAll } from "./supabase-rest";
+import { isSupabaseConfigured, select, selectAll, selectById, updateById } from "./supabase-rest";
 import { enrichOrderDetailGrouping, loadRawOrderRowsByIds, serializeReviewOrderDetail } from "./order-details-data";
 
 const PAGE_LIMIT = 36;
@@ -585,3 +585,190 @@ export async function loadOrdersReviewDetails({ account, orderIds = [] } = {}) {
   return await enrichOrderDetailGrouping(allowed.map(serializeReviewOrderDetail));
 }
 
+
+
+function roundOrderQty(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.round(numeric * 1e6) / 1e6;
+}
+
+function statusColor(status) {
+  const value = norm(status);
+  if (/archive/.test(value)) return "purple";
+  if (/(arrived|delivered|received)/.test(value)) return "green";
+  if (/shipped/.test(value)) return "blue";
+  if (/rejected/.test(value)) return "red";
+  if (/progress/.test(value)) return "yellow";
+  if (/supervision/.test(value)) return "orange";
+  return "default";
+}
+
+function directMutationError(message, status, code = "DIRECT_REVIEW_MUTATION_FAILED") {
+  const error = new Error(message);
+  error.status = status;
+  error.code = code;
+  return error;
+}
+
+async function allowedReviewRow(account, id) {
+  if (!isSupabaseConfigured()) return null;
+  const cleanId = text(id);
+  if (!/^\d+$/.test(cleanId)) return null;
+
+  const row = await selectById(tableName(), cleanId);
+  if (!row) throw directMutationError("Order not found", 404);
+
+  const visible = await reviewerVisibility(account || {});
+  if (!visible.ids.length && !visible.names.length) {
+    throw directMutationError("Not allowed", 403);
+  }
+  if (!visibleToReviewer(row, visible)) {
+    throw directMutationError("Not allowed", 403);
+  }
+
+  const issueDescription = text(valueFor(row, ["issue_description", "Issue Description"]));
+  if (/^created from proposal:/i.test(issueDescription)) {
+    throw directMutationError("Not allowed", 403);
+  }
+  return row;
+}
+
+async function upstashDelete(keys = []) {
+  const clean = [...new Set((Array.isArray(keys) ? keys : []).map((key) => text(key)).filter(Boolean))];
+  if (!clean.length) return false;
+  const url = String(process.env.UPSTASH_REDIS_REST_URL || "").trim().replace(/\/+$/, "");
+  const tokenValue = String(process.env.UPSTASH_REDIS_REST_TOKEN || "").trim();
+  if (!url || !tokenValue) return false;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 800);
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      cache: "no-store",
+      signal: controller.signal,
+      headers: {
+        Authorization: `Bearer ${tokenValue}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(["DEL", ...clean]),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function invalidateLegacyReviewCaches(account = {}) {
+  const username = text(account?.username || account?.name);
+  const usernameKey = encodeURIComponent(username || "-");
+  const keys = [];
+  for (const version of ["v2", "v3", "v4"]) {
+    for (const tab of ["all", "not-started", "approved", "rejected", "archive"]) {
+      keys.push(`cache:api:sv-orders:${usernameKey}:${tab}:${version}`);
+    }
+  }
+  keys.push(`cache:api:sv-orders-summary:${usernameKey}:v1`);
+  keys.push(`cache:api:sv-orders-home-summary:${usernameKey}:v1`);
+  keys.push(
+    "cache:api:orders:requested:v7",
+    "cache:api:orders:requested:supabase:v1",
+    "cache:api:orders:requested:supabase:v2:approved",
+    "cache:api:orders:requested:supabase:v2:all-system",
+    "cache:api:orders:requested:supabase:v4:approved",
+    "cache:api:orders:requested:supabase:v4:all-system",
+    "cache:api:orders:requested:supabase:v5:approved",
+    "cache:api:orders:requested:supabase:v5:all-system",
+    "cache:api:orders:requested-summary:supabase:v1:approved",
+    "cache:api:orders:requested-summary:supabase:v1:all-system",
+    "cache:api:orders:maintenance:supabase:v1",
+    "cache:api:orders:maintenance-summary:supabase:v1",
+    "cache:api:orders:current:supabase:v1",
+    "cache:api:orders:current:supabase:v1:all",
+    "cache:api:orders:current-summary:supabase:v1:all",
+  );
+  await upstashDelete(keys).catch(() => false);
+}
+
+export async function updateOrdersReviewApproval({ account, id, decision, rejectedReason = "" } = {}) {
+  const cleanId = text(id);
+  const raw = norm(decision);
+  const normalizedDecision = raw === "approved" ? "Approved" : raw === "rejected" ? "Rejected" : raw === "not started" ? "Not Started" : "";
+  if (!cleanId || !normalizedDecision) throw directMutationError("Invalid id or decision", 400);
+
+  const reason = text(rejectedReason);
+  if (normalizedDecision === "Rejected" && !reason) {
+    throw directMutationError("Rejected reason is required", 400);
+  }
+
+  const row = await allowedReviewRow(account, cleanId);
+  if (!row) return null;
+
+  const nextStatus = normalizedDecision === "Approved" || normalizedDecision === "Rejected" ? "In progress" : null;
+  const patch = {
+    sv_approval: normalizedDecision,
+    rejected_reason: normalizedDecision === "Rejected" ? reason : null,
+  };
+  if (nextStatus) patch.status = nextStatus;
+
+  await updateById(tableName(), cleanId, patch);
+  await invalidateLegacyReviewCaches(account).catch(() => {});
+  const currentStatus = text(valueFor(row, ["status", "Status"]));
+  const status = nextStatus || currentStatus || "";
+  return {
+    ok: true,
+    id: cleanId,
+    decision: normalizedDecision,
+    status,
+    statusColor: statusColor(status),
+    source: "supabase-direct",
+  };
+}
+
+export async function updateOrdersReviewQuantity({ account, id, value } = {}) {
+  const cleanId = text(id);
+  const numericValue = Number(value);
+  if (!cleanId) throw directMutationError("Missing id", 400);
+  if (!Number.isFinite(numericValue)) throw directMutationError("Invalid quantity", 400);
+
+  const row = await allowedReviewRow(account, cleanId);
+  if (!row) return null;
+
+  const requestedRaw = num(valueFor(row, ["quantity_requested", "Quantity Requested", "requested_quantity", "Requested Quantity"]));
+  const progressRaw = num(valueFor(row, ["quantity_progress", "Quantity Progress", "quantity", "Quantity", "qty", "Qty"]));
+  const requested = roundOrderQty(requestedRaw !== null ? requestedRaw : (progressRaw !== null ? progressRaw : 0));
+  const orderTypeName = text(valueFor(row, ["order_type", "Order Type"]));
+  const isWithdrawalQuantity = orderTypeKey(orderTypeName) === orderTypeKey("Withdraw Products")
+    || Number(requested) < 0
+    || Number(progressRaw) < 0;
+  const signedValue = isWithdrawalQuantity ? -Math.abs(numericValue) : numericValue;
+  const newVal = roundOrderQty(signedValue);
+  const editedVal = Number.isFinite(requested) && roundOrderQty(newVal) === roundOrderQty(requested) ? null : newVal;
+
+  const receivedRaw = num(valueFor(row, [
+    "quantity_received_by_operations",
+    "Quantity Received by operations",
+    "Quantity Received by Operations",
+    "received_quantity",
+    "quantity_received",
+  ]));
+  const received = Number.isFinite(Number(receivedRaw)) ? Number(receivedRaw) : 0;
+  const nextRemaining = roundOrderQty(newVal - received);
+
+  await updateById(tableName(), cleanId, {
+    quantity_edited_by_supervisor: editedVal,
+    quantity_remaining: nextRemaining,
+  });
+  await invalidateLegacyReviewCaches(account).catch(() => {});
+
+  return {
+    ok: true,
+    value: newVal,
+    remaining: nextRemaining,
+    cleared: editedVal === null,
+    source: "supabase-direct",
+  };
+}

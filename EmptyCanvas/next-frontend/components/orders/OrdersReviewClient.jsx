@@ -813,7 +813,7 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
     if (!id) return;
     setBusyIds((current) => new Set(current).add(id));
     try {
-      const response = await fetch(`/api/sv-orders/${encodeURIComponent(id)}/approval`, { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ decision, rejectedReason }) });
+      const response = await fetch(`/api/sv-orders/${encodeURIComponent(id)}/approval-direct`, { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ decision, rejectedReason }) });
       const data = await readJson(response);
       if (!response.ok) throw new Error(data?.error || "Failed to update approval.");
       const patch = { approval: normalizeApproval(decision), rejectedReason: normalizeApproval(decision) === "Rejected" ? text(rejectedReason) : "", status: data?.status };
@@ -851,7 +851,7 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
     if (!id || !Number.isFinite(number)) return;
     setBusyIds((current) => new Set(current).add(id));
     try {
-      const response = await fetch(`/api/sv-orders/${encodeURIComponent(id)}/quantity`, { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ value: number }) });
+      const response = await fetch(`/api/sv-orders/${encodeURIComponent(id)}/quantity-direct`, { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ value: number }) });
       const data = await readJson(response);
       if (!response.ok) throw new Error(data?.error || "Failed to update quantity.");
       const quantityEdited = data?.cleared ? null : finite(data?.value, number);
