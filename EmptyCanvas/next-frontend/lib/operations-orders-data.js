@@ -1,5 +1,6 @@
 import "server-only";
 import { isSupabaseConfigured, select } from "./supabase-rest";
+import { enrichOrderDetailGrouping, loadRawOrderRowsByIds, serializeOperationsOrderDetail } from "./order-details-data";
 
 const PAGE_LIMIT = 36;
 const PAGE_MAX = 80;
@@ -480,3 +481,10 @@ export async function loadOperationsOrdersPage({
 export async function loadOperationsOrdersInitialPage({ limit = PAGE_LIMIT } = {}) {
   return await loadOperationsOrdersPage({ tab: "all", type: "all", query: "", cursor: null, limit });
 }
+export async function loadOperationsOrderDetails(orderIds = []) {
+  if (!isSupabaseConfigured()) return null;
+  const rows = await loadRawOrderRowsByIds(orderIds);
+  const serialized = rows.map(serializeOperationsOrderDetail);
+  return await enrichOrderDetailGrouping(serialized);
+}
+

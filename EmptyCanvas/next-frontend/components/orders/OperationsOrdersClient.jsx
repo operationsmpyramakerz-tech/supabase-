@@ -1999,7 +1999,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
     }
 
     try {
-      const response = await fetch("/api/orders/requested/details", {
+      const response = await fetch("/api/orders/requested/details-direct", {
         method: "POST",
         credentials: "include",
         cache: "no-store",

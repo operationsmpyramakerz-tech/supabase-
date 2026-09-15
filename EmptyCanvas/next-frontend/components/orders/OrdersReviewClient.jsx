@@ -740,7 +740,7 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
     if (!force && detailGroups.has(group.key)) return;
     setDetailLoadingKey(group.key);
     try {
-      const response = await fetch("/api/sv-orders/details", {
+      const response = await fetch("/api/sv-orders/details-direct", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",

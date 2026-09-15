@@ -1,5 +1,6 @@
 import "server-only";
 import { isSupabaseConfigured, select, selectAll } from "./supabase-rest";
+import { enrichOrderDetailGrouping, loadRawOrderRowsByIds, serializeReviewOrderDetail } from "./order-details-data";
 
 const PAGE_LIMIT = 36;
 const PAGE_MAX = 80;
@@ -558,3 +559,29 @@ export const __ordersReviewDataTest = {
   visibleToReviewer,
   groupSearchText,
 };
+export async function loadOrdersReviewDetails({ account, orderIds = [] } = {}) {
+  if (!isSupabaseConfigured()) return null;
+  const rows = await loadRawOrderRowsByIds(orderIds);
+  const visible = await reviewerVisibility(account || {});
+  if (!visible.ids.length && !visible.names.length) {
+    const error = new Error("No reviewer schools are assigned to this account.");
+    error.status = 403;
+    throw error;
+  }
+
+  const allowed = rows.filter((row) => {
+    if (!visibleToReviewer(row, visible)) return false;
+    const issueDescription = text(valueFor(row, ["issue_description", "Issue Description"]));
+    return !/^created from proposal:/i.test(issueDescription);
+  });
+  const allowedIds = new Set(allowed.map((row) => text(valueFor(row, ["id", "ID"]))).filter(Boolean));
+  const requestedIds = [...new Set((Array.isArray(orderIds) ? orderIds : []).map(text).filter(Boolean))];
+  if (requestedIds.some((id) => !allowedIds.has(id))) {
+    const error = new Error("One or more order components are not available for this reviewer.");
+    error.status = 403;
+    throw error;
+  }
+
+  return await enrichOrderDetailGrouping(allowed.map(serializeReviewOrderDetail));
+}
+
