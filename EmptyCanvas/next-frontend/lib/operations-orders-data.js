@@ -103,7 +103,10 @@ function serializeSummary(row = {}) {
   const base = roundQty(quantityEditedBySupervisor !== null ? quantityEditedBySupervisor : originalBase);
   const receivedRaw = num(row.quantity_received_by_operations ?? row["Quantity Received by operations"] ?? row["Quantity Received by Operations"] ?? row.received_quantity ?? row.quantity_received);
   const remainingRaw = num(row.quantity_remaining ?? row["Quantity Remaining"] ?? row.remaining_quantity);
-  const status = text(row.status ?? row.Status) || "Pending";
+  const rawStatus = text(row.status ?? row.Status) || "Pending";
+  const orderType = text(row.order_type ?? row["Order Type"]) || null;
+  const svApproval = text(row.sv_approval ?? row["S.V Approval"] ?? row["SV Approval"]) || null;
+  const status = effectiveOperationsStatus(row, rawStatus, orderType, svApproval);
   const statusKey = norm(status);
   const isFinalReceivedStatus = /(arrived|delivered|received)/.test(statusKey);
   const hasBaseQty = Math.abs(Number(base) || 0) > 1e-9;
@@ -132,7 +135,6 @@ function serializeSummary(row = {}) {
     quantityReceivedEdited = receivedRaw !== null && Math.abs(Number(receivedRaw) || 0) > 1e-9;
   }
 
-  const orderType = text(row.order_type ?? row["Order Type"]) || null;
   const createdByName = text(row.team_member_name ?? row["Teams Members"] ?? row.teams_members ?? row.Supervisor ?? row.supervisor);
   const createdById = text(row.team_member_id ?? row["Team Member ID"]) || createdByName;
   const operationsByName = text(row.person_received_by_operations ?? row["Person Received by Operations"] ?? row["Received by operations"]);
@@ -171,7 +173,7 @@ function serializeSummary(row = {}) {
     createdTime,
     createdById,
     createdByName,
-    svApproval: text(row.sv_approval ?? row["S.V Approval"] ?? row["SV Approval"]) || null,
+    svApproval,
     summaryOnly: true,
     source: "supabase",
   };
@@ -203,6 +205,24 @@ function orderTypeLabel(value) {
   if (key === "withdrawproducts") return "Withdraw Products";
   if (key === "requestmaintenance") return "Request Maintenance";
   return "";
+}
+
+function effectiveOperationsStatus(row = {}, rawStatus = "", orderType = "", svApproval = "") {
+  const status = text(rawStatus) || "Pending";
+  if (orderTypeKey(orderType) !== "requestmaintenance") return status;
+  if (statusIndex(status) !== 2 || approvalKey(svApproval) !== "approved") return status;
+
+  // A saved maintenance log means the technical visit was completed and the
+  // Operations workflow is in Shipping, even for older rows whose DB status
+  // was left as "In progress" by the previous client.
+  const hasMaintenanceLog = [
+    row?.serial_number,
+    row?.actual_issue_description,
+    row?.repair_action,
+    row?.resolution_method,
+    row?.spare_parts_replaced,
+  ].some((value) => Boolean(text(value)));
+  return hasMaintenanceLog ? "Shipped" : status;
 }
 
 function approvalKey(value) {
@@ -300,9 +320,13 @@ function statusLogic(tab = "all") {
   const cleanTab = String(tab || "all").trim().toLowerCase();
   if (cleanTab === "archive") return ["status.ilike.*archive*"];
   if (cleanTab === "delivered") return ["status.ilike.*arrived*", "status.ilike.*delivered*", "status.ilike.*received*"];
-  if (cleanTab === "remaining" || cleanTab === "received") {
+  if (cleanTab === "remaining") {
     return ["status.ilike.*shipped*", "status.ilike.*shipping*", "status.ilike.*prepared*", "status.ilike.*delivering*"];
   }
+  // Maintenance logs created by the older client can legitimately be stored as
+  // "In progress" while they are already in the Shipping step. Keep this
+  // candidate query broad and let the exact normalized status decide below.
+  if (cleanTab === "received") return null;
   if (cleanTab === "approved" || cleanTab === "rejected") return ["status.ilike.*progress*", "status.ilike.*approved*"];
   return null;
 }
@@ -373,19 +397,40 @@ async function rowsByNumbers(numbers = []) {
   const clean = [...new Set(numbers.map(Number).filter(Number.isFinite))];
   if (!clean.length) return [];
   const out = [];
+  const rowChunk = 1000;
+
+  // Supabase/PostgREST can enforce a server-side max-row cap (commonly 1000)
+  // even when a larger `limit` is requested. Orders are component rows, so a
+  // page of a few Order groups can easily exceed that cap. Always paginate the
+  // rows inside each order-number batch until every component row is loaded.
   for (let index = 0; index < clean.length; index += 24) {
     const batch = clean.slice(index, index + 24);
-    const baseParams = {
-      order_number: `in.(${batch.join(",")})`,
-      order: "order_number.desc,notion_created_time.desc,id.desc",
-      limit: "5000",
-    };
-    try {
-      const rows = await select(tableName(), { ...baseParams, select: SUMMARY_SELECT });
-      if (Array.isArray(rows)) out.push(...rows);
-    } catch {
-      const rows = await select(tableName(), { ...baseParams, select: "*" });
-      if (Array.isArray(rows)) out.push(...rows);
+    let offset = 0;
+    let useProjection = true;
+
+    while (offset < 50000) {
+      const baseParams = {
+        order_number: `in.(${batch.join(",")})`,
+        order: "order_number.desc,notion_created_time.desc,id.desc",
+        limit: String(rowChunk),
+        offset: String(offset),
+      };
+      let rows;
+      if (useProjection) {
+        try {
+          rows = await select(tableName(), { ...baseParams, select: SUMMARY_SELECT });
+        } catch {
+          useProjection = false;
+          rows = await select(tableName(), { ...baseParams, select: "*" });
+        }
+      } else {
+        rows = await select(tableName(), { ...baseParams, select: "*" });
+      }
+
+      const chunk = Array.isArray(rows) ? rows : [];
+      out.push(...chunk);
+      if (chunk.length < rowChunk) break;
+      offset += chunk.length;
     }
   }
   return out;

@@ -2163,7 +2163,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
           orderIds: group.orderIds,
           perItemLogs: logsWithDetails,
           moveToArrived: false,
-          moveToShipping: false,
+          moveToShipping: true,
         });
         await refreshOrders();
         setActionState(null);

@@ -313,6 +313,22 @@ export async function loadRawOrderRowsByIds(orderIds = []) {
   return safeRows;
 }
 
+function effectiveOperationsMaintenanceStatus(row = {}, rawStatus = "", orderType = "", svApproval = "") {
+  const status = text(rawStatus) || "Pending";
+  const typeKey = norm(orderType).replace(/[^a-z0-9]/g, "");
+  const approval = norm(svApproval);
+  const stageTwo = /(in progress|inprogress|progress|approved)/.test(norm(status).replace(/[_-]+/g, " "));
+  if (typeKey !== "requestmaintenance" || !stageTwo || !approval.includes("approv")) return status;
+  const hasMaintenanceLog = [
+    valueFor(row, ["serial_number", "Serial Number"]),
+    valueFor(row, ["actual_issue_description", "Actual Issue Description"]),
+    valueFor(row, ["repair_action", "Repair Action"]),
+    valueFor(row, ["resolution_method", "Resolution Method"]),
+    valueFor(row, ["spare_parts_replaced", "Spare parts replaced"]),
+  ].some((value) => Boolean(text(value)));
+  return hasMaintenanceLog ? "Shipped" : status;
+}
+
 export function serializeOperationsOrderDetail(row = {}) {
   const id = text(valueFor(row, ["id", "ID"]));
   const orderNumber = num(valueFor(row, ["order_number", "Order - ID", "Order ID", "order id"]));
@@ -323,7 +339,10 @@ export function serializeOperationsOrderDetail(row = {}) {
   const base = roundQty(quantityEditedBySupervisor !== null ? quantityEditedBySupervisor : originalBase);
   const receivedRaw = num(valueFor(row, ["quantity_received_by_operations", "Quantity Received by operations", "Quantity Received by Operations", "received_quantity", "quantity_received"]));
   const remainingRaw = num(valueFor(row, ["quantity_remaining", "Quantity Remaining", "remaining_quantity"]));
-  const status = text(valueFor(row, ["status", "Status"])) || "Pending";
+  const rawStatus = text(valueFor(row, ["status", "Status"])) || "Pending";
+  const orderType = text(valueFor(row, ["order_type", "Order Type"])) || null;
+  const svApproval = text(valueFor(row, ["sv_approval", "S.V Approval", "SV Approval"])) || null;
+  const status = effectiveOperationsMaintenanceStatus(row, rawStatus, orderType, svApproval);
   const finalReceived = /(arrived|delivered|received)/.test(norm(status));
   const hasBase = Math.abs(Number(base) || 0) > 1e-9;
   const receivedZero = receivedRaw !== null && Math.abs(Number(receivedRaw) || 0) < 1e-9;
@@ -349,7 +368,6 @@ export function serializeOperationsOrderDetail(row = {}) {
     quantityReceivedEdited = receivedRaw !== null && Math.abs(Number(receivedRaw) || 0) > 1e-9;
   }
 
-  const orderType = text(valueFor(row, ["order_type", "Order Type"])) || null;
   const createdByName = text(valueFor(row, ["team_member_name", "Teams Members", "teams_members", "created_by_name", "created_by", "Created By", "Supervisor", "supervisor"]));
   const createdById = text(valueFor(row, ["team_member_id", "team_members_id", "created_by_id", "owner_id"])) || createdByName;
   const operationsByName = text(valueFor(row, ["person_received_by_operations", "Person Received by Operations", "Received by operations"]));
@@ -421,7 +439,7 @@ export function serializeOperationsOrderDetail(row = {}) {
     assignedToNames: text(valueFor(row, ["supervisor", "Supervisor"])) ? [text(valueFor(row, ["supervisor", "Supervisor"]))] : [],
     assignedToId: "",
     assignedToName: text(valueFor(row, ["supervisor", "Supervisor"])) || "",
-    svApproval: text(valueFor(row, ["sv_approval", "S.V Approval", "SV Approval"])) || null,
+    svApproval,
     productTag: text(valueFor(row, ["product_tag", "Product Tag", "component_tag", "Component Tag", "tag", "Tag"])) || null,
     customizeId: text(valueFor(row, ["customize_id", "Customize ID", "custom_id", "Custom ID"])) || null,
     kitTag: text(valueFor(row, ["kit_tag", "Kit Tag", "kit_name", "Kit Name", "source_kit", "Source Kit"])) || null,

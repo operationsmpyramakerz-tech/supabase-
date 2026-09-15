@@ -5038,6 +5038,18 @@ const _SB_OPERATIONS_SUMMARY_SELECT = [
 
 function _sbSerializeOperationsSummaryRow(row = {}) {
   const item = _sbSerializeOrderRow(row);
+  const rawStatus = _sbOrderText(item?.status) || "Pending";
+  const isMaintenance = _normKeyOrderType(item?.orderType) === _normKeyOrderType("Request Maintenance");
+  const stageTwo = _sbOrderPageStatusIndex(rawStatus) === 2;
+  const supervisorApproved = _sbOrderPageApprovalKey(item?.svApproval) === "approved";
+  const hasMaintenanceLog = [
+    _sbOrderGet(row, ["serial_number", "Serial Number"]),
+    item?.actualIssueDescription,
+    item?.repairAction,
+    item?.resolutionMethod,
+    _sbOrderGet(row, ["spare_parts_replaced", "Spare parts replaced"]),
+  ].some((value) => Boolean(_sbOrderText(value)));
+  const effectiveStatus = isMaintenance && stageTwo && supervisorApproved && hasMaintenanceLog ? "Shipped" : rawStatus;
   return {
     id: item.id,
     orderId: item.orderId,
@@ -5053,8 +5065,8 @@ function _sbSerializeOperationsSummaryRow(row = {}) {
     quantityRemaining: item.quantityRemaining,
     quantityReceivedEdited: item.quantityReceivedEdited,
     quantity: item.quantity,
-    status: item.status,
-    statusColor: item.statusColor,
+    status: effectiveStatus,
+    statusColor: _sbOrderStatusColor(effectiveStatus),
     orderType: item.orderType,
     orderTypeColor: item.orderTypeColor,
     issueDescription: item.issueDescription,
@@ -5280,7 +5292,8 @@ function _sbOrderPageStatusLogic(tab = "all", { review = false } = {}) {
   }
   if (cleanTab === "archive") return [`status.ilike.*archive*`];
   if (cleanTab === "delivered") return [`status.ilike.*arrived*`, `status.ilike.*delivered*`, `status.ilike.*received*`];
-  if (cleanTab === "remaining" || cleanTab === "received") return [`status.ilike.*shipped*`, `status.ilike.*shipping*`, `status.ilike.*prepared*`, `status.ilike.*delivering*`];
+  if (cleanTab === "remaining") return [`status.ilike.*shipped*`, `status.ilike.*shipping*`, `status.ilike.*prepared*`, `status.ilike.*delivering*`];
+  if (cleanTab === "received") return null;
   if (cleanTab === "approved" || cleanTab === "rejected") return [`status.ilike.*progress*`, `status.ilike.*approved*`];
   return null;
 }
@@ -5345,15 +5358,23 @@ async function _sbOrderPageRowsByNumbers(numbers = [], selectExpr = "*") {
   const unique = Array.from(new Set((Array.isArray(numbers) ? numbers : []).map(Number).filter(Number.isFinite)));
   if (!unique.length) return [];
   const out = [];
+  const rowChunk = 1000;
   for (let i = 0; i < unique.length; i += 24) {
     const batch = unique.slice(i, i + 24);
-    const rows = await supabaseDb.select(_sbOrdersTable(), {
-      select: selectExpr,
-      order: "order_number.desc,notion_created_time.desc,id.desc",
-      order_number: `in.(${batch.join(",")})`,
-      limit: 5000,
-    });
-    if (Array.isArray(rows)) out.push(...rows);
+    let offset = 0;
+    while (offset < 50000) {
+      const rows = await supabaseDb.select(_sbOrdersTable(), {
+        select: selectExpr,
+        order: "order_number.desc,notion_created_time.desc,id.desc",
+        order_number: `in.(${batch.join(",")})`,
+        limit: rowChunk,
+        offset,
+      });
+      const chunk = Array.isArray(rows) ? rows : [];
+      out.push(...chunk);
+      if (chunk.length < rowChunk) break;
+      offset += chunk.length;
+    }
   }
   return out;
 }
@@ -5506,7 +5527,16 @@ async function _sbRequestedOrderDetailsByIds(orderIds = []) {
     order: "notion_created_time.desc,id.desc",
     limit: Math.max(500, ids.length),
   });
-  return _sbEnrichOrderGrouping((Array.isArray(rows) ? rows : []).map(_sbSerializeOrderRow));
+  const items = (Array.isArray(rows) ? rows : []).map((row) => {
+    const item = _sbSerializeOrderRow(row);
+    const operationsSummary = _sbSerializeOperationsSummaryRow(row);
+    return {
+      ...item,
+      status: operationsSummary.status,
+      statusColor: operationsSummary.statusColor,
+    };
+  });
+  return _sbEnrichOrderGrouping(items);
 }
 
 async function _sbCurrentOrdersList(req) {
