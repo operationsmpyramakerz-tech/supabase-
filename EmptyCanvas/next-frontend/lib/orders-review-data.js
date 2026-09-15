@@ -1,5 +1,5 @@
 import "server-only";
-import { isSupabaseConfigured, select, selectAll, selectById, updateById } from "./supabase-rest";
+import { isSupabaseConfigured, select, selectAll, selectById, updateById, updateByIds } from "./supabase-rest";
 import { enrichOrderDetailGrouping, loadRawOrderRowsByIds, serializeReviewOrderDetail } from "./order-details-data";
 
 const PAGE_LIMIT = 36;
@@ -770,5 +770,196 @@ export async function updateOrdersReviewQuantity({ account, id, value } = {}) {
     remaining: nextRemaining,
     cleared: editedVal === null,
     source: "supabase-direct",
+  };
+}
+
+
+function reviewAccessToken(value) {
+  return text(value).toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function hasOrdersReviewAdminAccess(account = {}) {
+  const name = reviewAccessToken(account?.name || account?.username);
+  const position = reviewAccessToken(account?.position);
+  if (name === "admin" || position.includes("admin")) return true;
+
+  const wanted = new Set(["ordersreview", "svorders", "supervisionorders"]);
+  const pages = Array.isArray(account?.pageAccess?.pages) ? account.pageAccess.pages : [];
+  return pages.some((row) => {
+    if (row?.isEnabled === false) return false;
+    if (String(row?.accessLevel || row?.access_level || "").trim().toLowerCase() !== "admin") return false;
+    const candidates = [
+      row?.pageName,
+      row?.pageKey,
+      row?.routePath,
+      ...(Array.isArray(row?.aliases) ? row.aliases : []),
+    ].map(reviewAccessToken).filter(Boolean);
+    return candidates.some((candidate) => wanted.has(candidate));
+  });
+}
+
+async function directAdminPasswordResult(account = {}, password = "") {
+  const pwd = text(password);
+  if (!pwd) throw directMutationError("adminPassword required", 400);
+  // Match Express semantics: page-level Admin still needs to submit a non-empty
+  // value, but the shared password itself is bypassed for that access level.
+  if (hasOrdersReviewAdminAccess(account)) return true;
+  if (!isSupabaseConfigured()) return null;
+
+  let candidates = [];
+  const attempts = [
+    { select: "*", name: "ilike.admin", limit: "10" },
+    { select: "*", position: "ilike.*admin*", limit: "20" },
+  ];
+  let hadSuccessfulLookup = false;
+  for (const params of attempts) {
+    try {
+      const rows = await select(teamMembersTable(), params);
+      hadSuccessfulLookup = true;
+      if (Array.isArray(rows) && rows.length) candidates.push(...rows);
+    } catch {
+      // Older/custom schemas can reject one of these filter names. Keep trying,
+      // then fall back to Legacy instead of treating an infrastructure mismatch
+      // as an invalid password.
+    }
+    if (candidates.length) break;
+  }
+
+  if (!candidates.length) {
+    try {
+      const rows = await selectAll(teamMembersTable(), { limit: 1000 });
+      hadSuccessfulLookup = true;
+      candidates = Array.isArray(rows) ? rows : [];
+    } catch {
+      return null;
+    }
+  }
+  if (!hadSuccessfulLookup) return null;
+
+  const adminRow = candidates.find((row) => reviewAccessToken(valueFor(row, ["name", "Name"])) === "admin")
+    || candidates.find((row) => reviewAccessToken(valueFor(row, ["position", "Position"])).includes("admin"))
+    || candidates.find((row) => reviewAccessToken(valueFor(row, ["name", "Name"])).includes("admin"));
+  if (!adminRow) return null; // Legacy may still have the Admin user in Notion.
+
+  const stored = text(valueFor(adminRow, ["password", "Password"]));
+  if (!stored) return null;
+  return stored === pwd;
+}
+
+function cleanReviewActionIds(orderIds = []) {
+  return [...new Set((Array.isArray(orderIds) ? orderIds : [])
+    .map((id) => text(id))
+    .filter(Boolean))]
+    .slice(0, 500);
+}
+
+async function allowedReviewRows(account = {}, ids = []) {
+  const clean = cleanReviewActionIds(ids);
+  if (!clean.length) throw directMutationError("orderIds required", 400);
+  if (!clean.every((id) => /^\d+$/.test(id))) return null;
+  if (!isSupabaseConfigured()) return null;
+
+  const visible = await reviewerVisibility(account || {});
+  if (!visible.ids.length && !visible.names.length) throw directMutationError("Not allowed", 403);
+
+  const rows = [];
+  for (let index = 0; index < clean.length; index += 200) {
+    const batch = clean.slice(index, index + 200);
+    const chunk = await select(tableName(), {
+      select: "*",
+      id: `in.(${batch.join(",")})`,
+      limit: String(Math.max(batch.length, 1)),
+    });
+    if (Array.isArray(chunk)) rows.push(...chunk);
+  }
+
+  const byId = new Map(rows.map((row) => [text(valueFor(row, ["id", "ID"])), row]));
+  const ordered = clean.map((id) => byId.get(id)).filter(Boolean);
+  if (ordered.length !== clean.length) throw directMutationError("Order not found", 404);
+  if (ordered.some((row) => !visibleToReviewer(row, visible))) throw directMutationError("Not allowed", 403);
+  return ordered;
+}
+
+function normalizeProtectedApproval(value) {
+  const key = norm(value).replace(/[_\s-]+/g, " ");
+  if (key === "approved") return "Approved";
+  if (key === "rejected") return "Rejected";
+  return "Not Started";
+}
+
+function restoreStatusForApproval(value) {
+  const approval = normalizeProtectedApproval(value);
+  return approval === "Approved" || approval === "Rejected" ? "In progress" : "Under Supervision";
+}
+
+export async function performOrdersReviewProtectedAction({
+  account,
+  action,
+  orderIds = [],
+  adminPassword = "",
+  approvals = null,
+  approvalStatus = "",
+} = {}) {
+  const cleanAction = text(action).toLowerCase().replace(/[_\s]+/g, "-");
+  if (!["archive", "unarchive", "verify-edit", "update-approval"].includes(cleanAction)) {
+    throw directMutationError("Unsupported protected action", 400);
+  }
+
+  const cleanIds = cleanReviewActionIds(orderIds);
+  if (!cleanIds.length) throw directMutationError("orderIds required", 400);
+  if (!cleanIds.every((id) => /^\d+$/.test(id))) return null;
+
+  const passwordOk = await directAdminPasswordResult(account || {}, adminPassword);
+  if (passwordOk === null) return null;
+  if (!passwordOk) throw directMutationError("Invalid admin password", 401);
+
+  const rows = await allowedReviewRows(account || {}, cleanIds);
+  if (!rows) return null;
+
+  if (cleanAction === "verify-edit") {
+    return { ok: true, action: cleanAction, source: "supabase-direct" };
+  }
+
+  if (cleanAction === "archive") {
+    await updateByIds(tableName(), cleanIds, { status: "Archive" });
+    await invalidateLegacyReviewCaches(account).catch(() => {});
+    return { ok: true, action: cleanAction, status: "Archive", source: "supabase-direct" };
+  }
+
+  if (cleanAction === "unarchive") {
+    const grouped = new Map();
+    for (const row of rows) {
+      const id = text(valueFor(row, ["id", "ID"]));
+      const status = restoreStatusForApproval(valueFor(row, ["sv_approval", "S.V Approval", "SV Approval"]));
+      if (!grouped.has(status)) grouped.set(status, []);
+      grouped.get(status).push(id);
+    }
+    for (const [status, ids] of grouped.entries()) {
+      await updateByIds(tableName(), ids, { status });
+    }
+    await invalidateLegacyReviewCaches(account).catch(() => {});
+    return { ok: true, action: cleanAction, source: "supabase-direct" };
+  }
+
+  const approvalsInput = approvals && typeof approvals === "object" && !Array.isArray(approvals) ? approvals : null;
+  const fallbackApproval = normalizeProtectedApproval(approvalStatus);
+  const idsByApproval = new Map();
+  for (const id of cleanIds) {
+    const supplied = approvalsInput && Object.prototype.hasOwnProperty.call(approvalsInput, id)
+      ? approvalsInput[id]
+      : fallbackApproval;
+    const normalized = normalizeProtectedApproval(supplied);
+    if (!idsByApproval.has(normalized)) idsByApproval.set(normalized, []);
+    idsByApproval.get(normalized).push(id);
+  }
+  for (const [approval, ids] of idsByApproval.entries()) {
+    await updateByIds(tableName(), ids, { sv_approval: approval });
+  }
+  await invalidateLegacyReviewCaches(account).catch(() => {});
+  return {
+    ok: true,
+    action: "update-approval",
+    source: "supabase-direct",
+    items: cleanIds.map((id) => ({ id, approval: normalizeProtectedApproval(approvalsInput?.[id] ?? fallbackApproval) })),
   };
 }

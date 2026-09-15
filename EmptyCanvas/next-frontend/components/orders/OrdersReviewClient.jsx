@@ -19,7 +19,8 @@ const PASSWORD_ACTIONS = {
     title: "Archive order",
     description: "Enter admin password to move this order to Archive.",
     button: "Archive",
-    endpoint: "/api/sv-orders/actions/archive",
+    endpoint: "/api/sv-orders/mutations-direct",
+    directAction: "archive",
     icon: "archive",
     danger: true,
   },
@@ -27,14 +28,16 @@ const PASSWORD_ACTIONS = {
     title: "UnArchive order",
     description: "Enter admin password to restore this order.",
     button: "UnArchive",
-    endpoint: "/api/sv-orders/actions/unarchive",
+    endpoint: "/api/sv-orders/mutations-direct",
+    directAction: "unarchive",
     icon: "rotate-ccw",
   },
   editReview: {
     title: "Edit review decision",
     description: "Enter admin password to update the approval status for each component.",
     button: "Continue",
-    endpoint: "/api/sv-orders/actions/verify-edit",
+    endpoint: "/api/sv-orders/mutations-direct",
+    directAction: "verify-edit",
     icon: "edit-2",
   },
 };
@@ -813,7 +816,7 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
     if (!id) return;
     setBusyIds((current) => new Set(current).add(id));
     try {
-      const response = await fetch(`/api/sv-orders/${encodeURIComponent(id)}/approval-direct`, { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ decision, rejectedReason }) });
+      const response = await fetch("/api/sv-orders/mutations-direct", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ action: "approval", id, decision, rejectedReason }) });
       const data = await readJson(response);
       if (!response.ok) throw new Error(data?.error || "Failed to update approval.");
       const patch = { approval: normalizeApproval(decision), rejectedReason: normalizeApproval(decision) === "Rejected" ? text(rejectedReason) : "", status: data?.status };
@@ -851,7 +854,7 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
     if (!id || !Number.isFinite(number)) return;
     setBusyIds((current) => new Set(current).add(id));
     try {
-      const response = await fetch(`/api/sv-orders/${encodeURIComponent(id)}/quantity-direct`, { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ value: number }) });
+      const response = await fetch("/api/sv-orders/mutations-direct", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ action: "quantity", id, value: number }) });
       const data = await readJson(response);
       if (!response.ok) throw new Error(data?.error || "Failed to update quantity.");
       const quantityEdited = data?.cleared ? null : finite(data?.value, number);
@@ -866,7 +869,7 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
     const { action, group } = passwordState; const config = PASSWORD_ACTIONS[action];
     setPasswordBusy(true); setPasswordError("");
     try {
-      const response = await fetch(config.endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ orderIds: group.orderIds, adminPassword: password }) });
+      const response = await fetch(config.endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ action: config.directAction, orderIds: group.orderIds, adminPassword: password }) });
       const data = await readJson(response);
       if (response.status === 401) throw new Error("Wrong password. Please try again.");
       if (!response.ok) throw new Error(data?.error || "The protected action could not be completed.");
@@ -878,7 +881,7 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
     if (!editorState) return;
     setEditorBusy(true); setEditorError("");
     try {
-      const response = await fetch("/api/sv-orders/actions/update-approval", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ orderIds: editorState.group.orderIds, adminPassword: editorState.password, approvals }) });
+      const response = await fetch("/api/sv-orders/mutations-direct", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ action: "update-approval", orderIds: editorState.group.orderIds, adminPassword: editorState.password, approvals }) });
       const data = await readJson(response);
       if (response.status === 401) throw new Error("The verified password is no longer valid.");
       if (!response.ok) throw new Error(data?.error || "Review decisions could not be updated.");

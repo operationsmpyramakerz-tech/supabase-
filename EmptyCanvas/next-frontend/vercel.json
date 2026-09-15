@@ -21,12 +21,8 @@
       "destination": "/next/api/sv-orders/details-direct"
     },
     {
-      "source": "/api/sv-orders/:id/approval-direct",
-      "destination": "/next/api/sv-orders/:id/approval-direct"
-    },
-    {
-      "source": "/api/sv-orders/:id/quantity-direct",
-      "destination": "/next/api/sv-orders/:id/quantity-direct"
+      "source": "/api/sv-orders/mutations-direct",
+      "destination": "/next/api/sv-orders/mutations-direct"
     },
     {
       "source": "/api/products",
