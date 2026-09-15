@@ -1,6 +1,7 @@
 import "server-only";
-import { isSupabaseConfigured, select, updateById, updateByIds } from "./supabase-rest";
+import { isSupabaseConfigured, select, selectAll, updateById, updateByIds } from "./supabase-rest";
 import { enrichOrderDetailGrouping, loadRawOrderRowsByIds, serializeOperationsOrderDetail } from "./order-details-data";
+import { getProductsCatalog } from "./products-service";
 
 const PAGE_LIMIT = 36;
 const PAGE_MAX = 80;
@@ -542,6 +543,91 @@ function directOperationsMutationError(message, status = 500) {
   return error;
 }
 
+function operationsAccessToken(value) {
+  return text(value).toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function operationsTeamMembersTable() {
+  return text(process.env.SUPABASE_TEAM_MEMBERS_TABLE) || "team_members";
+}
+
+function operationsValueFor(row = {}, aliases = []) {
+  for (const alias of aliases) {
+    if (Object.prototype.hasOwnProperty.call(row || {}, alias)) return row[alias];
+  }
+  const wanted = new Set(aliases.map(operationsAccessToken).filter(Boolean));
+  for (const [key, value] of Object.entries(row || {})) {
+    if (wanted.has(operationsAccessToken(key))) return value;
+  }
+  return null;
+}
+
+function hasOperationsAdminAccess(account = {}) {
+  const name = operationsAccessToken(account?.name || account?.username);
+  const position = operationsAccessToken(account?.position);
+  if (name === "admin" || position.includes("admin")) return true;
+
+  const wanted = new Set(["operationsorders", "requestedorders", "operationsrequestedorders", "schoolsrequestedorders"]);
+  const pages = Array.isArray(account?.pageAccess?.pages) ? account.pageAccess.pages : [];
+  return pages.some((row) => {
+    if (row?.isEnabled === false) return false;
+    if (text(row?.accessLevel || row?.access_level).toLowerCase() !== "admin") return false;
+    const candidates = [
+      row?.pageName,
+      row?.pageKey,
+      row?.routePath,
+      ...(Array.isArray(row?.aliases) ? row.aliases : []),
+    ].map(operationsAccessToken).filter(Boolean);
+    return candidates.some((candidate) => wanted.has(candidate));
+  });
+}
+
+async function directOperationsAdminPasswordResult(account = {}, password = "") {
+  const pwd = text(password);
+  if (!pwd) throw directOperationsMutationError("adminPassword required", 400);
+  if (hasOperationsAdminAccess(account)) return true;
+  if (pwd === "__OPS_PAGE_ADMIN_BYPASS__") return false;
+  if (!isSupabaseConfigured()) return null;
+
+  let candidates = [];
+  let hadSuccessfulLookup = false;
+  const attempts = [
+    { select: "*", name: "ilike.admin", limit: "10" },
+    { select: "*", position: "ilike.*admin*", limit: "20" },
+  ];
+  for (const params of attempts) {
+    try {
+      const rows = await select(operationsTeamMembersTable(), params);
+      hadSuccessfulLookup = true;
+      if (Array.isArray(rows) && rows.length) candidates.push(...rows);
+    } catch {
+      // Custom/older schemas may reject a filter name. Keep trying and use the
+      // Legacy verifier when the direct schema cannot prove compatibility.
+    }
+    if (candidates.length) break;
+  }
+
+  if (!candidates.length) {
+    try {
+      const rows = await selectAll(operationsTeamMembersTable(), { limit: 1000 });
+      hadSuccessfulLookup = true;
+      candidates = Array.isArray(rows) ? rows : [];
+    } catch {
+      return null;
+    }
+  }
+  if (!hadSuccessfulLookup) return null;
+
+  const adminRow = candidates.find((row) => operationsAccessToken(operationsValueFor(row, ["name", "Name"])) === "admin")
+    || candidates.find((row) => operationsAccessToken(operationsValueFor(row, ["position", "Position"])).includes("admin"))
+    || candidates.find((row) => operationsAccessToken(operationsValueFor(row, ["name", "Name"])).includes("admin"));
+  if (!adminRow) return null;
+
+  const stored = text(operationsValueFor(adminRow, ["password", "Password"]));
+  if (!stored) return null;
+  return stored === pwd;
+}
+
 function cleanOperationsActionIds(value = []) {
   const source = Array.isArray(value) ? value : [value];
   return [...new Set(source.map((id) => text(id)).filter(Boolean))].slice(0, 1000);
@@ -817,3 +903,115 @@ export async function markOperationsShipped({
     source: "supabase-direct",
   };
 }
+
+function operationsProductKey(value) {
+  return text(value).normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+}
+
+function operationsProductMaps(products = []) {
+  const byId = new Map();
+  const byName = new Map();
+  const byUrl = new Map();
+  for (const product of Array.isArray(products) ? products : []) {
+    const id = text(product?.id);
+    const nameKey = operationsProductKey(product?.name);
+    const urlKey = text(product?.url).toLowerCase();
+    if (id) byId.set(id, product);
+    if (nameKey && !byName.has(nameKey)) byName.set(nameKey, product);
+    if (urlKey && !byUrl.has(urlKey)) byUrl.set(urlKey, product);
+  }
+  return { byId, byName, byUrl };
+}
+
+function resolveOperationsEditProduct(row = {}, maps = {}) {
+  const directId = text(operationsValueFor(row, ["product_id", "productId", "product_page_id", "productPageId"]));
+  if (directId && maps.byId?.has(directId)) return maps.byId.get(directId);
+  const url = text(operationsValueFor(row, ["product_url", "Product URL", "url", "URL"])).toLowerCase();
+  if (url && maps.byUrl?.has(url)) return maps.byUrl.get(url);
+  const nameKey = operationsProductKey(operationsValueFor(row, ["product_name", "Product Name", "product", "Product"]));
+  if (nameKey && maps.byName?.has(nameKey)) return maps.byName.get(nameKey);
+  return null;
+}
+
+function addOperationsStatusOption(list, value) {
+  const clean = text(value);
+  if (!clean) return;
+  if (!list.some((item) => norm(item) === norm(clean))) list.push(clean);
+}
+
+export async function performOperationsProtectedAction({
+  account,
+  action,
+  orderIds = [],
+  adminPassword = "",
+} = {}) {
+  const cleanAction = text(action).toLowerCase().replace(/[_\s]+/g, "-");
+  if (!["archive", "unarchive", "edit-init"].includes(cleanAction)) {
+    throw directOperationsMutationError("Unsupported protected action", 400);
+  }
+
+  const loaded = await loadOperationRowsByIds(orderIds);
+  if (!loaded) return null;
+  if (loaded.clean.some((id) => !loaded.byId.has(id))) {
+    throw directOperationsMutationError("Orders not found", 404);
+  }
+
+  if (cleanAction !== "unarchive") {
+    const passwordOk = await directOperationsAdminPasswordResult(account || {}, adminPassword);
+    if (passwordOk === null) return null;
+    if (!passwordOk) throw directOperationsMutationError("Invalid admin password", 401);
+  }
+
+  if (cleanAction === "archive") {
+    await updateByIds(tableName(), loaded.clean, { status: "Archive" });
+    await invalidateLegacyOperationsCaches(account).catch(() => {});
+    return { success: true, status: "Archive", statusColor: "purple", source: "supabase-direct" };
+  }
+
+  if (cleanAction === "unarchive") {
+    await updateByIds(tableName(), loaded.clean, { status: "In progress" });
+    await invalidateLegacyOperationsCaches(account).catch(() => {});
+    return { success: true, status: "In progress", statusColor: "yellow", source: "supabase-direct" };
+  }
+
+  const catalog = await getProductsCatalog();
+  const products = Array.isArray(catalog?.products) ? catalog.products : [];
+  const maps = operationsProductMaps(products);
+  const items = loaded.clean.map((id) => {
+    const row = loaded.byId.get(id) || {};
+    const serialized = serializeOperationsOrderDetail(row);
+    const product = resolveOperationsEditProduct(row, maps);
+    const status = text(serialized?.status) || "In Progress";
+    const delivered = /(arrived|delivered|received)/i.test(status);
+    const requestedQty = Number(serialized?.quantityRequested ?? serialized?.quantity ?? 0) || 0;
+    const receivedQty = Number(serialized?.quantityReceived ?? 0) || 0;
+    const remainingQty = Number(serialized?.quantityRemaining ?? (requestedQty - receivedQty)) || 0;
+    return {
+      ...serialized,
+      productId: text(product?.id || operationsValueFor(row, ["product_id", "productId", "product_page_id", "productPageId"])) || null,
+      productIdCode: text(product?.displayId) || null,
+      effectiveIdCode: text(serialized?.customizeId || product?.displayId) || null,
+      requestedQty,
+      receivedQty,
+      remainingQty,
+      deliveredQty: delivered ? receivedQty : 0,
+      unitPrice: Number.isFinite(Number(serialized?.unitPrice)) ? Number(serialized.unitPrice) : null,
+    };
+  });
+
+  const statusOptions = [];
+  addOperationsStatusOption(statusOptions, "In Progress");
+  addOperationsStatusOption(statusOptions, "Shipped");
+  addOperationsStatusOption(statusOptions, "Arrived");
+  loaded.clean.forEach((id) => addOperationsStatusOption(statusOptions, loaded.byId.get(id)?.status ?? loaded.byId.get(id)?.Status));
+
+  return {
+    ok: true,
+    source: "supabase-direct",
+    count: items.length,
+    items,
+    products,
+    statusOptions,
+  };
+}
+

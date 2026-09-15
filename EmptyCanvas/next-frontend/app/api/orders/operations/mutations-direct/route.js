@@ -3,6 +3,7 @@ import { fetchLegacyJson } from "../../../../../lib/legacy-api";
 import { getLegacyAccountGate } from "../../../../../lib/products-auth";
 import {
   markOperationsShipped,
+  performOperationsProtectedAction,
   updateOperationsApproval,
 } from "../../../../../lib/operations-orders-data";
 
@@ -58,6 +59,15 @@ async function legacyFallback(action, body) {
       issueDescription: body?.issueDescription,
       perItemIssues: body?.perItemIssues,
     };
+  } else if (action === "archive") {
+    path = "/api/orders/requested/archive";
+    legacyBody = { orderIds: body?.orderIds, adminPassword: body?.adminPassword };
+  } else if (action === "unarchive") {
+    path = "/api/orders/requested/unarchive";
+    legacyBody = { orderIds: body?.orderIds };
+  } else if (action === "edit-init") {
+    path = "/api/orders/operations/edit/init";
+    legacyBody = { orderIds: body?.orderIds, adminPassword: body?.adminPassword };
   } else {
     return noStore({ error: "Unsupported Operations Orders action." }, { status: 400 });
   }
@@ -77,7 +87,7 @@ async function legacyFallback(action, body) {
 export async function POST(request) {
   const body = await request.json().catch(() => ({}));
   const action = actionKey(body?.action);
-  if (!["approval", "mark-shipped"].includes(action)) {
+  if (!["approval", "mark-shipped", "archive", "unarchive", "edit-init"].includes(action)) {
     return noStore({ error: "Unsupported Operations Orders action." }, { status: 400 });
   }
 
@@ -95,7 +105,7 @@ export async function POST(request) {
         rejectedReason: body?.rejectedReason,
       });
       if (result) return noStore(result);
-    } else {
+    } else if (action === "mark-shipped") {
       const result = await markOperationsShipped({
         account: gate.account,
         orderIds: body?.orderIds,
@@ -103,6 +113,17 @@ export async function POST(request) {
         quantities: body?.quantities,
         issueDescription: body?.issueDescription,
         perItemIssues: body?.perItemIssues,
+      });
+      if (result) return noStore(result);
+    } else if (action === "unarchive" || gate.source === "direct-session") {
+      // Admin-password actions rely on the fresh page access carried by the
+      // direct-session gate. If this request had to use the Legacy account
+      // bridge, preserve exact compatibility by using the Legacy endpoint.
+      const result = await performOperationsProtectedAction({
+        account: gate.account,
+        action,
+        orderIds: body?.orderIds,
+        adminPassword: body?.adminPassword,
       });
       if (result) return noStore(result);
     }

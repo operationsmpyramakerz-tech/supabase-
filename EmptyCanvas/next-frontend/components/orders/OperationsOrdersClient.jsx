@@ -2092,11 +2092,11 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
       if (action === "edit") {
         const password = text(payload);
         if (!password) throw new Error("Admin password is required.");
-        const response = await fetch("/api/orders/operations/edit/init", {
+        const response = await fetch("/api/orders/operations/mutations-direct", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify({ orderIds: group.orderIds, adminPassword: password }),
+          body: JSON.stringify({ action: "edit-init", orderIds: group.orderIds, adminPassword: password }),
         });
         const data = await readJson(response);
         if (response.status === 401) throw new Error("Wrong password. Please try again.");
@@ -2204,11 +2204,11 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
       } else if (action === "archive") {
         const password = text(payload);
         if (!password) throw new Error("Admin password is required.");
-        await postJson("/api/orders/requested/archive", { orderIds: group.orderIds, adminPassword: password });
+        await postJson("/api/orders/operations/mutations-direct", { action: "archive", orderIds: group.orderIds, adminPassword: password });
         loadingSuccessMessage = "Order moved to Archive.";
         await completeAction("Order moved to Archive.", "archive");
       } else if (action === "unarchive") {
-        await postJson("/api/orders/requested/unarchive", { orderIds: group.orderIds });
+        await postJson("/api/orders/operations/mutations-direct", { action: "unarchive", orderIds: group.orderIds });
         loadingSuccessMessage = "Order restored from Archive.";
         await completeAction("Order restored from Archive.", "approved");
       } else if (action === "withdrawal") {
