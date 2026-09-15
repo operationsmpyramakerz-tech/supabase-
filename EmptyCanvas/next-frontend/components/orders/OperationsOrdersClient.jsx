@@ -2115,13 +2115,13 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
         setActionError("");
         return;
       } else if (action === "approve") {
-        await postJson("/api/orders/operations/approval", { ids: group.orderIds, decision: "Approved" });
+        await postJson("/api/orders/operations/mutations-direct", { action: "approval", ids: group.orderIds, decision: "Approved" });
         loadingSuccessMessage = "Order approved by operations.";
         await completeAction("Order approved by operations.", "approved");
       } else if (action === "reject") {
         const reason = text(payload);
         if (!reason) throw new Error("Rejected reason is required.");
-        await postJson("/api/orders/operations/approval", { ids: group.orderIds, decision: "Rejected", rejectedReason: reason });
+        await postJson("/api/orders/operations/mutations-direct", { action: "approval", ids: group.orderIds, decision: "Rejected", rejectedReason: reason });
         loadingSuccessMessage = group.actionScope === "component" ? "Component rejected and the reason was saved." : "Order rejected and the reason was saved.";
         await completeAction(loadingSuccessMessage, group.actionScope === "component" ? "approved" : "rejected");
       } else if (action === "receive") {
@@ -2134,7 +2134,8 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
           const absolute = Math.min(Math.abs(base), Math.abs(receivedQuantity(item)) + receiveNow);
           quantities[id] = roundQty(sign * absolute);
         });
-        await postJson("/api/orders/requested/mark-shipped", {
+        await postJson("/api/orders/operations/mutations-direct", {
+          action: "mark-shipped",
           orderIds: group.orderIds,
           receiptNumber: text(payload?.receiptNumber) || null,
           issueDescription: text(payload?.issueDescription) || null,
@@ -2146,7 +2147,8 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
         if (payload?.validationError) throw new Error(payload.validationError);
         const perItemIssues = Array.isArray(payload?.perItemIssues) ? payload.perItemIssues : [];
         if (!perItemIssues.length || perItemIssues.some((entry) => !text(entry?.issueDescription))) throw new Error("Issue description is required for every component.");
-        await postJson("/api/orders/requested/mark-shipped", {
+        await postJson("/api/orders/operations/mutations-direct", {
+          action: "mark-shipped",
           orderIds: group.orderIds,
           receiptNumber: null,
           quantities: {},

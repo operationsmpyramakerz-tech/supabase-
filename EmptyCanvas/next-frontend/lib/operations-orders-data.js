@@ -1,5 +1,5 @@
 import "server-only";
-import { isSupabaseConfigured, select } from "./supabase-rest";
+import { isSupabaseConfigured, select, updateById, updateByIds } from "./supabase-rest";
 import { enrichOrderDetailGrouping, loadRawOrderRowsByIds, serializeOperationsOrderDetail } from "./order-details-data";
 
 const PAGE_LIMIT = 36;
@@ -533,3 +533,287 @@ export async function loadOperationsOrderDetails(orderIds = []) {
   return await enrichOrderDetailGrouping(serialized);
 }
 
+
+
+function directOperationsMutationError(message, status = 500) {
+  const error = new Error(message || "Operations Orders action failed.");
+  error.code = "DIRECT_OPERATIONS_MUTATION_FAILED";
+  error.status = Number(status) || 500;
+  return error;
+}
+
+function cleanOperationsActionIds(value = []) {
+  const source = Array.isArray(value) ? value : [value];
+  return [...new Set(source.map((id) => text(id)).filter(Boolean))].slice(0, 1000);
+}
+
+async function loadOperationRowsByIds(ids = []) {
+  const clean = cleanOperationsActionIds(ids);
+  if (!clean.length) throw directOperationsMutationError("orderIds required", 400);
+  if (!clean.every((id) => /^\d+$/.test(id))) return null;
+  if (!isSupabaseConfigured()) return null;
+
+  const rows = [];
+  for (let index = 0; index < clean.length; index += 180) {
+    const batch = clean.slice(index, index + 180);
+    const chunk = await select(tableName(), {
+      select: "*",
+      id: `in.(${batch.join(",")})`,
+      limit: String(Math.max(batch.length, 1)),
+    });
+    if (Array.isArray(chunk)) rows.push(...chunk);
+  }
+
+  const byId = new Map(rows.map((row) => [text(row?.id ?? row?.ID), row]));
+  return { clean, byId, rows };
+}
+
+function splitReceiptNumbers(value) {
+  const source = Array.isArray(value) ? value : [value];
+  return source
+    .flatMap((entry) => String(entry ?? "").replace(/\r\n/g, "\n").split(/[\n,]+/))
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function mergeReceiptNumbers(existing, next) {
+  const seen = new Set();
+  const values = [];
+  for (const entry of [...splitReceiptNumbers(existing), ...splitReceiptNumbers(next)]) {
+    const key = entry.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    values.push(entry);
+  }
+  return values.join("\n").trim();
+}
+
+function orderBaseQuantity(row = {}) {
+  const requested = num(row.quantity_requested ?? row["Quantity Requested"] ?? row.requested_quantity ?? row["Requested Quantity"]);
+  const progress = num(row.quantity_progress ?? row["Quantity Progress"] ?? row.quantity ?? row.Quantity ?? row.qty ?? row.Qty);
+  const edited = num(row.quantity_edited_by_supervisor ?? row["Quantity Edited by supervisor"] ?? row["Quantity Edited by Supervisor"] ?? row.quantity_edited ?? row.edited_quantity);
+  const original = roundQty(requested !== null ? requested : (progress !== null ? progress : 0));
+  return roundQty(edited !== null ? edited : original);
+}
+
+function rawReceivedQuantity(row = {}) {
+  return num(row.quantity_received_by_operations ?? row["Quantity Received by operations"] ?? row["Quantity Received by Operations"] ?? row.received_quantity ?? row.quantity_received);
+}
+
+function rawRemainingQuantity(row = {}) {
+  return num(row.quantity_remaining ?? row["Quantity Remaining"] ?? row.remaining_quantity);
+}
+
+function effectiveReceivedForMutation(row = {}) {
+  const base = orderBaseQuantity(row);
+  const receivedRaw = rawReceivedQuantity(row);
+  const remainingRaw = rawRemainingQuantity(row);
+  const status = norm(row.status ?? row.Status);
+  const finalStatus = /(arrived|delivered|received)/.test(status);
+  const hasBase = Math.abs(base) > 1e-9;
+  const receivedZero = receivedRaw !== null && Math.abs(Number(receivedRaw) || 0) < 1e-9;
+  const remainingZero = remainingRaw !== null && Math.abs(Number(remainingRaw) || 0) < 1e-9;
+  const remainingEqualsBase = remainingRaw !== null && Math.abs(roundQty(Number(remainingRaw) - base)) < 1e-9;
+
+  // Imported empty Notion number cells can appear as 0/0 in Supabase. Match
+  // the Legacy serializer and treat those as "not received yet" until final.
+  if (hasBase && receivedZero && ((remainingZero && !finalStatus) || remainingEqualsBase)) return null;
+  return receivedRaw;
+}
+
+function clampQuantityToBase(base, value) {
+  const baseQty = roundQty(base);
+  const nextQty = roundQty(value);
+  if (baseQty >= 0) return Math.min(Math.max(nextQty, 0), baseQty);
+  return Math.max(Math.min(nextQty, 0), baseQty);
+}
+
+async function mapWithConcurrency(items = [], concurrency = 12, mapper = async (item) => item) {
+  const list = Array.isArray(items) ? items : [];
+  if (!list.length) return [];
+  const limit = Math.max(1, Math.min(list.length, Number(concurrency) || 1));
+  const results = new Array(list.length);
+  let cursor = 0;
+  const worker = async () => {
+    while (true) {
+      const index = cursor++;
+      if (index >= list.length) return;
+      results[index] = await mapper(list[index], index);
+    }
+  };
+  await Promise.all(Array.from({ length: limit }, () => worker()));
+  return results;
+}
+
+async function upstashDeleteOperationsKeys(keys = []) {
+  const url = text(process.env.UPSTASH_REDIS_REST_URL);
+  const tokenValue = text(process.env.UPSTASH_REDIS_REST_TOKEN);
+  const clean = [...new Set((keys || []).map(text).filter(Boolean))];
+  if (!url || !tokenValue || !clean.length) return false;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 1800);
+  try {
+    const response = await fetch(url.replace(/\/+$/, ""), {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        Authorization: `Bearer ${tokenValue}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(["DEL", ...clean]),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function invalidateLegacyOperationsCaches(account = {}) {
+  const username = text(account?.username || account?.name);
+  const userKey = username ? norm(username).replace(/[^a-z0-9]+/g, "") : "";
+  const keys = [
+    "cache:api:orders:requested:v7",
+    "cache:api:orders:requested:supabase:v1",
+    "cache:api:orders:requested:supabase:v2:approved",
+    "cache:api:orders:requested:supabase:v2:all-system",
+    "cache:api:orders:requested:supabase:v4:approved",
+    "cache:api:orders:requested:supabase:v4:all-system",
+    "cache:api:orders:requested:supabase:v5:approved",
+    "cache:api:orders:requested:supabase:v5:all-system",
+    "cache:api:orders:requested-summary:supabase:v1:approved",
+    "cache:api:orders:requested-summary:supabase:v1:all-system",
+    "cache:api:orders:maintenance:supabase:v1",
+    "cache:api:orders:maintenance-summary:supabase:v1",
+    "cache:api:orders:current:supabase:v1",
+    "cache:api:orders:current:supabase:v1:all",
+    "cache:api:orders:current-summary:supabase:v1:all",
+  ];
+  if (userKey) {
+    keys.push(
+      `cache:api:orders:current:supabase:v1:${userKey}`,
+      `cache:api:orders:current-summary:supabase:v1:${userKey}`,
+      `cache:api:orders:current-home-summary:supabase:v1:${userKey}`,
+    );
+  }
+  await upstashDeleteOperationsKeys(keys).catch(() => false);
+}
+
+export async function updateOperationsApproval({ account, ids = [], decision = "", rejectedReason = "" } = {}) {
+  const raw = norm(decision);
+  const normalizedDecision = raw === "approved" ? "Approved" : raw === "rejected" ? "Rejected" : raw === "not started" || raw === "not-started" ? "Not Started" : "";
+  const reason = text(rejectedReason);
+  if (!normalizedDecision) throw directOperationsMutationError("Invalid ids or decision", 400);
+  if (normalizedDecision === "Rejected" && !reason) throw directOperationsMutationError("Rejected reason is required", 400);
+
+  const loaded = await loadOperationRowsByIds(ids);
+  if (!loaded) return null;
+  const existingIds = loaded.clean.filter((id) => loaded.byId.has(id));
+  const failed = loaded.clean.filter((id) => !loaded.byId.has(id)).map((id) => ({ id, error: "Order not found" }));
+  const patch = {
+    operations_approval: normalizedDecision,
+    rejected_reason: normalizedDecision === "Rejected" ? reason : null,
+  };
+
+  for (let index = 0; index < existingIds.length; index += 180) {
+    const batch = existingIds.slice(index, index + 180);
+    try {
+      await updateByIds(tableName(), batch, patch);
+    } catch (error) {
+      for (const id of batch) {
+        try { await updateById(tableName(), id, patch); }
+        catch (rowError) { failed.push({ id, error: rowError?.message || String(rowError) }); }
+      }
+    }
+  }
+
+  const failedIds = new Set(failed.map((item) => text(item?.id)));
+  const updated = existingIds
+    .filter((id) => !failedIds.has(id))
+    .map((id) => ({ id, decision: normalizedDecision, rejectedReason: normalizedDecision === "Rejected" ? reason : null }));
+  await invalidateLegacyOperationsCaches(account).catch(() => {});
+  return {
+    ok: failed.length === 0,
+    decision: normalizedDecision,
+    rejectedReason: normalizedDecision === "Rejected" ? reason : null,
+    updated,
+    failed,
+    source: "supabase-direct",
+  };
+}
+
+export async function markOperationsShipped({
+  account,
+  orderIds = [],
+  receiptNumber = null,
+  quantities = null,
+  issueDescription = "",
+  perItemIssues = [],
+} = {}) {
+  const loaded = await loadOperationRowsByIds(orderIds);
+  if (!loaded) return null;
+  if (loaded.clean.some((id) => !loaded.byId.has(id))) {
+    throw directOperationsMutationError("Order not found", 404);
+  }
+
+  const quantityMap = quantities && typeof quantities === "object" && !Array.isArray(quantities) ? quantities : null;
+  const globalIssue = text(issueDescription);
+  const issues = new Map(
+    (Array.isArray(perItemIssues) ? perItemIssues : [])
+      .map((entry) => [text(entry?.orderId), text(entry?.issueDescription)])
+      .filter(([id]) => id),
+  );
+  const incomingReceipt = mergeReceiptNumbers("", receiptNumber);
+  const operationsByName = text(account?.username || account?.name);
+
+  const updatedRows = await mapWithConcurrency(loaded.clean, 16, async (id) => {
+    const row = loaded.byId.get(id) || {};
+    const patch = {
+      status: "Shipped",
+      person_received_by_operations: operationsByName || null,
+    };
+    const mergedReceipt = incomingReceipt ? mergeReceiptNumbers(row.receipt_number ?? row["Receipt Number"] ?? row["Store Receipt Number"], incomingReceipt) : "";
+    if (mergedReceipt) patch.receipt_number = mergedReceipt;
+
+    const rowIssue = issues.has(id) ? issues.get(id) : globalIssue;
+    if (rowIssue) patch.issue_description = rowIssue;
+
+    const base = orderBaseQuantity(row);
+    const hasExplicit = quantityMap && Object.prototype.hasOwnProperty.call(quantityMap, id);
+    const explicit = hasExplicit ? Number(quantityMap[id]) : null;
+    if (hasExplicit && Number.isFinite(explicit)) {
+      const received = clampQuantityToBase(base, explicit);
+      patch.quantity_received_by_operations = received;
+      patch.quantity_remaining = roundQty(base - received);
+    } else {
+      const currentReceived = effectiveReceivedForMutation(row);
+      const currentRemaining = rawRemainingQuantity(row);
+      const hasMeaningfulReceived = currentReceived !== null && Math.abs(Number(currentReceived) || 0) > 1e-9;
+      if (!hasMeaningfulReceived) {
+        patch.quantity_received_by_operations = roundQty(base);
+        patch.quantity_remaining = 0;
+      } else if (currentRemaining === null || Math.abs(Number(currentRemaining) || 0) > 1e-9) {
+        patch.quantity_received_by_operations = roundQty(Number(currentReceived) || 0);
+        patch.quantity_remaining = roundQty(base - (Number(currentReceived) || 0));
+      }
+    }
+    return await updateById(tableName(), id, patch);
+  });
+
+  await invalidateLegacyOperationsCaches(account).catch(() => {});
+  const returnedReceipt = updatedRows
+    .map((row) => text(row?.receipt_number ?? row?.["Receipt Number"] ?? row?.["Store Receipt Number"]))
+    .find(Boolean) || incomingReceipt || null;
+
+  return {
+    success: true,
+    status: "Shipped",
+    statusColor: "blue",
+    operationsByName,
+    issueDescription: globalIssue || null,
+    perItemIssues: Array.from(issues.entries()).map(([orderId, issue]) => ({ orderId, issueDescription: issue })),
+    receiptNumber: returnedReceipt,
+    source: "supabase-direct",
+  };
+}

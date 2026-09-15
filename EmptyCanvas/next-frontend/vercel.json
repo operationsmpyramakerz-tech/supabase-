@@ -13,6 +13,10 @@
       "destination": "/next/api/orders/requested/details-direct"
     },
     {
+      "source": "/api/orders/operations/mutations-direct",
+      "destination": "/next/api/orders/operations/mutations-direct"
+    },
+    {
       "source": "/api/sv-orders/paged-summary",
       "destination": "/next/api/sv-orders/paged-summary"
     },
