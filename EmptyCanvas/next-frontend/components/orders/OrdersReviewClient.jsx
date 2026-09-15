@@ -781,7 +781,7 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
       });
       if (query.trim()) params.set("q", query.trim());
       if (!reset && pageInfo?.nextCursor !== null && pageInfo?.nextCursor !== undefined) params.set("cursor", String(pageInfo.nextCursor));
-      const response = await fetch(`/api/sv-orders?${params.toString()}`, { credentials: "include", cache: "no-store" });
+      const response = await fetch(`/api/sv-orders/paged-summary?${params.toString()}`, { credentials: "include", cache: "no-store" });
       if (response.status === 401) { window.location.href = "/login?next=/next/orders-review"; return; }
       const data = await readJson(response);
       if (!response.ok) throw new Error(data?.error || "Failed to load review orders.");
