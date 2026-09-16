@@ -7348,44 +7348,46 @@ function _sbResolveMaintenanceSparePartsForItem(item = {}, lookups = {}) {
 }
 
 async function _sbPipeOrderMaintenancePdf(req, res, orderIds = []) {
+  const templateMode = Boolean(req?.body?.template);
   const payload = await _sbBuildOrderExportPayload(orderIds, req);
   const first = payload.first || {};
   if (_normKeyOrderType(first.orderType || "") !== _normKeyOrderType("Request Maintenance")) {
     return res.status(400).json({ error: "This export is only available for maintenance orders." });
   }
 
-  const lookups = await _sbBuildMaintenanceSparePartLookups();
+  const lookups = templateMode ? { byId: new Map(), byName: new Map() } : await _sbBuildMaintenanceSparePartLookups();
   const componentLogs = (payload.items || []).map((item, index) => ({
     idCode: payload.rows?.[index]?.idCode || "",
     component: item.productName || payload.rows?.[index]?.component || "Unknown Product",
     issueDescription: item.issueDescription || item.reason || "No Issue",
-    serialNumber: item.serialNumber || "—",
-    actualIssueDescription: item.actualIssueDescription || "—",
-    repairAction: item.repairAction || "—",
-    resolutionMethod: item.resolutionMethod || "—",
-    sparePartsReplacedIds: item.sparePartsReplacedIds || [],
-    sparePartsReplacedNames: item.sparePartsReplacedNames || [],
-    sparePartsReplacedName: item.sparePartsReplacedName || "",
-    spareParts: _sbResolveMaintenanceSparePartsForItem(item, lookups),
+    serialNumber: templateMode ? "" : (item.serialNumber || "—"),
+    actualIssueDescription: templateMode ? "" : (item.actualIssueDescription || "—"),
+    repairAction: templateMode ? "" : (item.repairAction || "—"),
+    resolutionMethod: templateMode ? "" : (item.resolutionMethod || "—"),
+    sparePartsReplacedIds: templateMode ? [] : (item.sparePartsReplacedIds || []),
+    sparePartsReplacedNames: templateMode ? [] : (item.sparePartsReplacedNames || []),
+    sparePartsReplacedName: templateMode ? "" : (item.sparePartsReplacedName || ""),
+    spareParts: templateMode ? [] : _sbResolveMaintenanceSparePartsForItem(item, lookups),
     link: item.productUrl || payload.rows?.[index]?.link || "",
   }));
 
-  const fileName = `maintenance_report_${_sbSafeExportName(payload.orderIdRange)}.pdf`;
+  const fileName = `${templateMode ? "maintenance_template" : "maintenance_report"}_${_sbSafeExportName(payload.orderIdRange)}.pdf`;
   await _sendBackgroundExport(res, {
     type: "maintenance-pdf",
     fileName,
     payload: {
+      template: templateMode,
       orderId: payload.orderIdRange,
       createdAt: payload.createdAt,
       requestedBy: payload.teamMember,
       teamMember: payload.teamMember,
       operationsBy: payload.operationsBy,
       issueDescription: first.issueDescription || "—",
-      serialNumber: first.serialNumber || "—",
-      actualIssueDescription: first.actualIssueDescription || "—",
-      repairAction: first.repairAction || "—",
-      resolutionMethod: first.resolutionMethod || "—",
-      sparePartsReplacedList: first.sparePartsReplacedNames || [],
+      serialNumber: templateMode ? "" : (first.serialNumber || "—"),
+      actualIssueDescription: templateMode ? "" : (first.actualIssueDescription || "—"),
+      repairAction: templateMode ? "" : (first.repairAction || "—"),
+      resolutionMethod: templateMode ? "" : (first.resolutionMethod || "—"),
+      sparePartsReplacedList: templateMode ? [] : (first.sparePartsReplacedNames || []),
       rows: payload.rows,
       componentLogs,
       maintenanceReceiptName: first.maintenanceReceiptName || "",
@@ -22823,7 +22825,8 @@ app.post(
   requirePage(["Requested Orders", "Operations Orders", "Maintenance Orders"]),
   async (req, res) => {
     try {
-      const { orderIds } = req.body || {};
+      const { orderIds, template } = req.body || {};
+      const templateMode = Boolean(template);
       if (!Array.isArray(orderIds) || orderIds.length === 0) {
         return res.status(400).json({ error: "orderIds required" });
       }
@@ -23037,22 +23040,23 @@ app.post(
         .replace(/[\\/:*?"<>|]/g, "-")
         .replace(/\s+/g, "_")
         .slice(0, 60);
-      const fileName = `maintenance_receipt_${safeName}.pdf`;
+      const fileName = `${templateMode ? "maintenance_template" : "maintenance_receipt"}_${safeName}.pdf`;
 
       await _sendBackgroundExport(res, {
         type: "maintenance-pdf",
         fileName,
         payload: {
+          template: templateMode,
           orderId: orderIdRange,
           createdAt,
           requestedBy,
           operationsBy,
           issueDescription,
-          actualIssueDescription,
-          repairAction,
-          resolutionMethod,
-          sparePartsReplaced,
-          sparePartsReplacedList,
+          actualIssueDescription: templateMode ? "" : actualIssueDescription,
+          repairAction: templateMode ? "" : repairAction,
+          resolutionMethod: templateMode ? "" : resolutionMethod,
+          sparePartsReplaced: templateMode ? "" : sparePartsReplaced,
+          sparePartsReplacedList: templateMode ? [] : sparePartsReplacedList,
           rows,
           maintenanceReceiptName,
           maintenanceReceiptUrl,

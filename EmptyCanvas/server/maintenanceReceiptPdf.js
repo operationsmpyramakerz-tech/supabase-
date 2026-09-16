@@ -124,17 +124,18 @@ function normalizeSpareParts(item = {}) {
 }
 
 function buildComponentLogs(params = {}) {
+  const templateMode = Boolean(params.template);
   const provided = Array.isArray(params.componentLogs) ? params.componentLogs : [];
   if (provided.length) {
     return provided.map((item) => ({
       idCode: ensureText(item?.idCode, ""),
       component: ensureText(item?.component, "Unknown Component"),
       issueDescription: ensureText(item?.issueDescription || item?.issue, "No Issue"),
-      serialNumber: ensureText(item?.serialNumber, "—"),
-      actualIssueDescription: ensureText(item?.actualIssueDescription),
-      repairAction: ensureText(item?.repairAction),
-      resolutionMethod: ensureText(item?.resolutionMethod),
-      spareParts: normalizeSpareParts(item),
+      serialNumber: templateMode ? "" : ensureText(item?.serialNumber, "—"),
+      actualIssueDescription: templateMode ? "" : ensureText(item?.actualIssueDescription),
+      repairAction: templateMode ? "" : ensureText(item?.repairAction),
+      resolutionMethod: templateMode ? "" : ensureText(item?.resolutionMethod),
+      spareParts: templateMode ? [] : normalizeSpareParts(item),
     }));
   }
 
@@ -143,17 +144,18 @@ function buildComponentLogs(params = {}) {
     idCode: ensureText(row?.idCode, ""),
     component: ensureText(row?.component, "Unknown Component"),
     issueDescription: ensureText(params.issueDescription || row?.issue || row?.reason, "No Issue"),
-    serialNumber: ensureText(row?.serialNumber || params.serialNumber, "—"),
-    actualIssueDescription: ensureText(params.actualIssueDescription),
-    repairAction: ensureText(params.repairAction),
-    resolutionMethod: ensureText(params.resolutionMethod),
-    spareParts: uniqueTextList(params.sparePartsReplacedList || params.sparePartsReplaced || [])
+    serialNumber: templateMode ? "" : ensureText(row?.serialNumber || params.serialNumber, "—"),
+    actualIssueDescription: templateMode ? "" : ensureText(params.actualIssueDescription),
+    repairAction: templateMode ? "" : ensureText(params.repairAction),
+    resolutionMethod: templateMode ? "" : ensureText(params.resolutionMethod),
+    spareParts: templateMode ? [] : uniqueTextList(params.sparePartsReplacedList || params.sparePartsReplaced || [])
       .map((name) => ({ name, idCode: "", unit: 0, qty: 1, total: 0 })),
   }));
 }
 
 async function pipeMaintenanceReceiptPDF(params = {}, stream) {
   await ensurePdfArabicSupport();
+  const templateMode = Boolean(params.template);
   const doc = new PDFDocument({ size: "A4", margin: 36, bufferPages: true });
   enableArabicPdf(doc);
   doc.pipe(stream);
@@ -280,6 +282,70 @@ async function pipeMaintenanceReceiptPDF(params = {}, stream) {
     return h;
   };
 
+  const measureRuledField = (lineCount = 1) => Math.max(52, 34 + Math.max(1, Number(lineCount) || 1) * 18);
+
+  const drawRuledField = (x, y, w, label, lineCount = 1) => {
+    const count = Math.max(1, Number(lineCount) || 1);
+    const h = measureRuledField(count);
+    doc.save();
+    doc.roundedRect(x, y, w, h, 9).fillAndStroke(COLORS.soft, COLORS.border);
+    doc.fillColor(COLORS.muted).font("Helvetica-Bold").fontSize(8).text(label, x + 9, y + 9, { width: w - 18 });
+    doc.strokeColor("#9CA3AF").lineWidth(0.7);
+    const firstY = y + 34;
+    const spacing = 18;
+    for (let index = 0; index < count; index += 1) {
+      const lineY = firstY + index * spacing;
+      doc.moveTo(x + 10, lineY).lineTo(x + w - 10, lineY).stroke();
+    }
+    doc.restore();
+    return h;
+  };
+
+  const measureTemplateSparePartsTable = (rowCount = 4) => 22 + Math.max(3, Number(rowCount) || 4) * 27 + 24;
+
+  const drawTemplateSparePartsTable = (x, y, w, rowCount = 4) => {
+    const rows = Math.max(3, Number(rowCount) || 4);
+    const headerH = 22;
+    const rowH = 27;
+    const totalH = 24;
+    const tableH = measureTemplateSparePartsTable(rows);
+    const numW = 28;
+    const qtyW = 42;
+    const unitW = 64;
+    const totalW = 72;
+    const nameW = Math.max(110, w - numW - qtyW - unitW - totalW - 34);
+
+    doc.save();
+    doc.roundedRect(x, y, w, tableH, 10).fillAndStroke("#FFFFFF", COLORS.border);
+    doc.rect(x, y, w, headerH).fill(COLORS.soft2);
+    doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(8.4);
+    doc.text("#", x + 9, y + 7, { width: numW });
+    doc.text("Spare Parts Replacement", x + 9 + numW, y + 7, { width: nameW });
+    doc.text("Qty", x + 9 + numW + nameW + 4, y + 7, { width: qtyW, align: "right" });
+    doc.text("Unit Cost", x + w - unitW - totalW - 14, y + 7, { width: unitW, align: "right" });
+    doc.text("Total Cost", x + w - totalW - 10, y + 7, { width: totalW, align: "right" });
+    doc.strokeColor(COLORS.border).lineWidth(0.8).moveTo(x, y + headerH).lineTo(x + w, y + headerH).stroke();
+
+    for (let index = 0; index < rows; index += 1) {
+      const rowY = y + headerH + index * rowH;
+      if (index > 0) doc.moveTo(x, rowY).lineTo(x + w, rowY).strokeColor(COLORS.border).stroke();
+      doc.fillColor(COLORS.muted).font("Helvetica-Bold").fontSize(8.4).text(String(index + 1), x + 9, rowY + 8, { width: numW });
+      doc.strokeColor("#9CA3AF").lineWidth(0.7);
+      doc.moveTo(x + 9 + numW, rowY + 19).lineTo(x + 9 + numW + nameW - 5, rowY + 19).stroke();
+      doc.moveTo(x + 9 + numW + nameW + 8, rowY + 19).lineTo(x + 9 + numW + nameW + qtyW, rowY + 19).stroke();
+      doc.moveTo(x + w - unitW - totalW - 10, rowY + 19).lineTo(x + w - totalW - 20, rowY + 19).stroke();
+      doc.moveTo(x + w - totalW - 6, rowY + 19).lineTo(x + w - 10, rowY + 19).stroke();
+    }
+
+    const totalY = y + headerH + rows * rowH;
+    doc.moveTo(x, totalY).lineTo(x + w, totalY).strokeColor(COLORS.border).stroke();
+    doc.rect(x, totalY, w, totalH).fill(COLORS.softOrange);
+    doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(9).text("Total Cost", x + 9, totalY + 7, { width: w - totalW - 24 });
+    doc.strokeColor("#9CA3AF").lineWidth(0.7).moveTo(x + w - totalW, totalY + 17).lineTo(x + w - 10, totalY + 17).stroke();
+    doc.restore();
+    return tableH;
+  };
+
   const measureSparePartsTable = (w, parts = []) => {
     const safeParts = Array.isArray(parts) ? parts : [];
     const rows = safeParts.length ? safeParts : [{ name: "No spare parts replacement", empty: true }];
@@ -343,6 +409,63 @@ async function pipeMaintenanceReceiptPDF(params = {}, stream) {
     doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(9).text(money(totalCost), x + w - totalW - 10, rowY + 7, { width: totalW, align: "right" });
     doc.restore();
     return tableH;
+  };
+
+  const measureMaintenanceTemplateCard = (item) => {
+    const { contentW } = metrics();
+    const innerW = contentW - 24;
+    const gap = 8;
+    const fieldW = (innerW - gap) / 2;
+    const issueH = measureSmallField(innerW, item.issueDescription);
+    const serialResolutionH = Math.max(measureRuledField(1), measureRuledField(2));
+    const actionH = Math.max(measureRuledField(3), measureRuledField(3));
+    const tableH = measureTemplateSparePartsTable(4);
+    return 54 + issueH + gap + serialResolutionH + gap + actionH + 10 + tableH + 16;
+  };
+
+  const drawMaintenanceTemplateCard = (item, index) => {
+    const { mL, contentW } = metrics();
+    const innerW = contentW - 24;
+    const gap = 8;
+    const fieldW = (innerW - gap) / 2;
+    const cardH = measureMaintenanceTemplateCard(item);
+
+    ensureSpace(cardH + 10);
+    if (doc.y + cardH + 10 > metrics().maxY) {
+      doc.addPage();
+      drawHeader(true);
+    }
+
+    const y = doc.y;
+    doc.save();
+    doc.roundedRect(mL, y, contentW, cardH, 15).fillAndStroke("#FFFFFF", COLORS.cardBorder);
+    doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(11.5).text(`Maintenance for Component ${index + 1}`, mL + 12, y + 12, {
+      width: contentW - 24,
+    });
+    const subtitle = [item.idCode ? `ID: ${item.idCode}` : "", item.component].filter(Boolean).join("  •  ");
+    doc.fillColor(COLORS.muted).font("Helvetica").fontSize(9.2).text(subtitle || "Unknown Component", mL + 12, y + 30, {
+      width: contentW - 24,
+    });
+    doc.restore();
+
+    let fy = y + 52;
+    const issueH = drawSmallField(mL + 12, fy, innerW, "Initial Issue", item.issueDescription);
+    fy += issueH + gap;
+
+    const serialResolutionH = Math.max(
+      drawRuledField(mL + 12, fy, fieldW, "Serial Number", 1),
+      drawRuledField(mL + 12 + fieldW + gap, fy, fieldW, "Resolution Method", 2),
+    );
+    fy += serialResolutionH + gap;
+
+    const actionH = Math.max(
+      drawRuledField(mL + 12, fy, fieldW, "Actual Issue Description", 3),
+      drawRuledField(mL + 12 + fieldW + gap, fy, fieldW, "Repair Action", 3),
+    );
+    fy += actionH + 10;
+
+    drawTemplateSparePartsTable(mL + 12, fy, innerW, 4);
+    doc.y = y + cardH + 10;
   };
 
   const measureMaintenanceCard = (item) => {
@@ -513,7 +636,10 @@ async function pipeMaintenanceReceiptPDF(params = {}, stream) {
 
   const componentLogs = buildComponentLogs(params);
   drawSectionTitle("Maintenance Details");
-  componentLogs.forEach((item, index) => drawMaintenanceCard(item, index));
+  componentLogs.forEach((item, index) => {
+    if (templateMode) drawMaintenanceTemplateCard(item, index);
+    else drawMaintenanceCard(item, index);
+  });
   drawSignatureFooters();
 
   return await new Promise((resolve, reject) => {

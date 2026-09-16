@@ -472,6 +472,11 @@ function reportFileName(group) {
   return `${safe}.pdf`;
 }
 
+function templateReportFileName(group) {
+  const safe = text(group?.orderIdLabel).replace(/[^a-z0-9_-]+/gi, "-") || "maintenance-order";
+  return `maintenance-template-${safe}.pdf`;
+}
+
 function Progress({ stage }) {
   const icons = ["eye", "activity", "truck", "home"];
   const safeStage = Math.max(1, Math.min(4, Number(stage) || 1));
@@ -566,6 +571,7 @@ function MaintenanceDetailsModal({ group, busy, onClose, onLog, onDone, onExport
   };
 
   const canLog = group.state.key === "not-started";
+  const canTemplate = group.state.key === "not-started";
   const canDone = group.state.key === "in-progress";
   const canDownload = ["in-progress", "done"].includes(group.state.key);
   const showDoneMeta = group.state.key === "done";
@@ -600,6 +606,7 @@ function MaintenanceDetailsModal({ group, busy, onClose, onLog, onDone, onExport
             </div> : null}
 
             <div className="co-modal-actions ro-actions ro-actions--right next-maintenance-modal-actions">
+              {canTemplate ? <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => onExport(group, { template: true })} disabled={busy}><ClassicOrderIcon name="download" />Download Template</button> : null}
               {canDownload ? <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => onExport(group)} disabled={busy}><ClassicOrderIcon name="download" />Download</button> : null}
               {canLog ? <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => onLog(group)} disabled={busy}><ClassicOrderIcon name="clipboard" />Log Maintenance</button> : null}
               {canDone ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onDone(group)} disabled={busy}><ClassicOrderIcon name="check-circle" />Mark as Delivered</button> : null}
@@ -1228,14 +1235,15 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
     }
   }
 
-  async function exportOrder(group) {
+  async function exportOrder(group, options = {}) {
+    const template = Boolean(options?.template);
     setBusy(true);
     try {
       const response = await fetch("/api/orders/requested/export/maintenance-pdf", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ orderIds: group.orderIds, tab: group.state.key }),
+        body: JSON.stringify({ orderIds: group.orderIds, tab: group.state.key, template }),
       });
       if (response.status === 401) {
         window.location.href = "/login?next=/next/maintenance-orders";
@@ -1246,8 +1254,8 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
         throw new Error(data?.error || "Failed to download maintenance PDF.");
       }
       const blob = await response.blob();
-      downloadBlob(blob, reportFileName(group));
-      setNotice("Maintenance PDF downloaded.");
+      downloadBlob(blob, template ? templateReportFileName(group) : reportFileName(group));
+      setNotice(template ? "Maintenance template downloaded." : "Maintenance PDF downloaded.");
       window.setTimeout(() => setNotice(""), 3000);
     } catch (error) {
       setNotice(error?.message || "Download failed.");
