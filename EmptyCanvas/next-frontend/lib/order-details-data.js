@@ -268,7 +268,8 @@ function sparePartEntries(value) {
   };
   if (Array.isArray(value)) value.forEach(add);
   else if (value && typeof value === "object") {
-    if (Array.isArray(value.items)) value.items.forEach(add);
+    if (Array.isArray(value.replaced)) value.replaced.forEach(add);
+    else if (Array.isArray(value.items)) value.items.forEach(add);
     else add(value);
   } else {
     const raw = String(value || "").trim();
@@ -277,6 +278,23 @@ function sparePartEntries(value) {
     raw.split(/[,\n]+/).map((part) => part.trim()).filter(Boolean).forEach((name) => add({ name }));
   }
   return entries;
+}
+
+function maintenanceLogMeta(value) {
+  let parsed = value;
+  if (typeof parsed === "string") {
+    const raw = parsed.trim();
+    if (raw) { try { parsed = JSON.parse(raw); } catch { parsed = raw; } }
+  }
+  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      && (Array.isArray(parsed.needed) || Array.isArray(parsed.replaced) || Array.isArray(parsed.checklist))) {
+    return {
+      neededEntries: sparePartEntries(Array.isArray(parsed.needed) ? parsed.needed : []),
+      replacedEntries: sparePartEntries(Array.isArray(parsed.replaced) ? parsed.replaced : []),
+      checklist: uniqueStrings(Array.isArray(parsed.checklist) ? parsed.checklist : [], { splitComma: false }),
+    };
+  }
+  return { neededEntries: [], replacedEntries: sparePartEntries(value), checklist: [] };
 }
 
 function ordersTable() {
@@ -371,8 +389,11 @@ export function serializeOperationsOrderDetail(row = {}) {
   const createdByName = text(valueFor(row, ["team_member_name", "Teams Members", "teams_members", "created_by_name", "created_by", "Created By", "Supervisor", "supervisor"]));
   const createdById = text(valueFor(row, ["team_member_id", "team_members_id", "created_by_id", "owner_id"])) || createdByName;
   const operationsByName = text(valueFor(row, ["person_received_by_operations", "Person Received by Operations", "Received by operations"]));
-  const spareEntries = sparePartEntries(valueFor(row, ["spare_parts_replaced", "Spare parts replaced"]));
-  const spareParts = spareEntries.length ? uniqueStrings(spareEntries.map((entry) => entry.name), { splitComma: true }) : uniqueStrings(valueFor(row, ["spare_parts_replaced", "Spare parts replaced"]), { splitComma: true });
+  const rawMaintenanceMeta = valueFor(row, ["spare_parts_replaced", "Spare parts replaced"]);
+  const maintenanceMeta = maintenanceLogMeta(rawMaintenanceMeta);
+  const spareEntries = maintenanceMeta.replacedEntries;
+  const spareParts = uniqueStrings(spareEntries.map((entry) => entry.name), { splitComma: true });
+  const sparePartsNeeded = uniqueStrings(maintenanceMeta.neededEntries.map((entry) => entry.name), { splitComma: true });
   const orderReceipts = receiptEntries(valueFor(row, ["order_receipt", "Order Receipt", "delivery_receipt", "Delivery Receipt", "receipt_photos", "Receipt Photos"]), "Receipt photo");
   const maintenanceReceipts = receiptEntries(valueFor(row, ["maintenance_receipt", "Maintenance Receipt"]) || valueFor(row, ["order_receipt", "Order Receipt", "delivery_receipt", "Delivery Receipt", "receipt_photos", "Receipt Photos"]), "Receipt photo");
   const sourceProposalId = text(valueFor(row, ["source_proposal_id", "Source Proposal ID", "proposal_id", "Proposal ID"])) || null;
@@ -415,6 +436,10 @@ export function serializeOperationsOrderDetail(row = {}) {
     sparePartsReplacedNames: spareParts,
     sparePartsReplacedName: spareParts.join(", ") || null,
     sparePartsReplacedEntries: spareEntries,
+    sparePartsNeededNames: sparePartsNeeded,
+    sparePartsNeededName: sparePartsNeeded.join(", ") || null,
+    sparePartsNeededEntries: maintenanceMeta.neededEntries,
+    maintenanceChecklist: maintenanceMeta.checklist,
     orderReceiptEntries: orderReceipts,
     orderReceiptNames: orderReceipts.map((entry) => entry.name).filter(Boolean),
     orderReceiptUrls: orderReceipts.map((entry) => entry.url).filter(Boolean),

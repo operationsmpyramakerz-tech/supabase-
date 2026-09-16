@@ -344,3 +344,141 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   background: #b91c1c;
 }
 
+
+/* Maintenance PDF options + dual spare-parts / checklist logger. */
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spare-frame,
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-checklist-frame {
+  border: 1px solid #dfe6ee;
+  background: #fff;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, .035);
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spare-frame__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 9px;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spare-frame__head small {
+  max-width: 55%;
+  color: #94a3b8;
+  font-size: 9px;
+  line-height: 1.35;
+  text-align: right;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-checklist-options {
+  display: grid;
+  gap: 7px;
+  max-height: 190px;
+  overflow: auto;
+  padding: 2px;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-checklist-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  min-height: 38px;
+  padding: 9px 10px;
+  border: 1px solid #e6ebf1;
+  border-radius: 12px;
+  background: #fbfdff;
+  color: #334155;
+  font-size: 10px;
+  line-height: 1.45;
+  cursor: pointer;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-checklist-option input {
+  width: 16px;
+  height: 16px;
+  margin: 1px 0 0;
+  accent-color: #111827;
+  flex: 0 0 auto;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-checklist-empty {
+  padding: 12px;
+  border: 1px dashed #dbe2ea;
+  border-radius: 12px;
+  color: #94a3b8;
+  font-size: 10px;
+  text-align: center;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-checklist-add,
+body.page-maintenance-orders .next-maintenance-download-dialog .next-maintenance-checklist-add {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) auto;
+  gap: 8px;
+  margin-top: 9px;
+}
+
+body.page-maintenance-orders .next-maintenance-download-dialog {
+  width: min(560px, calc(100vw - 28px));
+}
+
+body.page-maintenance-orders .next-maintenance-download-dialog .order-download-header p {
+  margin: 3px 0 0;
+  color: #94a3b8;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+body.page-maintenance-orders .next-maintenance-download-dialog .next-maintenance-checklist-options--download {
+  max-height: 210px;
+}
+
+body.page-maintenance-orders .next-maintenance-download-dialog .next-maintenance-checklist-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 9px 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #fff;
+  color: #374151;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+body.page-maintenance-orders .next-maintenance-download-dialog .next-maintenance-checklist-option input {
+  width: 16px;
+  height: 16px;
+  margin: 1px 0 0;
+  accent-color: #111827;
+}
+
+body.page-maintenance-orders .next-maintenance-download-dialog .next-maintenance-checklist-add input {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+body.page-maintenance-orders .next-maintenance-download-dialog .next-maintenance-checklist-add input:focus {
+  border-color: #cbd5e1;
+  box-shadow: 0 0 0 3px rgba(15, 23, 42, .06);
+}
+
+@media (max-width: 640px) {
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spare-frame__head {
+    display: block;
+  }
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spare-frame__head small {
+    display: block;
+    max-width: none;
+    margin-top: 3px;
+    text-align: left;
+  }
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-checklist-add,
+  body.page-maintenance-orders .next-maintenance-download-dialog .next-maintenance-checklist-add {
+    grid-template-columns: 1fr;
+  }
+}

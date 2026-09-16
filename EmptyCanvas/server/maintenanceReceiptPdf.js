@@ -135,7 +135,11 @@ function buildComponentLogs(params = {}) {
       actualIssueDescription: templateMode ? "" : ensureText(item?.actualIssueDescription),
       repairAction: templateMode ? "" : ensureText(item?.repairAction),
       resolutionMethod: templateMode ? "" : ensureText(item?.resolutionMethod),
+      sparePartsNeeded: templateMode ? [] : normalizeSpareParts({ spareParts: item?.sparePartsNeeded || [] }),
       spareParts: templateMode ? [] : normalizeSpareParts(item),
+      maintenanceChecklist: Array.isArray(item?.maintenanceChecklist)
+        ? item.maintenanceChecklist.map((value) => String(value || "").trim()).filter(Boolean)
+        : [],
     }));
   }
 
@@ -148,8 +152,12 @@ function buildComponentLogs(params = {}) {
     actualIssueDescription: templateMode ? "" : ensureText(params.actualIssueDescription),
     repairAction: templateMode ? "" : ensureText(params.repairAction),
     resolutionMethod: templateMode ? "" : ensureText(params.resolutionMethod),
+    sparePartsNeeded: [],
     spareParts: templateMode ? [] : uniqueTextList(params.sparePartsReplacedList || params.sparePartsReplaced || [])
       .map((name) => ({ name, idCode: "", unit: 0, qty: 1, total: 0 })),
+    maintenanceChecklist: Array.isArray(params.checklist)
+      ? params.checklist.map((value) => String(value || "").trim()).filter(Boolean)
+      : [],
   }));
 }
 
@@ -301,300 +309,359 @@ async function pipeMaintenanceReceiptPDF(params = {}, stream) {
     return h;
   };
 
-  const measureTemplateSparePartsTable = (rowCount = 4) => 22 + Math.max(3, Number(rowCount) || 4) * 27 + 24;
+  const normalizeSparePartColumns = (value) => {
+    const allowed = ["idCode", "component", "qty", "unitCost", "totalCost"];
+    const requested = Array.isArray(value) ? value.filter((key) => allowed.includes(String(key || ""))) : [];
+    return requested.length ? Array.from(new Set(requested)) : allowed;
+  };
 
-  const drawTemplateSparePartsTable = (x, y, w, rowCount = 4) => {
-    const rows = Math.max(3, Number(rowCount) || 4);
+  const sparePartColumns = normalizeSparePartColumns(params.sparePartColumns);
+
+  const spareTableLayout = (w) => {
+    const labels = { idCode: "ID Code", component: "Component", qty: "Qty", unitCost: "Unit Cost", totalCost: "Total Cost" };
+    const preferred = { idCode: 72, component: 150, qty: 44, unitCost: 66, totalCost: 72 };
+    const numeric = new Set(["qty", "unitCost", "totalCost"]);
+    const numberW = 24;
+    const inner = Math.max(100, w - 18 - numberW);
+    const selected = sparePartColumns.map((key) => ({ key, label: labels[key], width: preferred[key] || 70, numeric: numeric.has(key) }));
+    let totalPreferred = selected.reduce((sum, col) => sum + col.width, 0);
+    if (!selected.length) return { numberW, columns: [] };
+    if (totalPreferred < inner) {
+      const found = selected.findIndex((col) => col.key === "component" || col.key === "idCode");
+      const flexIndex = found >= 0 ? found : 0;
+      selected[flexIndex].width += inner - totalPreferred;
+    } else if (totalPreferred > inner) {
+      const scale = inner / totalPreferred;
+      selected.forEach((col) => { col.width = Math.max(col.numeric ? 38 : 54, col.width * scale); });
+      totalPreferred = selected.reduce((sum, col) => sum + col.width, 0);
+      if (totalPreferred > inner) selected[0].width = Math.max(44, selected[0].width - (totalPreferred - inner));
+    }
+    return { numberW, columns: selected };
+  };
+
+  const spareCellText = (part, key) => {
+    if (key === "idCode") return String(part?.idCode || "").trim() || "—";
+    if (key === "component") return ensureText(part?.name, "Spare part");
+    if (key === "qty") return String(Number(part?.qty) || 1);
+    if (key === "unitCost") return money(part?.unit);
+    if (key === "totalCost") return money(part?.total);
+    return "";
+  };
+
+  const measureTemplateSparePartsTable = (w, rowCount = 3) => {
+    const totalH = sparePartColumns.includes("totalCost") ? 24 : 0;
+    return 22 + 22 + Math.max(3, Number(rowCount) || 3) * 27 + totalH;
+  };
+
+  const drawTemplateSparePartsTable = (x, y, w, title, rowCount = 3) => {
+    const rows = Math.max(3, Number(rowCount) || 3);
+    const titleH = 22;
     const headerH = 22;
     const rowH = 27;
-    const totalH = 24;
-    const tableH = measureTemplateSparePartsTable(rows);
-    const numW = 28;
-    const qtyW = 42;
-    const unitW = 64;
-    const totalW = 72;
-    const nameW = Math.max(110, w - numW - qtyW - unitW - totalW - 34);
-
+    const totalH = sparePartColumns.includes("totalCost") ? 24 : 0;
+    const tableH = measureTemplateSparePartsTable(w, rows);
+    const layout = spareTableLayout(w);
     doc.save();
     doc.roundedRect(x, y, w, tableH, 10).fillAndStroke("#FFFFFF", COLORS.border);
-    doc.rect(x, y, w, headerH).fill(COLORS.soft2);
-    doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(8.4);
-    doc.text("#", x + 9, y + 7, { width: numW });
-    doc.text("Spare Parts Replacement", x + 9 + numW, y + 7, { width: nameW });
-    doc.text("Qty", x + 9 + numW + nameW + 4, y + 7, { width: qtyW, align: "right" });
-    doc.text("Unit Cost", x + w - unitW - totalW - 14, y + 7, { width: unitW, align: "right" });
-    doc.text("Total Cost", x + w - totalW - 10, y + 7, { width: totalW, align: "right" });
-    doc.strokeColor(COLORS.border).lineWidth(0.8).moveTo(x, y + headerH).lineTo(x + w, y + headerH).stroke();
-
+    doc.rect(x, y, w, titleH).fill(COLORS.softOrange);
+    doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(8.8).text(title, x + 9, y + 7, { width: w - 18 });
+    const headerY = y + titleH;
+    doc.rect(x, headerY, w, headerH).fill(COLORS.soft2);
+    doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(8.1);
+    doc.text("#", x + 9, headerY + 7, { width: layout.numberW });
+    let cursorX = x + 9 + layout.numberW;
+    layout.columns.forEach((col) => {
+      doc.text(col.label, cursorX, headerY + 7, { width: col.width - 4, align: col.numeric ? "right" : "left" });
+      cursorX += col.width;
+    });
+    doc.strokeColor(COLORS.border).lineWidth(0.8).moveTo(x, headerY + headerH).lineTo(x + w, headerY + headerH).stroke();
     for (let index = 0; index < rows; index += 1) {
-      const rowY = y + headerH + index * rowH;
+      const rowY = headerY + headerH + index * rowH;
       if (index > 0) doc.moveTo(x, rowY).lineTo(x + w, rowY).strokeColor(COLORS.border).stroke();
-      doc.fillColor(COLORS.muted).font("Helvetica-Bold").fontSize(8.4).text(String(index + 1), x + 9, rowY + 8, { width: numW });
-      doc.strokeColor("#9CA3AF").lineWidth(0.7);
-      doc.moveTo(x + 9 + numW, rowY + 19).lineTo(x + 9 + numW + nameW - 5, rowY + 19).stroke();
-      doc.moveTo(x + 9 + numW + nameW + 8, rowY + 19).lineTo(x + 9 + numW + nameW + qtyW, rowY + 19).stroke();
-      doc.moveTo(x + w - unitW - totalW - 10, rowY + 19).lineTo(x + w - totalW - 20, rowY + 19).stroke();
-      doc.moveTo(x + w - totalW - 6, rowY + 19).lineTo(x + w - 10, rowY + 19).stroke();
+      doc.fillColor(COLORS.muted).font("Helvetica-Bold").fontSize(8.2).text(String(index + 1), x + 9, rowY + 8, { width: layout.numberW });
+      cursorX = x + 9 + layout.numberW;
+      layout.columns.forEach((col) => {
+        doc.strokeColor("#9CA3AF").lineWidth(0.7);
+        doc.moveTo(cursorX + 3, rowY + 19).lineTo(cursorX + col.width - 7, rowY + 19).stroke();
+        cursorX += col.width;
+      });
     }
-
-    const totalY = y + headerH + rows * rowH;
-    doc.moveTo(x, totalY).lineTo(x + w, totalY).strokeColor(COLORS.border).stroke();
-    doc.rect(x, totalY, w, totalH).fill(COLORS.softOrange);
-    doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(9).text("Total Cost", x + 9, totalY + 7, { width: w - totalW - 24 });
-    doc.strokeColor("#9CA3AF").lineWidth(0.7).moveTo(x + w - totalW, totalY + 17).lineTo(x + w - 10, totalY + 17).stroke();
+    if (totalH) {
+      const totalY = headerY + headerH + rows * rowH;
+      doc.moveTo(x, totalY).lineTo(x + w, totalY).strokeColor(COLORS.border).stroke();
+      doc.rect(x, totalY, w, totalH).fill(COLORS.softOrange);
+      doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(9).text("Total Cost", x + 9, totalY + 7, { width: w - 100 });
+      doc.strokeColor("#9CA3AF").lineWidth(0.7).moveTo(x + w - 86, totalY + 17).lineTo(x + w - 10, totalY + 17).stroke();
+    }
     doc.restore();
     return tableH;
   };
 
   const measureSparePartsTable = (w, parts = []) => {
     const safeParts = Array.isArray(parts) ? parts : [];
-    const rows = safeParts.length ? safeParts : [{ name: "No spare parts replacement", empty: true }];
-    const headerH = 22;
-    const totalH = 24;
+    const rows = safeParts.length ? safeParts : [{ name: "", empty: true }];
+    const totalH = sparePartColumns.includes("totalCost") ? 24 : 0;
+    const layout = spareTableLayout(w);
     let bodyH = 0;
     rows.forEach((part) => {
-      const nameW = part.empty ? w - 18 : Math.max(140, w - 220);
-      bodyH += Math.max(23, textHeight(part.name, nameW, 8.4) + 13);
+      if (part.empty) { bodyH += 28; return; }
+      let maxH = 10;
+      layout.columns.forEach((col) => {
+        maxH = Math.max(maxH, textHeight(spareCellText(part, col.key), Math.max(20, col.width - 8), 8.2));
+      });
+      bodyH += Math.max(25, maxH + 13);
     });
-    return headerH + bodyH + totalH;
+    return 22 + 22 + bodyH + totalH;
   };
 
-  const drawSparePartsTable = (x, y, w, parts = []) => {
+  const drawSparePartsTable = (x, y, w, title, parts = [], emptyText = "No spare parts") => {
     const safeParts = Array.isArray(parts) ? parts : [];
-    const rows = safeParts.length ? safeParts : [{ name: "No spare parts replacement", empty: true }];
+    const rows = safeParts.length ? safeParts : [{ name: emptyText, empty: true }];
+    const titleH = 22;
     const headerH = 22;
     const tableH = measureSparePartsTable(w, parts);
     const totalCost = safeParts.reduce((sum, part) => sum + (Number(part.total) || 0), 0);
-
-    const numW = 28;
-    const qtyW = 42;
-    const unitW = 64;
-    const totalW = 72;
-    const nameW = Math.max(110, w - numW - qtyW - unitW - totalW - 34);
-
+    const totalH = sparePartColumns.includes("totalCost") ? 24 : 0;
+    const layout = spareTableLayout(w);
     doc.save();
     doc.roundedRect(x, y, w, tableH, 10).fillAndStroke("#FFFFFF", COLORS.border);
-    doc.rect(x, y, w, headerH).fill(COLORS.soft2);
-    doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(8.4);
-    doc.text("#", x + 9, y + 7, { width: numW });
-    doc.text("Spare Parts Replacement", x + 9 + numW, y + 7, { width: nameW });
-    doc.text("Qty", x + 9 + numW + nameW + 4, y + 7, { width: qtyW, align: "right" });
-    doc.text("Unit Cost", x + w - unitW - totalW - 14, y + 7, { width: unitW, align: "right" });
-    doc.text("Total Cost", x + w - totalW - 10, y + 7, { width: totalW, align: "right" });
-    doc.strokeColor(COLORS.border).lineWidth(0.8).moveTo(x, y + headerH).lineTo(x + w, y + headerH).stroke();
-
-    let rowY = y + headerH;
+    doc.rect(x, y, w, titleH).fill(COLORS.softOrange);
+    doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(8.8).text(title, x + 9, y + 7, { width: w - 18 });
+    const headerY = y + titleH;
+    doc.rect(x, headerY, w, headerH).fill(COLORS.soft2);
+    doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(8.1);
+    doc.text("#", x + 9, headerY + 7, { width: layout.numberW });
+    let cursorX = x + 9 + layout.numberW;
+    layout.columns.forEach((col) => {
+      doc.text(col.label, cursorX, headerY + 7, { width: col.width - 4, align: col.numeric ? "right" : "left" });
+      cursorX += col.width;
+    });
+    doc.strokeColor(COLORS.border).lineWidth(0.8).moveTo(x, headerY + headerH).lineTo(x + w, headerY + headerH).stroke();
+    let rowY = headerY + headerH;
     rows.forEach((part, idx) => {
-      const nameText = ensureText(part.name, "Spare part");
-      const isEmptyRow = !safeParts.length || part.empty;
-      const currentNameW = isEmptyRow ? w - 18 : nameW;
-      const nameLayout = makeValueLayout(nameText, currentNameW, isEmptyRow ? 8.6 : 8.4, isEmptyRow ? "Helvetica-Bold" : "Helvetica", 1);
-      const rowH = Math.max(23, nameLayout.height + 13);
       if (idx > 0) doc.moveTo(x, rowY).lineTo(x + w, rowY).strokeColor(COLORS.border).stroke();
-      if (isEmptyRow) {
-        drawValueLayout(nameLayout, x + 9, rowY + 7, w - 18, { fontName: "Helvetica-Bold", fontSize: 8.6, lineGap: 1, color: COLORS.muted, align: nameLayout.isArabic ? "right" : "center" });
-      } else {
-        doc.fillColor(COLORS.muted).font("Helvetica-Bold").fontSize(8.4).text(String(idx + 1), x + 9, rowY + 7, { width: numW });
-        drawValueLayout(nameLayout, x + 9 + numW, rowY + 7, nameW, { fontName: "Helvetica", fontSize: 8.4, lineGap: 1 });
-        doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(8.4).text(String(Number(part.qty) || 1), x + 9 + numW + nameW + 4, rowY + 7, { width: qtyW, align: "right" });
-        doc.fillColor(COLORS.text).font("Helvetica").fontSize(8.4).text(money(part.unit), x + w - unitW - totalW - 14, rowY + 7, { width: unitW, align: "right" });
-        doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(8.4).text(money(part.total), x + w - totalW - 10, rowY + 7, { width: totalW, align: "right" });
+      if (part.empty) {
+        doc.fillColor(COLORS.muted).font("Helvetica-Bold").fontSize(8.5).text(emptyText, x + 9, rowY + 8, { width: w - 18, align: "center" });
+        rowY += 28;
+        return;
       }
+      let maxH = 10;
+      layout.columns.forEach((col) => {
+        maxH = Math.max(maxH, textHeight(spareCellText(part, col.key), Math.max(20, col.width - 8), 8.2));
+      });
+      const rowH = Math.max(25, maxH + 13);
+      doc.fillColor(COLORS.muted).font("Helvetica-Bold").fontSize(8.2).text(String(idx + 1), x + 9, rowY + 7, { width: layout.numberW });
+      cursorX = x + 9 + layout.numberW;
+      layout.columns.forEach((col) => {
+        const value = spareCellText(part, col.key);
+        const layoutValue = makeValueLayout(value, Math.max(20, col.width - 8), 8.2, col.numeric ? "Helvetica-Bold" : "Helvetica", 1);
+        drawValueLayout(layoutValue, cursorX, rowY + 7, Math.max(20, col.width - 8), { fontName: col.numeric ? "Helvetica-Bold" : "Helvetica", fontSize: 8.2, lineGap: 1, align: col.numeric ? "right" : undefined });
+        cursorX += col.width;
+      });
       rowY += rowH;
     });
-
-    doc.moveTo(x, rowY).lineTo(x + w, rowY).strokeColor(COLORS.border).stroke();
-    doc.rect(x, rowY, w, 24).fill(COLORS.softOrange);
-    doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(9).text("Total Cost", x + 9, rowY + 7, { width: w - totalW - 24 });
-    doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(9).text(money(totalCost), x + w - totalW - 10, rowY + 7, { width: totalW, align: "right" });
+    if (totalH) {
+      doc.moveTo(x, rowY).lineTo(x + w, rowY).strokeColor(COLORS.border).stroke();
+      doc.rect(x, rowY, w, totalH).fill(COLORS.softOrange);
+      doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(9).text("Total Cost", x + 9, rowY + 7, { width: w - 100 });
+      doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(9).text(money(totalCost), x + w - 88, rowY + 7, { width: 78, align: "right" });
+    }
     doc.restore();
     return tableH;
   };
 
-  const measureMaintenanceTemplateCard = (item) => {
+  const measureChecklistBlock = (w, items = []) => {
+    const values = Array.isArray(items) ? items.filter(Boolean) : [];
+    if (!values.length) return 0;
+    let h = 36;
+    values.forEach((value) => { h += Math.max(22, textHeight(value, w - 48, 8.6) + 10); });
+    return h + 8;
+  };
+
+  const drawChecklistBlock = (x, y, w, items = [], checked = false) => {
+    const values = Array.isArray(items) ? items.filter(Boolean) : [];
+    if (!values.length) return 0;
+    const h = measureChecklistBlock(w, values);
+    doc.save();
+    doc.roundedRect(x, y, w, h, 10).fillAndStroke("#FFFFFF", COLORS.border);
+    doc.rect(x, y, w, 24).fill(COLORS.soft2);
+    doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(8.8).text("Maintenance Checklist", x + 9, y + 8, { width: w - 18 });
+    let rowY = y + 31;
+    values.forEach((value) => {
+      const layout = makeValueLayout(value, w - 48, 8.6, "Helvetica", 1);
+      const rowH = Math.max(22, layout.height + 10);
+      const boxX = x + 11;
+      const boxY = rowY + 2;
+      doc.strokeColor("#64748B").lineWidth(0.8).rect(boxX, boxY, 10, 10).stroke();
+      if (checked) {
+        doc.strokeColor(COLORS.accent).lineWidth(1.4).moveTo(boxX + 2, boxY + 5).lineTo(boxX + 4.5, boxY + 8).lineTo(boxX + 9, boxY + 2).stroke();
+      }
+      drawValueLayout(layout, x + 30, rowY, w - 41, { fontName: "Helvetica", fontSize: 8.6, lineGap: 1 });
+      rowY += rowH;
+    });
+    doc.restore();
+    return h;
+  };
+
+  const maintenanceDetailsMeasure = (item, template = false) => {
     const { contentW } = metrics();
     const innerW = contentW - 24;
     const gap = 8;
     const fieldW = (innerW - gap) / 2;
-    const issueH = measureSmallField(innerW, item.issueDescription);
-    const serialResolutionH = Math.max(measureRuledField(1), measureRuledField(2));
-    const actionH = Math.max(measureRuledField(3), measureRuledField(3));
-    const tableH = measureTemplateSparePartsTable(4);
-    return 54 + issueH + gap + serialResolutionH + gap + actionH + 10 + tableH + 16;
+    const issueH = template
+      ? measureSmallField(innerW, item.issueDescription)
+      : Math.max(measureSmallField(fieldW, item.issueDescription), measureSmallField(fieldW, item.resolutionMethod));
+    const serialH = template ? Math.max(measureRuledField(1), measureRuledField(2)) : 0;
+    const actionH = template
+      ? Math.max(measureRuledField(3), measureRuledField(3))
+      : Math.max(measureSmallField(fieldW, item.actualIssueDescription), measureSmallField(fieldW, item.repairAction));
+    return template
+      ? 52 + issueH + gap + serialH + gap + actionH + 14
+      : 52 + issueH + gap + actionH + 14;
+  };
+
+  const drawMaintenanceDetailsFields = (item, index, y, template = false, suffix = "") => {
+    const { mL, contentW } = metrics();
+    const innerW = contentW - 24;
+    const gap = 8;
+    const fieldW = (innerW - gap) / 2;
+    const detailsH = maintenanceDetailsMeasure(item, template);
+    doc.save();
+    doc.roundedRect(mL, y, contentW, detailsH, 15).fillAndStroke("#FFFFFF", COLORS.cardBorder);
+    doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(11.5).text(`Maintenance for Component ${index + 1}${suffix}`, mL + 12, y + 12, { width: contentW - 24 });
+    const subtitle = [
+      item.idCode ? `ID: ${item.idCode}` : "",
+      !template && item.serialNumber && item.serialNumber !== "—" ? `Serial: ${item.serialNumber}` : "",
+      item.component,
+    ].filter(Boolean).join("  •  ");
+    doc.fillColor(COLORS.muted).font("Helvetica").fontSize(9.2).text(subtitle || "Unknown Component", mL + 12, y + 30, { width: contentW - 24 });
+    doc.restore();
+
+    let fy = y + 52;
+    if (template) {
+      const issueH = drawSmallField(mL + 12, fy, innerW, "Initial Issue", item.issueDescription);
+      fy += issueH + gap;
+      const serialH = Math.max(
+        drawRuledField(mL + 12, fy, fieldW, "Serial Number", 1),
+        drawRuledField(mL + 12 + fieldW + gap, fy, fieldW, "Resolution Method", 2),
+      );
+      fy += serialH + gap;
+      Math.max(
+        drawRuledField(mL + 12, fy, fieldW, "Actual Issue Description", 3),
+        drawRuledField(mL + 12 + fieldW + gap, fy, fieldW, "Repair Action", 3),
+      );
+    } else {
+      const issueH = Math.max(
+        drawSmallField(mL + 12, fy, fieldW, "Initial Issue", item.issueDescription),
+        drawSmallField(mL + 12 + fieldW + gap, fy, fieldW, "Resolution Method", item.resolutionMethod),
+      );
+      fy += issueH + gap;
+      Math.max(
+        drawSmallField(mL + 12, fy, fieldW, "Actual Issue Description", item.actualIssueDescription),
+        drawSmallField(mL + 12 + fieldW + gap, fy, fieldW, "Repair Action", item.repairAction),
+      );
+    }
+    return detailsH;
+  };
+
+  const drawContinuationLabel = (index) => {
+    ensureSpace(28);
+    doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(10).text(`Component ${index + 1} — maintenance details continued`, metrics().mL, doc.y, { width: metrics().contentW });
+    doc.moveDown(0.3);
   };
 
   const drawMaintenanceTemplateCard = (item, index) => {
     const { mL, contentW } = metrics();
     const innerW = contentW - 24;
     const gap = 8;
-    const fieldW = (innerW - gap) / 2;
-    const cardH = measureMaintenanceTemplateCard(item);
+    const detailsH = maintenanceDetailsMeasure(item, true);
+    const neededH = measureTemplateSparePartsTable(innerW, 3);
+    const replacedH = measureTemplateSparePartsTable(innerW, 3);
+    const checklistItems = Array.isArray(item.maintenanceChecklist) ? item.maintenanceChecklist : [];
+    const checklistH = measureChecklistBlock(innerW, checklistItems);
+    const fullH = detailsH + gap + neededH + gap + replacedH + (checklistH ? gap + checklistH : 0) + 14;
 
-    ensureSpace(cardH + 10);
-    if (doc.y + cardH + 10 > metrics().maxY) {
-      doc.addPage();
-      drawHeader(true);
+    if (doc.y + fullH + 10 <= metrics().maxY) {
+      const y = doc.y;
+      drawMaintenanceDetailsFields(item, index, y, true);
+      let fy = y + detailsH + gap;
+      drawTemplateSparePartsTable(mL + 12, fy, innerW, "Spare Parts Needed", 3);
+      fy += neededH + gap;
+      drawTemplateSparePartsTable(mL + 12, fy, innerW, "Spare Parts Replaced", 3);
+      fy += replacedH;
+      if (checklistH) {
+        fy += gap;
+        drawChecklistBlock(mL + 12, fy, innerW, checklistItems, false);
+        fy += checklistH;
+      }
+      doc.y = fy + 10;
+      return;
     }
 
-    const y = doc.y;
-    doc.save();
-    doc.roundedRect(mL, y, contentW, cardH, 15).fillAndStroke("#FFFFFF", COLORS.cardBorder);
-    doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(11.5).text(`Maintenance for Component ${index + 1}`, mL + 12, y + 12, {
-      width: contentW - 24,
+    ensureSpace(Math.min(detailsH + 10, 180));
+    if (doc.y + detailsH + 10 > metrics().maxY) { doc.addPage(); drawHeader(true); }
+    let y = doc.y;
+    drawMaintenanceDetailsFields(item, index, y, true);
+    doc.y = y + detailsH + 10;
+
+    const sections = [
+      { h: neededH, draw: (yy) => drawTemplateSparePartsTable(mL, yy, contentW, "Spare Parts Needed", 3) },
+      { h: replacedH, draw: (yy) => drawTemplateSparePartsTable(mL, yy, contentW, "Spare Parts Replaced", 3) },
+      ...(checklistH ? [{ h: checklistH, draw: (yy) => drawChecklistBlock(mL, yy, contentW, checklistItems, false) }] : []),
+    ];
+    sections.forEach((section) => {
+      if (doc.y + section.h + 10 > metrics().maxY) { doc.addPage(); drawHeader(true); drawContinuationLabel(index); }
+      section.draw(doc.y);
+      doc.y += section.h + 10;
     });
-    const subtitle = [item.idCode ? `ID: ${item.idCode}` : "", item.component].filter(Boolean).join("  •  ");
-    doc.fillColor(COLORS.muted).font("Helvetica").fontSize(9.2).text(subtitle || "Unknown Component", mL + 12, y + 30, {
-      width: contentW - 24,
-    });
-    doc.restore();
-
-    let fy = y + 52;
-    const issueH = drawSmallField(mL + 12, fy, innerW, "Initial Issue", item.issueDescription);
-    fy += issueH + gap;
-
-    const serialResolutionH = Math.max(
-      drawRuledField(mL + 12, fy, fieldW, "Serial Number", 1),
-      drawRuledField(mL + 12 + fieldW + gap, fy, fieldW, "Resolution Method", 2),
-    );
-    fy += serialResolutionH + gap;
-
-    const actionH = Math.max(
-      drawRuledField(mL + 12, fy, fieldW, "Actual Issue Description", 3),
-      drawRuledField(mL + 12 + fieldW + gap, fy, fieldW, "Repair Action", 3),
-    );
-    fy += actionH + 10;
-
-    drawTemplateSparePartsTable(mL + 12, fy, innerW, 4);
-    doc.y = y + cardH + 10;
-  };
-
-  const measureMaintenanceCard = (item) => {
-    const { contentW } = metrics();
-    const fieldsGap = 8;
-    const fieldW = (contentW - 24 - fieldsGap) / 2;
-    const issueH = Math.max(
-      measureSmallField(fieldW, item.issueDescription),
-      measureSmallField(fieldW, item.resolutionMethod),
-    );
-    const actionH = Math.max(
-      measureSmallField(fieldW, item.actualIssueDescription),
-      measureSmallField(fieldW, item.repairAction),
-    );
-    const tableH = measureSparePartsTable(contentW - 24, item.spareParts || []);
-    return 54 + issueH + fieldsGap + actionH + 10 + tableH + 16;
   };
 
   const drawMaintenanceCard = (item, index) => {
     const { mL, contentW } = metrics();
-    const fieldsGap = 8;
-    const fieldW = (contentW - 24 - fieldsGap) / 2;
-    const spareParts = Array.isArray(item.spareParts) ? item.spareParts : [];
-    const cardH = measureMaintenanceCard(item);
+    const innerW = contentW - 24;
+    const gap = 8;
+    const needed = Array.isArray(item.sparePartsNeeded) ? item.sparePartsNeeded : [];
+    const replaced = Array.isArray(item.spareParts) ? item.spareParts : [];
+    const checklistItems = Array.isArray(item.maintenanceChecklist) ? item.maintenanceChecklist : [];
+    const detailsH = maintenanceDetailsMeasure(item, false);
+    const neededH = measureSparePartsTable(innerW, needed);
+    const replacedH = measureSparePartsTable(innerW, replaced);
+    const checklistH = measureChecklistBlock(innerW, checklistItems);
+    const fullH = detailsH + gap + neededH + gap + replacedH + (checklistH ? gap + checklistH : 0) + 14;
 
-    const drawCardHeader = (y, suffix = "") => {
-      doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(11.5).text(`Maintenance for Component ${index + 1}${suffix}`, mL + 12, y + 12, {
-        width: contentW - 24,
-      });
-      const subtitle = [
-        item.idCode ? `ID: ${item.idCode}` : "",
-        item.serialNumber && item.serialNumber !== "—" ? `Serial: ${item.serialNumber}` : "",
-        item.component,
-      ].filter(Boolean).join("  •  ");
-      doc.fillColor(COLORS.muted).font("Helvetica").fontSize(9.2).text(subtitle || "Unknown Component", mL + 12, y + 30, {
-        width: contentW - 24,
-      });
-    };
-
-    const drawFullCard = () => {
-      ensureSpace(cardH + 10);
+    if (doc.y + fullH + 10 <= metrics().maxY) {
       const y = doc.y;
-      doc.save();
-      doc.roundedRect(mL, y, contentW, cardH, 15).fillAndStroke("#FFFFFF", COLORS.cardBorder);
-      drawCardHeader(y);
-      doc.restore();
-
-      let fy = y + 52;
-      const issueH = Math.max(
-        drawSmallField(mL + 12, fy, fieldW, "Initial Issue", item.issueDescription),
-        drawSmallField(mL + 12 + fieldW + fieldsGap, fy, fieldW, "Resolution Method", item.resolutionMethod),
-      );
-      fy += issueH + fieldsGap;
-      const actionH = Math.max(
-        drawSmallField(mL + 12, fy, fieldW, "Actual Issue Description", item.actualIssueDescription),
-        drawSmallField(mL + 12 + fieldW + fieldsGap, fy, fieldW, "Repair Action", item.repairAction),
-      );
-      fy += actionH + 10;
-      drawSparePartsTable(mL + 12, fy, contentW - 24, spareParts);
-
-      doc.y = y + cardH + 10;
-    };
-
-    // Normal case: keep the card as one piece, but only when the whole card fits
-    // above the reserved signature footer area. This prevents the content from
-    // being drawn under the signature boxes.
-    if (doc.y + cardH + 10 <= metrics().maxY) {
-      drawFullCard();
+      drawMaintenanceDetailsFields(item, index, y, false);
+      let fy = y + detailsH + gap;
+      drawSparePartsTable(mL + 12, fy, innerW, "Spare Parts Needed", needed, "No spare parts needed");
+      fy += neededH + gap;
+      drawSparePartsTable(mL + 12, fy, innerW, "Spare Parts Replaced", replaced, "No spare parts replaced");
+      fy += replacedH;
+      if (checklistH) {
+        fy += gap;
+        drawChecklistBlock(mL + 12, fy, innerW, checklistItems, true);
+        fy += checklistH;
+      }
+      doc.y = fy + 10;
       return;
     }
 
-    const issueH = Math.max(
-      measureSmallField(fieldW, item.issueDescription),
-      measureSmallField(fieldW, item.resolutionMethod),
-    );
-    const actionH = Math.max(
-      measureSmallField(fieldW, item.actualIssueDescription),
-      measureSmallField(fieldW, item.repairAction),
-    );
-    const detailsH = 52 + issueH + fieldsGap + actionH + 14;
-    const tableH = measureSparePartsTable(contentW - 24, spareParts);
-
-    // If there is not enough room to show a meaningful first segment, move the
-    // card to the next page. If it fits there, draw it normally.
-    if (metrics().maxY - doc.y < Math.min(detailsH, 150)) {
-      doc.addPage();
-      drawHeader(true);
-      if (doc.y + cardH + 10 <= metrics().maxY) {
-        drawFullCard();
-        return;
-      }
-    }
-
-    // Split layout: details stay in the current page up to the signature-safe
-    // boundary, and the spare-parts table continues in a new card segment.
-    ensureSpace(detailsH + 10);
+    ensureSpace(Math.min(detailsH + 10, 180));
+    if (doc.y + detailsH + 10 > metrics().maxY) { doc.addPage(); drawHeader(true); }
     let y = doc.y;
-    doc.save();
-    doc.roundedRect(mL, y, contentW, detailsH, 15).fillAndStroke("#FFFFFF", COLORS.cardBorder);
-    drawCardHeader(y);
-    doc.restore();
+    drawMaintenanceDetailsFields(item, index, y, false);
+    doc.y = y + detailsH + 10;
 
-    let fy = y + 52;
-    const drawnIssueH = Math.max(
-      drawSmallField(mL + 12, fy, fieldW, "Initial Issue", item.issueDescription),
-      drawSmallField(mL + 12 + fieldW + fieldsGap, fy, fieldW, "Resolution Method", item.resolutionMethod),
-    );
-    fy += drawnIssueH + fieldsGap;
-    Math.max(
-      drawSmallField(mL + 12, fy, fieldW, "Actual Issue Description", item.actualIssueDescription),
-      drawSmallField(mL + 12 + fieldW + fieldsGap, fy, fieldW, "Repair Action", item.repairAction),
-    );
-    doc.y = y + detailsH + 8;
-
-    const tableSegmentH = tableH + 44;
-    if (doc.y + tableSegmentH > metrics().maxY) {
-      doc.addPage();
-      drawHeader(true);
-    }
-
-    y = doc.y;
-    doc.save();
-    doc.roundedRect(mL, y, contentW, tableSegmentH, 15).fillAndStroke("#FFFFFF", COLORS.cardBorder);
-    doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(10.5).text(`Maintenance for Component ${index + 1} — continued`, mL + 12, y + 12, {
-      width: contentW - 24,
+    const sections = [
+      { h: measureSparePartsTable(contentW, needed), draw: (yy) => drawSparePartsTable(mL, yy, contentW, "Spare Parts Needed", needed, "No spare parts needed") },
+      { h: measureSparePartsTable(contentW, replaced), draw: (yy) => drawSparePartsTable(mL, yy, contentW, "Spare Parts Replaced", replaced, "No spare parts replaced") },
+      ...(checklistItems.length ? [{ h: measureChecklistBlock(contentW, checklistItems), draw: (yy) => drawChecklistBlock(mL, yy, contentW, checklistItems, true) }] : []),
+    ];
+    sections.forEach((section) => {
+      if (doc.y + section.h + 10 > metrics().maxY) { doc.addPage(); drawHeader(true); drawContinuationLabel(index); }
+      section.draw(doc.y);
+      doc.y += section.h + 10;
     });
-    doc.restore();
-    drawSparePartsTable(mL + 12, y + 34, contentW - 24, spareParts);
-    doc.y = y + tableSegmentH + 10;
   };
 
   const drawFooterSignatureBox = (x, y, w, title) => {

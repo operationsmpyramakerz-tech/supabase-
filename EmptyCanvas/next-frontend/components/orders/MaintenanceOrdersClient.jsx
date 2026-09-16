@@ -16,6 +16,14 @@ const MAINTENANCE_STATUS_COLORS = {
   done: { bg: "#D1FAE5", fg: "#047857", bd: "#A7F3D0" },
 };
 
+const MAINTENANCE_SPARE_EXPORT_COLUMNS = [
+  ["idCode", "ID Code"],
+  ["component", "Component"],
+  ["qty", "Quantity"],
+  ["unitCost", "Unit Cost"],
+  ["totalCost", "Total Cost"],
+];
+
 const MAINTENANCE_ACTIONS = {
   edit: {
     title: "Edit maintenance order",
@@ -174,13 +182,54 @@ function normalizeSpareEntries(item = {}) {
   return entries;
 }
 
+function normalizeNeededSpareEntries(item = {}) {
+  const entries = [];
+  const seen = new Set();
+  const add = (entry = {}) => {
+    const id = text(entry?.id ?? entry?.productId ?? entry?.sparePartId);
+    let name = text(entry?.name ?? entry?.label ?? entry?.component ?? entry?.sparePartName);
+    let qty = Number(entry?.qty ?? entry?.quantity ?? 1);
+    if (!Number.isFinite(qty) || qty <= 0) qty = 1;
+    qty = Math.max(1, Math.round(qty));
+    const key = `${id || lower(name)}|${qty}`;
+    if ((!id && !name) || seen.has(key)) return;
+    seen.add(key);
+    entries.push({ id, name, qty });
+  };
+  if (Array.isArray(item?.sparePartsNeededEntries)) item.sparePartsNeededEntries.forEach(add);
+  if (!entries.length) {
+    const ids = splitNames(item?.sparePartsNeededIds?.length ? item.sparePartsNeededIds : item?.sparePartsNeededId);
+    const names = splitNames(item?.sparePartsNeededNames?.length ? item.sparePartsNeededNames : item?.sparePartsNeededName);
+    if (ids.length) ids.forEach((id, index) => add({ id, name: names[index] || "" }));
+    else names.forEach((name) => add({ name }));
+  }
+  return entries;
+}
+
+function normalizeMaintenanceChecklist(value) {
+  const source = Array.isArray(value) ? value : [];
+  const seen = new Set();
+  const out = [];
+  source.forEach((entry) => {
+    const item = text(entry?.text ?? entry?.value ?? entry);
+    if (!item) return;
+    const key = lower(item);
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(item);
+  });
+  return out;
+}
+
 function itemHasMaintenanceLog(item = {}) {
   return Boolean(
     text(item?.serialNumber) ||
     text(item?.resolutionMethod) ||
     text(item?.actualIssueDescription) ||
     text(item?.repairAction) ||
-    normalizeSpareEntries(item).length
+    normalizeSpareEntries(item).length ||
+    normalizeNeededSpareEntries(item).length ||
+    normalizeMaintenanceChecklist(item?.maintenanceChecklist).length
   );
 }
 
@@ -291,6 +340,9 @@ function groupSearchText(group) {
       item?.resolutionMethod,
       item?.sparePartsReplacedName,
       ...(Array.isArray(item?.sparePartsReplacedNames) ? item.sparePartsReplacedNames : []),
+      item?.sparePartsNeededName,
+      ...(Array.isArray(item?.sparePartsNeededNames) ? item.sparePartsNeededNames : []),
+      ...normalizeMaintenanceChecklist(item?.maintenanceChecklist),
     ]),
   ].filter(Boolean).join(" "));
 }
@@ -314,6 +366,25 @@ async function postJson(url, body) {
   const data = await readJson(response);
   if (!response.ok) throw new Error(data?.error || "The maintenance action failed.");
   return data;
+}
+
+async function saveMaintenanceChecklistItem(value) {
+  const clean = text(value);
+  if (!clean) throw new Error("Checklist text is required.");
+  const response = await fetch("/api/orders/maintenance-checklist", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    cache: "no-store",
+    body: JSON.stringify({ text: clean }),
+  });
+  if (response.status === 401) {
+    window.location.href = "/login?next=/next/maintenance-orders";
+    throw new Error("Authentication required.");
+  }
+  const data = await readJson(response);
+  if (!response.ok) throw new Error(data?.error || "Failed to save checklist item.");
+  return data?.item || null;
 }
 
 function useClassicHeaderSearch(query, setQuery, placeholder) {
@@ -645,6 +716,114 @@ function MaintenanceDetailsModal({ group, busy, onClose, onLog, onDone, onExport
   );
 }
 
+function MaintenanceDownloadModal({ state, options, busy, onClose, onDownload, onChecklistSaved }) {
+  const group = state?.group || null;
+  const template = Boolean(state?.template);
+  const [columns, setColumns] = useState(MAINTENANCE_SPARE_EXPORT_COLUMNS.map(([key]) => key));
+  const [selectedChecklist, setSelectedChecklist] = useState([]);
+  const [newChecklist, setNewChecklist] = useState("");
+  const [savingChecklist, setSavingChecklist] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!state) return;
+    setColumns(MAINTENANCE_SPARE_EXPORT_COLUMNS.map(([key]) => key));
+    const logged = template ? [] : normalizeMaintenanceChecklist((group?.items || []).flatMap((item) => item?.maintenanceChecklist || []));
+    setSelectedChecklist(logged);
+    setNewChecklist("");
+    setError("");
+  }, [state?.group?.key, template]);
+
+  useEffect(() => {
+    if (!state) return undefined;
+    const onKey = (event) => { if (event.key === "Escape" && !busy && !savingChecklist) onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [state, busy, savingChecklist, onClose]);
+
+  if (!state || !group) return null;
+  const checklistItems = (Array.isArray(options?.checklistItems) ? options.checklistItems : [])
+    .map((item) => ({ id: text(item?.id), text: text(item?.text ?? item?.value ?? item) }))
+    .filter((item) => item.text);
+
+  const toggleColumn = (key) => {
+    setColumns((current) => current.includes(key)
+      ? (current.length === 1 ? current : current.filter((item) => item !== key))
+      : [...current, key]);
+  };
+
+  const toggleChecklist = (value) => {
+    setSelectedChecklist((current) => current.includes(value) ? current.filter((item) => item !== value) : [...current, value]);
+  };
+
+  async function addChecklist() {
+    const value = text(newChecklist);
+    if (!value || savingChecklist) return;
+    setSavingChecklist(true);
+    setError("");
+    try {
+      const saved = await saveMaintenanceChecklistItem(value);
+      const savedText = text(saved?.text) || value;
+      onChecklistSaved?.(saved || { text: savedText });
+      setSelectedChecklist((current) => normalizeMaintenanceChecklist([...current, savedText]));
+      setNewChecklist("");
+    } catch (saveError) {
+      setError(saveError?.message || "Failed to save checklist item.");
+    } finally {
+      setSavingChecklist(false);
+    }
+  }
+
+  async function runDownload() {
+    setError("");
+    const ok = await onDownload(group, {
+      template,
+      sparePartColumns: columns,
+      checklist: selectedChecklist,
+    });
+    if (ok !== false) onClose();
+  }
+
+  return <div className="order-download-overlay" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy && !savingChecklist) onClose(); }}>
+    <div className="order-download-dialog next-maintenance-download-dialog" role="dialog" aria-modal="true" aria-label={template ? "Download maintenance template" : "Download maintenance report"}>
+      <button type="button" className="order-download-close" onClick={onClose} disabled={busy || savingChecklist} aria-label="Close download options"><ClassicOrderIcon name="x" /></button>
+      <div className="order-download-header">
+        <span className="order-download-header__icon"><ClassicOrderIcon name="download" /></span>
+        <div><h2>{template ? "Download Template" : "Download Maintenance PDF"}</h2><p>{group.orderIdLabel}</p></div>
+      </div>
+
+      <div className="order-download-section order-download-columns">
+        <span className="order-download-section__label">Spare parts table columns</span>
+        <div className="order-download-columns__grid">
+          {MAINTENANCE_SPARE_EXPORT_COLUMNS.map(([key, label]) => <label key={key} className="order-download-column-option">
+            <input type="checkbox" checked={columns.includes(key)} onChange={() => toggleColumn(key)} />
+            <span>{label}</span>
+          </label>)}
+        </div>
+      </div>
+
+      <div className="order-download-section next-maintenance-download-checklist">
+        <div className="order-download-instructions__heading"><span className="order-download-section__label">Checklist</span></div>
+        <div className="next-maintenance-checklist-options next-maintenance-checklist-options--download">
+          {checklistItems.length ? checklistItems.map((item) => <label className="next-maintenance-checklist-option" key={item.id || item.text}>
+            <input type="checkbox" checked={selectedChecklist.includes(item.text)} onChange={() => toggleChecklist(item.text)} disabled={busy || savingChecklist} />
+            <span>{item.text}</span>
+          </label>) : <div className="next-maintenance-checklist-empty">No saved checklist items yet.</div>}
+        </div>
+        <div className="next-maintenance-checklist-add">
+          <input type="text" value={newChecklist} onChange={(event) => setNewChecklist(event.target.value)} placeholder="Add checklist text..." disabled={busy || savingChecklist} />
+          <button type="button" className="order-download-btn order-download-btn--light" onClick={addChecklist} disabled={busy || savingChecklist || !text(newChecklist)}>+ Add</button>
+        </div>
+      </div>
+
+      {error ? <div className="order-download-error" role="alert">{error}</div> : null}
+      <div className="order-download-actions">
+        <button type="button" className="order-download-btn order-download-btn--dark" onClick={runDownload} disabled={busy || savingChecklist}><ClassicOrderIcon name="file-text" /><span>{busy ? "Preparing…" : "Download PDF"}</span></button>
+      </div>
+    </div>
+  </div>;
+}
+
 function ModernSelect({ value, options, placeholder, searchable = false, onChange, disabled = false, ariaLabel }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -680,7 +859,8 @@ function ModernSelect({ value, options, placeholder, searchable = false, onChang
 }
 
 function emptyLogForItem(item) {
-  const existingSpares = normalizeSpareEntries(item);
+  const existingNeeded = normalizeNeededSpareEntries(item);
+  const existingReplaced = normalizeSpareEntries(item);
   return {
     orderId: text(item?.id),
     productName: text(item?.productName) || "Component",
@@ -689,81 +869,147 @@ function emptyLogForItem(item) {
     resolutionMethod: text(item?.resolutionMethod),
     actualIssueDescription: text(item?.actualIssueDescription),
     repairAction: text(item?.repairAction),
-    spareParts: existingSpares.length ? existingSpares : [{ id: "", name: "", qty: 1 }],
+    sparePartsNeeded: existingNeeded.length ? existingNeeded : [{ id: "", name: "", qty: 1 }],
+    sparePartsReplaced: existingReplaced.length ? existingReplaced : [{ id: "", name: "", qty: 1 }],
+    checklist: normalizeMaintenanceChecklist(item?.maintenanceChecklist),
   };
 }
 
-function MaintenanceLogModal({ group, options, busy, error, onCancel, onSubmit }) {
+function MaintenanceLogModal({ group, options, busy, error, onCancel, onSubmit, onChecklistSaved }) {
   const [logs, setLogs] = useState([]);
+  const [newChecklistText, setNewChecklistText] = useState({});
+  const [checklistSaving, setChecklistSaving] = useState(false);
+  const [checklistError, setChecklistError] = useState("");
 
   useEffect(() => {
     setLogs(group ? [...group.items].sort((a, b) => text(a?.productName).localeCompare(text(b?.productName), undefined, { sensitivity: "base", numeric: true })).map(emptyLogForItem) : []);
+    setNewChecklistText({});
+    setChecklistError("");
   }, [group]);
 
   useEffect(() => {
     if (!group) return undefined;
-    const onKey = (event) => { if (event.key === "Escape" && !busy) onCancel(); };
+    const onKey = (event) => { if (event.key === "Escape" && !busy && !checklistSaving) onCancel(); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [group, busy, onCancel]);
+  }, [group, busy, checklistSaving, onCancel]);
 
   if (!group) return null;
   const resolutionMethods = (Array.isArray(options?.resolutionMethods) ? options.resolutionMethods : []).map((option) => ({ value: text(option?.name ?? option?.value ?? option), label: text(option?.name ?? option?.label ?? option) })).filter((option) => option.value);
   const spareOptions = (Array.isArray(options?.spareParts) ? options.spareParts : []).map((option) => ({ value: text(option?.id ?? option?.value ?? option?.name), label: text(option?.name ?? option?.label ?? option?.value) })).filter((option) => option.value || option.label);
+  const checklistItems = (Array.isArray(options?.checklistItems) ? options.checklistItems : [])
+    .map((item) => ({ id: text(item?.id), text: text(item?.text ?? item?.value ?? item) }))
+    .filter((item) => item.text);
 
   function patchLog(index, patch) {
     setLogs((current) => current.map((entry, entryIndex) => entryIndex === index ? { ...entry, ...patch } : entry));
   }
 
-  function patchSpare(logIndex, spareIndex, patch) {
+  function patchSpare(logIndex, listKey, spareIndex, patch) {
     setLogs((current) => current.map((entry, entryIndex) => {
       if (entryIndex !== logIndex) return entry;
-      const spareParts = entry.spareParts.map((part, partIndex) => partIndex === spareIndex ? { ...part, ...patch } : part);
-      return { ...entry, spareParts };
+      const list = Array.isArray(entry[listKey]) ? entry[listKey] : [];
+      return { ...entry, [listKey]: list.map((part, partIndex) => partIndex === spareIndex ? { ...part, ...patch } : part) };
     }));
   }
 
-  function addSpare(logIndex) {
-    setLogs((current) => current.map((entry, entryIndex) => entryIndex === logIndex ? { ...entry, spareParts: [...entry.spareParts, { id: "", name: "", qty: 1 }] } : entry));
+  function addSpare(logIndex, listKey) {
+    setLogs((current) => current.map((entry, entryIndex) => entryIndex === logIndex
+      ? { ...entry, [listKey]: [...(Array.isArray(entry[listKey]) ? entry[listKey] : []), { id: "", name: "", qty: 1 }] }
+      : entry));
   }
 
-  function removeSpare(logIndex, spareIndex) {
+  function removeSpare(logIndex, listKey, spareIndex) {
     setLogs((current) => current.map((entry, entryIndex) => {
       if (entryIndex !== logIndex) return entry;
-      const spareParts = entry.spareParts.filter((_, partIndex) => partIndex !== spareIndex);
-      return { ...entry, spareParts: spareParts.length ? spareParts : [{ id: "", name: "", qty: 1 }] };
+      const list = (Array.isArray(entry[listKey]) ? entry[listKey] : []).filter((_, partIndex) => partIndex !== spareIndex);
+      return { ...entry, [listKey]: list.length ? list : [{ id: "", name: "", qty: 1 }] };
     }));
+  }
+
+  function toggleChecklist(logIndex, value) {
+    setLogs((current) => current.map((entry, entryIndex) => {
+      if (entryIndex !== logIndex) return entry;
+      const active = normalizeMaintenanceChecklist(entry.checklist);
+      const next = active.includes(value) ? active.filter((item) => item !== value) : [...active, value];
+      return { ...entry, checklist: next };
+    }));
+  }
+
+  async function addChecklistItem(logIndex) {
+    const value = text(newChecklistText[logIndex]);
+    if (!value || checklistSaving) return;
+    setChecklistSaving(true);
+    setChecklistError("");
+    try {
+      const saved = await saveMaintenanceChecklistItem(value);
+      const savedText = text(saved?.text) || value;
+      onChecklistSaved?.(saved || { text: savedText });
+      setNewChecklistText((current) => ({ ...current, [logIndex]: "" }));
+      setLogs((current) => current.map((entry, entryIndex) => entryIndex === logIndex
+        ? { ...entry, checklist: normalizeMaintenanceChecklist([...(entry.checklist || []), savedText]) }
+        : entry));
+    } catch (saveError) {
+      setChecklistError(saveError?.message || "Failed to save checklist item.");
+    } finally {
+      setChecklistSaving(false);
+    }
+  }
+
+  function normalizeParts(list) {
+    return (Array.isArray(list) ? list : []).map((part) => {
+      const id = text(part?.id);
+      const selected = spareOptions.find((option) => text(option?.value) === id);
+      const name = text(selected?.label ?? part?.name);
+      const qtyValue = Number(part?.qty);
+      const qty = Number.isFinite(qtyValue) && qtyValue > 0 ? Math.max(1, Math.round(qtyValue)) : 1;
+      return { id, name, qty };
+    }).filter((part) => part.id || part.name);
   }
 
   function submit(event) {
     event.preventDefault();
     const normalized = logs.map((entry) => {
-      const spareParts = entry.spareParts.map((part) => {
-        const id = text(part?.id);
-        const selected = spareOptions.find((option) => text(option?.value) === id);
-        const name = text(selected?.label ?? part?.name);
-        const qtyValue = Number(part?.qty);
-        const qty = Number.isFinite(qtyValue) && qtyValue > 0 ? Math.max(1, Math.round(qtyValue)) : 1;
-        return { id, name, qty };
-      }).filter((part) => part.id || part.name);
+      const sparePartsNeeded = normalizeParts(entry.sparePartsNeeded);
+      const sparePartsReplaced = normalizeParts(entry.sparePartsReplaced);
       return {
         orderId: entry.orderId,
         serialNumber: text(entry.serialNumber),
         resolutionMethod: text(entry.resolutionMethod),
         actualIssueDescription: text(entry.actualIssueDescription),
         repairAction: text(entry.repairAction),
-        spareParts,
-        sparePartIds: spareParts.map((part) => part.id).filter(Boolean),
-        sparePartNames: spareParts.map((part) => part.name).filter(Boolean),
+        sparePartsNeeded,
+        sparePartsReplaced,
+        // Backward-compatible aliases used by the legacy branch.
+        spareParts: sparePartsReplaced,
+        sparePartIds: sparePartsReplaced.map((part) => part.id).filter(Boolean),
+        sparePartNames: sparePartsReplaced.map((part) => part.name).filter(Boolean),
+        checklist: normalizeMaintenanceChecklist(entry.checklist),
       };
     });
     onSubmit(normalized);
   }
 
+  const renderSpareBlock = (entry, logIndex, listKey, title, hint) => {
+    const list = Array.isArray(entry[listKey]) ? entry[listKey] : [];
+    return <div className="co-submodal-field req-maintenance-log-card__spares next-maintenance-spare-frame">
+      <div className="req-maintenance-spare-head next-maintenance-spare-frame__head">
+        <span className="co-submodal-label">{title}</span>
+        <small>{hint}</small>
+      </div>
+      <div className="req-maintenance-spare-list">{list.map((part, spareIndex) => <div className="req-maintenance-spare-row next-maintenance-spare-row" key={`${logIndex}-${listKey}-${spareIndex}`}>
+        <div className="co-submodal-field req-maintenance-spare-row__part"><span className="co-submodal-label">Spare part</span><ModernSelect value={part.id || part.name} options={spareOptions} placeholder="Select component" searchable onChange={(value) => { const selected = spareOptions.find((option) => option.value === value); patchSpare(logIndex, listKey, spareIndex, { id: selected ? value : "", name: selected?.label || value }); }} disabled={busy} ariaLabel={`${title} item ${spareIndex + 1} for ${entry.productName}`} /></div>
+        <label className="co-submodal-field req-maintenance-spare-row__qty"><span className="co-submodal-label">Qty</span><input className="co-submodal-input" type="number" min="1" step="1" inputMode="numeric" value={part.qty} onChange={(event) => patchSpare(logIndex, listKey, spareIndex, { qty: event.target.value })} disabled={busy} /></label>
+        <button type="button" className="req-maintenance-spare-row__remove" onClick={() => removeSpare(logIndex, listKey, spareIndex)} disabled={busy || list.length <= 1} aria-label={`Remove ${title} item`}><span aria-hidden="true">×</span></button>
+      </div>)}</div>
+      <button type="button" className="req-maintenance-spare-add req-maintenance-spare-add--full" onClick={() => addSpare(logIndex, listKey)} disabled={busy}><span className="req-maintenance-spare-add__icon">+</span><span>Add spare part</span></button>
+    </div>;
+  };
+
   return (
-    <div className="co-submodal-overlay is-open next-maintenance-log-overlay" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onCancel(); }}>
+    <div className="co-submodal-overlay is-open next-maintenance-log-overlay" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy && !checklistSaving) onCancel(); }}>
       <form className="co-submodal-dialog req-maintenance-log-dialog next-maintenance-log-dialog" role="dialog" aria-modal="true" onSubmit={submit}>
-        <button type="button" className="co-submodal-close" onClick={onCancel} disabled={busy} aria-label="Close" />
+        <button type="button" className="co-submodal-close" onClick={onCancel} disabled={busy || checklistSaving} aria-label="Close" />
         <div className="co-submodal-header next-maintenance-log-header"><div className="req-edit-icon"><ClassicOrderIcon name="clipboard" /></div><div><div className="co-submodal-title">Log Maintenance</div></div></div>
         <div className="co-submodal-body req-maintenance-log-body">
           <div className="req-maintenance-log-items">
@@ -774,21 +1020,27 @@ function MaintenanceLogModal({ group, options, busy, error, onCancel, onSubmit }
                 <label className="co-submodal-field"><span className="co-submodal-label">Resolution Method</span><ModernSelect value={entry.resolutionMethod} options={resolutionMethods} placeholder="Select resolution method" onChange={(value) => patchLog(logIndex, { resolutionMethod: value })} disabled={busy} ariaLabel={`Resolution method for ${entry.productName}`} /></label>
                 <label className="co-submodal-field"><span className="co-submodal-label">The Actual Issue Description</span><textarea className="co-submodal-textarea" value={entry.actualIssueDescription} onChange={(event) => patchLog(logIndex, { actualIssueDescription: event.target.value })} disabled={busy} rows={4} placeholder="Write the actual issue description" /></label>
                 <label className="co-submodal-field"><span className="co-submodal-label">Repair Action</span><textarea className="co-submodal-textarea" value={entry.repairAction} onChange={(event) => patchLog(logIndex, { repairAction: event.target.value })} disabled={busy} rows={4} placeholder="Write the repair action" /></label>
-                <div className="co-submodal-field req-maintenance-log-card__spares">
-                  <div className="req-maintenance-spare-head"><span className="co-submodal-label">Spare parts replaced</span></div>
-                  <div className="req-maintenance-spare-list">{entry.spareParts.map((part, spareIndex) => <div className="req-maintenance-spare-row next-maintenance-spare-row" key={`${logIndex}-${spareIndex}`}>
-                    <div className="co-submodal-field req-maintenance-spare-row__part"><span className="co-submodal-label">Spare part</span><ModernSelect value={part.id || part.name} options={spareOptions} placeholder="Select component" searchable onChange={(value) => { const selected = spareOptions.find((option) => option.value === value); patchSpare(logIndex, spareIndex, { id: selected ? value : "", name: selected?.label || value }); }} disabled={busy} ariaLabel={`Spare part ${spareIndex + 1} for ${entry.productName}`} /></div>
-                    <label className="co-submodal-field req-maintenance-spare-row__qty"><span className="co-submodal-label">Qty</span><input className="co-submodal-input" type="number" min="1" step="1" inputMode="numeric" value={part.qty} onChange={(event) => patchSpare(logIndex, spareIndex, { qty: event.target.value })} disabled={busy} /></label>
-                    <button type="button" className="req-maintenance-spare-row__remove" onClick={() => removeSpare(logIndex, spareIndex)} disabled={busy || entry.spareParts.length <= 1} aria-label="Remove spare part"><span aria-hidden="true">×</span></button>
-                  </div>)}</div>
-                  <button type="button" className="req-maintenance-spare-add req-maintenance-spare-add--full" onClick={() => addSpare(logIndex)} disabled={busy}><span className="req-maintenance-spare-add__icon">+</span><span>Add spare part</span></button>
+                {renderSpareBlock(entry, logIndex, "sparePartsNeeded", "Spare parts needed", "Components that need to be replaced")}
+                {renderSpareBlock(entry, logIndex, "sparePartsReplaced", "Spare parts replaced", "Components that were actually replaced")}
+                <div className="co-submodal-field req-maintenance-log-card__spares next-maintenance-checklist-frame">
+                  <div className="req-maintenance-spare-head next-maintenance-spare-frame__head"><span className="co-submodal-label">Maintenance Checklist</span><small>Select saved text items or add a new one.</small></div>
+                  <div className="next-maintenance-checklist-options">
+                    {checklistItems.length ? checklistItems.map((item) => <label className="next-maintenance-checklist-option" key={item.id || item.text}>
+                      <input type="checkbox" checked={normalizeMaintenanceChecklist(entry.checklist).includes(item.text)} onChange={() => toggleChecklist(logIndex, item.text)} disabled={busy || checklistSaving} />
+                      <span>{item.text}</span>
+                    </label>) : <div className="next-maintenance-checklist-empty">No saved checklist items yet.</div>}
+                  </div>
+                  <div className="next-maintenance-checklist-add">
+                    <input className="co-submodal-input" type="text" value={newChecklistText[logIndex] || ""} onChange={(event) => setNewChecklistText((current) => ({ ...current, [logIndex]: event.target.value }))} placeholder="Add checklist text..." disabled={busy || checklistSaving} />
+                    <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => addChecklistItem(logIndex)} disabled={busy || checklistSaving || !text(newChecklistText[logIndex])}>+ Add</button>
+                  </div>
                 </div>
               </div>
             </section>)}
           </div>
-          <div className="co-submodal-error" role="alert" aria-live="polite">{error}</div>
+          <div className="co-submodal-error" role="alert" aria-live="polite">{checklistError || error}</div>
         </div>
-        <div className="co-submodal-actions"><button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancel} disabled={busy}>Cancel</button><button type="submit" className="ro-action-btn ro-action-btn--dark" disabled={busy}>{busy ? "Saving…" : "Confirm"}</button></div>
+        <div className="co-submodal-actions"><button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancel} disabled={busy || checklistSaving}>Cancel</button><button type="submit" className="ro-action-btn ro-action-btn--dark" disabled={busy || checklistSaving}>{busy ? "Saving…" : "Confirm"}</button></div>
       </form>
     </div>
   );
@@ -954,6 +1206,7 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
   const [selected, setSelected] = useState(null);
   const [logGroup, setLogGroup] = useState(null);
   const [doneGroup, setDoneGroup] = useState(null);
+  const [downloadState, setDownloadState] = useState(null);
   const [actionState, setActionState] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [actionError, setActionError] = useState("");
@@ -1148,12 +1401,33 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
   }
 
   async function ensureOptions() {
-    if (Array.isArray(options?.resolutionMethods) && Array.isArray(options?.spareParts)) return options;
+    if (Array.isArray(options?.resolutionMethods) && Array.isArray(options?.spareParts) && Array.isArray(options?.checklistItems)) return options;
     const response = await fetch("/api/orders/requested/maintenance-form-options", { credentials: "include", cache: "no-store" });
     const data = await readJson(response);
     if (!response.ok) throw new Error(data?.error || "Failed to load maintenance form options.");
     setOptions(data || {});
     return data || {};
+  }
+
+  function rememberChecklistItem(item) {
+    const value = text(item?.text ?? item?.value ?? item);
+    if (!value) return;
+    setOptions((current) => {
+      const list = Array.isArray(current?.checklistItems) ? current.checklistItems : [];
+      if (list.some((entry) => lower(entry?.text ?? entry?.value ?? entry) === lower(value))) return current;
+      return { ...current, checklistItems: [...list, { id: text(item?.id), text: value }] };
+    });
+  }
+
+  async function openDownload(group, exportOptions = {}) {
+    setActionError("");
+    try {
+      await ensureOptions();
+      setDownloadState({ group, template: Boolean(exportOptions?.template) });
+    } catch (error) {
+      setNotice(error?.message || "Failed to load download options.");
+      window.setTimeout(() => setNotice(""), 4500);
+    }
   }
 
   async function openLog(group) {
@@ -1168,7 +1442,7 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
   }
 
   async function saveLog(perItemLogs) {
-    const logsWithDetails = perItemLogs.filter((entry) => text(entry?.serialNumber) || text(entry?.resolutionMethod) || text(entry?.actualIssueDescription) || text(entry?.repairAction) || (Array.isArray(entry?.spareParts) && entry.spareParts.length));
+    const logsWithDetails = perItemLogs.filter((entry) => text(entry?.serialNumber) || text(entry?.resolutionMethod) || text(entry?.actualIssueDescription) || text(entry?.repairAction) || (Array.isArray(entry?.sparePartsNeeded) && entry.sparePartsNeeded.length) || (Array.isArray(entry?.sparePartsReplaced) && entry.sparePartsReplaced.length) || normalizeMaintenanceChecklist(entry?.checklist).length);
     if (!logsWithDetails.length) {
       setActionError("Please fill maintenance details for at least one component. Spare parts are optional.");
       return;
@@ -1243,7 +1517,13 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ orderIds: group.orderIds, tab: group.state.key, template }),
+        body: JSON.stringify({
+          orderIds: group.orderIds,
+          tab: group.state.key,
+          template,
+          sparePartColumns: Array.isArray(options?.sparePartColumns) ? options.sparePartColumns : undefined,
+          checklist: Array.isArray(options?.checklist) ? options.checklist : [],
+        }),
       });
       if (response.status === 401) {
         window.location.href = "/login?next=/next/maintenance-orders";
@@ -1257,9 +1537,11 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
       downloadBlob(blob, template ? templateReportFileName(group) : reportFileName(group));
       setNotice(template ? "Maintenance template downloaded." : "Maintenance PDF downloaded.");
       window.setTimeout(() => setNotice(""), 3000);
+      return true;
     } catch (error) {
       setNotice(error?.message || "Download failed.");
       window.setTimeout(() => setNotice(""), 4500);
+      return false;
     } finally {
       setBusy(false);
     }
@@ -1309,10 +1591,11 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
         <div className="co-cards" id="requested-list">{visibleGroups.length ? visibleGroups.map((group) => <MaintenanceCard group={group} onOpen={openOrderDetails} onCreator={openCreatorProfile} key={group.key} />) : <div className="ops-no-data-state" role="status" aria-live="polite"><img className="ops-no-data-state__image" src="/next/images/no-data-illustration.png" alt="" loading="lazy" /><div className="ops-no-data-state__text">Sorry, No data available</div></div>}</div>
       </section>
 
-      <MaintenanceDetailsModal group={selected} busy={busy} onClose={() => setSelected(null)} onLog={openLog} onDone={(group) => { setActionError(""); setDoneGroup(group); }} onExport={exportOrder} onAction={beginAction} />
+      <MaintenanceDetailsModal group={selected} busy={busy} onClose={() => setSelected(null)} onLog={openLog} onDone={(group) => { setActionError(""); setDoneGroup(group); }} onExport={openDownload} onAction={beginAction} />
       <MaintenanceActionPasswordModal state={actionState} busy={busy} error={actionError} onCancel={() => { setActionState(null); setActionError(""); }} onSubmit={submitAction} />
       <MaintenanceDeleteConfirmationModal state={deleteConfirm} busy={busy} onCancel={() => setDeleteConfirm(null)} onConfirm={confirmDelete} />
-      <MaintenanceLogModal group={logGroup} options={options} busy={busy} error={actionError} onCancel={() => { setLogGroup(null); setActionError(""); }} onSubmit={saveLog} />
+      <MaintenanceLogModal group={logGroup} options={options} busy={busy} error={actionError} onCancel={() => { setLogGroup(null); setActionError(""); }} onSubmit={saveLog} onChecklistSaved={rememberChecklistItem} />
+      <MaintenanceDownloadModal state={downloadState} options={options} busy={busy} onClose={() => setDownloadState(null)} onDownload={exportOrder} onChecklistSaved={rememberChecklistItem} />
       <MarkDoneModal group={doneGroup} busy={busy} error={actionError} onCancel={() => { setDoneGroup(null); setActionError(""); }} onSubmit={markDone} />
       <CreatorProfilePopover state={creatorState} onClose={() => setCreatorState(null)} />
     </section>

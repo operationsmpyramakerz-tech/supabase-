@@ -4802,10 +4802,11 @@ function _sbSerializeOrderRow(row = {}) {
   const operationsApproval = _sbOrderText(_sbOrderGet(row, ["operations_approval", "Operations Approval", "operation_approval", "Operation Approval"])) || null;
   const rejectedReason = _sbOrderText(_sbOrderGet(row, ["rejected_reason", "Rejected Reason", "Reject Reason", "rejection_reason", "Rejection Reason"])) || null;
   const sparePartsRaw = _sbOrderGet(row, ["spare_parts_replaced", "Spare parts replaced"]);
-  const sparePartEntries = _normalizeMaintenanceSparePartEntries(sparePartsRaw);
-  const spareParts = sparePartEntries.length
-    ? toUniqueStringArray(sparePartEntries.map((entry) => entry.name), { splitComma: true })
-    : _sbOrderSplitNames(sparePartsRaw);
+  const maintenanceLogMeta = _maintenanceLogMetaFromValue(sparePartsRaw);
+  const sparePartEntries = maintenanceLogMeta.replacedEntries;
+  const spareParts = toUniqueStringArray(sparePartEntries.map((entry) => entry.name), { splitComma: true });
+  const sparePartsNeededEntries = maintenanceLogMeta.neededEntries;
+  const sparePartsNeededNames = toUniqueStringArray(sparePartsNeededEntries.map((entry) => entry.name), { splitComma: true });
   const orderReceiptRaw = _sbOrderGet(row, ["order_receipt", "Order Receipt", "delivery_receipt", "Delivery Receipt", "receipt_photos", "Receipt Photos"]);
   const maintenanceReceiptRaw = _sbOrderGet(row, ["maintenance_receipt", "Maintenance Receipt"]);
   const orderReceiptEntries = _sbNormalizeOrderReceiptEntries(orderReceiptRaw, "Receipt photo");
@@ -4866,6 +4867,10 @@ function _sbSerializeOrderRow(row = {}) {
     sparePartsReplacedNames: spareParts,
     sparePartsReplacedName: spareParts.join(", ") || null,
     sparePartsReplacedEntries: sparePartEntries,
+    sparePartsNeededNames,
+    sparePartsNeededName: sparePartsNeededNames.join(", ") || null,
+    sparePartsNeededEntries,
+    maintenanceChecklist: maintenanceLogMeta.checklist,
     orderReceiptEntries,
     orderReceiptNames,
     orderReceiptUrls,
@@ -7347,8 +7352,24 @@ function _sbResolveMaintenanceSparePartsForItem(item = {}, lookups = {}) {
   return out;
 }
 
+function _sbResolveMaintenanceSpareEntries(entries = [], lookups = {}) {
+  return _sbResolveMaintenanceSparePartsForItem({ sparePartsReplacedEntries: entries }, lookups);
+}
+
+function _normalizeMaintenancePdfSpareColumns(value) {
+  const allowed = ["idCode", "component", "qty", "unitCost", "totalCost"];
+  const requested = Array.isArray(value) ? value.map((entry) => String(entry || "").trim()).filter(Boolean) : [];
+  const selected = requested.filter((key) => allowed.includes(key));
+  return selected.length ? Array.from(new Set(selected)) : allowed;
+}
+
 async function _sbPipeOrderMaintenancePdf(req, res, orderIds = []) {
   const templateMode = Boolean(req?.body?.template);
+  const sparePartColumns = _normalizeMaintenancePdfSpareColumns(req?.body?.sparePartColumns);
+  const checklistProvided = Array.isArray(req?.body?.checklist);
+  const selectedChecklist = toUniqueStringArray(checklistProvided ? req.body.checklist : [], { splitComma: false })
+    .map((item) => String(item || "").trim().slice(0, 800))
+    .filter(Boolean);
   const payload = await _sbBuildOrderExportPayload(orderIds, req);
   const first = payload.first || {};
   if (_normKeyOrderType(first.orderType || "") !== _normKeyOrderType("Request Maintenance")) {
@@ -7367,7 +7388,11 @@ async function _sbPipeOrderMaintenancePdf(req, res, orderIds = []) {
     sparePartsReplacedIds: templateMode ? [] : (item.sparePartsReplacedIds || []),
     sparePartsReplacedNames: templateMode ? [] : (item.sparePartsReplacedNames || []),
     sparePartsReplacedName: templateMode ? "" : (item.sparePartsReplacedName || ""),
+    sparePartsNeeded: templateMode ? [] : _sbResolveMaintenanceSpareEntries(item.sparePartsNeededEntries || [], lookups),
     spareParts: templateMode ? [] : _sbResolveMaintenanceSparePartsForItem(item, lookups),
+    maintenanceChecklist: checklistProvided
+      ? selectedChecklist
+      : (templateMode ? [] : (Array.isArray(item.maintenanceChecklist) ? item.maintenanceChecklist : [])),
     link: item.productUrl || payload.rows?.[index]?.link || "",
   }));
 
@@ -7388,6 +7413,8 @@ async function _sbPipeOrderMaintenancePdf(req, res, orderIds = []) {
       repairAction: templateMode ? "" : (first.repairAction || "—"),
       resolutionMethod: templateMode ? "" : (first.resolutionMethod || "—"),
       sparePartsReplacedList: templateMode ? [] : (first.sparePartsReplacedNames || []),
+      sparePartColumns,
+      checklist: selectedChecklist,
       rows: payload.rows,
       componentLogs,
       maintenanceReceiptName: first.maintenanceReceiptName || "",
@@ -12315,7 +12342,12 @@ function _normalizeMaintenanceSparePartEntries(value, lookups = {}) {
   }
 
   if (value && typeof value === "object") {
-    if (Array.isArray(value.items)) value.items.forEach(add);
+    // Maintenance log v2 stores two spare-parts lists in the existing
+    // spare_parts_replaced text column so we can add the new workflow without
+    // requiring a database migration. Legacy callers still see only the
+    // actually-replaced list through this normalizer.
+    if (Array.isArray(value.replaced)) value.replaced.forEach(add);
+    else if (Array.isArray(value.items)) value.items.forEach(add);
     else add(value);
     return entries;
   }
@@ -12341,6 +12373,52 @@ function _maintenanceSparePartEntriesToText(entries = []) {
     })
     .filter(Boolean)
     .join(", ");
+}
+
+function _maintenanceLogMetaFromValue(value, lookups = {}) {
+  let parsed = value;
+  if (typeof parsed === "string") {
+    const raw = parsed.trim();
+    if (raw) {
+      try { parsed = JSON.parse(raw); } catch { parsed = raw; }
+    }
+  }
+
+  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      && (Array.isArray(parsed.needed) || Array.isArray(parsed.replaced) || Array.isArray(parsed.checklist))) {
+    return {
+      neededEntries: _normalizeMaintenanceSparePartEntries(Array.isArray(parsed.needed) ? parsed.needed : [], lookups),
+      replacedEntries: _normalizeMaintenanceSparePartEntries(Array.isArray(parsed.replaced) ? parsed.replaced : [], lookups),
+      checklist: toUniqueStringArray(Array.isArray(parsed.checklist) ? parsed.checklist : [], { splitComma: false })
+        .map((item) => String(item || "").trim())
+        .filter(Boolean),
+    };
+  }
+
+  return {
+    neededEntries: [],
+    replacedEntries: _normalizeMaintenanceSparePartEntries(value, lookups),
+    checklist: [],
+  };
+}
+
+function _maintenanceLogMetaToText({ neededEntries = [], replacedEntries = [], checklist = [] } = {}) {
+  const cleanEntries = (entries) => (Array.isArray(entries) ? entries : [])
+    .map((entry) => ({
+      id: String(entry?.id || "").trim(),
+      name: String(entry?.name || "").trim(),
+      qty: Number.isFinite(Number(entry?.qty)) ? Math.max(1, Math.round(Number(entry.qty))) : 1,
+    }))
+    .filter((entry) => entry.id || entry.name);
+  const cleanChecklist = toUniqueStringArray(Array.isArray(checklist) ? checklist : [], { splitComma: false })
+    .map((item) => String(item || "").trim().slice(0, 800))
+    .filter(Boolean);
+  return JSON.stringify({
+    v: 2,
+    needed: cleanEntries(neededEntries),
+    replaced: cleanEntries(replacedEntries),
+    checklist: cleanChecklist,
+  });
 }
 
 async function listSparePartsComponents() {
@@ -20745,10 +20823,14 @@ async function _maintenanceFormOptionsPayload() {
     }
   }
 
-  const spareParts = await listMaintenanceReplacementProducts();
+  const [spareParts, checklistItems] = await Promise.all([
+    listMaintenanceReplacementProducts(),
+    _maintenanceChecklistItems().catch(() => []),
+  ]);
   return {
     resolutionMethods,
     spareParts,
+    checklistItems,
     source: _sbProductsEnabled() ? "supabase" : "notion",
   };
 }
@@ -20827,11 +20909,21 @@ app.post(
             ],
             { splitComma: true },
           ).filter((value) => !isMaintenanceSparePartPlaceholderName(value));
-          const rawSparePartEntries = Array.isArray(entry?.spareParts)
-            ? entry.spareParts
-            : Array.isArray(entry?.sparePartEntries)
-              ? entry.sparePartEntries
+          const rawReplacedEntries = Array.isArray(entry?.sparePartsReplaced)
+            ? entry.sparePartsReplaced
+            : Array.isArray(entry?.spareParts)
+              ? entry.spareParts
+              : Array.isArray(entry?.sparePartEntries)
+                ? entry.sparePartEntries
+                : [];
+          const rawNeededEntries = Array.isArray(entry?.sparePartsNeeded)
+            ? entry.sparePartsNeeded
+            : Array.isArray(entry?.neededSpareParts)
+              ? entry.neededSpareParts
               : [];
+          const checklist = toUniqueStringArray(Array.isArray(entry?.checklist) ? entry.checklist : [], { splitComma: false })
+            .map((item) => String(item || "").trim().slice(0, 800))
+            .filter(Boolean);
           return {
             serialNumberText,
             resolutionMethodText,
@@ -20839,7 +20931,9 @@ app.post(
             repairActionText,
             rawSparePartTokens,
             requestedSparePartNames,
-            rawSparePartEntries,
+            rawReplacedEntries,
+            rawNeededEntries,
+            checklist,
           };
         };
 
@@ -20861,21 +20955,31 @@ app.post(
           const tokenEntries = spareIds.map((value) => ({ id: value }));
           const nameEntries = (log.requestedSparePartNames || []).map((name) => ({ name }));
           const normalizedEntries = _normalizeMaintenanceSparePartEntries([
-            ...(Array.isArray(log.rawSparePartEntries) ? log.rawSparePartEntries : []),
+            ...(Array.isArray(log.rawReplacedEntries) ? log.rawReplacedEntries : []),
             ...tokenEntries,
             ...nameEntries,
           ], catalogLookups);
+          const normalizedNeededEntries = _normalizeMaintenanceSparePartEntries(
+            Array.isArray(log.rawNeededEntries) ? log.rawNeededEntries : [],
+            catalogLookups,
+          );
 
           const normalizedSparePartNames = toUniqueStringArray(normalizedEntries.map((entry) => entry.name), { splitComma: true });
           const normalizedSparePartIds = toUniqueStringArray(normalizedEntries.map((entry) => entry.id).filter(Boolean));
+          const normalizedNeededNames = toUniqueStringArray(normalizedNeededEntries.map((entry) => entry.name), { splitComma: true });
           const sparePartText = _maintenanceSparePartEntriesToText(normalizedEntries);
+          const maintenanceMetaText = _maintenanceLogMetaToText({
+            neededEntries: normalizedNeededEntries,
+            replacedEntries: normalizedEntries,
+            checklist: log.checklist,
+          });
 
           const patch = { updated_at: new Date().toISOString() };
           if (log.serialNumberText) patch.serial_number = log.serialNumberText;
           if (log.resolutionMethodText) patch.resolution_method = log.resolutionMethodText;
           if (log.actualIssueDescriptionText) patch.actual_issue_description = log.actualIssueDescriptionText;
           if (log.repairActionText) patch.repair_action = log.repairActionText;
-          if (sparePartText) patch.spare_parts_replaced = sparePartText;
+          if (normalizedNeededEntries.length || normalizedEntries.length || log.checklist.length) patch.spare_parts_replaced = maintenanceMetaText;
           if (moveToShipping) patch.status = "Shipped";
           else if (moveToArrived) patch.status = "Arrived";
 
@@ -20891,6 +20995,10 @@ app.post(
               sparePartsReplacedNames: normalizedSparePartNames,
               sparePartsReplacedName: sparePartText || null,
               sparePartsReplacedEntries: normalizedEntries,
+              sparePartsNeededNames: normalizedNeededNames,
+              sparePartsNeededName: normalizedNeededNames.join(", ") || null,
+              sparePartsNeededEntries: normalizedNeededEntries,
+              maintenanceChecklist: log.checklist,
             },
           };
         };
@@ -22408,6 +22516,37 @@ function _orderDownloadInstructionsTable() {
   return String(process.env.SUPABASE_ORDER_DOWNLOAD_INSTRUCTIONS_TABLE || "order_download_instructions").trim() || "order_download_instructions";
 }
 
+const MAINTENANCE_CHECKLIST_SENTINEL = "__MAINTENANCE_CHECKLIST__";
+
+function _isMaintenanceChecklistInstructionRow(row = {}) {
+  return String(row?.title || "").trim() === MAINTENANCE_CHECKLIST_SENTINEL;
+}
+
+async function _maintenanceChecklistItems() {
+  const rows = await supabaseDb.selectAll(_orderDownloadInstructionsTable(), {
+    limit: 500,
+    order: "updated_at.desc",
+    select: "id,title,english_text,arabic_text,created_by,created_at,updated_at",
+  });
+  const out = [];
+  const seen = new Set();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    if (!_isMaintenanceChecklistInstructionRow(row)) continue;
+    const value = String(row?.english_text ?? row?.englishText ?? "").trim();
+    if (!value) continue;
+    const key = value.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({
+      id: String(row?.id || "").trim(),
+      text: value,
+      createdAt: row?.created_at || row?.createdAt || null,
+      updatedAt: row?.updated_at || row?.updatedAt || null,
+    });
+  }
+  return out;
+}
+
 function _normalizeOrderDownloadInstructionRow(row = {}) {
   return {
     id: String(row?.id || "").trim(),
@@ -22450,6 +22589,7 @@ app.get(
       });
       return res.json({
         items: (Array.isArray(rows) ? rows : [])
+          .filter((row) => !_isMaintenanceChecklistInstructionRow(row))
           .map(_normalizeOrderDownloadInstructionRow)
           .filter((item) => item.id && item.title && (item.englishText || item.arabicText)),
       });
@@ -22496,6 +22636,54 @@ app.patch(
       return res.status(Number(error?.status) || 500).json({
         error: error?.message || "Failed to update instructions.",
       });
+    }
+  },
+);
+
+
+app.get(
+  "/api/orders/maintenance-checklist",
+  requireAuth,
+  requirePage(["Maintenance Orders", "Operations Orders"]),
+  async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      return res.json({ items: await _maintenanceChecklistItems() });
+    } catch (error) {
+      console.error("GET /api/orders/maintenance-checklist error:", error?.details || error);
+      return res.status(Number(error?.status) || 500).json({ error: error?.message || "Failed to load maintenance checklist." });
+    }
+  },
+);
+
+app.post(
+  "/api/orders/maintenance-checklist",
+  requireAuth,
+  requirePage(["Maintenance Orders", "Operations Orders"]),
+  async (req, res) => {
+    try {
+      const value = String(req.body?.text ?? req.body?.value ?? "").replace(/\r\n/g, "\n").trim().slice(0, 800);
+      if (!value) return res.status(400).json({ error: "Checklist text is required." });
+      const current = await _maintenanceChecklistItems().catch(() => []);
+      const existing = current.find((item) => String(item?.text || "").trim().toLowerCase() === value.toLowerCase());
+      if (existing) return res.json({ item: existing, existing: true });
+      const row = await supabaseDb.insert(_orderDownloadInstructionsTable(), {
+        title: MAINTENANCE_CHECKLIST_SENTINEL,
+        english_text: value,
+        arabic_text: "",
+        created_by: String(req.session?.username || req.session?.name || "").trim() || null,
+      });
+      return res.status(201).json({
+        item: {
+          id: String(row?.id || "").trim(),
+          text: String(row?.english_text ?? value).trim(),
+          createdAt: row?.created_at || null,
+          updatedAt: row?.updated_at || null,
+        },
+      });
+    } catch (error) {
+      console.error("POST /api/orders/maintenance-checklist error:", error?.details || error);
+      return res.status(Number(error?.status) || 500).json({ error: error?.message || "Failed to save maintenance checklist item." });
     }
   },
 );
@@ -22827,6 +23015,10 @@ app.post(
     try {
       const { orderIds, template } = req.body || {};
       const templateMode = Boolean(template);
+      const sparePartColumns = _normalizeMaintenancePdfSpareColumns(req.body?.sparePartColumns);
+      const selectedChecklist = toUniqueStringArray(Array.isArray(req.body?.checklist) ? req.body.checklist : [], { splitComma: false })
+        .map((item) => String(item || "").trim().slice(0, 800))
+        .filter(Boolean);
       if (!Array.isArray(orderIds) || orderIds.length === 0) {
         return res.status(400).json({ error: "orderIds required" });
       }
@@ -23057,6 +23249,8 @@ app.post(
           resolutionMethod: templateMode ? "" : resolutionMethod,
           sparePartsReplaced: templateMode ? "" : sparePartsReplaced,
           sparePartsReplacedList: templateMode ? [] : sparePartsReplacedList,
+          sparePartColumns,
+          checklist: selectedChecklist,
           rows,
           maintenanceReceiptName,
           maintenanceReceiptUrl,
