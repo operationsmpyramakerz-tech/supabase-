@@ -4,6 +4,7 @@ import { getLegacyAccountGate } from "../../../../../lib/products-auth";
 import {
   markOperationsShipped,
   performOperationsProtectedAction,
+  saveOperationsEditDetails,
   updateOperationsApproval,
 } from "../../../../../lib/operations-orders-data";
 
@@ -31,6 +32,9 @@ function actionKey(value) {
 function directErrorResponse(error) {
   if (error?.code !== "DIRECT_OPERATIONS_MUTATION_FAILED") return null;
   const status = Number(error?.status) || 500;
+  if (error?.noFallback) {
+    return noStore({ error: error?.message || "Operations Orders action failed." }, { status });
+  }
   // Validation/auth/not-found errors must stay fail-closed. Compatibility or
   // infrastructure failures use the Legacy fallback below instead.
   if ([400, 401, 403, 404, 409, 422].includes(status)) {
@@ -68,6 +72,22 @@ async function legacyFallback(action, body) {
   } else if (action === "edit-init") {
     path = "/api/orders/operations/edit/init";
     legacyBody = { orderIds: body?.orderIds, adminPassword: body?.adminPassword };
+  } else if (action === "edit-save") {
+    path = "/api/orders/operations/details-edit";
+    legacyBody = {
+      orderIds: body?.orderIds,
+      adminPassword: body?.adminPassword,
+      itemUpdates: body?.itemUpdates,
+      quantities: body?.quantities,
+      receiptNumber: body?.receiptNumber,
+      receiptNumbers: body?.receiptNumbers,
+      orderReceiptReplace: body?.orderReceiptReplace,
+      orderReceiptKeepEntries: body?.orderReceiptKeepEntries,
+      orderReceiptRemovedKeys: body?.orderReceiptRemovedKeys,
+      orderReceiptRemovedUrls: body?.orderReceiptRemovedUrls,
+      orderReceiptDataUrls: body?.orderReceiptDataUrls,
+      orderReceiptFilenames: body?.orderReceiptFilenames,
+    };
   } else {
     return noStore({ error: "Unsupported Operations Orders action." }, { status: 400 });
   }
@@ -87,7 +107,7 @@ async function legacyFallback(action, body) {
 export async function POST(request) {
   const body = await request.json().catch(() => ({}));
   const action = actionKey(body?.action);
-  if (!["approval", "mark-shipped", "archive", "unarchive", "edit-init"].includes(action)) {
+  if (!["approval", "mark-shipped", "archive", "unarchive", "edit-init", "edit-save"].includes(action)) {
     return noStore({ error: "Unsupported Operations Orders action." }, { status: 400 });
   }
 
@@ -113,6 +133,20 @@ export async function POST(request) {
         quantities: body?.quantities,
         issueDescription: body?.issueDescription,
         perItemIssues: body?.perItemIssues,
+      });
+      if (result) return noStore(result);
+    } else if (action === "edit-save" && gate.source === "direct-session") {
+      const unsupportedReceiptEdit = [
+        "receiptNumber", "receiptNumbers", "orderReceiptReplace", "orderReceiptKeepEntries",
+        "orderReceiptRemovedKeys", "orderReceiptRemovedUrls", "orderReceiptDataUrls", "orderReceiptFilenames",
+      ].some((key) => Object.prototype.hasOwnProperty.call(body || {}, key));
+      const result = await saveOperationsEditDetails({
+        account: gate.account,
+        orderIds: body?.orderIds,
+        adminPassword: body?.adminPassword,
+        itemUpdates: body?.itemUpdates,
+        quantities: body?.quantities,
+        unsupportedReceiptEdit,
       });
       if (result) return noStore(result);
     } else if (action === "unarchive" || gate.source === "direct-session") {

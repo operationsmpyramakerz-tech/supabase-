@@ -1,7 +1,9 @@
 import "server-only";
-import { isSupabaseConfigured, select, selectAll, updateById, updateByIds } from "./supabase-rest";
+import { deleteById, insert, isSupabaseConfigured, select, selectAll, updateById, updateByIds } from "./supabase-rest";
 import { enrichOrderDetailGrouping, loadRawOrderRowsByIds, serializeOperationsOrderDetail } from "./order-details-data";
 import { getProductsCatalog } from "./products-service";
+import { listTeamMembersLite } from "./team-members-service";
+import { invalidateStocktakingReadCaches } from "./stocktaking-data";
 
 const PAGE_LIMIT = 36;
 const PAGE_MAX = 80;
@@ -1013,5 +1015,598 @@ export async function performOperationsProtectedAction({
     products,
     statusOptions,
   };
+}
+function directOperationsCommittedError(message, status = 500, cause = null) {
+  const error = directOperationsMutationError(message || "Operations order edit failed.", status);
+  error.noFallback = true;
+  if (cause) error.cause = cause;
+  return error;
+}
+
+function opsEditMissingColumn(error) {
+  const message = String(error?.message || error?.details?.message || error?.details || error?.hint || "");
+  return (message.match(/Could not find the ['"]([^'"]+)['"] column/i) || [])[1]
+    || (message.match(/column ['"]([^'"]+)['"]/i) || [])[1]
+    || "";
+}
+
+function opsEditCleanInsertRow(row = {}) {
+  const out = {};
+  for (const [key, value] of Object.entries(row || {})) {
+    if (!key || typeof value === "undefined") continue;
+    out[key] = typeof value === "number" && !Number.isFinite(value) ? null : value;
+  }
+  return out;
+}
+
+async function opsEditUpdateOrderSafe(id, row = {}, requiredColumns = []) {
+  let payload = { ...(row || {}) };
+  const required = new Set((requiredColumns || []).filter(Boolean));
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    try {
+      return await updateById(tableName(), id, payload);
+    } catch (error) {
+      const missing = opsEditMissingColumn(error);
+      if (!missing || !Object.prototype.hasOwnProperty.call(payload, missing)) throw error;
+      if (required.has(missing)) throw directOperationsMutationError(`Missing required Orders column: ${missing}. Run the Customize ID SQL migration first.`, 400);
+      delete payload[missing];
+    }
+  }
+  throw new Error("Failed to update the Operations order after removing unsupported optional columns.");
+}
+
+async function opsEditInsertOrderSafe(row = {}, requiredColumns = []) {
+  let payload = opsEditCleanInsertRow(row);
+  const required = new Set((requiredColumns || []).filter(Boolean));
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    try {
+      return await insert(tableName(), payload);
+    } catch (error) {
+      const missing = opsEditMissingColumn(error);
+      if (!missing || !Object.prototype.hasOwnProperty.call(payload, missing)) throw error;
+      if (required.has(missing)) throw directOperationsMutationError(`Missing required Orders column: ${missing}. Run the Customize ID SQL migration first.`, 400);
+      delete payload[missing];
+    }
+  }
+  throw new Error("Failed to create the split Operations order row after removing unsupported optional columns.");
+}
+
+function opsEditParseSourceKits(value) {
+  let raw = value;
+  if (!Array.isArray(raw) && !(raw && typeof raw === "object")) {
+    const candidate = text(value);
+    if (!candidate) return [];
+    try { raw = JSON.parse(candidate); } catch { return []; }
+  }
+  return (Array.isArray(raw) ? raw : [])
+    .map((source, index) => ({
+      kitId: text(source?.kitId || source?.kit_id || source?.id),
+      kitName: text(source?.kitName || source?.kit_name || source?.name),
+      quantity: Math.max(0, Number(source?.quantity ?? source?.qty ?? 1) || 0),
+      order: Number.isFinite(Number(source?.order)) ? Number(source.order) : index,
+    }))
+    .filter((source) => source.kitId || source.kitName);
+}
+
+function opsEditSplitQtyBySources(value, sources = []) {
+  const list = Array.isArray(sources) ? sources : [];
+  if (!list.length) return [];
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || Math.abs(numeric) < 1e-9) return list.map(() => 0);
+  const sign = numeric < 0 ? -1 : 1;
+  const targetAbs = Math.abs(numeric);
+  const weights = list.map((source) => Math.max(0, Number(source?.quantity) || 0));
+  const total = weights.reduce((sum, weight) => sum + weight, 0);
+  if (total <= 0) return list.map((_, index) => index === 0 ? roundQty(numeric) : 0);
+  if (Math.abs(targetAbs - Math.round(targetAbs)) < 1e-9) {
+    const target = Math.round(targetAbs);
+    const parts = weights.map((weight, index) => {
+      const raw = (weight * target) / total;
+      const base = Math.floor(raw);
+      return { index, value: base, fraction: raw - base };
+    });
+    let remaining = target - parts.reduce((sum, part) => sum + part.value, 0);
+    const ranked = parts.slice().sort((a, b) => (b.fraction - a.fraction) || (a.index - b.index));
+    for (let index = 0; remaining > 0 && ranked.length; index = (index + 1) % ranked.length) {
+      ranked[index].value += 1;
+      remaining -= 1;
+    }
+    return parts.sort((a, b) => a.index - b.index).map((part) => sign * part.value);
+  }
+  const result = weights.map((weight) => roundQty(sign * targetAbs * weight / total));
+  const difference = roundQty(numeric - result.reduce((sum, part) => sum + part, 0));
+  if (Math.abs(difference) > 1e-9) result[result.length - 1] = roundQty(result[result.length - 1] + difference);
+  return result;
+}
+
+function opsEditSplitOrderRow(row = {}) {
+  const sources = opsEditParseSourceKits(operationsValueFor(row, ["source_kits", "Source Kits", "proposal_source_kits", "Proposal Source Kits"]));
+  if (sources.length <= 1) return null;
+  const serialized = serializeOperationsOrderDetail(row);
+  const requested = Number(serialized?.quantityRequested ?? serialized?.quantity ?? 0) || 0;
+  const base = Number(serialized?.quantity ?? requested) || 0;
+  const received = Number(serialized?.quantityReceived ?? 0) || 0;
+  const remaining = Number(serialized?.quantityRemaining ?? (base - received)) || 0;
+  const editedRaw = serialized?.quantityEditedBySupervisor;
+  const requestedParts = opsEditSplitQtyBySources(requested, sources);
+  const baseParts = opsEditSplitQtyBySources(base, sources);
+  const receivedParts = opsEditSplitQtyBySources(received, sources);
+  const remainingParts = opsEditSplitQtyBySources(remaining, sources);
+  const editedParts = editedRaw === null || typeof editedRaw === "undefined" ? sources.map(() => null) : opsEditSplitQtyBySources(Number(editedRaw) || 0, sources);
+  return sources.map((source, index) => {
+    const requestedQty = roundQty(requestedParts[index] ?? 0);
+    const cleanSource = {
+      kitId: text(source?.kitId),
+      kitName: text(source?.kitName),
+      quantity: Math.abs(requestedQty),
+      order: Number.isFinite(Number(source?.order)) ? Number(source.order) : index,
+    };
+    return {
+      source: cleanSource,
+      sourceIndex: index,
+      row: {
+        ...(row || {}),
+        quantity_requested: requestedQty,
+        quantity_progress: roundQty(baseParts[index] ?? requestedQty),
+        quantity_edited_by_supervisor: editedParts[index],
+        quantity_received_by_operations: roundQty(receivedParts[index] ?? 0),
+        quantity_remaining: roundQty(remainingParts[index] ?? ((baseParts[index] ?? requestedQty) - (receivedParts[index] ?? 0))),
+        kit_tag: cleanSource.kitName || null,
+        source_kits: [cleanSource],
+      },
+    };
+  });
+}
+
+function opsEditCloneOrderInsertRow(row = {}) {
+  const clone = { ...(row || {}) };
+  ["id", "ID", "notion_page_id", "notion_id", "page_id", "notionPageId"].forEach((key) => delete clone[key]);
+  return opsEditCleanInsertRow(clone);
+}
+
+function opsEditProductFirstTag(product = {}) {
+  return (Array.isArray(product?.tags) ? product.tags : []).map(text).find(Boolean) || null;
+}
+
+function opsEditBuildItemPatch(beforeRow, itemUpdate, productMap, sourceMeta = null) {
+  if (!itemUpdate) return {};
+  const patch = {};
+  const has = (key) => Object.prototype.hasOwnProperty.call(itemUpdate, key);
+  const numberField = (key, label) => {
+    if (!has(key)) return null;
+    const value = Number(itemUpdate[key]);
+    if (!Number.isFinite(value)) throw directOperationsMutationError(`${label} must be a valid number.`, 400);
+    return roundQty(value);
+  };
+
+  if (has("productId")) {
+    const productId = text(itemUpdate.productId);
+    const product = productMap.get(productId) || null;
+    if (!product?.id) throw directOperationsMutationError("The selected Product component was not found.", 400);
+    patch.product_id = Number.isFinite(Number(product.id)) ? Number(product.id) : String(product.id);
+    patch.product_name = text(product.name) || "Unknown Product";
+    patch.product_url = product.url || null;
+    patch.unit_price = Number.isFinite(Number(product.unitPrice)) ? Number(product.unitPrice) : null;
+    patch.product_tag = opsEditProductFirstTag(product);
+  }
+  if (has("unitPrice")) patch.unit_price = itemUpdate.unitPrice === null || itemUpdate.unitPrice === "" ? null : numberField("unitPrice", "Unit cost");
+  if (has("productTag")) patch.product_tag = text(itemUpdate.productTag) || null;
+  if (has("customizeId")) patch.customize_id = text(itemUpdate.customizeId) || null;
+  if (has("kitTag")) patch.kit_tag = text(itemUpdate.kitTag) || null;
+  if (has("reason")) patch.reason = text(itemUpdate.reason) || null;
+  if (has("issueDescription")) patch.issue_description = String(itemUpdate.issueDescription || "").replace(/\r\n/g, "\n").trim() || null;
+  if (has("status")) {
+    const status = text(itemUpdate.status);
+    if (!status) throw directOperationsMutationError("Status is required.", 400);
+    patch.status = status;
+  }
+
+  const serialized = serializeOperationsOrderDetail(beforeRow);
+  const requestedQty = has("requestedQty") ? numberField("requestedQty", "Requested quantity") : roundQty(Number(serialized?.quantityRequested ?? serialized?.quantity ?? 0) || 0);
+  let receivedQty = has("receivedQty") ? numberField("receivedQty", "Received quantity") : roundQty(Number(serialized?.quantityReceived ?? 0) || 0);
+  let remainingQty = has("remainingQty") ? numberField("remainingQty", "Remaining quantity") : roundQty(Number(serialized?.quantityRemaining ?? (requestedQty - receivedQty)) || 0);
+  const nextStatus = text(has("status") ? itemUpdate.status : serialized?.status);
+  const finalStatus = /(arrived|delivered|received)/i.test(nextStatus);
+  if (has("deliveredQty")) {
+    const deliveredQty = numberField("deliveredQty", "Delivered quantity");
+    if (finalStatus) {
+      receivedQty = deliveredQty;
+      remainingQty = roundQty(requestedQty - deliveredQty);
+    } else if (Math.abs(deliveredQty) > 1e-9) {
+      throw directOperationsMutationError("Delivered quantity can only be greater than zero when the status is Arrived/Delivered.", 400);
+    }
+  }
+  if (has("requestedQty")) {
+    patch.quantity_requested = requestedQty;
+    patch.quantity_progress = requestedQty;
+    patch.quantity_edited_by_supervisor = null;
+  }
+  if (has("receivedQty") || has("remainingQty") || has("requestedQty") || has("deliveredQty")) {
+    patch.quantity_received_by_operations = receivedQty;
+    patch.quantity_remaining = remainingQty;
+  }
+
+  if (sourceMeta) {
+    const kitName = has("kitTag") ? text(itemUpdate.kitTag) : text(sourceMeta?.kitName || itemUpdate?.sourceKitName);
+    patch.kit_tag = kitName || null;
+    patch.source_kits = [{
+      kitId: text(sourceMeta?.kitId || itemUpdate?.sourceKitId),
+      kitName,
+      quantity: Math.abs(requestedQty),
+      order: Number.isFinite(Number(sourceMeta?.order)) ? Number(sourceMeta.order) : 0,
+    }];
+  }
+  return patch;
+}
+
+function opsEditApplyQuantityMapPatch(beforeRow, rawQty) {
+  const value = Number(rawQty);
+  if (!Number.isFinite(value)) throw directOperationsMutationError("Quantity received must be a valid number.", 400);
+  const serialized = serializeOperationsOrderDetail(beforeRow);
+  const base = Number(serialized?.quantity) || 0;
+  let nextQty = roundQty(value);
+  if (base < 0 && nextQty > 0) nextQty = -Math.abs(nextQty);
+  const clamped = clampQuantityToBase(base, nextQty);
+  return { quantity_received_by_operations: clamped, quantity_remaining: roundQty(base - clamped) };
+}
+
+function opsStockCanonical(value) {
+  return text(value).normalize("NFKC").toLowerCase().replace(/&/g, "and").replace(/[^\p{L}\p{N}]+/gu, "");
+}
+
+function opsStockColumnKey(value) {
+  return text(value).normalize("NFKC").toLowerCase().replace(/&/g, " and ").replace(/%/g, " percent ").replace(/[’'"`]/g, "").replace(/[^\p{L}\p{N}]+/gu, "_").replace(/^_+|_+$/g, "").replace(/_+/g, "_");
+}
+
+function opsStockFindKey(keys = [], aliases = []) {
+  const canonicalMap = new Map((keys || []).map((key) => [opsStockCanonical(key), key]));
+  for (const alias of aliases || []) {
+    const exact = (keys || []).find((key) => key === alias);
+    if (exact) return exact;
+    const hit = canonicalMap.get(opsStockCanonical(alias));
+    if (hit) return hit;
+  }
+  return "";
+}
+
+function opsStockQuantityColumn(keys = [], schoolName = "") {
+  const base = opsStockColumnKey(schoolName);
+  const candidates = [schoolName, base, base && !base.endsWith("_done") ? `${base}_done` : "", base && base.endsWith("_done") ? base.replace(/_done$/, "") : "", base && !base.endsWith("_2nd_term") ? `${base}_2nd_term` : "", "total_quantity", "all_schools_stock", "all_done", "all_2nd_term", "quantity", "stock"].filter(Boolean);
+  const direct = opsStockFindKey(keys, candidates);
+  if (direct) return direct;
+  if (!base) return "";
+  return keys.find((key) => {
+    const normalized = opsStockColumnKey(key);
+    return normalized === base || normalized === `${base}_done` || normalized === `${base}_2nd_term` || (normalized.includes(base) && /(done|stock|quantity|2nd_term)/i.test(normalized));
+  }) || "";
+}
+
+function opsStockTableName() {
+  return text(process.env.SUPABASE_STOCKTAKING_TABLE) || "stocktaking";
+}
+
+async function opsSelectAllPaged(table, { order = "" } = {}) {
+  const rows = [];
+  const pageSize = 1000;
+  for (let offset = 0; offset < 100000; offset += pageSize) {
+    const page = await select(table, { select: "*", limit: String(pageSize), offset: String(offset), ...(order ? { order } : {}) });
+    const list = Array.isArray(page) ? page : [];
+    rows.push(...list);
+    if (list.length < pageSize) break;
+  }
+  return rows;
+}
+
+function opsOrderTypeKey(value) {
+  return text(value).toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function opsSupportedStockOrderType(value) {
+  const key = opsOrderTypeKey(value);
+  return key === "requestproducts" || key === "withdrawproducts";
+}
+
+function opsFinalStatus(value) {
+  return /(arrived|delivered|received)/i.test(text(value));
+}
+
+function opsReceiptPhotosJson(serialized = {}) {
+  const entries = Array.isArray(serialized?.orderReceiptEntries) ? serialized.orderReceiptEntries : [];
+  const clean = entries.map((entry, index) => ({
+    name: text(entry?.name) || `Receipt photo ${index + 1}`,
+    url: text(entry?.url || entry?.publicUrl || entry?.public_url || entry?.raw),
+  })).filter((entry) => entry.url);
+  return clean.length ? JSON.stringify(clean) : null;
+}
+
+function opsResolveOwnerMember(row = {}, members = []) {
+  const rowId = text(operationsValueFor(row, ["team_member_id", "Team Member ID"]));
+  const rowName = operationsAccessToken(operationsValueFor(row, ["team_member_name", "Teams Members", "Supervisor", "supervisor"]));
+  return (members || []).find((member) => rowId && text(member?.id) === rowId)
+    || (members || []).find((member) => rowName && operationsAccessToken(member?.name) === rowName)
+    || null;
+}
+
+async function opsPrepareStockContext(plannedFinalRows = [], rowsBefore = [], products = []) {
+  const relevantAfter = (plannedFinalRows || []).filter((row) => {
+    const serialized = serializeOperationsOrderDetail(row || {});
+    return opsFinalStatus(serialized?.status) && opsSupportedStockOrderType(serialized?.orderType);
+  });
+  const relevantBefore = (rowsBefore || []).filter((row) => {
+    const serialized = serializeOperationsOrderDetail(row || {});
+    return opsFinalStatus(serialized?.status) && opsSupportedStockOrderType(serialized?.orderType);
+  });
+  if (!relevantAfter.length && !relevantBefore.length) return { needed: false };
+
+  const [stockRows, members] = await Promise.all([
+    opsSelectAllPaged(opsStockTableName(), { order: "id.asc" }),
+    listTeamMembersLite({ fresh: true }),
+  ]);
+  if (!stockRows.length) return null;
+  const keys = [...new Set(stockRows.flatMap((row) => Object.keys(row || {})))];
+  const sourceOrderColumn = opsStockFindKey(keys, ["source_order_id", "Source Order ID", "source_order", "Source Order", "order_row_id", "Order Row ID"]);
+  if (!sourceOrderColumn) return null;
+
+  const quantityColumnBySchool = new Map();
+  for (const row of relevantAfter) {
+    const member = opsResolveOwnerMember(row, members);
+    const school = text(member?.stocktakingColumn);
+    if (!school) return null;
+    if (!quantityColumnBySchool.has(school)) {
+      const quantityColumn = opsStockQuantityColumn(keys, school);
+      if (!quantityColumn) return null;
+      quantityColumnBySchool.set(school, quantityColumn);
+    }
+  }
+  return { needed: true, stockRows, keys, members, sourceOrderColumn, quantityColumnBySchool, productMaps: operationsProductMaps(products) };
+}
+
+async function opsStockInsertSafe(row = {}, requiredColumns = []) {
+  let payload = { ...(row || {}) };
+  const required = new Set((requiredColumns || []).filter(Boolean));
+  for (let attempt = 0; attempt < 16; attempt += 1) {
+    try { return await insert(opsStockTableName(), payload); }
+    catch (error) {
+      const missing = opsEditMissingColumn(error);
+      if (!missing || !Object.prototype.hasOwnProperty.call(payload, missing)) throw error;
+      if (required.has(missing)) throw directOperationsCommittedError(`Missing required Stocktaking column: ${missing}.`, 400, error);
+      delete payload[missing];
+    }
+  }
+  throw directOperationsCommittedError("Failed to synchronize the Operations order with Stocktaking.", 500);
+}
+
+function opsBuildStockRow(orderRow = {}, context = {}) {
+  const serialized = serializeOperationsOrderDetail(orderRow || {});
+  const orderType = text(serialized?.orderType);
+  if (!opsSupportedStockOrderType(orderType)) return null;
+  const member = opsResolveOwnerMember(orderRow, context.members || []);
+  const school = text(member?.stocktakingColumn);
+  const quantityColumn = context.quantityColumnBySchool?.get(school) || "";
+  if (!school || !quantityColumn) throw directOperationsCommittedError("Could not determine the requester Stocktaking column.", 500);
+
+  let quantity = 0;
+  for (const candidate of [serialized?.quantityReceived, serialized?.quantityProgress, serialized?.quantityRequested, serialized?.quantity]) {
+    const value = Number(candidate);
+    if (Number.isFinite(value) && Math.abs(value) > 1e-9) { quantity = roundQty(value); break; }
+  }
+  if (Math.abs(quantity) < 1e-9) throw directOperationsCommittedError("No delivered quantity was found for Stocktaking sync.", 500);
+  quantity = opsOrderTypeKey(orderType) === "withdrawproducts" ? -Math.abs(quantity) : Math.abs(quantity);
+
+  const keys = context.keys || [];
+  const product = resolveOperationsEditProduct(orderRow, context.productMaps || {}) || null;
+  const productName = text(serialized?.productName) || text(product?.name) || "Untitled Product";
+  const proposal = /^created\s+from\s+proposal\s*:/i.test(text(serialized?.issueDescription));
+  const proposalKitTag = proposal ? (text(serialized?.kitTag) || "Direct components") : "";
+  const componentTag = text(serialized?.productTag) || opsEditProductFirstTag(product) || "";
+  const stockTag = proposalKitTag || (opsOrderTypeKey(orderType) === "withdrawproducts" ? "Withdrawal Components" : "Request Components");
+  const rawOrderId = Number(operationsValueFor(orderRow, ["id", "ID"]));
+  const rawOrderNumber = Number(serialized?.orderIdNumber ?? operationsValueFor(orderRow, ["order_number", "Order Number", "Order - ID", "Order ID"]));
+  const sourceOrderColumn = context.sourceOrderColumn;
+  const sourceOrderNumberColumn = opsStockFindKey(keys, ["source_order_number", "Source Order Number", "order_number", "Order Number"]) || "source_order_number";
+  const productTagColumn = opsStockFindKey(keys, ["product_tag", "Product Tag", "component_tag", "Component Tag"]) || "product_tag";
+  const kitTagColumn = opsStockFindKey(keys, ["kit_tag", "Kit Tag", "source_kit", "Source Kit", "kit_name", "Kit Name"]) || "kit_tag";
+  const orderTypeColumn = opsStockFindKey(keys, ["order_type", "Order Type"]) || "order_type";
+  const receiptPhotosColumn = opsStockFindKey(keys, ["receipt_photos", "Receipt Photos", "receipt_photo", "Receipt Photo", "receipt_images", "Receipt Images", "receipt_image", "Receipt Image"]) || "receipt_photos";
+  const idCodeColumn = opsStockFindKey(keys, ["id_code", "ID Code", "id code", "code", "Code"]) || "id_code";
+  const customizeIdColumn = opsStockFindKey(keys, ["customize_id", "Customize ID", "custom_id", "Custom ID"]) || "customize_id";
+  const row = {};
+  const setExisting = (aliases, value, fallback = "") => {
+    if (value === null || typeof value === "undefined" || value === "") return "";
+    const key = opsStockFindKey(keys, aliases) || (!keys.length ? fallback : "");
+    if (!key) return "";
+    row[key] = value;
+    return key;
+  };
+  const nameKey = setExisting(["name", "Name", "component", "Component"], productName, "name");
+  const productKey = setExisting(["product_name", "Product Name", "product", "Product", "products", "Products"], productName, nameKey ? "" : "product_name");
+  if (!nameKey && !productKey && !keys.length) row.name = productName;
+  setExisting(["product_url", "Product URL", "url", "URL", "item_url", "Item URL"], text(serialized?.productUrl || product?.url), "product_url");
+  setExisting(["unity_price", "unit_price", "Unity Price", "Unit Price", "one_piece_price"], Number.isFinite(Number(serialized?.unitPrice)) ? Number(serialized.unitPrice) : null, "unit_price");
+  setExisting(["tag", "Tag", "tags", "Tags"], stockTag, "tag");
+  if (componentTag) row[productTagColumn] = componentTag;
+  if (proposalKitTag) row[kitTagColumn] = proposalKitTag;
+  if (orderType) row[orderTypeColumn] = orderType;
+  setExisting(["receipt_number", "Receipt Number", "store_receipt_number", "Store Receipt Number", "receipt", "Receipt"], text(serialized?.receiptNumber), "receipt_number");
+  const receiptPhotos = opsReceiptPhotosJson(serialized);
+  if (receiptPhotos) row[receiptPhotosColumn] = receiptPhotos;
+  if (text(product?.displayId)) row[idCodeColumn] = text(product.displayId);
+  if (text(serialized?.customizeId)) row[customizeIdColumn] = text(serialized.customizeId);
+  if (Number.isFinite(rawOrderId)) row[sourceOrderColumn] = Math.trunc(rawOrderId);
+  if (Number.isFinite(rawOrderNumber)) row[sourceOrderNumberColumn] = Math.trunc(rawOrderNumber);
+  setExisting(["team_member_name", "Team Member", "requester", "Requester", "created_by", "Created By"], text(serialized?.createdByName), "team_member_name");
+  setExisting(["school", "School", "stocktaking_column", "Stocktaking Column"], school, "school");
+  setExisting(["created_at", "Created at", "created_time", "Created time", "notion_created_time"], new Date().toISOString(), "");
+  row[quantityColumn] = quantity;
+  return {
+    row,
+    required: [quantityColumn, Number.isFinite(rawOrderId) ? sourceOrderColumn : "", Number.isFinite(rawOrderNumber) ? sourceOrderNumberColumn : ""].filter(Boolean),
+  };
+}
+
+async function opsSyncStocktakingAfterEdit(rowsBefore = [], rowsAfter = [], context = {}) {
+  if (!context?.needed) return { synced: 0, skipped: 0 };
+  const oldIds = new Set((rowsBefore || []).map((row) => text(operationsValueFor(row, ["id", "ID"]))).filter(Boolean));
+  const stockRowsToDelete = (context.stockRows || []).filter((row) => oldIds.has(text(row?.[context.sourceOrderColumn])));
+  await mapWithConcurrency(stockRowsToDelete, 10, async (row) => {
+    const id = text(row?.id ?? row?.ID);
+    if (id) await deleteById(opsStockTableName(), id);
+  });
+
+  let synced = 0;
+  let skipped = 0;
+  for (const row of rowsAfter || []) {
+    const serialized = serializeOperationsOrderDetail(row || {});
+    if (!opsFinalStatus(serialized?.status) || !opsSupportedStockOrderType(serialized?.orderType)) { skipped += 1; continue; }
+    const prepared = opsBuildStockRow(row, context);
+    if (!prepared) { skipped += 1; continue; }
+    await opsStockInsertSafe(prepared.row, prepared.required);
+    synced += 1;
+  }
+  invalidateStocktakingReadCaches();
+  await upstashDeleteOperationsKeys(["cache:api:b2b:school-stock:supabase:v1"]).catch(() => false);
+  return { synced, skipped };
+}
+
+export async function saveOperationsEditDetails({
+  account,
+  orderIds = [],
+  adminPassword = "",
+  itemUpdates = [],
+  quantities = null,
+  unsupportedReceiptEdit = false,
+} = {}) {
+  if (unsupportedReceiptEdit) return null;
+  const loaded = await loadOperationRowsByIds(orderIds);
+  if (!loaded) return null;
+  if (loaded.clean.some((id) => !loaded.byId.has(id))) throw directOperationsMutationError("Orders not found", 404);
+
+  const passwordOk = await directOperationsAdminPasswordResult(account || {}, adminPassword);
+  if (passwordOk === null) return null;
+  if (!passwordOk) throw directOperationsMutationError("Invalid admin password", 401);
+
+  const updates = (Array.isArray(itemUpdates) ? itemUpdates : []).filter((entry) => entry && typeof entry === "object");
+  const updatesById = new Map();
+  for (const entry of updates) {
+    const id = text(entry?.id || entry?.orderId || entry?.order_id);
+    if (!id) continue;
+    if (!updatesById.has(id)) updatesById.set(id, []);
+    updatesById.get(id).push(entry);
+  }
+  if (!updatesById.size && !(quantities && typeof quantities === "object")) {
+    throw directOperationsMutationError("No Operations order changes were provided.", 400);
+  }
+
+  const catalog = await getProductsCatalog({ fresh: true });
+  const products = Array.isArray(catalog?.products) ? catalog.products : [];
+  const productMap = new Map(products.map((product) => [text(product?.id), product]).filter(([id]) => id));
+  const quantityMap = quantities && typeof quantities === "object" && !Array.isArray(quantities) ? quantities : {};
+  const plans = [];
+
+  for (const id of loaded.clean) {
+    const beforeRow = loaded.byId.get(id) || null;
+    if (!beforeRow) continue;
+    const updatesForId = updatesById.get(id) || [];
+    const sourceSpecific = updatesForId.filter((entry) => entry?.sourceSpecific === true || Number(entry?.sourceCount || 0) > 1);
+    const splitRows = sourceSpecific.length ? opsEditSplitOrderRow(beforeRow) : null;
+    if (splitRows && splitRows.length > 1) {
+      const byIndex = new Map();
+      const bySourceId = new Map();
+      const bySourceName = new Map();
+      sourceSpecific.forEach((entry) => {
+        const index = Number(entry?.sourceIndex);
+        if (Number.isInteger(index) && index >= 0) byIndex.set(index, entry);
+        const sourceId = text(entry?.sourceKitId);
+        if (sourceId) bySourceId.set(sourceId, entry);
+        const sourceName = operationsAccessToken(entry?.sourceKitName);
+        if (sourceName) bySourceName.set(sourceName, entry);
+      });
+      const quantityOverride = Object.prototype.hasOwnProperty.call(quantityMap, id) ? Number(quantityMap[id]) : null;
+      if (quantityOverride !== null && !Number.isFinite(quantityOverride)) throw directOperationsMutationError("Quantity received must be a valid number.", 400);
+      const quantityParts = quantityOverride === null ? null : opsEditSplitQtyBySources(quantityOverride, splitRows.map((entry) => entry.source));
+      const materialized = splitRows.map((entry, sourceIndex) => {
+        const source = entry.source || {};
+        const update = bySourceId.get(text(source?.kitId)) || byIndex.get(sourceIndex) || bySourceName.get(operationsAccessToken(source?.kitName)) || null;
+        const patch = opsEditBuildItemPatch(entry.row, update, productMap, source);
+        if (quantityParts) Object.assign(patch, opsEditApplyQuantityMapPatch(entry.row, quantityParts[sourceIndex] ?? 0));
+        const finalRow = { ...entry.row, ...patch };
+        return {
+          finalRow,
+          updatePatch: {
+            quantity_requested: entry.row.quantity_requested,
+            quantity_progress: entry.row.quantity_progress,
+            quantity_edited_by_supervisor: entry.row.quantity_edited_by_supervisor,
+            quantity_received_by_operations: entry.row.quantity_received_by_operations,
+            quantity_remaining: entry.row.quantity_remaining,
+            kit_tag: entry.row.kit_tag,
+            source_kits: entry.row.source_kits,
+            ...patch,
+          },
+        };
+      });
+      plans.push({ id, beforeRow, split: true, materialized });
+      continue;
+    }
+    const update = updatesForId[updatesForId.length - 1] || null;
+    const patch = opsEditBuildItemPatch(beforeRow, update, productMap);
+    if (Object.prototype.hasOwnProperty.call(quantityMap, id)) Object.assign(patch, opsEditApplyQuantityMapPatch(beforeRow, quantityMap[id]));
+    plans.push({ id, beforeRow, split: false, patch, finalRow: { ...beforeRow, ...patch } });
+  }
+
+  const plannedFinalRows = plans.flatMap((plan) => plan.split ? plan.materialized.map((entry) => entry.finalRow) : [plan.finalRow]);
+  const stockContext = await opsPrepareStockContext(plannedFinalRows, loaded.rows, products);
+  if (stockContext === null) return null;
+
+  let mutationStarted = false;
+  const updatedRows = [];
+  try {
+    for (const plan of plans) {
+      if (plan.split) {
+        const insertedRows = [];
+        try {
+          for (let index = 1; index < plan.materialized.length; index += 1) {
+            mutationStarted = true;
+            const insertRow = opsEditCloneOrderInsertRow(plan.materialized[index].finalRow);
+            const inserted = await opsEditInsertOrderSafe(insertRow, Object.prototype.hasOwnProperty.call(insertRow, "customize_id") ? ["customize_id"] : []);
+            insertedRows.push(inserted);
+          }
+          mutationStarted = true;
+          const firstPatch = plan.materialized[0].updatePatch;
+          const firstUpdated = await opsEditUpdateOrderSafe(plan.id, firstPatch, Object.prototype.hasOwnProperty.call(firstPatch, "customize_id") ? ["customize_id"] : []);
+          updatedRows.push(firstUpdated, ...insertedRows);
+        } catch (error) {
+          for (const insertedRow of insertedRows) {
+            const insertedId = text(insertedRow?.id ?? insertedRow?.ID);
+            if (insertedId) await deleteById(tableName(), insertedId).catch(() => {});
+          }
+          throw error;
+        }
+        continue;
+      }
+      if (!Object.keys(plan.patch || {}).length) {
+        updatedRows.push(plan.beforeRow);
+        continue;
+      }
+      mutationStarted = true;
+      updatedRows.push(await opsEditUpdateOrderSafe(plan.id, plan.patch, Object.prototype.hasOwnProperty.call(plan.patch, "customize_id") ? ["customize_id"] : []));
+    }
+
+    const stock = await opsSyncStocktakingAfterEdit(loaded.rows, updatedRows, stockContext || { needed: false });
+    await invalidateLegacyOperationsCaches(account).catch(() => {});
+    const responseIds = updatedRows.map((row) => text(row?.id ?? row?.ID)).filter(Boolean);
+    const fresh = responseIds.length ? await loadOperationRowsByIds(responseIds).catch(() => null) : null;
+    const responseRows = fresh?.rows?.length ? fresh.rows : updatedRows;
+    return {
+      success: true,
+      items: responseRows.map((row) => serializeOperationsOrderDetail(row)),
+      stocktakingSyncedCount: Number(stock?.synced || 0),
+      stocktakingSkippedCount: Number(stock?.skipped || 0),
+      source: "supabase-direct",
+    };
+  } catch (error) {
+    if (error?.code === "DIRECT_OPERATIONS_MUTATION_FAILED" && error?.noFallback) throw error;
+    if (mutationStarted) throw directOperationsCommittedError(error?.message || "Order details were partially updated and require review.", Number(error?.status) || 500, error);
+    throw error;
+  }
 }
 

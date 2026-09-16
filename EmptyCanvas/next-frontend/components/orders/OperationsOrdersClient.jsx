@@ -2251,7 +2251,8 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
     setActionError("");
     startActionLoading({ title: "Saving order changes", message: "Updating the selected Operations Orders components…" });
     try {
-      await postJson("/api/orders/operations/details-edit", {
+      await postJson("/api/orders/operations/mutations-direct", {
+        action: "edit-save",
         orderIds: selected.orderIds,
         adminPassword: editMode.password,
         itemUpdates,

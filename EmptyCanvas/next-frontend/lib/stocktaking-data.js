@@ -13,6 +13,15 @@ let stockSchemaInflight = null;
 const stockProjectionCache = new Map();
 const stockProjectionInflight = new Map();
 
+export function invalidateStocktakingReadCaches() {
+  stockRowsCache = null;
+  stockRowsInflight = null;
+  stockSchemaCache = null;
+  stockSchemaInflight = null;
+  stockProjectionCache.clear();
+  stockProjectionInflight.clear();
+}
+
 function text(value) {
   if (value === null || typeof value === "undefined") return "";
   if (Array.isArray(value)) return value.map(text).find(Boolean) || "";
