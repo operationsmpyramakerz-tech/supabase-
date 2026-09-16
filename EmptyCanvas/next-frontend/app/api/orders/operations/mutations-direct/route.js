@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { fetchLegacyJson } from "../../../../../lib/legacy-api";
 import { getLegacyAccountGate } from "../../../../../lib/products-auth";
 import {
+  markOperationsArrived,
   markOperationsShipped,
   performOperationsProtectedAction,
   saveOperationsEditDetails,
@@ -37,7 +38,7 @@ function directErrorResponse(error) {
   }
   // Validation/auth/not-found errors must stay fail-closed. Compatibility or
   // infrastructure failures use the Legacy fallback below instead.
-  if ([400, 401, 403, 404, 409, 422].includes(status)) {
+  if ([400, 401, 403, 404, 409, 413, 422].includes(status)) {
     return noStore({ error: error?.message || "Operations Orders action failed." }, { status });
   }
   return null;
@@ -62,6 +63,15 @@ async function legacyFallback(action, body) {
       quantities: body?.quantities,
       issueDescription: body?.issueDescription,
       perItemIssues: body?.perItemIssues,
+    };
+  } else if (action === "mark-arrived") {
+    path = "/api/orders/requested/mark-arrived";
+    legacyBody = {
+      orderIds: body?.orderIds,
+      orderReceiptDataUrls: body?.orderReceiptDataUrls,
+      orderReceiptFilenames: body?.orderReceiptFilenames,
+      receiptNumbers: body?.receiptNumbers,
+      receiptNumber: body?.receiptNumber,
     };
   } else if (action === "archive") {
     path = "/api/orders/requested/archive";
@@ -107,7 +117,7 @@ async function legacyFallback(action, body) {
 export async function POST(request) {
   const body = await request.json().catch(() => ({}));
   const action = actionKey(body?.action);
-  if (!["approval", "mark-shipped", "archive", "unarchive", "edit-init", "edit-save"].includes(action)) {
+  if (!["approval", "mark-shipped", "mark-arrived", "archive", "unarchive", "edit-init", "edit-save"].includes(action)) {
     return noStore({ error: "Unsupported Operations Orders action." }, { status: 400 });
   }
 
@@ -133,6 +143,15 @@ export async function POST(request) {
         quantities: body?.quantities,
         issueDescription: body?.issueDescription,
         perItemIssues: body?.perItemIssues,
+      });
+      if (result) return noStore(result);
+    } else if (action === "mark-arrived") {
+      const result = await markOperationsArrived({
+        account: gate.account,
+        orderIds: body?.orderIds,
+        orderReceiptDataUrls: body?.orderReceiptDataUrls,
+        orderReceiptFilenames: body?.orderReceiptFilenames,
+        receiptNumbers: body?.receiptNumbers ?? body?.receiptNumber,
       });
       if (result) return noStore(result);
     } else if (action === "edit-save" && gate.source === "direct-session") {

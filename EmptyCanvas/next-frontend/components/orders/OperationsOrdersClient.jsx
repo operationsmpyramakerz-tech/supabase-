@@ -2182,7 +2182,8 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
         if (requiresReceiptNumbers && !receiptNumbers.length) throw new Error("Store receipt number is required.");
         if (receiptNumbers.some((value) => !/^\d+$/.test(value))) throw new Error("Please enter valid store receipt numbers.");
         const dataUrls = await Promise.all(files.map((file) => fileToOptimizedDataUrl(file)));
-        await postJson("/api/orders/requested/mark-arrived", {
+        await postJson("/api/orders/operations/mutations-direct", {
+          action: "mark-arrived",
           orderIds: group.orderIds,
           orderReceiptDataUrls: dataUrls,
           orderReceiptFilenames: files.map((file, index) => text(file?.name) || `maintenance-report-${index + 1}.jpg`),
@@ -2194,7 +2195,8 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
         const files = Array.isArray(payload?.files) ? payload.files : [];
         if (!files.length) throw new Error("Receipt photos are required.");
         const dataUrls = await Promise.all(files.map((file) => fileToOptimizedDataUrl(file)));
-        await postJson("/api/orders/requested/mark-arrived", {
+        await postJson("/api/orders/operations/mutations-direct", {
+          action: "mark-arrived",
           orderIds: group.orderIds,
           orderReceiptDataUrls: dataUrls,
           orderReceiptFilenames: files.map((file, index) => text(file?.name) || `receipt-photo-${index + 1}.jpg`),

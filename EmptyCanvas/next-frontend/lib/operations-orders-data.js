@@ -1,5 +1,5 @@
 import "server-only";
-import { deleteById, insert, isSupabaseConfigured, select, selectAll, updateById, updateByIds } from "./supabase-rest";
+import { deleteById, getSupabaseConfig, insert, isSupabaseConfigured, select, selectAll, updateById, updateByIds, uploadStorageObject } from "./supabase-rest";
 import { enrichOrderDetailGrouping, loadRawOrderRowsByIds, serializeOperationsOrderDetail } from "./order-details-data";
 import { getProductsCatalog } from "./products-service";
 import { listTeamMembersLite } from "./team-members-service";
@@ -1466,6 +1466,130 @@ async function opsSyncStocktakingAfterEdit(rowsBefore = [], rowsAfter = [], cont
   invalidateStocktakingReadCaches();
   await upstashDeleteOperationsKeys(["cache:api:b2b:school-stock:supabase:v1"]).catch(() => false);
   return { synced, skipped };
+}
+
+
+function opsHasColumn(row = {}, aliases = []) {
+  const wanted = new Set((aliases || []).map(operationsAccessToken).filter(Boolean));
+  return Object.keys(row || {}).some((key) => wanted.has(operationsAccessToken(key)));
+}
+
+function opsReceiptUploadInput(dataUrls = [], filenames = []) {
+  const urls = (Array.isArray(dataUrls) ? dataUrls : [dataUrls]).map(text).filter(Boolean);
+  const names = (Array.isArray(filenames) ? filenames : [filenames]).map(text).filter(Boolean);
+  if (!urls.length) throw directOperationsMutationError("Receipt photos are required.", 400);
+  return urls.map((dataUrl, index) => {
+    const match = String(dataUrl || "").match(/^data:([^;,]+);base64,(.+)$/i);
+    if (!match || !/^image\//i.test(String(match?.[1] || ""))) throw directOperationsMutationError("Invalid receipt photo.", 400);
+    let buffer;
+    try { buffer = Buffer.from(match[2], "base64"); } catch { buffer = null; }
+    if (!buffer || !buffer.length) throw directOperationsMutationError("Invalid receipt photo.", 400);
+    if (buffer.length > 12 * 1024 * 1024) throw directOperationsMutationError("Each receipt photo must not exceed 12 MB.", 413);
+    const fallbackName = `delivery-receipt-${index + 1}.jpg`;
+    const rawName = text(names[index] || names[0] || fallbackName) || fallbackName;
+    const cleanName = rawName.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 120) || fallbackName;
+    const extMatch = cleanName.match(/\.([a-zA-Z0-9]+)$/);
+    const safeExt = text(extMatch?.[1]).toLowerCase() || (/png/i.test(match[1]) ? "png" : /webp/i.test(match[1]) ? "webp" : "jpg");
+    return { buffer, contentType: text(match[1]) || "image/jpeg", cleanName, safeExt };
+  });
+}
+
+function opsReceiptStoragePath(file = {}, index = 0) {
+  return `delivery-receipts/${Date.now()}-${index + 1}-${Math.random().toString(36).slice(2, 10)}.${text(file?.safeExt) || "jpg"}`;
+}
+
+export async function markOperationsArrived({
+  account,
+  orderIds = [],
+  orderReceiptDataUrls = [],
+  orderReceiptFilenames = [],
+  receiptNumbers = [],
+} = {}) {
+  const loaded = await loadOperationRowsByIds(orderIds);
+  if (!loaded) return null;
+  if (loaded.clean.some((id) => !loaded.byId.has(id))) throw directOperationsMutationError("Orders not found", 404);
+
+  const uploadInputs = opsReceiptUploadInput(orderReceiptDataUrls, orderReceiptFilenames);
+  const receiptText = mergeReceiptNumbers("", receiptNumbers);
+  const firstRow = loaded.rows[0] || {};
+  if (!opsHasColumn(firstRow, ["status", "Status"])) return null;
+  if (!opsHasColumn(firstRow, ["order_receipt", "Order Receipt", "delivery_receipt", "Delivery Receipt", "receipt_photos", "Receipt Photos"])) return null;
+  if (receiptText && !opsHasColumn(firstRow, ["receipt_number", "Receipt Number", "Store Receipt Number"])) return null;
+
+  const plannedRows = loaded.rows.map((row) => ({ ...row, status: "Arrived" }));
+  const needsStocktaking = plannedRows.some((row) => {
+    const serialized = serializeOperationsOrderDetail(row || {});
+    return opsSupportedStockOrderType(serialized?.orderType);
+  });
+  let products = [];
+  let stockContext = { needed: false };
+  if (needsStocktaking) {
+    const catalog = await getProductsCatalog({ fresh: true });
+    products = Array.isArray(catalog?.products) ? catalog.products : [];
+    stockContext = await opsPrepareStockContext(plannedRows, loaded.rows, products);
+    if (!stockContext) return null;
+  }
+
+  const cfg = getSupabaseConfig();
+  if (!text(cfg?.storageBucket)) return null;
+
+  let mutationStarted = false;
+  try {
+    const receiptEntries = [];
+    for (let index = 0; index < uploadInputs.length; index += 1) {
+      const file = uploadInputs[index];
+      const uploaded = await uploadStorageObject(opsReceiptStoragePath(file, index), file.buffer, {
+        contentType: file.contentType,
+        bucketName: cfg.storageBucket,
+        upsert: false,
+      });
+      if (!uploaded?.publicUrl) throw new Error("Supabase Storage did not return a public receipt URL.");
+      mutationStarted = true;
+      receiptEntries.push({ name: file.cleanName, url: uploaded.publicUrl });
+    }
+
+    const receiptJson = JSON.stringify(receiptEntries);
+    const updatedRows = await mapWithConcurrency(loaded.clean, 10, async (id) => {
+      const before = loaded.byId.get(id) || {};
+      const patch = { status: "Arrived", order_receipt: receiptJson };
+      if (receiptText) patch.receipt_number = mergeReceiptNumbers(operationsValueFor(before, ["receipt_number", "Receipt Number", "Store Receipt Number"]), receiptText);
+      const updated = await updateById(tableName(), id, patch);
+      mutationStarted = true;
+      return updated || { ...before, ...patch };
+    });
+
+    let stock = { synced: 0, skipped: 0 };
+    if (stockContext?.needed) stock = await opsSyncStocktakingAfterEdit(loaded.rows, updatedRows, stockContext);
+
+    await invalidateLegacyOperationsCaches(account || {});
+    return {
+      success: true,
+      status: "Arrived",
+      statusColor: "green",
+      orderReceiptNames: receiptEntries.map((entry) => entry.name),
+      orderReceiptName: receiptEntries[0]?.name || null,
+      orderReceiptUrls: receiptEntries.map((entry) => entry.url),
+      orderReceiptUrl: receiptEntries[0]?.url || null,
+      maintenanceReceiptNames: receiptEntries.map((entry) => entry.name),
+      maintenanceReceiptName: receiptEntries[0]?.name || null,
+      maintenanceReceiptUrls: receiptEntries.map((entry) => entry.url),
+      maintenanceReceiptUrl: receiptEntries[0]?.url || null,
+      receiptNumber: receiptText || null,
+      stocktakingSyncedCount: Number(stock?.synced || 0),
+      stocktakingSkippedCount: Number(stock?.skipped || 0),
+      source: "supabase-direct",
+    };
+  } catch (error) {
+    if (error?.code === "DIRECT_OPERATIONS_MUTATION_FAILED" && error?.noFallback) throw error;
+    if (mutationStarted) {
+      throw directOperationsCommittedError(
+        error?.message || "Delivery was partially saved and requires review.",
+        Number(error?.status) || 500,
+        error,
+      );
+    }
+    throw error;
+  }
 }
 
 export async function saveOperationsEditDetails({
