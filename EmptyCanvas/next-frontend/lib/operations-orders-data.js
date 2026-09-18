@@ -4,7 +4,7 @@ import { enrichOrderDetailGrouping, loadRawOrderRowsByIds, serializeOperationsOr
 import { getProductsCatalog } from "./products-service";
 import { listTeamMembersLite } from "./team-members-service";
 import { invalidateStocktakingReadCaches } from "./stocktaking-data";
-import { loadOrderRowsByNumbers, scanOrderNumberCandidates } from "./order-pagination";
+import { consumeOrderSummaryWindows, loadOrderRowsByNumbers, scanOrderNumberCandidates } from "./order-pagination";
 import { applyOrderSearchPlan, canUseOrderSearchText, createOrderSearchPlan, noteOrderSearchTextError } from "./order-search-hotpath";
 import { canUseOrderCandidateRpc, loadOrderCandidateNumbersRpc, noteOrderCandidateRpcError } from "./order-candidate-rpc";
 
@@ -473,27 +473,43 @@ export async function loadOperationsOrdersPage({
       break;
     }
 
-    const rows = await rowsByNumbers(candidates.numbers, signal);
-    const groups = groupRows(rows);
     const cleanType = orderTypeKey(type);
     const directSearch = searchLogic(query);
     const needle = Number.isFinite(directSearch?.orderNumber) ? "" : norm(directSearch?.clean || query);
-    let processedCandidates = 0;
+    const windowResult = await consumeOrderSummaryWindows({
+      numbers: candidates.numbers,
+      remainingGroups: safeLimit - outputGroups.length,
+      loadRows: rowsByNumbers,
+      profileName: "orders.operations.summary-window",
+      signal,
+      consumeRows: ({ numbers, rows }) => {
+        const groups = groupRows(rows);
+        let processedCandidates = 0;
+        let matchedGroups = 0;
 
-    for (const orderNumber of candidates.numbers) {
-      processedCandidates += 1;
-      nextCursor = orderNumber;
-      const items = groups.get(orderNumber) || [];
-      if (!items.length || !groupMatchesTab(items, tab)) continue;
-      if (cleanType && cleanType !== "all" && orderTypeKey(items[0]?.orderType || "") !== cleanType) continue;
-      if (needle && !groupSearchText(items).includes(needle)) continue;
-      outputGroups.push({ orderNumber, items: rowsForTab(items, tab) });
-      if (outputGroups.length >= safeLimit) break;
-    }
+        for (const orderNumber of numbers) {
+          processedCandidates += 1;
+          nextCursor = orderNumber;
+          const items = groups.get(orderNumber) || [];
+          if (!items.length || !groupMatchesTab(items, tab)) continue;
+          if (cleanType && cleanType !== "all" && orderTypeKey(items[0]?.orderType || "") !== cleanType) continue;
+          if (needle && !groupSearchText(items).includes(needle)) continue;
+          outputGroups.push({ orderNumber, items: rowsForTab(items, tab) });
+          matchedGroups += 1;
+          if (outputGroups.length >= safeLimit) break;
+        }
+
+        return {
+          processedCandidates,
+          matchedGroups,
+          done: outputGroups.length >= safeLimit,
+        };
+      },
+    });
 
     // There can still be unconsumed groups inside the current candidate window
     // even when Supabase itself has no rows beyond that window.
-    hasMore = candidates.hasMore || processedCandidates < candidates.numbers.length;
+    hasMore = candidates.hasMore || windowResult.processedCandidates < candidates.numbers.length;
     if (outputGroups.length >= safeLimit || !hasMore) break;
   }
 

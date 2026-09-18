@@ -3,7 +3,7 @@ import "server-only";
 import { isSupabaseConfigured, select } from "./supabase-rest";
 import { serializeOperationsSummaryRow } from "./operations-orders-data";
 import { loadRawOrderRowsByIds, serializeOperationsOrderDetail } from "./order-details-data";
-import { loadOrderRowsByNumbers, scanOrderNumberCandidates } from "./order-pagination";
+import { consumeOrderSummaryWindows, loadOrderRowsByNumbers, scanOrderNumberCandidates } from "./order-pagination";
 import { applyOrderSearchPlan, canUseOrderSearchText, createOrderSearchPlan, noteOrderSearchTextError } from "./order-search-hotpath";
 import { canUseOrderCandidateRpc, loadOrderCandidateNumbersRpc, noteOrderCandidateRpcError } from "./order-candidate-rpc";
 
@@ -378,25 +378,41 @@ export async function loadCurrentOrdersPage({
       break;
     }
 
-    const rows = await rowsByNumbers(candidates.numbers, signal);
-    const groups = groupRows(rows, account);
     const cleanType = orderTypeKey(type);
     const directSearch = searchLogic(query);
     const needle = Number.isFinite(directSearch?.orderNumber) ? "" : norm(directSearch?.clean || query);
-    let processedCandidates = 0;
+    const windowResult = await consumeOrderSummaryWindows({
+      numbers: candidates.numbers,
+      remainingGroups: safeLimit - outputGroups.length,
+      loadRows: rowsByNumbers,
+      profileName: "orders.current.summary-window",
+      signal,
+      consumeRows: ({ numbers, rows }) => {
+        const groups = groupRows(rows, account);
+        let processedCandidates = 0;
+        let matchedGroups = 0;
 
-    for (const orderNumber of candidates.numbers) {
-      processedCandidates += 1;
-      nextCursor = orderNumber;
-      const items = groups.get(orderNumber) || [];
-      if (!items.length || !groupMatchesTab(items, tab)) continue;
-      if (cleanType && cleanType !== "all" && orderTypeKey(items[0]?.orderType || "") !== cleanType) continue;
-      if (needle && !groupSearchText(items).includes(needle)) continue;
-      outputGroups.push({ orderNumber, items });
-      if (outputGroups.length >= safeLimit) break;
-    }
+        for (const orderNumber of numbers) {
+          processedCandidates += 1;
+          nextCursor = orderNumber;
+          const items = groups.get(orderNumber) || [];
+          if (!items.length || !groupMatchesTab(items, tab)) continue;
+          if (cleanType && cleanType !== "all" && orderTypeKey(items[0]?.orderType || "") !== cleanType) continue;
+          if (needle && !groupSearchText(items).includes(needle)) continue;
+          outputGroups.push({ orderNumber, items });
+          matchedGroups += 1;
+          if (outputGroups.length >= safeLimit) break;
+        }
 
-    hasMore = candidates.hasMore || processedCandidates < candidates.numbers.length;
+        return {
+          processedCandidates,
+          matchedGroups,
+          done: outputGroups.length >= safeLimit,
+        };
+      },
+    });
+
+    hasMore = candidates.hasMore || windowResult.processedCandidates < candidates.numbers.length;
     if (outputGroups.length >= safeLimit || !hasMore) break;
   }
 

@@ -148,7 +148,7 @@ export async function loadOrderRowsByNumbers({
   selectExpr = "*",
   extraParams = {},
   order = "order_number.desc,notion_created_time.desc,id.desc",
-  batchSize = 24,
+  batchSize = 40,
   rowChunk = 1000,
   maxRowsPerBatch = 50000,
   queryProfileName = "orders.summary",
@@ -159,7 +159,7 @@ export async function loadOrderRowsByNumbers({
   const clean = cleanOrderNumbers(numbers);
   if (!clean.length) return [];
 
-  const safeBatchSize = positiveInteger(batchSize, 24, 1, 100);
+  const safeBatchSize = positiveInteger(batchSize, 40, 1, 100);
   const chunkSize = positiveInteger(rowChunk, 1000, 100, 5000);
   const batchBudget = positiveInteger(maxRowsPerBatch, 50000, chunkSize, 250000);
   const out = [];
@@ -227,6 +227,122 @@ export async function loadOrderRowsByNumbers({
         rows: out.length,
         groups: clean.length,
         fallback: usedFallback,
+      },
+    });
+  }
+}
+
+
+/**
+ * Consume a candidate-number window progressively instead of immediately
+ * loading summary component rows for every candidate in the scan. Most order
+ * pages only need the first N matching groups, so loading 2x/3x candidate
+ * groups up-front wastes bandwidth and JSON/serialization work when the first
+ * page fills early.
+ *
+ * `consumeRows` owns page-specific filtering/grouping and returns how many
+ * candidate numbers it actually consumed from the loaded window. If the page
+ * fills in the middle of a window, the remaining order numbers are deliberately
+ * left unconsumed so the caller can resume from the last processed cursor.
+ */
+export async function consumeOrderSummaryWindows({
+  numbers = [],
+  remainingGroups = 0,
+  loadRows,
+  consumeRows,
+  minWindow = 8,
+  maxWindow = 40,
+  profileName = "orders.summary-window",
+  signal = null,
+} = {}) {
+  const clean = cleanOrderNumbers(numbers);
+  const target = Math.max(0, Math.floor(Number(remainingGroups) || 0));
+  if (!clean.length || target <= 0) {
+    return {
+      processedCandidates: 0,
+      matchedGroups: 0,
+      loadedCandidateGroups: 0,
+      loadedRows: 0,
+      windows: 0,
+    };
+  }
+  if (typeof loadRows !== "function" || typeof consumeRows !== "function") {
+    throw new TypeError("consumeOrderSummaryWindows requires loadRows and consumeRows callbacks.");
+  }
+
+  const safeMinWindow = positiveInteger(minWindow, 8, 1, 100);
+  const safeMaxWindow = positiveInteger(maxWindow, 40, safeMinWindow, 200);
+  const startedAt = performance.now();
+  let processedCandidates = 0;
+  let matchedGroups = 0;
+  let loadedCandidateGroups = 0;
+  let loadedRows = 0;
+  let windows = 0;
+  let ok = false;
+  let status = 0;
+
+  try {
+    while (processedCandidates < clean.length && matchedGroups < target) {
+      const remainingNeeded = Math.max(1, target - matchedGroups);
+      const available = clean.length - processedCandidates;
+      const desired = Math.max(safeMinWindow, Math.min(safeMaxWindow, remainingNeeded));
+      const windowSize = Math.min(available, desired);
+      const windowNumbers = clean.slice(processedCandidates, processedCandidates + windowSize);
+
+      const rows = await loadRows(windowNumbers, signal);
+      const safeRows = Array.isArray(rows) ? rows : [];
+      windows += 1;
+      loadedCandidateGroups += windowNumbers.length;
+      loadedRows += safeRows.length;
+
+      const result = await consumeRows({
+        numbers: windowNumbers,
+        rows: safeRows,
+        remainingGroups: target - matchedGroups,
+      });
+      const consumedRaw = Number(result?.processedCandidates);
+      const consumed = Number.isFinite(consumedRaw)
+        ? Math.max(0, Math.min(windowNumbers.length, Math.floor(consumedRaw)))
+        : windowNumbers.length;
+      const matchedRaw = Number(result?.matchedGroups);
+      const matched = Number.isFinite(matchedRaw) ? Math.max(0, Math.floor(matchedRaw)) : 0;
+
+      processedCandidates += consumed;
+      matchedGroups += matched;
+
+      // A page that fills inside a loaded window must resume from the last
+      // processed number, not from the end of the already-fetched window.
+      if (result?.done || consumed < windowNumbers.length || consumed <= 0) break;
+    }
+
+    ok = true;
+    status = 200;
+    return {
+      processedCandidates,
+      matchedGroups,
+      loadedCandidateGroups,
+      loadedRows,
+      windows,
+    };
+  } catch (error) {
+    status = statusFromError(error);
+    throw error;
+  } finally {
+    recordPerformanceSample({
+      category: "orders-pagination",
+      name: profileName,
+      durationMs: performance.now() - startedAt,
+      ok,
+      status,
+      meta: {
+        candidateGroups: clean.length,
+        processedCandidates,
+        matchedGroups,
+        loadedCandidateGroups,
+        deferredCandidateGroups: Math.max(0, clean.length - loadedCandidateGroups),
+        loadedButUnconsumedGroups: Math.max(0, loadedCandidateGroups - processedCandidates),
+        rows: loadedRows,
+        windows,
       },
     });
   }

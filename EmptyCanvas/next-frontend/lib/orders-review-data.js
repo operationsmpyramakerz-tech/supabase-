@@ -1,7 +1,7 @@
 import "server-only";
 import { isSupabaseConfigured, select, selectAll, selectById, updateById, updateByIds } from "./supabase-rest";
 import { enrichOrderDetailGrouping, loadRawOrderRowsByIds, serializeReviewOrderDetail } from "./order-details-data";
-import { loadOrderRowsByNumbers, scanOrderNumberCandidates } from "./order-pagination";
+import { consumeOrderSummaryWindows, loadOrderRowsByNumbers, scanOrderNumberCandidates } from "./order-pagination";
 import { applyOrderSearchPlan, canUseOrderSearchText, createOrderSearchPlan, noteOrderSearchTextError } from "./order-search-hotpath";
 import { canUseOrderCandidateRpc, loadOrderCandidateNumbersRpc, noteOrderCandidateRpcError } from "./order-candidate-rpc";
 import { getReviewerVisibility as reviewerVisibility } from "./reviewer-visibility-service";
@@ -436,41 +436,57 @@ export async function loadOrdersReviewPage({
       break;
     }
 
-    const rows = await rowsByNumbers(candidates.numbers, signal);
-    const allowedRows = rows.filter((row) => {
-      if (!visibleToReviewer(row, visible)) return false;
-      const issueDescription = text(valueFor(row, ["issue_description", "Issue Description"]));
-      if (/^created from proposal:/i.test(issueDescription)) return false;
-      const archived = /archive|archived/.test(norm(valueFor(row, ["status", "Status"])));
-      if (cleanTab === "archive") return archived;
-      if (archived) return false;
-      if (["approved", "rejected", "not-started"].includes(cleanTab)) {
-        return approvalKey(valueFor(row, ["sv_approval", "S.V Approval", "SV Approval"])) === cleanTab;
-      }
-      return true;
-    });
-
-    const groups = groupRows(allowedRows);
     const cleanType = orderTypeKey(type);
     const directSearch = searchLogic(query);
     const needle = Number.isFinite(directSearch?.orderNumber) ? "" : norm(directSearch?.clean || query);
-    let processedCandidates = 0;
+    const windowResult = await consumeOrderSummaryWindows({
+      numbers: candidates.numbers,
+      remainingGroups: safeLimit - outputGroups.length,
+      loadRows: rowsByNumbers,
+      profileName: "orders.review.summary-window",
+      signal,
+      consumeRows: ({ numbers, rows }) => {
+        const allowedRows = rows.filter((row) => {
+          if (!visibleToReviewer(row, visible)) return false;
+          const issueDescription = text(valueFor(row, ["issue_description", "Issue Description"]));
+          if (/^created from proposal:/i.test(issueDescription)) return false;
+          const archived = /archive|archived/.test(norm(valueFor(row, ["status", "Status"])));
+          if (cleanTab === "archive") return archived;
+          if (archived) return false;
+          if (["approved", "rejected", "not-started"].includes(cleanTab)) {
+            return approvalKey(valueFor(row, ["sv_approval", "S.V Approval", "SV Approval"])) === cleanTab;
+          }
+          return true;
+        });
 
-    for (const orderNumber of candidates.numbers) {
-      processedCandidates += 1;
-      nextCursor = orderNumber;
-      const items = groups.get(orderNumber) || [];
-      if (!items.length) continue;
-      if (cleanType && cleanType !== "all" && orderTypeKey(items[0]?.orderType || "") !== cleanType) continue;
-      if (needle && !groupSearchText(items).includes(needle)) continue;
-      outputGroups.push({ orderNumber, items });
-      if (outputGroups.length >= safeLimit) break;
-    }
+        const groups = groupRows(allowedRows);
+        let processedCandidates = 0;
+        let matchedGroups = 0;
+
+        for (const orderNumber of numbers) {
+          processedCandidates += 1;
+          nextCursor = orderNumber;
+          const items = groups.get(orderNumber) || [];
+          if (!items.length) continue;
+          if (cleanType && cleanType !== "all" && orderTypeKey(items[0]?.orderType || "") !== cleanType) continue;
+          if (needle && !groupSearchText(items).includes(needle)) continue;
+          outputGroups.push({ orderNumber, items });
+          matchedGroups += 1;
+          if (outputGroups.length >= safeLimit) break;
+        }
+
+        return {
+          processedCandidates,
+          matchedGroups,
+          done: outputGroups.length >= safeLimit,
+        };
+      },
+    });
 
     // Keep the same group-safe semantics used by Operations Orders. Reaching
     // the end of the database does not mean all candidate groups in this scan
     // have already been consumed by the current page.
-    hasMore = candidates.hasMore || processedCandidates < candidates.numbers.length;
+    hasMore = candidates.hasMore || windowResult.processedCandidates < candidates.numbers.length;
     if (outputGroups.length >= safeLimit || !hasMore) break;
   }
 
