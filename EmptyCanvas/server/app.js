@@ -22688,6 +22688,68 @@ app.post(
   },
 );
 
+app.patch(
+  "/api/orders/maintenance-checklist/:id",
+  requireAuth,
+  requirePage(["Maintenance Orders", "Operations Orders"]),
+  async (req, res) => {
+    try {
+      const id = String(req.params?.id || "").trim();
+      const value = String(req.body?.text ?? req.body?.value ?? "").replace(/\r\n/g, "\n").trim().slice(0, 800);
+      if (!id) return res.status(400).json({ error: "Checklist item id is required." });
+      if (!value) return res.status(400).json({ error: "Checklist text is required." });
+
+      const existingRow = await supabaseDb.selectById(_orderDownloadInstructionsTable(), id);
+      if (!existingRow || !_isMaintenanceChecklistInstructionRow(existingRow)) {
+        return res.status(404).json({ error: "Checklist item was not found." });
+      }
+
+      const current = await _maintenanceChecklistItems().catch(() => []);
+      const duplicate = current.find((item) => String(item?.id || "") !== id && String(item?.text || "").trim().toLowerCase() === value.toLowerCase());
+      if (duplicate) return res.status(409).json({ error: "A checklist item with the same text already exists." });
+
+      const row = await supabaseDb.updateById(_orderDownloadInstructionsTable(), id, {
+        title: MAINTENANCE_CHECKLIST_SENTINEL,
+        english_text: value,
+        arabic_text: "",
+      });
+      if (!row) return res.status(404).json({ error: "Checklist item was not found." });
+      return res.json({
+        item: {
+          id: String(row?.id || id).trim(),
+          text: String(row?.english_text ?? value).trim(),
+          createdAt: row?.created_at || existingRow?.created_at || null,
+          updatedAt: row?.updated_at || null,
+        },
+      });
+    } catch (error) {
+      console.error("PATCH /api/orders/maintenance-checklist/:id error:", error?.details || error);
+      return res.status(Number(error?.status) || 500).json({ error: error?.message || "Failed to update maintenance checklist item." });
+    }
+  },
+);
+
+app.delete(
+  "/api/orders/maintenance-checklist/:id",
+  requireAuth,
+  requirePage(["Maintenance Orders", "Operations Orders"]),
+  async (req, res) => {
+    try {
+      const id = String(req.params?.id || "").trim();
+      if (!id) return res.status(400).json({ error: "Checklist item id is required." });
+      const existingRow = await supabaseDb.selectById(_orderDownloadInstructionsTable(), id);
+      if (!existingRow || !_isMaintenanceChecklistInstructionRow(existingRow)) {
+        return res.status(404).json({ error: "Checklist item was not found." });
+      }
+      await supabaseDb.deleteById(_orderDownloadInstructionsTable(), id);
+      return res.json({ ok: true, id });
+    } catch (error) {
+      console.error("DELETE /api/orders/maintenance-checklist/:id error:", error?.details || error);
+      return res.status(Number(error?.status) || 500).json({ error: error?.message || "Failed to delete maintenance checklist item." });
+    }
+  },
+);
+
 // Export requested order to PDF (Delivery receipt)
 // Body: { orderIds: [notionPageId, ...] }
 app.post(

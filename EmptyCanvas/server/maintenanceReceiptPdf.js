@@ -215,6 +215,7 @@ async function pipeMaintenanceReceiptPDF(params = {}, stream) {
     if (doc.y + height <= metrics().maxY) return;
     doc.addPage();
     drawHeader(true);
+    drawOrderData();
   };
 
   const drawSectionTitle = (title) => {
@@ -259,7 +260,6 @@ async function pipeMaintenanceReceiptPDF(params = {}, stream) {
   };
 
   const drawOrderData = () => {
-    drawSectionTitle("Order Data");
     const { mL, contentW } = metrics();
     const gap = 10;
     const colW = (contentW - gap * 2) / 3;
@@ -503,71 +503,116 @@ async function pipeMaintenanceReceiptPDF(params = {}, stream) {
     return h;
   };
 
-  const maintenanceDetailsMeasure = (item, template = false) => {
+  const measureChecklistActionField = (w, items = [], template = false) => {
+    const values = Array.isArray(items) ? items.filter(Boolean) : [];
+    if (values.length) return Math.max(64, measureChecklistBlock(w, values));
+    return template ? 76 : 58;
+  };
+
+  const drawEmptyChecklistActionField = (x, y, w, template = false) => {
+    const h = measureChecklistActionField(w, [], template);
+    doc.save();
+    doc.roundedRect(x, y, w, h, 9).fillAndStroke(COLORS.soft, COLORS.border);
+    doc.fillColor(COLORS.muted).font("Helvetica-Bold").fontSize(8).text("Maintenance Checklist", x + 9, y + 9, { width: w - 18 });
+    if (template) {
+      const firstY = y + 31;
+      for (let index = 0; index < 2; index += 1) {
+        const rowY = firstY + index * 20;
+        doc.strokeColor("#64748B").lineWidth(0.8).rect(x + 10, rowY, 10, 10).stroke();
+        doc.strokeColor("#9CA3AF").lineWidth(0.7).moveTo(x + 28, rowY + 9).lineTo(x + w - 10, rowY + 9).stroke();
+      }
+    } else {
+      doc.fillColor(COLORS.muted).font("Helvetica").fontSize(8.4).text("No checklist items recorded", x + 9, y + 31, { width: w - 18, align: "center" });
+    }
+    doc.restore();
+    return h;
+  };
+
+  const drawChecklistActionField = (x, y, w, items = [], template = false) => {
+    const values = Array.isArray(items) ? items.filter(Boolean) : [];
+    if (!values.length) return drawEmptyChecklistActionField(x, y, w, template);
+    return drawChecklistBlock(x, y, w, values, !template);
+  };
+
+  const machineDetailsMeasure = (item, template = false) => {
     const { contentW } = metrics();
     const innerW = contentW - 24;
     const gap = 8;
     const fieldW = (innerW - gap) / 2;
-    const issueH = template
-      ? measureSmallField(innerW, item.issueDescription)
-      : Math.max(measureSmallField(fieldW, item.issueDescription), measureSmallField(fieldW, item.resolutionMethod));
-    const serialH = template ? Math.max(measureRuledField(1), measureRuledField(2)) : 0;
-    const actionH = template
-      ? Math.max(measureRuledField(3), measureRuledField(3))
-      : Math.max(measureSmallField(fieldW, item.actualIssueDescription), measureSmallField(fieldW, item.repairAction));
-    return template
-      ? 52 + issueH + gap + serialH + gap + actionH + 14
-      : 52 + issueH + gap + actionH + 14;
+    const componentH = measureSmallField(fieldW, item.component);
+    const serialH = template ? measureRuledField(1) : measureSmallField(fieldW, item.serialNumber);
+    return 38 + Math.max(componentH, serialH) + 12;
   };
 
-  const drawMaintenanceDetailsFields = (item, index, y, template = false, suffix = "") => {
+  const maintenanceActionMeasure = (item, template = false) => {
+    const { contentW } = metrics();
+    const innerW = contentW - 24;
+    const gap = 8;
+    const fieldW = (innerW - gap) / 2;
+    const resolutionH = template ? measureRuledField(2) : measureSmallField(fieldW, item.resolutionMethod);
+    const checklistH = measureChecklistActionField(fieldW, item.maintenanceChecklist, template);
+    const actualH = template ? measureRuledField(3) : measureSmallField(fieldW, item.actualIssueDescription);
+    const repairH = template ? measureRuledField(3) : measureSmallField(fieldW, item.repairAction);
+    return 38 + Math.max(resolutionH, checklistH) + gap + Math.max(actualH, repairH) + 12;
+  };
+
+  const maintenanceDetailsMeasure = (item, template = false) => {
+    const { contentW } = metrics();
+    const gap = 8;
+    const machineH = machineDetailsMeasure(item, template);
+    const issueH = template
+      ? measureSmallField(contentW, item.issueDescription)
+      : measureSmallField(contentW, item.issueDescription);
+    const actionH = maintenanceActionMeasure(item, template);
+    return machineH + gap + issueH + gap + actionH;
+  };
+
+  const drawMaintenanceDetailsFields = (item, index, y, template = false) => {
     const { mL, contentW } = metrics();
     const innerW = contentW - 24;
     const gap = 8;
     const fieldW = (innerW - gap) / 2;
-    const detailsH = maintenanceDetailsMeasure(item, template);
+
+    const machineH = machineDetailsMeasure(item, template);
     doc.save();
-    doc.roundedRect(mL, y, contentW, detailsH, 15).fillAndStroke("#FFFFFF", COLORS.cardBorder);
-    doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(11.5).text(`Maintenance for Component ${index + 1}${suffix}`, mL + 12, y + 12, { width: contentW - 24 });
-    const subtitle = [
-      item.idCode ? `ID: ${item.idCode}` : "",
-      !template && item.serialNumber && item.serialNumber !== "—" ? `Serial: ${item.serialNumber}` : "",
-      item.component,
-    ].filter(Boolean).join("  •  ");
-    doc.fillColor(COLORS.muted).font("Helvetica").fontSize(9.2).text(subtitle || "Unknown Component", mL + 12, y + 30, { width: contentW - 24 });
+    doc.roundedRect(mL, y, contentW, machineH, 15).fillAndStroke("#FFFFFF", COLORS.cardBorder);
+    doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(11.5).text("Machine Details", mL + 12, y + 12, { width: contentW - 24 });
     doc.restore();
 
-    let fy = y + 52;
+    const machineFieldY = y + 38;
+    drawSmallField(mL + 12, machineFieldY, fieldW, "Component", item.component);
+    if (template) drawRuledField(mL + 12 + fieldW + gap, machineFieldY, fieldW, "Serial Number", 1);
+    else drawSmallField(mL + 12 + fieldW + gap, machineFieldY, fieldW, "Serial Number", item.serialNumber);
+
+    const issueY = y + machineH + gap;
+    const issueH = drawSmallField(mL, issueY, contentW, "Initial Issue", item.issueDescription);
+
+    const actionY = issueY + issueH + gap;
+    const actionH = maintenanceActionMeasure(item, template);
+    doc.save();
+    doc.roundedRect(mL, actionY, contentW, actionH, 15).fillAndStroke("#FFFFFF", COLORS.cardBorder);
+    doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(11.5).text("Maintenance Action", mL + 12, actionY + 12, { width: contentW - 24 });
+    doc.restore();
+
+    const actionTopY = actionY + 38;
+    const resolutionH = template
+      ? drawRuledField(mL + 12, actionTopY, fieldW, "Resolution Method", 2)
+      : drawSmallField(mL + 12, actionTopY, fieldW, "Resolution Method", item.resolutionMethod);
+    const checklistH = drawChecklistActionField(mL + 12 + fieldW + gap, actionTopY, fieldW, item.maintenanceChecklist, template);
+    const secondRowY = actionTopY + Math.max(resolutionH, checklistH) + gap;
     if (template) {
-      const issueH = drawSmallField(mL + 12, fy, innerW, "Initial Issue", item.issueDescription);
-      fy += issueH + gap;
-      const serialH = Math.max(
-        drawRuledField(mL + 12, fy, fieldW, "Serial Number", 1),
-        drawRuledField(mL + 12 + fieldW + gap, fy, fieldW, "Resolution Method", 2),
-      );
-      fy += serialH + gap;
-      Math.max(
-        drawRuledField(mL + 12, fy, fieldW, "Actual Issue Description", 3),
-        drawRuledField(mL + 12 + fieldW + gap, fy, fieldW, "Repair Action", 3),
-      );
+      drawRuledField(mL + 12, secondRowY, fieldW, "Actual Issue Description", 3);
+      drawRuledField(mL + 12 + fieldW + gap, secondRowY, fieldW, "Repair Action", 3);
     } else {
-      const issueH = Math.max(
-        drawSmallField(mL + 12, fy, fieldW, "Initial Issue", item.issueDescription),
-        drawSmallField(mL + 12 + fieldW + gap, fy, fieldW, "Resolution Method", item.resolutionMethod),
-      );
-      fy += issueH + gap;
-      Math.max(
-        drawSmallField(mL + 12, fy, fieldW, "Actual Issue Description", item.actualIssueDescription),
-        drawSmallField(mL + 12 + fieldW + gap, fy, fieldW, "Repair Action", item.repairAction),
-      );
+      drawSmallField(mL + 12, secondRowY, fieldW, "Actual Issue Description", item.actualIssueDescription);
+      drawSmallField(mL + 12 + fieldW + gap, secondRowY, fieldW, "Repair Action", item.repairAction);
     }
-    return detailsH;
+
+    return maintenanceDetailsMeasure(item, template);
   };
 
-  const drawContinuationLabel = (index) => {
-    ensureSpace(28);
-    doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(10).text(`Component ${index + 1} — maintenance details continued`, metrics().mL, doc.y, { width: metrics().contentW });
-    doc.moveDown(0.3);
+  const drawContinuationHeader = () => {
+    drawOrderData();
   };
 
   const drawMaintenanceTemplateCard = (item, index) => {
@@ -577,9 +622,7 @@ async function pipeMaintenanceReceiptPDF(params = {}, stream) {
     const detailsH = maintenanceDetailsMeasure(item, true);
     const neededH = measureTemplateSparePartsTable(innerW, 3);
     const replacedH = measureTemplateSparePartsTable(innerW, 3);
-    const checklistItems = Array.isArray(item.maintenanceChecklist) ? item.maintenanceChecklist : [];
-    const checklistH = measureChecklistBlock(innerW, checklistItems);
-    const fullH = detailsH + gap + neededH + gap + replacedH + (checklistH ? gap + checklistH : 0) + 14;
+    const fullH = detailsH + gap + neededH + gap + replacedH + 14;
 
     if (doc.y + fullH + 10 <= metrics().maxY) {
       const y = doc.y;
@@ -589,28 +632,30 @@ async function pipeMaintenanceReceiptPDF(params = {}, stream) {
       fy += neededH + gap;
       drawTemplateSparePartsTable(mL + 12, fy, innerW, "Spare Parts Replaced", 3);
       fy += replacedH;
-      if (checklistH) {
-        fy += gap;
-        drawChecklistBlock(mL + 12, fy, innerW, checklistItems, false);
-        fy += checklistH;
-      }
       doc.y = fy + 10;
       return;
     }
 
     ensureSpace(Math.min(detailsH + 10, 180));
-    if (doc.y + detailsH + 10 > metrics().maxY) { doc.addPage(); drawHeader(true); }
+    if (doc.y + detailsH + 10 > metrics().maxY) {
+      doc.addPage();
+      drawHeader(true);
+      drawContinuationHeader();
+    }
     let y = doc.y;
     drawMaintenanceDetailsFields(item, index, y, true);
     doc.y = y + detailsH + 10;
 
     const sections = [
-      { h: neededH, draw: (yy) => drawTemplateSparePartsTable(mL, yy, contentW, "Spare Parts Needed", 3) },
-      { h: replacedH, draw: (yy) => drawTemplateSparePartsTable(mL, yy, contentW, "Spare Parts Replaced", 3) },
-      ...(checklistH ? [{ h: checklistH, draw: (yy) => drawChecklistBlock(mL, yy, contentW, checklistItems, false) }] : []),
+      { h: measureTemplateSparePartsTable(contentW, 3), draw: (yy) => drawTemplateSparePartsTable(mL, yy, contentW, "Spare Parts Needed", 3) },
+      { h: measureTemplateSparePartsTable(contentW, 3), draw: (yy) => drawTemplateSparePartsTable(mL, yy, contentW, "Spare Parts Replaced", 3) },
     ];
     sections.forEach((section) => {
-      if (doc.y + section.h + 10 > metrics().maxY) { doc.addPage(); drawHeader(true); drawContinuationLabel(index); }
+      if (doc.y + section.h + 10 > metrics().maxY) {
+        doc.addPage();
+        drawHeader(true);
+        drawContinuationHeader();
+      }
       section.draw(doc.y);
       doc.y += section.h + 10;
     });
@@ -622,12 +667,10 @@ async function pipeMaintenanceReceiptPDF(params = {}, stream) {
     const gap = 8;
     const needed = Array.isArray(item.sparePartsNeeded) ? item.sparePartsNeeded : [];
     const replaced = Array.isArray(item.spareParts) ? item.spareParts : [];
-    const checklistItems = Array.isArray(item.maintenanceChecklist) ? item.maintenanceChecklist : [];
     const detailsH = maintenanceDetailsMeasure(item, false);
     const neededH = measureSparePartsTable(innerW, needed);
     const replacedH = measureSparePartsTable(innerW, replaced);
-    const checklistH = measureChecklistBlock(innerW, checklistItems);
-    const fullH = detailsH + gap + neededH + gap + replacedH + (checklistH ? gap + checklistH : 0) + 14;
+    const fullH = detailsH + gap + neededH + gap + replacedH + 14;
 
     if (doc.y + fullH + 10 <= metrics().maxY) {
       const y = doc.y;
@@ -637,17 +680,16 @@ async function pipeMaintenanceReceiptPDF(params = {}, stream) {
       fy += neededH + gap;
       drawSparePartsTable(mL + 12, fy, innerW, "Spare Parts Replaced", replaced, "No spare parts replaced");
       fy += replacedH;
-      if (checklistH) {
-        fy += gap;
-        drawChecklistBlock(mL + 12, fy, innerW, checklistItems, true);
-        fy += checklistH;
-      }
       doc.y = fy + 10;
       return;
     }
 
     ensureSpace(Math.min(detailsH + 10, 180));
-    if (doc.y + detailsH + 10 > metrics().maxY) { doc.addPage(); drawHeader(true); }
+    if (doc.y + detailsH + 10 > metrics().maxY) {
+      doc.addPage();
+      drawHeader(true);
+      drawContinuationHeader();
+    }
     let y = doc.y;
     drawMaintenanceDetailsFields(item, index, y, false);
     doc.y = y + detailsH + 10;
@@ -655,10 +697,13 @@ async function pipeMaintenanceReceiptPDF(params = {}, stream) {
     const sections = [
       { h: measureSparePartsTable(contentW, needed), draw: (yy) => drawSparePartsTable(mL, yy, contentW, "Spare Parts Needed", needed, "No spare parts needed") },
       { h: measureSparePartsTable(contentW, replaced), draw: (yy) => drawSparePartsTable(mL, yy, contentW, "Spare Parts Replaced", replaced, "No spare parts replaced") },
-      ...(checklistItems.length ? [{ h: measureChecklistBlock(contentW, checklistItems), draw: (yy) => drawChecklistBlock(mL, yy, contentW, checklistItems, true) }] : []),
     ];
     sections.forEach((section) => {
-      if (doc.y + section.h + 10 > metrics().maxY) { doc.addPage(); drawHeader(true); drawContinuationLabel(index); }
+      if (doc.y + section.h + 10 > metrics().maxY) {
+        doc.addPage();
+        drawHeader(true);
+        drawContinuationHeader();
+      }
       section.draw(doc.y);
       doc.y += section.h + 10;
     });
@@ -702,7 +747,6 @@ async function pipeMaintenanceReceiptPDF(params = {}, stream) {
   drawOrderData();
 
   const componentLogs = buildComponentLogs(params);
-  drawSectionTitle("Maintenance Details");
   componentLogs.forEach((item, index) => {
     if (templateMode) drawMaintenanceTemplateCard(item, index);
     else drawMaintenanceCard(item, index);

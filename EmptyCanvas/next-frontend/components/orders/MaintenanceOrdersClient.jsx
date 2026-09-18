@@ -387,6 +387,124 @@ async function saveMaintenanceChecklistItem(value) {
   return data?.item || null;
 }
 
+async function updateMaintenanceChecklistItem(id, value) {
+  const cleanId = text(id);
+  const clean = text(value);
+  if (!cleanId) throw new Error("Checklist item id is required.");
+  if (!clean) throw new Error("Checklist text is required.");
+  const response = await fetch(`/api/orders/maintenance-checklist/${encodeURIComponent(cleanId)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    cache: "no-store",
+    body: JSON.stringify({ text: clean }),
+  });
+  if (response.status === 401) {
+    window.location.href = "/login?next=/next/maintenance-orders";
+    throw new Error("Authentication required.");
+  }
+  const data = await readJson(response);
+  if (!response.ok) throw new Error(data?.error || "Failed to update checklist item.");
+  return data?.item || null;
+}
+
+async function deleteMaintenanceChecklistItem(id) {
+  const cleanId = text(id);
+  if (!cleanId) throw new Error("Checklist item id is required.");
+  const response = await fetch(`/api/orders/maintenance-checklist/${encodeURIComponent(cleanId)}`, {
+    method: "DELETE",
+    credentials: "include",
+    cache: "no-store",
+  });
+  if (response.status === 401) {
+    window.location.href = "/login?next=/next/maintenance-orders";
+    throw new Error("Authentication required.");
+  }
+  const data = await readJson(response);
+  if (!response.ok) throw new Error(data?.error || "Failed to delete checklist item.");
+  return data;
+}
+
+function MaintenanceChecklistOption({ item, checked, disabled, onToggle, onUpdated, onDeleted, onError }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(item?.text || "");
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [working, setWorking] = useState(false);
+
+  useEffect(() => {
+    setDraft(item?.text || "");
+    setEditing(false);
+    setConfirmDelete(false);
+  }, [item?.id, item?.text]);
+
+  const locked = disabled || working;
+
+  async function saveEdit() {
+    const value = text(draft);
+    if (!value || !item?.id || locked) return;
+    setWorking(true);
+    onError?.("");
+    try {
+      const saved = await updateMaintenanceChecklistItem(item.id, value);
+      const normalized = saved || { ...item, text: value };
+      onUpdated?.(item, normalized);
+      setEditing(false);
+      setConfirmDelete(false);
+    } catch (error) {
+      onError?.(error?.message || "Failed to update checklist item.");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function confirmRemove() {
+    if (!item?.id || locked) return;
+    setWorking(true);
+    onError?.("");
+    try {
+      await deleteMaintenanceChecklistItem(item.id);
+      onDeleted?.(item);
+    } catch (error) {
+      onError?.(error?.message || "Failed to delete checklist item.");
+      setConfirmDelete(false);
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  return <div className={`next-maintenance-checklist-option${editing ? " is-editing" : ""}${confirmDelete ? " is-delete-confirm" : ""}`}>
+    {editing ? <input
+      className="next-maintenance-checklist-option__edit-input"
+      type="text"
+      value={draft}
+      onChange={(event) => setDraft(event.target.value)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") { event.preventDefault(); saveEdit(); }
+        if (event.key === "Escape") { setDraft(item.text); setEditing(false); }
+      }}
+      disabled={locked}
+      autoFocus
+      aria-label="Edit checklist item"
+    /> : <label className="next-maintenance-checklist-option__select">
+      <input type="checkbox" checked={Boolean(checked)} onChange={onToggle} disabled={locked} />
+      <span>{item.text}</span>
+    </label>}
+
+    <div className="next-maintenance-checklist-option__actions">
+      {editing ? <>
+        <button type="button" className="next-maintenance-checklist-icon-btn next-maintenance-checklist-icon-btn--save" onClick={saveEdit} disabled={locked || !text(draft)} aria-label="Save checklist item" title="Save"><ClassicOrderIcon name="check" /></button>
+        <button type="button" className="next-maintenance-checklist-icon-btn" onClick={() => { setDraft(item.text); setEditing(false); }} disabled={locked} aria-label="Cancel checklist edit" title="Cancel"><ClassicOrderIcon name="x" /></button>
+      </> : confirmDelete ? <>
+        <button type="button" className="next-maintenance-checklist-icon-btn next-maintenance-checklist-icon-btn--danger" onClick={confirmRemove} disabled={locked} aria-label="Confirm delete checklist item" title="Confirm delete"><ClassicOrderIcon name="check" /></button>
+        <button type="button" className="next-maintenance-checklist-icon-btn" onClick={() => setConfirmDelete(false)} disabled={locked} aria-label="Cancel delete checklist item" title="Cancel"><ClassicOrderIcon name="x" /></button>
+      </> : <>
+        <button type="button" className="next-maintenance-checklist-icon-btn" onClick={() => { setDraft(item.text); setEditing(true); }} disabled={locked || !item?.id} aria-label="Edit checklist item" title="Edit"><ClassicOrderIcon name="edit-2" /></button>
+        <button type="button" className="next-maintenance-checklist-icon-btn next-maintenance-checklist-icon-btn--danger" onClick={() => setConfirmDelete(true)} disabled={locked || !item?.id} aria-label="Delete checklist item" title="Delete"><ClassicOrderIcon name="trash-2" /></button>
+      </>}
+    </div>
+  </div>;
+}
+
 function useClassicHeaderSearch(query, setQuery, placeholder) {
   useEffect(() => {
     const input = document.querySelector(".classic-app-shell .main-header .searchbar input");
@@ -716,7 +834,7 @@ function MaintenanceDetailsModal({ group, busy, onClose, onLog, onDone, onExport
   );
 }
 
-function MaintenanceDownloadModal({ state, options, busy, onClose, onDownload, onChecklistSaved }) {
+function MaintenanceDownloadModal({ state, options, busy, onClose, onDownload, onChecklistSaved, onChecklistUpdated, onChecklistDeleted }) {
   const group = state?.group || null;
   const template = Boolean(state?.template);
   const [columns, setColumns] = useState(MAINTENANCE_SPARE_EXPORT_COLUMNS.map(([key]) => key));
@@ -774,6 +892,20 @@ function MaintenanceDownloadModal({ state, options, busy, onClose, onDownload, o
     }
   }
 
+  function handleChecklistUpdated(previous, saved) {
+    const previousText = text(previous?.text);
+    const nextText = text(saved?.text);
+    if (!nextText) return;
+    onChecklistUpdated?.(saved);
+    setSelectedChecklist((current) => normalizeMaintenanceChecklist(current.map((value) => value === previousText ? nextText : value)));
+  }
+
+  function handleChecklistDeleted(item) {
+    const removedText = text(item?.text);
+    onChecklistDeleted?.(item);
+    setSelectedChecklist((current) => current.filter((value) => value !== removedText));
+  }
+
   async function runDownload() {
     setError("");
     const ok = await onDownload(group, {
@@ -805,10 +937,16 @@ function MaintenanceDownloadModal({ state, options, busy, onClose, onDownload, o
       <div className="order-download-section next-maintenance-download-checklist">
         <div className="order-download-instructions__heading"><span className="order-download-section__label">Checklist</span></div>
         <div className="next-maintenance-checklist-options next-maintenance-checklist-options--download">
-          {checklistItems.length ? checklistItems.map((item) => <label className="next-maintenance-checklist-option" key={item.id || item.text}>
-            <input type="checkbox" checked={selectedChecklist.includes(item.text)} onChange={() => toggleChecklist(item.text)} disabled={busy || savingChecklist} />
-            <span>{item.text}</span>
-          </label>) : <div className="next-maintenance-checklist-empty">No saved checklist items yet.</div>}
+          {checklistItems.length ? checklistItems.map((item) => <MaintenanceChecklistOption
+            key={item.id || item.text}
+            item={item}
+            checked={selectedChecklist.includes(item.text)}
+            disabled={busy || savingChecklist}
+            onToggle={() => toggleChecklist(item.text)}
+            onUpdated={handleChecklistUpdated}
+            onDeleted={handleChecklistDeleted}
+            onError={setError}
+          />) : <div className="next-maintenance-checklist-empty">No saved checklist items yet.</div>}
         </div>
         <div className="next-maintenance-checklist-add">
           <input type="text" value={newChecklist} onChange={(event) => setNewChecklist(event.target.value)} placeholder="Add checklist text..." disabled={busy || savingChecklist} />
@@ -875,7 +1013,7 @@ function emptyLogForItem(item) {
   };
 }
 
-function MaintenanceLogModal({ group, options, busy, error, onCancel, onSubmit, onChecklistSaved }) {
+function MaintenanceLogModal({ group, options, busy, error, onCancel, onSubmit, onChecklistSaved, onChecklistUpdated, onChecklistDeleted }) {
   const [logs, setLogs] = useState([]);
   const [newChecklistText, setNewChecklistText] = useState({});
   const [checklistSaving, setChecklistSaving] = useState(false);
@@ -956,6 +1094,26 @@ function MaintenanceLogModal({ group, options, busy, error, onCancel, onSubmit, 
     }
   }
 
+  function handleChecklistUpdated(previous, saved) {
+    const previousText = text(previous?.text);
+    const nextText = text(saved?.text);
+    if (!nextText) return;
+    onChecklistUpdated?.(saved);
+    setLogs((current) => current.map((entry) => ({
+      ...entry,
+      checklist: normalizeMaintenanceChecklist((entry.checklist || []).map((value) => value === previousText ? nextText : value)),
+    })));
+  }
+
+  function handleChecklistDeleted(item) {
+    const removedText = text(item?.text);
+    onChecklistDeleted?.(item);
+    setLogs((current) => current.map((entry) => ({
+      ...entry,
+      checklist: normalizeMaintenanceChecklist((entry.checklist || []).filter((value) => value !== removedText)),
+    })));
+  }
+
   function normalizeParts(list) {
     return (Array.isArray(list) ? list : []).map((part) => {
       const id = text(part?.id);
@@ -1025,10 +1183,16 @@ function MaintenanceLogModal({ group, options, busy, error, onCancel, onSubmit, 
                 <div className="co-submodal-field req-maintenance-log-card__spares next-maintenance-checklist-frame">
                   <div className="req-maintenance-spare-head next-maintenance-spare-frame__head"><span className="co-submodal-label">Maintenance Checklist</span><small>Select saved text items or add a new one.</small></div>
                   <div className="next-maintenance-checklist-options">
-                    {checklistItems.length ? checklistItems.map((item) => <label className="next-maintenance-checklist-option" key={item.id || item.text}>
-                      <input type="checkbox" checked={normalizeMaintenanceChecklist(entry.checklist).includes(item.text)} onChange={() => toggleChecklist(logIndex, item.text)} disabled={busy || checklistSaving} />
-                      <span>{item.text}</span>
-                    </label>) : <div className="next-maintenance-checklist-empty">No saved checklist items yet.</div>}
+                    {checklistItems.length ? checklistItems.map((item) => <MaintenanceChecklistOption
+                      key={item.id || item.text}
+                      item={item}
+                      checked={normalizeMaintenanceChecklist(entry.checklist).includes(item.text)}
+                      disabled={busy || checklistSaving}
+                      onToggle={() => toggleChecklist(logIndex, item.text)}
+                      onUpdated={handleChecklistUpdated}
+                      onDeleted={handleChecklistDeleted}
+                      onError={setChecklistError}
+                    />) : <div className="next-maintenance-checklist-empty">No saved checklist items yet.</div>}
                   </div>
                   <div className="next-maintenance-checklist-add">
                     <input className="co-submodal-input" type="text" value={newChecklistText[logIndex] || ""} onChange={(event) => setNewChecklistText((current) => ({ ...current, [logIndex]: event.target.value }))} placeholder="Add checklist text..." disabled={busy || checklistSaving} />
@@ -1411,12 +1575,33 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
 
   function rememberChecklistItem(item) {
     const value = text(item?.text ?? item?.value ?? item);
+    const id = text(item?.id);
     if (!value) return;
     setOptions((current) => {
       const list = Array.isArray(current?.checklistItems) ? current.checklistItems : [];
-      if (list.some((entry) => lower(entry?.text ?? entry?.value ?? entry) === lower(value))) return current;
-      return { ...current, checklistItems: [...list, { id: text(item?.id), text: value }] };
+      const index = list.findIndex((entry) => {
+        const entryId = text(entry?.id);
+        if (id && entryId) return entryId === id;
+        return lower(entry?.text ?? entry?.value ?? entry) === lower(value);
+      });
+      const normalized = { id, text: value };
+      if (index < 0) return { ...current, checklistItems: [...list, normalized] };
+      const next = [...list];
+      next[index] = { ...next[index], ...normalized };
+      return { ...current, checklistItems: next };
     });
+  }
+
+  function forgetChecklistItem(item) {
+    const id = text(item?.id);
+    const value = lower(item?.text ?? item?.value ?? item);
+    setOptions((current) => ({
+      ...current,
+      checklistItems: (Array.isArray(current?.checklistItems) ? current.checklistItems : []).filter((entry) => {
+        if (id && text(entry?.id)) return text(entry?.id) !== id;
+        return lower(entry?.text ?? entry?.value ?? entry) !== value;
+      }),
+    }));
   }
 
   async function openDownload(group, exportOptions = {}) {
@@ -1594,8 +1779,8 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
       <MaintenanceDetailsModal group={selected} busy={busy} onClose={() => setSelected(null)} onLog={openLog} onDone={(group) => { setActionError(""); setDoneGroup(group); }} onExport={openDownload} onAction={beginAction} />
       <MaintenanceActionPasswordModal state={actionState} busy={busy} error={actionError} onCancel={() => { setActionState(null); setActionError(""); }} onSubmit={submitAction} />
       <MaintenanceDeleteConfirmationModal state={deleteConfirm} busy={busy} onCancel={() => setDeleteConfirm(null)} onConfirm={confirmDelete} />
-      <MaintenanceLogModal group={logGroup} options={options} busy={busy} error={actionError} onCancel={() => { setLogGroup(null); setActionError(""); }} onSubmit={saveLog} onChecklistSaved={rememberChecklistItem} />
-      <MaintenanceDownloadModal state={downloadState} options={options} busy={busy} onClose={() => setDownloadState(null)} onDownload={exportOrder} onChecklistSaved={rememberChecklistItem} />
+      <MaintenanceLogModal group={logGroup} options={options} busy={busy} error={actionError} onCancel={() => { setLogGroup(null); setActionError(""); }} onSubmit={saveLog} onChecklistSaved={rememberChecklistItem} onChecklistUpdated={rememberChecklistItem} onChecklistDeleted={forgetChecklistItem} />
+      <MaintenanceDownloadModal state={downloadState} options={options} busy={busy} onClose={() => setDownloadState(null)} onDownload={exportOrder} onChecklistSaved={rememberChecklistItem} onChecklistUpdated={rememberChecklistItem} onChecklistDeleted={forgetChecklistItem} />
       <MarkDoneModal group={doneGroup} busy={busy} error={actionError} onCancel={() => { setDoneGroup(null); setActionError(""); }} onSubmit={markDone} />
       <CreatorProfilePopover state={creatorState} onClose={() => setCreatorState(null)} />
     </section>
