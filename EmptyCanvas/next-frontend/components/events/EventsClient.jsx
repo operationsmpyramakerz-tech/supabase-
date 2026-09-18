@@ -444,14 +444,14 @@ export default function EventsClient({ account, initialEvents = [], bootstrapWar
   }).length, [events]);
 
   const refreshEvents = async () => {
-    const body = await requestJson(`/api/events?_ts=${Date.now()}`);
+    const body = await requestJson(`/next/api/events?_ts=${Date.now()}`);
     setEvents((Array.isArray(body.events) ? body.events : []).map((event) => ({ ...event, status: normalizeStatus(event.status) })));
   };
 
   const openDetails = async (event) => {
     setActiveEvent(event);
     try {
-      const body = await requestJson(`/api/events/${encodeURIComponent(event.id)}?_ts=${Date.now()}`);
+      const body = await requestJson(`/next/api/events/${encodeURIComponent(event.id)}?_ts=${Date.now()}`);
       setActiveEvent({ ...body.event, status: normalizeStatus(body.event?.status) });
     } catch (error) {
       setToast({ type: "error", title: "Events", message: error.message });

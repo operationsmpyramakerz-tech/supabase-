@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import AppShell from "../../components/AppShell";
 import EventsClient from "../../components/events/EventsClient";
+import { loadDirectEventsPageData } from "../../lib/events-data";
 import { fetchLegacyJson } from "../../lib/legacy-api";
 
 export const dynamic = "force-dynamic";
@@ -21,10 +22,10 @@ function getResource(map, prefix, fallback = null) {
 }
 
 export default async function EventsPage() {
-  const response = await fetchLegacyJson("/api/page-bootstrap?scope=events", { timeoutMs: 35000 });
+  let pageData = await loadDirectEventsPageData({ mode: "events" }).catch(() => null);
 
-  if (response.status === 401) redirect("/login?next=/next/events");
-  if (response.status === 403) {
+  if (pageData?.status === 401) redirect("/login?next=/next/events");
+  if (pageData?.status === 403) {
     return (
       <main className="standalone-state">
         <section className="state-card">
@@ -37,34 +38,55 @@ export default async function EventsPage() {
     );
   }
 
-  if (!response.ok || !response.data?.ok) {
-    return (
-      <main className="standalone-state">
-        <section className="state-card">
-          <span className="status-dot warning" />
-          <h1>The new Events page could not load</h1>
-          <p>{response.error || response.data?.error || "The current ERP API is temporarily unavailable."}</p>
-          <div className="actions">
-            <a className="primary-button" href="/next/events">Try again</a>
-            <a className="secondary-button" href="/next/home">Return to Home</a>
-          </div>
-        </section>
-      </main>
-    );
+  if (!pageData?.ok) {
+    const response = await fetchLegacyJson("/api/page-bootstrap?scope=events", { timeoutMs: 35000 });
+    if (response.status === 401) redirect("/login?next=/next/events");
+    if (response.status === 403) {
+      return (
+        <main className="standalone-state">
+          <section className="state-card">
+            <span className="status-dot warning" />
+            <h1>Events is not available</h1>
+            <p>Your account does not have access to Event Requests or the Event Calendar.</p>
+            <a className="primary-button" href="/next/home">Return to Home</a>
+          </section>
+        </main>
+      );
+    }
+    if (!response.ok || !response.data?.ok) {
+      return (
+        <main className="standalone-state">
+          <section className="state-card">
+            <span className="status-dot warning" />
+            <h1>The new Events page could not load</h1>
+            <p>{response.error || response.data?.error || "The current ERP API is temporarily unavailable."}</p>
+            <div className="actions">
+              <a className="primary-button" href="/next/events">Try again</a>
+              <a className="secondary-button" href="/next/home">Return to Home</a>
+            </div>
+          </section>
+        </main>
+      );
+    }
+    const resources = resourceMap(response.data);
+    const account = getResource(resources, "/api/account", null);
+    const eventsPayload = getResource(resources, "/api/events", { ok: true, events: [] });
+    if (!account) redirect("/login?next=/next/events");
+    pageData = {
+      ok: true,
+      account,
+      events: Array.isArray(eventsPayload?.events) ? eventsPayload.events : [],
+      warnings: response.data.omitted || [],
+      source: "legacy-bootstrap",
+    };
   }
 
-  const resources = resourceMap(response.data);
-  const account = getResource(resources, "/api/account", null);
-  const eventsPayload = getResource(resources, "/api/events", { ok: true, events: [] });
-
-  if (!account) redirect("/login?next=/next/events");
-
   return (
-    <AppShell account={account} title="Events" eyebrow="Event execution requests" activePath="/next/events" bodyClass="events-page events-requests-page" pageStyles={["/next/css/events.css?v=next-stage-2k-events"]}>
+    <AppShell account={pageData.account} title="Events" eyebrow="Event execution requests" activePath="/next/events" bodyClass="events-page events-requests-page" pageStyles={["/next/css/events.css?v=next-stage-2k-events"]}>
       <EventsClient
-        account={account}
-        initialEvents={Array.isArray(eventsPayload?.events) ? eventsPayload.events : []}
-        bootstrapWarnings={response.data.omitted || []}
+        account={pageData.account}
+        initialEvents={Array.isArray(pageData.events) ? pageData.events : []}
+        bootstrapWarnings={pageData.warnings || []}
       />
     </AppShell>
   );

@@ -403,9 +403,9 @@ export default function EventRequestFormClient({
     setRefreshing(true);
     try {
       const [typePayload, componentPayload, eventPayload, ratePayload] = await Promise.all([
-        requestJson(`/api/events/types?_ts=${Date.now()}`),
-        requestJson(`/api/events/components?activeOnly=1&_ts=${Date.now()}`),
-        requestJson(`/api/events?_ts=${Date.now()}`),
+        requestJson(`/next/api/events/types?_ts=${Date.now()}`),
+        requestJson(`/next/api/events/components?activeOnly=1&_ts=${Date.now()}`),
+        requestJson(`/next/api/events?_ts=${Date.now()}`),
         requestJson(`/api/events/governorate-rates?includeInactive=0&_ts=${Date.now()}`),
       ]);
       setTypes(normalizeTypes(typePayload?.types));

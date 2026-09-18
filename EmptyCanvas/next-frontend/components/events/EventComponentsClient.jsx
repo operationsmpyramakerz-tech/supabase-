@@ -626,7 +626,7 @@ export default function EventComponentsClient({ account, initialComponents, init
   }
 
   async function refreshCategories() {
-    const payload = await requestJson(`/api/events/component-categories?_ts=${Date.now()}`);
+    const payload = await requestJson(`/next/api/events/component-categories?_ts=${Date.now()}`);
     const next = normalizeCategories(payload?.categories);
     setCategories(next);
     return next;

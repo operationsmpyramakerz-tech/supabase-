@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import AppShell from "../../components/AppShell";
 import EventComponentsClient from "../../components/events/EventComponentsClient";
+import { loadDirectEventsPageData } from "../../lib/events-data";
 import { fetchLegacyJson } from "../../lib/legacy-api";
 
 export const dynamic = "force-dynamic";
@@ -21,10 +22,12 @@ function getResource(map, prefix, fallback = null) {
 }
 
 export default async function EventComponentsPage({ searchParams }) {
-  const response = await fetchLegacyJson("/api/page-bootstrap?scope=events-components", { timeoutMs: 35000 });
+  const params = await Promise.resolve(searchParams || {});
+  const initialCreate = ["1", "true", "yes", "on"].includes(String(params?.create || "").trim().toLowerCase());
+  let pageData = await loadDirectEventsPageData({ mode: "components" }).catch(() => null);
 
-  if (response.status === 401) redirect("/login?next=/next/event-components");
-  if (response.status === 403) {
+  if (pageData?.status === 401) redirect("/login?next=/next/event-components");
+  if (pageData?.status === 403) {
     return (
       <main className="standalone-state">
         <section className="state-card">
@@ -37,40 +40,59 @@ export default async function EventComponentsPage({ searchParams }) {
     );
   }
 
-  if (!response.ok || !response.data?.ok) {
-    return (
-      <main className="standalone-state">
-        <section className="state-card">
-          <span className="status-dot warning" />
-          <h1>The new Event Components page could not load</h1>
-          <p>{response.error || response.data?.error || "The current ERP API is temporarily unavailable."}</p>
-          <div className="actions">
-            <a className="primary-button" href="/next/event-components">Try again</a>
-            <a className="secondary-button" href="/next/home">Return to Home</a>
-          </div>
-        </section>
-      </main>
-    );
+  if (!pageData?.ok) {
+    const response = await fetchLegacyJson("/api/page-bootstrap?scope=events-components", { timeoutMs: 35000 });
+    if (response.status === 401) redirect("/login?next=/next/event-components");
+    if (response.status === 403) {
+      return (
+        <main className="standalone-state">
+          <section className="state-card">
+            <span className="status-dot warning" />
+            <h1>Event Components is not available</h1>
+            <p>Your account does not have access to the Event Components catalogue.</p>
+            <a className="primary-button" href="/next/home">Return to Home</a>
+          </section>
+        </main>
+      );
+    }
+    if (!response.ok || !response.data?.ok) {
+      return (
+        <main className="standalone-state">
+          <section className="state-card">
+            <span className="status-dot warning" />
+            <h1>The new Event Components page could not load</h1>
+            <p>{response.error || response.data?.error || "The current ERP API is temporarily unavailable."}</p>
+            <div className="actions">
+              <a className="primary-button" href="/next/event-components">Try again</a>
+              <a className="secondary-button" href="/next/home">Return to Home</a>
+            </div>
+          </section>
+        </main>
+      );
+    }
+    const resources = resourceMap(response.data);
+    const account = getResource(resources, "/api/account", null);
+    const componentsPayload = getResource(resources, "/api/events/components", { ok: true, components: [] });
+    const categoriesPayload = getResource(resources, "/api/events/component-categories", { ok: true, categories: [] });
+    if (!account) redirect("/login?next=/next/event-components");
+    pageData = {
+      ok: true,
+      account,
+      components: Array.isArray(componentsPayload?.components) ? componentsPayload.components : [],
+      categories: Array.isArray(categoriesPayload?.categories) ? categoriesPayload.categories : [],
+      warnings: response.data.omitted || [],
+      source: "legacy-bootstrap",
+    };
   }
 
-  const params = await Promise.resolve(searchParams || {});
-  const initialCreate = ["1", "true", "yes", "on"].includes(String(params?.create || "").trim().toLowerCase());
-
-  const resources = resourceMap(response.data);
-  const account = getResource(resources, "/api/account", null);
-  const componentsPayload = getResource(resources, "/api/events/components", { ok: true, components: [] });
-  const categoriesPayload = getResource(resources, "/api/events/component-categories", { ok: true, categories: [] });
-
-  if (!account) redirect("/login?next=/next/event-components");
-
   return (
-    <AppShell account={account} title="Events" eyebrow="Reusable event resources" activePath="/next/event-components" bodyClass="events-page events-components-page" pageStyles={["/next/css/events.css?v=next-stage-2k-events"]}>
+    <AppShell account={pageData.account} title="Events" eyebrow="Reusable event resources" activePath="/next/event-components" bodyClass="events-page events-components-page" pageStyles={["/next/css/events.css?v=next-stage-2k-events"]}>
       <EventComponentsClient
-        account={account}
-        initialComponents={Array.isArray(componentsPayload?.components) ? componentsPayload.components : []}
-        initialCategories={Array.isArray(categoriesPayload?.categories) ? categoriesPayload.categories : []}
+        account={pageData.account}
+        initialComponents={Array.isArray(pageData.components) ? pageData.components : []}
+        initialCategories={Array.isArray(pageData.categories) ? pageData.categories : []}
         initialCreate={initialCreate}
-        bootstrapWarnings={response.data.omitted || []}
+        bootstrapWarnings={pageData.warnings || []}
       />
     </AppShell>
   );
