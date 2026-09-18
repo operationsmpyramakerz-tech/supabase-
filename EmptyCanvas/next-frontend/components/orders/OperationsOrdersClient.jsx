@@ -7,6 +7,10 @@ import OrderDownloadModal from "./OrderDownloadModal";
 import OrderComponentSearch, { matchesOrderComponentSearch } from "./OrderComponentSearch";
 import ActionLoadingModal, { useActionLoading } from "../ActionLoadingModal";
 
+// Direct Next route handlers must include the configured /next basePath.
+// Root /api/* belongs to the Legacy Express app on the public ERP origin.
+const DIRECT_API_BASE = "/next/api";
+
 const OPERATIONS_EXPORT_COLUMNS = [
   ["idCode", "ID Code"],
   ["component", "Component"],
@@ -1952,7 +1956,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
       if (query.trim()) params.set("q", query.trim());
       if (!reset && pageInfo?.nextCursor !== null && pageInfo?.nextCursor !== undefined) params.set("cursor", String(pageInfo.nextCursor));
       if (fresh) params.set("_fresh", "1");
-      const response = await fetch(`/api/orders/requested/paged-summary?${params.toString()}`, { credentials: "include", cache: "no-store" });
+      const response = await fetch(`${DIRECT_API_BASE}/orders/requested/paged-summary?${params.toString()}`, { credentials: "include", cache: "no-store" });
       if (response.status === 401) {
         window.location.href = "/login?next=/next/operations-orders";
         return;
@@ -1999,7 +2003,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
     }
 
     try {
-      const response = await fetch("/api/orders/requested/details-direct", {
+      const response = await fetch(`${DIRECT_API_BASE}/orders/requested/details-direct`, {
         method: "POST",
         credentials: "include",
         cache: "no-store",
@@ -2092,7 +2096,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
       if (action === "edit") {
         const password = text(payload);
         if (!password) throw new Error("Admin password is required.");
-        const response = await fetch("/api/orders/operations/mutations-direct", {
+        const response = await fetch(`${DIRECT_API_BASE}/orders/operations/mutations-direct`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
@@ -2115,13 +2119,13 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
         setActionError("");
         return;
       } else if (action === "approve") {
-        await postJson("/api/orders/operations/mutations-direct", { action: "approval", ids: group.orderIds, decision: "Approved" });
+        await postJson(`${DIRECT_API_BASE}/orders/operations/mutations-direct`, { action: "approval", ids: group.orderIds, decision: "Approved" });
         loadingSuccessMessage = "Order approved by operations.";
         await completeAction("Order approved by operations.", "approved");
       } else if (action === "reject") {
         const reason = text(payload);
         if (!reason) throw new Error("Rejected reason is required.");
-        await postJson("/api/orders/operations/mutations-direct", { action: "approval", ids: group.orderIds, decision: "Rejected", rejectedReason: reason });
+        await postJson(`${DIRECT_API_BASE}/orders/operations/mutations-direct`, { action: "approval", ids: group.orderIds, decision: "Rejected", rejectedReason: reason });
         loadingSuccessMessage = group.actionScope === "component" ? "Component rejected and the reason was saved." : "Order rejected and the reason was saved.";
         await completeAction(loadingSuccessMessage, group.actionScope === "component" ? "approved" : "rejected");
       } else if (action === "receive") {
@@ -2134,7 +2138,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
           const absolute = Math.min(Math.abs(base), Math.abs(receivedQuantity(item)) + receiveNow);
           quantities[id] = roundQty(sign * absolute);
         });
-        await postJson("/api/orders/operations/mutations-direct", {
+        await postJson(`${DIRECT_API_BASE}/orders/operations/mutations-direct`, {
           action: "mark-shipped",
           orderIds: group.orderIds,
           receiptNumber: text(payload?.receiptNumber) || null,
@@ -2147,7 +2151,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
         if (payload?.validationError) throw new Error(payload.validationError);
         const perItemIssues = Array.isArray(payload?.perItemIssues) ? payload.perItemIssues : [];
         if (!perItemIssues.length || perItemIssues.some((entry) => !text(entry?.issueDescription))) throw new Error("Issue description is required for every component.");
-        await postJson("/api/orders/operations/mutations-direct", {
+        await postJson(`${DIRECT_API_BASE}/orders/operations/mutations-direct`, {
           action: "mark-shipped",
           orderIds: group.orderIds,
           receiptNumber: null,
@@ -2182,7 +2186,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
         if (requiresReceiptNumbers && !receiptNumbers.length) throw new Error("Store receipt number is required.");
         if (receiptNumbers.some((value) => !/^\d+$/.test(value))) throw new Error("Please enter valid store receipt numbers.");
         const dataUrls = await Promise.all(files.map((file) => fileToOptimizedDataUrl(file)));
-        await postJson("/api/orders/operations/mutations-direct", {
+        await postJson(`${DIRECT_API_BASE}/orders/operations/mutations-direct`, {
           action: "mark-arrived",
           orderIds: group.orderIds,
           orderReceiptDataUrls: dataUrls,
@@ -2195,7 +2199,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
         const files = Array.isArray(payload?.files) ? payload.files : [];
         if (!files.length) throw new Error("Receipt photos are required.");
         const dataUrls = await Promise.all(files.map((file) => fileToOptimizedDataUrl(file)));
-        await postJson("/api/orders/operations/mutations-direct", {
+        await postJson(`${DIRECT_API_BASE}/orders/operations/mutations-direct`, {
           action: "mark-arrived",
           orderIds: group.orderIds,
           orderReceiptDataUrls: dataUrls,
@@ -2206,11 +2210,11 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
       } else if (action === "archive") {
         const password = text(payload);
         if (!password) throw new Error("Admin password is required.");
-        await postJson("/api/orders/operations/mutations-direct", { action: "archive", orderIds: group.orderIds, adminPassword: password });
+        await postJson(`${DIRECT_API_BASE}/orders/operations/mutations-direct`, { action: "archive", orderIds: group.orderIds, adminPassword: password });
         loadingSuccessMessage = "Order moved to Archive.";
         await completeAction("Order moved to Archive.", "archive");
       } else if (action === "unarchive") {
-        await postJson("/api/orders/operations/mutations-direct", { action: "unarchive", orderIds: group.orderIds });
+        await postJson(`${DIRECT_API_BASE}/orders/operations/mutations-direct`, { action: "unarchive", orderIds: group.orderIds });
         loadingSuccessMessage = "Order restored from Archive.";
         await completeAction("Order restored from Archive.", "approved");
       } else if (action === "withdrawal") {
@@ -2253,7 +2257,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
     setActionError("");
     startActionLoading({ title: "Saving order changes", message: "Updating the selected Operations Orders components…" });
     try {
-      await postJson("/api/orders/operations/mutations-direct", {
+      await postJson(`${DIRECT_API_BASE}/orders/operations/mutations-direct`, {
         action: "edit-save",
         orderIds: selected.orderIds,
         adminPassword: editMode.password,

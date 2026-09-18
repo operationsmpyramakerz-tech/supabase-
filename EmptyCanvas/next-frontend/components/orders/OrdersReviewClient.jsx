@@ -6,6 +6,10 @@ import { groupOrderItems, OrderGroupHeader, OrderSortButton } from "./OrderGroup
 import OrderDownloadModal from "./OrderDownloadModal";
 import OrderComponentSearch, { matchesOrderComponentSearch } from "./OrderComponentSearch";
 
+// Direct Next route handlers must include the configured /next basePath.
+// Root /api/* belongs to the Legacy Express app on the public ERP origin.
+const DIRECT_API_BASE = "/next/api";
+
 const REVIEW_TABS = [
   { key: "all", label: "All", icon: "layers" },
   { key: "not-started", label: "Not Started", icon: "pause-circle" },
@@ -19,7 +23,7 @@ const PASSWORD_ACTIONS = {
     title: "Archive order",
     description: "Enter admin password to move this order to Archive.",
     button: "Archive",
-    endpoint: "/api/sv-orders/mutations-direct",
+    endpoint: `${DIRECT_API_BASE}/sv-orders/mutations-direct`,
     directAction: "archive",
     icon: "archive",
     danger: true,
@@ -28,7 +32,7 @@ const PASSWORD_ACTIONS = {
     title: "UnArchive order",
     description: "Enter admin password to restore this order.",
     button: "UnArchive",
-    endpoint: "/api/sv-orders/mutations-direct",
+    endpoint: `${DIRECT_API_BASE}/sv-orders/mutations-direct`,
     directAction: "unarchive",
     icon: "rotate-ccw",
   },
@@ -36,7 +40,7 @@ const PASSWORD_ACTIONS = {
     title: "Edit review decision",
     description: "Enter admin password to update the approval status for each component.",
     button: "Continue",
-    endpoint: "/api/sv-orders/mutations-direct",
+    endpoint: `${DIRECT_API_BASE}/sv-orders/mutations-direct`,
     directAction: "verify-edit",
     icon: "edit-2",
   },
@@ -743,7 +747,7 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
     if (!force && detailGroups.has(group.key)) return;
     setDetailLoadingKey(group.key);
     try {
-      const response = await fetch("/api/sv-orders/details-direct", {
+      const response = await fetch(`${DIRECT_API_BASE}/sv-orders/details-direct`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -784,7 +788,7 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
       });
       if (query.trim()) params.set("q", query.trim());
       if (!reset && pageInfo?.nextCursor !== null && pageInfo?.nextCursor !== undefined) params.set("cursor", String(pageInfo.nextCursor));
-      const response = await fetch(`/api/sv-orders/paged-summary?${params.toString()}`, { credentials: "include", cache: "no-store" });
+      const response = await fetch(`${DIRECT_API_BASE}/sv-orders/paged-summary?${params.toString()}`, { credentials: "include", cache: "no-store" });
       if (response.status === 401) { window.location.href = "/login?next=/next/orders-review"; return; }
       const data = await readJson(response);
       if (!response.ok) throw new Error(data?.error || "Failed to load review orders.");
@@ -816,7 +820,7 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
     if (!id) return;
     setBusyIds((current) => new Set(current).add(id));
     try {
-      const response = await fetch("/api/sv-orders/mutations-direct", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ action: "approval", id, decision, rejectedReason }) });
+      const response = await fetch(`${DIRECT_API_BASE}/sv-orders/mutations-direct`, { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ action: "approval", id, decision, rejectedReason }) });
       const data = await readJson(response);
       if (!response.ok) throw new Error(data?.error || "Failed to update approval.");
       const patch = { approval: normalizeApproval(decision), rejectedReason: normalizeApproval(decision) === "Rejected" ? text(rejectedReason) : "", status: data?.status };
@@ -854,7 +858,7 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
     if (!id || !Number.isFinite(number)) return;
     setBusyIds((current) => new Set(current).add(id));
     try {
-      const response = await fetch("/api/sv-orders/mutations-direct", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ action: "quantity", id, value: number }) });
+      const response = await fetch(`${DIRECT_API_BASE}/sv-orders/mutations-direct`, { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ action: "quantity", id, value: number }) });
       const data = await readJson(response);
       if (!response.ok) throw new Error(data?.error || "Failed to update quantity.");
       const quantityEdited = data?.cleared ? null : finite(data?.value, number);
@@ -881,7 +885,7 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
     if (!editorState) return;
     setEditorBusy(true); setEditorError("");
     try {
-      const response = await fetch("/api/sv-orders/mutations-direct", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ action: "update-approval", orderIds: editorState.group.orderIds, adminPassword: editorState.password, approvals }) });
+      const response = await fetch(`${DIRECT_API_BASE}/sv-orders/mutations-direct`, { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ action: "update-approval", orderIds: editorState.group.orderIds, adminPassword: editorState.password, approvals }) });
       const data = await readJson(response);
       if (response.status === 401) throw new Error("The verified password is no longer valid.");
       if (!response.ok) throw new Error(data?.error || "Review decisions could not be updated.");
