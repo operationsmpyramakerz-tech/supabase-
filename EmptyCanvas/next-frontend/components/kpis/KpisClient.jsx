@@ -67,20 +67,50 @@ function evidenceFileName(value) {
   } catch { return raw; }
 }
 
+function directKpiReadUrl(url, options = {}) {
+  const method = String(options.method || "GET").toUpperCase();
+  if (method !== "GET") return "";
+  const raw = String(url || "");
+  const path = raw.split("?")[0];
+  const supported = path === "/api/kpis/meta"
+    || path === "/api/kpis/reviews"
+    || path === "/api/kpis/graph"
+    || path === "/api/kpis/standards"
+    || /^\/api\/kpis\/reviews\/[^/]+$/.test(path);
+  return supported ? `/next${raw}` : "";
+}
+
 async function requestJson(url, options = {}) {
-  const response = await fetch(url, {
-    credentials: "include",
-    cache: "no-store",
-    ...options,
-    headers: { ...(options.body ? { "Content-Type": "application/json" } : {}), ...(options.headers || {}) },
-  });
-  if (response.status === 401) {
-    window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`;
-    throw new Error("Your session has expired.");
+  const directUrl = directKpiReadUrl(url, options);
+  const targets = directUrl ? [directUrl, url] : [url];
+  let lastError = null;
+
+  for (const target of targets) {
+    try {
+      const response = await fetch(target, {
+        credentials: "include",
+        cache: "no-store",
+        ...options,
+        headers: { ...(options.body ? { "Content-Type": "application/json" } : {}), ...(options.headers || {}) },
+      });
+      if (response.status === 401) {
+        window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`;
+        throw new Error("Your session has expired.");
+      }
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok || body?.ok === false) {
+        const error = new Error(text(body?.message || body?.error) || "The request failed.");
+        error.status = response.status;
+        throw error;
+      }
+      return body;
+    } catch (error) {
+      lastError = error;
+      if (!directUrl || target === url || error?.message === "Your session has expired.") throw error;
+    }
   }
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok || body?.ok === false) throw new Error(text(body?.message || body?.error) || "The request failed.");
-  return body;
+
+  throw lastError || new Error("The request failed.");
 }
 
 const ICON_PATHS = {
