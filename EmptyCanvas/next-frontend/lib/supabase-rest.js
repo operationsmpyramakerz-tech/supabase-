@@ -1,5 +1,8 @@
 import "server-only";
 
+import { performance } from "node:perf_hooks";
+import { recordPerformanceSample } from "./performance-profiler";
+
 function cleanBaseUrl(raw) {
   return String(raw || "").trim().replace(/\/+$/, "").replace(/\/rest\/v1\/?$/i, "");
 }
@@ -75,6 +78,15 @@ function retryableStatus(status) {
 export async function supabaseRequest(pathname, options = {}) {
   const { url, key } = ensureConfigured();
   const method = String(options.method || "GET").toUpperCase();
+  const metricStartedAt = performance.now();
+  let metricStatus = 0;
+  let metricOk = false;
+  let metricAttempts = 0;
+  let metricRows = null;
+  const metricTable = (() => {
+    const first = String(pathname || "").replace(/^\/+/, "").split(/[?\/]/)[0] || "unknown";
+    try { return decodeURIComponent(first); } catch { return first; }
+  })();
   const timeoutMs = Math.max(
     1000,
     Math.min(120000, Number(options.timeoutMs || process.env.SUPABASE_REQUEST_TIMEOUT_MS || 15000) || 15000),
@@ -87,66 +99,86 @@ export async function supabaseRequest(pathname, options = {}) {
   let lastError = null;
   const startedAt = Date.now();
 
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    const elapsed = Date.now() - startedAt;
-    const remainingMs = timeoutMs - elapsed;
-    if (remainingMs <= 0) break;
+  try {
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      metricAttempts = attempt;
+      const elapsed = Date.now() - startedAt;
+      const remainingMs = timeoutMs - elapsed;
+      if (remainingMs <= 0) break;
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), remainingMs);
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), remainingMs);
 
-    try {
-      const headers = {
-        apikey: key,
-        Authorization: `Bearer ${key}`,
-        ...(options.headers || {}),
-      };
-      if (options.body !== undefined && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
+      try {
+        const headers = {
+          apikey: key,
+          Authorization: `Bearer ${key}`,
+          ...(options.headers || {}),
+        };
+        if (options.body !== undefined && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
 
-      const response = await fetch(`${url}/rest/v1${pathname}`, {
-        method,
-        cache: "no-store",
-        signal: controller.signal,
-        headers,
-        body: options.body === undefined ? undefined : JSON.stringify(options.body),
-      });
+        const response = await fetch(`${url}/rest/v1${pathname}`, {
+          method,
+          cache: "no-store",
+          signal: controller.signal,
+          headers,
+          body: options.body === undefined ? undefined : JSON.stringify(options.body),
+        });
 
-      const raw = await response.text();
-      let data = null;
-      try { data = raw ? JSON.parse(raw) : null; } catch { data = raw; }
+        const raw = await response.text();
+        let data = null;
+        try { data = raw ? JSON.parse(raw) : null; } catch { data = raw; }
 
-      if (!response.ok) {
-        const message = data && typeof data === "object"
-          ? (data.message || data.details || data.hint || JSON.stringify(data))
-          : (raw || `Supabase request failed with status ${response.status}`);
-        const error = new Error(message);
-        error.status = response.status;
-        error.details = data;
-        throw error;
+        metricStatus = response.status;
+        if (!response.ok) {
+          const message = data && typeof data === "object"
+            ? (data.message || data.details || data.hint || JSON.stringify(data))
+            : (raw || `Supabase request failed with status ${response.status}`);
+          const error = new Error(message);
+          error.status = response.status;
+          error.details = data;
+          throw error;
+        }
+        metricOk = true;
+        metricRows = Array.isArray(data) ? data.length : null;
+        return data;
+      } catch (error) {
+        let current = error;
+        if (error?.name === "AbortError") {
+          current = new Error(`Supabase request timed out after ${timeoutMs} ms.`);
+          current.code = "SUPABASE_TIMEOUT";
+          current.status = 504;
+        }
+        metricStatus = Number(current?.status) || metricStatus || 0;
+        lastError = current;
+        const budgetLeft = timeoutMs - (Date.now() - startedAt);
+        const canRetry = method === "GET" && attempt < maxAttempts && retryableStatus(current?.status) && budgetLeft > 220;
+        if (!canRetry) throw current;
+        await wait(Math.min(140, Math.max(0, budgetLeft - 80)));
+      } finally {
+        clearTimeout(timeout);
       }
-      return data;
-    } catch (error) {
-      let current = error;
-      if (error?.name === "AbortError") {
-        current = new Error(`Supabase request timed out after ${timeoutMs} ms.`);
-        current.code = "SUPABASE_TIMEOUT";
-        current.status = 504;
-      }
-      lastError = current;
-      const budgetLeft = timeoutMs - (Date.now() - startedAt);
-      const canRetry = method === "GET" && attempt < maxAttempts && retryableStatus(current?.status) && budgetLeft > 220;
-      if (!canRetry) throw current;
-      await wait(Math.min(140, Math.max(0, budgetLeft - 80)));
-    } finally {
-      clearTimeout(timeout);
     }
-  }
 
-  if (lastError) throw lastError;
-  const timeoutError = new Error(`Supabase request timed out after ${timeoutMs} ms.`);
-  timeoutError.code = "SUPABASE_TIMEOUT";
-  timeoutError.status = 504;
-  throw timeoutError;
+    if (lastError) throw lastError;
+    const timeoutError = new Error(`Supabase request timed out after ${timeoutMs} ms.`);
+    timeoutError.code = "SUPABASE_TIMEOUT";
+    timeoutError.status = 504;
+    metricStatus = 504;
+    throw timeoutError;
+  } finally {
+    recordPerformanceSample({
+      category: "supabase",
+      name: `${method} ${metricTable}`,
+      durationMs: performance.now() - metricStartedAt,
+      ok: metricOk,
+      status: metricStatus,
+      meta: {
+        attempts: metricAttempts || 1,
+        ...(metricRows === null ? {} : { rows: metricRows }),
+      },
+    });
+  }
 }
 
 export async function select(table, params = {}) {

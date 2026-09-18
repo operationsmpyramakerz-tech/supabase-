@@ -1,8 +1,10 @@
 import "server-only";
 
 import crypto from "node:crypto";
+import { performance } from "node:perf_hooks";
 import { cookies } from "next/headers";
 import { select, selectAll, selectById } from "./supabase-rest";
+import { recordPerformanceSample } from "./performance-profiler";
 
 const SESSION_LOOKUP_TIMEOUT_MS = 3500;
 const APP_PAGES_CACHE_TTL_MS = 60_000;
@@ -220,6 +222,10 @@ function unsignSessionCookie(rawValue, secret) {
 }
 
 async function upstashCommand(command) {
+  const metricStartedAt = performance.now();
+  const metricName = String(Array.isArray(command) ? command[0] : "command").trim().toUpperCase() || "COMMAND";
+  let metricOk = false;
+  let metricStatus = 0;
   const url = String(process.env.UPSTASH_REDIS_REST_URL || "").trim().replace(/\/+$/, "");
   const tokenValue = String(process.env.UPSTASH_REDIS_REST_TOKEN || "").trim();
   if (!url || !tokenValue) {
@@ -241,22 +247,34 @@ async function upstashCommand(command) {
       },
       body: JSON.stringify(command),
     });
+    metricStatus = response.status;
     const payload = await response.json().catch(() => null);
     if (!response.ok || payload?.error) {
       const error = new Error(payload?.error || `Upstash REST request failed with HTTP ${response.status}`);
       error.code = "DIRECT_SESSION_READ_FAILED";
       throw error;
     }
+    metricOk = true;
     return payload?.result;
   } catch (error) {
     if (error?.name === "AbortError") {
+      metricStatus = 504;
       const timeoutError = new Error(`Direct session lookup timed out after ${SESSION_LOOKUP_TIMEOUT_MS}ms.`);
       timeoutError.code = "DIRECT_SESSION_TIMEOUT";
+      timeoutError.status = 504;
       throw timeoutError;
     }
+    if (!metricStatus) metricStatus = Number(error?.status) || 503;
     throw error;
   } finally {
     clearTimeout(timeout);
+    recordPerformanceSample({
+      category: "upstash",
+      name: metricName,
+      durationMs: performance.now() - metricStartedAt,
+      ok: metricOk,
+      status: metricStatus,
+    });
   }
 }
 
@@ -473,7 +491,7 @@ function gateFromAccount(account, session, requiredPages = []) {
   };
 }
 
-export async function getDirectSessionAccountGate(requiredPages = []) {
+async function getDirectSessionAccountGateInternal(requiredPages = []) {
   // This path is intentionally opt-in by capability rather than by feature flag:
   // if the same Upstash REST database used by express-session is reachable,
   // Next can validate the session without booting the 40k-line Express app.
@@ -532,6 +550,31 @@ export async function getDirectSessionAccountGate(requiredPages = []) {
     return { ...gateFromAccount(account, session, requiredPages), source: "direct-session", memberId };
   } catch {
     return null;
+  }
+}
+
+export async function getDirectSessionAccountGate(requiredPages = []) {
+  const startedAt = performance.now();
+  let result = null;
+  let thrown = null;
+  try {
+    result = await getDirectSessionAccountGateInternal(requiredPages);
+    return result;
+  } catch (error) {
+    thrown = error;
+    throw error;
+  } finally {
+    recordPerformanceSample({
+      category: "auth",
+      name: "direct-session-gate",
+      durationMs: performance.now() - startedAt,
+      ok: thrown ? false : (result === null ? true : result?.ok !== false || Number(result?.status) === 401 || Number(result?.status) === 403),
+      status: Number(result?.status) || (thrown ? Number(thrown?.status) || 500 : 0),
+      meta: {
+        outcome: thrown ? "error" : (result === null ? "legacy-fallback" : (result?.ok ? "allowed" : `blocked-${Number(result?.status) || 0}`)),
+        requiredPages: Array.isArray(requiredPages) ? requiredPages.length : (requiredPages ? 1 : 0),
+      },
+    });
   }
 }
 

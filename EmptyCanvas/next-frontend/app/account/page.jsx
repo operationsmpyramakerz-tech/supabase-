@@ -1,22 +1,22 @@
 import { redirect } from "next/navigation";
 import AppShell from "../../components/AppShell";
 import AccountClient from "../../components/account/AccountClient";
-import { fetchLegacyJson } from "../../lib/legacy-api";
+import { getLegacyAccountGate } from "../../lib/products-auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function AccountPage() {
-  const response = await fetchLegacyJson("/api/account", { timeoutMs: 15000 });
+  const gate = await getLegacyAccountGate([]);
 
-  if (response.status === 401) redirect("/login?next=/next/account");
+  if (gate.status === 401) redirect("/login?next=/next/account");
 
-  if (!response.ok || !response.data) {
+  if (!gate.ok || !gate.account) {
     return (
       <main className="standalone-state">
         <section className="state-card">
           <span className="status-dot warning" />
           <h1>The new Account page could not load</h1>
-          <p>{response.error || response.data?.error || "The current ERP API is temporarily unavailable."}</p>
+          <p>{gate.error || "The current ERP API is temporarily unavailable."}</p>
           <div className="actions">
             <a className="primary-button" href="/next/account">Try again</a>
             <a className="secondary-button" href="/next/home">Return to Home</a>
@@ -28,14 +28,14 @@ export default async function AccountPage() {
 
   return (
     <AppShell
-      account={response.data}
+      account={gate.account}
       title="User Profile"
       eyebrow="Profile, security and personal workspace"
       activePath="/next/account"
       bodyClass="page-account"
       pageStyles={["/next/css/account-classic-inline.css?v=next-stage-2o-account"]}
     >
-      <AccountClient initialAccount={response.data} />
+      <AccountClient initialAccount={gate.account} />
     </AppShell>
   );
 }

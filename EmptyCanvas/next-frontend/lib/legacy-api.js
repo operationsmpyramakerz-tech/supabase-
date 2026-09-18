@@ -1,4 +1,6 @@
 import { cookies, headers } from "next/headers";
+import { performance } from "node:perf_hooks";
+import { recordPerformanceSample } from "./performance-profiler";
 
 const ACCOUNT_BRIDGE_CACHE_TTL_MS = 15_000;
 const ACCOUNT_BRIDGE_CACHE_MAX_ENTRIES = 250;
@@ -45,6 +47,24 @@ function backendOrigin() {
 
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function legacyMetricName(url) {
+  const pathname = String(url?.pathname || "/");
+  if (pathname === "/api/page-bootstrap") {
+    const scope = String(url?.searchParams?.get?.("scope") || "unknown").trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "-");
+    return `/api/page-bootstrap:${scope || "unknown"}`;
+  }
+  return pathname
+    .split("/")
+    .map((segment) => {
+      if (!segment) return segment;
+      if (/^\d+$/.test(segment)) return ":id";
+      if (/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(segment)) return ":id";
+      if (/^[A-Za-z0-9_-]{28,}$/.test(segment)) return ":id";
+      return segment;
+    })
+    .join("/");
 }
 
 function accountBridgeCacheKey(url, cookieValue) {
@@ -94,6 +114,7 @@ export async function fetchLegacyJson(pathname, options = {}) {
 
   const [cookieStore, headerStore] = await Promise.all([cookies(), headers()]);
   const url = new URL(String(pathname || "/"), origin);
+  const metricName = legacyMetricName(url);
   // timeoutMs is a total request budget. Previously it was applied once per
   // retry, so a 15 s request could block navigation for roughly 45 s.
   const timeoutMs = Math.max(1000, Number(options.timeoutMs || 8000) || 8000);
@@ -109,83 +130,125 @@ export async function fetchLegacyJson(pathname, options = {}) {
 
   if (cacheKey && options.fresh !== true) {
     const cached = accountBridgeCacheGet(cacheKey);
-    if (cached) return cached;
-    if (_accountBridgeInflight.has(cacheKey)) return await _accountBridgeInflight.get(cacheKey);
+    if (cached) {
+      recordPerformanceSample({
+        category: "legacy-api",
+        name: metricName,
+        durationMs: 0,
+        ok: true,
+        status: cached.status || 200,
+        meta: { cache: "hit", method },
+      });
+      return cached;
+    }
+    if (_accountBridgeInflight.has(cacheKey)) {
+      const startedAt = performance.now();
+      const shared = await _accountBridgeInflight.get(cacheKey);
+      recordPerformanceSample({
+        category: "legacy-api",
+        name: metricName,
+        durationMs: performance.now() - startedAt,
+        ok: shared?.ok !== false,
+        status: shared?.status || 0,
+        meta: { cache: "inflight", method },
+      });
+      return shared;
+    }
   }
 
   const run = async () => {
+    const metricStartedAt = performance.now();
+    let metricStatus = 0;
+    let metricOk = false;
+    let metricAttempts = 0;
     let lastError = "Legacy API is unavailable.";
     const startedAt = Date.now();
 
-    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-      const elapsed = Date.now() - startedAt;
-      const remainingMs = timeoutMs - elapsed;
-      if (remainingMs <= 0) {
-        lastError = `Legacy API timed out after ${timeoutMs}ms.`;
-        break;
-      }
-
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), remainingMs);
-
-      try {
-        const response = await fetch(url, {
-          method,
-          cache: "no-store",
-          redirect: "manual",
-          signal: controller.signal,
-          headers: {
-            accept: "application/json",
-            cookie: cookieValue,
-            "x-forwarded-host": headerStore.get("host") || "",
-            "x-forwarded-proto": headerStore.get("x-forwarded-proto") || "https",
-            "x-operations-hub-frontend": "next-pilot",
-            ...(hasBody ? { "content-type": "application/json" } : {}),
-            ...(options.headers || {}),
-          },
-          body: hasBody ? body : undefined,
-        });
-
-        let data = null;
-        const contentType = String(response.headers.get("content-type") || "");
-        if (contentType.includes("application/json")) {
-          data = await response.json().catch(() => null);
+    try {
+      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        metricAttempts = attempt;
+        const elapsed = Date.now() - startedAt;
+        const remainingMs = timeoutMs - elapsed;
+        if (remainingMs <= 0) {
+          lastError = `Legacy API timed out after ${timeoutMs}ms.`;
+          break;
         }
 
-        if (method === "GET" && attempt < maxAttempts && retryableGetStatus(response.status)) {
-          const budgetLeft = timeoutMs - (Date.now() - startedAt);
-          if (budgetLeft > 180) {
-            await wait(Math.min(120, Math.max(0, budgetLeft - 50)));
-            continue;
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), remainingMs);
+
+        try {
+          const response = await fetch(url, {
+            method,
+            cache: "no-store",
+            redirect: "manual",
+            signal: controller.signal,
+            headers: {
+              accept: "application/json",
+              cookie: cookieValue,
+              "x-forwarded-host": headerStore.get("host") || "",
+              "x-forwarded-proto": headerStore.get("x-forwarded-proto") || "https",
+              "x-operations-hub-frontend": "next-pilot",
+              ...(hasBody ? { "content-type": "application/json" } : {}),
+              ...(options.headers || {}),
+            },
+            body: hasBody ? body : undefined,
+          });
+
+          let data = null;
+          const contentType = String(response.headers.get("content-type") || "");
+          if (contentType.includes("application/json")) {
+            data = await response.json().catch(() => null);
           }
+
+          metricStatus = response.status;
+          if (method === "GET" && attempt < maxAttempts && retryableGetStatus(response.status)) {
+            const budgetLeft = timeoutMs - (Date.now() - startedAt);
+            if (budgetLeft > 180) {
+              await wait(Math.min(120, Math.max(0, budgetLeft - 50)));
+              continue;
+            }
+          }
+
+          metricOk = response.ok;
+          return {
+            ok: response.ok,
+            status: response.status,
+            data,
+            location: response.headers.get("location") || "",
+          };
+        } catch (error) {
+          lastError = error?.name === "AbortError"
+            ? `Legacy API timed out after ${timeoutMs}ms.`
+            : (error?.message || "Legacy API is unavailable.");
+          if (error?.name === "AbortError") metricStatus = 504;
+          if (method !== "GET" || attempt >= maxAttempts) break;
+          const budgetLeft = timeoutMs - (Date.now() - startedAt);
+          if (budgetLeft <= 180) break;
+          await wait(Math.min(120, Math.max(0, budgetLeft - 50)));
+        } finally {
+          clearTimeout(timeout);
         }
-
-        return {
-          ok: response.ok,
-          status: response.status,
-          data,
-          location: response.headers.get("location") || "",
-        };
-      } catch (error) {
-        lastError = error?.name === "AbortError"
-          ? `Legacy API timed out after ${timeoutMs}ms.`
-          : (error?.message || "Legacy API is unavailable.");
-        if (method !== "GET" || attempt >= maxAttempts) break;
-        const budgetLeft = timeoutMs - (Date.now() - startedAt);
-        if (budgetLeft <= 180) break;
-        await wait(Math.min(120, Math.max(0, budgetLeft - 50)));
-      } finally {
-        clearTimeout(timeout);
       }
-    }
 
-    return {
-      ok: false,
-      status: 503,
-      data: null,
-      location: "",
-      error: lastError,
-    };
+      metricStatus = metricStatus || 503;
+      return {
+        ok: false,
+        status: 503,
+        data: null,
+        location: "",
+        error: lastError,
+      };
+    } finally {
+      recordPerformanceSample({
+        category: "legacy-api",
+        name: metricName,
+        durationMs: performance.now() - metricStartedAt,
+        ok: metricOk,
+        status: metricStatus,
+        meta: { attempts: metricAttempts || 1, method, cache: "miss" },
+      });
+    }
   };
 
   if (!cacheKey || options.fresh === true) return await run();

@@ -1,18 +1,24 @@
 import "server-only";
+import { performance } from "node:perf_hooks";
 import { fetchLegacyJson } from "./legacy-api";
 import { getDirectSessionAccountGate } from "./direct-session-account";
+import { recordPerformanceSample } from "./performance-profiler";
 
 function normalize(value) {
   return String(value || "").trim().toLowerCase();
 }
 
-export async function getLegacyAccountGate(requiredPages = []) {
+async function getLegacyAccountGateInternal(requiredPages = [], onSource = () => {}) {
   // First try the lightweight Next -> Upstash session -> Supabase permission
   // path. If this deployment/session is not eligible, keep the established
   // Legacy Express account endpoint as a compatibility fallback.
   const direct = await getDirectSessionAccountGate(requiredPages).catch(() => null);
-  if (direct) return direct;
+  if (direct) {
+    onSource("direct");
+    return direct;
+  }
 
+  onSource("legacy");
   const response = await fetchLegacyJson("/api/account", { timeoutMs: 15000 });
 
   if (response.status === 401) {
@@ -44,3 +50,29 @@ export async function getLegacyAccountGate(requiredPages = []) {
 
   return { ok: true, status: 200, error: "", account: response.data };
 }
+export async function getLegacyAccountGate(requiredPages = []) {
+  const startedAt = performance.now();
+  let source = "direct";
+  let result = null;
+  let thrown = null;
+  try {
+    result = await getLegacyAccountGateInternal(requiredPages, (value) => { source = value || source; });
+    return result;
+  } catch (error) {
+    thrown = error;
+    throw error;
+  } finally {
+    recordPerformanceSample({
+      category: "auth",
+      name: "account-gate",
+      durationMs: performance.now() - startedAt,
+      ok: thrown ? false : Boolean(result?.ok) || [401, 403].includes(Number(result?.status)),
+      status: Number(result?.status) || (thrown ? Number(thrown?.status) || 500 : 0),
+      meta: {
+        source,
+        requiredPages: Array.isArray(requiredPages) ? requiredPages.length : (requiredPages ? 1 : 0),
+      },
+    });
+  }
+}
+
