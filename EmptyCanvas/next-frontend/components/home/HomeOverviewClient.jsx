@@ -389,7 +389,10 @@ function GlobalAnalysisControl({ users = [], usersReady = false, selectedUser = 
     if (usersLoaded || usersLoading) return;
     setUsersLoading(true);
     try {
-      const response = await fetch("/api/home/analysis-users", { credentials: "same-origin", cache: "no-store" });
+      let response = await fetch("/next/api/home/analysis-users", { credentials: "same-origin", cache: "no-store" });
+      if (!response.ok) {
+        response = await fetch("/api/home/analysis-users", { credentials: "same-origin", cache: "no-store" });
+      }
       const payload = response.ok ? await response.json().catch(() => ({})) : {};
       const loadedUsers = Array.isArray(payload?.users) ? payload.users : [];
       setAvailableUsers(loadedUsers);

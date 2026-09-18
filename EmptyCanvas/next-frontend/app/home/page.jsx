@@ -3,6 +3,8 @@ import AppShell from "../../components/AppShell";
 import { DashboardNotice, QuickActionsCard, RecentOrdersCard, ScopeCard } from "../../components/home/DashboardCards";
 import HomeOverviewClient from "../../components/home/HomeOverviewClient";
 import { fetchLegacyJson } from "../../lib/legacy-api";
+import { getLegacyAccountGate } from "../../lib/products-auth";
+import { loadHomeOverviewDirect } from "../../lib/home-overview-data";
 
 export const dynamic = "force-dynamic";
 
@@ -25,14 +27,36 @@ function quickActions(account) {
   actions.push({ href: "/next/account", icon: "user", title: "Account", sub: "Profile & permissions" });
   return actions;
 }
+
+function HomeUnavailable({ message }) {
+  return (
+    <main className="standalone-state">
+      <section className="state-card">
+        <span className="status-dot warning" />
+        <h1>The new Home could not load</h1>
+        <p>{message}</p>
+        <a className="primary-button" href="/next/home">Try again</a>
+      </section>
+    </main>
+  );
+}
+
 function resourceMap(bundle) {
   const map = new Map();
   for (const resource of Array.isArray(bundle?.resources) ? bundle.resources : []) map.set(resource.url, resource.body);
   return map;
 }
+
 function getResource(map, prefix, fallback) {
   for (const [url, body] of map.entries()) if (url === prefix || url.startsWith(prefix)) return body;
   return fallback;
+}
+
+async function legacyHomeBootstrap(requestedUserId, duration) {
+  const query = new URLSearchParams({ scope: "home" });
+  if (requestedUserId !== "all") query.set("analysisUser", requestedUserId);
+  if (duration !== "all") query.set("analysisDuration", duration);
+  return await fetchLegacyJson(`/api/page-bootstrap?${query.toString()}`, { timeoutMs: 20000 });
 }
 
 export default async function HomePage({ searchParams }) {
@@ -41,23 +65,44 @@ export default async function HomePage({ searchParams }) {
   const requestedDuration = text(Array.isArray(params?.analysisDuration) ? params.analysisDuration[0] : params?.analysisDuration) || "all";
   const duration = ["all", "week", "month", "year"].includes(requestedDuration) ? requestedDuration : "all";
 
-  const query = new URLSearchParams({ scope: "home" });
-  if (requestedUserId !== "all") query.set("analysisUser", requestedUserId);
-  if (duration !== "all") query.set("analysisDuration", duration);
+  // Fast path: resolve the signed-in account directly in Next, then load the
+  // dashboard datasets from Supabase in parallel. Home no longer waits for the
+  // monolithic Express page-bootstrap request before it can render.
+  const gate = await getLegacyAccountGate([]);
 
-  const response = await fetchLegacyJson(`/api/page-bootstrap?${query.toString()}`, { timeoutMs: 20000 });
-  if (response.status === 401 || response.status === 403) redirect("/login?next=/next/home");
-  if (!response.ok || !response.data?.ok) {
-    return <main className="standalone-state"><section className="state-card"><span className="status-dot warning" /><h1>The new Home could not load</h1><p>{response.error || response.data?.error || "The current ERP API is temporarily unavailable."}</p><a className="primary-button" href="/next/home">Try again</a></section></main>;
+  if (gate.status === 401) redirect("/login?next=/next/home");
+
+  let account = gate.ok ? gate.account : null;
+  let overview = null;
+  let bootstrapWarnings = [];
+
+  if (account) {
+    overview = await loadHomeOverviewDirect({
+      account,
+      requestedUserId,
+      duration,
+    }).catch(() => null);
   }
 
-  const resources = resourceMap(response.data);
-  const account = getResource(resources, "/api/account", null);
-  if (!account) redirect("/login?next=/next/home");
+  // Compatibility fallback only. The normal Home path never waits for the
+  // legacy page-bootstrap bundle; it is kept here so a customized/older
+  // Supabase schema cannot make the dashboard unavailable.
+  if (!account || !overview) {
+    const fallback = await legacyHomeBootstrap(requestedUserId, duration);
+    if (fallback.status === 401 || fallback.status === 403) {
+      redirect("/login?next=/next/home");
+    }
 
-  const overview = getResource(resources, "/api/home/overview", null);
-  if (!overview) {
-    return <main className="standalone-state"><section className="state-card"><span className="status-dot warning" /><h1>The Home overview could not load</h1><p>Please try again.</p><a className="primary-button" href="/next/home">Try again</a></section></main>;
+    if (fallback.ok && fallback.data?.ok) {
+      const resources = resourceMap(fallback.data);
+      if (!account) account = getResource(resources, "/api/account", null);
+      if (!overview) overview = getResource(resources, "/api/home/overview", null);
+      bootstrapWarnings = fallback.data.omitted || [];
+    }
+
+    if (!account || !overview) {
+      return <HomeUnavailable message={fallback.error || fallback.data?.error || gate.error || "The current ERP API is temporarily unavailable."} />;
+    }
   }
 
   const actions = quickActions(account);
@@ -71,7 +116,7 @@ export default async function HomePage({ searchParams }) {
       bodyClass="page-home"
       pageStyles={["/next/css/home.css?v=home-overview-summary-v2"]}
     >
-      <DashboardNotice omitted={response.data.omitted || []} />
+      <DashboardNotice omitted={bootstrapWarnings} />
 
       <HomeOverviewClient
         analysisUsers={selectedAnalysisUsers}
