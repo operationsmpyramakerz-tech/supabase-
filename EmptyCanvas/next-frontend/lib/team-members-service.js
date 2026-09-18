@@ -65,6 +65,7 @@ async function loadTeamMembers() {
         limit: 5000,
         order: "name.asc,id.asc",
         select: TEAM_MEMBERS_LITE_SELECT,
+        profileName: "team-members.lite",
       });
       teamMembersProjectionSupported = true;
     } catch {
@@ -76,7 +77,7 @@ async function loadTeamMembers() {
   if (!Array.isArray(rows)) {
     // Compatibility path for older/custom schemas whose identity fields use
     // non-canonical names. Keep the old behavior rather than breaking the page.
-    rows = await selectAll(teamMembersTable(), { limit: 5000 });
+    rows = await selectAll(teamMembersTable(), { limit: 5000, profileName: "team-members.lite-fallback" });
   }
   return (Array.isArray(rows) ? rows : [])
     .map(serializeMember)

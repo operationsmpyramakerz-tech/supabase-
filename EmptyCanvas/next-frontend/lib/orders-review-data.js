@@ -2,6 +2,7 @@ import "server-only";
 import { isSupabaseConfigured, select, selectAll, selectById, updateById, updateByIds } from "./supabase-rest";
 import { enrichOrderDetailGrouping, loadRawOrderRowsByIds, serializeReviewOrderDetail } from "./order-details-data";
 import { loadOrderRowsByNumbers, scanOrderNumberCandidates } from "./order-pagination";
+import { getReviewerVisibility as reviewerVisibility } from "./reviewer-visibility-service";
 
 const PAGE_LIMIT = 36;
 const PAGE_MAX = 80;
@@ -212,87 +213,6 @@ function splitIds(value) {
     .map((item) => String(item || "").trim())
     .map((item) => item.match(/\d+/)?.[0] || "")
     .filter(Boolean);
-}
-
-async function findCurrentMember(username) {
-  const cleanName = text(username).replace(/[,*%()]/g, " ").replace(/\s+/g, " ");
-  if (!cleanName) return null;
-  try {
-    const rows = await select(teamMembersTable(), {
-      select: "*",
-      name: `ilike.${cleanName}`,
-      limit: "5",
-    });
-    const exact = (Array.isArray(rows) ? rows : []).find((row) => norm(valueFor(row, ["name", "Name", "full_name", "Full Name"])) === norm(cleanName));
-    if (exact) return exact;
-  } catch {}
-
-  const rows = await selectAll(teamMembersTable(), { limit: 5000 });
-  return rows.find((row) => norm(valueFor(row, ["name", "Name", "full_name", "Full Name"])) === norm(cleanName)) || null;
-}
-
-async function memberIdentityRows() {
-  try {
-    return await selectAll(teamMembersTable(), { limit: 5000, select: "id,name" });
-  } catch {
-    return await selectAll(teamMembersTable(), { limit: 5000 });
-  }
-}
-
-async function reviewerVisibility(account = {}) {
-  const username = text(account?.username || account?.name);
-  if (!username) return { ids: [], names: [] };
-  const current = await findCurrentMember(username);
-  if (!current) return { ids: [], names: [] };
-
-  const currentId = text(valueFor(current, ["id", "ID"]));
-  let ids = [];
-  let names = [];
-
-  if (currentId) {
-    try {
-      const rows = await select("team_member_sv_schools", {
-        select: "visible_team_member_id,visible_team_member_name",
-        team_member_id: `eq.${currentId}`,
-        limit: "5000",
-      });
-      if (Array.isArray(rows) && rows.length) {
-        ids = rows.map((row) => text(row.visible_team_member_id)).filter(Boolean);
-        names = rows.map((row) => text(row.visible_team_member_name)).filter(Boolean);
-      }
-    } catch {
-      // Optional normalized junction table. Older schemas keep the same values
-      // on the current team-member row and are handled below.
-    }
-  }
-
-  if (!ids.length) ids = splitIds(valueFor(current, ["sv_school_member_ids", "sv_school_ids", "sv_member_ids"]));
-  if (!names.length) names = splitArray(valueFor(current, ["sv_school_member_names", "sv_schools", "S.V Schools", "SV Schools"]));
-
-  const resolvedNameKeys = new Set();
-  if (names.length) {
-    const members = await memberIdentityRows().catch(() => []);
-    const byName = new Map((Array.isArray(members) ? members : []).map((row) => [norm(valueFor(row, ["name", "Name", "full_name", "Full Name"])), row]));
-    for (const name of names) {
-      const key = norm(name);
-      const row = byName.get(key);
-      const id = row ? text(valueFor(row, ["id", "ID"])) : "";
-      if (id) {
-        if (!ids.includes(id)) ids.push(id);
-        resolvedNameKeys.add(key);
-      }
-    }
-  }
-
-  const cleanNames = [...new Set(names.map(text).filter(Boolean))];
-  return {
-    ids: [...new Set(ids.map(text).filter(Boolean))],
-    // Keep all names for the final compatibility visibility check, but avoid
-    // putting resolved names into the database OR filter. Exact ID predicates
-    // can use the composite orders(team_member_id, order_number) index.
-    names: cleanNames,
-    queryNames: cleanNames.filter((name) => !resolvedNameKeys.has(norm(name))),
-  };
 }
 
 function visibleToReviewer(row, visible) {

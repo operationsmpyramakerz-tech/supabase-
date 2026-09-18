@@ -1,10 +1,11 @@
 import "server-only";
 
-import { isSupabaseConfigured, select, selectAll } from "./supabase-rest";
+import { isSupabaseConfigured, select } from "./supabase-rest";
 import { serializeOperationsSummaryRow } from "./operations-orders-data";
 import { stocktakingForAccount } from "./stocktaking-data";
 import { expensesForAccount } from "./expenses-data";
 import { listTeamMembersLite } from "./team-members-service";
+import { getReviewerVisibility as reviewerVisibility } from "./reviewer-visibility-service";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const HOME_ROWS_CACHE_TTL_MS = 15_000;
@@ -78,9 +79,6 @@ function ordersTable() {
   return text(process.env.SUPABASE_ORDERS_TABLE) || "orders";
 }
 
-function teamMembersTable() {
-  return text(process.env.SUPABASE_TEAM_MEMBERS_TABLE) || "team_members";
-}
 
 function filterText(value) {
   return String(value ?? "").trim().replace(/[,*%()]/g, " ").replace(/\s+/g, " ");
@@ -224,133 +222,6 @@ async function loadRequestedRows() {
     rows = await selectHomeRows({});
   }
   return (Array.isArray(rows) ? rows : []).filter((row) => lower(row.svApproval ?? row.approval) === "approved");
-}
-
-function splitValues(value) {
-  if (Array.isArray(value)) return value.flatMap(splitValues).filter(Boolean);
-  if (value && typeof value === "object") return [text(value)].filter(Boolean);
-  const raw = text(value);
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) return parsed.flatMap(splitValues).filter(Boolean);
-  } catch {}
-  return raw.split(/[\n,;]+/).map((item) => item.trim()).filter(Boolean);
-}
-
-function memberMatchesAccount(row = {}, account = {}) {
-  const accountId = text(account.id || account.userId || account.userSupabaseId);
-  const rowId = text(valueFor(row, ["id", "ID"]));
-  if (accountId && rowId && accountId === rowId) return true;
-
-  const names = [account.username, account.name].map(canonical).filter(Boolean);
-  const rowNames = [
-    valueFor(row, ["username", "Username"]),
-    valueFor(row, ["name", "Name", "full_name", "Full Name"]),
-  ].map(canonical).filter(Boolean);
-  if (names.some((name) => rowNames.includes(name))) return true;
-
-  const email = canonical(account.email);
-  const rowEmail = canonical(valueFor(row, ["email", "Email"]));
-  return !!email && !!rowEmail && email === rowEmail;
-}
-
-async function findReviewerMember(account = {}) {
-  const accountId = text(account.id || account.userId || account.userSupabaseId);
-  if (accountId) {
-    try {
-      const rows = await select(teamMembersTable(), {
-        select: "*",
-        id: `eq.${String(accountId).replace(/[^0-9A-Za-z_-]/g, "")}`,
-        limit: "2",
-      });
-      if (Array.isArray(rows) && rows.length) return rows[0];
-    } catch {}
-  }
-
-  const username = filterText(account.username || account.name);
-  if (username) {
-    try {
-      const rows = await select(teamMembersTable(), {
-        select: "*",
-        name: `ilike.${username}`,
-        limit: "5",
-      });
-      const exact = (Array.isArray(rows) ? rows : []).find((row) => memberMatchesAccount(row, account));
-      if (exact) return exact;
-    } catch {}
-  }
-
-  // Compatibility only: customized schemas may not expose canonical id/name
-  // columns. Keep the old broad lookup as a last resort instead of making it
-  // part of every Home request.
-  const rows = await selectAll(teamMembersTable(), { limit: 5000 });
-  return (Array.isArray(rows) ? rows : []).find((row) => memberMatchesAccount(row, account)) || null;
-}
-
-async function reviewerIdentityRows() {
-  try {
-    return await selectAll(teamMembersTable(), { limit: 5000, select: "id,name" });
-  } catch {
-    return await selectAll(teamMembersTable(), { limit: 5000 });
-  }
-}
-
-async function reviewerVisibility(account = {}) {
-  const current = await findReviewerMember(account);
-  if (!current) return { ids: [], names: [] };
-
-  const currentId = text(valueFor(current, ["id", "ID"]));
-  let ids = [];
-  let names = [];
-
-  if (currentId) {
-    try {
-      const junction = await select("team_member_sv_schools", {
-        select: "visible_team_member_id,visible_team_member_name",
-        team_member_id: `eq.${currentId}`,
-        limit: "5000",
-      });
-      if (Array.isArray(junction) && junction.length) {
-        ids = junction.map((row) => text(row.visible_team_member_id)).filter(Boolean);
-        names = junction.map((row) => text(row.visible_team_member_name)).filter(Boolean);
-      }
-    } catch {
-      // Older schemas keep the visibility list on team_members.
-    }
-  }
-
-  if (!ids.length) {
-    ids = splitValues(valueFor(current, ["sv_school_member_ids", "sv_school_ids", "sv_member_ids"]));
-  }
-  if (!names.length) {
-    names = splitValues(valueFor(current, ["sv_school_member_names", "sv_schools", "S.V Schools", "SV Schools"]));
-  }
-
-  const resolvedNameKeys = new Set();
-  if (names.length) {
-    const members = await reviewerIdentityRows().catch(() => []);
-    const byName = new Map((Array.isArray(members) ? members : []).map((row) => [
-      canonical(valueFor(row, ["name", "Name", "full_name", "Full Name"])),
-      row,
-    ]));
-    for (const name of names) {
-      const key = canonical(name);
-      const row = byName.get(key);
-      const id = row ? text(valueFor(row, ["id", "ID"])) : "";
-      if (id) {
-        if (!ids.includes(id)) ids.push(id);
-        resolvedNameKeys.add(key);
-      }
-    }
-  }
-
-  const cleanNames = [...new Set(names.map(text).filter(Boolean))];
-  return {
-    ids: [...new Set(ids.map(text).filter(Boolean))],
-    names: cleanNames,
-    queryNames: cleanNames.filter((name) => !resolvedNameKeys.has(canonical(name))),
-  };
 }
 
 function reviewerFilter(visible = {}) {
