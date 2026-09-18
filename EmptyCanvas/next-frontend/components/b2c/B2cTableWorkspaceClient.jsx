@@ -52,8 +52,20 @@ async function requestJson(url, options = {}) {
     throw new Error("Your session has expired.");
   }
   const body = await response.json().catch(() => ({}));
-  if (!response.ok || body?.ok === false) throw new Error(apiErrorMessage(body, `Request failed (${response.status}).`));
+  if (!response.ok || body?.ok === false) {
+    const error = new Error(apiErrorMessage(body, `Request failed (${response.status}).`));
+    error.status = response.status;
+    throw error;
+  }
   return body;
+}
+async function requestReadJson(directUrl, legacyUrl) {
+  try {
+    return await requestJson(directUrl);
+  } catch (error) {
+    if (Number(error?.status) === 401) throw error;
+    return await requestJson(legacyUrl);
+  }
 }
 function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -407,7 +419,7 @@ export default function B2cTableWorkspaceClient({ databaseId, initialPayload, bo
   const refresh = async ({ silent = false } = {}) => {
     if (!silent) setBusy("refresh");
     try {
-      const payload = await requestJson(`/api/b2c/databases/${encodeURIComponent(databaseId)}/records`);
+      const payload = await requestReadJson(`/next/api/b2c/databases/${encodeURIComponent(databaseId)}/records?_fresh=1`, `/api/b2c/databases/${encodeURIComponent(databaseId)}/records`);
       setDatabase(payload.database || null);
       setFields((Array.isArray(payload.fields) ? payload.fields : []).map(normalizeField));
       setRecords((Array.isArray(payload.records) ? payload.records : []).map(normalizeRecord));

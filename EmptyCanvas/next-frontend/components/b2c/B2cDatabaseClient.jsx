@@ -32,8 +32,20 @@ async function requestJson(url, options = {}) {
     throw new Error("Your session has expired.");
   }
   const body = await response.json().catch(() => ({}));
-  if (!response.ok || body?.ok === false) throw new Error(apiErrorMessage(body, "The request failed."));
+  if (!response.ok || body?.ok === false) {
+    const error = new Error(apiErrorMessage(body, "The request failed."));
+    error.status = response.status;
+    throw error;
+  }
   return body;
+}
+async function requestReadJson(directUrl, legacyUrl) {
+  try {
+    return await requestJson(directUrl);
+  } catch (error) {
+    if (Number(error?.status) === 401) throw error;
+    return await requestJson(legacyUrl);
+  }
 }
 
 function Toast({ toast, onClose }) {
@@ -187,7 +199,7 @@ export default function B2cDatabaseClient({ initialPayload, bootstrapWarnings = 
   const refresh = async ({ silent = false } = {}) => {
     if (!silent) setBusy("refresh");
     try {
-      const payload = await requestJson("/api/b2c/databases");
+      const payload = await requestReadJson("/next/api/b2c/databases?_fresh=1", "/api/b2c/databases");
       setDatabases((Array.isArray(payload?.databases) ? payload.databases : []).map(normalizeDatabase));
       if (!silent) notify("Database folders were refreshed.");
     } catch (error) { notify(error?.message || "Unable to refresh B2C databases.", "error"); throw error; }

@@ -90,8 +90,20 @@ async function requestJson(url, options = {}) {
     throw new Error("Your session has expired.");
   }
   const body = await response.json().catch(() => ({}));
-  if (!response.ok || body?.ok === false) throw new Error(apiErrorMessage(body, `Request failed (${response.status}).`));
+  if (!response.ok || body?.ok === false) {
+    const error = new Error(apiErrorMessage(body, `Request failed (${response.status}).`));
+    error.status = response.status;
+    throw error;
+  }
   return body;
+}
+async function requestReadJson(directUrl, legacyUrl) {
+  try {
+    return await requestJson(directUrl);
+  } catch (error) {
+    if (Number(error?.status) === 401) throw error;
+    return await requestJson(legacyUrl);
+  }
 }
 function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -465,7 +477,7 @@ export default function B2cFormsClient({ account, initialPayload, initialSelecte
   const refreshLibrary = async ({ silent = false } = {}) => {
     if (!silent) setBusy("refresh");
     try {
-      const payload = await requestJson("/api/b2c/forms");
+      const payload = await requestReadJson("/next/api/b2c/forms?_fresh=1", "/api/b2c/forms");
       setForms((Array.isArray(payload?.forms) ? payload.forms : []).map(normalizeForm));
       setDatabases((Array.isArray(payload?.databases) ? payload.databases : []).map(normalizeDatabase));
       if (!silent) notify("Forms library was refreshed.");
@@ -479,7 +491,7 @@ export default function B2cFormsClient({ account, initialPayload, initialSelecte
     if (!formId) return;
     if (!silent) setBusy(`open:${formId}`);
     try {
-      const payload = await requestJson(`/api/b2c/forms/${encodeURIComponent(formId)}`);
+      const payload = await requestReadJson(`/next/api/b2c/forms/${encodeURIComponent(formId)}?_fresh=1`, `/api/b2c/forms/${encodeURIComponent(formId)}`);
       applyFormPayload(payload);
       if (openBuilder) setDialog("builder");
       return payload;
