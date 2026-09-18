@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import AppShell from "../../components/AppShell";
 import CurrentOrdersClient from "../../components/orders/CurrentOrdersClient";
 import { fetchLegacyJson } from "../../lib/legacy-api";
+import { getLegacyAccountGate } from "../../lib/products-auth";
+import { loadCurrentOrdersInitialPage } from "../../lib/current-orders-data";
 
 export const dynamic = "force-dynamic";
 
@@ -37,19 +39,43 @@ function UnavailableState({ message, forbidden = false }) {
 }
 
 export default async function CurrentOrdersPage() {
-  const response = await fetchLegacyJson("/api/page-bootstrap?scope=current-orders", { timeoutMs: 25000 });
+  // Fast path: resolve the signed-in account/permissions in Next, then read only
+  // the first Current Orders summary page directly from Supabase. The Legacy
+  // page-bootstrap remains an unchanged compatibility fallback.
+  const gate = await getLegacyAccountGate(["Current Orders"]);
 
-  if (response.status === 401) redirect("/login?next=/next/orders");
-  if (response.status === 403) {
+  if (gate.status === 401) redirect("/login?next=/next/orders");
+  if (gate.status === 403) {
     return <UnavailableState forbidden message="Your account does not have access to the Current Orders page." />;
   }
-  if (!response.ok || !response.data?.ok) {
-    return <UnavailableState message={response.error || response.data?.error || "The current ERP API is temporarily unavailable."} />;
+
+  let account = gate.ok ? gate.account : null;
+  let ordersPayload = gate.ok
+    ? await loadCurrentOrdersInitialPage({ account: gate.account }).catch(() => null)
+    : null;
+  let bootstrapWarnings = [];
+
+  if (!gate.ok || !ordersPayload) {
+    const response = await fetchLegacyJson("/api/page-bootstrap?scope=current-orders", { timeoutMs: 25000 });
+
+    if (response.status === 401) redirect("/login?next=/next/orders");
+    if (response.status === 403) {
+      return <UnavailableState forbidden message="Your account does not have access to the Current Orders page." />;
+    }
+    if (!response.ok || !response.data?.ok) {
+      return <UnavailableState message={response.error || response.data?.error || gate.error || "The current ERP API is temporarily unavailable."} />;
+    }
+
+    const resources = resourceMap(response.data);
+    account = getResource(resources, "/api/account", null);
+    ordersPayload = getResource(resources, "/api/orders", []);
+    bootstrapWarnings = response.data.omitted || [];
   }
 
-  const resources = resourceMap(response.data);
-  const account = getResource(resources, "/api/account", null);
-  const orders = getResource(resources, "/api/orders", []);
+  const orders = Array.isArray(ordersPayload)
+    ? ordersPayload
+    : (Array.isArray(ordersPayload?.items) ? ordersPayload.items : []);
+  const pageInfo = !Array.isArray(ordersPayload) && ordersPayload?.pageInfo ? ordersPayload.pageInfo : null;
 
   if (!account) redirect("/login?next=/next/orders");
 
@@ -63,7 +89,8 @@ export default async function CurrentOrdersPage() {
     >
       <CurrentOrdersClient
         initialOrders={Array.isArray(orders) ? orders : []}
-        bootstrapWarnings={response.data.omitted || []}
+        initialPageInfo={pageInfo}
+        bootstrapWarnings={bootstrapWarnings}
       />
     </AppShell>
   );

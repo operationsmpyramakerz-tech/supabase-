@@ -96,7 +96,7 @@ function statusIndex(value) {
   return 1;
 }
 
-function serializeSummary(row = {}) {
+export function serializeOperationsSummaryRow(row = {}) {
   const id = text(row.id ?? row.ID);
   const orderNumber = num(row.order_number ?? row["Order - ID"] ?? row["Order ID"]);
   const quantityProgress = num(row.quantity_progress ?? row["Quantity Progress"] ?? row.quantity ?? row.Quantity ?? row.qty ?? row.Qty);
@@ -442,7 +442,7 @@ async function rowsByNumbers(numbers = []) {
 function groupRows(rows = []) {
   const groups = new Map();
   for (const row of rows) {
-    const item = serializeSummary(row);
+    const item = serializeOperationsSummaryRow(row);
     const orderNumber = Number(item.orderIdNumber);
     if (!Number.isFinite(orderNumber)) continue;
     if (!groups.has(orderNumber)) groups.set(orderNumber, []);

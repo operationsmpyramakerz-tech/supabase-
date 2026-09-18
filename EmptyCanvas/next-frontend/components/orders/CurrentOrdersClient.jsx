@@ -6,6 +6,10 @@ import { groupOrderItems, OrderGroupHeader, OrderSortButton } from "./OrderGroup
 import OrderDownloadModal from "./OrderDownloadModal";
 import OrderComponentSearch, { matchesOrderComponentSearch } from "./OrderComponentSearch";
 
+// Direct Next route handlers must include the configured /next basePath.
+// Root /api/* belongs to the Legacy Express app on the public ERP origin.
+const DIRECT_API_BASE = "/next/api";
+
 const STATUS_TABS = [
   { key: "all", label: "All", icon: "layers" },
   { key: "under-supervision", label: "Under S.V", icon: "eye" },
@@ -773,8 +777,10 @@ function DeleteConfirmationModal({ state, busy, onCancel, onConfirm }) {
   );
 }
 
-export default function CurrentOrdersClient({ initialOrders = [], bootstrapWarnings = [] }) {
+export default function CurrentOrdersClient({ initialOrders = [], initialPageInfo = null, bootstrapWarnings = [] }) {
   const [orders, setOrders] = useState(Array.isArray(initialOrders) ? initialOrders : []);
+  const [pageInfo, setPageInfo] = useState(initialPageInfo || { hasMore: false, nextCursor: null, limit: 36 });
+  const [listLoading, setListLoading] = useState(false);
   const [tab, setTab] = useState("all");
   const [type, setType] = useState("all");
   const [query, setQuery] = useState("");
@@ -786,6 +792,8 @@ export default function CurrentOrdersClient({ initialOrders = [], bootstrapWarni
   const [reasonView, setReasonView] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const orderDetailsCache = useRef(new Map());
+  const listRequestRef = useRef(0);
+  const initialFilterKeyRef = useRef("all|all|");
 
   useClassicHeaderSearch(query, setQuery, "Search orders by reason...");
 
@@ -806,6 +814,19 @@ export default function CurrentOrdersClient({ initialOrders = [], bootstrapWarni
     if (!query.trim()) params.delete("q"); else params.set("q", query.trim());
     const search = params.toString();
     window.history.replaceState({}, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
+  }, [tab, type, query]);
+
+  useEffect(() => {
+    const key = `${tab}|${type}|${query.trim()}`;
+    if (key === initialFilterKeyRef.current) return undefined;
+    initialFilterKeyRef.current = key;
+    const timer = window.setTimeout(() => {
+      fetchOrdersPage({ reset: true }).catch((error) => {
+        setNotice(error?.message || "Failed to load Current Orders.");
+        window.setTimeout(() => setNotice(""), 4000);
+      });
+    }, query.trim() ? 300 : 0);
+    return () => window.clearTimeout(timer);
   }, [tab, type, query]);
 
   const allGroups = useMemo(() => buildGroups(orders), [orders]);
@@ -847,16 +868,56 @@ export default function CurrentOrdersClient({ initialOrders = [], bootstrapWarni
     });
   }, [statusGroups, type, query]);
 
-  async function refreshOrders() {
-    const response = await fetch("/api/orders?mode=summary&_fresh=1", { credentials: "include", cache: "no-store" });
-    if (response.status === 401) {
-      window.location.href = "/login?next=/next/orders";
-      return;
+  async function fetchOrdersPage({ reset = true, fresh = false } = {}) {
+    const requestId = ++listRequestRef.current;
+    setListLoading(true);
+    try {
+      const params = new URLSearchParams({
+        mode: "summary",
+        paged: "1",
+        tab,
+        filterType: type,
+        limit: String(pageInfo?.limit || 36),
+      });
+      if (query.trim()) params.set("q", query.trim());
+      if (!reset && pageInfo?.nextCursor !== null && pageInfo?.nextCursor !== undefined) params.set("cursor", String(pageInfo.nextCursor));
+      if (fresh) params.set("_fresh", "1");
+
+      const response = await fetch(`${DIRECT_API_BASE}/orders/current/paged-summary?${params.toString()}`, {
+        credentials: "include",
+        cache: "no-store",
+      });
+      if (response.status === 401) {
+        window.location.href = "/login?next=/next/orders";
+        return;
+      }
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error || "Failed to load Current Orders.");
+      if (requestId !== listRequestRef.current) return;
+
+      const items = Array.isArray(data) ? data : (Array.isArray(data?.items) ? data.items : []);
+      const nextPageInfo = !Array.isArray(data) && data?.pageInfo
+        ? data.pageInfo
+        : { hasMore: false, nextCursor: null, limit: pageInfo?.limit || 36 };
+
+      setOrders((current) => {
+        if (reset) return items;
+        const map = new Map((Array.isArray(current) ? current : []).map((item) => [text(item?.id), item]));
+        items.forEach((item) => map.set(text(item?.id), item));
+        return [...map.values()];
+      });
+      setPageInfo(nextPageInfo);
+      if (reset) {
+        orderDetailsCache.current.clear();
+        setSelected(null);
+      }
+    } finally {
+      if (requestId === listRequestRef.current) setListLoading(false);
     }
-    const data = await response.json().catch(() => null);
-    if (!response.ok) throw new Error(data?.error || "Failed to refresh orders.");
-    orderDetailsCache.current.clear();
-    setOrders(Array.isArray(data) ? data : []);
+  }
+
+  async function refreshOrders() {
+    return fetchOrdersPage({ reset: true, fresh: true });
   }
 
   async function openOrderDetails(group) {
@@ -875,7 +936,7 @@ export default function CurrentOrdersClient({ initialOrders = [], bootstrapWarni
     }
 
     try {
-      const response = await fetch("/api/orders/details", {
+      const response = await fetch(`${DIRECT_API_BASE}/orders/current/details-direct`, {
         method: "POST",
         credentials: "include",
         cache: "no-store",
@@ -1046,10 +1107,27 @@ export default function CurrentOrdersClient({ initialOrders = [], bootstrapWarni
 
       <section className="card" id="current-orders">
         <div className="co-cards" id="orders-list">
-          {visibleGroups.length ? visibleGroups.map((group) => <OrderCard group={group} activeTab={tab} onOpen={openOrderDetails} onReason={setReasonView} key={group.key} />) : (
+          {visibleGroups.length ? visibleGroups.map((group) => <OrderCard group={group} activeTab={tab} onOpen={openOrderDetails} onReason={setReasonView} key={group.key} />) : listLoading ? (
+            <div className="ops-no-data-state" role="status" aria-live="polite"><div className="ops-no-data-state__text">Loading orders…</div></div>
+          ) : (
             <div className="ops-no-data-state" role="status" aria-live="polite"><img className="ops-no-data-state__image" src="/next/images/no-data-illustration.png" alt="" loading="lazy"/><div className="ops-no-data-state__text">Sorry, No data available</div></div>
           )}
         </div>
+        {pageInfo?.hasMore ? (
+          <div style={{ display: "flex", justifyContent: "center", padding: "16px 0 4px" }}>
+            <button
+              type="button"
+              className="ro-action-btn ro-action-btn--light"
+              disabled={listLoading}
+              onClick={() => fetchOrdersPage({ reset: false }).catch((error) => {
+                setNotice(error?.message || "Failed to load more orders.");
+                window.setTimeout(() => setNotice(""), 4000);
+              })}
+            >
+              {listLoading ? "Loading…" : "Load more orders"}
+            </button>
+          </div>
+        ) : null}
       </section>
 
       <OrderDetailsModal group={selected} tab={tab} busy={busy} onClose={() => setSelected(null)} onAction={beginAction} onReason={setReasonView} onExport={exportOrder} />
