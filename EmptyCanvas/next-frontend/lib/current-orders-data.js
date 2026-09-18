@@ -3,6 +3,7 @@ import "server-only";
 import { isSupabaseConfigured, select } from "./supabase-rest";
 import { serializeOperationsSummaryRow } from "./operations-orders-data";
 import { loadRawOrderRowsByIds, serializeOperationsOrderDetail } from "./order-details-data";
+import { loadOrderRowsByNumbers, scanOrderNumberCandidates } from "./order-pagination";
 
 const PAGE_LIMIT = 36;
 const PAGE_MAX = 80;
@@ -243,85 +244,29 @@ function logicalParams({ account = {}, query = "", type = "all" } = {}) {
 }
 
 async function candidateNumbers({ cursor = null, scanGroups = 90, filters = {} } = {}) {
-  const wanted = Math.max(20, Math.min(240, Number(scanGroups) || 90));
-  const unique = [];
-  const seen = new Set();
-  let offset = 0;
-  let exhausted = false;
-  const rowChunk = 1000;
-  const base = { ...(filters || {}) };
-  const directNumber = String(base.order_number || "").startsWith("eq.")
-    ? Number(String(base.order_number).slice(3))
-    : null;
-
-  while (unique.length < wanted + 1 && !exhausted && offset < 12000) {
-    const params = {
-      select: "order_number",
-      order: "order_number.desc",
-      limit: String(rowChunk),
-      offset: String(offset),
-      ...base,
-    };
-    if (!Number.isFinite(directNumber)) {
-      const parsedCursor = pageCursor(cursor);
-      if (parsedCursor !== null) params.order_number = `lt.${parsedCursor}`;
-      else if (!params.order_number) params.order_number = "not.is.null";
-    }
-    const rows = await select(tableName(), params, { profileName: "orders.current.candidates" });
-    const chunk = Array.isArray(rows) ? rows : [];
-    for (const row of chunk) {
-      const orderNumber = num(row?.order_number);
-      if (!Number.isFinite(orderNumber) || seen.has(orderNumber)) continue;
-      seen.add(orderNumber);
-      unique.push(orderNumber);
-      if (unique.length >= wanted + 1) break;
-    }
-    if (chunk.length < rowChunk || Number.isFinite(directNumber)) exhausted = true;
-    else offset += chunk.length;
-  }
-
-  return {
-    numbers: unique.slice(0, wanted),
-    hasMore: unique.length > wanted || !exhausted,
-  };
+  return await scanOrderNumberCandidates({
+    table: tableName(),
+    cursor,
+    wanted: scanGroups,
+    minWanted: 20,
+    maxWanted: 240,
+    rowChunk: 1000,
+    maxScannedRows: 12000,
+    filters,
+    queryProfileName: "orders.current.candidates",
+    scanProfileName: "orders.current.candidate-scan",
+  });
 }
 
 async function rowsByNumbers(numbers = []) {
-  const clean = [...new Set(numbers.map(Number).filter(Number.isFinite))];
-  if (!clean.length) return [];
-  const out = [];
-  const rowChunk = 1000;
-
-  for (let index = 0; index < clean.length; index += 24) {
-    const batch = clean.slice(index, index + 24);
-    let offset = 0;
-    let useProjection = true;
-
-    while (offset < 50000) {
-      const baseParams = {
-        order_number: `in.(${batch.join(",")})`,
-        order: "order_number.desc,notion_created_time.desc,id.desc",
-        limit: String(rowChunk),
-        offset: String(offset),
-      };
-      let rows;
-      if (useProjection) {
-        try {
-          rows = await select(tableName(), { ...baseParams, select: SUMMARY_SELECT }, { profileName: "orders.current.summary" });
-        } catch {
-          useProjection = false;
-          rows = await select(tableName(), { ...baseParams, select: "*" }, { profileName: "orders.current.summary-fallback" });
-        }
-      } else {
-        rows = await select(tableName(), { ...baseParams, select: "*" }, { profileName: "orders.current.summary-fallback" });
-      }
-      const chunk = Array.isArray(rows) ? rows : [];
-      out.push(...chunk);
-      if (chunk.length < rowChunk) break;
-      offset += chunk.length;
-    }
-  }
-  return out;
+  return await loadOrderRowsByNumbers({
+    table: tableName(),
+    numbers,
+    selectExpr: SUMMARY_SELECT,
+    queryProfileName: "orders.current.summary",
+    fallbackProfileName: "orders.current.summary-fallback",
+    loadProfileName: "orders.current.summary-load",
+  });
 }
 
 function groupRows(rows = [], account = {}) {
