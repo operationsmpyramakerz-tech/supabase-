@@ -2,68 +2,72 @@ import { redirect } from "next/navigation";
 import AppShell from "../../../components/AppShell";
 import ExpensesUsersClient from "../../../components/expenses/ExpensesUsersClient";
 import { fetchLegacyJson } from "../../../lib/legacy-api";
+import { getLegacyAccountGate } from "../../../lib/products-auth";
+import { expenseUsersSummary } from "../../../lib/expenses-data";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
-function resourceMap(bundle) {
-  const map = new Map();
-  for (const resource of Array.isArray(bundle?.resources) ? bundle.resources : []) {
-    map.set(String(resource?.url || ""), resource?.body);
-  }
-  return map;
+function UnavailableState({ message, forbidden = false }) {
+  return (
+    <main className="standalone-state">
+      <section className="state-card">
+        <span className="status-dot warning" />
+        <h1>{forbidden ? "Expenses Users is not available" : "The new Expenses Users page could not load"}</h1>
+        <p>{message}</p>
+        <div className="actions">
+          {!forbidden ? <a className="primary-button" href="/next/expenses/users">Try again</a> : null}
+          <a className={forbidden ? "primary-button" : "secondary-button"} href="/next/home">Return to Home</a>
+        </div>
+      </section>
+    </main>
+  );
 }
 
-function getResource(map, prefix, fallback = null) {
-  for (const [url, body] of map.entries()) {
-    if (url === prefix || url.startsWith(prefix)) return body;
-  }
-  return fallback;
+async function legacyUsersPayload() {
+  const response = await fetchLegacyJson("/api/expenses/users", { timeoutMs: 30000 });
+  return response.ok && response.data ? response.data : null;
 }
 
 export default async function ExpensesUsersPage() {
-  const response = await fetchLegacyJson("/api/page-bootstrap?scope=expenses-users", { timeoutMs: 35000 });
+  const gate = await getLegacyAccountGate(["Expenses Users"]);
 
-  if (response.status === 401) redirect("/login?next=/next/expenses/users");
-  if (response.status === 403) {
-    return (
-      <main className="standalone-state">
-        <section className="state-card">
-          <span className="status-dot warning" />
-          <h1>Expenses Users is not available</h1>
-          <p>Your account does not have access to the Expenses Users module.</p>
-          <a className="primary-button" href="/next/home">Return to Home</a>
-        </section>
-      </main>
-    );
+  if (gate.status === 401) redirect("/login?next=/next/expenses/users");
+  if (gate.status === 403) {
+    return <UnavailableState forbidden message="Your account does not have access to the Expenses Users module." />;
+  }
+  if (!gate.ok || !gate.account) {
+    return <UnavailableState message={gate.error || "The current ERP authentication service is temporarily unavailable."} />;
   }
 
-  if (!response.ok || !response.data?.ok) {
-    return (
-      <main className="standalone-state">
-        <section className="state-card">
-          <span className="status-dot warning" />
-          <h1>The new Expenses Users page could not load</h1>
-          <p>{response.error || response.data?.error || "The current ERP API is temporarily unavailable."}</p>
-          <div className="actions">
-            <a className="primary-button" href="/next/expenses/users">Try again</a>
-            <a className="secondary-button" href="/next/home">Return to Home</a>
-          </div>
-        </section>
-      </main>
-    );
+  const warnings = [];
+  let usersPayload;
+  try {
+    usersPayload = {
+      success: true,
+      users: await expenseUsersSummary(),
+      source: "supabase-next",
+    };
+  } catch (directError) {
+    usersPayload = await legacyUsersPayload();
+    if (!usersPayload) {
+      return <UnavailableState message={directError?.message || "Expense-user data is temporarily unavailable."} />;
+    }
+    warnings.push("Expense users recovery path used.");
   }
-
-  const resources = resourceMap(response.data);
-  const account = getResource(resources, "/api/account", null);
-  const usersPayload = getResource(resources, "/api/expenses/users", { success: true, users: [] });
-  if (!account) redirect("/login?next=/next/expenses/users");
 
   return (
-    <AppShell account={account} title="Expenses by User" eyebrow="Review expenses by team member" activePath="/next/expenses/users" bodyClass="expenses-users-page" pageStyles={["/next/css/expenses-users-classic-inline.css?v=stage2f"]}>
+    <AppShell
+      account={gate.account}
+      title="Expenses by User"
+      eyebrow="Review expenses by team member"
+      activePath="/next/expenses/users"
+      bodyClass="expenses-users-page"
+      pageStyles={["/next/css/expenses-users-classic-inline.css?v=stage2f"]}
+    >
       <ExpensesUsersClient
-        account={account}
         initialUsersPayload={usersPayload || { success: true, users: [] }}
-        bootstrapWarnings={response.data.omitted || []}
+        bootstrapWarnings={warnings}
       />
     </AppShell>
   );

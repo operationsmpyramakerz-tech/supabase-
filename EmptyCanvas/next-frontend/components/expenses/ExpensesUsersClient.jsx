@@ -270,6 +270,15 @@ async function requestJson(url, options = {}) {
   return body;
 }
 
+async function requestJsonWithFallback(primaryUrl, fallbackUrl, options = {}) {
+  try {
+    return await requestJson(primaryUrl, options);
+  } catch (primaryError) {
+    if (!fallbackUrl || primaryError?.message === "Login required.") throw primaryError;
+    return await requestJson(fallbackUrl, options);
+  }
+}
+
 function shouldCompressImage(file) {
   const type = lower(file?.type);
   const name = lower(file?.name);
@@ -456,7 +465,12 @@ function UserExpensesModal({ user, onClose, onUsersRefresh, notify }) {
   const userId = text(user?.id || user?.userId);
   const load = async () => {
     setLoading(true);
-    try { setPayload(await requestJson(`/api/expenses/user/${encodeURIComponent(userId)}`)); }
+    try {
+      setPayload(await requestJsonWithFallback(
+        `/next/api/expenses/user/${encodeURIComponent(userId)}`,
+        `/api/expenses/user/${encodeURIComponent(userId)}`,
+      ));
+    }
     catch (error) { notify("Unable to load expenses", error?.message || "Failed to load this user's expenses.", "error"); }
     finally { setLoading(false); }
   };
@@ -556,7 +570,7 @@ export default function ExpensesUsersClient({ initialUsersPayload, bootstrapWarn
   const refresh = async () => {
     setBusy(true);
     try {
-      const body = await requestJson("/api/expenses/users");
+      const body = await requestJsonWithFallback("/next/api/expenses/users?fresh=1", "/api/expenses/users");
       setUsers(Array.isArray(body?.users) ? body.users : []);
       return body;
     } catch (error) { notify("Refresh failed", error?.message || "Failed to refresh expense users.", "error"); throw error; }

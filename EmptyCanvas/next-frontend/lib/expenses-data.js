@@ -394,3 +394,145 @@ export async function cashInFromOptions() {
     return { id, name };
   }).filter((item) => item.id && item.name);
 }
+
+let expenseUsersSummaryCache = null;
+let expenseUsersSummaryInflight = null;
+
+function sortExpenseRows(rows = []) {
+  return [...(Array.isArray(rows) ? rows : [])].sort((a, b) => {
+    const aStamp = new Date(valueFor(a, ["expense_date", "notion_created_time", "created_at"]) || 0).getTime();
+    const bStamp = new Date(valueFor(b, ["expense_date", "notion_created_time", "created_at"]) || 0).getTime();
+    if (Number.isFinite(aStamp) && Number.isFinite(bStamp) && aStamp !== bStamp) return bStamp - aStamp;
+    return number(valueFor(b, ["id", "ID"]), 0) - number(valueFor(a, ["id", "ID"]), 0);
+  });
+}
+
+async function expenseUsersSummaryRows() {
+  // Keep the management landing page lightweight: only fetch the columns used
+  // by the per-user balance cards rather than every receipt/order payload.
+  const rows = await select(expensesTable(), {
+    select: "id,expense_date,notion_created_time,funds_type,reason,cash_in,cash_out,team_member_name,team_member_raw,user_id",
+    order: "expense_date.desc,notion_created_time.desc,id.desc",
+    limit: "5000",
+  });
+  return sortExpenseRows(rows);
+}
+
+export async function expenseUsersSummary({ fresh = false } = {}) {
+  const now = Date.now();
+  if (!fresh && expenseUsersSummaryCache && expenseUsersSummaryCache.expiresAt > now) {
+    return expenseUsersSummaryCache.value;
+  }
+  if (!fresh && expenseUsersSummaryInflight) return await expenseUsersSummaryInflight;
+
+  const load = async () => {
+    const rows = await expenseUsersSummaryRows();
+    const perUser = new Map();
+
+    for (const row of rows) {
+      const name = text(valueFor(row, ["team_member_name", "Team Member", "team_member_raw"])) || "Unknown User";
+      const userId = text(valueFor(row, ["user_id", "employee_code"])) || name;
+      const key = userId || name;
+      if (!perUser.has(key)) {
+        perUser.set(key, {
+          id: key,
+          userId: key,
+          name,
+          total: 0,
+          count: 0,
+          lastSettledDate: null,
+        });
+      }
+
+      const aggregate = perUser.get(key);
+      aggregate.total += number(valueFor(row, ["cash_in", "Cash in"]), 0) - number(valueFor(row, ["cash_out", "Cash out"]), 0);
+      aggregate.count += 1;
+
+      const fundsType = canonical(valueFor(row, ["funds_type", "Funds Type"]));
+      const reason = canonical(valueFor(row, ["reason", "Reason"]));
+      if (!aggregate.lastSettledDate && (fundsType === "settled my account" || reason === "settled my account")) {
+        aggregate.lastSettledDate = dateValue(valueFor(row, ["expense_date", "Date"]));
+      }
+    }
+
+    return Array.from(perUser.values()).sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+  };
+
+  const pending = load();
+  if (!fresh) expenseUsersSummaryInflight = pending;
+  try {
+    const users = await pending;
+    expenseUsersSummaryCache = { value: users, expiresAt: Date.now() + 10_000 };
+    return users;
+  } finally {
+    if (!fresh) expenseUsersSummaryInflight = null;
+  }
+}
+
+function expenseRowMatchesMemberId(row = {}, memberId = "") {
+  const wanted = canonical(memberId);
+  if (!wanted) return false;
+  const rowUserId = canonical(valueFor(row, ["user_id", "employee_code"]));
+  const rowName = canonical(valueFor(row, ["team_member_name", "Team Member", "team_member_raw"]));
+  const rowId = canonical(valueFor(row, ["id", "ID"]));
+  return wanted === rowUserId || wanted === rowName || wanted === rowId;
+}
+
+async function selectExpensesForMemberId(memberId) {
+  const raw = text(memberId);
+  if (!raw) return [];
+
+  const specs = [
+    ["user_id", `eq.${raw}`],
+    ["team_member_name", ilike(raw, false)],
+    ["team_member_raw", ilike(raw, false)],
+  ];
+
+  const results = await Promise.allSettled(specs.map(([column, filter]) => select(expensesTable(), {
+    select: "*",
+    [column]: filter,
+    order: "expense_date.desc,notion_created_time.desc,id.desc",
+    limit: "5000",
+  })));
+
+  const successful = results.filter((result) => result.status === "fulfilled");
+  if (successful.length) {
+    const merged = new Map();
+    for (const result of successful) {
+      for (const row of Array.isArray(result.value) ? result.value : []) {
+        const id = text(valueFor(row, ["id", "ID"])) || JSON.stringify(row);
+        if (!merged.has(id)) merged.set(id, row);
+      }
+    }
+    const matched = sortExpenseRows(Array.from(merged.values()).filter((row) => expenseRowMatchesMemberId(row, raw)));
+    if (matched.length) return matched;
+  }
+
+  // Compatibility recovery for custom/older expense schemas. This path is only
+  // used when the canonical indexed identity columns cannot resolve the user.
+  const all = await selectAll(expensesTable(), {
+    limit: 5000,
+    order: "expense_date.desc,notion_created_time.desc,id.desc",
+  });
+  return sortExpenseRows(all.filter((row) => expenseRowMatchesMemberId(row, raw)));
+}
+
+export async function expensesForMemberId(memberId) {
+  const raw = text(memberId);
+  if (!raw) {
+    const error = new Error("Missing memberId.");
+    error.status = 400;
+    throw error;
+  }
+
+  const rows = await selectExpensesForMemberId(raw);
+  const info = lastSettledInfo(rows);
+  return {
+    success: true,
+    items: rows.map(serializeExpense),
+    lastSettledAt: info.lastSettledAt,
+    lastSettledDate: info.lastSettledDate,
+    source: "supabase-next",
+  };
+}
+
