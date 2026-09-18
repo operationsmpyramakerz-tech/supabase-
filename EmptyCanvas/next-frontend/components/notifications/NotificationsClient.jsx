@@ -33,6 +33,25 @@ async function requestJson(url, options = {}) {
   return body;
 }
 
+async function requestJsonWithFallback(directUrl, legacyUrl, options = {}) {
+  try {
+    return await requestJson(directUrl, options);
+  } catch (directError) {
+    if (!legacyUrl) throw directError;
+    return await requestJson(legacyUrl, options);
+  }
+}
+
+function triggerBackgroundNotificationScan() {
+  // Keep the existing cross-table notification generator alive without making
+  // the UI wait for it. Saved notification reads/mutations use the direct Next
+  // routes; this compatibility scan can be moved to a dedicated worker later.
+  return fetch(`/api/notifications/refresh?limit=1&_=${Date.now()}`, {
+    credentials: "include",
+    cache: "no-store",
+  }).catch(() => null);
+}
+
 function urlBase64ToUint8Array(base64String) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
@@ -201,10 +220,22 @@ export default function NotificationsClient({ initialItems = [], initialUnreadCo
     setLoading(true);
     setMessage("");
     try {
-      const body = await requestJson(`/api/notifications?limit=80&_=${Date.now()}`);
+      const body = await requestJsonWithFallback(
+        `/next/api/notifications?limit=80&fresh=1&_=${Date.now()}`,
+        `/api/notifications?limit=80&_=${Date.now()}`,
+      );
       const nextItems = Array.isArray(body?.items) ? body.items : [];
       setItems(nextItems);
       setUnreadCount(Number(body?.unreadCount) || nextItems.filter((item) => !item?.read).length);
+      triggerBackgroundNotificationScan().then(async (response) => {
+        if (!response?.ok) return;
+        try {
+          const updated = await requestJson(`/next/api/notifications?limit=80&fresh=1&_=${Date.now()}`);
+          const updatedItems = Array.isArray(updated?.items) ? updated.items : [];
+          setItems(updatedItems);
+          setUnreadCount(Number(updated?.unreadCount) || updatedItems.filter((item) => !item?.read).length);
+        } catch {}
+      });
     } catch (error) {
       setMessage(error.message || "Notifications could not be refreshed.");
     } finally {
@@ -218,7 +249,10 @@ export default function NotificationsClient({ initialItems = [], initialUnreadCo
     setItems((current) => current.map((row) => String(row?.id) === id ? { ...row, read: true } : row));
     setUnreadCount((count) => Math.max(0, count - 1));
     try {
-      await requestJson("/api/notifications/read", { method: "POST", body: JSON.stringify({ id }) });
+      await requestJsonWithFallback("/next/api/notifications/read", "/api/notifications/read", {
+        method: "POST",
+        body: JSON.stringify({ id }),
+      });
     } catch (error) {
       setMessage(error.message || "The notification could not be marked as read.");
       refresh();
@@ -232,7 +266,10 @@ export default function NotificationsClient({ initialItems = [], initialUnreadCo
     setItems((current) => current.map((item) => ({ ...item, read: true })));
     setUnreadCount(0);
     try {
-      await requestJson("/api/notifications/read-all", { method: "POST", body: "{}" });
+      await requestJsonWithFallback("/next/api/notifications/read-all", "/api/notifications/read-all", {
+        method: "POST",
+        body: "{}",
+      });
     } catch (error) {
       setItems(previous);
       setUnreadCount(previousCount);
@@ -253,7 +290,7 @@ export default function NotificationsClient({ initialItems = [], initialUnreadCo
           <span>Personal activity feed</span>
           <h2>Stay ahead of every ERP update.</h2>
           <p>Review orders, expenses, stock changes and workflow activity in one place. Stored links are automatically routed to their migrated Next.js pages.</p>
-          <div className="next-notifications-hero__meta"><b>{source === "supabase" ? "Supabase notifications" : "Notification fallback store"}</b><span>Up to 80 recent updates</span></div>
+          <div className="next-notifications-hero__meta"><b>{source.includes("supabase") ? "Supabase notifications" : "Notification fallback store"}</b><span>Up to 80 recent updates</span></div>
         </div>
         <div className="next-notifications-hero__actions">
           <button type="button" onClick={refresh} disabled={loading}>{loading ? "Refreshing…" : "Refresh"}</button>

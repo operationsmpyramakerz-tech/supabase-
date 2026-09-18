@@ -28,6 +28,22 @@ async function requestJson(url, options = {}) {
   return body;
 }
 
+async function requestJsonWithFallback(directUrl, legacyUrl, options = {}) {
+  try {
+    return await requestJson(directUrl, options);
+  } catch (directError) {
+    if (!legacyUrl) throw directError;
+    return await requestJson(legacyUrl, options);
+  }
+}
+
+function triggerBackgroundNotificationScan() {
+  return fetch(`/api/notifications/refresh?limit=1&_=${Date.now()}`, {
+    credentials: "include",
+    cache: "no-store",
+  }).catch(() => null);
+}
+
 export default function NotificationsBell({ classic = false }) {
   const router = useRouter();
   const [items, setItems] = useState([]);
@@ -44,11 +60,23 @@ export default function NotificationsBell({ classic = false }) {
   async function load({ quiet = false } = {}) {
     if (!quiet) setLoading(true);
     try {
-      const body = await requestJson(`/api/notifications?limit=12&_=${Date.now()}`);
+      const body = await requestJsonWithFallback(
+        `/next/api/notifications?limit=12&fresh=1&_=${Date.now()}`,
+        `/api/notifications?limit=12&_=${Date.now()}`,
+      );
       const nextItems = Array.isArray(body?.items) ? body.items : [];
       setItems(nextItems);
       setUnreadCount(Number(body?.unreadCount) || nextItems.filter((item) => !item?.read).length);
       setError("");
+      triggerBackgroundNotificationScan().then(async (response) => {
+        if (!response?.ok) return;
+        try {
+          const updated = await requestJson(`/next/api/notifications?limit=12&fresh=1&_=${Date.now()}`);
+          const updatedItems = Array.isArray(updated?.items) ? updated.items : [];
+          setItems(updatedItems);
+          setUnreadCount(Number(updated?.unreadCount) || updatedItems.filter((item) => !item?.read).length);
+        } catch {}
+      });
     } catch (loadError) {
       if (!quiet) setError(loadError.message || "Could not load notifications.");
     } finally {
@@ -122,7 +150,7 @@ export default function NotificationsBell({ classic = false }) {
     setItems((current) => current.map((row) => String(row?.id) === id ? { ...row, read: true } : row));
     setUnreadCount((count) => Math.max(0, count - 1));
     try {
-      await requestJson("/api/notifications/read", {
+      await requestJsonWithFallback("/next/api/notifications/read", "/api/notifications/read", {
         method: "POST",
         body: JSON.stringify({ id }),
       });
@@ -138,7 +166,10 @@ export default function NotificationsBell({ classic = false }) {
     setItems((current) => current.map((item) => ({ ...item, read: true })));
     setUnreadCount(0);
     try {
-      await requestJson("/api/notifications/read-all", { method: "POST", body: "{}" });
+      await requestJsonWithFallback("/next/api/notifications/read-all", "/api/notifications/read-all", {
+        method: "POST",
+        body: "{}",
+      });
     } catch {
       setItems(previous);
       setUnreadCount(previousCount);

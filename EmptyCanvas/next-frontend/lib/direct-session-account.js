@@ -495,7 +495,7 @@ export async function getDirectSessionAccountGate(requiredPages = []) {
       pageAccess: { pages: freshPageAccess },
     };
 
-    return { ...gateFromAccount(account, session, requiredPages), source: "direct-session" };
+    return { ...gateFromAccount(account, session, requiredPages), source: "direct-session", memberId };
   } catch {
     return null;
   }
