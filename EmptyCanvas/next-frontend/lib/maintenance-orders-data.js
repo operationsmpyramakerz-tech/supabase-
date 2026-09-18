@@ -4,6 +4,7 @@ import { isSupabaseConfigured, select } from "./supabase-rest";
 import { loadRawOrderRowsByIds, serializeOperationsOrderDetail } from "./order-details-data";
 import { loadOrderRowsByNumbers, scanOrderNumberCandidates } from "./order-pagination";
 import { applyOrderSearchPlan, canUseOrderSearchText, createOrderSearchPlan, noteOrderSearchTextError } from "./order-search-hotpath";
+import { canUseOrderCandidateRpc, loadOrderCandidateNumbersRpc, noteOrderCandidateRpcError } from "./order-candidate-rpc";
 
 const PAGE_LIMIT = 36;
 const PAGE_MAX = 80;
@@ -175,8 +176,22 @@ function serializeMaintenanceSummaryRow(row = {}) {
   };
 }
 
-async function candidateNumbers({ cursor = null, scanGroups = 108, filters = {}, searchMode = "", signal = null } = {}) {
+async function candidateNumbers({ cursor = null, scanGroups = 108, filters = {}, searchMode = "", rpcOptions = null, signal = null } = {}) {
   const suffix = searchMode ? `.search-${searchMode}` : "";
+  if (rpcOptions && canUseOrderCandidateRpc()) {
+    try {
+      return await loadOrderCandidateNumbersRpc({
+        ...rpcOptions,
+        cursor,
+        wanted: scanGroups,
+        profileName: `orders.maintenance${suffix}.candidates-rpc`,
+        signal,
+      });
+    } catch (error) {
+      if (signal?.aborted || error?.code === "REQUEST_ABORTED" || error?.name === "AbortError") throw error;
+      noteOrderCandidateRpcError(error);
+    }
+  }
   return await scanOrderNumberCandidates({
     table: tableName(),
     cursor,
@@ -245,6 +260,7 @@ export async function loadMaintenanceOrdersPage({
         scanGroups: Math.max(safeLimit * 3, 108),
         filters: candidateFilters(query, fastSearch ? "fast" : "legacy"),
         searchMode: hasTextSearch ? (fastSearch ? "fast" : "legacy") : "",
+        rpcOptions: !searchPlan ? { context: "maintenance" } : null,
         signal,
       });
     } catch (error) {

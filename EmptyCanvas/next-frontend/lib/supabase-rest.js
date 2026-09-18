@@ -198,6 +198,20 @@ export async function select(table, params = {}, options = {}) {
   return await supabaseRequest(`/${encodeTableName(table)}${queryString(params)}`, options);
 }
 
+export async function rpc(functionName, args = {}, options = {}) {
+  const cleanName = String(functionName || "").trim();
+  if (!cleanName) {
+    const error = new Error("Supabase RPC function name is required.");
+    error.status = 400;
+    throw error;
+  }
+  return await supabaseRequest(`/rpc/${encodeTableName(cleanName)}`, {
+    ...options,
+    method: "POST",
+    body: args && typeof args === "object" ? args : {},
+  });
+}
+
 export async function selectAll(table, { limit = 1000, order = "", select: selectExpr = "*", profileName = "" } = {}) {
   const params = {
     select: selectExpr,

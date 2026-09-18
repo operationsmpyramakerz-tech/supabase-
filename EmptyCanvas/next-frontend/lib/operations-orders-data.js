@@ -6,6 +6,7 @@ import { listTeamMembersLite } from "./team-members-service";
 import { invalidateStocktakingReadCaches } from "./stocktaking-data";
 import { loadOrderRowsByNumbers, scanOrderNumberCandidates } from "./order-pagination";
 import { applyOrderSearchPlan, canUseOrderSearchText, createOrderSearchPlan, noteOrderSearchTextError } from "./order-search-hotpath";
+import { canUseOrderCandidateRpc, loadOrderCandidateNumbersRpc, noteOrderCandidateRpcError } from "./order-candidate-rpc";
 
 const PAGE_LIMIT = 36;
 const PAGE_MAX = 80;
@@ -347,8 +348,22 @@ function logicalParams({ query = "", tab = "all", type = "all", searchMode = "fa
   return params;
 }
 
-async function candidateNumbers({ cursor = null, scanGroups = 90, filters = {}, searchMode = "", signal = null } = {}) {
+async function candidateNumbers({ cursor = null, scanGroups = 90, filters = {}, searchMode = "", rpcOptions = null, signal = null } = {}) {
   const suffix = searchMode ? `.search-${searchMode}` : "";
+  if (rpcOptions && canUseOrderCandidateRpc()) {
+    try {
+      return await loadOrderCandidateNumbersRpc({
+        ...rpcOptions,
+        cursor,
+        wanted: scanGroups,
+        profileName: `orders.operations${suffix}.candidates-rpc`,
+        signal,
+      });
+    } catch (error) {
+      if (signal?.aborted || error?.code === "REQUEST_ABORTED" || error?.name === "AbortError") throw error;
+      noteOrderCandidateRpcError(error);
+    }
+  }
   return await scanOrderNumberCandidates({
     table: tableName(),
     cursor,
@@ -416,6 +431,11 @@ export async function loadOperationsOrdersPage({
         scanGroups: Math.max(safeLimit * 2, 60),
         filters,
         searchMode: hasTextSearch ? (fastSearch ? "fast" : "legacy") : "",
+        rpcOptions: !searchPlan ? {
+          context: "operations",
+          orderType: orderTypeLabel(type),
+          tab,
+        } : null,
         signal,
       });
     } catch (error) {

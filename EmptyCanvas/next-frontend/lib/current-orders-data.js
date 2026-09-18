@@ -5,6 +5,7 @@ import { serializeOperationsSummaryRow } from "./operations-orders-data";
 import { loadRawOrderRowsByIds, serializeOperationsOrderDetail } from "./order-details-data";
 import { loadOrderRowsByNumbers, scanOrderNumberCandidates } from "./order-pagination";
 import { applyOrderSearchPlan, canUseOrderSearchText, createOrderSearchPlan, noteOrderSearchTextError } from "./order-search-hotpath";
+import { canUseOrderCandidateRpc, loadOrderCandidateNumbersRpc, noteOrderCandidateRpcError } from "./order-candidate-rpc";
 
 const PAGE_LIMIT = 36;
 const PAGE_MAX = 80;
@@ -202,6 +203,15 @@ function searchLogic(query = "") {
   return createOrderSearchPlan(query, SEARCH_COLUMNS);
 }
 
+function memberCandidateNames(account = {}) {
+  const clean = safeFilterText(accountUsername(account));
+  if (!clean) return [];
+  return Array.from(new Set([
+    clean,
+    clean.split(/\s+/)[0] || "",
+  ].map((value) => String(value || "").trim()).filter((value) => value.length >= 2)));
+}
+
 function memberClauses(account = {}) {
   const clauses = [];
   const memberId = String(account?.teamMemberId || account?.userSupabaseId || "")
@@ -212,12 +222,8 @@ function memberClauses(account = {}) {
   // Keep the legacy name branches for old rows that predate team_member_id.
   // Modern rows hit the exact indexed ID branch first, while compatibility is
   // preserved for historical data.
-  const clean = safeFilterText(accountUsername(account));
-  if (!clean) return clauses;
-  const candidates = Array.from(new Set([
-    clean,
-    clean.split(/\s+/)[0] || "",
-  ].map((value) => String(value || "").trim()).filter((value) => value.length >= 2)));
+  const candidates = memberCandidateNames(account);
+  if (!candidates.length) return clauses;
   return [
     ...clauses,
     ...candidates.map((value) => `team_member_name.ilike.*${value}*`),
@@ -242,8 +248,22 @@ function logicalParams({ account = {}, query = "", type = "all", searchMode = "f
   return params;
 }
 
-async function candidateNumbers({ cursor = null, scanGroups = 90, filters = {}, searchMode = "", signal = null } = {}) {
+async function candidateNumbers({ cursor = null, scanGroups = 90, filters = {}, searchMode = "", rpcOptions = null, signal = null } = {}) {
   const suffix = searchMode ? `.search-${searchMode}` : "";
+  if (rpcOptions && canUseOrderCandidateRpc()) {
+    try {
+      return await loadOrderCandidateNumbersRpc({
+        ...rpcOptions,
+        cursor,
+        wanted: scanGroups,
+        profileName: `orders.current${suffix}.candidates-rpc`,
+        signal,
+      });
+    } catch (error) {
+      if (signal?.aborted || error?.code === "REQUEST_ABORTED" || error?.name === "AbortError") throw error;
+      noteOrderCandidateRpcError(error);
+    }
+  }
   return await scanOrderNumberCandidates({
     table: tableName(),
     cursor,
@@ -317,6 +337,12 @@ export async function loadCurrentOrdersPage({
         scanGroups: Math.max(safeLimit * 2, 72),
         filters,
         searchMode: hasTextSearch ? (fastSearch ? "fast" : "legacy") : "",
+        rpcOptions: !searchPlan ? {
+          context: "current",
+          memberId: account?.teamMemberId || account?.userSupabaseId || "",
+          memberNames: memberCandidateNames(account),
+          orderType: orderTypeLabel(type),
+        } : null,
         signal,
       });
     } catch (error) {

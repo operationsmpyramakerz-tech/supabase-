@@ -3,6 +3,7 @@ import { isSupabaseConfigured, select, selectAll, selectById, updateById, update
 import { enrichOrderDetailGrouping, loadRawOrderRowsByIds, serializeReviewOrderDetail } from "./order-details-data";
 import { loadOrderRowsByNumbers, scanOrderNumberCandidates } from "./order-pagination";
 import { applyOrderSearchPlan, canUseOrderSearchText, createOrderSearchPlan, noteOrderSearchTextError } from "./order-search-hotpath";
+import { canUseOrderCandidateRpc, loadOrderCandidateNumbersRpc, noteOrderCandidateRpcError } from "./order-candidate-rpc";
 import { getReviewerVisibility as reviewerVisibility } from "./reviewer-visibility-service";
 
 const PAGE_LIMIT = 36;
@@ -287,8 +288,22 @@ function logicalParams({ visible, query = "", tab = "all", type = "all", searchM
   return params;
 }
 
-async function candidateNumbers({ cursor = null, scanGroups = 90, filters = {}, searchMode = "", signal = null } = {}) {
+async function candidateNumbers({ cursor = null, scanGroups = 90, filters = {}, searchMode = "", rpcOptions = null, signal = null } = {}) {
   const suffix = searchMode ? `.search-${searchMode}` : "";
+  if (rpcOptions && canUseOrderCandidateRpc()) {
+    try {
+      return await loadOrderCandidateNumbersRpc({
+        ...rpcOptions,
+        cursor,
+        wanted: scanGroups,
+        profileName: `orders.review${suffix}.candidates-rpc`,
+        signal,
+      });
+    } catch (error) {
+      if (signal?.aborted || error?.code === "REQUEST_ABORTED" || error?.name === "AbortError") throw error;
+      noteOrderCandidateRpcError(error);
+    }
+  }
   return await scanOrderNumberCandidates({
     table: tableName(),
     cursor,
@@ -377,6 +392,13 @@ export async function loadOrdersReviewPage({
         scanGroups: Math.max(safeLimit * 2, 60),
         filters,
         searchMode: hasTextSearch ? (fastSearch ? "fast" : "legacy") : "",
+        rpcOptions: !searchPlan ? {
+          context: "review",
+          visibleIds: visible.ids,
+          visibleNames: visible.queryNames || visible.names,
+          orderType: orderTypeLabel(type),
+          tab: cleanTab,
+        } : null,
         signal,
       });
     } catch (error) {
