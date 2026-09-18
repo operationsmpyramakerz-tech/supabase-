@@ -1176,7 +1176,7 @@ function TicketDetails({ ticket, view, meta, onClose, onEdit, onRefresh, onWork,
   const canManageDepartment = view === "my" && (["edit", "admin"].includes(lower(meta.accessLevel)) || meta.isPageAdmin);
   const refreshDetail = async () => {
     setLoading(true);
-    try { const result = await requestJson(`/api/task-management/${encodeURIComponent(ticket.id)}?view=${encodeURIComponent(view)}`); setLive(result.ticket || ticket); }
+    try { const result = await requestJson(`/next/api/task-management/${encodeURIComponent(ticket.id)}?view=${encodeURIComponent(view)}`); setLive(result.ticket || ticket); }
     catch (error) { notify("error", "Refresh failed", error?.message || "The project could not refresh."); }
     finally { setLoading(false); }
   };
@@ -1326,13 +1326,25 @@ export default function TaskManagementClient({ view, initialMeta, initialTickets
   const refresh = async ({ silent = false } = {}) => {
     if (!silent) setBusy(true);
     try {
+      const fresh = Date.now();
       const [list, metaResult] = await Promise.all([
-        requestJson(`/api/task-management?view=${encodeURIComponent(view)}`),
-        requestJson(`/api/task-management/meta?view=${encodeURIComponent(view)}`),
+        requestJson(`/next/api/task-management?view=${encodeURIComponent(view)}&_ts=${fresh}`),
+        requestJson(`/next/api/task-management/meta?view=${encodeURIComponent(view)}&_ts=${fresh}`),
       ]);
       const nextTickets = Array.isArray(list.tickets) ? list.tickets : [];
       setTickets(nextTickets);
-      setSelectedTicket((current) => current ? (nextTickets.find((item) => text(item.id) === text(current.id)) || current) : current);
+      setSelectedTicket((current) => {
+        if (!current) return current;
+        const summary = nextTickets.find((item) => text(item.id) === text(current.id));
+        if (!summary) return current;
+        return {
+          ...current,
+          ...summary,
+          description: current.description,
+          sections: Array.isArray(current.sections) && current.sections.some((section) => section?.request || section?.details || section?.attachments) ? current.sections : summary.sections,
+          edges: Array.isArray(current.edges) ? current.edges : [],
+        };
+      });
       setMeta(metaResult || meta);
       return nextTickets;
     } catch (error) {
@@ -1357,12 +1369,23 @@ export default function TaskManagementClient({ view, initialMeta, initialTickets
   }), [tickets, status, filterStatus, department, priority]);
   const agendaTickets = useMemo(() => tickets.filter((ticket) => status === "archived" ? ticket.isArchived : (!ticket.isArchived && (status === "all" || ticket.status === status))), [tickets, status]);
   const clearFilters = () => { setDepartment("all"); setFilterStatus("all"); setPriority("all"); };
+  const openTicket = async (ticket, { force = false } = {}) => {
+    if (!ticket?.id) return;
+    try {
+      const fresh = force ? `&_ts=${Date.now()}` : "";
+      const result = await requestJson(`/next/api/task-management/${encodeURIComponent(ticket.id)}?view=${encodeURIComponent(view)}${fresh}`);
+      setSelectedTicket(result?.ticket || ticket);
+    } catch (error) {
+      notify("error", "Project details could not load", error?.message || "The selected project could not be opened.");
+      setSelectedTicket(ticket);
+    }
+  };
 
   const afterSaved = async (ticket) => {
     setEditor(null);
     const rows = await refresh({ silent: true });
     const live = rows.find((item) => text(item.id) === text(ticket?.id));
-    if (live) setSelectedTicket(live);
+    if (live || ticket?.id) await openTicket(live || ticket, { force: true });
   };
   const doArchive = async (ticket, password = "") => {
     try {
@@ -1402,7 +1425,7 @@ export default function TaskManagementClient({ view, initialMeta, initialTickets
   const workSaved = async () => {
     setWorkTarget(null); await refresh({ silent: true });
     if (selectedTicket) {
-      const result = await requestJson(`/api/task-management/${encodeURIComponent(selectedTicket.id)}?view=${encodeURIComponent(view)}`).catch(() => null);
+      const result = await requestJson(`/next/api/task-management/${encodeURIComponent(selectedTicket.id)}?view=${encodeURIComponent(view)}&_ts=${Date.now()}`).catch(() => null);
       if (result?.ticket) setSelectedTicket(result.ticket);
     }
   };
@@ -1419,7 +1442,7 @@ export default function TaskManagementClient({ view, initialMeta, initialTickets
       {bootstrapWarnings.length ? <div className="dashboard-notice"><strong>Some Task Management resources loaded through fallback.</strong><span>The page remains usable while those resources recover.</span></div> : null}
       <main className="container-full-width tm-main">
         <div className="tm-agenda-layout">
-          <CalendarAgenda tickets={agendaTickets} selectedDate={selectedDate} onSelectDate={setSelectedDate} month={month} onMonthChange={setMonth} onOpenTicket={setSelectedTicket} view={view} />
+          <CalendarAgenda tickets={agendaTickets} selectedDate={selectedDate} onSelectDate={setSelectedDate} month={month} onMonthChange={setMonth} onOpenTicket={openTicket} view={view} />
           <section className="tm-tasks-column" aria-label="Task list">
             <div className="tm-toolbar tm-orders-toolbar" role="toolbar" aria-label="Task Management status and department filters">
               <div className="tm-toolbar__scroll"><div className="tm-tabs tm-tabs--orders" role="tablist" aria-label="Project status">{STATUS_OPTIONS.map(([value, label, icon]) => <button className={`tm-tab${status === value ? " is-active" : ""}`} type="button" onClick={() => setStatus(value)} role="tab" aria-selected={status === value} title={label} key={value}><span className="tm-tab__icon"><FeatherIcon name={icon} /></span><span className="tm-tab__label">{label}</span></button>)}</div></div>
@@ -1430,7 +1453,7 @@ export default function TaskManagementClient({ view, initialMeta, initialTickets
               </div>
               {canCreate ? <button type="button" className="tm-new-ticket tm-new-ticket--toolbar" onClick={() => setEditor(editorFromTicket())}><FeatherIcon name="plus" /><span>Add Project</span></button> : null}
             </div>
-            <section className="tm-ticket-grid" aria-live="polite">{busy ? <div className="modern-loading" role="status"><div className="modern-loading__spinner" /><div className="modern-loading__text">Loading projects</div></div> : activeTickets.length ? activeTickets.map((ticket) => <ProjectCard ticket={ticket} view={view} onOpen={setSelectedTicket} onRejected={() => setRejectedReason((ticket.sections || []).find((section) => section.status === "rejected" && text(section.rejectionReason))?.rejectionReason || "No rejected reason was provided.")} key={ticket.id} />) : <div className="tm-empty-state"><div className="tm-empty-state__icon"><FeatherIcon name="git-branch" /></div><h2>{copy.empty}</h2><p>{copy.emptyText}</p>{canCreate ? <button className="tm-btn tm-btn--primary" type="button" onClick={() => setEditor(editorFromTicket())}><FeatherIcon name="plus" />Add Project</button> : null}</div>}</section>
+            <section className="tm-ticket-grid" aria-live="polite">{busy ? <div className="modern-loading" role="status"><div className="modern-loading__spinner" /><div className="modern-loading__text">Loading projects</div></div> : activeTickets.length ? activeTickets.map((ticket) => <ProjectCard ticket={ticket} view={view} onOpen={openTicket} onRejected={() => setRejectedReason((ticket.sections || []).find((section) => section.status === "rejected" && text(section.rejectionReason))?.rejectionReason || "No rejected reason was provided.")} key={ticket.id} />) : <div className="tm-empty-state"><div className="tm-empty-state__icon"><FeatherIcon name="git-branch" /></div><h2>{copy.empty}</h2><p>{copy.emptyText}</p>{canCreate ? <button className="tm-btn tm-btn--primary" type="button" onClick={() => setEditor(editorFromTicket())}><FeatherIcon name="plus" />Add Project</button> : null}</div>}</section>
           </section>
         </div>
       </main>
