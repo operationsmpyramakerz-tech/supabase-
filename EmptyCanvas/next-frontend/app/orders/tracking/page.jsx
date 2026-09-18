@@ -2,22 +2,25 @@ import { redirect } from "next/navigation";
 import AppShell from "../../../components/AppShell";
 import OrderTrackingClient from "../../../components/orders/OrderTrackingClient";
 import { fetchLegacyJson } from "../../../lib/legacy-api";
+import { getLegacyAccountGate } from "../../../lib/products-auth";
+import { loadOrderTracking } from "../../../lib/order-tracking-data";
 
 export const dynamic = "force-dynamic";
 
-function resourceMap(bundle) {
-  const map = new Map();
-  for (const resource of Array.isArray(bundle?.resources) ? bundle.resources : []) {
-    map.set(String(resource?.url || ""), resource?.body);
-  }
-  return map;
-}
-
-function getResource(map, prefix, fallback = null) {
-  for (const [url, body] of map.entries()) {
-    if (url === prefix || url.startsWith(`${prefix}?`)) return body;
-  }
-  return fallback;
+function StandaloneState({ title, message, primaryHref = "/next/orders", primaryLabel = "Return to Current Orders", secondaryHref = "" }) {
+  return (
+    <main className="standalone-state">
+      <section className="state-card">
+        <span className="status-dot warning" />
+        <h1>{title}</h1>
+        <p>{message}</p>
+        <div className="actions">
+          <a className="primary-button" href={primaryHref}>{primaryLabel}</a>
+          {secondaryHref ? <a className="secondary-button" href={secondaryHref}>Refresh the page</a> : null}
+        </div>
+      </section>
+    </main>
+  );
 }
 
 export default async function OrderTrackingPage({ searchParams }) {
@@ -29,88 +32,77 @@ export default async function OrderTrackingPage({ searchParams }) {
 
   if (!groupId) {
     return (
-      <main className="standalone-state">
-        <section className="state-card">
-          <span className="status-dot warning" />
-          <h1>Order reference is missing</h1>
-          <p>Open Order Tracking from a Current Orders card or a linked order so the tracking reference is included.</p>
-          <div className="actions">
-            <a className="primary-button" href="/next/orders">Open Current Orders</a>
-            <a className="secondary-button" href="/next/home">Return to Home</a>
-          </div>
-        </section>
-      </main>
+      <StandaloneState
+        title="Order reference is missing"
+        message="Open Order Tracking from a Current Orders card or a linked order so the tracking reference is included."
+        primaryHref="/next/orders"
+        primaryLabel="Open Current Orders"
+      />
     );
   }
 
-  const query = new URLSearchParams({ scope: "order-tracking", groupId });
-  const response = await fetchLegacyJson(`/api/page-bootstrap?${query.toString()}`, { timeoutMs: 35000 });
-
-  if (response.status === 401) redirect(`/login?next=${encodeURIComponent(currentPath)}`);
-  if (response.status === 403) {
+  const gate = await getLegacyAccountGate(["Current Orders"]);
+  if (!gate.ok && gate.status === 401) redirect(`/login?next=${encodeURIComponent(currentPath)}`);
+  if (!gate.ok && gate.status === 403) {
     return (
-      <main className="standalone-state">
-        <section className="state-card">
-          <span className="status-dot warning" />
-          <h1>Order Tracking is not available</h1>
-          <p>Your account does not have access to Current Orders.</p>
-          <a className="primary-button" href="/next/home">Return to Home</a>
-        </section>
-      </main>
+      <StandaloneState
+        title="Order Tracking is not available"
+        message="Your account does not have access to Current Orders."
+        primaryHref="/next/home"
+        primaryLabel="Return to Home"
+      />
     );
   }
-
-  if (!response.ok || !response.data?.ok) {
+  if (!gate.ok || !gate.account) {
     return (
-      <main className="standalone-state">
-        <section className="state-card">
-          <span className="status-dot warning" />
-          <h1>Order Tracking could not load</h1>
-          <p>{response.error || response.data?.error || "The ERP API is temporarily unavailable."}</p>
-          <div className="actions">
-            <a className="primary-button" href="/next/orders">Return to Current Orders</a>
-            <a className="secondary-button" href="/next/orders">Return to Current Orders</a>
-          </div>
-        </section>
-      </main>
+      <StandaloneState
+        title="Order Tracking could not load"
+        message={gate.error || "The authentication service is temporarily unavailable."}
+        secondaryHref={currentPath}
+      />
     );
   }
 
-  const resources = resourceMap(response.data);
-  const account = getResource(resources, "/api/account", null);
-  const tracking = getResource(resources, "/api/orders/tracking", null);
-
-  if (!account) redirect(`/login?next=${encodeURIComponent(currentPath)}`);
+  let tracking = null;
+  let failure = null;
+  try {
+    tracking = await loadOrderTracking({ account: gate.account, groupId });
+  } catch (error) {
+    failure = error;
+  }
 
   if (!tracking) {
-    const missing = Array.isArray(response.data?.omitted)
-      ? response.data.omitted.some((item) => String(item?.code || "") === "404")
-      : false;
-    return (
-      <AppShell
-        account={account}
-        title="Order Tracking"
-        eyebrow="Current Orders delivery journey"
-        activePath="/next/orders"
-      >
-        <main className="standalone-state standalone-state--inside">
-          <section className="state-card">
-            <span className="status-dot warning" />
-            <h1>{missing ? "Order not found" : "Tracking data is temporarily unavailable"}</h1>
-            <p>{missing ? "The selected order is no longer available to this account." : "The page opened, but the tracking resource could not be loaded."}</p>
-            <div className="actions">
-              <a className="primary-button" href="/next/orders">Return to Current Orders</a>
-              <a className="secondary-button" href={currentPath}>Refresh the page</a>
-            </div>
-          </section>
-        </main>
-      </AppShell>
-    );
+    const legacy = await fetchLegacyJson(`/api/orders/tracking?groupId=${encodeURIComponent(groupId)}`, { timeoutMs: 20_000 });
+    if (legacy.ok && legacy.data) tracking = legacy.data;
+    else {
+      const status = legacy.status || failure?.status || 502;
+      const missing = Number(status) === 404;
+      return (
+        <AppShell
+          account={gate.account}
+          title="Order Tracking"
+          eyebrow="Current Orders delivery journey"
+          activePath="/next/orders"
+        >
+          <main className="standalone-state standalone-state--inside">
+            <section className="state-card">
+              <span className="status-dot warning" />
+              <h1>{missing ? "Order not found" : "Tracking data is temporarily unavailable"}</h1>
+              <p>{missing ? "The selected order is no longer available to this account." : (legacy.error || legacy.data?.error || failure?.message || "The tracking resource could not be loaded.")}</p>
+              <div className="actions">
+                <a className="primary-button" href="/next/orders">Return to Current Orders</a>
+                <a className="secondary-button" href={currentPath}>Refresh the page</a>
+              </div>
+            </section>
+          </main>
+        </AppShell>
+      );
+    }
   }
 
   return (
     <AppShell
-      account={account}
+      account={gate.account}
       title="Order Tracking"
       eyebrow="Current Orders delivery journey"
       activePath="/next/orders"
@@ -118,7 +110,7 @@ export default async function OrderTrackingPage({ searchParams }) {
       <OrderTrackingClient
         initialTracking={tracking}
         groupId={groupId}
-        bootstrapWarnings={response.data.omitted || []}
+        bootstrapWarnings={[]}
       />
     </AppShell>
   );

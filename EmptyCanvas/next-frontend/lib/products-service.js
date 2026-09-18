@@ -197,6 +197,14 @@ async function productUnitRows({ fresh = false, tolerant = true } = {}) {
   );
 }
 
+export async function getProductsList({ fresh = false } = {}) {
+  if (fresh) invalidateProductReadCaches("products");
+  const rows = await productRows({ fresh });
+  return (Array.isArray(rows) ? rows : [])
+    .map(serializeProduct)
+    .filter((product) => product.id && product.name);
+}
+
 export async function getProductsCatalog({ fresh = false } = {}) {
   if (fresh) invalidateProductReadCaches();
   return await productCachedRead("catalog", async () => {
