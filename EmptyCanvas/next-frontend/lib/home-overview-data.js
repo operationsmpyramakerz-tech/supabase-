@@ -117,13 +117,13 @@ async function selectHomeRows(filters = {}) {
       let chunk;
       if (useProjection) {
         try {
-          chunk = await select(ordersTable(), { ...base, select: HOME_SUMMARY_SELECT });
+          chunk = await select(ordersTable(), { ...base, select: HOME_SUMMARY_SELECT }, { profileName: "home.orders-summary" });
         } catch {
           useProjection = false;
-          chunk = await select(ordersTable(), { ...base, select: "*" });
+          chunk = await select(ordersTable(), { ...base, select: "*" }, { profileName: "home.orders-summary-fallback" });
         }
       } else {
-        chunk = await select(ordersTable(), { ...base, select: "*" });
+        chunk = await select(ordersTable(), { ...base, select: "*" }, { profileName: "home.orders-summary-fallback" });
       }
 
       const page = Array.isArray(chunk) ? chunk : [];

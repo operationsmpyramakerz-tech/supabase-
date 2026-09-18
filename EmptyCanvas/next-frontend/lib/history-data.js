@@ -250,11 +250,11 @@ async function rawHistoryRows(limit) {
     limit: String(limit),
   };
   try {
-    return await select(historyTable(), params);
+    return await select(historyTable(), params, { profileName: "history.list" });
   } catch (projectionError) {
     // Compatibility with older history schemas while the rollout is gradual.
     try {
-      return await select(historyTable(), { select: "*", order: "created_at.desc,id.desc", limit: String(limit) });
+      return await select(historyTable(), { select: "*", order: "created_at.desc,id.desc", limit: String(limit) }, { profileName: "history.list-fallback" });
     } catch {
       throw projectionError;
     }
@@ -303,7 +303,7 @@ export async function historyDetail(id) {
     select: "*",
     id: `eq.${cleanId}`,
     limit: "1",
-  });
+  }, { profileName: "history.detail" });
   const row = Array.isArray(rows) ? rows[0] : null;
   if (!row || !visibleRow(row)) {
     const error = new Error("History record was not found.");

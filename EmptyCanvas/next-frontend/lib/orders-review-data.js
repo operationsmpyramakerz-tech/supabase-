@@ -386,7 +386,7 @@ async function candidateNumbers({ cursor = null, scanGroups = 90, filters = {} }
       else if (!params.order_number) params.order_number = "not.is.null";
     }
 
-    const rows = await select(tableName(), params);
+    const rows = await select(tableName(), params, { profileName: "orders.review.candidates" });
     const chunk = Array.isArray(rows) ? rows : [];
     for (const row of chunk) {
       const orderNumber = num(row?.order_number);
@@ -414,10 +414,10 @@ async function rowsByNumbers(numbers = []) {
       limit: "5000",
     };
     try {
-      const rows = await select(tableName(), { ...baseParams, select: REVIEW_SUMMARY_SELECT });
+      const rows = await select(tableName(), { ...baseParams, select: REVIEW_SUMMARY_SELECT }, { profileName: "orders.review.summary" });
       if (Array.isArray(rows)) out.push(...rows);
     } catch {
-      const rows = await select(tableName(), { ...baseParams, select: "*" });
+      const rows = await select(tableName(), { ...baseParams, select: "*" }, { profileName: "orders.review.summary-fallback" });
       if (Array.isArray(rows)) out.push(...rows);
     }
   }

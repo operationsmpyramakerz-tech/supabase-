@@ -87,6 +87,7 @@ export async function supabaseRequest(pathname, options = {}) {
     const first = String(pathname || "").replace(/^\/+/, "").split(/[?\/]/)[0] || "unknown";
     try { return decodeURIComponent(first); } catch { return first; }
   })();
+  const metricName = String(options.profileName || `${method} ${metricTable}`).trim().slice(0, 120) || `${method} ${metricTable}`;
   const timeoutMs = Math.max(
     1000,
     Math.min(120000, Number(options.timeoutMs || process.env.SUPABASE_REQUEST_TIMEOUT_MS || 15000) || 15000),
@@ -169,7 +170,7 @@ export async function supabaseRequest(pathname, options = {}) {
   } finally {
     recordPerformanceSample({
       category: "supabase",
-      name: `${method} ${metricTable}`,
+      name: metricName,
       durationMs: performance.now() - metricStartedAt,
       ok: metricOk,
       status: metricStatus,
@@ -181,23 +182,24 @@ export async function supabaseRequest(pathname, options = {}) {
   }
 }
 
-export async function select(table, params = {}) {
-  return await supabaseRequest(`/${encodeTableName(table)}${queryString(params)}`);
+export async function select(table, params = {}, options = {}) {
+  return await supabaseRequest(`/${encodeTableName(table)}${queryString(params)}`, options);
 }
 
-export async function selectAll(table, { limit = 1000, order = "", select: selectExpr = "*" } = {}) {
+export async function selectAll(table, { limit = 1000, order = "", select: selectExpr = "*", profileName = "" } = {}) {
   const params = {
     select: selectExpr,
     limit: String(Math.max(1, Math.min(5000, Number(limit) || 1000))),
   };
   if (order) params.order = order;
-  const rows = await select(table, params);
+  const rows = await select(table, params, profileName ? { profileName } : {});
   return Array.isArray(rows) ? rows : [];
 }
 
-export async function selectById(table, id) {
+export async function selectById(table, id, options = {}) {
   const rows = await supabaseRequest(
     `/${encodeTableName(table)}?select=*&id=eq.${encodeFilterValue(id)}&limit=1`,
+    options,
   );
   return Array.isArray(rows) ? rows[0] || null : null;
 }

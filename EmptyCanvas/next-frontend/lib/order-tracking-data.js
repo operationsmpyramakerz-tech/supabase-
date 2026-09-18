@@ -47,7 +47,7 @@ async function rowsByOrderNumber(orderNumber, account) {
     order_number: `eq.${Number(orderNumber)}`,
     order: "notion_created_time.desc,id.desc",
     limit: "500",
-  });
+  }, { profileName: "orders.tracking.rows" });
   return (Array.isArray(rows) ? rows : []).filter((row) => visibleRow(row, account));
 }
 

@@ -115,15 +115,22 @@ export async function fetchLegacyJson(pathname, options = {}) {
   const [cookieStore, headerStore] = await Promise.all([cookies(), headers()]);
   const url = new URL(String(pathname || "/"), origin);
   const metricName = legacyMetricName(url);
+  const isPageBootstrap = url.pathname === "/api/page-bootstrap";
   // timeoutMs is a total request budget. Previously it was applied once per
-  // retry, so a 15 s request could block navigation for roughly 45 s.
-  const timeoutMs = Math.max(1000, Number(options.timeoutMs || 8000) || 8000);
+  // retry, so a 15 s request could block navigation for roughly 45 s. The
+  // monolithic page-bootstrap endpoint is now only a compatibility fallback,
+  // so cap its tail latency even when an older page passes a 40-55s budget.
+  const requestedTimeoutMs = Math.max(1000, Number(options.timeoutMs || 8000) || 8000);
+  const pageBootstrapCapMs = Math.max(5000, Math.min(20000, Number(process.env.LEGACY_BOOTSTRAP_TIMEOUT_MS || 12000) || 12000));
+  const timeoutMs = isPageBootstrap ? Math.min(requestedTimeoutMs, pageBootstrapCapMs) : requestedTimeoutMs;
   const hasBody = typeof options.body !== "undefined" && options.body !== null;
   const body = hasBody && typeof options.body !== "string" ? JSON.stringify(options.body) : options.body;
   const method = String(options.method || "GET").toUpperCase();
   const requestedAttempts = Number(options.maxAttempts);
   const maxAttempts = method === "GET"
-    ? Math.max(1, Math.min(2, Number.isFinite(requestedAttempts) ? Math.round(requestedAttempts) : 2))
+    ? (isPageBootstrap
+        ? 1
+        : Math.max(1, Math.min(2, Number.isFinite(requestedAttempts) ? Math.round(requestedAttempts) : 2)))
     : 1;
   const cookieValue = cookieHeader(cookieStore);
   const cacheKey = method === "GET" && !hasBody ? accountBridgeCacheKey(url, cookieValue) : "";

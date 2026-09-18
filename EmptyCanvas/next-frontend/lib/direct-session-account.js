@@ -9,6 +9,7 @@ import { recordPerformanceSample } from "./performance-profiler";
 const SESSION_LOOKUP_TIMEOUT_MS = 3500;
 const APP_PAGES_CACHE_TTL_MS = 60_000;
 const MEMBER_ACCESS_CACHE_TTL_MS = 2_500;
+const MEMBER_ROW_CACHE_TTL_MS = 2_500;
 
 let appPagesCache = null;
 let appPagesInflight = null;
@@ -16,6 +17,7 @@ const memberAccessCache = new Map();
 const memberAccessInflight = new Map();
 const directSessionInflight = new Map();
 const memberRowInflight = new Map();
+const memberRowCache = new Map();
 
 function text(value) {
   if (value === null || typeof value === "undefined") return "";
@@ -360,7 +362,11 @@ async function listAppPages() {
   if (appPagesCache?.expiresAt > now) return appPagesCache.value;
   if (appPagesInflight) return await appPagesInflight;
 
-  const pending = selectAll("app_pages", { limit: 1000, order: "sort_order.asc" });
+  const pending = selectAll("app_pages", {
+    limit: 1000,
+    order: "sort_order.asc",
+    profileName: "auth.app-pages",
+  });
   appPagesInflight = pending;
   try {
     const rows = await pending;
@@ -382,7 +388,7 @@ async function listMemberAccess(memberId) {
     select: "*",
     team_member_id: `eq.${id}`,
     limit: "1000",
-  }).then((rows) => Array.isArray(rows) ? rows : []);
+  }, { profileName: "auth.page-access" }).then((rows) => Array.isArray(rows) ? rows : []);
   memberAccessInflight.set(id, pending);
   try {
     const rows = await pending;
@@ -397,12 +403,19 @@ async function listMemberAccess(memberId) {
 async function readFreshMemberRow(memberId) {
   const id = text(memberId);
   if (!id) return null;
+
+  const cached = memberRowCache.get(id);
+  if (cached?.expiresAt > Date.now()) return cached.value;
+  if (cached) memberRowCache.delete(id);
   if (memberRowInflight.has(id)) return await memberRowInflight.get(id);
 
-  const pending = selectById(teamMembersTable(), id);
+  const pending = selectById(teamMembersTable(), id, { profileName: "auth.member-row" });
   memberRowInflight.set(id, pending);
   try {
-    return await pending;
+    const row = await pending;
+    memberRowCache.set(id, { value: row, expiresAt: Date.now() + MEMBER_ROW_CACHE_TTL_MS });
+    if (memberRowCache.size > 250) memberRowCache.delete(memberRowCache.keys().next().value);
+    return row;
   } finally {
     if (memberRowInflight.get(id) === pending) memberRowInflight.delete(id);
   }

@@ -267,7 +267,7 @@ async function candidateNumbers({ cursor = null, scanGroups = 90, filters = {} }
       if (parsedCursor !== null) params.order_number = `lt.${parsedCursor}`;
       else if (!params.order_number) params.order_number = "not.is.null";
     }
-    const rows = await select(tableName(), params);
+    const rows = await select(tableName(), params, { profileName: "orders.current.candidates" });
     const chunk = Array.isArray(rows) ? rows : [];
     for (const row of chunk) {
       const orderNumber = num(row?.order_number);
@@ -307,13 +307,13 @@ async function rowsByNumbers(numbers = []) {
       let rows;
       if (useProjection) {
         try {
-          rows = await select(tableName(), { ...baseParams, select: SUMMARY_SELECT });
+          rows = await select(tableName(), { ...baseParams, select: SUMMARY_SELECT }, { profileName: "orders.current.summary" });
         } catch {
           useProjection = false;
-          rows = await select(tableName(), { ...baseParams, select: "*" });
+          rows = await select(tableName(), { ...baseParams, select: "*" }, { profileName: "orders.current.summary-fallback" });
         }
       } else {
-        rows = await select(tableName(), { ...baseParams, select: "*" });
+        rows = await select(tableName(), { ...baseParams, select: "*" }, { profileName: "orders.current.summary-fallback" });
       }
       const chunk = Array.isArray(rows) ? rows : [];
       out.push(...chunk);

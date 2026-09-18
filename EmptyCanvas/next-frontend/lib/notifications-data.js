@@ -92,11 +92,11 @@ export async function notificationsForMember(memberId, { limit = 25, fresh = fal
   // Read a slightly wider window so the unread badge remains consistent with
   // the legacy endpoint while only returning the requested visible slice.
   const pending = select(notificationTable(), {
-    select: "*",
+    select: "id,notification_id,type,title,body,url,read,ts,created_at",
     user_id: `eq.${id}`,
     order: "ts.desc",
     limit: "200",
-  }).then((rows) => {
+  }, { profileName: "notifications.list" }).then((rows) => {
     const allItems = (Array.isArray(rows) ? rows : [])
       .map(itemFromRow)
       .filter(Boolean)
@@ -133,7 +133,7 @@ export async function markNotificationReadForMember(memberId, notificationId) {
     user_id: `eq.${id}`,
     notification_id: `eq.${notifId}`,
     limit: "1",
-  });
+  }, { profileName: "notifications.lookup" });
   const row = Array.isArray(rows) ? rows[0] : null;
   if (!row?.id) return { success: true, changed: false };
   if (!bool(row.read, false)) {
@@ -157,6 +157,7 @@ export async function markAllNotificationsReadForMember(memberId) {
     method: "PATCH",
     headers: { Prefer: "return=representation" },
     body: { read: true, updated_at: new Date().toISOString() },
+    profileName: "notifications.mark-all-read",
   });
   invalidate(id);
   return { success: true, changed: Array.isArray(rows) ? rows.length : 0 };

@@ -320,7 +320,7 @@ export async function loadRawOrderRowsByIds(orderIds = []) {
     id: inFilter(ids),
     order: "notion_created_time.desc,id.desc",
     limit: String(Math.max(500, ids.length)),
-  });
+  }, { profileName: "orders.details-by-id" });
   const safeRows = Array.isArray(rows) ? rows : [];
   const found = new Set(safeRows.map((row) => text(valueFor(row, ["id", "ID"]))).filter(Boolean));
   if (ids.some((id) => !found.has(id))) {
