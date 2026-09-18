@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { APP_NAVIGATION_EVENT } from "../lib/client-navigation";
 
 const BASE_PATH = "/next";
 
@@ -68,6 +69,27 @@ export default function InternalNavigationBridge() {
       if (anchor) prefetchAnchor(anchor);
     };
 
+    const onProgrammaticNavigate = (event) => {
+      const detail = event instanceof CustomEvent ? event.detail : null;
+      const rawTarget = String(detail?.target || "").trim();
+      if (!rawTarget) return;
+
+      let destination;
+      try {
+        destination = new URL(rawTarget, window.location.href);
+      } catch {
+        return;
+      }
+      if (destination.origin !== window.location.origin) return;
+
+      const href = routerHrefFromUrl(destination);
+      if (!href) return;
+
+      event.preventDefault();
+      if (detail?.replace) router.replace(href);
+      else router.push(href);
+    };
+
     const onClick = (event) => {
       if (!(event instanceof MouseEvent) || event.defaultPrevented) return;
       if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -104,12 +126,14 @@ export default function InternalNavigationBridge() {
     document.addEventListener("focusin", onFocusIn, false);
     document.addEventListener("pointerdown", onPointerDown, false);
     document.addEventListener("click", onClick, false);
+    window.addEventListener(APP_NAVIGATION_EVENT, onProgrammaticNavigate);
 
     return () => {
       document.removeEventListener("pointerover", onPointerOver, false);
       document.removeEventListener("focusin", onFocusIn, false);
       document.removeEventListener("pointerdown", onPointerDown, false);
       document.removeEventListener("click", onClick, false);
+      window.removeEventListener(APP_NAVIGATION_EVENT, onProgrammaticNavigate);
     };
   }, [router]);
 

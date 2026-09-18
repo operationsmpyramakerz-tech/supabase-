@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { navigateWithinApp } from "../../lib/client-navigation";
 import ClassicOrderIcon from "./ClassicOrderIcon";
 
 // Direct Next route handlers must include the configured /next basePath.
@@ -1590,7 +1591,7 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
         const editUrl = new URL("/next/orders/new/request-maintenance", window.location.origin);
         editUrl.searchParams.set("edit", "1");
         if (editKey) editUrl.searchParams.set("editKey", editKey);
-        window.location.href = `${editUrl.pathname}${editUrl.search}`;
+        navigateWithinApp(`${editUrl.pathname}${editUrl.search}`);
         return;
       }
 

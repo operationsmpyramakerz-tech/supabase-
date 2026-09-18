@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { navigateWithinApp } from "../../lib/client-navigation";
 import EventIcon from "./EventIcon";
 
 const STATUS_LABELS = {
@@ -504,7 +505,7 @@ export default function EventsClient({ account, initialEvents = [], bootstrapWar
       if (!isWorkflow && authorization.value === "edit") {
         const editId = authorization.eventId;
         setAuthorization(null);
-        window.location.href = `/next/events/new?edit=${encodeURIComponent(editId)}`;
+        navigateWithinApp(`/next/events/new?edit=${encodeURIComponent(editId)}`);
         return;
       }
 

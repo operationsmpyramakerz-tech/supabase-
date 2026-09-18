@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { navigateWithinApp } from "../../lib/client-navigation";
 import ClassicOrderIcon from "./ClassicOrderIcon";
 import { groupOrderItems, OrderGroupHeader, OrderSortButton } from "./OrderGrouping";
 import OrderDownloadModal from "./OrderDownloadModal";
@@ -1008,7 +1009,7 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
         editUrl.searchParams.set("edit", "1");
         if (data?.orderType) editUrl.searchParams.set("type", String(data.orderType));
         if (editKey) editUrl.searchParams.set("editKey", editKey);
-        window.location.href = `${editUrl.pathname}${editUrl.search}`;
+        navigateWithinApp(`${editUrl.pathname}${editUrl.search}`);
         return;
       }
 

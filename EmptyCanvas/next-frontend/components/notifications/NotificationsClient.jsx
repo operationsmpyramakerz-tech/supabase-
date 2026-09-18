@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { navigateWithinApp } from "../../lib/client-navigation";
 import {
   modernNotificationUrl,
   notificationDateTime,
@@ -280,7 +281,7 @@ export default function NotificationsClient({ initialItems = [], initialUnreadCo
   async function openItem(item) {
     await markRead(item);
     const target = modernNotificationUrl(item?.url);
-    if (target) window.location.href = target;
+    if (target) navigateWithinApp(target);
   }
 
   return (

@@ -12,6 +12,8 @@ let appPagesCache = null;
 let appPagesInflight = null;
 const memberAccessCache = new Map();
 const memberAccessInflight = new Map();
+const directSessionInflight = new Map();
+const memberRowInflight = new Map();
 
 function text(value) {
   if (value === null || typeof value === "undefined") return "";
@@ -264,14 +266,9 @@ function parseSessionValue(value) {
   try { return JSON.parse(String(value)); } catch { return null; }
 }
 
-async function readDirectSession() {
-  const cookieStore = await cookies();
-  const cookieName = String(process.env.SESSION_COOKIE_NAME || "op.sid").trim() || "op.sid";
-  const cookie = cookieStore.get(cookieName);
-  if (!cookie?.value) return { definitive: true, status: 401, session: null, error: "Authentication required." };
-
+async function resolveDirectSessionCookie(cookieValue) {
   const secret = String(process.env.SESSION_SECRET || "dev-fallback-secret");
-  const sid = unsignSessionCookie(cookie.value, secret);
+  const sid = unsignSessionCookie(cookieValue, secret);
   if (!sid) return { definitive: true, status: 401, session: null, error: "Invalid session cookie." };
 
   let values;
@@ -317,6 +314,29 @@ async function readDirectSession() {
   return { definitive: true, status: 200, session: sessionValue, error: "" };
 }
 
+async function readDirectSession() {
+  const cookieStore = await cookies();
+  const cookieName = String(process.env.SESSION_COOKIE_NAME || "op.sid").trim() || "op.sid";
+  const cookie = cookieStore.get(cookieName);
+  if (!cookie?.value) return { definitive: true, status: 401, session: null, error: "Authentication required." };
+
+  // A single page transition can fan out into several Direct Next API requests
+  // at once. Reuse only the *in-flight* validation promise for the exact signed
+  // cookie so those bursts do not repeat the same Upstash MGET + revocation
+  // check. Nothing is retained after completion, so logout/revocation freshness
+  // is unchanged.
+  const inflightKey = String(cookie.value);
+  if (directSessionInflight.has(inflightKey)) return await directSessionInflight.get(inflightKey);
+
+  const pending = resolveDirectSessionCookie(cookie.value);
+  directSessionInflight.set(inflightKey, pending);
+  try {
+    return await pending;
+  } finally {
+    if (directSessionInflight.get(inflightKey) === pending) directSessionInflight.delete(inflightKey);
+  }
+}
+
 async function listAppPages() {
   const now = Date.now();
   if (appPagesCache?.expiresAt > now) return appPagesCache.value;
@@ -353,6 +373,20 @@ async function listMemberAccess(memberId) {
     return rows;
   } finally {
     memberAccessInflight.delete(id);
+  }
+}
+
+async function readFreshMemberRow(memberId) {
+  const id = text(memberId);
+  if (!id) return null;
+  if (memberRowInflight.has(id)) return await memberRowInflight.get(id);
+
+  const pending = selectById(teamMembersTable(), id);
+  memberRowInflight.set(id, pending);
+  try {
+    return await pending;
+  } finally {
+    if (memberRowInflight.get(id) === pending) memberRowInflight.delete(id);
   }
 }
 
@@ -466,7 +500,7 @@ export async function getDirectSessionAccountGate(requiredPages = []) {
 
   try {
     const [memberRow, pages, accessRows] = await Promise.all([
-      selectById(teamMembersTable(), memberId),
+      readFreshMemberRow(memberId),
       listAppPages(),
       listMemberAccess(memberId),
     ]);

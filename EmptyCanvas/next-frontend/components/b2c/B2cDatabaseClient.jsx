@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { navigateWithinApp } from "../../lib/client-navigation";
 
 function text(value) { return String(value ?? "").trim(); }
 function lower(value) { return text(value).toLowerCase(); }
@@ -214,7 +215,7 @@ export default function B2cDatabaseClient({ initialPayload, bootstrapWarnings = 
       setDialog(null);
       await refresh({ silent: true });
       notify(isEdit ? `“${name}” was updated.` : `“${name}” was created.`);
-      if (!isEdit && payload?.database?.id) window.location.href = `/next/b2c/database/${encodeURIComponent(payload.database.id)}`;
+      if (!isEdit && payload?.database?.id) navigateWithinApp(`/next/b2c/database/${encodeURIComponent(payload.database.id)}`);
     } finally { setBusy(""); }
   };
   const copyDatabase = async (database) => {

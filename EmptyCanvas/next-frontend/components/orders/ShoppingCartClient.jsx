@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { navigateWithinApp } from "../../lib/client-navigation";
 
 const DEFAULT_ORDER_TYPES = ["Request Products", "Withdraw Products", "Request Maintenance"];
 const EDIT_TRANSFER_TTL_MS = 30 * 60 * 1000;
@@ -941,7 +942,7 @@ export default function ShoppingCartClient({
         });
       } catch {}
       clearEditTransfer();
-      window.location.href = "/next/orders";
+      navigateWithinApp("/next/orders");
       return;
     }
     setSelectedType("");
@@ -1099,7 +1100,7 @@ export default function ShoppingCartClient({
         title: editMode ? "Order updated" : (withdraw ? "Withdrawal submitted" : maintenance ? "Maintenance submitted" : "Order submitted"),
         message: response?.message || "The order was saved successfully.",
       });
-      window.setTimeout(() => { window.location.href = "/next/orders"; }, 850);
+      window.setTimeout(() => { navigateWithinApp("/next/orders"); }, 850);
     } catch (error) {
       setNotice({ type: "error", title: "Submission failed", message: error?.message || "The order could not be submitted." });
     } finally {

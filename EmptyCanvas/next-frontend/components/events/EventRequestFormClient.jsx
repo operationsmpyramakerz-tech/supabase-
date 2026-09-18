@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { navigateWithinApp } from "../../lib/client-navigation";
 
 const STANDARD_EVENT_TYPES = [
   { code: "tech_day", label: "Tech Day", isCustom: false },
@@ -506,7 +507,7 @@ export default function EventRequestFormClient({
         body: JSON.stringify(payload()),
       });
       notify("success", "Events", editingId ? "Event request updated successfully." : "Event request submitted successfully.");
-      window.setTimeout(() => { window.location.href = "/next/events"; }, 550);
+      window.setTimeout(() => { navigateWithinApp("/next/events"); }, 550);
     } catch (submitError) {
       setError(submitError?.message || "Could not save the event request.");
       setSubmitting(false);
