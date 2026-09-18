@@ -4,6 +4,7 @@ import { isSupabaseConfigured, select } from "./supabase-rest";
 import { serializeOperationsSummaryRow } from "./operations-orders-data";
 import { loadRawOrderRowsByIds, serializeOperationsOrderDetail } from "./order-details-data";
 import { loadOrderRowsByNumbers, scanOrderNumberCandidates } from "./order-pagination";
+import { applyOrderSearchPlan, canUseOrderSearchText, createOrderSearchPlan, noteOrderSearchTextError } from "./order-search-hotpath";
 
 const PAGE_LIMIT = 36;
 const PAGE_MAX = 80;
@@ -195,20 +196,10 @@ function groupSearchText(items = []) {
   ]).map((value) => norm(value)).join(" ");
 }
 
+const SEARCH_COLUMNS = ["reason", "team_member_name", "product_name", "order_type"];
+
 function searchLogic(query = "") {
-  const clean = safeFilterText(query);
-  if (!clean) return null;
-  const numeric = clean.match(/^(?:ord[-\s]*)?(\d+)$/i);
-  if (numeric) return { orderNumber: Number(numeric[1]), clauses: null };
-  return {
-    orderNumber: null,
-    clauses: [
-      `reason.ilike.*${clean}*`,
-      `team_member_name.ilike.*${clean}*`,
-      `product_name.ilike.*${clean}*`,
-      `order_type.ilike.*${clean}*`,
-    ],
-  };
+  return createOrderSearchPlan(query, SEARCH_COLUMNS);
 }
 
 function memberClauses(account = {}) {
@@ -235,15 +226,13 @@ function memberClauses(account = {}) {
   ];
 }
 
-function logicalParams({ account = {}, query = "", type = "all" } = {}) {
+function logicalParams({ account = {}, query = "", type = "all", searchMode = "fast" } = {}) {
   const params = {};
   const logicGroups = [];
   const member = memberClauses(account);
   if (member.length) logicGroups.push(member);
 
-  const search = searchLogic(query);
-  if (Number.isFinite(search?.orderNumber)) params.order_number = `eq.${search.orderNumber}`;
-  else if (search?.clauses?.length) logicGroups.push(search.clauses);
+  applyOrderSearchPlan({ params, logicGroups, plan: searchLogic(query), mode: searchMode });
 
   const typeLabel = orderTypeLabel(type);
   if (typeLabel) params.order_type = `ilike.*${typeLabel.replace(/[*%]/g, "")}*`;
@@ -253,7 +242,8 @@ function logicalParams({ account = {}, query = "", type = "all" } = {}) {
   return params;
 }
 
-async function candidateNumbers({ cursor = null, scanGroups = 90, filters = {} } = {}) {
+async function candidateNumbers({ cursor = null, scanGroups = 90, filters = {}, searchMode = "", signal = null } = {}) {
+  const suffix = searchMode ? `.search-${searchMode}` : "";
   return await scanOrderNumberCandidates({
     table: tableName(),
     cursor,
@@ -263,12 +253,13 @@ async function candidateNumbers({ cursor = null, scanGroups = 90, filters = {} }
     rowChunk: 1000,
     maxScannedRows: 12000,
     filters,
-    queryProfileName: "orders.current.candidates",
-    scanProfileName: "orders.current.candidate-scan",
+    queryProfileName: `orders.current${suffix}.candidates`,
+    scanProfileName: `orders.current${suffix}.candidate-scan`,
+    signal,
   });
 }
 
-async function rowsByNumbers(numbers = []) {
+async function rowsByNumbers(numbers = [], signal = null) {
   return await loadOrderRowsByNumbers({
     table: tableName(),
     numbers,
@@ -276,6 +267,7 @@ async function rowsByNumbers(numbers = []) {
     queryProfileName: "orders.current.summary",
     fallbackProfileName: "orders.current.summary-fallback",
     loadProfileName: "orders.current.summary-load",
+    signal,
   });
 }
 
@@ -300,6 +292,7 @@ export async function loadCurrentOrdersPage({
   query = "",
   cursor = null,
   limit = PAGE_LIMIT,
+  signal = null,
 } = {}) {
   if (!isSupabaseConfigured()) return null;
   const username = accountUsername(account);
@@ -313,33 +306,57 @@ export async function loadCurrentOrdersPage({
 
   while (outputGroups.length < safeLimit && hasMore && loops < 20) {
     loops += 1;
-    const filters = logicalParams({ account, query, type });
+    const searchPlan = searchLogic(query);
+    const hasTextSearch = Boolean(searchPlan?.clean && !Number.isFinite(searchPlan?.orderNumber));
+    const fastSearch = hasTextSearch && canUseOrderSearchText();
+    const filters = logicalParams({ account, query, type, searchMode: fastSearch ? "fast" : "legacy" });
     let candidates;
     try {
       candidates = await candidateNumbers({
         cursor: nextCursor,
         scanGroups: Math.max(safeLimit * 2, 72),
         filters,
+        searchMode: hasTextSearch ? (fastSearch ? "fast" : "legacy") : "",
+        signal,
       });
-    } catch {
-      // Custom/older schemas may reject a projected filter column. Preserve the
-      // direct paged read and apply creator/search/type rules after the query.
-      candidates = await candidateNumbers({
-        cursor: nextCursor,
-        scanGroups: Math.max(safeLimit * 2, 72),
-        filters: {},
-      });
+    } catch (error) {
+      if (signal?.aborted || error?.code === "REQUEST_ABORTED" || error?.name === "AbortError") throw error;
+      if (fastSearch && noteOrderSearchTextError(error)) {
+        try {
+          candidates = await candidateNumbers({
+            cursor: nextCursor,
+            scanGroups: Math.max(safeLimit * 2, 72),
+            filters: logicalParams({ account, query, type, searchMode: "legacy" }),
+            searchMode: "legacy",
+            signal,
+          });
+        } catch (fallbackError) {
+          if (signal?.aborted || fallbackError?.code === "REQUEST_ABORTED" || fallbackError?.name === "AbortError") throw fallbackError;
+          candidates = null;
+        }
+      }
+      if (!candidates) {
+        // Custom/older schemas may reject a projected filter column. Preserve the
+        // direct paged read and apply creator/search/type rules after the query.
+        candidates = await candidateNumbers({
+          cursor: nextCursor,
+          scanGroups: Math.max(safeLimit * 2, 72),
+          filters: {},
+          searchMode: hasTextSearch ? "local" : "",
+          signal,
+        });
+      }
     }
     if (!candidates.numbers.length) {
       hasMore = false;
       break;
     }
 
-    const rows = await rowsByNumbers(candidates.numbers);
+    const rows = await rowsByNumbers(candidates.numbers, signal);
     const groups = groupRows(rows, account);
     const cleanType = orderTypeKey(type);
     const directSearch = searchLogic(query);
-    const needle = Number.isFinite(directSearch?.orderNumber) ? "" : norm(query);
+    const needle = Number.isFinite(directSearch?.orderNumber) ? "" : norm(directSearch?.clean || query);
     let processedCandidates = 0;
 
     for (const orderNumber of candidates.numbers) {

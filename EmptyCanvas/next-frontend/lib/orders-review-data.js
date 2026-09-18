@@ -2,6 +2,7 @@ import "server-only";
 import { isSupabaseConfigured, select, selectAll, selectById, updateById, updateByIds } from "./supabase-rest";
 import { enrichOrderDetailGrouping, loadRawOrderRowsByIds, serializeReviewOrderDetail } from "./order-details-data";
 import { loadOrderRowsByNumbers, scanOrderNumberCandidates } from "./order-pagination";
+import { applyOrderSearchPlan, canUseOrderSearchText, createOrderSearchPlan, noteOrderSearchTextError } from "./order-search-hotpath";
 import { getReviewerVisibility as reviewerVisibility } from "./reviewer-visibility-service";
 
 const PAGE_LIMIT = 36;
@@ -227,26 +228,21 @@ function filterText(value) {
   return String(value ?? "").trim().replace(/[,*%()]/g, " ").replace(/\s+/g, " ");
 }
 
+const SEARCH_COLUMNS = [
+  "reason",
+  "team_member_name",
+  "product_name",
+  "issue_description",
+  "actual_issue_description",
+  "repair_action",
+  "resolution_method",
+  "person_received_by_operations",
+  "receipt_number",
+  "rejected_reason",
+];
+
 function searchLogic(query = "") {
-  const clean = filterText(query);
-  if (!clean) return null;
-  const numeric = clean.match(/^(?:ord[-\s]*)?(\d+)$/i);
-  if (numeric) return { orderNumber: Number(numeric[1]), clauses: null };
-  return {
-    orderNumber: null,
-    clauses: [
-      `reason.ilike.*${clean}*`,
-      `team_member_name.ilike.*${clean}*`,
-      `product_name.ilike.*${clean}*`,
-      `issue_description.ilike.*${clean}*`,
-      `actual_issue_description.ilike.*${clean}*`,
-      `repair_action.ilike.*${clean}*`,
-      `resolution_method.ilike.*${clean}*`,
-      `person_received_by_operations.ilike.*${clean}*`,
-      `receipt_number.ilike.*${clean}*`,
-      `rejected_reason.ilike.*${clean}*`,
-    ],
-  };
+  return createOrderSearchPlan(query, SEARCH_COLUMNS);
 }
 
 function visibilityLogic(visible) {
@@ -272,15 +268,13 @@ function statusLogic(tab = "all") {
   return null;
 }
 
-function logicalParams({ visible, query = "", tab = "all", type = "all" } = {}) {
+function logicalParams({ visible, query = "", tab = "all", type = "all", searchMode = "fast" } = {}) {
   const params = {};
   const logicGroups = [];
   const visibleClauses = visibilityLogic(visible);
   if (visibleClauses?.length) logicGroups.push(visibleClauses);
 
-  const search = searchLogic(query);
-  if (Number.isFinite(search?.orderNumber)) params.order_number = `eq.${search.orderNumber}`;
-  else if (search?.clauses?.length) logicGroups.push(search.clauses);
+  applyOrderSearchPlan({ params, logicGroups, plan: searchLogic(query), mode: searchMode });
 
   const statusClauses = statusLogic(tab);
   if (statusClauses?.length) logicGroups.push(statusClauses);
@@ -293,7 +287,8 @@ function logicalParams({ visible, query = "", tab = "all", type = "all" } = {}) 
   return params;
 }
 
-async function candidateNumbers({ cursor = null, scanGroups = 90, filters = {} } = {}) {
+async function candidateNumbers({ cursor = null, scanGroups = 90, filters = {}, searchMode = "", signal = null } = {}) {
+  const suffix = searchMode ? `.search-${searchMode}` : "";
   return await scanOrderNumberCandidates({
     table: tableName(),
     cursor,
@@ -303,12 +298,13 @@ async function candidateNumbers({ cursor = null, scanGroups = 90, filters = {} }
     rowChunk: 1000,
     maxScannedRows: 12000,
     filters,
-    queryProfileName: "orders.review.candidates",
-    scanProfileName: "orders.review.candidate-scan",
+    queryProfileName: `orders.review${suffix}.candidates`,
+    scanProfileName: `orders.review${suffix}.candidate-scan`,
+    signal,
   });
 }
 
-async function rowsByNumbers(numbers = []) {
+async function rowsByNumbers(numbers = [], signal = null) {
   return await loadOrderRowsByNumbers({
     table: tableName(),
     numbers,
@@ -316,6 +312,7 @@ async function rowsByNumbers(numbers = []) {
     queryProfileName: "orders.review.summary",
     fallbackProfileName: "orders.review.summary-fallback",
     loadProfileName: "orders.review.summary-load",
+    signal,
   });
 }
 
@@ -352,6 +349,7 @@ export async function loadOrdersReviewPage({
   query = "",
   cursor = null,
   limit = PAGE_LIMIT,
+  signal = null,
 } = {}) {
   if (!isSupabaseConfigured() || !account) return null;
   const safeLimit = pageLimit(limit);
@@ -368,23 +366,47 @@ export async function loadOrdersReviewPage({
 
   while (outputGroups.length < safeLimit && hasMore && loops < 12) {
     loops += 1;
-    const filters = logicalParams({ visible, query, tab: cleanTab, type });
+    const searchPlan = searchLogic(query);
+    const hasTextSearch = Boolean(searchPlan?.clean && !Number.isFinite(searchPlan?.orderNumber));
+    const fastSearch = hasTextSearch && canUseOrderSearchText();
+    const filters = logicalParams({ visible, query, tab: cleanTab, type, searchMode: fastSearch ? "fast" : "legacy" });
     let candidates;
     try {
       candidates = await candidateNumbers({
         cursor: nextCursor,
         scanGroups: Math.max(safeLimit * 2, 60),
         filters,
+        searchMode: hasTextSearch ? (fastSearch ? "fast" : "legacy") : "",
+        signal,
       });
-    } catch {
-      // Keep order-number paging even if a customized/older schema rejects one
-      // of the direct DB filter columns. Exact visibility and tab filtering is
-      // still applied below before anything is returned to the reviewer.
-      candidates = await candidateNumbers({
-        cursor: nextCursor,
-        scanGroups: Math.max(safeLimit * 3, 80),
-        filters: {},
-      });
+    } catch (error) {
+      if (signal?.aborted || error?.code === "REQUEST_ABORTED" || error?.name === "AbortError") throw error;
+      if (fastSearch && noteOrderSearchTextError(error)) {
+        try {
+          candidates = await candidateNumbers({
+            cursor: nextCursor,
+            scanGroups: Math.max(safeLimit * 2, 60),
+            filters: logicalParams({ visible, query, tab: cleanTab, type, searchMode: "legacy" }),
+            searchMode: "legacy",
+            signal,
+          });
+        } catch (fallbackError) {
+          if (signal?.aborted || fallbackError?.code === "REQUEST_ABORTED" || fallbackError?.name === "AbortError") throw fallbackError;
+          candidates = null;
+        }
+      }
+      if (!candidates) {
+        // Keep order-number paging even if a customized/older schema rejects one
+        // of the direct DB filter columns. Exact visibility and tab filtering is
+        // still applied below before anything is returned to the reviewer.
+        candidates = await candidateNumbers({
+          cursor: nextCursor,
+          scanGroups: Math.max(safeLimit * 3, 80),
+          filters: {},
+          searchMode: hasTextSearch ? "local" : "",
+          signal,
+        });
+      }
     }
 
     if (!candidates.numbers.length) {
@@ -392,7 +414,7 @@ export async function loadOrdersReviewPage({
       break;
     }
 
-    const rows = await rowsByNumbers(candidates.numbers);
+    const rows = await rowsByNumbers(candidates.numbers, signal);
     const allowedRows = rows.filter((row) => {
       if (!visibleToReviewer(row, visible)) return false;
       const issueDescription = text(valueFor(row, ["issue_description", "Issue Description"]));
@@ -409,7 +431,7 @@ export async function loadOrdersReviewPage({
     const groups = groupRows(allowedRows);
     const cleanType = orderTypeKey(type);
     const directSearch = searchLogic(query);
-    const needle = Number.isFinite(directSearch?.orderNumber) ? "" : norm(query);
+    const needle = Number.isFinite(directSearch?.orderNumber) ? "" : norm(directSearch?.clean || query);
     let processedCandidates = 0;
 
     for (const orderNumber of candidates.numbers) {

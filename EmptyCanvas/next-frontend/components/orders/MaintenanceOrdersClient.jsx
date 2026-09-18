@@ -1388,6 +1388,7 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
   const creatorProfileCache = useRef(new Map());
   const orderDetailsCache = useRef(new Map());
   const listRequestRef = useRef(0);
+  const listAbortRef = useRef(null);
   const initialFilterKeyRef = useRef("all|all|");
 
   useClassicHeaderSearch(query, setQuery, "Search by issue, product, or user...");
@@ -1454,6 +1455,9 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
 
   async function fetchOrdersPage({ reset = true, fresh = false } = {}) {
     const requestId = ++listRequestRef.current;
+    listAbortRef.current?.abort();
+    const controller = new AbortController();
+    listAbortRef.current = controller;
     setListLoading(true);
     try {
       const params = new URLSearchParams({
@@ -1470,6 +1474,7 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
       const response = await fetch(`${DIRECT_API_BASE}/orders/maintenance/paged-summary?${params.toString()}`, {
         credentials: "include",
         cache: "no-store",
+        signal: controller.signal,
       });
       if (response.status === 401) {
         window.location.href = "/login?next=/next/maintenance-orders";
@@ -1495,7 +1500,11 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
         orderDetailsCache.current.clear();
         setSelected(null);
       }
+    } catch (error) {
+      if (error?.name === "AbortError") return;
+      throw error;
     } finally {
+      if (listAbortRef.current === controller) listAbortRef.current = null;
       if (requestId === listRequestRef.current) setListLoading(false);
     }
   }

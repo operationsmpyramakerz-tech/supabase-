@@ -49,6 +49,7 @@ export async function scanOrderNumberCandidates({
   filters = {},
   queryProfileName = "orders.candidates",
   scanProfileName = "orders.candidate-scan",
+  signal = null,
 } = {}) {
   const target = positiveInteger(wanted, 90, minWanted, maxWanted);
   const chunkSize = positiveInteger(rowChunk, 1000, 100, 5000);
@@ -80,7 +81,7 @@ export async function scanOrderNumberCandidates({
       }
 
       requests += 1;
-      const rows = await select(table, params, { profileName: queryProfileName });
+      const rows = await select(table, params, { profileName: queryProfileName, signal });
       const chunk = Array.isArray(rows) ? rows : [];
       scannedRows += chunk.length;
 
@@ -153,6 +154,7 @@ export async function loadOrderRowsByNumbers({
   queryProfileName = "orders.summary",
   fallbackProfileName = "orders.summary-fallback",
   loadProfileName = "orders.summary-load",
+  signal = null,
 } = {}) {
   const clean = cleanOrderNumbers(numbers);
   if (!clean.length) return [];
@@ -187,16 +189,17 @@ export async function loadOrderRowsByNumbers({
         requests += 1;
         if (useProjection) {
           try {
-            rows = await select(table, { ...baseParams, select: selectExpr }, { profileName: queryProfileName });
-          } catch {
+            rows = await select(table, { ...baseParams, select: selectExpr }, { profileName: queryProfileName, signal });
+          } catch (error) {
+            if (signal?.aborted || error?.code === "REQUEST_ABORTED" || error?.name === "AbortError") throw error;
             usedFallback = true;
             useProjection = false;
             projectionSupported = false;
             requests += 1;
-            rows = await select(table, { ...baseParams, select: "*" }, { profileName: fallbackProfileName });
+            rows = await select(table, { ...baseParams, select: "*" }, { profileName: fallbackProfileName, signal });
           }
         } else {
-          rows = await select(table, { ...baseParams, select: "*" }, { profileName: fallbackProfileName });
+          rows = await select(table, { ...baseParams, select: "*" }, { profileName: fallbackProfileName, signal });
         }
 
         const chunk = Array.isArray(rows) ? rows : [];

@@ -3,6 +3,7 @@ import "server-only";
 import { isSupabaseConfigured, select } from "./supabase-rest";
 import { loadRawOrderRowsByIds, serializeOperationsOrderDetail } from "./order-details-data";
 import { loadOrderRowsByNumbers, scanOrderNumberCandidates } from "./order-pagination";
+import { applyOrderSearchPlan, canUseOrderSearchText, createOrderSearchPlan, noteOrderSearchTextError } from "./order-search-hotpath";
 
 const PAGE_LIMIT = 36;
 const PAGE_MAX = 80;
@@ -140,34 +141,29 @@ function groupSearchText(items = []) {
   ]).map((value) => norm(value)).join(" ");
 }
 
+const SEARCH_COLUMNS = [
+  "reason",
+  "team_member_name",
+  "person_received_by_operations",
+  "product_name",
+  "issue_description",
+  "serial_number",
+  "actual_issue_description",
+  "repair_action",
+  "resolution_method",
+  "spare_parts_replaced",
+  "receipt_number",
+];
+
 function searchLogic(query = "") {
-  const clean = safeFilterText(query);
-  if (!clean) return null;
-  const numeric = clean.match(/^(?:ord[-\s]*)?(\d+)$/i);
-  if (numeric) return { orderNumber: Number(numeric[1]), clauses: null };
-  return {
-    orderNumber: null,
-    clauses: [
-      `reason.ilike.*${clean}*`,
-      `team_member_name.ilike.*${clean}*`,
-      `person_received_by_operations.ilike.*${clean}*`,
-      `product_name.ilike.*${clean}*`,
-      `issue_description.ilike.*${clean}*`,
-      `serial_number.ilike.*${clean}*`,
-      `actual_issue_description.ilike.*${clean}*`,
-      `repair_action.ilike.*${clean}*`,
-      `resolution_method.ilike.*${clean}*`,
-      `spare_parts_replaced.ilike.*${clean}*`,
-      `receipt_number.ilike.*${clean}*`,
-    ],
-  };
+  return createOrderSearchPlan(query, SEARCH_COLUMNS);
 }
 
-function candidateFilters(query = "") {
+function candidateFilters(query = "", searchMode = "fast") {
   const params = { order_type: "ilike.*Request Maintenance*" };
-  const search = searchLogic(query);
-  if (Number.isFinite(search?.orderNumber)) params.order_number = `eq.${search.orderNumber}`;
-  else if (search?.clauses?.length) params.or = `(${search.clauses.join(",")})`;
+  const logicGroups = [];
+  applyOrderSearchPlan({ params, logicGroups, plan: searchLogic(query), mode: searchMode });
+  if (logicGroups.length) params.or = `(${logicGroups[0].join(",")})`;
   return params;
 }
 
@@ -179,7 +175,8 @@ function serializeMaintenanceSummaryRow(row = {}) {
   };
 }
 
-async function candidateNumbers({ cursor = null, scanGroups = 108, filters = {} } = {}) {
+async function candidateNumbers({ cursor = null, scanGroups = 108, filters = {}, searchMode = "", signal = null } = {}) {
+  const suffix = searchMode ? `.search-${searchMode}` : "";
   return await scanOrderNumberCandidates({
     table: tableName(),
     cursor,
@@ -189,12 +186,13 @@ async function candidateNumbers({ cursor = null, scanGroups = 108, filters = {} 
     rowChunk: 1000,
     maxScannedRows: 20000,
     filters,
-    queryProfileName: "orders.maintenance.candidates",
-    scanProfileName: "orders.maintenance.candidate-scan",
+    queryProfileName: `orders.maintenance${suffix}.candidates`,
+    scanProfileName: `orders.maintenance${suffix}.candidate-scan`,
+    signal,
   });
 }
 
-async function rowsByNumbers(numbers = []) {
+async function rowsByNumbers(numbers = [], signal = null) {
   return await loadOrderRowsByNumbers({
     table: tableName(),
     numbers,
@@ -203,6 +201,7 @@ async function rowsByNumbers(numbers = []) {
     queryProfileName: "orders.maintenance.summary",
     fallbackProfileName: "orders.maintenance.summary-fallback",
     loadProfileName: "orders.maintenance.summary-load",
+    signal,
   });
 }
 
@@ -224,6 +223,7 @@ export async function loadMaintenanceOrdersPage({
   query = "",
   cursor = null,
   limit = PAGE_LIMIT,
+  signal = null,
 } = {}) {
   if (!isSupabaseConfigured()) return null;
 
@@ -235,22 +235,46 @@ export async function loadMaintenanceOrdersPage({
 
   while (outputGroups.length < safeLimit && hasMore && loops < 20) {
     loops += 1;
+    const searchPlan = searchLogic(query);
+    const hasTextSearch = Boolean(searchPlan?.clean && !Number.isFinite(searchPlan?.orderNumber));
+    const fastSearch = hasTextSearch && canUseOrderSearchText();
     let candidates;
     try {
       candidates = await candidateNumbers({
         cursor: nextCursor,
         scanGroups: Math.max(safeLimit * 3, 108),
-        filters: candidateFilters(query),
+        filters: candidateFilters(query, fastSearch ? "fast" : "legacy"),
+        searchMode: hasTextSearch ? (fastSearch ? "fast" : "legacy") : "",
+        signal,
       });
-    } catch {
-      // Older/custom schemas may reject one of the searchable maintenance
-      // columns. Keep direct pagination and apply the search after loading the
-      // summary rows instead of dropping back to the entire Legacy bootstrap.
-      candidates = await candidateNumbers({
-        cursor: nextCursor,
-        scanGroups: Math.max(safeLimit * 3, 108),
-        filters: { order_type: "ilike.*Request Maintenance*" },
-      });
+    } catch (error) {
+      if (signal?.aborted || error?.code === "REQUEST_ABORTED" || error?.name === "AbortError") throw error;
+      if (fastSearch && noteOrderSearchTextError(error)) {
+        try {
+          candidates = await candidateNumbers({
+            cursor: nextCursor,
+            scanGroups: Math.max(safeLimit * 3, 108),
+            filters: candidateFilters(query, "legacy"),
+            searchMode: "legacy",
+            signal,
+          });
+        } catch (fallbackError) {
+          if (signal?.aborted || fallbackError?.code === "REQUEST_ABORTED" || fallbackError?.name === "AbortError") throw fallbackError;
+          candidates = null;
+        }
+      }
+      if (!candidates) {
+        // Older/custom schemas may reject one of the searchable maintenance
+        // columns. Keep direct pagination and apply the search after loading the
+        // summary rows instead of dropping back to the entire Legacy bootstrap.
+        candidates = await candidateNumbers({
+          cursor: nextCursor,
+          scanGroups: Math.max(safeLimit * 3, 108),
+          filters: { order_type: "ilike.*Request Maintenance*" },
+          searchMode: hasTextSearch ? "local" : "",
+          signal,
+        });
+      }
     }
 
     if (!candidates.numbers.length) {
@@ -258,10 +282,10 @@ export async function loadMaintenanceOrdersPage({
       break;
     }
 
-    const rows = await rowsByNumbers(candidates.numbers);
+    const rows = await rowsByNumbers(candidates.numbers, signal);
     const groups = groupRows(rows);
     const directSearch = searchLogic(query);
-    const needle = Number.isFinite(directSearch?.orderNumber) ? "" : norm(query);
+    const needle = Number.isFinite(directSearch?.orderNumber) ? "" : norm(directSearch?.clean || query);
     let processedCandidates = 0;
 
     for (const orderNumber of candidates.numbers) {

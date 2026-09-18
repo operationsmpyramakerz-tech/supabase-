@@ -5,6 +5,7 @@ import { getProductsCatalog } from "./products-service";
 import { listTeamMembersLite } from "./team-members-service";
 import { invalidateStocktakingReadCaches } from "./stocktaking-data";
 import { loadOrderRowsByNumbers, scanOrderNumberCandidates } from "./order-pagination";
+import { applyOrderSearchPlan, canUseOrderSearchText, createOrderSearchPlan, noteOrderSearchTextError } from "./order-search-hotpath";
 
 const PAGE_LIMIT = 36;
 const PAGE_MAX = 80;
@@ -298,26 +299,21 @@ function filterText(value) {
   return String(value ?? "").trim().replace(/[,*%()]/g, " ").replace(/\s+/g, " ");
 }
 
+const SEARCH_COLUMNS = [
+  "reason",
+  "team_member_name",
+  "product_name",
+  "issue_description",
+  "actual_issue_description",
+  "repair_action",
+  "resolution_method",
+  "person_received_by_operations",
+  "receipt_number",
+  "rejected_reason",
+];
+
 function searchLogic(query = "") {
-  const clean = filterText(query);
-  if (!clean) return null;
-  const numeric = clean.match(/^(?:ord[-\s]*)?(\d+)$/i);
-  if (numeric) return { orderNumber: Number(numeric[1]), clauses: null };
-  return {
-    orderNumber: null,
-    clauses: [
-      `reason.ilike.*${clean}*`,
-      `team_member_name.ilike.*${clean}*`,
-      `product_name.ilike.*${clean}*`,
-      `issue_description.ilike.*${clean}*`,
-      `actual_issue_description.ilike.*${clean}*`,
-      `repair_action.ilike.*${clean}*`,
-      `resolution_method.ilike.*${clean}*`,
-      `person_received_by_operations.ilike.*${clean}*`,
-      `receipt_number.ilike.*${clean}*`,
-      `rejected_reason.ilike.*${clean}*`,
-    ],
-  };
+  return createOrderSearchPlan(query, SEARCH_COLUMNS);
 }
 
 function statusLogic(tab = "all") {
@@ -335,12 +331,10 @@ function statusLogic(tab = "all") {
   return null;
 }
 
-function logicalParams({ query = "", tab = "all", type = "all" } = {}) {
+function logicalParams({ query = "", tab = "all", type = "all", searchMode = "fast" } = {}) {
   const params = {};
   const logicGroups = [];
-  const search = searchLogic(query);
-  if (Number.isFinite(search?.orderNumber)) params.order_number = `eq.${search.orderNumber}`;
-  else if (search?.clauses?.length) logicGroups.push(search.clauses);
+  applyOrderSearchPlan({ params, logicGroups, plan: searchLogic(query), mode: searchMode });
 
   const statusClauses = statusLogic(tab);
   if (statusClauses?.length) logicGroups.push(statusClauses);
@@ -353,7 +347,8 @@ function logicalParams({ query = "", tab = "all", type = "all" } = {}) {
   return params;
 }
 
-async function candidateNumbers({ cursor = null, scanGroups = 90, filters = {} } = {}) {
+async function candidateNumbers({ cursor = null, scanGroups = 90, filters = {}, searchMode = "", signal = null } = {}) {
+  const suffix = searchMode ? `.search-${searchMode}` : "";
   return await scanOrderNumberCandidates({
     table: tableName(),
     cursor,
@@ -363,12 +358,13 @@ async function candidateNumbers({ cursor = null, scanGroups = 90, filters = {} }
     rowChunk: 1000,
     maxScannedRows: 12000,
     filters,
-    queryProfileName: "orders.operations.candidates",
-    scanProfileName: "orders.operations.candidate-scan",
+    queryProfileName: `orders.operations${suffix}.candidates`,
+    scanProfileName: `orders.operations${suffix}.candidate-scan`,
+    signal,
   });
 }
 
-async function rowsByNumbers(numbers = []) {
+async function rowsByNumbers(numbers = [], signal = null) {
   return await loadOrderRowsByNumbers({
     table: tableName(),
     numbers,
@@ -376,6 +372,7 @@ async function rowsByNumbers(numbers = []) {
     queryProfileName: "orders.operations.summary",
     fallbackProfileName: "orders.operations.summary-fallback",
     loadProfileName: "orders.operations.summary-load",
+    signal,
   });
 }
 
@@ -397,6 +394,7 @@ export async function loadOperationsOrdersPage({
   query = "",
   cursor = null,
   limit = PAGE_LIMIT,
+  signal = null,
 } = {}) {
   if (!isSupabaseConfigured()) return null;
   const safeLimit = pageLimit(limit);
@@ -407,34 +405,59 @@ export async function loadOperationsOrdersPage({
 
   while (outputGroups.length < safeLimit && hasMore && loops < 12) {
     loops += 1;
-    const filters = logicalParams({ query, tab, type });
+    const searchPlan = searchLogic(query);
+    const hasTextSearch = Boolean(searchPlan?.clean && !Number.isFinite(searchPlan?.orderNumber));
+    const fastSearch = hasTextSearch && canUseOrderSearchText();
+    const filters = logicalParams({ query, tab, type, searchMode: fastSearch ? "fast" : "legacy" });
     let candidates;
     try {
       candidates = await candidateNumbers({
         cursor: nextCursor,
         scanGroups: Math.max(safeLimit * 2, 60),
         filters,
+        searchMode: hasTextSearch ? (fastSearch ? "fast" : "legacy") : "",
+        signal,
       });
-    } catch {
-      // Older/custom schemas can reject one of the projected filter columns.
-      // Keep the optimized order-number paging and apply the exact filters in
-      // JavaScript rather than falling all the way back to a full-table scan.
-      candidates = await candidateNumbers({
-        cursor: nextCursor,
-        scanGroups: Math.max(safeLimit * 2, 60),
-        filters: {},
-      });
+    } catch (error) {
+      if (signal?.aborted || error?.code === "REQUEST_ABORTED" || error?.name === "AbortError") throw error;
+      if (fastSearch && noteOrderSearchTextError(error)) {
+        try {
+          candidates = await candidateNumbers({
+            cursor: nextCursor,
+            scanGroups: Math.max(safeLimit * 2, 60),
+            filters: logicalParams({ query, tab, type, searchMode: "legacy" }),
+            searchMode: "legacy",
+            signal,
+          });
+        } catch (fallbackError) {
+          if (signal?.aborted || fallbackError?.code === "REQUEST_ABORTED" || fallbackError?.name === "AbortError") throw fallbackError;
+          candidates = null;
+        }
+      }
+      if (!candidates) {
+        // Older/custom schemas can reject one of the projected filter columns.
+        // Keep the optimized order-number paging and apply the exact filters in
+        // JavaScript rather than falling all the way back to a full-table scan.
+        candidates = await candidateNumbers({
+          cursor: nextCursor,
+          scanGroups: Math.max(safeLimit * 2, 60),
+          filters: {},
+          searchMode: hasTextSearch ? "local" : "",
+          signal,
+        });
+      }
     }
+
     if (!candidates.numbers.length) {
       hasMore = false;
       break;
     }
 
-    const rows = await rowsByNumbers(candidates.numbers);
+    const rows = await rowsByNumbers(candidates.numbers, signal);
     const groups = groupRows(rows);
     const cleanType = orderTypeKey(type);
     const directSearch = searchLogic(query);
-    const needle = Number.isFinite(directSearch?.orderNumber) ? "" : norm(query);
+    const needle = Number.isFinite(directSearch?.orderNumber) ? "" : norm(directSearch?.clean || query);
     let processedCandidates = 0;
 
     for (const orderNumber of candidates.numbers) {

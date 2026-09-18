@@ -637,6 +637,7 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
   const [detailError, setDetailError] = useState("");
   const creatorProfileCache = useRef(new Map());
   const listRequestRef = useRef(0);
+  const listAbortRef = useRef(null);
   const initialFilterKeyRef = useRef("all|all|");
 
   useClassicHeaderSearch(query, setQuery, "Search by reason or item...");
@@ -777,6 +778,9 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
   }
   async function fetchReviewPage({ reset = true } = {}) {
     const requestId = ++listRequestRef.current;
+    listAbortRef.current?.abort();
+    const controller = new AbortController();
+    listAbortRef.current = controller;
     setListLoading(true);
     try {
       const params = new URLSearchParams({
@@ -788,7 +792,7 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
       });
       if (query.trim()) params.set("q", query.trim());
       if (!reset && pageInfo?.nextCursor !== null && pageInfo?.nextCursor !== undefined) params.set("cursor", String(pageInfo.nextCursor));
-      const response = await fetch(`${DIRECT_API_BASE}/sv-orders/paged-summary?${params.toString()}`, { credentials: "include", cache: "no-store" });
+      const response = await fetch(`${DIRECT_API_BASE}/sv-orders/paged-summary?${params.toString()}`, { credentials: "include", cache: "no-store", signal: controller.signal });
       if (response.status === 401) { window.location.href = "/login?next=/next/orders-review"; return; }
       const data = await readJson(response);
       if (!response.ok) throw new Error(data?.error || "Failed to load review orders.");
@@ -807,7 +811,11 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
         setDetailGroups(new Map());
         setDetailError("");
       }
+    } catch (error) {
+      if (error?.name === "AbortError") return;
+      throw error;
     } finally {
+      if (listAbortRef.current === controller) listAbortRef.current = null;
       if (requestId === listRequestRef.current) setListLoading(false);
     }
   }

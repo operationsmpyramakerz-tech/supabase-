@@ -31,9 +31,11 @@ export async function GET(request) {
       query: url.searchParams.get("q") || url.searchParams.get("search") || "",
       cursor: url.searchParams.get("cursor"),
       limit: url.searchParams.get("limit"),
+      signal: request.signal,
     });
     if (payload) return noStore(payload);
   } catch (error) {
+    if (request.signal?.aborted || error?.code === "REQUEST_ABORTED" || error?.name === "AbortError") throw error;
     console.warn("[current-orders] direct paged summary failed; using Legacy fallback:", error?.message || error);
   }
 

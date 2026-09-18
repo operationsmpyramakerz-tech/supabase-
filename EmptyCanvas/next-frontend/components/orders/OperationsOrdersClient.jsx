@@ -1864,6 +1864,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
   const creatorProfileCache = useRef(new Map());
   const orderDetailsCache = useRef(new Map());
   const listRequestRef = useRef(0);
+  const listAbortRef = useRef(null);
   const initialFilterKeyRef = useRef("all|all|");
   const { actionLoading, startActionLoading, finishActionLoading } = useActionLoading();
 
@@ -1943,6 +1944,9 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
 
   async function fetchOrdersPage({ reset = true, fresh = false } = {}) {
     const requestId = ++listRequestRef.current;
+    listAbortRef.current?.abort();
+    const controller = new AbortController();
+    listAbortRef.current = controller;
     setListLoading(true);
     try {
       const params = new URLSearchParams({
@@ -1956,7 +1960,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
       if (query.trim()) params.set("q", query.trim());
       if (!reset && pageInfo?.nextCursor !== null && pageInfo?.nextCursor !== undefined) params.set("cursor", String(pageInfo.nextCursor));
       if (fresh) params.set("_fresh", "1");
-      const response = await fetch(`${DIRECT_API_BASE}/orders/requested/paged-summary?${params.toString()}`, { credentials: "include", cache: "no-store" });
+      const response = await fetch(`${DIRECT_API_BASE}/orders/requested/paged-summary?${params.toString()}`, { credentials: "include", cache: "no-store", signal: controller.signal });
       if (response.status === 401) {
         window.location.href = "/login?next=/next/operations-orders";
         return;
@@ -1978,7 +1982,11 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
         setSelected(null);
         setEditMode(null);
       }
+    } catch (error) {
+      if (error?.name === "AbortError") return;
+      throw error;
     } finally {
+      if (listAbortRef.current === controller) listAbortRef.current = null;
       if (requestId === listRequestRef.current) setListLoading(false);
     }
   }

@@ -794,6 +794,7 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const orderDetailsCache = useRef(new Map());
   const listRequestRef = useRef(0);
+  const listAbortRef = useRef(null);
   const initialFilterKeyRef = useRef("all|all|");
 
   useClassicHeaderSearch(query, setQuery, "Search orders by reason...");
@@ -871,6 +872,9 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
 
   async function fetchOrdersPage({ reset = true, fresh = false } = {}) {
     const requestId = ++listRequestRef.current;
+    listAbortRef.current?.abort();
+    const controller = new AbortController();
+    listAbortRef.current = controller;
     setListLoading(true);
     try {
       const params = new URLSearchParams({
@@ -887,6 +891,7 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
       const response = await fetch(`${DIRECT_API_BASE}/orders/current/paged-summary?${params.toString()}`, {
         credentials: "include",
         cache: "no-store",
+        signal: controller.signal,
       });
       if (response.status === 401) {
         window.location.href = "/login?next=/next/orders";
@@ -912,7 +917,11 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
         orderDetailsCache.current.clear();
         setSelected(null);
       }
+    } catch (error) {
+      if (error?.name === "AbortError") return;
+      throw error;
     } finally {
+      if (listAbortRef.current === controller) listAbortRef.current = null;
       if (requestId === listRequestRef.current) setListLoading(false);
     }
   }

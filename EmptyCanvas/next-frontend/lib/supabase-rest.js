@@ -108,6 +108,10 @@ export async function supabaseRequest(pathname, options = {}) {
       if (remainingMs <= 0) break;
 
       const controller = new AbortController();
+      const externalSignal = options.signal || null;
+      const abortFromCaller = () => controller.abort(externalSignal?.reason);
+      if (externalSignal?.aborted) abortFromCaller();
+      else externalSignal?.addEventListener?.("abort", abortFromCaller, { once: true });
       const timeout = setTimeout(() => controller.abort(), remainingMs);
 
       try {
@@ -146,9 +150,16 @@ export async function supabaseRequest(pathname, options = {}) {
       } catch (error) {
         let current = error;
         if (error?.name === "AbortError") {
-          current = new Error(`Supabase request timed out after ${timeoutMs} ms.`);
-          current.code = "SUPABASE_TIMEOUT";
-          current.status = 504;
+          if (externalSignal?.aborted) {
+            current = new Error("Supabase request was cancelled by the caller.");
+            current.name = "AbortError";
+            current.code = "REQUEST_ABORTED";
+            current.status = 499;
+          } else {
+            current = new Error(`Supabase request timed out after ${timeoutMs} ms.`);
+            current.code = "SUPABASE_TIMEOUT";
+            current.status = 504;
+          }
         }
         metricStatus = Number(current?.status) || metricStatus || 0;
         lastError = current;
@@ -158,6 +169,7 @@ export async function supabaseRequest(pathname, options = {}) {
         await wait(Math.min(140, Math.max(0, budgetLeft - 80)));
       } finally {
         clearTimeout(timeout);
+        externalSignal?.removeEventListener?.("abort", abortFromCaller);
       }
     }
 
