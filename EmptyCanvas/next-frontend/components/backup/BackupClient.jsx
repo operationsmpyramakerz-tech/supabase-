@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useRouter } from "next/navigation";
 import { confirmDelete as showDeleteConfirm } from "../../lib/client-confirm";
 
 const MAX_CSV_SIZE = 25 * 1024 * 1024;
@@ -184,6 +185,7 @@ function buildDatabasePageGroups(tables = []) {
 }
 
 export default function BackupClient({ initialTables = [] }) {
+  const router = useRouter();
   const [tables, setTables] = useState(() => Array.isArray(initialTables) ? initialTables : []);
   const [importTarget, setImportTarget] = useState(null);
   const [importFile, setImportFile] = useState(null);
@@ -360,7 +362,12 @@ export default function BackupClient({ initialTables = [] }) {
 
   async function reloadTables() {
     try {
-      const body = await requestJson("/api/backup/tables");
+      let body;
+      try {
+        body = await requestJson("/next/api/backup/tables");
+      } catch (directError) {
+        body = await requestJson("/api/backup/tables");
+      }
       setTables(Array.isArray(body?.tables) ? body.tables : []);
     } catch (error) {
       showToast(error?.message || "Failed to load database tables.", "danger");
@@ -597,7 +604,7 @@ export default function BackupClient({ initialTables = [] }) {
                         suppressFolderClickRef.current = false;
                         return;
                       }
-                      window.location.href = `/next/backup/${encodeURIComponent(item.key)}?folder=${encodeURIComponent(activePage.key)}`;
+                      router.push(`/next/backup/${encodeURIComponent(item.key)}?folder=${encodeURIComponent(activePage.key)}`);
                     }}
                     aria-label={`Open ${item.pageName || item.tableName}. Press and hold for actions.`}
                     aria-haspopup="menu"

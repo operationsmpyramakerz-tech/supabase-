@@ -75,14 +75,15 @@ function FieldEditor({ column, value, onChange }) {
   return <input type={inputType} value={value} onChange={(event) => onChange(event.target.value)} spellCheck={false} />;
 }
 
-export default function BackupTableClient({ tableKey, initialTable, backFolder = "" }) {
-  const [table, setTable] = useState(initialTable || null);
-  const [columns, setColumns] = useState([]);
-  const [rows, setRows] = useState([]);
-  const [canEdit, setCanEdit] = useState(false);
-  const [offset, setOffset] = useState(0);
-  const [hasMore, setHasMore] = useState(false);
-  const [loading, setLoading] = useState(true);
+export default function BackupTableClient({ tableKey, initialTable, initialPayload = null, backFolder = "" }) {
+  const hasInitialPayload = Boolean(initialPayload?.ok);
+  const [table, setTable] = useState(initialPayload?.table || initialTable || null);
+  const [columns, setColumns] = useState(Array.isArray(initialPayload?.columns) ? initialPayload.columns : []);
+  const [rows, setRows] = useState(Array.isArray(initialPayload?.rows) ? initialPayload.rows : []);
+  const [canEdit, setCanEdit] = useState(Boolean(initialPayload?.canEdit));
+  const [offset, setOffset] = useState(Number(initialPayload?.offset || 0));
+  const [hasMore, setHasMore] = useState(Boolean(initialPayload?.hasMore));
+  const [loading, setLoading] = useState(!hasInitialPayload);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [editRow, setEditRow] = useState(null);
@@ -99,10 +100,17 @@ export default function BackupTableClient({ tableKey, initialTable, backFolder =
     setLoading(true);
     setError("");
     try {
-      const response = await fetch(`/api/backup/tables/${encodeURIComponent(tableKey)}/rows?limit=${pageSize}&offset=${Math.max(0, nextOffset)}`, {
+      const query = `limit=${pageSize}&offset=${Math.max(0, nextOffset)}`;
+      let response = await fetch(`/next/api/backup/tables/${encodeURIComponent(tableKey)}/rows?${query}`, {
         credentials: "include",
         cache: "no-store",
       });
+      if (!response.ok && response.status !== 401 && response.status !== 403 && response.status !== 404) {
+        response = await fetch(`/api/backup/tables/${encodeURIComponent(tableKey)}/rows?${query}`, {
+          credentials: "include",
+          cache: "no-store",
+        });
+      }
       if (response.status === 401) {
         window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`;
         return;
@@ -123,6 +131,17 @@ export default function BackupTableClient({ tableKey, initialTable, backFolder =
   }
 
   useEffect(() => {
+    if (initialPayload?.ok) {
+      setTable(initialPayload.table || initialTable || null);
+      setColumns(Array.isArray(initialPayload.columns) ? initialPayload.columns : []);
+      setRows(Array.isArray(initialPayload.rows) ? initialPayload.rows : []);
+      setCanEdit(Boolean(initialPayload.canEdit));
+      setOffset(Number(initialPayload.offset || 0));
+      setHasMore(Boolean(initialPayload.hasMore));
+      setError("");
+      setLoading(false);
+      return;
+    }
     loadRows(0);
   }, [tableKey]);
 
