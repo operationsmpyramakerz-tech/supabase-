@@ -296,7 +296,7 @@ function ProfilePopover({ state, onClose }) {
   );
 }
 
-function DetailsModal({ row, onClose, onProfile }) {
+function DetailsModal({ row, onClose, onProfile, loadingDetails = false, detailsError = "" }) {
   const status = Number(row?.statusCode || 0);
   return (
     <Modal title={text(row?.actionLabel) || "History details"} subtitle={formatDateTime(row?.createdAt)} onClose={onClose} wide>
@@ -323,6 +323,8 @@ function DetailsModal({ row, onClose, onProfile }) {
           <DetailItem label="User agent" value={row?.userAgent} wide />
         </section>
         {text(row?.actorId) ? <button type="button" className="next-history-profile-button" onClick={onProfile}>Open team member profile</button> : null}
+        {loadingDetails ? <div className="next-history-inline-error" style={{ borderColor: "#dbeafe", background: "#eff6ff", color: "#1d4ed8" }}>Loading full request details…</div> : null}
+        {detailsError ? <div className="next-history-inline-error">{detailsError}</div> : null}
         <section className="next-history-json-grid">
           <details><summary>Request query</summary><pre>{safeJson(row?.requestQuery)}</pre></details>
           <details><summary>Request body</summary><pre>{safeJson(row?.requestBody)}</pre></details>
@@ -495,6 +497,8 @@ export default function HistoryClient({ account, initialRows, bootstrapWarnings 
   const [visibleLimit, setVisibleLimit] = useState(PAGE_SIZE);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState(null);
+  const [detailsLoading, setDetailsLoading] = useState(false);
+  const [detailsError, setDetailsError] = useState("");
   const [profilePopover, setProfilePopover] = useState(null);
   const [showClear, setShowClear] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
@@ -511,7 +515,11 @@ export default function HistoryClient({ account, initialRows, bootstrapWarnings 
     document.body.style.overflow = "hidden";
     function keydown(event) {
       if (event.key !== "Escape") return;
-      if (selected) setSelected(null);
+      if (selected) {
+        setSelected(null);
+        setDetailsLoading(false);
+        setDetailsError("");
+      }
       else if (showFilters) setShowFilters(false);
       else setShowClear(false);
     }
@@ -593,7 +601,7 @@ export default function HistoryClient({ account, initialRows, bootstrapWarnings 
   async function refresh() {
     setLoading(true);
     try {
-      const payload = await requestJson(`/api/history?limit=1000&_=${Date.now()}`);
+      const payload = await requestJson(`/next/api/history?limit=1000&_fresh=1&_=${Date.now()}`);
       const nextRows = Array.isArray(payload?.rows) ? payload.rows : [];
       setRows(nextRows);
       const nextPages = new Set(nextRows.map((row) => text(row?.pageName)).filter(Boolean));
@@ -631,9 +639,33 @@ export default function HistoryClient({ account, initialRows, bootstrapWarnings 
     setShowFilters(false);
   }
 
+  async function openDetails(row) {
+    if (!row) return;
+    setSelected(row);
+    setDetailsError("");
+    const id = text(row?.id);
+    if (!id || row?.detailsLoaded === true) {
+      setDetailsLoading(false);
+      return;
+    }
+
+    setDetailsLoading(true);
+    try {
+      const payload = await requestJson(`/next/api/history/${encodeURIComponent(id)}`);
+      const fullRow = payload?.row && typeof payload.row === "object" ? payload.row : null;
+      if (fullRow) {
+        setSelected((current) => text(current?.id) === id ? { ...current, ...fullRow, detailsLoaded: true } : current);
+      }
+    } catch (error) {
+      setDetailsError(error.message || "Full history details could not be loaded.");
+    } finally {
+      setDetailsLoading(false);
+    }
+  }
+
   function openProfilePopover(anchor, row) {
     if (!text(row?.actorId)) {
-      setSelected(row);
+      openDetails(row);
       return;
     }
     const rect = anchor.getBoundingClientRect();
@@ -722,8 +754,8 @@ export default function HistoryClient({ account, initialRows, bootstrapWarnings 
             const statusCode = Number(row?.statusCode || 0);
             return (
               <article className="next-history-row" key={text(row?.id) || `${row?.createdAt}-${index}`}>
-                <button type="button" className={`next-history-action-mark is-${actionTone(row)}`} onClick={() => setSelected(row)} aria-label={`Open ${text(row?.actionLabel) || "history"} details`}>{actionMark(row)}</button>
-                <button type="button" className="next-history-row-main" onClick={() => setSelected(row)}>
+                <button type="button" className={`next-history-action-mark is-${actionTone(row)}`} onClick={() => openDetails(row)} aria-label={`Open ${text(row?.actionLabel) || "history"} details`}>{actionMark(row)}</button>
+                <button type="button" className="next-history-row-main" onClick={() => openDetails(row)}>
                   <strong>{text(row?.actionLabel) || "System action"}</strong>
                   <span>{entityLabel(row)}</span>
                 </button>
@@ -737,7 +769,7 @@ export default function HistoryClient({ account, initialRows, bootstrapWarnings 
                   <div><strong>{text(row?.actorName) || "System"}</strong><small>{text(row?.actorDepartment || row?.actorPosition) || "System activity"}</small></div>
                 </button>
                 <time>{formatCardDateTime(row?.createdAt)}</time>
-                <button type="button" className="next-history-open" onClick={() => setSelected(row)}>View</button>
+                <button type="button" className="next-history-open" onClick={() => openDetails(row)}>View</button>
               </article>
             );
           }) : (
@@ -757,7 +789,20 @@ export default function HistoryClient({ account, initialRows, bootstrapWarnings 
         onClear={() => { clearFilters(); setShowFilters(false); }}
         onApply={applyFilters}
       /> : null}
-      {selected ? <DetailsModal row={selected} onClose={() => setSelected(null)} onProfile={() => { const current = selected; setSelected(null); const width = Math.min(380, window.innerWidth - 28); setProfilePopover({ row: current, left: Math.max(14, window.innerWidth - width - 24), top: 90 }); }} /> : null}
+      {selected ? <DetailsModal
+        row={selected}
+        loadingDetails={detailsLoading}
+        detailsError={detailsError}
+        onClose={() => { setSelected(null); setDetailsLoading(false); setDetailsError(""); }}
+        onProfile={() => {
+          const current = selected;
+          setSelected(null);
+          setDetailsLoading(false);
+          setDetailsError("");
+          const width = Math.min(380, window.innerWidth - 28);
+          setProfilePopover({ row: current, left: Math.max(14, window.innerWidth - width - 24), top: 90 });
+        }}
+      /> : null}
       {profilePopover ? <ProfilePopover state={profilePopover} onClose={() => setProfilePopover(null)} /> : null}
       {showClear ? <ClearHistoryModal onClose={() => setShowClear(false)} onCleared={() => {
         setRows([]);
