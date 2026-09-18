@@ -134,6 +134,18 @@ async function requestJson(url, options = {}) {
   return body;
 }
 
+async function requestJsonWithFallback(primaryUrl, legacyUrl, options = {}) {
+  try {
+    return await requestJson(primaryUrl, options);
+  } catch (error) {
+    // Authentication/authorization failures are authoritative and must never be
+    // retried through another backend. Other failures can use the established
+    // Express route so Users Center remains compatible during rollout.
+    if ([401, 403].includes(Number(error?.status))) throw error;
+    return await requestJson(legacyUrl, options);
+  }
+}
+
 function UAIcon({ name }) {
   const common = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true };
   const paths = {
@@ -244,7 +256,10 @@ async function uploadUserFile(file, kind) { if (!file) return null; if (file.siz
 
 function SignupRequestsModal({ departments, positions = [], onClose, onChanged, notify }) {
   const [status, setStatus] = useState("pending"); const [requests, setRequests] = useState([]); const [loading, setLoading] = useState(true); const [error, setError] = useState(""); const [approve, setApprove] = useState(null); const [rejecting, setRejecting] = useState(null); const [form, setForm] = useState({ department: "", position: "" }); const [busy, setBusy] = useState(false);
-  async function load(nextStatus = status) { setLoading(true); setError(""); try { const body = await requestJson(`/api/user-access/signup-requests?status=${encodeURIComponent(nextStatus)}&_=${Date.now()}`); setRequests(body.requests || []); } catch (err) { setRequests([]); setError(err.message); } finally { setLoading(false); } }
+  async function load(nextStatus = status) { setLoading(true); setError(""); try { const body = await requestJsonWithFallback(
+        `/next/api/users-center/signup-requests?status=${encodeURIComponent(nextStatus)}&fresh=1&_=${Date.now()}`,
+        `/api/user-access/signup-requests?status=${encodeURIComponent(nextStatus)}&_=${Date.now()}`,
+      ); setRequests(body.requests || []); } catch (err) { setRequests([]); setError(err.message); } finally { setLoading(false); } }
   useEffect(() => { load("pending"); }, []);
   function beginApprove(request) { setApprove(request); setForm({ department: "", position: "" }); setError(""); }
   async function approveSubmit(event) { event.preventDefault(); if (!text(form.department) || !text(form.position)) return setError("Please select department and position."); setBusy(true); setError(""); try { const body = await requestJson(`/api/user-access/signup-requests/${encodeURIComponent(approve.id)}/approve`, { method: "POST", body: JSON.stringify(form) }); setApprove(null); notify?.("success", "Request approved", body.emailWarning ? `Approved, but email warning: ${body.emailWarning}` : "The user was added and notified by email."); await Promise.all([load(status), onChanged()]); } catch (err) { setError(err.message); notify?.("error", "Approval failed", err.message); } finally { setBusy(false); } }
@@ -499,7 +514,12 @@ function PageAccessRow({ row, onChange, subpage = false }) {
 
 function PageAccessModal({ member, draftRows, onDraftRows, onClose, onSaved, protect }) {
   const [rows, setRows] = useState([]); const [loading, setLoading] = useState(true); const [busy, setBusy] = useState(false); const [error, setError] = useState(""); const isCreate = !member;
-  useEffect(() => { let active = true; (async () => { try { if (isCreate && draftRows?.length) { if (active) setRows(normalizeAccessRows(draftRows)); return; } const body = isCreate ? await requestJson("/api/user-access/pages") : await requestJson(`/api/user-access/team-members/${encodeURIComponent(member.id)}/page-access`); const nextRows = isCreate ? normalizeAccessRows((body.pages || []).map((page) => ({ ...page, accessLevel: "edit", isEnabled: false }))) : normalizeAccessRows(body.pages || []); if (active) setRows(nextRows); } catch (err) { if (active) setError(err.message); } finally { if (active) setLoading(false); } })(); return () => { active = false; }; }, [member?.id]);
+  useEffect(() => { let active = true; (async () => { try { if (isCreate && draftRows?.length) { if (active) setRows(normalizeAccessRows(draftRows)); return; } const body = isCreate
+        ? await requestJsonWithFallback("/next/api/users-center/pages", "/api/user-access/pages")
+        : await requestJsonWithFallback(
+            `/next/api/users-center/team-members/${encodeURIComponent(member.id)}/page-access`,
+            `/api/user-access/team-members/${encodeURIComponent(member.id)}/page-access`,
+          ); const nextRows = isCreate ? normalizeAccessRows((body.pages || []).map((page) => ({ ...page, accessLevel: "edit", isEnabled: false }))) : normalizeAccessRows(body.pages || []); if (active) setRows(nextRows); } catch (err) { if (active) setError(err.message); } finally { if (active) setLoading(false); } })(); return () => { active = false; }; }, [member?.id]);
   function patch(index, values) { setRows((current) => current.map((row, i) => i === index ? { ...row, ...values, accessLevel: values.accessLevel ? normalizeAccessLevel(values.accessLevel) : row.accessLevel } : row)); }
   async function save() { if (loading || busy) return; if (isCreate) { onDraftRows(rows); onSaved?.(rows); onClose(); return; } protect({ title: "Save page access", message: `Apply this page-access matrix to ${member.name}?` }, async () => { setBusy(true); setError(""); try { const body = await requestJson(`/api/user-access/team-members/${encodeURIComponent(member.id)}/page-access`, { method: "PATCH", body: JSON.stringify({ pages: rows.map((row) => ({ pageId: row.pageId, pageKey: row.pageKey, isEnabled: !!row.isEnabled, accessLevel: row.accessLevel })) }) }); const saved = normalizeAccessRows(body.pages || rows); setRows(saved); await onSaved?.(saved, body.summary); onClose(); } catch (err) { setError(err.message); } finally { setBusy(false); } }); }
   const events = new Set(["event-calendar", "event-requests", "event-components"]); const tasks = new Set(["task-management-all-tasks", "task-management-my-tasks", "task-management-delegated-tasks", "all-tasks", "my-tasks", "delegated-tasks"]); const b2c = new Set(["b2c-customer-database", "customer-database", "b2c-customer-form", "customer-form"]);
@@ -512,7 +532,10 @@ function PageAccessModal({ member, draftRows, onDraftRows, onClose, onSaved, pro
 
 function SvAccessModal({ member, allMembers, draftRows, onDraftRows, onClose, onSaved, protect }) {
   const [rows, setRows] = useState([]); const [search, setSearch] = useState(""); const [loading, setLoading] = useState(true); const [busy, setBusy] = useState(false); const [error, setError] = useState(""); const isCreate = !member;
-  useEffect(() => { let active = true; (async () => { try { if (isCreate) { const base = draftRows?.length ? normalizeSvRows(draftRows) : normalizeSvRows(allMembers.map((item) => ({ memberId: item.id, name: item.name, department: item.department, position: item.position, email: item.email, photoUrl: item.photoUrl, isEnabled: false }))); if (active) setRows(base); return; } const body = await requestJson(`/api/user-access/team-members/${encodeURIComponent(member.id)}/sv-access`); if (active) setRows(normalizeSvRows(body.members || body.rows || [])); } catch (err) { if (active) setError(err.message); } finally { if (active) setLoading(false); } })(); return () => { active = false; }; }, [member?.id]);
+  useEffect(() => { let active = true; (async () => { try { if (isCreate) { const base = draftRows?.length ? normalizeSvRows(draftRows) : normalizeSvRows(allMembers.map((item) => ({ memberId: item.id, name: item.name, department: item.department, position: item.position, email: item.email, photoUrl: item.photoUrl, isEnabled: false }))); if (active) setRows(base); return; } const body = await requestJsonWithFallback(
+        `/next/api/users-center/team-members/${encodeURIComponent(member.id)}/sv-access`,
+        `/api/user-access/team-members/${encodeURIComponent(member.id)}/sv-access`,
+      ); if (active) setRows(normalizeSvRows(body.members || body.rows || [])); } catch (err) { if (active) setError(err.message); } finally { if (active) setLoading(false); } })(); return () => { active = false; }; }, [member?.id]);
   const visible = rows.filter((row) => !search || lower(`${row.name} ${row.department} ${row.position} ${row.email}`).includes(lower(search)));
   function toggle(id, enabled) { setRows((current) => current.map((row) => row.memberId === id ? { ...row, isEnabled: enabled } : row)); }
   function enableVisible() { const ids = new Set(visible.map((row) => row.memberId)); setRows((current) => current.map((row) => ids.has(row.memberId) ? { ...row, isEnabled: true } : row)); }
@@ -530,8 +553,27 @@ export default function UsersCenterClient({ initialDirectory, initialSignupReque
   const filteredMembers = useMemo(() => { if (!selectedDepartment) return []; const q = lower(search); return sortByName((selectedDepartment.members || []).filter((member) => !q || lower(`${member.name} ${member.position} ${member.email} ${member.phone} ${member.employeeCode}`).includes(q))); }, [selectedDepartment, search]);
 
   function notify(type, title, message) { setToast({ type, title, message }); window.clearTimeout(notify._timer); notify._timer = window.setTimeout(() => setToast(null), 3500); }
-  async function refresh() { const body = await requestJson(`/api/user-access/team-members?_fresh=1&_refresh=${Date.now()}`, { headers: { "X-Ops-Hard-Refresh": "1" } }); const next = normalizeDirectory(body); setDirectory(next); return next; }
-  async function refreshPending() { try { const body = await requestJson(`/api/user-access/signup-requests?status=pending&_=${Date.now()}`); setPendingSignupCount((body.requests || []).length); } catch {} }
+  async function refresh() {
+    const stamp = Date.now();
+    const body = await requestJsonWithFallback(
+      `/next/api/users-center/directory?fresh=1&_=${stamp}`,
+      `/api/user-access/team-members?_fresh=1&_refresh=${stamp}`,
+      { headers: { "X-Ops-Hard-Refresh": "1" } },
+    );
+    const next = normalizeDirectory(body);
+    setDirectory(next);
+    return next;
+  }
+  async function refreshPending() {
+    try {
+      const stamp = Date.now();
+      const body = await requestJsonWithFallback(
+        `/next/api/users-center/signup-requests?status=pending&fresh=1&_=${stamp}`,
+        `/api/user-access/signup-requests?status=pending&_=${stamp}`,
+      );
+      setPendingSignupCount((body.requests || []).length);
+    } catch {}
+  }
 
   function writeDepartmentUrl(id, push = true) { if (typeof window === "undefined") return; const url = new URL(window.location.href); if (id) url.searchParams.set("department", id); else url.searchParams.delete("department"); const next = `${url.pathname}${url.search}${url.hash}`; if (push) window.history.pushState({}, "", next); else window.history.replaceState({}, "", next); }
   function navigateDepartment(id, push = true) { setSelectedDepartmentId(id || ""); setSearch(""); writeDepartmentUrl(id, push); window.setTimeout(() => document.querySelector(".ua-members-panel")?.scrollIntoView({ behavior: "smooth", block: "start" }), 20); }
