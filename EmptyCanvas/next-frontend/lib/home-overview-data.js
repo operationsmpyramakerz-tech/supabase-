@@ -327,6 +327,7 @@ async function reviewerVisibility(account = {}) {
     names = splitValues(valueFor(current, ["sv_school_member_names", "sv_schools", "S.V Schools", "SV Schools"]));
   }
 
+  const resolvedNameKeys = new Set();
   if (names.length) {
     const members = await reviewerIdentityRows().catch(() => []);
     const byName = new Map((Array.isArray(members) ? members : []).map((row) => [
@@ -334,15 +335,21 @@ async function reviewerVisibility(account = {}) {
       row,
     ]));
     for (const name of names) {
-      const row = byName.get(canonical(name));
+      const key = canonical(name);
+      const row = byName.get(key);
       const id = row ? text(valueFor(row, ["id", "ID"])) : "";
-      if (id && !ids.includes(id)) ids.push(id);
+      if (id) {
+        if (!ids.includes(id)) ids.push(id);
+        resolvedNameKeys.add(key);
+      }
     }
   }
 
+  const cleanNames = [...new Set(names.map(text).filter(Boolean))];
   return {
     ids: [...new Set(ids.map(text).filter(Boolean))],
-    names: [...new Set(names.map(text).filter(Boolean))],
+    names: cleanNames,
+    queryNames: cleanNames.filter((name) => !resolvedNameKeys.has(canonical(name))),
   };
 }
 
@@ -352,7 +359,7 @@ function reviewerFilter(visible = {}) {
     const id = String(value || "").replace(/[^0-9A-Za-z_-]/g, "");
     if (id) clauses.push(`team_member_id.eq.${id}`);
   }
-  for (const value of visible.names || []) {
+  for (const value of visible.queryNames || visible.names || []) {
     const name = filterText(value);
     if (name) clauses.push(`team_member_name.ilike.*${name}*`);
   }

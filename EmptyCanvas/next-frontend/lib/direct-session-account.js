@@ -556,6 +556,11 @@ async function getDirectSessionAccountGateInternal(requiredPages = []) {
         );
     const account = {
       ...freshBaseAccount,
+      // Keep the canonical Supabase member identity on the direct account.
+      // Read-heavy pages can then use indexed team_member_id equality filters
+      // instead of falling back to display-name substring matching.
+      userSupabaseId: memberId,
+      teamMemberId: memberId,
       allowedPages,
       pageAccess: { pages: freshPageAccess },
     };

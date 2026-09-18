@@ -211,14 +211,24 @@ function searchLogic(query = "") {
   };
 }
 
-function memberClauses(username = "") {
-  const clean = safeFilterText(username);
-  if (!clean) return [];
+function memberClauses(account = {}) {
+  const clauses = [];
+  const memberId = String(account?.teamMemberId || account?.userSupabaseId || "")
+    .trim()
+    .replace(/[^0-9A-Za-z_-]/g, "");
+  if (memberId) clauses.push(`team_member_id.eq.${memberId}`);
+
+  // Keep the legacy name branches for old rows that predate team_member_id.
+  // Modern rows hit the exact indexed ID branch first, while compatibility is
+  // preserved for historical data.
+  const clean = safeFilterText(accountUsername(account));
+  if (!clean) return clauses;
   const candidates = Array.from(new Set([
     clean,
     clean.split(/\s+/)[0] || "",
   ].map((value) => String(value || "").trim()).filter((value) => value.length >= 2)));
   return [
+    ...clauses,
     ...candidates.map((value) => `team_member_name.ilike.*${value}*`),
     "team_member_name.is.null",
     "team_member_name.eq.",
@@ -228,7 +238,7 @@ function memberClauses(username = "") {
 function logicalParams({ account = {}, query = "", type = "all" } = {}) {
   const params = {};
   const logicGroups = [];
-  const member = memberClauses(accountUsername(account));
+  const member = memberClauses(account);
   if (member.length) logicGroups.push(member);
 
   const search = searchLogic(query);

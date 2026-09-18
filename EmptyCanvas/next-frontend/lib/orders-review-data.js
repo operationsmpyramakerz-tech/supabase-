@@ -269,19 +269,29 @@ async function reviewerVisibility(account = {}) {
   if (!ids.length) ids = splitIds(valueFor(current, ["sv_school_member_ids", "sv_school_ids", "sv_member_ids"]));
   if (!names.length) names = splitArray(valueFor(current, ["sv_school_member_names", "sv_schools", "S.V Schools", "SV Schools"]));
 
+  const resolvedNameKeys = new Set();
   if (names.length) {
     const members = await memberIdentityRows().catch(() => []);
     const byName = new Map((Array.isArray(members) ? members : []).map((row) => [norm(valueFor(row, ["name", "Name", "full_name", "Full Name"])), row]));
     for (const name of names) {
-      const row = byName.get(norm(name));
+      const key = norm(name);
+      const row = byName.get(key);
       const id = row ? text(valueFor(row, ["id", "ID"])) : "";
-      if (id && !ids.includes(id)) ids.push(id);
+      if (id) {
+        if (!ids.includes(id)) ids.push(id);
+        resolvedNameKeys.add(key);
+      }
     }
   }
 
+  const cleanNames = [...new Set(names.map(text).filter(Boolean))];
   return {
     ids: [...new Set(ids.map(text).filter(Boolean))],
-    names: [...new Set(names.map(text).filter(Boolean))],
+    // Keep all names for the final compatibility visibility check, but avoid
+    // putting resolved names into the database OR filter. Exact ID predicates
+    // can use the composite orders(team_member_id, order_number) index.
+    names: cleanNames,
+    queryNames: cleanNames.filter((name) => !resolvedNameKeys.has(norm(name))),
   };
 }
 
@@ -325,7 +335,7 @@ function visibilityLogic(visible) {
     const clean = String(id || "").replace(/[^0-9A-Za-z_-]/g, "");
     if (clean) clauses.push(`team_member_id.eq.${clean}`);
   }
-  for (const name of visible?.names || []) {
+  for (const name of visible?.queryNames || visible?.names || []) {
     const clean = filterText(name);
     if (clean) clauses.push(`team_member_name.ilike.*${clean}*`);
   }
