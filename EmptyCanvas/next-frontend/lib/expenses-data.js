@@ -589,6 +589,8 @@ export async function cashInFromOptions({ fresh = false } = {}) {
 
 let expenseUsersSummaryCache = null;
 let expenseUsersSummaryInflight = null;
+let expenseUsersSummaryRpcUnavailableUntil = 0;
+let expenseMemberOrProjectionSupported = null;
 
 function sortExpenseRows(rows = []) {
   return [...(Array.isArray(rows) ? rows : [])].sort((a, b) => {
@@ -600,14 +602,60 @@ function sortExpenseRows(rows = []) {
 }
 
 async function expenseUsersSummaryRows() {
-  // Keep the management landing page lightweight: only fetch the columns used
-  // by the per-user balance cards rather than every receipt/order payload.
+  // Compatibility path for deployments where the aggregate RPC has not been
+  // installed yet. Keep the transfer narrow even here.
   const rows = await select(expensesTable(), {
     select: "id,expense_date,notion_created_time,funds_type,reason,cash_in,cash_out,team_member_name,team_member_raw,user_id",
     order: "expense_date.desc,notion_created_time.desc,id.desc",
     limit: "5000",
-  });
+  }, { profileName: "expenses.users-summary-fallback" });
   return sortExpenseRows(rows);
+}
+
+function serializeExpenseUsersSummaryRpcRow(row = {}) {
+  const name = text(row?.member_name ?? row?.name) || "Unknown User";
+  const key = text(row?.member_key ?? row?.user_id ?? row?.id) || name;
+  return {
+    id: key,
+    userId: key,
+    name,
+    total: number(row?.total ?? row?.balance, 0),
+    count: Math.max(0, Math.round(number(row?.item_count ?? row?.count, 0))),
+    lastSettledDate: dateValue(row?.last_settled_date ?? row?.lastSettledDate),
+  };
+}
+
+async function loadExpenseUsersSummaryFallback() {
+  const rows = await expenseUsersSummaryRows();
+  const perUser = new Map();
+
+  for (const row of rows) {
+    const name = text(valueFor(row, ["team_member_name", "Team Member", "team_member_raw"])) || "Unknown User";
+    const userId = text(valueFor(row, ["user_id", "employee_code"])) || name;
+    const key = userId || name;
+    if (!perUser.has(key)) {
+      perUser.set(key, {
+        id: key,
+        userId: key,
+        name,
+        total: 0,
+        count: 0,
+        lastSettledDate: null,
+      });
+    }
+
+    const aggregate = perUser.get(key);
+    aggregate.total += number(valueFor(row, ["cash_in", "Cash in"]), 0) - number(valueFor(row, ["cash_out", "Cash out"]), 0);
+    aggregate.count += 1;
+
+    const fundsType = canonical(valueFor(row, ["funds_type", "Funds Type"]));
+    const reason = canonical(valueFor(row, ["reason", "Reason"]));
+    if (!aggregate.lastSettledDate && (fundsType === "settled my account" || reason === "settled my account")) {
+      aggregate.lastSettledDate = dateValue(valueFor(row, ["expense_date", "Date"]));
+    }
+  }
+
+  return Array.from(perUser.values()).sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
 }
 
 export async function expenseUsersSummary({ fresh = false } = {}) {
@@ -618,36 +666,40 @@ export async function expenseUsersSummary({ fresh = false } = {}) {
   if (!fresh && expenseUsersSummaryInflight) return await expenseUsersSummaryInflight;
 
   const load = async () => {
-    const rows = await expenseUsersSummaryRows();
-    const perUser = new Map();
-
-    for (const row of rows) {
-      const name = text(valueFor(row, ["team_member_name", "Team Member", "team_member_raw"])) || "Unknown User";
-      const userId = text(valueFor(row, ["user_id", "employee_code"])) || name;
-      const key = userId || name;
-      if (!perUser.has(key)) {
-        perUser.set(key, {
-          id: key,
-          userId: key,
-          name,
-          total: 0,
-          count: 0,
-          lastSettledDate: null,
-        });
+    const startedAt = performance.now();
+    let source = "fallback";
+    let users = [];
+    let ok = false;
+    try {
+      if (Date.now() >= expenseUsersSummaryRpcUnavailableUntil) {
+        try {
+          const rows = await rpc("erp_expense_users_summary", {}, { profileName: "expenses.users-summary-rpc" });
+          users = (Array.isArray(rows) ? rows : [])
+            .map(serializeExpenseUsersSummaryRpcRow)
+            .filter((item) => item.id)
+            .sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+          source = "rpc";
+          ok = true;
+          return users;
+        } catch (error) {
+          if (isMissingRpc(error)) expenseUsersSummaryRpcUnavailableUntil = Date.now() + EXPENSE_RPC_COOLDOWN_MS;
+          else if (Number(error?.status) !== 400) throw error;
+        }
       }
 
-      const aggregate = perUser.get(key);
-      aggregate.total += number(valueFor(row, ["cash_in", "Cash in"]), 0) - number(valueFor(row, ["cash_out", "Cash out"]), 0);
-      aggregate.count += 1;
-
-      const fundsType = canonical(valueFor(row, ["funds_type", "Funds Type"]));
-      const reason = canonical(valueFor(row, ["reason", "Reason"]));
-      if (!aggregate.lastSettledDate && (fundsType === "settled my account" || reason === "settled my account")) {
-        aggregate.lastSettledDate = dateValue(valueFor(row, ["expense_date", "Date"]));
-      }
+      users = await loadExpenseUsersSummaryFallback();
+      ok = true;
+      return users;
+    } finally {
+      recordPerformanceSample({
+        category: "expenses",
+        name: "users-summary",
+        durationMs: performance.now() - startedAt,
+        ok,
+        status: ok ? 200 : 500,
+        meta: { source, users: users.length },
+      });
     }
-
-    return Array.from(perUser.values()).sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
   };
 
   const pending = load();
@@ -674,6 +726,26 @@ async function selectExpensesForMemberId(memberId) {
   const raw = text(memberId);
   if (!raw) return [];
 
+  // Normal schema: one request covers the modern user_id and both historical
+  // name fields. This replaces three parallel full-row requests whenever the
+  // canonical identity columns are available.
+  if (expenseMemberOrProjectionSupported !== false) {
+    try {
+      const rows = await select(expensesTable(), {
+        select: "*",
+        or: `(user_id.eq.${raw},team_member_name.${ilike(raw, false)},team_member_raw.${ilike(raw, false)})`,
+        order: "expense_date.desc,notion_created_time.desc,id.desc",
+        limit: "5000",
+      }, { profileName: "expenses.member-detail-or" });
+      expenseMemberOrProjectionSupported = true;
+      const matched = sortExpenseRows((Array.isArray(rows) ? rows : []).filter((row) => expenseRowMatchesMemberId(row, raw)));
+      if (matched.length || !rows?.length) return matched;
+    } catch (error) {
+      if (Number(error?.status) === 400) expenseMemberOrProjectionSupported = false;
+      else throw error;
+    }
+  }
+
   const specs = [
     ["user_id", `eq.${raw}`],
     ["team_member_name", ilike(raw, false)],
@@ -685,7 +757,7 @@ async function selectExpensesForMemberId(memberId) {
     [column]: filter,
     order: "expense_date.desc,notion_created_time.desc,id.desc",
     limit: "5000",
-  })));
+  }, { profileName: `expenses.member-detail-${column}` })));
 
   const successful = results.filter((result) => result.status === "fulfilled");
   if (successful.length) {
@@ -705,6 +777,7 @@ async function selectExpensesForMemberId(memberId) {
   const all = await selectAll(expensesTable(), {
     limit: 5000,
     order: "expense_date.desc,notion_created_time.desc,id.desc",
+    profileName: "expenses.member-detail-full-fallback",
   });
   return sortExpenseRows(all.filter((row) => expenseRowMatchesMemberId(row, raw)));
 }

@@ -136,16 +136,32 @@ export function getPerformanceSnapshot({ windowMs = DEFAULT_WINDOW_MS, limit = 2
     grouped.get(key).push(sample);
   }
 
+  const thresholdMs = slowThresholdMs();
   const operations = Array.from(grouped.values()).map((rows) => {
     const durations = rows.map((row) => row.durationMs);
     const total = durations.reduce((sum, value) => sum + value, 0);
     const failures = rows.filter((row) => !row.ok).length;
+    const slowCount = rows.filter((row) => row.durationMs >= thresholdMs).length;
+    const sourceBreakdown = {};
+    let fallbackCount = 0;
+    for (const row of rows) {
+      const source = shortText(row?.meta?.source || "");
+      if (source) sourceBreakdown[source] = (sourceBreakdown[source] || 0) + 1;
+      const fallbackText = `${row.category} ${row.name} ${source}`.toLowerCase();
+      if (/legacy|fallback|recovery/.test(fallbackText)) fallbackCount += 1;
+    }
     const latest = rows[rows.length - 1];
     return {
       category: latest.category,
       name: latest.name,
       count: rows.length,
       failures,
+      failureRate: rounded((failures / Math.max(1, rows.length)) * 100),
+      slowCount,
+      slowRate: rounded((slowCount / Math.max(1, rows.length)) * 100),
+      fallbackCount,
+      fallbackRate: rounded((fallbackCount / Math.max(1, rows.length)) * 100),
+      sourceBreakdown,
       avgMs: rounded(total / Math.max(1, rows.length)),
       p50Ms: rounded(percentile(durations, 0.5)),
       p95Ms: rounded(percentile(durations, 0.95)),
@@ -171,12 +187,23 @@ export function getPerformanceSnapshot({ windowMs = DEFAULT_WINDOW_MS, limit = 2
     value.totalMs = rounded(value.totalMs);
   }
 
+  const health = {
+    slowThresholdMs: thresholdMs,
+    slowSamples: samples.filter((sample) => sample.durationMs >= thresholdMs).length,
+    failedSamples: samples.filter((sample) => !sample.ok).length,
+    fallbackSamples: samples.filter((sample) => {
+      const source = shortText(sample?.meta?.source || "");
+      return /legacy|fallback|recovery/.test(`${sample.category} ${sample.name} ${source}`.toLowerCase());
+    }).length,
+  };
+
   return {
     generatedAt: now,
     processStartedAt: store.startedAt,
     windowMs: effectiveWindow,
     sampleCount: samples.length,
     operationCount: operations.length,
+    health,
     categories,
     operations: operations.slice(0, maxRows),
     slowest,
