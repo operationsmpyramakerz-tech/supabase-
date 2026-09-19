@@ -10,6 +10,57 @@ const RATES_CACHE_TTL_MS = 5_000;
 const listCache = new Map();
 const inflight = new Map();
 
+let eventListProjectionSupported = null;
+let componentProjectionSupported = null;
+let typeProjectionSupported = null;
+let categoryProjectionSupported = null;
+let rateProjectionSupported = null;
+
+// Event cards and the calendar only need a small subset of the event row.
+// Heavy JSON/text fields (projects, component arrays, notes, audience, contact
+// details, etc.) stay on the detail path and are fetched lazily by event ID.
+const EVENT_LIST_SELECT = [
+  "id",
+  "event_code",
+  "event_name",
+  "event_type",
+  "event_type_custom",
+  "status",
+  "is_archived",
+  "archived_at",
+  "organization_name",
+  "contact_person",
+  "event_start_date",
+  "event_end_date",
+  "governorate",
+  "location_url",
+  "total_cost",
+  "requester_name",
+  "created_by_user_id",
+  "created_at",
+  "updated_at",
+].join(",");
+
+const EVENT_COMPONENT_LIST_SELECT = [
+  "id",
+  "name",
+  "category",
+  "description",
+  "default_quantity",
+  "ownership_type",
+  "operating_cost",
+  "rental_cost",
+  "photo_url",
+  "link_url",
+  "is_active",
+  "created_at",
+  "updated_at",
+].join(",");
+
+const EVENT_TYPE_LIST_SELECT = "code,label,is_active,created_at";
+const EVENT_CATEGORY_LIST_SELECT = "code,label,is_active,created_at";
+const EVENT_RATE_LIST_SELECT = "id,area_name,transport_cost,is_active,sort_order,updated_at";
+
 const STANDARD_TYPES = Object.freeze([
   { code: "tech_day", label: "Tech Day", isCustom: false },
   { code: "seminar", label: "Seminar", isCustom: false },
@@ -227,6 +278,31 @@ function serializeEvent(row = {}) {
   };
 }
 
+function serializeEventSummary(row = {}) {
+  return {
+    id: String(row?.id || ""),
+    eventCode: text(row?.event_code, 80),
+    eventName: text(row?.event_name, 240),
+    eventType: normalizeType(row?.event_type),
+    eventTypeCustom: text(row?.event_type_custom, 80) || null,
+    status: normalizeStatus(row?.status),
+    isArchived: bool(row?.is_archived ?? row?.isArchived),
+    archivedAt: row?.archived_at || row?.archivedAt || null,
+    organizationName: text(row?.organization_name, 240),
+    contactPerson: text(row?.contact_person, 160),
+    eventStartDate: row?.event_start_date || null,
+    eventEndDate: row?.event_end_date || null,
+    governorate: text(row?.governorate, 120),
+    locationUrl: httpUrl(row?.location_url, 1000),
+    totalCost: money(row?.total_cost, 0),
+    requesterName: text(row?.requester_name, 160),
+    createdByUserId: text(row?.created_by_user_id, 180) || null,
+    createdAt: row?.created_at || null,
+    updatedAt: row?.updated_at || null,
+    summaryFormat: "compact-v1",
+  };
+}
+
 function serializeComponent(row = {}) {
   const ownershipType = normalizeOwnership(row?.ownership_type || row?.ownershipType);
   const operatingCost = money(row?.operating_cost ?? row?.operatingCost, 0);
@@ -302,18 +378,36 @@ async function cached(key, ttlMs, loader, { force = false } = {}) {
 }
 
 export async function listEvents({ includeArchived = false, status = "all", search = "", force = false } = {}) {
-  const rows = await cached("events:all", EVENT_LIST_CACHE_TTL_MS, async () => (
-    await selectAll(eventsTable(), { limit: 2000, order: "created_at.desc,event_code.desc" })
-  ), { force });
+  const rows = await cached("events:all", EVENT_LIST_CACHE_TTL_MS, async () => {
+    if (eventListProjectionSupported !== false) {
+      try {
+        const compactRows = await selectAll(eventsTable(), {
+          limit: 2000,
+          order: "created_at.desc,event_code.desc",
+          select: EVENT_LIST_SELECT,
+          profileName: "events.list-compact",
+        });
+        eventListProjectionSupported = true;
+        return compactRows;
+      } catch {
+        eventListProjectionSupported = false;
+      }
+    }
+    return await selectAll(eventsTable(), {
+      limit: 2000,
+      order: "created_at.desc,event_code.desc",
+      profileName: "events.list-fallback",
+    });
+  }, { force });
 
   const needle = text(search, 200).toLowerCase();
   const requestedStatus = String(status || "all").trim().toLowerCase();
   const normalizedStatus = requestedStatus && requestedStatus !== "all" ? normalizeStatus(requestedStatus) : "all";
-  return (Array.isArray(rows) ? rows : []).map(serializeEvent).filter((event) => {
+  return (Array.isArray(rows) ? rows : []).map(serializeEventSummary).filter((event) => {
     if (!includeArchived && event.isArchived) return false;
     if (normalizedStatus !== "all" && event.status !== normalizedStatus) return false;
     if (!needle) return true;
-    return [event.eventCode, event.eventName, event.eventType, event.eventTypeCustom, event.organizationName, event.governorate, event.requesterName]
+    return [event.eventCode, event.eventName, event.eventType, event.eventTypeCustom, event.organizationName, event.governorate, event.requesterName, event.contactPerson]
       .join(" ")
       .toLowerCase()
       .includes(needle);
@@ -330,21 +424,43 @@ export async function getEvent(id) {
 export async function listEventComponents({ activeOnly = false, force = false } = {}) {
   const key = activeOnly ? "event-components:active" : "event-components:all";
   const rows = await cached(key, REFERENCE_CACHE_TTL_MS, async () => {
-    const params = {
-      select: "*",
+    const base = {
       order: "is_active.desc,name.asc",
       limit: "1000",
+      ...(activeOnly ? { is_active: "eq.true" } : {}),
     };
-    if (activeOnly) params.is_active = "eq.true";
-    return await select(componentsTable(), params);
+    if (componentProjectionSupported !== false) {
+      try {
+        const compactRows = await select(componentsTable(), { ...base, select: EVENT_COMPONENT_LIST_SELECT }, { profileName: "events.components-compact" });
+        componentProjectionSupported = true;
+        return compactRows;
+      } catch {
+        componentProjectionSupported = false;
+      }
+    }
+    return await select(componentsTable(), { ...base, select: "*" }, { profileName: "events.components-fallback" });
   }, { force });
   return (Array.isArray(rows) ? rows : []).map(serializeComponent);
 }
 
 export async function listEventTypes({ force = false } = {}) {
-  const rows = await cached("event-types", REFERENCE_CACHE_TTL_MS, async () => (
-    await selectAll(typesTable(), { limit: 1000, order: "label.asc" })
-  ), { force });
+  const rows = await cached("event-types", REFERENCE_CACHE_TTL_MS, async () => {
+    if (typeProjectionSupported !== false) {
+      try {
+        const compactRows = await selectAll(typesTable(), {
+          limit: 1000,
+          order: "label.asc",
+          select: EVENT_TYPE_LIST_SELECT,
+          profileName: "events.types-compact",
+        });
+        typeProjectionSupported = true;
+        return compactRows;
+      } catch {
+        typeProjectionSupported = false;
+      }
+    }
+    return await selectAll(typesTable(), { limit: 1000, order: "label.asc", profileName: "events.types-fallback" });
+  }, { force });
   const standard = STANDARD_TYPES.map((item) => ({ ...item }));
   const seenCodes = new Set(standard.map((item) => item.code));
   const custom = (Array.isArray(rows) ? rows : [])
@@ -354,9 +470,23 @@ export async function listEventTypes({ force = false } = {}) {
 }
 
 export async function listEventComponentCategories({ force = false } = {}) {
-  const rows = await cached("event-component-categories", REFERENCE_CACHE_TTL_MS, async () => (
-    await selectAll(categoriesTable(), { limit: 1000, order: "label.asc" })
-  ), { force });
+  const rows = await cached("event-component-categories", REFERENCE_CACHE_TTL_MS, async () => {
+    if (categoryProjectionSupported !== false) {
+      try {
+        const compactRows = await selectAll(categoriesTable(), {
+          limit: 1000,
+          order: "label.asc",
+          select: EVENT_CATEGORY_LIST_SELECT,
+          profileName: "events.categories-compact",
+        });
+        categoryProjectionSupported = true;
+        return compactRows;
+      } catch {
+        categoryProjectionSupported = false;
+      }
+    }
+    return await selectAll(categoriesTable(), { limit: 1000, order: "label.asc", profileName: "events.categories-fallback" });
+  }, { force });
   const standard = STANDARD_COMPONENT_CATEGORIES.map((item) => ({ ...item }));
   const seenCodes = new Set(standard.map((item) => item.code));
   const custom = (Array.isArray(rows) ? rows : [])
@@ -368,13 +498,21 @@ export async function listEventComponentCategories({ force = false } = {}) {
 export async function listGovernorateRates({ includeInactive = false, force = false } = {}) {
   const key = includeInactive ? "event-rates:all" : "event-rates:active";
   const rows = await cached(key, RATES_CACHE_TTL_MS, async () => {
-    const params = {
-      select: "*",
+    const base = {
       order: "sort_order.asc,area_name.asc",
       limit: "1000",
+      ...(includeInactive ? {} : { is_active: "eq.true" }),
     };
-    if (!includeInactive) params.is_active = "eq.true";
-    return await select(ratesTable(), params);
+    if (rateProjectionSupported !== false) {
+      try {
+        const compactRows = await select(ratesTable(), { ...base, select: EVENT_RATE_LIST_SELECT }, { profileName: "events.rates-compact" });
+        rateProjectionSupported = true;
+        return compactRows;
+      } catch {
+        rateProjectionSupported = false;
+      }
+    }
+    return await select(ratesTable(), { ...base, select: "*" }, { profileName: "events.rates-fallback" });
   }, { force });
   return (Array.isArray(rows) ? rows : []).map(serializeRate).filter((item) => item.areaName);
 }

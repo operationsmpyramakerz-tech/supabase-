@@ -300,6 +300,18 @@ export default function EventsCalendarClient({ account, initialEvents = [], boot
     }
   }
 
+  async function openEventDetails(event) {
+    if (!event?.id) return;
+    setActiveEvent(event);
+    try {
+      const body = await requestJson(`/next/api/events/${encodeURIComponent(event.id)}?_ts=${Date.now()}`);
+      if (body?.event) setActiveEvent(body.event);
+    } catch {
+      // Keep the compact summary visible if the detail request is temporarily
+      // unavailable. The list/calendar itself must remain usable.
+    }
+  }
+
   function openNewEvent() {
     const overlapping = selectedDayEvents.filter((event) => normalizeStatus(event.status) !== "cancelled");
     const params = new URLSearchParams({ startDate: selectedKey });
@@ -390,7 +402,7 @@ export default function EventsCalendarClient({ account, initialEvents = [], boot
 
                 <div className="events-calendar-upcoming-list" role="tabpanel">
                   {list.length ? list.map((event) => (
-                    <button type="button" className="events-calendar-upcoming-item" key={event.id} onClick={() => setActiveEvent(event)}>
+                    <button type="button" className="events-calendar-upcoming-item" key={event.id} onClick={() => openEventDetails(event)}>
                       <span className="events-calendar-upcoming-item__date">
                         <strong>{formatDate(startDate(event), { day: "2-digit", month: "short" })}</strong>
                         <small>{String(event.eventStartDate || "").slice(0, 4) || "—"}</small>
