@@ -9,6 +9,14 @@ import {
   updateById,
 } from "./supabase-rest";
 import { fetchLegacyJson } from "./legacy-api";
+import {
+  canUseKitHeadersRpc,
+  canUseProposalHeadersRpc,
+  loadKitHeadersRpc,
+  loadProposalHeadersRpc,
+  noteKitHeadersRpcError,
+  noteProposalHeadersRpcError,
+} from "./proposal-kit-summary-rpc";
 
 function text(value) {
   return String(value ?? "").trim();
@@ -89,6 +97,11 @@ const PROPOSAL_KIT_READ_CACHE_MAX_ENTRIES = 8;
 const proposalKitReadCache = new Map();
 const proposalKitReadInflight = new Map();
 let proposalKitCacheGeneration = 0;
+let proposalHeaderProjectionSupported = null;
+let kitHeaderProjectionSupported = null;
+
+const PROPOSAL_HEADER_SELECT = "id,name,created_by,created_by_id,created_at,updated_at,combined_sources,combine_logic";
+const KIT_HEADER_SELECT = "id,name,created_by,created_by_id,created_at,updated_at,folder_id";
 
 function proposalKitCacheGet(key) {
   const entry = proposalKitReadCache.get(key);
@@ -285,13 +298,51 @@ async function requireKitFolder(folderId) {
   return folder;
 }
 
-function counts(rows, foreignKey) {
-  const map = new Map();
-  for (const row of rows || []) {
-    const id = text(row?.[foreignKey]);
-    if (id) map.set(id, (map.get(id) || 0) + 1);
+async function proposalHeaderRowsCompact() {
+  if (proposalHeaderProjectionSupported !== false) {
+    try {
+      const rows = await selectAll(proposalTable(), {
+        limit: 5000,
+        order: "updated_at.desc,created_at.desc",
+        select: PROPOSAL_HEADER_SELECT,
+        profileName: "proposals.headers-compact",
+      });
+      proposalHeaderProjectionSupported = true;
+      return rows;
+    } catch {
+      // Customized/legacy schemas may use non-canonical header column names.
+      // Remember compatibility mode so we do not pay for a failed projection
+      // on every cache miss.
+      proposalHeaderProjectionSupported = false;
+    }
   }
-  return map;
+  return await selectAll(proposalTable(), {
+    limit: 5000,
+    order: "updated_at.desc,created_at.desc",
+    profileName: "proposals.headers-fallback",
+  });
+}
+
+async function kitHeaderRowsCompact() {
+  if (kitHeaderProjectionSupported !== false) {
+    try {
+      const rows = await selectAll(kitsTable(), {
+        limit: 5000,
+        order: "updated_at.desc,created_at.desc",
+        select: KIT_HEADER_SELECT,
+        profileName: "kits.headers-compact",
+      });
+      kitHeaderProjectionSupported = true;
+      return rows;
+    } catch {
+      kitHeaderProjectionSupported = false;
+    }
+  }
+  return await selectAll(kitsTable(), {
+    limit: 5000,
+    order: "updated_at.desc,created_at.desc",
+    profileName: "kits.headers-fallback",
+  });
 }
 
 async function proposalItemCountsForHeaders(headers = []) {
@@ -309,6 +360,7 @@ async function proposalItemCountsForHeaders(headers = []) {
   for (let offset = 0; ; offset += pageSize) {
     const rows = await supabaseRequest(
       `/${encodeURIComponent(proposalItemsTable())}?select=proposal_id&proposal_id=in.(${encodeURIComponent(inList)})&order=id.asc&limit=${pageSize}&offset=${offset}`,
+      { profileName: "proposals.count-items-fallback" },
     );
     const page = Array.isArray(rows) ? rows : [];
     for (const row of page) {
@@ -321,18 +373,75 @@ async function proposalItemCountsForHeaders(headers = []) {
   return itemCounts;
 }
 
+async function kitItemCountsForHeaders(headers = []) {
+  const kitIds = [...new Set((headers || []).map((row) => text(row?.id)).filter(Boolean))];
+  const itemCounts = new Map();
+  if (!kitIds.length) return itemCounts;
+
+  const pageSize = 500;
+  const inList = postgrestInList(kitIds);
+  for (let offset = 0; ; offset += pageSize) {
+    const rows = await supabaseRequest(
+      `/${encodeURIComponent(kitItemsTable())}?select=kit_id&kit_id=in.(${encodeURIComponent(inList)})&order=id.asc&limit=${pageSize}&offset=${offset}`,
+      { profileName: "kits.count-items-fallback" },
+    );
+    const page = Array.isArray(rows) ? rows : [];
+    for (const row of page) {
+      const kitId = text(row?.kit_id);
+      if (kitId) itemCounts.set(kitId, (itemCounts.get(kitId) || 0) + 1);
+    }
+    if (page.length < pageSize) break;
+  }
+  return itemCounts;
+}
+
+async function kitMembershipRowsForHeaders(headers = []) {
+  const kitIds = [...new Set((headers || []).map((row) => text(row?.id)).filter(Boolean))];
+  if (!kitIds.length) return [];
+
+  const out = [];
+  const pageSize = 500;
+  const inList = postgrestInList(kitIds);
+  for (let offset = 0; ; offset += pageSize) {
+    const rows = await supabaseRequest(
+      `/${encodeURIComponent(kitItemsTable())}?select=kit_id,product_id&kit_id=in.(${encodeURIComponent(inList)})&order=id.asc&limit=${pageSize}&offset=${offset}`,
+      { profileName: "kits.membership-items" },
+    );
+    const page = Array.isArray(rows) ? rows : [];
+    out.push(...page);
+    if (page.length < pageSize) break;
+  }
+  return out;
+}
+
 export async function listProposals(account, { fresh = false } = {}) {
   // `account` may be a promise. This lets page loaders start the safe Supabase
   // reads at the same time as the permission gate instead of serializing them.
   // Only raw shared rows/counts are cached; `canEdit` is calculated afterward.
   const accountPromise = Promise.resolve(account || {});
   const snapshot = await proposalKitCachedRead("proposals:list", async () => {
-    const headers = await selectAll(proposalTable(), { limit: 5000, order: "updated_at.desc,created_at.desc" });
+    if (canUseProposalHeadersRpc()) {
+      try {
+        const headers = await loadProposalHeadersRpc();
+        return { headers, itemCounts: null, source: "rpc" };
+      } catch (error) {
+        // Only disable the accelerator when Supabase explicitly reports that
+        // the optional function is not installed. Other failures still fall
+        // through for this request without permanently hiding real problems.
+        noteProposalHeadersRpcError(error);
+      }
+    }
+
+    const headers = await proposalHeaderRowsCompact();
     const itemCounts = await proposalItemCountsForHeaders(headers);
-    return { headers, itemCounts };
+    return { headers, itemCounts, source: "rest" };
   }, { fresh });
   const resolvedAccount = await accountPromise;
-  return snapshot.headers.map((row) => proposalHeader(row, snapshot.itemCounts.get(text(row.id)) || 0, resolvedAccount));
+  return snapshot.headers.map((row) => proposalHeader(
+    row,
+    snapshot.itemCounts ? (snapshot.itemCounts.get(text(row.id)) || 0) : (Number(row.items_count) || 0),
+    resolvedAccount,
+  ));
 }
 
 export async function getProposal(id, account) {
@@ -648,21 +757,34 @@ export async function deleteKitFolder(id, body, account) {
 
 async function kitListSnapshot({ fresh = false } = {}) {
   return await proposalKitCachedRead("kits:snapshot", async () => {
-    const [headers, items] = await Promise.all([
-      selectAll(kitsTable(), { limit: 5000, order: "updated_at.desc,created_at.desc" }),
-      selectAll(kitItemsTable(), { limit: 5000, order: "created_at.asc" }),
-    ]);
+    const headers = await kitHeaderRowsCompact();
+    const items = await kitMembershipRowsForHeaders(headers);
     return { headers, items };
   }, { fresh });
 }
 
 export async function listKits(account, { fresh = false } = {}) {
-  const [snapshot, resolvedAccount] = await Promise.all([
-    kitListSnapshot({ fresh }),
+  const [headers, resolvedAccount] = await Promise.all([
+    proposalKitCachedRead("kits:list", async () => {
+      if (canUseKitHeadersRpc()) {
+        try {
+          return await loadKitHeadersRpc();
+        } catch (error) {
+          noteKitHeadersRpcError(error);
+        }
+      }
+
+      // Compatibility fallback: keep the existing REST path, but fetch only
+      // the two fields required to calculate counts rather than every item
+      // property. This path is used until the optional RPC is installed.
+      const headerRows = await kitHeaderRowsCompact();
+      const itemCounts = await kitItemCountsForHeaders(headerRows);
+      return headerRows.map((row) => ({ ...row, items_count: itemCounts.get(text(row.id)) || 0 }));
+    }, { fresh }),
     Promise.resolve(account || {}),
   ]);
-  const itemCounts = counts(snapshot.items, "kit_id");
-  return snapshot.headers.map((row) => kitHeader(row, itemCounts.get(text(row.id)) || 0, resolvedAccount));
+
+  return headers.map((row) => kitHeader(row, Number(row.items_count) || 0, resolvedAccount));
 }
 
 export async function listKitMembership({ fresh = false } = {}) {

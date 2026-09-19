@@ -15,6 +15,12 @@ const PRODUCT_READ_CACHE_MAX_ENTRIES = 12;
 const _productReadCache = new Map();
 const _productReadInflight = new Map();
 let productReadCacheGeneration = 0;
+let productProjectionSupported = null;
+
+// Product cards/pickers only use this compact projection. Full rows are still
+// available through the mutation/detail paths when needed. Legacy/custom
+// schemas automatically fall back to select=* once per warm process.
+const PRODUCT_LIST_SELECT = "id,name,id_code,unit_price,unit,url,image_url,tags";
 
 function productReadCacheGet(key) {
   const entry = _productReadCache.get(key);
@@ -160,7 +166,27 @@ async function productRows({ fresh = false } = {}) {
   const { productsTable } = getSupabaseConfig();
   return await productCachedRead(
     "products",
-    () => selectAll(productsTable, { limit: 5000, order: "name.asc,id.asc" }),
+    async () => {
+      if (productProjectionSupported !== false) {
+        try {
+          const rows = await selectAll(productsTable, {
+            limit: 5000,
+            order: "name.asc,id.asc",
+            select: PRODUCT_LIST_SELECT,
+            profileName: "products.catalog-compact",
+          });
+          productProjectionSupported = true;
+          return rows;
+        } catch {
+          productProjectionSupported = false;
+        }
+      }
+      return await selectAll(productsTable, {
+        limit: 5000,
+        order: "name.asc,id.asc",
+        profileName: "products.catalog-fallback",
+      });
+    },
     { fresh },
   );
 }
