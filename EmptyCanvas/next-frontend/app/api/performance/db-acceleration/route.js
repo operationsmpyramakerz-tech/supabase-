@@ -6,10 +6,10 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 const RPC_PROBES = [
-  { name: "erp_order_candidate_numbers", args: { p_options: { context: "__probe__", limit: 1 } } },
-  { name: "erp_home_order_groups", args: { p_options: { includeCurrent: false, includeReview: false, includeApproved: false } } },
-  { name: "erp_home_stock_summary", args: { p_options: {} } },
-  { name: "erp_home_expenses_summary", args: { p_options: {} } },
+  { name: "erp_order_candidate_numbers", args: { p_options: { probe: true, context: "__probe__", limit: 1 } } },
+  { name: "erp_home_order_groups", args: { p_options: { probe: true, includeCurrent: false, includeReview: false, includeApproved: false } } },
+  { name: "erp_home_stock_summary", args: { p_options: { probe: true } } },
+  { name: "erp_home_expenses_summary", args: { p_options: { probe: true } } },
   { name: "erp_stocktaking_folder_summaries", args: {} },
   { name: "erp_product_proposal_headers", args: {} },
   { name: "erp_product_kit_headers", args: {} },
@@ -101,18 +101,23 @@ async function probeRpc({ name, args }) {
   }
 }
 
-export async function GET() {
+export async function GET(request) {
   const gate = await performanceGate();
   if (!gate.ok) {
     return noStore({ error: gate.error || "Performance diagnostics access is not allowed." }, { status: gate.status || 403 });
   }
 
+  const url = new URL(request.url);
+  const live = ["1", "true", "yes"].includes(String(url.searchParams.get("live") || "").toLowerCase());
   const manifest = await loadInstalledManifest();
-  if (manifest.installed) {
+
+  if (manifest.installed && !live) {
     const installedCount = manifest.rows.filter((row) => row.installed).length;
     return noStore({
       ok: true,
       source: "database-manifest",
+      liveVerification: false,
+      hint: "Add ?live=1 to resolve/probe the RPC accelerators through PostgREST.",
       summary: {
         total: manifest.rows.length,
         installed: installedCount,
@@ -124,11 +129,42 @@ export async function GET() {
 
   const probes = await Promise.all(RPC_PROBES.map(probeRpc));
   const available = probes.filter((row) => row.state !== "missing").length;
+
+  if (manifest.installed) {
+    const manifestByName = new Map(manifest.rows.map((row) => [`${row.kind}:${row.name}`, row]));
+    const liveRpcNames = new Set(probes.map((row) => row.name));
+    const accelerators = [
+      ...manifest.rows
+        .filter((row) => row.kind !== "rpc" || !liveRpcNames.has(row.name))
+        .map((row) => ({ ...row, state: row.installed ? "installed" : "missing" })),
+      ...probes.map((row) => ({
+        ...row,
+        installed: row.state !== "missing",
+        manifestInstalled: manifestByName.get(`rpc:${row.name}`)?.installed === true,
+      })),
+    ];
+    const installedCount = accelerators.filter((row) => row.installed !== false && row.state !== "missing").length;
+    return noStore({
+      ok: true,
+      source: "database-manifest+live-rpc-probes",
+      liveVerification: true,
+      summary: {
+        total: accelerators.length,
+        installed: installedCount,
+        missing: Math.max(0, accelerators.length - installedCount),
+        rpcResolved: available,
+        rpcTotal: probes.length,
+      },
+      accelerators,
+    });
+  }
+
   return noStore({
     ok: true,
     source: "rpc-probes",
+    liveVerification: true,
     sqlPackInstalled: false,
-    warning: manifest.warning || "Run supabase_performance_acceleration.sql to install the index pack and database manifest.",
+    warning: manifest.warning || "Run EmptyCanvas/supabase_performance_acceleration.sql to install the index + RPC acceleration pack and database manifest.",
     summary: {
       total: probes.length,
       installed: available,
