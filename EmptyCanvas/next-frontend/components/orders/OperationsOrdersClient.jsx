@@ -6,6 +6,7 @@ import { groupOrderItems, OrderGroupHeader, OrderSortButton } from "./OrderGroup
 import OrderDownloadModal from "./OrderDownloadModal";
 import OrderComponentSearch, { matchesOrderComponentSearch } from "./OrderComponentSearch";
 import ActionLoadingModal, { useActionLoading } from "../ActionLoadingModal";
+import { loadTeamMemberPublicProfile } from "../../lib/team-member-public-client";
 
 // Direct Next route handlers must include the configured /next basePath.
 // Root /api/* belongs to the Legacy Express app on the public ERP origin.
@@ -2352,9 +2353,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
       return;
     }
     try {
-      const response = await fetch(`/api/team-members/${encodeURIComponent(key)}/public`, { credentials: "include", cache: "no-store" });
-      const data = await readJson(response);
-      if (!response.ok) throw new Error(data?.error || "Failed to load user profile.");
+      const data = await loadTeamMemberPublicProfile(key);
       creatorProfileCache.current.set(key, data);
       setCreatorState({ ...base, loading: false, profile: data, error: false });
     } catch {

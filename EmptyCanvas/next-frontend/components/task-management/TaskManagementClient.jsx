@@ -8,6 +8,7 @@ import UserProfileMenu from "../UserProfileMenu";
 import ActionLoadingModal, { useActionLoading } from "../ActionLoadingModal";
 import ClassicTaskWorkflowDetails from "./ClassicTaskWorkflowDetails";
 import ClassicTaskSelect from "./ClassicTaskSelect";
+import { loadTeamMemberPublicProfile } from "../../lib/team-member-public-client";
 
 const STATUS_OPTIONS = [
   ["all", "All", "layers"],
@@ -395,9 +396,8 @@ function CreatorProfileButton({ ticket, className = "" }) {
     if (profile || !key) return;
     setLoading(true);
     try {
-      const response = await fetch(`/api/team-members/${encodeURIComponent(key)}/public`, { credentials: "include", cache: "no-store" });
-      const body = await response.json().catch(() => ({}));
-      if (response.ok) setProfile(body);
+      const body = await loadTeamMemberPublicProfile(key);
+      setProfile(body);
     } finally { setLoading(false); }
   };
   useEffect(() => {

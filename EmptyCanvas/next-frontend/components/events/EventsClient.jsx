@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { navigateWithinApp } from "../../lib/client-navigation";
 import EventIcon from "./EventIcon";
+import { loadTeamMemberPublicProfile } from "../../lib/team-member-public-client";
 
 const STATUS_LABELS = {
   submitted: "Submitted",
@@ -562,7 +563,7 @@ export default function EventsClient({ account, initialEvents = [], bootstrapWar
     const name = text(event.requesterName) || "Creator";
     setProfileState({ loading: true, name, profile: null, error: "" });
     try {
-      const body = await requestJson(`/api/team-members/${encodeURIComponent(key || name)}/public`);
+      const body = await loadTeamMemberPublicProfile(key || name);
       setProfileState({ loading: false, name, profile: body, error: "" });
     } catch (error) {
       setProfileState({ loading: false, name, profile: null, error: error.message || "Could not load profile details." });

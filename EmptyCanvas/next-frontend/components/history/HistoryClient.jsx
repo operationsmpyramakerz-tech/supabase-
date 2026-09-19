@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { loadTeamMemberPublicProfile } from "../../lib/team-member-public-client";
 
 const PAGE_SIZE = 50;
 
@@ -248,7 +249,7 @@ function ProfilePopover({ state, onClose }) {
       try {
         let body = profileCache.get(id);
         if (!body) {
-          body = await requestJson(`/api/team-members/${encodeURIComponent(id)}/public`);
+          body = await loadTeamMemberPublicProfile(id);
           profileCache.set(id, body);
         }
         if (!cancelled) setProfile(body);

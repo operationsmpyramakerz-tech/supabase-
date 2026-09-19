@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { navigateWithinApp } from "../../lib/client-navigation";
 import ClassicOrderIcon from "./ClassicOrderIcon";
+import { loadTeamMemberPublicProfile } from "../../lib/team-member-public-client";
 
 // Direct Next route handlers must include the configured /next basePath.
 // Root /api/* belongs to the Legacy Express app on the public ERP origin.
@@ -1825,9 +1826,7 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
       return;
     }
     try {
-      const response = await fetch(`/api/team-members/${encodeURIComponent(key)}/public`, { credentials: "include", cache: "no-store" });
-      const data = await readJson(response);
-      if (!response.ok) throw new Error(data?.error || "Failed to load user profile.");
+      const data = await loadTeamMemberPublicProfile(key);
       creatorProfileCache.current.set(key, data);
       setCreatorState({ ...base, loading: false, profile: data, error: false });
     } catch {
