@@ -8,8 +8,19 @@ import { recordPerformanceSample } from "./performance-profiler";
 
 const SESSION_LOOKUP_TIMEOUT_MS = 3500;
 const APP_PAGES_CACHE_TTL_MS = 60_000;
-const MEMBER_ACCESS_CACHE_TTL_MS = 2_500;
-const MEMBER_ROW_CACHE_TTL_MS = 2_500;
+
+function boundedCacheTtl(rawValue, fallback) {
+  const value = Number(rawValue);
+  return Math.max(1_000, Math.min(60_000, Number.isFinite(value) && value > 0 ? value : fallback));
+}
+
+// Match the established /api/account bridge freshness window by default.
+// The old 2.5s cache caused normal page-to-page navigation to re-read the same
+// member row + permission matrix from Supabase several times in one session.
+// Session revocation is still checked on every gate, so this only caches the
+// profile/permission payload, not authentication validity.
+const MEMBER_ACCESS_CACHE_TTL_MS = boundedCacheTtl(process.env.DIRECT_AUTH_ACCESS_CACHE_TTL_MS, 15_000);
+const MEMBER_ROW_CACHE_TTL_MS = boundedCacheTtl(process.env.DIRECT_AUTH_MEMBER_CACHE_TTL_MS, 15_000);
 
 const APP_PAGES_COMPACT_SELECT = "id,page_key,page_name,route_path,sort_order";
 const MEMBER_ACCESS_COMPACT_SELECT = "team_member_id,page_id,access_level,is_enabled";
@@ -230,7 +241,7 @@ function unsignSessionCookie(rawValue, secret) {
   return sid;
 }
 
-async function upstashCommand(command) {
+async function upstashCommand(command, { timeoutMs = SESSION_LOOKUP_TIMEOUT_MS } = {}) {
   const metricStartedAt = performance.now();
   const metricName = String(Array.isArray(command) ? command[0] : "command").trim().toUpperCase() || "COMMAND";
   let metricOk = false;
@@ -243,8 +254,9 @@ async function upstashCommand(command) {
     throw error;
   }
 
+  const effectiveTimeoutMs = Math.max(100, Math.min(SESSION_LOOKUP_TIMEOUT_MS, Number(timeoutMs) || SESSION_LOOKUP_TIMEOUT_MS));
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), SESSION_LOOKUP_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), effectiveTimeoutMs);
   try {
     const response = await fetch(url, {
       method: "POST",
@@ -268,7 +280,7 @@ async function upstashCommand(command) {
   } catch (error) {
     if (error?.name === "AbortError") {
       metricStatus = 504;
-      const timeoutError = new Error(`Direct session lookup timed out after ${SESSION_LOOKUP_TIMEOUT_MS}ms.`);
+      const timeoutError = new Error(`Direct session lookup timed out after ${effectiveTimeoutMs}ms.`);
       timeoutError.code = "DIRECT_SESSION_TIMEOUT";
       timeoutError.status = 504;
       throw timeoutError;
@@ -298,11 +310,17 @@ async function resolveDirectSessionCookie(cookieValue) {
   const sid = unsignSessionCookie(cookieValue, secret);
   if (!sid) return { definitive: true, status: 401, session: null, error: "Invalid session cookie." };
 
+  // Keep the whole direct-session validation inside one tail-latency budget.
+  // Previously MGET and the revocation GET could each consume 3.5s, delaying
+  // the compatibility fallback by roughly 7s during an unhealthy Redis path.
+  const budgetStartedAt = performance.now();
+  const remainingBudgetMs = () => Math.max(0, SESSION_LOOKUP_TIMEOUT_MS - (performance.now() - budgetStartedAt));
+
   let values;
   try {
     // RedisStore uses `op:<sid>` while the REST fallback store uses
     // `op:sess:<sid>`. MGET supports both deployment modes without guessing.
-    values = await upstashCommand(["MGET", `op:${sid}`, `op:sess:${sid}`]);
+    values = await upstashCommand(["MGET", `op:${sid}`, `op:sess:${sid}`], { timeoutMs: remainingBudgetMs() });
   } catch (error) {
     return { definitive: false, status: 503, session: null, error: error?.message || "Direct session lookup failed." };
   }
@@ -327,7 +345,14 @@ async function resolveDirectSessionCookie(cookieValue) {
   const userId = text(sessionValue.userSupabaseId || sessionValue.userNotionId);
   if (userId) {
     try {
-      const revokedAt = Number(await upstashCommand(["GET", `op:auth-revoked:${userId}`])) || 0;
+      const remainingMs = remainingBudgetMs();
+      if (remainingMs < 100) {
+        const error = new Error(`Direct session validation exceeded its ${SESSION_LOOKUP_TIMEOUT_MS}ms budget.`);
+        error.code = "DIRECT_SESSION_TIMEOUT";
+        error.status = 504;
+        throw error;
+      }
+      const revokedAt = Number(await upstashCommand(["GET", `op:auth-revoked:${userId}`], { timeoutMs: remainingMs })) || 0;
       const issuedAt = Number(sessionValue.authIssuedAt || 0);
       if (revokedAt && issuedAt <= revokedAt) {
         return { definitive: true, status: 401, session: null, error: "Session invalidated." };
