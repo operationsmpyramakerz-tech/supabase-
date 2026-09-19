@@ -7,7 +7,7 @@ import { stocktakingForAccount } from "./stocktaking-data";
 import { expensesForAccount } from "./expenses-data";
 import { listTeamMembersLite } from "./team-members-service";
 import { getReviewerVisibility as reviewerVisibility } from "./reviewer-visibility-service";
-import { recordPerformanceSample } from "./performance-profiler";
+import { measurePerformance, recordPerformanceSample } from "./performance-profiler";
 import {
   canUseHomeOrderGroupsRpc,
   loadHomeOrderGroupsRpc,
@@ -883,7 +883,7 @@ function buildHomeOverview({
   };
 }
 
-export async function loadHomeOverviewDirect({
+async function loadHomeOverviewDirectImpl({
   account = {},
   requestedUserId = "all",
   duration = "all",
@@ -1017,4 +1017,10 @@ export async function loadHomeOverviewDirect({
     showExpenses,
     source: overviewSource,
   };
+}
+
+export async function loadHomeOverviewDirect(options = {}) {
+  return await measurePerformance("page-data", "home.overview", async () =>
+    await loadHomeOverviewDirectImpl(options),
+  );
 }

@@ -6,7 +6,7 @@ import { loadRawOrderRowsByIds, serializeOperationsOrderDetail } from "./order-d
 import { consumeOrderSummaryWindows, loadOrderRowsByNumbers, scanOrderNumberCandidates } from "./order-pagination";
 import { applyOrderSearchPlan, canUseOrderSearchText, createOrderSearchPlan, noteOrderSearchTextError } from "./order-search-hotpath";
 import { canUseOrderCandidateRpc, loadOrderCandidateNumbersRpc, noteOrderCandidateRpcError } from "./order-candidate-rpc";
-import { recordPerformanceSample } from "./performance-profiler";
+import { measurePerformance, recordPerformanceSample } from "./performance-profiler";
 
 const PAGE_LIMIT = 36;
 const PAGE_MAX = 80;
@@ -404,7 +404,9 @@ export async function loadMaintenanceOrdersPage({
 }
 
 export async function loadMaintenanceOrdersInitialPage({ limit = PAGE_LIMIT } = {}) {
-  return await loadMaintenanceOrdersPage({ tab: "all", query: "", cursor: null, limit });
+  return await measurePerformance("page-data", "orders.maintenance.initial", async () =>
+    await loadMaintenanceOrdersPage({ tab: "all", query: "", cursor: null, limit }),
+  );
 }
 
 export async function loadMaintenanceOrderDetails({ orderIds = [] } = {}) {

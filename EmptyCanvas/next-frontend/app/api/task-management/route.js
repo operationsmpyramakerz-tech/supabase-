@@ -5,6 +5,7 @@ import {
   taskManagementDataError,
 } from "../../../lib/task-management-data";
 import { fetchLegacyJson } from "../../../lib/legacy-api";
+import { measurePerformance } from "../../../lib/performance-profiler";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -16,7 +17,7 @@ function json(payload, init = {}) {
   });
 }
 
-export async function GET(request) {
+async function GETImpl(request) {
   const url = new URL(request.url);
   const view = String(url.searchParams.get("view") || "").trim().toLowerCase();
   const force = url.searchParams.has("_ts") || url.searchParams.get("_fresh") === "1";
@@ -35,4 +36,8 @@ export async function GET(request) {
   const legacy = await fetchLegacyJson(`/api/task-management?view=${encodeURIComponent(view)}`, { timeoutMs: 35_000, fresh: force });
   if (legacy.ok && legacy.data) return json({ ...legacy.data, source: legacy.data?.source || "legacy" }, { status: legacy.status || 200 });
   return json({ ok: false, tickets: [], error: legacy.error || legacy.data?.error || taskManagementDataError(new Error("Task Management list is unavailable.")) }, { status: legacy.status || 502 });
+}
+
+export async function GET(request) {
+  return await measurePerformance("route", "task-management.list", async () => await GETImpl(request), { method: "GET" });
 }

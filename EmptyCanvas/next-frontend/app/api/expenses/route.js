@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { getLegacyAccountGate } from "../../../lib/products-auth";
 import { expensesForAccount } from "../../../lib/expenses-data";
+import { measurePerformance } from "../../../lib/performance-profiler";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+async function GETImpl() {
   const gate = await getLegacyAccountGate(["Expenses"]);
   if (!gate.ok) {
     return NextResponse.json(
@@ -24,4 +25,8 @@ export async function GET() {
       { status: Number(error?.status) || 500 },
     );
   }
+}
+
+export async function GET(request) {
+  return await measurePerformance("route", "expenses.list", async () => await GETImpl(request), { method: "GET" });
 }

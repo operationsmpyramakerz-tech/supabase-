@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { listEvents, eventsDataError } from "../../../lib/events-data";
 import { fetchLegacyJson } from "../../../lib/legacy-api";
 import { getLegacyAccountGate } from "../../../lib/products-auth";
+import { measurePerformance } from "../../../lib/performance-profiler";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -13,7 +14,7 @@ function json(payload, init = {}) {
   });
 }
 
-export async function GET(request) {
+async function GETImpl(request) {
   const gate = await getLegacyAccountGate(["Event Calendar", "Event Requests"]);
   if (!gate.ok) return json({ ok: false, error: gate.error || "Authentication required." }, { status: gate.status || 503 });
 
@@ -36,4 +37,8 @@ export async function GET(request) {
     if (legacy.ok && legacy.data) return json({ ...legacy.data, source: legacy.data?.source || "legacy" }, { status: legacy.status || 200 });
     return json({ ok: false, events: [], error: legacy.error || legacy.data?.error || eventsDataError(error) }, { status: legacy.status || error?.status || 502 });
   }
+}
+
+export async function GET(request) {
+  return await measurePerformance("route", "events.list", async () => await GETImpl(request), { method: "GET" });
 }

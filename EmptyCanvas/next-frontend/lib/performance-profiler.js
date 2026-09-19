@@ -94,6 +94,10 @@ function isRetrySample(sample = {}) {
   return finiteNumber(sample?.meta?.attempts, 1) > 1;
 }
 
+function isAbortedSample(sample = {}) {
+  return sample?.meta?.aborted === true || Number(sample?.status) === 499;
+}
+
 export function recordPerformanceSample({ category, name, durationMs, ok = true, status = 0, meta = {} } = {}) {
   const duration = Math.max(0, finiteNumber(durationMs));
   const safeCategory = shortText(category || "other") || "other";
@@ -126,24 +130,29 @@ export async function measurePerformance(category, name, callback, meta = {}) {
   try {
     const value = await callback();
     status = finiteNumber(value?.status, 200) || 200;
+    const expectedRouteDenial = category === "route" && [401, 403].includes(status);
     recordPerformanceSample({
       category,
       name,
       durationMs: performance.now() - started,
-      ok: value?.ok !== false,
+      // Permission denials are valid route outcomes rather than server errors.
+      ok: expectedRouteDenial || value?.ok !== false,
       status,
-      meta,
+      meta: expectedRouteDenial ? { ...meta, expectedDenial: true } : meta,
     });
     return value;
   } catch (error) {
-    status = finiteNumber(error?.status, 500) || 500;
+    const aborted = error?.name === "AbortError" || error?.code === "REQUEST_ABORTED";
+    status = aborted ? 499 : (finiteNumber(error?.status, 500) || 500);
     recordPerformanceSample({
       category,
       name,
       durationMs: performance.now() - started,
-      ok: false,
+      // A client-side navigation/cancel is not a server failure. Keep the
+      // sample for tail-latency visibility, but classify it separately.
+      ok: aborted ? true : false,
       status,
-      meta: { ...meta, code: error?.code || "" },
+      meta: { ...meta, code: error?.code || "", aborted },
     });
     throw error;
   }
@@ -177,6 +186,7 @@ export function getPerformanceSnapshot({ windowMs = DEFAULT_WINDOW_MS, limit = 2
     let retryCount = 0;
     let cacheHitCount = 0;
     let sharedWaitCount = 0;
+    let abortedCount = 0;
     const workDurations = [];
     for (const row of rows) {
       const source = shortText(row?.meta?.source || "");
@@ -186,6 +196,7 @@ export function getPerformanceSnapshot({ windowMs = DEFAULT_WINDOW_MS, limit = 2
       if (isCacheHitSample(row)) cacheHitCount += 1;
       else workDurations.push(row.durationMs);
       if (isSharedWaitSample(row)) sharedWaitCount += 1;
+      if (isAbortedSample(row)) abortedCount += 1;
     }
     const latest = rows[rows.length - 1];
     return {
@@ -250,6 +261,7 @@ export function getPerformanceSnapshot({ windowMs = DEFAULT_WINDOW_MS, limit = 2
     retriedSamples: samples.filter(isRetrySample).length,
     cacheHitSamples: samples.filter(isCacheHitSample).length,
     sharedWaitSamples: samples.filter(isSharedWaitSample).length,
+    abortedSamples: samples.filter(isAbortedSample).length,
   };
 
   return {
@@ -267,6 +279,7 @@ export function getPerformanceSnapshot({ windowMs = DEFAULT_WINDOW_MS, limit = 2
       "Metrics are process-local and intentionally contain no query values, cookies, user IDs, or request bodies.",
       "On serverless deployments each warm instance keeps its own rolling window, so this is a diagnostic sample rather than a global APM report.",
       "tailOperations excludes completed cache-hit samples so cold/miss/shared-wait latency is not hidden by near-zero cache hits.",
+      "Client-aborted requests are recorded with status 499 and reported separately so navigation cancellations do not inflate server failure rates.",
     ],
   };
 }

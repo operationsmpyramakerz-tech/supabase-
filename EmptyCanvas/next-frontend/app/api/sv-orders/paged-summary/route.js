@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { fetchLegacyJson } from "../../../../lib/legacy-api";
 import { getLegacyAccountGate } from "../../../../lib/products-auth";
 import { loadOrdersReviewPage } from "../../../../lib/orders-review-data";
+import { measurePerformance } from "../../../../lib/performance-profiler";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -23,7 +24,7 @@ function legacyQuery(searchParams) {
   return params.toString();
 }
 
-export async function GET(request) {
+async function GETImpl(request) {
   const url = new URL(request.url);
   const gate = await getLegacyAccountGate(["Orders Review"]);
   if (!gate.ok) {
@@ -55,4 +56,8 @@ export async function GET(request) {
     { error: legacy.error || legacy.data?.error || "Failed to load Orders Review." },
     { status: legacy.status || 502 },
   );
+}
+
+export async function GET(request) {
+  return await measurePerformance("route", "orders.review.summary", async () => await GETImpl(request), { method: "GET" });
 }

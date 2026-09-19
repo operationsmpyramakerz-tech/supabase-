@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getLegacyAccountGate } from "../../../lib/products-auth";
 import { createProduct, getProductsCatalog } from "../../../lib/products-service";
+import { measurePerformance } from "../../../lib/performance-profiler";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,7 @@ function errorResponse(error, fallback) {
   );
 }
 
-export async function GET(request) {
+async function GETImpl(request) {
   const gate = await getLegacyAccountGate(["Products", "Proposals"]);
   if (!gate.ok) return gateResponse(gate);
 
@@ -47,4 +48,8 @@ export async function POST(request) {
     console.error("POST /next/api/products error:", error?.details || error);
     return errorResponse(error, "Failed to create product.");
   }
+}
+
+export async function GET(request) {
+  return await measurePerformance("route", "products.catalog", async () => await GETImpl(request), { method: "GET" });
 }

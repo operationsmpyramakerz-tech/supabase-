@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { fetchLegacyJson } from "../../../../../lib/legacy-api";
 import { getLegacyAccountGate } from "../../../../../lib/products-auth";
 import { loadMaintenanceOrdersPage } from "../../../../../lib/maintenance-orders-data";
+import { measurePerformance } from "../../../../../lib/performance-profiler";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -16,7 +17,7 @@ function noStore(payload, init = {}) {
   });
 }
 
-export async function GET(request) {
+async function GETImpl(request) {
   const url = new URL(request.url);
   const gate = await getLegacyAccountGate(["Maintenance Orders"]);
   if (!gate.ok) {
@@ -46,4 +47,8 @@ export async function GET(request) {
     { error: legacy.error || legacy.data?.error || "Failed to load Maintenance Orders." },
     { status: legacy.status || 502 },
   );
+}
+
+export async function GET(request) {
+  return await measurePerformance("route", "orders.maintenance.summary", async () => await GETImpl(request), { method: "GET" });
 }

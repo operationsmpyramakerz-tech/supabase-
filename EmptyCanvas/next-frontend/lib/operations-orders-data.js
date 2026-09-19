@@ -8,7 +8,7 @@ import { invalidateStocktakingReadCaches } from "./stocktaking-data";
 import { consumeOrderSummaryWindows, loadOrderRowsByNumbers, scanOrderNumberCandidates } from "./order-pagination";
 import { applyOrderSearchPlan, canUseOrderSearchText, createOrderSearchPlan, noteOrderSearchTextError } from "./order-search-hotpath";
 import { canUseOrderCandidateRpc, loadOrderCandidateNumbersRpc, noteOrderCandidateRpcError } from "./order-candidate-rpc";
-import { recordPerformanceSample } from "./performance-profiler";
+import { measurePerformance, recordPerformanceSample } from "./performance-profiler";
 
 const PAGE_LIMIT = 36;
 const PAGE_MAX = 80;
@@ -681,7 +681,9 @@ export async function loadOperationsOrdersPage({
 }
 
 export async function loadOperationsOrdersInitialPage({ limit = PAGE_LIMIT } = {}) {
-  return await loadOperationsOrdersPage({ tab: "all", type: "all", query: "", cursor: null, limit });
+  return await measurePerformance("page-data", "orders.operations.initial", async () =>
+    await loadOperationsOrdersPage({ tab: "all", type: "all", query: "", cursor: null, limit }),
+  );
 }
 export async function loadOperationsOrderDetails(orderIds = []) {
   if (!isSupabaseConfigured()) return null;

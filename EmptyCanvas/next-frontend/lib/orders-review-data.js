@@ -6,7 +6,7 @@ import { consumeOrderSummaryWindows, loadOrderRowsByNumbers, scanOrderNumberCand
 import { applyOrderSearchPlan, canUseOrderSearchText, createOrderSearchPlan, noteOrderSearchTextError } from "./order-search-hotpath";
 import { canUseOrderCandidateRpc, loadOrderCandidateNumbersRpc, noteOrderCandidateRpcError } from "./order-candidate-rpc";
 import { getReviewerVisibility as reviewerVisibility } from "./reviewer-visibility-service";
-import { recordPerformanceSample } from "./performance-profiler";
+import { measurePerformance, recordPerformanceSample } from "./performance-profiler";
 
 const PAGE_LIMIT = 36;
 const PAGE_MAX = 80;
@@ -609,7 +609,9 @@ export async function loadOrdersReviewPage({
 }
 
 export async function loadOrdersReviewInitialPage({ account, limit = PAGE_LIMIT } = {}) {
-  return await loadOrdersReviewPage({ account, tab: "all", type: "all", query: "", cursor: null, limit });
+  return await measurePerformance("page-data", "orders.review.initial", async () =>
+    await loadOrdersReviewPage({ account, tab: "all", type: "all", query: "", cursor: null, limit }),
+  );
 }
 
 export const __ordersReviewDataTest = {

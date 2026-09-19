@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import { getLegacyAccountGate } from "../../../../lib/products-auth";
 import { usersCenterDirectory } from "../../../../lib/users-center-data";
+import { measurePerformance } from "../../../../lib/performance-profiler";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 const ACCESS_PAGES = ["Users Center", "User Access & Data", "User Access", "Team Members"];
 
-export async function GET(request) {
+async function GETImpl(request) {
   const gate = await getLegacyAccountGate(ACCESS_PAGES);
   if (!gate.ok) {
     return NextResponse.json({ ok: false, error: gate.error || "Access denied." }, { status: gate.status || 503 });
@@ -25,4 +26,8 @@ export async function GET(request) {
       { status: Number(error?.status) || 500 },
     );
   }
+}
+
+export async function GET(request) {
+  return await measurePerformance("route", "users-center.directory", async () => await GETImpl(request), { method: "GET" });
 }
