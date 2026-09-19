@@ -1,10 +1,12 @@
 import "server-only";
+import { performance } from "node:perf_hooks";
 import { isSupabaseConfigured, select, selectAll, selectById, updateById, updateByIds } from "./supabase-rest";
 import { enrichOrderDetailGrouping, loadRawOrderRowsByIds, serializeReviewOrderDetail } from "./order-details-data";
 import { consumeOrderSummaryWindows, loadOrderRowsByNumbers, scanOrderNumberCandidates } from "./order-pagination";
 import { applyOrderSearchPlan, canUseOrderSearchText, createOrderSearchPlan, noteOrderSearchTextError } from "./order-search-hotpath";
 import { canUseOrderCandidateRpc, loadOrderCandidateNumbersRpc, noteOrderCandidateRpcError } from "./order-candidate-rpc";
 import { getReviewerVisibility as reviewerVisibility } from "./reviewer-visibility-service";
+import { recordPerformanceSample } from "./performance-profiler";
 
 const PAGE_LIMIT = 36;
 const PAGE_MAX = 80;
@@ -144,11 +146,13 @@ function approvalColor(value) {
 }
 
 function ownerId(row = {}) {
-  return text(valueFor(row, ["team_member_id", "team_members_id", "created_by_id", "owner_id"]));
+  const direct = text(row?.team_member_id);
+  return direct || text(valueFor(row, ["team_member_id", "team_members_id", "created_by_id", "owner_id"]));
 }
 
 function ownerName(row = {}) {
-  return text(valueFor(row, ["team_member_name", "teams_members", "Teams Members", "created_by_name", "created_by", "Created By"]));
+  const direct = text(row?.team_member_name);
+  return direct || text(valueFor(row, ["team_member_name", "teams_members", "Teams Members", "created_by_name", "created_by", "Created By"]));
 }
 
 function serializeReviewSummary(row = {}) {
@@ -195,6 +199,62 @@ function serializeReviewSummary(row = {}) {
     summaryOnly: true,
     source: "supabase",
   };
+}
+
+
+function serializeReviewCompactRow(row = {}, { includeSearchText = false } = {}) {
+  if (!Object.prototype.hasOwnProperty.call(row || {}, "order_number")) {
+    const legacy = serializeReviewSummary(row);
+    const item = compactReviewSummaryItem(legacy);
+    if (includeSearchText) item._summarySearchText = groupSearchText([legacy]);
+    return item;
+  }
+  const id = text(row.id);
+  const orderNumber = num(row.order_number);
+  const quantityProgress = num(row.quantity_progress);
+  const quantityRequested = num(row.quantity_requested);
+  const quantityBase = quantityRequested !== null ? quantityRequested : (quantityProgress !== null ? quantityProgress : 0);
+  const quantityEdited = num(row.quantity_edited_by_supervisor);
+  const approval = approvalLabel(row.sv_approval);
+  const orderType = text(row.order_type) || null;
+  const createdByName = ownerName(row);
+  const createdById = ownerId(row);
+  const item = {
+    id,
+    teamMemberId: createdById || createdByName || null,
+    createdById: createdById || createdByName || null,
+    createdByName: createdByName || null,
+    orderId: Number.isFinite(orderNumber) ? `ORD-${orderNumber}` : (id ? `ORD-${id}` : null),
+    orderIdNumber: Number.isFinite(orderNumber) ? orderNumber : null,
+    reason: text(row.reason) || "No Reason",
+    unitPrice: num(row.unit_price),
+    quantity: quantityBase,
+    quantityRequested: quantityRequested !== null ? quantityRequested : quantityBase,
+    quantityEdited,
+    status: text(row.status) || "",
+    approval,
+    approvalColor: approvalColor(approval),
+    orderType,
+    orderTypeColor: orderTypeColor(orderType),
+    createdTime: dateValue(row.notion_created_time) || new Date().toISOString(),
+    summaryOnly: true,
+    source: "supabase",
+  };
+  if (includeSearchText) {
+    item._summarySearchText = [
+      row.reason,
+      row.team_member_name,
+      row.product_name,
+      row.issue_description,
+      row.actual_issue_description,
+      row.repair_action,
+      row.resolution_method,
+      row.person_received_by_operations,
+      row.receipt_number,
+      row.rejected_reason,
+    ].map(text).filter(Boolean).join(" ");
+  }
+  return item;
 }
 
 function splitArray(value) {
@@ -340,27 +400,22 @@ async function rowsByNumbers(numbers = [], signal = null, includeLocalSearchFiel
   });
 }
 
-function groupRows(rows = []) {
+function groupRows(rows = [], includeLocalSearchFields = false) {
+  const startedAt = performance.now();
   const groups = new Map();
   for (const row of rows) {
-    const item = serializeReviewSummary(row);
-    item._summarySearchText = [
-      row.reason,
-      row.team_member_name,
-      row.product_name,
-      row.issue_description,
-      row.actual_issue_description,
-      row.repair_action,
-      row.resolution_method,
-      row.person_received_by_operations,
-      row.receipt_number,
-      row.rejected_reason,
-    ].map(text).filter(Boolean).join(" ");
+    const item = serializeReviewCompactRow(row, { includeSearchText: includeLocalSearchFields });
     const orderNumber = Number(item.orderIdNumber);
     if (!Number.isFinite(orderNumber)) continue;
     if (!groups.has(orderNumber)) groups.set(orderNumber, []);
     groups.get(orderNumber).push(item);
   }
+  recordPerformanceSample({
+    category: "orders-summary",
+    name: "orders.review.summary-transform",
+    durationMs: performance.now() - startedAt,
+    meta: { rows: rows.length, groups: groups.size, localSearch: includeLocalSearchFields },
+  });
   return groups;
 }
 
@@ -496,18 +551,18 @@ export async function loadOrdersReviewPage({
       consumeRows: ({ numbers, rows }) => {
         const allowedRows = rows.filter((row) => {
           if (!visibleToReviewer(row, visible)) return false;
-          const issueDescription = text(valueFor(row, ["issue_description", "Issue Description"]));
+          const issueDescription = text(row?.issue_description ?? valueFor(row, ["issue_description", "Issue Description"]));
           if (/^created from proposal:/i.test(issueDescription)) return false;
-          const archived = /archive|archived/.test(norm(valueFor(row, ["status", "Status"])));
+          const archived = /archive|archived/.test(norm(row?.status ?? valueFor(row, ["status", "Status"])));
           if (cleanTab === "archive") return archived;
           if (archived) return false;
           if (["approved", "rejected", "not-started"].includes(cleanTab)) {
-            return approvalKey(valueFor(row, ["sv_approval", "S.V Approval", "SV Approval"])) === cleanTab;
+            return approvalKey(row?.sv_approval ?? valueFor(row, ["sv_approval", "S.V Approval", "SV Approval"])) === cleanTab;
           }
           return true;
         });
 
-        const groups = groupRows(allowedRows);
+        const groups = groupRows(allowedRows, localSearchFallback);
         let processedCandidates = 0;
         let matchedGroups = 0;
 
@@ -540,12 +595,12 @@ export async function loadOrdersReviewPage({
 
   const pageGroups = outputGroups.slice(0, safeLimit);
   return {
-    items: pageGroups.flatMap((group) => group.items.map(compactReviewSummaryItem)),
+    items: pageGroups.flatMap((group) => group.items),
     pageInfo: {
       limit: safeLimit,
       serverFiltered: true,
       query: text(query),
-      summaryFormat: "compact-v1",
+      summaryFormat: "compact-v2",
       groupCount: pageGroups.length,
       hasMore: !!hasMore,
       nextCursor: hasMore && pageCursor(nextCursor) !== null ? pageCursor(nextCursor) : null,

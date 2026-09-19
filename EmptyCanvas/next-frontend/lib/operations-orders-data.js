@@ -1,4 +1,5 @@
 import "server-only";
+import { performance } from "node:perf_hooks";
 import { deleteById, getSupabaseConfig, insert, isSupabaseConfigured, select, selectAll, updateById, updateByIds, uploadStorageObject } from "./supabase-rest";
 import { enrichOrderDetailGrouping, loadRawOrderRowsByIds, serializeOperationsOrderDetail } from "./order-details-data";
 import { getProductsCatalog } from "./products-service";
@@ -7,6 +8,7 @@ import { invalidateStocktakingReadCaches } from "./stocktaking-data";
 import { consumeOrderSummaryWindows, loadOrderRowsByNumbers, scanOrderNumberCandidates } from "./order-pagination";
 import { applyOrderSearchPlan, canUseOrderSearchText, createOrderSearchPlan, noteOrderSearchTextError } from "./order-search-hotpath";
 import { canUseOrderCandidateRpc, loadOrderCandidateNumbersRpc, noteOrderCandidateRpcError } from "./order-candidate-rpc";
+import { recordPerformanceSample } from "./performance-profiler";
 
 const PAGE_LIMIT = 36;
 const PAGE_MAX = 80;
@@ -190,6 +192,114 @@ export function serializeOperationsSummaryRow(row = {}) {
   };
 }
 
+
+/**
+ * Fast-path serializer used by the paged order lists. The list only needs a
+ * compact workflow/quantity shape; detail-only fields are loaded lazily when
+ * the user opens an order. Keeping this separate from the broader Home/detail
+ * summary serializer avoids allocating and then discarding many properties for
+ * every component row in a page.
+ */
+export function serializeOperationsCompactSummaryRow(row = {}, { includeSearchText = false, includeCreatedById = true } = {}) {
+  // Modern direct reads always expose the snake_case projection below. If a
+  // customized legacy table returns only old alias columns, preserve the old
+  // compatibility serializer instead of dropping the row.
+  if (!Object.prototype.hasOwnProperty.call(row || {}, "order_number")) {
+    const legacy = serializeOperationsSummaryRow(row);
+    const item = compactOperationsSummaryItem(legacy);
+    if (!includeCreatedById) delete item.createdById;
+    if (includeSearchText) item._summarySearchText = groupSearchText([legacy]);
+    return item;
+  }
+  const id = text(row.id);
+  const orderNumber = num(row.order_number);
+  const quantityProgress = num(row.quantity_progress);
+  const quantityRequested = num(row.quantity_requested);
+  const quantityEditedBySupervisor = num(row.quantity_edited_by_supervisor);
+  const originalBase = roundQty(quantityRequested !== null ? quantityRequested : (quantityProgress !== null ? quantityProgress : 0));
+  const base = roundQty(quantityEditedBySupervisor !== null ? quantityEditedBySupervisor : originalBase);
+  const receivedRaw = num(row.quantity_received_by_operations);
+  const remainingRaw = num(row.quantity_remaining);
+  const rawStatus = text(row.status) || "Pending";
+  const orderType = text(row.order_type) || null;
+  const svApproval = text(row.sv_approval) || null;
+  const status = effectiveOperationsStatus(row, rawStatus, orderType, svApproval);
+  const statusKey = norm(status);
+  const isFinalReceivedStatus = /(arrived|delivered|received)/.test(statusKey);
+  const hasBaseQty = Math.abs(Number(base) || 0) > 1e-9;
+  const receivedIsZero = receivedRaw !== null && Math.abs(Number(receivedRaw) || 0) < 1e-9;
+  const remainingIsZero = remainingRaw !== null && Math.abs(Number(remainingRaw) || 0) < 1e-9;
+  const remainingEqualsBase = remainingRaw !== null && Math.abs(roundQty(Number(remainingRaw) - Number(base))) < 1e-9;
+  const remainingEqualsOriginalBase = remainingRaw !== null && Math.abs(roundQty(Number(remainingRaw) - Number(originalBase))) < 1e-9;
+  const supervisorEditActive = quantityEditedBySupervisor !== null && Math.abs(roundQty(Number(quantityEditedBySupervisor) - Number(originalBase))) > 1e-9;
+  const noMeaningfulReceivedYet = receivedRaw === null || Math.abs(Number(receivedRaw) || 0) < 1e-9;
+  const zeroZeroPlaceholder = hasBaseQty && receivedIsZero && remainingIsZero && !isFinalReceivedStatus;
+  const zeroReceivedWithBaseRemaining = hasBaseQty && receivedIsZero && remainingEqualsBase;
+  const supervisorEditedBeforeOps = supervisorEditActive && noMeaningfulReceivedYet && remainingEqualsOriginalBase;
+
+  let quantityReceived = receivedRaw;
+  let quantityRemaining;
+  let quantityReceivedEdited = false;
+  if (zeroZeroPlaceholder || zeroReceivedWithBaseRemaining || supervisorEditedBeforeOps) {
+    quantityReceived = null;
+    quantityRemaining = base;
+  } else if (remainingRaw !== null) {
+    quantityRemaining = roundQty(remainingRaw);
+    quantityReceivedEdited = receivedRaw !== null && Math.abs(Number(receivedRaw) || 0) > 1e-9;
+  } else {
+    const receivedForRemaining = receivedRaw === null ? 0 : Number(receivedRaw) || 0;
+    quantityRemaining = roundQty((Number(base) || 0) - receivedForRemaining);
+    quantityReceivedEdited = receivedRaw !== null && Math.abs(Number(receivedRaw) || 0) > 1e-9;
+  }
+
+  const createdByName = text(row.team_member_name);
+  const createdById = text(row.team_member_id) || createdByName;
+  const issueDescription = text(row.issue_description);
+  const rawReason = text(row.reason) || "No Reason";
+  const reason = /^created\s+from\s+proposal\s*:/i.test(issueDescription) ? "Generated from Proposal" : rawReason;
+  const createdTime = dateValue(row.notion_created_time) || new Date().toISOString();
+  const item = {
+    id,
+    orderId: Number.isFinite(orderNumber) ? `ORD-${orderNumber}` : (id ? `ORD-${id}` : null),
+    orderIdNumber: Number.isFinite(orderNumber) ? orderNumber : null,
+    reason,
+    unitPrice: num(row.unit_price),
+    quantityRequested: quantityRequested !== null ? quantityRequested : base,
+    quantityEditedBySupervisor,
+    quantityReceived,
+    quantityRemaining,
+    quantityReceivedEdited,
+    quantity: base,
+    status,
+    orderType,
+    orderTypeColor: orderTypeColor(orderType),
+    operationsApproval: text(row.operations_approval) || null,
+    rejectedReason: text(row.rejected_reason) || null,
+    createdTime,
+    createdByName,
+    svApproval,
+    summaryOnly: true,
+    source: "supabase",
+  };
+
+  if (includeCreatedById) item.createdById = createdById || null;
+  if (includeSearchText) {
+    item._summarySearchText = [
+      row.reason,
+      row.team_member_name,
+      row.product_name,
+      row.issue_description,
+      row.actual_issue_description,
+      row.repair_action,
+      row.resolution_method,
+      row.person_received_by_operations,
+      row.receipt_number,
+      row.rejected_reason,
+    ].map(text).filter(Boolean).join(" ");
+  }
+  return item;
+}
+
 function tableName() {
   return text(process.env.SUPABASE_ORDERS_TABLE) || "orders";
 }
@@ -298,6 +408,7 @@ function groupSearchText(items = []) {
     item?.operationsByName,
     item?.receiptNumber,
     item?.rejectedReason,
+    item?._summarySearchText,
   ]).map((value) => norm(value)).join(" ");
 }
 
@@ -396,15 +507,22 @@ async function rowsByNumbers(numbers = [], signal = null, includeLocalSearchFiel
   });
 }
 
-function groupRows(rows = []) {
+function groupRows(rows = [], includeLocalSearchFields = false) {
+  const startedAt = performance.now();
   const groups = new Map();
   for (const row of rows) {
-    const item = serializeOperationsSummaryRow(row);
+    const item = serializeOperationsCompactSummaryRow(row, { includeSearchText: includeLocalSearchFields });
     const orderNumber = Number(item.orderIdNumber);
     if (!Number.isFinite(orderNumber)) continue;
     if (!groups.has(orderNumber)) groups.set(orderNumber, []);
     groups.get(orderNumber).push(item);
   }
+  recordPerformanceSample({
+    category: "orders-summary",
+    name: "orders.operations.summary-transform",
+    durationMs: performance.now() - startedAt,
+    meta: { rows: rows.length, groups: groups.size, localSearch: includeLocalSearchFields },
+  });
   return groups;
 }
 
@@ -517,7 +635,7 @@ export async function loadOperationsOrdersPage({
       profileName: "orders.operations.summary-window",
       signal,
       consumeRows: ({ numbers, rows }) => {
-        const groups = groupRows(rows);
+        const groups = groupRows(rows, localSearchFallback);
         let processedCandidates = 0;
         let matchedGroups = 0;
 
@@ -549,12 +667,12 @@ export async function loadOperationsOrdersPage({
 
   const pageGroups = outputGroups.slice(0, safeLimit);
   return {
-    items: pageGroups.flatMap((group) => group.items.map(compactOperationsSummaryItem)),
+    items: pageGroups.flatMap((group) => group.items),
     pageInfo: {
       limit: safeLimit,
       serverFiltered: true,
       query: text(query),
-      summaryFormat: "compact-v1",
+      summaryFormat: "compact-v2",
       groupCount: pageGroups.length,
       hasMore: !!hasMore,
       nextCursor: hasMore && pageCursor(nextCursor) !== null ? pageCursor(nextCursor) : null,

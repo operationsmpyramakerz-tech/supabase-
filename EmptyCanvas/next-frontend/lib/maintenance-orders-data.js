@@ -1,10 +1,12 @@
 import "server-only";
+import { performance } from "node:perf_hooks";
 
 import { isSupabaseConfigured, select } from "./supabase-rest";
 import { loadRawOrderRowsByIds, serializeOperationsOrderDetail } from "./order-details-data";
 import { consumeOrderSummaryWindows, loadOrderRowsByNumbers, scanOrderNumberCandidates } from "./order-pagination";
 import { applyOrderSearchPlan, canUseOrderSearchText, createOrderSearchPlan, noteOrderSearchTextError } from "./order-search-hotpath";
 import { canUseOrderCandidateRpc, loadOrderCandidateNumbersRpc, noteOrderCandidateRpcError } from "./order-candidate-rpc";
+import { recordPerformanceSample } from "./performance-profiler";
 
 const PAGE_LIMIT = 36;
 const PAGE_MAX = 80;
@@ -175,7 +177,7 @@ function candidateFilters(query = "", searchMode = "fast") {
   return params;
 }
 
-function serializeMaintenanceSummaryRow(row = {}) {
+function serializeMaintenanceSummaryRow(row = {}, { includeSearchText = false } = {}) {
   const id = text(row.id ?? row.ID);
   const orderNumber = num(row.order_number ?? row["Order - ID"] ?? row["Order ID"]);
   const createdByName = text(row.team_member_name ?? row["Teams Members"] ?? row.teams_members);
@@ -187,21 +189,7 @@ function serializeMaintenanceSummaryRow(row = {}) {
     row.resolution_method,
     row.spare_parts_replaced,
   ].some((value) => Boolean(text(value)));
-  const searchText = [
-    row.reason,
-    row.team_member_name,
-    row.person_received_by_operations,
-    row.product_name,
-    row.issue_description,
-    row.serial_number,
-    row.actual_issue_description,
-    row.repair_action,
-    row.resolution_method,
-    row.spare_parts_replaced,
-    row.receipt_number,
-  ].map(text).filter(Boolean).join(" ");
-
-  return {
+  const item = {
     id,
     orderId: Number.isFinite(orderNumber) ? `ORD-${orderNumber}` : (id ? `ORD-${id}` : null),
     orderIdNumber: Number.isFinite(orderNumber) ? orderNumber : null,
@@ -212,27 +200,25 @@ function serializeMaintenanceSummaryRow(row = {}) {
     createdById,
     createdByName,
     maintenanceLogged,
-    _summarySearchText: searchText,
     summaryOnly: true,
     source: "supabase",
   };
-}
-
-function compactMaintenanceSummaryItem(item = {}) {
-  return {
-    id: item.id,
-    orderId: item.orderId,
-    orderIdNumber: item.orderIdNumber,
-    reason: item.reason,
-    status: item.status,
-    orderType: item.orderType,
-    createdTime: item.createdTime,
-    createdById: item.createdById,
-    createdByName: item.createdByName,
-    maintenanceLogged: item.maintenanceLogged === true,
-    summaryOnly: true,
-    source: "supabase",
-  };
+  if (includeSearchText) {
+    item._summarySearchText = [
+      row.reason,
+      row.team_member_name,
+      row.person_received_by_operations,
+      row.product_name,
+      row.issue_description,
+      row.serial_number,
+      row.actual_issue_description,
+      row.repair_action,
+      row.resolution_method,
+      row.spare_parts_replaced,
+      row.receipt_number,
+    ].map(text).filter(Boolean).join(" ");
+  }
+  return item;
 }
 
 async function candidateNumbers({ cursor = null, scanGroups = 108, filters = {}, searchMode = "", rpcOptions = null, signal = null } = {}) {
@@ -279,16 +265,23 @@ async function rowsByNumbers(numbers = [], signal = null, includeLocalSearchFiel
   });
 }
 
-function groupRows(rows = []) {
+function groupRows(rows = [], includeLocalSearchFields = false) {
+  const startedAt = performance.now();
   const groups = new Map();
   for (const row of rows) {
-    const item = serializeMaintenanceSummaryRow(row);
-    if (!isMaintenanceOrder(item?.orderType)) continue;
+    if (!isMaintenanceOrder(row?.order_type ?? row?.["Order Type"])) continue;
+    const item = serializeMaintenanceSummaryRow(row, { includeSearchText: includeLocalSearchFields });
     const orderNumber = Number(item?.orderIdNumber);
     if (!Number.isFinite(orderNumber)) continue;
     if (!groups.has(orderNumber)) groups.set(orderNumber, []);
     groups.get(orderNumber).push(item);
   }
+  recordPerformanceSample({
+    category: "orders-summary",
+    name: "orders.maintenance.summary-transform",
+    durationMs: performance.now() - startedAt,
+    meta: { rows: rows.length, groups: groups.size, localSearch: includeLocalSearchFields },
+  });
   return groups;
 }
 
@@ -368,7 +361,7 @@ export async function loadMaintenanceOrdersPage({
       profileName: "orders.maintenance.summary-window",
       signal,
       consumeRows: ({ numbers, rows }) => {
-        const groups = groupRows(rows);
+        const groups = groupRows(rows, localSearchFallback);
         let processedCandidates = 0;
         let matchedGroups = 0;
 
@@ -397,12 +390,12 @@ export async function loadMaintenanceOrdersPage({
 
   const pageGroups = outputGroups.slice(0, safeLimit);
   return {
-    items: pageGroups.flatMap((group) => group.items.map(compactMaintenanceSummaryItem)),
+    items: pageGroups.flatMap((group) => group.items),
     pageInfo: {
       limit: safeLimit,
       serverFiltered: true,
       query: text(query),
-      summaryFormat: "compact-v1",
+      summaryFormat: "compact-v2",
       groupCount: pageGroups.length,
       hasMore: !!hasMore,
       nextCursor: hasMore && pageCursor(nextCursor) !== null ? pageCursor(nextCursor) : null,

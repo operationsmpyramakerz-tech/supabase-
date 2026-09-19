@@ -1,11 +1,13 @@
 import "server-only";
+import { performance } from "node:perf_hooks";
 
 import { isSupabaseConfigured, select } from "./supabase-rest";
-import { serializeOperationsSummaryRow } from "./operations-orders-data";
+import { serializeOperationsCompactSummaryRow } from "./operations-orders-data";
 import { loadRawOrderRowsByIds, serializeOperationsOrderDetail } from "./order-details-data";
 import { consumeOrderSummaryWindows, loadOrderRowsByNumbers, scanOrderNumberCandidates } from "./order-pagination";
 import { applyOrderSearchPlan, canUseOrderSearchText, createOrderSearchPlan, noteOrderSearchTextError } from "./order-search-hotpath";
 import { canUseOrderCandidateRpc, loadOrderCandidateNumbersRpc, noteOrderCandidateRpcError } from "./order-candidate-rpc";
+import { recordPerformanceSample } from "./performance-profiler";
 
 const PAGE_LIMIT = 36;
 const PAGE_MAX = 80;
@@ -194,6 +196,7 @@ function groupSearchText(items = []) {
     item?.createdById,
     item?.orderType,
     item?.productName,
+    item?._summarySearchText,
   ]).map((value) => norm(value)).join(" ");
 }
 
@@ -291,44 +294,29 @@ async function rowsByNumbers(numbers = [], signal = null, includeLocalSearchFiel
   });
 }
 
-function groupRows(rows = [], account = {}) {
+function groupRows(rows = [], account = {}, includeLocalSearchFields = false) {
+  const startedAt = performance.now();
   const username = accountUsername(account);
   const groups = new Map();
   for (const row of rows) {
-    const item = serializeOperationsSummaryRow(row);
-    if (!memberMatches(item?.createdByName, username)) continue;
+    // Reject non-owned rows before doing quantity/status serialization work.
+    if (!memberMatches(row?.team_member_name ?? row?.["Teams Members"] ?? row?.teams_members, username)) continue;
+    const item = serializeOperationsCompactSummaryRow(row, {
+      includeSearchText: includeLocalSearchFields,
+      includeCreatedById: false,
+    });
     const orderNumber = Number(item?.orderIdNumber);
     if (!Number.isFinite(orderNumber)) continue;
     if (!groups.has(orderNumber)) groups.set(orderNumber, []);
     groups.get(orderNumber).push(item);
   }
+  recordPerformanceSample({
+    category: "orders-summary",
+    name: "orders.current.summary-transform",
+    durationMs: performance.now() - startedAt,
+    meta: { rows: rows.length, groups: groups.size, localSearch: includeLocalSearchFields },
+  });
   return groups;
-}
-
-function compactCurrentSummaryItem(item = {}) {
-  return {
-    id: item.id,
-    orderId: item.orderId,
-    orderIdNumber: item.orderIdNumber,
-    reason: item.reason,
-    unitPrice: item.unitPrice,
-    quantityRequested: item.quantityRequested,
-    quantityEditedBySupervisor: item.quantityEditedBySupervisor,
-    quantityReceived: item.quantityReceived,
-    quantityRemaining: item.quantityRemaining,
-    quantityReceivedEdited: item.quantityReceivedEdited,
-    quantity: item.quantity,
-    status: item.status,
-    orderType: item.orderType,
-    orderTypeColor: item.orderTypeColor,
-    operationsApproval: item.operationsApproval,
-    rejectedReason: item.rejectedReason,
-    createdTime: item.createdTime,
-    createdByName: item.createdByName,
-    svApproval: item.svApproval,
-    summaryOnly: true,
-    source: "supabase",
-  };
 }
 
 export async function loadCurrentOrdersPage({
@@ -416,7 +404,7 @@ export async function loadCurrentOrdersPage({
       profileName: "orders.current.summary-window",
       signal,
       consumeRows: ({ numbers, rows }) => {
-        const groups = groupRows(rows, account);
+        const groups = groupRows(rows, account, localSearchFallback);
         let processedCandidates = 0;
         let matchedGroups = 0;
 
@@ -446,12 +434,12 @@ export async function loadCurrentOrdersPage({
 
   const pageGroups = outputGroups.slice(0, safeLimit);
   return {
-    items: pageGroups.flatMap((group) => group.items.map(compactCurrentSummaryItem)),
+    items: pageGroups.flatMap((group) => group.items),
     pageInfo: {
       limit: safeLimit,
       serverFiltered: true,
       query: text(query),
-      summaryFormat: "compact-v1",
+      summaryFormat: "compact-v2",
       groupCount: pageGroups.length,
       hasMore: !!hasMore,
       nextCursor: hasMore && pageCursor(nextCursor) !== null ? pageCursor(nextCursor) : null,
