@@ -14,9 +14,10 @@ async function readJson(response) {
   return await response.json().catch(() => ({}));
 }
 
-async function fetchProfile(identifier) {
+async function fetchProfile(identifier, { fresh = false } = {}) {
   const encoded = encodeURIComponent(clean(identifier));
-  let response = await fetch(`/next/api/team-members/${encoded}/public`, { credentials: "include", cache: "no-store" });
+  const freshQuery = fresh ? `&_ts=${Date.now()}` : "";
+  let response = await fetch(`/next/api/team-members/public?key=${encoded}${freshQuery}`, { credentials: "include", cache: "no-store" });
   let body = await readJson(response);
 
   // Compatibility fallback remains available while the migration is running.
@@ -43,7 +44,7 @@ export async function loadTeamMemberPublicProfile(identifier, { fresh = false } 
   if (!fresh && cached && cached.expiresAt > Date.now()) return cached.value;
   if (!fresh && inflightProfiles.has(key)) return await inflightProfiles.get(key);
 
-  const pending = fetchProfile(identifier);
+  const pending = fetchProfile(identifier, { fresh });
   if (!fresh) inflightProfiles.set(key, pending);
   try {
     const profile = await pending;
