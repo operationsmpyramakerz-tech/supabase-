@@ -1,11 +1,18 @@
 import "server-only";
 
+import { performance } from "node:perf_hooks";
 import { isSupabaseConfigured, select } from "./supabase-rest";
 import { serializeOperationsSummaryRow } from "./operations-orders-data";
 import { stocktakingForAccount } from "./stocktaking-data";
 import { expensesForAccount } from "./expenses-data";
 import { listTeamMembersLite } from "./team-members-service";
 import { getReviewerVisibility as reviewerVisibility } from "./reviewer-visibility-service";
+import { recordPerformanceSample } from "./performance-profiler";
+import {
+  canUseHomeOrderGroupsRpc,
+  loadHomeOrderGroupsRpc,
+  noteHomeOrderGroupsRpcError,
+} from "./home-order-groups-rpc";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const HOME_ROWS_CACHE_TTL_MS = 15_000;
@@ -419,6 +426,8 @@ function optionText(value) {
 }
 
 function orderTypeBucket(group = {}) {
+  const directBucket = lower(group.orderTypeBucket || group.order_type_bucket);
+  if (["request", "withdrawal", "maintenance"].includes(directBucket)) return directBucket;
   const rows = Array.isArray(group.items) ? group.items : [];
   const candidates = [
     group.orderType,
@@ -437,6 +446,8 @@ function orderTypeBucket(group = {}) {
 }
 
 function groupCreatedDate(group = {}) {
+  const direct = new Date(group.createdTime ?? group.created_time ?? "");
+  if (Number.isFinite(direct.getTime())) return direct;
   const dates = (Array.isArray(group.items) ? group.items : [])
     .map((row) => new Date(rowDate(row) || 0))
     .filter((date) => Number.isFinite(date.getTime()));
@@ -597,6 +608,176 @@ const MAINTENANCE_STATUS_DEFINITIONS = [
   { key: "completed", label: "Completed", color: "#168455" },
 ];
 
+
+function aggregateMatchesUser(group = {}, user = null) {
+  if (!user) return true;
+  const targets = [user.id, user.name, user.username, user.email, user.employeeCode].map(lower).filter(Boolean);
+  if (!targets.length) return true;
+  const owners = [group.teamMemberId, group.teamMemberName].map(lower).filter(Boolean);
+  return targets.some((target) => owners.some((owner) => owner === target || owner.includes(target) || target.includes(owner)));
+}
+
+function aggregateMatchesCurrentAccount(group = {}, account = {}) {
+  const username = lower(account.username || account.name);
+  const owner = lower(group.teamMemberName);
+  if (!owner) return true;
+  return !!username && (owner.includes(username) || username.includes(owner));
+}
+
+function aggregateVisibleToReviewer(group = {}, visible = {}) {
+  const ids = new Set((visible.ids || []).map(text).filter(Boolean));
+  const names = new Set((visible.names || []).map(canonical).filter(Boolean));
+  const id = text(group.teamMemberId);
+  const name = canonical(group.teamMemberName);
+  return (!!id && ids.has(id)) || (!!name && names.has(name));
+}
+
+function aggregateGroupView(group = {}, subset = "all", statusField = "currentBucket") {
+  const isApproved = subset === "approved";
+  const isReview = subset === "review";
+  const itemCount = isApproved
+    ? number(group.approvedItemCount)
+    : isReview
+      ? number(group.reviewItemCount)
+      : number(group.itemCount);
+  const cost = isApproved
+    ? number(group.approvedTotalCost)
+    : isReview
+      ? number(group.reviewTotalCost)
+      : number(group.totalCost);
+  const typeBucket = isApproved
+    ? group.approvedOrderTypeBucket
+    : isReview
+      ? group.reviewOrderTypeBucket
+      : group.orderTypeBucket;
+
+  return {
+    key: text(group.key),
+    orderNumber: group.orderNumber,
+    createdTime: text(group.createdTime),
+    teamMemberId: text(group.teamMemberId),
+    teamMemberName: text(group.teamMemberName),
+    reason: text(group.reason),
+    productName: text(group.productName),
+    itemCount,
+    cost,
+    orderTypeBucket: text(typeBucket) || "request",
+    statusBucket: text(group?.[statusField]),
+  };
+}
+
+function recentOrdersFromAggregates(rows = [], account = {}) {
+  return (Array.isArray(rows) ? rows : [])
+    .filter((group) => aggregateMatchesCurrentAccount(group, account))
+    .map((group, index) => {
+      const statusKey = lower(group.currentBucket) || "progress";
+      const status = statusKey === "completed" ? "Completed" : statusKey === "rejected" ? "Rejected" : "In progress";
+      const tone = statusKey === "completed" ? "success" : statusKey === "rejected" ? "danger" : "info";
+      const createdTs = new Date(group.createdTime || 0).getTime() || 0;
+      return {
+        key: text(group.key) || `home-order-${index}`,
+        title: text(group.reason || group.productName) || "Order",
+        itemCount: number(group.itemCount),
+        status,
+        tone,
+        date: formatDate(group.createdTime),
+        createdTs,
+        total: number(group.totalCost),
+        href: "/next/orders",
+      };
+    })
+    .sort((a, b) => b.createdTs - a.createdTs)
+    .slice(0, 5);
+}
+
+function buildHomeOverviewFromAggregates({
+  groups = [],
+  account = {},
+  reviewer = { ids: [], names: [] },
+  selectedUser = null,
+  duration = "all",
+  stockRows = [],
+  expenseItems = [],
+} = {}) {
+  const startedAt = performance.now();
+  const source = Array.isArray(groups) ? groups : [];
+  const globalDuration = ["all", "week", "month", "year"].includes(duration) ? duration : "all";
+  const selectedGroups = selectedUser ? source.filter((group) => aggregateMatchesUser(group, selectedUser)) : null;
+  const applyDuration = (values) => filterGroupsByTime(Array.isArray(values) ? values : [], globalDuration);
+
+  const currentSource = selectedGroups || source.filter((group) => aggregateMatchesCurrentAccount(group, account));
+  const currentGroups = applyDuration(currentSource.map((group) => {
+    const view = aggregateGroupView(group, "all", "currentBucket");
+    view.statusBucket = lower(group.currentBucket) || "progress";
+    return view;
+  }));
+
+  const reviewSource = selectedGroups || source.filter((group) => (
+    number(group.reviewItemCount) > 0 && aggregateVisibleToReviewer(group, reviewer)
+  ));
+  const reviewGroups = applyDuration(reviewSource.map((group) => {
+    const subset = selectedGroups ? "all" : "review";
+    const view = aggregateGroupView(group, subset, selectedGroups ? "reviewBucketAll" : "reviewBucket");
+    view.statusBucket = lower(selectedGroups ? group.reviewBucketAll : group.reviewBucket) || "pending";
+    return view;
+  }));
+
+  const approvedSource = (selectedGroups || source).filter((group) => (
+    group.hasApprovedRows || number(group.approvedItemCount) > 0
+  ));
+  const operationsGroups = applyDuration(approvedSource
+    .map((group) => {
+      const view = aggregateGroupView(group, "approved", "approvedOperationsBucket");
+      view.statusBucket = lower(group.approvedOperationsBucket) || "pending";
+      return view;
+    })
+    .filter((group) => orderTypeBucket(group) !== "maintenance"));
+  const maintenanceGroups = applyDuration(approvedSource
+    .map((group) => {
+      const view = aggregateGroupView(group, "approved", "approvedMaintenanceBucket");
+      view.statusBucket = lower(group.approvedMaintenanceBucket) || "pending";
+      return view;
+    })
+    .filter((group) => orderTypeBucket(group) === "maintenance"));
+
+  const currentMatrix = analysisMatrix(currentGroups, CURRENT_STATUS_DEFINITIONS, (group) => group.statusBucket || "progress");
+  const reviewMatrix = analysisMatrix(reviewGroups, REVIEW_STATUS_DEFINITIONS, (group) => group.statusBucket || "pending");
+  const operationsMatrix = analysisMatrix(operationsGroups, OPERATIONS_STATUS_DEFINITIONS, (group) => group.statusBucket || "pending");
+  const maintenanceSummary = summarizeGroupList(maintenanceGroups, MAINTENANCE_STATUS_DEFINITIONS, (group) => group.statusBucket || "pending");
+  const stockAnalysis = stockTagAnalysis(stockRows);
+  const filteredExpenseItems = filterItemsByDuration(expenseItems, globalDuration);
+
+  const overview = {
+    currentMatrix,
+    reviewMatrix,
+    operationsMatrix,
+    maintenanceSummary,
+    stockTagSummaries: stockAnalysis.summaries,
+    stockTags: stockAnalysis.tags,
+    expenseSummary: expensesSummary({ items: filteredExpenseItems }),
+    recentOrders: recentOrdersFromAggregates(source, account),
+    currentTotalGroups: currentMatrix?.status?.all?.total || 0,
+  };
+
+  recordPerformanceSample({
+    category: "home",
+    name: "home.aggregate-transform",
+    durationMs: performance.now() - startedAt,
+    ok: true,
+    status: 200,
+    meta: {
+      groups: source.length,
+      currentGroups: currentGroups.length,
+      reviewGroups: reviewGroups.length,
+      operationsGroups: operationsGroups.length,
+      maintenanceGroups: maintenanceGroups.length,
+      selected: Boolean(selectedUser),
+    },
+  });
+
+  return overview;
+}
+
 function buildHomeOverview({
   currentRows = [],
   reviewRows = [],
@@ -672,17 +853,6 @@ export async function loadHomeOverviewDirect({
   const needsOrderOverview = showCurrent || showReview || showOperations || showMaintenance;
 
   const selectedUser = await resolveSelectedUser(requestedUserId);
-
-  const currentPromise = showCurrent ? loadCurrentRows(account) : Promise.resolve([]);
-  const requestedPromise = !selectedUser && (showOperations || showMaintenance)
-    ? loadRequestedRows()
-    : Promise.resolve([]);
-  const reviewPromise = !selectedUser && showReview
-    ? loadReviewRows(account)
-    : Promise.resolve([]);
-  const selectedRowsPromise = selectedUser && needsOrderOverview
-    ? loadSelectedSystemRows(selectedUser)
-    : Promise.resolve(null);
   const stockPromise = showStock
     ? loadStockRows(account, selectedUser)
     : Promise.resolve([]);
@@ -690,32 +860,95 @@ export async function loadHomeOverviewDirect({
     ? loadExpenseItems(account, selectedUser)
     : Promise.resolve([]);
 
-  const [
-    currentRows,
-    requestedRows,
-    reviewRows,
-    selectedSystemRows,
-    stockRows,
-    expenseItems,
-  ] = await Promise.all([
-    currentPromise,
-    requestedPromise,
-    reviewPromise,
-    selectedRowsPromise,
-    stockPromise,
-    expensesPromise,
-  ]);
+  let overview = null;
+  let overviewSource = "supabase-direct";
 
-  const overview = buildHomeOverview({
-    currentRows: Array.isArray(currentRows) ? currentRows : [],
-    reviewRows: Array.isArray(reviewRows) ? reviewRows : [],
-    requestedRows: Array.isArray(requestedRows) ? requestedRows : [],
-    selectedSystemRows: Array.isArray(selectedSystemRows) ? selectedSystemRows : null,
-    selectedUser,
-    duration: selectedDuration,
-    stockRows: Array.isArray(stockRows) ? stockRows : [],
-    expenseItems: Array.isArray(expenseItems) ? expenseItems : [],
-  });
+  // Primary Home fast path: collapse component rows into order groups inside
+  // PostgreSQL, then build the dashboard from a much smaller group payload.
+  // The row-based loader below remains a full compatibility fallback until the
+  // optional RPC is installed (or for customized schemas that cannot use it).
+  if (needsOrderOverview && canUseHomeOrderGroupsRpc()) {
+    try {
+      const reviewer = !selectedUser && showReview
+        ? await reviewerVisibility(account)
+        : { ids: [], names: [] };
+      const identity = identityFromAccount(account);
+      const groupsPromise = loadHomeOrderGroupsRpc({
+        currentUserId: identity.id,
+        currentUserName: identity.username || identity.name,
+        selectedUserId: selectedUser?.id || "",
+        selectedUserName: selectedUser?.username || selectedUser?.name || "",
+        reviewerIds: reviewer.ids || [],
+        reviewerNames: reviewer.queryNames || reviewer.names || [],
+        includeCurrent: showCurrent,
+        includeReview: showReview && !selectedUser,
+        includeApproved: showOperations || showMaintenance,
+      });
+
+      const [groups, stockRows, expenseItems] = await Promise.all([
+        groupsPromise,
+        stockPromise,
+        expensesPromise,
+      ]);
+
+      overview = buildHomeOverviewFromAggregates({
+        groups,
+        account,
+        reviewer,
+        selectedUser,
+        duration: selectedDuration,
+        stockRows: Array.isArray(stockRows) ? stockRows : [],
+        expenseItems: Array.isArray(expenseItems) ? expenseItems : [],
+      });
+      overviewSource = "supabase-direct-aggregate";
+    } catch (error) {
+      // Missing-function errors disable the optional path for a short period so
+      // every Home navigation does not repeat the same failed RPC call.
+      noteHomeOrderGroupsRpcError(error);
+      overview = null;
+    }
+  }
+
+  if (!overview) {
+    const currentPromise = showCurrent ? loadCurrentRows(account) : Promise.resolve([]);
+    const requestedPromise = !selectedUser && (showOperations || showMaintenance)
+      ? loadRequestedRows()
+      : Promise.resolve([]);
+    const reviewPromise = !selectedUser && showReview
+      ? loadReviewRows(account)
+      : Promise.resolve([]);
+    const selectedRowsPromise = selectedUser && needsOrderOverview
+      ? loadSelectedSystemRows(selectedUser)
+      : Promise.resolve(null);
+
+    const [
+      currentRows,
+      requestedRows,
+      reviewRows,
+      selectedSystemRows,
+      stockRows,
+      expenseItems,
+    ] = await Promise.all([
+      currentPromise,
+      requestedPromise,
+      reviewPromise,
+      selectedRowsPromise,
+      stockPromise,
+      expensesPromise,
+    ]);
+
+    overview = buildHomeOverview({
+      currentRows: Array.isArray(currentRows) ? currentRows : [],
+      reviewRows: Array.isArray(reviewRows) ? reviewRows : [],
+      requestedRows: Array.isArray(requestedRows) ? requestedRows : [],
+      selectedSystemRows: Array.isArray(selectedSystemRows) ? selectedSystemRows : null,
+      selectedUser,
+      duration: selectedDuration,
+      stockRows: Array.isArray(stockRows) ? stockRows : [],
+      expenseItems: Array.isArray(expenseItems) ? expenseItems : [],
+    });
+    overviewSource = needsOrderOverview ? "supabase-direct-row-fallback" : "supabase-direct";
+  }
 
   return {
     ...overview,
@@ -732,6 +965,6 @@ export async function loadHomeOverviewDirect({
     showMaintenance,
     showStock,
     showExpenses,
-    source: "supabase-direct",
+    source: overviewSource,
   };
 }
