@@ -200,6 +200,14 @@ async function requestJson(url, options = {}) {
   }
   return body;
 }
+async function requestJsonFallback(primaryUrl, fallbackUrl, options = {}) {
+  try {
+    return await requestJson(primaryUrl, options);
+  } catch (error) {
+    if (!fallbackUrl || error?.message === "Login required.") throw error;
+    return await requestJson(fallbackUrl, options);
+  }
+}
 async function fileToCompressedDataUrl(file) {
   if (!file) return "";
   if (!String(file.type || "").startsWith("image/")) throw new Error(`${file.name || "File"} is not an image.`);
@@ -1019,6 +1027,15 @@ export default function ExpensesClient({ account, initialPayload = {}, initialTy
   const [modal, setModal] = useState("");
   const [screenshotTransaction, setScreenshotTransaction] = useState(null);
   const [toast, setToast] = useState(null);
+  const [expenseTypeOptions, setExpenseTypeOptions] = useState(() => Array.isArray(initialTypes) ? initialTypes : []);
+  const [cashInPeople, setCashInPeople] = useState(() => Array.isArray(cashInFromOptions) ? cashInFromOptions : []);
+  const [expenseOrderOptions, setExpenseOrderOptions] = useState(() => Array.isArray(orderOptions) ? orderOptions : []);
+  const supportLoadedRef = useRef({
+    types: Array.isArray(initialTypes) && initialTypes.length > 0,
+    cashInPeople: Array.isArray(cashInFromOptions) && cashInFromOptions.length > 0,
+    orders: Array.isArray(orderOptions) && orderOptions.length > 0,
+  });
+  const supportInflightRef = useRef({});
 
   useEffect(() => {
     const input = document.querySelector(".classic-app-shell .main-header .searchbar input");
@@ -1055,17 +1072,55 @@ export default function ExpensesClient({ account, initialPayload = {}, initialTy
   }, [selectedYear, monthlyTotals]);
   const [selectedMonth, setSelectedMonth] = useState(defaultMonth);
   const effectiveSelectedMonth = selectedMonth.startsWith(`${selectedYear}-`) ? selectedMonth : defaultMonth;
-  const fundsTypes = useMemo(() => dedupeTypes(initialTypes), [initialTypes]);
+  const fundsTypes = useMemo(() => dedupeTypes(expenseTypeOptions), [expenseTypeOptions]);
 
   const notify = (message, type = "info") => {
     setToast({ message, type, id: Date.now() });
     window.setTimeout(() => setToast((current) => current?.message === message ? null : current), 4500);
   };
   const refresh = async () => {
-    const body = await requestJson("/api/expenses");
+    const body = await requestJsonFallback("/next/api/expenses", "/api/expenses");
     setItems(sortTransactions(body?.items));
     setLastSettledAt(body?.lastSettledAt || null);
     setLastSettledDate(body?.lastSettledDate || null);
+  };
+
+  const ensureSupportOptions = async (kind) => {
+    if (supportLoadedRef.current[kind]) return;
+    if (supportInflightRef.current[kind]) return await supportInflightRef.current[kind];
+
+    const load = async () => {
+      if (kind === "types") {
+        const body = await requestJsonFallback("/next/api/expenses/types", "/api/expenses/types");
+        setExpenseTypeOptions(Array.isArray(body?.options) ? body.options : []);
+      } else if (kind === "cashInPeople") {
+        const body = await requestJsonFallback("/next/api/expenses/cash-in-from/options", "/api/expenses/cash-in-from/options");
+        setCashInPeople(Array.isArray(body?.options) ? body.options : []);
+      } else if (kind === "orders") {
+        const body = await requestJsonFallback("/next/api/expenses/orders/options", "/api/expenses/orders/options");
+        setExpenseOrderOptions(Array.isArray(body?.options) ? body.options : []);
+      }
+      supportLoadedRef.current[kind] = true;
+    };
+
+    const pending = load();
+    supportInflightRef.current[kind] = pending;
+    try {
+      await pending;
+    } finally {
+      if (supportInflightRef.current[kind] === pending) delete supportInflightRef.current[kind];
+    }
+  };
+
+  const openCashIn = () => {
+    setModal("cash-in");
+    void ensureSupportOptions("cashInPeople").catch((error) => notify(error?.message || "Cash-in names could not be refreshed.", "error"));
+  };
+
+  const openCashOut = () => {
+    setModal("cash-out");
+    void Promise.all([ensureSupportOptions("types"), ensureSupportOptions("orders")])
+      .catch((error) => notify(error?.message || "Expense options could not be refreshed.", "error"));
   };
 
   const currentCycle = useMemo(() => {
@@ -1142,8 +1197,8 @@ export default function ExpensesClient({ account, initialPayload = {}, initialTy
 
         <section className="expenses-dashboard__main" aria-label="Expense activity">
           <div className="expense-action-grid" aria-label="Expense actions">
-            <button className="cash-btn cash-in" type="button" onClick={() => setModal("cash-in")}><span className="cash-btn__icon"><ClassicExpenseIcon name="arrow-down-left" size={19}/></span><span className="cash-btn__copy"><strong>Cash in</strong><small>Record incoming money</small></span><span className="cash-btn__arrow"><ClassicExpenseIcon name="arrow-right" size={18}/></span></button>
-            <button className="cash-btn cash-out" type="button" onClick={() => setModal("cash-out")}><span className="cash-btn__icon"><ClassicExpenseIcon name="arrow-up-right" size={19}/></span><span className="cash-btn__copy"><strong>Cash out</strong><small>Record outgoing money</small></span><span className="cash-btn__arrow"><ClassicExpenseIcon name="arrow-right" size={18}/></span></button>
+            <button className="cash-btn cash-in" type="button" onClick={openCashIn}><span className="cash-btn__icon"><ClassicExpenseIcon name="arrow-down-left" size={19}/></span><span className="cash-btn__copy"><strong>Cash in</strong><small>Record incoming money</small></span><span className="cash-btn__arrow"><ClassicExpenseIcon name="arrow-right" size={18}/></span></button>
+            <button className="cash-btn cash-out" type="button" onClick={openCashOut}><span className="cash-btn__icon"><ClassicExpenseIcon name="arrow-up-right" size={19}/></span><span className="cash-btn__copy"><strong>Cash out</strong><small>Record outgoing money</small></span><span className="cash-btn__arrow"><ClassicExpenseIcon name="arrow-right" size={18}/></span></button>
           </div>
 
           <section className="expenses-activity-card">
@@ -1154,8 +1209,8 @@ export default function ExpensesClient({ account, initialPayload = {}, initialTy
         </section>
       </div>
 
-      {modal === "cash-in" ? <CashInModal options={cashInFromOptions} onClose={() => setModal("")} onSaved={refresh} notify={notify} /> : null}
-      {modal === "cash-out" ? <CashOutModal fundsTypes={fundsTypes} orderOptions={orderOptions} onClose={() => setModal("")} onSaved={refresh} notify={notify} /> : null}
+      {modal === "cash-in" ? <CashInModal options={cashInPeople} onClose={() => setModal("")} onSaved={refresh} notify={notify} /> : null}
+      {modal === "cash-out" ? <CashOutModal fundsTypes={fundsTypes} orderOptions={expenseOrderOptions} onClose={() => setModal("")} onSaved={refresh} notify={notify} /> : null}
       {modal === "settle" ? <SettleModal onClose={() => setModal("")} onSaved={refresh} notify={notify} /> : null}
       {modal === "export" ? <ExportModal account={account} items={items} onClose={() => setModal("")} notify={notify} /> : null}
       {modal === "all" ? <AllExpensesSheet items={items} lastSettledAt={lastSettledAt} onClose={() => setModal("")} onScreenshots={setScreenshotTransaction} onExport={() => setModal("export")} /> : null}

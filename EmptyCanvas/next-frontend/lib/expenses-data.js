@@ -1,5 +1,8 @@
 import "server-only";
-import { getSupabaseConfig, select, selectAll, storagePublicUrl } from "./supabase-rest";
+import { performance } from "node:perf_hooks";
+import { getSupabaseConfig, rpc, select, selectAll, storagePublicUrl } from "./supabase-rest";
+import { listTeamMembersLite } from "./team-members-service";
+import { recordPerformanceSample } from "./performance-profiler";
 
 function text(value) {
   if (value === null || typeof value === "undefined") return "";
@@ -212,9 +215,9 @@ function expenseRowMatchesMember(row = {}, member = {}) {
   const name = canonical(member.name);
   const rowName = canonical(valueFor(row, ["team_member_name", "Team Member", "team_member_raw"]));
   if (name && rowName && (rowName === name || rowName.includes(name) || name.includes(rowName))) return true;
-  const userId = canonical(member.code || member.id);
   const rowUserId = canonical(valueFor(row, ["user_id", "employee_code"]));
-  if (userId && rowUserId && userId === rowUserId) return true;
+  const memberIds = [member.code, member.id].map(canonical).filter(Boolean);
+  if (rowUserId && memberIds.includes(rowUserId)) return true;
   const email = canonical(member.email);
   const rowEmail = canonical(valueFor(row, ["email", "Email"]));
   return !!email && !!rowEmail && email === rowEmail;
@@ -232,8 +235,34 @@ function ordersTable() {
   return text(process.env.SUPABASE_ORDERS_TABLE) || "orders";
 }
 
+const EXPENSE_SUPPORT_CACHE_TTL_MS = 60_000;
+const EXPENSE_RPC_COOLDOWN_MS = 10 * 60_000;
+const EXPENSE_ROW_SELECT = [
+  "id",
+  "expense_date",
+  "notion_created_time",
+  "reason",
+  "funds_type",
+  "from_location",
+  "to_location",
+  "kilometer",
+  "cash_in",
+  "cash_out",
+  "orders_names",
+  "orders_raw",
+  "screenshot",
+  "team_member_name",
+  "team_member_raw",
+  "user_id",
+].join(",");
+
 let expenseOrderOptionsCache = null;
 let expenseOrderOptionsInflight = null;
+let expenseOrderRpcUnavailableUntil = 0;
+let expenseTypeOptionsCache = null;
+let expenseTypeOptionsInflight = null;
+let expenseTypeRpcUnavailableUntil = 0;
+let expenseRowProjectionSupported = null;
 
 function orderNumber(value) {
   if (value === null || typeof value === "undefined" || value === "") return null;
@@ -241,60 +270,107 @@ function orderNumber(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function isMissingRpc(error) {
+  const status = Number(error?.status) || 0;
+  const detail = [error?.message, error?.details?.message, error?.details?.hint, error?.details?.code]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return status === 404 || detail.includes("pgrst202") || detail.includes("could not find the function") || detail.includes("does not exist");
+}
+
+function normalizeRelationIds(value) {
+  if (Array.isArray(value)) return value.map(text).filter(Boolean);
+  const raw = text(value);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed.map(text).filter(Boolean);
+  } catch {}
+  return raw.split(",").map((item) => item.trim()).filter(Boolean);
+}
+
+function serializeExpenseOrderOption({ orderNumberValue = null, rowId = "", orderType = "", relationIds = [] } = {}) {
+  const num = orderNumber(orderNumberValue);
+  const cleanRowId = text(rowId);
+  const displayId = num !== null ? `ORD-${num}` : (cleanRowId ? `ORD-${cleanRowId}` : "Order");
+  const key = num !== null ? `ord:${num}` : `row:${cleanRowId || displayId}`;
+  const type = text(orderType) || "Request Products";
+  return {
+    id: key,
+    key,
+    orderId: displayId,
+    orderType: type,
+    label: [displayId, type].filter(Boolean).join(" - "),
+    relationIds: Array.from(new Set((Array.isArray(relationIds) ? relationIds : []).map(text).filter(Boolean))),
+    receiptEntries: [],
+    trackingGroupId: key,
+    trackingUrl: `/orders/tracking?groupId=${encodeURIComponent(key)}`,
+  };
+}
+
+async function loadExpenseOrderOptionsFallback() {
+  // Compatibility path for deployments where the compact RPC has not been
+  // installed yet. Keep the old behavior but only transfer picker fields.
+  const rows = await select(ordersTable(), {
+    select: "id,order_number,order_type,sv_approval,notion_created_time",
+    sv_approval: "ilike.*approved*",
+    order: "order_number.desc,notion_created_time.desc,id.desc",
+    limit: "5000",
+  }, { profileName: "expenses.order-options-fallback" });
+
+  const groups = new Map();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const num = orderNumber(valueFor(row, ["order_number", "Order - ID", "Order ID"]));
+    const rowId = text(valueFor(row, ["id", "ID"]));
+    const key = num !== null ? `ord:${num}` : `row:${rowId || "order"}`;
+    if (!groups.has(key)) {
+      groups.set(key, serializeExpenseOrderOption({
+        orderNumberValue: num,
+        rowId,
+        orderType: valueFor(row, ["order_type", "Order Type"]),
+        relationIds: rowId ? [rowId] : [],
+      }));
+      continue;
+    }
+    if (rowId && !groups.get(key).relationIds.includes(rowId)) groups.get(key).relationIds.push(rowId);
+  }
+
+  return [...groups.values()]
+    .sort((a, b) => String(b.orderId || "").localeCompare(String(a.orderId || ""), undefined, { numeric: true }))
+    .slice(0, 300);
+}
+
 export async function expenseOrderOptions({ fresh = false } = {}) {
   const now = Date.now();
-  if (!fresh && expenseOrderOptionsCache && expenseOrderOptionsCache.expiresAt > now) {
-    return expenseOrderOptionsCache.value;
-  }
+  if (!fresh && expenseOrderOptionsCache && expenseOrderOptionsCache.expiresAt > now) return expenseOrderOptionsCache.value;
   if (!fresh && expenseOrderOptionsInflight) return await expenseOrderOptionsInflight;
 
   const load = async () => {
-    // Match the old Express endpoint, but ask PostgreSQL only for the fields
-    // needed by the Expenses order picker and filter approved rows in the DB.
-    const rows = await select(ordersTable(), {
-      select: "id,order_number,order_type,sv_approval,notion_created_time",
-      sv_approval: "ilike.*approved*",
-      order: "notion_created_time.desc,id.desc",
-      limit: "5000",
-    });
-
-    const groups = new Map();
-    for (const row of Array.isArray(rows) ? rows : []) {
-      const num = orderNumber(valueFor(row, ["order_number", "Order - ID", "Order ID"]));
-      const rowId = text(valueFor(row, ["id", "ID"]));
-      const displayId = num !== null ? `ORD-${num}` : (rowId ? `ORD-${rowId}` : "Order");
-      const key = num !== null ? `ord:${num}` : `row:${rowId || displayId}`;
-      const type = text(valueFor(row, ["order_type", "Order Type"])) || "Request Products";
-      if (!groups.has(key)) {
-        groups.set(key, {
-          id: key,
-          key,
-          orderId: displayId,
-          orderType: type,
-          label: [displayId, type].filter(Boolean).join(" - "),
-          relationIds: [],
-          receiptEntries: [],
-          trackingGroupId: key,
-          trackingUrl: `/orders/tracking?groupId=${encodeURIComponent(key)}`,
-        });
+    if (Date.now() >= expenseOrderRpcUnavailableUntil) {
+      try {
+        const rows = await rpc("erp_expense_order_options", {}, { profileName: "expenses.order-options-rpc" });
+        const options = (Array.isArray(rows) ? rows : []).map((row) => serializeExpenseOrderOption({
+          orderNumberValue: row?.order_number,
+          orderType: row?.order_type,
+          relationIds: normalizeRelationIds(row?.relation_ids),
+        })).filter((item) => item.orderId && item.relationIds.length);
+        return options.slice(0, 300);
+      } catch (error) {
+        if (isMissingRpc(error)) expenseOrderRpcUnavailableUntil = Date.now() + EXPENSE_RPC_COOLDOWN_MS;
       }
-      const group = groups.get(key);
-      if (rowId && !group.relationIds.includes(rowId)) group.relationIds.push(rowId);
     }
-
-    return [...groups.values()]
-      .sort((a, b) => String(b.orderId || "").localeCompare(String(a.orderId || ""), undefined, { numeric: true }))
-      .slice(0, 300);
+    return await loadExpenseOrderOptionsFallback();
   };
 
   const pending = load();
   if (!fresh) expenseOrderOptionsInflight = pending;
   try {
     const options = await pending;
-    expenseOrderOptionsCache = { value: options, expiresAt: Date.now() + 60_000 };
+    expenseOrderOptionsCache = { value: options, expiresAt: Date.now() + EXPENSE_SUPPORT_CACHE_TTL_MS };
     return options;
   } finally {
-    if (!fresh) expenseOrderOptionsInflight = null;
+    if (!fresh && expenseOrderOptionsInflight === pending) expenseOrderOptionsInflight = null;
   }
 }
 
@@ -303,22 +379,83 @@ function ilike(value, contains = true) {
   return `ilike.${contains ? `*${safe}*` : safe}`;
 }
 
+async function selectExpenseRows(params = {}, { profileName = "expenses.rows" } = {}) {
+  if (expenseRowProjectionSupported !== false) {
+    try {
+      const rows = await select(expensesTable(), { ...params, select: EXPENSE_ROW_SELECT }, { profileName });
+      expenseRowProjectionSupported = true;
+      return Array.isArray(rows) ? rows : [];
+    } catch (error) {
+      // The expenses table predates the current canonical projection in some
+      // deployments. Remember compatibility mode to avoid one failed projected
+      // request on every refresh.
+      if (Number(error?.status) === 400) expenseRowProjectionSupported = false;
+      else throw error;
+    }
+  }
+  const rows = await select(expensesTable(), { ...params, select: "*" }, { profileName: `${profileName}-fallback` });
+  return Array.isArray(rows) ? rows : [];
+}
+
+function memberFromAccount(account = {}) {
+  return {
+    row: null,
+    name: text(account.name || account.username),
+    code: text(account.employeeCode || account.employee_code),
+    id: text(account.teamMemberId || account.userSupabaseId || account.userId || account.id),
+    email: text(account.email),
+  };
+}
+
+function expenseIdentityOr(member = {}) {
+  const clauses = [];
+  const code = text(member.code);
+  const id = text(member.id);
+  const name = text(member.name);
+  if (code) clauses.push(`user_id.eq.${code}`);
+  if (id && id !== code) clauses.push(`user_id.eq.${id}`);
+  if (name) {
+    clauses.push(`team_member_name.${ilike(name, false)}`);
+    clauses.push(`team_member_raw.${ilike(name, false)}`);
+  }
+  return clauses.length ? `(${clauses.join(",")})` : "";
+}
+
 async function selectCurrentExpenseRows(member) {
+  const baseParams = {
+    order: "expense_date.desc,notion_created_time.desc,id.desc",
+    limit: "5000",
+  };
+
+  // Normal path: one PostgreSQL request can match both modern user_id rows and
+  // older name-based rows, preserving historical expenses without 3-4 parallel
+  // full payload requests.
+  const identityOr = expenseIdentityOr(member);
+  if (identityOr) {
+    try {
+      const rows = await selectExpenseRows({ ...baseParams, or: identityOr }, { profileName: "expenses.current-identity" });
+      const matched = rows.filter((row) => expenseRowMatchesMember(row, member));
+      if (matched.length || rows.length === 0) return matched;
+    } catch {}
+  }
+
+  // Compatibility path for schemas missing one of the canonical identity
+  // columns used by the OR expression. Queries remain isolated so one missing
+  // optional column cannot break the page.
   const specs = [];
+  if (member.code) specs.push(["user_id", `eq.${text(member.code)}`]);
+  if (member.id && text(member.id) !== text(member.code)) specs.push(["user_id", `eq.${text(member.id)}`]);
   if (member.name) {
     specs.push(["team_member_name", ilike(member.name, true)]);
     specs.push(["team_member_raw", ilike(member.name, true)]);
   }
-  if (member.code || member.id) specs.push(["user_id", `eq.${text(member.code || member.id)}`]);
   if (member.email) specs.push(["email", ilike(member.email, false)]);
 
   if (specs.length) {
-    const results = await Promise.allSettled(specs.map(([column, filter]) => select(expensesTable(), {
-      select: "*",
+    const results = await Promise.allSettled(specs.map(([column, filter]) => selectExpenseRows({
+      ...baseParams,
       [column]: filter,
-      order: "expense_date.desc,notion_created_time.desc,id.desc",
-      limit: "5000",
-    })));
+    }, { profileName: `expenses.current-${column}` })));
     const fulfilled = results.filter((result) => result.status === "fulfilled");
     if (fulfilled.length) {
       const merged = new Map();
@@ -328,11 +465,16 @@ async function selectCurrentExpenseRows(member) {
           if (!merged.has(id)) merged.set(id, row);
         }
       }
-      return [...merged.values()];
+      const matched = [...merged.values()].filter((row) => expenseRowMatchesMember(row, member));
+      if (matched.length || merged.size === 0) return matched;
     }
   }
 
-  const all = await selectAll(expensesTable(), { limit: 5000, order: "expense_date.desc,notion_created_time.desc,id.desc" });
+  const all = await selectAll(expensesTable(), {
+    limit: 5000,
+    order: "expense_date.desc,notion_created_time.desc,id.desc",
+    profileName: "expenses.current-full-fallback",
+  });
   return all.filter((row) => expenseRowMatchesMember(row, member));
 }
 
@@ -354,45 +496,95 @@ function lastSettledInfo(rows = []) {
 }
 
 export async function expensesForAccount(account = {}) {
-  const members = await selectAll(teamMembersTable(), { limit: 5000, order: "name.asc,id.asc" });
-  const member = memberIdentity(account, members);
-  if (!member.name) {
-    const error = new Error("User not found.");
-    error.status = 400;
-    throw error;
+  const startedAt = performance.now();
+  let ok = false;
+  let itemCount = 0;
+  try {
+    let member = memberFromAccount(account);
+    if (!member.name) {
+      // Only very old/legacy account payloads should need the directory lookup.
+      const members = await selectAll(teamMembersTable(), { limit: 5000, order: "name.asc,id.asc", profileName: "expenses.member-directory-fallback" });
+      member = memberIdentity(account, members);
+    }
+    if (!member.name) {
+      const error = new Error("User not found.");
+      error.status = 400;
+      throw error;
+    }
+    const rows = await selectCurrentExpenseRows(member);
+    const info = lastSettledInfo(rows);
+    itemCount = rows.length;
+    ok = true;
+    return {
+      success: true,
+      items: rows.map(serializeExpense),
+      lastSettledAt: info.lastSettledAt,
+      lastSettledDate: info.lastSettledDate,
+      source: "supabase-next-compact",
+    };
+  } finally {
+    recordPerformanceSample({
+      category: "expenses",
+      name: "current-load",
+      durationMs: performance.now() - startedAt,
+      ok,
+      status: ok ? 200 : 500,
+      meta: { items: itemCount },
+    });
   }
-  const rows = await selectCurrentExpenseRows(member);
-  const info = lastSettledInfo(rows);
-  return {
-    success: true,
-    items: rows.map(serializeExpense),
-    lastSettledAt: info.lastSettledAt,
-    lastSettledDate: info.lastSettledDate,
-    source: "supabase",
+}
+
+export async function expenseTypeOptions({ fresh = false } = {}) {
+  const now = Date.now();
+  if (!fresh && expenseTypeOptionsCache && expenseTypeOptionsCache.expiresAt > now) return expenseTypeOptionsCache.value;
+  if (!fresh && expenseTypeOptionsInflight) return await expenseTypeOptionsInflight;
+
+  const load = async () => {
+    if (Date.now() >= expenseTypeRpcUnavailableUntil) {
+      try {
+        const rows = await rpc("erp_expense_type_options", {}, { profileName: "expenses.type-options-rpc" });
+        return (Array.isArray(rows) ? rows : []).map((row) => text(row?.value ?? row?.funds_type)).filter(Boolean);
+      } catch (error) {
+        if (isMissingRpc(error)) expenseTypeRpcUnavailableUntil = Date.now() + EXPENSE_RPC_COOLDOWN_MS;
+      }
+    }
+
+    // Even without the RPC, transfer one short text column rather than every
+    // expense receipt/order payload just to build a dropdown.
+    const rows = await select(expensesTable(), {
+      select: "funds_type",
+      order: "funds_type.asc",
+      limit: "5000",
+    }, { profileName: "expenses.type-options-fallback" });
+    const seen = new Set();
+    const options = [];
+    for (const row of Array.isArray(rows) ? rows : []) {
+      const value = text(valueFor(row, ["funds_type", "Funds Type"]));
+      const key = canonical(value);
+      if (!value || !key || seen.has(key)) continue;
+      seen.add(key);
+      options.push(value);
+    }
+    return options.sort((a, b) => a.localeCompare(b));
   };
-}
 
-export async function expenseTypeOptions() {
-  const rows = await selectAll(expensesTable(), { limit: 5000, order: "expense_date.desc,notion_created_time.desc,id.desc" });
-  const seen = new Set();
-  const options = [];
-  for (const row of rows) {
-    const value = text(valueFor(row, ["funds_type", "Funds Type"]));
-    const key = canonical(value);
-    if (!value || !key || seen.has(key)) continue;
-    seen.add(key);
-    options.push(value);
+  const pending = load();
+  if (!fresh) expenseTypeOptionsInflight = pending;
+  try {
+    const options = await pending;
+    expenseTypeOptionsCache = { value: options, expiresAt: Date.now() + EXPENSE_SUPPORT_CACHE_TTL_MS };
+    return options;
+  } finally {
+    if (!fresh && expenseTypeOptionsInflight === pending) expenseTypeOptionsInflight = null;
   }
-  return options.sort((a, b) => a.localeCompare(b));
 }
 
-export async function cashInFromOptions() {
-  const rows = await selectAll(teamMembersTable(), { limit: 5000, order: "name.asc,id.asc" });
-  return rows.map((row) => {
-    const name = text(valueFor(row, ["Name", "name"])) || "Unnamed";
-    const id = text(valueFor(row, ["id", "ID"])) || text(valueFor(row, ["Employee Code", "employee_code"])) || name;
-    return { id, name };
-  }).filter((item) => item.id && item.name);
+export async function cashInFromOptions({ fresh = false } = {}) {
+  const rows = await listTeamMembersLite({ fresh });
+  return (Array.isArray(rows) ? rows : []).map((row) => ({
+    id: text(row?.id) || text(row?.name),
+    name: text(row?.name) || "Unnamed",
+  })).filter((item) => item.id && item.name);
 }
 
 let expenseUsersSummaryCache = null;

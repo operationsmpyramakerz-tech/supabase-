@@ -3,7 +3,7 @@ import AppShell from "../../components/AppShell";
 import ExpensesClient from "../../components/expenses/ExpensesClient";
 import { fetchLegacyJson } from "../../lib/legacy-api";
 import { getLegacyAccountGate } from "../../lib/products-auth";
-import { cashInFromOptions, expenseOrderOptions, expenseTypeOptions, expensesForAccount } from "../../lib/expenses-data";
+import { expensesForAccount } from "../../lib/expenses-data";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -53,22 +53,10 @@ export default async function ExpensesPage() {
     warnings.push("Expenses recovery path used.");
   }
 
-  const [typesResult, cashInResult, ordersPayload] = await Promise.all([
-    expenseTypeOptions().then((options) => ({ success: true, options })).catch(async () => {
-      warnings.push("Expense type options recovery path used.");
-      return await legacyPayload("/api/expenses/types", { success: true, options: [] });
-    }),
-    cashInFromOptions().then((options) => ({ success: true, options })).catch(async () => {
-      warnings.push("Cash-in options recovery path used.");
-      return await legacyPayload("/api/expenses/cash-in-from/options", { success: true, options: [] });
-    }),
-    expenseOrderOptions().then((options) => ({ success: true, source: "supabase-next", options })).catch(async () => {
-      warnings.push("Expense order options recovery path used.");
-      return await legacyPayload("/api/expenses/orders/options", { success: true, options: [] });
-    }),
-  ]);
-
-  if (!Array.isArray(ordersPayload?.options)) warnings.push("Order options are temporarily unavailable.");
+  // Modal-only support data (funds types, team members and approved orders)
+  // is intentionally lazy-loaded by the client. Keeping it off the critical
+  // render path makes the Expenses dashboard appear as soon as the user's own
+  // transactions are ready.
 
   return (
     <AppShell
@@ -82,9 +70,6 @@ export default async function ExpensesPage() {
       <ExpensesClient
         account={gate.account}
         initialPayload={expensePayload || { success: true, items: [] }}
-        initialTypes={Array.isArray(typesResult?.options) ? typesResult.options : []}
-        cashInFromOptions={Array.isArray(cashInResult?.options) ? cashInResult.options : []}
-        orderOptions={Array.isArray(ordersPayload?.options) ? ordersPayload.options : []}
         bootstrapWarnings={warnings}
       />
     </AppShell>
