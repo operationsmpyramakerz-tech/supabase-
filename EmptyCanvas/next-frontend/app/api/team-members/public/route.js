@@ -16,7 +16,7 @@ function noStore(payload, init = {}) {
 }
 
 export async function GET(request) {
-  const gate = await getLegacyAccountGate([]);
+  const gate = await getLegacyAccountGate([], { authOnly: true });
   if (!gate.ok) {
     return noStore({ error: gate.error || "Authentication required." }, { status: gate.status || 503 });
   }

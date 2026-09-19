@@ -14,7 +14,7 @@ function safeNext(value) {
 export default async function LoginPage({ searchParams }) {
   const query = await Promise.resolve(searchParams);
   const requestedNext = safeNext(query?.next);
-  const gate = await getLegacyAccountGate([]);
+  const gate = await getLegacyAccountGate([], { authOnly: true });
 
   if (gate.ok && gate.account) {
     if (requestedNext.startsWith("/next/")) {

@@ -11,8 +11,15 @@ const APP_PAGES_CACHE_TTL_MS = 60_000;
 const MEMBER_ACCESS_CACHE_TTL_MS = 2_500;
 const MEMBER_ROW_CACHE_TTL_MS = 2_500;
 
+const APP_PAGES_COMPACT_SELECT = "id,page_key,page_name,route_path,sort_order";
+const MEMBER_ACCESS_COMPACT_SELECT = "team_member_id,page_id,access_level,is_enabled";
+const MEMBER_ROW_COMPACT_SELECT = "id,name,position,department,profile_picture,cover_photo,phone,email,employee_code";
+
 let appPagesCache = null;
 let appPagesInflight = null;
+let appPagesProjectionSupported = null;
+let memberAccessProjectionSupported = null;
+let memberRowProjectionSupported = null;
 const memberAccessCache = new Map();
 const memberAccessInflight = new Map();
 const directSessionInflight = new Map();
@@ -362,11 +369,30 @@ async function listAppPages() {
   if (appPagesCache?.expiresAt > now) return appPagesCache.value;
   if (appPagesInflight) return await appPagesInflight;
 
-  const pending = selectAll("app_pages", {
-    limit: 1000,
-    order: "sort_order.asc",
-    profileName: "auth.app-pages",
-  });
+  const pending = (async () => {
+    if (appPagesProjectionSupported !== false) {
+      try {
+        const rows = await selectAll("app_pages", {
+          limit: 1000,
+          order: "sort_order.asc",
+          select: APP_PAGES_COMPACT_SELECT,
+          profileName: "auth.app-pages-compact",
+        });
+        appPagesProjectionSupported = true;
+        return rows;
+      } catch {
+        // Customized/older schemas remain supported. Remember the fallback for
+        // this warm process so a missing projected column is not retried on
+        // every cache miss.
+        appPagesProjectionSupported = false;
+      }
+    }
+    return await selectAll("app_pages", {
+      limit: 1000,
+      order: "sort_order.asc",
+      profileName: "auth.app-pages-fallback",
+    });
+  })();
   appPagesInflight = pending;
   try {
     const rows = await pending;
@@ -384,11 +410,27 @@ async function listMemberAccess(memberId) {
   if (cached?.expiresAt > Date.now()) return cached.value;
   if (memberAccessInflight.has(id)) return await memberAccessInflight.get(id);
 
-  const pending = select("team_member_page_access", {
-    select: "*",
-    team_member_id: `eq.${id}`,
-    limit: "1000",
-  }, { profileName: "auth.page-access" }).then((rows) => Array.isArray(rows) ? rows : []);
+  const pending = (async () => {
+    if (memberAccessProjectionSupported !== false) {
+      try {
+        const rows = await select("team_member_page_access", {
+          select: MEMBER_ACCESS_COMPACT_SELECT,
+          team_member_id: `eq.${id}`,
+          limit: "1000",
+        }, { profileName: "auth.page-access-compact" });
+        memberAccessProjectionSupported = true;
+        return Array.isArray(rows) ? rows : [];
+      } catch {
+        memberAccessProjectionSupported = false;
+      }
+    }
+    const rows = await select("team_member_page_access", {
+      select: "*",
+      team_member_id: `eq.${id}`,
+      limit: "1000",
+    }, { profileName: "auth.page-access-fallback" });
+    return Array.isArray(rows) ? rows : [];
+  })();
   memberAccessInflight.set(id, pending);
   try {
     const rows = await pending;
@@ -409,7 +451,22 @@ async function readFreshMemberRow(memberId) {
   if (cached) memberRowCache.delete(id);
   if (memberRowInflight.has(id)) return await memberRowInflight.get(id);
 
-  const pending = selectById(teamMembersTable(), id, { profileName: "auth.member-row" });
+  const pending = (async () => {
+    if (memberRowProjectionSupported !== false) {
+      try {
+        const rows = await select(teamMembersTable(), {
+          select: MEMBER_ROW_COMPACT_SELECT,
+          id: `eq.${id}`,
+          limit: "1",
+        }, { profileName: "auth.member-row-compact" });
+        memberRowProjectionSupported = true;
+        return Array.isArray(rows) ? rows[0] || null : null;
+      } catch {
+        memberRowProjectionSupported = false;
+      }
+    }
+    return await selectById(teamMembersTable(), id, { profileName: "auth.member-row-fallback" });
+  })();
   memberRowInflight.set(id, pending);
   try {
     const row = await pending;
@@ -504,7 +561,7 @@ function gateFromAccount(account, session, requiredPages = []) {
   };
 }
 
-async function getDirectSessionAccountGateInternal(requiredPages = []) {
+async function getDirectSessionAccountGateInternal(requiredPages = [], options = {}) {
   // This path is intentionally opt-in by capability rather than by feature flag:
   // if the same Upstash REST database used by express-session is reachable,
   // Next can validate the session without booting the 40k-line Express app.
@@ -528,6 +585,27 @@ async function getDirectSessionAccountGateInternal(requiredPages = []) {
   // keep using the existing Express bridge. This makes rollout reversible and
   // avoids changing behavior for accounts that have not migrated to Supabase.
   if (!memberId || !baseAccount) return null;
+
+  // A number of high-frequency API routes only need to know that the session is
+  // valid (notifications, public team-member profile, login redirect checks).
+  // In that case, the signed/revocation-checked Upstash session is sufficient;
+  // do not pay for app_pages + page-access + member-directory reads that the
+  // caller will never inspect. Full page/account requests keep the stricter
+  // Supabase refresh path below.
+  if (options?.authOnly === true) {
+    return {
+      ok: true,
+      status: 200,
+      error: "",
+      account: {
+        ...baseAccount,
+        userSupabaseId: memberId,
+        teamMemberId: memberId,
+      },
+      source: "direct-session-auth-only",
+      memberId,
+    };
+  }
 
   try {
     const [memberRow, pages, accessRows] = await Promise.all([
@@ -571,12 +649,12 @@ async function getDirectSessionAccountGateInternal(requiredPages = []) {
   }
 }
 
-export async function getDirectSessionAccountGate(requiredPages = []) {
+export async function getDirectSessionAccountGate(requiredPages = [], options = {}) {
   const startedAt = performance.now();
   let result = null;
   let thrown = null;
   try {
-    result = await getDirectSessionAccountGateInternal(requiredPages);
+    result = await getDirectSessionAccountGateInternal(requiredPages, options);
     return result;
   } catch (error) {
     thrown = error;
@@ -584,13 +662,14 @@ export async function getDirectSessionAccountGate(requiredPages = []) {
   } finally {
     recordPerformanceSample({
       category: "auth",
-      name: "direct-session-gate",
+      name: options?.authOnly === true ? "direct-session-gate-auth-only" : "direct-session-gate",
       durationMs: performance.now() - startedAt,
       ok: thrown ? false : (result === null ? true : result?.ok !== false || Number(result?.status) === 401 || Number(result?.status) === 403),
       status: Number(result?.status) || (thrown ? Number(thrown?.status) || 500 : 0),
       meta: {
         outcome: thrown ? "error" : (result === null ? "legacy-fallback" : (result?.ok ? "allowed" : `blocked-${Number(result?.status) || 0}`)),
         requiredPages: Array.isArray(requiredPages) ? requiredPages.length : (requiredPages ? 1 : 0),
+        authOnly: options?.authOnly === true,
       },
     });
   }

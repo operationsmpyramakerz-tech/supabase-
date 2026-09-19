@@ -8,11 +8,11 @@ function normalize(value) {
   return String(value || "").trim().toLowerCase();
 }
 
-async function getLegacyAccountGateInternal(requiredPages = [], onSource = () => {}) {
+async function getLegacyAccountGateInternal(requiredPages = [], onSource = () => {}, options = {}) {
   // First try the lightweight Next -> Upstash session -> Supabase permission
   // path. If this deployment/session is not eligible, keep the established
   // Legacy Express account endpoint as a compatibility fallback.
-  const direct = await getDirectSessionAccountGate(requiredPages).catch(() => null);
+  const direct = await getDirectSessionAccountGate(requiredPages, options).catch(() => null);
   if (direct) {
     onSource("direct");
     return direct;
@@ -50,13 +50,13 @@ async function getLegacyAccountGateInternal(requiredPages = [], onSource = () =>
 
   return { ok: true, status: 200, error: "", account: response.data };
 }
-export async function getLegacyAccountGate(requiredPages = []) {
+export async function getLegacyAccountGate(requiredPages = [], options = {}) {
   const startedAt = performance.now();
   let source = "direct";
   let result = null;
   let thrown = null;
   try {
-    result = await getLegacyAccountGateInternal(requiredPages, (value) => { source = value || source; });
+    result = await getLegacyAccountGateInternal(requiredPages, (value) => { source = value || source; }, options);
     return result;
   } catch (error) {
     thrown = error;
@@ -64,13 +64,14 @@ export async function getLegacyAccountGate(requiredPages = []) {
   } finally {
     recordPerformanceSample({
       category: "auth",
-      name: "account-gate",
+      name: options?.authOnly === true ? "account-gate-auth-only" : "account-gate",
       durationMs: performance.now() - startedAt,
       ok: thrown ? false : Boolean(result?.ok) || [401, 403].includes(Number(result?.status)),
       status: Number(result?.status) || (thrown ? Number(thrown?.status) || 500 : 0),
       meta: {
         source,
         requiredPages: Array.isArray(requiredPages) ? requiredPages.length : (requiredPages ? 1 : 0),
+        authOnly: options?.authOnly === true,
       },
     });
   }

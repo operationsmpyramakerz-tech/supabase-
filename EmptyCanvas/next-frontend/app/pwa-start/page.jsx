@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 // an intermediate launcher/splash screen: resolve the session on the server and
 // send the user straight to the correct destination.
 export default async function PwaStartPage() {
-  const gate = await getLegacyAccountGate([]);
+  const gate = await getLegacyAccountGate([], { authOnly: true });
 
   if (gate.ok && gate.account) {
     redirect("/home");
