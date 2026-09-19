@@ -428,6 +428,7 @@ function serializeMemberSummary(row = {}) {
   const department = text(valueForLabel(row, "Department")) || "No Department";
   const legacySvIds = splitValues(valueFor(row, ["sv_school_member_ids", "sv_school_ids", "sv_member_ids"]));
   const legacySvNames = splitValues(valueFor(row, ["sv_school_member_names", "sv_schools", "S.V Schools", "SV Schools"]));
+  const legacyAllowedPages = splitValues(valueForLabel(row, "Allowed Pages"));
   return {
     id: text(valueFor(row, ["id", "ID"])),
     url: "",
@@ -439,9 +440,14 @@ function serializeMemberSummary(row = {}) {
     email: text(valueForLabel(row, "Email")),
     employeeCode: text(valueForLabel(row, "Employee Code")),
     photoUrl: extractUrl(valueForLabel(row, "Profile picture")),
-    pageAccessSummary: { allowedPages: [], accessCount: 0, adminCount: 0 },
+    // Keep the legacy column only as a zero-cost summary for directory cards.
+    // The authoritative access matrix is loaded on demand when one member is opened.
+    pageAccessSummary: {
+      allowedPages: legacyAllowedPages,
+      accessCount: legacyAllowedPages.length,
+      adminCount: 0,
+    },
     svAccessSummary: { enabledCount: Math.max(legacySvIds.length, legacySvNames.length) },
-    legacyAllowedPages: splitValues(valueForLabel(row, "Allowed Pages")),
     source: "supabase-next-compact",
   };
 }
@@ -617,24 +623,6 @@ function joinAccessRows(pages = [], accessRows = [], { includeDisabled = false }
   return result.sort((a, b) => (a.sortOrder - b.sortOrder) || a.pageName.localeCompare(b.pageName));
 }
 
-function attachAccessSummary(member, pages = [], accessRows = []) {
-  const enabled = joinAccessRows(pages, accessRows, { includeDisabled: false });
-  const allowedPages = unique(enabled.flatMap((row) => row.aliases?.length ? row.aliases : [row.pageName]));
-  if (!allowedPages.length) {
-    allowedPages.push(...unique([
-      ...(Array.isArray(member?.legacyAllowedPages) ? member.legacyAllowedPages : []),
-      ...splitValues(valueForLabel(Object.fromEntries((member.fields || []).map((field) => [field.label, field.value])), "Allowed Pages")),
-    ]));
-  }
-  member.pageAccessSummary = {
-    allowedPages,
-    accessCount: enabled.length || allowedPages.length,
-    adminCount: enabled.filter((row) => row.accessLevel === "admin").length,
-  };
-  delete member.legacyAllowedPages;
-  return member;
-}
-
 function departmentName(row = {}) {
   return text(valueFor(row, ["name", "department", "department_name", "Department", "Name"]));
 }
@@ -665,7 +653,11 @@ export async function usersCenterDirectory({ fresh = false } = {}) {
   if (!fresh && directoryInflight) return await directoryInflight;
 
   const load = async () => measurePerformance("users-center", "directory-load", async () => {
-    const [teamBundle, departmentRows, pages, accessRows] = await Promise.all([
+    // Initial Users Center render only needs the compact team directory and departments.
+    // Page definitions and every member's access rows used to be fetched here as well,
+    // which made the first render scale with the entire permission table. Those reads now
+    // move to the single-member editor bundle below.
+    const [teamBundle, departmentRows] = await Promise.all([
       loadCompactTeamRows({ fresh }),
       (async () => {
         try {
@@ -679,18 +671,6 @@ export async function usersCenterDirectory({ fresh = false } = {}) {
           return await optionalSelectAll(departmentsTable(), { limit: 1000, order: "name.asc", profileName: "users-center.departments-fallback" });
         }
       })(),
-      usersCenterAppPages({ fresh, assignableOnly: false }).catch(() => []),
-      (async () => {
-        try {
-          const rows = await select("team_member_page_access", {
-            select: "team_member_id,page_id,access_level,is_enabled",
-            limit: "5000",
-          }, { profileName: "users-center.page-access-summary" });
-          return Array.isArray(rows) ? rows : [];
-        } catch {
-          return await optionalSelectAll("team_member_page_access", { limit: 5000, profileName: "users-center.page-access-fallback" });
-        }
-      })(),
     ]);
 
     const teamRows = Array.isArray(teamBundle?.rows) ? teamBundle.rows : [];
@@ -701,22 +681,14 @@ export async function usersCenterDirectory({ fresh = false } = {}) {
     ]).sort((a, b) => a.localeCompare(b));
     const editableFields = orderedEditableFields(schemaRows, {
       departments: knownDepartments,
-      pages: pages.filter((page) => page.isActive && page.isAssignable),
+      pages: [],
       optionRows: teamRows,
     });
 
-    const accessByMember = new Map();
-    for (const access of accessRows) {
-      const memberId = text(valueFor(access, ["team_member_id", "teamMemberId"]));
-      if (!memberId) continue;
-      if (!accessByMember.has(memberId)) accessByMember.set(memberId, []);
-      accessByMember.get(memberId).push(access);
-    }
-
-    const members = teamRows.map((row) => {
-      const member = serializeMemberSummary(row);
-      return attachAccessSummary(member, pages, accessByMember.get(member.id) || []);
-    }).filter((member) => member.id).sort((a, b) => a.department.localeCompare(b.department) || a.name.localeCompare(b.name));
+    const members = teamRows
+      .map(serializeMemberSummary)
+      .filter((member) => member.id)
+      .sort((a, b) => a.department.localeCompare(b.department) || a.name.localeCompare(b.name));
 
     const map = new Map();
     for (const row of departmentRows) {
@@ -741,7 +713,7 @@ export async function usersCenterDirectory({ fresh = false } = {}) {
       editableFields,
       departments: Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name)),
       source: "supabase-next",
-      directoryFormat: "compact-v2",
+      directoryFormat: "compact-v3-on-demand-access",
     };
   }, { fresh });
 
@@ -881,9 +853,8 @@ export async function usersCenterMemberDetails(memberId) {
     throw error;
   }
 
-  const [teamBundle, pages, departmentRows] = await Promise.all([
+  const [teamBundle, departmentRows] = await Promise.all([
     loadCompactTeamRows().catch(() => ({ rows: [], schemaSample: null })),
-    usersCenterAppPages({ assignableOnly: false }).catch(() => []),
     (async () => {
       try {
         return await selectAll(departmentsTable(), {
@@ -906,7 +877,7 @@ export async function usersCenterMemberDetails(memberId) {
   ]).sort((a, b) => a.localeCompare(b));
   const editableFields = orderedEditableFields([row], {
     departments: knownDepartments,
-    pages: pages.filter((page) => page.isActive && page.isAssignable),
+    pages: [],
     optionRows,
   });
 
@@ -916,6 +887,50 @@ export async function usersCenterMemberDetails(memberId) {
     editableFields,
     source: "supabase-next-detail",
   };
+}
+
+export async function usersCenterMemberEditorBundle(memberId) {
+  const id = text(memberId);
+  if (!id) {
+    const error = new Error("Missing team member ID.");
+    error.status = 400;
+    throw error;
+  }
+
+  return await measurePerformance("users-center", "member-editor-bundle", async () => {
+    // The full member row and that member's access matrix are the only heavy data
+    // needed to open Edit. Run them together behind one authenticated HTTP request.
+    const [detailResult, accessResult] = await Promise.allSettled([
+      usersCenterMemberDetails(id),
+      usersCenterPageAccess(id),
+    ]);
+
+    if (detailResult.status !== "fulfilled") throw detailResult.reason;
+
+    const detail = detailResult.value;
+    const accessPayload = accessResult.status === "fulfilled" ? accessResult.value : null;
+    const pageAccessRows = Array.isArray(accessPayload?.pages) ? accessPayload.pages : null;
+    const member = { ...(detail.member || {}) };
+
+    if (pageAccessRows) {
+      const enabled = pageAccessRows.filter((row) => row?.isEnabled);
+      member.pageAccessSummary = {
+        allowedPages: unique(enabled.flatMap((row) => [row.pageName, row.pageKey, row.routePath]).filter(Boolean)),
+        accessCount: enabled.length,
+        adminCount: enabled.filter((row) => row.accessLevel === "admin").length,
+      };
+    }
+
+    return {
+      ...detail,
+      member,
+      pageAccessRows,
+      accessWarning: accessResult.status === "rejected"
+        ? text(accessResult.reason?.message || "Page access could not be loaded with the member details.")
+        : "",
+      source: "supabase-next-editor-bundle",
+    };
+  });
 }
 
 export async function usersCenterSvAccess(memberId) {

@@ -514,7 +514,7 @@ function PageAccessRow({ row, onChange, subpage = false }) {
 
 function PageAccessModal({ member, draftRows, onDraftRows, onClose, onSaved, protect }) {
   const [rows, setRows] = useState([]); const [loading, setLoading] = useState(true); const [busy, setBusy] = useState(false); const [error, setError] = useState(""); const isCreate = !member;
-  useEffect(() => { let active = true; (async () => { try { if (isCreate && draftRows?.length) { if (active) setRows(normalizeAccessRows(draftRows)); return; } const body = isCreate
+  useEffect(() => { let active = true; (async () => { try { if (draftRows?.length) { if (active) setRows(normalizeAccessRows(draftRows)); return; } const body = isCreate
         ? await requestJsonWithFallback("/next/api/users-center/pages", "/api/user-access/pages")
         : await requestJsonWithFallback(
             `/next/api/users-center/team-members/${encodeURIComponent(member.id)}/page-access`,
@@ -599,11 +599,19 @@ export default function UsersCenterClient({ initialDirectory, initialSignupReque
       try {
         body = await requestJson(`/next/api/users-center/team-members/${encodeURIComponent(member.id)}?_=${Date.now()}`);
       } catch (directError) {
-        const legacy = await requestJson(`/api/user-access/team-members?_fresh=1&_refresh=${Date.now()}`);
+        const [legacy, legacyAccess] = await Promise.all([
+          requestJson(`/api/user-access/team-members?_fresh=1&_refresh=${Date.now()}`),
+          requestJson(`/api/user-access/team-members/${encodeURIComponent(member.id)}/page-access`).catch(() => null),
+        ]);
         const legacyDirectory = normalizeDirectory(legacy);
         const fullMember = legacyDirectory.departments.flatMap((department) => department.members || []).find((item) => text(item?.id) === text(member.id));
         if (!fullMember) throw directError;
-        body = { ok: true, member: fullMember, editableFields: legacyDirectory.editableFields || [] };
+        body = {
+          ok: true,
+          member: fullMember,
+          editableFields: legacyDirectory.editableFields || [],
+          pageAccessRows: Array.isArray(legacyAccess?.pages) ? legacyAccess.pages : null,
+        };
       }
 
       const detailedMember = body?.member ? {
@@ -612,6 +620,9 @@ export default function UsersCenterClient({ initialDirectory, initialSignupReque
         pageAccessSummary: body.member.pageAccessSummary || member.pageAccessSummary,
         svAccessSummary: body.member.svAccessSummary || member.svAccessSummary,
       } : member;
+      if (Array.isArray(body?.pageAccessRows)) {
+        setPageAccessRows(normalizeAccessRows(body.pageAccessRows));
+      }
       if (Array.isArray(body?.editableFields) && body.editableFields.length) {
         setDirectory((current) => ({ ...current, editableFields: body.editableFields }));
       }
