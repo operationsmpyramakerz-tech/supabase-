@@ -8,25 +8,34 @@ import { getReviewerVisibility as reviewerVisibility } from "./reviewer-visibili
 
 const PAGE_LIMIT = 36;
 const PAGE_MAX = 80;
-const REVIEW_SUMMARY_SELECT = [
+const REVIEW_SUMMARY_BASE_SELECT = [
   "id",
   "reason",
   "order_number",
   "order_type",
   "notion_created_time",
-  "product_name",
   "unit_price",
   "quantity_requested",
   "quantity_progress",
   "quantity_edited_by_supervisor",
   "status",
+  // Needed to keep proposal-generated rows out of the supervisor queue.
   "issue_description",
   "sv_approval",
-  "rejected_reason",
-  "operations_approval",
   "team_member_id",
   "team_member_name",
+];
+const REVIEW_SUMMARY_SEARCH_SELECT = [
+  ...REVIEW_SUMMARY_BASE_SELECT,
+  "product_name",
+  "actual_issue_description",
+  "repair_action",
+  "resolution_method",
+  "person_received_by_operations",
+  "receipt_number",
+  "rejected_reason",
 ].join(",");
+const REVIEW_SUMMARY_SELECT = REVIEW_SUMMARY_BASE_SELECT.join(",");
 
 function text(value) {
   if (value === null || typeof value === "undefined") return "";
@@ -319,11 +328,11 @@ async function candidateNumbers({ cursor = null, scanGroups = 90, filters = {}, 
   });
 }
 
-async function rowsByNumbers(numbers = [], signal = null) {
+async function rowsByNumbers(numbers = [], signal = null, includeLocalSearchFields = false) {
   return await loadOrderRowsByNumbers({
     table: tableName(),
     numbers,
-    selectExpr: REVIEW_SUMMARY_SELECT,
+    selectExpr: includeLocalSearchFields ? REVIEW_SUMMARY_SEARCH_SELECT : REVIEW_SUMMARY_SELECT,
     queryProfileName: "orders.review.summary",
     fallbackProfileName: "orders.review.summary-fallback",
     loadProfileName: "orders.review.summary-load",
@@ -335,12 +344,48 @@ function groupRows(rows = []) {
   const groups = new Map();
   for (const row of rows) {
     const item = serializeReviewSummary(row);
+    item._summarySearchText = [
+      row.reason,
+      row.team_member_name,
+      row.product_name,
+      row.issue_description,
+      row.actual_issue_description,
+      row.repair_action,
+      row.resolution_method,
+      row.person_received_by_operations,
+      row.receipt_number,
+      row.rejected_reason,
+    ].map(text).filter(Boolean).join(" ");
     const orderNumber = Number(item.orderIdNumber);
     if (!Number.isFinite(orderNumber)) continue;
     if (!groups.has(orderNumber)) groups.set(orderNumber, []);
     groups.get(orderNumber).push(item);
   }
   return groups;
+}
+
+function compactReviewSummaryItem(item = {}) {
+  return {
+    id: item.id,
+    teamMemberId: item.teamMemberId,
+    createdById: item.createdById,
+    createdByName: item.createdByName,
+    orderId: item.orderId,
+    orderIdNumber: item.orderIdNumber,
+    reason: item.reason,
+    unitPrice: item.unitPrice,
+    quantity: item.quantity,
+    quantityRequested: item.quantityRequested,
+    quantityEdited: item.quantityEdited,
+    status: item.status,
+    approval: item.approval,
+    approvalColor: item.approvalColor,
+    orderType: item.orderType,
+    orderTypeColor: item.orderTypeColor,
+    createdTime: item.createdTime,
+    summaryOnly: true,
+    source: "supabase",
+  };
 }
 
 function groupSearchText(items = []) {
@@ -354,6 +399,7 @@ function groupSearchText(items = []) {
     item?.productName,
     item?.issueDescription,
     item?.rejectedReason,
+    item?._summarySearchText,
   ]).map((value) => norm(value)).join(" ");
 }
 
@@ -386,6 +432,7 @@ export async function loadOrdersReviewPage({
     const fastSearch = hasTextSearch && canUseOrderSearchText();
     const filters = logicalParams({ visible, query, tab: cleanTab, type, searchMode: fastSearch ? "fast" : "legacy" });
     let candidates;
+    let localSearchFallback = false;
     try {
       candidates = await candidateNumbers({
         cursor: nextCursor,
@@ -421,6 +468,7 @@ export async function loadOrdersReviewPage({
         // Keep order-number paging even if a customized/older schema rejects one
         // of the direct DB filter columns. Exact visibility and tab filtering is
         // still applied below before anything is returned to the reviewer.
+        localSearchFallback = hasTextSearch;
         candidates = await candidateNumbers({
           cursor: nextCursor,
           scanGroups: Math.max(safeLimit * 3, 80),
@@ -438,11 +486,11 @@ export async function loadOrdersReviewPage({
 
     const cleanType = orderTypeKey(type);
     const directSearch = searchLogic(query);
-    const needle = Number.isFinite(directSearch?.orderNumber) ? "" : norm(directSearch?.clean || query);
+    const needle = localSearchFallback && !Number.isFinite(directSearch?.orderNumber) ? norm(directSearch?.clean || query) : "";
     const windowResult = await consumeOrderSummaryWindows({
       numbers: candidates.numbers,
       remainingGroups: safeLimit - outputGroups.length,
-      loadRows: rowsByNumbers,
+      loadRows: (numbers, loadSignal) => rowsByNumbers(numbers, loadSignal, localSearchFallback),
       profileName: "orders.review.summary-window",
       signal,
       consumeRows: ({ numbers, rows }) => {
@@ -492,9 +540,12 @@ export async function loadOrdersReviewPage({
 
   const pageGroups = outputGroups.slice(0, safeLimit);
   return {
-    items: pageGroups.flatMap((group) => group.items),
+    items: pageGroups.flatMap((group) => group.items.map(compactReviewSummaryItem)),
     pageInfo: {
       limit: safeLimit,
+      serverFiltered: true,
+      query: text(query),
+      summaryFormat: "compact-v1",
       groupCount: pageGroups.length,
       hasMore: !!hasMore,
       nextCursor: hasMore && pageCursor(nextCursor) !== null ? pageCursor(nextCursor) : null,

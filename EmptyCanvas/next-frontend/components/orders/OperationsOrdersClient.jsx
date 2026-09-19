@@ -1936,11 +1936,14 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
 
   const visibleGroups = useMemo(() => {
     const needle = lower(query);
+    const serverFilteredQuery = Boolean(needle)
+      && pageInfo?.serverFiltered === true
+      && lower(pageInfo?.query) === needle;
     return tabGroups.filter((group) => {
       if (type !== "all" && (orderTypeKey(group.orderType) || "other") !== type) return false;
-      return !needle || groupSearchText(group).includes(needle);
+      return !needle || serverFilteredQuery || groupSearchText(group).includes(needle);
     });
-  }, [tabGroups, type, query]);
+  }, [tabGroups, type, query, pageInfo]);
 
   async function fetchOrdersPage({ reset = true, fresh = false } = {}) {
     const requestId = ++listRequestRef.current;

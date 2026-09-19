@@ -8,32 +8,30 @@ import { canUseOrderCandidateRpc, loadOrderCandidateNumbersRpc, noteOrderCandida
 
 const PAGE_LIMIT = 36;
 const PAGE_MAX = 80;
-const SUMMARY_SELECT = [
+const SUMMARY_BASE_SELECT = [
   "id",
   "reason",
   "order_number",
   "order_type",
   "notion_created_time",
-  "product_name",
-  "unit_price",
-  "quantity_requested",
-  "quantity_progress",
-  "quantity_edited_by_supervisor",
-  "quantity_received_by_operations",
-  "quantity_remaining",
   "status",
-  "issue_description",
   "serial_number",
   "actual_issue_description",
   "repair_action",
   "resolution_method",
   "spare_parts_replaced",
-  "receipt_number",
   "team_member_id",
   "team_member_name",
-  "person_received_by_operations",
   "sv_approval",
+];
+const SUMMARY_SEARCH_SELECT = [
+  ...SUMMARY_BASE_SELECT,
+  "product_name",
+  "issue_description",
+  "receipt_number",
+  "person_received_by_operations",
 ].join(",");
+const SUMMARY_SELECT = SUMMARY_BASE_SELECT.join(",");
 
 function text(value) {
   if (value === null || typeof value === "undefined") return "";
@@ -53,6 +51,13 @@ function num(value) {
   if (!raw || /^null$/i.test(raw)) return null;
   const parsed = Number(raw.replace(/[^0-9.-]/g, ""));
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function dateValue(value) {
+  const raw = text(value);
+  if (!raw) return null;
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? raw : parsed.toISOString();
 }
 
 function tableName() {
@@ -93,6 +98,7 @@ function statusIndex(value) {
 }
 
 function hasMaintenanceLog(item = {}) {
+  if (item?.maintenanceLogged === true) return true;
   return Boolean(
     text(item?.serialNumber) ||
     text(item?.resolutionMethod) ||
@@ -139,6 +145,7 @@ function groupSearchText(items = []) {
     item?.sparePartsNeededName,
     ...(Array.isArray(item?.sparePartsNeededNames) ? item.sparePartsNeededNames : []),
     ...(Array.isArray(item?.maintenanceChecklist) ? item.maintenanceChecklist : []),
+    item?._summarySearchText,
   ]).map((value) => norm(value)).join(" ");
 }
 
@@ -169,8 +176,60 @@ function candidateFilters(query = "", searchMode = "fast") {
 }
 
 function serializeMaintenanceSummaryRow(row = {}) {
+  const id = text(row.id ?? row.ID);
+  const orderNumber = num(row.order_number ?? row["Order - ID"] ?? row["Order ID"]);
+  const createdByName = text(row.team_member_name ?? row["Teams Members"] ?? row.teams_members);
+  const createdById = text(row.team_member_id ?? row["Team Member ID"]) || createdByName;
+  const maintenanceLogged = [
+    row.serial_number,
+    row.actual_issue_description,
+    row.repair_action,
+    row.resolution_method,
+    row.spare_parts_replaced,
+  ].some((value) => Boolean(text(value)));
+  const searchText = [
+    row.reason,
+    row.team_member_name,
+    row.person_received_by_operations,
+    row.product_name,
+    row.issue_description,
+    row.serial_number,
+    row.actual_issue_description,
+    row.repair_action,
+    row.resolution_method,
+    row.spare_parts_replaced,
+    row.receipt_number,
+  ].map(text).filter(Boolean).join(" ");
+
   return {
-    ...serializeOperationsOrderDetail(row),
+    id,
+    orderId: Number.isFinite(orderNumber) ? `ORD-${orderNumber}` : (id ? `ORD-${id}` : null),
+    orderIdNumber: Number.isFinite(orderNumber) ? orderNumber : null,
+    reason: text(row.reason ?? row.Reason) || "No Reason",
+    status: text(row.status ?? row.Status) || "Pending",
+    orderType: text(row.order_type ?? row["Order Type"]) || "Request Maintenance",
+    createdTime: dateValue(row.notion_created_time ?? row.created_time ?? row.created_at ?? row["Created time"]) || new Date().toISOString(),
+    createdById,
+    createdByName,
+    maintenanceLogged,
+    _summarySearchText: searchText,
+    summaryOnly: true,
+    source: "supabase",
+  };
+}
+
+function compactMaintenanceSummaryItem(item = {}) {
+  return {
+    id: item.id,
+    orderId: item.orderId,
+    orderIdNumber: item.orderIdNumber,
+    reason: item.reason,
+    status: item.status,
+    orderType: item.orderType,
+    createdTime: item.createdTime,
+    createdById: item.createdById,
+    createdByName: item.createdByName,
+    maintenanceLogged: item.maintenanceLogged === true,
     summaryOnly: true,
     source: "supabase",
   };
@@ -207,11 +266,11 @@ async function candidateNumbers({ cursor = null, scanGroups = 108, filters = {},
   });
 }
 
-async function rowsByNumbers(numbers = [], signal = null) {
+async function rowsByNumbers(numbers = [], signal = null, includeLocalSearchFields = false) {
   return await loadOrderRowsByNumbers({
     table: tableName(),
     numbers,
-    selectExpr: SUMMARY_SELECT,
+    selectExpr: includeLocalSearchFields ? SUMMARY_SEARCH_SELECT : SUMMARY_SELECT,
     extraParams: { order_type: "ilike.*Request Maintenance*" },
     queryProfileName: "orders.maintenance.summary",
     fallbackProfileName: "orders.maintenance.summary-fallback",
@@ -254,6 +313,7 @@ export async function loadMaintenanceOrdersPage({
     const hasTextSearch = Boolean(searchPlan?.clean && !Number.isFinite(searchPlan?.orderNumber));
     const fastSearch = hasTextSearch && canUseOrderSearchText();
     let candidates;
+    let localSearchFallback = false;
     try {
       candidates = await candidateNumbers({
         cursor: nextCursor,
@@ -283,6 +343,7 @@ export async function loadMaintenanceOrdersPage({
         // Older/custom schemas may reject one of the searchable maintenance
         // columns. Keep direct pagination and apply the search after loading the
         // summary rows instead of dropping back to the entire Legacy bootstrap.
+        localSearchFallback = hasTextSearch;
         candidates = await candidateNumbers({
           cursor: nextCursor,
           scanGroups: Math.max(safeLimit * 3, 108),
@@ -299,11 +360,11 @@ export async function loadMaintenanceOrdersPage({
     }
 
     const directSearch = searchLogic(query);
-    const needle = Number.isFinite(directSearch?.orderNumber) ? "" : norm(directSearch?.clean || query);
+    const needle = localSearchFallback && !Number.isFinite(directSearch?.orderNumber) ? norm(directSearch?.clean || query) : "";
     const windowResult = await consumeOrderSummaryWindows({
       numbers: candidates.numbers,
       remainingGroups: safeLimit - outputGroups.length,
-      loadRows: rowsByNumbers,
+      loadRows: (numbers, loadSignal) => rowsByNumbers(numbers, loadSignal, localSearchFallback),
       profileName: "orders.maintenance.summary-window",
       signal,
       consumeRows: ({ numbers, rows }) => {
@@ -336,9 +397,12 @@ export async function loadMaintenanceOrdersPage({
 
   const pageGroups = outputGroups.slice(0, safeLimit);
   return {
-    items: pageGroups.flatMap((group) => group.items),
+    items: pageGroups.flatMap((group) => group.items.map(compactMaintenanceSummaryItem)),
     pageInfo: {
       limit: safeLimit,
+      serverFiltered: true,
+      query: text(query),
+      summaryFormat: "compact-v1",
       groupCount: pageGroups.length,
       hasMore: !!hasMore,
       nextCursor: hasMore && pageCursor(nextCursor) !== null ? pageCursor(nextCursor) : null,

@@ -864,11 +864,14 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
 
   const visibleGroups = useMemo(() => {
     const needle = lower(query);
+    const serverFilteredQuery = Boolean(needle)
+      && pageInfo?.serverFiltered === true
+      && lower(pageInfo?.query) === needle;
     return statusGroups.filter((group) => {
       if (type !== "all" && (orderTypeKey(group.orderType) || "other") !== type) return false;
-      return !needle || groupSearchText(group).includes(needle);
+      return !needle || serverFilteredQuery || groupSearchText(group).includes(needle);
     });
-  }, [statusGroups, type, query]);
+  }, [statusGroups, type, query, pageInfo]);
 
   async function fetchOrdersPage({ reset = true, fresh = false } = {}) {
     const requestId = ++listRequestRef.current;

@@ -9,13 +9,12 @@ import { canUseOrderCandidateRpc, loadOrderCandidateNumbersRpc, noteOrderCandida
 
 const PAGE_LIMIT = 36;
 const PAGE_MAX = 80;
-const SUMMARY_SELECT = [
+const SUMMARY_BASE_SELECT = [
   "id",
   "reason",
   "order_number",
   "order_type",
   "notion_created_time",
-  "product_name",
   "unit_price",
   "quantity_requested",
   "quantity_progress",
@@ -23,7 +22,8 @@ const SUMMARY_SELECT = [
   "quantity_received_by_operations",
   "quantity_remaining",
   "status",
-  "issue_description",
+  // These maintenance-log columns are intentionally kept in the compact DB
+  // projection because they affect the effective workflow status.
   "serial_number",
   "actual_issue_description",
   "repair_action",
@@ -31,12 +31,12 @@ const SUMMARY_SELECT = [
   "spare_parts_replaced",
   "operations_approval",
   "rejected_reason",
-  "receipt_number",
   "team_member_id",
   "team_member_name",
-  "person_received_by_operations",
   "sv_approval",
-].join(",");
+];
+const SUMMARY_SEARCH_SELECT = [...SUMMARY_BASE_SELECT, "product_name"].join(",");
+const SUMMARY_SELECT = SUMMARY_BASE_SELECT.join(",");
 
 function text(value) {
   if (value === null || typeof value === "undefined") return "";
@@ -279,11 +279,11 @@ async function candidateNumbers({ cursor = null, scanGroups = 90, filters = {}, 
   });
 }
 
-async function rowsByNumbers(numbers = [], signal = null) {
+async function rowsByNumbers(numbers = [], signal = null, includeLocalSearchFields = false) {
   return await loadOrderRowsByNumbers({
     table: tableName(),
     numbers,
-    selectExpr: SUMMARY_SELECT,
+    selectExpr: includeLocalSearchFields ? SUMMARY_SEARCH_SELECT : SUMMARY_SELECT,
     queryProfileName: "orders.current.summary",
     fallbackProfileName: "orders.current.summary-fallback",
     loadProfileName: "orders.current.summary-load",
@@ -303,6 +303,32 @@ function groupRows(rows = [], account = {}) {
     groups.get(orderNumber).push(item);
   }
   return groups;
+}
+
+function compactCurrentSummaryItem(item = {}) {
+  return {
+    id: item.id,
+    orderId: item.orderId,
+    orderIdNumber: item.orderIdNumber,
+    reason: item.reason,
+    unitPrice: item.unitPrice,
+    quantityRequested: item.quantityRequested,
+    quantityEditedBySupervisor: item.quantityEditedBySupervisor,
+    quantityReceived: item.quantityReceived,
+    quantityRemaining: item.quantityRemaining,
+    quantityReceivedEdited: item.quantityReceivedEdited,
+    quantity: item.quantity,
+    status: item.status,
+    orderType: item.orderType,
+    orderTypeColor: item.orderTypeColor,
+    operationsApproval: item.operationsApproval,
+    rejectedReason: item.rejectedReason,
+    createdTime: item.createdTime,
+    createdByName: item.createdByName,
+    svApproval: item.svApproval,
+    summaryOnly: true,
+    source: "supabase",
+  };
 }
 
 export async function loadCurrentOrdersPage({
@@ -331,6 +357,7 @@ export async function loadCurrentOrdersPage({
     const fastSearch = hasTextSearch && canUseOrderSearchText();
     const filters = logicalParams({ account, query, type, searchMode: fastSearch ? "fast" : "legacy" });
     let candidates;
+    let localSearchFallback = false;
     try {
       candidates = await candidateNumbers({
         cursor: nextCursor,
@@ -364,6 +391,7 @@ export async function loadCurrentOrdersPage({
       if (!candidates) {
         // Custom/older schemas may reject a projected filter column. Preserve the
         // direct paged read and apply creator/search/type rules after the query.
+        localSearchFallback = hasTextSearch;
         candidates = await candidateNumbers({
           cursor: nextCursor,
           scanGroups: Math.max(safeLimit * 2, 72),
@@ -380,11 +408,11 @@ export async function loadCurrentOrdersPage({
 
     const cleanType = orderTypeKey(type);
     const directSearch = searchLogic(query);
-    const needle = Number.isFinite(directSearch?.orderNumber) ? "" : norm(directSearch?.clean || query);
+    const needle = localSearchFallback && !Number.isFinite(directSearch?.orderNumber) ? norm(directSearch?.clean || query) : "";
     const windowResult = await consumeOrderSummaryWindows({
       numbers: candidates.numbers,
       remainingGroups: safeLimit - outputGroups.length,
-      loadRows: rowsByNumbers,
+      loadRows: (numbers, loadSignal) => rowsByNumbers(numbers, loadSignal, localSearchFallback),
       profileName: "orders.current.summary-window",
       signal,
       consumeRows: ({ numbers, rows }) => {
@@ -418,9 +446,12 @@ export async function loadCurrentOrdersPage({
 
   const pageGroups = outputGroups.slice(0, safeLimit);
   return {
-    items: pageGroups.flatMap((group) => group.items),
+    items: pageGroups.flatMap((group) => group.items.map(compactCurrentSummaryItem)),
     pageInfo: {
       limit: safeLimit,
+      serverFiltered: true,
+      query: text(query),
+      summaryFormat: "compact-v1",
       groupCount: pageGroups.length,
       hasMore: !!hasMore,
       nextCursor: hasMore && pageCursor(nextCursor) !== null ? pageCursor(nextCursor) : null,

@@ -227,6 +227,7 @@ function normalizeMaintenanceChecklist(value) {
 }
 
 function itemHasMaintenanceLog(item = {}) {
+  if (item?.maintenanceLogged === true) return true;
   return Boolean(
     text(item?.serialNumber) ||
     text(item?.resolutionMethod) ||
@@ -1446,12 +1447,15 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
   const groups = useMemo(() => buildGroups(orders), [orders]);
   const visibleGroups = useMemo(() => {
     const needle = lower(query);
+    const serverFilteredQuery = Boolean(needle)
+      && pageInfo?.serverFiltered === true
+      && lower(pageInfo?.query) === needle;
     return groups.filter((group) => {
       if (tab !== "all" && group.state.key !== tab) return false;
       if (type !== "all" && type !== "requestmaintenance") return false;
-      return !needle || groupSearchText(group).includes(needle);
+      return !needle || serverFilteredQuery || groupSearchText(group).includes(needle);
     });
-  }, [groups, tab, type, query]);
+  }, [groups, tab, type, query, pageInfo]);
 
   async function fetchOrdersPage({ reset = true, fresh = false } = {}) {
     const requestId = ++listRequestRef.current;
