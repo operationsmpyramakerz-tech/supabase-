@@ -13,6 +13,14 @@ import {
   loadHomeOrderGroupsRpc,
   noteHomeOrderGroupsRpcError,
 } from "./home-order-groups-rpc";
+import {
+  canUseHomeStockSummaryRpc,
+  noteHomeStockSummaryRpcError,
+  loadHomeStockSummaryRpc,
+  canUseHomeExpensesSummaryRpc,
+  noteHomeExpensesSummaryRpcError,
+  loadHomeExpensesSummaryRpc,
+} from "./home-support-summaries-rpc";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const HOME_ROWS_CACHE_TTL_MS = 15_000;
@@ -350,6 +358,40 @@ async function loadExpenseItems(account = {}, selectedUser = null) {
     if ([400, 404].includes(Number(error?.status))) return [];
     throw error;
   }
+}
+
+async function loadHomeStockAnalysis(account = {}, selectedUser = null) {
+  const identity = selectedUser || account;
+  if (canUseHomeStockSummaryRpc()) {
+    try {
+      return await loadHomeStockSummaryRpc(identity);
+    } catch (error) {
+      noteHomeStockSummaryRpcError(error);
+    }
+  }
+
+  const rows = await loadStockRows(account, selectedUser);
+  return {
+    ...stockTagAnalysis(rows),
+    source: "row-fallback",
+  };
+}
+
+async function loadHomeExpenseAnalysis(account = {}, selectedUser = null, duration = "all") {
+  const identity = selectedUser || account;
+  if (canUseHomeExpensesSummaryRpc()) {
+    try {
+      return await loadHomeExpensesSummaryRpc(identity, duration);
+    } catch (error) {
+      noteHomeExpensesSummaryRpcError(error);
+    }
+  }
+
+  const items = await loadExpenseItems(account, selectedUser);
+  return {
+    ...expensesSummary({ items: filterItemsByDuration(items, duration) }),
+    source: "row-fallback",
+  };
 }
 
 function rowCost(row = {}) {
@@ -696,8 +738,8 @@ function buildHomeOverviewFromAggregates({
   reviewer = { ids: [], names: [] },
   selectedUser = null,
   duration = "all",
-  stockRows = [],
-  expenseItems = [],
+  stockAnalysis = null,
+  expenseSummaryValue = null,
 } = {}) {
   const startedAt = performance.now();
   const source = Array.isArray(groups) ? groups : [];
@@ -744,17 +786,21 @@ function buildHomeOverviewFromAggregates({
   const reviewMatrix = analysisMatrix(reviewGroups, REVIEW_STATUS_DEFINITIONS, (group) => group.statusBucket || "pending");
   const operationsMatrix = analysisMatrix(operationsGroups, OPERATIONS_STATUS_DEFINITIONS, (group) => group.statusBucket || "pending");
   const maintenanceSummary = summarizeGroupList(maintenanceGroups, MAINTENANCE_STATUS_DEFINITIONS, (group) => group.statusBucket || "pending");
-  const stockAnalysis = stockTagAnalysis(stockRows);
-  const filteredExpenseItems = filterItemsByDuration(expenseItems, globalDuration);
+  const resolvedStockAnalysis = stockAnalysis && typeof stockAnalysis === "object"
+    ? stockAnalysis
+    : stockTagAnalysis([]);
+  const resolvedExpenseSummary = expenseSummaryValue && typeof expenseSummaryValue === "object"
+    ? expenseSummaryValue
+    : expensesSummary({ items: [] });
 
   const overview = {
     currentMatrix,
     reviewMatrix,
     operationsMatrix,
     maintenanceSummary,
-    stockTagSummaries: stockAnalysis.summaries,
-    stockTags: stockAnalysis.tags,
-    expenseSummary: expensesSummary({ items: filteredExpenseItems }),
+    stockTagSummaries: resolvedStockAnalysis.summaries || stockTagAnalysis([]).summaries,
+    stockTags: Array.isArray(resolvedStockAnalysis.tags) ? resolvedStockAnalysis.tags : [],
+    expenseSummary: resolvedExpenseSummary,
     recentOrders: recentOrdersFromAggregates(source, account),
     currentTotalGroups: currentMatrix?.status?.all?.total || 0,
   };
@@ -785,8 +831,8 @@ function buildHomeOverview({
   selectedSystemRows = null,
   selectedUser = null,
   duration = "all",
-  stockRows = [],
-  expenseItems = [],
+  stockAnalysis = null,
+  expenseSummaryValue = null,
 } = {}) {
   const globalDuration = ["all", "week", "month", "year"].includes(duration) ? duration : "all";
   const applyGlobalFilters = (groups) => filterGroupsByTime(
@@ -817,17 +863,21 @@ function buildHomeOverview({
   const reviewMatrix = analysisMatrix(reviewGroups, REVIEW_STATUS_DEFINITIONS, bucketReview);
   const operationsMatrix = analysisMatrix(operationsGroups, OPERATIONS_STATUS_DEFINITIONS, bucketOperations);
   const maintenanceSummary = summarizeGroupList(maintenanceGroups, MAINTENANCE_STATUS_DEFINITIONS, bucketMaintenance);
-  const stockAnalysis = stockTagAnalysis(stockRows);
-  const filteredExpenseItems = filterItemsByDuration(expenseItems, globalDuration);
+  const resolvedStockAnalysis = stockAnalysis && typeof stockAnalysis === "object"
+    ? stockAnalysis
+    : stockTagAnalysis([]);
+  const resolvedExpenseSummary = expenseSummaryValue && typeof expenseSummaryValue === "object"
+    ? expenseSummaryValue
+    : expensesSummary({ items: [] });
 
   return {
     currentMatrix,
     reviewMatrix,
     operationsMatrix,
     maintenanceSummary,
-    stockTagSummaries: stockAnalysis.summaries,
-    stockTags: stockAnalysis.tags,
-    expenseSummary: expensesSummary({ items: filteredExpenseItems }),
+    stockTagSummaries: resolvedStockAnalysis.summaries || stockTagAnalysis([]).summaries,
+    stockTags: Array.isArray(resolvedStockAnalysis.tags) ? resolvedStockAnalysis.tags : [],
+    expenseSummary: resolvedExpenseSummary,
     recentOrders: recentOrders(currentRows),
     currentTotalGroups: currentMatrix?.status?.all?.total || 0,
   };
@@ -854,11 +904,11 @@ export async function loadHomeOverviewDirect({
 
   const selectedUser = await resolveSelectedUser(requestedUserId);
   const stockPromise = showStock
-    ? loadStockRows(account, selectedUser)
-    : Promise.resolve([]);
+    ? loadHomeStockAnalysis(account, selectedUser)
+    : Promise.resolve({ ...stockTagAnalysis([]), source: "not-requested" });
   const expensesPromise = showExpenses
-    ? loadExpenseItems(account, selectedUser)
-    : Promise.resolve([]);
+    ? loadHomeExpenseAnalysis(account, selectedUser, selectedDuration)
+    : Promise.resolve({ ...expensesSummary({ items: [] }), source: "not-requested" });
 
   let overview = null;
   let overviewSource = "supabase-direct";
@@ -885,7 +935,7 @@ export async function loadHomeOverviewDirect({
         includeApproved: showOperations || showMaintenance,
       });
 
-      const [groups, stockRows, expenseItems] = await Promise.all([
+      const [groups, stockAnalysis, expenseSummaryValue] = await Promise.all([
         groupsPromise,
         stockPromise,
         expensesPromise,
@@ -897,8 +947,8 @@ export async function loadHomeOverviewDirect({
         reviewer,
         selectedUser,
         duration: selectedDuration,
-        stockRows: Array.isArray(stockRows) ? stockRows : [],
-        expenseItems: Array.isArray(expenseItems) ? expenseItems : [],
+        stockAnalysis,
+        expenseSummaryValue,
       });
       overviewSource = "supabase-direct-aggregate";
     } catch (error) {
@@ -926,8 +976,8 @@ export async function loadHomeOverviewDirect({
       requestedRows,
       reviewRows,
       selectedSystemRows,
-      stockRows,
-      expenseItems,
+      stockAnalysis,
+      expenseSummaryValue,
     ] = await Promise.all([
       currentPromise,
       requestedPromise,
@@ -944,8 +994,8 @@ export async function loadHomeOverviewDirect({
       selectedSystemRows: Array.isArray(selectedSystemRows) ? selectedSystemRows : null,
       selectedUser,
       duration: selectedDuration,
-      stockRows: Array.isArray(stockRows) ? stockRows : [],
-      expenseItems: Array.isArray(expenseItems) ? expenseItems : [],
+      stockAnalysis,
+      expenseSummaryValue,
     });
     overviewSource = needsOrderOverview ? "supabase-direct-row-fallback" : "supabase-direct";
   }
