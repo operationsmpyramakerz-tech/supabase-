@@ -1,9 +1,11 @@
 import "server-only";
-import { select, selectAll } from "./supabase-rest";
+import { select, selectAll, selectById } from "./supabase-rest";
+import { measurePerformance } from "./performance-profiler";
 
 const DIRECTORY_TTL_MS = 20_000;
 const SIGNUP_TTL_MS = 10_000;
 const PAGES_TTL_MS = 60_000;
+const TEAM_SCHEMA_TTL_MS = 5 * 60_000;
 
 let directoryCache = null;
 let directoryInflight = null;
@@ -11,6 +13,11 @@ let appPagesCache = null;
 let appPagesInflight = null;
 const signupCache = new Map();
 const signupInflight = new Map();
+let teamSchemaCache = null;
+let teamSchemaInflight = null;
+let compactDirectoryProjectionSupported = null;
+let compactTeamRowsCache = null;
+let compactTeamRowsInflight = null;
 
 function text(value) {
   if (value === null || typeof value === "undefined") return "";
@@ -135,6 +142,111 @@ function dateText(value) {
   }
 }
 
+function exactColumnKey(row = {}, aliases = []) {
+  const source = row && typeof row === "object" ? row : {};
+  for (const alias of aliases) {
+    if (Object.prototype.hasOwnProperty.call(source, alias)) return alias;
+  }
+  const wanted = new Set(aliases.map(canon).filter(Boolean));
+  for (const key of Object.keys(source)) {
+    if (wanted.has(canon(key))) return key;
+  }
+  return "";
+}
+
+function selectIdentifier(value) {
+  const key = text(value);
+  if (!key) return "";
+  if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) return key;
+  return `"${key.replace(/"/g, '""')}"`;
+}
+
+async function teamSchemaSample({ fresh = false } = {}) {
+  const now = Date.now();
+  if (!fresh && teamSchemaCache?.expiresAt > now) return teamSchemaCache.value;
+  if (!fresh && teamSchemaInflight) return await teamSchemaInflight;
+
+  const pending = select(teamMembersTable(), {
+    select: "*",
+    limit: "1",
+  }, { profileName: "users-center.member-schema-sample" }).then((rows) => Array.isArray(rows) ? rows[0] || null : null);
+
+  if (!fresh) teamSchemaInflight = pending;
+  try {
+    const row = await pending;
+    teamSchemaCache = { value: row, expiresAt: Date.now() + TEAM_SCHEMA_TTL_MS };
+    return row;
+  } finally {
+    if (teamSchemaInflight === pending) teamSchemaInflight = null;
+  }
+}
+
+function compactDirectorySelect(sample = {}) {
+  const groups = [
+    ["id", "ID"],
+    ["name", "Name", "full_name", "username"],
+    ["department", "Department"],
+    ["position", "Position", "role"],
+    ["phone", "Phone", "mobile"],
+    ["email", "Email", "mail"],
+    ["employee_code", "employeeCode", "Employee Code", "code"],
+    ["profile_picture", "Profile picture", "Profile Picture", "Profile Photo", "Profile photo", "profile_picture_url", "profile_photo", "profile_photo_url", "photo", "photo_url", "avatar", "avatar_url", "image", "image_url", "picture", "picture_url"],
+    ["school", "School", "school_name", "School Name", "stocktaking_column", "Stocktaking Column", "done_column", "Done Column"],
+    ["allowed_pages", "Allowed Pages", "Pages", "pages", "access_pages"],
+    ["sv_school_member_ids", "sv_school_ids", "sv_member_ids"],
+    ["sv_school_member_names", "sv_schools", "S.V Schools", "SV Schools"],
+  ];
+  const keys = unique(groups.map((aliases) => exactColumnKey(sample, aliases)).filter(Boolean));
+  const idKey = exactColumnKey(sample, ["id", "ID"]);
+  const nameKey = exactColumnKey(sample, ["name", "Name", "full_name", "username"]);
+  if (!idKey || !nameKey) return "";
+  return keys.map(selectIdentifier).filter(Boolean).join(",");
+}
+
+async function loadCompactTeamRows({ fresh = false } = {}) {
+  if (fresh) compactTeamRowsCache = null;
+  const now = Date.now();
+  if (!fresh && compactTeamRowsCache?.expiresAt > now) return compactTeamRowsCache.value;
+  if (!fresh && compactTeamRowsInflight) return await compactTeamRowsInflight;
+
+  const pending = (async () => {
+    const sample = await teamSchemaSample({ fresh: false }).catch(() => null);
+    const selectExpr = sample ? compactDirectorySelect(sample) : "";
+    let rows = null;
+
+    if (selectExpr && compactDirectoryProjectionSupported !== false) {
+      try {
+        rows = await selectAll(teamMembersTable(), {
+          limit: 5000,
+          select: selectExpr,
+          profileName: "users-center.members-compact",
+        });
+        compactDirectoryProjectionSupported = true;
+      } catch {
+        compactDirectoryProjectionSupported = false;
+      }
+    }
+
+    if (!Array.isArray(rows)) {
+      rows = await selectAll(teamMembersTable(), {
+        limit: 5000,
+        profileName: "users-center.members-full-fallback",
+      });
+    }
+
+    return { rows: Array.isArray(rows) ? rows : [], schemaSample: sample };
+  })();
+
+  if (!fresh) compactTeamRowsInflight = pending;
+  try {
+    const value = await pending;
+    compactTeamRowsCache = { value, expiresAt: Date.now() + DIRECTORY_TTL_MS };
+    return value;
+  } finally {
+    if (compactTeamRowsInflight === pending) compactTeamRowsInflight = null;
+  }
+}
+
 const FIELD_ORDER = [
   "Profile picture",
   "Employee Code",
@@ -224,9 +336,10 @@ function orderedEditableFields(rows = [], context = {}) {
   }
 
   const departments = Array.isArray(context.departments) ? context.departments : [];
-  const positions = unique(rows.map((row) => valueFor(row, ["Position", "position", "role"]))).sort((a, b) => a.localeCompare(b));
-  const schools = unique(rows.map((row) => valueFor(row, ["School", "school", "school_name", "Stocktaking Column", "stocktaking_column", "Done Column", "done_column"]))).sort((a, b) => a.localeCompare(b));
-  const memberNames = unique(rows.map((row) => valueFor(row, ["Name", "name", "full_name", "username"]))).sort((a, b) => a.localeCompare(b));
+  const optionRows = Array.isArray(context.optionRows) && context.optionRows.length ? context.optionRows : rows;
+  const positions = unique(optionRows.map((row) => valueFor(row, ["Position", "position", "role"]))).sort((a, b) => a.localeCompare(b));
+  const schools = unique(optionRows.map((row) => valueFor(row, ["School", "school", "school_name", "Stocktaking Column", "stocktaking_column", "Done Column", "done_column"]))).sort((a, b) => a.localeCompare(b));
+  const memberNames = unique(optionRows.map((row) => valueFor(row, ["Name", "name", "full_name", "username"]))).sort((a, b) => a.localeCompare(b));
   const pages = Array.isArray(context.pages) ? context.pages : [];
 
   return ordered.map((sourceColumn) => {
@@ -307,6 +420,29 @@ function serializeMember(row = {}, editableFields = []) {
     lastEditedTime: dateText(valueFor(row, ["updated_at", "Updated time", "last_edited_time"])),
     fields,
     source: "supabase-next",
+  };
+}
+
+function serializeMemberSummary(row = {}) {
+  const name = text(valueForLabel(row, "Name")) || "Unnamed";
+  const department = text(valueForLabel(row, "Department")) || "No Department";
+  const legacySvIds = splitValues(valueFor(row, ["sv_school_member_ids", "sv_school_ids", "sv_member_ids"]));
+  const legacySvNames = splitValues(valueFor(row, ["sv_school_member_names", "sv_schools", "S.V Schools", "SV Schools"]));
+  return {
+    id: text(valueFor(row, ["id", "ID"])),
+    url: "",
+    name,
+    department,
+    departmentKey: departmentKey(department),
+    position: text(valueForLabel(row, "Position")) || "Team Member",
+    phone: text(valueForLabel(row, "Phone")),
+    email: text(valueForLabel(row, "Email")),
+    employeeCode: text(valueForLabel(row, "Employee Code")),
+    photoUrl: extractUrl(valueForLabel(row, "Profile picture")),
+    pageAccessSummary: { allowedPages: [], accessCount: 0, adminCount: 0 },
+    svAccessSummary: { enabledCount: Math.max(legacySvIds.length, legacySvNames.length) },
+    legacyAllowedPages: splitValues(valueForLabel(row, "Allowed Pages")),
+    source: "supabase-next-compact",
   };
 }
 
@@ -398,15 +534,28 @@ export async function usersCenterAppPages({ fresh = false, assignableOnly = true
     return assignableOnly ? rows.filter((page) => page.isAssignable && page.isActive) : rows;
   }
 
-  const pending = selectAll("app_pages", { limit: 1000, order: "sort_order.asc" }).then((rows) => (rows || [])
-    .map(serializeAppPage)
-    .filter((page) => {
-      if (!page.id || !page.pageKey || !page.pageName) return false;
-      const key = page.pageKey.toLowerCase();
-      const route = page.routePath.toLowerCase();
-      const moduleName = page.moduleName.toLowerCase();
-      return !key.startsWith("lms-") && key !== "lms" && !route.startsWith("/lms") && moduleName !== "lms";
-    }));
+  const pending = (async () => {
+    let rows;
+    try {
+      rows = await selectAll("app_pages", {
+        limit: 1000,
+        order: "sort_order.asc",
+        select: "id,page_key,page_name,route_path,route_pattern,module_name,parent_page_key,sort_order,is_active,is_assignable,visible_in_sidebar",
+        profileName: "users-center.app-pages-compact",
+      });
+    } catch {
+      rows = await selectAll("app_pages", { limit: 1000, order: "sort_order.asc", profileName: "users-center.app-pages-fallback" });
+    }
+    return (rows || [])
+      .map(serializeAppPage)
+      .filter((page) => {
+        if (!page.id || !page.pageKey || !page.pageName) return false;
+        const key = page.pageKey.toLowerCase();
+        const route = page.routePath.toLowerCase();
+        const moduleName = page.moduleName.toLowerCase();
+        return !key.startsWith("lms-") && key !== "lms" && !route.startsWith("/lms") && moduleName !== "lms";
+      });
+  })();
   appPagesInflight = pending;
   try {
     const pages = await pending;
@@ -471,12 +620,18 @@ function joinAccessRows(pages = [], accessRows = [], { includeDisabled = false }
 function attachAccessSummary(member, pages = [], accessRows = []) {
   const enabled = joinAccessRows(pages, accessRows, { includeDisabled: false });
   const allowedPages = unique(enabled.flatMap((row) => row.aliases?.length ? row.aliases : [row.pageName]));
-  if (!allowedPages.length) allowedPages.push(...splitValues(valueForLabel(Object.fromEntries((member.fields || []).map((field) => [field.label, field.value])), "Allowed Pages")));
+  if (!allowedPages.length) {
+    allowedPages.push(...unique([
+      ...(Array.isArray(member?.legacyAllowedPages) ? member.legacyAllowedPages : []),
+      ...splitValues(valueForLabel(Object.fromEntries((member.fields || []).map((field) => [field.label, field.value])), "Allowed Pages")),
+    ]));
+  }
   member.pageAccessSummary = {
     allowedPages,
     accessCount: enabled.length || allowedPages.length,
     adminCount: enabled.filter((row) => row.accessLevel === "admin").length,
   };
+  delete member.legacyAllowedPages;
   return member;
 }
 
@@ -509,19 +664,46 @@ export async function usersCenterDirectory({ fresh = false } = {}) {
   if (!fresh && directoryCache?.expiresAt > now) return directoryCache.value;
   if (!fresh && directoryInflight) return await directoryInflight;
 
-  const load = async () => {
-    const [teamRows, departmentRows, pages, accessRows] = await Promise.all([
-      selectAll(teamMembersTable(), { limit: 5000 }),
-      optionalSelectAll(departmentsTable(), { limit: 1000, order: "name.asc" }),
+  const load = async () => measurePerformance("users-center", "directory-load", async () => {
+    const [teamBundle, departmentRows, pages, accessRows] = await Promise.all([
+      loadCompactTeamRows({ fresh }),
+      (async () => {
+        try {
+          return await selectAll(departmentsTable(), {
+            limit: 1000,
+            order: "name.asc",
+            select: "id,name",
+            profileName: "users-center.departments-compact",
+          });
+        } catch {
+          return await optionalSelectAll(departmentsTable(), { limit: 1000, order: "name.asc", profileName: "users-center.departments-fallback" });
+        }
+      })(),
       usersCenterAppPages({ fresh, assignableOnly: false }).catch(() => []),
-      optionalSelectAll("team_member_page_access", { limit: 5000 }),
+      (async () => {
+        try {
+          const rows = await select("team_member_page_access", {
+            select: "team_member_id,page_id,access_level,is_enabled",
+            limit: "5000",
+          }, { profileName: "users-center.page-access-summary" });
+          return Array.isArray(rows) ? rows : [];
+        } catch {
+          return await optionalSelectAll("team_member_page_access", { limit: 5000, profileName: "users-center.page-access-fallback" });
+        }
+      })(),
     ]);
 
+    const teamRows = Array.isArray(teamBundle?.rows) ? teamBundle.rows : [];
+    const schemaRows = teamBundle?.schemaSample ? [teamBundle.schemaSample] : teamRows.slice(0, 1);
     const knownDepartments = unique([
       ...departmentRows.map(departmentName),
       ...teamRows.map((row) => text(valueForLabel(row, "Department")) || "No Department"),
     ]).sort((a, b) => a.localeCompare(b));
-    const editableFields = orderedEditableFields(teamRows, { departments: knownDepartments, pages: pages.filter((page) => page.isActive && page.isAssignable) });
+    const editableFields = orderedEditableFields(schemaRows, {
+      departments: knownDepartments,
+      pages: pages.filter((page) => page.isActive && page.isAssignable),
+      optionRows: teamRows,
+    });
 
     const accessByMember = new Map();
     for (const access of accessRows) {
@@ -532,9 +714,9 @@ export async function usersCenterDirectory({ fresh = false } = {}) {
     }
 
     const members = teamRows.map((row) => {
-      const member = serializeMember(row, editableFields);
+      const member = serializeMemberSummary(row);
       return attachAccessSummary(member, pages, accessByMember.get(member.id) || []);
-    }).sort((a, b) => a.department.localeCompare(b.department) || a.name.localeCompare(b.name));
+    }).filter((member) => member.id).sort((a, b) => a.department.localeCompare(b.department) || a.name.localeCompare(b.name));
 
     const map = new Map();
     for (const row of departmentRows) {
@@ -559,8 +741,9 @@ export async function usersCenterDirectory({ fresh = false } = {}) {
       editableFields,
       departments: Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name)),
       source: "supabase-next",
+      directoryFormat: "compact-v2",
     };
-  };
+  }, { fresh });
 
   const pending = load();
   if (!fresh) directoryInflight = pending;
@@ -597,9 +780,17 @@ export async function usersCenterSignupRequests({ status = "pending", fresh = fa
   if (!fresh && signupInflight.has(cacheKey)) return await signupInflight.get(cacheKey);
 
   const load = async () => {
-    const params = { select: "*", order: "created_at.desc", limit: "1000" };
-    if (cleanStatus && cleanStatus !== "all") params.status = `eq.${cleanStatus}`;
-    const rows = await select(signupRequestsTable(), params);
+    const base = { order: "created_at.desc", limit: "1000" };
+    if (cleanStatus && cleanStatus !== "all") base.status = `eq.${cleanStatus}`;
+    let rows;
+    try {
+      rows = await select(signupRequestsTable(), {
+        ...base,
+        select: "id,username,employee_code,phone,email,status,department,position,reviewed_by,reviewed_at,created_at",
+      }, { profileName: "users-center.signup-requests-compact" });
+    } catch {
+      rows = await select(signupRequestsTable(), { ...base, select: "*" }, { profileName: "users-center.signup-requests-fallback" });
+    }
     return { ok: true, requests: (Array.isArray(rows) ? rows : []).map(serializeSignupRequest), source: "supabase-next" };
   };
 
@@ -623,7 +814,23 @@ export async function usersCenterPageAccess(memberId) {
   }
   const [pages, accessRows] = await Promise.all([
     usersCenterAppPages({ assignableOnly: true }),
-    select("team_member_page_access", { select: "*", team_member_id: `eq.${id}`, limit: "1000" }).then((rows) => Array.isArray(rows) ? rows : []),
+    (async () => {
+      try {
+        const rows = await select("team_member_page_access", {
+          select: "team_member_id,page_id,access_level,is_enabled",
+          team_member_id: `eq.${id}`,
+          limit: "1000",
+        }, { profileName: "users-center.page-access-member" });
+        return Array.isArray(rows) ? rows : [];
+      } catch {
+        const rows = await select("team_member_page_access", {
+          select: "*",
+          team_member_id: `eq.${id}`,
+          limit: "1000",
+        }, { profileName: "users-center.page-access-member-fallback" });
+        return Array.isArray(rows) ? rows : [];
+      }
+    })(),
   ]);
   return { ok: true, memberId: id, pages: joinAccessRows(pages, accessRows, { includeDisabled: true }), source: "supabase-next" };
 }
@@ -646,6 +853,71 @@ export async function usersCenterPages() {
   };
 }
 
+export async function usersCenterMemberDetails(memberId) {
+  const id = text(memberId);
+  if (!id) {
+    const error = new Error("Missing team member ID.");
+    error.status = 400;
+    throw error;
+  }
+
+  const row = await measurePerformance("users-center", "member-detail", async () => {
+    let direct = null;
+    try {
+      direct = await selectById(teamMembersTable(), id, { profileName: "users-center.member-detail-by-id" });
+    } catch {}
+    if (direct) return direct;
+
+    const rows = await selectAll(teamMembersTable(), {
+      limit: 5000,
+      profileName: "users-center.member-detail-fallback",
+    });
+    return (rows || []).find((item) => text(valueFor(item, ["id", "ID"])) === id) || null;
+  });
+
+  if (!row) {
+    const error = new Error("Team member was not found.");
+    error.status = 404;
+    throw error;
+  }
+
+  const [teamBundle, pages, departmentRows] = await Promise.all([
+    loadCompactTeamRows().catch(() => ({ rows: [], schemaSample: null })),
+    usersCenterAppPages({ assignableOnly: false }).catch(() => []),
+    (async () => {
+      try {
+        return await selectAll(departmentsTable(), {
+          limit: 1000,
+          order: "name.asc",
+          select: "id,name",
+          profileName: "users-center.departments-for-detail",
+        });
+      } catch {
+        return [];
+      }
+    })(),
+  ]);
+
+  const optionRows = Array.isArray(teamBundle?.rows) ? teamBundle.rows : [];
+  const knownDepartments = unique([
+    ...departmentRows.map(departmentName),
+    ...optionRows.map((item) => text(valueForLabel(item, "Department")) || "No Department"),
+    text(valueForLabel(row, "Department")) || "No Department",
+  ]).sort((a, b) => a.localeCompare(b));
+  const editableFields = orderedEditableFields([row], {
+    departments: knownDepartments,
+    pages: pages.filter((page) => page.isActive && page.isAssignable),
+    optionRows,
+  });
+
+  return {
+    ok: true,
+    member: serializeMember(row, editableFields),
+    editableFields,
+    source: "supabase-next-detail",
+  };
+}
+
 export async function usersCenterSvAccess(memberId) {
   const id = text(memberId);
   if (!id) {
@@ -653,7 +925,8 @@ export async function usersCenterSvAccess(memberId) {
     error.status = 400;
     throw error;
   }
-  const rows = await selectAll(teamMembersTable(), { limit: 5000 });
+  const teamBundle = await loadCompactTeamRows();
+  const rows = Array.isArray(teamBundle?.rows) ? teamBundle.rows : [];
   const target = rows.find((row) => text(valueFor(row, ["id", "ID"])) === id) || null;
   if (!target) {
     const error = new Error("Team member was not found.");
@@ -663,10 +936,23 @@ export async function usersCenterSvAccess(memberId) {
 
   let relationRows = [];
   try {
-    relationRows = await select(svAccessTable(), { select: "*", team_member_id: `eq.${id}`, limit: "5000" });
+    relationRows = await select(svAccessTable(), {
+      select: "team_member_id,visible_team_member_id,visible_team_member_name",
+      team_member_id: `eq.${id}`,
+      limit: "5000",
+    }, { profileName: "users-center.sv-access-member" });
     if (!Array.isArray(relationRows)) relationRows = [];
   } catch {
-    relationRows = [];
+    try {
+      relationRows = await select(svAccessTable(), {
+        select: "*",
+        team_member_id: `eq.${id}`,
+        limit: "5000",
+      }, { profileName: "users-center.sv-access-member-fallback" });
+      if (!Array.isArray(relationRows)) relationRows = [];
+    } catch {
+      relationRows = [];
+    }
   }
 
   const enabledIds = new Set();
@@ -707,5 +993,8 @@ export async function usersCenterSvAccess(memberId) {
 
 export function clearUsersCenterReadCaches() {
   directoryCache = null;
+  directoryInflight = null;
+  compactTeamRowsCache = null;
+  compactTeamRowsInflight = null;
   signupCache.clear();
 }
