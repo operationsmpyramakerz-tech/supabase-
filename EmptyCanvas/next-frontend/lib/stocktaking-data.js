@@ -1,6 +1,12 @@
 import "server-only";
 import { getProductsCatalog } from "./products-service";
 import { listTeamMembersLite } from "./team-members-service";
+import {
+  canUseStocktakingFolderSummaryRpc,
+  invalidateStocktakingFolderSummaryRpcCache,
+  loadStocktakingFolderSummariesRpc,
+  noteStocktakingFolderSummaryRpcError,
+} from "./stocktaking-folder-summary-rpc";
 import { getSupabaseConfig, selectAll, storagePublicUrl } from "./supabase-rest";
 
 const STOCK_ROWS_CACHE_TTL_MS = 20_000;
@@ -20,6 +26,7 @@ export function invalidateStocktakingReadCaches() {
   stockSchemaInflight = null;
   stockProjectionCache.clear();
   stockProjectionInflight.clear();
+  invalidateStocktakingFolderSummaryRpcCache();
 }
 
 function text(value) {
@@ -516,12 +523,68 @@ export async function listStocktakingFolders({ fresh = false } = {}) {
     "sourceorderid", "sourceordernumber", "orderid", "ordernumber", "teammemberid", "teammembername",
     "userid", "username", "createdby", "ownername", "employee", "school", "stocktakingcolumn",
   ]);
+  const eligibleKey = (key) => usefulStockFolderColumn(key) && !folderBlocked.has(canonical(key)) && !isInventoryMetaColumn(key);
+
+  const buildFolders = (summaries, members) => {
+    const cleanSummaries = (Array.isArray(summaries) ? summaries : [])
+      .map((entry) => ({
+        key: text(entry?.key),
+        itemsCount: Math.max(0, Math.trunc(number(entry?.itemsCount))),
+        total: number(entry?.total),
+      }))
+      .filter((entry) => entry.key && eligibleKey(entry.key));
+    const keys = cleanSummaries.map((entry) => entry.key);
+    const memberByColumn = new Map();
+
+    for (const member of Array.isArray(members) ? members : []) {
+      const exactResolved = member?.stocktakingColumn ? findQuantityColumnFromKeys(keys, member.stocktakingColumn) : "";
+      if (exactResolved && keys.includes(exactResolved) && !memberByColumn.has(exactResolved)) memberByColumn.set(exactResolved, member);
+      const bases = new Set([ownerBase(member?.name), ownerBase(member?.stocktakingColumn)].filter(Boolean));
+      if (!bases.size) continue;
+      for (const key of keys) {
+        if (memberByColumn.has(key)) continue;
+        const keyBase = ownerBase(key);
+        if (keyBase && bases.has(keyBase)) memberByColumn.set(key, member);
+      }
+    }
+
+    return cleanSummaries.map((entry) => {
+      const owner = memberByColumn.get(entry.key) || null;
+      const fallback = titleCase(entry.key).replace(/\s+Stock$/i, "").trim() || titleCase(entry.key);
+      return {
+        key: entry.key,
+        label: owner?.name || fallback,
+        userId: owner?.id || null,
+        stocktakingLabel: owner?.stocktakingColumn || titleCase(entry.key),
+        itemsCount: entry.itemsCount,
+        total: entry.total,
+      };
+    }).filter((item) => item.itemsCount > 0).sort((a, b) => String(a.label || "").localeCompare(String(b.label || "")));
+  };
+
+  // Fast path: PostgreSQL returns one aggregate row per quantity column. This
+  // avoids transferring the full, very wide Stocktaking matrix on every visit
+  // to the folder landing page. The existing projection/full-row path remains
+  // below as a compatibility fallback for customized schemas.
+  if (canUseStocktakingFolderSummaryRpc()) {
+    try {
+      const [summaries, members] = await Promise.all([
+        loadStocktakingFolderSummariesRpc({ fresh }),
+        membersPromise,
+      ]);
+      return buildFolders(summaries, members);
+    } catch (error) {
+      noteStocktakingFolderSummaryRpcError(error);
+      console.warn("[stocktaking] folder summary RPC unavailable; using projection compatibility path:", error?.message || error);
+    }
+  }
+
   let rows = null;
   let keys = [];
 
   try {
     const schemaKeys = await loadStockSchemaKeys({ fresh });
-    keys = schemaKeys.filter((key) => usefulStockFolderColumn(key) && !folderBlocked.has(canonical(key)) && !isInventoryMetaColumn(key));
+    keys = schemaKeys.filter(eligibleKey);
     // The folder screen only needs the dynamic stock quantity columns to
     // calculate item counts/totals. Avoid downloading receipts, URLs, tags and
     // all other row metadata before a folder is opened.
@@ -532,25 +595,10 @@ export async function listStocktakingFolders({ fresh = false } = {}) {
 
   if (!Array.isArray(rows)) {
     rows = await loadStockRows({ fresh });
-    keys = allKeys(rows).filter((key) => usefulStockFolderColumn(key) && !folderBlocked.has(canonical(key)) && !isInventoryMetaColumn(key));
+    keys = allKeys(rows).filter(eligibleKey);
   }
 
-  const members = await membersPromise;
-
-  const memberByColumn = new Map();
-  for (const member of Array.isArray(members) ? members : []) {
-    const exactResolved = member?.stocktakingColumn ? findQuantityColumnFromKeys(keys, member.stocktakingColumn) : "";
-    if (exactResolved && keys.includes(exactResolved) && !memberByColumn.has(exactResolved)) memberByColumn.set(exactResolved, member);
-    const bases = new Set([ownerBase(member?.name), ownerBase(member?.stocktakingColumn)].filter(Boolean));
-    if (!bases.size) continue;
-    for (const key of keys) {
-      if (memberByColumn.has(key)) continue;
-      const keyBase = ownerBase(key);
-      if (keyBase && bases.has(keyBase)) memberByColumn.set(key, member);
-    }
-  }
-
-  return keys.map((key) => {
+  const summaries = keys.map((key) => {
     let itemsCount = 0;
     let total = 0;
     for (const row of rows) {
@@ -560,17 +608,9 @@ export async function listStocktakingFolders({ fresh = false } = {}) {
       itemsCount += 1;
       total += value;
     }
-    const owner = memberByColumn.get(key) || null;
-    const fallback = titleCase(key).replace(/\s+Stock$/i, "").trim() || titleCase(key);
-    return {
-      key,
-      label: owner?.name || fallback,
-      userId: owner?.id || null,
-      stocktakingLabel: owner?.stocktakingColumn || titleCase(key),
-      itemsCount,
-      total,
-    };
-  }).filter((item) => item.itemsCount > 0).sort((a, b) => String(a.label || "").localeCompare(String(b.label || "")));
+    return { key, itemsCount, total };
+  });
+  return buildFolders(summaries, await membersPromise);
 }
 
 export async function stocktakingForColumn(column, { inventoryColumn = "", defectedColumn = "", fresh = false } = {}) {
@@ -613,13 +653,21 @@ export async function listStocktakingProducts({ fresh = false } = {}) {
 }
 
 export async function stocktakingForAccount(account = {}, { fresh = false } = {}) {
-  const [memberRows, schemaKeys] = await Promise.all([
-    selectAll(teamMembersTable(), { limit: 5000, order: "name.asc,id.asc" }),
+  const [memberRowsLite, schemaKeys] = await Promise.all([
+    listTeamMembersLite({ fresh }),
     loadStockSchemaKeys({ fresh }).catch(() => []),
   ]);
 
-  const member = (memberRows || []).find((row) => accountMatchesMember(account, row)) || null;
-  const schoolName = text(valueFor(member || {}, ["School", "school"]));
+  let member = (memberRowsLite || []).find((row) => accountMatchesMember(account, row)) || null;
+  // Old/customized Team Members schemas may only be matchable by email or a
+  // legacy username column omitted from the lightweight directory. Keep the
+  // full-row lookup as a narrow compatibility fallback instead of paying for
+  // it on every Stocktaking request.
+  if (!member) {
+    const memberRows = await selectAll(teamMembersTable(), { limit: 5000, order: "name.asc,id.asc" });
+    member = (memberRows || []).find((row) => accountMatchesMember(account, row)) || null;
+  }
+  const schoolName = text(member?.stocktakingColumn) || text(valueFor(member || {}, ["School", "school", "Stocktaking Column", "stocktaking_column"]));
   if (!schoolName) {
     const error = new Error("Could not determine school name for the current user.");
     error.status = 404;
