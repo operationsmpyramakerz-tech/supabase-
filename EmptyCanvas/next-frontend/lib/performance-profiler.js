@@ -64,6 +64,36 @@ function slowThresholdMs() {
   return Math.max(250, Math.min(30_000, finiteNumber(process.env.PERF_SLOW_OPERATION_MS, 900) || 900));
 }
 
+function metaText(meta = {}) {
+  const source = meta && typeof meta === "object" && !Array.isArray(meta) ? meta : {};
+  return Object.entries(source)
+    .slice(0, MAX_META_KEYS)
+    .map(([key, value]) => `${shortText(key)} ${shortText(value)}`)
+    .join(" ")
+    .toLowerCase();
+}
+
+function isFallbackSample(sample = {}) {
+  const source = shortText(sample?.meta?.source || "");
+  const outcome = shortText(sample?.meta?.outcome || "");
+  const recovery = shortText(sample?.meta?.recovery || "");
+  const haystack = `${sample?.category || ""} ${sample?.name || ""} ${source} ${outcome} ${recovery} ${metaText(sample?.meta)}`.toLowerCase();
+  return /legacy|fallback|recovery/.test(haystack);
+}
+
+function isCacheHitSample(sample = {}) {
+  return shortText(sample?.meta?.cache || "").toLowerCase() === "hit";
+}
+
+function isSharedWaitSample(sample = {}) {
+  const cache = shortText(sample?.meta?.cache || "").toLowerCase();
+  return cache === "inflight" || cache === "shared";
+}
+
+function isRetrySample(sample = {}) {
+  return finiteNumber(sample?.meta?.attempts, 1) > 1;
+}
+
 export function recordPerformanceSample({ category, name, durationMs, ok = true, status = 0, meta = {} } = {}) {
   const duration = Math.max(0, finiteNumber(durationMs));
   const safeCategory = shortText(category || "other") || "other";
@@ -144,11 +174,18 @@ export function getPerformanceSnapshot({ windowMs = DEFAULT_WINDOW_MS, limit = 2
     const slowCount = rows.filter((row) => row.durationMs >= thresholdMs).length;
     const sourceBreakdown = {};
     let fallbackCount = 0;
+    let retryCount = 0;
+    let cacheHitCount = 0;
+    let sharedWaitCount = 0;
+    const workDurations = [];
     for (const row of rows) {
       const source = shortText(row?.meta?.source || "");
       if (source) sourceBreakdown[source] = (sourceBreakdown[source] || 0) + 1;
-      const fallbackText = `${row.category} ${row.name} ${source}`.toLowerCase();
-      if (/legacy|fallback|recovery/.test(fallbackText)) fallbackCount += 1;
+      if (isFallbackSample(row)) fallbackCount += 1;
+      if (isRetrySample(row)) retryCount += 1;
+      if (isCacheHitSample(row)) cacheHitCount += 1;
+      else workDurations.push(row.durationMs);
+      if (isSharedWaitSample(row)) sharedWaitCount += 1;
     }
     const latest = rows[rows.length - 1];
     return {
@@ -161,15 +198,33 @@ export function getPerformanceSnapshot({ windowMs = DEFAULT_WINDOW_MS, limit = 2
       slowRate: rounded((slowCount / Math.max(1, rows.length)) * 100),
       fallbackCount,
       fallbackRate: rounded((fallbackCount / Math.max(1, rows.length)) * 100),
+      retryCount,
+      retryRate: rounded((retryCount / Math.max(1, rows.length)) * 100),
+      cacheHitCount,
+      cacheHitRate: rounded((cacheHitCount / Math.max(1, rows.length)) * 100),
+      sharedWaitCount,
+      sharedWaitRate: rounded((sharedWaitCount / Math.max(1, rows.length)) * 100),
+      workCount: workDurations.length,
       sourceBreakdown,
       avgMs: rounded(total / Math.max(1, rows.length)),
       p50Ms: rounded(percentile(durations, 0.5)),
       p95Ms: rounded(percentile(durations, 0.95)),
       maxMs: rounded(Math.max(...durations)),
+      workP50Ms: rounded(percentile(workDurations, 0.5)),
+      workP95Ms: rounded(percentile(workDurations, 0.95)),
+      workMaxMs: rounded(workDurations.length ? Math.max(...workDurations) : 0),
       lastAt: latest.at,
       lastMeta: latest.meta,
     };
   }).sort((a, b) => (b.p95Ms - a.p95Ms) || (b.avgMs - a.avgMs) || (b.count - a.count));
+
+  // Cache hits can legitimately be near-zero and may hide expensive cold/miss
+  // work when they dominate the sample window. Keep the established `operations`
+  // ordering for compatibility, and expose a second view that ranks only samples
+  // which actually performed work.
+  const tailOperations = [...operations]
+    .filter((row) => row.workCount > 0)
+    .sort((a, b) => (b.workP95Ms - a.workP95Ms) || (b.workMaxMs - a.workMaxMs) || (b.p95Ms - a.p95Ms));
 
   const slowest = [...samples]
     .sort((a, b) => b.durationMs - a.durationMs)
@@ -191,10 +246,10 @@ export function getPerformanceSnapshot({ windowMs = DEFAULT_WINDOW_MS, limit = 2
     slowThresholdMs: thresholdMs,
     slowSamples: samples.filter((sample) => sample.durationMs >= thresholdMs).length,
     failedSamples: samples.filter((sample) => !sample.ok).length,
-    fallbackSamples: samples.filter((sample) => {
-      const source = shortText(sample?.meta?.source || "");
-      return /legacy|fallback|recovery/.test(`${sample.category} ${sample.name} ${source}`.toLowerCase());
-    }).length,
+    fallbackSamples: samples.filter(isFallbackSample).length,
+    retriedSamples: samples.filter(isRetrySample).length,
+    cacheHitSamples: samples.filter(isCacheHitSample).length,
+    sharedWaitSamples: samples.filter(isSharedWaitSample).length,
   };
 
   return {
@@ -206,10 +261,12 @@ export function getPerformanceSnapshot({ windowMs = DEFAULT_WINDOW_MS, limit = 2
     health,
     categories,
     operations: operations.slice(0, maxRows),
+    tailOperations: tailOperations.slice(0, maxRows),
     slowest,
     notes: [
       "Metrics are process-local and intentionally contain no query values, cookies, user IDs, or request bodies.",
       "On serverless deployments each warm instance keeps its own rolling window, so this is a diagnostic sample rather than a global APM report.",
+      "tailOperations excludes completed cache-hit samples so cold/miss/shared-wait latency is not hidden by near-zero cache hits.",
     ],
   };
 }

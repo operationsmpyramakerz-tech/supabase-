@@ -7,7 +7,7 @@ import {
   loadStocktakingFolderSummariesRpc,
   noteStocktakingFolderSummaryRpcError,
 } from "./stocktaking-folder-summary-rpc";
-import { getSupabaseConfig, selectAll, storagePublicUrl } from "./supabase-rest";
+import { getSupabaseConfig, selectAll, selectById, storagePublicUrl } from "./supabase-rest";
 
 const STOCK_ROWS_CACHE_TTL_MS = 20_000;
 const STOCK_SCHEMA_CACHE_TTL_MS = 5 * 60_000;
@@ -341,7 +341,7 @@ async function loadStockRows({ fresh = false } = {}) {
   const now = Date.now();
   if (!fresh && stockRowsCache && stockRowsCache.expiresAt > now) return stockRowsCache.value;
   if (!fresh && stockRowsInflight) return await stockRowsInflight;
-  const pending = selectAll(stocktakingTable(), { limit: 5000, order: "name.asc,id.asc" });
+  const pending = selectAll(stocktakingTable(), { limit: 5000, order: "name.asc,id.asc", profileName: "stocktaking.rows-full-fallback" });
   if (!fresh) stockRowsInflight = pending;
   try {
     const loaded = await pending;
@@ -394,7 +394,7 @@ async function loadStockSchemaKeys({ fresh = false } = {}) {
   if (!fresh && stockSchemaCache && stockSchemaCache.expiresAt > now) return stockSchemaCache.value;
   if (!fresh && stockSchemaInflight) return await stockSchemaInflight;
 
-  const pending = selectAll(stocktakingTable(), { limit: 1 });
+  const pending = selectAll(stocktakingTable(), { limit: 1, profileName: "stocktaking.schema-sample" });
   if (!fresh) stockSchemaInflight = pending;
   try {
     const sampleRows = await pending;
@@ -426,6 +426,7 @@ async function loadStockProjection(keys = [], { fresh = false } = {}) {
     limit: 5000,
     select: selectExpr,
     order: hasName ? `name.asc${hasId ? ",id.asc" : ""}` : "",
+    profileName: "stocktaking.rows-projection",
   });
   if (!fresh) stockProjectionInflight.set(cacheKey, pending);
   try {
@@ -653,18 +654,34 @@ export async function listStocktakingProducts({ fresh = false } = {}) {
 }
 
 export async function stocktakingForAccount(account = {}, { fresh = false } = {}) {
-  const [memberRowsLite, schemaKeys] = await Promise.all([
-    listTeamMembersLite({ fresh }),
+  // Direct-session accounts already carry the canonical Supabase Team Member id.
+  // Use that indexed lookup first instead of downloading the whole Team Members
+  // directory just to identify the current user's Stocktaking school/column.
+  // Older/legacy account payloads keep the established directory + full-row
+  // compatibility fallbacks below.
+  const memberId = text(account.teamMemberId || account.userSupabaseId || account.id || account.userId);
+  const [directMember, schemaKeys] = await Promise.all([
+    memberId
+      ? selectById(teamMembersTable(), memberId, { profileName: "stocktaking.member-by-id" }).catch(() => null)
+      : Promise.resolve(null),
     loadStockSchemaKeys({ fresh }).catch(() => []),
   ]);
 
-  let member = (memberRowsLite || []).find((row) => accountMatchesMember(account, row)) || null;
+  let member = directMember && accountMatchesMember(account, directMember) ? directMember : null;
+  if (!member) {
+    const memberRowsLite = await listTeamMembersLite({ fresh });
+    member = (memberRowsLite || []).find((row) => accountMatchesMember(account, row)) || null;
+  }
   // Old/customized Team Members schemas may only be matchable by email or a
   // legacy username column omitted from the lightweight directory. Keep the
   // full-row lookup as a narrow compatibility fallback instead of paying for
   // it on every Stocktaking request.
   if (!member) {
-    const memberRows = await selectAll(teamMembersTable(), { limit: 5000, order: "name.asc,id.asc" });
+    const memberRows = await selectAll(teamMembersTable(), {
+      limit: 5000,
+      order: "name.asc,id.asc",
+      profileName: "stocktaking.member-directory-fallback",
+    });
     member = (memberRows || []).find((row) => accountMatchesMember(account, row)) || null;
   }
   const schoolName = text(member?.stocktakingColumn) || text(valueFor(member || {}, ["School", "school", "Stocktaking Column", "stocktaking_column"]));
