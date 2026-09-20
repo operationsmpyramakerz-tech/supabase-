@@ -479,7 +479,7 @@ function ProductCard({ product, menuOpen, onMenu, onEdit, onDelete, onImage }) {
   // stored images server-side, and can discover a preview from the product URL.
   // This avoids broken legacy redirects/hot-link protection in the browser.
   const imagePreviewUrl = product.id
-    ? `/next/api/products/${encodeURIComponent(product.id)}/image`
+    ? `/next/api/products/image?id=${encodeURIComponent(product.id)}`
     : product.imageUrl || "";
   return (
     <article className="product-card">
