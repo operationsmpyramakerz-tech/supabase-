@@ -294,14 +294,12 @@ function OrderReviewCard({ group, activeTab, onOpen, onCreator }) {
           <div className="co-title">{group.orderIdLabel}</div>
           <div className="next-review-order-meta"><span className="co-sub">{formatDate(group.latestCreated)}</span></div>
         </div>
-        <div className="co-qty">x{group.items.length}</div>
-      </div>
-      <div className="co-divider" />
-      <div className="co-bottom">
-        <div className="co-est"><div className="co-est-label">Estimate Total</div><div className="co-est-value">{formatMoney(group.total)}</div></div>
-        <div className="co-actions">
-          {mixed ? <MixedStatusPill /> : <ApprovalPill approval={state} />}
-          <button className="co-right-ico co-creator-btn next-review-creator-btn" type="button" aria-label={`Created by ${group.createdByName || "Creator"}`} title={`Created by ${group.createdByName || "Creator"}`} onClick={(event) => { event.preventDefault(); event.stopPropagation(); onCreator(event.currentTarget, group); }}><ClassicOrderIcon name="user" /></button>
+        <div className="next-review-card-head-actions">
+          <div className="next-review-card-status">{mixed ? <MixedStatusPill /> : <ApprovalPill approval={state} />}</div>
+          <button className="co-creator-btn next-review-creator-btn" type="button" aria-label={`Created by ${group.createdByName || "Creator"}`} title={`Created by ${group.createdByName || "Creator"}`} onClick={(event) => { event.preventDefault(); event.stopPropagation(); onCreator(event.currentTarget, group); }}>
+            <span className="next-review-creator-label">{group.createdByName || "—"}</span>
+            <span className="next-review-creator-icon"><ClassicOrderIcon name="user" /></span>
+          </button>
         </div>
       </div>
     </article>

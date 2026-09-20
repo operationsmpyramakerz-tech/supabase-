@@ -9091,3 +9091,340 @@ html.ops-has-persistent-profile .classic-app-shell .main-header .next-stable-loa
   }
 }
 
+/* ========================================================================
+   Orders Review — match Operations Orders cards + keep details viewport-safe
+   2026-09-20
+   ===================================================================== */
+body.orders-review-page .next-classic-orders-parity .next-review-order-card {
+  padding-top: 10px !important;
+  padding-bottom: 10px !important;
+}
+
+body.orders-review-page .next-classic-orders-parity .next-review-order-card .co-top {
+  display: grid !important;
+  grid-template-columns: auto minmax(0, 1fr) auto !important;
+  align-items: center !important;
+  gap: 11px !important;
+  min-height: 66px !important;
+}
+
+body.orders-review-page .next-classic-orders-parity .next-review-order-card .co-main {
+  min-width: 0 !important;
+  align-self: center !important;
+}
+
+body.orders-review-page .next-classic-orders-parity .next-review-order-card .co-qty,
+body.orders-review-page .next-classic-orders-parity .next-review-order-card .co-divider,
+body.orders-review-page .next-classic-orders-parity .next-review-order-card .co-bottom {
+  display: none !important;
+}
+
+body.orders-review-page .next-classic-orders-parity .next-review-card-head-actions {
+  min-width: 112px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 5px;
+  margin-left: auto;
+}
+
+body.orders-review-page .next-classic-orders-parity .next-review-card-status {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+body.orders-review-page .next-classic-orders-parity .next-review-card-head-actions .co-status-btn,
+body.orders-review-page .next-classic-orders-parity .next-review-card-head-actions .sv-mixed-approval-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  height: 30px;
+  min-height: 30px;
+  margin: 0;
+  padding: 0 11px;
+  border-radius: 999px;
+  font-size: 9.5px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: none;
+}
+
+body.orders-review-page .next-classic-orders-parity .next-review-order-card .next-review-creator-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 0 !important;
+  width: auto !important;
+  min-width: 34px !important;
+  height: 34px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  background: transparent !important;
+  color: #fff !important;
+  overflow: visible !important;
+  box-shadow: none !important;
+}
+
+body.orders-review-page .next-classic-orders-parity .next-review-order-card .next-review-creator-label {
+  display: flex;
+  align-items: center;
+  height: 30px;
+  max-width: 150px;
+  margin-right: -11px;
+  padding: 0 20px 0 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-radius: 999px 4px 4px 999px;
+  background: #020617;
+  color: #fff;
+  font-size: 9.5px;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: 0 7px 16px rgba(2, 6, 23, .12);
+}
+
+body.orders-review-page .next-classic-orders-parity .next-review-order-card .next-review-creator-icon {
+  position: relative;
+  z-index: 1;
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  border: 2px solid #fff !important;
+  border-radius: 50% !important;
+  background: #020617;
+  color: #fff;
+  box-shadow: 0 7px 16px rgba(2, 6, 23, .16);
+}
+
+body.orders-review-page .next-classic-orders-parity .next-review-order-card .next-review-creator-icon svg {
+  display: block;
+  width: 15px;
+  height: 15px;
+  margin: 0 !important;
+  transform: none !important;
+}
+
+/* The review dialog used to let the component action row define the modal's
+   horizontal size. Keep every layer shrinkable and let long names wrap instead. */
+body.orders-review-page .next-classic-orders-parity .next-review-order-modal {
+  box-sizing: border-box !important;
+  width: min(900px, calc(100vw - 36px)) !important;
+  max-width: 900px !important;
+  max-height: min(88dvh, 900px) !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+}
+
+body.orders-review-page .next-classic-orders-parity .next-review-order-modal :is(
+  .co-modal-header,
+  .next-review-order-modal-summary,
+  .co-track-pill,
+  .co-modal-body,
+  .co-modal-meta,
+  .co-modal-actions,
+  .co-modal-items,
+  .order-component-groups,
+  .order-component-group,
+  .order-component-group__items,
+  .next-review-order-item,
+  .co-item-left,
+  .co-item-right,
+  .co-item-title
+) {
+  min-width: 0 !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+body.orders-review-page .next-classic-orders-parity .next-review-order-modal .order-modal-search-actions {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 8px !important;
+}
+
+body.orders-review-page .next-classic-orders-parity .next-review-order-modal .next-review-order-item {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) minmax(250px, auto) !important;
+  align-items: center !important;
+  gap: 12px !important;
+  width: 100% !important;
+}
+
+body.orders-review-page .next-classic-orders-parity .next-review-order-modal .co-item-left {
+  width: 100% !important;
+}
+
+body.orders-review-page .next-classic-orders-parity .next-review-order-modal .co-item-title .co-item-name {
+  white-space: normal !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
+}
+
+body.orders-review-page .next-classic-orders-parity .next-review-order-modal .co-item-right {
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  display: grid !important;
+  grid-template-columns: auto auto !important;
+  align-items: center !important;
+  justify-content: end !important;
+  gap: 6px 8px !important;
+  text-align: right !important;
+  flex-shrink: 1 !important;
+}
+
+body.orders-review-page .next-classic-orders-parity .next-review-order-modal .next-review-item-actions {
+  grid-column: 1 / -1;
+  width: auto !important;
+  max-width: 100% !important;
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 6px !important;
+}
+
+body.orders-review-page .next-classic-orders-parity .next-review-order-modal .next-review-action-btn {
+  min-width: 0 !important;
+  white-space: nowrap !important;
+}
+
+body.orders-review-page .next-classic-orders-parity .next-review-order-modal .next-classic-qty-editor {
+  grid-column: 1 / -1;
+  max-width: 100% !important;
+}
+
+@media (max-width: 900px) {
+  body.orders-review-page .next-classic-orders-parity .next-review-order-modal {
+    width: min(720px, calc(100vw - 28px)) !important;
+  }
+
+  body.orders-review-page .next-classic-orders-parity .next-review-order-modal .next-review-order-item {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 8px !important;
+  }
+
+  body.orders-review-page .next-classic-orders-parity .next-review-order-modal .co-item-right {
+    width: 100% !important;
+    grid-template-columns: auto auto minmax(0, 1fr) !important;
+    justify-content: start !important;
+    text-align: left !important;
+  }
+
+  body.orders-review-page .next-classic-orders-parity .next-review-order-modal .next-review-item-actions {
+    grid-column: 1 / -1;
+    width: 100% !important;
+  }
+}
+
+@media (max-width: 768px) {
+  body.orders-review-page .next-classic-orders-parity .next-review-order-card {
+    padding: 9px 10px !important;
+    border-radius: 18px !important;
+    box-shadow: 0 8px 20px rgba(15, 23, 42, .055) !important;
+  }
+
+  body.orders-review-page .next-classic-orders-parity .next-review-order-card .co-top {
+    grid-template-columns: 46px minmax(0, 1fr) auto !important;
+    gap: 9px !important;
+    min-height: 62px !important;
+  }
+
+  body.orders-review-page .next-classic-orders-parity .next-review-order-card .co-thumb {
+    width: 46px !important;
+    height: 46px !important;
+    border-radius: 14px !important;
+  }
+
+  body.orders-review-page .next-classic-orders-parity .next-review-order-card .co-thumb svg {
+    width: 21px !important;
+    height: 21px !important;
+  }
+
+  body.orders-review-page .next-classic-orders-parity .next-review-order-card .co-title {
+    font-size: 16px !important;
+    line-height: 1.08 !important;
+  }
+
+  body.orders-review-page .next-classic-orders-parity .next-review-order-card .next-review-card-head-actions {
+    min-width: 92px !important;
+    max-width: 138px !important;
+    gap: 4px !important;
+  }
+
+  body.orders-review-page .next-classic-orders-parity .next-review-card-head-actions .co-status-btn,
+  body.orders-review-page .next-classic-orders-parity .next-review-card-head-actions .sv-mixed-approval-pill {
+    height: 27px !important;
+    min-height: 27px !important;
+    padding: 0 9px !important;
+    font-size: 8.5px !important;
+  }
+
+  body.orders-review-page .next-classic-orders-parity .next-review-order-card .next-review-creator-btn {
+    min-width: 31px !important;
+    height: 31px !important;
+  }
+
+  body.orders-review-page .next-classic-orders-parity .next-review-order-card .next-review-creator-label {
+    height: 27px !important;
+    max-width: 112px !important;
+    margin-right: -10px !important;
+    padding: 0 18px 0 9px !important;
+    font-size: 8.5px !important;
+  }
+
+  body.orders-review-page .next-classic-orders-parity .next-review-order-card .next-review-creator-icon {
+    width: 31px !important;
+    min-width: 31px !important;
+    height: 31px !important;
+  }
+
+  body.orders-review-page .next-classic-orders-parity .next-review-order-modal {
+    width: min(560px, calc(100vw - 32px)) !important;
+    max-width: 560px !important;
+  }
+
+  body.orders-review-page .next-classic-orders-parity .next-review-order-modal .co-item-right {
+    display: grid !important;
+    grid-template-columns: auto auto !important;
+    align-items: center !important;
+    justify-content: start !important;
+    gap: 6px 8px !important;
+  }
+
+  body.orders-review-page .next-classic-orders-parity .next-review-order-modal .next-review-item-actions {
+    grid-column: 1 / -1;
+    width: 100% !important;
+  }
+}
+
+@media (max-width: 520px) {
+  body.orders-review-page .next-classic-orders-parity .next-review-order-card .next-review-card-head-actions {
+    min-width: 88px !important;
+    max-width: 122px !important;
+  }
+
+  body.orders-review-page .next-classic-orders-parity .next-review-order-card .next-review-creator-label {
+    max-width: 96px !important;
+  }
+
+  body.orders-review-page .next-classic-orders-parity .next-review-order-modal .next-review-item-actions {
+    grid-template-columns: 1fr !important;
+  }
+
+  body.orders-review-page .next-classic-orders-parity .next-review-order-modal .next-review-action-btn {
+    width: 100% !important;
+  }
+}
