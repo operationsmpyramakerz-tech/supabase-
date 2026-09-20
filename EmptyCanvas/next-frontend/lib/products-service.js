@@ -6,6 +6,7 @@ import {
   storagePublicUrl,
   insert,
   selectAll,
+  selectById,
   updateById,
   updateByIds,
   uploadStorageObject,
@@ -187,6 +188,91 @@ function cleanImageUrl(value) {
   return cleanUrl(value);
 }
 
+
+
+function pushUniqueUrl(target, value) {
+  const clean = cleanImageUrl(value);
+  if (!clean) return;
+  if (!target.some((item) => item === clean)) target.push(clean);
+}
+
+function collectImageLikeUrls(value, target, depth = 0) {
+  if (depth > 5 || value === null || typeof value === "undefined") return;
+  if (Array.isArray(value)) {
+    for (const item of value) collectImageLikeUrls(item, target, depth + 1);
+    return;
+  }
+  if (typeof value === "object") {
+    const preferredKeys = [
+      "url", "publicUrl", "public_url", "src", "source", "href",
+      "image", "imageUrl", "image_url", "photo", "photoUrl", "photo_url",
+      "picture", "thumbnail", "cover", "coverUrl", "cover_url",
+      "external", "file", "files", "attachments",
+    ];
+    for (const key of preferredKeys) {
+      if (Object.prototype.hasOwnProperty.call(value, key)) collectImageLikeUrls(value[key], target, depth + 1);
+    }
+    return;
+  }
+
+  const raw = text(value);
+  if (!raw || /^null$/i.test(raw)) return;
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && parsed !== raw) {
+      collectImageLikeUrls(parsed, target, depth + 1);
+      if (target.length) return;
+    }
+  } catch {}
+
+  // Dedicated image fields can contain an absolute URL, a data URL, or just a
+  // Supabase Storage object path. cleanImageUrl resolves all three forms.
+  pushUniqueUrl(target, raw);
+}
+
+function productRowImageCandidates(row = {}) {
+  const urls = [];
+  const exactAliases = [
+    "image_url", "Image URL", "image", "Image", "product_image", "Product Image",
+    "product_photo", "Product Photo", "photo", "Photo", "picture", "Picture",
+    "thumbnail", "Thumbnail", "thumbnail_url", "Thumbnail URL",
+    "cover", "Cover", "cover_url", "Cover URL", "cover_image", "Cover Image",
+    "cover_image_url", "Cover Image URL", "icon", "Icon", "attachments", "Attachments",
+    "files", "Files",
+  ];
+
+  for (const alias of exactAliases) {
+    if (Object.prototype.hasOwnProperty.call(row || {}, alias)) {
+      collectImageLikeUrls(row[alias], urls);
+    }
+  }
+
+  // Custom/migrated schemas sometimes kept the original Notion file property
+  // under a different name. Inspect only columns whose names clearly describe
+  // image/file media so normal product links are never mistaken for images.
+  for (const [key, value] of Object.entries(row || {})) {
+    const normalized = norm(key).replace(/[^a-z0-9]+/g, "");
+    if (!/(image|photo|picture|thumbnail|cover|attachment|file)/.test(normalized)) continue;
+    collectImageLikeUrls(value, urls);
+  }
+
+  return urls;
+}
+
+export async function getProductImageSources(productId) {
+  const id = text(productId);
+  if (!id) return null;
+  const { productsTable } = getSupabaseConfig();
+  const row = await selectById(productsTable, id, { profileName: "products.image-source" });
+  if (!row) return null;
+  const product = serializeProduct(row);
+  return {
+    id,
+    name: product.name,
+    pageUrl: product.url || cleanUrl(pick(row, ["url", "URL", "product_url", "Product URL", "link", "Link", "website", "Website"])),
+    imageUrls: productRowImageCandidates(row),
+  };
+}
 function serializeProduct(row = {}) {
   return {
     id: text(pick(row, ["id", "ID"])),

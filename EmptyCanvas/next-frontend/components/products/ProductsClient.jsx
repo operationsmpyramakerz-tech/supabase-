@@ -474,14 +474,12 @@ function TagModal({ mode, tag, onClose, onSaved }) {
 }
 
 function ProductCard({ product, menuOpen, onMenu, onEdit, onDelete, onImage }) {
-  // Most of the migrated catalogue rows do not store a dedicated image_url.
-  // The legacy product-image endpoint already knows how to use image_url when
-  // present and otherwise discover the preview image from the product URL.
-  // Keep using that same authenticated endpoint so the Next catalogue retains
-  // the images that were visible before the migration.
-  const hasImageSource = !!(product.imageUrl || product.url);
-  const imagePreviewUrl = hasImageSource && product.id
-    ? `/api/products/${encodeURIComponent(product.id)}/image`
+  // Resolve product images through the Next image endpoint itself. It reads the
+  // complete Supabase row (including migrated/custom image fields), proxies
+  // stored images server-side, and can discover a preview from the product URL.
+  // This avoids broken legacy redirects/hot-link protection in the browser.
+  const imagePreviewUrl = product.id
+    ? `/next/api/products/${encodeURIComponent(product.id)}/image`
     : product.imageUrl || "";
   return (
     <article className="product-card">
