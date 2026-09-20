@@ -25127,32 +25127,79 @@ function _eventsPhotoFileName(value = '') {
   return name.slice(0, 120);
 }
 
-async function _eventsComponentPhotoUrl(body = {}, { existingUrl = '' } = {}) {
-  if (_eventsBoolean(body?.removePhoto || body?.remove_photo)) return null;
-  const dataUrl = String(body?.photoDataUrl || body?.photo_data_url || '').trim();
-  if (!dataUrl) return _eventsHttpUrl(existingUrl, 2000) || null;
+function _eventsComponentPhotoUrlList(value, fallbackUrl = '') {
+  const values = [..._eventsArray(value)];
+  if (fallbackUrl) values.unshift(fallbackUrl);
+  const seen = new Set();
+  const urls = [];
+  for (const value of values) {
+    const url = _eventsHttpUrl(value, 2000);
+    if (!url || seen.has(url)) continue;
+    seen.add(url);
+    urls.push(url);
+    if (urls.length >= 8) break;
+  }
+  return urls;
+}
 
-  const { mime, buf } = parseDataUrlToBuffer(dataUrl);
-  if (!/^image\/(png|jpeg|webp|gif)$/i.test(String(mime || ''))) {
-    const error = new Error('Component photo must be a PNG, JPG, WEBP, or GIF image.');
+async function _eventsComponentPhotoUrls(body = {}, { existingUrls = [], existingUrl = '' } = {}) {
+  if (_eventsBoolean(body?.removePhoto || body?.remove_photo)) return [];
+
+  const hasExplicitExisting = Object.prototype.hasOwnProperty.call(body || {}, 'existingPhotoUrls')
+    || Object.prototype.hasOwnProperty.call(body || {}, 'existing_photo_urls');
+  const hasMultiUpload = Object.prototype.hasOwnProperty.call(body || {}, 'photoDataUrls')
+    || Object.prototype.hasOwnProperty.call(body || {}, 'photo_data_urls');
+  const singleDataUrl = String(body?.photoDataUrl || body?.photo_data_url || '').trim();
+
+  let retained = hasExplicitExisting
+    ? _eventsComponentPhotoUrlList(body?.existingPhotoUrls ?? body?.existing_photo_urls)
+    : _eventsComponentPhotoUrlList(existingUrls, existingUrl);
+
+  // Keep the legacy one-photo API behavior: selecting a new single photo
+  // replaces the previous photo instead of appending to it.
+  if (!hasMultiUpload && !hasExplicitExisting && singleDataUrl) retained = [];
+
+  const dataUrls = _eventsArray(body?.photoDataUrls ?? body?.photo_data_urls)
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+  if (singleDataUrl && !dataUrls.length) dataUrls.push(singleDataUrl);
+  const fileNames = _eventsArray(body?.photoFileNames ?? body?.photo_file_names);
+  if (!fileNames.length && (body?.photoFileName || body?.photo_file_name)) fileNames.push(body?.photoFileName || body?.photo_file_name);
+
+  if (retained.length + dataUrls.length > 8) {
+    const error = new Error('An event component can contain up to 8 photos.');
     error.status = 400;
     throw error;
   }
-  if (buf.length > 8 * 1024 * 1024) {
-    const error = new Error('Component photo must be 8 MB or less.');
-    error.status = 413;
-    throw error;
+
+  const uploaded = [];
+  for (let index = 0; index < dataUrls.length; index += 1) {
+    const dataUrl = dataUrls[index];
+    const { mime, buf } = parseDataUrlToBuffer(dataUrl);
+    if (!/^image\/(png|jpeg|webp|gif)$/i.test(String(mime || ''))) {
+      const error = new Error('Component photos must be PNG, JPG, WEBP, or GIF images.');
+      error.status = 400;
+      throw error;
+    }
+    if (buf.length > 8 * 1024 * 1024) {
+      const error = new Error('Each component photo must be 8 MB or less.');
+      error.status = 413;
+      throw error;
+    }
+
+    const original = _eventsPhotoFileName(fileNames[index] || `component-photo-${index + 1}`);
+    const objectPath = `events/components/${Date.now()}-${index}-${Math.random().toString(16).slice(2)}-${original}`;
+    uploaded.push(await uploadToBlobFromBase64(dataUrl, objectPath));
   }
 
-  const original = _eventsPhotoFileName(body?.photoFileName || body?.photo_file_name);
-  const objectPath = `events/components/${Date.now()}-${Math.random().toString(16).slice(2)}-${original}`;
-  return await uploadToBlobFromBase64(dataUrl, objectPath);
+  return _eventsComponentPhotoUrlList([...retained, ...uploaded]);
 }
 
 function _eventsSerializeComponent(row = {}) {
   const ownershipType = _eventsNormalizeComponentOwnership(row?.ownership_type || row?.ownershipType);
   const operatingCost = _eventsCost(row?.operating_cost ?? row?.operatingCost, 0);
   const rentalCost = ownershipType === 'external_rental' ? _eventsCost(row?.rental_cost ?? row?.rentalCost, 0) : 0;
+  const photoUrls = _eventsComponentPhotoUrlList(row?.photo_urls || row?.photoUrls, row?.photo_url || row?.photoUrl || '');
   return {
     id: String(row?.id || ''),
     name: _eventsText(row?.name, 180),
@@ -25163,7 +25210,8 @@ function _eventsSerializeComponent(row = {}) {
     operatingCost,
     rentalCost,
     unitCost: _eventsComponentUnitCost(ownershipType, operatingCost, rentalCost),
-    photoUrl: _eventsHttpUrl(row?.photo_url || row?.photoUrl, 2000),
+    photoUrl: photoUrls[0] || '',
+    photoUrls,
     linkUrl: _eventsHttpUrl(row?.link_url || row?.linkUrl, 1000),
     isActive: row?.is_active !== false,
     createdAt: row?.created_at || null,
@@ -25437,6 +25485,9 @@ function _eventsModuleMissingError(error) {
   if (/SUPABASE_STORAGE_OR_BLOB_TOKEN_MISSING|SUPABASE_STORAGE_PUBLIC_URL_MISSING/i.test(raw)) {
     return 'Photo upload is not configured. Add SUPABASE_STORAGE_BUCKET in Vercel, or add BLOB_READ_WRITE_TOKEN as a fallback.';
   }
+  if (/photo_urls|PGRST204/i.test(raw)) {
+    return 'Multiple event component photos are not installed yet. Run supabase_event_component_photos.sql in Supabase.';
+  }
   return /event_components|event_type_catalog|event_component_category_catalog|event_governorate_transport_rates|events|relation .* does not exist|Could not find the table|PGRST205|42P01|schema cache/i.test(raw)
     ? 'Events tables are not installed. Run the latest Events component categories SQL migration in Supabase first.'
     : raw || 'Events request failed.';
@@ -25480,6 +25531,34 @@ app.get('/api/events/components', requireAuth, requirePage(['Event Requests', 'E
     return res.json({ ok: true, components: (Array.isArray(rows) ? rows : []).map(_eventsSerializeComponent) });
   } catch (error) {
     console.error('GET /api/events/components error:', error?.details || error);
+    return res.status(error?.status || 500).json({ ok: false, error: _eventsModuleMissingError(error) });
+  }
+});
+
+app.post('/api/events/components/photo-upload', requireAuth, requirePage('Event Components'), async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    const componentId = _eventsUuid(req.body?.componentId || req.body?.component_id);
+    const canUpload = _hasEventComponentsAdminAccess(req)
+      || (componentId ? _hasEventsComponentEditAccess(req, componentId) : _hasEventsComponentCreateAccess(req));
+    if (!canUpload) return res.status(403).json({ ok: false, error: 'Admin authorization is required to upload event component photos.' });
+
+    const dataUrl = String(req.body?.dataUrl || req.body?.data_url || '').trim();
+    if (!dataUrl) return res.status(400).json({ ok: false, error: 'Choose an image first.' });
+    const { mime, buf } = parseDataUrlToBuffer(dataUrl);
+    if (!/^image\/(png|jpeg|webp|gif)$/i.test(String(mime || ''))) {
+      return res.status(400).json({ ok: false, error: 'Component photos must be PNG, JPG, WEBP, or GIF images.' });
+    }
+    if (buf.length > 8 * 1024 * 1024) {
+      return res.status(413).json({ ok: false, error: 'Each component photo must be 8 MB or less.' });
+    }
+
+    const original = _eventsPhotoFileName(req.body?.fileName || req.body?.file_name);
+    const objectPath = `events/components/${Date.now()}-${Math.random().toString(16).slice(2)}-${original}`;
+    const url = await uploadToBlobFromBase64(dataUrl, objectPath);
+    return res.status(201).json({ ok: true, url });
+  } catch (error) {
+    console.error('POST /api/events/components/photo-upload error:', error?.details || error);
     return res.status(error?.status || 500).json({ ok: false, error: _eventsModuleMissingError(error) });
   }
 });
@@ -25568,7 +25647,7 @@ app.post('/api/events/components', requireAuth, requirePage('Event Components'),
     if (!_hasEventsComponentCreateAccess(req)) return res.status(403).json({ ok: false, error: 'Admin authorization is required to add an event component.' });
     const name = _eventsText(req.body?.name, 180);
     if (!name) return res.status(400).json({ ok: false, error: 'Component name is required.' });
-    const photoUrl = await _eventsComponentPhotoUrl(req.body || {});
+    const photoUrls = await _eventsComponentPhotoUrls(req.body || {});
     const linkUrl = _eventsHttpUrl(req.body?.linkUrl || req.body?.link_url, 1000);
     if (String(req.body?.linkUrl || req.body?.link_url || '').trim() && !linkUrl) {
       return res.status(400).json({ ok: false, error: 'Link must start with http:// or https://.' });
@@ -25582,7 +25661,8 @@ app.post('/api/events/components', requireAuth, requirePage('Event Components'),
       ownership_type: _eventsNormalizeComponentOwnership(req.body?.ownershipType || req.body?.ownership_type),
       operating_cost: _eventsCost(req.body?.operatingCost ?? req.body?.operating_cost, 0),
       rental_cost: _eventsNormalizeComponentOwnership(req.body?.ownershipType || req.body?.ownership_type) === 'external_rental' ? _eventsCost(req.body?.rentalCost ?? req.body?.rental_cost, 0) : 0,
-      photo_url: photoUrl,
+      photo_url: photoUrls[0] || null,
+      photo_urls: photoUrls,
       link_url: linkUrl || null,
       is_active: req.body?.isActive !== false,
     });
@@ -25604,7 +25684,10 @@ app.patch('/api/events/components/:id', requireAuth, requirePage('Event Componen
     if (!name) return res.status(400).json({ ok: false, error: 'Component name is required.' });
     const existing = await supabaseDb.selectById(_sbEventComponentsTable(), id);
     if (!existing) return res.status(404).json({ ok: false, error: 'Event component was not found.' });
-    const photoUrl = await _eventsComponentPhotoUrl(req.body || {}, { existingUrl: existing?.photo_url || existing?.photoUrl || '' });
+    const photoUrls = await _eventsComponentPhotoUrls(req.body || {}, {
+      existingUrls: existing?.photo_urls || existing?.photoUrls || [],
+      existingUrl: existing?.photo_url || existing?.photoUrl || '',
+    });
     const linkUrl = _eventsHttpUrl(req.body?.linkUrl || req.body?.link_url, 1000);
     if (String(req.body?.linkUrl || req.body?.link_url || '').trim() && !linkUrl) {
       return res.status(400).json({ ok: false, error: 'Link must start with http:// or https://.' });
@@ -25618,7 +25701,8 @@ app.patch('/api/events/components/:id', requireAuth, requirePage('Event Componen
       ownership_type: _eventsNormalizeComponentOwnership(req.body?.ownershipType || req.body?.ownership_type),
       operating_cost: _eventsCost(req.body?.operatingCost ?? req.body?.operating_cost, 0),
       rental_cost: _eventsNormalizeComponentOwnership(req.body?.ownershipType || req.body?.ownership_type) === 'external_rental' ? _eventsCost(req.body?.rentalCost ?? req.body?.rental_cost, 0) : 0,
-      photo_url: photoUrl,
+      photo_url: photoUrls[0] || null,
+      photo_urls: photoUrls,
       link_url: linkUrl || null,
       is_active: req.body?.isActive !== false,
     });

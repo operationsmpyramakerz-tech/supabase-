@@ -51,6 +51,7 @@ const EVENT_COMPONENT_LIST_SELECT = [
   "operating_cost",
   "rental_cost",
   "photo_url",
+  "photo_urls",
   "link_url",
   "is_active",
   "created_at",
@@ -307,6 +308,14 @@ function serializeComponent(row = {}) {
   const ownershipType = normalizeOwnership(row?.ownership_type || row?.ownershipType);
   const operatingCost = money(row?.operating_cost ?? row?.operatingCost, 0);
   const rentalCost = ownershipType === "external_rental" ? money(row?.rental_cost ?? row?.rentalCost, 0) : 0;
+  const photoUrls = [];
+  const seenPhotos = new Set();
+  for (const value of [row?.photo_url || row?.photoUrl, ...array(row?.photo_urls || row?.photoUrls)]) {
+    const url = httpUrl(value, 2000);
+    if (!url || seenPhotos.has(url)) continue;
+    seenPhotos.add(url);
+    photoUrls.push(url);
+  }
   return {
     id: String(row?.id || ""),
     name: text(row?.name, 180),
@@ -317,7 +326,8 @@ function serializeComponent(row = {}) {
     operatingCost,
     rentalCost,
     unitCost: componentUnitCost(ownershipType, operatingCost, rentalCost),
-    photoUrl: httpUrl(row?.photo_url || row?.photoUrl, 2000),
+    photoUrl: photoUrls[0] || "",
+    photoUrls,
     linkUrl: httpUrl(row?.link_url || row?.linkUrl, 1000),
     isActive: row?.is_active !== false,
     createdAt: row?.created_at || null,

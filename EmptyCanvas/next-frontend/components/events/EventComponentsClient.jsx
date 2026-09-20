@@ -35,10 +35,7 @@ const EMPTY_FORM = {
   linkUrl: "",
   description: "",
   isActive: true,
-  photoDataUrl: "",
-  photoFileName: "",
-  existingPhotoUrl: "",
-  removePhoto: false,
+  existingPhotoUrls: [],
 };
 
 function text(value) {
@@ -214,21 +211,21 @@ function Toast({ toast, onClose }) {
   );
 }
 
-function ComponentFormModal({ mode, form, categories, busy, error, onChange, onPhoto, onClose, onSubmit }) {
+function ComponentFormModal({ mode, form, categories, busy, error, onChange, onPhoto, onRemovePhoto, onClose, onSubmit }) {
   if (!mode) return null;
   const external = form.ownershipType === "external_rental";
-  const preview = form.removePhoto ? "" : (form.photoDataUrl || form.existingPhotoUrl);
   const unitCost = Math.max(0, number(form.operatingCost)) + (external ? Math.max(0, number(form.rentalCost)) : 0);
   const isNewCategory = form.category === "__new__";
+  const existingPhotos = Array.isArray(form.existingPhotoUrls) ? form.existingPhotoUrls.filter(Boolean) : [];
+  const photos = existingPhotos.map((src, index) => ({ src, kind: "existing", index }));
 
   return (
     <div className="events-modal-overlay next-modal-layer" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
       <form className="events-modal events-modal--form next-modal next-event-component-form" onSubmit={onSubmit}>
-        <header className="events-modal__header next-events-modal-head">
-          <div>
-            <span className="next-events-kicker">Catalogue record</span>
+        <header className="events-modal__header next-events-modal-head next-event-component-form-head">
+          <div className="next-event-component-form-title">
+            <span className="next-event-component-form-icon"><EventIcon name="box" /></span>
             <h2>{mode === "create" ? "Add Event Component" : "Edit Event Component"}</h2>
-            <p>Define its category, source, default quantity, costs, photo, and availability.</p>
           </div>
           <button type="button" className="events-modal__close next-modal-close" onClick={onClose} disabled={busy} aria-label="Close">×</button>
         </header>
@@ -256,7 +253,6 @@ function ComponentFormModal({ mode, form, categories, busy, error, onChange, onP
             <label className="next-field wide next-event-component-new-category">
               <span>New category name *</span>
               <input value={form.customCategory} maxLength={80} onChange={(event) => onChange("customCategory", event.target.value)} placeholder="Example: Safety Equipment" required />
-              <small>The category will be saved when the component is saved.</small>
             </label>
           ) : null}
 
@@ -296,28 +292,28 @@ function ComponentFormModal({ mode, form, categories, busy, error, onChange, onP
             <textarea rows="4" maxLength={2000} value={form.description} onChange={(event) => onChange("description", event.target.value)} placeholder="Brief description or preparation notes" />
           </label>
 
-          <div className="next-event-component-photo-field wide">
-            <div>
-              <span>Component photo</span>
-              <small>PNG, JPG, WEBP, or GIF. Images are compressed before upload.</small>
+          <div className="next-event-component-photo-field next-event-component-photo-field--modern wide">
+            <div className="next-event-component-photo-heading">
+              <span>Component photos</span>
+              {photos.length ? <b>{photos.length} photo{photos.length === 1 ? "" : "s"}</b> : null}
             </div>
-            <div className="next-event-component-photo-layout">
-              <div className={`next-event-component-photo-preview${preview ? " has-image" : ""}`}>
-                {preview ? <img src={preview} alt="Component preview" /> : <span>Photo preview</span>}
+            <label className="next-event-component-photo-dropzone">
+              <span className="next-event-component-photo-dropzone__icon"><EventIcon name="image" /></span>
+              <strong>{photos.length ? "Add more photos" : "Choose photos"}</strong>
+              <span className="next-event-component-photo-dropzone__action">Browse</span>
+              <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple onChange={onPhoto} hidden />
+            </label>
+            {photos.length ? (
+              <div className="next-event-component-photo-grid">
+                {photos.map((photo, photoIndex) => (
+                  <figure className="next-event-component-photo-thumb" key={`${photo.kind}-${photo.index}-${photo.src.slice(0, 24)}`}>
+                    <img src={photo.src} alt={`Component photo ${photoIndex + 1}`} />
+                    {photoIndex === 0 ? <span className="next-event-component-photo-primary">Card photo</span> : null}
+                    <button type="button" onClick={() => onRemovePhoto(photo.kind, photo.index)} aria-label={`Remove photo ${photoIndex + 1}`}>×</button>
+                  </figure>
+                ))}
               </div>
-              <div className="next-event-component-photo-actions">
-                <label className="events-secondary-btn secondary-button">
-                  Choose image
-                  <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={onPhoto} hidden />
-                </label>
-                {(form.existingPhotoUrl || form.photoDataUrl) && !form.removePhoto ? (
-                  <button type="button" className="danger-button" onClick={() => onChange("removePhoto", true)}>Remove photo</button>
-                ) : null}
-                {form.removePhoto ? (
-                  <button type="button" className="events-secondary-btn secondary-button" onClick={() => onChange("removePhoto", false)}>Keep current photo</button>
-                ) : null}
-              </div>
-            </div>
+            ) : null}
           </div>
 
           <label className="next-event-component-checkbox wide">
@@ -332,7 +328,7 @@ function ComponentFormModal({ mode, form, categories, busy, error, onChange, onP
           <span />
           <div>
             <button type="button" className="events-secondary-btn secondary-button" onClick={onClose} disabled={busy}>Cancel</button>
-            <button type="submit" className="events-primary-btn primary-button" disabled={busy}>{busy ? "Saving..." : mode === "create" ? "Save Component" : "Save Changes"}</button>
+            <button type="submit" className="events-primary-btn primary-button" disabled={busy}>{busy ? "Working..." : mode === "create" ? "Save Component" : "Save Changes"}</button>
           </div>
         </footer>
       </form>
@@ -396,8 +392,11 @@ function DeleteModal({ component, busy, error, onClose, onConfirm }) {
   );
 }
 
-function ComponentCard({ component, categoryLabel, canEdit, canDelete, onEdit, onDelete }) {
-  const photo = safeUrl(component?.photoUrl);
+function ComponentCard({ component, categoryLabel, canEdit, canDelete, onEdit, onDelete, onOpenPhotos }) {
+  const photos = (Array.isArray(component?.photoUrls) ? component.photoUrls : [component?.photoUrl])
+    .map(safeUrl)
+    .filter(Boolean);
+  const photo = photos[0] || "";
   const link = safeUrl(component?.linkUrl);
   const external = component?.ownershipType === "external_rental";
   const operating = Math.max(0, number(component?.operatingCost));
@@ -412,9 +411,14 @@ function ComponentCard({ component, categoryLabel, canEdit, canDelete, onEdit, o
         <span className={`events-status ${active ? "events-status--approved" : "events-status--cancelled"}`}>{active ? "Active" : "Inactive"}</span>
       </div>
 
-      <div className="events-component-card__photo">
-        {photo ? <img src={photo} alt={`${component?.name || "Event component"} photo`} loading="lazy" /> : <EventIcon name="box" />}
-      </div>
+      {photo ? (
+        <button type="button" className="events-component-card__photo events-component-card__photo-button" onClick={() => onOpenPhotos(component)} aria-label={`Open ${component?.name || "component"} photos`}>
+          <img src={photo} alt={`${component?.name || "Event component"} photo`} loading="lazy" />
+          {photos.length > 1 ? <span className="events-component-card__photo-count">+{photos.length - 1}</span> : null}
+        </button>
+      ) : (
+        <div className="events-component-card__photo"><EventIcon name="box" /></div>
+      )}
 
       <div className="events-component-card__body">
         <h3 title={component?.name || ""}>{component?.name || "Untitled component"}</h3>
@@ -448,6 +452,46 @@ function ComponentCard({ component, categoryLabel, canEdit, canDelete, onEdit, o
   );
 }
 
+function AddNewComponentCard({ onClick }) {
+  return (
+    <button type="button" className="events-component-add-new" onClick={onClick}>
+      <span className="events-component-add-new__copy">
+        <strong>Add new</strong>
+        <small>Create a new event component</small>
+      </span>
+      <span className="events-component-add-new__plus"><EventIcon name="plus-circle" /></span>
+    </button>
+  );
+}
+
+function PhotoGalleryModal({ component, onClose }) {
+  if (!component) return null;
+  const photos = (Array.isArray(component?.photoUrls) ? component.photoUrls : [component?.photoUrl])
+    .map(safeUrl)
+    .filter(Boolean);
+  if (!photos.length) return null;
+  return (
+    <div className="events-modal-overlay next-modal-layer" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <section className="events-modal next-modal next-event-component-gallery" role="dialog" aria-modal="true" aria-label={`${component?.name || "Event component"} photos`}>
+        <header className="events-modal__header next-events-modal-head next-event-component-gallery__head">
+          <div>
+            <h2>{component?.name || "Event Component"}</h2>
+            <span>{photos.length} photo{photos.length === 1 ? "" : "s"}</span>
+          </div>
+          <button type="button" className="events-modal__close next-modal-close" onClick={onClose} aria-label="Close">×</button>
+        </header>
+        <div className="next-event-component-gallery__grid">
+          {photos.map((src, index) => (
+            <a href={src} target="_blank" rel="noreferrer" className="next-event-component-gallery__item" key={`${src}-${index}`}>
+              <img src={src} alt={`${component?.name || "Event component"} photo ${index + 1}`} />
+            </a>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 export default function EventComponentsClient({ account, initialComponents, initialCategories, initialCreate = false, bootstrapWarnings = [] }) {
   const [components, setComponents] = useState(Array.isArray(initialComponents) ? initialComponents : []);
   const [categories, setCategories] = useState(normalizeCategories(initialCategories));
@@ -468,6 +512,7 @@ export default function EventComponentsClient({ account, initialComponents, init
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState("");
   const [toast, setToast] = useState(null);
+  const [galleryTarget, setGalleryTarget] = useState(null);
   const initialCreateHandled = useRef(false);
 
   useEffect(() => {
@@ -550,7 +595,7 @@ export default function EventComponentsClient({ account, initialComponents, init
       linkUrl: text(component?.linkUrl),
       description: text(component?.description),
       isActive: component?.isActive !== false,
-      existingPhotoUrl: text(component?.photoUrl),
+      existingPhotoUrls: (Array.isArray(component?.photoUrls) ? component.photoUrls : [component?.photoUrl]).map(safeUrl).filter(Boolean),
     };
   }
 
@@ -605,24 +650,47 @@ export default function EventComponentsClient({ account, initialComponents, init
   }
 
   async function handlePhoto(event) {
-    const file = event.target.files?.[0];
+    const files = Array.from(event.target.files || []);
     event.target.value = "";
-    if (!file) return;
+    if (!files.length) return;
+    const currentCount = Array.isArray(form.existingPhotoUrls) ? form.existingPhotoUrls.length : 0;
+    if (currentCount + files.length > 8) {
+      setFormError("You can attach up to 8 photos to one component.");
+      return;
+    }
     setFormBusy(true);
     setFormError("");
     try {
-      const prepared = await compressImage(file);
-      setForm((current) => ({
-        ...current,
-        photoDataUrl: prepared.dataUrl,
-        photoFileName: prepared.fileName,
-        removePhoto: false,
-      }));
+      for (const file of files) {
+        const prepared = await compressImage(file);
+        const payload = await requestJson("/api/events/components/photo-upload", {
+          method: "POST",
+          body: JSON.stringify({
+            componentId: form.id || "",
+            dataUrl: prepared.dataUrl,
+            fileName: prepared.fileName,
+          }),
+        });
+        const url = safeUrl(payload?.url || payload?.photoUrl);
+        if (!url) throw new Error("The uploaded image did not return a valid URL.");
+        setForm((current) => ({
+          ...current,
+          existingPhotoUrls: [...(Array.isArray(current.existingPhotoUrls) ? current.existingPhotoUrls : []), url],
+        }));
+      }
     } catch (error) {
-      setFormError(error?.message || "Could not prepare the image.");
+      setFormError(error?.message || "Could not upload the selected images.");
     } finally {
       setFormBusy(false);
     }
+  }
+
+  function removeFormPhoto(kind, index) {
+    setForm((current) => ({
+      ...current,
+      existingPhotoUrls: (current.existingPhotoUrls || []).filter((_, itemIndex) => itemIndex !== index),
+    }));
+    setFormError("");
   }
 
   async function refreshCategories() {
@@ -664,9 +732,7 @@ export default function EventComponentsClient({ account, initialComponents, init
         ownershipType: form.ownershipType === "external_rental" ? "external_rental" : "company_owned",
         operatingCost: Math.max(0, number(form.operatingCost)),
         rentalCost: form.ownershipType === "external_rental" ? Math.max(0, number(form.rentalCost)) : 0,
-        photoDataUrl: form.photoDataUrl || "",
-        photoFileName: form.photoFileName || "",
-        removePhoto: !!form.removePhoto,
+        existingPhotoUrls: Array.isArray(form.existingPhotoUrls) ? form.existingPhotoUrls : [],
         linkUrl: link,
         description: text(form.description),
         isActive: !!form.isActive,
@@ -721,18 +787,6 @@ export default function EventComponentsClient({ account, initialComponents, init
       <Toast toast={toast} onClose={() => setToast(null)} />
 
       <section className="events-panel events-components-workspace">
-        <div className="events-panel__header events-components-workspace__header events-components-workspace__header--actions-only">
-          <h3 className="events-visually-hidden">Event Components</h3>
-          <input className="events-global-search-bridge" type="search" aria-label="Search event components" tabIndex={-1} readOnly />
-          <div className="events-list-controls events-components-workspace__controls">
-            {canEdit ? (
-              <button type="button" className="events-primary-btn" onClick={() => requestForm("create")}>
-                <EventIcon name="plus-circle" /><span>Add Event Component</span>
-              </button>
-            ) : null}
-          </div>
-        </div>
-
         <div className="events-orders-toolbar events-component-filters-toolbar" aria-label="Event component filters">
           <div className="events-orders-toolbar__scroll">
             <div className="events-orders-tabs" role="tablist" aria-label="Event component categories">
@@ -799,23 +853,24 @@ export default function EventComponentsClient({ account, initialComponents, init
           </div>
         </div>
 
-        {filtered.length ? (
-          <div className="events-component-cards" aria-live="polite">
-            {filtered.map((component) => (
-              <ComponentCard
-                component={component}
-                categoryLabel={categoryMap.get(text(component?.category)) || "Other"}
-                canEdit={canEdit}
-                canDelete={canDelete}
-                onEdit={(item) => requestForm("edit", item)}
-                onDelete={setDeleteTarget}
-                key={component?.id || component?.name}
-              />
-            ))}
-          </div>
-        ) : (
-          <div className="events-empty events-component-cards__empty"><EventIcon name="layers" /><span>No event components match this view.</span></div>
-        )}
+        <div className="events-component-cards" aria-live="polite">
+          {canEdit ? <AddNewComponentCard onClick={() => requestForm("create")} /> : null}
+          {filtered.map((component) => (
+            <ComponentCard
+              component={component}
+              categoryLabel={categoryMap.get(text(component?.category)) || "Other"}
+              canEdit={canEdit}
+              canDelete={canDelete}
+              onEdit={(item) => requestForm("edit", item)}
+              onDelete={setDeleteTarget}
+              onOpenPhotos={setGalleryTarget}
+              key={component?.id || component?.name}
+            />
+          ))}
+          {!filtered.length ? (
+            <div className="events-empty events-component-cards__empty"><EventIcon name="layers" /><span>No event components match this view.</span></div>
+          ) : null}
+        </div>
       </section>
 
       <ComponentFormModal
@@ -826,9 +881,12 @@ export default function EventComponentsClient({ account, initialComponents, init
         error={formError}
         onChange={patchForm}
         onPhoto={handlePhoto}
+        onRemovePhoto={removeFormPhoto}
         onClose={() => { if (!formBusy) { setFormMode(""); setFormError(""); } }}
         onSubmit={submitForm}
       />
+
+      <PhotoGalleryModal component={galleryTarget} onClose={() => setGalleryTarget(null)} />
 
       <AuthorizationModal
         authorization={authorization}

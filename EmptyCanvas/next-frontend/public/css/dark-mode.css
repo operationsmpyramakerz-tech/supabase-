@@ -1472,3 +1472,22 @@ html[data-theme="dark"] body .task-management-secondary-sidebar__link.is-active 
   color: #ffffff !important;
   stroke: #ffffff !important;
 }
+
+/* Event Components multi-photo editor + inline Add new card. */
+html[data-theme="dark"] body.events-page .events-component-add-new{
+  background:linear-gradient(145deg,#151925,#1a1830)!important;
+  border-color:#4c3f79!important;color:#f8fafc!important;box-shadow:0 15px 32px rgba(0,0,0,.2)!important;
+}
+html[data-theme="dark"] body.events-page .events-component-add-new__copy small{color:#aab4c4!important;}
+html[data-theme="dark"] body.events-page .next-event-component-form-head,
+html[data-theme="dark"] body.events-page .next-event-component-form>.next-events-modal-actions,
+html[data-theme="dark"] body.events-page .next-event-component-gallery__head{background:#11161f!important;border-color:#2b3544!important;}
+html[data-theme="dark"] body.events-page .next-event-component-form-title h2{color:#f8fafc!important;}
+html[data-theme="dark"] body.events-page .next-event-component-photo-field--modern,
+html[data-theme="dark"] body.events-page .next-event-component-photo-dropzone,
+html[data-theme="dark"] body.events-page .next-event-component-checkbox,
+html[data-theme="dark"] body.events-page .next-event-component-gallery__grid{background:#151b25!important;border-color:#2b3544!important;}
+html[data-theme="dark"] body.events-page .next-event-component-photo-dropzone strong,
+html[data-theme="dark"] body.events-page .next-event-component-photo-heading>span{color:#e5e7eb!important;}
+html[data-theme="dark"] body.events-page .next-event-component-photo-thumb,
+html[data-theme="dark"] body.events-page .next-event-component-gallery__item{background:#0f141c!important;border-color:#2b3544!important;}
