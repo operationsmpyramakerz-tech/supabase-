@@ -7,6 +7,7 @@ export const revalidate = 0;
 
 const RPC_PROBES = [
   { name: "erp_order_candidate_numbers", args: { p_options: { probe: true, context: "__probe__", limit: 1 } } },
+  { name: "erp_order_card_summaries", args: { p_options: { probe: true, context: "__probe__", orderNumbers: [] } } },
   { name: "erp_order_summary_rows", args: { p_options: { probe: true, context: "__probe__", orderNumbers: [] } } },
   { name: "erp_order_summary_bundle", args: { p_options: { probe: true, context: "__probe__", orderNumbers: [] } } },
   { name: "erp_home_order_groups", args: { p_options: { probe: true, includeCurrent: false, includeReview: false, includeApproved: false } } },

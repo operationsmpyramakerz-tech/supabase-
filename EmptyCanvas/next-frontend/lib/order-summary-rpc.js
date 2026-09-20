@@ -4,6 +4,7 @@ import { rpc } from "./supabase-rest";
 
 const RPC_NAME = "erp_order_summary_rows";
 const BUNDLE_RPC_NAME = "erp_order_summary_bundle";
+const CARD_RPC_NAME = "erp_order_card_summaries";
 const MISSING_COOLDOWN_MS = 60 * 1000;
 const ERROR_COOLDOWN_MS = 60 * 1000;
 // PostgREST commonly caps one RPC response at 1000 rows. Large proposal
@@ -19,6 +20,7 @@ const DEFAULT_BUNDLE_TIMEOUT_MS = 4500;
 const DEFAULT_ROW_BATCH_CONCURRENCY = 4;
 let disabledUntil = 0;
 let bundleDisabledUntil = 0;
+let cardDisabledUntil = 0;
 
 function text(value) {
   return String(value ?? "").trim();
@@ -132,6 +134,86 @@ function normalizeBundleRows(data) {
   return [];
 }
 
+
+function normalizeCardRows(rows = []) {
+  return (Array.isArray(rows) ? rows : []).map((row) => {
+    const rawIds = row?.order_ids ?? row?.orderIds ?? [];
+    let orderIds = [];
+    if (Array.isArray(rawIds)) orderIds = rawIds;
+    else if (typeof rawIds === "string" && rawIds.trim()) {
+      try {
+        const parsed = JSON.parse(rawIds);
+        if (Array.isArray(parsed)) orderIds = parsed;
+      } catch {}
+    }
+    return {
+      orderNumber: Number.isFinite(Number(row?.order_number ?? row?.orderNumber)) ? Number(row?.order_number ?? row?.orderNumber) : null,
+      orderIds: [...new Set(orderIds.map((value) => text(value)).filter(Boolean))],
+      createdTime: text(row?.created_time ?? row?.createdTime),
+      teamMemberId: text(row?.team_member_id ?? row?.teamMemberId),
+      teamMemberName: text(row?.team_member_name ?? row?.teamMemberName),
+      reason: text(row?.reason),
+      orderType: text(row?.order_type ?? row?.orderType),
+      stage: Number.isFinite(Number(row?.stage)) ? Number(row.stage) : 1,
+      hasRemaining: Boolean(row?.has_remaining ?? row?.hasRemaining),
+      hasReceived: Boolean(row?.has_received ?? row?.hasReceived),
+      hasApproved: Boolean(row?.has_approved ?? row?.hasApproved),
+      hasRejected: Boolean(row?.has_rejected ?? row?.hasRejected),
+      approvalState: text(row?.approval_state ?? row?.approvalState) || "not-started",
+      archived: Boolean(row?.archived),
+    };
+  }).filter((row) => Number.isFinite(row.orderNumber) && row.orderIds.length);
+}
+
+export function canUseOrderCardSummaryRpc() {
+  return Date.now() >= cardDisabledUntil;
+}
+
+export function noteOrderCardSummaryRpcError(error) {
+  const missing = missingNamedRpc(error, CARD_RPC_NAME);
+  cardDisabledUntil = Date.now() + (missing ? MISSING_COOLDOWN_MS : ERROR_COOLDOWN_MS);
+  return missing;
+}
+
+/**
+ * Card-only fast path for Orders Review / Operations Orders. The closed list
+ * cards do not render component rows; details are loaded lazily on open. This
+ * RPC therefore returns one aggregate row per order plus the component IDs
+ * needed by the existing details endpoint.
+ */
+export async function loadOrderCardSummariesRpc({
+  numbers = [],
+  context = "operations",
+  tab = "all",
+  visibleIds = [],
+  visibleNames = [],
+  profileName = "orders.card-summary-rpc",
+  signal = null,
+} = {}) {
+  const orderNumbers = cleanNumbers(numbers);
+  if (!orderNumbers.length) return [];
+
+  try {
+    const rows = await rpc(CARD_RPC_NAME, {
+      p_options: {
+        orderNumbers,
+        context: text(context).toLowerCase(),
+        tab: text(tab).toLowerCase(),
+        visibleIds: [...new Set((Array.isArray(visibleIds) ? visibleIds : []).map(text).filter(Boolean))],
+        visibleNames: [...new Set((Array.isArray(visibleNames) ? visibleNames : []).map(text).filter(Boolean))],
+      },
+    }, {
+      profileName: text(profileName) || "orders.card-summary-rpc",
+      timeoutMs: 5_000,
+      signal,
+    });
+    return normalizeCardRows(rows);
+  } catch (error) {
+    noteOrderCardSummaryRpcError(error);
+    throw error;
+  }
+}
+
 async function loadSummaryBundleBatch(orderNumbers, { profileName, signal } = {}) {
   const response = await rpc(BUNDLE_RPC_NAME, {
     p_options: { orderNumbers },
@@ -222,6 +304,7 @@ export const __orderSummaryRpcTest = {
   missingRpc,
   normalizeSummaryRows,
   normalizeBundleRows,
+  normalizeCardRows,
   chunk,
   mapConcurrent,
 };

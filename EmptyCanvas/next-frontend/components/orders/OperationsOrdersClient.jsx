@@ -296,12 +296,13 @@ function buildGroups(rows) {
     const reasons = group.items.map((item) => text(item?.reason)).filter(Boolean);
     const counts = reasons.reduce((acc, reason) => acc.set(reason, (acc.get(reason) || 0) + 1), new Map());
     const reason = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "No reason";
-    const stage = Math.max(...group.items.map((item) => statusIndex(item?.status)), 1);
+    const summaryItem = group.items.find((item) => item?._summaryCard);
+    const stage = summaryItem ? (Number(summaryItem._groupStage) || statusIndex(summaryItem.status)) : Math.max(...group.items.map((item) => statusIndex(item?.status)), 1);
     const decisions = group.items.map(itemDecision);
-    const hasApproved = decisions.includes("approved");
-    const hasRejected = decisions.includes("rejected");
-    const hasRemaining = group.items.some((item) => Math.abs(remainingQuantity(item)) > 1e-9);
-    const hasReceived = group.items.some((item) => Math.abs(receivedQuantity(item)) > 1e-9);
+    const hasApproved = summaryItem ? Boolean(summaryItem._groupHasApproved) : decisions.includes("approved");
+    const hasRejected = summaryItem ? Boolean(summaryItem._groupHasRejected) : decisions.includes("rejected");
+    const hasRemaining = summaryItem ? Boolean(summaryItem._groupHasRemaining) : group.items.some((item) => Math.abs(remainingQuantity(item)) > 1e-9);
+    const hasReceived = summaryItem ? Boolean(summaryItem._groupHasReceived) : group.items.some((item) => Math.abs(receivedQuantity(item)) > 1e-9);
     const receiptEntries = [];
     const receiptSeen = new Set();
     group.items.flatMap(receiptEntriesFromItem).forEach((entry) => {
@@ -332,7 +333,7 @@ function buildGroups(rows) {
       hasRemaining,
       hasReceived,
       orderIdLabel: orderIdLabel(group.items),
-      orderIds: group.items.map((item) => text(item?.id)).filter(Boolean),
+      orderIds: [...new Set(group.items.flatMap((item) => Array.isArray(item?.orderIds) && item.orderIds.length ? item.orderIds : [item?.id]).map(text).filter(Boolean))],
       total: group.items.reduce((sum, item) => sum + itemTotal(item), 0),
       receivedTotal: group.items.reduce((sum, item) => sum + Math.abs(receivedQuantity(item)) * Math.abs(finite(item?.unitPrice)), 0),
       remainingTotal: group.items.reduce((sum, item) => sum + Math.abs(remainingQuantity(item)) * Math.abs(finite(item?.unitPrice)), 0),

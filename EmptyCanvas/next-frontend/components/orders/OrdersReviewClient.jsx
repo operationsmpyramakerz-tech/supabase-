@@ -185,9 +185,9 @@ function buildGroups(rows) {
     const counts = reasons.reduce((acc, reason) => acc.set(reason, (acc.get(reason) || 0) + 1), new Map());
     const reason = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "No reason";
     return {
-      ...group, reason, orderIdLabel: orderIdLabel(group.items), orderIds: group.items.map((item) => text(item?.id)).filter(Boolean),
-      total: group.items.reduce((sum, item) => sum + itemTotal(item), 0), approval: dominantApproval(group.items),
-      archived: group.items.length > 0 && group.items.every(isArchived),
+      ...group, reason, orderIdLabel: orderIdLabel(group.items), orderIds: [...new Set(group.items.flatMap((item) => Array.isArray(item?.orderIds) && item.orderIds.length ? item.orderIds : [item?.id]).map(text).filter(Boolean))],
+      total: group.items.reduce((sum, item) => sum + itemTotal(item), 0), approval: group.items.find((item) => item?._summaryCard)?._groupApproval || dominantApproval(group.items),
+      archived: group.items.find((item) => item?._summaryCard) ? Boolean(group.items.find((item) => item?._summaryCard)?._groupArchived) : (group.items.length > 0 && group.items.every(isArchived)),
     };
   }).sort((a, b) => dateValue(b.latestCreated) - dateValue(a.latestCreated));
 }

@@ -5,7 +5,7 @@ import { enrichOrderDetailGrouping, loadRawOrderRowsByIds, serializeReviewOrderD
 import { consumeOrderSummaryWindows, loadOrderRowsByNumbers, scanOrderNumberCandidates } from "./order-pagination";
 import { applyOrderSearchPlan, canUseOrderSearchText, createOrderSearchPlan, noteOrderSearchTextError } from "./order-search-hotpath";
 import { canUseOrderCandidateRpc, loadOrderCandidateNumbersRpc, noteOrderCandidateRpcError } from "./order-candidate-rpc";
-import { canUseOrderSummaryRpc, loadOrderSummaryRowsRpc, noteOrderSummaryRpcError } from "./order-summary-rpc";
+import { canUseOrderCardSummaryRpc, canUseOrderSummaryRpc, loadOrderCardSummariesRpc, loadOrderSummaryRowsRpc, noteOrderCardSummaryRpcError, noteOrderSummaryRpcError } from "./order-summary-rpc";
 import { getReviewerVisibility as reviewerVisibility } from "./reviewer-visibility-service";
 import { measurePerformance, recordPerformanceSample } from "./performance-profiler";
 
@@ -389,7 +389,70 @@ async function candidateNumbers({ cursor = null, scanGroups = 90, filters = {}, 
   });
 }
 
-async function rowsByNumbers(numbers = [], signal = null, includeLocalSearchFields = false) {
+function reviewStageStatus(stage) {
+  const value = Number(stage) || 1;
+  if (value >= 5) return "Archive";
+  if (value === 4) return "Delivered";
+  if (value === 3) return "Shipped";
+  if (value === 2) return "In progress";
+  return "Pending";
+}
+
+function reviewCardSummaryItem(row = {}, tab = "all") {
+  const orderIds = Array.isArray(row?.orderIds) ? row.orderIds.map(text).filter(Boolean) : [];
+  const orderNumber = Number(row?.orderNumber);
+  const cleanTab = String(tab || "all").trim().toLowerCase().replace(/[\s_]+/g, "-");
+  const approvalState = cleanTab === "approved" || cleanTab === "rejected" || cleanTab === "not-started"
+    ? cleanTab
+    : (text(row?.approvalState).toLowerCase() || "not-started");
+  const approval = approvalState === "approved" ? "Approved" : approvalState === "rejected" ? "Rejected" : approvalState === "mixed" ? "Mixed" : "Not Started";
+  return {
+    id: orderIds[0] || `summary-${Number.isFinite(orderNumber) ? orderNumber : "order"}`,
+    orderIds,
+    teamMemberId: text(row?.teamMemberId) || text(row?.teamMemberName) || null,
+    createdById: text(row?.teamMemberId) || text(row?.teamMemberName) || null,
+    createdByName: text(row?.teamMemberName) || null,
+    orderId: Number.isFinite(orderNumber) ? `ORD-${orderNumber}` : null,
+    orderIdNumber: Number.isFinite(orderNumber) ? orderNumber : null,
+    reason: text(row?.reason) || "No Reason",
+    unitPrice: 0,
+    quantity: 1,
+    quantityRequested: 1,
+    quantityEdited: null,
+    status: reviewStageStatus(row?.stage),
+    approval,
+    approvalColor: approvalColor(approval),
+    orderType: text(row?.orderType) || null,
+    orderTypeColor: orderTypeColor(row?.orderType),
+    createdTime: dateValue(row?.createdTime) || new Date().toISOString(),
+    summaryOnly: true,
+    source: "supabase",
+    _summaryCard: true,
+    _summaryTab: cleanTab,
+    _groupApproval: approvalState,
+    _groupArchived: Boolean(row?.archived),
+  };
+}
+
+async function rowsByNumbers(numbers = [], signal = null, includeLocalSearchFields = false, { tab = "all", visible = null } = {}) {
+  if (!includeLocalSearchFields && canUseOrderCardSummaryRpc()) {
+    try {
+      const rows = await loadOrderCardSummariesRpc({
+        numbers,
+        context: "review",
+        tab,
+        visibleIds: visible?.ids || [],
+        visibleNames: visible?.queryNames || visible?.names || [],
+        profileName: "orders.review.card-summary-rpc",
+        signal,
+      });
+      return rows.map((row) => reviewCardSummaryItem(row, tab));
+    } catch (error) {
+      if (signal?.aborted || error?.code === "REQUEST_ABORTED" || error?.name === "AbortError") throw error;
+      noteOrderCardSummaryRpcError(error);
+    }
+  }
+
   if (canUseOrderSummaryRpc()) {
     try {
       return await loadOrderSummaryRowsRpc({
@@ -418,7 +481,7 @@ function groupRows(rows = [], includeLocalSearchFields = false) {
   const startedAt = performance.now();
   const groups = new Map();
   for (const row of rows) {
-    const item = serializeReviewCompactRow(row, { includeSearchText: includeLocalSearchFields });
+    const item = row?._summaryCard ? row : serializeReviewCompactRow(row, { includeSearchText: includeLocalSearchFields });
     const orderNumber = Number(item.orderIdNumber);
     if (!Number.isFinite(orderNumber)) continue;
     if (!groups.has(orderNumber)) groups.set(orderNumber, []);
@@ -559,11 +622,12 @@ export async function loadOrdersReviewPage({
     const windowResult = await consumeOrderSummaryWindows({
       numbers: candidates.numbers,
       remainingGroups: safeLimit - outputGroups.length,
-      loadRows: (numbers, loadSignal) => rowsByNumbers(numbers, loadSignal, localSearchFallback),
+      loadRows: (numbers, loadSignal) => rowsByNumbers(numbers, loadSignal, localSearchFallback, { tab: cleanTab, visible }),
       profileName: "orders.review.summary-window",
       signal,
       consumeRows: ({ numbers, rows }) => {
         const allowedRows = rows.filter((row) => {
+          if (row?._summaryCard) return true;
           if (!visibleToReviewer(row, visible)) return false;
           const issueDescription = text(row?.issue_description ?? valueFor(row, ["issue_description", "Issue Description"]));
           if (/^created from proposal:/i.test(issueDescription)) return false;

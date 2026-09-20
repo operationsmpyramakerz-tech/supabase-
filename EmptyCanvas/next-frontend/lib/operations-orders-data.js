@@ -8,7 +8,7 @@ import { invalidateStocktakingReadCaches } from "./stocktaking-data";
 import { consumeOrderSummaryWindows, loadOrderRowsByNumbers, scanOrderNumberCandidates } from "./order-pagination";
 import { applyOrderSearchPlan, canUseOrderSearchText, createOrderSearchPlan, noteOrderSearchTextError } from "./order-search-hotpath";
 import { canUseOrderCandidateRpc, loadOrderCandidateNumbersRpc, noteOrderCandidateRpcError } from "./order-candidate-rpc";
-import { canUseOrderSummaryRpc, loadOrderSummaryRowsRpc, noteOrderSummaryRpcError } from "./order-summary-rpc";
+import { canUseOrderCardSummaryRpc, canUseOrderSummaryRpc, loadOrderCardSummariesRpc, loadOrderSummaryRowsRpc, noteOrderCardSummaryRpcError, noteOrderSummaryRpcError } from "./order-summary-rpc";
 import { measurePerformance, recordPerformanceSample } from "./performance-profiler";
 
 const PAGE_LIMIT = 36;
@@ -363,6 +363,15 @@ function decision(item = {}) {
 }
 
 function groupMeta(items = []) {
+  const summary = items.find((item) => item?._summaryCard);
+  if (summary) {
+    return {
+      stage: Number(summary._groupStage) || statusIndex(summary.status),
+      hasRemaining: Boolean(summary._groupHasRemaining),
+      hasReceived: Boolean(summary._groupHasReceived),
+      maintenance: orderTypeKey(summary.orderType) === "requestmaintenance",
+    };
+  }
   const stage = Math.max(1, ...items.map((item) => statusIndex(item?.status)));
   const hasRemaining = items.some((item) => Math.abs(Number(item?.quantityRemaining ?? item?.quantity_remaining ?? 0) || 0) > 1e-9);
   const hasReceived = items.some((item) => Math.abs(Number(item?.quantityReceived ?? item?.quantity_received_by_operations ?? 0) || 0) > 1e-9);
@@ -373,6 +382,8 @@ function groupMeta(items = []) {
 
 function groupMatchesTab(items = [], tab = "all") {
   const cleanTab = String(tab || "all").trim().toLowerCase();
+  const summary = items.find((item) => item?._summaryCard);
+  if (summary && summary._summaryTab === cleanTab) return true;
   if (cleanTab === "approved" || cleanTab === "rejected") {
     return items.some((item) => statusIndex(item?.status) === 2 && decision(item) === cleanTab);
   }
@@ -387,6 +398,7 @@ function groupMatchesTab(items = [], tab = "all") {
 
 function rowsForTab(items = [], tab = "all") {
   const cleanTab = String(tab || "all").trim().toLowerCase();
+  if (items.some((item) => item?._summaryCard)) return items;
   if (cleanTab === "approved" || cleanTab === "rejected") {
     return items.filter((item) => statusIndex(item?.status) === 2 && decision(item) === cleanTab);
   }
@@ -496,7 +508,72 @@ async function candidateNumbers({ cursor = null, scanGroups = 90, filters = {}, 
   });
 }
 
-async function rowsByNumbers(numbers = [], signal = null, includeLocalSearchFields = false) {
+function stageStatus(stage) {
+  const value = Number(stage) || 1;
+  if (value >= 5) return "Archive";
+  if (value === 4) return "Delivered";
+  if (value === 3) return "Shipped";
+  if (value === 2) return "In progress";
+  return "Pending";
+}
+
+function operationsCardSummaryItem(row = {}, tab = "all") {
+  const orderIds = Array.isArray(row?.orderIds) ? row.orderIds.map(text).filter(Boolean) : [];
+  const orderNumber = Number(row?.orderNumber);
+  const cleanTab = String(tab || "all").trim().toLowerCase();
+  const hasApproved = Boolean(row?.hasApproved);
+  const hasRejected = Boolean(row?.hasRejected);
+  return {
+    id: orderIds[0] || `summary-${Number.isFinite(orderNumber) ? orderNumber : "order"}`,
+    orderIds,
+    orderId: Number.isFinite(orderNumber) ? `ORD-${orderNumber}` : null,
+    orderIdNumber: Number.isFinite(orderNumber) ? orderNumber : null,
+    reason: text(row?.reason) || "No Reason",
+    unitPrice: 0,
+    quantityRequested: 1,
+    quantityEditedBySupervisor: null,
+    quantityReceived: row?.hasReceived ? 1 : 0,
+    quantityRemaining: row?.hasRemaining ? 1 : 0,
+    quantityReceivedEdited: Boolean(row?.hasReceived),
+    quantity: 1,
+    status: stageStatus(row?.stage),
+    orderType: text(row?.orderType) || null,
+    orderTypeColor: orderTypeColor(row?.orderType),
+    operationsApproval: cleanTab === "rejected" ? "Rejected" : cleanTab === "approved" ? "Approved" : (hasRejected && !hasApproved ? "Rejected" : hasApproved && !hasRejected ? "Approved" : null),
+    rejectedReason: null,
+    createdTime: dateValue(row?.createdTime) || new Date().toISOString(),
+    createdById: text(row?.teamMemberId) || text(row?.teamMemberName) || null,
+    createdByName: text(row?.teamMemberName) || null,
+    svApproval: cleanTab === "rejected" ? "Rejected" : cleanTab === "approved" ? "Approved" : null,
+    summaryOnly: true,
+    source: "supabase",
+    _summaryCard: true,
+    _summaryTab: cleanTab,
+    _groupStage: Number(row?.stage) || 1,
+    _groupHasRemaining: Boolean(row?.hasRemaining),
+    _groupHasReceived: Boolean(row?.hasReceived),
+    _groupHasApproved: hasApproved,
+    _groupHasRejected: hasRejected,
+  };
+}
+
+async function rowsByNumbers(numbers = [], signal = null, includeLocalSearchFields = false, { tab = "all" } = {}) {
+  if (!includeLocalSearchFields && canUseOrderCardSummaryRpc()) {
+    try {
+      const rows = await loadOrderCardSummariesRpc({
+        numbers,
+        context: "operations",
+        tab,
+        profileName: "orders.operations.card-summary-rpc",
+        signal,
+      });
+      return rows.map((row) => operationsCardSummaryItem(row, tab));
+    } catch (error) {
+      if (signal?.aborted || error?.code === "REQUEST_ABORTED" || error?.name === "AbortError") throw error;
+      noteOrderCardSummaryRpcError(error);
+    }
+  }
+
   if (canUseOrderSummaryRpc()) {
     try {
       return await loadOrderSummaryRowsRpc({
@@ -525,7 +602,7 @@ function groupRows(rows = [], includeLocalSearchFields = false) {
   const startedAt = performance.now();
   const groups = new Map();
   for (const row of rows) {
-    const item = serializeOperationsCompactSummaryRow(row, { includeSearchText: includeLocalSearchFields });
+    const item = row?._summaryCard ? row : serializeOperationsCompactSummaryRow(row, { includeSearchText: includeLocalSearchFields });
     const orderNumber = Number(item.orderIdNumber);
     if (!Number.isFinite(orderNumber)) continue;
     if (!groups.has(orderNumber)) groups.set(orderNumber, []);
@@ -645,7 +722,7 @@ export async function loadOperationsOrdersPage({
     const windowResult = await consumeOrderSummaryWindows({
       numbers: candidates.numbers,
       remainingGroups: safeLimit - outputGroups.length,
-      loadRows: (numbers, loadSignal) => rowsByNumbers(numbers, loadSignal, localSearchFallback),
+      loadRows: (numbers, loadSignal) => rowsByNumbers(numbers, loadSignal, localSearchFallback, { tab }),
       profileName: "orders.operations.summary-window",
       signal,
       consumeRows: ({ numbers, rows }) => {
