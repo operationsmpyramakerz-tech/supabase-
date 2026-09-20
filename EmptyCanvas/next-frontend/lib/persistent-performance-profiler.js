@@ -67,21 +67,36 @@ export async function loadPersistentPerformanceSnapshot({
   const cutoff = new Date(Date.now() - effectiveWindow).toISOString();
 
   try {
+    const rowLimit = maxRows();
+    // Read one extra row so `truncated` is exact instead of guessing when the
+    // result happens to contain exactly PERF_PERSIST_MAX_ROWS rows.
     const rows = await select(TABLE, {
       select: "created_at,category,name,duration_ms,ok,status,meta",
       created_at: `gte.${cutoff}`,
       order: "created_at.desc",
-      limit: String(maxRows()),
+      limit: String(rowLimit + 1),
     }, {
       profileName: "performance.telemetry-window",
       timeoutMs: 4_000,
       attempts: 1,
     });
 
-    const samples = (Array.isArray(rows) ? rows : []).map(mapRow).sort((a, b) => a.at - b.at);
+    const rawRows = Array.isArray(rows) ? rows : [];
+    const truncated = rawRows.length > rowLimit;
+    const samples = rawRows
+      .slice(0, rowLimit)
+      .map(mapRow)
+      .sort((a, b) => a.at - b.at);
+    const oldestAt = samples[0]?.at || null;
+    const newestAt = samples[samples.length - 1]?.at || null;
+
     return {
       available: true,
-      truncated: samples.length >= maxRows(),
+      truncated,
+      rowLimit,
+      oldestAt,
+      newestAt,
+      coverageMs: oldestAt && newestAt ? Math.max(0, newestAt - oldestAt) : 0,
       snapshot: summarizePerformanceSamples(samples, {
         windowMs: effectiveWindow,
         limit,

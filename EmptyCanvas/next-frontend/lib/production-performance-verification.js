@@ -279,7 +279,7 @@ export async function loadProductionAccelerationStatus() {
   }
 }
 
-export function buildProductionVerification(profile = {}, database = {}, overrides = {}) {
+export function buildProductionVerification(profile = {}, database = {}, overrides = {}, telemetry = {}) {
   const thresholds = envThresholds(overrides);
   const operations = operationMap(profile);
   const critical = CRITICAL_OPERATIONS.map((spec) => evaluateCriticalOperation(
@@ -300,12 +300,28 @@ export function buildProductionVerification(profile = {}, database = {}, overrid
   else if (state !== "needs-attention" && watchRows.length) state = "watch";
   else if (state === "healthy" && collectingRows.length) state = "collecting";
 
+  // A production verdict must not silently rely on one warm server instance.
+  // Persistent telemetry being empty/truncated/unavailable is itself part of QA.
+  if (!telemetry?.forcedLocal) {
+    if (!telemetry?.persistentAvailable && state === "healthy") state = "collecting";
+    if (telemetry?.persistentEmpty && state !== "needs-attention") state = "collecting";
+    if (telemetry?.persistentTruncated && state === "healthy") state = "watch";
+  }
+
   const fastPaths = fastPathUsage(profile);
   const bottlenecks = bottleneckRows(profile, thresholds);
 
   let nextAction = "Keep collecting production samples and re-check the report after normal navigation traffic.";
   if (database?.available && Number(database?.missing) > 0) {
     nextAction = "Install the missing database accelerators first, then collect a fresh profiler window.";
+  } else if (!telemetry?.forcedLocal && !telemetry?.persistentAvailable) {
+    nextAction = "Install/restore persistent performance telemetry and verify the server Supabase service credential before grading production P95.";
+  } else if (!telemetry?.forcedLocal && telemetry?.persistentTruncated) {
+    nextAction = "The persistent telemetry window exceeded its row limit. Shorten the minutes window or raise PERF_PERSIST_MAX_ROWS, then measure again before accepting the P95 verdict.";
+  } else if (!telemetry?.forcedLocal && telemetry?.persistentEmpty) {
+    nextAction = Number(telemetry?.localCriticalSamples) > 0
+      ? "Critical traffic exists in the local profiler but the persistent window is empty. Verify the telemetry SQL/service-role write path before grading production P95."
+      : "Generate normal production navigation traffic, then re-check after the persistent profiler has enough completed-work samples.";
   } else if (attentionRows.length || bottlenecks.length) {
     nextAction = "Prioritize the listed needs-attention/bottleneck operations, then clear the profiler window and measure again.";
   } else if (!collectingRows.length) {
@@ -331,15 +347,27 @@ export function buildProductionVerification(profile = {}, database = {}, overrid
       sampleCount: profile?.sampleCount || 0,
       operationCount: profile?.operationCount || 0,
       health: profile?.health || {},
+      persistentAvailable: telemetry?.persistentAvailable === true,
+      persistentEmpty: telemetry?.persistentEmpty === true,
+      persistentTruncated: telemetry?.persistentTruncated === true,
+      persistentRowLimit: telemetry?.persistentRowLimit || null,
+      persistentCoverageMs: telemetry?.persistentCoverageMs || 0,
+      persistentOldestAt: telemetry?.persistentOldestAt || null,
+      persistentNewestAt: telemetry?.persistentNewestAt || null,
     },
     criticalPaths: critical,
     fastPaths,
     bottlenecks,
     nextAction,
     notes: [
-      profile?.source === "supabase-persistent"
-        ? "This report aggregates persisted telemetry across server instances for the selected time window."
-        : "Persistent telemetry is unavailable or empty, so this report is using the current warm server process only.",
+      telemetry?.forcedLocal
+        ? "This report was explicitly forced to process-local telemetry for debugging; it is not a cross-instance production verdict."
+        : (profile?.source === "supabase-persistent"
+          ? "This report aggregates persisted telemetry across server instances for the selected time window."
+          : "Persistent telemetry is unavailable, so this report is using the current warm server process only and remains collecting for production verification."),
+      telemetry?.persistentTruncated
+        ? "The persistent row limit was reached; the report uses the newest retained rows and must not be treated as a complete-window P95 verdict."
+        : "The persistent telemetry window is not row-limit truncated.",
       "A path is not marked healthy until it has the configured minimum completed-work sample count; cache hits, client aborts, and expected 401/403 denials do not satisfy readiness.",
       "Persistent telemetry intentionally retains critical route/page-data timings, RPC fast paths, fallbacks, retries, failures, and slow outliers rather than every low-cost database read.",
       "P95 targets are configurable with PERF_PRODUCTION_* environment variables and are diagnostics, not a user-facing SLA.",

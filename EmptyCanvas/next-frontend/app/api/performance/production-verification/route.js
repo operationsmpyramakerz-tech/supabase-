@@ -25,6 +25,13 @@ function safeNumber(value, fallback, min, max) {
   return Math.max(min, Math.min(max, Number.isFinite(number) ? number : fallback));
 }
 
+function criticalLocalSampleCount(profile = {}) {
+  const rows = Array.isArray(profile?.operations) ? profile.operations : [];
+  return rows
+    .filter((row) => ["route", "page-data"].includes(String(row?.category || "").toLowerCase()))
+    .reduce((sum, row) => sum + (Number(row?.count) || 0), 0);
+}
+
 async function performanceGate() {
   return await getLegacyAccountGate(["Backup", "Users Center"]);
 }
@@ -41,6 +48,9 @@ export async function GET(request) {
   const url = new URL(request.url);
   const minutes = safeNumber(url.searchParams.get("minutes"), 15, 0.5, 60);
   const minSamples = Math.round(safeNumber(url.searchParams.get("minSamples"), 5, 1, 100));
+  const forceLocal = ["local", "process", "memory"].includes(
+    String(url.searchParams.get("source") || "").toLowerCase(),
+  );
   const targetP95Ms = safeNumber(url.searchParams.get("targetP95Ms"), 1800, 250, 30_000);
   const warningP95Ms = Math.max(
     targetP95Ms,
@@ -58,26 +68,34 @@ export async function GET(request) {
     loadPersistentPerformanceSnapshot({ windowMs, limit: 100 }),
     loadProductionAccelerationStatus(),
   ]);
-  const profile = persistent.available && persistent.snapshot?.sampleCount > 0
-    ? persistent.snapshot
-    : localProfile;
+  const profile = forceLocal
+    ? localProfile
+    : (persistent.available ? persistent.snapshot : localProfile);
+  const telemetry = {
+    source: profile.source || "process-local",
+    forcedLocal: forceLocal,
+    persistentAvailable: persistent.available,
+    persistentSamples: persistent.snapshot?.sampleCount || 0,
+    persistentEmpty: persistent.available && (persistent.snapshot?.sampleCount || 0) === 0,
+    persistentTruncated: persistent.truncated === true,
+    persistentRowLimit: persistent.rowLimit || null,
+    persistentOldestAt: persistent.oldestAt || null,
+    persistentNewestAt: persistent.newestAt || null,
+    persistentCoverageMs: persistent.coverageMs || 0,
+    localSamples: localProfile.sampleCount || 0,
+    localCriticalSamples: criticalLocalSampleCount(localProfile),
+    fallbackToLocal: !forceLocal && !persistent.available,
+    ...(persistent.available ? {} : { persistentReason: persistent.reason || "Persistent telemetry is unavailable." }),
+  };
   const verification = buildProductionVerification(profile, database, {
     minSamples,
     targetP95Ms,
     warningP95Ms,
-  });
+  }, telemetry);
 
   return noStore({
     ok: true,
-    telemetry: {
-      source: profile.source || "process-local",
-      persistentAvailable: persistent.available,
-      persistentSamples: persistent.snapshot?.sampleCount || 0,
-      persistentTruncated: persistent.truncated === true,
-      localSamples: localProfile.sampleCount || 0,
-      fallbackToLocal: !(persistent.available && persistent.snapshot?.sampleCount > 0),
-      ...(persistent.available ? {} : { persistentReason: persistent.reason || "Persistent telemetry is unavailable." }),
-    },
+    telemetry,
     verification,
     links: {
       rawProfile: `/next/api/performance/profile?minutes=${minutes}&limit=100`,

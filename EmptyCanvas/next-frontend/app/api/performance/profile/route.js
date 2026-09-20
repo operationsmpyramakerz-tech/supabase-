@@ -44,7 +44,10 @@ export async function GET(request) {
   }
 
   const persistent = await loadPersistentPerformanceSnapshot({ windowMs, limit });
-  const profile = persistent.available && persistent.snapshot?.sampleCount > 0
+  // If the persistent store is installed, an empty window is meaningful. Do
+  // not silently replace it with one warm instance and call that production
+  // telemetry; callers can explicitly request ?source=local when needed.
+  const profile = persistent.available
     ? persistent.snapshot
     : localProfile;
 
@@ -52,7 +55,13 @@ export async function GET(request) {
     ok: true,
     source: profile.source || "process-local",
     persistentAvailable: persistent.available,
+    persistentEmpty: persistent.available && (persistent.snapshot?.sampleCount || 0) === 0,
     persistentTruncated: persistent.truncated === true,
+    persistentRowLimit: persistent.rowLimit || null,
+    persistentOldestAt: persistent.oldestAt || null,
+    persistentNewestAt: persistent.newestAt || null,
+    persistentCoverageMs: persistent.coverageMs || 0,
+    fallbackToLocal: !persistent.available,
     ...(persistent.available ? {} : { persistentReason: persistent.reason || "Persistent telemetry is unavailable." }),
     profile,
   });
