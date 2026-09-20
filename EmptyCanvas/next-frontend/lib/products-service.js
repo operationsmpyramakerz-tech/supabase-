@@ -3,6 +3,7 @@ import {
   createSignedUploadUrl,
   deleteById,
   getSupabaseConfig,
+  storagePublicUrl,
   insert,
   selectAll,
   updateById,
@@ -119,11 +120,71 @@ function parseTags(value) {
   return raw.split(/[,;|]/).map(text).filter(Boolean);
 }
 
-function cleanUrl(value) {
+function extractUrl(value) {
+  if (value === null || typeof value === "undefined") return null;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const url = extractUrl(item);
+      if (url) return url;
+    }
+    return null;
+  }
+  if (typeof value === "object") {
+    return extractUrl(value.url || value.publicUrl || value.public_url || value.href || value.external?.url || value.file?.url || null);
+  }
+
   const raw = text(value);
-  if (!raw) return null;
-  if (/^https?:\/\//i.test(raw)) return raw;
+  if (!raw || /^null$/i.test(raw)) return null;
+
+  try {
+    const parsed = JSON.parse(raw);
+    const parsedUrl = extractUrl(parsed);
+    if (parsedUrl) return parsedUrl;
+  } catch {}
+
+  if (/^(https?:|data:image\/|blob:)/i.test(raw)) return raw;
+  const match = raw.match(/https?:\/\/[^\s,"'<>]+/i);
+  return match ? match[0] : null;
+}
+
+function cleanUrl(value) {
+  const extracted = extractUrl(value);
+  if (extracted) return extracted;
+  const raw = text(value);
+  if (!raw || /^null$/i.test(raw)) return null;
+  if (raw.startsWith("/")) return raw;
   return `https://${raw.replace(/^\/+/, "")}`;
+}
+
+function cleanImageUrl(value) {
+  const extracted = extractUrl(value);
+  if (extracted) return extracted;
+
+  let raw = text(value);
+  if (!raw || /^null$/i.test(raw)) return null;
+
+  const { url: supabaseUrl } = getSupabaseConfig();
+  const base = text(supabaseUrl).replace(/\/+$/, "");
+  const bucket = text(getProductsStorageBucket()).replace(/^\/+|\/+$/g, "");
+
+  // Some migrated rows store only a Supabase Storage object path instead of
+  // the complete public URL. Resolve those paths against the configured bucket
+  // instead of turning them into an invalid https://products/... URL.
+  raw = raw.replace(/^\/+/, "");
+  if (/^storage\/v1\/object\/public\//i.test(raw)) {
+    return base ? `${base}/${raw}` : null;
+  }
+  if (/^object\/public\//i.test(raw)) {
+    return base ? `${base}/storage/v1/${raw}` : null;
+  }
+  if (bucket && raw.toLowerCase().startsWith(`${bucket.toLowerCase()}/`)) {
+    raw = raw.slice(bucket.length + 1);
+  }
+  if (/^(products\/images|products|images)\//i.test(raw) && bucket) {
+    return storagePublicUrl(raw, bucket) || null;
+  }
+
+  return cleanUrl(value);
 }
 
 function serializeProduct(row = {}) {
@@ -134,7 +195,7 @@ function serializeProduct(row = {}) {
     unitPrice: numberOrNull(pick(row, ["unit_price", "Unity Price", "Unit price", "Unit Price", "price", "Price"])),
     unit: text(pick(row, ["unit", "unit_name", "measurement_unit", "Unit", "Unit Name"])) || null,
     url: cleanUrl(pick(row, ["url", "URL", "product_url", "Product URL", "link", "Link", "website", "Website"])),
-    imageUrl: cleanUrl(pick(row, ["image_url", "Image URL", "image", "Image", "photo", "Photo", "picture", "Picture", "thumbnail", "Thumbnail"])),
+    imageUrl: cleanImageUrl(pick(row, ["image_url", "Image URL", "image", "Image", "photo", "Photo", "picture", "Picture", "thumbnail", "Thumbnail"])),
     tags: parseTags(pick(row, ["tags", "Tags", "tag", "Tag"])),
     source: "supabase",
   };

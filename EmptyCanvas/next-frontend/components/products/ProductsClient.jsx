@@ -44,7 +44,8 @@ function fileSize(bytes) {
 function normalizedUrl(value) {
   const url = text(value);
   if (!url) return "";
-  if (/^https?:\/\//i.test(url)) return url;
+  if (/^(https?:|data:|blob:)/i.test(url)) return url;
+  if (url.startsWith("/")) return url;
   return `https://${url.replace(/^\/+/, "")}`;
 }
 
@@ -477,7 +478,7 @@ function ProductCard({ product, menuOpen, onMenu, onEdit, onDelete, onImage }) {
   return (
     <article className="product-card">
       <button type="button" className={`product-card__media ${image ? "" : "is-fallback"}`} onClick={() => image && onImage(product.imageUrl, product.name)} disabled={!image} aria-label={image ? `Open ${product.name} image` : "No product image"}>
-        {image ? <img className="product-card__image" src={product.imageUrl} alt={product.name} loading="lazy" /> : null}
+        {image ? <img className="product-card__image" src={product.imageUrl} alt={product.name} loading="lazy" onError={(event) => { event.currentTarget.style.display = "none"; event.currentTarget.parentElement?.classList.add("is-fallback"); }} /> : null}
         <div className="product-card__image-fallback"><ClassicIcon name="package" /></div>
       </button>
       <div className="product-card__content">

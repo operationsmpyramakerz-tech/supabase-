@@ -86,7 +86,7 @@ export default async function EventComponentsPage({ searchParams }) {
   }
 
   return (
-    <AppShell account={pageData.account} title="Events" eyebrow="Reusable event resources" activePath="/next/event-components" bodyClass="events-page events-components-page" pageStyles={["/next/css/events.css?v=next-stage-2k-events"]}>
+    <AppShell account={pageData.account} title="Events" eyebrow="Reusable event resources" activePath="/next/event-components" bodyClass="events-page events-components-page" pageStyles={["/next/css/events.css?v=event-components-toolbar-surface-v2"]}>
       <EventComponentsClient
         account={pageData.account}
         initialComponents={Array.isArray(pageData.components) ? pageData.components : []}

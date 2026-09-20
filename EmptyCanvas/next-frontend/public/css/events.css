@@ -981,6 +981,34 @@ body.events-page.ops-view-only #eventComponentAddBtn{display:none!important;}
   line-height:1;
 }
 
+/* Event Components 2026-09-20: keep the floating filters outside the card surface. */
+body.events-components-page .events-components-workspace{
+  margin-top:0!important;
+  padding:0!important;
+  border:0!important;
+  border-radius:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+  backdrop-filter:none!important;
+  -webkit-backdrop-filter:none!important;
+}
+body.events-components-page .events-components-workspace .events-component-filters-toolbar{
+  margin:0 0 18px!important;
+}
+body.events-components-page .events-components-workspace .events-component-cards{
+  width:100%;
+  box-sizing:border-box;
+  padding:22px;
+  border:1px solid rgba(255,255,255,.88);
+  border-radius:28px;
+  background:rgba(255,255,255,.94);
+  box-shadow:var(--events-shadow-soft);
+}
+@media(max-width:760px){
+  body.events-components-page .events-components-workspace .events-component-filters-toolbar{margin-bottom:13px!important;}
+  body.events-components-page .events-components-workspace .events-component-cards{padding:14px;border-radius:22px;}
+}
+
 /* Event Components 2026-09-20: inline Add new card, modern multi-photo editor, and gallery. */
 .events-components-workspace .events-component-filters-toolbar{margin-top:0;}
 .events-component-add-new{
