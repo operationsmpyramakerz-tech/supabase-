@@ -746,14 +746,108 @@ function gateFromAccount(account, session, requiredPages = []) {
   };
 }
 
-async function getDirectSessionAccountGateInternal(requiredPages = [], options = {}) {
-  // This path is intentionally opt-in by capability rather than by feature flag:
-  // if the Redis session store used by express-session is reachable through the
-  // normal Redis URL or Upstash REST, Next can validate the session without
-  // booting the 40k-line Express app.
-  if (!redisUrlValue() && !hasRestSessionBackend()) {
+export async function getDirectAccountGateFromSessionContext(context = {}, requiredPages = [], options = {}) {
+  const memberId = text(
+    context?.memberId
+    || context?.userSupabaseId
+    || context?.teamMemberId
+    || context?.account?.userSupabaseId
+    || context?.account?.teamMemberId
+    || context?.account?.id,
+  );
+  const baseAccount = context?.account && typeof context.account === "object"
+    ? { ...context.account }
+    : null;
+  if (!memberId || !baseAccount) return null;
+
+  const session = {
+    username: text(context?.username || baseAccount.username || baseAccount.name),
+    userSupabaseId: memberId,
+    accountCache: baseAccount,
+  };
+  const sessionBackend = text(context?.sessionBackend || context?.backend || "session-bridge");
+
+  // Auth-only callers (notification bell, login redirect checks, public profile)
+  // only need a verified session identity. When this helper is fed by the
+  // authenticated Express /api/session-status bridge, requireAuth has already
+  // performed the authoritative session/revocation check.
+  if (options?.authOnly === true) {
+    return {
+      ok: true,
+      status: 200,
+      error: "",
+      account: {
+        ...baseAccount,
+        id: memberId,
+        userSupabaseId: memberId,
+        teamMemberId: memberId,
+      },
+      source: "session-context-auth-only",
+      memberId,
+      sessionBackend,
+    };
+  }
+
+  try {
+    const requestedPages = (Array.isArray(requiredPages) ? requiredPages : [requiredPages]).map(text).filter(Boolean);
+
+    // Pages that only need the signed-in account (Home, Account, Notifications,
+    // generic shells) do not need to rebuild the permission matrix. Refresh the
+    // member row so profile/role changes are current, but reuse the authenticated
+    // session snapshot for allowedPages/pageAccess. Permission-protected routes
+    // still read the fresh page-access rows below before making a decision.
+    if (!requestedPages.length) {
+      const memberRow = await readFreshMemberRow(memberId);
+      if (!memberRow) return null;
+      const account = {
+        ...accountFromFreshMember(baseAccount, memberRow, session),
+        id: memberId,
+        userSupabaseId: memberId,
+        teamMemberId: memberId,
+      };
+      return { ok: true, status: 200, error: "", account, source: "session-context", memberId, sessionBackend };
+    }
+
+    const [memberRow, pages, accessRows] = await Promise.all([
+      readFreshMemberRow(memberId),
+      listAppPages(),
+      listMemberAccess(memberId),
+    ]);
+    if (!memberRow) return null;
+
+    const freshBaseAccount = accountFromFreshMember(baseAccount, memberRow, session);
+    const freshPageAccess = directPageAccessRows(pages, accessRows);
+    const isAdmin = builtInAdmin(freshBaseAccount, session);
+    if (!isAdmin && !freshPageAccess.length && Array.isArray(baseAccount?.pageAccess?.pages) && baseAccount.pageAccess.pages.length) {
+      return null;
+    }
+
+    const allowedPages = isAdmin
+      ? expandUiAliases(Array.isArray(baseAccount.allowedPages) ? baseAccount.allowedPages : [])
+      : expandUiAliases(
+          freshPageAccess.flatMap((row) => [row.pageName, ...(Array.isArray(row.aliases) ? row.aliases : [])]).filter(Boolean),
+        );
+    const account = {
+      ...freshBaseAccount,
+      id: memberId,
+      userSupabaseId: memberId,
+      teamMemberId: memberId,
+      allowedPages,
+      pageAccess: { pages: freshPageAccess },
+    };
+
+    return { ...gateFromAccount(account, session, requestedPages), source: "session-context", memberId, sessionBackend };
+  } catch {
     return null;
   }
+}
+
+async function getDirectSessionAccountGateInternal(requiredPages = [], options = {}) {
+  // Prefer a direct Redis/Upstash read when Vercel has the same session-store
+  // credentials as Express. If not, products-auth can bootstrap this same
+  // direct Supabase gate from the lightweight authenticated session-status
+  // bridge without paying for /api/account.
+  if (!redisUrlValue() && !hasRestSessionBackend()) return null;
 
   const resolved = await readDirectSession();
   if (!resolved.definitive) return null;
@@ -766,74 +860,22 @@ async function getDirectSessionAccountGateInternal(requiredPages = [], options =
   const baseAccount = session.accountCache && typeof session.accountCache === "object"
     ? { ...session.accountCache }
     : null;
-
-  // Legacy/Notion sessions and very old sessions without the account snapshot
-  // keep using the existing Express bridge. This makes rollout reversible and
-  // avoids changing behavior for accounts that have not migrated to Supabase.
   if (!memberId || !baseAccount) return null;
 
-  // A number of high-frequency API routes only need to know that the session is
-  // valid (notifications, public team-member profile, login redirect checks).
-  // In that case, the signed/revocation-checked Upstash session is sufficient;
-  // do not pay for app_pages + page-access + member-directory reads that the
-  // caller will never inspect. Full page/account requests keep the stricter
-  // Supabase refresh path below.
-  if (options?.authOnly === true) {
-    return {
-      ok: true,
-      status: 200,
-      error: "",
-      account: {
-        ...baseAccount,
-        userSupabaseId: memberId,
-        teamMemberId: memberId,
-      },
-      source: "direct-session-auth-only",
-      memberId,
-      sessionBackend: resolved.backend || "",
-    };
-  }
+  const result = await getDirectAccountGateFromSessionContext({
+    memberId,
+    userSupabaseId: memberId,
+    username: session.username,
+    account: baseAccount,
+    sessionBackend: resolved.backend || "",
+  }, requiredPages, options);
 
-  try {
-    const [memberRow, pages, accessRows] = await Promise.all([
-      readFreshMemberRow(memberId),
-      listAppPages(),
-      listMemberAccess(memberId),
-    ]);
-    if (!memberRow) return null;
-
-    // Refresh identity/position from Supabase as well. In particular this keeps
-    // the built-in Admin bypass equivalent to Express: a removed admin position
-    // cannot survive only because an older session snapshot still said Admin.
-    const freshBaseAccount = accountFromFreshMember(baseAccount, memberRow, session);
-    const freshPageAccess = directPageAccessRows(pages, accessRows);
-    const isAdmin = builtInAdmin(freshBaseAccount, session);
-    if (!isAdmin && !freshPageAccess.length && Array.isArray(baseAccount?.pageAccess?.pages) && baseAccount.pageAccess.pages.length) {
-      // A missing/old permission schema should never silently downgrade or
-      // broaden access. Let the established Express account route resolve it.
-      return null;
-    }
-
-    const allowedPages = isAdmin
-      ? expandUiAliases(Array.isArray(baseAccount.allowedPages) ? baseAccount.allowedPages : [])
-      : expandUiAliases(
-          freshPageAccess.flatMap((row) => [row.pageName, ...(Array.isArray(row.aliases) ? row.aliases : [])]).filter(Boolean),
-        );
-    const account = {
-      ...freshBaseAccount,
-      // Keep the canonical Supabase member identity on the direct account.
-      // Read-heavy pages can then use indexed team_member_id equality filters
-      // instead of falling back to display-name substring matching.
-      userSupabaseId: memberId,
-      teamMemberId: memberId,
-      allowedPages,
-      pageAccess: { pages: freshPageAccess },
-    };
-
-    return { ...gateFromAccount(account, session, requiredPages), source: "direct-session", memberId, sessionBackend: resolved.backend || "" };
-  } catch {
-    return null;
-  }
+  if (!result) return null;
+  return {
+    ...result,
+    source: options?.authOnly === true ? "direct-session-auth-only" : "direct-session",
+    sessionBackend: resolved.backend || "",
+  };
 }
 
 export async function getDirectSessionAccountGate(requiredPages = [], options = {}) {

@@ -139,7 +139,7 @@ export async function fetchLegacyJson(pathname, options = {}) {
     const cached = accountBridgeCacheGet(cacheKey);
     if (cached) {
       recordPerformanceSample({
-        category: "legacy-api",
+        category: String(options.metricCategory || "legacy-api"),
         name: metricName,
         durationMs: 0,
         ok: true,
@@ -152,7 +152,7 @@ export async function fetchLegacyJson(pathname, options = {}) {
       const startedAt = performance.now();
       const shared = await _accountBridgeInflight.get(cacheKey);
       recordPerformanceSample({
-        category: "legacy-api",
+        category: String(options.metricCategory || "legacy-api"),
         name: metricName,
         durationMs: performance.now() - startedAt,
         ok: shared?.ok !== false,
@@ -248,7 +248,7 @@ export async function fetchLegacyJson(pathname, options = {}) {
       };
     } finally {
       recordPerformanceSample({
-        category: "legacy-api",
+        category: String(options.metricCategory || "legacy-api"),
         name: metricName,
         durationMs: performance.now() - metricStartedAt,
         ok: metricOk,

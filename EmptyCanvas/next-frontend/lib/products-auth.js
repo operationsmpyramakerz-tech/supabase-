@@ -1,7 +1,7 @@
 import "server-only";
 import { performance } from "node:perf_hooks";
 import { fetchLegacyJson } from "./legacy-api";
-import { getDirectSessionAccountGate } from "./direct-session-account";
+import { getDirectAccountGateFromSessionContext, getDirectSessionAccountGate } from "./direct-session-account";
 import { recordPerformanceSample } from "./performance-profiler";
 
 function normalize(value) {
@@ -26,6 +26,34 @@ async function getLegacyAccountGateInternal(requiredPages = [], onSource = () =>
   if (direct) {
     onSource("direct");
     return direct;
+  }
+
+  // If Next cannot read the Redis session store directly, reuse the existing
+  // authenticated Express heartbeat as a tiny session bridge. It returns the
+  // member id + cached account snapshot only; authorization still happens in
+  // Next against fresh Supabase page-access rows when a protected page is
+  // requested. This avoids the expensive /api/account compatibility call on
+  // every Vercel instance that does not have Redis credentials.
+  const sessionStatus = await fetchLegacyJson("/api/session-status", {
+    timeoutMs: 3_000,
+    maxAttempts: 1,
+    metricCategory: "session-bridge",
+  }).catch(() => null);
+
+  if (sessionStatus?.status === 401) {
+    onSource("session-bridge");
+    return { ok: false, status: 401, error: "Authentication required.", account: null };
+  }
+  if (sessionStatus?.ok && sessionStatus.data) {
+    const bridged = await getDirectAccountGateFromSessionContext(
+      sessionStatus.data,
+      requiredPages,
+      options,
+    ).catch(() => null);
+    if (bridged) {
+      onSource("session-bridge");
+      return bridged;
+    }
   }
 
   onSource("legacy");

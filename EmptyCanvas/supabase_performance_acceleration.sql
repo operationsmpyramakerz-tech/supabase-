@@ -248,8 +248,9 @@ $$;
 
 
 -- Compact order-summary loader used by Orders Review and Operations Orders.
--- It filters by the indexed order_number column, but shapes optional/custom
--- fields through to_jsonb so a missing projected column cannot force select=*.
+-- It filters by the indexed order_number column and builds only the compact
+-- fields that exist in the current schema, so optional columns cannot force select=*
+-- and large unrelated row payloads are never serialized.
 create or replace function public.erp_order_summary_rows(
   p_options jsonb default '{}'::jsonb
 )
@@ -263,6 +264,10 @@ declare
   v_table regclass := to_regclass('public.orders');
   v_numbers numeric[];
   v_csv text;
+  v_cols jsonb := '{}'::jsonb;
+  v_pairs text;
+  v_created_expr text := 'NULL::timestamptz';
+  v_id_expr text := quote_literal('');
 begin
   if coalesce(lower(p_options->>'context'), '') = '__probe__'
      or coalesce((p_options->>'probe')::boolean, false) then
@@ -270,6 +275,24 @@ begin
   end if;
   if v_table is null then
     raise exception 'ERP accelerator requires public.orders';
+  end if;
+
+  select coalesce(jsonb_object_agg(c.column_name, true), '{}'::jsonb)
+    into v_cols
+  from information_schema.columns c
+  where c.table_schema = 'public'
+    and c.table_name = 'orders'
+    and c.column_name = any(array[
+      'id','reason','order_number','order_type','notion_created_time','created_at',
+      'unit_price','quantity_requested','quantity_progress','quantity_edited_by_supervisor',
+      'quantity_received_by_operations','quantity_remaining','status','issue_description',
+      'actual_issue_description','repair_action','resolution_method','operations_approval',
+      'rejected_reason','team_member_id','team_member_name','sv_approval','product_name',
+      'receipt_number','person_received_by_operations'
+    ]);
+
+  if not (v_cols ? 'order_number') then
+    raise exception 'ERP accelerator requires public.orders.order_number';
   end if;
 
   select array_agg(v order by v desc)
@@ -284,47 +307,70 @@ begin
     return;
   end if;
 
+  -- Do not call to_jsonb(o) on the full orders row. Some installations keep
+  -- large JSON/files columns on each component row; serializing those columns
+  -- just to discard them dominated the summary P95. Build the compact JSON
+  -- directly from the columns that actually exist in this schema instead.
+  select string_agg(
+    format(
+      '%L, %s',
+      m.output_key,
+      case
+        when v_cols ? m.column_name then format('to_jsonb(o.%I)', m.column_name)
+        else '''null''::jsonb'
+      end
+    ),
+    ', ' order by m.ord
+  )
+  into v_pairs
+  from (values
+    (1,'id','id'),
+    (2,'reason','reason'),
+    (3,'order_number','order_number'),
+    (4,'order_type','order_type'),
+    (5,'notion_created_time','notion_created_time'),
+    (6,'unit_price','unit_price'),
+    (7,'quantity_requested','quantity_requested'),
+    (8,'quantity_progress','quantity_progress'),
+    (9,'quantity_edited_by_supervisor','quantity_edited_by_supervisor'),
+    (10,'quantity_received_by_operations','quantity_received_by_operations'),
+    (11,'quantity_remaining','quantity_remaining'),
+    (12,'status','status'),
+    (13,'issue_description','issue_description'),
+    (14,'actual_issue_description','actual_issue_description'),
+    (15,'repair_action','repair_action'),
+    (16,'resolution_method','resolution_method'),
+    (17,'operations_approval','operations_approval'),
+    (18,'rejected_reason','rejected_reason'),
+    (19,'team_member_id','team_member_id'),
+    (20,'team_member_name','team_member_name'),
+    (21,'sv_approval','sv_approval'),
+    (22,'product_name','product_name'),
+    (23,'receipt_number','receipt_number'),
+    (24,'person_received_by_operations','person_received_by_operations')
+  ) as m(ord, output_key, column_name);
+
+  if v_cols ? 'notion_created_time' then
+    v_created_expr := 'public.erp_try_timestamptz(o.notion_created_time::text)';
+  elsif v_cols ? 'created_at' then
+    v_created_expr := 'public.erp_try_timestamptz(o.created_at::text)';
+  end if;
+  if v_cols ? 'id' then
+    v_id_expr := 'o.id::text';
+  end if;
+
   -- Values have already been parsed as numeric, so the generated IN list is
-  -- injection-safe and lets PostgreSQL use the normal order_number index.
+  -- injection-safe and lets PostgreSQL use idx_erp_orders_order_number.
   v_csv := array_to_string(v_numbers, ',');
 
   return query execute format($sql$
-    with src as (
-      select o.order_number as ord, to_jsonb(o) as j
-      from %s o
-      where o.order_number in (%s)
-    )
-    select jsonb_build_object(
-      'id', j->'id',
-      'reason', j->'reason',
-      'order_number', j->'order_number',
-      'order_type', j->'order_type',
-      'notion_created_time', j->'notion_created_time',
-      'unit_price', j->'unit_price',
-      'quantity_requested', j->'quantity_requested',
-      'quantity_progress', j->'quantity_progress',
-      'quantity_edited_by_supervisor', j->'quantity_edited_by_supervisor',
-      'quantity_received_by_operations', j->'quantity_received_by_operations',
-      'quantity_remaining', j->'quantity_remaining',
-      'status', j->'status',
-      'issue_description', j->'issue_description',
-      'actual_issue_description', j->'actual_issue_description',
-      'repair_action', j->'repair_action',
-      'resolution_method', j->'resolution_method',
-      'operations_approval', j->'operations_approval',
-      'rejected_reason', j->'rejected_reason',
-      'team_member_id', j->'team_member_id',
-      'team_member_name', j->'team_member_name',
-      'sv_approval', j->'sv_approval',
-      'product_name', j->'product_name',
-      'receipt_number', j->'receipt_number',
-      'person_received_by_operations', j->'person_received_by_operations'
-    ) as row_data
-    from src
-    order by ord desc,
-             coalesce(public.erp_try_timestamptz(j->>'notion_created_time'), '-infinity'::timestamptz) desc,
-             coalesce(j->>'id','') desc
-  $sql$, v_table, v_csv);
+    select jsonb_build_object(%s) as row_data
+    from %s o
+    where o.order_number in (%s)
+    order by o.order_number desc,
+             %s desc nulls last,
+             %s desc
+  $sql$, v_pairs, v_table, v_csv, v_created_expr, v_id_expr);
 end;
 $$;
 
@@ -362,47 +408,110 @@ set search_path = public
 as $$
 declare
   v_table regclass := to_regclass('public.orders');
+  v_cols jsonb := '{}'::jsonb;
+  v_id text := quote_literal('');
+  v_order_number text := quote_literal('');
+  v_created text := quote_literal('');
+  v_team_member_id text := quote_literal('');
+  v_team_member_name text := quote_literal('');
+  v_reason text := quote_literal('');
+  v_product_name text := quote_literal('');
+  v_order_type text := quote_literal('');
+  v_status text := quote_literal('');
+  v_sv_approval text := quote_literal('');
+  v_repair_action text := quote_literal('');
+  v_resolution_method text := quote_literal('');
+  v_qty_edited text := quote_literal('');
+  v_qty_requested text := quote_literal('');
+  v_qty_progress text := quote_literal('');
+  v_unit_price text := quote_literal('');
+  v_source_sql text;
 begin
   if coalesce((p_options->>'probe')::boolean, false) then return; end if;
   if v_table is null then raise exception 'ERP accelerator requires public.orders'; end if;
 
+  select coalesce(jsonb_object_agg(c.column_name, true), '{}'::jsonb)
+    into v_cols
+  from information_schema.columns c
+  where c.table_schema='public' and c.table_name='orders'
+    and c.column_name = any(array[
+      'id','order_number','notion_created_time','created_at','team_member_id','team_member_name',
+      'reason','product_name','order_type','status','sv_approval','repair_action','resolution_method',
+      'quantity_edited_by_supervisor','quantity_requested','quantity_progress','unit_price'
+    ]);
+
+  -- Keep every dynamic expression text-only. Unlike to_jsonb(o), PostgreSQL
+  -- only touches/detoasts the small columns required by the Home dashboard.
+  if v_cols ? 'id' then v_id := 'o.id::text'; end if;
+  if v_cols ? 'order_number' then v_order_number := 'o.order_number::text'; end if;
+  if v_cols ? 'notion_created_time' then
+    v_created := 'o.notion_created_time::text';
+  elsif v_cols ? 'created_at' then
+    v_created := 'o.created_at::text';
+  end if;
+  if v_cols ? 'team_member_id' then v_team_member_id := 'o.team_member_id::text'; end if;
+  if v_cols ? 'team_member_name' then v_team_member_name := 'o.team_member_name::text'; end if;
+  if v_cols ? 'reason' then v_reason := 'o.reason::text'; end if;
+  if v_cols ? 'product_name' then v_product_name := 'o.product_name::text'; end if;
+  if v_cols ? 'order_type' then v_order_type := 'o.order_type::text'; end if;
+  if v_cols ? 'status' then v_status := 'o.status::text'; end if;
+  if v_cols ? 'sv_approval' then v_sv_approval := 'o.sv_approval::text'; end if;
+  if v_cols ? 'repair_action' then v_repair_action := 'o.repair_action::text'; end if;
+  if v_cols ? 'resolution_method' then v_resolution_method := 'o.resolution_method::text'; end if;
+  if v_cols ? 'quantity_edited_by_supervisor' then v_qty_edited := 'o.quantity_edited_by_supervisor::text'; end if;
+  if v_cols ? 'quantity_requested' then v_qty_requested := 'o.quantity_requested::text'; end if;
+  if v_cols ? 'quantity_progress' then v_qty_progress := 'o.quantity_progress::text'; end if;
+  if v_cols ? 'unit_price' then v_unit_price := 'o.unit_price::text'; end if;
+
+  v_source_sql := format($src$
+    select
+      coalesce(
+        nullif(%s,''),
+        'row:' || coalesce(
+          nullif(%s,''),
+          md5(concat_ws('|', %s, %s, %s, %s))
+        )
+      ) as group_key,
+      public.erp_try_numeric(%s) as order_number,
+      coalesce(%s,'') as created_time,
+      coalesce(%s,'') as team_member_id,
+      coalesce(%s,'') as team_member_name,
+      coalesce(%s,'') as reason,
+      coalesce(%s,'') as product_name,
+      coalesce(%s,'') as order_type,
+      coalesce(%s,'') as status,
+      coalesce(%s,'') as sv_approval,
+      coalesce(%s,'') as repair_action,
+      coalesce(%s,'') as resolution_method,
+      coalesce(
+        public.erp_try_numeric(%s),
+        public.erp_try_numeric(%s),
+        public.erp_try_numeric(%s),
+        1
+      ) * coalesce(public.erp_try_numeric(%s), 0) as row_cost,
+      (
+        exists (
+          select 1 from jsonb_array_elements_text(coalesce($1->'reviewerIds','[]'::jsonb)) x(value)
+          where coalesce(%s,'') = x.value
+        )
+        or exists (
+          select 1 from jsonb_array_elements_text(coalesce($1->'reviewerNames','[]'::jsonb)) x(value)
+          where lower(coalesce(%s,'')) like '%%' || lower(x.value) || '%%'
+        )
+      ) as reviewer_visible,
+      lower(coalesce(%s,'')) like '%%approved%%' as approved
+    from %s o
+  $src$,
+    v_order_number, v_id, v_created, v_team_member_id, v_team_member_name, v_reason,
+    v_order_number, v_created, v_team_member_id, v_team_member_name, v_reason, v_product_name,
+    v_order_type, v_status, v_sv_approval, v_repair_action, v_resolution_method,
+    v_qty_edited, v_qty_requested, v_qty_progress, v_unit_price,
+    v_team_member_id, v_team_member_name, v_sv_approval, v_table
+  );
+
   return query execute format($sql$
-    with src as (
-      select to_jsonb(o) as j
-      from %s o
-    ), shaped as (
-      select
-        coalesce(nullif(j->>'order_number',''), 'row:' || coalesce(j->>'id', md5(j::text))) as group_key,
-        public.erp_try_numeric(j->>'order_number') as order_number,
-        coalesce(j->>'notion_created_time', j->>'created_at', '') as created_time,
-        coalesce(j->>'team_member_id','') as team_member_id,
-        coalesce(j->>'team_member_name','') as team_member_name,
-        coalesce(j->>'reason','') as reason,
-        coalesce(j->>'product_name','') as product_name,
-        coalesce(j->>'order_type','') as order_type,
-        coalesce(j->>'status','') as status,
-        coalesce(j->>'sv_approval','') as sv_approval,
-        coalesce(j->>'repair_action','') as repair_action,
-        coalesce(j->>'resolution_method','') as resolution_method,
-        coalesce(
-          public.erp_try_numeric(j->>'quantity_edited_by_supervisor'),
-          public.erp_try_numeric(j->>'quantity_requested'),
-          public.erp_try_numeric(j->>'quantity_progress'),
-          1
-        ) * coalesce(public.erp_try_numeric(j->>'unit_price'), 0) as row_cost,
-        (
-          exists (
-            select 1 from jsonb_array_elements_text(coalesce($1->'reviewerIds','[]'::jsonb)) x(value)
-            where coalesce(j->>'team_member_id','') = x.value
-          )
-          or exists (
-            select 1 from jsonb_array_elements_text(coalesce($1->'reviewerNames','[]'::jsonb)) x(value)
-            where lower(coalesce(j->>'team_member_name','')) like '%%' || lower(x.value) || '%%'
-          )
-        ) as reviewer_visible,
-        lower(coalesce(j->>'sv_approval','')) like '%%approved%%' as approved,
-        j
-      from src
+    with shaped as (
+      %s
     ), wanted as (
       select *
       from shaped s
@@ -510,7 +619,7 @@ begin
       a.approved_operations_bucket, a.approved_maintenance_bucket, a.has_approved_rows
     from agg a
     order by public.erp_try_timestamptz(a.created_time) desc nulls last, a.order_number desc nulls last
-  $sql$, v_table)
+  $sql$, v_source_sql)
   using p_options;
 end;
 $$;

@@ -3499,7 +3499,11 @@ function _sbExtractAllowedPages(row) {
 
 function _sbAccountPayload(row, fallbackUsername = "") {
   const allowedUI = expandAllowedForUI(_sbExtractAllowedPages(row));
+  const memberId = String(_sbGet(row, ["id", "ID"]) ?? "").trim();
   return {
+    id: memberId || null,
+    userSupabaseId: memberId || null,
+    teamMemberId: memberId || null,
     name: _sbString(_sbValueForLabel(row, "Name")) || fallbackUsername || "",
     username: _sbString(_sbValueForLabel(row, "Name")) || fallbackUsername || "",
     department: _sbString(_sbValueForLabel(row, "Department")) || "",
@@ -15144,7 +15148,24 @@ app.post("/api/forgot-password", async (req, res) => {
 // username/password changes or account deletion.
 app.get("/api/session-status", requireAuth, (req, res) => {
   res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
-  return res.json({ ok: true, authenticated: true });
+  const memberId = String(req.session?.userSupabaseId || "").trim();
+  const cachedAccount = req.session?.accountCache && typeof req.session.accountCache === "object"
+    ? { ...req.session.accountCache }
+    : null;
+  const account = cachedAccount
+    ? {
+        ...cachedAccount,
+        ...(memberId ? { id: memberId, userSupabaseId: memberId, teamMemberId: memberId } : {}),
+      }
+    : null;
+  return res.json({
+    ok: true,
+    authenticated: true,
+    memberId: memberId || null,
+    userSupabaseId: memberId || null,
+    username: String(req.session?.username || "").trim(),
+    account,
+  });
 });
 
 // Login
