@@ -4718,26 +4718,26 @@ body.operations-orders-page .next-maintenance-upload-field {
 @media(max-width:640px){.order-download-overlay,.order-instruction-editor-overlay{padding:10px}.order-download-dialog{width:min(100%,520px);max-height:90vh;border-radius:20px;padding:17px}.order-download-header{padding-right:38px}.order-download-header__icon{width:40px;height:40px;flex-basis:40px;border-radius:12px}.order-download-header h2{font-size:18px}.order-download-columns__grid{grid-template-columns:1fr 1fr;gap:6px}.order-download-column-option{min-height:38px;padding:8px;font-size:9px}.order-download-instructions__heading{display:block}.order-download-instructions__heading small{display:block;max-width:none;margin-top:4px;text-align:left}.order-download-actions{grid-template-columns:1fr}.order-instruction-editor{padding:17px;border-radius:19px}.order-instruction-editor__actions{grid-template-columns:1fr 1fr}}
 
 
-/* Operations Orders — keep receipt photos beside Received by in the same meta-card style. */
-body.operations-orders-page .next-operations-meta-pair {
+/* Current / Operations Orders — keep receipt photos beside Received by in the same meta-card style. */
+body:is(.operations-orders-page,.current-orders-page) .next-operations-meta-pair {
   grid-column: 1 / -1;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px 14px;
 }
-body.operations-orders-page .next-operations-meta-pair > .co-meta-row:only-child {
+body:is(.operations-orders-page,.current-orders-page) .next-operations-meta-pair > .co-meta-row:only-child {
   grid-column: 1 / -1;
 }
-body.operations-orders-page .next-operations-receipt-meta strong {
+body:is(.operations-orders-page,.current-orders-page) .next-operations-receipt-meta strong {
   min-width: 0;
 }
-body.operations-orders-page .next-operations-receipt-meta__links {
+body:is(.operations-orders-page,.current-orders-page) .next-operations-receipt-meta__links {
   display: flex;
   justify-content: flex-end;
   flex-wrap: wrap;
   gap: 5px 9px;
 }
-body.operations-orders-page .next-operations-receipt-meta__link {
+body:is(.operations-orders-page,.current-orders-page) .next-operations-receipt-meta__link {
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
@@ -4747,19 +4747,19 @@ body.operations-orders-page .next-operations-receipt-meta__link {
   text-decoration: none;
   font-weight: 900;
 }
-body.operations-orders-page .next-operations-receipt-meta__link svg {
+body:is(.operations-orders-page,.current-orders-page) .next-operations-receipt-meta__link svg {
   width: 16px;
   height: 16px;
   flex: 0 0 auto;
 }
-body.operations-orders-page .next-operations-receipt-meta__link span {
+body:is(.operations-orders-page,.current-orders-page) .next-operations-receipt-meta__link span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: inherit;
 }
 @media (max-width: 720px) {
-  body.operations-orders-page .next-operations-meta-pair {
+  body:is(.operations-orders-page,.current-orders-page) .next-operations-meta-pair {
     grid-template-columns: 1fr;
   }
 }
@@ -4863,7 +4863,7 @@ body.operations-orders-page .next-classic-orders-parity .co-meta-row--reason str
   padding: 9px 12px;
   font-size: 12px;
 }
-body.operations-orders-page .next-classic-orders-parity .next-operations-meta-pair {
+body:is(.operations-orders-page,.current-orders-page) .next-classic-orders-parity .next-operations-meta-pair {
   gap: 7px 9px;
 }
 body.operations-orders-page .next-classic-orders-parity .co-modal-actions.ro-actions {

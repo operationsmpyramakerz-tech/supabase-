@@ -866,6 +866,9 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
       // Compatibility fallback: keep the existing Express read path available
       // if a deployment has an older/atypical Stocktaking schema that the new
       // direct Supabase reader cannot resolve yet.
+      if (response.status === 403) {
+        throw new Error(body?.error || "This Stocktaking folder is not available for your access level.");
+      }
       if (!response.ok || !Array.isArray(body)) {
         response = await fetch(`/api/stock?${params.toString()}`, {
           method: "GET",

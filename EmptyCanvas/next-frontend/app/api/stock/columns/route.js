@@ -12,7 +12,7 @@ export async function GET(request) {
   try {
     const url = new URL(request.url);
     const fresh = url.searchParams.get("_fresh") === "1";
-    const columns = await listStocktakingFolders({ fresh });
+    const columns = await listStocktakingFolders({ fresh, account: gate.account || {} });
     return NextResponse.json({ ok: true, source: "supabase-next", columns });
   } catch (error) {
     return NextResponse.json(

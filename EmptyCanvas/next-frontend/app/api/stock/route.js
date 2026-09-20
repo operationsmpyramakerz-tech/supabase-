@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getLegacyAccountGate } from "../../../lib/products-auth";
-import { stocktakingForAccount, stocktakingForColumn } from "../../../lib/stocktaking-data";
+import { canAccessStocktakingColumn, stocktakingForAccount, stocktakingForColumn } from "../../../lib/stocktaking-data";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +19,15 @@ export async function GET(request) {
     const inventoryColumn = String(url.searchParams.get("inventoryColumn") || url.searchParams.get("inventory_column") || "").trim();
     const defectedColumn = String(url.searchParams.get("defectedColumn") || url.searchParams.get("defected_column") || "").trim();
     const fresh = url.searchParams.get("_fresh") === "1";
+    if (column) {
+      const allowed = await canAccessStocktakingColumn(gate.account || {}, column, { fresh });
+      if (!allowed) {
+        return NextResponse.json(
+          { ok: false, error: "This Stocktaking folder is not available for your access level." },
+          { status: 403, headers: { "Cache-Control": "private, no-store" } },
+        );
+      }
+    }
     const items = column
       ? await stocktakingForColumn(column, { inventoryColumn, defectedColumn, fresh })
       : await stocktakingForAccount(gate.account || {}, { fresh });

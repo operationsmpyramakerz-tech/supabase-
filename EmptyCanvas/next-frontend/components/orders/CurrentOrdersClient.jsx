@@ -276,6 +276,28 @@ function hasMixedApprovedRejected(items) {
   return tabs.includes("approved") && tabs.includes("rejected");
 }
 
+function receiptEntriesFromItem(item) {
+  const entries = [];
+  const seen = new Set();
+  const add = (entry = {}, fallbackIndex = 0) => {
+    const url = text(entry?.url ?? entry?.rawUrl ?? entry?.raw);
+    const name = text(entry?.name ?? entry?.filename) || `Receipt photo ${fallbackIndex + 1}`;
+    if (!url) return;
+    const key = `${url}|${name}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    entries.push({ name, url });
+  };
+
+  const direct = Array.isArray(item?.orderReceiptEntries) ? item.orderReceiptEntries : [];
+  direct.forEach((entry, index) => add(entry, index));
+
+  const urls = Array.isArray(item?.orderReceiptUrls) ? item.orderReceiptUrls : [item?.orderReceiptUrl];
+  const names = Array.isArray(item?.orderReceiptNames) ? item.orderReceiptNames : [item?.orderReceiptName];
+  urls.filter(Boolean).forEach((url, index) => add({ url, name: names[index] }, index));
+  return entries;
+}
+
 function buildGroups(rows) {
   const sorted = [...(Array.isArray(rows) ? rows : [])].sort((a, b) => dateValue(b?.createdTime) - dateValue(a?.createdTime));
   const map = new Map();
@@ -311,6 +333,15 @@ function buildGroups(rows) {
     const stage = Math.max(...group.items.map((item) => statusIndex(item?.status)), 1);
     const hasRemaining = group.items.some((item) => Math.abs(remainingQuantity(item)) > 1e-9);
     const hasReceived = group.items.some((item) => Math.abs(receivedQuantity(item)) > 1e-9);
+    const operationsNames = [...new Set(group.items.map((item) => text(item?.operationsByName)).filter(Boolean))];
+    const receiptEntries = [];
+    const receiptSeen = new Set();
+    group.items.flatMap(receiptEntriesFromItem).forEach((entry) => {
+      const key = `${entry.url}|${entry.name}`;
+      if (receiptSeen.has(key)) return;
+      receiptSeen.add(key);
+      receiptEntries.push(entry);
+    });
     let status = dominantStatus(group.items);
     if (stage === 3) status = hasRemaining && !isMaintenanceOrder(group.orderType) ? "remaining" : "shipped";
     return {
@@ -324,6 +355,8 @@ function buildGroups(rows) {
       total: group.items.reduce((sum, item) => sum + itemTotal(item), 0),
       receivedTotal: group.items.reduce((sum, item) => sum + Math.abs(receivedQuantity(item)) * Math.abs(finite(item?.unitPrice ?? item?.unit_price ?? item?.price)), 0),
       remainingTotal: group.items.reduce((sum, item) => sum + Math.abs(remainingQuantity(item)) * Math.abs(finite(item?.unitPrice ?? item?.unit_price ?? item?.price)), 0),
+      operationsByName: operationsNames.length === 1 ? operationsNames[0] : operationsNames.length ? "Multiple" : "",
+      receiptEntries,
       status,
     };
   }).sort((a, b) => dateValue(b.latestCreated) - dateValue(a.latestCreated));
@@ -674,7 +707,38 @@ function OrderDetailsModal({ group, tab, busy, onClose, onAction, onReason, onEx
         <ProgressTrack value={archived ? 4 : progressIndex(group)} />
 
         <div className="co-modal-body">
-          {!maintenance ? <div className="co-modal-meta"><div className="co-meta-row co-meta-row--reason"><span>Reason</span><strong>{group.reason}</strong></div></div> : null}
+          {!maintenance ? (
+            <div className="co-modal-meta">
+              <div className="co-meta-row co-meta-row--reason"><span>Reason</span><strong>{group.reason}</strong></div>
+              {((tab === "shipped" || tab === "arrived") && group.operationsByName) || (tab === "arrived" && group.receiptEntries?.length) ? (
+                <div className="next-operations-meta-pair">
+                  {(tab === "shipped" || tab === "arrived") && group.operationsByName ? (
+                    <div className="co-meta-row"><span>Received by</span><strong>{group.operationsByName}</strong></div>
+                  ) : null}
+                  {tab === "arrived" && group.receiptEntries?.length ? (
+                    <div className="co-meta-row next-operations-receipt-meta">
+                      <span>Receipt photos</span>
+                      <strong className="next-operations-receipt-meta__links">
+                        {group.receiptEntries.map((entry, index) => (
+                          <a
+                            className="next-operations-receipt-meta__link"
+                            href={entry.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            title={entry.name}
+                            key={`${entry.url}-${index}`}
+                          >
+                            <ClassicOrderIcon name="image" />
+                            <span>{entry.name || `Photo ${index + 1}`}</span>
+                          </a>
+                        ))}
+                      </strong>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           <div className="co-modal-actions ro-actions ro-actions--right order-group-sort-actions order-modal-search-actions">
             <OrderComponentSearch key={`${group.key}:${tab}`} value={componentSearch} onChange={setComponentSearch} disabled={busy} />
             <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => setDownloadOpen(true)} disabled={busy}><ClassicOrderIcon name="download" /><span>Download</span></button>

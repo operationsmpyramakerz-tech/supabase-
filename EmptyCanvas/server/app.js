@@ -30619,11 +30619,49 @@ function _sbRequestedStocktakingColumn(req, rows = []) {
   return resolved;
 }
 
+async function _sbVisibleStocktakingFoldersForRequest(req, folders = []) {
+  const source = Array.isArray(folders) ? folders : [];
+  const accessLevel = _sessionPageAccessLevel(req, "Stocktaking");
+  if (accessLevel === PAGE_ACCESS_LEVELS.ADMIN) return source;
+
+  const currentId = String(req?.session?.userSupabaseId || req?.session?.userNotionId || "").trim();
+  const currentName = String(req?.session?.username || "").trim();
+  const allowedIds = new Set([currentId].filter(Boolean));
+  const allowedNames = new Set([_sbStocktakingOwnerBase(currentName)].filter(Boolean));
+
+  if (accessLevel === PAGE_ACCESS_LEVELS.EDIT) {
+    const visible = await _sbVisibleSVInfo(req).catch(() => ({ ids: [], names: [] }));
+    (visible?.ids || []).forEach((id) => {
+      const value = String(id || "").trim();
+      if (value) allowedIds.add(value);
+    });
+    (visible?.names || []).forEach((name) => {
+      const value = _sbStocktakingOwnerBase(name);
+      if (value) allowedNames.add(value);
+    });
+  }
+
+  return source.filter((folder) => {
+    const folderId = String(folder?.userId || "").trim();
+    const folderNames = [folder?.label, folder?.stocktakingLabel, folder?.key]
+      .map((value) => _sbStocktakingOwnerBase(value))
+      .filter(Boolean);
+    return (folderId && allowedIds.has(folderId)) || folderNames.some((name) => allowedNames.has(name));
+  });
+}
+
 async function _sbStocktakingSelectionForRequest(req, rows = []) {
   const requestedColumn = _sbRequestedStocktakingColumn(req, rows);
   if (requestedColumn) {
     const memberRows = _sbTeamMembersEnabled() ? await _sbSelectTeamMembersRows().catch(() => []) : [];
-    const folder = _sbStocktakingFolderColumns(rows, memberRows).find((item) => item.key === requestedColumn) || null;
+    const folders = _sbStocktakingFolderColumns(rows, memberRows);
+    const visibleFolders = await _sbVisibleStocktakingFoldersForRequest(req, folders);
+    const folder = visibleFolders.find((item) => item.key === requestedColumn) || null;
+    if (!folder) {
+      const err = new Error("This Stocktaking folder is not available for your access level.");
+      err.status = 403;
+      throw err;
+    }
     return {
       quantityColumn: requestedColumn,
       displayName: folder?.label || _uaTitleCaseLabel(requestedColumn).replace(/\s+Stock$/i, ""),
@@ -31829,7 +31867,9 @@ app.get(
           _sbStocktakingRows(),
           _sbTeamMembersEnabled() ? _sbSelectTeamMembersRows().catch(() => []) : Promise.resolve([]),
         ]);
-        return res.json({ ok: true, columns: _sbStocktakingFolderColumns(rows, memberRows), source: "supabase" });
+        const folders = _sbStocktakingFolderColumns(rows, memberRows);
+        const columns = await _sbVisibleStocktakingFoldersForRequest(req, folders);
+        return res.json({ ok: true, columns, source: "supabase" });
       }
 
       if (!stocktakingDatabaseId) {
@@ -31840,7 +31880,8 @@ app.get(
         .filter(([key, prop]) => _uaIsUsefulStocktakingSchoolColumn(key) && ["number", "formula"].includes(String(prop?.type || "")))
         .map(([key]) => ({ key, label: _uaTitleCaseLabel(key), itemsCount: null, total: null }))
         .sort((a, b) => String(a.label || "").localeCompare(String(b.label || "")));
-      return res.json({ ok: true, columns, source: "notion" });
+      const visibleColumns = await _sbVisibleStocktakingFoldersForRequest(req, columns);
+      return res.json({ ok: true, columns: visibleColumns, source: "notion" });
     } catch (error) {
       console.error("GET /api/stock/columns error:", error?.details || error?.body || error);
       return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to load Stocktaking columns." });

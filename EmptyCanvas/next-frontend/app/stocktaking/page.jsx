@@ -3,7 +3,7 @@ import AppShell from "../../components/AppShell";
 import StocktakingClient from "../../components/stocktaking/StocktakingClient";
 import { fetchLegacyJson } from "../../lib/legacy-api";
 import { getLegacyAccountGate } from "../../lib/products-auth";
-import { listStocktakingFolders } from "../../lib/stocktaking-data";
+import { filterStocktakingFoldersForAccount, listStocktakingFolders } from "../../lib/stocktaking-data";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -29,9 +29,8 @@ async function loadInitialStocktakingColumns() {
     return { columns: await listStocktakingFolders(), error: "" };
   } catch (error) {
     const directError = error?.message || "Stocktaking columns are temporarily unavailable.";
-    // Compatibility fallback only. Normal Supabase deployments stay entirely
-    // on the direct Next read path. This fallback also runs independently of
-    // the account gate so it does not reintroduce sequential startup latency.
+    // Compatibility fallback only. The server filters this route too, and the
+    // page applies its account filter before rendering any folder cards.
     const legacy = await fetchLegacyJson("/api/stock/columns", { timeoutMs: 20_000 });
     if (legacy.ok && legacy.data?.ok && Array.isArray(legacy.data?.columns)) {
       return { columns: legacy.data.columns, error: "" };
@@ -58,6 +57,7 @@ export default async function StocktakingPage() {
   if (!Array.isArray(columns)) {
     return <UnavailableState message={columnsError || "Stocktaking data is temporarily unavailable."} />;
   }
+  const visibleColumns = await filterStocktakingFoldersForAccount(columns, gate.account);
 
   return (
     <AppShell
@@ -67,7 +67,7 @@ export default async function StocktakingPage() {
       activePath="/next/stocktaking"
       bodyClass="stocktaking-page"
     >
-      <StocktakingClient initialColumns={columns} />
+      <StocktakingClient initialColumns={visibleColumns} />
     </AppShell>
   );
 }

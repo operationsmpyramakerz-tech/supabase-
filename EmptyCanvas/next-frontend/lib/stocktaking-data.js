@@ -1,6 +1,7 @@
 import "server-only";
 import { getProductsCatalog } from "./products-service";
 import { listTeamMembersLite } from "./team-members-service";
+import { getReviewerVisibility } from "./reviewer-visibility-service";
 import {
   canUseStocktakingFolderSummaryRpc,
   invalidateStocktakingFolderSummaryRpcCache,
@@ -329,6 +330,78 @@ function accountMatchesMember(account = {}, row = {}) {
   return !!accountEmail && !!rowEmail && accountEmail === rowEmail;
 }
 
+function stocktakingBuiltInAdmin(account = {}) {
+  const name = canonical(account?.name || account?.username);
+  const position = canonical(account?.position);
+  return name === "admin" || position.includes("admin");
+}
+
+export function stocktakingAccessLevel(account = {}) {
+  if (stocktakingBuiltInAdmin(account)) return "admin";
+
+  const pageRows = Array.isArray(account?.pageAccess?.pages) ? account.pageAccess.pages : [];
+  const rank = { view: 1, edit: 2, admin: 3 };
+  let best = "";
+  for (const row of pageRows) {
+    if (row?.isEnabled === false) continue;
+    const candidates = [row?.pageName, row?.pageKey, row?.routePath, ...(Array.isArray(row?.aliases) ? row.aliases : [])]
+      .map(canonical)
+      .filter(Boolean);
+    if (!candidates.some((value) => value === "stocktaking" || value === "nextstocktaking" || value.endsWith("stocktaking"))) continue;
+    const raw = text(row?.accessLevel || row?.access_level).toLowerCase();
+    const level = raw === "admin" ? "admin" : raw === "view" ? "view" : "edit";
+    if (!best || rank[level] > rank[best]) best = level;
+  }
+  if (best) return best;
+
+  // Legacy account payloads only carry allowedPages. The legacy server treats
+  // an enabled Stocktaking page without a granular access row as Edit.
+  const allowed = Array.isArray(account?.allowedPages) ? account.allowedPages.map(canonical) : [];
+  if (allowed.some((value) => value === "stocktaking" || value === "nextstocktaking" || value.endsWith("stocktaking"))) return "edit";
+  return "view";
+}
+
+function stocktakingFolderMatches(folder = {}, ids = new Set(), names = new Set()) {
+  const userId = text(folder?.userId);
+  if (userId && ids.has(userId)) return true;
+  const folderNames = [folder?.label, folder?.stocktakingLabel, folder?.key]
+    .map((value) => ownerBase(value))
+    .filter(Boolean);
+  return folderNames.some((value) => names.has(value));
+}
+
+export async function filterStocktakingFoldersForAccount(folders = [], account = {}, { fresh = false } = {}) {
+  const source = Array.isArray(folders) ? folders : [];
+  const level = stocktakingAccessLevel(account);
+  if (level === "admin") return source;
+
+  const ownIds = new Set([text(account?.teamMemberId || account?.userSupabaseId || account?.id || account?.userId)].filter(Boolean));
+  const ownNames = new Set([account?.name, account?.username].map(ownerBase).filter(Boolean));
+  const allowedIds = new Set(ownIds);
+  const allowedNames = new Set(ownNames);
+
+  if (level === "edit") {
+    const visibility = await getReviewerVisibility(account, { fresh }).catch(() => ({ ids: [], names: [], queryNames: [] }));
+    for (const id of Array.isArray(visibility?.ids) ? visibility.ids : []) {
+      const clean = text(id);
+      if (clean) allowedIds.add(clean);
+    }
+    for (const name of [...(Array.isArray(visibility?.names) ? visibility.names : []), ...(Array.isArray(visibility?.queryNames) ? visibility.queryNames : [])]) {
+      const clean = ownerBase(name);
+      if (clean) allowedNames.add(clean);
+    }
+  }
+
+  return source.filter((folder) => stocktakingFolderMatches(folder, allowedIds, allowedNames));
+}
+
+export async function canAccessStocktakingColumn(account = {}, column = "", { fresh = false } = {}) {
+  const requested = text(column);
+  if (!requested) return false;
+  const folders = await listStocktakingFolders({ fresh, account });
+  return folders.some((folder) => text(folder?.key) === requested);
+}
+
 function stocktakingTable() {
   return text(process.env.SUPABASE_STOCKTAKING_TABLE) || "stocktaking";
 }
@@ -518,7 +591,7 @@ async function enrichComponentTags(items = []) {
   }
 }
 
-export async function listStocktakingFolders({ fresh = false } = {}) {
+export async function listStocktakingFolders({ fresh = false, account = null } = {}) {
   const membersPromise = listTeamMembersLite({ fresh });
   const folderBlocked = new Set([
     "sourceorderid", "sourceordernumber", "orderid", "ordernumber", "teammemberid", "teammembername",
@@ -573,7 +646,8 @@ export async function listStocktakingFolders({ fresh = false } = {}) {
         loadStocktakingFolderSummariesRpc({ fresh }),
         membersPromise,
       ]);
-      return buildFolders(summaries, members);
+      const folders = buildFolders(summaries, members);
+      return account ? await filterStocktakingFoldersForAccount(folders, account, { fresh }) : folders;
     } catch (error) {
       noteStocktakingFolderSummaryRpcError(error);
       console.warn("[stocktaking] folder summary RPC unavailable; using projection compatibility path:", error?.message || error);
@@ -611,7 +685,8 @@ export async function listStocktakingFolders({ fresh = false } = {}) {
     }
     return { key, itemsCount, total };
   });
-  return buildFolders(summaries, await membersPromise);
+  const folders = buildFolders(summaries, await membersPromise);
+  return account ? await filterStocktakingFoldersForAccount(folders, account, { fresh }) : folders;
 }
 
 export async function stocktakingForColumn(column, { inventoryColumn = "", defectedColumn = "", fresh = false } = {}) {
