@@ -155,6 +155,7 @@ $$;
 -- with CREATE OR REPLACE, so remove only the known accelerator signatures first.
 -- They are recreated immediately below and their EXECUTE grants are restored later.
 drop function if exists public.erp_order_candidate_numbers(jsonb);
+drop function if exists public.erp_order_summary_bundle(jsonb);
 drop function if exists public.erp_order_summary_rows(jsonb);
 drop function if exists public.erp_home_order_groups(jsonb);
 drop function if exists public.erp_home_stock_summary(jsonb);
@@ -372,6 +373,25 @@ begin
              %s desc
   $sql$, v_pairs, v_table, v_csv, v_created_expr, v_id_expr);
 end;
+$$;
+
+-- Bundle the compact row RPC into one PostgREST row. The row-based RPC
+-- remains available as a compatibility fallback, but PostgREST commonly caps
+-- set-returning responses at 1000 rows. Large order groups can exceed that cap
+-- and previously forced the Next layer to make many sequential 5-order calls.
+-- Aggregating inside PostgreSQL preserves the exact compact row shape while
+-- removing the row cap and repeated HTTP/RPC round trips.
+create or replace function public.erp_order_summary_bundle(
+  p_options jsonb default '{}'::jsonb
+)
+returns table(payload jsonb)
+language sql
+stable
+security invoker
+set search_path = public
+as $$
+  select coalesce(jsonb_agg(r.row_data), '[]'::jsonb) as payload
+  from public.erp_order_summary_rows(p_options) r;
 $$;
 
 create or replace function public.erp_home_order_groups(
@@ -1048,6 +1068,7 @@ grant execute on function public.erp_try_timestamptz(text) to anon, authenticate
 grant execute on function public.erp_canonical_token(text) to anon, authenticated, service_role;
 grant execute on function public.erp_order_candidate_numbers(jsonb) to anon, authenticated, service_role;
 grant execute on function public.erp_order_summary_rows(jsonb) to anon, authenticated, service_role;
+grant execute on function public.erp_order_summary_bundle(jsonb) to anon, authenticated, service_role;
 grant execute on function public.erp_home_order_groups(jsonb) to anon, authenticated, service_role;
 grant execute on function public.erp_home_stock_summary(jsonb) to anon, authenticated, service_role;
 grant execute on function public.erp_home_expenses_summary(jsonb) to anon, authenticated, service_role;
@@ -1071,6 +1092,7 @@ as $$
     values
       ('rpc','erp_order_candidate_numbers'),
       ('rpc','erp_order_summary_rows'),
+      ('rpc','erp_order_summary_bundle'),
       ('rpc','erp_home_order_groups'),
       ('rpc','erp_home_stock_summary'),
       ('rpc','erp_home_expenses_summary'),
