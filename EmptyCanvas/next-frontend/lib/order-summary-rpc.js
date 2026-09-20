@@ -13,11 +13,64 @@ const ERROR_COOLDOWN_MS = 60 * 1000;
 // defensively if a deployment still returns a cap-sized payload.
 const SUMMARY_RPC_BATCH_SIZE = 5;
 const SUMMARY_RPC_ROW_CAP_GUARD = 1000;
+const DEFAULT_BUNDLE_BATCH_SIZE = 6;
+const DEFAULT_BUNDLE_CONCURRENCY = 4;
+const DEFAULT_BUNDLE_TIMEOUT_MS = 4500;
+const DEFAULT_ROW_BATCH_CONCURRENCY = 4;
 let disabledUntil = 0;
 let bundleDisabledUntil = 0;
 
 function text(value) {
   return String(value ?? "").trim();
+}
+
+function boundedInteger(value, fallback, min, max) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(min, Math.min(max, Math.floor(parsed)));
+}
+
+function bundleBatchSize() {
+  return boundedInteger(process.env.ORDER_SUMMARY_BUNDLE_BATCH_SIZE, DEFAULT_BUNDLE_BATCH_SIZE, 2, 12);
+}
+
+function bundleConcurrency() {
+  return boundedInteger(process.env.ORDER_SUMMARY_BUNDLE_CONCURRENCY, DEFAULT_BUNDLE_CONCURRENCY, 1, 8);
+}
+
+function bundleTimeoutMs() {
+  return boundedInteger(process.env.ORDER_SUMMARY_BUNDLE_TIMEOUT_MS, DEFAULT_BUNDLE_TIMEOUT_MS, 1500, 8000);
+}
+
+function rowBatchConcurrency() {
+  return boundedInteger(process.env.ORDER_SUMMARY_ROW_BATCH_CONCURRENCY, DEFAULT_ROW_BATCH_CONCURRENCY, 1, 8);
+}
+
+function chunk(values = [], size = 1) {
+  const safe = Math.max(1, Math.floor(Number(size) || 1));
+  const out = [];
+  for (let index = 0; index < values.length; index += safe) out.push(values.slice(index, index + safe));
+  return out;
+}
+
+async function mapConcurrent(values = [], concurrency = 1, worker) {
+  const source = Array.isArray(values) ? values : [];
+  if (!source.length) return [];
+  const limit = Math.max(1, Math.min(source.length, Math.floor(Number(concurrency) || 1)));
+  const output = new Array(source.length);
+  let cursor = 0;
+
+  async function run() {
+    while (true) {
+      const index = cursor;
+      cursor += 1;
+      if (index >= source.length) return;
+      output[index] = await worker(source[index], index);
+    }
+  }
+
+  await Promise.all(Array.from({ length: limit }, () => run()));
+  return output;
 }
 
 function cleanNumbers(values = []) {
@@ -79,15 +132,28 @@ function normalizeBundleRows(data) {
   return [];
 }
 
-async function loadSummaryBundle(orderNumbers, { profileName, signal } = {}) {
+async function loadSummaryBundleBatch(orderNumbers, { profileName, signal } = {}) {
   const response = await rpc(BUNDLE_RPC_NAME, {
     p_options: { orderNumbers },
   }, {
+    // Keep one metric name for all small bundle calls so Production P95 shows
+    // the real per-batch DB/network latency instead of one giant-window call.
     profileName: `${text(profileName) || "orders.summary"}-bundle-rpc`,
-    timeoutMs: 10_000,
+    timeoutMs: bundleTimeoutMs(),
     signal,
   });
   return normalizeBundleRows(response);
+}
+
+async function loadSummaryBundles(orderNumbers, { profileName, signal } = {}) {
+  // A single jsonb_agg for 30-40 order groups produced a very large JSON value
+  // in production and regressed P95 to ~10s. Small bundles keep each JSON
+  // serialization bounded, while limited concurrency removes the old sequential
+  // round-trip chain.
+  const batches = chunk(orderNumbers, bundleBatchSize());
+  const groups = await mapConcurrent(batches, bundleConcurrency(), async (batch) =>
+    await loadSummaryBundleBatch(batch, { profileName, signal }));
+  return groups.flat();
 }
 
 async function loadSummaryBatch(orderNumbers, { profileName, signal } = {}) {
@@ -117,6 +183,13 @@ async function loadSummaryBatch(orderNumbers, { profileName, signal } = {}) {
   return normalized;
 }
 
+async function loadSummaryRowBatches(orderNumbers, { profileName, signal } = {}) {
+  const batches = chunk(orderNumbers, SUMMARY_RPC_BATCH_SIZE);
+  const groups = await mapConcurrent(batches, rowBatchConcurrency(), async (batch) =>
+    await loadSummaryBatch(batch, { profileName, signal }));
+  return groups.flat();
+}
+
 export async function loadOrderSummaryRowsRpc({
   numbers = [],
   profileName = "orders.summary-rpc",
@@ -125,28 +198,23 @@ export async function loadOrderSummaryRowsRpc({
   const orderNumbers = cleanNumbers(numbers);
   if (!orderNumbers.length) return [];
 
-  // Primary production path: aggregate every compact component row into one
-  // jsonb payload inside PostgreSQL. PostgREST then sees one result row instead
-  // of 1,000+ component rows, so a 30-40 order window needs one round trip
-  // instead of a chain of 5-order RPC calls. This is the main fix for the
-  // Operations/Review 9-12s tail that remained after compacting each row.
+  // Production evidence showed that one giant bundle moved the bottleneck into
+  // PostgreSQL JSON aggregation/network transfer. Use several bounded bundles
+  // concurrently instead. This keeps one response small while avoiding the old
+  // 6-8 sequential requests for a 36-order page.
   if (Date.now() >= bundleDisabledUntil) {
     try {
-      return await loadSummaryBundle(orderNumbers, { profileName, signal });
+      return await loadSummaryBundles(orderNumbers, { profileName, signal });
     } catch (error) {
       if (signal?.aborted || error?.code === "REQUEST_ABORTED" || error?.name === "AbortError") throw error;
       bundleDisabledUntil = Date.now() + (missingNamedRpc(error, BUNDLE_RPC_NAME) ? MISSING_COOLDOWN_MS : ERROR_COOLDOWN_MS);
     }
   }
 
-  // Compatibility path for a deployment where the new bundle migration has
-  // not been installed yet. Keep the proven row RPC and cap-safe batching.
-  const output = [];
-  for (let index = 0; index < orderNumbers.length; index += SUMMARY_RPC_BATCH_SIZE) {
-    const batch = orderNumbers.slice(index, index + SUMMARY_RPC_BATCH_SIZE);
-    output.push(...await loadSummaryBatch(batch, { profileName, signal }));
-  }
-  return output;
+  // Compatibility/recovery path: the row RPC is also parallelized in bounded
+  // batches. A slow/missing bundle therefore no longer adds a long serial tail
+  // before the fallback completes.
+  return await loadSummaryRowBatches(orderNumbers, { profileName, signal });
 }
 
 export const __orderSummaryRpcTest = {
@@ -154,4 +222,6 @@ export const __orderSummaryRpcTest = {
   missingRpc,
   normalizeSummaryRows,
   normalizeBundleRows,
+  chunk,
+  mapConcurrent,
 };
