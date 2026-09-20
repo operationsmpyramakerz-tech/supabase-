@@ -25142,6 +25142,55 @@ function _eventsComponentPhotoUrlList(value, fallbackUrl = '') {
   return urls;
 }
 
+const EVENTS_COMPONENT_FILE_EXTENSIONS = new Set([
+  'pdf', 'zip', 'rar', '7z', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv',
+]);
+
+function _eventsComponentFileExtension(value = '') {
+  const match = String(value || '').trim().toLowerCase().match(/\.([a-z0-9]{1,8})$/);
+  return match ? match[1] : '';
+}
+
+function _eventsComponentFileAllowed(fileName = '', mime = '') {
+  const extension = _eventsComponentFileExtension(fileName);
+  if (!EVENTS_COMPONENT_FILE_EXTENSIONS.has(extension)) return false;
+  const normalizedMime = String(mime || '').trim().toLowerCase();
+  if (!normalizedMime || normalizedMime === 'application/octet-stream') return true;
+  if (extension === 'pdf') return normalizedMime === 'application/pdf';
+  if (['zip', 'rar', '7z'].includes(extension)) return /(zip|rar|7z|compressed|octet-stream)/i.test(normalizedMime);
+  if (['txt', 'csv'].includes(extension)) return /^text\//i.test(normalizedMime) || /csv/i.test(normalizedMime);
+  return /(word|officedocument|excel|spreadsheet|powerpoint|presentation|msword|ms-excel|ms-powerpoint|octet-stream)/i.test(normalizedMime);
+}
+
+function _eventsComponentAttachmentList(value) {
+  const seen = new Set();
+  const files = [];
+  for (const item of _eventsArray(value)) {
+    const candidate = typeof item === 'string' ? { url: item } : (item || {});
+    const url = _eventsHttpUrl(candidate?.url || candidate?.fileUrl || candidate?.file_url, 2000);
+    if (!url || seen.has(url)) continue;
+    seen.add(url);
+    files.push({
+      url,
+      name: _eventsText(candidate?.name || candidate?.fileName || candidate?.file_name || 'Attachment', 180) || 'Attachment',
+      mime: _eventsText(candidate?.mime || candidate?.type, 120),
+      size: _eventsNumber(candidate?.size, { min: 0, max: 50 * 1024 * 1024, fallback: 0, integer: true }),
+    });
+    if (files.length >= 8) break;
+  }
+  return files;
+}
+
+function _eventsComponentAttachments(body = {}, { existing = [] } = {}) {
+  const hasExplicit = Object.prototype.hasOwnProperty.call(body || {}, 'existingAttachments')
+    || Object.prototype.hasOwnProperty.call(body || {}, 'existing_attachments')
+    || Object.prototype.hasOwnProperty.call(body || {}, 'attachmentFiles')
+    || Object.prototype.hasOwnProperty.call(body || {}, 'attachment_files');
+  return hasExplicit
+    ? _eventsComponentAttachmentList(body?.existingAttachments ?? body?.existing_attachments ?? body?.attachmentFiles ?? body?.attachment_files)
+    : _eventsComponentAttachmentList(existing);
+}
+
 async function _eventsComponentPhotoUrls(body = {}, { existingUrls = [], existingUrl = '' } = {}) {
   if (_eventsBoolean(body?.removePhoto || body?.remove_photo)) return [];
 
@@ -25200,6 +25249,7 @@ function _eventsSerializeComponent(row = {}) {
   const operatingCost = _eventsCost(row?.operating_cost ?? row?.operatingCost, 0);
   const rentalCost = ownershipType === 'external_rental' ? _eventsCost(row?.rental_cost ?? row?.rentalCost, 0) : 0;
   const photoUrls = _eventsComponentPhotoUrlList(row?.photo_urls || row?.photoUrls, row?.photo_url || row?.photoUrl || '');
+  const attachments = _eventsComponentAttachmentList(row?.attachment_files || row?.attachmentFiles || row?.attachments);
   return {
     id: String(row?.id || ''),
     name: _eventsText(row?.name, 180),
@@ -25212,6 +25262,7 @@ function _eventsSerializeComponent(row = {}) {
     unitCost: _eventsComponentUnitCost(ownershipType, operatingCost, rentalCost),
     photoUrl: photoUrls[0] || '',
     photoUrls,
+    attachments,
     linkUrl: _eventsHttpUrl(row?.link_url || row?.linkUrl, 1000),
     isActive: row?.is_active !== false,
     createdAt: row?.created_at || null,
@@ -25485,8 +25536,11 @@ function _eventsModuleMissingError(error) {
   if (/SUPABASE_STORAGE_OR_BLOB_TOKEN_MISSING|SUPABASE_STORAGE_PUBLIC_URL_MISSING/i.test(raw)) {
     return 'Photo upload is not configured. Add SUPABASE_STORAGE_BUCKET in Vercel, or add BLOB_READ_WRITE_TOKEN as a fallback.';
   }
+  if (/attachment_files/i.test(raw)) {
+    return 'Event component file attachments are not installed yet. Run supabase_event_component_files.sql in Supabase.';
+  }
   if (/photo_urls|PGRST204/i.test(raw)) {
-    return 'Multiple event component photos are not installed yet. Run supabase_event_component_photos.sql in Supabase.';
+    return 'Multiple event component photos are not installed yet. Run the latest Event Components SQL migration in Supabase.';
   }
   return /event_components|event_type_catalog|event_component_category_catalog|event_governorate_transport_rates|events|relation .* does not exist|Could not find the table|PGRST205|42P01|schema cache/i.test(raw)
     ? 'Events tables are not installed. Run the latest Events component categories SQL migration in Supabase first.'
@@ -25559,6 +25613,39 @@ app.post('/api/events/components/photo-upload', requireAuth, requirePage('Event 
     return res.status(201).json({ ok: true, url });
   } catch (error) {
     console.error('POST /api/events/components/photo-upload error:', error?.details || error);
+    return res.status(error?.status || 500).json({ ok: false, error: _eventsModuleMissingError(error) });
+  }
+});
+
+app.post('/api/events/components/file-upload', requireAuth, requirePage('Event Components'), async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    const componentId = _eventsUuid(req.body?.componentId || req.body?.component_id);
+    const canUpload = _hasEventComponentsAdminAccess(req)
+      || (componentId ? _hasEventsComponentEditAccess(req, componentId) : _hasEventsComponentCreateAccess(req));
+    if (!canUpload) return res.status(403).json({ ok: false, error: 'Admin authorization is required to upload event component files.' });
+
+    const dataUrl = String(req.body?.dataUrl || req.body?.data_url || '').trim();
+    if (!dataUrl) return res.status(400).json({ ok: false, error: 'Choose a file first.' });
+    const displayName = _eventsText(req.body?.fileName || req.body?.file_name || 'attachment', 180) || 'attachment';
+    const fileName = _eventsPhotoFileName(displayName);
+    const { mime, buf } = parseDataUrlToBuffer(dataUrl);
+    if (!_eventsComponentFileAllowed(displayName, mime)) {
+      return res.status(400).json({ ok: false, error: 'Supported files: PDF, ZIP, RAR, 7Z, Word, Excel, PowerPoint, TXT, and CSV.' });
+    }
+    if (buf.length > 2.6 * 1024 * 1024) {
+      return res.status(413).json({ ok: false, error: 'Each non-image file must be 2.6 MB or less.' });
+    }
+
+    const objectPath = `events/components/files/${Date.now()}-${Math.random().toString(16).slice(2)}-${fileName}`;
+    const url = await uploadToBlobFromBase64(dataUrl, objectPath);
+    return res.status(201).json({
+      ok: true,
+      url,
+      file: { url, name: displayName, mime: String(mime || ''), size: buf.length },
+    });
+  } catch (error) {
+    console.error('POST /api/events/components/file-upload error:', error?.details || error);
     return res.status(error?.status || 500).json({ ok: false, error: _eventsModuleMissingError(error) });
   }
 });
@@ -25648,6 +25735,7 @@ app.post('/api/events/components', requireAuth, requirePage('Event Components'),
     const name = _eventsText(req.body?.name, 180);
     if (!name) return res.status(400).json({ ok: false, error: 'Component name is required.' });
     const photoUrls = await _eventsComponentPhotoUrls(req.body || {});
+    const attachments = _eventsComponentAttachments(req.body || {});
     const linkUrl = _eventsHttpUrl(req.body?.linkUrl || req.body?.link_url, 1000);
     if (String(req.body?.linkUrl || req.body?.link_url || '').trim() && !linkUrl) {
       return res.status(400).json({ ok: false, error: 'Link must start with http:// or https://.' });
@@ -25663,6 +25751,7 @@ app.post('/api/events/components', requireAuth, requirePage('Event Components'),
       rental_cost: _eventsNormalizeComponentOwnership(req.body?.ownershipType || req.body?.ownership_type) === 'external_rental' ? _eventsCost(req.body?.rentalCost ?? req.body?.rental_cost, 0) : 0,
       photo_url: photoUrls[0] || null,
       photo_urls: photoUrls,
+      attachment_files: attachments,
       link_url: linkUrl || null,
       is_active: req.body?.isActive !== false,
     });
@@ -25688,6 +25777,9 @@ app.patch('/api/events/components/:id', requireAuth, requirePage('Event Componen
       existingUrls: existing?.photo_urls || existing?.photoUrls || [],
       existingUrl: existing?.photo_url || existing?.photoUrl || '',
     });
+    const attachments = _eventsComponentAttachments(req.body || {}, {
+      existing: existing?.attachment_files || existing?.attachmentFiles || existing?.attachments || [],
+    });
     const linkUrl = _eventsHttpUrl(req.body?.linkUrl || req.body?.link_url, 1000);
     if (String(req.body?.linkUrl || req.body?.link_url || '').trim() && !linkUrl) {
       return res.status(400).json({ ok: false, error: 'Link must start with http:// or https://.' });
@@ -25703,6 +25795,7 @@ app.patch('/api/events/components/:id', requireAuth, requirePage('Event Componen
       rental_cost: _eventsNormalizeComponentOwnership(req.body?.ownershipType || req.body?.ownership_type) === 'external_rental' ? _eventsCost(req.body?.rentalCost ?? req.body?.rental_cost, 0) : 0,
       photo_url: photoUrls[0] || null,
       photo_urls: photoUrls,
+      attachment_files: attachments,
       link_url: linkUrl || null,
       is_active: req.body?.isActive !== false,
     });

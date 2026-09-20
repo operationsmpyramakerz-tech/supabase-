@@ -36,6 +36,7 @@ const EMPTY_FORM = {
   description: "",
   isActive: true,
   existingPhotoUrls: [],
+  existingAttachments: [],
 };
 
 function text(value) {
@@ -139,9 +140,41 @@ function readBlobAsDataUrl(blob) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = () => reject(new Error("Could not read the selected image."));
+    reader.onerror = () => reject(new Error("Could not read the selected file."));
     reader.readAsDataURL(blob);
   });
+}
+
+const EVENT_ATTACHMENT_EXTENSIONS = new Set([
+  "pdf", "zip", "rar", "7z", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "csv",
+]);
+
+function fileExtension(name) {
+  const match = text(name).toLowerCase().match(/\.([a-z0-9]{1,8})$/);
+  return match ? match[1] : "";
+}
+
+function isSupportedAttachment(file) {
+  if (String(file?.type || "").toLowerCase().startsWith("image/")) return true;
+  return EVENT_ATTACHMENT_EXTENSIONS.has(fileExtension(file?.name));
+}
+
+function attachmentLabel(file = {}) {
+  const ext = fileExtension(file?.name);
+  if (ext) return ext.toUpperCase();
+  const mime = text(file?.mime || file?.type);
+  return mime ? mime.split("/").pop().toUpperCase() : "FILE";
+}
+
+function normalizeAttachment(value) {
+  const url = safeUrl(value?.url || value?.fileUrl || value?.file_url);
+  if (!url) return null;
+  return {
+    url,
+    name: text(value?.name || value?.fileName || value?.file_name) || "Attachment",
+    mime: text(value?.mime || value?.type),
+    size: Math.max(0, number(value?.size)),
+  };
 }
 
 function loadImage(file) {
@@ -211,13 +244,15 @@ function Toast({ toast, onClose }) {
   );
 }
 
-function ComponentFormModal({ mode, form, categories, busy, error, onChange, onPhoto, onRemovePhoto, onClose, onSubmit }) {
+function ComponentFormModal({ mode, form, categories, busy, error, onChange, onAssets, onRemovePhoto, onRemoveAttachment, onClose, onSubmit }) {
   if (!mode) return null;
   const external = form.ownershipType === "external_rental";
   const unitCost = Math.max(0, number(form.operatingCost)) + (external ? Math.max(0, number(form.rentalCost)) : 0);
   const isNewCategory = form.category === "__new__";
   const existingPhotos = Array.isArray(form.existingPhotoUrls) ? form.existingPhotoUrls.filter(Boolean) : [];
   const photos = existingPhotos.map((src, index) => ({ src, kind: "existing", index }));
+  const attachments = (Array.isArray(form.existingAttachments) ? form.existingAttachments : []).map(normalizeAttachment).filter(Boolean);
+  const assetCount = photos.length + attachments.length;
 
   return (
     <div className="events-modal-overlay next-modal-layer" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
@@ -294,22 +329,38 @@ function ComponentFormModal({ mode, form, categories, busy, error, onChange, onP
 
           <div className="next-event-component-photo-field next-event-component-photo-field--modern wide">
             <div className="next-event-component-photo-heading">
-              <span>Component photos</span>
-              {photos.length ? <b>{photos.length} photo{photos.length === 1 ? "" : "s"}</b> : null}
+              <span>Photos & files</span>
+              {assetCount ? <b>{photos.length} photo{photos.length === 1 ? "" : "s"} · {attachments.length} file{attachments.length === 1 ? "" : "s"}</b> : null}
             </div>
             <label className="next-event-component-photo-dropzone">
-              <span className="next-event-component-photo-dropzone__icon"><EventIcon name="image" /></span>
-              <strong>{photos.length ? "Add more photos" : "Choose photos"}</strong>
+              <span className="next-event-component-photo-dropzone__icon"><EventIcon name="paperclip" /></span>
+              <strong>{assetCount ? "Add more photos or files" : "Choose photos or files"}</strong>
               <span className="next-event-component-photo-dropzone__action">Browse</span>
-              <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple onChange={onPhoto} hidden />
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif,.pdf,.zip,.rar,.7z,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv"
+                multiple
+                onChange={onAssets}
+                hidden
+              />
             </label>
-            {photos.length ? (
+            {assetCount ? (
               <div className="next-event-component-photo-grid">
                 {photos.map((photo, photoIndex) => (
                   <figure className="next-event-component-photo-thumb" key={`${photo.kind}-${photo.index}-${photo.src.slice(0, 24)}`}>
                     <img src={photo.src} alt={`Component photo ${photoIndex + 1}`} />
                     {photoIndex === 0 ? <span className="next-event-component-photo-primary">Card photo</span> : null}
                     <button type="button" onClick={() => onRemovePhoto(photo.kind, photo.index)} aria-label={`Remove photo ${photoIndex + 1}`}>×</button>
+                  </figure>
+                ))}
+                {attachments.map((file, fileIndex) => (
+                  <figure className="next-event-component-file-thumb" key={`${file.url}-${fileIndex}`}>
+                    <span className="next-event-component-file-thumb__icon"><EventIcon name="file-text" /></span>
+                    <figcaption>
+                      <strong title={file.name}>{file.name}</strong>
+                      <small>{attachmentLabel(file)}</small>
+                    </figcaption>
+                    <button type="button" onClick={() => onRemoveAttachment(fileIndex)} aria-label={`Remove ${file.name}`}>×</button>
                   </figure>
                 ))}
               </div>
@@ -396,6 +447,7 @@ function ComponentCard({ component, categoryLabel, canEdit, canDelete, onEdit, o
   const photos = (Array.isArray(component?.photoUrls) ? component.photoUrls : [component?.photoUrl])
     .map(safeUrl)
     .filter(Boolean);
+  const attachments = (Array.isArray(component?.attachments) ? component.attachments : []).map(normalizeAttachment).filter(Boolean);
   const photo = photos[0] || "";
   const link = safeUrl(component?.linkUrl);
   const external = component?.ownershipType === "external_rental";
@@ -412,9 +464,14 @@ function ComponentCard({ component, categoryLabel, canEdit, canDelete, onEdit, o
       </div>
 
       {photo ? (
-        <button type="button" className="events-component-card__photo events-component-card__photo-button" onClick={() => onOpenPhotos(component)} aria-label={`Open ${component?.name || "component"} photos`}>
+        <button type="button" className="events-component-card__photo events-component-card__photo-button" onClick={() => onOpenPhotos(component)} aria-label={`Open ${component?.name || "component"} photos and files`}>
           <img src={photo} alt={`${component?.name || "Event component"} photo`} loading="lazy" />
-          {photos.length > 1 ? <span className="events-component-card__photo-count">+{photos.length - 1}</span> : null}
+          {photos.length + attachments.length > 1 ? <span className="events-component-card__photo-count">+{photos.length + attachments.length - 1}</span> : null}
+        </button>
+      ) : attachments.length ? (
+        <button type="button" className="events-component-card__photo events-component-card__photo-button events-component-card__file-only" onClick={() => onOpenPhotos(component)} aria-label={`Open ${component?.name || "component"} files`}>
+          <EventIcon name="file-text" />
+          <span>{attachments.length} file{attachments.length === 1 ? "" : "s"}</span>
         </button>
       ) : (
         <div className="events-component-card__photo"><EventIcon name="box" /></div>
@@ -469,14 +526,15 @@ function PhotoGalleryModal({ component, onClose }) {
   const photos = (Array.isArray(component?.photoUrls) ? component.photoUrls : [component?.photoUrl])
     .map(safeUrl)
     .filter(Boolean);
-  if (!photos.length) return null;
+  const attachments = (Array.isArray(component?.attachments) ? component.attachments : []).map(normalizeAttachment).filter(Boolean);
+  if (!photos.length && !attachments.length) return null;
   return (
     <div className="events-modal-overlay next-modal-layer" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <section className="events-modal next-modal next-event-component-gallery" role="dialog" aria-modal="true" aria-label={`${component?.name || "Event component"} photos`}>
         <header className="events-modal__header next-events-modal-head next-event-component-gallery__head">
           <div>
             <h2>{component?.name || "Event Component"}</h2>
-            <span>{photos.length} photo{photos.length === 1 ? "" : "s"}</span>
+            <span>{photos.length} photo{photos.length === 1 ? "" : "s"} · {attachments.length} file{attachments.length === 1 ? "" : "s"}</span>
           </div>
           <button type="button" className="events-modal__close next-modal-close" onClick={onClose} aria-label="Close">×</button>
         </header>
@@ -484,6 +542,16 @@ function PhotoGalleryModal({ component, onClose }) {
           {photos.map((src, index) => (
             <a href={src} target="_blank" rel="noreferrer" className="next-event-component-gallery__item" key={`${src}-${index}`}>
               <img src={src} alt={`${component?.name || "Event component"} photo ${index + 1}`} />
+            </a>
+          ))}
+          {attachments.map((file, index) => (
+            <a href={file.url} target="_blank" rel="noreferrer" className="next-event-component-gallery__file" key={`${file.url}-${index}`}>
+              <span className="next-event-component-gallery__file-icon"><EventIcon name="file-text" /></span>
+              <span className="next-event-component-gallery__file-copy">
+                <strong>{file.name}</strong>
+                <small>{attachmentLabel(file)}</small>
+              </span>
+              <EventIcon name="download" />
             </a>
           ))}
         </div>
@@ -596,6 +664,7 @@ export default function EventComponentsClient({ account, initialComponents, init
       description: text(component?.description),
       isActive: component?.isActive !== false,
       existingPhotoUrls: (Array.isArray(component?.photoUrls) ? component.photoUrls : [component?.photoUrl]).map(safeUrl).filter(Boolean),
+      existingAttachments: (Array.isArray(component?.attachments) ? component.attachments : []).map(normalizeAttachment).filter(Boolean),
     };
   }
 
@@ -649,37 +718,80 @@ export default function EventComponentsClient({ account, initialComponents, init
     }
   }
 
-  async function handlePhoto(event) {
+  async function handleAssets(event) {
     const files = Array.from(event.target.files || []);
     event.target.value = "";
     if (!files.length) return;
-    const currentCount = Array.isArray(form.existingPhotoUrls) ? form.existingPhotoUrls.length : 0;
-    if (currentCount + files.length > 8) {
+
+    const unsupported = files.find((file) => !isSupportedAttachment(file));
+    if (unsupported) {
+      setFormError(`Unsupported file type: ${unsupported.name}. Use images, PDF, ZIP/RAR/7Z, Office files, TXT, or CSV.`);
+      return;
+    }
+
+    const currentPhotos = Array.isArray(form.existingPhotoUrls) ? form.existingPhotoUrls.length : 0;
+    const currentFiles = Array.isArray(form.existingAttachments) ? form.existingAttachments.length : 0;
+    const incomingPhotos = files.filter((file) => String(file?.type || "").toLowerCase().startsWith("image/")).length;
+    const incomingFiles = files.length - incomingPhotos;
+    if (currentPhotos + incomingPhotos > 8) {
       setFormError("You can attach up to 8 photos to one component.");
       return;
     }
+    if (currentFiles + incomingFiles > 8) {
+      setFormError("You can attach up to 8 files to one component.");
+      return;
+    }
+
     setFormBusy(true);
     setFormError("");
     try {
       for (const file of files) {
-        const prepared = await compressImage(file);
-        const payload = await requestJson("/api/events/components/photo-upload", {
+        const isImage = String(file?.type || "").toLowerCase().startsWith("image/");
+        if (isImage) {
+          const prepared = await compressImage(file);
+          const payload = await requestJson("/api/events/components/photo-upload", {
+            method: "POST",
+            body: JSON.stringify({
+              componentId: form.id || "",
+              dataUrl: prepared.dataUrl,
+              fileName: prepared.fileName,
+            }),
+          });
+          const url = safeUrl(payload?.url || payload?.photoUrl);
+          if (!url) throw new Error("The uploaded image did not return a valid URL.");
+          setForm((current) => ({
+            ...current,
+            existingPhotoUrls: [...(Array.isArray(current.existingPhotoUrls) ? current.existingPhotoUrls : []), url],
+          }));
+          continue;
+        }
+
+        if (file.size > 2.6 * 1024 * 1024) {
+          throw new Error(`${file.name} is too large. Non-image files must be 2.6 MB or less.`);
+        }
+        const payload = await requestJson("/api/events/components/file-upload", {
           method: "POST",
           body: JSON.stringify({
             componentId: form.id || "",
-            dataUrl: prepared.dataUrl,
-            fileName: prepared.fileName,
+            dataUrl: await readBlobAsDataUrl(file),
+            fileName: file.name || "attachment",
+            size: file.size || 0,
           }),
         });
-        const url = safeUrl(payload?.url || payload?.photoUrl);
-        if (!url) throw new Error("The uploaded image did not return a valid URL.");
+        const uploaded = normalizeAttachment(payload?.file || {
+          url: payload?.url,
+          name: file.name,
+          mime: file.type,
+          size: file.size,
+        });
+        if (!uploaded) throw new Error("The uploaded file did not return a valid URL.");
         setForm((current) => ({
           ...current,
-          existingPhotoUrls: [...(Array.isArray(current.existingPhotoUrls) ? current.existingPhotoUrls : []), url],
+          existingAttachments: [...(Array.isArray(current.existingAttachments) ? current.existingAttachments : []), uploaded],
         }));
       }
     } catch (error) {
-      setFormError(error?.message || "Could not upload the selected images.");
+      setFormError(error?.message || "Could not upload the selected files.");
     } finally {
       setFormBusy(false);
     }
@@ -689,6 +801,14 @@ export default function EventComponentsClient({ account, initialComponents, init
     setForm((current) => ({
       ...current,
       existingPhotoUrls: (current.existingPhotoUrls || []).filter((_, itemIndex) => itemIndex !== index),
+    }));
+    setFormError("");
+  }
+
+  function removeFormAttachment(index) {
+    setForm((current) => ({
+      ...current,
+      existingAttachments: (current.existingAttachments || []).filter((_, itemIndex) => itemIndex !== index),
     }));
     setFormError("");
   }
@@ -733,6 +853,7 @@ export default function EventComponentsClient({ account, initialComponents, init
         operatingCost: Math.max(0, number(form.operatingCost)),
         rentalCost: form.ownershipType === "external_rental" ? Math.max(0, number(form.rentalCost)) : 0,
         existingPhotoUrls: Array.isArray(form.existingPhotoUrls) ? form.existingPhotoUrls : [],
+        existingAttachments: (Array.isArray(form.existingAttachments) ? form.existingAttachments : []).map(normalizeAttachment).filter(Boolean),
         linkUrl: link,
         description: text(form.description),
         isActive: !!form.isActive,
@@ -880,8 +1001,9 @@ export default function EventComponentsClient({ account, initialComponents, init
         busy={formBusy}
         error={formError}
         onChange={patchForm}
-        onPhoto={handlePhoto}
+        onAssets={handleAssets}
         onRemovePhoto={removeFormPhoto}
+        onRemoveAttachment={removeFormAttachment}
         onClose={() => { if (!formBusy) { setFormMode(""); setFormError(""); } }}
         onSubmit={submitForm}
       />

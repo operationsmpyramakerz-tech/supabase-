@@ -52,6 +52,7 @@ const EVENT_COMPONENT_LIST_SELECT = [
   "rental_cost",
   "photo_url",
   "photo_urls",
+  "attachment_files",
   "link_url",
   "is_active",
   "created_at",
@@ -316,6 +317,21 @@ function serializeComponent(row = {}) {
     seenPhotos.add(url);
     photoUrls.push(url);
   }
+  const attachments = [];
+  const seenFiles = new Set();
+  for (const value of array(row?.attachment_files || row?.attachmentFiles || row?.attachments)) {
+    const item = typeof value === "string" ? { url: value } : (value || {});
+    const url = httpUrl(item?.url || item?.fileUrl || item?.file_url, 2000);
+    if (!url || seenFiles.has(url)) continue;
+    seenFiles.add(url);
+    attachments.push({
+      url,
+      name: text(item?.name || item?.fileName || item?.file_name, 180) || "Attachment",
+      mime: text(item?.mime || item?.type, 120),
+      size: number(item?.size, { min: 0, max: 50 * 1024 * 1024, fallback: 0, integer: true }),
+    });
+    if (attachments.length >= 8) break;
+  }
   return {
     id: String(row?.id || ""),
     name: text(row?.name, 180),
@@ -328,6 +344,7 @@ function serializeComponent(row = {}) {
     unitCost: componentUnitCost(ownershipType, operatingCost, rentalCost),
     photoUrl: photoUrls[0] || "",
     photoUrls,
+    attachments,
     linkUrl: httpUrl(row?.link_url || row?.linkUrl, 1000),
     isActive: row?.is_active !== false,
     createdAt: row?.created_at || null,
