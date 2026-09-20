@@ -474,11 +474,19 @@ function TagModal({ mode, tag, onClose, onSaved }) {
 }
 
 function ProductCard({ product, menuOpen, onMenu, onEdit, onDelete, onImage }) {
-  const image = !!product.imageUrl;
+  // Most of the migrated catalogue rows do not store a dedicated image_url.
+  // The legacy product-image endpoint already knows how to use image_url when
+  // present and otherwise discover the preview image from the product URL.
+  // Keep using that same authenticated endpoint so the Next catalogue retains
+  // the images that were visible before the migration.
+  const hasImageSource = !!(product.imageUrl || product.url);
+  const imagePreviewUrl = hasImageSource && product.id
+    ? `/api/products/${encodeURIComponent(product.id)}/image`
+    : product.imageUrl || "";
   return (
     <article className="product-card">
-      <button type="button" className={`product-card__media ${image ? "" : "is-fallback"}`} onClick={() => image && onImage(product.imageUrl, product.name)} disabled={!image} aria-label={image ? `Open ${product.name} image` : "No product image"}>
-        {image ? <img className="product-card__image" src={product.imageUrl} alt={product.name} loading="lazy" onError={(event) => { event.currentTarget.style.display = "none"; event.currentTarget.parentElement?.classList.add("is-fallback"); }} /> : null}
+      <button type="button" className={`product-card__media ${imagePreviewUrl ? "" : "is-fallback"}`} onClick={() => imagePreviewUrl && onImage(imagePreviewUrl, product.name)} disabled={!imagePreviewUrl} aria-label={imagePreviewUrl ? `Open ${product.name} image` : "No product image"}>
+        {imagePreviewUrl ? <img className="product-card__image" src={imagePreviewUrl} alt={product.name} loading="lazy" onError={(event) => { event.currentTarget.style.display = "none"; event.currentTarget.parentElement?.classList.add("is-fallback"); }} /> : null}
         <div className="product-card__image-fallback"><ClassicIcon name="package" /></div>
       </button>
       <div className="product-card__content">
