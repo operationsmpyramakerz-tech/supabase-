@@ -157,16 +157,48 @@ function cleanUrl(value) {
   return `https://${raw.replace(/^\/+/, "")}`;
 }
 
-function cleanImageUrl(value) {
-  const extracted = extractUrl(value);
-  if (extracted) return extracted;
+const LEGACY_PRODUCTS_STORAGE_HOSTS = new Set([
+  "pysup2.opik.net",
+]);
 
-  let raw = text(value);
-  if (!raw || /^null$/i.test(raw)) return null;
+function normalizeProductsStorageUrl(value) {
+  const raw = text(value).replace(/&amp;/g, "&");
+  if (!raw) return null;
 
   const { url: supabaseUrl } = getSupabaseConfig();
   const base = text(supabaseUrl).replace(/\/+$/, "");
+  if (!base || !/^https?:\/\//i.test(raw)) return raw;
+
+  try {
+    const source = new URL(raw);
+    const target = new URL(base);
+    const isPublicStorageObject = /^\/storage\/v1\/object\/public\//i.test(source.pathname);
+
+    // Most historical product images were uploaded while Supabase was exposed
+    // through pysup2.opik.net. The database still contains that old absolute
+    // origin, while the live Supabase host is supplied by SUPABASE_URL. Reuse
+    // the exact bucket/object path on the current origin so those files do not
+    // depend on a retired DNS name.
+    if (isPublicStorageObject && LEGACY_PRODUCTS_STORAGE_HOSTS.has(source.hostname.toLowerCase())) {
+      source.protocol = target.protocol;
+      source.host = target.host;
+      return source.toString();
+    }
+  } catch {}
+
+  return raw;
+}
+
+function cleanImageUrl(value) {
+  const { url: supabaseUrl } = getSupabaseConfig();
+  const base = text(supabaseUrl).replace(/\/+$/, "");
   const bucket = text(getProductsStorageBucket()).replace(/^\/+|\/+$/g, "");
+
+  const extracted = extractUrl(value);
+  if (extracted) return normalizeProductsStorageUrl(extracted);
+
+  let raw = text(value);
+  if (!raw || /^null$/i.test(raw)) return null;
 
   // Some migrated rows store only a Supabase Storage object path instead of
   // the complete public URL. Resolve those paths against the configured bucket
@@ -185,7 +217,7 @@ function cleanImageUrl(value) {
     return storagePublicUrl(raw, bucket) || null;
   }
 
-  return cleanUrl(value);
+  return normalizeProductsStorageUrl(cleanUrl(value));
 }
 
 

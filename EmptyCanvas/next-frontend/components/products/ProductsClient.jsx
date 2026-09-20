@@ -474,17 +474,33 @@ function TagModal({ mode, tag, onClose, onSaved }) {
 }
 
 function ProductCard({ product, menuOpen, onMenu, onEdit, onDelete, onImage }) {
-  // Resolve product images through the Next image endpoint itself. It reads the
-  // complete Supabase row (including migrated/custom image fields), proxies
-  // stored images server-side, and can discover a preview from the product URL.
-  // This avoids broken legacy redirects/hot-link protection in the browser.
-  const imagePreviewUrl = product.id
-    ? `/next/api/products/image?id=${encodeURIComponent(product.id)}`
-    : product.imageUrl || "";
+  const proxyImageUrl = product.id ? `/next/api/products/image?id=${encodeURIComponent(product.id)}` : "";
+  const primaryImageUrl = product.imageUrl || proxyImageUrl;
+  const [imagePreviewUrl, setImagePreviewUrl] = useState(primaryImageUrl);
+  const [imageFailed, setImageFailed] = useState(!primaryImageUrl);
+
+  useEffect(() => {
+    setImagePreviewUrl(primaryImageUrl);
+    setImageFailed(!primaryImageUrl);
+  }, [primaryImageUrl]);
+
+  const imageError = () => {
+    // Stored Supabase images should load directly in the browser. If an old or
+    // unavailable object still fails, use the server-side resolver once so it
+    // can try the product page preview. This keeps hundreds of cards from
+    // creating hundreds of Supabase lookups/proxy requests at the same time.
+    if (imagePreviewUrl !== proxyImageUrl && proxyImageUrl) {
+      setImagePreviewUrl(proxyImageUrl);
+      return;
+    }
+    setImageFailed(true);
+  };
+
+  const canOpenImage = !!imagePreviewUrl && !imageFailed;
   return (
     <article className="product-card">
-      <button type="button" className={`product-card__media ${imagePreviewUrl ? "" : "is-fallback"}`} onClick={() => imagePreviewUrl && onImage(imagePreviewUrl, product.name)} disabled={!imagePreviewUrl} aria-label={imagePreviewUrl ? `Open ${product.name} image` : "No product image"}>
-        {imagePreviewUrl ? <img className="product-card__image" src={imagePreviewUrl} alt={product.name} loading="lazy" onError={(event) => { event.currentTarget.style.display = "none"; event.currentTarget.parentElement?.classList.add("is-fallback"); }} /> : null}
+      <button type="button" className={`product-card__media ${canOpenImage ? "" : "is-fallback"}`} onClick={() => canOpenImage && onImage(imagePreviewUrl, product.name)} disabled={!canOpenImage} aria-label={canOpenImage ? `Open ${product.name} image` : "No product image"}>
+        {canOpenImage ? <img className="product-card__image" src={imagePreviewUrl} alt={product.name} loading="lazy" onError={imageError} /> : null}
         <div className="product-card__image-fallback"><ClassicIcon name="package" /></div>
       </button>
       <div className="product-card__content">

@@ -87,6 +87,23 @@ async function fetchWithTimeout(url, options = {}) {
   }
 }
 
+function sniffImageType(buffer, fallbackUrl = "") {
+  if (!buffer?.length) return "";
+  if (buffer.length >= 12 && buffer.toString("ascii", 0, 4) === "RIFF" && buffer.toString("ascii", 8, 12) === "WEBP") return "image/webp";
+  if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return "image/jpeg";
+  if (buffer.length >= 8 && buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return "image/png";
+  if (buffer.length >= 6) {
+    const signature = buffer.toString("ascii", 0, 6);
+    if (signature === "GIF87a" || signature === "GIF89a") return "image/gif";
+  }
+  const extension = text(fallbackUrl).split(/[?#]/)[0].toLowerCase();
+  if (extension.endsWith(".webp")) return "image/webp";
+  if (/\.(jpe?g)$/i.test(extension)) return "image/jpeg";
+  if (extension.endsWith(".png")) return "image/png";
+  if (extension.endsWith(".gif")) return "image/gif";
+  return "";
+}
+
 async function fetchImage(url, { referer = "" } = {}) {
   if (/^data:image\//i.test(url)) {
     const match = url.match(/^data:(image\/[a-z0-9.+-]+);base64,(.+)$/i);
@@ -111,12 +128,14 @@ async function fetchImage(url, { referer = "" } = {}) {
   }
   if (!response.ok) return null;
 
-  const contentType = text(response.headers.get("content-type")).split(";")[0].toLowerCase();
-  if (!contentType.startsWith("image/")) return null;
   const declaredLength = Number(response.headers.get("content-length") || 0);
   if (declaredLength > MAX_IMAGE_BYTES) return null;
   const buffer = Buffer.from(await response.arrayBuffer());
   if (!buffer.length || buffer.length > MAX_IMAGE_BYTES) return null;
+
+  const responseType = text(response.headers.get("content-type")).split(";")[0].toLowerCase();
+  const contentType = responseType.startsWith("image/") ? responseType : sniffImageType(buffer, response.url || url);
+  if (!contentType) return null;
   return { body: buffer, contentType };
 }
 
