@@ -1773,9 +1773,10 @@ function ReceiveModal({ state, busy, error, onCancel, onSubmit }) {
   const [searchQuery, setSearchQuery] = useState("");
   useEffect(() => {
     if (!group) return;
-    const initial = {};
-    group.items.forEach((item) => { initial[text(item?.id)] = formatQuantity(Math.abs(remainingQuantity(item))); });
-    setQuantities(initial);
+    // Receive-now values must always start empty. The order quantity is shown
+    // separately as read-only so confirming the modal can never receive the
+    // whole outstanding quantity by accident.
+    setQuantities({});
     setReceiptNumber("");
     setIssueDescription("");
     setSearchQuery("");
@@ -1792,6 +1793,11 @@ function ReceiveModal({ state, busy, error, onCancel, onSubmit }) {
       item?.kitTag,
       item?.reason,
     ].map(lower).some((value) => value.includes(searchNeedle));
+  });
+  const hasReceiveQuantity = group.items.some((item) => {
+    const id = text(item?.id);
+    const maxNow = Math.abs(remainingQuantity(item));
+    return Math.min(maxNow, Math.max(0, finite(quantities[id]))) > 1e-9;
   });
   return <div className="co-submodal-overlay is-open next-operations-receive-modal" aria-hidden="false">
     <form className="co-submodal-dialog next-operations-receive-dialog" role="dialog" aria-modal="true" aria-labelledby="operations-receive-title" onSubmit={(event) => { event.preventDefault(); onSubmit({ receiptNumber, issueDescription, quantities }); }}>
@@ -1820,18 +1826,26 @@ function ReceiveModal({ state, busy, error, onCancel, onSubmit }) {
           <div className="next-operations-receive-section-head"><div><span className="next-operations-receive-kicker">Components</span><strong id="operations-receive-quantities-title">Received quantities</strong></div><span className="next-operations-receive-count">{visibleItems.length}</span></div>
           <div className="next-operations-receive-list">{visibleItems.length ? visibleItems.map((item) => {
             const id = text(item?.id);
+            const base = baseQuantity(item);
             const received = receivedQuantity(item);
             const remaining = remainingQuantity(item);
             const maxNow = Math.abs(remaining);
-            return <label className="next-operations-receive-row" key={id}>
-              <span className="next-operations-receive-info"><span className="next-operations-receive-name">{text(item?.productName) || "Product"}</span><span className="next-operations-receive-sub">Received {formatQuantity(received)} <b>·</b> Remaining {formatQuantity(remaining)}</span></span>
-              <span className="next-operations-receive-input-wrap"><span>Qty now</span><input className="co-submodal-input next-operations-receive-input" type="number" min="0" max={maxNow || undefined} step="any" inputMode="decimal" value={quantities[id] ?? ""} onChange={(event) => setQuantities((current) => ({ ...current, [id]: event.target.value }))} aria-label={`Quantity received now for ${text(item?.productName) || "component"}`}/></span>
-            </label>;
+            const receiveNow = Math.min(maxNow, Math.max(0, finite(quantities[id])));
+            const sign = base < 0 ? -1 : 1;
+            const previewReceived = roundQty(received + (sign * receiveNow));
+            const previewRemaining = roundQty(remaining - (sign * receiveNow));
+            return <div className="next-operations-receive-row" key={id}>
+              <span className="next-operations-receive-info"><span className="next-operations-receive-name">{text(item?.productName) || "Product"}</span><span className="next-operations-receive-sub">Received {formatQuantity(previewReceived)} <b>·</b> Remaining {formatQuantity(previewRemaining)}</span></span>
+              <span className="next-operations-receive-qty-controls">
+                <span className="next-operations-receive-input-wrap next-operations-receive-input-wrap--readonly"><span>Qty</span><input className="co-submodal-input next-operations-receive-input" type="text" value={formatQuantity(Math.abs(base))} readOnly tabIndex={-1} aria-label={`Ordered quantity for ${text(item?.productName) || "component"}`}/></span>
+                <span className="next-operations-receive-input-wrap"><span>Received now</span><input className="co-submodal-input next-operations-receive-input" type="number" min="0" max={maxNow || undefined} step="any" inputMode="decimal" value={quantities[id] ?? ""} onChange={(event) => setQuantities((current) => ({ ...current, [id]: event.target.value }))} placeholder="0" aria-label={`Quantity received now for ${text(item?.productName) || "component"}`}/></span>
+              </span>
+            </div>;
           }) : <div className="next-operations-receive-empty">No components match your search.</div>}</div>
         </section>
         <div className="co-submodal-error" role="alert" aria-live="polite">{error}</div>
       </div>
-      <div className="co-submodal-actions next-operations-receive-actions"><button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancel} disabled={busy}>Cancel</button><button type="submit" className="ro-action-btn ro-action-btn--dark" disabled={busy}>{busy ? "Receiving…" : "Confirm receipt"}</button></div>
+      <div className="co-submodal-actions next-operations-receive-actions"><button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancel} disabled={busy}>Cancel</button><button type="submit" className="ro-action-btn ro-action-btn--dark" disabled={busy || !hasReceiveQuantity}>{busy ? "Receiving…" : "Confirm receipt"}</button></div>
     </form>
   </div>;
 }
@@ -2142,14 +2156,17 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
         await completeAction(loadingSuccessMessage, group.actionScope === "component" ? "approved" : "rejected");
       } else if (action === "receive") {
         const quantities = {};
+        let hasReceiveQuantity = false;
         group.items.forEach((item) => {
           const id = text(item?.id);
-          const receiveNow = Math.max(0, finite(payload?.quantities?.[id]));
+          const receiveNow = Math.min(Math.abs(remainingQuantity(item)), Math.max(0, finite(payload?.quantities?.[id])));
+          if (receiveNow > 1e-9) hasReceiveQuantity = true;
           const base = baseQuantity(item);
           const sign = base < 0 ? -1 : 1;
           const absolute = Math.min(Math.abs(base), Math.abs(receivedQuantity(item)) + receiveNow);
           quantities[id] = roundQty(sign * absolute);
         });
+        if (!hasReceiveQuantity) throw new Error("Enter the quantity received for at least one component.");
         await postJson(`${DIRECT_API_BASE}/orders/operations/mutations-direct`, {
           action: "mark-shipped",
           orderIds: group.orderIds,

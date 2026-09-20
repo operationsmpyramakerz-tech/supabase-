@@ -2987,7 +2987,7 @@ body.operations-orders-page .next-operations-receive-empty {
 body.operations-orders-page .next-operations-receive-row {
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 104px;
+  grid-template-columns: minmax(0, 1fr) minmax(210px, 236px);
   align-items: center;
   gap: 12px;
   padding: 10px 10px 10px 12px;
@@ -3030,6 +3030,13 @@ body.operations-orders-page .next-operations-receive-input-wrap {
   gap: 4px;
 }
 
+body.operations-orders-page .next-operations-receive-qty-controls {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, .82fr) minmax(0, 1.18fr);
+  gap: 8px;
+}
+
 body.operations-orders-page .next-operations-receive-input-wrap > span {
   color: #94a3b8;
   font-size: 8px;
@@ -3048,6 +3055,14 @@ body.operations-orders-page .next-operations-receive-input {
   text-align: center;
   font-size: 13px !important;
   font-weight: 900 !important;
+}
+
+body.operations-orders-page .next-operations-receive-input-wrap--readonly .next-operations-receive-input {
+  cursor: default;
+  border-color: #e2e8f0 !important;
+  background: #f1f5f9 !important;
+  color: #475569 !important;
+  box-shadow: none !important;
 }
 
 body.operations-orders-page .next-operations-receive-actions {
@@ -3154,10 +3169,14 @@ body.operations-orders-page .next-classic-orders-parity .sv-qty-new {
   }
 
   body.operations-orders-page .next-operations-receive-row {
-    grid-template-columns: minmax(0, 1fr) 88px;
+    grid-template-columns: minmax(0, 1fr) minmax(176px, 196px);
     gap: 8px;
     padding: 9px;
     border-radius: 14px;
+  }
+
+  body.operations-orders-page .next-operations-receive-qty-controls {
+    gap: 6px;
   }
 
   body.operations-orders-page .next-operations-receive-name {
