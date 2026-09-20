@@ -326,6 +326,7 @@ export function buildProductionVerification(profile = {}, database = {}, overrid
     },
     database,
     profiler: {
+      source: profile?.source || "process-local",
       windowMs: profile?.windowMs || 0,
       sampleCount: profile?.sampleCount || 0,
       operationCount: profile?.operationCount || 0,
@@ -336,8 +337,11 @@ export function buildProductionVerification(profile = {}, database = {}, overrid
     bottlenecks,
     nextAction,
     notes: [
-      "This report evaluates only the current warm server process because the built-in profiler is intentionally process-local.",
+      profile?.source === "supabase-persistent"
+        ? "This report aggregates persisted telemetry across server instances for the selected time window."
+        : "Persistent telemetry is unavailable or empty, so this report is using the current warm server process only.",
       "A path is not marked healthy until it has the configured minimum completed-work sample count; cache hits, client aborts, and expected 401/403 denials do not satisfy readiness.",
+      "Persistent telemetry intentionally retains critical route/page-data timings, RPC fast paths, fallbacks, retries, failures, and slow outliers rather than every low-cost database read.",
       "P95 targets are configurable with PERF_PRODUCTION_* environment variables and are diagnostics, not a user-facing SLA.",
     ],
   };

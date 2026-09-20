@@ -1,6 +1,7 @@
 import "server-only";
 
 import { performance } from "node:perf_hooks";
+import { after } from "next/server";
 
 const STORE_SYMBOL = Symbol.for("operations-hub.next.performance-profiler.v1");
 const DEFAULT_WINDOW_MS = 10 * 60 * 1000;
@@ -8,6 +9,131 @@ const MAX_WINDOW_MS = 60 * 60 * 1000;
 const MAX_SAMPLES = 2500;
 const MAX_META_KEYS = 10;
 const MAX_TEXT = 120;
+const PERSIST_STORE_SYMBOL = Symbol.for("operations-hub.next.performance-profiler.persist.v1");
+const PERSIST_TABLE = "erp_performance_samples";
+const PERSIST_DISABLE_MS = 5 * 60 * 1000;
+const PERSIST_DEFAULT_TIMEOUT_MS = 800;
+
+function persistentTelemetryState() {
+  if (!globalThis[PERSIST_STORE_SYMBOL]) {
+    globalThis[PERSIST_STORE_SYMBOL] = {
+      disabledUntil: 0,
+      warnedAt: 0,
+    };
+  }
+  return globalThis[PERSIST_STORE_SYMBOL];
+}
+
+function cleanSupabaseBaseUrl(raw) {
+  return String(raw || "").trim().replace(/\/+$/, "").replace(/\/rest\/v1\/?$/i, "");
+}
+
+function persistentTelemetryConfig() {
+  const mode = String(process.env.PERF_PERSIST_TELEMETRY ?? "auto").trim().toLowerCase();
+  if (["0", "false", "off", "disabled", "no"].includes(mode)) return { enabled: false };
+  if (mode === "auto" && String(process.env.NODE_ENV || "").toLowerCase() !== "production") return { enabled: false };
+
+  const url = cleanSupabaseBaseUrl(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "");
+  // Persistent telemetry is server-only and intentionally requires a privileged
+  // key. Never write diagnostic rows with a browser/anon credential.
+  const key = String(
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_SECRET_KEY ||
+    process.env.SUPABASE_SERVICE_KEY ||
+    "",
+  ).trim();
+
+  return {
+    enabled: /^https:\/\//i.test(url) && !!key,
+    url,
+    key,
+    timeoutMs: Math.max(250, Math.min(3000, finiteNumber(process.env.PERF_PERSIST_WRITE_TIMEOUT_MS, PERSIST_DEFAULT_TIMEOUT_MS) || PERSIST_DEFAULT_TIMEOUT_MS)),
+  };
+}
+
+function shouldPersistSample(sample = {}) {
+  const category = shortText(sample?.category || "").toLowerCase();
+  const name = shortText(sample?.name || "").toLowerCase();
+  if (!category || !name) return false;
+  if (/^(performance\.|db-acceleration\.|production-verification\.)/.test(name)) return false;
+
+  // Critical user-facing timings are always retained. Successful RPC fast-path
+  // samples and exceptional/slow samples are retained too, which is enough for
+  // cross-instance P95/fallback analysis without logging every small DB read.
+  if (category === "route" || category === "page-data") return true;
+  if (category === "supabase" && /(^|[.\-_])rpc($|[.\-_])|candidates-rpc/.test(name)) return true;
+  if (sample?.ok === false || sample?.durationMs >= slowThresholdMs()) return true;
+  if (isFallbackSample(sample) || isRetrySample(sample)) return true;
+  return false;
+}
+
+async function persistPerformanceSample(sample) {
+  const config = persistentTelemetryConfig();
+  if (!config.enabled) return;
+
+  const state = persistentTelemetryState();
+  const now = Date.now();
+  if (state.disabledUntil > now) return;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
+  try {
+    const response = await fetch(`${config.url}/rest/v1/${PERSIST_TABLE}`, {
+      method: "POST",
+      cache: "no-store",
+      signal: controller.signal,
+      headers: {
+        apikey: config.key,
+        Authorization: `Bearer ${config.key}`,
+        "Content-Type": "application/json",
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify({
+        created_at: new Date(sample.at || now).toISOString(),
+        category: sample.category,
+        name: sample.name,
+        duration_ms: sample.durationMs,
+        ok: sample.ok !== false,
+        status: sample.status || 0,
+        meta: sample.meta || {},
+      }),
+    });
+
+    if (!response.ok) {
+      const raw = await response.text().catch(() => "");
+      const missingStorage = response.status === 404 || /erp_performance_samples|pgrst205|relation .* does not exist/i.test(raw);
+      if (missingStorage || response.status === 401 || response.status === 403) {
+        state.disabledUntil = Date.now() + PERSIST_DISABLE_MS;
+      }
+      if (Date.now() - state.warnedAt > PERSIST_DISABLE_MS) {
+        state.warnedAt = Date.now();
+        console.warn(`[perf][persistent] telemetry write unavailable status=${response.status}`);
+      }
+    }
+  } catch (error) {
+    // Telemetry must never change product behavior or make a request fail.
+    state.disabledUntil = Date.now() + Math.min(PERSIST_DISABLE_MS, 60_000);
+    if (Date.now() - state.warnedAt > PERSIST_DISABLE_MS) {
+      state.warnedAt = Date.now();
+      console.warn(`[perf][persistent] telemetry write failed: ${shortText(error?.message || error?.name || "unknown")}`);
+    }
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function schedulePersistentSample(sample) {
+  if (!shouldPersistSample(sample)) return;
+  if (!persistentTelemetryConfig().enabled) return;
+  try {
+    after(async () => {
+      await persistPerformanceSample(sample);
+    });
+  } catch {
+    // Some non-request code paths (tests/build-time utilities) have no Next.js
+    // request context. In that case keep only the in-memory profiler sample.
+  }
+}
 
 function profilerStore() {
   if (!globalThis[STORE_SYMBOL]) {
@@ -119,6 +245,7 @@ export function recordPerformanceSample({ category, name, durationMs, ok = true,
   const store = profilerStore();
   store.samples.push(sample);
   trimStore(store, sample.at);
+  schedulePersistentSample(sample);
 
   if (duration >= slowThresholdMs()) {
     const statusLabel = sample.status ? ` status=${sample.status}` : "";
@@ -162,15 +289,27 @@ export async function measurePerformance(category, name, callback, meta = {}) {
   }
 }
 
-export function getPerformanceSnapshot({ windowMs = DEFAULT_WINDOW_MS, limit = 25 } = {}) {
-  const now = Date.now();
+export function summarizePerformanceSamples(rawSamples = [], {
+  windowMs = DEFAULT_WINDOW_MS,
+  limit = 25,
+  now = Date.now(),
+  source = "external",
+  startedAt = null,
+} = {}) {
   const effectiveWindow = Math.max(30_000, Math.min(MAX_WINDOW_MS, finiteNumber(windowMs, DEFAULT_WINDOW_MS) || DEFAULT_WINDOW_MS));
   const maxRows = Math.max(5, Math.min(100, Math.round(finiteNumber(limit, 25) || 25)));
-  const store = profilerStore();
-  trimStore(store, now);
-
   const cutoff = now - effectiveWindow;
-  const samples = store.samples.filter((sample) => sample.at >= cutoff);
+  const samples = (Array.isArray(rawSamples) ? rawSamples : [])
+    .filter((sample) => finiteNumber(sample?.at, 0) >= cutoff)
+    .map((sample) => ({
+      at: finiteNumber(sample?.at, now),
+      category: shortText(sample?.category || "other") || "other",
+      name: shortText(sample?.name || "operation") || "operation",
+      durationMs: Math.max(0, rounded(sample?.durationMs)),
+      ok: sample?.ok !== false,
+      status: Math.max(0, Math.round(finiteNumber(sample?.status))),
+      meta: safeMeta(sample?.meta || {}),
+    }));
   const grouped = new Map();
 
   for (const sample of samples) {
@@ -194,17 +333,14 @@ export function getPerformanceSnapshot({ windowMs = DEFAULT_WINDOW_MS, limit = 2
     let expectedDenialCount = 0;
     const workDurations = [];
     for (const row of rows) {
-      const source = shortText(row?.meta?.source || "");
+      const rowSource = shortText(row?.meta?.source || "");
       const cacheHit = isCacheHitSample(row);
       const aborted = isAbortedSample(row);
       const expectedDenial = isExpectedDenialSample(row);
-      if (source) sourceBreakdown[source] = (sourceBreakdown[source] || 0) + 1;
+      if (rowSource) sourceBreakdown[rowSource] = (sourceBreakdown[rowSource] || 0) + 1;
       if (isFallbackSample(row)) fallbackCount += 1;
       if (isRetrySample(row)) retryCount += 1;
       if (cacheHit) cacheHitCount += 1;
-      // `workP95` is the latency used by production verification. Cache hits,
-      // client-cancelled requests, and expected 401/403 permission denials do
-      // not represent completed backend work and must not inflate that value.
       if (!cacheHit && !aborted && !expectedDenial) workDurations.push(row.durationMs);
       if (isSharedWaitSample(row)) sharedWaitCount += 1;
       if (aborted) abortedCount += 1;
@@ -245,10 +381,6 @@ export function getPerformanceSnapshot({ windowMs = DEFAULT_WINDOW_MS, limit = 2
     };
   }).sort((a, b) => (b.p95Ms - a.p95Ms) || (b.avgMs - a.avgMs) || (b.count - a.count));
 
-  // Cache hits can legitimately be near-zero and may hide expensive cold/miss
-  // work when they dominate the sample window. Keep the established `operations`
-  // ordering for compatibility, and expose a second view that ranks only samples
-  // which actually performed work.
   const tailOperations = [...operations]
     .filter((row) => row.workCount > 0)
     .sort((a, b) => (b.workP95Ms - a.workP95Ms) || (b.workMaxMs - a.workMaxMs) || (b.p95Ms - a.p95Ms));
@@ -282,8 +414,9 @@ export function getPerformanceSnapshot({ windowMs = DEFAULT_WINDOW_MS, limit = 2
   };
 
   return {
+    source,
     generatedAt: now,
-    processStartedAt: store.startedAt,
+    processStartedAt: startedAt,
     windowMs: effectiveWindow,
     sampleCount: samples.length,
     operationCount: operations.length,
@@ -292,14 +425,33 @@ export function getPerformanceSnapshot({ windowMs = DEFAULT_WINDOW_MS, limit = 2
     operations: operations.slice(0, maxRows),
     tailOperations: tailOperations.slice(0, maxRows),
     slowest,
-    notes: [
-      "Metrics are process-local and intentionally contain no query values, cookies, user IDs, or request bodies.",
-      "On serverless deployments each warm instance keeps its own rolling window, so this is a diagnostic sample rather than a global APM report.",
-      "tailOperations excludes cache-hit, client-aborted, and expected permission-denial samples so cold/miss/shared-wait latency reflects completed backend work.",
-      "Client-aborted requests are recorded with status 499 and reported separately so navigation cancellations do not inflate production P95 or server failure rates.",
-      "Expected 401/403 route denials remain visible in diagnostics but are excluded from work P95 and readiness sampling.",
-    ],
+    notes: source === "process-local"
+      ? [
+        "Metrics are process-local and intentionally contain no query values, cookies, user IDs, or request bodies.",
+        "On serverless deployments each warm instance keeps its own rolling window, so this is a diagnostic sample rather than a global APM report.",
+        "tailOperations excludes cache-hit, client-aborted, and expected permission-denial samples so cold/miss/shared-wait latency reflects completed backend work.",
+        "Client-aborted requests are recorded with status 499 and reported separately so navigation cancellations do not inflate production P95 or server failure rates.",
+        "Expected 401/403 route denials remain visible in diagnostics but are excluded from work P95 and readiness sampling.",
+      ]
+      : [
+        "Metrics are aggregated from persisted server telemetry and intentionally contain no query values, cookies, user IDs, or request bodies.",
+        "Critical route/page-data timings, RPC fast-path samples, fallbacks, retries, failures, and slow outliers are retained; ordinary low-cost DB reads are intentionally not persisted.",
+        "tailOperations excludes cache-hit, client-aborted, and expected permission-denial samples so work P95 reflects completed backend work.",
+      ],
   };
+}
+
+export function getPerformanceSnapshot({ windowMs = DEFAULT_WINDOW_MS, limit = 25 } = {}) {
+  const now = Date.now();
+  const store = profilerStore();
+  trimStore(store, now);
+  return summarizePerformanceSamples(store.samples, {
+    windowMs,
+    limit,
+    now,
+    source: "process-local",
+    startedAt: store.startedAt,
+  });
 }
 
 export function clearPerformanceSamples() {

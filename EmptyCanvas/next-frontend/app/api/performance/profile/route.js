@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getLegacyAccountGate } from "../../../../lib/products-auth";
 import { clearPerformanceSamples, getPerformanceSnapshot } from "../../../../lib/performance-profiler";
+import { clearPersistentPerformanceSamples, loadPersistentPerformanceSnapshot } from "../../../../lib/persistent-performance-profiler";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -32,12 +33,28 @@ export async function GET(request) {
     return noStore({ error: gate.error || "Performance diagnostics access is not allowed." }, { status: gate.status || 403 });
   }
 
+  const url = new URL(request.url);
+  const windowMs = windowMsFromRequest(request);
+  const limit = url.searchParams.get("limit") || 30;
+  const localOnly = ["local", "process", "memory"].includes(String(url.searchParams.get("source") || "").toLowerCase());
+  const localProfile = getPerformanceSnapshot({ windowMs, limit });
+
+  if (localOnly) {
+    return noStore({ ok: true, source: "process-local", profile: localProfile });
+  }
+
+  const persistent = await loadPersistentPerformanceSnapshot({ windowMs, limit });
+  const profile = persistent.available && persistent.snapshot?.sampleCount > 0
+    ? persistent.snapshot
+    : localProfile;
+
   return noStore({
     ok: true,
-    profile: getPerformanceSnapshot({
-      windowMs: windowMsFromRequest(request),
-      limit: new URL(request.url).searchParams.get("limit") || 30,
-    }),
+    source: profile.source || "process-local",
+    persistentAvailable: persistent.available,
+    persistentTruncated: persistent.truncated === true,
+    ...(persistent.available ? {} : { persistentReason: persistent.reason || "Persistent telemetry is unavailable." }),
+    profile,
   });
 }
 
@@ -47,6 +64,11 @@ export async function DELETE() {
     return noStore({ error: gate.error || "Performance diagnostics access is not allowed." }, { status: gate.status || 403 });
   }
 
-  const removed = clearPerformanceSamples();
-  return noStore({ ok: true, removed });
+  const localRemoved = clearPerformanceSamples();
+  const persistent = await clearPersistentPerformanceSamples();
+  return noStore({
+    ok: true,
+    localRemoved,
+    persistent,
+  });
 }

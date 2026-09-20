@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getLegacyAccountGate } from "../../../../lib/products-auth";
 import { getPerformanceSnapshot } from "../../../../lib/performance-profiler";
+import { loadPersistentPerformanceSnapshot } from "../../../../lib/persistent-performance-profiler";
 import {
   buildProductionVerification,
   loadProductionAccelerationStatus,
@@ -48,11 +49,18 @@ export async function GET(request) {
 
   // Capture the profiler window BEFORE reading the diagnostic manifest so this
   // request does not grade its own database-status probe.
-  const profile = getPerformanceSnapshot({
-    windowMs: Math.round(minutes * 60_000),
+  const windowMs = Math.round(minutes * 60_000);
+  const localProfile = getPerformanceSnapshot({
+    windowMs,
     limit: 100,
   });
-  const database = await loadProductionAccelerationStatus();
+  const [persistent, database] = await Promise.all([
+    loadPersistentPerformanceSnapshot({ windowMs, limit: 100 }),
+    loadProductionAccelerationStatus(),
+  ]);
+  const profile = persistent.available && persistent.snapshot?.sampleCount > 0
+    ? persistent.snapshot
+    : localProfile;
   const verification = buildProductionVerification(profile, database, {
     minSamples,
     targetP95Ms,
@@ -61,6 +69,15 @@ export async function GET(request) {
 
   return noStore({
     ok: true,
+    telemetry: {
+      source: profile.source || "process-local",
+      persistentAvailable: persistent.available,
+      persistentSamples: persistent.snapshot?.sampleCount || 0,
+      persistentTruncated: persistent.truncated === true,
+      localSamples: localProfile.sampleCount || 0,
+      fallbackToLocal: !(persistent.available && persistent.snapshot?.sampleCount > 0),
+      ...(persistent.available ? {} : { persistentReason: persistent.reason || "Persistent telemetry is unavailable." }),
+    },
     verification,
     links: {
       rawProfile: `/next/api/performance/profile?minutes=${minutes}&limit=100`,
