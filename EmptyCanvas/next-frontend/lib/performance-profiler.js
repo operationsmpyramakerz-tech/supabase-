@@ -98,6 +98,10 @@ function isAbortedSample(sample = {}) {
   return sample?.meta?.aborted === true || Number(sample?.status) === 499;
 }
 
+function isExpectedDenialSample(sample = {}) {
+  return sample?.meta?.expectedDenial === true || [401, 403].includes(Number(sample?.status));
+}
+
 export function recordPerformanceSample({ category, name, durationMs, ok = true, status = 0, meta = {} } = {}) {
   const duration = Math.max(0, finiteNumber(durationMs));
   const safeCategory = shortText(category || "other") || "other";
@@ -187,16 +191,24 @@ export function getPerformanceSnapshot({ windowMs = DEFAULT_WINDOW_MS, limit = 2
     let cacheHitCount = 0;
     let sharedWaitCount = 0;
     let abortedCount = 0;
+    let expectedDenialCount = 0;
     const workDurations = [];
     for (const row of rows) {
       const source = shortText(row?.meta?.source || "");
+      const cacheHit = isCacheHitSample(row);
+      const aborted = isAbortedSample(row);
+      const expectedDenial = isExpectedDenialSample(row);
       if (source) sourceBreakdown[source] = (sourceBreakdown[source] || 0) + 1;
       if (isFallbackSample(row)) fallbackCount += 1;
       if (isRetrySample(row)) retryCount += 1;
-      if (isCacheHitSample(row)) cacheHitCount += 1;
-      else workDurations.push(row.durationMs);
+      if (cacheHit) cacheHitCount += 1;
+      // `workP95` is the latency used by production verification. Cache hits,
+      // client-cancelled requests, and expected 401/403 permission denials do
+      // not represent completed backend work and must not inflate that value.
+      if (!cacheHit && !aborted && !expectedDenial) workDurations.push(row.durationMs);
       if (isSharedWaitSample(row)) sharedWaitCount += 1;
-      if (isAbortedSample(row)) abortedCount += 1;
+      if (aborted) abortedCount += 1;
+      if (expectedDenial) expectedDenialCount += 1;
     }
     const latest = rows[rows.length - 1];
     return {
@@ -215,6 +227,10 @@ export function getPerformanceSnapshot({ windowMs = DEFAULT_WINDOW_MS, limit = 2
       cacheHitRate: rounded((cacheHitCount / Math.max(1, rows.length)) * 100),
       sharedWaitCount,
       sharedWaitRate: rounded((sharedWaitCount / Math.max(1, rows.length)) * 100),
+      abortedCount,
+      abortedRate: rounded((abortedCount / Math.max(1, rows.length)) * 100),
+      expectedDenialCount,
+      expectedDenialRate: rounded((expectedDenialCount / Math.max(1, rows.length)) * 100),
       workCount: workDurations.length,
       sourceBreakdown,
       avgMs: rounded(total / Math.max(1, rows.length)),
@@ -262,6 +278,7 @@ export function getPerformanceSnapshot({ windowMs = DEFAULT_WINDOW_MS, limit = 2
     cacheHitSamples: samples.filter(isCacheHitSample).length,
     sharedWaitSamples: samples.filter(isSharedWaitSample).length,
     abortedSamples: samples.filter(isAbortedSample).length,
+    expectedDenialSamples: samples.filter(isExpectedDenialSample).length,
   };
 
   return {
@@ -278,8 +295,9 @@ export function getPerformanceSnapshot({ windowMs = DEFAULT_WINDOW_MS, limit = 2
     notes: [
       "Metrics are process-local and intentionally contain no query values, cookies, user IDs, or request bodies.",
       "On serverless deployments each warm instance keeps its own rolling window, so this is a diagnostic sample rather than a global APM report.",
-      "tailOperations excludes completed cache-hit samples so cold/miss/shared-wait latency is not hidden by near-zero cache hits.",
-      "Client-aborted requests are recorded with status 499 and reported separately so navigation cancellations do not inflate server failure rates.",
+      "tailOperations excludes cache-hit, client-aborted, and expected permission-denial samples so cold/miss/shared-wait latency reflects completed backend work.",
+      "Client-aborted requests are recorded with status 499 and reported separately so navigation cancellations do not inflate production P95 or server failure rates.",
+      "Expected 401/403 route denials remain visible in diagnostics but are excluded from work P95 and readiness sampling.",
     ],
   };
 }

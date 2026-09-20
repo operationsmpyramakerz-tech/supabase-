@@ -108,6 +108,7 @@ function evaluateCriticalOperation(spec, row, thresholds) {
   }
 
   const count = Number(row.count) || 0;
+  const workCount = Number.isFinite(Number(row.workCount)) ? Number(row.workCount) : count;
   const p95Ms = Number(row.p95Ms) || 0;
   const workP95Ms = Number(row.workP95Ms) || p95Ms;
   const failureRate = Number(row.failureRate) || 0;
@@ -118,9 +119,9 @@ function evaluateCriticalOperation(spec, row, thresholds) {
   let state = "healthy";
   const reasons = [];
 
-  if (count < thresholds.minSamples) {
+  if (workCount < thresholds.minSamples) {
     state = "collecting";
-    reasons.push(`needs ${thresholds.minSamples} samples`);
+    reasons.push(`needs ${thresholds.minSamples} completed-work samples`);
   } else {
     if (failureRate > thresholds.maxFailureRate) {
       state = "needs-attention";
@@ -147,6 +148,7 @@ function evaluateCriticalOperation(spec, row, thresholds) {
     ...spec,
     state,
     count,
+    workCount,
     p50Ms: Number(row.p50Ms) || 0,
     p95Ms,
     workP95Ms,
@@ -156,6 +158,7 @@ function evaluateCriticalOperation(spec, row, thresholds) {
     retryRate,
     cacheHitRate: Number(row.cacheHitRate) || 0,
     abortedRate,
+    expectedDenialRate: Number(row.expectedDenialRate) || 0,
     sourceBreakdown: row.sourceBreakdown || {},
     lastAt: row.lastAt || null,
     note: reasons.join("; "),
@@ -166,17 +169,22 @@ function bottleneckRows(profile = {}, thresholds) {
   const rows = Array.isArray(profile?.tailOperations) ? profile.tailOperations : [];
   return rows
     .filter((row) => {
+      const count = Number(row?.count) || 0;
+      const workCount = Number.isFinite(Number(row?.workCount)) ? Number(row.workCount) : count;
       const workP95 = Number(row?.workP95Ms) || Number(row?.p95Ms) || 0;
-      return workP95 > thresholds.targetP95Ms
-        || Number(row?.failureRate) > thresholds.maxFailureRate
-        || Number(row?.fallbackRate) > thresholds.maxFallbackRate
-        || Number(row?.retryRate) > thresholds.maxRetryRate;
+      const enoughWork = workCount >= thresholds.minSamples;
+      const enoughSamples = count >= thresholds.minSamples;
+      return (enoughWork && workP95 > thresholds.targetP95Ms)
+        || (enoughSamples && Number(row?.failureRate) > thresholds.maxFailureRate)
+        || (enoughSamples && Number(row?.fallbackRate) > thresholds.maxFallbackRate)
+        || (enoughSamples && Number(row?.retryRate) > thresholds.maxRetryRate);
     })
     .slice(0, 15)
     .map((row) => ({
       category: row.category,
       name: row.name,
       count: row.count,
+      workCount: row.workCount,
       workP95Ms: row.workP95Ms,
       workMaxMs: row.workMaxMs,
       failureRate: row.failureRate,
@@ -184,6 +192,7 @@ function bottleneckRows(profile = {}, thresholds) {
       retryRate: row.retryRate,
       cacheHitRate: row.cacheHitRate,
       abortedRate: row.abortedRate || 0,
+      expectedDenialRate: row.expectedDenialRate || 0,
       sourceBreakdown: row.sourceBreakdown || {},
       lastMeta: row.lastMeta || {},
     }));
@@ -279,7 +288,7 @@ export function buildProductionVerification(profile = {}, database = {}, overrid
     thresholds,
   ));
 
-  const readyRows = critical.filter((row) => row.count >= thresholds.minSamples);
+  const readyRows = critical.filter((row) => Number(row.workCount) >= thresholds.minSamples);
   const collectingRows = critical.filter((row) => row.state === "collecting" || row.state === "no-samples");
   const attentionRows = critical.filter((row) => row.state === "needs-attention");
   const watchRows = critical.filter((row) => row.state === "watch");
@@ -328,7 +337,7 @@ export function buildProductionVerification(profile = {}, database = {}, overrid
     nextAction,
     notes: [
       "This report evaluates only the current warm server process because the built-in profiler is intentionally process-local.",
-      "A path is not marked healthy until it has the configured minimum sample count.",
+      "A path is not marked healthy until it has the configured minimum completed-work sample count; cache hits, client aborts, and expected 401/403 denials do not satisfy readiness.",
       "P95 targets are configurable with PERF_PRODUCTION_* environment variables and are diagnostics, not a user-facing SLA.",
     ],
   };
