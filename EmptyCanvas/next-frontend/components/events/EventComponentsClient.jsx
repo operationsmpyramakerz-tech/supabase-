@@ -23,6 +23,41 @@ const OWNERSHIP_LABELS = {
   external_rental: "External Rental",
 };
 
+const CATEGORY_THEME_MAP = Object.freeze({
+  project: { accent: "#2563eb", accent2: "#0ea5e9", soft: "#eff6ff", surface: "#f8fbff", border: "rgba(37,99,235,.24)", text: "#1d4ed8" },
+  marketing_material: { accent: "#ea580c", accent2: "#f59e0b", soft: "#fff7ed", surface: "#fffbf5", border: "rgba(234,88,12,.24)", text: "#c2410c" },
+  venue_equipment: { accent: "#059669", accent2: "#14b8a6", soft: "#ecfdf5", surface: "#f5fffb", border: "rgba(5,150,105,.24)", text: "#047857" },
+  other: { accent: "#64748b", accent2: "#475569", soft: "#f1f5f9", surface: "#f8fafc", border: "rgba(100,116,139,.24)", text: "#475569" },
+});
+
+const CUSTOM_CATEGORY_THEMES = Object.freeze([
+  { accent: "#db2777", accent2: "#f43f5e", soft: "#fdf2f8", surface: "#fff8fb", border: "rgba(219,39,119,.24)", text: "#be185d" },
+  { accent: "#7c3aed", accent2: "#8b5cf6", soft: "#f5f3ff", surface: "#fbfaff", border: "rgba(124,58,237,.24)", text: "#6d28d9" },
+  { accent: "#0891b2", accent2: "#06b6d4", soft: "#ecfeff", surface: "#f6feff", border: "rgba(8,145,178,.24)", text: "#0e7490" },
+  { accent: "#ca8a04", accent2: "#eab308", soft: "#fefce8", surface: "#fffef7", border: "rgba(202,138,4,.24)", text: "#a16207" },
+  { accent: "#4f46e5", accent2: "#6366f1", soft: "#eef2ff", surface: "#f8f9ff", border: "rgba(79,70,229,.24)", text: "#4338ca" },
+  { accent: "#0f766e", accent2: "#14b8a6", soft: "#f0fdfa", surface: "#f7fffd", border: "rgba(15,118,110,.24)", text: "#0f766e" },
+]);
+
+function categoryTheme(categoryCode) {
+  const code = text(categoryCode) || "other";
+  const preset = CATEGORY_THEME_MAP[code];
+  let theme = preset;
+  if (!theme) {
+    let hash = 0;
+    for (let index = 0; index < code.length; index += 1) hash = ((hash * 31) + code.charCodeAt(index)) >>> 0;
+    theme = CUSTOM_CATEGORY_THEMES[hash % CUSTOM_CATEGORY_THEMES.length];
+  }
+  return {
+    "--event-cat-accent": theme.accent,
+    "--event-cat-accent-2": theme.accent2,
+    "--event-cat-soft": theme.soft,
+    "--event-cat-surface": theme.surface,
+    "--event-cat-border": theme.border,
+    "--event-cat-text": theme.text,
+  };
+}
+
 const EMPTY_FORM = {
   id: "",
   name: "",
@@ -233,6 +268,68 @@ async function compressImage(file) {
   return { dataUrl: await readBlobAsDataUrl(blob), fileName: `${baseName}.webp` };
 }
 
+
+function ModernDropdown({ value, options = [], onChange, disabled = false, ariaLabel = "Choose option" }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef(null);
+  const normalized = Array.isArray(options) ? options : [];
+  const selected = normalized.find((option) => String(option?.value) === String(value));
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onPointerDown = (event) => {
+      if (rootRef.current && !rootRef.current.contains(event.target)) setOpen(false);
+    };
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  return (
+    <div className={`next-event-modern-select${open ? " is-open" : ""}`} ref={rootRef}>
+      <button
+        type="button"
+        className="next-event-modern-select__trigger"
+        onClick={() => !disabled && setOpen((current) => !current)}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        aria-label={ariaLabel}
+        disabled={disabled}
+      >
+        <span>{selected?.label || "Select"}</span>
+        <span className="next-event-modern-select__chevron" aria-hidden="true" />
+      </button>
+      {open ? (
+        <div className="next-event-modern-select__menu" role="listbox" aria-label={ariaLabel}>
+          {normalized.map((option) => {
+            const optionValue = String(option?.value ?? "");
+            const active = optionValue === String(value);
+            return (
+              <button
+                type="button"
+                role="option"
+                aria-selected={active}
+                className={`next-event-modern-select__option${active ? " is-selected" : ""}${option?.special ? " is-special" : ""}`}
+                key={optionValue}
+                onClick={() => { onChange(optionValue); setOpen(false); }}
+              >
+                <span>{option?.label || optionValue}</span>
+                {active ? <EventIcon name="check" /> : null}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function Toast({ toast, onClose }) {
   if (!toast) return null;
   return (
@@ -271,13 +368,15 @@ function ComponentFormModal({ mode, form, categories, busy, error, onChange, onA
             <input value={form.name} maxLength={180} onChange={(event) => onChange("name", event.target.value)} placeholder="Example: 3m × 1m branded backdrop" required autoFocus />
           </label>
 
-          <label className="events-field next-field">
+          <div className="events-field next-field">
             <span>Category *</span>
-            <select value={form.category} onChange={(event) => onChange("category", event.target.value)}>
-              {categories.map((item) => <option value={item.code} key={item.code}>{item.label}</option>)}
-              <option value="__new__">+ Add a new category</option>
-            </select>
-          </label>
+            <ModernDropdown
+              value={form.category}
+              onChange={(value) => onChange("category", value)}
+              ariaLabel="Event component category"
+              options={[...categories.map((item) => ({ value: item.code, label: item.label })), { value: "__new__", label: "+ Add a new category", special: true }]}
+            />
+          </div>
 
           <label className="events-field next-field">
             <span>Default quantity</span>
@@ -291,13 +390,18 @@ function ComponentFormModal({ mode, form, categories, busy, error, onChange, onA
             </label>
           ) : null}
 
-          <label className="events-field next-field">
+          <div className="events-field next-field">
             <span>Source type *</span>
-            <select value={form.ownershipType} onChange={(event) => onChange("ownershipType", event.target.value)}>
-              <option value="company_owned">Company Owned</option>
-              <option value="external_rental">External Rental</option>
-            </select>
-          </label>
+            <ModernDropdown
+              value={form.ownershipType}
+              onChange={(value) => onChange("ownershipType", value)}
+              ariaLabel="Event component source type"
+              options={[
+                { value: "company_owned", label: "Company Owned" },
+                { value: "external_rental", label: "External Rental" },
+              ]}
+            />
+          </div>
 
           <label className="events-field next-field">
             <span>Operating cost (EGP)</span>
@@ -457,7 +561,7 @@ function ComponentCard({ component, categoryLabel, canEdit, canDelete, onEdit, o
   const active = component?.isActive !== false;
 
   return (
-    <article className={`events-component-card${active ? "" : " is-inactive"}`}>
+    <article className={`events-component-card${active ? "" : " is-inactive"}`} style={categoryTheme(component?.category)}>
       <div className="events-component-card__top">
         <span className="events-component-badge"><EventIcon name="layers" />{categoryLabel}</span>
         <span className={`events-status ${active ? "events-status--approved" : "events-status--cancelled"}`}>{active ? "Active" : "Inactive"}</span>
