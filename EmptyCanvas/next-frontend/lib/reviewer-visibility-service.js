@@ -161,7 +161,6 @@ async function resolveReviewerVisibility(account = {}) {
     names = splitValues(valueFor(current, ["sv_school_member_names", "sv_schools", "S.V Schools", "SV Schools"])).map(text).filter(Boolean);
   }
 
-  const resolvedNameKeys = new Set();
   if (names.length) {
     // Reuse the shared 30s lightweight directory rather than downloading the
     // entire team_members table separately from Home and Orders Review.
@@ -173,7 +172,6 @@ async function resolveReviewerVisibility(account = {}) {
       const id = safeId(member?.id);
       if (id) {
         if (!ids.includes(id)) ids.push(id);
-        resolvedNameKeys.add(key);
       }
     }
   }
@@ -182,7 +180,11 @@ async function resolveReviewerVisibility(account = {}) {
   return {
     ids: [...new Set(ids.map(safeId).filter(Boolean))],
     names: cleanNames,
-    queryNames: cleanNames.filter((name) => !resolvedNameKeys.has(canonical(name))),
+    // Always keep the assigned names in the database-side visibility query.
+    // Older/manual order rows can have team_member_name populated while
+    // team_member_id is null. Dropping a name merely because it resolved to a
+    // Team Members ID makes those legitimate orders disappear from Review.
+    queryNames: cleanNames,
   };
 }
 
