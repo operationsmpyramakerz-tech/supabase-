@@ -38,7 +38,15 @@ async function requestJsonWithFallback(directUrl, legacyUrl, options = {}) {
 }
 
 function triggerBackgroundNotificationScan() {
-  return fetch(`/api/notifications/refresh?limit=1&_=${Date.now()}`, {
+  const now = Date.now();
+  const storageKey = "ops.notifications.last-background-scan";
+  try {
+    const previous = Number(window.sessionStorage.getItem(storageKey) || 0) || 0;
+    if (now - previous < 2 * 60 * 1000) return Promise.resolve(null);
+    window.sessionStorage.setItem(storageKey, String(now));
+  } catch {}
+
+  return fetch(`/api/notifications/refresh?limit=1&_=${now}`, {
     credentials: "include",
     cache: "no-store",
   }).catch(() => null);
@@ -61,8 +69,8 @@ export default function NotificationsBell({ classic = false }) {
     if (!quiet) setLoading(true);
     try {
       const body = await requestJsonWithFallback(
-        `/next/api/notifications?limit=12&fresh=1&_=${Date.now()}`,
-        `/api/notifications?limit=12&_=${Date.now()}`,
+        `/next/api/notifications?limit=12`,
+        `/api/notifications?limit=12`,
       );
       const nextItems = Array.isArray(body?.items) ? body.items : [];
       setItems(nextItems);
@@ -71,7 +79,7 @@ export default function NotificationsBell({ classic = false }) {
       triggerBackgroundNotificationScan().then(async (response) => {
         if (!response?.ok) return;
         try {
-          const updated = await requestJson(`/next/api/notifications?limit=12&fresh=1&_=${Date.now()}`);
+          const updated = await requestJson(`/next/api/notifications?limit=12&fresh=1`);
           const updatedItems = Array.isArray(updated?.items) ? updated.items : [];
           setItems(updatedItems);
           setUnreadCount(Number(updated?.unreadCount) || updatedItems.filter((item) => !item?.read).length);

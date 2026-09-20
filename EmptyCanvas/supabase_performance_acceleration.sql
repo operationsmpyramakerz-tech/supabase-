@@ -155,6 +155,7 @@ $$;
 -- with CREATE OR REPLACE, so remove only the known accelerator signatures first.
 -- They are recreated immediately below and their EXECUTE grants are restored later.
 drop function if exists public.erp_order_candidate_numbers(jsonb);
+drop function if exists public.erp_order_summary_rows(jsonb);
 drop function if exists public.erp_home_order_groups(jsonb);
 drop function if exists public.erp_home_stock_summary(jsonb);
 drop function if exists public.erp_home_expenses_summary(jsonb);
@@ -242,6 +243,88 @@ begin
     limit greatest(1, least(301, coalesce(public.erp_try_numeric($1->>'limit')::int, 91)))
   $sql$, v_table)
   using p_options;
+end;
+$$;
+
+
+-- Compact order-summary loader used by Orders Review and Operations Orders.
+-- It filters by the indexed order_number column, but shapes optional/custom
+-- fields through to_jsonb so a missing projected column cannot force select=*.
+create or replace function public.erp_order_summary_rows(
+  p_options jsonb default '{}'::jsonb
+)
+returns table(row_data jsonb)
+language plpgsql
+stable
+security invoker
+set search_path = public
+as $$
+declare
+  v_table regclass := to_regclass('public.orders');
+  v_numbers numeric[];
+  v_csv text;
+begin
+  if coalesce(lower(p_options->>'context'), '') = '__probe__'
+     or coalesce((p_options->>'probe')::boolean, false) then
+    return;
+  end if;
+  if v_table is null then
+    raise exception 'ERP accelerator requires public.orders';
+  end if;
+
+  select array_agg(v order by v desc)
+    into v_numbers
+  from (
+    select distinct public.erp_try_numeric(value) as v
+    from jsonb_array_elements_text(coalesce(p_options->'orderNumbers', '[]'::jsonb))
+  ) n
+  where v is not null;
+
+  if coalesce(array_length(v_numbers, 1), 0) = 0 then
+    return;
+  end if;
+
+  -- Values have already been parsed as numeric, so the generated IN list is
+  -- injection-safe and lets PostgreSQL use the normal order_number index.
+  v_csv := array_to_string(v_numbers, ',');
+
+  return query execute format($sql$
+    with src as (
+      select o.order_number as ord, to_jsonb(o) as j
+      from %s o
+      where o.order_number in (%s)
+    )
+    select jsonb_build_object(
+      'id', j->'id',
+      'reason', j->'reason',
+      'order_number', j->'order_number',
+      'order_type', j->'order_type',
+      'notion_created_time', j->'notion_created_time',
+      'unit_price', j->'unit_price',
+      'quantity_requested', j->'quantity_requested',
+      'quantity_progress', j->'quantity_progress',
+      'quantity_edited_by_supervisor', j->'quantity_edited_by_supervisor',
+      'quantity_received_by_operations', j->'quantity_received_by_operations',
+      'quantity_remaining', j->'quantity_remaining',
+      'status', j->'status',
+      'issue_description', j->'issue_description',
+      'actual_issue_description', j->'actual_issue_description',
+      'repair_action', j->'repair_action',
+      'resolution_method', j->'resolution_method',
+      'operations_approval', j->'operations_approval',
+      'rejected_reason', j->'rejected_reason',
+      'team_member_id', j->'team_member_id',
+      'team_member_name', j->'team_member_name',
+      'sv_approval', j->'sv_approval',
+      'product_name', j->'product_name',
+      'receipt_number', j->'receipt_number',
+      'person_received_by_operations', j->'person_received_by_operations'
+    ) as row_data
+    from src
+    order by ord desc,
+             coalesce(public.erp_try_timestamptz(j->>'notion_created_time'), '-infinity'::timestamptz) desc,
+             coalesce(j->>'id','') desc
+  $sql$, v_table, v_csv);
 end;
 $$;
 
@@ -855,6 +938,7 @@ grant execute on function public.erp_try_numeric(text) to anon, authenticated, s
 grant execute on function public.erp_try_timestamptz(text) to anon, authenticated, service_role;
 grant execute on function public.erp_canonical_token(text) to anon, authenticated, service_role;
 grant execute on function public.erp_order_candidate_numbers(jsonb) to anon, authenticated, service_role;
+grant execute on function public.erp_order_summary_rows(jsonb) to anon, authenticated, service_role;
 grant execute on function public.erp_home_order_groups(jsonb) to anon, authenticated, service_role;
 grant execute on function public.erp_home_stock_summary(jsonb) to anon, authenticated, service_role;
 grant execute on function public.erp_home_expenses_summary(jsonb) to anon, authenticated, service_role;
@@ -877,6 +961,7 @@ as $$
   with expected(kind, name) as (
     values
       ('rpc','erp_order_candidate_numbers'),
+      ('rpc','erp_order_summary_rows'),
       ('rpc','erp_home_order_groups'),
       ('rpc','erp_home_stock_summary'),
       ('rpc','erp_home_expenses_summary'),

@@ -5,7 +5,7 @@ import { recordPerformanceSample } from "./performance-profiler";
 import { select, selectAll } from "./supabase-rest";
 import { listTeamMembersLite } from "./team-members-service";
 
-const VISIBILITY_CACHE_TTL_MS = 2_500;
+const VISIBILITY_CACHE_TTL_MS = 15_000;
 const visibilityCache = new Map();
 const visibilityInflight = new Map();
 

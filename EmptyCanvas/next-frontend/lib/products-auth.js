@@ -8,6 +8,16 @@ function normalize(value) {
   return String(value || "").trim().toLowerCase();
 }
 
+function accountMemberId(account = {}) {
+  return String(
+    account?.teamMemberId
+    || account?.userSupabaseId
+    || account?.userId
+    || account?.id
+    || "",
+  ).trim();
+}
+
 async function getLegacyAccountGateInternal(requiredPages = [], onSource = () => {}, options = {}) {
   // First try the lightweight Next -> Upstash session -> Supabase permission
   // path. If this deployment/session is not eligible, keep the established
@@ -44,11 +54,12 @@ async function getLegacyAccountGateInternal(requiredPages = [], onSource = () =>
         status: 403,
         error: `${pages.join(" or ")} access is not allowed for this account.`,
         account: response.data,
+        memberId: accountMemberId(response.data),
       };
     }
   }
 
-  return { ok: true, status: 200, error: "", account: response.data };
+  return { ok: true, status: 200, error: "", account: response.data, memberId: accountMemberId(response.data) };
 }
 export async function getLegacyAccountGate(requiredPages = [], options = {}) {
   const startedAt = performance.now();

@@ -36,6 +36,8 @@ const memberAccessInflight = new Map();
 const directSessionInflight = new Map();
 const memberRowInflight = new Map();
 const memberRowCache = new Map();
+let redisUrlClient = null;
+let redisUrlConnectPromise = null;
 
 function text(value) {
   if (value === null || typeof value === "undefined") return "";
@@ -241,9 +243,21 @@ function unsignSessionCookie(rawValue, secret) {
   return sid;
 }
 
+function redisUrlValue() {
+  return String(process.env.UPSTASH_REDIS_URL || process.env.REDIS_URL || "").trim();
+}
+
+function hasRestSessionBackend() {
+  return Boolean(
+    String(process.env.UPSTASH_REDIS_REST_URL || "").trim()
+    && String(process.env.UPSTASH_REDIS_REST_TOKEN || "").trim(),
+  );
+}
+
 async function upstashCommand(command, { timeoutMs = SESSION_LOOKUP_TIMEOUT_MS } = {}) {
   const metricStartedAt = performance.now();
-  const metricName = String(Array.isArray(command) ? command[0] : "command").trim().toUpperCase() || "COMMAND";
+  const op = String(Array.isArray(command) ? command[0] : "command").trim().toUpperCase() || "COMMAND";
+  const metricName = `${op}-REST`;
   let metricOk = false;
   let metricStatus = 0;
   const url = String(process.env.UPSTASH_REDIS_REST_URL || "").trim().replace(/\/+$/, "");
@@ -273,6 +287,7 @@ async function upstashCommand(command, { timeoutMs = SESSION_LOOKUP_TIMEOUT_MS }
     if (!response.ok || payload?.error) {
       const error = new Error(payload?.error || `Upstash REST request failed with HTTP ${response.status}`);
       error.code = "DIRECT_SESSION_READ_FAILED";
+      error.status = response.status;
       throw error;
     }
     metricOk = true;
@@ -280,7 +295,7 @@ async function upstashCommand(command, { timeoutMs = SESSION_LOOKUP_TIMEOUT_MS }
   } catch (error) {
     if (error?.name === "AbortError") {
       metricStatus = 504;
-      const timeoutError = new Error(`Direct session lookup timed out after ${effectiveTimeoutMs}ms.`);
+      const timeoutError = new Error(`Direct REST session lookup timed out after ${effectiveTimeoutMs}ms.`);
       timeoutError.code = "DIRECT_SESSION_TIMEOUT";
       timeoutError.status = 504;
       throw timeoutError;
@@ -295,8 +310,115 @@ async function upstashCommand(command, { timeoutMs = SESSION_LOOKUP_TIMEOUT_MS }
       durationMs: performance.now() - metricStartedAt,
       ok: metricOk,
       status: metricStatus,
+      meta: { backend: "rest" },
     });
   }
+}
+
+async function getRedisUrlClient(timeoutMs = SESSION_LOOKUP_TIMEOUT_MS) {
+  const url = redisUrlValue();
+  if (!url) {
+    const error = new Error("Direct Redis URL session access is not configured.");
+    error.code = "DIRECT_SESSION_UNAVAILABLE";
+    throw error;
+  }
+  if (redisUrlClient?.isReady) return redisUrlClient;
+  if (redisUrlConnectPromise) return await redisUrlConnectPromise;
+
+  const pending = (async () => {
+    const { createClient } = await import("redis");
+    const client = redisUrlClient || createClient({
+      url,
+      disableOfflineQueue: true,
+      socket: {
+        tls: /^rediss:/i.test(url),
+        keepAlive: 30_000,
+        connectTimeout: Math.max(500, Math.min(2_000, Number(timeoutMs) || 1_500)),
+        reconnectStrategy: false,
+      },
+    });
+    if (!redisUrlClient) {
+      redisUrlClient = client;
+      client.on("error", () => {});
+    }
+    if (!client.isOpen) await client.connect();
+    return client;
+  })();
+  redisUrlConnectPromise = pending;
+  try {
+    return await pending;
+  } catch (error) {
+    try { redisUrlClient?.disconnect?.(); } catch {}
+    redisUrlClient = null;
+    throw error;
+  } finally {
+    if (redisUrlConnectPromise === pending) redisUrlConnectPromise = null;
+  }
+}
+
+async function redisUrlCommand(command, { timeoutMs = SESSION_LOOKUP_TIMEOUT_MS } = {}) {
+  const metricStartedAt = performance.now();
+  const op = String(Array.isArray(command) ? command[0] : "command").trim().toUpperCase() || "COMMAND";
+  const metricName = `${op}-REDIS-URL`;
+  const effectiveTimeoutMs = Math.max(100, Math.min(SESSION_LOOKUP_TIMEOUT_MS, Number(timeoutMs) || SESSION_LOOKUP_TIMEOUT_MS));
+  let metricOk = false;
+  let metricStatus = 0;
+  let timeout = null;
+  const budgetStartedAt = performance.now();
+  try {
+    const client = await getRedisUrlClient(effectiveTimeoutMs);
+    const commandBudgetMs = Math.max(0, effectiveTimeoutMs - (performance.now() - budgetStartedAt));
+    if (commandBudgetMs < 50) {
+      const error = new Error(`Direct Redis URL session lookup timed out after ${effectiveTimeoutMs}ms.`);
+      error.code = "DIRECT_SESSION_TIMEOUT";
+      error.status = 504;
+      throw error;
+    }
+    const operation = (() => {
+      if (op === "MGET") return client.mGet((command || []).slice(1).map(String));
+      if (op === "GET") return client.get(String(command?.[1] || ""));
+      const error = new Error(`Unsupported direct Redis command: ${op}`);
+      error.code = "DIRECT_SESSION_COMMAND_UNSUPPORTED";
+      throw error;
+    })();
+    const timeoutPromise = new Promise((_, reject) => {
+      timeout = setTimeout(() => {
+        const error = new Error(`Direct Redis URL session lookup timed out after ${effectiveTimeoutMs}ms.`);
+        error.code = "DIRECT_SESSION_TIMEOUT";
+        error.status = 504;
+        reject(error);
+      }, commandBudgetMs);
+    });
+    const result = await Promise.race([operation, timeoutPromise]);
+    metricOk = true;
+    metricStatus = 200;
+    return result;
+  } catch (error) {
+    metricStatus = Number(error?.status) || 503;
+    if (error?.code === "DIRECT_SESSION_TIMEOUT") {
+      try { redisUrlClient?.disconnect?.(); } catch {}
+      redisUrlClient = null;
+      redisUrlConnectPromise = null;
+    }
+    throw error;
+  } finally {
+    if (timeout) clearTimeout(timeout);
+    recordPerformanceSample({
+      category: "upstash",
+      name: metricName,
+      durationMs: performance.now() - metricStartedAt,
+      ok: metricOk,
+      status: metricStatus,
+      meta: { backend: "redis-url" },
+    });
+  }
+}
+
+async function sessionCommand(command, { backend = "auto", timeoutMs = SESSION_LOOKUP_TIMEOUT_MS } = {}) {
+  if (backend === "redis-url") return await redisUrlCommand(command, { timeoutMs });
+  if (backend === "rest") return await upstashCommand(command, { timeoutMs });
+  if (redisUrlValue()) return await redisUrlCommand(command, { timeoutMs });
+  return await upstashCommand(command, { timeoutMs });
 }
 
 function parseSessionValue(value) {
@@ -308,38 +430,65 @@ function parseSessionValue(value) {
 async function resolveDirectSessionCookie(cookieValue) {
   const secret = String(process.env.SESSION_SECRET || "dev-fallback-secret");
   const sid = unsignSessionCookie(cookieValue, secret);
-  if (!sid) return { definitive: true, status: 401, session: null, error: "Invalid session cookie." };
+  if (!sid) return { definitive: true, status: 401, session: null, error: "Invalid session cookie.", backend: "" };
 
-  // Keep the whole direct-session validation inside one tail-latency budget.
-  // Previously MGET and the revocation GET could each consume 3.5s, delaying
-  // the compatibility fallback by roughly 7s during an unhealthy Redis path.
-  const budgetStartedAt = performance.now();
-  const remainingBudgetMs = () => Math.max(0, SESSION_LOOKUP_TIMEOUT_MS - (performance.now() - budgetStartedAt));
-
-  let values;
-  try {
-    // RedisStore uses `op:<sid>` while the REST fallback store uses
-    // `op:sess:<sid>`. MGET supports both deployment modes without guessing.
-    values = await upstashCommand(["MGET", `op:${sid}`, `op:sess:${sid}`], { timeoutMs: remainingBudgetMs() });
-  } catch (error) {
-    return { definitive: false, status: 503, session: null, error: error?.message || "Direct session lookup failed." };
+  // Express prefers UPSTASH_REDIS_URL when it exists, while older Next code
+  // only knew the REST credentials. Mirror the real session-store priority so
+  // the direct gate reads the same Redis database as the legacy backend.
+  const backends = [];
+  if (redisUrlValue()) backends.push("redis-url");
+  if (hasRestSessionBackend()) backends.push("rest");
+  if (!backends.length) {
+    return { definitive: false, status: 503, session: null, error: "Direct session storage is not configured.", backend: "" };
   }
 
-  const candidates = Array.isArray(values) ? values : [values];
-  const sessionValue = candidates.map(parseSessionValue).find(Boolean) || null;
+  const budgetStartedAt = performance.now();
+  const remainingBudgetMs = () => Math.max(0, SESSION_LOOKUP_TIMEOUT_MS - (performance.now() - budgetStartedAt));
+  let sessionValue = null;
+  let sessionBackend = "";
+  let lastError = null;
+
+  for (let index = 0; index < backends.length; index += 1) {
+    const backend = backends[index];
+    const remaining = remainingBudgetMs();
+    if (remaining < 100) break;
+    const remainingBackends = Math.max(1, backends.length - index);
+    const attemptBudget = remainingBackends > 1 ? Math.max(500, Math.floor(remaining / remainingBackends)) : remaining;
+    try {
+      // RedisStore uses `op:<sid>` while the REST fallback store uses
+      // `op:sess:<sid>`. Reading both is cheap and keeps old sessions valid.
+      const values = await sessionCommand(["MGET", `op:${sid}`, `op:sess:${sid}`], {
+        backend,
+        timeoutMs: attemptBudget,
+      });
+      const candidates = Array.isArray(values) ? values : [values];
+      sessionValue = candidates.map(parseSessionValue).find(Boolean) || null;
+      if (sessionValue) {
+        sessionBackend = backend;
+        break;
+      }
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
   if (!sessionValue) {
-    // The REST endpoint can point at a different Redis deployment than the URL
-    // session store. Let the legacy bridge decide rather than logging the user out.
-    return { definitive: false, status: 503, session: null, error: "Session was not found in the direct REST store." };
+    return {
+      definitive: false,
+      status: 503,
+      session: null,
+      error: lastError?.message || "Session was not found in the configured direct session stores.",
+      backend: "",
+    };
   }
 
   if (!sessionValue.authenticated) {
-    return { definitive: true, status: 401, session: null, error: "Authentication required." };
+    return { definitive: true, status: 401, session: null, error: "Authentication required.", backend: sessionBackend };
   }
 
   const expiresAt = sessionValue?.cookie?.expires ? new Date(sessionValue.cookie.expires).getTime() : 0;
   if (expiresAt && Number.isFinite(expiresAt) && expiresAt <= Date.now()) {
-    return { definitive: true, status: 401, session: null, error: "Session expired." };
+    return { definitive: true, status: 401, session: null, error: "Session expired.", backend: sessionBackend };
   }
 
   const userId = text(sessionValue.userSupabaseId || sessionValue.userNotionId);
@@ -352,18 +501,29 @@ async function resolveDirectSessionCookie(cookieValue) {
         error.status = 504;
         throw error;
       }
-      const revokedAt = Number(await upstashCommand(["GET", `op:auth-revoked:${userId}`], { timeoutMs: remainingMs })) || 0;
+      // Read revocation from the same backend that held the session. If this
+      // check is unhealthy, fall back to the legacy auth path rather than
+      // weakening revocation semantics.
+      const revokedAt = Number(await sessionCommand(["GET", `op:auth-revoked:${userId}`], {
+        backend: sessionBackend,
+        timeoutMs: remainingMs,
+      })) || 0;
       const issuedAt = Number(sessionValue.authIssuedAt || 0);
       if (revokedAt && issuedAt <= revokedAt) {
-        return { definitive: true, status: 401, session: null, error: "Session invalidated." };
+        return { definitive: true, status: 401, session: null, error: "Session invalidated.", backend: sessionBackend };
       }
     } catch (error) {
-      // Do not bypass a revocation check when the direct Redis read is unhealthy.
-      return { definitive: false, status: 503, session: null, error: error?.message || "Session revocation lookup failed." };
+      return {
+        definitive: false,
+        status: 503,
+        session: null,
+        error: error?.message || "Session revocation lookup failed.",
+        backend: sessionBackend,
+      };
     }
   }
 
-  return { definitive: true, status: 200, session: sessionValue, error: "" };
+  return { definitive: true, status: 200, session: sessionValue, error: "", backend: sessionBackend };
 }
 
 async function readDirectSession() {
@@ -588,9 +748,10 @@ function gateFromAccount(account, session, requiredPages = []) {
 
 async function getDirectSessionAccountGateInternal(requiredPages = [], options = {}) {
   // This path is intentionally opt-in by capability rather than by feature flag:
-  // if the same Upstash REST database used by express-session is reachable,
-  // Next can validate the session without booting the 40k-line Express app.
-  if (!String(process.env.UPSTASH_REDIS_REST_URL || "").trim() || !String(process.env.UPSTASH_REDIS_REST_TOKEN || "").trim()) {
+  // if the Redis session store used by express-session is reachable through the
+  // normal Redis URL or Upstash REST, Next can validate the session without
+  // booting the 40k-line Express app.
+  if (!redisUrlValue() && !hasRestSessionBackend()) {
     return null;
   }
 
@@ -629,6 +790,7 @@ async function getDirectSessionAccountGateInternal(requiredPages = [], options =
       },
       source: "direct-session-auth-only",
       memberId,
+      sessionBackend: resolved.backend || "",
     };
   }
 
@@ -668,7 +830,7 @@ async function getDirectSessionAccountGateInternal(requiredPages = [], options =
       pageAccess: { pages: freshPageAccess },
     };
 
-    return { ...gateFromAccount(account, session, requiredPages), source: "direct-session", memberId };
+    return { ...gateFromAccount(account, session, requiredPages), source: "direct-session", memberId, sessionBackend: resolved.backend || "" };
   } catch {
     return null;
   }
@@ -695,6 +857,7 @@ export async function getDirectSessionAccountGate(requiredPages = [], options = 
         outcome: thrown ? "error" : (result === null ? "legacy-fallback" : (result?.ok ? "allowed" : `blocked-${Number(result?.status) || 0}`)),
         requiredPages: Array.isArray(requiredPages) ? requiredPages.length : (requiredPages ? 1 : 0),
         authOnly: options?.authOnly === true,
+        sessionBackend: result?.sessionBackend || "",
       },
     });
   }

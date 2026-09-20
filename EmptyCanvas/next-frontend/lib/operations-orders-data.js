@@ -8,6 +8,7 @@ import { invalidateStocktakingReadCaches } from "./stocktaking-data";
 import { consumeOrderSummaryWindows, loadOrderRowsByNumbers, scanOrderNumberCandidates } from "./order-pagination";
 import { applyOrderSearchPlan, canUseOrderSearchText, createOrderSearchPlan, noteOrderSearchTextError } from "./order-search-hotpath";
 import { canUseOrderCandidateRpc, loadOrderCandidateNumbersRpc, noteOrderCandidateRpcError } from "./order-candidate-rpc";
+import { canUseOrderSummaryRpc, loadOrderSummaryRowsRpc, noteOrderSummaryRpcError } from "./order-summary-rpc";
 import { measurePerformance, recordPerformanceSample } from "./performance-profiler";
 
 const PAGE_LIMIT = 36;
@@ -496,6 +497,19 @@ async function candidateNumbers({ cursor = null, scanGroups = 90, filters = {}, 
 }
 
 async function rowsByNumbers(numbers = [], signal = null, includeLocalSearchFields = false) {
+  if (canUseOrderSummaryRpc()) {
+    try {
+      return await loadOrderSummaryRowsRpc({
+        numbers,
+        profileName: "orders.operations.summary-rpc",
+        signal,
+      });
+    } catch (error) {
+      if (signal?.aborted || error?.code === "REQUEST_ABORTED" || error?.name === "AbortError") throw error;
+      noteOrderSummaryRpcError(error);
+    }
+  }
+
   return await loadOrderRowsByNumbers({
     table: tableName(),
     numbers,

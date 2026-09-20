@@ -2,7 +2,7 @@ import "server-only";
 
 import { select, supabaseRequest, updateById } from "./supabase-rest";
 
-const NOTIFICATION_CACHE_TTL_MS = 1_500;
+const NOTIFICATION_CACHE_TTL_MS = 5_000;
 const NOTIFICATION_CACHE_MAX = 200;
 const listCache = new Map();
 const listInflight = new Map();
