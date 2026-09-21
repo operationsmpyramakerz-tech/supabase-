@@ -1876,11 +1876,35 @@ function ReceiveModal({ state, busy, error, onCancel, onSubmit }) {
       item?.reason,
     ].map(lower).some((value) => value.includes(searchNeedle));
   });
-  const hasReceiveQuantity = group.items.some((item) => {
+  const receivableItems = group.items.filter((item) => Math.abs(remainingQuantity(item)) > 1e-9);
+  const hasReceiveQuantity = receivableItems.some((item) => {
     const id = text(item?.id);
     const maxNow = Math.abs(remainingQuantity(item));
     return Math.min(maxNow, Math.max(0, finite(quantities[id]))) > 1e-9;
   });
+  const allReceiveQuantitiesSelected = receivableItems.length > 0 && receivableItems.every((item) => {
+    const id = text(item?.id);
+    const maxNow = Math.abs(remainingQuantity(item));
+    return Math.min(maxNow, Math.max(0, finite(quantities[id]))) >= maxNow - 1e-9;
+  });
+  const setItemReceiveAll = (item, checked) => {
+    const id = text(item?.id);
+    const maxNow = Math.abs(remainingQuantity(item));
+    if (!id || maxNow <= 1e-9) return;
+    setQuantities((current) => ({ ...current, [id]: checked ? formatQuantity(maxNow) : "" }));
+  };
+  const setAllReceiveQuantities = (checked) => {
+    setQuantities((current) => {
+      const next = { ...current };
+      group.items.forEach((item) => {
+        const id = text(item?.id);
+        const maxNow = Math.abs(remainingQuantity(item));
+        if (!id || maxNow <= 1e-9) return;
+        next[id] = checked ? formatQuantity(maxNow) : "";
+      });
+      return next;
+    });
+  };
   return <div className="co-submodal-overlay is-open next-operations-receive-modal" aria-hidden="false">
     <form className="co-submodal-dialog next-operations-receive-dialog" role="dialog" aria-modal="true" aria-labelledby="operations-receive-title" onSubmit={(event) => { event.preventDefault(); onSubmit({ receiptNumber, issueDescription, quantities }); }}>
       <div className="co-submodal-header next-operations-receive-header">
@@ -1905,7 +1929,17 @@ function ReceiveModal({ state, busy, error, onCancel, onSubmit }) {
           />
         </label>
         <section className="next-operations-receive-quantities" aria-labelledby="operations-receive-quantities-title">
-          <div className="next-operations-receive-section-head"><div><span className="next-operations-receive-kicker">Components</span><strong id="operations-receive-quantities-title">Received quantities</strong></div><span className="next-operations-receive-count">{visibleItems.length}</span></div>
+          <div className="next-operations-receive-section-head">
+            <div><span className="next-operations-receive-kicker">Components</span><strong id="operations-receive-quantities-title">Received quantities</strong></div>
+            <div className="next-operations-receive-head-actions">
+              <label className={`next-operations-receive-check next-operations-receive-check--all${allReceiveQuantitiesSelected ? " is-checked" : ""}${receivableItems.length ? "" : " is-disabled"}`}>
+                <input type="checkbox" checked={allReceiveQuantitiesSelected} onChange={(event) => setAllReceiveQuantities(event.target.checked)} disabled={!receivableItems.length || busy} />
+                <span className="next-operations-receive-check-box" aria-hidden="true"><span>✓</span></span>
+                <span className="next-operations-receive-check-label">Receive all</span>
+              </label>
+              <span className="next-operations-receive-count">{visibleItems.length}</span>
+            </div>
+          </div>
           <div className="next-operations-receive-list">{visibleItems.length ? visibleItems.map((item) => {
             const id = text(item?.id);
             const base = baseQuantity(item);
@@ -1916,7 +1950,12 @@ function ReceiveModal({ state, busy, error, onCancel, onSubmit }) {
             const sign = base < 0 ? -1 : 1;
             const previewReceived = roundQty(received + (sign * receiveNow));
             const previewRemaining = roundQty(remaining - (sign * receiveNow));
-            return <div className="next-operations-receive-row" key={id}>
+            const receiveAllSelected = maxNow > 1e-9 && receiveNow >= maxNow - 1e-9;
+            return <div className={`next-operations-receive-row${receiveAllSelected ? " is-selected" : ""}`} key={id}>
+              <label className={`next-operations-receive-check next-operations-receive-check--row${receiveAllSelected ? " is-checked" : ""}${maxNow <= 1e-9 ? " is-disabled" : ""}`} title={maxNow > 1e-9 ? "Fill the full remaining quantity" : "Nothing remaining to receive"}>
+                <input type="checkbox" checked={receiveAllSelected} onChange={(event) => setItemReceiveAll(item, event.target.checked)} disabled={maxNow <= 1e-9 || busy} aria-label={`Receive full remaining quantity for ${text(item?.productName) || "component"}`} />
+                <span className="next-operations-receive-check-box" aria-hidden="true"><span>✓</span></span>
+              </label>
               <span className="next-operations-receive-info"><span className="next-operations-receive-name">{text(item?.productName) || "Product"}</span><span className="next-operations-receive-sub">Received {formatQuantity(previewReceived)} <b>·</b> Remaining {formatQuantity(previewRemaining)}</span></span>
               <span className="next-operations-receive-qty-controls">
                 <span className="next-operations-receive-input-wrap next-operations-receive-input-wrap--readonly"><span>Qty</span><input className="co-submodal-input next-operations-receive-input" type="text" value={formatQuantity(Math.abs(remaining))} readOnly tabIndex={-1} aria-label={`Remaining quantity for ${text(item?.productName) || "component"}`}/></span>

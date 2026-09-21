@@ -2935,9 +2935,110 @@ body.operations-orders-page .next-operations-receive-section-head {
   margin-bottom: 9px;
 }
 
-body.operations-orders-page .next-operations-receive-section-head > div {
+body.operations-orders-page .next-operations-receive-section-head > div:first-child {
   display: grid;
   gap: 2px;
+}
+
+body.operations-orders-page .next-operations-receive-head-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+body.operations-orders-page .next-operations-receive-check {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 0;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+body.operations-orders-page .next-operations-receive-check input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+body.operations-orders-page .next-operations-receive-check-box {
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  display: inline-grid;
+  place-items: center;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  color: transparent;
+  box-shadow: 0 3px 10px rgba(15, 23, 42, .05);
+  transition: border-color .16s ease, background .16s ease, color .16s ease, transform .16s ease, box-shadow .16s ease;
+}
+
+body.operations-orders-page .next-operations-receive-check-box > span {
+  transform: scale(.65);
+  font-size: 13px;
+  line-height: 1;
+  font-weight: 950;
+  transition: transform .16s ease;
+}
+
+body.operations-orders-page .next-operations-receive-check:hover .next-operations-receive-check-box {
+  border-color: #f59e0b;
+  box-shadow: 0 4px 14px rgba(245, 158, 11, .12);
+}
+
+body.operations-orders-page .next-operations-receive-check.is-checked .next-operations-receive-check-box {
+  border-color: #f59e0b;
+  background: linear-gradient(145deg, #fff7d6 0%, #ffedd5 100%);
+  color: #c2410c;
+  box-shadow: 0 5px 15px rgba(234, 88, 12, .14);
+}
+
+body.operations-orders-page .next-operations-receive-check.is-checked .next-operations-receive-check-box > span {
+  transform: scale(1);
+}
+
+body.operations-orders-page .next-operations-receive-check.is-disabled {
+  cursor: not-allowed;
+  opacity: .45;
+}
+
+body.operations-orders-page .next-operations-receive-check--all {
+  min-height: 34px;
+  padding: 4px 10px 4px 7px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #fff;
+  color: #475569;
+  box-shadow: 0 3px 12px rgba(15, 23, 42, .04);
+}
+
+body.operations-orders-page .next-operations-receive-check--all.is-checked {
+  border-color: #fed7aa;
+  background: #fffaf2;
+  color: #9a3412;
+}
+
+body.operations-orders-page .next-operations-receive-check--all .next-operations-receive-check-box {
+  width: 22px;
+  min-width: 22px;
+  height: 22px;
+  border-radius: 7px;
+}
+
+body.operations-orders-page .next-operations-receive-check-label {
+  font-size: 9px;
+  line-height: 1;
+  font-weight: 900;
+  letter-spacing: .01em;
+  white-space: nowrap;
 }
 
 body.operations-orders-page .next-operations-receive-kicker {
@@ -2987,13 +3088,24 @@ body.operations-orders-page .next-operations-receive-empty {
 body.operations-orders-page .next-operations-receive-row {
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(210px, 236px);
+  grid-template-columns: 28px minmax(0, 1fr) minmax(210px, 236px);
   align-items: center;
-  gap: 12px;
-  padding: 10px 10px 10px 12px;
+  gap: 10px;
+  padding: 10px 10px 10px 11px;
   border: 1px solid #e8edf3;
   border-radius: 16px;
   background: #fbfcfe;
+  transition: border-color .16s ease, background .16s ease, box-shadow .16s ease;
+}
+
+body.operations-orders-page .next-operations-receive-row.is-selected {
+  border-color: #fed7aa;
+  background: linear-gradient(90deg, #fffaf4 0%, #fbfcfe 48%);
+  box-shadow: 0 5px 16px rgba(234, 88, 12, .055);
+}
+
+body.operations-orders-page .next-operations-receive-check--row {
+  align-self: center;
 }
 
 body.operations-orders-page .next-operations-receive-info {
@@ -3169,10 +3281,26 @@ body.operations-orders-page .next-classic-orders-parity .sv-qty-new {
   }
 
   body.operations-orders-page .next-operations-receive-row {
-    grid-template-columns: minmax(0, 1fr) minmax(176px, 196px);
-    gap: 8px;
+    grid-template-columns: 25px minmax(0, 1fr) minmax(176px, 196px);
+    gap: 7px;
     padding: 9px;
     border-radius: 14px;
+  }
+
+  body.operations-orders-page .next-operations-receive-check--row .next-operations-receive-check-box {
+    width: 22px;
+    min-width: 22px;
+    height: 22px;
+    border-radius: 7px;
+  }
+
+  body.operations-orders-page .next-operations-receive-check--all {
+    min-height: 32px;
+    padding-right: 8px;
+  }
+
+  body.operations-orders-page .next-operations-receive-check-label {
+    font-size: 8.5px;
   }
 
   body.operations-orders-page .next-operations-receive-qty-controls {
