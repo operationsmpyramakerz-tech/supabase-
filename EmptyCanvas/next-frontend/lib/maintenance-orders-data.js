@@ -7,6 +7,7 @@ import { consumeOrderSummaryWindows, loadOrderRowsByNumbers, scanOrderNumberCand
 import { applyOrderSearchPlan, canUseOrderSearchText, createOrderSearchPlan, noteOrderSearchTextError } from "./order-search-hotpath";
 import { canUseOrderCandidateRpc, loadOrderCandidateNumbersRpc, noteOrderCandidateRpcError } from "./order-candidate-rpc";
 import { measurePerformance, recordPerformanceSample } from "./performance-profiler";
+import { getProductsCatalog } from "./products-service";
 
 const PAGE_LIMIT = 36;
 const PAGE_MAX = 80;
@@ -409,6 +410,82 @@ export async function loadMaintenanceOrdersInitialPage({ limit = PAGE_LIMIT } = 
   );
 }
 
+async function enrichMaintenanceDetailProducts(items = []) {
+  const rows = Array.isArray(items) ? items : [];
+  if (!rows.length) return rows;
+
+  let products = [];
+  try {
+    const catalog = await getProductsCatalog();
+    products = Array.isArray(catalog?.products) ? catalog.products : [];
+  } catch {}
+  if (!products.length) return rows;
+
+  const byId = new Map();
+  const byName = new Map();
+  const byUrl = new Map();
+  for (const product of products) {
+    const id = text(product?.id);
+    const nameKey = norm(product?.name);
+    const urlKey = norm(product?.url);
+    if (id && !byId.has(id)) byId.set(id, product);
+    if (nameKey && !byName.has(nameKey)) byName.set(nameKey, product);
+    if (urlKey && !byUrl.has(urlKey)) byUrl.set(urlKey, product);
+  }
+
+  const findProduct = ({ id, name, url } = {}) => {
+    const cleanId = text(id);
+    if (cleanId && byId.has(cleanId)) return byId.get(cleanId);
+    const cleanUrl = norm(url);
+    if (cleanUrl && byUrl.has(cleanUrl)) return byUrl.get(cleanUrl);
+    const cleanName = norm(name);
+    return cleanName ? (byName.get(cleanName) || null) : null;
+  };
+
+  const enrichSpareEntries = (entries = []) => (Array.isArray(entries) ? entries : []).map((entry) => {
+    const product = findProduct({ id: entry?.id, name: entry?.name, url: entry?.url });
+    const qty = Math.max(1, Math.round(Number(entry?.qty) || 1));
+    const storedUnitPrice = Number(entry?.unitPrice ?? entry?.unit);
+    const catalogUnitPrice = Number(product?.unitPrice);
+    const unitPrice = Number.isFinite(storedUnitPrice) && storedUnitPrice > 0
+      ? storedUnitPrice
+      : (Number.isFinite(catalogUnitPrice) && catalogUnitPrice > 0 ? catalogUnitPrice : 0);
+    return {
+      ...entry,
+      id: text(entry?.id) || text(product?.id),
+      name: text(entry?.name) || text(product?.name) || "Spare part",
+      qty,
+      displayId: text(entry?.displayId ?? entry?.idCode) || text(product?.displayId),
+      idCode: text(entry?.idCode ?? entry?.displayId) || text(product?.displayId),
+      unitPrice,
+      unit: unitPrice,
+      total: unitPrice * qty,
+      url: /^https?:\/\//i.test(text(entry?.url)) ? text(entry?.url) : (text(product?.url) || null),
+    };
+  });
+
+  return rows.map((item) => {
+    const product = findProduct({ id: item?.productId, name: item?.productName, url: item?.productUrl });
+    const needed = enrichSpareEntries(item?.sparePartsNeededEntries);
+    const replaced = enrichSpareEntries(item?.sparePartsReplacedEntries);
+    return {
+      ...item,
+      productId: text(item?.productId) || text(product?.id) || null,
+      productUrl: /^https?:\/\//i.test(text(item?.productUrl)) ? text(item?.productUrl) : (text(product?.url) || null),
+      idCode: text(item?.idCode ?? item?.displayId) || text(product?.displayId) || null,
+      displayId: text(item?.displayId ?? item?.idCode) || text(product?.displayId) || null,
+      sparePartsNeededEntries: needed,
+      sparePartsNeededNames: needed.map((entry) => entry.name).filter(Boolean),
+      sparePartsNeededName: needed.map((entry) => entry.name).filter(Boolean).join(", ") || null,
+      sparePartsReplacedEntries: replaced,
+      sparePartsReplacedIds: replaced.map((entry) => entry.id).filter(Boolean),
+      sparePartsReplacedId: replaced.find((entry) => entry.id)?.id || null,
+      sparePartsReplacedNames: replaced.map((entry) => entry.name).filter(Boolean),
+      sparePartsReplacedName: replaced.map((entry) => entry.name).filter(Boolean).join(", ") || null,
+    };
+  });
+}
+
 export async function loadMaintenanceOrderDetails({ orderIds = [] } = {}) {
   if (!isSupabaseConfigured()) return null;
   const ids = [...new Set((Array.isArray(orderIds) ? orderIds : [])
@@ -430,5 +507,5 @@ export async function loadMaintenanceOrderDetails({ orderIds = [] } = {}) {
     throw error;
   }
 
-  return maintenanceRows.map(serializeOperationsOrderDetail);
+  return await enrichMaintenanceDetailProducts(maintenanceRows.map(serializeOperationsOrderDetail));
 }

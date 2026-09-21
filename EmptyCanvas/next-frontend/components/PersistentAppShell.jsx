@@ -30,7 +30,7 @@ function routePerformanceStyles(localPath) {
   }
   if (localPath === "/maintenance-orders") {
     return [
-      "/next/css/maintenance-orders.css?v=maintenance-log-edit-v2",
+      "/next/css/maintenance-orders.css?v=maintenance-details-v3",
       "/next/css/order-mobile-performance.css?v=css-phase3",
     ];
   }

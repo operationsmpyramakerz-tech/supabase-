@@ -156,25 +156,41 @@ function normalizeReceiptNumbers(receiptNumbers) {
   return values;
 }
 
+function normalizeMaintenanceSpareEntry(entry = {}) {
+  const id = text(entry?.id ?? entry?.productId ?? entry?.sparePartId);
+  let name = text(entry?.name ?? entry?.label ?? entry?.component ?? entry?.sparePartName);
+  let qty = Number(entry?.qty ?? entry?.quantity ?? 1);
+  if (!Number.isFinite(qty) || qty <= 0) qty = 1;
+  qty = Math.max(1, Math.round(qty));
+  const qtyMatch = name.match(/(?:\s*[x×]\s*|\s*\(\s*qty\s*:?\s*)(\d+(?:\.\d+)?)\s*\)?\s*$/i);
+  if (qtyMatch) {
+    const parsed = Number(qtyMatch[1]);
+    if (Number.isFinite(parsed) && parsed > 0) qty = Math.max(1, Math.round(parsed));
+    name = name.slice(0, qtyMatch.index).trim();
+  }
+  const unitPrice = Number(entry?.unitPrice ?? entry?.unit ?? 0);
+  const total = Number(entry?.total ?? entry?.totalCost);
+  return {
+    id,
+    name,
+    qty,
+    idCode: text(entry?.idCode ?? entry?.displayId),
+    displayId: text(entry?.displayId ?? entry?.idCode),
+    unitPrice: Number.isFinite(unitPrice) ? unitPrice : 0,
+    total: Number.isFinite(total) ? total : (Number.isFinite(unitPrice) ? unitPrice * qty : 0),
+    url: text(entry?.url ?? entry?.link),
+  };
+}
+
 function normalizeSpareEntries(item = {}) {
   const entries = [];
   const seen = new Set();
   const add = (entry = {}) => {
-    const id = text(entry?.id ?? entry?.productId ?? entry?.sparePartId);
-    let name = text(entry?.name ?? entry?.label ?? entry?.component ?? entry?.sparePartName);
-    let qty = Number(entry?.qty ?? entry?.quantity ?? 1);
-    if (!Number.isFinite(qty) || qty <= 0) qty = 1;
-    qty = Math.max(1, Math.round(qty));
-    const qtyMatch = name.match(/(?:\s*[x×]\s*|\s*\(\s*qty\s*:?\s*)(\d+(?:\.\d+)?)\s*\)?\s*$/i);
-    if (qtyMatch) {
-      const parsed = Number(qtyMatch[1]);
-      if (Number.isFinite(parsed) && parsed > 0) qty = Math.max(1, Math.round(parsed));
-      name = name.slice(0, qtyMatch.index).trim();
-    }
-    const key = `${id || lower(name)}|${qty}`;
-    if ((!id && !name) || seen.has(key)) return;
+    const normalized = normalizeMaintenanceSpareEntry(entry);
+    const key = `${normalized.id || lower(normalized.name)}|${normalized.qty}`;
+    if ((!normalized.id && !normalized.name) || seen.has(key)) return;
     seen.add(key);
-    entries.push({ id, name, qty });
+    entries.push(normalized);
   };
 
   if (Array.isArray(item?.sparePartsReplacedEntries)) item.sparePartsReplacedEntries.forEach(add);
@@ -191,15 +207,11 @@ function normalizeNeededSpareEntries(item = {}) {
   const entries = [];
   const seen = new Set();
   const add = (entry = {}) => {
-    const id = text(entry?.id ?? entry?.productId ?? entry?.sparePartId);
-    let name = text(entry?.name ?? entry?.label ?? entry?.component ?? entry?.sparePartName);
-    let qty = Number(entry?.qty ?? entry?.quantity ?? 1);
-    if (!Number.isFinite(qty) || qty <= 0) qty = 1;
-    qty = Math.max(1, Math.round(qty));
-    const key = `${id || lower(name)}|${qty}`;
-    if ((!id && !name) || seen.has(key)) return;
+    const normalized = normalizeMaintenanceSpareEntry(entry);
+    const key = `${normalized.id || lower(normalized.name)}|${normalized.qty}`;
+    if ((!normalized.id && !normalized.name) || seen.has(key)) return;
     seen.add(key);
-    entries.push({ id, name, qty });
+    entries.push(normalized);
   };
   if (Array.isArray(item?.sparePartsNeededEntries)) item.sparePartsNeededEntries.forEach(add);
   if (!entries.length) {
@@ -703,6 +715,48 @@ function ReceiptPhotosModal({ group, onClose }) {
   );
 }
 
+function safeMaintenanceUrl(value) {
+  const url = text(value);
+  if (/^https?:\/\//i.test(url)) return url;
+  if (/^www\./i.test(url)) return `https://${url}`;
+  return "";
+}
+
+function MaintenanceSparePartsBlock({ title, entries, emptyText }) {
+  const parts = Array.isArray(entries) ? entries : [];
+  const totalCost = parts.reduce((sum, part) => sum + Math.max(0, finite(part?.total ?? (finite(part?.unitPrice) * finite(part?.qty)))), 0);
+  return (
+    <section className="next-maintenance-spares-card">
+      <div className="next-maintenance-spares-card__head">
+        <span className="next-maintenance-spares-card__title"><ClassicOrderIcon name="package" />{title}</span>
+        <span className="next-maintenance-spares-card__count">{parts.length}</span>
+      </div>
+      {parts.length ? <div className="next-maintenance-spares-list">
+        {parts.map((part, index) => {
+          const partUrl = safeMaintenanceUrl(part?.url);
+          const unitPrice = finite(part?.unitPrice);
+          const total = finite(part?.total, unitPrice * finite(part?.qty, 1));
+          return <div className="next-maintenance-spare-row" key={`${text(part?.id) || text(part?.name) || index}-${index}`}>
+            <div className="next-maintenance-spare-row__main">
+              <span className="next-maintenance-spare-row__index">{index + 1}</span>
+              <span className="next-maintenance-spare-row__identity">
+                {partUrl ? <a href={partUrl} target="_blank" rel="noopener noreferrer" className="next-maintenance-spare-row__name"><span>{text(part?.name) || "Spare part"}</span><ClassicOrderIcon name="external-link" /></a> : <strong className="next-maintenance-spare-row__name">{text(part?.name) || "Spare part"}</strong>}
+                <span className="next-maintenance-spare-row__id">{text(part?.idCode ?? part?.displayId) ? `ID: ${text(part?.idCode ?? part?.displayId)}` : "No ID code"}</span>
+              </span>
+            </div>
+            <div className="next-maintenance-spare-row__stats">
+              <span><small>Qty</small><strong>{Math.max(1, Math.round(finite(part?.qty, 1)))}</strong></span>
+              {unitPrice > 0 ? <span><small>Unit</small><strong>{formatMoney(unitPrice)}</strong></span> : null}
+              {total > 0 ? <span><small>Total</small><strong>{formatMoney(total)}</strong></span> : null}
+            </div>
+          </div>;
+        })}
+        {totalCost > 0 ? <div className="next-maintenance-spares-card__total"><span>Total cost</span><strong>{formatMoney(totalCost)}</strong></div> : null}
+      </div> : <div className="next-maintenance-spares-empty">{emptyText}</div>}
+    </section>
+  );
+}
+
 function MaintenanceDetailsModal({ group, busy, onClose, onLog, onDone, onExport, onAction }) {
   const [photosOpen, setPhotosOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -761,6 +815,7 @@ function MaintenanceDetailsModal({ group, busy, onClose, onLog, onDone, onExport
           <button type="button" className="co-modal-close" onClick={onClose} aria-label="Close order details" />
           <div className="co-modal-header"><div className="co-modal-head-left"><div className="co-modal-status">Request Maintenance</div></div></div>
           <div className="next-maintenance-order-modal-summary" aria-label="Maintenance order summary">
+            <div><span>Team member</span><strong title={group.createdByName || "—"}>{group.createdByName || "—"}</strong></div>
             <div><span>Order</span><strong>{group.orderIdLabel}</strong></div>
             <div><span>Date</span><strong>{formatDate(group.latestCreated)}</strong></div>
             <div><span>Components</span><strong>{group.items.length}</strong></div>
@@ -782,26 +837,67 @@ function MaintenanceDetailsModal({ group, busy, onClose, onLog, onDone, onExport
 
             <div className="co-modal-items next-maintenance-modal-items">
               {[...group.items].sort((a, b) => text(a?.productName).localeCompare(text(b?.productName), undefined, { sensitivity: "base", numeric: true })).map((item, index) => {
-                const loggedDetails = [
-                  ["Serial number", text(item?.serialNumber)],
-                  ["Resolution method", text(item?.resolutionMethod)],
-                  ["Actual issue", text(item?.actualIssueDescription)],
-                  ["Repair action", text(item?.repairAction)],
-                ].filter((entry) => entry[1]);
+                const productName = text(item?.productName) || "Component";
+                const productUrl = safeMaintenanceUrl(item?.productUrl);
+                const serialNumber = text(item?.serialNumber) || "—";
+                const resolutionMethod = text(item?.resolutionMethod) || "—";
+                const actualIssue = text(item?.actualIssueDescription) || "—";
+                const repairAction = text(item?.repairAction) || "—";
+                const checklist = normalizeMaintenanceChecklist(item?.maintenanceChecklist);
+                const neededSpareParts = normalizeNeededSpareEntries(item);
+                const replacedSpareParts = normalizeSpareEntries(item);
+                const idCode = text(item?.idCode ?? item?.displayId);
+                const componentName = productUrl
+                  ? <a className="next-maintenance-modal-item__name next-maintenance-modal-item__name-link" href={productUrl} target="_blank" rel="noopener noreferrer" title="Open product link"><span>{productName}</span><ClassicOrderIcon name="external-link" /></a>
+                  : <strong className="next-maintenance-modal-item__name">{productName}</strong>;
+
                 return <section className="co-item next-maintenance-modal-item" key={text(item?.id) || index}>
                   <div className="next-maintenance-modal-item__head">
                     <span className="next-maintenance-modal-item__icon"><ClassicOrderIcon name="tool" /></span>
                     <span className="next-maintenance-modal-item__identity">
                       <span className="next-maintenance-modal-item__kicker">Component {index + 1}</span>
-                      <strong className="next-maintenance-modal-item__name">{text(item?.productName) || "Component"}</strong>
-                      {text(item?.idCode ?? item?.displayId) ? <span className="next-maintenance-modal-item__id">ID: {text(item?.idCode ?? item?.displayId)}</span> : null}
+                      {componentName}
+                      {idCode ? <span className="next-maintenance-modal-item__id">ID: {idCode}</span> : null}
                     </span>
                   </div>
-                  <div className="next-maintenance-modal-item__issue">
-                    <span>Issue description</span>
-                    <p>{issueText(item)}</p>
+
+                  <div className="next-maintenance-detail-group next-maintenance-detail-group--machine">
+                    <div className="next-maintenance-detail-group__title"><span>Machine details</span></div>
+                    <div className="next-maintenance-detail-grid next-maintenance-detail-grid--two">
+                      <div className="next-maintenance-detail-field">
+                        <span>Component</span>
+                        {productUrl ? <a className="next-maintenance-detail-field__product" href={productUrl} target="_blank" rel="noopener noreferrer"><span>{productName}</span><ClassicOrderIcon name="external-link" /></a> : <strong>{productName}</strong>}
+                        {idCode ? <small>ID: {idCode}</small> : null}
+                      </div>
+                      <div className="next-maintenance-detail-field"><span>Serial number</span><strong dir="auto">{serialNumber}</strong></div>
+                    </div>
                   </div>
-                  {loggedDetails.length ? <div className="next-maintenance-modal-item__log-grid">{loggedDetails.map(([label, value]) => <div className="next-maintenance-modal-item__log" key={label}><span>{label}</span><strong>{value}</strong></div>)}</div> : null}
+
+                  <div className="next-maintenance-modal-item__issue next-maintenance-modal-item__issue--grouped">
+                    <span>Initial issue</span>
+                    <p dir="auto">{issueText(item)}</p>
+                  </div>
+
+                  <div className="next-maintenance-detail-group next-maintenance-detail-group--action">
+                    <div className="next-maintenance-detail-group__title"><span>Maintenance action</span></div>
+                    <div className="next-maintenance-detail-grid next-maintenance-detail-grid--two">
+                      <div className="next-maintenance-detail-field"><span>Resolution method</span><strong dir="auto">{resolutionMethod}</strong></div>
+                      <div className="next-maintenance-detail-field next-maintenance-detail-field--checklist">
+                        <span>Maintenance checklist</span>
+                        {checklist.length ? <div className="next-maintenance-checklist-view">{checklist.map((value, checklistIndex) => <div className="next-maintenance-checklist-view__item" key={`${value}-${checklistIndex}`}><ClassicOrderIcon name="check-circle" /><strong dir="auto">{value}</strong></div>)}</div> : <div className="next-maintenance-detail-field__empty">No checklist items recorded</div>}
+                      </div>
+                      <div className="next-maintenance-detail-field next-maintenance-detail-field--text"><span>Actual issue description</span><strong dir="auto">{actualIssue}</strong></div>
+                      <div className="next-maintenance-detail-field next-maintenance-detail-field--text"><span>Repair action</span><strong dir="auto">{repairAction}</strong></div>
+                    </div>
+                  </div>
+
+                  <div className="next-maintenance-detail-group next-maintenance-detail-group--spares">
+                    <div className="next-maintenance-detail-group__title"><span>Spare parts</span></div>
+                    <div className="next-maintenance-spares-grid">
+                      <MaintenanceSparePartsBlock title="Spare parts needed" entries={neededSpareParts} emptyText="No spare parts needed" />
+                      <MaintenanceSparePartsBlock title="Spare parts replaced" entries={replacedSpareParts} emptyText="No spare parts replaced" />
+                    </div>
+                  </div>
                 </section>;
               })}
             </div>

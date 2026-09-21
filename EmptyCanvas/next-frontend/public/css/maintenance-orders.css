@@ -915,3 +915,424 @@ html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-p
     padding: 9px 10px 11px !important;
   }
 }
+
+/* Maintenance order details — grouped report-style card (2026-09-21). */
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog {
+  width: min(860px, calc(100vw - 24px));
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-modal-summary {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item {
+  padding: 14px !important;
+  border-color: #e5eaf1;
+  border-radius: 20px;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, .055);
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__name-link {
+  width: fit-content;
+  max-width: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-decoration: none;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__name-link:hover,
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-field__product:hover,
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spare-row__name:hover {
+  color: #2563eb;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__name-link svg,
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-field__product svg,
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spare-row__name svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-group {
+  margin-top: 10px;
+  padding: 11px;
+  border: 1px solid #e7ebf1;
+  border-radius: 15px;
+  background: #fff;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-group--machine,
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-group--action {
+  border-color: #f2c98b;
+  background: linear-gradient(180deg, #fffdf9 0%, #ffffff 48%);
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-group--spares {
+  background: #fbfcfe;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-group__title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 9px;
+  color: #0f172a;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .01em;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-grid {
+  display: grid;
+  gap: 8px;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-grid--two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-field {
+  min-width: 0;
+  min-height: 62px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 11px;
+  border: 1px solid #e7ebf1;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-field > span:first-child {
+  color: #94a3b8;
+  font-size: 8.5px;
+  font-weight: 850;
+  letter-spacing: .055em;
+  text-transform: uppercase;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-field > strong,
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-field__product,
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-checklist-view__item strong {
+  color: #334155;
+  font-size: 10.5px;
+  font-weight: 800;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-field > strong[dir="auto"],
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-checklist-view__item strong[dir="auto"],
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__issue p[dir="auto"] {
+  unicode-bidi: plaintext;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-field__product {
+  width: fit-content;
+  max-width: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #0f172a;
+  text-decoration: none;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-field small {
+  color: #94a3b8;
+  font-size: 8.5px;
+  font-weight: 700;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-field--text {
+  min-height: 86px;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-field--checklist {
+  min-height: 86px;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-checklist-view {
+  display: grid;
+  gap: 5px;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-checklist-view__item {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-checklist-view__item svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 13px;
+  margin-top: 1px;
+  color: #16a34a;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-field__empty {
+  margin: auto 0;
+  color: #94a3b8;
+  font-size: 9.5px;
+  font-weight: 700;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__issue--grouped {
+  margin-top: 10px;
+  border-radius: 14px;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spares-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spares-card {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #e5eaf1;
+  border-radius: 13px;
+  background: #fff;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spares-card__head {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid #f1e5d4;
+  background: #fff7ed;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spares-card__title {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #9a3412;
+  font-size: 9.5px;
+  font-weight: 900;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spares-card__title svg {
+  width: 14px;
+  height: 14px;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spares-card__count {
+  min-width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  padding: 0 6px;
+  border: 1px solid #fed7aa;
+  border-radius: 999px;
+  background: #fff;
+  color: #9a3412;
+  font-size: 8.5px;
+  font-weight: 900;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spares-list {
+  display: grid;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spare-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 9px 10px;
+  border-bottom: 1px solid #edf1f5;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spare-row__main {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spare-row__index {
+  width: 23px;
+  height: 23px;
+  flex: 0 0 23px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 8.5px;
+  font-weight: 900;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spare-row__identity {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spare-row__name {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #0f172a;
+  font-size: 9.5px;
+  font-weight: 850;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spare-row__id {
+  color: #94a3b8;
+  font-size: 8px;
+  font-weight: 700;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spare-row__stats {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spare-row__stats > span {
+  min-width: 44px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  padding: 4px 6px;
+  border-radius: 8px;
+  background: #f8fafc;
+  text-align: right;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spare-row__stats small {
+  color: #94a3b8;
+  font-size: 7px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spare-row__stats strong {
+  color: #334155;
+  font-size: 8.5px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spares-card__total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  background: #fffaf5;
+  color: #7c2d12;
+  font-size: 9px;
+  font-weight: 900;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spares-empty {
+  min-height: 58px;
+  display: grid;
+  place-items: center;
+  padding: 10px;
+  color: #94a3b8;
+  font-size: 9.5px;
+  font-weight: 750;
+  text-align: center;
+}
+
+html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-group,
+html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spares-card {
+  border-color: #2b3544;
+  background: #11161f;
+}
+
+html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-group--machine,
+html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-group--action {
+  border-color: #60491f;
+  background: #17150f;
+}
+
+html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-group__title,
+html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spare-row__name,
+html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-field__product {
+  color: #f8fafc;
+}
+
+html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-field,
+html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spare-row__stats > span {
+  border-color: #2b3544;
+  background: #151b25;
+}
+
+html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-field > strong,
+html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-checklist-view__item strong,
+html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spare-row__stats strong {
+  color: #cbd5e1;
+}
+
+html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spares-card__head,
+html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spares-card__total {
+  border-color: #60491f;
+  background: #201b12;
+}
+
+html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spare-row {
+  border-bottom-color: #273140;
+}
+
+@media (max-width: 760px) {
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-modal-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-modal-summary > div:first-child {
+    grid-column: 1 / -1;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spares-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 620px) {
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item {
+    padding: 10px !important;
+    border-radius: 17px;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-grid--two {
+    grid-template-columns: 1fr;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-group {
+    padding: 9px;
+    border-radius: 13px;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spare-row {
+    grid-template-columns: 1fr;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spare-row__stats {
+    padding-left: 31px;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spare-row__stats > span {
+    flex: 1 1 0;
+    text-align: left;
+  }
+}
