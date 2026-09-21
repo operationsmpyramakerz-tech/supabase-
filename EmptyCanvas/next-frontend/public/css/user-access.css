@@ -3207,3 +3207,414 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* ========================================================================== 
+   2026-09-22 — Users Center square people folders + proposal-style menu
+   ========================================================================== */
+.user-access-page .ua-folders {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)) !important;
+  gap: 18px !important;
+  align-items: stretch;
+}
+
+.user-access-page .ua-folder {
+  position: relative !important;
+  display: grid !important;
+  grid-template-columns: 1fr !important;
+  grid-template-rows: minmax(0, 1fr) auto !important;
+  align-items: stretch !important;
+  aspect-ratio: 1 / 1 !important;
+  min-height: 0 !important;
+  width: 100% !important;
+  padding: 22px 18px 18px !important;
+  gap: 15px !important;
+  overflow: visible !important;
+  border: 1px solid rgba(228, 101, 32, 0.10) !important;
+  border-radius: 28px !important;
+  background: linear-gradient(155deg, #fffdfa 0%, #fff7f1 52%, #ffefe4 100%) !important;
+  color: #111827 !important;
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.07), inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
+  transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease, background .18s ease !important;
+}
+
+.user-access-page .ua-folder::before {
+  content: none !important;
+}
+
+@media (hover: hover) {
+  .user-access-page .ua-folder:not(.ua-folder--add):hover {
+    transform: translateY(-3px) !important;
+    border-color: rgba(228, 101, 32, 0.22) !important;
+    box-shadow: 0 24px 48px rgba(15, 23, 42, 0.10) !important;
+  }
+}
+
+.user-access-page .ua-folder.is-actions-open {
+  z-index: 30;
+  border-color: rgba(228, 101, 32, 0.34) !important;
+  background: linear-gradient(155deg, #fffdfa 0%, #fff5ec 55%, #ffe8d8 100%) !important;
+  box-shadow: 0 24px 50px rgba(15, 23, 42, 0.12), 0 0 0 3px rgba(228, 101, 32, 0.07) !important;
+}
+
+.user-access-page .ua-folder__icon {
+  position: relative !important;
+  display: grid !important;
+  place-items: center !important;
+  align-self: stretch !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 92px !important;
+  margin: 10px 0 0 !important;
+  border: 1px solid rgba(228, 101, 32, 0.14) !important;
+  border-radius: 25px 25px 20px 20px !important;
+  background: linear-gradient(145deg, #ffe9d8 0%, #ffd7bb 55%, #ffcda9 100%) !important;
+  color: #c95012 !important;
+  box-shadow: 0 14px 30px rgba(228, 101, 32, 0.11), inset 0 1px 0 rgba(255,255,255,.72) !important;
+}
+
+.user-access-page .ua-folder__icon::before {
+  content: "" !important;
+  position: absolute !important;
+  left: 14px !important;
+  top: -11px !important;
+  width: 42% !important;
+  height: 18px !important;
+  border: 1px solid rgba(228, 101, 32, 0.14) !important;
+  border-bottom: 0 !important;
+  border-radius: 12px 12px 0 0 !important;
+  background: linear-gradient(145deg, #ffe9d8, #ffddc6) !important;
+}
+
+.user-access-page .ua-folder__icon::after {
+  content: "";
+  position: absolute;
+  right: 14px;
+  top: 13px;
+  width: 30px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.58);
+}
+
+.user-access-page .ua-folder__icon svg {
+  position: relative !important;
+  z-index: 1 !important;
+  width: 38px !important;
+  height: 38px !important;
+  stroke-width: 1.9 !important;
+}
+
+.user-access-page .ua-folder__text {
+  display: grid !important;
+  align-content: end !important;
+  gap: 5px !important;
+  min-width: 0 !important;
+  padding: 0 4px 2px !important;
+  text-align: left;
+}
+
+.user-access-page .ua-folder__name {
+  display: block !important;
+  overflow: hidden !important;
+  color: #111827 !important;
+  font-size: 16px !important;
+  font-weight: 950 !important;
+  line-height: 1.22 !important;
+  letter-spacing: -0.025em !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.user-access-page .ua-folder__count {
+  display: flex !important;
+  align-items: center !important;
+  gap: 7px !important;
+  margin: 0 !important;
+  color: #7b8494 !important;
+  font-size: 11px !important;
+  font-weight: 800 !important;
+}
+
+.user-access-page .ua-folder__badge {
+  margin-left: 0 !important;
+  padding: 3px 6px !important;
+  background: rgba(255,255,255,.72) !important;
+  color: #9a5d38 !important;
+}
+
+.user-access-page .ua-folder__main,
+.user-access-page .ua-folder__eyebrow,
+.user-access-page .ua-folder__open,
+.user-access-page .ua-folder__manage-hint,
+.user-access-page .ua-folder__actions {
+  display: none !important;
+}
+
+/* Same interaction language as Proposal: long press/right-click opens a compact dropdown. */
+.user-access-page .ua-folder__menu {
+  position: absolute;
+  top: 15px;
+  right: 14px;
+  z-index: 60;
+  width: min(148px, calc(100% - 28px));
+  padding: 8px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 22px 55px rgba(15, 23, 42, 0.18);
+  animation: uaFolderMenuIn .16s ease-out;
+}
+
+@keyframes uaFolderMenuIn {
+  from { opacity: 0; transform: translateY(-4px) scale(.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.user-access-page .ua-folder__menu button {
+  width: 100%;
+  min-height: 40px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px;
+  color: #111827;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 900;
+  text-align: left;
+  cursor: pointer;
+}
+
+.user-access-page .ua-folder__menu button:hover {
+  background: #f8fafc;
+}
+
+.user-access-page .ua-folder__menu button.is-danger {
+  color: #dc2626;
+}
+
+.user-access-page .ua-folder__menu button.is-danger:hover {
+  background: #fef2f2;
+}
+
+.user-access-page .ua-folder__menu button:disabled {
+  opacity: .42;
+  cursor: not-allowed;
+}
+
+.user-access-page .ua-folder__menu svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 2.3;
+}
+
+/* Dotted Add New folder, matching the Event Components add-new card language. */
+.user-access-page .ua-folder.ua-folder--add {
+  grid-template-rows: auto 1fr !important;
+  align-content: stretch !important;
+  padding: 22px !important;
+  border: 1.5px dashed rgba(228, 101, 32, 0.38) !important;
+  background: linear-gradient(145deg, #fffdfb 0%, #fff7f1 56%, #fff 100%) !important;
+  color: #b74a12 !important;
+  text-align: left;
+  box-shadow: 0 15px 32px rgba(228, 101, 32, 0.055) !important;
+}
+
+.user-access-page .ua-folder.ua-folder--add:hover,
+.user-access-page .ua-folder.ua-folder--add:focus-visible {
+  transform: translateY(-3px) !important;
+  border-color: rgba(228, 101, 32, 0.65) !important;
+  background: linear-gradient(145deg, #fffaf6, #fff0e4 60%, #fff) !important;
+  box-shadow: 0 22px 42px rgba(194, 65, 12, 0.12) !important;
+  outline: 0;
+}
+
+.user-access-page .ua-folder-add__copy {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 6px;
+  align-self: start;
+}
+
+.user-access-page .ua-folder-add__copy strong {
+  color: #ca571a;
+  font-size: 18px;
+  line-height: 1.1;
+  font-weight: 950;
+  letter-spacing: -.03em;
+}
+
+.user-access-page .ua-folder-add__copy small {
+  max-width: 130px;
+  color: #9b7b69;
+  font-size: 11px;
+  line-height: 1.4;
+  font-weight: 750;
+}
+
+.user-access-page .ua-folder-add__plus {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  justify-self: end;
+  align-self: end;
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #ec7b39, #d95c18);
+  color: #fff;
+  box-shadow: 0 16px 30px rgba(217, 92, 24, .23);
+}
+
+.user-access-page .ua-folder-add__plus svg {
+  width: 27px;
+  height: 27px;
+  stroke-width: 1.9;
+}
+
+.user-access-page .ua-empty--folders {
+  grid-column: 1 / -1;
+  min-height: 90px;
+}
+
+@media (max-width: 760px) {
+  .user-access-page .ua-folders {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 12px !important;
+  }
+
+  .user-access-page .ua-folder {
+    aspect-ratio: 1 / 1 !important;
+    min-height: 0 !important;
+    padding: 17px 13px 13px !important;
+    gap: 10px !important;
+    border-radius: 22px !important;
+  }
+
+  .user-access-page .ua-folder__icon {
+    min-height: 74px !important;
+    margin-top: 8px !important;
+    border-radius: 20px 20px 16px 16px !important;
+  }
+
+  .user-access-page .ua-folder__icon::before {
+    left: 11px !important;
+    top: -9px !important;
+    height: 15px !important;
+  }
+
+  .user-access-page .ua-folder__icon svg {
+    width: 31px !important;
+    height: 31px !important;
+  }
+
+  .user-access-page .ua-folder__name {
+    font-size: 13px !important;
+  }
+
+  .user-access-page .ua-folder__count {
+    font-size: 9.5px !important;
+  }
+
+  .user-access-page .ua-folder.ua-folder--add {
+    padding: 16px !important;
+  }
+
+  .user-access-page .ua-folder-add__copy strong {
+    font-size: 16px;
+  }
+
+  .user-access-page .ua-folder-add__copy small {
+    font-size: 10px;
+  }
+
+  .user-access-page .ua-folder-add__plus {
+    width: 48px;
+    height: 48px;
+  }
+
+  .user-access-page .ua-folder-add__plus svg {
+    width: 23px;
+    height: 23px;
+  }
+
+  .user-access-page .ua-folder__menu {
+    top: 11px;
+    right: 10px;
+    width: min(132px, calc(100% - 20px));
+    padding: 6px;
+    border-radius: 15px;
+  }
+
+  .user-access-page .ua-folder__menu button {
+    min-height: 36px;
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 390px) {
+  .user-access-page .ua-folders {
+    gap: 9px !important;
+  }
+
+  .user-access-page .ua-folder {
+    padding: 15px 11px 11px !important;
+  }
+
+  .user-access-page .ua-folder__name {
+    font-size: 12px !important;
+  }
+}
+
+html[data-theme="dark"] body.user-access-page .ua-folder:not(.ua-folder--add) {
+  background: linear-gradient(155deg, #171d27 0%, #141a23 55%, #11161f 100%) !important;
+  border-color: #2b3544 !important;
+}
+
+html[data-theme="dark"] body.user-access-page .ua-folder__icon {
+  background: linear-gradient(145deg, #3a241b, #4a2819) !important;
+  border-color: rgba(244, 138, 77, .22) !important;
+  color: #ff9b63 !important;
+}
+
+html[data-theme="dark"] body.user-access-page .ua-folder__icon::before {
+  background: #3a241b !important;
+  border-color: rgba(244, 138, 77, .22) !important;
+}
+
+html[data-theme="dark"] body.user-access-page .ua-folder__name {
+  color: #f8fafc !important;
+}
+
+html[data-theme="dark"] body.user-access-page .ua-folder__count {
+  color: #9aa6b5 !important;
+}
+
+html[data-theme="dark"] body.user-access-page .ua-folder__menu {
+  background: #11161f !important;
+  border-color: #2b3544 !important;
+}
+
+html[data-theme="dark"] body.user-access-page .ua-folder__menu button {
+  color: #f8fafc !important;
+}
+
+html[data-theme="dark"] body.user-access-page .ua-folder__menu button:hover {
+  background: #202835 !important;
+}
+
+html[data-theme="dark"] body.user-access-page .ua-folder.ua-folder--add {
+  background: linear-gradient(145deg, #161b24, #1b202a 58%, #11161f) !important;
+  border-color: rgba(244, 138, 77, .38) !important;
+}
