@@ -249,6 +249,88 @@ function Avatar({ member, small = false }) {
   return member?.photoUrl ? <div className={cls}><img src={member.photoUrl} alt={member.name || "User"} loading="lazy"/></div> : <div className={cls}>{initials(member?.name)}</div>;
 }
 
+function DepartmentFolder({ department, actionsOpen = false, onOpen, onActionsOpen, onEdit, onDelete }) {
+  const longPressTimer = useRef(null);
+  const suppressClick = useRef(false);
+  const count = Number(department?.count || department?.members?.length || 0);
+  const canEdit = lower(department?.name) !== "no department";
+
+  useEffect(() => () => window.clearTimeout(longPressTimer.current), []);
+
+  function clearLongPress() {
+    window.clearTimeout(longPressTimer.current);
+    longPressTimer.current = null;
+  }
+
+  function startLongPress(event) {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    clearLongPress();
+    suppressClick.current = false;
+    longPressTimer.current = window.setTimeout(() => {
+      suppressClick.current = true;
+      onActionsOpen?.(department.id);
+      try { navigator.vibrate?.(18); } catch {}
+    }, 520);
+  }
+
+  function handleOpen() {
+    if (suppressClick.current) {
+      suppressClick.current = false;
+      return;
+    }
+    onOpen?.(department.id);
+  }
+
+  function handleContextMenu(event) {
+    event.preventDefault();
+    clearLongPress();
+    suppressClick.current = true;
+    onActionsOpen?.(department.id);
+  }
+
+  return <article
+    className={`ua-folder ${actionsOpen ? "is-actions-open" : ""}`}
+    role="button"
+    tabIndex={0}
+    aria-label={`Open ${department.name} department`}
+    aria-expanded={actionsOpen}
+    onPointerDown={startLongPress}
+    onPointerUp={clearLongPress}
+    onPointerCancel={clearLongPress}
+    onPointerLeave={clearLongPress}
+    onContextMenu={handleContextMenu}
+    onClick={handleOpen}
+    onKeyDown={(event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        onOpen?.(department.id);
+      }
+    }}
+  >
+    <div className="ua-folder__main">
+      <span className="ua-folder__icon" aria-hidden="true"><UAIcon name="users"/></span>
+      <span className="ua-folder__text">
+        <span className="ua-folder__eyebrow">People folder</span>
+        <span className="ua-folder__name" title={department.name}>{department.name}</span>
+        <span className="ua-folder__count">{count} {count === 1 ? "member" : "members"}{!count ? <span className="ua-folder__badge">Empty</span> : null}</span>
+      </span>
+      <span className="ua-folder__open" aria-hidden="true"><UAIcon name="chevron"/></span>
+    </div>
+    <div className="ua-folder__manage-hint" aria-hidden={actionsOpen}>
+      <span className="ua-folder__people-mini"><UAIcon name="users"/></span>
+      <span>{actionsOpen ? "Department actions" : "Press and hold to manage"}</span>
+    </div>
+    <div className="ua-folder__actions" onClick={(event) => event.stopPropagation()} onPointerDown={(event) => event.stopPropagation()}>
+      <button type="button" className="ua-folder__edit" disabled={!canEdit} title={!canEdit ? "Default fallback department cannot be renamed" : undefined} onClick={() => onEdit?.(department)}>
+        <UAIcon name="edit"/><span>Edit</span>
+      </button>
+      <button type="button" className="ua-folder__delete" disabled={!canEdit} title={!canEdit ? "Default fallback department cannot be deleted" : undefined} onClick={() => onDelete?.(department)}>
+        <UAIcon name="trash"/><span>Delete</span>
+      </button>
+    </div>
+  </article>;
+}
+
 async function readRawFileAsDataUrl(file) { return await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result || "")); reader.onerror = () => reject(new Error("Failed to read file.")); reader.readAsDataURL(file); }); }
 function shouldCompressImage(file) { const type = lower(file?.type); const name = lower(file?.name); if (type === "image/gif" || type === "image/svg+xml" || /\.(gif|svg)$/i.test(name)) return false; return type.startsWith("image/") || /\.(png|jpe?g|webp|bmp|avif)$/i.test(name); }
 async function compressDataUrl(file, raw) { if (!shouldCompressImage(file)) return raw; try { const image = await new Promise((resolve, reject) => { const img = new Image(); img.onload = () => resolve(img); img.onerror = () => reject(new Error("Failed to load image for compression.")); img.src = raw; }); const ratio = Math.min(1, 1400 / Math.max(1, image.naturalWidth || image.width), 1400 / Math.max(1, image.naturalHeight || image.height)); const canvas = document.createElement("canvas"); canvas.width = Math.max(1, Math.round((image.naturalWidth || image.width) * ratio)); canvas.height = Math.max(1, Math.round((image.naturalHeight || image.height) * ratio)); const context = canvas.getContext("2d", { alpha: true }); context.drawImage(image, 0, 0, canvas.width, canvas.height); let compressed = canvas.toDataURL("image/webp", .74); if (!/^data:image\/webp/i.test(compressed)) compressed = canvas.toDataURL("image/jpeg", .76); return compressed && compressed.length < raw.length ? compressed : raw; } catch { return raw; } }
@@ -545,7 +627,7 @@ function SvAccessModal({ member, allMembers, draftRows, onDraftRows, onClose, on
 
 export default function UsersCenterClient({ initialDirectory, initialSignupRequests, bootstrapWarnings = [] }) {
   const [directory, setDirectory] = useState(() => normalizeDirectory(initialDirectory));
-  const [selectedDepartmentId, setSelectedDepartmentId] = useState(""); const [search, setSearch] = useState(""); const [toast, setToast] = useState(null); const [passwordAction, setPasswordAction] = useState(null); const [confirm, setConfirm] = useState(null); const [departmentForm, setDepartmentForm] = useState(null); const [memberForm, setMemberForm] = useState(null); const [memberDetailLoading, setMemberDetailLoading] = useState(false); const [moveMember, setMoveMember] = useState(null); const [signupOpen, setSignupOpen] = useState(false); const [pendingSignupCount, setPendingSignupCount] = useState((initialSignupRequests?.requests || []).length); const [memberMenu, setMemberMenu] = useState(""); const [pageAccessOpen, setPageAccessOpen] = useState(false); const [svAccessOpen, setSvAccessOpen] = useState(false); const [pageAccessRows, setPageAccessRows] = useState([]); const [svRows, setSvRows] = useState([]);
+  const [selectedDepartmentId, setSelectedDepartmentId] = useState(""); const [search, setSearch] = useState(""); const [departmentActions, setDepartmentActions] = useState(""); const [toast, setToast] = useState(null); const [passwordAction, setPasswordAction] = useState(null); const [confirm, setConfirm] = useState(null); const [departmentForm, setDepartmentForm] = useState(null); const [memberForm, setMemberForm] = useState(null); const [memberDetailLoading, setMemberDetailLoading] = useState(false); const [moveMember, setMoveMember] = useState(null); const [signupOpen, setSignupOpen] = useState(false); const [pendingSignupCount, setPendingSignupCount] = useState((initialSignupRequests?.requests || []).length); const [memberMenu, setMemberMenu] = useState(""); const [pageAccessOpen, setPageAccessOpen] = useState(false); const [svAccessOpen, setSvAccessOpen] = useState(false); const [pageAccessRows, setPageAccessRows] = useState([]); const [svRows, setSvRows] = useState([]);
   const selectedDepartment = directory.departments.find((department) => department.id === selectedDepartmentId) || null;
   const allMembers = useMemo(() => directory.departments.flatMap((department) => department.members || []), [directory]);
   const positionOptions = useMemo(() => unique(allMembers.map((member) => member.position)).sort((a, b) => a.localeCompare(b)), [allMembers]);
@@ -576,12 +658,13 @@ export default function UsersCenterClient({ initialDirectory, initialSignupReque
   }
 
   function writeDepartmentUrl(id, push = true) { if (typeof window === "undefined") return; const url = new URL(window.location.href); if (id) url.searchParams.set("department", id); else url.searchParams.delete("department"); const next = `${url.pathname}${url.search}${url.hash}`; if (push) window.history.pushState({}, "", next); else window.history.replaceState({}, "", next); }
-  function navigateDepartment(id, push = true) { setSelectedDepartmentId(id || ""); setSearch(""); writeDepartmentUrl(id, push); window.setTimeout(() => document.querySelector(".ua-members-panel")?.scrollIntoView({ behavior: "smooth", block: "start" }), 20); }
-  function backDepartments(push = true) { setSelectedDepartmentId(""); setSearch(""); writeDepartmentUrl("", push); }
+  function navigateDepartment(id, push = true) { setDepartmentActions(""); setSelectedDepartmentId(id || ""); setSearch(""); writeDepartmentUrl(id, push); window.setTimeout(() => document.querySelector(".ua-members-panel")?.scrollIntoView({ behavior: "smooth", block: "start" }), 20); }
+  function backDepartments(push = true) { setDepartmentActions(""); setSelectedDepartmentId(""); setSearch(""); writeDepartmentUrl("", push); }
 
   useEffect(() => { const read = () => { const id = new URLSearchParams(window.location.search).get("department") || ""; if (id && directory.departments.some((department) => department.id === id)) setSelectedDepartmentId(id); else setSelectedDepartmentId(""); }; read(); window.addEventListener("popstate", read); return () => window.removeEventListener("popstate", read); }, [directory.departments.length]);
   useEffect(() => { const input = document.querySelector(".classic-app-shell .main-header .searchbar input"); if (!input) return undefined; input.value = search; input.placeholder = selectedDepartment ? "Search users inside this department..." : "Search departments, users, emails..."; const handle = (event) => setSearch(event.target.value || ""); input.addEventListener("input", handle); return () => input.removeEventListener("input", handle); }, [selectedDepartmentId]);
   useEffect(() => { function close(event) { if (!event.target.closest(".ua-member-menu-wrap")) setMemberMenu(""); } document.addEventListener("click", close); return () => document.removeEventListener("click", close); }, []);
+  useEffect(() => { function closeDepartmentActions(event) { if (!event.target.closest(".ua-folder")) setDepartmentActions(""); } document.addEventListener("pointerdown", closeDepartmentActions); return () => document.removeEventListener("pointerdown", closeDepartmentActions); }, []);
 
   async function protect(descriptor, action) { try { const probe = await requestJson("/api/user-access/admin/verify", { method: "POST", body: "{}" }); if (probe?.ok) return await action(); return undefined; } catch (err) { if ([400, 401, 403].includes(err.status) && /password|required|invalid|verification/i.test(err.message)) setPasswordAction({ ...descriptor, action }); else notify("error", descriptor?.title || "Action failed", err.message); return undefined; } }
   function protectedOpen(descriptor, opener) { return protect(descriptor, async () => opener()); }
@@ -641,7 +724,15 @@ export default function UsersCenterClient({ initialDirectory, initialSignupReque
     <Toast value={toast} onClose={() => setToast(null)}/>
     <ActionLoadingModal state={memberDetailLoading ? { open: true, status: "loading", title: "Loading team member", message: "Loading the full account record…" } : null} zIndex={12040}/>
     {bootstrapWarnings.length ? <div className="ua-error">Some optional Users Center data loaded after the page opened. Refresh the page if a section looks incomplete.</div> : null}
-    {!selectedDepartment ? <section className="ua-folders-panel"><div className="ua-section-head ua-section-head--folders ua-section-head--folders-actions-only"><div className="ua-folder-actions"><div className="ua-count-pill">{directory.departments.reduce((sum, department) => sum + Number(department.count || 0), 0)} {directory.total === 1 ? "user" : "users"}</div><button type="button" className="ua-dept-btn ua-dept-btn--requests" onClick={() => protectedOpen({ title: "Sign up requests", message: "Review account requests." }, () => setSignupOpen(true))}><UAIcon name="signup"/><span>Sign up requests</span>{pendingSignupCount ? <small>{pendingSignupCount}</small> : null}</button><button type="button" className="ua-dept-btn ua-dept-btn--add" onClick={() => protectedOpen({ title: "Create department", message: "Create a new department folder?" }, () => setDepartmentForm({ department: null }))}><UAIcon name="folderPlus"/><span>New Department</span></button></div></div>{!filteredDepartments.length ? <div className="ua-empty">Sorry, No data available</div> : <div className="ua-folders">{filteredDepartments.map((department) => { const count = Number(department.count || department.members?.length || 0); const canEdit = lower(department.name) !== "no department"; return <article className="ua-folder" key={department.id} role="button" tabIndex={0} aria-label={`Open ${department.name} department`} onClick={() => navigateDepartment(department.id)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); navigateDepartment(department.id); } }}><div className="ua-folder__main"><span className="ua-folder__icon"><UAIcon name="folder"/></span><span className="ua-folder__text"><span className="ua-folder__name" title={department.name}>{department.name}</span><span className="ua-folder__count">{count} {count === 1 ? "member" : "members"}{!count ? <span className="ua-folder__badge">Empty</span> : null}</span></span></div><div className="ua-folder__actions" onClick={(event) => event.stopPropagation()}><button type="button" className="ua-folder__edit" disabled={!canEdit} title={!canEdit ? "Default fallback department cannot be renamed" : undefined} onClick={() => protectedOpen({ title: "Rename department", message: `Rename ${department.name}?` }, () => setDepartmentForm({ department }))}><UAIcon name="edit"/><span>Edit</span></button><button type="button" className="ua-folder__delete" disabled={!canEdit} title={!canEdit ? "Default fallback department cannot be deleted" : undefined} onClick={() => deleteDepartment(department)}><UAIcon name="trash"/><span>Delete</span></button><span className="ua-folder__open" onClick={() => navigateDepartment(department.id)}><UAIcon name="chevron"/></span></div></article>; })}</div>}</section> : <section className="ua-members-panel"><div className="ua-section-head ua-section-head--members"><div className="ua-member-heading-left"><button type="button" className="ua-back-btn" onClick={() => backDepartments()} aria-label="Back to departments"><UAIcon name="back"/></button><div><h3>{selectedDepartment.name} Members</h3></div></div><div className="ua-members-actions"><button type="button" className="ua-add-member-btn" onClick={() => protectedOpen({ title: "Add team member", message: `Create a new account in ${selectedDepartment.name}?` }, () => openMember("create"))}><UAIcon name="addUser"/><span>Add Member</span></button></div></div>{!filteredMembers.length ? <div className="ua-empty">Sorry, No data available</div> : <div className="ua-members-grid">{filteredMembers.map((member) => <article className="ua-member-card" key={member.id}><div className="ua-member-card__top"><Avatar member={member}/><div className="ua-member-card__identity"><h4 title={member.name || "Unnamed"}>{member.name || "Unnamed"}</h4><p title={member.position || "Team Member"}>{member.position || "Team Member"}</p></div><div className="ua-member-menu-wrap"><button type="button" className="ua-member-menu-btn" aria-expanded={memberMenu === member.id} onClick={(event) => { event.stopPropagation(); setMemberMenu((current) => current === member.id ? "" : member.id); }} aria-label={`More actions for ${member.name || "user"}`}><span className="ua-member-menu-dots">•••</span></button><div className="ua-member-menu" hidden={memberMenu !== member.id}><button type="button" onClick={() => { setMemberMenu(""); protectedOpen({ title: "Move team member", message: `Move ${member.name} to another department?` }, () => setMoveMember(member)); }}><UAIcon name="move"/><span>Move</span></button><button type="button" className="is-danger" onClick={() => { setMemberMenu(""); deleteMember(member); }}><UAIcon name="trash"/><span>Delete</span></button></div></div></div><div className="ua-member-card__meta"><div className="ua-meta-line" title={member.employeeCode || "No employee code"}><UAIcon name="hash"/><span>{member.employeeCode || "No employee code"}</span></div><div className="ua-meta-line" title={member.phone || "No phone"}><UAIcon name="phone"/><span>{member.phone || "No phone"}</span></div><div className="ua-meta-line" title={member.email || "No email"}><UAIcon name="mail"/><span>{member.email || "No email"}</span></div></div><div className="ua-member-card__actions"><button type="button" className="ua-btn ua-btn--dark" onClick={() => protectedOpen({ title: "Edit team member", message: `Edit ${member.name}'s account record?` }, () => openMember("edit", member))}><UAIcon name="edit"/><span>Edit</span></button></div></article>)}</div>}</section>}
+    {!selectedDepartment ? <section className="ua-folders-panel"><div className="ua-section-head ua-section-head--folders ua-section-head--folders-actions-only"><div className="ua-folder-actions"><div className="ua-count-pill">{directory.departments.reduce((sum, department) => sum + Number(department.count || 0), 0)} {directory.total === 1 ? "user" : "users"}</div><button type="button" className="ua-dept-btn ua-dept-btn--requests" onClick={() => protectedOpen({ title: "Sign up requests", message: "Review account requests." }, () => setSignupOpen(true))}><UAIcon name="signup"/><span>Sign up requests</span>{pendingSignupCount ? <small>{pendingSignupCount}</small> : null}</button><button type="button" className="ua-dept-btn ua-dept-btn--add" onClick={() => protectedOpen({ title: "Create department", message: "Create a new department folder?" }, () => setDepartmentForm({ department: null }))}><UAIcon name="folderPlus"/><span>New Department</span></button></div></div>{!filteredDepartments.length ? <div className="ua-empty">Sorry, No data available</div> : <div className="ua-folders">{filteredDepartments.map((department) => <DepartmentFolder
+      key={department.id}
+      department={department}
+      actionsOpen={departmentActions === department.id}
+      onOpen={navigateDepartment}
+      onActionsOpen={(id) => setDepartmentActions(id)}
+      onEdit={(item) => { setDepartmentActions(""); protectedOpen({ title: "Rename department", message: `Rename ${item.name}?` }, () => setDepartmentForm({ department: item })); }}
+      onDelete={(item) => { setDepartmentActions(""); deleteDepartment(item); }}
+    />)}</div>}</section> : <section className="ua-members-panel"><div className="ua-section-head ua-section-head--members"><div className="ua-member-heading-left"><button type="button" className="ua-back-btn" onClick={() => backDepartments()} aria-label="Back to departments"><UAIcon name="back"/></button><div><h3>{selectedDepartment.name} Members</h3></div></div><div className="ua-members-actions"><button type="button" className="ua-add-member-btn" onClick={() => protectedOpen({ title: "Add team member", message: `Create a new account in ${selectedDepartment.name}?` }, () => openMember("create"))}><UAIcon name="addUser"/><span>Add Member</span></button></div></div>{!filteredMembers.length ? <div className="ua-empty">Sorry, No data available</div> : <div className="ua-members-grid">{filteredMembers.map((member) => <article className="ua-member-card" key={member.id}><div className="ua-member-card__top"><Avatar member={member}/><div className="ua-member-card__identity"><h4 title={member.name || "Unnamed"}>{member.name || "Unnamed"}</h4><p title={member.position || "Team Member"}>{member.position || "Team Member"}</p></div><div className="ua-member-menu-wrap"><button type="button" className="ua-member-menu-btn" aria-expanded={memberMenu === member.id} onClick={(event) => { event.stopPropagation(); setMemberMenu((current) => current === member.id ? "" : member.id); }} aria-label={`More actions for ${member.name || "user"}`}><span className="ua-member-menu-dots">•••</span></button><div className="ua-member-menu" hidden={memberMenu !== member.id}><button type="button" onClick={() => { setMemberMenu(""); protectedOpen({ title: "Move team member", message: `Move ${member.name} to another department?` }, () => setMoveMember(member)); }}><UAIcon name="move"/><span>Move</span></button><button type="button" className="is-danger" onClick={() => { setMemberMenu(""); deleteMember(member); }}><UAIcon name="trash"/><span>Delete</span></button></div></div></div><div className="ua-member-card__meta"><div className="ua-meta-line" title={member.employeeCode || "No employee code"}><UAIcon name="hash"/><span>{member.employeeCode || "No employee code"}</span></div><div className="ua-meta-line" title={member.phone || "No phone"}><UAIcon name="phone"/><span>{member.phone || "No phone"}</span></div><div className="ua-meta-line" title={member.email || "No email"}><UAIcon name="mail"/><span>{member.email || "No email"}</span></div></div><div className="ua-member-card__actions"><button type="button" className="ua-btn ua-btn--dark" onClick={() => protectedOpen({ title: "Edit team member", message: `Edit ${member.name}'s account record?` }, () => openMember("edit", member))}><UAIcon name="edit"/><span>Edit</span></button></div></article>)}</div>}</section>}
 
     {passwordAction ? <PasswordModal action={passwordAction} onClose={() => setPasswordAction(null)} onVerified={async () => { const action = passwordAction.action; setPasswordAction(null); try { await action(); } catch (err) { notify("error", "Action failed", err.message); } }}/> : null}
     {confirm ? <ConfirmModal value={confirm} onClose={() => setConfirm(null)}/> : null}

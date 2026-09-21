@@ -2936,3 +2936,274 @@
     height: 34px;
   }
 }
+
+/* ==========================================================================
+   Users Center — modern people folders + press-and-hold management
+   ========================================================================== */
+.user-access-page .ua-folders {
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.user-access-page .ua-folder {
+  position: relative;
+  isolation: isolate;
+  min-height: 156px;
+  padding: 18px;
+  gap: 13px;
+  overflow: hidden;
+  border: 1px solid rgba(15, 23, 42, 0.075);
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(228, 101, 32, 0.075), transparent 36%),
+    linear-gradient(145deg, #ffffff 0%, #fbfcfe 100%);
+  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.055), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+}
+
+.user-access-page .ua-folder::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  width: 92px;
+  height: 92px;
+  right: -36px;
+  bottom: -44px;
+  border-radius: 999px;
+  background: rgba(228, 101, 32, 0.045);
+  pointer-events: none;
+}
+
+@media (hover: hover) {
+  .user-access-page .ua-folder:hover {
+    transform: translateY(-2px);
+    border-color: rgba(228, 101, 32, 0.18);
+    box-shadow: 0 22px 46px rgba(15, 23, 42, 0.085);
+  }
+}
+
+.user-access-page .ua-folder.is-actions-open {
+  border-color: rgba(228, 101, 32, 0.28);
+  background:
+    radial-gradient(circle at 100% 0%, rgba(228, 101, 32, 0.11), transparent 38%),
+    linear-gradient(145deg, #ffffff 0%, #fffaf6 100%);
+  box-shadow: 0 22px 48px rgba(15, 23, 42, 0.09), 0 0 0 3px rgba(228, 101, 32, 0.055);
+}
+
+.user-access-page .ua-folder__main {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.user-access-page .ua-folder__icon {
+  position: relative;
+  width: 58px;
+  height: 54px;
+  margin-top: 5px;
+  border: 1px solid rgba(228, 101, 32, 0.13);
+  border-radius: 13px 18px 18px 18px;
+  background: linear-gradient(145deg, #fff8f1 0%, #ffefe2 100%);
+  color: #d95f1d;
+  box-shadow: 0 10px 22px rgba(228, 101, 32, 0.09);
+}
+
+.user-access-page .ua-folder__icon::before {
+  content: "";
+  position: absolute;
+  width: 25px;
+  height: 8px;
+  left: 7px;
+  top: -7px;
+  border: 1px solid rgba(228, 101, 32, 0.13);
+  border-bottom: 0;
+  border-radius: 7px 7px 0 0;
+  background: #fff0e4;
+}
+
+.user-access-page .ua-folder__icon svg {
+  position: relative;
+  z-index: 1;
+  width: 25px;
+  height: 25px;
+  stroke-width: 2.15;
+}
+
+.user-access-page .ua-folder__text {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.user-access-page .ua-folder__eyebrow {
+  color: #d06a32;
+  font-size: 9px;
+  font-weight: 950;
+  letter-spacing: 0.115em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.user-access-page .ua-folder__name {
+  color: #111827;
+  font-size: 16px;
+  font-weight: 950;
+  line-height: 1.25;
+  letter-spacing: -0.025em;
+}
+
+.user-access-page .ua-folder__count {
+  margin-top: 1px;
+  color: #7b8494;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.user-access-page .ua-folder__open {
+  display: grid;
+  place-items: center;
+  width: 35px;
+  height: 35px;
+  margin: 0;
+  border: 1px solid rgba(15, 23, 42, 0.07);
+  border-radius: 12px;
+  background: rgba(248, 250, 252, 0.94);
+  color: #98a2b3;
+  transition: transform 0.18s ease, color 0.18s ease, background 0.18s ease;
+}
+
+.user-access-page .ua-folder__open svg {
+  width: 16px;
+  height: 16px;
+}
+
+.user-access-page .ua-folder:hover .ua-folder__open,
+.user-access-page .ua-folder.is-actions-open .ua-folder__open {
+  color: #d95f1d;
+  background: #fff7f0;
+}
+
+.user-access-page .ua-folder__manage-hint {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: fit-content;
+  max-width: 100%;
+  min-height: 27px;
+  padding: 5px 9px;
+  border: 1px solid rgba(15, 23, 42, 0.055);
+  border-radius: 999px;
+  background: rgba(248, 250, 252, 0.9);
+  color: #98a2b3;
+  font-size: 9.5px;
+  font-weight: 850;
+  line-height: 1;
+  transition: color 0.18s ease, background 0.18s ease, border-color 0.18s ease;
+}
+
+.user-access-page .ua-folder__people-mini {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  color: #c97848;
+}
+
+.user-access-page .ua-folder__people-mini svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.2;
+}
+
+.user-access-page .ua-folder.is-actions-open .ua-folder__manage-hint {
+  border-color: rgba(228, 101, 32, 0.12);
+  background: #fff7f0;
+  color: #c45a1e;
+}
+
+.user-access-page .ua-folder__actions {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+  align-items: center;
+  width: 100%;
+  max-height: 0;
+  margin-top: -8px;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+  transform: translateY(7px);
+  transition: max-height 0.22s ease, margin-top 0.22s ease, opacity 0.18s ease, transform 0.22s ease;
+}
+
+.user-access-page .ua-folder.is-actions-open .ua-folder__actions {
+  max-height: 54px;
+  margin-top: 0;
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.user-access-page .ua-folder__edit,
+.user-access-page .ua-folder__delete {
+  min-height: 42px;
+  width: 100%;
+  padding: 0 13px;
+  border-radius: 14px;
+  box-shadow: none;
+  font-size: 11px;
+  font-weight: 950;
+}
+
+.user-access-page .ua-folder__edit {
+  border-color: rgba(228, 101, 32, 0.13);
+  background: #fff5ec;
+  color: #c6561c;
+}
+
+.user-access-page .ua-folder__delete {
+  border-color: rgba(220, 38, 38, 0.11);
+  background: #fff4f5;
+  color: #c92835;
+}
+
+.user-access-page .ua-folder__edit svg,
+.user-access-page .ua-folder__delete svg {
+  width: 14px;
+  height: 14px;
+}
+
+@media (max-width: 760px) {
+  .user-access-page .ua-folders {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .user-access-page .ua-folder {
+    display: flex;
+    min-height: 145px;
+    padding: 16px;
+    border-radius: 21px;
+  }
+
+  .user-access-page .ua-folder__icon {
+    width: 54px;
+    height: 50px;
+  }
+
+  .user-access-page .ua-folder__actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
