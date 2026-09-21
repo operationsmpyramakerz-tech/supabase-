@@ -1698,3 +1698,379 @@ body.expenses-page .expenses-activity-card {
     border-radius: 28px !important;
   }
 }
+
+/* =========================================================
+   EXPENSES COMPACT MODERN ACTIVITY — 2026-09-21 v4
+   - Full-color Cash in / Cash out actions
+   - Compact spacing without changing card widths
+   - Modern segmented transaction tabs and cleaner ledger card
+   ========================================================= */
+body.expenses-page .expenses-dashboard {
+  --expenses-green-action: #2dac67;
+  --expenses-green-action-2: #238f56;
+  --expenses-red-action: #ee565c;
+  --expenses-red-action-2: #d9434b;
+}
+
+/* Keep the same available widths, only reduce inner density. */
+body.expenses-page .expenses-dashboard__sidebar,
+body.expenses-page .expenses-dashboard__main {
+  gap: 10px !important;
+}
+
+body.expenses-page .expenses-dashboard .cash-btn {
+  min-height: 66px !important;
+  grid-template-columns: 36px minmax(0, 1fr) 20px !important;
+  gap: 10px !important;
+  padding: 11px 14px !important;
+  border: 0 !important;
+  border-radius: 18px !important;
+  color: #fff !important;
+  box-shadow: 0 12px 26px rgba(15, 23, 42, .11) !important;
+}
+
+body.expenses-page .expenses-dashboard .cash-btn.cash-in {
+  background: linear-gradient(135deg, var(--expenses-green-action) 0%, var(--expenses-green-action-2) 100%) !important;
+}
+
+body.expenses-page .expenses-dashboard .cash-btn.cash-out {
+  background: linear-gradient(135deg, var(--expenses-red-action) 0%, var(--expenses-red-action-2) 100%) !important;
+}
+
+body.expenses-page .expenses-dashboard .cash-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 15px 30px rgba(15, 23, 42, .15) !important;
+}
+
+body.expenses-page .cash-btn__icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  background: rgba(255,255,255,.16) !important;
+  color: #fff !important;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.13) !important;
+}
+
+body.expenses-page .cash-btn__icon svg {
+  width: 17px;
+  height: 17px;
+}
+
+body.expenses-page .cash-btn__copy {
+  gap: 0;
+}
+
+body.expenses-page .cash-btn__copy strong {
+  color: #fff !important;
+  font-size: .82rem !important;
+  font-weight: 820 !important;
+}
+
+body.expenses-page .cash-btn__arrow {
+  color: rgba(255,255,255,.9) !important;
+}
+
+body.expenses-page .cash-btn__arrow svg {
+  width: 17px;
+  height: 17px;
+}
+
+/* Transaction container */
+body.expenses-page .expenses-activity-card {
+  overflow: hidden;
+  border: 1px solid rgba(222, 228, 237, .92) !important;
+  border-radius: 24px !important;
+  background: rgba(255,255,255,.94) !important;
+  box-shadow: 0 14px 36px rgba(15, 23, 42, .07) !important;
+}
+
+body.expenses-page .expenses-activity-head {
+  align-items: center;
+  padding: 14px 16px 10px !important;
+}
+
+body.expenses-page .expenses-eyebrow {
+  font-size: .6rem !important;
+  letter-spacing: .065em !important;
+}
+
+body.expenses-page .expenses-activity-head h2 {
+  margin-top: 2px !important;
+  font-size: .9rem !important;
+}
+
+body.expenses-page .expenses-dashboard .view-all-chip {
+  min-height: 31px !important;
+  padding: 0 10px !important;
+  border-radius: 11px !important;
+  background: #f7f9fc !important;
+  font-size: .61rem !important;
+}
+
+/* Modern segmented tabs. */
+body.expenses-page .expenses-dashboard .expenses-overview {
+  min-height: auto !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px !important;
+  padding: 7px 16px 9px !important;
+  border-top: 0 !important;
+  border-bottom: 1px solid #eef1f5 !important;
+  background: transparent !important;
+}
+
+body.expenses-page .expenses-dashboard .expenses-filters {
+  width: fit-content;
+  max-width: 100%;
+  display: inline-flex !important;
+  gap: 3px !important;
+  padding: 3px !important;
+  border: 1px solid #e6eaf0 !important;
+  border-radius: 14px !important;
+  background: #f4f6f9 !important;
+}
+
+body.expenses-page .expenses-dashboard .expenses-filter {
+  min-height: 31px !important;
+  padding: 0 13px !important;
+  border: 0 !important;
+  border-radius: 10px !important;
+  background: transparent !important;
+  color: #7a8595 !important;
+  font-size: .62rem !important;
+  font-weight: 780 !important;
+  transition: background .16s ease, color .16s ease, box-shadow .16s ease;
+}
+
+body.expenses-page .expenses-dashboard .expenses-filter::after {
+  display: none !important;
+}
+
+body.expenses-page .expenses-dashboard .expenses-filter.is-active {
+  background: #111827 !important;
+  color: #fff !important;
+  box-shadow: 0 5px 12px rgba(15, 23, 42, .14) !important;
+}
+
+body.expenses-page .expenses-period-note {
+  gap: 4px;
+  font-size: .58rem !important;
+}
+
+body.expenses-page .expenses-content {
+  min-height: 220px;
+  padding: 8px 14px 12px !important;
+  background: transparent !important;
+}
+
+/* Make each transaction group feel like an independent modern receipt card. */
+body.expenses-page .expense-ledger-group {
+  margin: 0 0 9px;
+  padding: 10px !important;
+  border: 1px solid #e7ebf1 !important;
+  border-radius: 18px !important;
+  background: rgba(255,255,255,.96) !important;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, .045) !important;
+}
+
+body.expenses-page .expense-ledger-group + .expense-ledger-group {
+  border-top: 1px solid #e7ebf1 !important;
+}
+
+body.expenses-page .expense-ledger-group__summary {
+  min-height: 34px !important;
+  padding: 0 2px 7px !important;
+}
+
+body.expenses-page .expense-ledger-group__date {
+  font-size: .62rem !important;
+}
+
+body.expenses-page .expense-ledger-group__reason {
+  font-size: .56rem !important;
+}
+
+body.expenses-page .expense-ledger-group__total,
+body.expenses-page .expense-ledger-row__amount {
+  font-size: .64rem !important;
+}
+
+body.expenses-page .expense-ledger-group__rows {
+  gap: 7px !important;
+}
+
+body.expenses-page .expense-ledger-row {
+  min-height: 58px !important;
+  padding: 8px 9px !important;
+  border-radius: 13px !important;
+  box-shadow: 0 3px 10px rgba(15, 23, 42, .035) !important;
+}
+
+body.expenses-page .expense-ledger-row__category-icon {
+  width: 28px;
+  height: 28px;
+  flex-basis: 28px;
+  border-radius: 9px;
+}
+
+body.expenses-page .expense-ledger-row__type {
+  font-size: .63rem !important;
+}
+
+body.expenses-page .expense-ledger-row__kind,
+body.expenses-page .expense-ledger-row__route-sub {
+  font-size: .54rem !important;
+}
+
+body.expenses-page .expense-ledger-row__route-main {
+  font-size: .61rem !important;
+}
+
+@media (max-width: 768px) {
+  body.expenses-page .expenses-layout.expenses-dashboard.next-expenses-classic-parity {
+    gap: 10px !important;
+  }
+
+  body.expenses-page .expenses-dashboard__main {
+    gap: 10px !important;
+  }
+
+  body.expenses-page .expense-action-grid {
+    gap: 8px !important;
+  }
+
+  body.expenses-page .expenses-dashboard .cash-btn {
+    min-height: 64px !important;
+    padding: 10px 13px !important;
+  }
+
+  body.expenses-page .expenses-activity-head {
+    padding: 13px 14px 9px !important;
+  }
+
+  body.expenses-page .expenses-dashboard .expenses-overview {
+    grid-template-columns: 1fr !important;
+    gap: 5px !important;
+    padding: 6px 14px 8px !important;
+  }
+
+  body.expenses-page .expenses-dashboard .expenses-filters {
+    width: 100%;
+  }
+
+  body.expenses-page .expenses-dashboard .expenses-filter {
+    flex: 1 1 0;
+    padding-inline: 8px !important;
+  }
+
+  body.expenses-page .expenses-period-note {
+    padding-left: 3px;
+  }
+
+  body.expenses-page .expenses-content {
+    padding: 8px 12px 11px !important;
+  }
+
+  body.expenses-page .expense-ledger-group {
+    margin-bottom: 8px;
+    padding: 9px !important;
+    border-radius: 17px !important;
+  }
+
+  body.expenses-page .expense-ledger-row {
+    min-height: 55px !important;
+    padding: 7px 8px !important;
+  }
+}
+
+@media (max-width: 420px) {
+  body.expenses-page .expenses-dashboard .cash-btn {
+    min-height: 60px !important;
+  }
+
+  body.expenses-page .cash-btn__copy strong {
+    font-size: .78rem !important;
+  }
+
+  body.expenses-page .expenses-dashboard .expenses-filter {
+    min-height: 29px !important;
+    font-size: .59rem !important;
+  }
+}
+
+/* Slightly tighter wallet hero typography/spacing; width remains unchanged. */
+body.expenses-page .expenses-summary-card .total-label {
+  font-size: .76rem !important;
+}
+
+body.expenses-page .expenses-summary-card .total-amount {
+  font-size: clamp(2.65rem, 8vw, 4rem) !important;
+}
+
+body.expenses-page .expenses-summary-card .total-currency {
+  margin-top: 7px !important;
+  font-size: .78rem !important;
+}
+
+body.expenses-page .expenses-dashboard .summary-pill {
+  min-height: 78px !important;
+  padding: 11px 13px !important;
+}
+
+body.expenses-page .summary-pill__icon {
+  width: 36px;
+  height: 36px;
+  flex-basis: 36px;
+  border-radius: 12px;
+}
+
+body.expenses-page .expenses-dashboard .summary-pill__label {
+  font-size: .67rem !important;
+}
+
+body.expenses-page .expenses-dashboard .summary-pill__value {
+  font-size: .88rem !important;
+}
+
+body.expenses-page .expenses-dashboard .settle-btn {
+  min-height: 51px !important;
+  font-size: .76rem !important;
+}
+
+body.expenses-page .expenses-dashboard .last-settled {
+  min-height: 55px !important;
+}
+
+@media (max-width: 768px) {
+  body.expenses-page .total-card.expenses-summary-card {
+    min-height: 350px !important;
+    padding: 24px 18px 18px !important;
+  }
+
+  body.expenses-page .expenses-summary-card .total-card__main {
+    margin-bottom: 20px !important;
+  }
+
+  body.expenses-page .expenses-summary-card .total-amount {
+    font-size: clamp(2.8rem, 12vw, 4rem) !important;
+  }
+
+  body.expenses-page .expenses-dashboard .summary-pill {
+    min-height: 88px !important;
+    gap: 6px !important;
+    padding: 10px 7px !important;
+  }
+
+  body.expenses-page .expenses-summary-card .total-card__actions {
+    gap: 7px !important;
+    margin-top: 9px !important;
+  }
+
+  body.expenses-page .expenses-dashboard .settle-btn {
+    min-height: 50px !important;
+  }
+
+  body.expenses-page .expenses-dashboard .last-settled {
+    min-height: 54px !important;
+  }
+}

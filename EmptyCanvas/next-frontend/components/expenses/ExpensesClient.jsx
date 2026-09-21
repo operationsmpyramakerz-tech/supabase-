@@ -1188,8 +1188,8 @@ export default function ExpensesClient({ account, initialPayload = {}, initialTy
 
         <section className="expenses-dashboard__main" aria-label="Expense activity">
           <div className="expense-action-grid" aria-label="Expense actions">
-            <button className="cash-btn cash-in" type="button" onClick={openCashIn}><span className="cash-btn__icon"><ClassicExpenseIcon name="arrow-down-left" size={19}/></span><span className="cash-btn__copy"><strong>Cash in</strong><small>Record incoming money</small></span><span className="cash-btn__arrow"><ClassicExpenseIcon name="arrow-right" size={18}/></span></button>
-            <button className="cash-btn cash-out" type="button" onClick={openCashOut}><span className="cash-btn__icon"><ClassicExpenseIcon name="arrow-up-right" size={19}/></span><span className="cash-btn__copy"><strong>Cash out</strong><small>Record outgoing money</small></span><span className="cash-btn__arrow"><ClassicExpenseIcon name="arrow-right" size={18}/></span></button>
+            <button className="cash-btn cash-in" type="button" onClick={openCashIn}><span className="cash-btn__icon"><ClassicExpenseIcon name="arrow-down-left" size={19}/></span><span className="cash-btn__copy"><strong>Cash in</strong></span><span className="cash-btn__arrow"><ClassicExpenseIcon name="arrow-right" size={18}/></span></button>
+            <button className="cash-btn cash-out" type="button" onClick={openCashOut}><span className="cash-btn__icon"><ClassicExpenseIcon name="arrow-up-right" size={19}/></span><span className="cash-btn__copy"><strong>Cash out</strong></span><span className="cash-btn__arrow"><ClassicExpenseIcon name="arrow-right" size={18}/></span></button>
           </div>
 
           <section className="expenses-activity-card">

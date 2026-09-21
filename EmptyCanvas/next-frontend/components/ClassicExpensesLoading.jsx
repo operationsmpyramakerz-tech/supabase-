@@ -12,7 +12,7 @@ export default function ClassicExpensesLoading({ users = false }) {
   return (
     <>
       <ShellStyleLinks />
-      {!users ? <link rel="stylesheet" href="/next/css/expenses-redesign.css?v=expenses-dashboard-v3" /> : null}
+      {!users ? <link rel="stylesheet" href="/next/css/expenses-redesign.css?v=expenses-dashboard-v4" /> : null}
       <link rel="stylesheet" href={users ? "/next/css/expenses-users-classic-inline.css?v=stage2f" : "/next/css/expenses-classic-inline.css?v=stage2f"} />
       <BodyClassSync className={`${bodyClass} next-classic-shell-active`} />
 

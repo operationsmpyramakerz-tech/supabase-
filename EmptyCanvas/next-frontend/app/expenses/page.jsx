@@ -65,7 +65,7 @@ export default async function ExpensesPage() {
       eyebrow="Live cash-flow workspace"
       activePath="/next/expenses"
       bodyClass="expenses-page"
-      pageStyles={["/next/css/expenses-redesign.css?v=expenses-dashboard-v3", "/next/css/expenses-classic-inline.css?v=stage2f"]}
+      pageStyles={["/next/css/expenses-redesign.css?v=expenses-dashboard-v4", "/next/css/expenses-classic-inline.css?v=stage2f"]}
     >
       <ExpensesClient
         account={gate.account}
