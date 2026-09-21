@@ -344,7 +344,7 @@ function ProductModal({ product, activeTag, tags, units, onClose, onSaved, onUni
         ...(uploadedImageUrl ? { imageUrl: uploadedImageUrl } : {}),
         removeImage: !uploadedImageUrl && !!image.removed,
       };
-      const endpoint = isEdit ? `/next/api/products/${encodeURIComponent(product.id)}` : "/next/api/products";
+      const endpoint = isEdit ? `/next/api/products?id=${encodeURIComponent(product.id)}` : "/next/api/products";
       const body = await requestJson(endpoint, {
         method: isEdit ? "PATCH" : "POST",
         body: JSON.stringify(payload),
@@ -620,7 +620,7 @@ export default function ProductsClient({ initialCatalog = {}, bootstrapWarnings 
     });
     if (!confirmed) return;
     try {
-      await requestJson(`/next/api/products/${encodeURIComponent(product.id)}`, { method: "DELETE" });
+      await requestJson(`/next/api/products?id=${encodeURIComponent(product.id)}`, { method: "DELETE" });
       setProducts((current) => current.filter((item) => item.id !== product.id));
       notify("success", "Product deleted successfully.");
     } catch (error) {

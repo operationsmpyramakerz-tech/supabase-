@@ -410,6 +410,20 @@ export async function getProductsList({ fresh = false } = {}) {
     .filter((product) => product.id && product.name);
 }
 
+export async function getProduct(productId) {
+  const id = text(productId);
+  if (!id) {
+    const error = new Error("Missing product ID.");
+    error.status = 400;
+    throw error;
+  }
+
+  const row = await selectById(getSupabaseConfig().productsTable, id, {
+    profileName: "products.detail",
+  });
+  return row ? serializeProduct(row) : null;
+}
+
 export async function getProductsCatalog({ fresh = false } = {}) {
   if (fresh) invalidateProductReadCaches();
   return await productCachedRead("catalog", async () => {
