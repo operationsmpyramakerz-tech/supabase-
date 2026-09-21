@@ -1919,7 +1919,7 @@ function ReceiveModal({ state, busy, error, onCancel, onSubmit }) {
             return <div className="next-operations-receive-row" key={id}>
               <span className="next-operations-receive-info"><span className="next-operations-receive-name">{text(item?.productName) || "Product"}</span><span className="next-operations-receive-sub">Received {formatQuantity(previewReceived)} <b>·</b> Remaining {formatQuantity(previewRemaining)}</span></span>
               <span className="next-operations-receive-qty-controls">
-                <span className="next-operations-receive-input-wrap next-operations-receive-input-wrap--readonly"><span>Qty</span><input className="co-submodal-input next-operations-receive-input" type="text" value={formatQuantity(Math.abs(base))} readOnly tabIndex={-1} aria-label={`Ordered quantity for ${text(item?.productName) || "component"}`}/></span>
+                <span className="next-operations-receive-input-wrap next-operations-receive-input-wrap--readonly"><span>Qty</span><input className="co-submodal-input next-operations-receive-input" type="text" value={formatQuantity(Math.abs(remaining))} readOnly tabIndex={-1} aria-label={`Remaining quantity for ${text(item?.productName) || "component"}`}/></span>
                 <span className="next-operations-receive-input-wrap"><span>Received now</span><input className="co-submodal-input next-operations-receive-input" type="number" min="0" max={maxNow || undefined} step="any" inputMode="decimal" value={quantities[id] ?? ""} onChange={(event) => setQuantities((current) => ({ ...current, [id]: event.target.value }))} placeholder="0" aria-label={`Quantity received now for ${text(item?.productName) || "component"}`}/></span>
               </span>
             </div>;
