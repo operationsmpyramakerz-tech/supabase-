@@ -721,7 +721,7 @@ function Progress({ stage }) {
   );
 }
 
-function OrderModal({ group, tab, busy, onClose, onAction, onExport, editMode, onPatchEditItem, onSaveEdit, onCancelEdit }) {
+function OrderModal({ group, tab, busy, onClose, onAction, onExport, editMode, onPatchEditItem, onUpsertEditAddition, onSaveEdit, onCancelEdit }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const [downloadOpen, setDownloadOpen] = useState(false);
   const [sortMode, setSortMode] = useState("product-tag");
@@ -853,7 +853,34 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, editMode, o
       quantityReceivedEdited: true,
     };
   };
-  const tabItems = itemsForOperationsTab(group.items, tab).map(applyEditDraft);
+  const baseTabItems = itemsForOperationsTab(group.items, tab).map(applyEditDraft);
+  const editAdditions = isEditing
+    ? (Array.isArray(editMode?.additions) ? editMode.additions : []).map((addition, index) => {
+        const draftKey = text(addition?.draftKey) || `new-${index + 1}`;
+        const requestedQty = roundQty(Number(addition?.requestedQty) || 0);
+        const receivedQty = roundQty(Number(addition?.receivedQty) || 0);
+        const remainingQty = roundQty(Number(addition?.remainingQty ?? (requestedQty - receivedQty)) || 0);
+        const deliveredQty = roundQty(Number(addition?.deliveredQty) || 0);
+        return {
+          ...addition,
+          id: `draft:${draftKey}`,
+          _displayKey: `draft:${draftKey}`,
+          _draftKey: draftKey,
+          _isNew: true,
+          quantityRequested: requestedQty,
+          quantity: requestedQty,
+          quantityProgress: requestedQty,
+          quantityReceived: receivedQty,
+          quantityRemaining: remainingQty,
+          quantityReceivedEdited: true,
+          deliveredQty,
+          productTags: text(addition?.productTag) ? [text(addition.productTag)] : [],
+          sourceKits: [],
+          sourceBreakdown: [],
+        };
+      })
+    : [];
+  const tabItems = isEditing ? [...baseTabItems, ...editAdditions] : baseTabItems;
   const displayTabItems = expandOrderItemsForDisplay(tabItems).map(applyEditDraft);
   const searchedDisplayItems = componentSearch.trim()
     ? displayTabItems.filter((item) => matchesOrderComponentSearch(item, componentSearch))
@@ -919,7 +946,18 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, editMode, o
     const displayTotal = Math.abs(visibleQty) * Math.abs(finite(item?.unitPrice ?? item?.unit_price ?? item?.price));
     const openEditor = () => {
       if (!isEditing || !itemId) return;
-      setEditItemState({ item: applyEditDraft(item), version: Date.now() });
+      if (item?._isNew) {
+        setEditItemState({
+          mode: "add",
+          draftKey: text(item?._draftKey),
+          item,
+          defaultStatus: text(item?.status),
+          defaultReason: text(item?.reason || group?.reason),
+          version: Date.now(),
+        });
+        return;
+      }
+      setEditItemState({ mode: "edit", item: applyEditDraft(item), version: Date.now() });
     };
     return <div
       className={`co-item ${isEditing ? "next-operations-editable-item" : ""}`}
@@ -1017,7 +1055,7 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, editMode, o
             <div className="co-modal-actions ro-actions ro-actions--right order-modal-search-actions next-operations-edit-actions">
               <OrderComponentSearch key={`${group.key}:${tab}:edit`} value={componentSearch} onChange={setComponentSearch} disabled={busy} collapseOnToggle />
               <button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancelEdit} disabled={busy}>Cancel</button>
-              <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onSaveEdit(editChanges)} disabled={busy || !Object.keys(editChanges).length}>{busy ? "Saving…" : "Save changes"}</button>
+              <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onSaveEdit(editChanges)} disabled={busy || (!Object.keys(editChanges).length && !(Array.isArray(editMode?.additions) && editMode.additions.length))}>{busy ? "Saving…" : "Save changes"}</button>
             </div>
             <div className="next-operations-edit-mode-note"><ClassicOrderIcon name="info" /><span>Tap any component to edit its product, status and quantities.</span></div>
           </>}
@@ -1030,6 +1068,34 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, editMode, o
               </section>
             )) : <div className="order-component-search-empty">{componentSearch.trim() ? "No matching components." : "No items."}</div>}
           </div>
+          {isEditing ? (
+            <div className="next-operations-edit-footer">
+              <button
+                type="button"
+                className="next-operations-add-component-btn"
+                onClick={() => {
+                  const defaultStatus = text(displayTabItems.find((item) => !item?._isNew)?.status)
+                    || text(group?.items?.[0]?.status)
+                    || (group.stage >= 4 ? "Arrived" : group.stage === 3 ? "Shipped" : "In Progress");
+                  setEditItemState({
+                    mode: "add",
+                    draftKey: "",
+                    item: null,
+                    defaultStatus,
+                    defaultReason: text(group?.reason),
+                    version: Date.now(),
+                  });
+                }}
+                disabled={busy}
+              >
+                <span className="next-operations-add-component-btn__icon" aria-hidden="true">+</span>
+                <span className="next-operations-add-component-btn__copy">
+                  <strong>Add component</strong>
+                  <small>Add a new component to this order</small>
+                </span>
+              </button>
+            </div>
+          ) : null}
         </div>
         <OrderDownloadModal
           open={downloadOpen}
@@ -1050,7 +1116,8 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, editMode, o
           busy={busy}
           onCancel={() => setEditItemState(null)}
           onApply={(patch) => {
-            onPatchEditItem(patch);
+            if (patch?.isNew) onUpsertEditAddition(patch);
+            else onPatchEditItem(patch);
             setEditItemState(null);
           }}
         />
@@ -1475,6 +1542,7 @@ function OperationsModernDropdown({
 }
 
 function OperationsComponentEditModal({ state, products = [], statusOptions = [], busy, onCancel, onApply }) {
+  const isAddMode = state?.mode === "add";
   const item = state?.item || null;
   const [form, setForm] = useState(null);
   const [validationError, setValidationError] = useState("");
@@ -1482,53 +1550,64 @@ function OperationsComponentEditModal({ state, products = [], statusOptions = []
   const customizeIdInputRef = useRef(null);
 
   useEffect(() => {
-    if (!item) {
+    if (!item && !isAddMode) {
       setForm(null);
       setValidationError("");
       setCustomizeIdOpen(false);
       return;
     }
-    const sourceSpecific = Number(item?._displaySourceCount || 0) > 1;
-    // For proposal components that appear in multiple kit tags, the visible row
-    // already carries the correctly split quantity. Prefer those per-kit fields
-    // over the aggregate edit/init aliases returned for the shared DB row.
-    const requested = Number(sourceSpecific
-      ? (item?.quantityRequested ?? requestedQuantity(item))
-      : (item?.requestedQty ?? item?.quantityRequested ?? requestedQuantity(item))) || 0;
-    const received = Number(sourceSpecific
-      ? (item?.quantityReceived ?? receivedQuantity(item))
-      : (item?.receivedQty ?? item?.quantityReceived ?? receivedQuantity(item))) || 0;
-    const remaining = Number(sourceSpecific
-      ? (item?.quantityRemaining ?? remainingQuantity(item))
-      : (item?.remainingQty ?? item?.quantityRemaining ?? remainingQuantity(item))) || 0;
-    const delivered = Number(sourceSpecific
-      ? (/(arrived|delivered|received)/i.test(text(item?.status)) ? received : 0)
-      : (item?.deliveredQty ?? deliveredQuantity(item))) || 0;
-    const matchedProduct = products.find((product) => String(product?.id || "") === String(item?.productId || ""))
-      || products.find((product) => lower(product?.name) === lower(item?.productName));
+
+    const source = item || {};
+    const sourceSpecific = Number(source?._displaySourceCount || 0) > 1;
+    const fallbackStatus = text(state?.defaultStatus) || "In Progress";
+    const status = text(source?.status) || fallbackStatus;
+    const requested = isAddMode && !item
+      ? 1
+      : Number(sourceSpecific
+          ? (source?.quantityRequested ?? requestedQuantity(source))
+          : (source?.requestedQty ?? source?.quantityRequested ?? requestedQuantity(source))) || 0;
+    const received = isAddMode && !item
+      ? (/(arrived|delivered|received)/i.test(status) ? requested : 0)
+      : Number(sourceSpecific
+          ? (source?.quantityReceived ?? receivedQuantity(source))
+          : (source?.receivedQty ?? source?.quantityReceived ?? receivedQuantity(source))) || 0;
+    const remaining = isAddMode && !item
+      ? roundQty(requested - received)
+      : Number(sourceSpecific
+          ? (source?.quantityRemaining ?? remainingQuantity(source))
+          : (source?.remainingQty ?? source?.quantityRemaining ?? remainingQuantity(source))) || 0;
+    const delivered = isAddMode && !item
+      ? (/(arrived|delivered|received)/i.test(status) ? received : 0)
+      : Number(sourceSpecific
+          ? (/(arrived|delivered|received)/i.test(status) ? received : 0)
+          : (source?.deliveredQty ?? deliveredQuantity(source))) || 0;
+    const matchedProduct = products.find((product) => String(product?.id || "") === String(source?.productId || ""))
+      || products.find((product) => lower(product?.name) === lower(source?.productName));
+
     setForm({
-      id: text(item?.id),
-      productId: text(matchedProduct?.id || item?.productId),
-      productName: text(matchedProduct?.name || item?.productName),
-      status: text(item?.status) || "In Progress",
+      id: isAddMode ? "" : text(source?.id),
+      draftKey: text(state?.draftKey || source?._draftKey),
+      productId: text(matchedProduct?.id || source?.productId),
+      productName: text(matchedProduct?.name || source?.productName),
+      status,
       requestedQty: String(requested),
       receivedQty: String(received),
       remainingQty: String(remaining),
       deliveredQty: String(delivered),
-      unitPrice: String(item?.unitPrice ?? item?.unit_price ?? item?.price ?? matchedProduct?.unitPrice ?? ""),
-      productTag: text(item?.productTag ?? item?.product_tag) || text(matchedProduct?.tags?.[0]),
-      kitTag: text(item?.kitTag ?? item?.kit_tag),
-      reason: text(item?.reason),
-      issueDescription: text(item?.issueDescription ?? item?.issue_description),
-      productUrl: text(item?.productUrl ?? item?.product_url ?? matchedProduct?.url),
-      productIdCode: text(item?.productIdCode ?? item?.idCode ?? matchedProduct?.displayId),
-      customizeId: text(item?.customizeId ?? item?.customize_id),
+      unitPrice: String(source?.unitPrice ?? source?.unit_price ?? source?.price ?? matchedProduct?.unitPrice ?? ""),
+      productTag: text(source?.productTag ?? source?.product_tag) || text(matchedProduct?.tags?.[0]),
+      kitTag: text(source?.kitTag ?? source?.kit_tag),
+      reason: text(source?.reason) || text(state?.defaultReason),
+      issueDescription: text(source?.issueDescription ?? source?.issue_description),
+      productUrl: text(source?.productUrl ?? source?.product_url ?? matchedProduct?.url),
+      productIdCode: text(source?.productIdCode ?? source?.idCode ?? matchedProduct?.displayId),
+      customizeId: text(source?.customizeId ?? source?.customize_id),
     });
-    setCustomizeIdOpen(Boolean(text(item?.customizeId ?? item?.customize_id)));
+    setCustomizeIdOpen(Boolean(text(source?.customizeId ?? source?.customize_id)));
     setValidationError("");
-  }, [item?.id, state?.version, products]);
+  }, [item?.id, item?._draftKey, state?.version, state?.defaultStatus, state?.defaultReason, state?.draftKey, products, isAddMode]);
 
-  if (!item || !form) return null;
+  if ((!item && !isAddMode) || !form) return null;
 
   const isFinalStatus = /(arrived|delivered|received)/i.test(form.status);
   const num = (value) => {
@@ -1624,15 +1703,17 @@ function OperationsComponentEditModal({ state, products = [], statusOptions = []
     }
     setValidationError("");
     const source = Array.isArray(item?.sourceBreakdown) ? item.sourceBreakdown[0] : null;
-    const sourceSpecific = Number(item?._displaySourceCount || 0) > 1;
+    const sourceSpecific = !isAddMode && Number(item?._displaySourceCount || 0) > 1;
     onApply({
-      id: form.id,
-      editKey: text(item?._displayKey) || form.id,
+      isNew: isAddMode,
+      draftKey: isAddMode ? (text(form.draftKey) || text(state?.draftKey)) : "",
+      id: isAddMode ? "" : form.id,
+      editKey: isAddMode ? "" : (text(item?._displayKey) || form.id),
       sourceSpecific,
-      sourceIndex: Number.isInteger(item?._displaySourceIndex) ? item._displaySourceIndex : null,
-      sourceCount: Number.isInteger(item?._displaySourceCount) ? item._displaySourceCount : null,
-      sourceKitId: text(source?.kitId),
-      sourceKitName: text(source?.kitTag || form.kitTag),
+      sourceIndex: !isAddMode && Number.isInteger(item?._displaySourceIndex) ? item._displaySourceIndex : null,
+      sourceCount: !isAddMode && Number.isInteger(item?._displaySourceCount) ? item._displaySourceCount : null,
+      sourceKitId: isAddMode ? "" : text(source?.kitId),
+      sourceKitName: isAddMode ? text(form.kitTag) : text(source?.kitTag || form.kitTag),
       productId: form.productId,
       productName: form.productName,
       productUrl: form.productUrl,
@@ -1662,10 +1743,10 @@ function OperationsComponentEditModal({ state, products = [], statusOptions = []
   return (
     <div className="co-submodal-overlay is-open next-operations-component-edit-overlay" aria-hidden="false">
       <form className="co-submodal-dialog next-operations-component-edit-dialog" role="dialog" aria-modal="true" onSubmit={submit}>
-        <button type="button" className="co-submodal-close" onClick={onCancel} disabled={busy} aria-label="Close component editor" />
+        <button type="button" className="co-submodal-close" onClick={onCancel} disabled={busy} aria-label={isAddMode ? "Close component creator" : "Close component editor"} />
         <div className="co-submodal-header req-edit-header next-operations-component-edit-header">
           <div className="req-edit-icon"><ClassicOrderIcon name="edit-2" /></div>
-          <div><div className="co-submodal-title">Edit component</div></div>
+          <div><div className="co-submodal-title">{isAddMode ? "Add component" : "Edit component"}</div></div>
         </div>
         <div className="co-submodal-body next-operations-component-edit-body">
           <div className="next-operations-edit-grid next-operations-edit-grid--primary">
@@ -1752,7 +1833,7 @@ function OperationsComponentEditModal({ state, products = [], statusOptions = []
         </div>
         <div className="co-submodal-actions next-operations-component-edit-actions">
           <button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancel} disabled={busy}>Cancel</button>
-          <button type="submit" className="ro-action-btn ro-action-btn--dark" disabled={busy || !form.productId || !form.status}>{busy ? "Saving…" : "Save component"}</button>
+          <button type="submit" className="ro-action-btn ro-action-btn--dark" disabled={busy || !form.productId || !form.status}>{busy ? "Saving…" : isAddMode ? "Add component" : "Save component"}</button>
         </div>
       </form>
     </div>
@@ -2141,6 +2222,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
           products: Array.isArray(data?.products) ? data.products : [],
           statusOptions: Array.isArray(data?.statusOptions) ? data.statusOptions : ["In Progress", "Shipped", "Arrived"],
           changes: {},
+          additions: [],
         });
         setActionState(null);
         setActionError("");
@@ -2279,10 +2361,41 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
     } : current);
   }
 
+  function upsertOperationsEditAddition(patch) {
+    if (!patch?.isNew) return;
+    setEditMode((current) => {
+      if (!current) return current;
+      const existing = Array.isArray(current.additions) ? current.additions : [];
+      const requestedKey = text(patch?.draftKey);
+      const draftKey = requestedKey || (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `new-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+      const cleanPatch = { ...patch, draftKey };
+      delete cleanPatch.id;
+      delete cleanPatch.editKey;
+      const index = existing.findIndex((entry) => text(entry?.draftKey) === draftKey);
+      const additions = index >= 0
+        ? existing.map((entry, entryIndex) => entryIndex === index ? { ...entry, ...cleanPatch } : entry)
+        : [...existing, cleanPatch];
+      return { ...current, additions };
+    });
+  }
+
   async function saveOperationsEdit(changes) {
     if (!editMode || !selected) return;
     const itemUpdates = Object.values(changes || {}).filter((entry) => entry && text(entry?.id));
-    if (!itemUpdates.length) return;
+    const itemAdds = (Array.isArray(editMode?.additions) ? editMode.additions : [])
+      .map((entry) => {
+        if (!entry || !text(entry?.productId)) return null;
+        const clean = { ...entry };
+        delete clean.isNew;
+        delete clean.draftKey;
+        delete clean.id;
+        delete clean.editKey;
+        return clean;
+      })
+      .filter(Boolean);
+    if (!itemUpdates.length && !itemAdds.length) return;
     setBusy(true);
     setActionError("");
     startActionLoading({ title: "Saving order changes", message: "Updating the selected Operations Orders components…" });
@@ -2292,6 +2405,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
         orderIds: selected.orderIds,
         adminPassword: editMode.password,
         itemUpdates,
+        itemAdds,
       });
       await finishActionLoading("done", "Operations order changes were saved.");
       await refreshOrders();
@@ -2413,6 +2527,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
         onExport={exportOrder}
         editMode={editMode}
         onPatchEditItem={patchOperationsEditItem}
+        onUpsertEditAddition={upsertOperationsEditAddition}
         onSaveEdit={saveOperationsEdit}
         onCancelEdit={cancelOperationsEdit}
       />

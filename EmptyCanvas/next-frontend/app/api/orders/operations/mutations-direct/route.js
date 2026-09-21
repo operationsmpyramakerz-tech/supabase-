@@ -88,6 +88,7 @@ async function legacyFallback(action, body) {
       orderIds: body?.orderIds,
       adminPassword: body?.adminPassword,
       itemUpdates: body?.itemUpdates,
+      itemAdds: body?.itemAdds,
       quantities: body?.quantities,
       receiptNumber: body?.receiptNumber,
       receiptNumbers: body?.receiptNumbers,
@@ -164,6 +165,7 @@ export async function POST(request) {
         orderIds: body?.orderIds,
         adminPassword: body?.adminPassword,
         itemUpdates: body?.itemUpdates,
+        itemAdds: body?.itemAdds,
         quantities: body?.quantities,
         unsupportedReceiptEdit,
       });

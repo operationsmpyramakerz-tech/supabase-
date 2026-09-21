@@ -5587,6 +5587,86 @@ body.operations-orders-page .next-classic-orders-parity .next-operations-edit-fo
   border-top: 1px solid #e5e7eb;
 }
 
+body.operations-orders-page .next-classic-orders-parity .next-operations-add-component-btn {
+  display: flex;
+  width: 100%;
+  min-height: 68px;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1.5px dashed #fb923c;
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255, 247, 237, .96), rgba(255, 255, 255, .98));
+  color: #9a3412;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 8px 22px rgba(124, 45, 18, .06);
+  transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease, background .15s ease;
+}
+
+body.operations-orders-page .next-classic-orders-parity .next-operations-add-component-btn:hover,
+body.operations-orders-page .next-classic-orders-parity .next-operations-add-component-btn:focus-visible {
+  transform: translateY(-1px);
+  border-color: #ea580c;
+  background: #fff7ed;
+  box-shadow: 0 12px 28px rgba(124, 45, 18, .11);
+  outline: none;
+}
+
+body.operations-orders-page .next-classic-orders-parity .next-operations-add-component-btn:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+body.operations-orders-page .next-classic-orders-parity .next-operations-add-component-btn__icon {
+  display: inline-grid;
+  width: 38px;
+  min-width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 12px;
+  background: #ea580c;
+  color: #fff;
+  font-size: 25px;
+  font-weight: 500;
+  line-height: 1;
+  box-shadow: 0 7px 16px rgba(234, 88, 12, .22);
+}
+
+body.operations-orders-page .next-classic-orders-parity .next-operations-add-component-btn__copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+body.operations-orders-page .next-classic-orders-parity .next-operations-add-component-btn__copy strong {
+  font-size: 13px;
+  font-weight: 900;
+  color: #111827;
+}
+
+body.operations-orders-page .next-classic-orders-parity .next-operations-add-component-btn__copy small {
+  font-size: 10px;
+  font-weight: 650;
+  color: #9a3412;
+}
+
+html[data-theme="dark"] body.operations-orders-page .next-classic-orders-parity .next-operations-add-component-btn {
+  border-color: rgba(251, 146, 60, .62);
+  background: linear-gradient(180deg, rgba(67, 32, 13, .64), rgba(17, 24, 39, .94));
+  color: #fdba74;
+}
+
+html[data-theme="dark"] body.operations-orders-page .next-classic-orders-parity .next-operations-add-component-btn__copy strong {
+  color: #f8fafc;
+}
+
+html[data-theme="dark"] body.operations-orders-page .next-classic-orders-parity .next-operations-add-component-btn__copy small {
+  color: #fdba74;
+}
+
 /* Operations Orders — modern inline component editor */
 body.operations-orders-page .next-operations-component-edit-overlay {
   z-index: 10080;

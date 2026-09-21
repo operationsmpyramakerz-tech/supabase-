@@ -1844,6 +1844,7 @@ export async function saveOperationsEditDetails({
   orderIds = [],
   adminPassword = "",
   itemUpdates = [],
+  itemAdds = [],
   quantities = null,
   unsupportedReceiptEdit = false,
 } = {}) {
@@ -1857,6 +1858,7 @@ export async function saveOperationsEditDetails({
   if (!passwordOk) throw directOperationsMutationError("Invalid admin password", 401);
 
   const updates = (Array.isArray(itemUpdates) ? itemUpdates : []).filter((entry) => entry && typeof entry === "object");
+  const additions = (Array.isArray(itemAdds) ? itemAdds : []).filter((entry) => entry && typeof entry === "object");
   const updatesById = new Map();
   for (const entry of updates) {
     const id = text(entry?.id || entry?.orderId || entry?.order_id);
@@ -1864,7 +1866,7 @@ export async function saveOperationsEditDetails({
     if (!updatesById.has(id)) updatesById.set(id, []);
     updatesById.get(id).push(entry);
   }
-  if (!updatesById.size && !(quantities && typeof quantities === "object")) {
+  if (!updatesById.size && !additions.length && !(quantities && typeof quantities === "object")) {
     throw directOperationsMutationError("No Operations order changes were provided.", 400);
   }
 
@@ -1924,7 +1926,28 @@ export async function saveOperationsEditDetails({
     plans.push({ id, beforeRow, split: false, patch, finalRow: { ...beforeRow, ...patch } });
   }
 
-  const plannedFinalRows = plans.flatMap((plan) => plan.split ? plan.materialized.map((entry) => entry.finalRow) : [plan.finalRow]);
+  const templateRow = loaded.rows[0] || null;
+  const additionPlans = additions.map((addition) => {
+    if (!templateRow) throw directOperationsMutationError("Orders not found", 404);
+    const patch = opsEditBuildItemPatch(templateRow, addition, productMap);
+    const finalRow = {
+      ...opsEditCloneOrderInsertRow(templateRow),
+      ...patch,
+      source_kits: null,
+      actual_issue_description: null,
+      repair_action: null,
+      spare_parts: null,
+      serial_number: null,
+      maintenance_resolution_method: null,
+      maintenance_checklist: null,
+    };
+    return { finalRow };
+  });
+
+  const plannedFinalRows = [
+    ...plans.flatMap((plan) => plan.split ? plan.materialized.map((entry) => entry.finalRow) : [plan.finalRow]),
+    ...additionPlans.map((plan) => plan.finalRow),
+  ];
   const stockContext = await opsPrepareStockContext(plannedFinalRows, loaded.rows, products);
   if (stockContext === null) return null;
 
@@ -1960,6 +1983,14 @@ export async function saveOperationsEditDetails({
       }
       mutationStarted = true;
       updatedRows.push(await opsEditUpdateOrderSafe(plan.id, plan.patch, Object.prototype.hasOwnProperty.call(plan.patch, "customize_id") ? ["customize_id"] : []));
+    }
+
+    for (const additionPlan of additionPlans) {
+      mutationStarted = true;
+      const requiredColumns = Object.prototype.hasOwnProperty.call(additionPlan.finalRow, "customize_id") && text(additionPlan.finalRow.customize_id)
+        ? ["customize_id"]
+        : [];
+      updatedRows.push(await opsEditInsertOrderSafe(additionPlan.finalRow, requiredColumns));
     }
 
     const stock = await opsSyncStocktakingAfterEdit(loaded.rows, updatedRows, stockContext || { needed: false });

@@ -29400,6 +29400,7 @@ app.post(
         orderIds,
         adminPassword,
         itemUpdates,
+        itemAdds,
         receiptNumber,
         receiptNumbers,
         quantities,
@@ -29514,6 +29515,9 @@ app.post(
       const normalizedItemUpdates = Array.isArray(itemUpdates)
         ? itemUpdates.filter((entry) => entry && typeof entry === "object")
         : [];
+      const normalizedItemAdds = Array.isArray(itemAdds)
+        ? itemAdds.filter((entry) => entry && typeof entry === "object")
+        : [];
       const itemUpdatesById = new Map();
       for (const entry of normalizedItemUpdates) {
         const id = String(entry?.id || entry?.orderId || entry?.order_id || "").trim();
@@ -29521,7 +29525,9 @@ app.post(
         if (!itemUpdatesById.has(id)) itemUpdatesById.set(id, []);
         itemUpdatesById.get(id).push(entry);
       }
-      const productMap = itemUpdatesById.size ? await _sbProductsMapById().catch(() => new Map()) : new Map();
+      const productMap = (itemUpdatesById.size || normalizedItemAdds.length)
+        ? await _sbProductsMapById().catch(() => new Map())
+        : new Map();
       const beforeById = new Map((rowsBeforeUpdate || []).filter(Boolean).map((row) => [String(row?.id ?? ""), row]));
       const updatedRows = [];
       const combinedReceiptFiles = [...keepReceiptEntries, ...uploadedReceiptFiles];
@@ -29765,6 +29771,33 @@ app.post(
           patch,
           Object.prototype.hasOwnProperty.call(patch, "customize_id") ? ["customize_id"] : [],
         ));
+      }
+
+      if (normalizedItemAdds.length) {
+        const templateRow = rowsBeforeUpdate[0] || null;
+        if (!templateRow) return res.status(404).json({ error: "Orders not found" });
+        for (const itemAdd of normalizedItemAdds) {
+          const patch = buildItemPatch(templateRow, itemAdd);
+          const insertRow = {
+            ..._sbOperationsCloneOrderInsertRow(templateRow),
+            ...patch,
+            ...globalReceiptPatch,
+            source_kits: null,
+            actual_issue_description: null,
+            repair_action: null,
+            spare_parts: null,
+            serial_number: null,
+            maintenance_resolution_method: null,
+            maintenance_checklist: null,
+          };
+          const inserted = await _sbInsertOrderRowSafe(
+            insertRow,
+            Object.prototype.hasOwnProperty.call(insertRow, "customize_id") && String(insertRow.customize_id || "").trim()
+              ? ["customize_id"]
+              : [],
+          );
+          updatedRows.push(inserted);
+        }
       }
 
       const rowsNeedingStockSync = updatedRows.filter((row) => {
