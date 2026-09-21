@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { navigateWithinApp } from "../../lib/client-navigation";
 import ClassicOrderIcon from "./ClassicOrderIcon";
 import { loadTeamMemberPublicProfile } from "../../lib/team-member-public-client";
 
@@ -32,8 +31,8 @@ const MAINTENANCE_SPARE_EXPORT_COLUMNS = [
 
 const MAINTENANCE_ACTIONS = {
   edit: {
-    title: "Edit maintenance order",
-    description: "Enter the Maintenance Orders admin password to edit this order.",
+    title: "Edit maintenance log",
+    description: "Enter the Maintenance Orders admin password to edit the saved maintenance details.",
     button: "Continue",
     endpoint: "/api/orders/maintenance/edit/init",
     icon: "edit-2",
@@ -625,34 +624,6 @@ function MaintenanceFilter({ value, onChange, count }) {
   );
 }
 
-function writeMaintenanceEditTransfer(data, group) {
-  try {
-    const products = Array.isArray(data?.products) ? data.products : [];
-    if (!products.length) return "";
-    const reason = text(data?.reason || group?.reason || products.find((item) => text(item?.reason))?.reason);
-    const orderType = text(data?.orderType || "Request Maintenance");
-    const patched = products.map((item) => ({ ...item, reason: text(item?.reason) || reason }));
-    const editKey = `maintenance-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-    const payload = JSON.stringify({ products: patched, reason, orderType, source: "maintenance-orders-next", ts: Date.now() });
-    const typeKey = orderTypeKey(orderType) || "requestmaintenance";
-    const keys = [
-      `shopping_cart:edit_payload:v2:${editKey}`,
-      `shopping_cart:edit_fallback:v1:${typeKey}`,
-      "shopping_cart:edit_fallback:v1:default",
-    ];
-    for (const storage of [window.sessionStorage, window.localStorage]) {
-      try {
-        keys.forEach((key) => storage.setItem(key, payload));
-        storage.setItem("shopping_cart:edit_pending:v2", JSON.stringify({ key: editKey, orderType, reason, ts: Date.now() }));
-        storage.setItem("shopping_cart:edit_target_type:v1", orderType);
-      } catch {}
-    }
-    return editKey;
-  } catch {
-    return "";
-  }
-}
-
 function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
@@ -1021,7 +992,7 @@ function emptyLogForItem(item) {
   };
 }
 
-function MaintenanceLogModal({ group, options, busy, error, onCancel, onSubmit, onChecklistSaved, onChecklistUpdated, onChecklistDeleted }) {
+function MaintenanceLogModal({ group, mode = "create", options, busy, error, onCancel, onSubmit, onChecklistSaved, onChecklistUpdated, onChecklistDeleted }) {
   const [logs, setLogs] = useState([]);
   const [newChecklistText, setNewChecklistText] = useState({});
   const [checklistSaving, setChecklistSaving] = useState(false);
@@ -1041,6 +1012,7 @@ function MaintenanceLogModal({ group, options, busy, error, onCancel, onSubmit, 
   }, [group, busy, checklistSaving, onCancel]);
 
   if (!group) return null;
+  const isEditMode = mode === "edit";
   const resolutionMethods = (Array.isArray(options?.resolutionMethods) ? options.resolutionMethods : []).map((option) => ({ value: text(option?.name ?? option?.value ?? option), label: text(option?.name ?? option?.label ?? option) })).filter((option) => option.value);
   const spareOptions = (Array.isArray(options?.spareParts) ? options.spareParts : []).map((option) => ({ value: text(option?.id ?? option?.value ?? option?.name), label: text(option?.name ?? option?.label ?? option?.value) })).filter((option) => option.value || option.label);
   const checklistItems = (Array.isArray(options?.checklistItems) ? options.checklistItems : [])
@@ -1176,11 +1148,26 @@ function MaintenanceLogModal({ group, options, busy, error, onCancel, onSubmit, 
     <div className="co-submodal-overlay is-open next-maintenance-log-overlay" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy && !checklistSaving) onCancel(); }}>
       <form className="co-submodal-dialog req-maintenance-log-dialog next-maintenance-log-dialog" role="dialog" aria-modal="true" onSubmit={submit}>
         <button type="button" className="co-submodal-close" onClick={onCancel} disabled={busy || checklistSaving} aria-label="Close" />
-        <div className="co-submodal-header next-maintenance-log-header"><div className="req-edit-icon"><ClassicOrderIcon name="clipboard" /></div><div><div className="co-submodal-title">Log Maintenance</div></div></div>
+        <div className="co-submodal-header next-maintenance-log-header">
+          <div className="req-edit-icon"><ClassicOrderIcon name={isEditMode ? "edit-2" : "clipboard"} /></div>
+          <div className="next-maintenance-log-header__copy">
+            <div className="co-submodal-title">{isEditMode ? "Edit Maintenance Log" : "Log Maintenance"}</div>
+            <div className="co-submodal-sub">{isEditMode ? "Update the saved maintenance details below. Existing values are already filled in." : "Record the maintenance work completed for each component."}</div>
+            <div className="next-maintenance-log-header__meta" aria-label="Maintenance log summary">
+              <span><ClassicOrderIcon name="tool" />{group.orderIdLabel || "Maintenance order"}</span>
+              <span><ClassicOrderIcon name="layers" />{logs.length} component{logs.length === 1 ? "" : "s"}</span>
+            </div>
+          </div>
+        </div>
         <div className="co-submodal-body req-maintenance-log-body">
           <div className="req-maintenance-log-items">
             {logs.map((entry, logIndex) => <section className="req-maintenance-log-card next-maintenance-log-card" key={entry.orderId || logIndex}>
-              <div className="req-maintenance-log-card__head"><div><div className="req-maintenance-log-card__label">Component {logIndex + 1}</div><div className="req-maintenance-log-card__title">{entry.productName}</div><div className="req-maintenance-log-card__issue"><span>Issue:</span> {entry.issueDescription}</div></div></div>
+              <div className="req-maintenance-log-card__head next-maintenance-log-card__head">
+                <span className="next-maintenance-log-card__icon"><ClassicOrderIcon name="tool" /></span>
+                <div className="next-maintenance-log-card__identity"><div className="req-maintenance-log-card__label">Component {logIndex + 1}</div><div className="req-maintenance-log-card__title">{entry.productName}</div></div>
+                <span className={`next-maintenance-log-card__mode ${isEditMode ? "is-edit" : ""}`}>{isEditMode ? "Editing" : "New log"}</span>
+                <div className="req-maintenance-log-card__issue"><span>Issue:</span> {entry.issueDescription}</div>
+              </div>
               <div className="req-maintenance-log-card__fields">
                 <label className="co-submodal-field next-maintenance-serial-field"><span className="co-submodal-label">Serial Number</span><input className="co-submodal-input" type="text" value={entry.serialNumber} onChange={(event) => patchLog(logIndex, { serialNumber: event.target.value })} disabled={busy} placeholder="Enter equipment serial number" autoComplete="off" /></label>
                 <label className="co-submodal-field"><span className="co-submodal-label">Resolution Method</span><ModernSelect value={entry.resolutionMethod} options={resolutionMethods} placeholder="Select resolution method" onChange={(value) => patchLog(logIndex, { resolutionMethod: value })} disabled={busy} ariaLabel={`Resolution method for ${entry.productName}`} /></label>
@@ -1212,7 +1199,7 @@ function MaintenanceLogModal({ group, options, busy, error, onCancel, onSubmit, 
           </div>
           <div className="co-submodal-error" role="alert" aria-live="polite">{checklistError || error}</div>
         </div>
-        <div className="co-submodal-actions"><button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancel} disabled={busy || checklistSaving}>Cancel</button><button type="submit" className="ro-action-btn ro-action-btn--dark" disabled={busy || checklistSaving}>{busy ? "Saving…" : "Confirm"}</button></div>
+        <div className="co-submodal-actions next-maintenance-log-actions"><button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancel} disabled={busy || checklistSaving}>Cancel</button><button type="submit" className="ro-action-btn ro-action-btn--dark" disabled={busy || checklistSaving}>{busy ? "Saving…" : isEditMode ? "Save changes" : "Confirm"}</button></div>
       </form>
     </div>
   );
@@ -1379,6 +1366,7 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(null);
   const [logGroup, setLogGroup] = useState(null);
+  const [logMode, setLogMode] = useState("create");
   const [doneGroup, setDoneGroup] = useState(null);
   const [downloadState, setDownloadState] = useState(null);
   const [actionState, setActionState] = useState(null);
@@ -1601,11 +1589,14 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
     try {
       const data = await runProtectedAction(action, group, password);
       if (action === "edit") {
-        const editKey = writeMaintenanceEditTransfer(data, group);
-        const editUrl = new URL("/next/orders/new/request-maintenance", window.location.origin);
-        editUrl.searchParams.set("edit", "1");
-        if (editKey) editUrl.searchParams.set("editKey", editKey);
-        navigateWithinApp(`${editUrl.pathname}${editUrl.search}`);
+        await ensureOptions();
+        const freshItems = Array.isArray(data?.items) ? data.items : [];
+        const freshGroups = freshItems.length ? buildGroups(freshItems) : [];
+        const editGroup = freshGroups.find((item) => item.key === group.key) || freshGroups[0] || group;
+        setLogMode("edit");
+        setLogGroup(editGroup);
+        setActionState(null);
+        setSelected(null);
         return;
       }
 
@@ -1696,6 +1687,7 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
     setActionError("");
     try {
       await ensureOptions();
+      setLogMode("create");
       setLogGroup(group);
     } catch (error) {
       setNotice(error?.message || "Failed to load maintenance form options.");
@@ -1704,8 +1696,11 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
   }
 
   async function saveLog(perItemLogs) {
-    const logsWithDetails = perItemLogs.filter((entry) => text(entry?.serialNumber) || text(entry?.resolutionMethod) || text(entry?.actualIssueDescription) || text(entry?.repairAction) || (Array.isArray(entry?.sparePartsNeeded) && entry.sparePartsNeeded.length) || (Array.isArray(entry?.sparePartsReplaced) && entry.sparePartsReplaced.length) || normalizeMaintenanceChecklist(entry?.checklist).length);
-    if (!logsWithDetails.length) {
+    const isEditMode = logMode === "edit";
+    const logsWithDetails = isEditMode
+      ? perItemLogs
+      : perItemLogs.filter((entry) => text(entry?.serialNumber) || text(entry?.resolutionMethod) || text(entry?.actualIssueDescription) || text(entry?.repairAction) || (Array.isArray(entry?.sparePartsNeeded) && entry.sparePartsNeeded.length) || (Array.isArray(entry?.sparePartsReplaced) && entry.sparePartsReplaced.length) || normalizeMaintenanceChecklist(entry?.checklist).length);
+    if (!logsWithDetails.length && !isEditMode) {
       setActionError("Please fill maintenance details for at least one component. Spare parts are optional.");
       return;
     }
@@ -1718,12 +1713,14 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
         perItemLogs: logsWithDetails,
         moveToArrived: false,
         moveToShipping: false,
+        replaceExisting: isEditMode,
       });
       await refreshOrders();
       setLogGroup(null);
+      setLogMode("create");
       setSelected(null);
-      setTab("in-progress");
-      setNotice("Maintenance log saved.");
+      if (!isEditMode) setTab("in-progress");
+      setNotice(isEditMode ? "Maintenance log updated." : "Maintenance log saved.");
       window.setTimeout(() => setNotice(""), 4000);
     } catch (error) {
       setActionError(error?.message || "Failed to save maintenance log.");
@@ -1855,7 +1852,7 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
       <MaintenanceDetailsModal group={selected} busy={busy} onClose={() => setSelected(null)} onLog={openLog} onDone={(group) => { setActionError(""); setDoneGroup(group); }} onExport={openDownload} onAction={beginAction} />
       <MaintenanceActionPasswordModal state={actionState} busy={busy} error={actionError} onCancel={() => { setActionState(null); setActionError(""); }} onSubmit={submitAction} />
       <MaintenanceDeleteConfirmationModal state={deleteConfirm} busy={busy} onCancel={() => setDeleteConfirm(null)} onConfirm={confirmDelete} />
-      <MaintenanceLogModal group={logGroup} options={options} busy={busy} error={actionError} onCancel={() => { setLogGroup(null); setActionError(""); }} onSubmit={saveLog} onChecklistSaved={rememberChecklistItem} onChecklistUpdated={rememberChecklistItem} onChecklistDeleted={forgetChecklistItem} />
+      <MaintenanceLogModal group={logGroup} mode={logMode} options={options} busy={busy} error={actionError} onCancel={() => { setLogGroup(null); setLogMode("create"); setActionError(""); }} onSubmit={saveLog} onChecklistSaved={rememberChecklistItem} onChecklistUpdated={rememberChecklistItem} onChecklistDeleted={forgetChecklistItem} />
       <MaintenanceDownloadModal state={downloadState} options={options} busy={busy} onClose={() => setDownloadState(null)} onDownload={exportOrder} onChecklistSaved={rememberChecklistItem} onChecklistUpdated={rememberChecklistItem} onChecklistDeleted={forgetChecklistItem} />
       <MarkDoneModal group={doneGroup} busy={busy} error={actionError} onCancel={() => { setDoneGroup(null); setActionError(""); }} onSubmit={markDone} />
       <CreatorProfilePopover state={creatorState} onClose={() => setCreatorState(null)} />

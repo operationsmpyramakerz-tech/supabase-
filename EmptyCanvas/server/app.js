@@ -20567,9 +20567,11 @@ app.post(
 );
 
 
-// Init edit for a Maintenance Orders group. This uses the same Shopping Cart
-// edit session as Current Orders, but is scoped to Request Maintenance rows and
-// protected by the Maintenance Orders admin password/access.
+// Unlock editing for a Maintenance Orders group. Editing from Maintenance
+// Orders now targets the maintenance log itself (serial/resolution/actual issue,
+// repair action, spare parts and checklist), not the original Shopping Cart
+// request. Return fresh serialized rows so the editor always opens with the
+// latest saved maintenance values.
 app.post(
   "/api/orders/maintenance/edit/init",
   requireAuth,
@@ -20592,7 +20594,7 @@ app.post(
         .map((value) => (looksLikeNotionId(value) ? toHyphenatedUUID(value) : value));
       if (!ids.length) return res.status(400).json({ error: "orderIds required" });
 
-      if (_sbOrdersEnabled() && _sbProductsEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
+      if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
         const rows = await _sbOrderRowsByIds(ids);
         if (!rows.length) return res.status(404).json({ error: "Orders not found." });
         const invalid = rows.find((row) => {
@@ -20601,11 +20603,15 @@ app.post(
         });
         if (invalid) return res.status(400).json({ error: "Only Request Maintenance orders can be edited here." });
 
-        const result = await _sbInitOrderEditFromRows(req, ids);
-        return res.json(result);
+        return res.json({
+          ok: true,
+          count: rows.length,
+          items: rows.map((row) => _sbSerializeOrderRow(row)),
+          source: "supabase",
+        });
       }
 
-      return res.status(400).json({ error: "Maintenance order editing is available for Supabase orders only." });
+      return res.status(400).json({ error: "Maintenance log editing is available for Supabase orders only." });
     } catch (error) {
       console.error("maintenance edit init error:", error?.details || error);
       return res.status(error?.status || 500).json({ error: error?.message || "Failed to init maintenance edit" });
@@ -20904,6 +20910,7 @@ app.post(
         const perItemLogsInput = Array.isArray(req.body?.perItemLogs) ? req.body.perItemLogs : [];
         const moveToArrived = !!req.body?.moveToArrived;
         const moveToShipping = !!req.body?.moveToShipping;
+        const replaceExisting = !!req.body?.replaceExisting;
         const logById = new Map();
 
         const normalizeLogEntry = (entry = {}) => {
@@ -20996,11 +21003,21 @@ app.post(
           });
 
           const patch = { updated_at: new Date().toISOString() };
-          if (log.serialNumberText) patch.serial_number = log.serialNumberText;
-          if (log.resolutionMethodText) patch.resolution_method = log.resolutionMethodText;
-          if (log.actualIssueDescriptionText) patch.actual_issue_description = log.actualIssueDescriptionText;
-          if (log.repairActionText) patch.repair_action = log.repairActionText;
-          if (normalizedNeededEntries.length || normalizedEntries.length || log.checklist.length) patch.spare_parts_replaced = maintenanceMetaText;
+          if (replaceExisting) {
+            patch.serial_number = log.serialNumberText || null;
+            patch.resolution_method = log.resolutionMethodText || null;
+            patch.actual_issue_description = log.actualIssueDescriptionText || null;
+            patch.repair_action = log.repairActionText || null;
+            patch.spare_parts_replaced = normalizedNeededEntries.length || normalizedEntries.length || log.checklist.length
+              ? maintenanceMetaText
+              : null;
+          } else {
+            if (log.serialNumberText) patch.serial_number = log.serialNumberText;
+            if (log.resolutionMethodText) patch.resolution_method = log.resolutionMethodText;
+            if (log.actualIssueDescriptionText) patch.actual_issue_description = log.actualIssueDescriptionText;
+            if (log.repairActionText) patch.repair_action = log.repairActionText;
+            if (normalizedNeededEntries.length || normalizedEntries.length || log.checklist.length) patch.spare_parts_replaced = maintenanceMetaText;
+          }
           if (moveToShipping) patch.status = "Shipped";
           else if (moveToArrived) patch.status = "Arrived";
 
@@ -21032,7 +21049,7 @@ app.post(
           const entryLog = logById.get(String(id)) || fallbackLog;
           const built = await buildPatchForLog(entryLog);
           const detailKeys = ["serial_number", "resolution_method", "actual_issue_description", "repair_action", "spare_parts_replaced"];
-          const hasDetailsForRow = detailKeys.some((key) => String(built.patch?.[key] || "").trim());
+          const hasDetailsForRow = replaceExisting || detailKeys.some((key) => String(built.patch?.[key] || "").trim());
           hasAnyDetails = hasAnyDetails || hasDetailsForRow;
           if (!hasDetailsForRow && !moveToArrived && !moveToShipping) continue;
           const requiredColumns = built.patch?.serial_number ? ["serial_number"] : [];
@@ -21041,7 +21058,7 @@ app.post(
           responseById.set(String(id), built.response);
         }
 
-        if (!hasAnyDetails && !moveToArrived && !moveToShipping) {
+        if (!hasAnyDetails && !moveToArrived && !moveToShipping && !replaceExisting) {
           return res.status(400).json({ error: "No maintenance details were provided." });
         }
 
