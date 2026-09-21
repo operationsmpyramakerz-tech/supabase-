@@ -1066,25 +1066,6 @@ main.expenses-layout.expenses-dashboard {
   justify-self: center;
 }
 
-.expenses-dashboard .expense-ticket__shot-btn {
-  width: 32px !important;
-  height: 32px !important;
-  border-radius: 10px !important;
-  background: #f6f8fb !important;
-  border-color: #e5eaf1 !important;
-  box-shadow: none !important;
-}
-
-.expenses-dashboard .expense-ticket__shot-btn--has-shots {
-  background: #fff4eb !important;
-  border-color: #fed7aa !important;
-  color: #dd6411 !important;
-}
-
-.expenses-dashboard .expense-ticket__shot-btn-icon svg {
-  width: 14px !important;
-  height: 14px !important;
-}
 
 .expenses-dashboard .expense-ticket__order-btn {
   min-height: 26px;
@@ -1936,6 +1917,7 @@ body.expenses-page .expense-ledger-row__route-main {
   }
 
   body.expenses-page .expense-action-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
     gap: 8px !important;
   }
 
