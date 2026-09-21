@@ -12,7 +12,7 @@ export default function ClassicExpensesLoading({ users = false }) {
   return (
     <>
       <ShellStyleLinks />
-      {!users ? <link rel="stylesheet" href="/next/css/expenses-redesign.css?v=expenses-dashboard-v2" /> : null}
+      {!users ? <link rel="stylesheet" href="/next/css/expenses-redesign.css?v=expenses-dashboard-v3" /> : null}
       <link rel="stylesheet" href={users ? "/next/css/expenses-users-classic-inline.css?v=stage2f" : "/next/css/expenses-classic-inline.css?v=stage2f"} />
       <BodyClassSync className={`${bodyClass} next-classic-shell-active`} />
 
@@ -24,7 +24,7 @@ export default function ClassicExpensesLoading({ users = false }) {
             {users ? (
               <div className="expenses-layout next-expense-users-classic-parity"><div className="user-tabs">{Array.from({ length: 6 }).map((_, index) => <span className="user-tab next-expenses-loading-user-card" key={index}><span className="next-expenses-loading-line wide"/><span className="user-tab__divider"/><span className="next-expenses-loading-line amount"/><span className="next-expenses-loading-line"/></span>)}</div></div>
             ) : (
-              <div className="expenses-layout expenses-dashboard next-expenses-classic-parity"><aside className="expenses-dashboard__sidebar"><span className="expenses-summary-card next-expenses-loading-panel"/><span className="expenses-analytics-card next-expenses-loading-panel chart"/><span className="expenses-analytics-card next-expenses-loading-panel donut"/></aside><section className="expenses-dashboard__main"><div className="expense-action-grid"><span className="next-expenses-loading-action"/><span className="next-expenses-loading-action"/></div><span className="expenses-activity-card next-expenses-loading-ledger"/></section></div>
+              <div className="expenses-layout expenses-dashboard next-expenses-classic-parity"><aside className="expenses-dashboard__sidebar"><span className="expenses-summary-card next-expenses-loading-panel"/></aside><section className="expenses-dashboard__main"><div className="expense-action-grid"><span className="next-expenses-loading-action"/><span className="next-expenses-loading-action"/></div><span className="expenses-activity-card next-expenses-loading-ledger"/></section></div>
             )}
           </main>
         </div>
