@@ -31,12 +31,49 @@ function money(value) {
   return `£${n.toFixed(2)}`;
 }
 
-// PDFKit/fontkit can shape Arabic glyphs, but it does not fully reorder RTL
-// word runs. Keep Arabic logical text in native-shaping mode and reverse the
-// visual word order per line so the final PDF reads naturally from right to left.
-function reverseRtlWordsForNativePdfLine(value) {
-  const words = String(value || "").trim().match(/\S+/g) || [];
-  return words.reverse().join(" ");
+// PDFKit/fontkit shapes Arabic glyphs correctly, but PDFKit still lays out the
+// whitespace-separated word runs from left to right. Build the visual RTL order
+// ourselves while keeping consecutive English/number runs in their original
+// order (for values such as "Power Supply 24V 2A"). The actual Arabic words stay
+// logical so fontkit can shape them normally.
+function nativeRtlVisualLine(wordsInput) {
+  const words = Array.isArray(wordsInput)
+    ? wordsInput.map((word) => String(word || "")).filter(Boolean)
+    : (String(wordsInput || "").trim().match(/\S+/g) || []);
+  if (!words.length) return "";
+
+  const runs = [];
+  for (let index = 0; index < words.length; index += 1) {
+    const word = words[index];
+    const arabic = containsArabic(word);
+    const latinOrNumber = /[A-Za-z0-9]/.test(word);
+
+    if (arabic) {
+      runs.push({ direction: "rtl", words: [word] });
+      continue;
+    }
+
+    if (latinOrNumber) {
+      const previous = runs[runs.length - 1];
+      if (previous?.direction === "ltr") previous.words.push(word);
+      else runs.push({ direction: "ltr", words: [word] });
+      continue;
+    }
+
+    // Keep punctuation with the closest meaningful run. A leading dash/bullet
+    // belongs to the following Arabic phrase so it stays on the right edge.
+    const previous = runs[runs.length - 1];
+    const nextWord = words[index + 1] || "";
+    if (!previous && containsArabic(nextWord)) {
+      runs.push({ direction: "rtl", words: [word] });
+    } else if (previous) {
+      previous.words.push(word);
+    } else {
+      runs.push({ direction: "ltr", words: [word] });
+    }
+  }
+
+  return runs.reverse().map((run) => run.words.join(" ")).join(" ");
 }
 
 function prepareNativeRtlPdfText(doc, value, maxWidth) {
@@ -53,13 +90,13 @@ function prepareNativeRtlPdfText(doc, value, maxWidth) {
       if (!rawLine) return "";
 
       const words = rawLine.match(/\S+/g) || [];
-      if (!canMeasure || words.length <= 1) return reverseRtlWordsForNativePdfLine(rawLine);
+      if (!canMeasure || words.length <= 1) return nativeRtlVisualLine(words);
 
       const logicalLines = [];
       let current = [];
       for (const word of words) {
         const candidate = current.concat(word);
-        const visualCandidate = candidate.slice().reverse().join(" ");
+        const visualCandidate = nativeRtlVisualLine(candidate);
         const candidateWidth = doc.widthOfString(visualCandidate);
         if (current.length && candidateWidth > width) {
           logicalLines.push(current);
@@ -70,7 +107,7 @@ function prepareNativeRtlPdfText(doc, value, maxWidth) {
       }
       if (current.length) logicalLines.push(current);
 
-      return logicalLines.map((logicalLine) => logicalLine.slice().reverse().join(" ")).join("\n");
+      return logicalLines.map((logicalLine) => nativeRtlVisualLine(logicalLine)).join("\n");
     })
     .join("\n");
 }
