@@ -304,7 +304,7 @@ async function pipeMaintenanceReceiptPDF(params = {}, stream) {
     const heights = [
       drawMetaCard(mL, y, colW, "Team Member", params.teamMember || params.requestedBy),
       drawMetaCard(mL + colW + gap, y, colW, "Order ID", params.orderId),
-      drawMetaCard(mL + (colW + gap) * 2, y, colW, "Date", formatDateTime(params.createdAt)),
+      drawMetaCard(mL + (colW + gap) * 2, y, colW, "Date", formatDateTime(params.reportDate || params.createdAt || new Date())),
     ];
     doc.y = y + Math.max(...heights) + 14;
   };

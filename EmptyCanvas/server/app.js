@@ -4826,6 +4826,9 @@ function _sbSerializeOrderRow(row = {}) {
   const createdTime =
     _sbOrderDate(_sbOrderGet(row, ["notion_created_time", "created_time", "created_at", "Created time"])) ||
     new Date().toISOString();
+  const updatedTime =
+    _sbOrderDate(_sbOrderGet(row, ["updated_at", "updated_time", "last_edited_time", "Last edited time", "last_modified_at"])) ||
+    null;
   const sourceProposalId = _sbOrderText(_sbOrderGet(row, ["source_proposal_id", "Source Proposal ID", "proposal_id", "Proposal ID"])) || null;
   const sourceProposalName = _sbOrderText(_sbOrderGet(row, ["source_proposal_name", "Source Proposal Name", "proposal_name", "Proposal Name"])) || null;
   const sourceKits = _sbProposalSourceKits(_sbOrderGet(row, ["source_kits", "Source Kits", "proposal_source_kits", "Proposal Source Kits"]));
@@ -4875,6 +4878,7 @@ function _sbSerializeOrderRow(row = {}) {
     sparePartsNeededName: sparePartsNeededNames.join(", ") || null,
     sparePartsNeededEntries,
     maintenanceChecklist: maintenanceLogMeta.checklist,
+    maintenanceLoggedAt: maintenanceLogMeta.loggedAt || null,
     orderReceiptEntries,
     orderReceiptNames,
     orderReceiptUrls,
@@ -4893,6 +4897,7 @@ function _sbSerializeOrderRow(row = {}) {
     rejectedReason,
     receiptNumber: _sbOrderText(_sbOrderGet(row, ["receipt_number", "Receipt Number", "Store Receipt Number"])) || null,
     createdTime,
+    updatedTime,
     createdById: createdById || createdByName,
     createdByName,
     assignedToIds: [],
@@ -7381,7 +7386,35 @@ async function _sbPipeOrderMaintenancePdf(req, res, orderIds = []) {
   }
 
   const lookups = templateMode ? { byId: new Map(), byName: new Map() } : await _sbBuildMaintenanceSparePartLookups();
-  const componentLogs = (payload.items || []).map((item, index) => ({
+  const maintenanceItems = Array.isArray(payload.items) ? payload.items : [];
+  const explicitLogDates = maintenanceItems
+    .map((item) => _sbOrderDate(item?.maintenanceLoggedAt))
+    .filter(Boolean)
+    .map((value) => new Date(value))
+    .filter((value) => !Number.isNaN(value.getTime()));
+  const legacyUpdatedDates = maintenanceItems
+    .filter((item) => Boolean(
+      item?.serialNumber
+      || item?.resolutionMethod
+      || item?.actualIssueDescription
+      || item?.repairAction
+      || (Array.isArray(item?.sparePartsNeededEntries) && item.sparePartsNeededEntries.length)
+      || (Array.isArray(item?.sparePartsReplacedEntries) && item.sparePartsReplacedEntries.length)
+      || (Array.isArray(item?.maintenanceChecklist) && item.maintenanceChecklist.length)
+    ))
+    .map((item) => _sbOrderDate(item?.updatedTime))
+    .filter(Boolean)
+    .map((value) => new Date(value))
+    .filter((value) => !Number.isNaN(value.getTime()));
+  const maintenanceReportDate = templateMode
+    ? new Date()
+    : (explicitLogDates.length
+      ? new Date(Math.max(...explicitLogDates.map((value) => value.getTime())))
+      : (legacyUpdatedDates.length
+        ? new Date(Math.max(...legacyUpdatedDates.map((value) => value.getTime())))
+        : new Date()));
+
+  const componentLogs = maintenanceItems.map((item, index) => ({
     idCode: payload.rows?.[index]?.idCode || "",
     component: item.productName || payload.rows?.[index]?.component || "Unknown Product",
     issueDescription: item.issueDescription || item.reason || "No Issue",
@@ -7408,6 +7441,7 @@ async function _sbPipeOrderMaintenancePdf(req, res, orderIds = []) {
       template: templateMode,
       orderId: payload.orderIdRange,
       createdAt: payload.createdAt,
+      reportDate: maintenanceReportDate,
       requestedBy: payload.teamMember,
       teamMember: payload.teamMember,
       operationsBy: payload.operationsBy,
@@ -12396,6 +12430,7 @@ function _maintenanceLogMetaFromValue(value, lookups = {}) {
       checklist: toUniqueStringArray(Array.isArray(parsed.checklist) ? parsed.checklist : [], { splitComma: false })
         .map((item) => String(item || "").trim())
         .filter(Boolean),
+      loggedAt: _sbOrderDate(parsed.loggedAt || parsed.logged_at || parsed.maintenanceLoggedAt || parsed.maintenance_logged_at) || null,
     };
   }
 
@@ -12403,10 +12438,11 @@ function _maintenanceLogMetaFromValue(value, lookups = {}) {
     neededEntries: [],
     replacedEntries: _normalizeMaintenanceSparePartEntries(value, lookups),
     checklist: [],
+    loggedAt: null,
   };
 }
 
-function _maintenanceLogMetaToText({ neededEntries = [], replacedEntries = [], checklist = [] } = {}) {
+function _maintenanceLogMetaToText({ neededEntries = [], replacedEntries = [], checklist = [], loggedAt = null } = {}) {
   const cleanEntries = (entries) => (Array.isArray(entries) ? entries : [])
     .map((entry) => ({
       id: String(entry?.id || "").trim(),
@@ -12418,10 +12454,11 @@ function _maintenanceLogMetaToText({ neededEntries = [], replacedEntries = [], c
     .map((item) => String(item || "").trim().slice(0, 800))
     .filter(Boolean);
   return JSON.stringify({
-    v: 2,
+    v: 3,
     needed: cleanEntries(neededEntries),
     replaced: cleanEntries(replacedEntries),
     checklist: cleanChecklist,
+    loggedAt: _sbOrderDate(loggedAt) || null,
   });
 }
 
@@ -20911,6 +20948,9 @@ app.post(
         const moveToArrived = !!req.body?.moveToArrived;
         const moveToShipping = !!req.body?.moveToShipping;
         const replaceExisting = !!req.body?.replaceExisting;
+        // Keep the exact maintenance-log timestamp inside the existing metadata
+        // payload so PDF exports do not have to reuse the original order date.
+        const maintenanceLoggedAt = new Date().toISOString();
         const logById = new Map();
 
         const normalizeLogEntry = (entry = {}) => {
@@ -20996,27 +21036,35 @@ app.post(
           const normalizedSparePartIds = toUniqueStringArray(normalizedEntries.map((entry) => entry.id).filter(Boolean));
           const normalizedNeededNames = toUniqueStringArray(normalizedNeededEntries.map((entry) => entry.name), { splitComma: true });
           const sparePartText = _maintenanceSparePartEntriesToText(normalizedEntries);
+          const hasMaintenanceContent = Boolean(
+            log.serialNumberText
+            || log.resolutionMethodText
+            || log.actualIssueDescriptionText
+            || log.repairActionText
+            || normalizedNeededEntries.length
+            || normalizedEntries.length
+            || log.checklist.length
+          );
           const maintenanceMetaText = _maintenanceLogMetaToText({
             neededEntries: normalizedNeededEntries,
             replacedEntries: normalizedEntries,
             checklist: log.checklist,
+            loggedAt: hasMaintenanceContent ? maintenanceLoggedAt : null,
           });
 
-          const patch = { updated_at: new Date().toISOString() };
+          const patch = { updated_at: maintenanceLoggedAt };
           if (replaceExisting) {
             patch.serial_number = log.serialNumberText || null;
             patch.resolution_method = log.resolutionMethodText || null;
             patch.actual_issue_description = log.actualIssueDescriptionText || null;
             patch.repair_action = log.repairActionText || null;
-            patch.spare_parts_replaced = normalizedNeededEntries.length || normalizedEntries.length || log.checklist.length
-              ? maintenanceMetaText
-              : null;
+            patch.spare_parts_replaced = hasMaintenanceContent ? maintenanceMetaText : null;
           } else {
             if (log.serialNumberText) patch.serial_number = log.serialNumberText;
             if (log.resolutionMethodText) patch.resolution_method = log.resolutionMethodText;
             if (log.actualIssueDescriptionText) patch.actual_issue_description = log.actualIssueDescriptionText;
             if (log.repairActionText) patch.repair_action = log.repairActionText;
-            if (normalizedNeededEntries.length || normalizedEntries.length || log.checklist.length) patch.spare_parts_replaced = maintenanceMetaText;
+            if (hasMaintenanceContent) patch.spare_parts_replaced = maintenanceMetaText;
           }
           if (moveToShipping) patch.status = "Shipped";
           else if (moveToArrived) patch.status = "Arrived";
@@ -23341,6 +23389,7 @@ app.post(
           template: templateMode,
           orderId: orderIdRange,
           createdAt,
+          reportDate: new Date(),
           requestedBy,
           operationsBy,
           issueDescription,
