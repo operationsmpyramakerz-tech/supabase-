@@ -194,7 +194,7 @@ export default function AppShell({
       <BodyClassSync className={combinedBodyClass} />
       <ClassicChromeAccessSync account={account} />
       <ClassicSidebarBootstrap />
-      <ClassicMobileDockStructure />
+      <ClassicMobileDockStructure activePath={activePath} />
       <ClassicSidebarViewportKeeper />
       <ClassicSidebarActiveIndicator activePath={activePath} />
       <TaskManagementSidebarFlyout allowedPages={allowedPages} activePath={activePath} />

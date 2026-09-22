@@ -164,3 +164,44 @@ body.persistent-app-shell
   margin: 0 !important;
   padding: 0 !important;
 }
+
+
+/* -------------------------------------------------------------------------
+ * Mobile bottom dock — directional auto hide (Pinterest-style)
+ *
+ * The persistent shell adds .ops-mobile-dock-hidden after a deliberate
+ * downward page scroll and removes it immediately when the user scrolls up.
+ * Keep the page geometry untouched so showing/hiding the dock never causes a
+ * content jump; only the fixed dock itself moves beyond the viewport.
+ * ---------------------------------------------------------------------- */
+@media (max-width: 768px) {
+  html body.next-classic-shell-active .classic-app-shell > .sidebar {
+    transform: translate3d(0, 0, 0) scale(1) !important;
+    opacity: 1 !important;
+    filter: blur(0) !important;
+    transition:
+      transform .34s cubic-bezier(.16, 1, .3, 1),
+      opacity .20s ease-out,
+      filter .26s ease-out !important;
+    transform-origin: center bottom !important;
+    will-change: transform, opacity, filter;
+  }
+
+  html body.next-classic-shell-active .classic-app-shell > .sidebar.ops-mobile-dock-hidden {
+    transform: translate3d(0, calc(100% + 40px), 0) scale(.975) !important;
+    opacity: 0 !important;
+    filter: blur(1.5px) !important;
+    pointer-events: none !important;
+  }
+}
+
+@media (max-width: 768px) and (prefers-reduced-motion: reduce) {
+  html body.next-classic-shell-active .classic-app-shell > .sidebar {
+    transition: opacity .01ms linear !important;
+  }
+
+  html body.next-classic-shell-active .classic-app-shell > .sidebar.ops-mobile-dock-hidden {
+    transform: translate3d(0, calc(100% + 40px), 0) !important;
+    filter: none !important;
+  }
+}

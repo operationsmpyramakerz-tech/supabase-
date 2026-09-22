@@ -183,7 +183,7 @@ export function ClassicSidebarBootstrap() {
 
 
 
-export function ClassicMobileDockStructure() {
+export function ClassicMobileDockStructure({ activePath = "" }) {
   useLayoutEffect(() => {
     const sidebar = document.querySelector(".classic-app-shell .sidebar");
     const nav = sidebar?.querySelector(":scope > .sidebar-nav");
@@ -191,6 +191,7 @@ export function ClassicMobileDockStructure() {
 
     const MOBILE_QUERY = "(max-width: 768px)";
     const media = window.matchMedia(MOBILE_QUERY);
+    const HIDDEN_CLASS = "ops-mobile-dock-hidden";
 
     const structure = () => {
       const directList = nav.querySelector(":scope > .nav-list");
@@ -243,17 +244,102 @@ export function ClassicMobileDockStructure() {
     };
 
     structure();
-    const onChange = () => structure();
+
+    // Pinterest-style mobile dock behavior: the page gets the full viewport
+    // while the user is intentionally scrolling down, then the dock glides
+    // back as soon as they reverse direction.  The persistent shell owns one
+    // scrollable <main>, so this applies consistently to every authenticated
+    // page without wiring scroll logic into individual routes.
+    const pageScroller = document.querySelector(
+      ".classic-app-shell > .main-content > main.next-classic-page-content"
+    );
+    let lastScrollTop = pageScroller instanceof HTMLElement
+      ? Math.max(0, pageScroller.scrollTop || 0)
+      : 0;
+    let travel = 0;
+    let direction = 0;
+    let scrollFrame = 0;
+
+    const setDockHidden = (hidden) => {
+      const nextHidden = Boolean(hidden && media.matches);
+      sidebar.classList.toggle(HIDDEN_CLASS, nextHidden);
+    };
+
+    // Always start a freshly navigated page with navigation available.
+    setDockHidden(false);
+
+    const handlePageScroll = () => {
+      if (!(pageScroller instanceof HTMLElement) || !media.matches) {
+        setDockHidden(false);
+        return;
+      }
+
+      if (scrollFrame) window.cancelAnimationFrame(scrollFrame);
+      scrollFrame = window.requestAnimationFrame(() => {
+        scrollFrame = 0;
+        const current = Math.max(0, pageScroller.scrollTop || 0);
+        const delta = current - lastScrollTop;
+
+        // Keep the dock visible at the top and ignore tiny touch jitter.
+        if (current <= 8) {
+          setDockHidden(false);
+          travel = 0;
+          direction = 0;
+          lastScrollTop = current;
+          return;
+        }
+        if (Math.abs(delta) < 1) {
+          lastScrollTop = current;
+          return;
+        }
+
+        const nextDirection = delta > 0 ? 1 : -1;
+        if (nextDirection !== direction) {
+          direction = nextDirection;
+          travel = 0;
+        }
+        travel += Math.abs(delta);
+
+        // A slightly larger downward threshold prevents accidental hiding;
+        // upward intent reveals the dock faster, matching the reference video.
+        if (direction > 0 && current > 28 && travel >= 20) {
+          setDockHidden(true);
+          travel = 0;
+        } else if (direction < 0 && travel >= 10) {
+          setDockHidden(false);
+          travel = 0;
+        }
+
+        lastScrollTop = current;
+      });
+    };
+
+    const onChange = () => {
+      structure();
+      setDockHidden(false);
+      lastScrollTop = pageScroller instanceof HTMLElement
+        ? Math.max(0, pageScroller.scrollTop || 0)
+        : 0;
+      travel = 0;
+      direction = 0;
+    };
+
+    if (pageScroller instanceof HTMLElement) {
+      pageScroller.addEventListener("scroll", handlePageScroll, { passive: true });
+    }
     if (typeof media.addEventListener === "function") media.addEventListener("change", onChange);
     else media.addListener?.(onChange);
     window.addEventListener("orientationchange", onChange);
 
     return () => {
+      if (scrollFrame) window.cancelAnimationFrame(scrollFrame);
+      setDockHidden(false);
+      pageScroller?.removeEventListener?.("scroll", handlePageScroll);
       if (typeof media.removeEventListener === "function") media.removeEventListener("change", onChange);
       else media.removeListener?.(onChange);
       window.removeEventListener("orientationchange", onChange);
     };
-  }, []);
+  }, [activePath]);
   return null;
 }
 
