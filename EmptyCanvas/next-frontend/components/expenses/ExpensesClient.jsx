@@ -714,15 +714,43 @@ function SettleModal({ onClose, onSaved, notify }) {
     finally { setBusy(false); }
   };
   return (
-    <Modal title="Settle my account" subtitle="A balancing transaction will reset the current balance to zero." onClose={onClose} footer={<><button className="secondary-button" onClick={onClose} disabled={busy}>Cancel</button><button className="primary-button" onClick={submit} disabled={busy}>{busy ? "Saving…" : "Save settlement"}</button></>}>
-      <div className="expense-form-grid">
-        <label><span>Date *</span><input type="date" value={form.date} onChange={update("date")} /></label>
-        <div className="expense-field"><span>Funds type *</span><ModernSelect value={form.fundsType} onChange={(value) => { setForm((current) => ({ ...current, fundsType: value, receiptNumber: value === "Cash Payment" ? current.receiptNumber : "" })); if (value !== "Online Transfer") setFiles([]); }} options={CASH_IN_TYPES.map((value) => ({ value, label: value, note: value === "Online Transfer" ? "Screenshot is required for this transfer" : "Receipt number is required for this payment", badge: value === "Online Transfer" ? "Required" : "Receipt", tone: value === "Online Transfer" ? "orange" : "neutral" }))} placeholder="Select funds type…" /></div>
-        <label className="expense-form-full"><span>Settled by *</span><input value={form.settledBy} onChange={update("settledBy")} placeholder="Person name" /></label>
-        {isCash ? <label className="expense-form-full"><span>Receipt number *</span><input value={form.receiptNumber} onChange={update("receiptNumber")} /></label> : null}
-        {isTransfer ? <div className="expense-form-full"><FileField files={files} onChange={setFiles} required hint="Upload the transfer screenshot (JPG/PNG)." /></div> : null}
+    <ClassicModal title="Settle my account" onClose={onClose}>
+      <ClassicFieldLabel icon="calendar">Date <span className="req-star">*</span></ClassicFieldLabel>
+      <input type="date" className="ex-input" value={form.date} onChange={update("date")}/>
+
+      <ClassicFieldLabel icon="tag">Funds Type <span className="req-star">*</span></ClassicFieldLabel>
+      <ClassicSelect
+        value={form.fundsType}
+        onChange={(value) => {
+          setForm((current) => ({ ...current, fundsType: value, receiptNumber: value === "Cash Payment" ? current.receiptNumber : "" }));
+          if (value !== "Online Transfer") setFiles([]);
+        }}
+        options={CASH_IN_TYPES.map((value) => ({
+          value,
+          label: value,
+          note: value === "Online Transfer" ? "Screenshot is required for this transfer" : "Receipt number is required for this payment",
+          badge: value === "Online Transfer" ? "Required" : "Receipt",
+          tone: value === "Online Transfer" ? "orange" : "neutral",
+        }))}
+        placeholder="Select funds type..."
+        ariaLabel="Settlement funds types"
+      />
+
+      <ClassicFieldLabel icon="user">Settled by <span className="req-star">*</span></ClassicFieldLabel>
+      <input className="ex-input" value={form.settledBy} onChange={update("settledBy")} placeholder="Person name"/>
+
+      {isCash ? <>
+        <ClassicFieldLabel icon="hash">Receipt number <span className="req-star">*</span></ClassicFieldLabel>
+        <input className="ex-input" value={form.receiptNumber} onChange={update("receiptNumber")} placeholder="Enter receipt number"/>
+      </> : null}
+
+      {isTransfer ? <ClassicFileField files={files} onChange={setFiles} required hint="Upload the transfer screenshot (JPG/PNG)."/> : null}
+
+      <div className="ex-modal-actions">
+        <button type="button" className="ex-btn ex-primary" onClick={submit} disabled={busy}>{busy ? "Saving..." : "Save settlement"}</button>
+        <button type="button" className="ex-btn ex-danger" onClick={onClose} disabled={busy}>Close</button>
       </div>
-    </Modal>
+    </ClassicModal>
   );
 }
 

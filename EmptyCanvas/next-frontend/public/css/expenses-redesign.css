@@ -2265,3 +2265,104 @@ body.expenses-page .expenses-dashboard .cash-btn .cash-btn__copy {
     left: 10px;
   }
 }
+
+/* =========================================================
+   Expenses motion system
+   Strong, polished entrance motion for every in-page expense
+   surface (Cash in/out, settlement, export, all expenses and
+   screenshot viewer). Opening-only motion keeps interactions
+   fast while giving the workspace a more app-like feel.
+   ========================================================= */
+@keyframes expenses-overlay-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes expenses-panel-enter {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 42px, 0) scale(.92);
+    filter: blur(8px);
+  }
+  68% {
+    opacity: 1;
+    transform: translate3d(0, -5px, 0) scale(1.008);
+    filter: blur(0);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes expenses-sheet-enter {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 110px, 0) scale(.965);
+  }
+  72% {
+    opacity: 1;
+    transform: translate3d(0, -7px, 0) scale(1.004);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes expenses-content-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+body.expenses-page .ex-modal,
+body.expenses-page .next-modal-backdrop,
+body.expenses-page .ios-modal,
+body.expenses-page .expense-shots-modal.is-open {
+  animation: expenses-overlay-enter .24s ease-out both;
+}
+
+body.expenses-page .ex-modal-box,
+body.expenses-page .expense-modal,
+body.expenses-page .expense-shots-modal.is-open .expense-shots-modal__card {
+  transform-origin: 50% 65%;
+  will-change: transform, opacity, filter;
+  animation: expenses-panel-enter .5s cubic-bezier(.16, 1, .3, 1) both;
+}
+
+body.expenses-page .ios-modal.next-ios-modal-open .ios-sheet {
+  transform-origin: 50% 100%;
+  will-change: transform, opacity;
+  animation: expenses-sheet-enter .52s cubic-bezier(.16, 1, .3, 1) both;
+}
+
+body.expenses-page .ex-modal-box > :not(.ex-modal-title),
+body.expenses-page .expense-modal__body,
+body.expenses-page .expense-modal > footer,
+body.expenses-page #allExpensesList {
+  animation: expenses-content-enter .34s .08s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.expenses-page .ex-modal,
+  body.expenses-page .next-modal-backdrop,
+  body.expenses-page .ios-modal,
+  body.expenses-page .expense-shots-modal.is-open,
+  body.expenses-page .ex-modal-box,
+  body.expenses-page .expense-modal,
+  body.expenses-page .expense-shots-modal.is-open .expense-shots-modal__card,
+  body.expenses-page .ios-modal.next-ios-modal-open .ios-sheet,
+  body.expenses-page .ex-modal-box > :not(.ex-modal-title),
+  body.expenses-page .expense-modal__body,
+  body.expenses-page .expense-modal > footer,
+  body.expenses-page #allExpensesList {
+    animation: none !important;
+  }
+}
