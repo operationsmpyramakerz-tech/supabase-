@@ -2056,3 +2056,212 @@ body.expenses-page .expenses-dashboard .last-settled {
     min-height: 54px !important;
   }
 }
+
+/* =========================================================
+   EXPENSES ACTIONS + TICKET HEADER REFINEMENT — 2026-09-22 v6
+   - Center Cash in / Cash out actions and remove trailing arrows
+   - Center ticket date
+   - Put manual expense reason inside its label under the date
+   ========================================================= */
+body.expenses-page .expenses-dashboard .cash-btn {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 10px !important;
+  min-height: 66px !important;
+  padding: 11px 16px !important;
+  text-align: center !important;
+  border: 1px solid rgba(255,255,255,.16) !important;
+  border-radius: 19px !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.16),
+    0 10px 24px rgba(15,23,42,.10) !important;
+}
+
+body.expenses-page .expenses-dashboard .cash-btn::after {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: 18px;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(255,255,255,.08), transparent 48%);
+}
+
+body.expenses-page .expenses-dashboard .cash-btn > * {
+  position: relative;
+  z-index: 1;
+}
+
+body.expenses-page .cash-btn__icon {
+  width: 35px;
+  height: 35px;
+  flex: 0 0 35px;
+  border-radius: 12px;
+  background: rgba(255,255,255,.15) !important;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.13) !important;
+}
+
+body.expenses-page .cash-btn__copy {
+  min-width: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+body.expenses-page .cash-btn__copy strong {
+  font-size: .84rem !important;
+  letter-spacing: -.01em;
+  text-align: center;
+}
+
+body.expenses-page .cash-btn__arrow {
+  display: none !important;
+}
+
+body.expenses-page .expense-ticket__header-row--centered {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: .48rem !important;
+  text-align: center;
+}
+
+body.expenses-page .expense-ticket__header-row--centered .expense-ticket__meta {
+  width: 100%;
+  justify-content: center;
+}
+
+body.expenses-page .expense-ticket__header-row--centered .expense-ticket__date {
+  justify-content: center;
+  min-width: 0;
+  padding: .36rem .78rem;
+  background: #f8fafc;
+  border-color: #dfe5ec;
+  color: #475569;
+  box-shadow: 0 4px 12px rgba(15,23,42,.035);
+}
+
+body.expenses-page .expense-ticket__header-row--centered .expense-ticket__header-side {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+body.expenses-page .expense-ticket__header-row--centered .expense-ticket__order-actions {
+  width: 100%;
+  justify-content: center;
+}
+
+body.expenses-page .expense-ticket__header-row--centered .expense-ticket__order-btn {
+  max-width: min(100%, 360px);
+  justify-content: center;
+  text-align: center;
+  padding-inline: .78rem;
+}
+
+body.expenses-page .expense-ticket__header-row--centered .expense-ticket__order-btn span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.expenses-page .expense-ticket__reason--label,
+body.expenses-page .expense-ticket__reason--centered {
+  width: fit-content;
+  max-width: min(100%, 360px);
+  margin-inline: auto;
+  justify-content: center;
+  padding: .42rem .72rem;
+  border: 1px solid #e4e8ee;
+  border-radius: 999px;
+  background: #f7f9fc;
+  color: #334155;
+  font-size: .76rem;
+  font-weight: 800;
+  line-height: 1.25;
+  text-align: center;
+  direction: auto;
+  unicode-bidi: plaintext;
+  box-shadow: 0 4px 12px rgba(15,23,42,.035);
+}
+
+body.expenses-page .expense-ticket__reason--centered {
+  margin-top: -.1rem;
+}
+
+@media (max-width: 768px) {
+  body.expenses-page .expense-action-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  body.expenses-page .expenses-dashboard .cash-btn {
+    min-height: 62px !important;
+    gap: 8px !important;
+    padding: 9px 10px !important;
+    border-radius: 18px !important;
+  }
+
+  body.expenses-page .cash-btn__icon {
+    width: 33px;
+    height: 33px;
+    flex-basis: 33px;
+    border-radius: 11px;
+  }
+
+  body.expenses-page .cash-btn__copy strong {
+    font-size: .8rem !important;
+  }
+
+  body.expenses-page .expense-ticket__top {
+    gap: .46rem;
+  }
+
+  body.expenses-page .expense-ticket__header-row--centered {
+    gap: .42rem !important;
+  }
+
+  body.expenses-page .expense-ticket__header-row--centered .expense-ticket__date {
+    font-size: .74rem;
+    padding: .31rem .68rem;
+  }
+
+  body.expenses-page .expense-ticket__header-row--centered .expense-ticket__order-btn,
+  body.expenses-page .expense-ticket__reason--label,
+  body.expenses-page .expense-ticket__reason--centered {
+    max-width: 92%;
+  }
+}
+
+/* Keep the action label optically centered even with the leading icon. */
+body.expenses-page .expenses-dashboard .cash-btn {
+  position: relative;
+  padding-inline: 54px !important;
+}
+
+body.expenses-page .expenses-dashboard .cash-btn .cash-btn__icon {
+  position: absolute;
+  left: 13px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+body.expenses-page .expenses-dashboard .cash-btn .cash-btn__copy {
+  width: 100%;
+  text-align: center;
+}
+
+@media (max-width: 768px) {
+  body.expenses-page .expenses-dashboard .cash-btn {
+    padding-inline: 48px !important;
+  }
+
+  body.expenses-page .expenses-dashboard .cash-btn .cash-btn__icon {
+    left: 10px;
+  }
+}

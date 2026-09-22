@@ -919,12 +919,15 @@ function orderMeta(order) {
   return { icon: "package", bg: "#EFF6FF", fg: "#1D4ED8", border: "#BFDBFE" };
 }
 
-function ExpenseOrderActions({ orders }) {
+function ExpenseOrderActions({ orders, reasonLabel = "" }) {
   if (!orders?.length) return null;
   return <div className="expense-ticket__order-actions">{orders.map((order, index) => {
     const href = modernReceiptViewerHref(order) || modernTrackingHref(order);
-    const label = [text(order?.orderId), text(order?.orderType)].filter(Boolean).join(" · ") || text(order?.label) || "Order";
     const meta = orderMeta(order);
+    const orderKind = typeKey(order?.orderType);
+    const originalLabel = [text(order?.orderId), text(order?.orderType)].filter(Boolean).join(" · ") || text(order?.label) || "Order";
+    const isManualReason = ["manualreason", "otherreason", "manual"].includes(orderKind) || typeKey(order?.label) === "otherreason";
+    const label = isManualReason && text(reasonLabel) ? text(reasonLabel) : originalLabel;
     const style = { "--expense-order-btn-bg": meta.bg, "--expense-order-btn-fg": meta.fg, "--expense-order-btn-border": meta.border };
     return href ? <a className="expense-ticket__order-btn" style={style} href={href} target="_blank" rel="noreferrer" key={`${label}-${index}`}><ClassicExpenseIcon name={meta.icon} size={15}/><span>{label}</span><ClassicExpenseIcon name="external-link" size={14}/></a> : <span className="expense-ticket__order-btn expense-ticket__order-btn--disabled" style={style} key={`${label}-${index}`}><ClassicExpenseIcon name={meta.icon} size={15}/><span>{label}</span></span>;
   })}</div>;
@@ -953,7 +956,7 @@ function LedgerGroup({ group, onScreenshots }) {
   return <section className="expense-ledger-group">
     <div className="expense-ledger-group__summary">
       <div className="expense-ledger-group__identity"><span className="expense-ledger-group__date">{formatDate(group.date, group.date || "No date")}</span><span className="expense-ledger-group__reason" title={group.reason}>{group.reason}</span></div>
-      <div className="expense-ledger-group__orders"><ExpenseOrderActions orders={group.orders}/></div>
+      <div className="expense-ledger-group__orders"><ExpenseOrderActions orders={group.orders} reasonLabel={group.reason}/></div>
       <span className={`expense-ledger-group__total ${total.tone}`}>{total.text}</span>
       <span className="expense-ledger-group__receipt-label">{receiptCount ? `${receiptCount} file${receiptCount === 1 ? "" : "s"}` : "—"}</span>
     </div>
@@ -989,13 +992,14 @@ function ExpenseTicket({ group, onScreenshots, compact = false }) {
   const rows = [...(Array.isArray(group?.items) ? group.items : [])].sort((a, b) => transactionTime(a) - transactionTime(b));
   const hideReason = shouldHideExpenseGroupReason(group);
   const hasOrders = Array.isArray(group?.orders) && group.orders.length > 0;
+  const hasManualReasonOrder = hasOrders && group.orders.some((order) => ["manualreason", "otherreason", "manual"].includes(typeKey(order?.orderType)) || typeKey(order?.label) === "otherreason");
   return <article className={`expense-ticket${compact ? " expense-ticket--compact" : ""}`}>
     <div className="expense-ticket__top">
-      <div className={`expense-ticket__header-row${hasOrders ? " expense-ticket__header-row--with-order" : ""}`}>
+      <div className={`expense-ticket__header-row expense-ticket__header-row--centered${hasOrders ? " expense-ticket__header-row--with-order" : ""}`}>
         <div className="expense-ticket__meta"><span className="expense-ticket__date">{formatDate(group.date, group.date || "No date")}</span></div>
-        <div className="expense-ticket__header-side">{hasOrders ? <ExpenseOrderActions orders={group.orders}/> : !hideReason ? <div className="expense-ticket__reason">{group.reason}</div> : null}</div>
+        <div className="expense-ticket__header-side">{hasOrders ? <ExpenseOrderActions orders={group.orders} reasonLabel={group.reason}/> : !hideReason ? <div className="expense-ticket__reason expense-ticket__reason--label">{group.reason}</div> : null}</div>
       </div>
-      {hasOrders && !hideReason ? <div className="expense-ticket__reason expense-ticket__reason--block">{group.reason}</div> : null}
+      {hasOrders && !hideReason && !hasManualReasonOrder ? <div className="expense-ticket__reason expense-ticket__reason--block expense-ticket__reason--centered">{group.reason}</div> : null}
       <div className="expense-ticket__header-divider" />
     </div>
     <div className="expense-ticket__legs">{rows.map((item, index) => { const route = routeEndpoints(item); const amount = expenseAmount(item); return <div className="expense-ticket__route" key={text(item?.id) || index}><div className="expense-ticket__route-frame"><div className="expense-ticket__route-shot"><ExpenseShotButton item={item} onScreenshots={onScreenshots}/></div><div className="expense-ticket__route-body"><div className="expense-ticket__route-top"><div className="expense-ticket__route-title">{number(item?.cashIn) > 0 ? "Cash In" : text(item?.fundsType) || "Cash Out"}</div><div className={`expense-ticket__route-amount ${amount.tone}`}>{amount.text}</div></div><div className="expense-ticket__route-sub"><span className="expense-ticket__route-endpoint expense-ticket__route-endpoint--from">{route.from}</span><span className="expense-ticket__route-arrow"><ClassicExpenseIcon name="arrow-right" size={16}/></span><span className="expense-ticket__route-endpoint expense-ticket__route-endpoint--to">{route.to}</span></div></div></div></div>; })}</div>
@@ -1188,8 +1192,8 @@ export default function ExpensesClient({ account, initialPayload = {}, initialTy
 
         <section className="expenses-dashboard__main" aria-label="Expense activity">
           <div className="expense-action-grid" aria-label="Expense actions">
-            <button className="cash-btn cash-in" type="button" onClick={openCashIn}><span className="cash-btn__icon"><ClassicExpenseIcon name="arrow-down-left" size={19}/></span><span className="cash-btn__copy"><strong>Cash in</strong></span><span className="cash-btn__arrow"><ClassicExpenseIcon name="arrow-right" size={18}/></span></button>
-            <button className="cash-btn cash-out" type="button" onClick={openCashOut}><span className="cash-btn__icon"><ClassicExpenseIcon name="arrow-up-right" size={19}/></span><span className="cash-btn__copy"><strong>Cash out</strong></span><span className="cash-btn__arrow"><ClassicExpenseIcon name="arrow-right" size={18}/></span></button>
+            <button className="cash-btn cash-in" type="button" onClick={openCashIn}><span className="cash-btn__icon"><ClassicExpenseIcon name="arrow-down-left" size={19}/></span><span className="cash-btn__copy"><strong>Cash in</strong></span></button>
+            <button className="cash-btn cash-out" type="button" onClick={openCashOut}><span className="cash-btn__icon"><ClassicExpenseIcon name="arrow-up-right" size={19}/></span><span className="cash-btn__copy"><strong>Cash out</strong></span></button>
           </div>
 
           <section className="expenses-activity-card">
