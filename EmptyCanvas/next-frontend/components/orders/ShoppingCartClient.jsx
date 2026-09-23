@@ -291,20 +291,30 @@ function OrderSubmissionBar({ submission, onDone }) {
 
   if (!submission) return null;
   const meta = orderTypeMeta(submission.orderType);
+  const orderQuery = text(submission.orderId);
+  const viewOrderUrl = orderQuery ? `/next/orders?q=${encodeURIComponent(orderQuery)}` : "/next/orders";
 
   return (
     <div className="classic-cart-order-confirmation" role="status" aria-live="polite">
-      <svg className="classic-cart-order-confirmation-progress" viewBox="0 0 560 112" preserveAspectRatio="none" aria-hidden="true">
-        <rect className="classic-cart-order-confirmation-track" x="3" y="3" width="554" height="106" rx="52" pathLength="100"/>
-        <rect className="classic-cart-order-confirmation-line" x="3" y="3" width="554" height="106" rx="52" pathLength="100"/>
+      <svg className="classic-cart-order-confirmation-progress" viewBox="0 0 500 92" preserveAspectRatio="none" aria-hidden="true">
+        <rect className="classic-cart-order-confirmation-track" x="3" y="3" width="494" height="86" rx="43" pathLength="100"/>
+        <rect className="classic-cart-order-confirmation-line" x="3" y="3" width="494" height="86" rx="43" pathLength="100"/>
       </svg>
       <span className="classic-cart-order-confirmation-icon">
-        <CartSvgIcon name={meta.icon} size={23}/>
+        <CartSvgIcon name={meta.icon} size={21}/>
       </span>
       <span className="classic-cart-order-confirmation-copy">
         <strong>{submission.nextStep || "Waiting for approval"}</strong>
         <small>{submission.orderId || "Order created"} <b>·</b> {meta.label}</small>
       </span>
+      <button
+        className="classic-cart-order-confirmation-view"
+        type="button"
+        onClick={() => navigateWithinApp(viewOrderUrl)}
+        aria-label={`View ${submission.orderId || "order"}`}
+      >
+        View order
+      </button>
     </div>
   );
 }
