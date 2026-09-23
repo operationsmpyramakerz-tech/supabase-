@@ -827,3 +827,149 @@
     animation: none !important;
   }
 }
+
+/* ========================================================================
+   Shopping Cart — order submitted floating confirmation bar
+   Dynamic-island inspired confirmation with a timed progress frame.
+   ===================================================================== */
+.classic-cart-order-confirmation{
+  position:fixed;
+  top:18px;
+  left:50%;
+  z-index:1800;
+  width:min(560px,calc(100vw - 28px));
+  min-height:112px;
+  display:flex;
+  align-items:center;
+  gap:14px;
+  padding:18px 22px;
+  border-radius:56px;
+  background:linear-gradient(145deg,#050505 0%,#111 58%,#080808 100%);
+  color:#fff;
+  box-shadow:0 24px 60px -20px rgba(0,0,0,.68),0 8px 24px -16px rgba(0,0,0,.7);
+  overflow:hidden;
+  isolation:isolate;
+  transform:translateX(-50%);
+  animation:classicCartOrderConfirmationLife 6.68s cubic-bezier(.2,.85,.2,1) both;
+  will-change:transform,opacity;
+}
+.classic-cart-order-confirmation::after{
+  content:"";
+  position:absolute;
+  inset:8px 34% 8px auto;
+  width:1px;
+  background:linear-gradient(180deg,transparent,rgba(255,255,255,.13),transparent);
+  pointer-events:none;
+}
+.classic-cart-order-confirmation-progress{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  z-index:0;
+  pointer-events:none;
+  overflow:visible;
+}
+.classic-cart-order-confirmation-track,
+.classic-cart-order-confirmation-line{
+  fill:none;
+  vector-effect:non-scaling-stroke;
+}
+.classic-cart-order-confirmation-track{
+  stroke:rgba(255,255,255,.10);
+  stroke-width:3px;
+}
+.classic-cart-order-confirmation-line{
+  stroke:#f5c400;
+  stroke-width:3.5px;
+  stroke-linecap:round;
+  stroke-dasharray:100;
+  stroke-dashoffset:0;
+  animation:classicCartOrderConfirmationProgress 6.5s linear forwards;
+  filter:drop-shadow(0 0 4px rgba(245,196,0,.42));
+}
+.classic-cart-order-confirmation-icon{
+  position:relative;
+  z-index:1;
+  flex:0 0 54px;
+  width:54px;
+  height:54px;
+  display:grid;
+  place-items:center;
+  border-radius:999px;
+  background:#f7f7f5;
+  color:#080808;
+  box-shadow:0 8px 24px -12px rgba(255,255,255,.32);
+}
+.classic-cart-order-confirmation-copy{
+  position:relative;
+  z-index:1;
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  gap:5px;
+  padding-right:8px;
+}
+.classic-cart-order-confirmation-copy strong{
+  display:block;
+  color:#fff;
+  font-size:1.06rem;
+  line-height:1.2;
+  font-weight:900;
+  letter-spacing:-.015em;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.classic-cart-order-confirmation-copy small{
+  display:block;
+  color:rgba(255,255,255,.72);
+  font-size:.84rem;
+  line-height:1.25;
+  font-weight:700;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.classic-cart-order-confirmation-copy b{
+  color:#f5c400;
+  padding:0 3px;
+}
+@keyframes classicCartOrderConfirmationProgress{
+  from{stroke-dashoffset:0}
+  to{stroke-dashoffset:100}
+}
+@keyframes classicCartOrderConfirmationLife{
+  0%{opacity:0;transform:translate(-50%,-24px) scale(.90)}
+  8%{opacity:1;transform:translate(-50%,0) scale(1.015)}
+  13%{opacity:1;transform:translate(-50%,0) scale(1)}
+  88%{opacity:1;transform:translate(-50%,0) scale(1)}
+  100%{opacity:0;transform:translate(-50%,-14px) scale(.96)}
+}
+@media(max-width:640px){
+  .classic-cart-order-confirmation{
+    top:12px;
+    width:calc(100vw - 20px);
+    min-height:88px;
+    gap:11px;
+    padding:14px 17px;
+    border-radius:44px;
+  }
+  .classic-cart-order-confirmation-icon{
+    flex-basis:46px;
+    width:46px;
+    height:46px;
+  }
+  .classic-cart-order-confirmation-copy strong{font-size:.96rem}
+  .classic-cart-order-confirmation-copy small{font-size:.76rem}
+  .classic-cart-order-confirmation::after{display:none}
+}
+@media(prefers-reduced-motion:reduce){
+  .classic-cart-order-confirmation{animation:classicCartOrderConfirmationFade 6.68s ease both}
+  .classic-cart-order-confirmation-line{animation:none;stroke-dashoffset:0}
+  @keyframes classicCartOrderConfirmationFade{
+    0%{opacity:0}
+    8%,90%{opacity:1}
+    100%{opacity:0}
+  }
+}

@@ -28479,11 +28479,20 @@ if (_sbOrdersEnabled() && _sbProductsEnabled() && !req.session.editingOrder) {
     if (req.session.recentOrders.length > 50) req.session.recentOrders = req.session.recentOrders.slice(-50);
     _clearOrderDraftForType(req.session, orderType);
     _historySetOrderEntity(res, createdItems);
+    const primaryOrder = Array.isArray(createdItems) && createdItems.length ? createdItems[0] : null;
     return res.json({
       success: true,
       message: "Order submitted and saved to Supabase successfully!",
       source: "supabase",
-      orderItems: (createdItems || []).map((item) => ({ orderPageId: item.id, productId: item.productPageId || item.id })),
+      orderId: primaryOrder?.orderId || null,
+      orderNumber: Number.isFinite(Number(primaryOrder?.orderIdNumber)) ? Number(primaryOrder.orderIdNumber) : null,
+      orderType: primaryOrder?.orderType || (_canonicalOrderTypeLabel(orderType) || orderType || null),
+      nextStatusStep: "Waiting for approval",
+      orderItems: (createdItems || []).map((item) => ({
+        orderPageId: item.id,
+        productId: item.productPageId || item.id,
+        orderId: item.orderId || null,
+      })),
     });
   } catch (error) {
     console.error("Error creating order in Supabase:", error?.details || error);
@@ -28500,11 +28509,20 @@ if (_sbOrdersEnabled() && req.session?.editingOrder?.source === "supabase") {
     const updatedItems = await _sbApplyOrderEditFromSession(req, signedProducts, orderType, 1);
     _clearOrderDraftForType(req.session, orderType);
     _historySetOrderEntity(res, updatedItems);
+    const primaryOrder = Array.isArray(updatedItems) && updatedItems.length ? updatedItems[0] : null;
     return res.json({
       success: true,
       message: "Order updated in Supabase successfully!",
       source: "supabase",
-      orderItems: (updatedItems || []).map((item) => ({ orderPageId: item.id, productId: item.productPageId || item.id })),
+      orderId: primaryOrder?.orderId || null,
+      orderNumber: Number.isFinite(Number(primaryOrder?.orderIdNumber)) ? Number(primaryOrder.orderIdNumber) : null,
+      orderType: primaryOrder?.orderType || (_canonicalOrderTypeLabel(orderType) || orderType || null),
+      nextStatusStep: "Waiting for approval",
+      orderItems: (updatedItems || []).map((item) => ({
+        orderPageId: item.id,
+        productId: item.productPageId || item.id,
+        orderId: item.orderId || null,
+      })),
     });
   } catch (error) {
     console.error("Error editing order in Supabase:", error?.details || error);
@@ -28806,6 +28824,10 @@ if (!ordersDatabaseId || !teamMembersDatabaseId) {
         return res.json({
           success: true,
           message: "Order updated successfully!",
+          orderId: Number.isFinite(Number(orderGroupIdNumber)) ? `ORD-${Number(orderGroupIdNumber)}` : null,
+          orderNumber: Number.isFinite(Number(orderGroupIdNumber)) ? Number(orderGroupIdNumber) : null,
+          orderType: _canonicalOrderTypeLabel(orderType) || orderType || null,
+          nextStatusStep: "Waiting for approval",
           createdItems: Array.from(creations?.values?.() || []).filter(Boolean),
         });
       }
@@ -28889,9 +28911,14 @@ if (!ordersDatabaseId || !teamMembersDatabaseId) {
       res.json({
         success: true,
         message: "Order submitted and saved to Notion successfully!",
+        orderId: Number.isFinite(Number(orderGroupIdNumber)) ? `ORD-${Number(orderGroupIdNumber)}` : null,
+        orderNumber: Number.isFinite(Number(orderGroupIdNumber)) ? Number(orderGroupIdNumber) : null,
+        orderType: _canonicalOrderTypeLabel(orderType) || orderType || null,
+        nextStatusStep: "Waiting for approval",
         orderItems: creations.map((c) => ({
           orderPageId: c.orderPageId,
           productId: c.productId,
+          orderId: Number.isFinite(Number(orderGroupIdNumber)) ? `ORD-${Number(orderGroupIdNumber)}` : null,
         })),
       });
     } catch (error) {

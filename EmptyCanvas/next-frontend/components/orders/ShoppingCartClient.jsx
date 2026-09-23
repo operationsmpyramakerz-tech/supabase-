@@ -280,6 +280,35 @@ function Toast({ notice, onClose }) {
   );
 }
 
+const ORDER_CONFIRMATION_DURATION_MS = 6500;
+
+function OrderSubmissionBar({ submission, onDone }) {
+  useEffect(() => {
+    if (!submission) return undefined;
+    const timer = window.setTimeout(() => onDone(null), ORDER_CONFIRMATION_DURATION_MS + 180);
+    return () => window.clearTimeout(timer);
+  }, [submission, onDone]);
+
+  if (!submission) return null;
+  const meta = orderTypeMeta(submission.orderType);
+
+  return (
+    <div className="classic-cart-order-confirmation" role="status" aria-live="polite">
+      <svg className="classic-cart-order-confirmation-progress" viewBox="0 0 560 112" preserveAspectRatio="none" aria-hidden="true">
+        <rect className="classic-cart-order-confirmation-track" x="3" y="3" width="554" height="106" rx="52" pathLength="100"/>
+        <rect className="classic-cart-order-confirmation-line" x="3" y="3" width="554" height="106" rx="52" pathLength="100"/>
+      </svg>
+      <span className="classic-cart-order-confirmation-icon">
+        <CartSvgIcon name={meta.icon} size={23}/>
+      </span>
+      <span className="classic-cart-order-confirmation-copy">
+        <strong>{submission.nextStep || "Waiting for approval"}</strong>
+        <small>{submission.orderId || "Order created"} <b>·</b> {meta.label}</small>
+      </span>
+    </div>
+  );
+}
+
 function TypeSelection({ orderTypes, onChoose }) {
   return (
     <section className="classic-cart-order-type-step" aria-label="Choose order type">
@@ -798,6 +827,7 @@ export default function ShoppingCartClient({
   const [busy, setBusy] = useState(false);
   const [loadingDraft, setLoadingDraft] = useState(false);
   const [notice, setNotice] = useState(null);
+  const [submittedOrder, setSubmittedOrder] = useState(null);
   const [saveState, setSaveState] = useState("");
   const [checkoutCommitted, setCheckoutCommitted] = useState(false);
   const reasonTimer = useRef(null);
@@ -1094,13 +1124,25 @@ export default function ShoppingCartClient({
       setCheckoutCommitted(true);
       clearEditTransfer();
       setCart([]);
+      setReason("");
       setPassword("");
-      setNotice({
-        type: "success",
-        title: editMode ? "Order updated" : (withdraw ? "Withdrawal submitted" : maintenance ? "Maintenance submitted" : "Order submitted"),
-        message: response?.message || "The order was saved successfully.",
-      });
-      window.setTimeout(() => { navigateWithinApp("/next/orders"); }, 850);
+
+      if (editMode) {
+        setNotice({
+          type: "success",
+          title: "Order updated",
+          message: response?.message || "The order was saved successfully.",
+        });
+        window.setTimeout(() => { navigateWithinApp("/next/orders"); }, 850);
+      } else {
+        setNotice(null);
+        setSubmittedOrder({
+          key: `${response?.orderId || response?.orderNumber || "order"}:${Date.now()}`,
+          orderId: text(response?.orderId) || (response?.orderNumber ? `ORD-${response.orderNumber}` : "Order created"),
+          orderType: selectedType,
+          nextStep: text(response?.nextStatusStep) || "Waiting for approval",
+        });
+      }
     } catch (error) {
       setNotice({ type: "error", title: "Submission failed", message: error?.message || "The order could not be submitted." });
     } finally {
@@ -1274,6 +1316,9 @@ export default function ShoppingCartClient({
         </div>
       ) : null}
 
+      {submittedOrder ? (
+        <OrderSubmissionBar key={submittedOrder.key} submission={submittedOrder} onDone={setSubmittedOrder} />
+      ) : null}
       <Toast notice={notice} onClose={() => setNotice(null)} />
     </section>
   );
