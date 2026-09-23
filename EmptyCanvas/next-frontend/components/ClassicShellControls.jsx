@@ -183,6 +183,88 @@ export function ClassicSidebarBootstrap() {
 
 
 
+
+const SMALL_WINDOW_SELECTOR = [
+  'dialog[open]',
+  '[role="dialog"][aria-modal="true"]',
+  '[role="alertdialog"][aria-modal="true"]',
+  '.action-loading-overlay',
+  '.save-progress-overlay',
+  '.classic-cart-saving-overlay',
+].join(',');
+
+function isVisibleSmallWindow(node) {
+  if (!(node instanceof HTMLElement)) return false;
+  if (node.getAttribute('aria-hidden') === 'true') return false;
+
+  const style = window.getComputedStyle(node);
+  if (style.display === 'none' || style.visibility === 'hidden' || style.visibility === 'collapse') {
+    return false;
+  }
+
+  return node.getClientRects().length > 0;
+}
+
+export function ClassicSmallWindowSidebarGuard() {
+  useLayoutEffect(() => {
+    const sidebar = document.querySelector('.classic-app-shell > .sidebar');
+    if (!(sidebar instanceof HTMLElement)) return undefined;
+
+    const BODY_CLASS = 'ops-small-window-open';
+    const SIDEBAR_CLASS = 'ops-small-window-sidebar-hidden';
+    let frame = 0;
+    let wasOpen = false;
+
+    const hasOpenSmallWindow = () => Array.from(document.querySelectorAll(SMALL_WINDOW_SELECTOR))
+      .some(isVisibleSmallWindow);
+
+    const sync = () => {
+      frame = 0;
+      const open = hasOpenSmallWindow();
+
+      document.body.classList.toggle(BODY_CLASS, open);
+      sidebar.classList.toggle(SIDEBAR_CLASS, open);
+
+      // Closing a sheet/modal should always return the navigation immediately,
+      // even when the dock had previously auto-hidden because of a downward
+      // scroll. The next deliberate scroll can hide it again as usual.
+      if (wasOpen && !open) {
+        sidebar.classList.remove('ops-mobile-dock-hidden');
+      }
+      wasOpen = open;
+    };
+
+    const scheduleSync = () => {
+      if (frame) window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(sync);
+    };
+
+    sync();
+
+    const observer = new MutationObserver(scheduleSync);
+    observer.observe(document.body, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ['class', 'style', 'aria-hidden', 'aria-modal', 'open'],
+    });
+
+    window.addEventListener('resize', scheduleSync, { passive: true });
+    window.addEventListener('orientationchange', scheduleSync);
+
+    return () => {
+      observer.disconnect();
+      if (frame) window.cancelAnimationFrame(frame);
+      document.body.classList.remove(BODY_CLASS);
+      sidebar.classList.remove(SIDEBAR_CLASS);
+      window.removeEventListener('resize', scheduleSync);
+      window.removeEventListener('orientationchange', scheduleSync);
+    };
+  }, []);
+
+  return null;
+}
+
 export function ClassicMobileDockStructure({ activePath = "" }) {
   useLayoutEffect(() => {
     const sidebar = document.querySelector(".classic-app-shell .sidebar");

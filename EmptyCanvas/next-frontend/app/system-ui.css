@@ -187,7 +187,8 @@ body.persistent-app-shell
     will-change: transform, opacity, filter;
   }
 
-  html body.next-classic-shell-active .classic-app-shell > .sidebar.ops-mobile-dock-hidden {
+  html body.next-classic-shell-active .classic-app-shell > .sidebar.ops-mobile-dock-hidden,
+  html body.next-classic-shell-active .classic-app-shell > .sidebar.ops-small-window-sidebar-hidden {
     transform: translate3d(0, calc(100% + 40px), 0) scale(.975) !important;
     opacity: 0 !important;
     filter: blur(1.5px) !important;
@@ -200,7 +201,8 @@ body.persistent-app-shell
     transition: opacity .01ms linear !important;
   }
 
-  html body.next-classic-shell-active .classic-app-shell > .sidebar.ops-mobile-dock-hidden {
+  html body.next-classic-shell-active .classic-app-shell > .sidebar.ops-mobile-dock-hidden,
+  html body.next-classic-shell-active .classic-app-shell > .sidebar.ops-small-window-sidebar-hidden {
     transform: translate3d(0, calc(100% + 40px), 0) !important;
     filter: none !important;
   }

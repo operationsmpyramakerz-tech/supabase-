@@ -14,6 +14,7 @@ import {
   BodyClassSync,
   ClassicChromeAccessSync,
   ClassicSidebarBootstrap,
+  ClassicSmallWindowSidebarGuard,
   ClassicSidebarViewportKeeper,
   ClassicSidebarActiveIndicator,
   ClassicMobileDockStructure,
@@ -194,6 +195,7 @@ export default function AppShell({
       <BodyClassSync className={combinedBodyClass} />
       <ClassicChromeAccessSync account={account} />
       <ClassicSidebarBootstrap />
+      <ClassicSmallWindowSidebarGuard />
       <ClassicMobileDockStructure activePath={activePath} />
       <ClassicSidebarViewportKeeper />
       <ClassicSidebarActiveIndicator activePath={activePath} />
