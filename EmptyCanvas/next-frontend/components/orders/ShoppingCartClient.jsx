@@ -1269,11 +1269,7 @@ export default function ShoppingCartClient({
           orderPageIds,
         }),
       });
-      setNotice({
-        type: "success",
-        title: "Order undone",
-        message: `${text(submission?.orderId) || "The order"} was removed successfully.`,
-      });
+      setNotice(null);
     } catch (error) {
       setNotice({
         type: "error",
