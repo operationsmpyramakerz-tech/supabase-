@@ -29041,6 +29041,83 @@ async function _verifyCurrentOrderActionPassword(req, res) {
   return true;
 }
 
+// Undo a freshly submitted Shopping Cart order.
+// This is intentionally limited to orders created by the same authenticated session
+// and only for a short window, so the Dynamic Island can safely provide Undo
+// without asking for the admin password used by the general Current Orders delete action.
+app.post(
+  "/api/orders/current/undo-submit",
+  requireAuth,
+  requirePage("Create New Order"),
+  async (req, res) => {
+    try {
+      const requestedOrderId = String(req.body?.orderId || "").trim();
+      const requestedIds = new Set(
+        _normalizeCurrentOrderActionIds(req.body?.orderPageIds || []).map((id) => String(id)),
+      );
+      const recentOrders = Array.isArray(req.session?.recentOrders) ? req.session.recentOrders : [];
+
+      const matched = recentOrders.filter((item) => {
+        const itemOrderId = String(item?.orderId || "").trim();
+        const itemId = _normalizeCurrentOrderActionIds([item?.id])[0] || "";
+        const matchesOrder = requestedOrderId && requestedOrderId !== "Order created" && itemOrderId === requestedOrderId;
+        const matchesId = itemId && requestedIds.has(String(itemId));
+        return matchesOrder || matchesId;
+      });
+
+      if (!matched.length) {
+        return res.status(404).json({ error: "This order is no longer available to undo." });
+      }
+
+      const matchedOrderId =
+        requestedOrderId && requestedOrderId !== "Order created"
+          ? requestedOrderId
+          : String(matched.find((item) => item?.orderId)?.orderId || "").trim();
+      const group = matchedOrderId
+        ? recentOrders.filter((item) => String(item?.orderId || "").trim() === matchedOrderId)
+        : matched;
+
+      const timestamps = group
+        .map((item) => Date.parse(String(item?.createdTime || "")))
+        .filter((value) => Number.isFinite(value));
+      const newestCreatedAt = timestamps.length ? Math.max(...timestamps) : null;
+      if (newestCreatedAt && Date.now() - newestCreatedAt > 30_000) {
+        return res.status(409).json({ error: "The undo window for this order has expired." });
+      }
+
+      const ids = _normalizeCurrentOrderActionIds(group.map((item) => item?.id));
+      if (!ids.length) {
+        return res.status(404).json({ error: "This order is no longer available to undo." });
+      }
+
+      let source = "notion";
+      if (_sbOrdersEnabled() && ids.every((id) => /^\d+$/.test(String(id)))) {
+        await supabaseDb.deleteByIds(_sbOrdersTable(), ids);
+        source = "supabase";
+      } else {
+        await Promise.all(ids.map((id) => notion.pages.update({ page_id: id, archived: true })));
+      }
+
+      const deletedIds = new Set(ids.map((id) => String(id)));
+      req.session.recentOrders = recentOrders.filter((item) => {
+        const itemId = _normalizeCurrentOrderActionIds([item?.id])[0] || "";
+        return !deletedIds.has(String(itemId));
+      });
+
+      await _invalidateCurrentOrdersActionCaches(req);
+      return res.json({
+        success: true,
+        deleted: ids.length,
+        orderId: matchedOrderId || null,
+        source,
+      });
+    } catch (e) {
+      console.error("undo submitted order error:", e?.body || e);
+      return res.status(e?.status || 500).json({ error: e?.message || "Failed to undo order" });
+    }
+  },
+);
+
 // Archive a Current Orders group (Status => "Archive") — requires admin password
 app.post(
   "/api/orders/current/archive",

@@ -282,7 +282,9 @@ function Toast({ notice, onClose }) {
 
 const ORDER_CONFIRMATION_DURATION_MS = 6500;
 
-function OrderSubmissionBar({ submission, onDone }) {
+function OrderSubmissionBar({ submission, onDone, onUndo }) {
+  const [undoing, setUndoing] = useState(false);
+
   useEffect(() => {
     if (!submission) return undefined;
     const timer = window.setTimeout(() => onDone(null), ORDER_CONFIRMATION_DURATION_MS + 180);
@@ -294,26 +296,53 @@ function OrderSubmissionBar({ submission, onDone }) {
   const orderQuery = text(submission.orderId);
   const viewOrderUrl = orderQuery ? `/next/orders?q=${encodeURIComponent(orderQuery)}` : "/next/orders";
 
+  const openCurrentOrder = () => navigateWithinApp(viewOrderUrl);
+  const undoOrder = async (event) => {
+    event.stopPropagation();
+    if (undoing || typeof onUndo !== "function") return;
+    setUndoing(true);
+    try {
+      await onUndo(submission);
+    } catch {
+      setUndoing(false);
+    }
+  };
+
   return (
-    <div className="classic-cart-order-confirmation" role="status" aria-live="polite">
+    <div
+      className="classic-cart-order-confirmation"
+      role="button"
+      tabIndex={0}
+      aria-live="polite"
+      aria-label={`Open ${submission.orderId || "current order"}`}
+      onClick={openCurrentOrder}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return;
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          openCurrentOrder();
+        }
+      }}
+    >
       <svg className="classic-cart-order-confirmation-progress" viewBox="0 0 500 92" preserveAspectRatio="none" aria-hidden="true">
         <rect className="classic-cart-order-confirmation-track" x="3" y="3" width="494" height="86" rx="43" pathLength="100"/>
         <rect className="classic-cart-order-confirmation-line" x="3" y="3" width="494" height="86" rx="43" pathLength="100"/>
       </svg>
       <span className="classic-cart-order-confirmation-icon">
-        <CartSvgIcon name={meta.icon} size={21}/>
+        <CartSvgIcon name={meta.icon} size={19}/>
       </span>
       <span className="classic-cart-order-confirmation-copy">
         <strong>{submission.nextStep || "Waiting for approval"}</strong>
         <small>{submission.orderId || "Order created"} <b>·</b> {meta.label}</small>
       </span>
       <button
-        className="classic-cart-order-confirmation-view"
+        className="classic-cart-order-confirmation-undo"
         type="button"
-        onClick={() => navigateWithinApp(viewOrderUrl)}
-        aria-label={`View ${submission.orderId || "order"}`}
+        disabled={undoing}
+        onClick={undoOrder}
+        aria-label={`Undo ${submission.orderId || "order"}`}
       >
-        View order
+        Undo
       </button>
     </div>
   );
@@ -1151,12 +1180,42 @@ export default function ShoppingCartClient({
           orderId: text(response?.orderId) || (response?.orderNumber ? `ORD-${response.orderNumber}` : "Order created"),
           orderType: selectedType,
           nextStep: text(response?.nextStatusStep) || "Waiting for approval",
+          orderItems: Array.isArray(response?.orderItems) ? response.orderItems : [],
         });
       }
     } catch (error) {
       setNotice({ type: "error", title: "Submission failed", message: error?.message || "The order could not be submitted." });
     } finally {
       setBusy(false);
+    }
+  };
+
+  const undoSubmittedOrder = async (submission) => {
+    const orderPageIds = (Array.isArray(submission?.orderItems) ? submission.orderItems : [])
+      .map((item) => text(item?.orderPageId))
+      .filter(Boolean);
+
+    try {
+      await requestJson("/api/orders/current/undo-submit", {
+        method: "POST",
+        body: JSON.stringify({
+          orderId: text(submission?.orderId),
+          orderPageIds,
+        }),
+      });
+      setSubmittedOrder(null);
+      setNotice({
+        type: "success",
+        title: "Order undone",
+        message: `${text(submission?.orderId) || "The order"} was removed successfully.`,
+      });
+    } catch (error) {
+      setNotice({
+        type: "error",
+        title: "Undo failed",
+        message: error?.message || "The order could not be removed.",
+      });
+      throw error;
     }
   };
 
@@ -1327,7 +1386,12 @@ export default function ShoppingCartClient({
       ) : null}
 
       {submittedOrder ? (
-        <OrderSubmissionBar key={submittedOrder.key} submission={submittedOrder} onDone={setSubmittedOrder} />
+        <OrderSubmissionBar
+          key={submittedOrder.key}
+          submission={submittedOrder}
+          onDone={setSubmittedOrder}
+          onUndo={undoSubmittedOrder}
+        />
       ) : null}
       <Toast notice={notice} onClose={() => setNotice(null)} />
     </section>
