@@ -262,6 +262,7 @@ function CartSvgIcon({ name, size = 18 }) {
     folder: <path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>,
     check: <polyline points="20 6 9 17 4 12"/>,
     x: <><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>,
+    trash: <><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M8 6V4h8v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></>,
   };
   return <svg {...common}>{icons[name] || icons.grid}</svg>;
 }
@@ -911,9 +912,6 @@ function CartItem({ item, product, type, index, onEdit, onDelete, onQuantityChan
   const withdraw = isWithdraw(type);
   const qty = quantity(item.quantity, 1);
   const total = product.unitPrice * qty * (withdraw ? -1 : 1);
-  const excludedTags = new Set(DEFAULT_ORDER_TYPES.map(key));
-  const tags = product.tags.filter((tag) => !excludedTags.has(key(tag))).slice(0, 2);
-
   if (maintenance) {
     return (
       <article className="classic-cart-row classic-cart-row--maintenance-card">
@@ -934,9 +932,18 @@ function CartItem({ item, product, type, index, onEdit, onDelete, onQuantityChan
 
   return (
     <article className="classic-cart-row classic-cart-row--request-card">
-      <div className="classic-cart-card-main" role="button" tabIndex={0} onClick={() => onEdit(item)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onEdit(item); } }}>
-        <CartThumb product={product} index={index}/>
-        <span className="classic-cart-prod-meta"><strong>{product.name}</strong>{tags.length ? <small>{tags.join(" • ")}</small> : null}{product.displayId ? <small className="part">Part No: {product.displayId}</small> : null}</span>
+      <div className="classic-cart-card-topline">
+        <div className="classic-cart-card-main" role="button" tabIndex={0} onClick={() => onEdit(item)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onEdit(item); } }}>
+          <CartThumb product={product} index={index}/>
+          <span className="classic-cart-prod-meta">
+            <strong>{product.name}</strong>
+            {product.displayId ? <small className="part">Part No: {product.displayId}</small> : null}
+          </span>
+        </div>
+        <div className="classic-cart-card-actions classic-cart-card-actions--compact">
+          {product.url ? <a className="classic-cart-action classic-cart-action--open" href={product.url} target="_blank" rel="noopener noreferrer" aria-label={`Open ${product.name}`} title="Open product"><CartSvgIcon name="external-link" size={17}/><span>Open</span></a> : <button className="classic-cart-action classic-cart-action--open" type="button" disabled aria-label="No product link" title="No product link"><CartSvgIcon name="external-link" size={17}/><span>Open</span></button>}
+          <button className="classic-cart-action classic-cart-action--delete" type="button" onClick={() => onDelete(item)} aria-label={`Delete ${product.name}`} title="Delete product"><CartSvgIcon name="trash" size={17}/><span>Delete</span></button>
+        </div>
       </div>
       <div className="classic-cart-card-metrics">
         <div className="classic-cart-card-metric classic-cart-card-metric--qty">
@@ -951,11 +958,7 @@ function CartItem({ item, product, type, index, onEdit, onDelete, onQuantityChan
           </div>
         </div>
         <div className="classic-cart-card-metric"><span>Unit Price</span><strong>{formatMoney(product.unitPrice)}</strong></div>
-        <div className="classic-cart-card-metric"><span>Total</span><strong>{formatMoney(total)}</strong></div>
-      </div>
-      <div className="classic-cart-card-actions">
-        {product.url ? <a className="classic-cart-action classic-cart-action--open" href={product.url} target="_blank" rel="noopener noreferrer"><CartSvgIcon name="external-link" size={16}/><span>Open</span></a> : <button className="classic-cart-action classic-cart-action--open" type="button" disabled><CartSvgIcon name="external-link" size={16}/><span>Open</span></button>}
-        <button className="classic-cart-action classic-cart-action--delete" type="button" onClick={() => onDelete(item)}>Delete</button>
+        <div className="classic-cart-card-metric classic-cart-card-metric--total"><span>Total</span><strong>{formatMoney(total)}</strong></div>
       </div>
     </article>
   );
