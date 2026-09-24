@@ -864,50 +864,26 @@
   background:linear-gradient(180deg,transparent,rgba(255,255,255,.10),transparent);
   pointer-events:none;
 }
-.classic-cart-order-confirmation-burst{
+.classic-cart-order-confirmation-dust{
   position:absolute;
-  left:50%;
-  top:50%;
-  z-index:6;
-  width:8px;
-  height:8px;
-  border-radius:50%;
+  inset:0;
+  z-index:10;
   pointer-events:none;
+  overflow:visible;
   opacity:0;
-  transform:translate(-50%,-50%) scale(.1);
 }
-.classic-cart-order-confirmation-burst::before,
-.classic-cart-order-confirmation-burst::after{
-  content:"";
+.classic-cart-order-confirmation-dust-particle{
   position:absolute;
-  left:50%;
-  top:50%;
-  pointer-events:none;
-}
-.classic-cart-order-confirmation-burst::before{
-  width:7px;
-  height:7px;
-  margin:-3.5px 0 0 -3.5px;
-  border-radius:50%;
-  background:#ff7518;
-  box-shadow:
-    -118px -26px 0 -1px #ff7518,
-    -92px 45px 0 -1px rgba(255,117,24,.92),
-    -48px -58px 0 -2px #fff,
-    -18px 68px 0 -2px rgba(255,255,255,.92),
-    34px -66px 0 -1px #ff7518,
-    68px 58px 0 -2px rgba(255,255,255,.95),
-    105px 24px 0 -1px #ff7518,
-    120px -38px 0 -2px rgba(255,117,24,.88),
-    8px 78px 0 -2px #ff7518;
-}
-.classic-cart-order-confirmation-burst::after{
-  width:24px;
-  height:24px;
-  margin:-14px 0 0 -14px;
-  border:2px solid rgba(255,117,24,.95);
-  border-radius:50%;
-  box-shadow:0 0 20px rgba(255,117,24,.48);
+  left:var(--dust-x);
+  top:var(--dust-y);
+  width:var(--dust-size);
+  height:var(--dust-size);
+  margin:var(--dust-half) 0 0 var(--dust-half);
+  border-radius:999px;
+  background:var(--dust-color);
+  opacity:0;
+  transform:translate3d(0,0,0) scale(.45);
+  will-change:transform,opacity,filter;
 }
 .classic-cart-order-confirmation-progress{
   position:absolute;
@@ -1025,7 +1001,7 @@
 .classic-cart-order-confirmation.is-exploding{
   overflow:visible;
   pointer-events:none;
-  animation:classicCartOrderUndoExplosion .74s cubic-bezier(.16,.84,.23,1) forwards !important;
+  animation:classicCartOrderUndoDisintegrate 1.10s cubic-bezier(.2,.68,.2,1) forwards !important;
 }
 .classic-cart-order-confirmation.is-exploding::after{
   opacity:0;
@@ -1034,39 +1010,36 @@
 .classic-cart-order-confirmation.is-exploding .classic-cart-order-confirmation-icon,
 .classic-cart-order-confirmation.is-exploding .classic-cart-order-confirmation-copy,
 .classic-cart-order-confirmation.is-exploding .classic-cart-order-confirmation-undo{
-  animation:classicCartOrderUndoContent .34s ease forwards;
+  animation:classicCartOrderUndoDissolveContent .46s ease-out forwards;
 }
-.classic-cart-order-confirmation.is-exploding .classic-cart-order-confirmation-burst{
+.classic-cart-order-confirmation.is-exploding .classic-cart-order-confirmation-dust{
   opacity:1;
-  animation:classicCartOrderUndoParticles .68s cubic-bezier(.12,.75,.18,1) forwards;
 }
-.classic-cart-order-confirmation.is-exploding .classic-cart-order-confirmation-burst::after{
-  animation:classicCartOrderUndoRing .62s cubic-bezier(.12,.75,.18,1) forwards;
+.classic-cart-order-confirmation.is-exploding .classic-cart-order-confirmation-dust-particle{
+  animation:classicCartOrderUndoDust var(--dust-duration) cubic-bezier(.14,.7,.22,1) var(--dust-delay) forwards;
 }
 .classic-cart-order-confirmation:focus-visible{outline:2px solid #ff7518;outline-offset:3px}
-@keyframes classicCartOrderUndoExplosion{
-  0%{opacity:1;filter:blur(0);transform:translate(-50%,0) scale(1);box-shadow:0 22px 54px -20px rgba(0,0,0,.64),0 8px 22px -16px rgba(0,0,0,.7)}
-  12%{opacity:1;filter:blur(0);transform:translate(-50%,1px) scale(.985);box-shadow:0 18px 42px -20px rgba(0,0,0,.55),0 0 0 0 rgba(255,117,24,0)}
-  28%{opacity:1;filter:blur(0);transform:translate(-50%,-1px) scale(1.045);box-shadow:0 12px 34px -18px rgba(0,0,0,.48),0 0 0 5px rgba(255,117,24,.28)}
-  48%{opacity:.96;filter:blur(.15px);transform:translate(-50%,-3px) scale(1.09);box-shadow:0 10px 28px -18px rgba(0,0,0,.38),0 0 0 12px rgba(255,117,24,.18)}
-  72%{opacity:.62;filter:blur(2px);transform:translate(-50%,-8px) scale(1.17);box-shadow:0 8px 22px -16px rgba(0,0,0,.24),0 0 0 22px rgba(255,117,24,.08)}
-  100%{opacity:0;filter:blur(7px);transform:translate(-50%,-14px) scale(1.29);box-shadow:0 0 0 0 rgba(0,0,0,0),0 0 0 34px rgba(255,117,24,0)}
+@keyframes classicCartOrderUndoDisintegrate{
+  0%{opacity:1;transform:translate(-50%,0) scale(1);background:linear-gradient(145deg,rgba(5,5,5,1) 0%,rgba(17,17,17,1) 58%,rgba(8,8,8,1) 100%);box-shadow:0 22px 54px -20px rgba(0,0,0,.64),0 8px 22px -16px rgba(0,0,0,.7)}
+  18%{opacity:1;transform:translate(-50%,0) scale(1);background:linear-gradient(145deg,rgba(5,5,5,1) 0%,rgba(17,17,17,1) 58%,rgba(8,8,8,1) 100%);box-shadow:0 15px 38px -20px rgba(0,0,0,.5),0 6px 18px -16px rgba(0,0,0,.58)}
+  42%{opacity:1;transform:translate(-50%,-1px) scale(.998);background:linear-gradient(145deg,rgba(5,5,5,.74) 0%,rgba(17,17,17,.74) 58%,rgba(8,8,8,.74) 100%);box-shadow:0 8px 22px -20px rgba(0,0,0,.28)}
+  64%{opacity:1;transform:translate(-50%,-4px) scale(.994);background:linear-gradient(145deg,rgba(5,5,5,.24) 0%,rgba(17,17,17,.24) 58%,rgba(8,8,8,.24) 100%);box-shadow:none}
+  80%{opacity:1;transform:translate(-50%,-8px) scale(.986);background:linear-gradient(145deg,rgba(5,5,5,0) 0%,rgba(17,17,17,0) 58%,rgba(8,8,8,0) 100%)}
+  91%{opacity:.68;transform:translate(-50%,-12px) scale(.972);background:transparent}
+  100%{opacity:0;transform:translate(-50%,-18px) scale(.95);background:transparent;box-shadow:none}
 }
-@keyframes classicCartOrderUndoContent{
-  0%{opacity:1;transform:scale(1)}
-  45%{opacity:.9;transform:scale(.97)}
-  100%{opacity:0;transform:scale(.72)}
+@keyframes classicCartOrderUndoDissolveContent{
+  0%{opacity:1;filter:blur(0);transform:translate3d(0,0,0) scale(1)}
+  28%{opacity:.95;filter:blur(.1px);transform:translate3d(0,0,0) scale(.995)}
+  66%{opacity:.34;filter:blur(1.2px);transform:translate3d(1px,-1px,0) scale(.985)}
+  100%{opacity:0;filter:blur(3.2px);transform:translate3d(5px,-4px,0) scale(.96)}
 }
-@keyframes classicCartOrderUndoParticles{
-  0%{opacity:0;transform:translate(-50%,-50%) scale(.10) rotate(0deg)}
-  16%{opacity:1}
-  72%{opacity:.95}
-  100%{opacity:0;transform:translate(-50%,-50%) scale(1.18) rotate(12deg)}
-}
-@keyframes classicCartOrderUndoRing{
-  0%{opacity:0;transform:scale(.15)}
-  18%{opacity:1}
-  100%{opacity:0;transform:scale(5.8)}
+@keyframes classicCartOrderUndoDust{
+  0%{opacity:0;filter:blur(0);transform:translate3d(0,0,0) scale(.35) rotate(0deg)}
+  7%{opacity:.98;filter:blur(0);transform:translate3d(0,0,0) scale(1) rotate(0deg)}
+  34%{opacity:.96;filter:blur(0);transform:translate3d(var(--dust-dx-mid),var(--dust-dy-mid),0) scale(.96) rotate(var(--dust-rotate-mid))}
+  68%{opacity:.68;filter:blur(.18px);transform:translate3d(var(--dust-dx-far),var(--dust-dy-far),0) scale(.72) rotate(var(--dust-rotate-far))}
+  100%{opacity:0;filter:blur(.75px);transform:translate3d(var(--dust-dx),var(--dust-dy),0) scale(.16) rotate(var(--dust-rotate))}
 }
 @keyframes classicCartOrderConfirmationProgress{
   from{stroke-dashoffset:0}
@@ -1116,7 +1089,7 @@
   .classic-cart-order-confirmation{animation:classicCartOrderConfirmationFade 6.68s ease both}
   .classic-cart-order-confirmation-line{animation:none;stroke-dashoffset:0}
   .classic-cart-order-confirmation.is-exploding{animation:classicCartOrderUndoReduced .28s ease forwards !important}
-  .classic-cart-order-confirmation.is-exploding .classic-cart-order-confirmation-burst{display:none}
+  .classic-cart-order-confirmation.is-exploding .classic-cart-order-confirmation-dust{display:none}
   @keyframes classicCartOrderUndoReduced{
     from{opacity:1;transform:translate(-50%,0) scale(1)}
     to{opacity:0;transform:translate(-50%,-8px) scale(.92)}

@@ -35,7 +35,7 @@ function routePerformanceStyles(localPath) {
     ];
   }
   if (localPath === "/orders/new" || localPath.startsWith("/orders/new/")) {
-    return ["/next/css/shopping-cart.css?v=order-confirmation-v5-undo-explosion"];
+    return ["/next/css/shopping-cart.css?v=order-confirmation-v7-dust-disintegrate"];
   }
   if (localPath === "/products") {
     return ["/next/css/products-stocktaking-performance.css?v=css-phase2"];

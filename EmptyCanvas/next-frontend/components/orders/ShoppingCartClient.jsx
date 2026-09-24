@@ -281,6 +281,54 @@ function Toast({ notice, onClose }) {
 }
 
 const ORDER_CONFIRMATION_DURATION_MS = 6500;
+const ORDER_DISSOLVE_DURATION_MS = 1100;
+const ORDER_DISSOLVE_PARTICLES = Array.from({ length: 168 }, (_, index) => {
+  const columns = 24;
+  const rows = 7;
+  const column = index % columns;
+  const row = Math.floor(index / columns);
+  const seed = (index * 47 + 19) % 101;
+  const xJitter = (((index * 29) % 17) / 17 - 0.5) * 2.8;
+  const yJitter = (((index * 41) % 19) / 19 - 0.5) * 5;
+  const x = ((column + 0.5) / columns) * 100 + xJitter;
+  const y = ((row + 0.5) / rows) * 100 + yJitter;
+  const edgeDirection = (x - 50) / 50;
+  const dx = Math.round(edgeDirection * (36 + (seed % 34)) + ((((index * 31) % 23) / 23) - 0.5) * 42);
+  const verticalDirection = y < 50 ? -1 : 1;
+  const dy = Math.round(verticalDirection * (12 + ((index * 17) % 28)) - 10 - (((index * 13) % 17) / 17) * 28);
+  const size = 1 + ((index * 7) % 3);
+  const delay = Math.round(((100 - x) / 100) * 120 + ((index * 23) % 70));
+  const duration = 620 + ((index * 37) % 250);
+  const color = index % 13 === 0
+    ? "#ff7518"
+    : index % 17 === 0
+      ? "rgba(255,255,255,.94)"
+      : index % 5 === 0
+        ? "#303030"
+        : "#0d0d0d";
+
+  return {
+    id: index,
+    style: {
+      "--dust-x": `${x.toFixed(2)}%`,
+      "--dust-y": `${y.toFixed(2)}%`,
+      "--dust-dx": `${dx}px`,
+      "--dust-dy": `${dy}px`,
+      "--dust-dx-mid": `${Math.round(dx * 0.22)}px`,
+      "--dust-dy-mid": `${Math.round(dy * 0.20)}px`,
+      "--dust-dx-far": `${Math.round(dx * 0.62)}px`,
+      "--dust-dy-far": `${Math.round(dy * 0.64)}px`,
+      "--dust-size": `${size}px`,
+      "--dust-half": `${-size / 2}px`,
+      "--dust-delay": `${delay}ms`,
+      "--dust-duration": `${duration}ms`,
+      "--dust-color": color,
+      "--dust-rotate": `${((index * 61) % 160) - 80}deg`,
+      "--dust-rotate-mid": `${Math.round((((index * 61) % 160) - 80) * 0.18)}deg`,
+      "--dust-rotate-far": `${Math.round((((index * 61) % 160) - 80) * 0.65)}deg`,
+    },
+  };
+});
 
 function OrderSubmissionBar({ submission, onDone, onUndo }) {
   const [undoing, setUndoing] = useState(false);
@@ -310,7 +358,7 @@ function OrderSubmissionBar({ submission, onDone, onUndo }) {
       await onUndo(submission);
       setUndoing(false);
       setExploding(true);
-      window.setTimeout(() => onDone(null), 760);
+      window.setTimeout(() => onDone(null), ORDER_DISSOLVE_DURATION_MS);
     } catch {
       setUndoing(false);
     }
@@ -332,7 +380,15 @@ function OrderSubmissionBar({ submission, onDone, onUndo }) {
         }
       }}
     >
-      <span className="classic-cart-order-confirmation-burst" aria-hidden="true" />
+      <span className="classic-cart-order-confirmation-dust" aria-hidden="true">
+        {ORDER_DISSOLVE_PARTICLES.map((particle) => (
+          <i
+            className="classic-cart-order-confirmation-dust-particle"
+            key={particle.id}
+            style={particle.style}
+          />
+        ))}
+      </span>
       <svg className="classic-cart-order-confirmation-progress" viewBox="0 0 500 92" preserveAspectRatio="none" aria-hidden="true">
         <rect className="classic-cart-order-confirmation-track" x="3" y="3" width="494" height="86" rx="43" pathLength="100"/>
         <rect className="classic-cart-order-confirmation-line" x="3" y="3" width="494" height="86" rx="43" pathLength="100"/>
