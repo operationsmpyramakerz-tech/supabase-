@@ -256,6 +256,7 @@ function CartSvgIcon({ name, size = 18 }) {
     "arrow-left": <><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></>,
     "external-link": <><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></>,
     plus: <><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></>,
+    minus: <line x1="5" y1="12" x2="19" y2="12"/>,
     search: <><circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16.65" y2="16.65"/></>,
     "chevron-down": <polyline points="6 9 12 15 18 9"/>,
     package: <><path d="M16.5 9.4 7.55 4.24"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.29 7 12 12 20.71 7"/><line x1="12" y1="22" x2="12" y2="12"/></>,
@@ -950,9 +951,13 @@ function CartItem({ item, product, type, index, onEdit, onDelete, onQuantityChan
           <span>Qty</span>
           <div className="classic-cart-card-qty-unit-row">
             <div className="classic-cart-qty-control">
-              <button type="button" onClick={() => onQuantityChange(item.id, Math.max(0.01, qty - 1))}>−</button>
-              <b>{withdraw ? `-${formatQuantity(qty)}` : formatQuantity(qty)}</b>
-              <button type="button" onClick={() => onQuantityChange(item.id, qty + 1)}>+</button>
+              <button className="classic-cart-qty-step classic-cart-qty-step--minus" type="button" onClick={() => onQuantityChange(item.id, Math.max(0.01, qty - 1))} aria-label={`Decrease ${product.name} quantity`}>
+                <CartSvgIcon name="minus" size={15}/>
+              </button>
+              <b aria-live="polite">{withdraw ? `-${formatQuantity(qty)}` : formatQuantity(qty)}</b>
+              <button className="classic-cart-qty-step classic-cart-qty-step--plus" type="button" onClick={() => onQuantityChange(item.id, qty + 1)} aria-label={`Increase ${product.name} quantity`}>
+                <CartSvgIcon name="plus" size={15}/>
+              </button>
             </div>
             <strong className="classic-cart-unit-badge" title={product.unit}>{product.unit}</strong>
           </div>
