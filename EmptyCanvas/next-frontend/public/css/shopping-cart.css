@@ -526,6 +526,9 @@
 .classic-cart-combobox-copy em{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#667085;font-size:.72rem;font-style:normal;font-weight:700}
 .classic-cart-combobox-arrow{width:34px;height:34px;display:grid;place-items:center;border-radius:11px;background:#f0f3f6;color:#667085;transition:transform .16s ease}
 .classic-cart-combobox.is-open .classic-cart-combobox-arrow{transform:rotate(180deg)}
+.classic-cart-combobox-backdrop{display:none}
+.classic-cart-combobox-sheet-head{display:none}
+
 .classic-cart-combobox-panel{
   position:absolute;
   z-index:80;
@@ -668,6 +671,13 @@
 .classic-cart-kit-browser-footer span strong{color:#111827;font-size:.9rem}
 .classic-cart-kit-browser-footer>button{height:44px;padding:0 1rem;border:0;border-radius:14px;background:#0b1220;color:#fff;font:inherit;font-size:.8rem;font-weight:900;cursor:pointer}
 
+
+@keyframes classicCartComboboxBackdropIn{from{opacity:0}to{opacity:1}}
+@keyframes classicCartComboboxSheetIn{
+  from{opacity:0;transform:translateY(14px) scale(.985)}
+  to{opacity:1;transform:translateY(0) scale(1)}
+}
+
 @media(max-width:760px){
   .classic-cart-picker-overlay{align-items:flex-end;padding:0}
   .classic-cart-modal-card--modern{width:100%;max-height:calc(92dvh - env(safe-area-inset-bottom,0px));border-radius:26px 26px 0 0;border-bottom:0}
@@ -682,9 +692,129 @@
   .classic-cart-picker-body{padding:.85rem .95rem 1rem}
   .classic-cart-combobox-trigger{min-height:70px;grid-template-columns:42px minmax(0,1fr) 30px;gap:.65rem;padding:.62rem .68rem}
   .classic-cart-combobox-media{width:42px;height:42px;border-radius:12px}
-  .classic-cart-combobox-panel{position:fixed;left:.75rem;right:.75rem;top:auto;bottom:calc(84px + env(safe-area-inset-bottom,0px));max-height:min(58dvh,480px);z-index:1490;border-radius:22px;box-shadow:0 32px 90px -24px rgba(2,8,23,.62)}
-  .classic-cart-combobox-list{max-height:min(48dvh,390px)}
-  .classic-cart-combobox-option-price{display:none}
+  .classic-cart-combobox-backdrop{
+    display:block;
+    position:fixed;
+    inset:0;
+    z-index:1488;
+    padding:0;
+    border:0;
+    background:rgba(15,23,42,.16);
+    backdrop-filter:blur(2px);
+    -webkit-backdrop-filter:blur(2px);
+    animation:classicCartComboboxBackdropIn .18s ease-out both;
+  }
+  .classic-cart-combobox-panel{
+    position:fixed;
+    left:.65rem;
+    right:.65rem;
+    bottom:auto;
+    z-index:1490;
+    display:flex;
+    flex-direction:column;
+    overflow:hidden;
+    min-height:250px;
+    border:1px solid rgba(226,232,240,.96);
+    border-radius:26px;
+    background:rgba(255,255,255,.995);
+    box-shadow:0 30px 88px -22px rgba(2,8,23,.58),0 1px 0 rgba(255,255,255,.96) inset;
+    transform-origin:50% 100%;
+    animation:classicCartComboboxSheetIn .24s cubic-bezier(.2,.82,.24,1) both;
+  }
+  .classic-cart-combobox-sheet-head{
+    position:relative;
+    display:grid;
+    grid-template-columns:minmax(0,1fr) 38px;
+    align-items:center;
+    gap:.6rem;
+    min-height:68px;
+    padding:1rem .9rem .7rem;
+    border-bottom:1px solid #eef2f6;
+    background:linear-gradient(180deg,#fff 0%,#fbfcfd 100%);
+  }
+  .classic-cart-combobox-sheet-handle{
+    position:absolute;
+    top:7px;
+    left:50%;
+    width:38px;
+    height:4px;
+    border-radius:999px;
+    background:#d6dbe2;
+    transform:translateX(-50%);
+  }
+  .classic-cart-combobox-sheet-head>div{min-width:0;display:flex;flex-direction:column;gap:.06rem}
+  .classic-cart-combobox-sheet-head>div small{color:#98a2b3;font-size:.61rem;font-weight:900;letter-spacing:.08em;text-transform:uppercase}
+  .classic-cart-combobox-sheet-head>div strong{color:#101828;font-size:.98rem;font-weight:950;letter-spacing:-.01em}
+  .classic-cart-combobox-sheet-head>button{
+    width:38px;
+    height:38px;
+    display:grid;
+    place-items:center;
+    padding:0;
+    border:0;
+    border-radius:12px;
+    background:#f2f4f7;
+    color:#344054;
+    cursor:pointer;
+  }
+  .classic-cart-combobox-search{
+    flex:0 0 auto;
+    height:50px;
+    margin:.72rem .75rem .45rem;
+    padding:0 .72rem;
+    border:1px solid #e4e7ec;
+    border-radius:15px;
+    background:#f7f9fb;
+    color:#667085;
+  }
+  .classic-cart-combobox-search:focus-within{
+    border-color:color-mix(in srgb,var(--cart-accent,#94a3b8) 52%,#dfe5ec);
+    background:#fff;
+    box-shadow:0 0 0 4px color-mix(in srgb,var(--cart-accent,#94a3b8) 9%,transparent);
+  }
+  .classic-cart-combobox-search input{font-size:.82rem}
+  .classic-cart-combobox-list{
+    min-height:0;
+    max-height:none;
+    flex:1 1 auto;
+    overflow-y:auto;
+    padding:.3rem .55rem .7rem;
+    overscroll-behavior:contain;
+    -webkit-overflow-scrolling:touch;
+    scroll-padding:.5rem;
+  }
+  .classic-cart-combobox-option{
+    min-height:66px;
+    grid-template-columns:44px minmax(0,1fr) auto;
+    gap:.72rem;
+    margin:.16rem 0;
+    padding:.58rem .62rem;
+    border:1px solid transparent;
+    border-radius:16px;
+    transition:background .14s ease,border-color .14s ease,transform .12s ease;
+  }
+  .classic-cart-combobox-option:active{transform:scale(.992);background:#f5f7fa}
+  .classic-cart-combobox-option.is-selected{
+    border-color:color-mix(in srgb,var(--cart-accent,#22c55e) 24%,#e4e7ec);
+    background:color-mix(in srgb,var(--cart-accent-soft,#f0fdf4) 74%,#fff);
+  }
+  .classic-cart-combobox-option-media{width:44px;height:44px;border-radius:13px}
+  .classic-cart-combobox-option-copy strong{font-size:.84rem}
+  .classic-cart-combobox-option-copy small{font-size:.67rem}
+  .classic-cart-combobox-option-price{
+    display:block;
+    max-width:82px;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    padding:.32rem .48rem;
+    border-radius:999px;
+    background:#f2f4f7;
+    color:#475467;
+    font-size:.64rem;
+    font-weight:900;
+  }
+  .classic-cart-combobox-option.is-selected .classic-cart-combobox-option-price{padding-right:1.45rem;background:#fff}
+  .classic-cart-combobox-option-check{right:.45rem;top:50%;width:20px;height:20px;transform:translateY(-50%)}
   .classic-cart-picker-qty-row{grid-template-columns:1fr;gap:.6rem}
   .classic-cart-picker-product-summary{min-height:46px}
   .classic-cart-kit-trigger{grid-template-columns:44px minmax(0,1fr) 20px;min-height:78px;padding:.65rem;gap:.6rem}

@@ -439,7 +439,9 @@ function TypeSelection({ orderTypes, onChoose }) {
 function ProductCombobox({ products, value, onChange, disabled = false }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [viewport, setViewport] = useState({ top: 0, height: 0, mobile: false });
   const rootRef = useRef(null);
+  const searchInputRef = useRef(null);
   const selected = products.find((product) => product.id === value) || null;
   const needle = text(query).toLowerCase();
   const filtered = useMemo(() => {
@@ -450,26 +452,77 @@ function ProductCombobox({ products, value, onChange, disabled = false }) {
 
   useEffect(() => {
     if (!open) return undefined;
+
+    const updateViewport = () => {
+      const vv = window.visualViewport;
+      setViewport({
+        top: Math.max(0, Math.round(vv?.offsetTop || 0)),
+        height: Math.max(240, Math.round(vv?.height || window.innerHeight || 640)),
+        mobile: window.matchMedia?.("(max-width: 760px)")?.matches ?? window.innerWidth <= 760,
+      });
+    };
     const close = (event) => {
       if (!rootRef.current?.contains(event.target)) setOpen(false);
     };
     const escape = (event) => {
       if (event.key === "Escape") setOpen(false);
     };
+
+    updateViewport();
+    window.visualViewport?.addEventListener("resize", updateViewport);
+    window.visualViewport?.addEventListener("scroll", updateViewport);
+    window.addEventListener("resize", updateViewport);
     document.addEventListener("mousedown", close);
     document.addEventListener("keydown", escape);
+
+    const focusTimer = window.setTimeout(() => {
+      try {
+        searchInputRef.current?.focus({ preventScroll: true });
+      } catch {
+        searchInputRef.current?.focus();
+      }
+    }, 90);
+
     return () => {
+      window.clearTimeout(focusTimer);
+      window.visualViewport?.removeEventListener("resize", updateViewport);
+      window.visualViewport?.removeEventListener("scroll", updateViewport);
+      window.removeEventListener("resize", updateViewport);
       document.removeEventListener("mousedown", close);
       document.removeEventListener("keydown", escape);
     };
   }, [open]);
+
+  const mobilePanelStyle = useMemo(() => {
+    if (!open || !viewport.mobile || !viewport.height) return undefined;
+    const gap = 10;
+    const visibleHeight = viewport.height;
+    const panelHeight = Math.min(520, Math.max(220, visibleHeight - gap * 2));
+    return {
+      top: `${viewport.top + visibleHeight - panelHeight - gap}px`,
+      height: `${panelHeight}px`,
+      maxHeight: `${panelHeight}px`,
+    };
+  }, [open, viewport]);
+
+  const openPicker = () => {
+    if (disabled) return;
+    const vv = window.visualViewport;
+    setViewport({
+      top: Math.max(0, Math.round(vv?.offsetTop || 0)),
+      height: Math.max(240, Math.round(vv?.height || window.innerHeight || 640)),
+      mobile: window.matchMedia?.("(max-width: 760px)")?.matches ?? window.innerWidth <= 760,
+    });
+    setQuery("");
+    setOpen(true);
+  };
 
   return (
     <div className={`classic-cart-combobox ${open ? "is-open" : ""}`} ref={rootRef}>
       <button
         className={`classic-cart-combobox-trigger ${selected ? "has-value" : ""}`}
         type="button"
-        onClick={() => { if (!disabled) { setOpen((current) => !current); setQuery(""); } }}
+        onClick={() => { if (open) setOpen(false); else openPicker(); }}
         aria-expanded={open}
         disabled={disabled}
       >
@@ -485,39 +538,50 @@ function ProductCombobox({ products, value, onChange, disabled = false }) {
       </button>
 
       {open ? (
-        <div className="classic-cart-combobox-panel" role="listbox" aria-label="Products">
-          <label className="classic-cart-combobox-search">
-            <CartSvgIcon name="search" size={18}/>
-            <input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search components..." autoComplete="off" />
-            <span>{filtered.length}</span>
-          </label>
-          <div className="classic-cart-combobox-list">
-            {filtered.map((product) => {
-              const active = product.id === value;
-              return (
-                <button
-                  type="button"
-                  className={`classic-cart-combobox-option ${active ? "is-selected" : ""}`}
-                  key={product.id}
-                  onClick={() => { onChange(product.id); setOpen(false); setQuery(""); }}
-                  role="option"
-                  aria-selected={active}
-                >
-                  <span className="classic-cart-combobox-option-media">
-                    {product.imageUrl ? <img src={product.imageUrl} alt="" /> : <CartSvgIcon name="package" size={18}/>} 
-                  </span>
-                  <span className="classic-cart-combobox-option-copy">
-                    <strong>{product.name}</strong>
-                    <small>{[product.displayId || "No ID", product.unit || "Unit"].join(" · ")}</small>
-                  </span>
-                  <span className="classic-cart-combobox-option-price">{formatMoney(product.unitPrice)}</span>
-                  {active ? <span className="classic-cart-combobox-option-check"><CartSvgIcon name="check" size={16}/></span> : null}
-                </button>
-              );
-            })}
-            {!filtered.length ? <div className="classic-cart-combobox-empty">No components match “{query}”.</div> : null}
+        <>
+          <button className="classic-cart-combobox-backdrop" type="button" aria-label="Close component selector" onClick={() => setOpen(false)} />
+          <div className="classic-cart-combobox-panel" style={mobilePanelStyle} role="listbox" aria-label="Products">
+            <div className="classic-cart-combobox-sheet-head">
+              <span className="classic-cart-combobox-sheet-handle" aria-hidden="true" />
+              <div>
+                <small>Component library</small>
+                <strong>Select component</strong>
+              </div>
+              <button type="button" onClick={() => setOpen(false)} aria-label="Close component selector"><CartSvgIcon name="x" size={18}/></button>
+            </div>
+            <label className="classic-cart-combobox-search">
+              <CartSvgIcon name="search" size={18}/>
+              <input ref={searchInputRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search components..." autoComplete="off" inputMode="search" />
+              <span>{filtered.length}</span>
+            </label>
+            <div className="classic-cart-combobox-list">
+              {filtered.map((product) => {
+                const active = product.id === value;
+                return (
+                  <button
+                    type="button"
+                    className={`classic-cart-combobox-option ${active ? "is-selected" : ""}`}
+                    key={product.id}
+                    onClick={() => { onChange(product.id); setOpen(false); setQuery(""); }}
+                    role="option"
+                    aria-selected={active}
+                  >
+                    <span className="classic-cart-combobox-option-media">
+                      {product.imageUrl ? <img src={product.imageUrl} alt="" /> : <CartSvgIcon name="package" size={18}/>} 
+                    </span>
+                    <span className="classic-cart-combobox-option-copy">
+                      <strong>{product.name}</strong>
+                      <small>{[product.displayId || "No ID", product.unit || "Unit"].join(" · ")}</small>
+                    </span>
+                    <span className="classic-cart-combobox-option-price">{formatMoney(product.unitPrice)}</span>
+                    {active ? <span className="classic-cart-combobox-option-check"><CartSvgIcon name="check" size={16}/></span> : null}
+                  </button>
+                );
+              })}
+              {!filtered.length ? <div className="classic-cart-combobox-empty">No components match “{query}”.</div> : null}
+            </div>
           </div>
-        </div>
+        </>
       ) : null}
     </div>
   );
