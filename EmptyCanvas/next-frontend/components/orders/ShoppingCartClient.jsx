@@ -11,7 +11,7 @@ const TYPE_META = {
     label: "Request Products",
     icon: "shopping-cart",
     className: "request",
-    description: "Add new products or supplies and send them as a stock request.",
+    description: "",
     checkout: "Checkout Now",
   },
   withdrawproducts: {
@@ -158,10 +158,6 @@ async function requestJson(url, options = {}) {
   });
 
   if (response.status === 401) {
-    if (/submit-order/i.test(url)) {
-      const body = await response.json().catch(() => ({}));
-      throw new Error(apiMessage(body, "Incorrect password."));
-    }
     window.location.href = `/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`;
     throw new Error("Your session has expired.");
   }
@@ -430,7 +426,7 @@ function TypeSelection({ orderTypes, onChoose }) {
           return (
             <button className={`classic-cart-order-type-btn ${themeClass}`} type="button" key={type} onClick={() => onChoose(type)}>
               <span className="classic-cart-order-type-icon"><CartSvgIcon name={meta.icon} size={24}/></span>
-              <span className="classic-cart-order-type-copy"><strong>{type}</strong><small>{meta.description}</small></span>
+              <span className="classic-cart-order-type-copy"><strong>{type}</strong>{meta.description ? <small>{meta.description}</small> : null}</span>
               <span className="classic-cart-order-type-arrow"><CartSvgIcon name="arrow-right" size={18}/></span>
             </button>
           );
@@ -901,6 +897,144 @@ function CartItem({ item, product, type, index, onEdit, onDelete, onQuantityChan
   );
 }
 
+
+function SlideToSubmit({ onSubmit, disabled = false, label = "Slide to submit" }) {
+  const trackRef = useRef(null);
+  const knobRef = useRef(null);
+  const dragRef = useRef({ active: false, pointerId: null, startX: 0, startOffset: 0 });
+  const [offset, setOffset] = useState(0);
+  const [maxTravel, setMaxTravel] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  const measure = () => {
+    const track = trackRef.current;
+    const knob = knobRef.current;
+    if (!track || !knob) return;
+    const styles = window.getComputedStyle(track);
+    const inset = Number.parseFloat(styles.getPropertyValue("--slide-inset")) || 5;
+    const nextMax = Math.max(0, track.clientWidth - knob.offsetWidth - (inset * 2));
+    setMaxTravel(nextMax);
+    setOffset((current) => Math.min(current, nextMax));
+  };
+
+  useEffect(() => {
+    measure();
+    const onResize = () => measure();
+    window.addEventListener("resize", onResize, { passive: true });
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  useEffect(() => {
+    if (!disabled && !submitting) return;
+    dragRef.current.active = false;
+    setDragging(false);
+  }, [disabled, submitting]);
+
+  const reset = () => {
+    setDragging(false);
+    setOffset(0);
+  };
+
+  const complete = async () => {
+    if (disabled || submitting) return;
+    setOffset(maxTravel);
+    setSubmitting(true);
+    let submitted = false;
+    try {
+      submitted = (await onSubmit?.()) === true;
+    } finally {
+      window.setTimeout(() => {
+        setSubmitting(false);
+        reset();
+      }, submitted ? 520 : 180);
+    }
+  };
+
+  const onPointerDown = (event) => {
+    if (disabled || submitting || event.button > 0) return;
+    measure();
+    dragRef.current = {
+      active: true,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startOffset: offset,
+      lastOffset: offset,
+    };
+    setDragging(true);
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  };
+
+  const onPointerMove = (event) => {
+    const drag = dragRef.current;
+    if (!drag.active || drag.pointerId !== event.pointerId || disabled || submitting) return;
+    const next = Math.max(0, Math.min(maxTravel, drag.startOffset + event.clientX - drag.startX));
+    drag.lastOffset = next;
+    setOffset(next);
+  };
+
+  const finishPointer = (event) => {
+    const drag = dragRef.current;
+    if (!drag.active || drag.pointerId !== event.pointerId) return;
+    dragRef.current.active = false;
+    setDragging(false);
+    try { event.currentTarget.releasePointerCapture?.(event.pointerId); } catch {}
+    const finalOffset = Number.isFinite(drag.lastOffset) ? drag.lastOffset : offset;
+    if (!disabled && !submitting && maxTravel > 0 && finalOffset >= maxTravel * 0.84) {
+      complete();
+    } else {
+      setOffset(0);
+    }
+  };
+
+  const progress = maxTravel > 0 ? Math.max(0, Math.min(1, offset / maxTravel)) : 0;
+
+  return (
+    <div
+      ref={trackRef}
+      className={`classic-cart-submit-slider${dragging ? " is-dragging" : ""}${submitting ? " is-submitting" : ""}${disabled ? " is-disabled" : ""}`}
+      style={{
+        "--slide-progress": progress,
+        "--slide-offset": `${offset}px`,
+        "--slide-label-opacity": Math.max(0, 1 - (progress * 1.35)),
+        "--slide-label-shift": `${Math.round(progress * 14)}px`,
+        "--slide-fill-opacity": Math.max(.92, .98 - (progress * .05)),
+      }}
+      aria-label={label}
+    >
+      <span className="classic-cart-submit-slider-fill" aria-hidden="true"/>
+      <span className="classic-cart-submit-slider-label" aria-hidden="true">
+        {submitting ? "Submitting…" : label}
+      </span>
+      <button
+        ref={knobRef}
+        className="classic-cart-submit-slider-knob"
+        type="button"
+        role="slider"
+        aria-label={label}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(progress * 100)}
+        disabled={disabled || submitting}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={finishPointer}
+        onPointerCancel={finishPointer}
+        onKeyDown={(event) => {
+          if ((event.key === "Enter" || event.key === " ") && !disabled && !submitting) {
+            event.preventDefault();
+            complete();
+          }
+        }}
+      >
+        <span className="classic-cart-submit-slider-chevrons" aria-hidden="true">
+          <i/><i/><i/>
+        </span>
+      </button>
+    </div>
+  );
+}
+
 export default function ShoppingCartClient({
   initialOrderTypes = [],
   initialComponents = [],
@@ -927,7 +1061,6 @@ export default function ShoppingCartClient({
   const [selectedType, setSelectedType] = useState(text(initialType));
   const [cart, setCart] = useState(() => normalizeDraft(initialDraft?.products));
   const [reason, setReason] = useState(() => text(initialDraft?.reason) || normalizeDraft(initialDraft?.products).find((item) => item.reason)?.reason || "");
-  const [password, setPassword] = useState("");
   const [picker, setPicker] = useState(null);
   const [busy, setBusy] = useState(false);
   const [loadingDraft, setLoadingDraft] = useState(false);
@@ -1064,7 +1197,6 @@ export default function ShoppingCartClient({
     setSelectedType(clean);
     setBrowserType(clean);
     setPicker(null);
-    setPassword("");
     await loadDraft(clean);
   };
 
@@ -1084,7 +1216,6 @@ export default function ShoppingCartClient({
     setBrowserType("");
     setCart([]);
     setReason("");
-    setPassword("");
   };
 
   const savePickerSelection = async (selection) => {
@@ -1194,25 +1325,20 @@ export default function ShoppingCartClient({
   const checkout = async () => {
     if (!cart.length) {
       setNotice({ type: "error", title: "Empty cart", message: maintenance ? "Add at least one product to maintain." : "Add at least one product before checkout." });
-      return;
+      return false;
     }
     if (!maintenance && !text(reason)) {
       setNotice({ type: "error", title: "Reason required", message: withdraw ? "Enter the withdrawal reason." : "Enter the order reason." });
-      return;
+      return false;
     }
     if (maintenance && cart.length > 1) {
       setNotice({ type: "error", title: "One component only", message: "A maintenance request can include only one component. Remove the extra component before submitting." });
-      return;
+      return false;
     }
     if (maintenance && cart.some((item) => !text(item.issueDescription))) {
       setNotice({ type: "error", title: "Issue Description required", message: "The maintenance component must include an Issue Description." });
-      return;
+      return false;
     }
-    if (!text(password)) {
-      setNotice({ type: "error", title: "Password required", message: "Enter your account password before submitting." });
-      return;
-    }
-
     setBusy(true);
     setNotice(null);
     try {
@@ -1222,7 +1348,6 @@ export default function ShoppingCartClient({
         method: "POST",
         body: JSON.stringify({
           products: payloadFor(cart, selectedType, reason),
-          password: text(password),
           orderType: selectedType,
         }),
       });
@@ -1230,7 +1355,6 @@ export default function ShoppingCartClient({
       clearEditTransfer();
       setCart([]);
       setReason("");
-      setPassword("");
 
       if (editMode) {
         setNotice({
@@ -1249,8 +1373,10 @@ export default function ShoppingCartClient({
           orderItems: Array.isArray(response?.orderItems) ? response.orderItems : [],
         });
       }
+      return true;
     } catch (error) {
       setNotice({ type: "error", title: "Submission failed", message: error?.message || "The order could not be submitted." });
+      return false;
     } finally {
       setBusy(false);
     }
@@ -1323,7 +1449,6 @@ export default function ShoppingCartClient({
           <span className="classic-cart-flow-heading-copy">
             <small>Shopping flow</small>
             <strong>{selectedType}</strong>
-            <span>{meta.description}</span>
           </span>
         </div>
         <span className={`classic-cart-save-state ${saveState === "Save failed" ? "is-error" : ""}`}>{saveState}</span>
@@ -1365,7 +1490,6 @@ export default function ShoppingCartClient({
                 >
                   <span className="classic-cart-add-new-copy">
                     <strong>Add new</strong>
-                    <small>{maintenance ? "Add a product and describe the maintenance issue" : withdraw ? "Select products to withdraw from stock" : "Select products or supplies for this request"}</small>
                   </span>
                   <span className="classic-cart-add-new-plus"><CartSvgIcon name="plus" size={30}/></span>
                 </button>
@@ -1386,13 +1510,14 @@ export default function ShoppingCartClient({
         <aside className="classic-cart-summary" aria-label="Order summary">
           <div className="classic-cart-summary-card">
             <div className="classic-cart-summary-title">{withdraw ? "Withdrawal Summary" : "Order Summary"}</div>
-
             <div className="classic-cart-summary-lines">
               <div><span>Entry count</span><strong>{itemCount}</strong></div>
               {!maintenance ? <div className="classic-cart-summary-total"><span>Total</span><strong>{formatMoney(total)}</strong></div> : null}
             </div>
+          </div>
 
-            {!maintenance ? (
+          {!maintenance ? (
+            <div className="classic-cart-reason-card">
               <label className="classic-cart-summary-field">
                 <span>Reason</span>
                 <input
@@ -1402,28 +1527,14 @@ export default function ShoppingCartClient({
                   autoComplete="off"
                 />
               </label>
-            ) : null}
+            </div>
+          ) : null}
 
-            <label className="classic-cart-voucher-row">
-              <input
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    checkout();
-                  }
-                }}
-                placeholder="Your password"
-                autoComplete="new-password"
-              />
-            </label>
-
-            <button className="classic-cart-checkout-btn" type="button" onClick={checkout} disabled={busy || loadingDraft}>
-              {busy ? (editMode ? "Saving..." : "Submitting...") : editMode ? "Save Order Changes" : withdraw ? "Withdraw Now" : "Checkout Now"}
-            </button>
-          </div>
+          <SlideToSubmit
+            label="Slide to submit"
+            disabled={busy || loadingDraft}
+            onSubmit={checkout}
+          />
         </aside>
       </div>
 

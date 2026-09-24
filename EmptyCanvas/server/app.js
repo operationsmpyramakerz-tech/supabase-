@@ -28369,15 +28369,6 @@ app.post(
   requireAuth,
   requirePage("Create New Order"),
   async (req, res) => {
-      // Password confirmation (requested): user must enter their password
-      // again before submitting an order.
-      const password = String(req.body?.password || "").trim();
-      if (!password) {
-        return res
-          .status(400)
-          .json({ success: false, message: "Password is required before checkout." });
-      }
-
 let { products } = req.body || {};
 // Optional: order type (select/status) — used by the Shopping Cart tabs
 const requestedOrderType = String(req.body?.orderType || req.session?.editingOrder?.orderType || "").trim();
@@ -28613,13 +28604,6 @@ if (!ordersDatabaseId || !teamMembersDatabaseId) {
       }
       const userPage = userQuery.results[0];
       const userId = userPage.id;
-
-      const storedPassword = _extractPropText(userPage?.properties?.Password);
-      if (storedPassword === null || typeof storedPassword === "undefined" || String(storedPassword) !== password) {
-        return res
-          .status(401)
-          .json({ success: false, message: "incorrect password" });
-      }
 
       // ===================== Edit mode =====================
       // If the session contains an active edit context (set by /api/orders/current/edit/init),
