@@ -284,25 +284,33 @@ const ORDER_CONFIRMATION_DURATION_MS = 6500;
 
 function OrderSubmissionBar({ submission, onDone, onUndo }) {
   const [undoing, setUndoing] = useState(false);
+  const [exploding, setExploding] = useState(false);
 
   useEffect(() => {
-    if (!submission) return undefined;
+    if (!submission || undoing || exploding) return undefined;
     const timer = window.setTimeout(() => onDone(null), ORDER_CONFIRMATION_DURATION_MS + 180);
     return () => window.clearTimeout(timer);
-  }, [submission, onDone]);
+  }, [submission, onDone, undoing, exploding]);
 
   if (!submission) return null;
   const meta = orderTypeMeta(submission.orderType);
   const orderQuery = text(submission.orderId);
   const viewOrderUrl = orderQuery ? `/next/orders?q=${encodeURIComponent(orderQuery)}` : "/next/orders";
 
-  const openCurrentOrder = () => navigateWithinApp(viewOrderUrl);
+  const openCurrentOrder = () => {
+    if (undoing || exploding) return;
+    navigateWithinApp(viewOrderUrl);
+  };
   const undoOrder = async (event) => {
+    event.preventDefault();
     event.stopPropagation();
-    if (undoing || typeof onUndo !== "function") return;
+    if (undoing || exploding || typeof onUndo !== "function") return;
     setUndoing(true);
     try {
       await onUndo(submission);
+      setUndoing(false);
+      setExploding(true);
+      window.setTimeout(() => onDone(null), 760);
     } catch {
       setUndoing(false);
     }
@@ -310,20 +318,21 @@ function OrderSubmissionBar({ submission, onDone, onUndo }) {
 
   return (
     <div
-      className="classic-cart-order-confirmation"
+      className={`classic-cart-order-confirmation${undoing ? " is-undoing" : ""}${exploding ? " is-exploding" : ""}`}
       role="button"
-      tabIndex={0}
+      tabIndex={exploding ? -1 : 0}
       aria-live="polite"
       aria-label={`Open ${submission.orderId || "current order"}`}
       onClick={openCurrentOrder}
       onKeyDown={(event) => {
-        if (event.target !== event.currentTarget) return;
+        if (event.target !== event.currentTarget || undoing || exploding) return;
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
           openCurrentOrder();
         }
       }}
     >
+      <span className="classic-cart-order-confirmation-burst" aria-hidden="true" />
       <svg className="classic-cart-order-confirmation-progress" viewBox="0 0 500 92" preserveAspectRatio="none" aria-hidden="true">
         <rect className="classic-cart-order-confirmation-track" x="3" y="3" width="494" height="86" rx="43" pathLength="100"/>
         <rect className="classic-cart-order-confirmation-line" x="3" y="3" width="494" height="86" rx="43" pathLength="100"/>
@@ -338,7 +347,8 @@ function OrderSubmissionBar({ submission, onDone, onUndo }) {
       <button
         className="classic-cart-order-confirmation-undo"
         type="button"
-        disabled={undoing}
+        disabled={undoing || exploding}
+        onPointerDown={(event) => event.stopPropagation()}
         onClick={undoOrder}
         aria-label={`Undo ${submission.orderId || "order"}`}
       >
@@ -1203,7 +1213,6 @@ export default function ShoppingCartClient({
           orderPageIds,
         }),
       });
-      setSubmittedOrder(null);
       setNotice({
         type: "success",
         title: "Order undone",
