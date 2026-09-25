@@ -1459,9 +1459,6 @@ export default function ShoppingCartClient({
   };
 
   const deleteItem = async (item) => {
-    const product = productMap.get(item.id);
-    const name = product?.name || "this item";
-    if (!window.confirm(`Remove “${name}” from this cart?`)) return;
     const next = cart.filter((row) => row.id !== item.id);
     setCart(next);
     await persistDraft(next);
