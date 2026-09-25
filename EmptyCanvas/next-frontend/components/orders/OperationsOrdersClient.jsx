@@ -2369,11 +2369,11 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
         loadingSuccessMessage = "Order restored from Archive.";
         await completeAction("Order restored from Archive.", "approved");
       } else if (action === "withdrawal") {
-        await postJson("/api/orders/requested/create-withdrawal", { orderIds: group.orderIds });
+        await postJson(`${DIRECT_API_BASE}/orders/operations/mutations-direct`, { action: "create-withdrawal", orderIds: group.orderIds });
         loadingSuccessMessage = "Withdrawal order created.";
         await completeAction("Withdrawal order created.", "all");
       } else if (action === "delivery") {
-        await postJson("/api/orders/requested/create-delivery", { orderIds: group.orderIds });
+        await postJson(`${DIRECT_API_BASE}/orders/operations/mutations-direct`, { action: "create-delivery", orderIds: group.orderIds });
         loadingSuccessMessage = "Delivery order created.";
         await completeAction("Delivery order created.", "all");
       }

@@ -1,6 +1,6 @@
 import "server-only";
 import { performance } from "node:perf_hooks";
-import { deleteById, getSupabaseConfig, insert, isSupabaseConfigured, select, selectAll, updateById, updateByIds, uploadStorageObject } from "./supabase-rest";
+import { deleteById, getSupabaseConfig, insert, isSupabaseConfigured, select, selectAll, supabaseRequest, updateById, updateByIds, uploadStorageObject } from "./supabase-rest";
 import { enrichOrderDetailGrouping, loadRawOrderRowsByIds, serializeOperationsOrderDetail } from "./order-details-data";
 import { getProductsCatalog } from "./products-service";
 import { listTeamMembersLite } from "./team-members-service";
@@ -901,6 +901,194 @@ async function loadOperationRowsByIds(ids = []) {
 
   const byId = new Map(rows.map((row) => [text(row?.id ?? row?.ID), row]));
   return { clean, byId, rows };
+}
+
+function repeatOrderFinalStatus(status) {
+  return /(arrived|delivered|received)/i.test(text(status));
+}
+
+function repeatOrderEffectiveDeliveredQty(item = {}) {
+  const received = Number(item?.quantityReceived);
+  if (item?.quantityReceived !== null && typeof item?.quantityReceived !== "undefined" && Math.abs(roundQty(received)) > 1e-9) {
+    return Math.abs(roundQty(received));
+  }
+  for (const candidate of [item?.quantityProgress, item?.quantityRequested, item?.quantity]) {
+    const value = Number(candidate);
+    if (Number.isFinite(value) && Math.abs(roundQty(value)) > 1e-9) return Math.abs(roundQty(value));
+  }
+  return 0;
+}
+
+async function nextOperationsOrderNumber() {
+  const rows = await select(tableName(), {
+    select: "order_number",
+    order: "order_number.desc",
+    limit: "1",
+  }, {
+    profileName: "orders.operations.repeat-next-number",
+  });
+  const current = Array.isArray(rows) && rows[0] ? num(rows[0]?.order_number) : null;
+  return Number.isFinite(current) ? Number(current) + 1 : 1;
+}
+
+async function insertOperationsRepeatRows(rows = []) {
+  let payload = (Array.isArray(rows) ? rows : []).map((row) => opsEditCleanInsertRow(row));
+  if (!payload.length) return [];
+  let receiptCompatibilityRetried = false;
+
+  while (true) {
+    try {
+      const inserted = await supabaseRequest(`/${encodeURIComponent(tableName())}`, {
+        method: "POST",
+        headers: { Prefer: "return=representation" },
+        body: payload,
+        timeoutMs: 30_000,
+        profileName: "orders.operations.repeat-create",
+      });
+      return Array.isArray(inserted) ? inserted : (inserted ? [inserted] : []);
+    } catch (error) {
+      const missing = opsEditMissingColumn(error);
+      const receiptColumns = new Set(["order_receipt", "receipt_number", "maintenance_receipt"]);
+      // Match the Legacy Supabase compatibility path: old Orders imports can
+      // miss the optional receipt columns, so retry the same atomic batch once
+      // without those columns. Other schema errors must stay fail-closed.
+      if (!receiptCompatibilityRetried && missing && receiptColumns.has(missing)) {
+        receiptCompatibilityRetried = true;
+        payload = payload.map((row) => {
+          const next = { ...row };
+          delete next.order_receipt;
+          delete next.receipt_number;
+          delete next.maintenance_receipt;
+          return next;
+        });
+        continue;
+      }
+
+      // A failed/aborted POST can be ambiguous at the network boundary. Never
+      // fall back to Express after a direct create attempt, otherwise the same
+      // repeat order could be created twice.
+      throw directOperationsCommittedError(
+        error?.message || "Failed to create the repeat order.",
+        Number(error?.status) || 500,
+        error,
+      );
+    }
+  }
+}
+
+export async function createOperationsRepeatOrder({
+  account,
+  orderIds = [],
+  action = "",
+} = {}) {
+  const mode = text(action).toLowerCase().replace(/[_\s]+/g, "-");
+  const config = mode === "create-withdrawal"
+    ? {
+        expectedSourceType: "Request Products",
+        targetType: "Withdraw Products",
+        quantitySign: -1,
+        defaultReason: "Withdraw Products",
+        successMessage: "Withdrawal order created in Not Started.",
+        noQuantityError: "No delivered quantities were found to withdraw.",
+      }
+    : mode === "create-delivery"
+      ? {
+          expectedSourceType: "Withdraw Products",
+          targetType: "Request Products",
+          quantitySign: 1,
+          defaultReason: "Request Products",
+          successMessage: "Delivery order created in Not Started.",
+          noQuantityError: "No delivered quantities were found to create a delivery.",
+        }
+      : null;
+
+  if (!config) throw directOperationsMutationError("Unsupported repeat-order action", 400);
+
+  const loaded = await loadOperationRowsByIds(orderIds);
+  if (!loaded) return null;
+  if (loaded.clean.some((id) => !loaded.byId.has(id))) {
+    throw directOperationsMutationError("Orders not found", 404);
+  }
+
+  const sourceRows = loaded.clean.map((id) => loaded.byId.get(id) || {});
+  const sourceItems = sourceRows.map((row) => serializeOperationsOrderDetail(row));
+  const expectedKey = orderTypeKey(config.expectedSourceType);
+  const wrongType = sourceItems.find((item) => orderTypeKey(item?.orderType) !== expectedKey);
+  if (wrongType) {
+    throw directOperationsMutationError(`Only delivered ${config.expectedSourceType} orders can create this order.`, 400);
+  }
+
+  const notDelivered = sourceItems.find((item) => !repeatOrderFinalStatus(item?.status));
+  if (notDelivered) {
+    throw directOperationsMutationError("Order must be in Delivered / Arrived before creating this order.", 400);
+  }
+
+  const orderNumber = await nextOperationsOrderNumber();
+  const now = new Date().toISOString();
+  const sign = Number(config.quantitySign) < 0 ? -1 : 1;
+  const fallbackUserName = text(account?.username || account?.name) || null;
+  const createdRows = [];
+
+  for (let index = 0; index < sourceRows.length; index += 1) {
+    const sourceRow = sourceRows[index] || {};
+    const item = sourceItems[index] || serializeOperationsOrderDetail(sourceRow);
+    const qtyAbs = repeatOrderEffectiveDeliveredQty(item);
+    if (Math.abs(roundQty(qtyAbs)) <= 1e-9) continue;
+
+    const qty = roundQty(sign * qtyAbs);
+    const teamMemberName =
+      text(item?.createdByName)
+      || text(operationsValueFor(sourceRow, ["team_member_name", "teams_members", "Teams Members", "Supervisor", "supervisor"]))
+      || fallbackUserName;
+    const supervisorName =
+      text(item?.assignedToName)
+      || text(operationsValueFor(sourceRow, ["supervisor", "Supervisor"]))
+      || null;
+
+    createdRows.push(opsEditCleanInsertRow({
+      reason: text(item?.reason || config.defaultReason) || config.defaultReason || null,
+      order_number: orderNumber,
+      order_type: orderTypeLabel(config.targetType) || config.targetType || null,
+      notion_created_time: now,
+      product_name: text(item?.productName)
+        || text(operationsValueFor(sourceRow, ["product_name", "Product Name", "product", "Product"]))
+        || "Unknown Product",
+      product_url: text(item?.productUrl)
+        || text(operationsValueFor(sourceRow, ["product_url", "Product URL"]))
+        || null,
+      unit_price: Number.isFinite(Number(item?.unitPrice)) ? Number(item.unitPrice) : null,
+      quantity_requested: qty,
+      quantity_progress: qty,
+      quantity_received_by_operations: 0,
+      quantity_remaining: qty,
+      status: "Under Supervision",
+      sv_approval: "Approved",
+      team_member_name: teamMemberName || null,
+      issue_description: text(item?.issueDescription)
+        || text(operationsValueFor(sourceRow, ["issue_description", "Issue Description"]))
+        || null,
+      supervisor: supervisorName || null,
+      person_received_by_operations: null,
+      order_receipt: null,
+      receipt_number: null,
+      maintenance_receipt: null,
+    }));
+  }
+
+  if (!createdRows.length) {
+    throw directOperationsMutationError(config.noQuantityError, 400);
+  }
+
+  const insertedRows = await insertOperationsRepeatRows(createdRows);
+  await invalidateLegacyOperationsCaches(account).catch(() => {});
+
+  return {
+    success: true,
+    source: "supabase-direct",
+    createdCount: insertedRows.length || createdRows.length,
+    orderIdNumber: Number.isFinite(Number(orderNumber)) ? Number(orderNumber) : null,
+    message: config.successMessage,
+  };
 }
 
 function splitReceiptNumbers(value) {

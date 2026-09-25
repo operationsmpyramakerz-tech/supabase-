@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { fetchLegacyJson } from "../../../../../lib/legacy-api";
 import { getLegacyAccountGate } from "../../../../../lib/products-auth";
 import {
+  createOperationsRepeatOrder,
   markOperationsArrived,
   markOperationsShipped,
   performOperationsProtectedAction,
@@ -82,6 +83,12 @@ async function legacyFallback(action, body) {
   } else if (action === "edit-init") {
     path = "/api/orders/operations/edit/init";
     legacyBody = { orderIds: body?.orderIds, adminPassword: body?.adminPassword };
+  } else if (action === "create-withdrawal") {
+    path = "/api/orders/requested/create-withdrawal";
+    legacyBody = { orderIds: body?.orderIds };
+  } else if (action === "create-delivery") {
+    path = "/api/orders/requested/create-delivery";
+    legacyBody = { orderIds: body?.orderIds };
   } else if (action === "edit-save") {
     path = "/api/orders/operations/details-edit";
     legacyBody = {
@@ -118,7 +125,7 @@ async function legacyFallback(action, body) {
 export async function POST(request) {
   const body = await request.json().catch(() => ({}));
   const action = actionKey(body?.action);
-  if (!["approval", "mark-shipped", "mark-arrived", "archive", "unarchive", "edit-init", "edit-save"].includes(action)) {
+  if (!["approval", "mark-shipped", "mark-arrived", "archive", "unarchive", "edit-init", "edit-save", "create-withdrawal", "create-delivery"].includes(action)) {
     return noStore({ error: "Unsupported Operations Orders action." }, { status: 400 });
   }
 
@@ -153,6 +160,13 @@ export async function POST(request) {
         orderReceiptDataUrls: body?.orderReceiptDataUrls,
         orderReceiptFilenames: body?.orderReceiptFilenames,
         receiptNumbers: body?.receiptNumbers ?? body?.receiptNumber,
+      });
+      if (result) return noStore(result);
+    } else if (action === "create-withdrawal" || action === "create-delivery") {
+      const result = await createOperationsRepeatOrder({
+        account: gate.account,
+        orderIds: body?.orderIds,
+        action,
       });
       if (result) return noStore(result);
     } else if (action === "edit-save" && gate.source === "direct-session") {
