@@ -91,7 +91,7 @@ function routeDefaults(localPath) {
     "/orders-review": { title: "Orders Review", activePath: "/next/orders-review" },
     "/operations-orders": { title: "Operations Orders", activePath: "/next/operations-orders" },
     "/maintenance-orders": { title: "Maintenance Orders", activePath: "/next/maintenance-orders" },
-    "/stocktaking": { title: "Stocktaking", activePath: "/next/stocktaking" },
+    "/stocktaking": { title: "Stocktaking", activePath: "/next/stocktaking", bodyClass: "stocktaking-page" },
     "/products": { title: "Products", activePath: "/next/products" },
     "/kits": { title: "Kits", activePath: "/next/kits" },
     "/proposals": { title: "Proposals", activePath: "/next/proposals" },
@@ -206,13 +206,14 @@ export default function PersistentAppShell({ initialAccount = null, children }) 
   const account = liveRegistration?.account || cachedAccount || initialAccount || null;
   const title = liveRegistration?.title || defaults.title;
   const activePath = liveRegistration?.activePath || defaults.activePath || publicPathname(localPath);
+  const persistentBodyClass = ["persistent-app-shell", defaults.bodyClass || ""].filter(Boolean).join(" ");
 
   return (
     <AppShell
       account={account}
       title={title}
       activePath={activePath}
-      bodyClass="persistent-app-shell"
+      bodyClass={persistentBodyClass}
       pageStyles={performanceStyles}
     >
       <PersistentShellProvider registerPage={registerPage}>
