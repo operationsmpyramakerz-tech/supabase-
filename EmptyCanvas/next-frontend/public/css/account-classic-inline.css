@@ -2018,14 +2018,40 @@ html[data-theme="dark"] body.page-account .profile-avatar-shell{
 }
 
 /* ================================================================
-   Profile cover / avatar tangent fix
-   Keep the cover continuous behind the avatar. The white avatar halo
-   itself creates the smooth left/right corners from the reference design.
-   The previous radial mask cut extra white wedges beside the avatar.
+   Profile cover / avatar overlap treatment
+   Restore the Abdullah reference look: a shallow centered notch in the
+   bottom edge of the cover so the white avatar halo feels integrated with
+   the cover without creating the large left/right white wedges.
    ================================================================ */
 .page-account .profile-cover-display{
-  -webkit-mask-image: none !important;
-  mask-image: none !important;
-  -webkit-mask: none !important;
-  mask: none !important;
+  --profile-cover-notch-radius: 76px;
+  --profile-cover-notch-offset: 52px;
+  -webkit-mask-image: radial-gradient(
+    circle var(--profile-cover-notch-radius) at 50% calc(100% + var(--profile-cover-notch-offset)),
+    transparent 0 calc(var(--profile-cover-notch-radius) - 1px),
+    #000 var(--profile-cover-notch-radius)
+  ) !important;
+  mask-image: radial-gradient(
+    circle var(--profile-cover-notch-radius) at 50% calc(100% + var(--profile-cover-notch-offset)),
+    transparent 0 calc(var(--profile-cover-notch-radius) - 1px),
+    #000 var(--profile-cover-notch-radius)
+  ) !important;
+  -webkit-mask-repeat: no-repeat !important;
+  mask-repeat: no-repeat !important;
+  -webkit-mask-size: 100% 100% !important;
+  mask-size: 100% 100% !important;
+}
+
+@media (max-width: 768px){
+  .page-account .profile-cover-display{
+    --profile-cover-notch-radius: 56px;
+    --profile-cover-notch-offset: 38px;
+  }
+}
+
+@media (max-width: 420px){
+  .page-account .profile-cover-display{
+    --profile-cover-notch-radius: 54px;
+    --profile-cover-notch-offset: 37px;
+  }
 }
