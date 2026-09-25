@@ -229,10 +229,10 @@ body.persistent-app-shell
     left: 50% !important;
     bottom: calc(env(safe-area-inset-bottom, 0px) + 1px) !important;
     z-index: 2147482990 !important;
-    width: 108px !important;
-    height: 28px !important;
-    min-width: 108px !important;
-    min-height: 28px !important;
+    width: 168px !important;
+    height: 30px !important;
+    min-width: 168px !important;
+    min-height: 30px !important;
     margin: 0 !important;
     padding: 0 !important;
     display: grid !important;
@@ -258,7 +258,7 @@ body.persistent-app-shell
 
   .ops-mobile-dock-quick-open > span {
     display: block !important;
-    width: 72px !important;
+    width: 126px !important;
     height: 5px !important;
     border-radius: 999px !important;
     background: #111318 !important;
@@ -278,6 +278,16 @@ body.persistent-app-shell
 
   .ops-mobile-dock-quick-open.is-visible:active > span {
     transform: scaleX(.86) !important;
+  }
+
+
+  /* Keep mobile sheets/dialogs physically above the quick-open dock.
+   * ClassicSmallWindowSidebarGuard marks the full-screen fixed layer that
+   * owns each visible dialog, so this applies across the system without
+   * requiring per-page modal offsets. */
+  .ops-small-window-dock-clearance {
+    box-sizing: border-box !important;
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 42px) !important;
   }
 
   html.ops-theme-dark .ops-mobile-dock-quick-open > span,

@@ -196,6 +196,7 @@ const SMALL_WINDOW_SELECTOR = [
 const MOBILE_DOCK_HIDDEN_CLASS = 'ops-mobile-dock-hidden';
 const SMALL_WINDOW_SIDEBAR_HIDDEN_CLASS = 'ops-small-window-sidebar-hidden';
 const MOBILE_DOCK_FORCED_OPEN_CLASS = 'ops-mobile-dock-forced-open';
+const SMALL_WINDOW_DOCK_CLEARANCE_CLASS = 'ops-small-window-dock-clearance';
 
 function isVisibleSmallWindow(node) {
   if (!(node instanceof HTMLElement)) return false;
@@ -209,6 +210,29 @@ function isVisibleSmallWindow(node) {
   return node.getClientRects().length > 0;
 }
 
+function smallWindowViewportLayer(node) {
+  if (!(node instanceof HTMLElement)) return null;
+
+  // Most small windows are a dialog/card inside a full-screen fixed overlay.
+  // Mark that viewport layer (rather than the card itself) so CSS can reserve
+  // a little space above the mobile quick-open dock without changing each
+  // feature-specific modal implementation. Some flows put role=dialog on the
+  // overlay itself, so include the starting node in the search.
+  let current = node;
+  while (current && current !== document.body) {
+    const style = window.getComputedStyle(current);
+    const rect = current.getBoundingClientRect();
+    const viewportWidth = Math.max(window.innerWidth || 0, document.documentElement.clientWidth || 0);
+    const viewportHeight = Math.max(window.innerHeight || 0, document.documentElement.clientHeight || 0);
+    const coversViewport = rect.width >= viewportWidth * 0.72 && rect.height >= viewportHeight * 0.62;
+
+    if (style.position === 'fixed' && coversViewport) return current;
+    current = current.parentElement;
+  }
+
+  return null;
+}
+
 export function ClassicSmallWindowSidebarGuard() {
   useLayoutEffect(() => {
     const sidebar = document.querySelector('.classic-app-shell > .sidebar');
@@ -218,16 +242,34 @@ export function ClassicSmallWindowSidebarGuard() {
     const SIDEBAR_CLASS = SMALL_WINDOW_SIDEBAR_HIDDEN_CLASS;
     let frame = 0;
     let wasOpen = false;
+    let dockClearanceLayers = new Set();
 
-    const hasOpenSmallWindow = () => Array.from(document.querySelectorAll(SMALL_WINDOW_SELECTOR))
-      .some(isVisibleSmallWindow);
+    const getOpenSmallWindows = () => Array.from(document.querySelectorAll(SMALL_WINDOW_SELECTOR))
+      .filter(isVisibleSmallWindow);
+
+    const syncDockClearance = (openWindows) => {
+      const nextLayers = new Set();
+
+      openWindows.forEach((windowNode) => {
+        const layer = smallWindowViewportLayer(windowNode);
+        if (layer) nextLayers.add(layer);
+      });
+
+      dockClearanceLayers.forEach((layer) => {
+        if (!nextLayers.has(layer)) layer.classList.remove(SMALL_WINDOW_DOCK_CLEARANCE_CLASS);
+      });
+      nextLayers.forEach((layer) => layer.classList.add(SMALL_WINDOW_DOCK_CLEARANCE_CLASS));
+      dockClearanceLayers = nextLayers;
+    };
 
     const sync = () => {
       frame = 0;
-      const open = hasOpenSmallWindow();
+      const openWindows = getOpenSmallWindows();
+      const open = openWindows.length > 0;
 
       document.body.classList.toggle(BODY_CLASS, open);
       sidebar.classList.toggle(SIDEBAR_CLASS, open);
+      syncDockClearance(openWindows);
 
       // A newly opened sheet/modal starts with the full dock hidden and only
       // leaves the tiny quick-open handle visible. If the user explicitly
@@ -271,6 +313,8 @@ export function ClassicSmallWindowSidebarGuard() {
       document.body.classList.remove(BODY_CLASS);
       sidebar.classList.remove(SIDEBAR_CLASS);
       sidebar.classList.remove(MOBILE_DOCK_FORCED_OPEN_CLASS);
+      dockClearanceLayers.forEach((layer) => layer.classList.remove(SMALL_WINDOW_DOCK_CLEARANCE_CLASS));
+      dockClearanceLayers.clear();
       window.removeEventListener('resize', scheduleSync);
       window.removeEventListener('orientationchange', scheduleSync);
     };
