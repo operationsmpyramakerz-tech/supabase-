@@ -114,7 +114,7 @@ export default async function HomePage({ searchParams }) {
       title="Home"
       activePath="/next/home"
       bodyClass="page-home"
-      pageStyles={["/next/css/home.css?v=home-overview-summary-v2"]}
+      pageStyles={["/next/css/home.css?v=home-hidden-scrollbar-v3"]}
     >
       <DashboardNotice omitted={bootstrapWarnings} />
 

@@ -2263,3 +2263,15 @@
     font-size:.94rem;
   }
 }
+/* 2026-09-25 — Shopping Cart: hide the page scrollbar while preserving touch/mouse scrolling. */
+body.shopping-cart-page .main-content > main{
+  scrollbar-width:none !important;
+  -ms-overflow-style:none !important;
+}
+body.shopping-cart-page .main-content > main::-webkit-scrollbar{
+  width:0 !important;
+  height:0 !important;
+  display:none !important;
+  background:transparent !important;
+}
+

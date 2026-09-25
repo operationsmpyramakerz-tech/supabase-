@@ -35,7 +35,7 @@ function routePerformanceStyles(localPath) {
     ];
   }
   if (localPath === "/orders/new" || localPath.startsWith("/orders/new/")) {
-    return ["/next/css/shopping-cart.css?v=shopping-cart-summary-light-v14"];
+    return ["/next/css/shopping-cart.css?v=shopping-cart-scrollbar-v15"];
   }
   if (localPath === "/products") {
     return ["/next/css/products-stocktaking-performance.css?v=css-phase2"];
@@ -45,7 +45,7 @@ function routePerformanceStyles(localPath) {
       "/next/css/products-stocktaking-performance.css?v=css-phase2",
       "/next/css/stocktaking-performance.css?v=css-phase2",
       "/next/css/stocktaking-proposals-performance.css?v=css-phase2",
-      "/next/css/stocktaking-after-shared-performance.css?v=css-phase2",
+      "/next/css/stocktaking-after-shared-performance.css?v=stocktaking-folders-polish-v3",
     ];
   }
   if (localPath === "/kits") {

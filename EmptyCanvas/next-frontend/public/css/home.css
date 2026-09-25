@@ -3827,3 +3827,15 @@ body.shell-embedded.page-home .main-content > main.container-full-width{
   height:15px;
   color:#ea580c;
 }
+/* 2026-09-25 — Home: keep the page scrollable without a visible scrollbar. */
+body.page-home .main-content > main{
+  scrollbar-width:none !important;
+  -ms-overflow-style:none !important;
+}
+body.page-home .main-content > main::-webkit-scrollbar{
+  width:0 !important;
+  height:0 !important;
+  display:none !important;
+  background:transparent !important;
+}
+

@@ -1490,8 +1490,8 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
       {!activeColumn ? (
         <section className="card stocktaking-folders-card">
           <div className="stocktaking-folders-head">
-            <div>
-              <span className="stocktaking-folders-kicker">STOCKTAKING COLUMNS</span>
+            <div className="stocktaking-folders-title">
+              <span className="stocktaking-folders-title-icon" aria-hidden="true"><Icon name="folder" /></span>
               <h2>Stock Folders</h2>
             </div>
             <span className="stocktaking-folders-count">{visibleFolders.length} folder{visibleFolders.length === 1 ? "" : "s"}</span>
@@ -1519,7 +1519,11 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
                 </button>
               </article>
             )) : (
-              <div className="empty-block empty-block--no-data stocktaking-folder-empty">Sorry, No stock folders available</div>
+              <div className="empty-block empty-block--no-data stocktaking-folder-empty">
+                <span className="stocktaking-folder-empty__icon" aria-hidden="true"><Icon name="folder" /></span>
+                <strong>No stock folders available</strong>
+                <span>Folders available to your account will appear here.</span>
+              </div>
             )}
           </div>
         </section>
