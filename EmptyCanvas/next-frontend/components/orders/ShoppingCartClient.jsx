@@ -6,6 +6,7 @@ import { navigateWithinApp } from "../../lib/client-navigation";
 const DEFAULT_ORDER_TYPES = ["Request Products", "Withdraw Products", "Request Maintenance"];
 const DIRECT_API_BASE = "/next/api";
 const EDIT_TRANSFER_TTL_MS = 30 * 60 * 1000;
+const CART_DRAFT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 const TYPE_META = {
   requestproducts: {
@@ -242,6 +243,75 @@ function clearEditTransfer() {
       }
       remove.forEach((storageKey) => storage.removeItem(storageKey));
     } catch {}
+  }
+}
+
+function storageKeyPart(value, fallback = "default") {
+  const clean = text(value).toLowerCase().slice(0, 180);
+  return encodeURIComponent(clean || fallback);
+}
+
+function cartDraftStorageKey({ draftScope = "account", type = "", editMode = false, editKey = "" } = {}) {
+  const scope = storageKeyPart(draftScope, "account");
+  const typeKey = storageKeyPart(key(type), "default");
+  const modeKey = editMode
+    ? `edit:${storageKeyPart(editKey || typeKey, "default")}`
+    : `new:${typeKey}`;
+  return `shopping_cart:draft:v3:${scope}:${modeKey}`;
+}
+
+function readCartDraft(options = {}) {
+  const storageKey = cartDraftStorageKey(options);
+  const candidates = [];
+  for (const storage of storageAreas()) {
+    try {
+      const payload = parseJson(storage.getItem(storageKey));
+      if (!payload) continue;
+      const ts = number(payload?.ts);
+      if (!ts || Date.now() - ts > CART_DRAFT_TTL_MS) {
+        storage.removeItem(storageKey);
+        continue;
+      }
+      if (key(payload?.orderType) && key(payload.orderType) !== key(options?.type)) continue;
+      candidates.push(payload);
+    } catch {}
+  }
+  candidates.sort((left, right) => number(right?.ts) - number(left?.ts));
+  return candidates[0] || null;
+}
+
+function writeCartDraft({ draftScope = "account", type = "", editMode = false, editKey = "", products = [], reason = "", editToken = "" } = {}) {
+  const storageKey = cartDraftStorageKey({ draftScope, type, editMode, editKey });
+  const cleanProducts = normalizeDraft(products);
+  const stores = storageAreas();
+  if (!cleanProducts.length) {
+    for (const storage of stores) {
+      try { storage.removeItem(storageKey); } catch {}
+    }
+    return true;
+  }
+
+  const payload = JSON.stringify({
+    ts: Date.now(),
+    orderType: text(type),
+    reason: text(reason),
+    products: cleanProducts,
+    editToken: editMode ? text(editToken) : "",
+  });
+  let saved = false;
+  for (const storage of stores) {
+    try {
+      storage.setItem(storageKey, payload);
+      saved = true;
+    } catch {}
+  }
+  return saved;
+}
+
+function clearCartDraft(options = {}) {
+  const storageKey = cartDraftStorageKey(options);
+  for (const storage of storageAreas()) {
+    try { storage.removeItem(storageKey); } catch {}
   }
 }
 
@@ -1171,6 +1241,7 @@ export default function ShoppingCartClient({
   initialType = "",
   editMode = false,
   editKey = "",
+  draftScope = "account",
   bootstrapWarnings = [],
 }) {
   const orderTypes = useMemo(() => {
@@ -1235,20 +1306,22 @@ export default function ShoppingCartClient({
     expectedSparePartId: "",
   }));
 
-  const persistDraft = async (items = cart, type = selectedType, globalReason = reason, { quiet = false } = {}) => {
+  const persistDraft = async (items = cart, type = selectedType, globalReason = reason, { quiet = false, editTransfer = null } = {}) => {
     const cleanType = text(type);
     if (!cleanType) return true;
     const cleanItems = normalizeDraft(items);
     try {
       if (!quiet) setSaveState("Saving…");
-      if (!cleanItems.length) {
-        await requestJson(`/api/order-draft?orderType=${encodeURIComponent(cleanType)}`, { method: "DELETE" });
-      } else {
-        await requestJson("/api/order-draft/products", {
-          method: "POST",
-          body: JSON.stringify({ products: payloadFor(cleanItems, cleanType, globalReason), orderType: cleanType }),
-        });
-      }
+      const saved = writeCartDraft({
+        draftScope,
+        type: cleanType,
+        editMode,
+        editKey,
+        products: cleanItems,
+        reason: globalReason,
+        editToken: text(editTransfer?.editToken || activeEditTransfer?.editToken),
+      });
+      if (!saved && cleanItems.length) throw new Error("Browser storage is unavailable.");
       if (!quiet) {
         setSaveState("Saved");
         window.setTimeout(() => setSaveState(""), 1300);
@@ -1286,15 +1359,12 @@ export default function ShoppingCartClient({
           setActiveEditTransfer(transfer);
           setCart(patched);
           setReason(isMaintenance(cleanType) ? "" : transferReason);
-          // Keep the established session draft as temporary compatibility for
-          // the remaining Legacy draft/cancel endpoints. Direct edit submit is
-          // authorized by the signed edit token, not by this session draft.
-          await persistDraft(patched, cleanType, transferReason, { quiet: true });
+          await persistDraft(patched, cleanType, transferReason, { quiet: true, editTransfer: transfer });
           return;
         }
       }
 
-      const draft = fallback || await requestJson(`/api/order-draft?orderType=${encodeURIComponent(cleanType)}`);
+      const draft = fallback || readCartDraft({ draftScope, type: cleanType, editMode, editKey }) || {};
       let items = normalizeDraft(draft?.products);
       let nextReason = text(draft?.reason) || items.find((item) => item.reason)?.reason || "";
 
@@ -1306,12 +1376,25 @@ export default function ShoppingCartClient({
         if (!nextReason && transferReason) nextReason = transferReason;
         if (nextReason) items = items.map((item) => ({ ...item, reason: item.reason || nextReason }));
         if (transfer) setActiveEditTransfer(transfer);
+        else if (text(draft?.editToken)) {
+          setActiveEditTransfer({
+            products: items,
+            reason: nextReason,
+            orderType: cleanType,
+            editToken: text(draft.editToken),
+            source: "shopping-cart-local-draft",
+            ts: number(draft?.ts) || Date.now(),
+          });
+        }
       }
 
       setCart(items);
       setReason(isMaintenance(cleanType) ? "" : nextReason);
       if (items.length && (!draft?.products?.length || (editMode && !text(draft?.reason) && nextReason))) {
-        await persistDraft(items, cleanType, nextReason, { quiet: true });
+        await persistDraft(items, cleanType, nextReason, {
+          quiet: true,
+          editTransfer: text(draft?.editToken) ? { editToken: text(draft.editToken) } : null,
+        });
       }
     } catch (error) {
       setCart([]);
@@ -1391,12 +1474,11 @@ export default function ShoppingCartClient({
 
   const backToTypes = async () => {
     if (editMode && !checkoutCommitted) {
-      try {
-        await requestJson("/api/order-edit/cancel", {
-          method: "POST",
-          body: JSON.stringify({ orderType: selectedType }),
-        });
-      } catch {}
+      if (reasonTimer.current) {
+        window.clearTimeout(reasonTimer.current);
+        reasonTimer.current = null;
+      }
+      clearCartDraft({ draftScope, type: selectedType, editMode: true, editKey });
       clearEditTransfer();
       navigateWithinApp("/next/orders");
       return;
@@ -1527,9 +1609,8 @@ export default function ShoppingCartClient({
     setBusy(true);
     setNotice(null);
     try {
-      // Draft persistence is still a Legacy compatibility feature. Checkout now
-      // carries the complete payload, so a draft-store outage must not block the
-      // direct Next/Supabase submission path.
+      // Keep the current browser draft synchronized before submit so a failed
+      // request can be retried after a refresh without relying on Express session state.
       await persistDraft(cart, selectedType, reason, { quiet: true });
       const response = await requestJson(`${DIRECT_API_BASE}/orders/shopping-cart/submit-direct`, {
         method: "POST",
@@ -1541,13 +1622,11 @@ export default function ShoppingCartClient({
         }),
       });
       setCheckoutCommitted(true);
-      // Direct submit does not depend on the Express draft store. Clear the
-      // compatibility draft without letting a cleanup failure hide a committed order.
-      fetch(`/api/order-draft?orderType=${encodeURIComponent(selectedType)}`, {
-        method: "DELETE",
-        credentials: "include",
-        cache: "no-store",
-      }).catch(() => {});
+      if (reasonTimer.current) {
+        window.clearTimeout(reasonTimer.current);
+        reasonTimer.current = null;
+      }
+      clearCartDraft({ draftScope, type: selectedType, editMode, editKey });
       clearEditTransfer();
       setActiveEditTransfer(null);
       setCart([]);

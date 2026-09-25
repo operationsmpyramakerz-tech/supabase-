@@ -57,6 +57,15 @@ export default async function ShoppingCartPageServer({
     );
   }
 
+  const draftScope = String(
+    gate.account?.teamMemberId ||
+    gate.account?.userSupabaseId ||
+    gate.account?.userId ||
+    gate.account?.id ||
+    gate.account?.username ||
+    "account"
+  ).trim() || "account";
+
   let initial;
   try {
     initial = await loadShoppingCartInitialData();
@@ -87,6 +96,7 @@ export default async function ShoppingCartPageServer({
         initialType={initialType}
         editMode={editMode}
         editKey={editKey}
+        draftScope={draftScope}
         bootstrapWarnings={[]}
       />
     </AppShell>
