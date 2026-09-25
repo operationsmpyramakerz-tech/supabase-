@@ -621,9 +621,7 @@ function KitBrowserDialog({ kits, folders, selectedKits, onToggleKit, onQuantity
       <section className="classic-cart-kit-browser" role="dialog" aria-modal="true" aria-label="Select kits">
         <header className="classic-cart-kit-browser-head">
           <div>
-            <span>Kit library</span>
             <h3>{activeFolder ? activeFolder.name : "Select kits"}</h3>
-            <p>{activeFolder ? "Choose one or more kits from this folder." : "Browse folders or choose unfiled kits."}</p>
           </div>
           <button type="button" onClick={onClose} aria-label="Close"><CartSvgIcon name="x" size={20}/></button>
         </header>
@@ -723,7 +721,6 @@ function KitBrowserDialog({ kits, folders, selectedKits, onToggleKit, onQuantity
         </div>
 
         <footer className="classic-cart-kit-browser-footer">
-          <span><strong>{selectedCount}</strong> kit{selectedCount === 1 ? "" : "s"} selected</span>
           <button type="button" onClick={onClose}>Use selected kits</button>
         </footer>
       </section>
