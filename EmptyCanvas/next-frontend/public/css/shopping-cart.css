@@ -2147,7 +2147,7 @@
 }
 
 /* ========================================================================
-   Shopping Cart — compact dark summary metric cards
+   Shopping Cart — refined light summary metric cards
    2026-09-24
    ===================================================================== */
 .classic-cart-page[class*="theme-"] .classic-cart-summary-card{
@@ -2174,45 +2174,44 @@
   align-items:flex-start;
   justify-content:center;
   gap:.28rem;
-  border:1px solid rgba(15,23,42,.08);
   border-radius:18px;
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,.16),
-    0 13px 30px -25px rgba(15,23,42,.48);
   overflow:hidden;
+  transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease;
 }
 
+/* Neutral mist card: deliberately quiet so the number reads immediately. */
 .classic-cart-page[class*="theme-"] .classic-cart-summary-lines>div:first-child{
-  background:linear-gradient(145deg,#334155 0%,#263244 100%);
-  border-color:rgba(148,163,184,.18);
-  color:#fff;
+  background:linear-gradient(145deg,#f7f8fa 0%,#eef1f4 100%);
+  border:1px solid #e1e6eb;
+  color:#111827;
   box-shadow:
-    inset 0 1px 0 rgba(255,255,255,.10),
-    0 16px 34px -27px rgba(15,23,42,.72);
+    inset 0 1px 0 rgba(255,255,255,.92),
+    0 12px 28px -24px rgba(15,23,42,.30);
 }
 
 .classic-cart-page[class*="theme-"] .classic-cart-summary-lines>div:first-child span{
-  color:#cbd5e1;
+  color:#6b7280;
 }
 
 .classic-cart-page[class*="theme-"] .classic-cart-summary-lines>div:first-child strong{
-  color:#fff;
+  color:#111827;
 }
 
+/* Soft mint total: same green family as the page without looking saturated. */
 .classic-cart-page[class*="theme-"] .classic-cart-summary-lines>div.classic-cart-summary-total{
-  background:linear-gradient(145deg,#111827 0%,#080d17 100%);
-  border-color:color-mix(in srgb,var(--cart-accent) 18%,rgba(255,255,255,.06));
+  background:linear-gradient(145deg,#f3fbf7 0%,#e8f7ef 100%);
+  border:1px solid #cfe9da;
   box-shadow:
-    inset 0 1px 0 rgba(255,255,255,.075),
-    0 17px 36px -26px rgba(2,6,23,.82);
+    inset 0 1px 0 rgba(255,255,255,.94),
+    0 13px 30px -24px rgba(22,101,52,.22);
 }
 
 .classic-cart-page[class*="theme-"] .classic-cart-summary-lines>div.classic-cart-summary-total span{
-  color:color-mix(in srgb,var(--cart-accent) 72%,#fff);
+  color:#4f7f67;
 }
 
 .classic-cart-page[class*="theme-"] .classic-cart-summary-lines>div.classic-cart-summary-total strong{
-  color:var(--cart-accent);
+  color:#17834f;
 }
 
 .classic-cart-page[class*="theme-"] .classic-cart-summary-lines>div span{
@@ -2232,6 +2231,13 @@
 
 .classic-cart-page[class*="theme-"] .classic-cart-summary-lines>div:only-child{
   grid-column:1/-1;
+}
+
+@media(hover:hover){
+  .classic-cart-page[class*="theme-"] .classic-cart-summary-lines>div:hover{
+    transform:translateY(-1px);
+    box-shadow:0 16px 34px -27px rgba(15,23,42,.28);
+  }
 }
 
 @media(max-width:640px){
