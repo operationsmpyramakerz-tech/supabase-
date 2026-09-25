@@ -648,28 +648,71 @@ function KitBrowserDialog({ kits, folders, selectedKits, onToggleKit, onQuantity
             <div className="classic-cart-kit-browser-status is-error"><strong>Kit library unavailable</strong><span>{error}</span><button type="button" onClick={onRetry}>Try again</button></div>
           ) : (
             <>
-              {visibleFolders.map((folder) => (
-                <button type="button" className="classic-cart-kit-folder-card" key={folder.id} onClick={() => { setActiveFolderId(folder.id); setQuery(""); }}>
-                  <span className="classic-cart-kit-folder-icon"><CartSvgIcon name="folder" size={24}/></span>
-                  <span><strong>{folder.name}</strong><small>{folderCounts.get(folder.id) || 0} kit{(folderCounts.get(folder.id) || 0) === 1 ? "" : "s"}</small></span>
-                  <CartSvgIcon name="arrow-right" size={18}/>
-                </button>
-              ))}
+              {visibleFolders.map((folder) => {
+                const kitCount = folderCounts.get(folder.id) || 0;
+                return (
+                  <article className="classic-cart-kit-library-card classic-cart-kit-library-folder" key={folder.id}>
+                    <button
+                      type="button"
+                      className="classic-cart-kit-library-main"
+                      onClick={() => { setActiveFolderId(folder.id); setQuery(""); }}
+                      aria-label={`Open folder ${folder.name}`}
+                    >
+                      <span className="classic-cart-kit-folder-figure" aria-hidden="true">
+                        <span className="classic-cart-kit-folder-paper classic-cart-kit-folder-paper--left" />
+                        <span className="classic-cart-kit-folder-paper classic-cart-kit-folder-paper--middle" />
+                        <span className="classic-cart-kit-folder-paper classic-cart-kit-folder-paper--right" />
+                      </span>
+                      <span className="classic-cart-kit-folder-copy"><strong>{folder.name}</strong><em>Kit folder</em></span>
+                      <span className="classic-cart-kit-folder-count">
+                        <CartSvgIcon name="folder" size={11}/>
+                        <span>{kitCount} kit{kitCount === 1 ? "" : "s"}</span>
+                      </span>
+                    </button>
+                  </article>
+                );
+              })}
               {visibleKits.map((kit) => {
                 const selected = Object.prototype.hasOwnProperty.call(selectedKits || {}, kit.id);
                 const qty = selected ? selectedKits[kit.id] : 1;
                 return (
-                  <article className={`classic-cart-kit-card ${selected ? "is-selected" : ""}`} key={kit.id}>
-                    <button type="button" className="classic-cart-kit-card-main" onClick={() => onToggleKit(kit.id)} aria-pressed={selected}>
-                      <span className="classic-cart-kit-card-icon"><CartSvgIcon name="layers" size={22}/></span>
-                      <span className="classic-cart-kit-card-copy"><strong>{kit.name}</strong><small>{kit.itemsCount} component{kit.itemsCount === 1 ? "" : "s"}{kit.createdBy ? ` · ${kit.createdBy}` : ""}</small></span>
-                      <span className="classic-cart-kit-card-check">{selected ? <CartSvgIcon name="check" size={16}/> : <CartSvgIcon name="plus" size={16}/>}</span>
+                  <article className={`classic-cart-kit-library-card classic-cart-kit-library-kit ${selected ? "is-selected" : ""}`} key={kit.id}>
+                    <button
+                      type="button"
+                      className="classic-cart-kit-library-main"
+                      onClick={() => onToggleKit(kit.id)}
+                      aria-pressed={selected}
+                      aria-label={`${selected ? "Unselect" : "Select"} kit ${kit.name}`}
+                    >
+                      <span className="classic-cart-kit-folder-figure" aria-hidden="true">
+                        <span className="classic-cart-kit-folder-paper classic-cart-kit-folder-paper--left" />
+                        <span className="classic-cart-kit-folder-paper classic-cart-kit-folder-paper--middle" />
+                        <span className="classic-cart-kit-folder-paper classic-cart-kit-folder-paper--right" />
+                      </span>
+                      <span className="classic-cart-kit-folder-copy"><strong>{kit.name}</strong><em>Created by {kit.createdBy || "—"}</em></span>
+                      <span className="classic-cart-kit-folder-count">
+                        <CartSvgIcon name="package" size={11}/>
+                        <span>{kit.itemsCount} component{kit.itemsCount === 1 ? "" : "s"}</span>
+                      </span>
                     </button>
                     {selected ? (
-                      <label className="classic-cart-kit-card-qty" onClick={(event) => event.stopPropagation()}>
-                        <span>Kit Qty</span>
-                        <input type="number" min="1" step="1" inputMode="numeric" value={qty} onChange={(event) => onQuantityChange(kit.id, event.target.value)} />
-                      </label>
+                      <div className="classic-cart-kit-library-selected-panel">
+                        <span className="classic-cart-kit-library-selected-name">{kit.name}</span>
+                        <label onClick={(event) => event.stopPropagation()}>
+                          <span>Qty</span>
+                          <input
+                            type="number"
+                            min="1"
+                            step="1"
+                            inputMode="numeric"
+                            value={qty}
+                            onChange={(event) => onQuantityChange(kit.id, event.target.value)}
+                            onFocus={(event) => event.currentTarget.select()}
+                            onClick={(event) => event.stopPropagation()}
+                            aria-label={`Quantity for ${kit.name}`}
+                          />
+                        </label>
+                      </div>
                     ) : null}
                   </article>
                 );
