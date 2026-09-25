@@ -2653,3 +2653,70 @@ body.shopping-cart-page .main-content > main::-webkit-scrollbar{
   .classic-cart-kit-library-main::before{height:68px}
   .classic-cart-kit-folder-count{bottom:6px}
 }
+
+
+/* ========================================================================
+   Shopping Cart — tactile inline validation for slide-to-submit
+   2026-09-25
+   ===================================================================== */
+.classic-cart-add-new.is-validation-error,
+.classic-cart-page[class*="theme-"] .classic-cart-reason-card.is-validation-error{
+  border-color:rgba(239,68,68,.82);
+  animation:
+    classicCartValidationNudge .46s cubic-bezier(.2,.8,.2,1),
+    classicCartValidationGlow 1.08s ease-out;
+  will-change:transform,box-shadow;
+}
+
+.classic-cart-add-new.is-validation-error{
+  box-shadow:
+    0 0 0 4px rgba(239,68,68,.12),
+    0 16px 42px -24px rgba(239,68,68,.52);
+}
+
+.classic-cart-add-new.is-validation-error .classic-cart-add-new-plus{
+  animation:classicCartValidationPlusPulse .72s cubic-bezier(.2,.8,.2,1);
+}
+
+.classic-cart-page[class*="theme-"] .classic-cart-reason-card.is-validation-error{
+  box-shadow:
+    0 0 0 4px rgba(239,68,68,.11),
+    0 18px 44px -28px rgba(239,68,68,.5);
+}
+
+.classic-cart-page[class*="theme-"] .classic-cart-reason-card.is-validation-error::before{
+  background:linear-gradient(90deg,#ef4444,#fb7185);
+}
+
+.classic-cart-page[class*="theme-"] .classic-cart-reason-card.is-validation-error .classic-cart-summary-field input{
+  border-color:rgba(239,68,68,.66);
+  box-shadow:0 0 0 3px rgba(239,68,68,.08);
+  background:#fffafa;
+}
+
+@keyframes classicCartValidationNudge{
+  0%,100%{transform:translateX(0)}
+  18%{transform:translateX(-5px)}
+  36%{transform:translateX(4px)}
+  54%{transform:translateX(-3px)}
+  72%{transform:translateX(2px)}
+}
+
+@keyframes classicCartValidationGlow{
+  0%{filter:brightness(1)}
+  22%{filter:brightness(1.035)}
+  100%{filter:brightness(1)}
+}
+
+@keyframes classicCartValidationPlusPulse{
+  0%,100%{transform:scale(1)}
+  42%{transform:scale(1.1)}
+}
+
+@media(prefers-reduced-motion:reduce){
+  .classic-cart-add-new.is-validation-error,
+  .classic-cart-page[class*="theme-"] .classic-cart-reason-card.is-validation-error,
+  .classic-cart-add-new.is-validation-error .classic-cart-add-new-plus{
+    animation:none;
+  }
+}

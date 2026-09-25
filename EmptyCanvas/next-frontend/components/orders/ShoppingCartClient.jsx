@@ -1196,7 +1196,10 @@ export default function ShoppingCartClient({
   const [submittedOrder, setSubmittedOrder] = useState(null);
   const [saveState, setSaveState] = useState("");
   const [checkoutCommitted, setCheckoutCommitted] = useState(false);
+  const [validationFeedback, setValidationFeedback] = useState({ cart: false, reason: false });
   const reasonTimer = useRef(null);
+  const validationTimer = useRef(null);
+  const reasonInputRef = useRef(null);
   const mounted = useRef(false);
 
   const meta = orderTypeMeta(selectedType);
@@ -1318,7 +1321,42 @@ export default function ShoppingCartClient({
 
   useEffect(() => () => {
     if (reasonTimer.current) window.clearTimeout(reasonTimer.current);
+    if (validationTimer.current) window.clearTimeout(validationTimer.current);
   }, []);
+
+  const showValidationFeedback = ({ cart: cartMissing = false, reason: reasonMissing = false } = {}) => {
+    if (!cartMissing && !reasonMissing) return;
+
+    setNotice(null);
+    if (validationTimer.current) window.clearTimeout(validationTimer.current);
+
+    try {
+      if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+        navigator.vibrate([65, 35, 90]);
+      }
+    } catch {}
+
+    // Remove the state for one frame so repeated invalid slides replay the pulse.
+    setValidationFeedback({ cart: false, reason: false });
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        setValidationFeedback({ cart: cartMissing, reason: reasonMissing });
+
+        const target = cartMissing
+          ? document.querySelector(".classic-cart-add-new")
+          : document.querySelector(".classic-cart-reason-card");
+        target?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+
+        if (!cartMissing && reasonMissing) {
+          window.setTimeout(() => reasonInputRef.current?.focus?.({ preventScroll: true }), 220);
+        }
+
+        validationTimer.current = window.setTimeout(() => {
+          setValidationFeedback({ cart: false, reason: false });
+        }, 1150);
+      });
+    });
+  };
 
   const chooseType = async (type) => {
     const clean = text(type);
@@ -1437,6 +1475,7 @@ export default function ShoppingCartClient({
 
   const updateReason = (value) => {
     setReason(value);
+    if (text(value)) setValidationFeedback((current) => ({ ...current, reason: false }));
     if (reasonTimer.current) window.clearTimeout(reasonTimer.current);
     reasonTimer.current = window.setTimeout(() => {
       if (cart.length) persistDraft(cart, selectedType, value, { quiet: false });
@@ -1451,12 +1490,10 @@ export default function ShoppingCartClient({
   };
 
   const checkout = async () => {
-    if (!cart.length) {
-      setNotice({ type: "error", title: "Empty cart", message: maintenance ? "Add at least one product to maintain." : "Add at least one product before checkout." });
-      return false;
-    }
-    if (!maintenance && !text(reason)) {
-      setNotice({ type: "error", title: "Reason required", message: withdraw ? "Enter the withdrawal reason." : "Enter the order reason." });
+    const cartMissing = !cart.length;
+    const reasonMissing = !maintenance && !text(reason);
+    if (cartMissing || reasonMissing) {
+      showValidationFeedback({ cart: cartMissing, reason: reasonMissing });
       return false;
     }
     if (maintenance && cart.length > 1) {
@@ -1611,7 +1648,7 @@ export default function ShoppingCartClient({
             ) : (
               <div className="classic-cart-empty">
                 <button
-                  className={`classic-cart-add-new ${typeTheme}`}
+                  className={`classic-cart-add-new ${typeTheme}${validationFeedback.cart ? " is-validation-error" : ""}`}
                   type="button"
                   onClick={() => setPicker({ item: null })}
                   aria-label={`Add new item to ${selectedType}`}
@@ -1645,14 +1682,16 @@ export default function ShoppingCartClient({
           </div>
 
           {!maintenance ? (
-            <div className="classic-cart-reason-card">
+            <div className={`classic-cart-reason-card${validationFeedback.reason ? " is-validation-error" : ""}`}>
               <label className="classic-cart-summary-field">
                 <span>Reason</span>
                 <input
+                  ref={reasonInputRef}
                   value={reason}
                   onChange={(event) => updateReason(event.target.value)}
                   placeholder="Reason..."
                   autoComplete="off"
+                  aria-invalid={validationFeedback.reason || undefined}
                 />
               </label>
             </div>
