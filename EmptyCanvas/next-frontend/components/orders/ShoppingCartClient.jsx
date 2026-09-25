@@ -532,7 +532,6 @@ function ProductCombobox({ products, value, onChange, disabled = false }) {
           {selected?.imageUrl ? <img src={selected.imageUrl} alt="" /> : <CartSvgIcon name="package" size={20}/>} 
         </span>
         <span className="classic-cart-combobox-copy">
-          <small>{selected ? "Selected component" : "Component"}</small>
           <strong>{selected?.name || "Select a component"}</strong>
           <em>{selected ? [selected.displayId || "No ID", selected.unit || "Unit"].join(" · ") : "Search by name, ID, tag or unit"}</em>
         </span>
@@ -797,14 +796,9 @@ function ProductPicker({ products, type, item, onClose, onSave }) {
 
   return (
     <div className="classic-cart-modal-overlay classic-cart-picker-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !submitting) onClose(); }}>
-      <section className="classic-cart-modal-card classic-cart-modal-card--modern" role="dialog" aria-modal="true" aria-labelledby="classic-cart-modal-title">
-        <header className="classic-cart-picker-head">
-          <span className="classic-cart-picker-head-icon"><CartSvgIcon name={isMaintenance(type) ? "tool" : isWithdraw(type) ? "log-out" : "shopping-cart"} size={24}/></span>
-          <div className="classic-cart-picker-head-copy">
-            <span>{item ? "Edit cart item" : "Add to cart"}</span>
-            <h3 id="classic-cart-modal-title">{item ? "Edit component" : isWithdraw(type) ? "Add to Withdraw Products" : isMaintenance(type) ? "Add Maintenance Item" : "Add to Request Products"}</h3>
-            <p>{item ? "Update this component without changing the rest of the cart." : maintenance ? "Choose one component and describe the maintenance issue." : "Choose a component directly or add all components from one or more kits."}</p>
-          </div>
+      <section className="classic-cart-modal-card classic-cart-modal-card--modern" role="dialog" aria-modal="true" aria-label={item ? "Edit cart item" : "Add to cart"}>
+        <header className="classic-cart-picker-head classic-cart-picker-head--floating">
+          <span className="classic-cart-picker-head-icon classic-cart-picker-head-icon--floating" aria-hidden="true"><CartSvgIcon name={isMaintenance(type) ? "tool" : isWithdraw(type) ? "log-out" : "shopping-cart"} size={26}/></span>
           <button className="classic-cart-picker-close" type="button" onClick={onClose} disabled={submitting} aria-label="Close"><CartSvgIcon name="x" size={22}/></button>
         </header>
 
@@ -822,7 +816,7 @@ function ProductPicker({ products, type, item, onClose, onSave }) {
         <div className="classic-cart-picker-body">
           {mode === "product" ? (
             <div className="classic-cart-picker-section">
-              <div className="classic-cart-picker-label-row"><span>Component <em>*</em></span><small>{products.length} available</small></div>
+              <div className="classic-cart-picker-label-row"><span>Component <em>*</em></span></div>
               <ProductCombobox products={products} value={selectedId} onChange={(id) => { setSelectedId(id); setError(""); }} disabled={submitting}/>
 
               {!maintenance ? (

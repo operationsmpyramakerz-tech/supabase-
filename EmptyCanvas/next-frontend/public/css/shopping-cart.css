@@ -370,7 +370,7 @@
   padding:0;
   border:1px solid rgba(226,232,240,.92);
   border-radius:30px;
-  background:rgba(255,255,255,.985);
+  background:#fff;
   box-shadow:0 40px 110px -34px rgba(2,8,23,.62),0 1px 0 rgba(255,255,255,.9) inset;
 }
 .classic-cart-picker-head{
@@ -432,6 +432,34 @@
 .classic-cart-picker-close:hover{background:#e9edf2;transform:rotate(3deg)}
 .classic-cart-picker-close:disabled{opacity:.55;cursor:not-allowed}
 
+/* Floating cart badge: centered on the sheet edge, half in / half out. */
+.classic-cart-picker-head--floating{
+  position:relative;
+  display:block;
+  min-height:34px;
+  padding:0;
+  border-bottom:0;
+}
+.classic-cart-picker-head-icon--floating{
+  position:absolute;
+  z-index:4;
+  top:-29px;
+  left:50%;
+  width:58px;
+  height:58px;
+  transform:translateX(-50%);
+  border-radius:19px;
+  background:var(--cart-accent-soft,#f8fafc);
+  border:1px solid var(--cart-accent-border,#e2e8f0);
+  box-shadow:0 14px 34px -18px color-mix(in srgb,var(--cart-accent,#22c55e) 46%,rgba(15,23,42,.35)),0 4px 14px -10px rgba(15,23,42,.28);
+}
+.classic-cart-picker-head--floating .classic-cart-picker-close{
+  position:absolute;
+  z-index:5;
+  top:10px;
+  right:14px;
+}
+
 .classic-cart-picker-tabs{
   display:grid;
   grid-template-columns:1fr 1fr;
@@ -442,6 +470,8 @@
   border-radius:18px;
   background:#f6f8fa;
 }
+.classic-cart-picker-head--floating + .classic-cart-picker-tabs{margin-top:1.65rem}
+
 .classic-cart-picker-tabs button{
   min-width:0;
   height:58px;
@@ -474,6 +504,7 @@
   overflow-y:auto;
   overflow-x:visible;
   padding:1rem 1.3rem 1.15rem;
+  background:#fff;
   scrollbar-width:thin;
   scrollbar-color:#cbd5e1 transparent;
 }
@@ -520,7 +551,7 @@
 }
 .classic-cart-combobox-media{width:46px;height:46px;border-radius:14px}
 .classic-cart-combobox-media img,.classic-cart-combobox-option-media img{width:100%;height:100%;object-fit:cover;display:block}
-.classic-cart-combobox-copy{min-width:0;display:flex;flex-direction:column;gap:.05rem;font-style:normal}
+.classic-cart-combobox-copy{min-width:0;display:flex;flex-direction:column;justify-content:center;gap:.16rem;font-style:normal}
 .classic-cart-combobox-copy small{color:#98a2b3;font-size:.64rem;font-weight:850;text-transform:uppercase;letter-spacing:.06em}
 .classic-cart-combobox-copy strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#111827;font-size:.9rem;font-weight:900}
 .classic-cart-combobox-copy em{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#667085;font-size:.72rem;font-style:normal;font-weight:700}
@@ -618,7 +649,7 @@
   gap:.7rem;
   padding:.9rem 1.3rem 1.2rem;
   border-top:1px solid #edf2f7;
-  background:rgba(255,255,255,.98);
+  background:#fff;
   border-radius:0 0 30px 30px;
 }
 .classic-cart-picker-actions .classic-cart-btn-ghost,.classic-cart-picker-actions .classic-cart-btn-solid{
@@ -681,12 +712,10 @@
 @media(max-width:760px){
   .classic-cart-picker-overlay{align-items:flex-end;padding:0}
   .classic-cart-modal-card--modern{width:100%;max-height:calc(92dvh - env(safe-area-inset-bottom,0px));border-radius:26px 26px 0 0;border-bottom:0}
-  .classic-cart-picker-head{grid-template-columns:46px minmax(0,1fr) 40px;gap:.7rem;padding:1rem .95rem .82rem}
-  .classic-cart-picker-head-icon{width:46px;height:46px;border-radius:15px}
-  .classic-cart-picker-head-copy h3{font-size:1.12rem}
-  .classic-cart-picker-head-copy p{font-size:.72rem;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-  .classic-cart-picker-close{width:40px;height:40px;border-radius:13px}
-  .classic-cart-picker-tabs{margin:.75rem .95rem 0}
+  .classic-cart-picker-head--floating{min-height:32px;padding:0}
+  .classic-cart-picker-head-icon--floating{top:-28px;width:56px;height:56px;border-radius:18px}
+  .classic-cart-picker-head--floating .classic-cart-picker-close{top:9px;right:.82rem;width:40px;height:40px;border-radius:13px}
+  .classic-cart-picker-tabs{margin:1.55rem .95rem 0}
   .classic-cart-picker-tabs button{height:52px;padding:0 .55rem;gap:.45rem}
   .classic-cart-picker-tabs button small{display:none}
   .classic-cart-picker-body{padding:.85rem .95rem 1rem}
