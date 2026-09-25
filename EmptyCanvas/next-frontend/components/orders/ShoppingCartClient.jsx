@@ -705,6 +705,29 @@ function ProductPicker({ products, type, item, onClose, onSave }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
+  useEffect(() => {
+    const root = document.documentElement;
+    const body = document.body;
+    const themeMeta = document.getElementById("ops-theme-color");
+    const previousRootBackground = root.style.backgroundColor;
+    const previousBodyBackground = body.style.backgroundColor;
+    const previousThemeColor = themeMeta?.getAttribute("content") || "";
+
+    root.classList.add("classic-cart-picker-open");
+    body.classList.add("classic-cart-picker-open");
+    root.style.backgroundColor = "#ffffff";
+    body.style.backgroundColor = "#ffffff";
+    if (themeMeta) themeMeta.setAttribute("content", "#ffffff");
+
+    return () => {
+      root.classList.remove("classic-cart-picker-open");
+      body.classList.remove("classic-cart-picker-open");
+      root.style.backgroundColor = previousRootBackground;
+      body.style.backgroundColor = previousBodyBackground;
+      if (themeMeta) themeMeta.setAttribute("content", previousThemeColor || (root.dataset.theme === "dark" ? "#080b11" : "#ffffff"));
+    };
+  }, []);
+
   const selected = products.find((product) => product.id === selectedId) || null;
   const selectedKitCount = Object.keys(selectedKits).length;
   const selectedKitNames = Object.keys(selectedKits).map((id) => kits.find((kit) => kit.id === id)?.name).filter(Boolean);
@@ -838,7 +861,7 @@ function ProductPicker({ products, type, item, onClose, onSave }) {
             </div>
           ) : (
             <div className="classic-cart-picker-section classic-cart-picker-section--kit">
-              <div className="classic-cart-picker-label-row"><span>Kits <em>*</em></span><small>{kitLibraryLoaded ? `${kits.length} available` : "Kit library"}</small></div>
+              <div className="classic-cart-picker-label-row"><span>Kits <em>*</em></span></div>
               <button
                 type="button"
                 className={`classic-cart-kit-trigger ${selectedKitCount ? "has-value" : ""}`}
@@ -847,7 +870,6 @@ function ProductPicker({ products, type, item, onClose, onSave }) {
               >
                 <span className="classic-cart-kit-trigger-icon"><CartSvgIcon name="layers" size={22}/></span>
                 <span className="classic-cart-kit-trigger-copy">
-                  <small>Kit library</small>
                   <strong>{selectedKitCount ? `${selectedKitCount} kit${selectedKitCount === 1 ? "" : "s"} selected` : "Select kits"}</strong>
                   <em>{selectedKitCount ? selectedKitNames.slice(0, 3).join(" · ") + (selectedKitCount > 3 ? ` +${selectedKitCount - 3}` : "") : "Browse folders, search and choose quantities"}</em>
                 </span>

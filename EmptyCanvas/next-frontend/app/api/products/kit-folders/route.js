@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { createKitFolder, listKitFolders } from "../../../../lib/proposal-kit-service";
-import { errorResponse, gateResponse, kitGate, requestBody } from "../../../../lib/proposal-kit-api";
+import { errorResponse, gateResponse, kitGate, kitReadGate, requestBody } from "../../../../lib/proposal-kit-api";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request) {
-  const gate = await kitGate();
+  const gate = await kitReadGate();
   if (!gate.ok) return gateResponse(gate);
   try {
     const url = new URL(request.url);
