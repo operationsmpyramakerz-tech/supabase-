@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { navigateWithinApp } from "../../lib/client-navigation";
 
 const DEFAULT_ORDER_TYPES = ["Request Products", "Withdraw Products", "Request Maintenance"];
+const DIRECT_API_BASE = "/next/api";
 const EDIT_TRANSFER_TTL_MS = 30 * 60 * 1000;
 
 const TYPE_META = {
@@ -1196,6 +1197,7 @@ export default function ShoppingCartClient({
   const [submittedOrder, setSubmittedOrder] = useState(null);
   const [saveState, setSaveState] = useState("");
   const [checkoutCommitted, setCheckoutCommitted] = useState(false);
+  const [activeEditTransfer, setActiveEditTransfer] = useState(null);
   const [validationFeedback, setValidationFeedback] = useState({ cart: false, reason: false });
   const reasonTimer = useRef(null);
   const validationTimer = useRef(null);
@@ -1273,6 +1275,25 @@ export default function ShoppingCartClient({
     if (!cleanType) return;
     setLoadingDraft(true);
     try {
+      if (editMode) {
+        const transfer = readEditTransfer(editKey);
+        const transferItems = normalizeDraft(transfer?.products);
+        if (transfer && transferItems.length) {
+          const transferReason = text(transfer?.reason) || transferItems.find((item) => item.reason)?.reason || "";
+          const patched = transferReason
+            ? transferItems.map((item) => ({ ...item, reason: item.reason || transferReason }))
+            : transferItems;
+          setActiveEditTransfer(transfer);
+          setCart(patched);
+          setReason(isMaintenance(cleanType) ? "" : transferReason);
+          // Keep the established session draft as temporary compatibility for
+          // the remaining Legacy draft/cancel endpoints. Direct edit submit is
+          // authorized by the signed edit token, not by this session draft.
+          await persistDraft(patched, cleanType, transferReason, { quiet: true });
+          return;
+        }
+      }
+
       const draft = fallback || await requestJson(`/api/order-draft?orderType=${encodeURIComponent(cleanType)}`);
       let items = normalizeDraft(draft?.products);
       let nextReason = text(draft?.reason) || items.find((item) => item.reason)?.reason || "";
@@ -1284,6 +1305,7 @@ export default function ShoppingCartClient({
         if (!items.length && transferItems.length) items = transferItems;
         if (!nextReason && transferReason) nextReason = transferReason;
         if (nextReason) items = items.map((item) => ({ ...item, reason: item.reason || nextReason }));
+        if (transfer) setActiveEditTransfer(transfer);
       }
 
       setCart(items);
@@ -1299,6 +1321,7 @@ export default function ShoppingCartClient({
       setLoadingDraft(false);
     }
   };
+
 
   useEffect(() => {
     if (mounted.current) return;
@@ -1504,17 +1527,29 @@ export default function ShoppingCartClient({
     setBusy(true);
     setNotice(null);
     try {
-      const draftSaved = await persistDraft(cart, selectedType, reason, { quiet: true });
-      if (!draftSaved) throw new Error("The cart draft could not be saved before checkout.");
-      const response = await requestJson("/api/submit-order", {
+      // Draft persistence is still a Legacy compatibility feature. Checkout now
+      // carries the complete payload, so a draft-store outage must not block the
+      // direct Next/Supabase submission path.
+      await persistDraft(cart, selectedType, reason, { quiet: true });
+      const response = await requestJson(`${DIRECT_API_BASE}/orders/shopping-cart/submit-direct`, {
         method: "POST",
         body: JSON.stringify({
           products: payloadFor(cart, selectedType, reason),
           orderType: selectedType,
+          editMode,
+          editToken: text(activeEditTransfer?.editToken),
         }),
       });
       setCheckoutCommitted(true);
+      // Direct submit does not depend on the Express draft store. Clear the
+      // compatibility draft without letting a cleanup failure hide a committed order.
+      fetch(`/api/order-draft?orderType=${encodeURIComponent(selectedType)}`, {
+        method: "DELETE",
+        credentials: "include",
+        cache: "no-store",
+      }).catch(() => {});
       clearEditTransfer();
+      setActiveEditTransfer(null);
       setCart([]);
       setReason("");
 
@@ -1533,6 +1568,7 @@ export default function ShoppingCartClient({
           orderType: selectedType,
           nextStep: text(response?.nextStatusStep) || "Waiting for approval",
           orderItems: Array.isArray(response?.orderItems) ? response.orderItems : [],
+          undoToken: text(response?.undoToken),
         });
       }
       return true;
@@ -1550,9 +1586,10 @@ export default function ShoppingCartClient({
       .filter(Boolean);
 
     try {
-      await requestJson("/api/orders/current/undo-submit", {
+      await requestJson(`${DIRECT_API_BASE}/orders/shopping-cart/undo-direct`, {
         method: "POST",
         body: JSON.stringify({
+          undoToken: text(submission?.undoToken),
           orderId: text(submission?.orderId),
           orderPageIds,
         }),

@@ -239,6 +239,17 @@ export async function insert(table, row) {
   return Array.isArray(rows) ? rows[0] || null : rows;
 }
 
+export async function insertMany(table, rows = []) {
+  const payload = Array.isArray(rows) ? rows.filter((row) => row && typeof row === "object") : [];
+  if (!payload.length) return [];
+  const result = await supabaseRequest(`/${encodeTableName(table)}`, {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: payload,
+  });
+  return Array.isArray(result) ? result : (result ? [result] : []);
+}
+
 export async function updateById(table, id, row) {
   const rows = await supabaseRequest(
     `/${encodeTableName(table)}?id=eq.${encodeFilterValue(id)}`,

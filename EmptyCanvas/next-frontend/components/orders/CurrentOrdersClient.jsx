@@ -33,7 +33,7 @@ const ACTIONS = {
     title: "Edit order",
     description: "Enter admin password to edit this order.",
     button: "Continue",
-    endpoint: "/api/orders/current/edit/init",
+    endpoint: `${DIRECT_API_BASE}/orders/current/edit-direct`,
     icon: "edit-2",
   },
   archive: {
@@ -400,11 +400,18 @@ function writeEditTransfer(data, group) {
   try {
     const products = Array.isArray(data?.products) ? data.products : [];
     if (!products.length) return "";
-    const reason = text(group?.reason);
+    const reason = text(data?.reason || group?.reason);
     const orderType = text(data?.orderType || group?.orderType);
     const patched = products.map((item) => ({ ...item, reason: text(item?.reason) || reason }));
     const editKey = `current-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-    const payload = JSON.stringify({ products: patched, reason, orderType, source: "current-orders-next", ts: Date.now() });
+    const payload = JSON.stringify({
+      products: patched,
+      reason,
+      orderType,
+      editToken: text(data?.editToken),
+      source: text(data?.source) || "current-orders-next",
+      ts: Date.now(),
+    });
     const typeKey = orderTypeKey(orderType) || "default";
     const keys = [
       `shopping_cart:edit_payload:v2:${editKey}`,
