@@ -2016,3 +2016,16 @@ html[data-theme="dark"] body.page-account .account-image-editor-actions{
 html[data-theme="dark"] body.page-account .profile-avatar-shell{
   background: #fff;
 }
+
+/* ================================================================
+   Profile cover / avatar tangent fix
+   Keep the cover continuous behind the avatar. The white avatar halo
+   itself creates the smooth left/right corners from the reference design.
+   The previous radial mask cut extra white wedges beside the avatar.
+   ================================================================ */
+.page-account .profile-cover-display{
+  -webkit-mask-image: none !important;
+  mask-image: none !important;
+  -webkit-mask: none !important;
+  mask: none !important;
+}
