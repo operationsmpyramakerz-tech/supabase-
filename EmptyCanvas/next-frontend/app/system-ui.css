@@ -315,3 +315,93 @@ body.persistent-app-shell
   }
 }
 
+
+/* -------------------------------------------------------------------------
+ * Global close-control alignment + pure mobile modal dock surface
+ * 2026-09-25
+ *
+ * Keep every icon-style X visually centered, regardless of whether a feature
+ * renders an SVG, a wrapped × glyph, or one of the legacy pseudo-element Xs.
+ * Also keep the mobile gesture/dock strip pure white while nested sheets are
+ * open; stacked translucent backdrops must never tint that strip gray.
+ * ---------------------------------------------------------------------- */
+button[aria-label^="Close"]:not([class*="backdrop"]) {
+  display: inline-grid !important;
+  place-items: center !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+  line-height: 1 !important;
+}
+
+button[aria-label^="Close"]:not([class*="backdrop"]) > svg {
+  display: block !important;
+  margin: 0 !important;
+  align-self: center !important;
+  justify-self: center !important;
+  transform: none !important;
+  vertical-align: middle !important;
+}
+
+button[aria-label^="Close"]:not([class*="backdrop"]) > span:only-child {
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  display: grid !important;
+  place-items: center !important;
+  line-height: 1 !important;
+  transform: none !important;
+}
+
+/* Legacy order modals draw their X with ::before instead of an SVG. */
+.co-modal-close::before,
+.co-submodal-close::before {
+  position: absolute !important;
+  top: 50% !important;
+  left: 50% !important;
+  margin: 0 !important;
+  transform: translate(-50%, -52%) !important;
+  transform-origin: center !important;
+  line-height: 1 !important;
+}
+
+@media (max-width: 768px) {
+  /* The small-window guard already reserves this exact bottom clearance.
+   * Paint it above every stacked backdrop so opening a second/third sheet
+   * cannot progressively darken the gesture/dock area. */
+  body.ops-small-window-open::after {
+    content: "";
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: calc(env(safe-area-inset-bottom, 0px) + 42px);
+    background: #ffffff !important;
+    opacity: 1 !important;
+    filter: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    pointer-events: none;
+    z-index: 2147482880;
+  }
+
+  /* When the user explicitly re-opens navigation above a modal, the dock must
+   * still sit above the white safe-area surface. */
+  html body.next-classic-shell-active .classic-app-shell > .sidebar.ops-mobile-dock-forced-open {
+    z-index: 2147482940 !important;
+  }
+
+  .ops-mobile-dock-quick-open {
+    z-index: 2147482990 !important;
+  }
+}
+
+/* Preserve the legacy order-close fallback: those controls intentionally draw
+ * the X with ::before, so never reveal a hidden icon underneath it. */
+.co-modal-close > svg,
+.co-submodal-close > svg,
+.co-modal-close > i,
+.co-submodal-close > i {
+  display: none !important;
+}
