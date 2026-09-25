@@ -274,13 +274,39 @@ function fileIcon(file) {
   return "file";
 }
 
+const ACCOUNT_ISLAND_DURATION_MS = 5200;
+
+function AccountSavedIsland({ toast, onClose }) {
+  useEffect(() => {
+    if (!toast) return undefined;
+    const timer = window.setTimeout(onClose, ACCOUNT_ISLAND_DURATION_MS + 140);
+    return () => window.clearTimeout(timer);
+  }, [toast, onClose]);
+
+  if (!toast) return null;
+  return (
+    <div className="account-saved-island" role="status" aria-live="polite">
+      <svg className="account-saved-island-progress" viewBox="0 0 500 92" preserveAspectRatio="none" aria-hidden="true">
+        <rect className="account-saved-island-track" x="3" y="3" width="494" height="86" rx="43" pathLength="100" />
+        <rect className="account-saved-island-line" x="3" y="3" width="494" height="86" rx="43" pathLength="100" />
+      </svg>
+      <span className="account-saved-island-icon"><Icon name="check" size={18} /></span>
+      <span className="account-saved-island-copy">
+        <strong>{toast.title || "Saved"}</strong>
+        <small>{toast.message || "Changes saved successfully."}</small>
+      </span>
+    </div>
+  );
+}
+
 function Toast({ toast, onClose }) {
   if (!toast) return null;
   const type = toast.type === "error" ? "error" : toast.type === "success" ? "success" : "info";
+  if (type === "success") return <AccountSavedIsland toast={toast} onClose={onClose} />;
   return (
     <div className="toast-stack account-classic-toast" role="status" aria-live="polite">
       <div className={`toast toast--${type} is-in`}>
-        <span className="toast__icon"><Icon name={type === "success" ? "check" : type === "error" ? "alert" : "file"} size={14} /></span>
+        <span className="toast__icon"><Icon name={type === "error" ? "alert" : "file"} size={14} /></span>
         <div className="toast__content"><div className="toast__title">{toast.title || "My Account"}</div><div className="toast__msg">{toast.message}</div></div>
         <button className="toast__close" type="button" onClick={onClose} aria-label="Close">×</button>
       </div>
@@ -538,9 +564,12 @@ function ImageUploadModal({ imageRequest, onClose, onSaved }) {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [invalidPassword, setInvalidPassword] = useState(false);
   const [crop, setCrop] = useState({ zoom: 1, x: 0, y: 0 });
   const [imageMeta, setImageMeta] = useState({ width: 0, height: 0 });
   const cropViewportRef = useRef(null);
+  const passwordInputRef = useRef(null);
+  const invalidPasswordTimerRef = useRef(null);
   const dragRef = useRef(null);
   const kind = imageRequest?.kind === "cover" ? "cover" : "profile";
   const label = kind === "cover" ? "Cover photo" : "Profile picture";
@@ -549,7 +578,16 @@ function ImageUploadModal({ imageRequest, onClose, onSaved }) {
     setCrop({ zoom: 1, x: 0, y: 0 });
     setImageMeta({ width: 0, height: 0 });
     setError("");
+    setInvalidPassword(false);
+    if (invalidPasswordTimerRef.current) {
+      window.clearTimeout(invalidPasswordTimerRef.current);
+      invalidPasswordTimerRef.current = null;
+    }
   }, [imageRequest?.preview, kind]);
+
+  useEffect(() => () => {
+    if (invalidPasswordTimerRef.current) window.clearTimeout(invalidPasswordTimerRef.current);
+  }, []);
 
   useEffect(() => {
     function handleKeyDown(event) {
@@ -610,6 +648,24 @@ function ImageUploadModal({ imageRequest, onClose, onSaved }) {
     try { event.currentTarget.releasePointerCapture?.(event.pointerId); } catch {}
   }
 
+  function triggerInvalidPassword() {
+    if (invalidPasswordTimerRef.current) window.clearTimeout(invalidPasswordTimerRef.current);
+    setCurrentPassword("");
+    setShowCurrentPassword(false);
+    setError("");
+    setInvalidPassword(true);
+    try {
+      if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+        navigator.vibrate([70, 45, 90]);
+      }
+    } catch {}
+    window.requestAnimationFrame(() => passwordInputRef.current?.focus());
+    invalidPasswordTimerRef.current = window.setTimeout(() => {
+      setInvalidPassword(false);
+      invalidPasswordTimerRef.current = null;
+    }, 1650);
+  }
+
   async function submit(event) {
     event.preventDefault();
     if (!imageRequest?.file) return setError("Please choose an image first.");
@@ -640,7 +696,8 @@ function ImageUploadModal({ imageRequest, onClose, onSaved }) {
       onSaved(kind, safeUrl(kind === "cover" ? result.coverPhotoUrl : result.photoUrl));
       onClose();
     } catch (uploadError) {
-      setError(uploadError?.status === 401 ? "invalid password" : (uploadError?.message || "The image could not be uploaded."));
+      if (uploadError?.status === 401) triggerInvalidPassword();
+      else setError(uploadError?.message || "The image could not be uploaded.");
     } finally {
       setBusy(false);
     }
@@ -719,8 +776,27 @@ function ImageUploadModal({ imageRequest, onClose, onSaved }) {
         <div className="account-image-editor-filename"><Icon name="image" size={15} /><span>{imageRequest?.file?.name || "Selected image"}</span></div>
 
         <label className="field-label"><Icon name="lock" size={16} /> Current password</label>
-        <div className="password-wrapper has-toggle account-image-editor-password">
-          <input className="ex-input" type={showCurrentPassword ? "text" : "password"} value={currentPassword} onChange={(event) => { setCurrentPassword(event.target.value); setError(""); }} autoComplete="current-password" placeholder="Enter your current password" />
+        <div className={`password-wrapper has-toggle account-image-editor-password${invalidPassword ? " is-invalid-password" : ""}`}>
+          <input
+            ref={passwordInputRef}
+            className="ex-input"
+            type={showCurrentPassword ? "text" : "password"}
+            value={currentPassword}
+            onChange={(event) => {
+              setCurrentPassword(event.target.value);
+              setError("");
+              if (invalidPassword) {
+                setInvalidPassword(false);
+                if (invalidPasswordTimerRef.current) {
+                  window.clearTimeout(invalidPasswordTimerRef.current);
+                  invalidPasswordTimerRef.current = null;
+                }
+              }
+            }}
+            autoComplete="current-password"
+            placeholder={invalidPassword ? "invalid password" : "Enter your current password"}
+            aria-invalid={invalidPassword || !!error}
+          />
           <PasswordToggle visible={showCurrentPassword} onToggle={() => setShowCurrentPassword((current) => !current)} label="current password" />
         </div>
         {error ? <div className="ex-error" style={{ display: "block" }} role="alert">{error}</div> : null}

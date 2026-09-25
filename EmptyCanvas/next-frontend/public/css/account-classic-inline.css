@@ -1634,6 +1634,187 @@
   }
 }
 
+
+/* ----------------------------------------------------------------
+   Account image editor — inline password feedback
+   ---------------------------------------------------------------- */
+.page-account .account-image-editor-password.is-invalid-password{
+  animation: accountInvalidPasswordShake .34s cubic-bezier(.36,.07,.19,.97) both;
+}
+.page-account .account-image-editor-password.is-invalid-password .ex-input{
+  border-color:#ef4444 !important;
+  background:#fff7f7 !important;
+  color:#b42318;
+  box-shadow:
+    0 0 0 4px rgba(239,68,68,.12),
+    0 0 22px rgba(239,68,68,.14) !important;
+}
+.page-account .account-image-editor-password.is-invalid-password .ex-input::placeholder{
+  color:#d92d20;
+  opacity:1;
+  font-weight:850;
+}
+.page-account .account-image-editor-password.is-invalid-password .toggle-password{
+  color:#d92d20;
+}
+@keyframes accountInvalidPasswordShake{
+  0%,100%{transform:translateX(0)}
+  18%{transform:translateX(-6px)}
+  36%{transform:translateX(5px)}
+  54%{transform:translateX(-4px)}
+  72%{transform:translateX(3px)}
+  88%{transform:translateX(-1px)}
+}
+
+/* ----------------------------------------------------------------
+   Account saved confirmation — Dynamic Island
+   Matches the Shopping Cart confirmation language.
+   ---------------------------------------------------------------- */
+.page-account .account-saved-island{
+  position:fixed;
+  top:16px;
+  left:50%;
+  z-index:2200;
+  width:min(420px,calc(100vw - 52px));
+  min-height:76px;
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr);
+  align-items:center;
+  gap:10px;
+  padding:11px 14px;
+  border-radius:38px;
+  overflow:hidden;
+  isolation:isolate;
+  color:#fff;
+  background:linear-gradient(145deg,#050505 0%,#111 58%,#080808 100%);
+  box-shadow:0 22px 54px -20px rgba(0,0,0,.64),0 8px 22px -16px rgba(0,0,0,.7);
+  transform:translateX(-50%);
+  transform-origin:50% 0%;
+  animation:accountSavedIslandLife 5.34s linear both;
+  will-change:transform,opacity,filter;
+}
+.page-account .account-saved-island-progress{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  z-index:0;
+  pointer-events:none;
+  overflow:visible;
+}
+.page-account .account-saved-island-track,
+.page-account .account-saved-island-line{
+  fill:none;
+  vector-effect:non-scaling-stroke;
+}
+.page-account .account-saved-island-track{
+  stroke:rgba(255,255,255,.10);
+  stroke-width:3px;
+}
+.page-account .account-saved-island-line{
+  stroke:#ff7518;
+  stroke-width:3.2px;
+  stroke-linecap:round;
+  stroke-dasharray:100;
+  stroke-dashoffset:0;
+  animation:accountSavedIslandProgress 5.2s linear forwards;
+  filter:drop-shadow(0 0 4px rgba(255,117,24,.42));
+}
+.page-account .account-saved-island-icon{
+  position:relative;
+  z-index:1;
+  width:42px;
+  height:42px;
+  min-width:42px;
+  display:grid;
+  place-items:center;
+  border-radius:999px;
+  background:#f7f7f5;
+  color:#139a57;
+  box-shadow:0 8px 22px -12px rgba(255,255,255,.3);
+}
+.page-account .account-saved-island-copy{
+  position:relative;
+  z-index:1;
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+  padding-right:4px;
+}
+.page-account .account-saved-island-copy strong{
+  display:block;
+  color:#fff;
+  font-size:.88rem;
+  line-height:1.18;
+  font-weight:900;
+  letter-spacing:-.012em;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.page-account .account-saved-island-copy small{
+  display:block;
+  color:rgba(255,255,255,.68);
+  font-size:.68rem;
+  line-height:1.2;
+  font-weight:700;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+@keyframes accountSavedIslandProgress{
+  from{stroke-dashoffset:0}
+  to{stroke-dashoffset:100}
+}
+@keyframes accountSavedIslandLife{
+  0%{opacity:0;filter:blur(2px);transform:translate(-50%,-54px) scale(.78,.58)}
+  3%{opacity:.72;filter:blur(.8px);transform:translate(-50%,-18px) scale(.94,.86)}
+  6%{opacity:1;filter:blur(0);transform:translate(-50%,5px) scale(1.018,1.035)}
+  9%{opacity:1;filter:blur(0);transform:translate(-50%,-2px) scale(.994,.985)}
+  12%{opacity:1;filter:blur(0);transform:translate(-50%,1px) scale(1.004,1.008)}
+  15%,88%{opacity:1;filter:blur(0);transform:translate(-50%,0) scale(1)}
+  92%{opacity:1;filter:blur(0);transform:translate(-50%,-2px) scale(.995,.985)}
+  96%{opacity:.78;filter:blur(.4px);transform:translate(-50%,-15px) scale(.94,.84)}
+  100%{opacity:0;filter:blur(2px);transform:translate(-50%,-52px) scale(.76,.54)}
+}
+@media (max-width:640px){
+  .page-account .account-saved-island{
+    top:12px;
+    width:calc(100vw - 52px);
+    max-width:430px;
+    min-height:70px;
+    gap:8px;
+    padding:10px 12px;
+    border-radius:35px;
+  }
+  .page-account .account-saved-island-icon{
+    width:36px;
+    height:36px;
+    min-width:36px;
+  }
+  .page-account .account-saved-island-copy strong{font-size:.80rem}
+  .page-account .account-saved-island-copy small{font-size:.62rem}
+}
+@media (max-width:380px){
+  .page-account .account-saved-island{
+    width:calc(100vw - 38px);
+    padding-left:10px;
+    padding-right:10px;
+    gap:7px;
+  }
+}
+@media (prefers-reduced-motion:reduce){
+  .page-account .account-image-editor-password.is-invalid-password{animation:none}
+  .page-account .account-saved-island{animation:accountSavedIslandFade 5.34s ease both}
+  .page-account .account-saved-island-line{animation:none;stroke-dashoffset:0}
+  @keyframes accountSavedIslandFade{
+    0%{opacity:0}
+    8%,90%{opacity:1}
+    100%{opacity:0}
+  }
+}
+
 /* Keep the compact editor coherent in dark mode too. */
 html[data-theme="dark"] body.page-account .account-image-editor-icon,
 html[data-theme="dark"] body.page-account .account-crop-stage,
