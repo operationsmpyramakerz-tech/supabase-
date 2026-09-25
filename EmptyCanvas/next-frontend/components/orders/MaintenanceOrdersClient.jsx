@@ -1732,7 +1732,7 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
 
   async function ensureOptions() {
     if (Array.isArray(options?.resolutionMethods) && Array.isArray(options?.spareParts) && Array.isArray(options?.checklistItems)) return options;
-    const response = await fetch("/api/orders/requested/maintenance-form-options", { credentials: "include", cache: "no-store" });
+    const response = await fetch(`${DIRECT_API_BASE}/orders/maintenance/form-options`, { credentials: "include", cache: "no-store" });
     const data = await readJson(response);
     if (!response.ok) throw new Error(data?.error || "Failed to load maintenance form options.");
     setOptions(data || {});
@@ -1806,7 +1806,8 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
     setBusy(true);
     setActionError("");
     try {
-      await postJson("/api/orders/requested/log-maintenance", {
+      await postJson(`${DIRECT_API_BASE}/orders/maintenance/mutations-direct`, {
+        action: "log-maintenance",
         orderIds: logGroup.orderIds,
         perItemLogs: logsWithDetails,
         moveToArrived: false,
@@ -1847,7 +1848,8 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
     try {
       const dataUrls = [];
       for (const file of payload.files) dataUrls.push(await fileToOptimizedDataUrl(file));
-      await postJson("/api/orders/requested/mark-arrived", {
+      await postJson(`${DIRECT_API_BASE}/orders/maintenance/mutations-direct`, {
+        action: "mark-arrived",
         orderIds: doneGroup.orderIds,
         orderReceiptDataUrls: dataUrls,
         orderReceiptFilenames: payload.files.map((file, index) => text(file?.name) || `maintenance-report-${index + 1}.jpg`),

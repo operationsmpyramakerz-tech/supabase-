@@ -1,15 +1,16 @@
 import "server-only";
 import { performance } from "node:perf_hooks";
 
-import { deleteByIds, isSupabaseConfigured, select, updateByIds } from "./supabase-rest";
+import { deleteByIds, isSupabaseConfigured, select, updateById, updateByIds } from "./supabase-rest";
 import { loadRawOrderRowsByIds, serializeOperationsOrderDetail } from "./order-details-data";
 import { consumeOrderSummaryWindows, loadOrderRowsByNumbers, scanOrderNumberCandidates } from "./order-pagination";
 import { applyOrderSearchPlan, canUseOrderSearchText, createOrderSearchPlan, noteOrderSearchTextError } from "./order-search-hotpath";
 import { canUseOrderCandidateRpc, loadOrderCandidateNumbersRpc, noteOrderCandidateRpcError } from "./order-candidate-rpc";
 import { measurePerformance, recordPerformanceSample } from "./performance-profiler";
 import { getProductsCatalog } from "./products-service";
-import { invalidateLegacyOperationsCaches } from "./operations-orders-data";
+import { invalidateLegacyOperationsCaches, markOperationsArrived } from "./operations-orders-data";
 import { directPageMutationAccess, verifyPageAdminPasswordDirect } from "./order-action-auth";
+import { listMaintenanceChecklistItems } from "./maintenance-checklist-data";
 
 const PAGE_LIMIT = 36;
 const PAGE_MAX = 80;
@@ -522,6 +523,425 @@ function directMaintenanceMutationError(message, status = 500) {
 function cleanMaintenanceActionIds(value = []) {
   const source = Array.isArray(value) ? value : [value];
   return [...new Set(source.map((id) => text(id)).filter(Boolean))].slice(0, 500);
+}
+
+const DEFAULT_MAINTENANCE_RESOLUTION_METHODS = [
+  { name: "In-facility", color: "green" },
+  { name: "Not Applicable", color: "purple" },
+  { name: "On-site", color: "brown" },
+  { name: "Remote", color: "yellow" },
+];
+
+function uniqueMaintenanceStrings(value, { splitComma = false } = {}) {
+  const out = [];
+  const seen = new Set();
+  const add = (entry) => {
+    if (entry === null || typeof entry === "undefined") return;
+    const raw = text(entry);
+    if (!raw) return;
+    if (splitComma && raw.includes(",")) {
+      raw.split(",").forEach(add);
+      return;
+    }
+    const key = norm(raw);
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(raw);
+  };
+  if (Array.isArray(value)) value.forEach(add);
+  else add(value);
+  return out;
+}
+
+function maintenanceSparePlaceholder(value) {
+  const key = norm(value).replace(/[^a-z0-9]/g, "");
+  return !key || key === "selectcomponent" || key === "selectsparepart" || key === "nosparepartselected";
+}
+
+function normalizeMaintenanceSpareEntries(value, lookups = {}) {
+  const out = [];
+  const seen = new Set();
+  const byId = lookups?.byId || new Map();
+  const byName = lookups?.byName || new Map();
+
+  const add = (entry = {}) => {
+    const rawId = text(entry?.id ?? entry?.productId ?? entry?.sparePartId ?? entry?.value);
+    let rawName = text(entry?.name ?? entry?.label ?? entry?.component ?? entry?.sparePartName);
+    let qty = Number(entry?.qty ?? entry?.quantity ?? entry?.count ?? 1);
+    if (!Number.isFinite(qty) || qty <= 0) qty = 1;
+    qty = Math.max(1, Math.round(qty));
+
+    const fromId = rawId ? byId.get(rawId) : null;
+    if (!rawName && fromId?.name) rawName = text(fromId.name);
+    const qtyMatch = rawName.match(/(?:\s*[x×]\s*|\s*\(\s*qty\s*:?\s*)(\d+(?:\.\d+)?)\s*\)?\s*$/i);
+    if (qtyMatch) {
+      const parsedQty = Number(qtyMatch[1]);
+      if (Number.isFinite(parsedQty) && parsedQty > 0) qty = Math.max(1, Math.round(parsedQty));
+      rawName = rawName.slice(0, qtyMatch.index).trim();
+    }
+    if (!rawId && maintenanceSparePlaceholder(rawName)) return;
+
+    const fromName = rawName ? byName.get(norm(rawName)) : null;
+    const product = fromId || fromName || null;
+    const name = text(product?.name || rawName);
+    if (!name || (!rawId && maintenanceSparePlaceholder(name))) return;
+    const id = text(product?.id || rawId);
+    const key = `${id || norm(name)}|${qty}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push({
+      id,
+      name,
+      qty,
+      displayId: text(product?.displayId || product?.idCode),
+      unitPrice: Number.isFinite(Number(product?.unitPrice)) ? Number(product.unitPrice) : 0,
+      url: product?.url || null,
+    });
+  };
+
+  if (Array.isArray(value)) value.forEach(add);
+  else if (value && typeof value === "object") {
+    if (Array.isArray(value.replaced)) value.replaced.forEach(add);
+    else if (Array.isArray(value.items)) value.items.forEach(add);
+    else add(value);
+  } else {
+    const raw = text(value);
+    if (raw) {
+      try { return normalizeMaintenanceSpareEntries(JSON.parse(raw), lookups); } catch {}
+      raw.split(/[,\n]+/).map((part) => part.trim()).filter(Boolean).forEach((name) => add({ name }));
+    }
+  }
+  return out;
+}
+
+function maintenanceLogMetaText({ neededEntries = [], replacedEntries = [], checklist = [], loggedAt = null } = {}) {
+  const cleanEntries = (entries) => (Array.isArray(entries) ? entries : [])
+    .map((entry) => ({
+      id: text(entry?.id),
+      name: text(entry?.name),
+      qty: Number.isFinite(Number(entry?.qty)) ? Math.max(1, Math.round(Number(entry.qty))) : 1,
+    }))
+    .filter((entry) => entry.id || entry.name);
+  const cleanChecklist = uniqueMaintenanceStrings(Array.isArray(checklist) ? checklist : [], { splitComma: false })
+    .map((item) => text(item).slice(0, 800))
+    .filter(Boolean);
+  return JSON.stringify({
+    v: 3,
+    needed: cleanEntries(neededEntries),
+    replaced: cleanEntries(replacedEntries),
+    checklist: cleanChecklist,
+    loggedAt: text(loggedAt) || null,
+  });
+}
+
+function missingWritableColumn(error) {
+  const raw = [error?.message, error?.details?.message, error?.details?.details, error?.details?.hint]
+    .filter(Boolean)
+    .join(" ");
+  return (raw.match(/Could not find the ['\"]([^'\"]+)['\"] column/i) || [])[1]
+    || (raw.match(/column ['\"]([^'\"]+)['\"]/i) || [])[1]
+    || "";
+}
+
+async function updateMaintenanceRowSafe(id, sourcePatch = {}, requiredColumns = []) {
+  let patch = { ...(sourcePatch || {}) };
+  const required = new Set((requiredColumns || []).map((value) => norm(value)).filter(Boolean));
+  const removed = new Set();
+  for (let attempt = 0; attempt <= Object.keys(patch).length; attempt += 1) {
+    try {
+      return await updateById(tableName(), id, patch);
+    } catch (error) {
+      const missing = missingWritableColumn(error);
+      const key = Object.keys(patch).find((name) => norm(name) === norm(missing));
+      if (!missing || !key || required.has(norm(key)) || removed.has(norm(key))) throw error;
+      delete patch[key];
+      removed.add(norm(key));
+    }
+  }
+  return await updateById(tableName(), id, patch);
+}
+
+function maintenanceWorkflowAccess(account = {}) {
+  return directPageMutationAccess(account, ["Maintenance Orders", "Operations Orders", "Requested Orders"]);
+}
+
+export async function loadMaintenanceFormOptionsDirect() {
+  if (!isSupabaseConfigured()) return null;
+  const [catalog, checklistItems, existingResolutionRows] = await Promise.all([
+    getProductsCatalog().catch(() => null),
+    listMaintenanceChecklistItems().catch(() => []),
+    select(tableName(), {
+      select: "resolution_method",
+      resolution_method: "not.is.null",
+      limit: "1000",
+    }).catch(() => []),
+  ]);
+  if (!catalog || !Array.isArray(catalog?.products)) return null;
+
+  const spareParts = catalog.products
+    .map((product) => ({
+      id: text(product?.id),
+      name: text(product?.name),
+      displayId: text(product?.displayId),
+      unitPrice: Number.isFinite(Number(product?.unitPrice)) ? Number(product.unitPrice) : 0,
+      url: product?.url || null,
+      tags: Array.isArray(product?.tags) ? product.tags : [],
+    }))
+    .filter((product) => product.id && product.name)
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base", numeric: true }));
+
+  const colors = new Map(DEFAULT_MAINTENANCE_RESOLUTION_METHODS.map((item) => [norm(item.name), item.color]));
+  const resolutionMethods = [];
+  const seen = new Set();
+  const addResolution = (name, color = null) => {
+    const clean = text(name);
+    const key = norm(clean);
+    if (!clean || seen.has(key)) return;
+    seen.add(key);
+    resolutionMethods.push({ name: clean, color: color || colors.get(key) || null });
+  };
+  DEFAULT_MAINTENANCE_RESOLUTION_METHODS.forEach((item) => addResolution(item.name, item.color));
+  (Array.isArray(existingResolutionRows) ? existingResolutionRows : []).forEach((row) => addResolution(row?.resolution_method));
+
+  return {
+    resolutionMethods,
+    spareParts,
+    checklistItems: Array.isArray(checklistItems) ? checklistItems : [],
+    source: "supabase-next",
+  };
+}
+
+export async function logMaintenanceDirect({
+  account = {},
+  orderIds = [],
+  resolutionMethod = "",
+  serialNumber = "",
+  actualIssueDescription = "",
+  repairAction = "",
+  sparePartId = null,
+  sparePartIds = [],
+  sparePartNames = [],
+  perItemLogs = [],
+  moveToArrived = false,
+  moveToShipping = false,
+  replaceExisting = false,
+} = {}) {
+  const access = maintenanceWorkflowAccess(account);
+  if (access === null) return null;
+  if (!access) throw directMaintenanceMutationError("Edit access is required for this action.", 403);
+
+  const ids = cleanMaintenanceActionIds(orderIds);
+  if (!ids.length) throw directMaintenanceMutationError("orderIds required", 400);
+  if (!ids.every((id) => /^\d+$/.test(id)) || !isSupabaseConfigured()) return null;
+
+  let rows;
+  try {
+    rows = await loadRawOrderRowsByIds(ids);
+  } catch (error) {
+    if (Number(error?.status) === 404) throw directMaintenanceMutationError("Orders not found.", 404);
+    throw error;
+  }
+  if (!Array.isArray(rows) || rows.length !== ids.length) throw directMaintenanceMutationError("Orders not found.", 404);
+  const serializedBefore = rows.map(serializeOperationsOrderDetail);
+  if (serializedBefore.some((item) => !isMaintenanceOrder(item?.orderType))) {
+    throw directMaintenanceMutationError("Only Request Maintenance orders can be logged here.", 400);
+  }
+
+  const catalog = await getProductsCatalog();
+  if (!catalog || !Array.isArray(catalog?.products)) return null;
+  const byId = new Map(catalog.products.map((item) => [text(item?.id), item]).filter(([id]) => id));
+  const byName = new Map(catalog.products.map((item) => [norm(item?.name), item]).filter(([name]) => name));
+  const lookups = { byId, byName };
+  const maintenanceLoggedAt = new Date().toISOString();
+  const logById = new Map();
+
+  const normalizeLog = (entry = {}) => {
+    const serialNumberText = text(entry?.serialNumber || serialNumber);
+    const resolutionMethodText = text(entry?.resolutionMethod || resolutionMethod);
+    const actualIssueDescriptionText = String(entry?.actualIssueDescription || actualIssueDescription || "").replace(/\r\n/g, "\n").trim();
+    const repairActionText = String(entry?.repairAction || repairAction || "").replace(/\r\n/g, "\n").trim();
+    const rawSparePartTokens = uniqueMaintenanceStrings(
+      Array.isArray(entry?.sparePartIds) && entry.sparePartIds.length
+        ? entry.sparePartIds
+        : Array.isArray(sparePartIds) && sparePartIds.length
+          ? sparePartIds
+          : (entry?.sparePartId ?? sparePartId),
+    ).filter((value) => !maintenanceSparePlaceholder(value));
+    const requestedSparePartNames = uniqueMaintenanceStrings([
+      ...rawSparePartTokens.filter((value) => !/^\d+$/.test(text(value))),
+      ...(Array.isArray(entry?.sparePartNames) ? entry.sparePartNames : []),
+      ...(Array.isArray(sparePartNames) ? sparePartNames : [sparePartNames]),
+    ], { splitComma: true }).filter((value) => !maintenanceSparePlaceholder(value));
+    const rawReplacedEntries = Array.isArray(entry?.sparePartsReplaced)
+      ? entry.sparePartsReplaced
+      : Array.isArray(entry?.spareParts)
+        ? entry.spareParts
+        : Array.isArray(entry?.sparePartEntries)
+          ? entry.sparePartEntries
+          : [];
+    const rawNeededEntries = Array.isArray(entry?.sparePartsNeeded)
+      ? entry.sparePartsNeeded
+      : Array.isArray(entry?.neededSpareParts)
+        ? entry.neededSpareParts
+        : [];
+    const checklist = uniqueMaintenanceStrings(Array.isArray(entry?.checklist) ? entry.checklist : [], { splitComma: false })
+      .map((item) => text(item).slice(0, 800))
+      .filter(Boolean);
+    return {
+      serialNumberText,
+      resolutionMethodText,
+      actualIssueDescriptionText,
+      repairActionText,
+      rawSparePartTokens,
+      requestedSparePartNames,
+      rawReplacedEntries,
+      rawNeededEntries,
+      checklist,
+    };
+  };
+
+  for (const entry of Array.isArray(perItemLogs) ? perItemLogs : []) {
+    const orderId = text(entry?.orderId ?? entry?.id);
+    if (orderId) logById.set(orderId, normalizeLog(entry));
+  }
+  const fallbackLog = normalizeLog({});
+  const responseById = new Map();
+  const updatedRows = [];
+  let hasAnyDetails = false;
+  let mutationStarted = false;
+
+  const buildPatch = (entryLog) => {
+    const log = entryLog || fallbackLog;
+    const tokenEntries = (log.rawSparePartTokens || []).map((value) => ({ id: text(value) }));
+    const nameEntries = (log.requestedSparePartNames || []).map((name) => ({ name }));
+    const replaced = normalizeMaintenanceSpareEntries([
+      ...(Array.isArray(log.rawReplacedEntries) ? log.rawReplacedEntries : []),
+      ...tokenEntries,
+      ...nameEntries,
+    ], lookups);
+    const needed = normalizeMaintenanceSpareEntries(Array.isArray(log.rawNeededEntries) ? log.rawNeededEntries : [], lookups);
+    const replacedNames = uniqueMaintenanceStrings(replaced.map((entry) => entry.name), { splitComma: true });
+    const replacedIds = uniqueMaintenanceStrings(replaced.map((entry) => entry.id).filter(Boolean));
+    const neededNames = uniqueMaintenanceStrings(needed.map((entry) => entry.name), { splitComma: true });
+    const hasContent = Boolean(
+      log.serialNumberText || log.resolutionMethodText || log.actualIssueDescriptionText || log.repairActionText
+      || needed.length || replaced.length || log.checklist.length
+    );
+    const metaText = maintenanceLogMetaText({
+      neededEntries: needed,
+      replacedEntries: replaced,
+      checklist: log.checklist,
+      loggedAt: hasContent ? maintenanceLoggedAt : null,
+    });
+    const patch = { updated_at: maintenanceLoggedAt };
+    if (replaceExisting) {
+      patch.serial_number = log.serialNumberText || null;
+      patch.resolution_method = log.resolutionMethodText || null;
+      patch.actual_issue_description = log.actualIssueDescriptionText || null;
+      patch.repair_action = log.repairActionText || null;
+      patch.spare_parts_replaced = hasContent ? metaText : null;
+    } else {
+      if (log.serialNumberText) patch.serial_number = log.serialNumberText;
+      if (log.resolutionMethodText) patch.resolution_method = log.resolutionMethodText;
+      if (log.actualIssueDescriptionText) patch.actual_issue_description = log.actualIssueDescriptionText;
+      if (log.repairActionText) patch.repair_action = log.repairActionText;
+      if (hasContent) patch.spare_parts_replaced = metaText;
+    }
+    if (moveToShipping) patch.status = "Shipped";
+    else if (moveToArrived) patch.status = "Arrived";
+    return {
+      patch,
+      response: {
+        serialNumber: log.serialNumberText || null,
+        resolutionMethod: log.resolutionMethodText || null,
+        actualIssueDescription: log.actualIssueDescriptionText || null,
+        repairAction: log.repairActionText || null,
+        sparePartsReplacedIds: replacedIds,
+        sparePartsReplacedId: replacedIds[0] || null,
+        sparePartsReplacedNames: replacedNames,
+        sparePartsReplacedName: replacedNames.join(", ") || null,
+        sparePartsReplacedEntries: replaced,
+        sparePartsNeededNames: neededNames,
+        sparePartsNeededName: neededNames.join(", ") || null,
+        sparePartsNeededEntries: needed,
+        maintenanceChecklist: log.checklist,
+      },
+    };
+  };
+
+  try {
+    for (const id of ids) {
+      const built = buildPatch(logById.get(id) || fallbackLog);
+      const detailKeys = ["serial_number", "resolution_method", "actual_issue_description", "repair_action", "spare_parts_replaced"];
+      const hasDetailsForRow = replaceExisting || detailKeys.some((key) => text(built.patch?.[key]));
+      hasAnyDetails = hasAnyDetails || hasDetailsForRow;
+      if (!hasDetailsForRow && !moveToArrived && !moveToShipping) continue;
+      const requiredColumns = built.patch?.serial_number ? ["serial_number"] : [];
+      const updated = await updateMaintenanceRowSafe(id, built.patch, requiredColumns);
+      mutationStarted = true;
+      updatedRows.push(updated || { ...(rows.find((row) => text(row?.id) === id) || {}), ...built.patch });
+      responseById.set(id, built.response);
+    }
+    if (!hasAnyDetails && !moveToArrived && !moveToShipping && !replaceExisting) {
+      throw directMaintenanceMutationError("No maintenance details were provided.", 400);
+    }
+    await invalidateLegacyOperationsCaches(account).catch(() => {});
+    const items = await enrichMaintenanceDetailProducts(updatedRows.map((row) => {
+      const item = serializeOperationsOrderDetail(row || {});
+      return { ...item, ...(responseById.get(text(item?.id)) || {}) };
+    }));
+    return {
+      success: true,
+      source: "supabase-direct",
+      status: moveToShipping ? "Shipped" : moveToArrived ? "Arrived" : null,
+      statusColor: moveToShipping ? "blue" : moveToArrived ? "green" : null,
+      items,
+    };
+  } catch (error) {
+    if (error?.code === "DIRECT_MAINTENANCE_ORDERS_MUTATION_FAILED") throw error;
+    if (mutationStarted) throw directMaintenanceMutationError(error?.message || "Maintenance log was partially saved and requires review.", Number(error?.status) || 500);
+    throw error;
+  }
+}
+
+export async function markMaintenanceArrivedDirect({
+  account = {},
+  orderIds = [],
+  orderReceiptDataUrls = [],
+  orderReceiptFilenames = [],
+  receiptNumbers = [],
+} = {}) {
+  const access = maintenanceWorkflowAccess(account);
+  if (access === null) return null;
+  if (!access) throw directMaintenanceMutationError("Edit access is required for this action.", 403);
+  const ids = cleanMaintenanceActionIds(orderIds);
+  if (!ids.length) throw directMaintenanceMutationError("orderIds required", 400);
+  if (!ids.every((id) => /^\d+$/.test(id)) || !isSupabaseConfigured()) return null;
+
+  let rows;
+  try { rows = await loadRawOrderRowsByIds(ids); }
+  catch (error) {
+    if (Number(error?.status) === 404) throw directMaintenanceMutationError("Orders not found.", 404);
+    throw error;
+  }
+  if (rows.map(serializeOperationsOrderDetail).some((item) => !isMaintenanceOrder(item?.orderType))) {
+    throw directMaintenanceMutationError("Only Request Maintenance orders can be marked delivered here.", 400);
+  }
+
+  try {
+    return await markOperationsArrived({
+      account,
+      orderIds: ids,
+      orderReceiptDataUrls,
+      orderReceiptFilenames,
+      receiptNumbers,
+    });
+  } catch (error) {
+    if (error?.code === "DIRECT_OPERATIONS_MUTATION_FAILED") {
+      throw directMaintenanceMutationError(error?.message || "Failed to mark maintenance order as delivered.", Number(error?.status) || 500);
+    }
+    throw error;
+  }
 }
 
 export async function performMaintenanceOrdersProtectedAction({

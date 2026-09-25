@@ -2180,7 +2180,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
       try {
         let options = maintenanceOptions;
         if (!options || !Array.isArray(options?.resolutionMethods) || !Array.isArray(options?.spareParts)) {
-          const response = await fetch("/api/orders/requested/maintenance-form-options", { credentials: "include", cache: "no-store" });
+          const response = await fetch(`${DIRECT_API_BASE}/orders/maintenance/form-options`, { credentials: "include", cache: "no-store" });
           if (response.status === 401) {
             window.location.href = "/login?next=/next/operations-orders";
             return;
@@ -2316,7 +2316,8 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
         const logs = Array.isArray(payload) ? payload : [];
         const logsWithDetails = logs.filter((entry) => text(entry?.serialNumber) || text(entry?.resolutionMethod) || text(entry?.actualIssueDescription) || text(entry?.repairAction) || (Array.isArray(entry?.spareParts) && entry.spareParts.length));
         if (!logsWithDetails.length) throw new Error("Please fill maintenance details for at least one component. Spare parts are optional.");
-        await postJson("/api/orders/requested/log-maintenance", {
+        await postJson(`${DIRECT_API_BASE}/orders/maintenance/mutations-direct`, {
+          action: "log-maintenance",
           orderIds: group.orderIds,
           perItemLogs: logsWithDetails,
           moveToArrived: false,

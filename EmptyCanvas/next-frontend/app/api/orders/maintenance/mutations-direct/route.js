@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { fetchLegacyJson } from "../../../../../lib/legacy-api";
 import { getLegacyAccountGate } from "../../../../../lib/products-auth";
-import { performMaintenanceOrdersProtectedAction } from "../../../../../lib/maintenance-orders-data";
+import {
+  logMaintenanceDirect,
+  markMaintenanceArrivedDirect,
+  performMaintenanceOrdersProtectedAction,
+} from "../../../../../lib/maintenance-orders-data";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -37,17 +41,44 @@ async function legacyFallback(action, body) {
     archive: "/api/orders/maintenance/archive",
     delete: "/api/orders/maintenance/delete",
     "edit-init": "/api/orders/maintenance/edit/init",
+    "log-maintenance": "/api/orders/requested/log-maintenance",
+    "mark-arrived": "/api/orders/requested/mark-arrived",
   };
   const path = routes[action];
   if (!path) return noStore({ error: "Unsupported Maintenance Orders action." }, { status: 400 });
 
+  let legacyBody = {
+    orderIds: body?.orderIds,
+    adminPassword: body?.adminPassword,
+  };
+  if (action === "log-maintenance") {
+    legacyBody = {
+      orderIds: body?.orderIds,
+      resolutionMethod: body?.resolutionMethod,
+      serialNumber: body?.serialNumber,
+      actualIssueDescription: body?.actualIssueDescription,
+      repairAction: body?.repairAction,
+      sparePartId: body?.sparePartId,
+      sparePartIds: body?.sparePartIds,
+      sparePartNames: body?.sparePartNames,
+      perItemLogs: body?.perItemLogs,
+      moveToArrived: body?.moveToArrived,
+      moveToShipping: body?.moveToShipping,
+      replaceExisting: body?.replaceExisting,
+    };
+  } else if (action === "mark-arrived") {
+    legacyBody = {
+      orderIds: body?.orderIds,
+      orderReceiptDataUrls: body?.orderReceiptDataUrls,
+      orderReceiptFilenames: body?.orderReceiptFilenames,
+      receiptNumbers: body?.receiptNumbers ?? body?.receiptNumber,
+    };
+  }
+
   const legacy = await fetchLegacyJson(path, {
     method: "POST",
-    body: {
-      orderIds: body?.orderIds,
-      adminPassword: body?.adminPassword,
-    },
-    timeoutMs: 25_000,
+    body: legacyBody,
+    timeoutMs: 30_000,
   });
   if (legacy.ok && legacy.data) return noStore(legacy.data, { status: legacy.status || 200 });
   return noStore(
@@ -59,22 +90,49 @@ async function legacyFallback(action, body) {
 export async function POST(request) {
   const body = await request.json().catch(() => ({}));
   const action = actionKey(body?.action);
-  if (!["archive", "delete", "edit-init"].includes(action)) {
+  if (!["archive", "delete", "edit-init", "log-maintenance", "mark-arrived"].includes(action)) {
     return noStore({ error: "Unsupported Maintenance Orders action." }, { status: 400 });
   }
 
-  const gate = await getLegacyAccountGate(["Maintenance Orders"]);
+  const gate = await getLegacyAccountGate(["Maintenance Orders", "Operations Orders", "Requested Orders"]);
   if (!gate.ok) {
     return noStore({ error: gate.error || "Authentication required." }, { status: gate.status || 503 });
   }
 
   try {
-    const result = await performMaintenanceOrdersProtectedAction({
-      account: gate.account,
-      action,
-      orderIds: body?.orderIds,
-      adminPassword: body?.adminPassword,
-    });
+    let result = null;
+    if (["archive", "delete", "edit-init"].includes(action)) {
+      result = await performMaintenanceOrdersProtectedAction({
+        account: gate.account,
+        action,
+        orderIds: body?.orderIds,
+        adminPassword: body?.adminPassword,
+      });
+    } else if (action === "log-maintenance") {
+      result = await logMaintenanceDirect({
+        account: gate.account,
+        orderIds: body?.orderIds,
+        resolutionMethod: body?.resolutionMethod,
+        serialNumber: body?.serialNumber,
+        actualIssueDescription: body?.actualIssueDescription,
+        repairAction: body?.repairAction,
+        sparePartId: body?.sparePartId,
+        sparePartIds: body?.sparePartIds,
+        sparePartNames: body?.sparePartNames,
+        perItemLogs: body?.perItemLogs,
+        moveToArrived: body?.moveToArrived,
+        moveToShipping: body?.moveToShipping,
+        replaceExisting: body?.replaceExisting,
+      });
+    } else if (action === "mark-arrived") {
+      result = await markMaintenanceArrivedDirect({
+        account: gate.account,
+        orderIds: body?.orderIds,
+        orderReceiptDataUrls: body?.orderReceiptDataUrls,
+        orderReceiptFilenames: body?.orderReceiptFilenames,
+        receiptNumbers: body?.receiptNumbers ?? body?.receiptNumber,
+      });
+    }
     if (result) return noStore(result);
   } catch (error) {
     const response = directErrorResponse(error);
