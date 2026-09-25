@@ -294,6 +294,27 @@ export function ClassicSmallWindowSidebarGuard() {
       frame = window.requestAnimationFrame(sync);
     };
 
+    const hideForcedDockFromSmallWindowTap = (event) => {
+      if (!sidebar.classList.contains(MOBILE_DOCK_FORCED_OPEN_CLASS)) return;
+
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+
+      // Navigation itself stays fully interactive while it is temporarily
+      // revealed above a sheet/modal. The next tap back inside that open
+      // window should immediately return the user to the modal by collapsing
+      // the dock again, without swallowing the tap or changing the modal state.
+      if (sidebar.contains(target)) return;
+      const quickOpen = document.querySelector('.ops-mobile-dock-quick-open');
+      if (quickOpen instanceof HTMLElement && quickOpen.contains(target)) return;
+
+      const openWindows = getOpenSmallWindows();
+      const tappedSmallWindow = openWindows.some((windowNode) => windowNode.contains(target));
+      if (!tappedSmallWindow) return;
+
+      sidebar.classList.remove(MOBILE_DOCK_FORCED_OPEN_CLASS);
+    };
+
     sync();
 
     const observer = new MutationObserver(scheduleSync);
@@ -306,6 +327,7 @@ export function ClassicSmallWindowSidebarGuard() {
 
     window.addEventListener('resize', scheduleSync, { passive: true });
     window.addEventListener('orientationchange', scheduleSync);
+    document.addEventListener('pointerdown', hideForcedDockFromSmallWindowTap, true);
 
     return () => {
       observer.disconnect();
@@ -317,6 +339,7 @@ export function ClassicSmallWindowSidebarGuard() {
       dockClearanceLayers.clear();
       window.removeEventListener('resize', scheduleSync);
       window.removeEventListener('orientationchange', scheduleSync);
+      document.removeEventListener('pointerdown', hideForcedDockFromSmallWindowTap, true);
     };
   }, []);
 
