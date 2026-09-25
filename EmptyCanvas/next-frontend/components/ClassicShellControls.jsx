@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 const COLLAPSED_KEY = "ui.sidebarCollapsed";
@@ -193,6 +193,10 @@ const SMALL_WINDOW_SELECTOR = [
   '.classic-cart-saving-overlay',
 ].join(',');
 
+const MOBILE_DOCK_HIDDEN_CLASS = 'ops-mobile-dock-hidden';
+const SMALL_WINDOW_SIDEBAR_HIDDEN_CLASS = 'ops-small-window-sidebar-hidden';
+const MOBILE_DOCK_FORCED_OPEN_CLASS = 'ops-mobile-dock-forced-open';
+
 function isVisibleSmallWindow(node) {
   if (!(node instanceof HTMLElement)) return false;
   if (node.getAttribute('aria-hidden') === 'true') return false;
@@ -211,7 +215,7 @@ export function ClassicSmallWindowSidebarGuard() {
     if (!(sidebar instanceof HTMLElement)) return undefined;
 
     const BODY_CLASS = 'ops-small-window-open';
-    const SIDEBAR_CLASS = 'ops-small-window-sidebar-hidden';
+    const SIDEBAR_CLASS = SMALL_WINDOW_SIDEBAR_HIDDEN_CLASS;
     let frame = 0;
     let wasOpen = false;
 
@@ -225,11 +229,20 @@ export function ClassicSmallWindowSidebarGuard() {
       document.body.classList.toggle(BODY_CLASS, open);
       sidebar.classList.toggle(SIDEBAR_CLASS, open);
 
+      // A newly opened sheet/modal starts with the full dock hidden and only
+      // leaves the tiny quick-open handle visible. If the user explicitly
+      // reveals the dock while the same window is still open, preserve that
+      // choice until the window closes.
+      if (!wasOpen && open) {
+        sidebar.classList.remove(MOBILE_DOCK_FORCED_OPEN_CLASS);
+      }
+
       // Closing a sheet/modal should always return the navigation immediately,
       // even when the dock had previously auto-hidden because of a downward
       // scroll. The next deliberate scroll can hide it again as usual.
       if (wasOpen && !open) {
-        sidebar.classList.remove('ops-mobile-dock-hidden');
+        sidebar.classList.remove(MOBILE_DOCK_HIDDEN_CLASS);
+        sidebar.classList.remove(MOBILE_DOCK_FORCED_OPEN_CLASS);
       }
       wasOpen = open;
     };
@@ -257,6 +270,7 @@ export function ClassicSmallWindowSidebarGuard() {
       if (frame) window.cancelAnimationFrame(frame);
       document.body.classList.remove(BODY_CLASS);
       sidebar.classList.remove(SIDEBAR_CLASS);
+      sidebar.classList.remove(MOBILE_DOCK_FORCED_OPEN_CLASS);
       window.removeEventListener('resize', scheduleSync);
       window.removeEventListener('orientationchange', scheduleSync);
     };
@@ -273,7 +287,7 @@ export function ClassicMobileDockStructure({ activePath = "" }) {
 
     const MOBILE_QUERY = "(max-width: 768px)";
     const media = window.matchMedia(MOBILE_QUERY);
-    const HIDDEN_CLASS = "ops-mobile-dock-hidden";
+    const HIDDEN_CLASS = MOBILE_DOCK_HIDDEN_CLASS;
 
     const structure = () => {
       const directList = nav.querySelector(":scope > .nav-list");
@@ -423,6 +437,79 @@ export function ClassicMobileDockStructure({ activePath = "" }) {
     };
   }, [activePath]);
   return null;
+}
+
+export function ClassicMobileDockQuickOpen() {
+  const [visible, setVisible] = useState(false);
+
+  useLayoutEffect(() => {
+    const sidebar = document.querySelector('.classic-app-shell > .sidebar');
+    if (!(sidebar instanceof HTMLElement)) return undefined;
+
+    const media = window.matchMedia('(max-width: 768px)');
+    let frame = 0;
+
+    const sync = () => {
+      frame = 0;
+      const hidden = media.matches
+        && !sidebar.classList.contains(MOBILE_DOCK_FORCED_OPEN_CLASS)
+        && (
+          sidebar.classList.contains(MOBILE_DOCK_HIDDEN_CLASS)
+          || sidebar.classList.contains(SMALL_WINDOW_SIDEBAR_HIDDEN_CLASS)
+        );
+      setVisible(hidden);
+    };
+
+    const scheduleSync = () => {
+      if (frame) window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(sync);
+    };
+
+    sync();
+
+    const observer = new MutationObserver(scheduleSync);
+    observer.observe(sidebar, { attributes: true, attributeFilter: ['class'] });
+
+    if (typeof media.addEventListener === 'function') media.addEventListener('change', scheduleSync);
+    else media.addListener?.(scheduleSync);
+    window.addEventListener('orientationchange', scheduleSync);
+
+    return () => {
+      observer.disconnect();
+      if (frame) window.cancelAnimationFrame(frame);
+      sidebar.classList.remove(MOBILE_DOCK_FORCED_OPEN_CLASS);
+      if (typeof media.removeEventListener === 'function') media.removeEventListener('change', scheduleSync);
+      else media.removeListener?.(scheduleSync);
+      window.removeEventListener('orientationchange', scheduleSync);
+    };
+  }, []);
+
+  const revealDock = () => {
+    const sidebar = document.querySelector('.classic-app-shell > .sidebar');
+    if (!(sidebar instanceof HTMLElement)) return;
+
+    const hiddenBySmallWindow = sidebar.classList.contains(SMALL_WINDOW_SIDEBAR_HIDDEN_CLASS);
+
+    // Scroll-driven hiding can simply be cleared. A modal keeps its own hidden
+    // marker while open, so use an explicit override there until that modal is
+    // closed by the user.
+    sidebar.classList.remove(MOBILE_DOCK_HIDDEN_CLASS);
+    sidebar.classList.toggle(MOBILE_DOCK_FORCED_OPEN_CLASS, hiddenBySmallWindow);
+    setVisible(false);
+  };
+
+  return (
+    <button
+      type="button"
+      className={`ops-mobile-dock-quick-open${visible ? ' is-visible' : ''}`}
+      onClick={revealDock}
+      aria-label="Open navigation"
+      aria-hidden={visible ? undefined : true}
+      tabIndex={visible ? 0 : -1}
+    >
+      <span aria-hidden="true" />
+    </button>
+  );
 }
 
 export function ClassicSidebarViewportKeeper() {

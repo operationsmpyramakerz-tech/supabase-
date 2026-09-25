@@ -18,6 +18,7 @@ import {
   ClassicSidebarViewportKeeper,
   ClassicSidebarActiveIndicator,
   ClassicMobileDockStructure,
+  ClassicMobileDockQuickOpen,
   HeaderMenuToggle,
   SidebarBrandToggle,
 } from "./ClassicShellControls";
@@ -197,6 +198,7 @@ export default function AppShell({
       <ClassicSidebarBootstrap />
       <ClassicSmallWindowSidebarGuard />
       <ClassicMobileDockStructure activePath={activePath} />
+      <ClassicMobileDockQuickOpen />
       <ClassicSidebarViewportKeeper />
       <ClassicSidebarActiveIndicator activePath={activePath} />
       <TaskManagementSidebarFlyout allowedPages={allowedPages} activePath={activePath} />

@@ -207,3 +207,101 @@ body.persistent-app-shell
     filter: none !important;
   }
 }
+
+/* -------------------------------------------------------------------------
+ * Mobile dock quick-open handle
+ *
+ * Whenever the bottom navigation is intentionally hidden (scroll-down or a
+ * small modal/sheet), keep a tiny iPhone-style handle at the very bottom as a
+ * one-tap way to restore the dock. It lives outside the moving sidebar so it
+ * stays reachable while the dock itself is off-canvas.
+ * ---------------------------------------------------------------------- */
+@media (max-width: 768px) {
+  html body.next-classic-shell-active .classic-app-shell > .sidebar.ops-mobile-dock-forced-open {
+    transform: translate3d(0, 0, 0) scale(1) !important;
+    opacity: 1 !important;
+    filter: blur(0) !important;
+    pointer-events: auto !important;
+  }
+
+  .ops-mobile-dock-quick-open {
+    position: fixed !important;
+    left: 50% !important;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 1px) !important;
+    z-index: 2147482990 !important;
+    width: 108px !important;
+    height: 28px !important;
+    min-width: 108px !important;
+    min-height: 28px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    display: grid !important;
+    place-items: center !important;
+    border: 0 !important;
+    border-radius: 999px !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    transform: translate3d(-50%, 12px, 0) scale(.92) !important;
+    transform-origin: center bottom !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+    touch-action: manipulation !important;
+    cursor: pointer !important;
+    transition:
+      transform .28s cubic-bezier(.16, 1, .3, 1),
+      opacity .18s ease-out,
+      visibility 0s linear .28s !important;
+  }
+
+  .ops-mobile-dock-quick-open > span {
+    display: block !important;
+    width: 72px !important;
+    height: 5px !important;
+    border-radius: 999px !important;
+    background: #111318 !important;
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, .18) inset,
+      0 2px 8px rgba(15, 23, 42, .18) !important;
+    transition: transform .18s ease-out, background .18s ease-out !important;
+  }
+
+  .ops-mobile-dock-quick-open.is-visible {
+    transform: translate3d(-50%, 0, 0) scale(1) !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
+    transition-delay: 0s !important;
+  }
+
+  .ops-mobile-dock-quick-open.is-visible:active > span {
+    transform: scaleX(.86) !important;
+  }
+
+  html.ops-theme-dark .ops-mobile-dock-quick-open > span,
+  html[data-theme="dark"] .ops-mobile-dock-quick-open > span {
+    background: rgba(255, 255, 255, .92) !important;
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, .34) inset,
+      0 2px 10px rgba(0, 0, 0, .42) !important;
+  }
+}
+
+@media (min-width: 769px) {
+  .ops-mobile-dock-quick-open {
+    display: none !important;
+  }
+}
+
+@media (max-width: 768px) and (prefers-reduced-motion: reduce) {
+  .ops-mobile-dock-quick-open {
+    transition: opacity .01ms linear, visibility .01ms linear !important;
+  }
+
+  .ops-mobile-dock-quick-open.is-visible {
+    transform: translate3d(-50%, 0, 0) !important;
+  }
+}
+
