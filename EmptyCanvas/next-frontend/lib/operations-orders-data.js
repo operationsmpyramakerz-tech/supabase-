@@ -1193,7 +1193,7 @@ async function upstashDeleteOperationsKeys(keys = []) {
   }
 }
 
-async function invalidateLegacyOperationsCaches(account = {}) {
+export async function invalidateLegacyOperationsCaches(account = {}) {
   const username = text(account?.username || account?.name);
   const userKey = username ? norm(username).replace(/[^a-z0-9]+/g, "") : "";
   const keys = [

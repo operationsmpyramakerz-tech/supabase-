@@ -40,21 +40,21 @@ const ACTIONS = {
     title: "Archive order",
     description: "Enter admin password to move this order to the Archive tab.",
     button: "Archive",
-    endpoint: "/api/orders/current/archive",
+    endpoint: `${DIRECT_API_BASE}/orders/current/mutations-direct`,
     icon: "archive",
   },
   unarchive: {
     title: "UnArchive order",
     description: "Enter admin password to restore this order from Archive.",
     button: "UnArchive",
-    endpoint: "/api/orders/current/unarchive",
+    endpoint: `${DIRECT_API_BASE}/orders/current/mutations-direct`,
     icon: "rotate-ccw",
   },
   delete: {
     title: "Delete order",
     description: "Enter admin password to permanently delete this order.",
     button: "Delete",
-    endpoint: "/api/orders/current/delete",
+    endpoint: `${DIRECT_API_BASE}/orders/current/mutations-direct`,
     icon: "trash-2",
     danger: true,
   },
@@ -1048,7 +1048,7 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ orderIds: group.orderIds, adminPassword: password }),
+      body: JSON.stringify({ action, orderIds: group.orderIds, adminPassword: password }),
     });
     const data = await response.json().catch(() => ({}));
     if (response.status === 401) {

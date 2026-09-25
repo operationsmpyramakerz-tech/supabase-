@@ -34,21 +34,21 @@ const MAINTENANCE_ACTIONS = {
     title: "Edit maintenance log",
     description: "Enter the Maintenance Orders admin password to edit the saved maintenance details.",
     button: "Continue",
-    endpoint: "/api/orders/maintenance/edit/init",
+    endpoint: `${DIRECT_API_BASE}/orders/maintenance/mutations-direct`,
     icon: "edit-2",
   },
   archive: {
     title: "Archive maintenance order",
     description: "Enter the Maintenance Orders admin password to move this order to Archive.",
     button: "Archive",
-    endpoint: "/api/orders/maintenance/archive",
+    endpoint: `${DIRECT_API_BASE}/orders/maintenance/mutations-direct`,
     icon: "archive",
   },
   delete: {
     title: "Delete maintenance order",
     description: "Enter the Maintenance Orders admin password to permanently delete this order.",
     button: "Delete",
-    endpoint: "/api/orders/maintenance/delete",
+    endpoint: `${DIRECT_API_BASE}/orders/maintenance/mutations-direct`,
     icon: "trash-2",
     danger: true,
   },
@@ -390,7 +390,7 @@ async function postJson(url, body) {
 async function saveMaintenanceChecklistItem(value) {
   const clean = text(value);
   if (!clean) throw new Error("Checklist text is required.");
-  const response = await fetch("/api/orders/maintenance-checklist", {
+  const response = await fetch(`${DIRECT_API_BASE}/orders/maintenance-checklist`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -411,12 +411,12 @@ async function updateMaintenanceChecklistItem(id, value) {
   const clean = text(value);
   if (!cleanId) throw new Error("Checklist item id is required.");
   if (!clean) throw new Error("Checklist text is required.");
-  const response = await fetch(`/api/orders/maintenance-checklist/${encodeURIComponent(cleanId)}`, {
+  const response = await fetch(`${DIRECT_API_BASE}/orders/maintenance-checklist`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
     cache: "no-store",
-    body: JSON.stringify({ text: clean }),
+    body: JSON.stringify({ id: cleanId, text: clean }),
   });
   if (response.status === 401) {
     window.location.href = "/login?next=/next/maintenance-orders";
@@ -430,10 +430,12 @@ async function updateMaintenanceChecklistItem(id, value) {
 async function deleteMaintenanceChecklistItem(id) {
   const cleanId = text(id);
   if (!cleanId) throw new Error("Checklist item id is required.");
-  const response = await fetch(`/api/orders/maintenance-checklist/${encodeURIComponent(cleanId)}`, {
+  const response = await fetch(`${DIRECT_API_BASE}/orders/maintenance-checklist`, {
     method: "DELETE",
+    headers: { "Content-Type": "application/json" },
     credentials: "include",
     cache: "no-store",
+    body: JSON.stringify({ id: cleanId }),
   });
   if (response.status === 401) {
     window.location.href = "/login?next=/next/maintenance-orders";
@@ -1654,7 +1656,7 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ orderIds: group.orderIds, adminPassword: password }),
+      body: JSON.stringify({ action: action === "edit" ? "edit-init" : action, orderIds: group.orderIds, adminPassword: password }),
     });
     const data = await readJson(response) || {};
     if (response.status === 401) {

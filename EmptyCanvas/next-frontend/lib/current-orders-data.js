@@ -1,13 +1,14 @@
 import "server-only";
 import { performance } from "node:perf_hooks";
 
-import { isSupabaseConfigured, select } from "./supabase-rest";
-import { serializeOperationsCompactSummaryRow } from "./operations-orders-data";
+import { deleteByIds, isSupabaseConfigured, select, updateByIds } from "./supabase-rest";
+import { invalidateLegacyOperationsCaches, serializeOperationsCompactSummaryRow } from "./operations-orders-data";
 import { loadRawOrderRowsByIds, serializeOperationsOrderDetail } from "./order-details-data";
 import { consumeOrderSummaryWindows, loadOrderRowsByNumbers, scanOrderNumberCandidates } from "./order-pagination";
 import { applyOrderSearchPlan, canUseOrderSearchText, createOrderSearchPlan, noteOrderSearchTextError } from "./order-search-hotpath";
 import { canUseOrderCandidateRpc, loadOrderCandidateNumbersRpc, noteOrderCandidateRpcError } from "./order-candidate-rpc";
 import { measurePerformance, recordPerformanceSample } from "./performance-profiler";
+import { directPageMutationAccess, verifyPageAdminPasswordDirect } from "./order-action-auth";
 
 const PAGE_LIMIT = 36;
 const PAGE_MAX = 80;
@@ -477,3 +478,72 @@ export async function loadCurrentOrderDetails({ account = {}, orderIds = [] } = 
 
   return visible.map(serializeOperationsOrderDetail);
 }
+
+function directCurrentMutationError(message, status = 500) {
+  const error = new Error(message || "Current Orders action failed.");
+  error.code = "DIRECT_CURRENT_ORDERS_MUTATION_FAILED";
+  error.status = Number(status) || 500;
+  return error;
+}
+
+function cleanCurrentActionIds(value = []) {
+  const source = Array.isArray(value) ? value : [value];
+  return [...new Set(source.map((id) => text(id)).filter(Boolean))].slice(0, 500);
+}
+
+export async function performCurrentOrdersProtectedAction({
+  account = {},
+  action = "",
+  orderIds = [],
+  adminPassword = "",
+} = {}) {
+  const cleanAction = text(action).toLowerCase().replace(/[_\s]+/g, "-");
+  if (!["archive", "unarchive", "delete"].includes(cleanAction)) {
+    throw directCurrentMutationError("Unsupported Current Orders action.", 400);
+  }
+
+  const mutationAccess = directPageMutationAccess(account, "Current Orders");
+  if (mutationAccess === null) return null;
+  if (!mutationAccess) throw directCurrentMutationError("Edit access is required for this action.", 403);
+
+  const ids = cleanCurrentActionIds(orderIds);
+  if (!ids.length) throw directCurrentMutationError("orderIds required", 400);
+  // Legacy Notion ids remain on the compatibility path until the final cleanup.
+  if (!ids.every((id) => /^\d+$/.test(id)) || !isSupabaseConfigured()) return null;
+
+  const pwd = text(adminPassword);
+  if (!pwd) throw directCurrentMutationError("adminPassword required", 400);
+  const passwordOk = await verifyPageAdminPasswordDirect(account, pwd, "Current Orders");
+  if (passwordOk === null) return null;
+  if (!passwordOk) throw directCurrentMutationError("Invalid admin password", 401);
+
+  let rows;
+  try {
+    rows = await loadRawOrderRowsByIds(ids);
+  } catch (error) {
+    if (Number(error?.status) === 404) throw directCurrentMutationError("Orders not found", 404);
+    throw error;
+  }
+  if (!Array.isArray(rows) || rows.length !== ids.length) throw directCurrentMutationError("Orders not found", 404);
+
+  if (cleanAction === "archive" || cleanAction === "unarchive") {
+    const status = cleanAction === "archive" ? "Archive" : "In progress";
+    await updateByIds(tableName(), ids, { status });
+    await invalidateLegacyOperationsCaches(account).catch(() => {});
+    return {
+      success: true,
+      status,
+      statusColor: cleanAction === "archive" ? "purple" : "yellow",
+      source: "supabase-direct",
+    };
+  }
+
+  const deleted = await deleteByIds(tableName(), ids);
+  await invalidateLegacyOperationsCaches(account).catch(() => {});
+  return {
+    success: true,
+    deleted: Array.isArray(deleted) ? deleted.length : ids.length,
+    source: "supabase-direct",
+  };
+}
+

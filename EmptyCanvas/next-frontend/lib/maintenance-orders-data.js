@@ -1,13 +1,15 @@
 import "server-only";
 import { performance } from "node:perf_hooks";
 
-import { isSupabaseConfigured, select } from "./supabase-rest";
+import { deleteByIds, isSupabaseConfigured, select, updateByIds } from "./supabase-rest";
 import { loadRawOrderRowsByIds, serializeOperationsOrderDetail } from "./order-details-data";
 import { consumeOrderSummaryWindows, loadOrderRowsByNumbers, scanOrderNumberCandidates } from "./order-pagination";
 import { applyOrderSearchPlan, canUseOrderSearchText, createOrderSearchPlan, noteOrderSearchTextError } from "./order-search-hotpath";
 import { canUseOrderCandidateRpc, loadOrderCandidateNumbersRpc, noteOrderCandidateRpcError } from "./order-candidate-rpc";
 import { measurePerformance, recordPerformanceSample } from "./performance-profiler";
 import { getProductsCatalog } from "./products-service";
+import { invalidateLegacyOperationsCaches } from "./operations-orders-data";
+import { directPageMutationAccess, verifyPageAdminPasswordDirect } from "./order-action-auth";
 
 const PAGE_LIMIT = 36;
 const PAGE_MAX = 80;
@@ -509,3 +511,86 @@ export async function loadMaintenanceOrderDetails({ orderIds = [] } = {}) {
 
   return await enrichMaintenanceDetailProducts(maintenanceRows.map(serializeOperationsOrderDetail));
 }
+
+function directMaintenanceMutationError(message, status = 500) {
+  const error = new Error(message || "Maintenance Orders action failed.");
+  error.code = "DIRECT_MAINTENANCE_ORDERS_MUTATION_FAILED";
+  error.status = Number(status) || 500;
+  return error;
+}
+
+function cleanMaintenanceActionIds(value = []) {
+  const source = Array.isArray(value) ? value : [value];
+  return [...new Set(source.map((id) => text(id)).filter(Boolean))].slice(0, 500);
+}
+
+export async function performMaintenanceOrdersProtectedAction({
+  account = {},
+  action = "",
+  orderIds = [],
+  adminPassword = "",
+} = {}) {
+  const cleanAction = text(action).toLowerCase().replace(/[_\s]+/g, "-");
+  if (!["archive", "delete", "edit-init"].includes(cleanAction)) {
+    throw directMaintenanceMutationError("Unsupported Maintenance Orders action.", 400);
+  }
+
+  const mutationAccess = directPageMutationAccess(account, "Maintenance Orders");
+  if (mutationAccess === null) return null;
+  if (!mutationAccess) throw directMaintenanceMutationError("Edit access is required for this action.", 403);
+
+  const ids = cleanMaintenanceActionIds(orderIds);
+  if (!ids.length) throw directMaintenanceMutationError("orderIds required", 400);
+  if (!ids.every((id) => /^\d+$/.test(id)) || !isSupabaseConfigured()) return null;
+
+  const pwd = text(adminPassword);
+  if (!pwd) throw directMaintenanceMutationError("adminPassword required", 400);
+  const passwordOk = await verifyPageAdminPasswordDirect(account, pwd, "Maintenance Orders");
+  if (passwordOk === null) return null;
+  if (!passwordOk) throw directMaintenanceMutationError("Invalid admin password", 401);
+
+  let rows;
+  try {
+    rows = await loadRawOrderRowsByIds(ids);
+  } catch (error) {
+    if (Number(error?.status) === 404) throw directMaintenanceMutationError("Orders not found.", 404);
+    throw error;
+  }
+  if (!Array.isArray(rows) || rows.length !== ids.length) throw directMaintenanceMutationError("Orders not found.", 404);
+
+  const serialized = rows.map(serializeOperationsOrderDetail);
+  if (serialized.some((item) => !isMaintenanceOrder(item?.orderType))) {
+    const verb = cleanAction === "archive" ? "archived" : cleanAction === "delete" ? "deleted" : "edited";
+    throw directMaintenanceMutationError(`Only Request Maintenance orders can be ${verb} here.`, 400);
+  }
+
+  if (cleanAction === "edit-init") {
+    const items = await enrichMaintenanceDetailProducts(serialized);
+    return {
+      ok: true,
+      count: items.length,
+      items,
+      source: "supabase-direct",
+    };
+  }
+
+  if (cleanAction === "archive") {
+    await updateByIds(tableName(), ids, { status: "Archive" });
+    await invalidateLegacyOperationsCaches(account).catch(() => {});
+    return {
+      success: true,
+      status: "Archive",
+      statusColor: "purple",
+      source: "supabase-direct",
+    };
+  }
+
+  const deleted = await deleteByIds(tableName(), ids);
+  await invalidateLegacyOperationsCaches(account).catch(() => {});
+  return {
+    success: true,
+    deleted: Array.isArray(deleted) ? deleted.length : ids.length,
+    source: "supabase-direct",
+  };
+}
+

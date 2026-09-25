@@ -274,6 +274,17 @@ export async function deleteById(table, id) {
   return Array.isArray(rows) ? rows[0] || null : rows;
 }
 
+export async function deleteByIds(table, ids = []) {
+  const clean = [...new Set((ids || []).map((id) => String(id ?? "").trim()).filter(Boolean))];
+  if (!clean.length) return [];
+  const inList = clean.map((id) => (/^-?\d+(?:\.\d+)?$/.test(id) ? id : `"${id.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`)).join(",");
+  const rows = await supabaseRequest(`/${encodeTableName(table)}?id=in.(${encodeURIComponent(inList)})`, {
+    method: "DELETE",
+    headers: { Prefer: "return=representation" },
+  });
+  return Array.isArray(rows) ? rows : [];
+}
+
 export function storagePublicUrl(objectPath, bucketName = null) {
   const { url, storageBucket } = getSupabaseConfig();
   const bucket = String(bucketName || storageBucket || "").trim();
