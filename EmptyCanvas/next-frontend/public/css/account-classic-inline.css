@@ -1864,6 +1864,22 @@ html[data-theme="dark"] body.page-account .account-image-editor-actions{
   border-radius: 26px;
   overflow: hidden;
   background: #e5e7eb;
+  /* Cut the cover around the avatar so the lower edge flows into the
+     circular profile halo instead of leaving two square white shoulders. */
+  -webkit-mask-image: radial-gradient(
+    circle 70px at 50% 100%,
+    transparent 0 68px,
+    #000 70px
+  );
+  mask-image: radial-gradient(
+    circle 70px at 50% 100%,
+    transparent 0 68px,
+    #000 70px
+  );
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
 }
 
 .page-account .profile-cover-image,
@@ -1934,6 +1950,16 @@ html[data-theme="dark"] body.page-account .account-image-editor-actions{
 
   .page-account .profile-cover-display{
     border-radius: 22px;
+    -webkit-mask-image: radial-gradient(
+      circle 53px at 50% 100%,
+      transparent 0 51px,
+      #000 53px
+    );
+    mask-image: radial-gradient(
+      circle 53px at 50% 100%,
+      transparent 0 51px,
+      #000 53px
+    );
   }
 
   .page-account .profile-identity-block{
@@ -1965,6 +1991,16 @@ html[data-theme="dark"] body.page-account .account-image-editor-actions{
 
   .page-account .profile-cover-display{
     border-radius: 20px;
+    -webkit-mask-image: radial-gradient(
+      circle 51px at 50% 100%,
+      transparent 0 49px,
+      #000 51px
+    );
+    mask-image: radial-gradient(
+      circle 51px at 50% 100%,
+      transparent 0 49px,
+      #000 51px
+    );
   }
 
   .page-account .profile-identity-block{

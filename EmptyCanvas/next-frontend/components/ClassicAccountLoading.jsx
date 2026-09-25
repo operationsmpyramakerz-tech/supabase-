@@ -8,7 +8,7 @@ export default function ClassicAccountLoading() {
   return (
     <>
       <ShellStyleLinks />
-      <link rel="stylesheet" href="/next/css/account-classic-inline.css?v=next-stage-2r-profile-overlap" />
+      <link rel="stylesheet" href="/next/css/account-classic-inline.css?v=next-stage-2s-profile-notch" />
       <BodyClassSync className="page-account next-classic-shell-active" />
 
       <div className="app-container classic-app-shell next-classic-account-loading" aria-label="Loading User Profile">
