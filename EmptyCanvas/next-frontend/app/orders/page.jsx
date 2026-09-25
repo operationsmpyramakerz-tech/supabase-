@@ -1,26 +1,10 @@
 import { redirect } from "next/navigation";
 import AppShell from "../../components/AppShell";
 import CurrentOrdersClient from "../../components/orders/CurrentOrdersClient";
-import { fetchLegacyJson } from "../../lib/legacy-api";
 import { getLegacyAccountGate } from "../../lib/products-auth";
 import { loadCurrentOrdersInitialPage } from "../../lib/current-orders-data";
 
 export const dynamic = "force-dynamic";
-
-function resourceMap(bundle) {
-  const map = new Map();
-  for (const resource of Array.isArray(bundle?.resources) ? bundle.resources : []) {
-    map.set(String(resource?.url || ""), resource?.body);
-  }
-  return map;
-}
-
-function getResource(map, prefix, fallback = null) {
-  for (const [url, body] of map.entries()) {
-    if (url === prefix || url.startsWith(prefix)) return body;
-  }
-  return fallback;
-}
 
 function UnavailableState({ message, forbidden = false }) {
   return (
@@ -39,37 +23,26 @@ function UnavailableState({ message, forbidden = false }) {
 }
 
 export default async function CurrentOrdersPage() {
-  // Fast path: resolve the signed-in account/permissions in Next, then read only
-  // the first Current Orders summary page directly from Supabase. The Legacy
-  // page-bootstrap remains an unchanged compatibility fallback.
+  // Phase 18 cutover: Current Orders now renders from the Next/Supabase path
+  // only. Express page-bootstrap is no longer part of the page read path.
   const gate = await getLegacyAccountGate(["Current Orders"]);
 
   if (gate.status === 401) redirect("/login?next=/next/orders");
   if (gate.status === 403) {
     return <UnavailableState forbidden message="Your account does not have access to the Current Orders page." />;
   }
+  if (!gate.ok || !gate.account) {
+    return <UnavailableState message={gate.error || "The account service is temporarily unavailable."} />;
+  }
 
-  let account = gate.ok ? gate.account : null;
-  let ordersPayload = gate.ok
-    ? await loadCurrentOrdersInitialPage({ account: gate.account }).catch(() => null)
-    : null;
-  let bootstrapWarnings = [];
-
-  if (!gate.ok || !ordersPayload) {
-    const response = await fetchLegacyJson("/api/page-bootstrap?scope=current-orders", { timeoutMs: 25000 });
-
-    if (response.status === 401) redirect("/login?next=/next/orders");
-    if (response.status === 403) {
-      return <UnavailableState forbidden message="Your account does not have access to the Current Orders page." />;
-    }
-    if (!response.ok || !response.data?.ok) {
-      return <UnavailableState message={response.error || response.data?.error || gate.error || "The current ERP API is temporarily unavailable."} />;
-    }
-
-    const resources = resourceMap(response.data);
-    account = getResource(resources, "/api/account", null);
-    ordersPayload = getResource(resources, "/api/orders", []);
-    bootstrapWarnings = response.data.omitted || [];
+  let ordersPayload = null;
+  try {
+    ordersPayload = await loadCurrentOrdersInitialPage({ account: gate.account });
+  } catch (error) {
+    return <UnavailableState message={error?.message || "Current Orders could not be loaded from Supabase."} />;
+  }
+  if (!ordersPayload) {
+    return <UnavailableState message="Current Orders direct Supabase data is unavailable." />;
   }
 
   const orders = Array.isArray(ordersPayload)
@@ -77,11 +50,9 @@ export default async function CurrentOrdersPage() {
     : (Array.isArray(ordersPayload?.items) ? ordersPayload.items : []);
   const pageInfo = !Array.isArray(ordersPayload) && ordersPayload?.pageInfo ? ordersPayload.pageInfo : null;
 
-  if (!account) redirect("/login?next=/next/orders");
-
   return (
     <AppShell
-      account={account}
+      account={gate.account}
       title="Current Orders"
       eyebrow="Live order portfolio"
       activePath="/next/orders"
@@ -90,7 +61,7 @@ export default async function CurrentOrdersPage() {
       <CurrentOrdersClient
         initialOrders={Array.isArray(orders) ? orders : []}
         initialPageInfo={pageInfo}
-        bootstrapWarnings={bootstrapWarnings}
+        bootstrapWarnings={[]}
       />
     </AppShell>
   );

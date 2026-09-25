@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import AppShell from "../../../components/AppShell";
 import OrderTrackingClient from "../../../components/orders/OrderTrackingClient";
-import { fetchLegacyJson } from "../../../lib/legacy-api";
 import { getLegacyAccountGate } from "../../../lib/products-auth";
 import { loadOrderTracking } from "../../../lib/order-tracking-data";
 
@@ -72,32 +71,27 @@ export default async function OrderTrackingPage({ searchParams }) {
   }
 
   if (!tracking) {
-    const legacy = await fetchLegacyJson(`/api/orders/tracking?groupId=${encodeURIComponent(groupId)}`, { timeoutMs: 20_000 });
-    if (legacy.ok && legacy.data) tracking = legacy.data;
-    else {
-      const status = legacy.status || failure?.status || 502;
-      const missing = Number(status) === 404;
-      return (
-        <AppShell
-          account={gate.account}
-          title="Order Tracking"
-          eyebrow="Current Orders delivery journey"
-          activePath="/next/orders"
-        >
-          <main className="standalone-state standalone-state--inside">
-            <section className="state-card">
-              <span className="status-dot warning" />
-              <h1>{missing ? "Order not found" : "Tracking data is temporarily unavailable"}</h1>
-              <p>{missing ? "The selected order is no longer available to this account." : (legacy.error || legacy.data?.error || failure?.message || "The tracking resource could not be loaded.")}</p>
-              <div className="actions">
-                <a className="primary-button" href="/next/orders">Return to Current Orders</a>
-                <a className="secondary-button" href={currentPath}>Refresh the page</a>
-              </div>
-            </section>
-          </main>
-        </AppShell>
-      );
-    }
+    const missing = Number(failure?.status) === 404;
+    return (
+      <AppShell
+        account={gate.account}
+        title="Order Tracking"
+        eyebrow="Current Orders delivery journey"
+        activePath="/next/orders"
+      >
+        <main className="standalone-state standalone-state--inside">
+          <section className="state-card">
+            <span className="status-dot warning" />
+            <h1>{missing ? "Order not found" : "Tracking data is temporarily unavailable"}</h1>
+            <p>{missing ? "The selected order is no longer available to this account." : (failure?.message || "The tracking resource could not be loaded from Supabase.")}</p>
+            <div className="actions">
+              <a className="primary-button" href="/next/orders">Return to Current Orders</a>
+              <a className="secondary-button" href={currentPath}>Refresh the page</a>
+            </div>
+          </section>
+        </main>
+      </AppShell>
+    );
   }
 
   return (

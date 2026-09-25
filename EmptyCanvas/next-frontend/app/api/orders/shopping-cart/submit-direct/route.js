@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { fetchLegacyJson } from "../../../../../lib/legacy-api";
 import { getLegacyAccountGate } from "../../../../../lib/products-auth";
 import { submitShoppingCartOrderDirect } from "../../../../../lib/shopping-cart-order-service";
 
@@ -14,22 +13,6 @@ function noStore(payload, init = {}) {
       ...(init.headers || {}),
     },
   });
-}
-
-async function legacyFallback(body = {}) {
-  const legacy = await fetchLegacyJson("/api/submit-order", {
-    method: "POST",
-    body: {
-      products: body?.products,
-      orderType: body?.orderType,
-    },
-    timeoutMs: 35_000,
-  });
-  if (legacy.ok && legacy.data) return noStore(legacy.data, { status: legacy.status || 200 });
-  return noStore(
-    { success: false, message: legacy.error || legacy.data?.message || legacy.data?.error || "The order could not be submitted." },
-    { status: legacy.status || 502 },
-  );
 }
 
 export async function POST(request) {
@@ -48,24 +31,14 @@ export async function POST(request) {
       editToken: body?.editToken,
     });
     if (result) return noStore(result);
+    return noStore(
+      { success: false, message: "Direct Supabase order submission is unavailable." },
+      { status: 503 },
+    );
   } catch (error) {
-    if (error?.code === "DIRECT_SHOPPING_CART_ORDER_FAILED") {
-      return noStore(
-        { success: false, message: error?.message || "The order could not be submitted." },
-        { status: Number(error?.status) || 500 },
-      );
-    }
-
-    // A direct edit token intentionally has no Express edit session behind it,
-    // so it must never fall through to Legacy after the direct init succeeded.
-    if (body?.editMode === true && String(body?.editToken || "").trim()) {
-      return noStore(
-        { success: false, message: error?.message || "The order could not be updated." },
-        { status: Number(error?.status) || 502 },
-      );
-    }
-    console.warn("[shopping-cart] direct submit unavailable; using Legacy fallback:", error?.message || error);
+    return noStore(
+      { success: false, message: error?.message || "The order could not be submitted." },
+      { status: Number(error?.status) || 500 },
+    );
   }
-
-  return await legacyFallback(body);
 }

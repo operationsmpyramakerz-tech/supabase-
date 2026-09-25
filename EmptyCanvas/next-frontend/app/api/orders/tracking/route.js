@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { fetchLegacyJson } from "../../../../lib/legacy-api";
 import { getLegacyAccountGate } from "../../../../lib/products-auth";
 import { loadOrderTracking } from "../../../../lib/order-tracking-data";
 
@@ -26,16 +25,11 @@ export async function GET(request) {
   try {
     const tracking = await loadOrderTracking({ account: gate.account, groupId });
     if (tracking) return noStore(tracking);
+    return noStore({ error: "Order tracking direct Supabase data is unavailable." }, { status: 503 });
   } catch (error) {
-    console.warn("[order-tracking] direct read failed; using Legacy fallback:", error?.message || error);
+    return noStore(
+      { error: error?.message || "Failed to load order tracking from Supabase." },
+      { status: Number(error?.status) || 502 },
+    );
   }
-
-  const legacy = await fetchLegacyJson(`/api/orders/tracking?groupId=${encodeURIComponent(groupId)}`, {
-    timeoutMs: 20_000,
-  });
-  if (legacy.ok && legacy.data) return noStore(legacy.data, { status: legacy.status || 200 });
-  return noStore(
-    { error: legacy.error || legacy.data?.error || "Failed to load order tracking." },
-    { status: legacy.status || 502 },
-  );
 }

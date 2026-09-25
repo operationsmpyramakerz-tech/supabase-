@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { fetchLegacyJson } from "../../../../../lib/legacy-api";
 import { getLegacyAccountGate } from "../../../../../lib/products-auth";
 import { undoShoppingCartOrderDirect } from "../../../../../lib/shopping-cart-order-service";
 
@@ -16,22 +15,6 @@ function noStore(payload, init = {}) {
   });
 }
 
-async function legacyFallback(body = {}) {
-  const legacy = await fetchLegacyJson("/api/orders/current/undo-submit", {
-    method: "POST",
-    body: {
-      orderId: body?.orderId,
-      orderPageIds: body?.orderPageIds,
-    },
-    timeoutMs: 20_000,
-  });
-  if (legacy.ok && legacy.data) return noStore(legacy.data, { status: legacy.status || 200 });
-  return noStore(
-    { error: legacy.error || legacy.data?.error || "The order could not be removed." },
-    { status: legacy.status || 502 },
-  );
-}
-
 export async function POST(request) {
   const body = await request.json().catch(() => ({}));
   const gate = await getLegacyAccountGate(["Create New Order"]);
@@ -45,15 +28,11 @@ export async function POST(request) {
       undoToken: body?.undoToken,
     });
     if (result) return noStore(result);
+    return noStore({ error: "A valid direct undo token is required." }, { status: 400 });
   } catch (error) {
-    if (error?.code === "DIRECT_SHOPPING_CART_ORDER_FAILED") {
-      return noStore({ error: error?.message || "The order could not be removed." }, { status: Number(error?.status) || 500 });
-    }
-    if (String(body?.undoToken || "").trim()) {
-      return noStore({ error: error?.message || "The order could not be removed." }, { status: Number(error?.status) || 502 });
-    }
-    console.warn("[shopping-cart] direct undo unavailable; using Legacy fallback:", error?.message || error);
+    return noStore(
+      { error: error?.message || "The order could not be removed." },
+      { status: Number(error?.status) || 500 },
+    );
   }
-
-  return await legacyFallback(body);
 }

@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { fetchLegacyJson } from "../../../../../lib/legacy-api";
 import { getLegacyAccountGate } from "../../../../../lib/products-auth";
 import { loadOperationsOrdersPage } from "../../../../../lib/operations-orders-data";
 import { measurePerformance } from "../../../../../lib/performance-profiler";
@@ -15,14 +14,6 @@ function noStore(payload, init = {}) {
       ...(init.headers || {}),
     },
   });
-}
-
-function legacyQuery(searchParams) {
-  const params = new URLSearchParams(searchParams);
-  params.set("scope", "all-system");
-  params.set("mode", "summary");
-  params.set("paged", "1");
-  return params.toString();
 }
 
 async function GETImpl(request) {
@@ -42,20 +33,14 @@ async function GETImpl(request) {
       signal: request.signal,
     });
     if (payload) return noStore(payload);
+    return noStore({ error: "Operations Orders direct Supabase data is unavailable." }, { status: 503 });
   } catch (error) {
     if (request.signal?.aborted || error?.code === "REQUEST_ABORTED" || error?.name === "AbortError") throw error;
-    console.warn("[operations-orders] direct paged summary failed; using Legacy fallback:", error?.message || error);
+    return noStore(
+      { error: error?.message || "Failed to load Operations Orders from Supabase." },
+      { status: Number(error?.status) || 502 },
+    );
   }
-
-  const legacy = await fetchLegacyJson(`/api/orders/requested?${legacyQuery(url.searchParams)}`, {
-    timeoutMs: 25_000,
-    fresh: url.searchParams.get("_fresh") === "1",
-  });
-  if (legacy.ok && legacy.data) return noStore(legacy.data, { status: legacy.status || 200 });
-  return noStore(
-    { error: legacy.error || legacy.data?.error || "Failed to load Operations Orders." },
-    { status: legacy.status || 502 },
-  );
 }
 
 export async function GET(request) {

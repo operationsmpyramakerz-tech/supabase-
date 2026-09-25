@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { fetchLegacyJson } from "../../../../../lib/legacy-api";
 import { getLegacyAccountGate } from "../../../../../lib/products-auth";
 import { loadMaintenanceFormOptionsDirect } from "../../../../../lib/maintenance-orders-data";
 
@@ -16,17 +15,6 @@ function noStore(payload, init = {}) {
   });
 }
 
-async function legacyFallback() {
-  const legacy = await fetchLegacyJson("/api/orders/requested/maintenance-form-options", {
-    timeoutMs: 20_000,
-  });
-  if (legacy.ok && legacy.data) return noStore(legacy.data, { status: legacy.status || 200 });
-  return noStore(
-    { error: legacy.error || legacy.data?.error || "Failed to load maintenance form options." },
-    { status: legacy.status || 502 },
-  );
-}
-
 export async function GET() {
   const gate = await getLegacyAccountGate(["Maintenance Orders", "Operations Orders", "Requested Orders"]);
   if (!gate.ok) {
@@ -36,9 +24,11 @@ export async function GET() {
   try {
     const result = await loadMaintenanceFormOptionsDirect();
     if (result) return noStore(result);
+    return noStore({ error: "Maintenance form options direct Supabase data is unavailable." }, { status: 503 });
   } catch (error) {
-    console.warn("[maintenance-orders] direct form options failed; using Legacy fallback:", error?.message || error);
+    return noStore(
+      { error: error?.message || "Failed to load maintenance form options from Supabase." },
+      { status: Number(error?.status) || 502 },
+    );
   }
-
-  return await legacyFallback();
 }

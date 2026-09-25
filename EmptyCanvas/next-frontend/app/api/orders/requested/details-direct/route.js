@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { fetchLegacyJson } from "../../../../../lib/legacy-api";
 import { getLegacyAccountGate } from "../../../../../lib/products-auth";
 import { loadOperationsOrderDetails } from "../../../../../lib/operations-orders-data";
 
@@ -34,19 +33,11 @@ export async function POST(request) {
   try {
     const items = await loadOperationsOrderDetails(orderIds);
     if (Array.isArray(items)) return noStore(items);
+    return noStore({ error: "Operations Orders direct Supabase data is unavailable." }, { status: 503 });
   } catch (error) {
-    if (Number(error?.status) === 403) return noStore({ error: error?.message || "Not allowed." }, { status: 403 });
-    console.warn("[operations-orders] direct details failed; using Legacy fallback:", error?.message || error);
+    return noStore(
+      { error: error?.message || "Failed to load order details from Supabase." },
+      { status: Number(error?.status) || 502 },
+    );
   }
-
-  const legacy = await fetchLegacyJson("/api/orders/requested/details", {
-    method: "POST",
-    body: { orderIds },
-    timeoutMs: 25_000,
-  });
-  if (legacy.ok && legacy.data) return noStore(legacy.data, { status: legacy.status || 200 });
-  return noStore(
-    { error: legacy.error || legacy.data?.error || "Failed to load order details." },
-    { status: legacy.status || 502 },
-  );
 }

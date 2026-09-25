@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { fetchLegacyJson } from "../../../../../lib/legacy-api";
 import { getLegacyAccountGate } from "../../../../../lib/products-auth";
 import { loadCurrentOrdersPage } from "../../../../../lib/current-orders-data";
 import { measurePerformance } from "../../../../../lib/performance-profiler";
@@ -35,20 +34,14 @@ async function GETImpl(request) {
       signal: request.signal,
     });
     if (payload) return noStore(payload);
+    return noStore({ error: "Current Orders direct Supabase data is unavailable." }, { status: 503 });
   } catch (error) {
     if (request.signal?.aborted || error?.code === "REQUEST_ABORTED" || error?.name === "AbortError") throw error;
-    console.warn("[current-orders] direct paged summary failed; using Legacy fallback:", error?.message || error);
+    return noStore(
+      { error: error?.message || "Failed to load Current Orders from Supabase." },
+      { status: Number(error?.status) || 502 },
+    );
   }
-
-  const legacy = await fetchLegacyJson("/api/orders?mode=summary", {
-    timeoutMs: 20_000,
-    fresh: url.searchParams.get("_fresh") === "1",
-  });
-  if (legacy.ok && legacy.data) return noStore(legacy.data, { status: legacy.status || 200 });
-  return noStore(
-    { error: legacy.error || legacy.data?.error || "Failed to load Current Orders." },
-    { status: legacy.status || 502 },
-  );
 }
 
 export async function GET(request) {
