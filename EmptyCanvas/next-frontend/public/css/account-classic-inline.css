@@ -1846,3 +1846,137 @@ html[data-theme="dark"] body.page-account .account-image-editor-actions{
   background: rgba(17,22,31,.96);
   border-top-color: #2b3544;
 }
+
+/* ================================================================
+   Profile hero — restore the latest cover / avatar overlap treatment
+   Reference: inset cover card + large white avatar halo that merges
+   into the white profile surface (the Abdullah profile design).
+   ================================================================ */
+.page-account .profile-cover-section{
+  margin: 16px 16px 0;
+  height: clamp(180px, 23vw, 260px);
+  border-radius: 26px;
+  overflow: visible;
+  background: transparent;
+}
+
+.page-account .profile-cover-display{
+  border-radius: 26px;
+  overflow: hidden;
+  background: #e5e7eb;
+}
+
+.page-account .profile-cover-image,
+.page-account .profile-cover-fallback{
+  border-radius: inherit;
+}
+
+.page-account .profile-identity-block{
+  margin-top: -68px;
+}
+
+.page-account .profile-avatar-shell{
+  position: relative;
+  width: 138px;
+  height: 138px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow:
+    0 1px 0 rgba(255,255,255,.98) inset,
+    0 18px 38px rgba(15,23,42,.14);
+  isolation: isolate;
+}
+
+.page-account .profile-avatar-display{
+  position: absolute;
+  left: 14%;
+  top: 14%;
+  width: 72%;
+  height: 72%;
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 2px rgba(255,255,255,.98),
+    0 5px 14px rgba(15,23,42,.10) !important;
+  transform: none !important;
+}
+
+.page-account .profile-avatar-display:hover{
+  transform: none !important;
+  box-shadow:
+    0 0 0 2px rgba(255,255,255,.98),
+    0 6px 16px rgba(15,23,42,.12) !important;
+}
+
+.page-account .profile-avatar-edit{
+  right: -3px;
+  bottom: 10px;
+}
+
+.page-account .profile-avatar-remove{
+  top: -5px;
+  right: -5px;
+}
+
+.page-account .account-classic-loading-avatar{
+  position: absolute;
+  left: 14%;
+  top: 14%;
+  width: 72%;
+  height: 72%;
+}
+
+@media (max-width: 768px){
+  .page-account .profile-cover-section{
+    margin: 12px 12px 0;
+    height: clamp(128px, 36vw, 176px);
+    border-radius: 22px;
+  }
+
+  .page-account .profile-cover-display{
+    border-radius: 22px;
+  }
+
+  .page-account .profile-identity-block{
+    margin-top: -52px;
+  }
+
+  .page-account .profile-avatar-shell{
+    width: 104px;
+    height: 104px;
+  }
+
+  .page-account .profile-avatar-edit{
+    right: -5px;
+    bottom: 6px;
+  }
+
+  .page-account .profile-avatar-remove{
+    top: -7px;
+    right: -7px;
+  }
+}
+
+@media (max-width: 420px){
+  .page-account .profile-cover-section{
+    margin: 10px 10px 0;
+    height: 124px;
+    border-radius: 20px;
+  }
+
+  .page-account .profile-cover-display{
+    border-radius: 20px;
+  }
+
+  .page-account .profile-identity-block{
+    margin-top: -50px;
+  }
+
+  .page-account .profile-avatar-shell{
+    width: 100px;
+    height: 100px;
+  }
+}
+
+html[data-theme="dark"] body.page-account .profile-avatar-shell{
+  background: #fff;
+}
