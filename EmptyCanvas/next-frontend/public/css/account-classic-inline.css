@@ -1254,3 +1254,414 @@
     font-size: .86rem;
   }
 }
+
+/* ================================================================
+   Account image editor — compact modern profile / cover workflow
+   ================================================================ */
+.page-account .account-image-editor-layer{
+  padding: 22px;
+  align-items: center;
+  justify-content: center;
+}
+
+.page-account .account-image-editor{
+  position: relative;
+  width: min(100%, 460px);
+  max-height: min(88dvh, 720px);
+  padding: 22px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid rgba(226,232,240,.95);
+  border-radius: 28px;
+  background: #fff;
+  box-shadow: 0 30px 90px rgba(15,23,42,.22);
+  scrollbar-width: none;
+}
+.page-account .account-image-editor::-webkit-scrollbar{ display:none; }
+
+.page-account .account-image-editor-head{
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding-right: 52px;
+  margin-bottom: 18px;
+}
+
+.page-account .account-image-editor-headcopy{
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.page-account .account-image-editor-icon{
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 13px;
+  color: #0f172a;
+  background: #f5f7fa;
+  border: 1px solid #e7ebf0;
+}
+
+.page-account .account-image-editor .ex-modal-title{
+  margin: 1px 0 5px;
+  color: #101828;
+  font-size: 1.18rem;
+  line-height: 1.18;
+  font-weight: 800;
+  letter-spacing: -.02em;
+}
+
+.page-account .account-image-editor-headcopy p{
+  margin: 0;
+  max-width: 320px;
+  color: #667085;
+  font-size: .82rem;
+  line-height: 1.45;
+  font-weight: 600;
+}
+
+.page-account .account-image-editor-close{
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 42px;
+  height: 42px;
+  min-width: 42px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 14px;
+  color: #101828;
+  background: #f4f6f8;
+  cursor: pointer;
+  transition: transform .18s ease, background .18s ease;
+}
+.page-account .account-image-editor-close:hover{ background:#e9edf2; }
+.page-account .account-image-editor-close:active{ transform:scale(.94); }
+.page-account .account-image-editor-close svg{ display:block; width:18px; height:18px; }
+
+.page-account .account-crop-stage,
+.page-account .account-cover-fit-stage{
+  padding: 12px;
+  border: 1px solid #e5eaf0;
+  border-radius: 22px;
+  background: #f8fafc;
+}
+
+.page-account .account-crop-viewport{
+  position: relative;
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+  background: #0f1115;
+}
+
+.page-account .account-crop-viewport--profile{
+  width: min(100%, 270px);
+  aspect-ratio: 1 / 1;
+  margin-inline: auto;
+  border-radius: 24px;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.1);
+}
+
+.page-account .account-crop-image{
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform-origin: 50% 50%;
+  will-change: transform;
+  pointer-events: none;
+}
+
+.page-account .account-crop-grid{
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: .18;
+  background:
+    linear-gradient(to right, transparent 33.2%, #fff 33.3%, #fff 33.8%, transparent 33.9%, transparent 66.2%, #fff 66.3%, #fff 66.8%, transparent 66.9%),
+    linear-gradient(to bottom, transparent 33.2%, #fff 33.3%, #fff 33.8%, transparent 33.9%, transparent 66.2%, #fff 66.3%, #fff 66.8%, transparent 66.9%);
+}
+
+.page-account .account-crop-profile-ring{
+  position: absolute;
+  inset: 9%;
+  border: 2px solid rgba(255,255,255,.9);
+  border-radius: 50%;
+  box-shadow: 0 0 0 999px rgba(0,0,0,.28);
+  pointer-events: none;
+}
+
+.page-account .account-crop-hint{
+  margin-top: 9px;
+  color: #667085;
+  font-size: .76rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.page-account .account-crop-controls{
+  display: grid;
+  grid-template-columns: auto minmax(0,1fr) auto;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid #e5eaf0;
+  border-radius: 16px;
+  background: #fff;
+}
+.page-account .account-crop-zoom-label{
+  color: #475467;
+  font-size: .76rem;
+  font-weight: 800;
+}
+.page-account .account-crop-zoom{
+  width: 100%;
+  accent-color: #f97316;
+}
+.page-account .account-crop-reset{
+  min-height: 34px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 11px;
+  color: #344054;
+  background: #f2f4f7;
+  font-size: .75rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.page-account .account-cover-fit-preview{
+  width: 100%;
+  aspect-ratio: 16 / 7;
+  max-height: 220px;
+  overflow: hidden;
+  border-radius: 17px;
+  background: #eef1f4;
+}
+.page-account .account-cover-fit-preview img{
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+.page-account .account-cover-fit-note{
+  margin-top: 9px;
+  color: #667085;
+  font-size: .76rem;
+  line-height: 1.35;
+  font-weight: 700;
+  text-align: center;
+}
+
+.page-account .account-image-editor-filename{
+  min-width: 0;
+  margin-top: 12px;
+  padding: 9px 11px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #e5eaf0;
+  border-radius: 13px;
+  color: #475467;
+  background: #f8fafc;
+  font-size: .78rem;
+  font-weight: 700;
+}
+.page-account .account-image-editor-filename span{
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.page-account .account-image-editor .field-label{
+  margin: 14px 0 6px;
+  color: #344054;
+  font-size: .8rem;
+}
+
+.page-account .account-image-editor-password{
+  margin-bottom: 0;
+}
+.page-account .account-image-editor-password .ex-input{
+  height: 46px;
+  padding: 0 44px 0 14px;
+  border: 1px solid #dde3ea;
+  border-radius: 14px;
+  background: #fbfcfd;
+  font-size: .88rem;
+}
+.page-account .account-image-editor-password .ex-input:focus{
+  border-color: rgba(249,115,22,.55);
+  box-shadow: 0 0 0 4px rgba(249,115,22,.10);
+  outline: none;
+}
+
+.page-account .account-image-editor .ex-error{
+  margin: 8px 0 0;
+  padding: 9px 11px;
+  border: 1px solid #fecdd3;
+  border-radius: 12px;
+  background: #fff1f2;
+  color: #be123c;
+  font-size: .78rem;
+}
+
+.page-account .account-image-editor-actions{
+  display: grid;
+  grid-template-columns: 1fr 1.35fr;
+  gap: 10px;
+  margin-top: 14px;
+}
+.page-account .account-image-editor-actions .ex-btn{
+  min-height: 46px;
+  padding: 0 16px;
+  border-radius: 14px;
+  font-size: .86rem;
+  font-weight: 800;
+}
+.page-account .account-image-editor-cancel{
+  color: #344054;
+  background: #f2f4f7;
+  border: 1px solid #e4e7ec;
+}
+.page-account .account-image-editor-save{
+  color: #fff;
+  background: #101828;
+  border: 1px solid #101828;
+}
+.page-account .account-image-editor-save:hover{ background:#1d2939; }
+
+@media (max-width: 640px){
+  .page-account .account-image-editor-layer{
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .page-account .account-image-editor{
+    width: 100%;
+    max-width: none;
+    max-height: min(84dvh, 720px);
+    margin: 0;
+    padding: 18px 18px calc(16px + env(safe-area-inset-bottom));
+    border-radius: 28px 28px 0 0;
+  }
+
+  .page-account .account-image-editor-head{
+    margin-bottom: 14px;
+    padding-right: 46px;
+  }
+
+  .page-account .account-image-editor-headcopy{
+    gap: 10px;
+  }
+
+  .page-account .account-image-editor-icon{
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    border-radius: 12px;
+  }
+
+  .page-account .account-image-editor .ex-modal-title{
+    font-size: 1.04rem;
+  }
+
+  .page-account .account-image-editor-headcopy p{
+    font-size: .75rem;
+    line-height: 1.38;
+  }
+
+  .page-account .account-image-editor-close{
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    border-radius: 13px;
+  }
+
+  .page-account .account-crop-stage,
+  .page-account .account-cover-fit-stage{
+    padding: 10px;
+    border-radius: 19px;
+  }
+
+  .page-account .account-crop-viewport--profile{
+    width: min(64vw, 230px);
+    border-radius: 20px;
+  }
+
+  .page-account .account-cover-fit-preview{
+    max-height: 170px;
+    border-radius: 15px;
+  }
+
+  .page-account .account-crop-controls{
+    margin-top: 10px;
+    padding: 8px 10px;
+  }
+
+  .page-account .account-image-editor-filename{
+    margin-top: 10px;
+    padding: 8px 10px;
+  }
+
+  .page-account .account-image-editor .field-label{
+    margin-top: 11px;
+  }
+
+  .page-account .account-image-editor-actions{
+    position: sticky;
+    bottom: calc(-16px - env(safe-area-inset-bottom));
+    z-index: 2;
+    margin: 12px -18px calc(-16px - env(safe-area-inset-bottom));
+    padding: 10px 18px calc(12px + env(safe-area-inset-bottom));
+    background: rgba(255,255,255,.96);
+    border-top: 1px solid #eef1f4;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+}
+
+/* Keep the compact editor coherent in dark mode too. */
+html[data-theme="dark"] body.page-account .account-image-editor-icon,
+html[data-theme="dark"] body.page-account .account-crop-stage,
+html[data-theme="dark"] body.page-account .account-cover-fit-stage,
+html[data-theme="dark"] body.page-account .account-image-editor-filename,
+html[data-theme="dark"] body.page-account .account-crop-controls{
+  background: #171d26;
+  border-color: #2b3544;
+}
+html[data-theme="dark"] body.page-account .account-image-editor-close,
+html[data-theme="dark"] body.page-account .account-crop-reset,
+html[data-theme="dark"] body.page-account .account-image-editor-cancel{
+  background: #202733;
+  border-color: #2b3544;
+  color: #f8fafc;
+}
+html[data-theme="dark"] body.page-account .account-image-editor-password .ex-input{
+  background: #171d26;
+  border-color: #2b3544;
+  color: #f8fafc;
+}
+html[data-theme="dark"] body.page-account .account-image-editor-filename,
+html[data-theme="dark"] body.page-account .account-crop-hint,
+html[data-theme="dark"] body.page-account .account-cover-fit-note,
+html[data-theme="dark"] body.page-account .account-crop-zoom-label{
+  color: #98a2b3;
+}
+html[data-theme="dark"] body.page-account .account-image-editor-actions{
+  background: rgba(17,22,31,.96);
+  border-top-color: #2b3544;
+}
