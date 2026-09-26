@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import ERPDirectStorage from "../../lib/direct-storage-upload";
+import { uploadB2cFile } from "../../lib/b2c-direct-upload";
 
 const TYPE_LABELS = {
   text: "Text", number: "Number", select: "Select", multi_select: "Multi-select",
@@ -97,36 +97,11 @@ async function requestJson(url, options = {}) {
   }
   return body;
 }
-async function requestReadJson(directUrl, legacyUrl) {
-  try {
-    return await requestJson(directUrl);
-  } catch (error) {
-    if (Number(error?.status) === 401) throw error;
-    return await requestJson(legacyUrl);
-  }
-}
-function fileToDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error(`Could not read ${file.name}.`));
-    reader.onload = () => resolve(String(reader.result || ""));
-    reader.readAsDataURL(file);
-  });
+async function requestReadJson(directUrl) {
+  return await requestJson(directUrl);
 }
 async function uploadFile(file, onProgress = () => {}) {
-  if (!file || !file.size) throw new Error("Choose a valid file first.");
-  if (file.size > 10 * 1024 * 1024) throw new Error(`${file.name} is larger than 10 MB.`);
-  const fallback = async () => {
-    onProgress({ percent: 5, stage: "fallback" });
-    const dataUrl = await fileToDataUrl(file);
-    const payload = await requestJson("/api/b2c/upload", {
-      method: "POST",
-      body: JSON.stringify({ dataUrl, filename: file.name, mime: file.type, size: file.size }),
-    });
-    onProgress({ percent: 100, stage: "complete" });
-    return payload?.file || null;
-  };
-  return ERPDirectStorage.uploadFile({ scope: "b2c", file, fallback, onProgress });
+  return await uploadB2cFile(file, onProgress);
 }
 function emptyValues(fields) {
   return Object.fromEntries(fields.map((field) => [field.key, field.type === "checkbox" ? false : field.type === "multi_select" ? [] : ""]));
@@ -477,7 +452,7 @@ export default function B2cFormsClient({ account, initialPayload, initialSelecte
   const refreshLibrary = async ({ silent = false } = {}) => {
     if (!silent) setBusy("refresh");
     try {
-      const payload = await requestReadJson("/next/api/b2c/forms?_fresh=1", "/api/b2c/forms");
+      const payload = await requestReadJson("/next/api/b2c/forms?_fresh=1");
       setForms((Array.isArray(payload?.forms) ? payload.forms : []).map(normalizeForm));
       setDatabases((Array.isArray(payload?.databases) ? payload.databases : []).map(normalizeDatabase));
       if (!silent) notify("Forms library was refreshed.");
@@ -491,7 +466,7 @@ export default function B2cFormsClient({ account, initialPayload, initialSelecte
     if (!formId) return;
     if (!silent) setBusy(`open:${formId}`);
     try {
-      const payload = await requestReadJson(`/next/api/b2c/forms/${encodeURIComponent(formId)}?_fresh=1`, `/api/b2c/forms/${encodeURIComponent(formId)}`);
+      const payload = await requestReadJson(`/next/api/b2c/forms/${encodeURIComponent(formId)}?_fresh=1`);
       applyFormPayload(payload);
       if (openBuilder) setDialog("builder");
       return payload;
@@ -531,7 +506,7 @@ export default function B2cFormsClient({ account, initialPayload, initialSelecte
   const createForm = async (data) => {
     setBusy("create");
     try {
-      const payload = await requestJson("/api/b2c/forms", { method: "POST", body: JSON.stringify(data) });
+      const payload = await requestJson("/next/api/b2c/mutations-direct", { method: "POST", body: JSON.stringify({ action: "form-create", ...data }) });
       setDialog(null);
       await refreshLibrary({ silent: true });
       if (payload?.form?.id) await openForm(payload.form.id, { silent: true });
@@ -542,7 +517,7 @@ export default function B2cFormsClient({ account, initialPayload, initialSelecte
     if (!activeForm?.id) return;
     setBusy("details");
     try {
-      const payload = await requestJson(`/api/b2c/forms/${encodeURIComponent(activeForm.id)}`, { method: "PATCH", body: JSON.stringify(data) });
+      const payload = await requestJson("/next/api/b2c/mutations-direct", { method: "POST", body: JSON.stringify({ action: "form-update", formId: activeForm.id, ...data }) });
       const updated = normalizeForm({ ...activeForm, ...(payload?.form || data), database: activeForm.database });
       setActiveForm(updated);
       setForms((current) => current.map((form) => form.id === activeForm.id ? { ...form, ...updated, databaseName: form.databaseName } : form));
@@ -554,7 +529,7 @@ export default function B2cFormsClient({ account, initialPayload, initialSelecte
     if (!activeForm?.id) return;
     setBusy("builder");
     try {
-      await requestJson(`/api/b2c/forms/${encodeURIComponent(activeForm.id)}/builder`, { method: "PUT", body: JSON.stringify({ fields: nextFields }) });
+      await requestJson("/next/api/b2c/mutations-direct", { method: "POST", body: JSON.stringify({ action: "form-builder-save", formId: activeForm.id, fields: nextFields }) });
       setDialog(null);
       await openForm(activeForm.id, { silent: true });
       await refreshLibrary({ silent: true });
@@ -601,7 +576,7 @@ export default function B2cFormsClient({ account, initialPayload, initialSelecte
           payloadValues[field.key] = uploaded;
         } else payloadValues[field.key] = values[field.key] ?? (field.type === "checkbox" ? false : "");
       }
-      await requestJson(`/api/b2c/forms/${encodeURIComponent(activeForm.id)}/submit`, { method: "POST", body: JSON.stringify({ values: payloadValues }) });
+      await requestJson("/next/api/b2c/mutations-direct", { method: "POST", body: JSON.stringify({ action: "form-submit", formId: activeForm.id, values: payloadValues }) });
       clearForm();
       setSubmitted(true);
       notify("Customer record was saved successfully.");

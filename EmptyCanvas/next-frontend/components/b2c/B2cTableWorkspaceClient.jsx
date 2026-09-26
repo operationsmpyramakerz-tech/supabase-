@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import B2CFormulaEngine from "../../lib/b2c-formula-engine";
+import { uploadB2cFile } from "../../lib/b2c-direct-upload";
 
 const FIELD_TYPES = [
   ["text", "Text"], ["number", "Number"], ["select", "Select"], ["multi_select", "Multi-select"],
@@ -59,35 +60,16 @@ async function requestJson(url, options = {}) {
   }
   return body;
 }
-async function requestReadJson(directUrl, legacyUrl) {
-  try {
-    return await requestJson(directUrl);
-  } catch (error) {
-    if (Number(error?.status) === 401) throw error;
-    return await requestJson(legacyUrl);
-  }
-}
-function fileToDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error(`Could not read ${file.name}.`));
-    reader.onload = () => resolve(String(reader.result || ""));
-    reader.readAsDataURL(file);
-  });
+async function requestReadJson(directUrl) {
+  return await requestJson(directUrl);
 }
 async function uploadFiles(files, onProgress = () => {}) {
   const list = Array.from(files || []);
   const uploaded = [];
   for (let index = 0; index < list.length; index += 1) {
     const file = list[index];
-    if (file.size > 10 * 1024 * 1024) throw new Error(`${file.name} is larger than 10 MB.`);
-    onProgress({ index, total: list.length, file: file.name });
-    const dataUrl = await fileToDataUrl(file);
-    const payload = await requestJson("/api/b2c/upload", {
-      method: "POST",
-      body: JSON.stringify({ dataUrl, filename: file.name, mime: file.type, size: file.size }),
-    });
-    if (payload?.file?.url) uploaded.push(payload.file);
+    const result = await uploadB2cFile(file, (progress) => onProgress({ index, total: list.length, file: file.name, ...progress }));
+    if (result?.url) uploaded.push(result);
   }
   return uploaded;
 }
@@ -419,7 +401,7 @@ export default function B2cTableWorkspaceClient({ databaseId, initialPayload, bo
   const refresh = async ({ silent = false } = {}) => {
     if (!silent) setBusy("refresh");
     try {
-      const payload = await requestReadJson(`/next/api/b2c/databases/${encodeURIComponent(databaseId)}/records?_fresh=1`, `/api/b2c/databases/${encodeURIComponent(databaseId)}/records`);
+      const payload = await requestReadJson(`/next/api/b2c/databases/${encodeURIComponent(databaseId)}/records?_fresh=1`);
       setDatabase(payload.database || null);
       setFields((Array.isArray(payload.fields) ? payload.fields : []).map(normalizeField));
       setRecords((Array.isArray(payload.records) ? payload.records : []).map(normalizeRecord));
@@ -431,7 +413,7 @@ export default function B2cTableWorkspaceClient({ databaseId, initialPayload, bo
     if (!editor) return;
     setBusy("record");
     try {
-      await requestJson(`/api/b2c/records/${encodeURIComponent(editor.id)}`, { method: "PATCH", body: JSON.stringify({ databaseId, values }) });
+      await requestJson("/next/api/b2c/mutations-direct", { method: "POST", body: JSON.stringify({ action: "record-update", recordId: editor.id, databaseId, values }) });
       setEditor(null);
       await refresh({ silent: true });
       notify(`${editor.customerCode} was updated.`);
@@ -441,7 +423,7 @@ export default function B2cTableWorkspaceClient({ databaseId, initialPayload, bo
     if (!deleteTarget) return;
     setBusy("delete-record");
     try {
-      await requestJson(`/api/b2c/records/${encodeURIComponent(deleteTarget.id)}?databaseId=${encodeURIComponent(databaseId)}`, { method: "DELETE" });
+      await requestJson("/next/api/b2c/mutations-direct", { method: "POST", body: JSON.stringify({ action: "record-delete", recordId: deleteTarget.id, databaseId }) });
       const code = deleteTarget.customerCode;
       setRecords((current) => current.filter((record) => record.id !== deleteTarget.id));
       setDeleteTarget(null);
@@ -452,7 +434,7 @@ export default function B2cTableWorkspaceClient({ databaseId, initialPayload, bo
   const saveSchema = async (nextFields) => {
     setBusy("schema");
     try {
-      await requestJson(`/api/b2c/databases/${encodeURIComponent(databaseId)}/fields`, { method: "PUT", body: JSON.stringify({ fields: nextFields }) });
+      await requestJson("/next/api/b2c/mutations-direct", { method: "POST", body: JSON.stringify({ action: "fields-save", databaseId, fields: nextFields }) });
       setSchemaOpen(false);
       await refresh({ silent: true });
       notify("Table properties were saved and linked forms were synchronized.");
@@ -460,7 +442,7 @@ export default function B2cTableWorkspaceClient({ databaseId, initialPayload, bo
   };
 
   const formHref = database?.defaultFormId ? `/next/b2c/forms?form=${encodeURIComponent(database.defaultFormId)}` : `/next/b2c/forms?database=${encodeURIComponent(databaseId)}`;
-  const exportHref = `/api/b2c/databases/${encodeURIComponent(databaseId)}/export.xlsx`;
+  const exportHref = `/next/api/b2c/export-direct?id=${encodeURIComponent(databaseId)}`;
 
   return (
     <main className="b2c-shell next-b2c-table-classic-page">

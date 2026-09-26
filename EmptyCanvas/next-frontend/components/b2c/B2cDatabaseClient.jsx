@@ -40,13 +40,8 @@ async function requestJson(url, options = {}) {
   }
   return body;
 }
-async function requestReadJson(directUrl, legacyUrl) {
-  try {
-    return await requestJson(directUrl);
-  } catch (error) {
-    if (Number(error?.status) === 401) throw error;
-    return await requestJson(legacyUrl);
-  }
+async function requestReadJson(directUrl) {
+  return await requestJson(directUrl);
 }
 
 function Toast({ toast, onClose }) {
@@ -135,7 +130,7 @@ function DeleteModal({ database, busy, onClose, onConfirm }) {
 
 function DatabaseCard({ database, busy, menuOpen, onToggleMenu, onEdit, onCopy, onDelete }) {
   const openUrl = `/next/b2c/database/${encodeURIComponent(database.id)}`;
-  const exportUrl = `/api/b2c/databases/${encodeURIComponent(database.id)}/export.xlsx`;
+  const exportUrl = `/next/api/b2c/export-direct?id=${encodeURIComponent(database.id)}`;
   const caption = `${formatNumber(database.fieldCount)} ${database.fieldCount === 1 ? "property" : "properties"} · ${formatNumber(database.recordCount)} ${database.recordCount === 1 ? "record" : "records"}`;
   return (
     <div className={`b2c-folder-card ${menuOpen ? "is-actions-open" : ""}`}>
@@ -200,7 +195,7 @@ export default function B2cDatabaseClient({ initialPayload, bootstrapWarnings = 
   const refresh = async ({ silent = false } = {}) => {
     if (!silent) setBusy("refresh");
     try {
-      const payload = await requestReadJson("/next/api/b2c/databases?_fresh=1", "/api/b2c/databases");
+      const payload = await requestReadJson("/next/api/b2c/databases?_fresh=1");
       setDatabases((Array.isArray(payload?.databases) ? payload.databases : []).map(normalizeDatabase));
       if (!silent) notify("Database folders were refreshed.");
     } catch (error) { notify(error?.message || "Unable to refresh B2C databases.", "error"); throw error; }
@@ -211,7 +206,7 @@ export default function B2cDatabaseClient({ initialPayload, bootstrapWarnings = 
     const database = dialog?.database;
     setBusy(isEdit ? `edit:${database?.id}` : "create");
     try {
-      const payload = await requestJson(isEdit ? `/api/b2c/databases/${encodeURIComponent(database.id)}` : "/api/b2c/databases", { method: isEdit ? "PATCH" : "POST", body: JSON.stringify({ name, description }) });
+      const payload = await requestJson("/next/api/b2c/mutations-direct", { method: "POST", body: JSON.stringify({ action: isEdit ? "database-update" : "database-create", databaseId: database?.id || "", name, description }) });
       setDialog(null);
       await refresh({ silent: true });
       notify(isEdit ? `“${name}” was updated.` : `“${name}” was created.`);
@@ -222,7 +217,7 @@ export default function B2cDatabaseClient({ initialPayload, bootstrapWarnings = 
     setMenuOpen("");
     if (!window.confirm(`Make a copy of “${database.name}”? The copy keeps properties and form layouts without copying customer records.`)) return;
     setBusy(`copy:${database.id}`);
-    try { const payload = await requestJson(`/api/b2c/databases/${encodeURIComponent(database.id)}/copy`, { method: "POST" }); await refresh({ silent: true }); notify(`“${payload?.database?.name || `${database.name} Copy`}” was created.`); }
+    try { const payload = await requestJson("/next/api/b2c/mutations-direct", { method: "POST", body: JSON.stringify({ action: "database-copy", databaseId: database.id }) }); await refresh({ silent: true }); notify(`“${payload?.database?.name || `${database.name} Copy`}” was created.`); }
     catch (error) { notify(error?.message || "The database table could not be copied.", "error"); }
     finally { setBusy(""); }
   };
@@ -230,7 +225,7 @@ export default function B2cDatabaseClient({ initialPayload, bootstrapWarnings = 
     if (!deleteTarget) return;
     setBusy(`delete:${deleteTarget.id}`);
     try {
-      await requestJson(`/api/b2c/databases/${encodeURIComponent(deleteTarget.id)}`, { method: "DELETE" });
+      await requestJson("/next/api/b2c/mutations-direct", { method: "POST", body: JSON.stringify({ action: "database-delete", databaseId: deleteTarget.id }) });
       const id = deleteTarget.id; const deletedName = deleteTarget.name;
       setDeleteTarget(null); setDatabases((current) => current.filter((database) => database.id !== id)); notify(`“${deletedName}” was permanently deleted.`);
     } finally { setBusy(""); }
