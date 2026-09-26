@@ -78,7 +78,7 @@
     },
     {
       "source": "/api/products/proposals/:id/items/by-kit",
-      "destination": "/next/api/products/proposals/:id/items/by-kit"
+      "destination": "/next/api/products/proposals/items-by-kit?id=:id"
     },
     {
       "source": "/api/products/proposals/combine/save",

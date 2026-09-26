@@ -1849,7 +1849,7 @@ export default function ProposalsClient({
       if (mode === "kit") {
         let body = null;
         for (const entry of selections) {
-          body = await requestJson(`/next/api/products/proposals/${encodeURIComponent(proposal.id)}/items/by-kit`, {
+          body = await requestJson(`/next/api/products/proposals/items-by-kit?id=${encodeURIComponent(proposal.id)}`, {
             method: "POST",
             body: JSON.stringify({
               kitId: entry.selected,
