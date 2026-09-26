@@ -362,12 +362,7 @@ export default function BackupClient({ initialTables = [] }) {
 
   async function reloadTables() {
     try {
-      let body;
-      try {
-        body = await requestJson("/next/api/backup/tables");
-      } catch (directError) {
-        body = await requestJson("/api/backup/tables");
-      }
+      const body = await requestJson("/next/api/backup/tables");
       setTables(Array.isArray(body?.tables) ? body.tables : []);
     } catch (error) {
       showToast(error?.message || "Failed to load database tables.", "danger");
@@ -402,25 +397,37 @@ export default function BackupClient({ initialTables = [] }) {
     setImportError("");
     setImporting(true);
     try {
-      setImportStage("Reading...");
-      const csvText = await importFile.text();
-      if (!text(csvText)) throw new Error("CSV file is empty.");
-      setImportStage("Validating...");
-      const response = await fetch(`/api/backup/tables/${encodeURIComponent(importTarget.key)}/import`, {
+      setImportStage("Preparing...");
+      const ticket = await requestJson("/next/api/backup/import-ticket", {
         method: "POST",
-        credentials: "include",
-        cache: "no-store",
-        headers: {
-          "Content-Type": "text/csv; charset=utf-8",
-          "X-Admin-Password": encodeURIComponent(text(importPassword)),
-          "X-CSV-Filename": encodeURIComponent(importFile.name || ""),
-        },
-        body: csvText,
+        body: JSON.stringify({
+          key: importTarget.key,
+          adminPassword: text(importPassword),
+          filename: importFile.name || "backup.csv",
+          mime: importFile.type || "text/csv",
+          size: Number(importFile.size || 0),
+        }),
       });
-      const body = response.ok ? await response.json().catch(() => ({})) : {};
-      if (!response.ok || body?.ok === false) {
-        throw new Error(response.ok ? (body?.error || "Failed to import CSV data.") : await readResponseError(response, "Failed to import CSV data."));
-      }
+      if (!ticket?.upload?.signedUrl || !ticket?.uploadPath) throw new Error("Could not prepare CSV upload.");
+
+      setImportStage("Uploading...");
+      const uploadResponse = await fetch(ticket.upload.signedUrl, {
+        method: String(ticket.upload.method || "PUT").toUpperCase(),
+        headers: ticket.upload.headers || {},
+        body: importFile,
+      });
+      if (!uploadResponse.ok) throw new Error(`CSV upload failed with status ${uploadResponse.status}.`);
+
+      setImportStage("Validating...");
+      const body = await requestJson("/next/api/backup/mutations-direct", {
+        method: "POST",
+        body: JSON.stringify({
+          action: "import",
+          key: importTarget.key,
+          adminPassword: text(importPassword),
+          uploadPath: ticket.uploadPath,
+        }),
+      });
       const importedTarget = importTarget;
       setImporting(false);
       setImportTarget(null);
@@ -474,16 +481,19 @@ export default function BackupClient({ initialTables = [] }) {
     setDeleting(true);
     try {
       setDeleteStage("Exporting...");
-      const exportUrl = isAll ? "/api/backup/export-all" : `/api/backup/tables/${encodeURIComponent(deleteTarget.key)}/download`;
+      const exportUrl = isAll ? "/next/api/backup/export-direct?scope=all" : `/next/api/backup/export-direct?key=${encodeURIComponent(deleteTarget.key)}`;
       const fallbackName = isAll ? `database-export-${Date.now()}.zip` : `${deleteTarget?.tableName || "table"}-${Date.now()}.csv`;
       await fetchDownload(exportUrl, fallbackName);
       await new Promise((resolve) => window.setTimeout(resolve, 450));
 
       setDeleteStage("Deleting...");
-      const deleteUrl = isAll ? "/api/backup/delete-all" : `/api/backup/tables/${encodeURIComponent(deleteTarget.key)}`;
-      await requestJson(deleteUrl, {
-        method: "DELETE",
-        body: JSON.stringify({ adminPassword: password }),
+      await requestJson("/next/api/backup/mutations-direct", {
+        method: "POST",
+        body: JSON.stringify({
+          action: isAll ? "delete-all" : "delete-table",
+          key: isAll ? "" : deleteTarget.key,
+          adminPassword: password,
+        }),
       });
       setDeleting(false);
       setDeleteTarget(null);
@@ -511,7 +521,7 @@ export default function BackupClient({ initialTables = [] }) {
             <h2>Database</h2>
           </div>
           <div className="backup-hero-actions">
-            <a className="backup-export-all-btn" href="/api/backup/export-all" download>
+            <a className="backup-export-all-btn" href="/next/api/backup/export-direct?scope=all" download>
               <FeatherIcon name="download-cloud" /><span>Export all data</span>
             </a>
             <button type="button" className="backup-delete-all-btn" onClick={() => openDeleteModal({ key: "__all__", pageName: "all system data", tableName: "all database tables", isAll: true })}>
@@ -573,7 +583,7 @@ export default function BackupClient({ initialTables = [] }) {
                 <article className={`backup-folder-card ${menuOpen ? "is-menu-open" : ""}`} key={item.key || item.tableName}>
                   {menuOpen ? (
                     <div className="backup-folder-menu" onClick={(event) => event.stopPropagation()}>
-                      <a href={`/api/backup/tables/${encodeURIComponent(item.key)}/download`} download onClick={() => setFolderMenu("")}>
+                      <a href={`/next/api/backup/export-direct?key=${encodeURIComponent(item.key)}`} download onClick={() => setFolderMenu("")}>
                         <FeatherIcon name="download" /><span>Export</span>
                       </a>
                       <button type="button" onClick={() => { setFolderMenu(""); openImportModal(item); }}>

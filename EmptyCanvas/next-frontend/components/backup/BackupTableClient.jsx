@@ -100,17 +100,11 @@ export default function BackupTableClient({ tableKey, initialTable, initialPaylo
     setLoading(true);
     setError("");
     try {
-      const query = `limit=${pageSize}&offset=${Math.max(0, nextOffset)}`;
-      let response = await fetch(`/next/api/backup/tables/${encodeURIComponent(tableKey)}/rows?${query}`, {
+      const query = `key=${encodeURIComponent(tableKey)}&limit=${pageSize}&offset=${Math.max(0, nextOffset)}`;
+      const response = await fetch(`/next/api/backup/rows-direct?${query}`, {
         credentials: "include",
         cache: "no-store",
       });
-      if (!response.ok && response.status !== 401 && response.status !== 403 && response.status !== 404) {
-        response = await fetch(`/api/backup/tables/${encodeURIComponent(tableKey)}/rows?${query}`, {
-          credentials: "include",
-          cache: "no-store",
-        });
-      }
       if (response.status === 401) {
         window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`;
         return;
@@ -224,12 +218,12 @@ export default function BackupTableClient({ tableKey, initialTable, initialPaylo
     setCreating(true);
     setCreateError("");
     try {
-      const response = await fetch(`/api/backup/tables/${encodeURIComponent(tableKey)}/rows`, {
+      const response = await fetch("/next/api/backup/rows-direct", {
         method: "POST",
         credentials: "include",
         cache: "no-store",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ values: newDraft }),
+        body: JSON.stringify({ key: tableKey, values: newDraft }),
       });
       if (!response.ok) throw new Error(await readError(response, "Failed to create row."));
       const body = await response.json();
@@ -259,12 +253,12 @@ export default function BackupTableClient({ tableKey, initialTable, initialPaylo
     setSaving(true);
     setSaveError("");
     try {
-      const response = await fetch(`/api/backup/tables/${encodeURIComponent(tableKey)}/rows`, {
+      const response = await fetch("/next/api/backup/rows-direct", {
         method: "PATCH",
         credentials: "include",
         cache: "no-store",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ originalRow: editRow, changes }),
+        body: JSON.stringify({ key: tableKey, originalRow: editRow, changes }),
       });
       if (!response.ok) throw new Error(await readError(response, "Failed to save row."));
       const body = await response.json();
