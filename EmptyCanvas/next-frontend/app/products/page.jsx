@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import AppShell from "../../components/AppShell";
 import ProductsClient from "../../components/products/ProductsClient";
-import { getLegacyAccountGate } from "../../lib/products-auth";
+import { getDirectAccountGate } from "../../lib/products-auth";
 import { getProductsCatalog } from "../../lib/products-service";
 
 export const dynamic = "force-dynamic";
@@ -10,7 +10,7 @@ export default async function ProductsPage() {
   // Express/Redis remains only as the temporary session + permission bridge.
   // Products data is loaded directly from Supabase by the Next.js server.
   const [gateResult, catalogResult] = await Promise.allSettled([
-    getLegacyAccountGate("Products"),
+    getDirectAccountGate("Products"),
     getProductsCatalog(),
   ]);
 

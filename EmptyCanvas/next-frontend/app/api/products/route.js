@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getLegacyAccountGate } from "../../../lib/products-auth";
+import { getDirectAccountGate } from "../../../lib/products-auth";
 import { createProduct, deleteProduct, getProduct, getProductsCatalog, updateProduct } from "../../../lib/products-service";
 import { measurePerformance } from "../../../lib/performance-profiler";
 
@@ -17,7 +17,7 @@ function errorResponse(error, fallback) {
 }
 
 async function GETImpl(request) {
-  const gate = await getLegacyAccountGate(["Products", "Proposals"]);
+  const gate = await getDirectAccountGate(["Products", "Proposals"]);
   if (!gate.ok) return gateResponse(gate);
 
   try {
@@ -49,7 +49,7 @@ async function GETImpl(request) {
 }
 
 export async function POST(request) {
-  const gate = await getLegacyAccountGate("Products");
+  const gate = await getDirectAccountGate("Products");
   if (!gate.ok) return gateResponse(gate);
 
   try {
@@ -70,7 +70,7 @@ export async function GET(request) {
 }
 
 export async function PATCH(request) {
-  const gate = await getLegacyAccountGate("Products");
+  const gate = await getDirectAccountGate("Products");
   if (!gate.ok) return gateResponse(gate);
 
   try {
@@ -104,7 +104,7 @@ export async function PATCH(request) {
 }
 
 export async function DELETE(request) {
-  const gate = await getLegacyAccountGate("Products");
+  const gate = await getDirectAccountGate("Products");
   if (!gate.ok) return gateResponse(gate);
 
   try {

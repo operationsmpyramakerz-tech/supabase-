@@ -37,7 +37,10 @@
     },
     {
       "src": "^/api/products/proposals/receipt-upload$",
-      "dest": "/EmptyCanvas/api/index.js"
+      "dest": "${NEXT_FRONTEND_ORIGIN}/next/api/products/proposals/receipt-upload",
+      "env": [
+        "NEXT_FRONTEND_ORIGIN"
+      ]
     },
     {
       "src": "^/api/products/proposals/([^/]+)/send-to-stock$",
@@ -95,6 +98,13 @@
     {
       "src": "^/api/expenses/export/(pdf|excel)$",
       "dest": "${NEXT_FRONTEND_ORIGIN}/next/api/expenses/export-direct?kind=$1",
+      "env": [
+        "NEXT_FRONTEND_ORIGIN"
+      ]
+    },
+    {
+      "src": "^/api/products/admin/verify$",
+      "dest": "${NEXT_FRONTEND_ORIGIN}/next/api/products/admin/verify",
       "env": [
         "NEXT_FRONTEND_ORIGIN"
       ]

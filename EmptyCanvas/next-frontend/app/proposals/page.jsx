@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import AppShell from "../../components/AppShell";
 import ProposalsClient from "../../components/proposals/ProposalsClient";
-import { getLegacyAccountGate } from "../../lib/products-auth";
+import { getDirectAccountGate } from "../../lib/products-auth";
 import { getProductsCatalog } from "../../lib/products-service";
 import { listKitFolders, listKits, listProposals } from "../../lib/proposal-kit-service";
 import { listTeamMembersLite } from "../../lib/team-members-service";
@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 export default async function ProposalsPage() {
   // Run the permission gate and read-only page data in parallel. Ownership
   // flags still use the resolved account, and nothing is rendered on a failed gate.
-  const gatePromise = getLegacyAccountGate(["Proposals", "Products"]);
+  const gatePromise = getDirectAccountGate(["Proposals", "Products"]);
   const accountPromise = gatePromise.then((result) => result?.account || {}).catch(() => ({}));
   const dataPromise = Promise.allSettled([
     getProductsCatalog(),

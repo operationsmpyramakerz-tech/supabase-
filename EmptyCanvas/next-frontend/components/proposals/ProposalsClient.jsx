@@ -396,7 +396,7 @@ function PasswordModal({ request, busy, onClose, onVerified }) {
     if (!text(password)) return setError("Admin password is required.");
     setError("");
     try {
-      await requestJson("/api/products/admin/verify", { method: "POST", body: JSON.stringify({ password }) });
+      await requestJson("/next/api/products/admin/verify", { method: "POST", body: JSON.stringify({ password }) });
       onVerified(text(password));
     } catch (verifyError) {
       setError(verifyError?.message || "Invalid Admin password.");

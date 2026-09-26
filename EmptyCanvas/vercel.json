@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/api/products/admin/verify",
+      "destination": "https://operations-hub-next-pilot.vercel.app/next/api/products/admin/verify"
+    },
+    {
       "source": "/api/products/proposals",
       "destination": "https://operations-hub-next-pilot.vercel.app/next/api/products/proposals"
     },
@@ -15,6 +19,10 @@
     {
       "source": "/api/products/proposals/:id/items/:itemId((?!by-tag|by-kit)[^/]+)",
       "destination": "https://operations-hub-next-pilot.vercel.app/next/api/products/proposals/:id/items/:itemId"
+    },
+    {
+      "source": "/api/products/proposals/receipt-upload",
+      "destination": "https://operations-hub-next-pilot.vercel.app/next/api/products/proposals/receipt-upload"
     },
     {
       "source": "/api/products/proposals/:id",

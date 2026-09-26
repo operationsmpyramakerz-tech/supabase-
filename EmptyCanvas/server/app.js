@@ -17502,47 +17502,6 @@ async function _pageBootstrapBackup(req) {
   ]);
 }
 
-async function _pageBootstrapProducts(req) {
-  return Promise.all([
-    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapAccountPayload(req)),
-    _pageBootstrapLoad('/api/products', 2 * 60_000, () => _sbProductsCatalogPayload()),
-  ]);
-}
-
-async function _pageBootstrapProposals(req) {
-  return Promise.all([
-    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapAccountPayload(req)),
-    _pageBootstrapLoad('/api/products', 2 * 60_000, () => _sbProductsCatalogPayload()),
-    _pageBootstrapLoad('/api/products/proposals', 20_000, async () => ({
-      ok: true,
-      source: 'supabase',
-      proposals: await _sbProductsProposalsList(req),
-    })),
-    _pageBootstrapLoad('/api/products/kits', 30_000, async () => ({
-      ok: true,
-      source: 'supabase',
-      kits: await _sbProductsKitsList(req),
-    })),
-    _pageBootstrapLoad('/api/products/proposals/team-members', 2 * 60_000, async () => ({
-      ok: true,
-      source: 'supabase',
-      members: await _sbProposalTeamMembersList(),
-    })),
-  ]);
-}
-
-async function _pageBootstrapKits(req) {
-  return Promise.all([
-    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapAccountPayload(req)),
-    _pageBootstrapLoad('/api/products', 2 * 60_000, () => _sbProductsCatalogPayload()),
-    _pageBootstrapLoad('/api/products/kits', 30_000, async () => ({
-      ok: true,
-      source: 'supabase',
-      kits: await _sbProductsKitsList(req),
-    })),
-  ]);
-}
-
 async function _pageBootstrapB2cDatabase(req) {
   return Promise.all([
     _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapAccountPayload(req)),
@@ -17807,17 +17766,6 @@ app.get('/api/page-bootstrap', requireAuth, async (req, res) => {
     } else if (scope === 'backup') {
       if (!_pageBootstrapHasPageAccess(req, 'Backup')) return _pageAccessDeniedResponse(req, res);
       results = await _pageBootstrapBackup(req);
-    } else if (scope === 'proposals') {
-      const canAccessProposals = _pageBootstrapHasPageAccess(req, 'Proposals') ||
-        _pageBootstrapHasPageAccess(req, 'Products');
-      if (!canAccessProposals) return _pageAccessDeniedResponse(req, res);
-      results = await _pageBootstrapProposals(req);
-    } else if (scope === 'kits') {
-      const canAccessKits = _pageBootstrapHasPageAccess(req, 'Kits') ||
-        _pageBootstrapHasPageAccess(req, 'Proposals') ||
-        _pageBootstrapHasPageAccess(req, 'Products');
-      if (!canAccessKits) return _pageAccessDeniedResponse(req, res);
-      results = await _pageBootstrapKits(req);
     } else if (scope === 'b2c-forms') {
       const canAccessB2cForms = _pageBootstrapHasPageAccess(req, 'Customer Form') ||
         _pageBootstrapHasPageAccess(req, 'Customer Database') ||
@@ -17836,9 +17784,6 @@ app.get('/api/page-bootstrap', requireAuth, async (req, res) => {
       const databaseId = String(req.query?.id || '').trim();
       if (!databaseId) return res.status(400).json({ ok: false, error: 'A B2C database id is required.' });
       results = await _pageBootstrapB2cTable(req, databaseId);
-    } else if (scope === 'products') {
-      if (!_pageBootstrapHasPageAccess(req, 'Products')) return _pageAccessDeniedResponse(req, res);
-      results = await _pageBootstrapProducts(req);
     } else if (scope === 'kpis') {
       if (!_pageBootstrapHasPageAccess(req, 'KPIs')) return _pageAccessDeniedResponse(req, res);
       results = await _pageBootstrapKpis(req);
@@ -18039,22 +17984,6 @@ async function _requireProductsAdminPassword(req, res) {
   return true;
 }
 
-app.post(
-  "/api/products/admin/verify",
-  requireAuth,
-  requirePage(["Proposals", "Kits", "Products"]),
-  async (req, res) => {
-    res.set("Cache-Control", "no-store");
-    try {
-      if (!await _requireProductsAdminPassword(req, res)) return;
-      return res.json({ ok: true });
-    } catch (error) {
-      console.error("POST /api/products/admin/verify error:", error?.details || error);
-      return res.status(500).json({ ok: false, error: "Failed to verify Admin password." });
-    }
-  },
-);
-
 app.get(
   "/api/products/proposals",
   requireAuth,
@@ -18239,37 +18168,6 @@ app.get(
         return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to download proposal Excel." });
       }
       try { res.end(); } catch {}
-    }
-  },
-);
-
-app.post(
-  "/api/products/proposals/receipt-upload",
-  requireAuth,
-  requirePage(["Proposals", "Kits", "Products"]),
-  async (req, res) => {
-    res.set("Cache-Control", "no-store");
-    try {
-      const { dataUrl, filename } = req.body || {};
-      if (!dataUrl) return res.status(400).json({ ok: false, error: "Receipt image data is required." });
-      const { mime, buf } = parseDataUrlToBuffer(dataUrl);
-      if (!/^image\//i.test(String(mime || ""))) {
-        return res.status(400).json({ ok: false, error: "Receipt upload must be an image." });
-      }
-      if (buf.length > 8 * 1024 * 1024) {
-        return res.status(413).json({ ok: false, error: "Receipt image is too large. Maximum size is 8 MB." });
-      }
-      const originalName = String(filename || "receipt.jpg").trim() || "receipt.jpg";
-      const cleanName = originalName.replace(/[^a-z0-9._-]/gi, "_");
-      const objectName = `proposal-receipts/${Date.now()}-${Math.random().toString(16).slice(2)}-${cleanName}`;
-      const url = await uploadToBlobFromBase64(dataUrl, objectName);
-      return res.status(201).json({ ok: true, url, name: originalName, mime });
-    } catch (error) {
-      console.error("POST /api/products/proposals/receipt-upload error:", error?.details || error?.body || error);
-      const message = String(error?.message || "") === "SUPABASE_STORAGE_OR_BLOB_TOKEN_MISSING"
-        ? "Supabase Storage is not configured for receipt uploads."
-        : (error?.message || "Failed to upload receipt image.");
-      return res.status(error?.status || 500).json({ ok: false, error: message });
     }
   },
 );

@@ -8,7 +8,7 @@ import {
   supabaseRequest,
   updateById,
 } from "./supabase-rest";
-import { fetchLegacyJson } from "./legacy-api";
+import { verifyPageAdminPasswordDirect } from "./order-action-auth";
 import {
   canUseKitHeadersRpc,
   canUseProposalHeadersRpc,
@@ -182,20 +182,21 @@ function isOwner(row = {}, account = {}) {
   return false;
 }
 
-async function verifyAdmin(password) {
+async function verifyAdmin(account, password) {
   const clean = text(password);
   if (!clean) return false;
-  const response = await fetchLegacyJson("/api/products/admin/verify", {
-    method: "POST",
-    body: { password: clean },
-    timeoutMs: 15000,
-  });
-  return !!(response.ok && response.data?.ok !== false);
+  const verified = await verifyPageAdminPasswordDirect(account || {}, clean, ["Proposals", "Kits", "Products"]);
+  if (verified === null) {
+    const error = new Error("The direct Admin password context is unavailable.");
+    error.status = 503;
+    throw error;
+  }
+  return verified;
 }
 
 async function requireOwnerOrAdmin(row, account, adminPassword) {
   if (isOwner(row, account)) return;
-  if (await verifyAdmin(adminPassword)) return;
+  if (await verifyAdmin(account, adminPassword)) return;
   const error = new Error("Admin password is required to modify an item created by another user.");
   error.status = 403;
   throw error;

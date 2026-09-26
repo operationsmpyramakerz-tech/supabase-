@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getLegacyAccountGate } from "../../../../lib/products-auth";
+import { getDirectAccountGate } from "../../../../lib/products-auth";
 import { getProductImageSources } from "../../../../lib/products-service";
 import { getSupabaseConfig } from "../../../../lib/supabase-rest";
 
@@ -169,7 +169,7 @@ function noImage() {
 }
 
 export async function GET(request) {
-  const gate = await getLegacyAccountGate("Products");
+  const gate = await getDirectAccountGate("Products");
   if (!gate.ok) return noImage();
 
   try {

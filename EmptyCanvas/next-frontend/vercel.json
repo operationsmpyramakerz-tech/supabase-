@@ -37,6 +37,10 @@
       "destination": "/next/api/sv-orders/mutations-direct"
     },
     {
+      "source": "/api/products/admin/verify",
+      "destination": "/next/api/products/admin/verify"
+    },
+    {
       "source": "/api/products",
       "destination": "/next/api/products"
     },
@@ -55,6 +59,10 @@
     {
       "source": "/api/products/proposals",
       "destination": "/next/api/products/proposals"
+    },
+    {
+      "source": "/api/products/proposals/receipt-upload",
+      "destination": "/next/api/products/proposals/receipt-upload"
     },
     {
       "source": "/api/products/proposals/:id/copy",

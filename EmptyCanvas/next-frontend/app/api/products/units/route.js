@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getLegacyAccountGate } from "../../../../lib/products-auth";
+import { getDirectAccountGate } from "../../../../lib/products-auth";
 import { createProductUnit, listProductUnits } from "../../../../lib/products-service";
 
 export const dynamic = "force-dynamic";
@@ -16,7 +16,7 @@ function errorResponse(error, fallback) {
 }
 
 export async function GET() {
-  const gate = await getLegacyAccountGate("Products");
+  const gate = await getDirectAccountGate("Products");
   if (!gate.ok) return gateResponse(gate);
   try {
     return NextResponse.json({ ok: true, source: "supabase-next", units: await listProductUnits() }, {
@@ -28,7 +28,7 @@ export async function GET() {
 }
 
 export async function POST(request) {
-  const gate = await getLegacyAccountGate("Products");
+  const gate = await getDirectAccountGate("Products");
   if (!gate.ok) return gateResponse(gate);
   try {
     const body = await request.json().catch(() => ({}));

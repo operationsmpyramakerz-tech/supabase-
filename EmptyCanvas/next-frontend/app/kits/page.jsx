@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import AppShell from "../../components/AppShell";
 import KitsClient from "../../components/kits/KitsClient";
-import { getLegacyAccountGate } from "../../lib/products-auth";
+import { getDirectAccountGate } from "../../lib/products-auth";
 import { getProductsCatalog } from "../../lib/products-service";
 import { listKitFolders, listKits } from "../../lib/proposal-kit-service";
 
@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 export default async function KitsPage() {
   // Start authentication and the read-only Supabase queries together. The data
   // promise is not consumed/rendered until the permission gate succeeds.
-  const gatePromise = getLegacyAccountGate(["Kits", "Proposals", "Products"]);
+  const gatePromise = getDirectAccountGate(["Kits", "Proposals", "Products"]);
   const accountPromise = gatePromise.then((result) => result?.account || {}).catch(() => ({}));
   const dataPromise = Promise.allSettled([
     getProductsCatalog(),

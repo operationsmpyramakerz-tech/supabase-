@@ -1,13 +1,13 @@
 import "server-only";
 import { NextResponse } from "next/server";
-import { getLegacyAccountGate } from "./products-auth";
+import { getDirectAccountGate } from "./products-auth";
 
 export async function proposalGate() {
-  return await getLegacyAccountGate(["Proposals", "Products"]);
+  return await getDirectAccountGate(["Proposals", "Products"]);
 }
 
 export async function kitGate() {
-  return await getLegacyAccountGate(["Kits", "Proposals", "Products"]);
+  return await getDirectAccountGate(["Kits", "Proposals", "Products"]);
 }
 
 // Read-only kit access is also required by Shopping Cart. A user should be able
@@ -15,7 +15,7 @@ export async function kitGate() {
 // Kits/Proposals/Products pages are not part of their sidebar permissions.
 // Write operations continue to use kitGate() above.
 export async function kitReadGate() {
-  return await getLegacyAccountGate(["Kits", "Proposals", "Products", "Create New Order", "Shopping Cart"]);
+  return await getDirectAccountGate(["Kits", "Proposals", "Products", "Create New Order", "Shopping Cart"]);
 }
 
 export function gateResponse(gate) {
