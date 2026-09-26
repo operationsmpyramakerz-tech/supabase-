@@ -5,6 +5,62 @@
       "destination": "https://operations-hub-next-pilot.vercel.app/next/api/products/admin/verify"
     },
     {
+      "source": "/api/products",
+      "destination": "https://operations-hub-next-pilot.vercel.app/next/api/products"
+    },
+    {
+      "source": "/api/products/tags",
+      "destination": "https://operations-hub-next-pilot.vercel.app/next/api/products/tags"
+    },
+    {
+      "source": "/api/products/units",
+      "destination": "https://operations-hub-next-pilot.vercel.app/next/api/products/units"
+    },
+    {
+      "source": "/api/products/proposals/team-members",
+      "destination": "https://operations-hub-next-pilot.vercel.app/next/api/team-members"
+    },
+    {
+      "source": "/api/products/:id/image",
+      "destination": "https://operations-hub-next-pilot.vercel.app/next/api/products/image?id=:id"
+    },
+    {
+      "source": "/api/products/proposals/combine/:kind(pdf|excel)",
+      "destination": "https://operations-hub-next-pilot.vercel.app/next/api/products/export-direct?scope=combined&kind=:kind"
+    },
+    {
+      "source": "/api/products/proposals/:id/:kind(pdf|excel)",
+      "destination": "https://operations-hub-next-pilot.vercel.app/next/api/products/export-direct?scope=proposal&id=:id&kind=:kind"
+    },
+    {
+      "source": "/api/products/kits/:id/:kind(pdf|excel)",
+      "destination": "https://operations-hub-next-pilot.vercel.app/next/api/products/export-direct?scope=kit&id=:id&kind=:kind"
+    },
+    {
+      "source": "/api/products/proposals/:id/send-to-stock",
+      "destination": "https://operations-hub-next-pilot.vercel.app/next/api/products/proposals/send-to-stock?id=:id"
+    },
+    {
+      "source": "/api/products/proposals/:id/make-order",
+      "destination": "https://operations-hub-next-pilot.vercel.app/next/api/products/proposals/make-order?id=:id"
+    },
+    {
+      "source": "/api/products/proposals/:id/items/by-kit",
+      "destination": "https://operations-hub-next-pilot.vercel.app/next/api/products/proposals/items-by-kit?id=:id"
+    },
+    {
+      "source": "/api/products/proposals/:id/items/by-tag",
+      "destination": "https://operations-hub-next-pilot.vercel.app/next/api/products/proposals/items-by-tag?id=:id"
+    },
+    {
+      "source": "/api/products/proposals/combine/save",
+      "destination": "https://operations-hub-next-pilot.vercel.app/next/api/products/proposals/combine/save"
+    },
+    {
+      "source": "/api/products/kits/:id/send-to-stock",
+      "destination": "https://operations-hub-next-pilot.vercel.app/next/api/products/kits/send-to-stock?id=:id"
+    },
+    {
       "source": "/api/products/proposals",
       "destination": "https://operations-hub-next-pilot.vercel.app/next/api/products/proposals"
     },
@@ -55,6 +111,10 @@
     {
       "source": "/api/expenses/export/:kind(pdf|excel)",
       "destination": "https://operations-hub-next-pilot.vercel.app/next/api/expenses/export-direct?kind=:kind"
+    },
+    {
+      "source": "/api/products/:id((?!admin|proposals|kits|tags|units)[^/]+)",
+      "destination": "https://operations-hub-next-pilot.vercel.app/next/api/products?id=:id"
     },
     {
       "source": "/(.*)",

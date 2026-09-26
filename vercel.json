@@ -8,6 +8,104 @@
   ],
   "routes": [
     {
+      "src": "^/api/products$",
+      "dest": "${NEXT_FRONTEND_ORIGIN}/next/api/products",
+      "env": [
+        "NEXT_FRONTEND_ORIGIN"
+      ]
+    },
+    {
+      "src": "^/api/products/tags$",
+      "dest": "${NEXT_FRONTEND_ORIGIN}/next/api/products/tags",
+      "env": [
+        "NEXT_FRONTEND_ORIGIN"
+      ]
+    },
+    {
+      "src": "^/api/products/units$",
+      "dest": "${NEXT_FRONTEND_ORIGIN}/next/api/products/units",
+      "env": [
+        "NEXT_FRONTEND_ORIGIN"
+      ]
+    },
+    {
+      "src": "^/api/products/proposals/team-members$",
+      "dest": "${NEXT_FRONTEND_ORIGIN}/next/api/team-members",
+      "env": [
+        "NEXT_FRONTEND_ORIGIN"
+      ]
+    },
+    {
+      "src": "^/api/products/([^/]+)/image$",
+      "dest": "${NEXT_FRONTEND_ORIGIN}/next/api/products/image?id=$1",
+      "env": [
+        "NEXT_FRONTEND_ORIGIN"
+      ]
+    },
+    {
+      "src": "^/api/products/proposals/combine/(pdf|excel)$",
+      "dest": "${NEXT_FRONTEND_ORIGIN}/next/api/products/export-direct?scope=combined&kind=$1",
+      "env": [
+        "NEXT_FRONTEND_ORIGIN"
+      ]
+    },
+    {
+      "src": "^/api/products/proposals/([^/]+)/(pdf|excel)$",
+      "dest": "${NEXT_FRONTEND_ORIGIN}/next/api/products/export-direct?scope=proposal&id=$1&kind=$2",
+      "env": [
+        "NEXT_FRONTEND_ORIGIN"
+      ]
+    },
+    {
+      "src": "^/api/products/kits/([^/]+)/(pdf|excel)$",
+      "dest": "${NEXT_FRONTEND_ORIGIN}/next/api/products/export-direct?scope=kit&id=$1&kind=$2",
+      "env": [
+        "NEXT_FRONTEND_ORIGIN"
+      ]
+    },
+    {
+      "src": "^/api/products/proposals/([^/]+)/send-to-stock$",
+      "dest": "${NEXT_FRONTEND_ORIGIN}/next/api/products/proposals/send-to-stock?id=$1",
+      "env": [
+        "NEXT_FRONTEND_ORIGIN"
+      ]
+    },
+    {
+      "src": "^/api/products/proposals/([^/]+)/make-order$",
+      "dest": "${NEXT_FRONTEND_ORIGIN}/next/api/products/proposals/make-order?id=$1",
+      "env": [
+        "NEXT_FRONTEND_ORIGIN"
+      ]
+    },
+    {
+      "src": "^/api/products/proposals/([^/]+)/items/by-kit$",
+      "dest": "${NEXT_FRONTEND_ORIGIN}/next/api/products/proposals/items-by-kit?id=$1",
+      "env": [
+        "NEXT_FRONTEND_ORIGIN"
+      ]
+    },
+    {
+      "src": "^/api/products/proposals/([^/]+)/items/by-tag$",
+      "dest": "${NEXT_FRONTEND_ORIGIN}/next/api/products/proposals/items-by-tag?id=$1",
+      "env": [
+        "NEXT_FRONTEND_ORIGIN"
+      ]
+    },
+    {
+      "src": "^/api/products/proposals/combine/save$",
+      "dest": "${NEXT_FRONTEND_ORIGIN}/next/api/products/proposals/combine/save",
+      "env": [
+        "NEXT_FRONTEND_ORIGIN"
+      ]
+    },
+    {
+      "src": "^/api/products/kits/([^/]+)/send-to-stock$",
+      "dest": "${NEXT_FRONTEND_ORIGIN}/next/api/products/kits/send-to-stock?id=$1",
+      "env": [
+        "NEXT_FRONTEND_ORIGIN"
+      ]
+    },
+    {
       "src": "^/api/products/proposals$",
       "dest": "${NEXT_FRONTEND_ORIGIN}/next/api/products/proposals",
       "env": [
@@ -41,10 +139,6 @@
       "env": [
         "NEXT_FRONTEND_ORIGIN"
       ]
-    },
-    {
-      "src": "^/api/products/proposals/([^/]+)/send-to-stock$",
-      "dest": "/EmptyCanvas/api/index.js"
     },
     {
       "src": "^/api/products/proposals/([^/]+)$",
@@ -105,6 +199,13 @@
     {
       "src": "^/api/products/admin/verify$",
       "dest": "${NEXT_FRONTEND_ORIGIN}/next/api/products/admin/verify",
+      "env": [
+        "NEXT_FRONTEND_ORIGIN"
+      ]
+    },
+    {
+      "src": "^/api/products/([^/]+)$",
+      "dest": "${NEXT_FRONTEND_ORIGIN}/next/api/products?id=$1",
       "env": [
         "NEXT_FRONTEND_ORIGIN"
       ]

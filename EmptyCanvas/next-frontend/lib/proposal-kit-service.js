@@ -661,6 +661,70 @@ export async function addProposalProduct(proposalId, body, account) {
   return await getProposal(proposalId, account);
 }
 
+export async function addProposalProductsByTag(proposalId, body = {}, account = {}) {
+  const parent = await selectById(proposalTable(), proposalId);
+  if (!parent) {
+    const error = new Error("Proposal not found.");
+    error.status = 404;
+    throw error;
+  }
+  await requireOwnerOrAdmin(parent, account, body?.adminPassword);
+
+  const tag = text(body?.tag || body?.tags || body?.name);
+  if (!tag) {
+    const error = new Error("Tag is required.");
+    error.status = 400;
+    throw error;
+  }
+  const products = (await getProductsList({ fresh: true })).filter((product) => {
+    const tags = Array.isArray(product?.tags)
+      ? product.tags.map(text).filter(Boolean)
+      : text(product?.tags).split(/[,;|]/).map(text).filter(Boolean);
+    return (tags[0] || "") === tag;
+  });
+  if (!products.length) {
+    const error = new Error("No products were found under this tag.");
+    error.status = 404;
+    throw error;
+  }
+
+  const quantity = positiveInt(body?.quantity || body?.qty);
+  const mergeLogic = text(body?.mergeLogic || body?.logic || body?.quantityLogic).toLowerCase();
+  const now = new Date().toISOString();
+  const rows = await rowsByForeignKey(proposalItemsTable(), "proposal_id", proposalId);
+  const byProduct = new Map(rows.map((row) => [text(row?.product_id), row]).filter(([id]) => id));
+
+  for (const product of products) {
+    const productId = text(product?.id);
+    if (!productId) continue;
+    const existing = byProduct.get(productId);
+    const directSource = [{ kitId: "", kitName: "Direct components", quantity, order: 0 }];
+    if (existing) {
+      await updateById(proposalItemsTable(), existing.id, {
+        quantity: mergedQuantity(existing.quantity, quantity, mergeLogic),
+        product_name: text(product?.name) || text(existing?.product_name) || "Untitled product",
+        source_kits: mergeSourceKits(existing.source_kits, directSource, existing.quantity, quantity, mergeLogic),
+        updated_at: now,
+      });
+    } else {
+      const created = await insert(proposalItemsTable(), {
+        proposal_id: proposalId,
+        product_id: productId,
+        product_name: text(product?.name) || "Untitled product",
+        quantity,
+        source_kits: directSource,
+        created_at: now,
+        updated_at: now,
+      });
+      byProduct.set(productId, created || { product_id: productId, quantity, source_kits: directSource });
+    }
+  }
+
+  await updateById(proposalTable(), proposalId, { updated_at: now });
+  invalidateProposalKitReadCaches("proposals");
+  return { ...(await getProposal(proposalId, account)), addedCount: products.length };
+}
+
 export async function updateProposalItem(proposalId, itemId, body, account) {
   const parent = await selectById(proposalTable(), proposalId);
   if (!parent) {

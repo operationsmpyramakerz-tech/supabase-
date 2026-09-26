@@ -53,8 +53,28 @@
       "destination": "/next/api/products/units"
     },
     {
+      "source": "/api/products/proposals/team-members",
+      "destination": "/next/api/team-members"
+    },
+    {
+      "source": "/api/products/:id/image",
+      "destination": "/next/api/products/image?id=:id"
+    },
+    {
       "source": "/api/products/:id((?!admin|proposals|kits|tags|units)[^/]+)",
-      "destination": "/next/api/products/:id"
+      "destination": "/next/api/products?id=:id"
+    },
+    {
+      "source": "/api/products/proposals/combine/:kind(pdf|excel)",
+      "destination": "/next/api/products/export-direct?scope=combined&kind=:kind"
+    },
+    {
+      "source": "/api/products/proposals/:id/:kind(pdf|excel)",
+      "destination": "/next/api/products/export-direct?scope=proposal&id=:id&kind=:kind"
+    },
+    {
+      "source": "/api/products/kits/:id/:kind(pdf|excel)",
+      "destination": "/next/api/products/export-direct?scope=kit&id=:id&kind=:kind"
     },
     {
       "source": "/api/products/proposals",
@@ -79,6 +99,10 @@
     {
       "source": "/api/products/proposals/:id/items/by-kit",
       "destination": "/next/api/products/proposals/items-by-kit?id=:id"
+    },
+    {
+      "source": "/api/products/proposals/:id/items/by-tag",
+      "destination": "/next/api/products/proposals/items-by-tag?id=:id"
     },
     {
       "source": "/api/products/proposals/combine/save",

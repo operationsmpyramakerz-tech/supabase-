@@ -1158,7 +1158,7 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
     if (!kit?.id) return;
     const columns = exportColumns.length ? exportColumns.join(",") : EXPORT_COLUMNS.map(([key]) => key).join(",");
     const params = new URLSearchParams({ columns, groupBy });
-    openDownload(`/api/products/kits/${encodeURIComponent(kit.id)}/${type}?${params.toString()}`);
+    openDownload(`/next/api/products/export-direct?scope=kit&id=${encodeURIComponent(kit.id)}&kind=${encodeURIComponent(type)}&${params.toString()}`);
     setDownloadMenuOpen(false);
   };
 

@@ -1995,7 +1995,7 @@ export default function ProposalsClient({
     if (!activeDetail?.proposal?.id) return;
     const columns = exportColumns.length ? exportColumns.join(",") : EXPORT_COLUMNS.map(([key]) => key).join(",");
     const params = new URLSearchParams({ columns, groupBy, repeatedComponents: repeatedComponentMode });
-    openDownload(`/api/products/proposals/${encodeURIComponent(activeDetail.proposal.id)}/${type}?${params.toString()}`);
+    openDownload(`/next/api/products/export-direct?scope=proposal&id=${encodeURIComponent(activeDetail.proposal.id)}&kind=${encodeURIComponent(type)}&${params.toString()}`);
     setDownloadMenuOpen(false);
   };
 
@@ -2009,7 +2009,7 @@ export default function ProposalsClient({
       groupBy,
       repeatedComponents: repeatedComponentMode,
     });
-    openDownload(`/api/products/proposals/combine/${type}?${params.toString()}`);
+    openDownload(`/next/api/products/export-direct?scope=combined&kind=${encodeURIComponent(type)}&${params.toString()}`);
   };
 
   const toggleExportColumn = (key) => {
