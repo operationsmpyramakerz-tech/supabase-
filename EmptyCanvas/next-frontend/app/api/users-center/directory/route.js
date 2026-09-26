@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getLegacyAccountGate } from "../../../../lib/products-auth";
+import { getDirectAccountGate } from "../../../../lib/products-auth";
 import { usersCenterDirectory } from "../../../../lib/users-center-data";
 import { measurePerformance } from "../../../../lib/performance-profiler";
 
@@ -9,7 +9,7 @@ export const revalidate = 0;
 const ACCESS_PAGES = ["Users Center", "User Access & Data", "User Access", "Team Members"];
 
 async function GETImpl(request) {
-  const gate = await getLegacyAccountGate(ACCESS_PAGES);
+  const gate = await getDirectAccountGate(ACCESS_PAGES);
   if (!gate.ok) {
     return NextResponse.json({ ok: false, error: gate.error || "Access denied." }, { status: gate.status || 503 });
   }

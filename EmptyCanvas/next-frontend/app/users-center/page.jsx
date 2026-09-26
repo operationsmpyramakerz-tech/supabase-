@@ -1,29 +1,13 @@
 import { redirect } from "next/navigation";
 import AppShell from "../../components/AppShell";
 import UsersCenterClient from "../../components/users-center/UsersCenterClient";
-import { fetchLegacyJson } from "../../lib/legacy-api";
-import { getLegacyAccountGate } from "../../lib/products-auth";
+import { getDirectAccountGate } from "../../lib/products-auth";
 import { usersCenterDirectory, usersCenterSignupRequests } from "../../lib/users-center-data";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 const ACCESS_PAGES = ["Users Center", "User Access & Data", "User Access", "Team Members"];
-
-function resourceMap(bundle) {
-  const map = new Map();
-  for (const resource of Array.isArray(bundle?.resources) ? bundle.resources : []) {
-    map.set(String(resource?.url || ""), resource?.body);
-  }
-  return map;
-}
-
-function getResource(map, prefix, fallback = null) {
-  for (const [url, body] of map.entries()) {
-    if (url === prefix || url.startsWith(prefix)) return body;
-  }
-  return fallback;
-}
 
 function UnavailableState({ message, forbidden = false }) {
   return (
@@ -42,24 +26,8 @@ function UnavailableState({ message, forbidden = false }) {
 }
 
 
-async function legacySignupPayload() {
-  const response = await fetchLegacyJson("/api/user-access/signup-requests?status=pending", { timeoutMs: 20000 });
-  return response.ok && response.data ? response.data : null;
-}
-
-async function legacyUsersCenterBundle() {
-  const response = await fetchLegacyJson("/api/page-bootstrap?scope=users-center", { timeoutMs: 45000 });
-  if (!response.ok || !response.data?.ok) return null;
-  const resources = resourceMap(response.data);
-  return {
-    directory: getResource(resources, "/api/user-access/team-members", null),
-    signup: getResource(resources, "/api/user-access/signup-requests", { ok: true, requests: [] }),
-    warnings: response.data.omitted || [],
-  };
-}
-
 export default async function UsersCenterPage() {
-  const gate = await getLegacyAccountGate(ACCESS_PAGES);
+  const gate = await getDirectAccountGate(ACCESS_PAGES);
 
   if (gate.status === 401) redirect("/login?next=/next/users-center");
   if (gate.status === 403) {
@@ -69,29 +37,22 @@ export default async function UsersCenterPage() {
     return <UnavailableState message={gate.error || "The current ERP authentication service is temporarily unavailable."} />;
   }
 
-  const warnings = [];
   const [directoryResult, signupResult] = await Promise.allSettled([
     usersCenterDirectory(),
     usersCenterSignupRequests({ status: "pending" }),
   ]);
 
-  let directory = directoryResult.status === "fulfilled" ? directoryResult.value : null;
-  let signup = signupResult.status === "fulfilled" ? signupResult.value : null;
-
-  if (!signup) {
-    signup = await legacySignupPayload();
-    if (signup) warnings.push("Sign up request count loaded through the recovery path.");
-    else signup = { ok: true, requests: [] };
+  if (directoryResult.status !== "fulfilled") {
+    return <UnavailableState message={directoryResult.reason?.message || "Users Center data is temporarily unavailable."} />;
   }
 
-  if (!directory) {
-    const legacy = await legacyUsersCenterBundle();
-    if (!legacy?.directory) {
-      return <UnavailableState message={directoryResult.reason?.message || "Users Center data is temporarily unavailable."} />;
-    }
-    directory = legacy.directory;
-    warnings.push("Users Center directory recovery path used.", ...(legacy.warnings || []));
-  }
+  const directory = directoryResult.value;
+  const signup = signupResult.status === "fulfilled"
+    ? signupResult.value
+    : { ok: true, requests: [] };
+  const warnings = signupResult.status === "rejected"
+    ? ["Sign up requests could not be loaded. Refresh to retry."]
+    : [];
 
   return (
     <AppShell

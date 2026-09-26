@@ -15066,27 +15066,6 @@ app.post(
 
 
 // User Access & Data — Sign up requests
-app.get(
-  '/api/user-access/signup-requests',
-  requireAuth,
-  async (req, res) => {
-    res.set('Cache-Control', 'no-store');
-    try {
-      const status = String(req.query?.status || 'pending').trim().toLowerCase() || 'pending';
-      const rows = await _sbSelectSignupRequests({ status });
-      return res.json({ ok: true, requests: rows.map((row) => _serializeSignupRequest(row)), source: 'supabase' });
-    } catch (error) {
-      console.error('GET /api/user-access/signup-requests error:', error?.details || error?.body || error);
-      const raw = String(error?.message || 'Failed to load sign up requests.');
-      const tableMissing = /team_member_signup_requests|schema cache|Could not find the table|relation .* does not exist|42P01|PGRST205/i.test(raw);
-      return res.status(error?.status || 500).json({
-        ok: false,
-        error: tableMissing ? 'Sign up requests table is not installed. Run the signup requests SQL migration first.' : raw,
-      });
-    }
-  },
-);
-
 app.post(
   '/api/user-access/signup-requests/:id/approve',
   requireAuth,
@@ -15189,27 +15168,6 @@ app.post(
 );
 
 // User Access & Data — Dynamic form options
-app.get(
-  "/api/user-access/options",
-  requireAuth,
-  async (req, res) => {
-    res.set("Cache-Control", "no-store");
-    try {
-      const rows = _sbTeamMembersEnabled() ? await _sbSelectTeamMembersRows() : [];
-      return res.json({
-        ok: true,
-        source: _sbTeamMembersEnabled() ? "supabase" : "notion",
-        schools: await _uaStocktakingSchoolOptions(),
-        allowedPages: _uaAllowedPageOptionsFromRows(rows),
-        svSchools: _uaSvSchoolNameOptionsFromRows(rows),
-      });
-    } catch (error) {
-      console.error("GET /api/user-access/options error:", error?.details || error?.body || error);
-      return res.status(500).json({ ok: false, error: error?.message || "Failed to load Users Center options." });
-    }
-  },
-);
-
 // User Access & Data — Add a Stocktaking school column used by the School dropdown
 app.post(
   "/api/user-access/stocktaking-columns",
@@ -15270,53 +15228,7 @@ app.post(
 
 
 // User Access & Data — Page-access catalog from Supabase app_pages
-app.get(
-  "/api/user-access/pages",
-  requireAuth,
-  async (req, res) => {
-    res.set("Cache-Control", "no-store");
-    try {
-      if (!_sbTeamMembersEnabled()) {
-        return res.status(500).json({ ok: false, error: "Supabase is required for page-access management." });
-      }
-      const pages = await _sbSelectAppPages({ assignableOnly: true });
-      return res.json({ ok: true, source: "supabase", pages });
-    } catch (error) {
-      console.error("GET /api/user-access/pages error:", error?.details || error?.body || error);
-      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to load application pages." });
-    }
-  },
-);
-
 // User Access & Data — Read one member's page-access matrix
-app.get(
-  "/api/user-access/team-members/:id/page-access",
-  requireAuth,
-  async (req, res) => {
-    res.set("Cache-Control", "no-store");
-    try {
-      if (!_sbTeamMembersEnabled()) {
-        return res.status(500).json({ ok: false, error: "Supabase is required for page-access management." });
-      }
-      const memberId = String(req.params?.id || "").trim();
-      if (!memberId) return res.status(400).json({ ok: false, error: "Missing team member ID." });
-      const member = await _sbFindTeamMemberById(memberId).catch(() => null);
-      const payload = await _sbPageAccessPayloadForMember(memberId);
-      return res.json({
-        ok: true,
-        source: "supabase",
-        memberId,
-        memberName: _sbString(_sbValueForLabel(member || {}, "Name")) || "",
-        pages: payload.pages,
-        summary: payload.summary,
-      });
-    } catch (error) {
-      console.error("GET /api/user-access/team-members/:id/page-access error:", error?.details || error?.body || error);
-      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to load page access." });
-    }
-  },
-);
-
 // User Access & Data — Save one member's page-access matrix
 app.patch(
   "/api/user-access/team-members/:id/page-access",
@@ -15383,26 +15295,6 @@ app.patch(
 );
 
 // User Access & Data — Read one member's S.V Schools / Orders Review visibility
-app.get(
-  "/api/user-access/team-members/:id/sv-access",
-  requireAuth,
-  async (req, res) => {
-    res.set("Cache-Control", "no-store");
-    try {
-      if (!_sbTeamMembersEnabled()) {
-        return res.status(500).json({ ok: false, error: "Supabase is required for S.V Schools management." });
-      }
-      const memberId = String(req.params?.id || "").trim();
-      if (!memberId) return res.status(400).json({ ok: false, error: "Missing team member ID." });
-      const payload = await _sbSvAccessPayloadForMember(memberId);
-      return res.json({ ok: true, source: "supabase", ...payload });
-    } catch (error) {
-      console.error("GET /api/user-access/team-members/:id/sv-access error:", error?.details || error?.body || error);
-      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to load S.V Schools." });
-    }
-  },
-);
-
 // User Access & Data — Save one member's S.V Schools / Orders Review visibility
 app.patch(
   "/api/user-access/team-members/:id/sv-access",
@@ -15683,42 +15575,6 @@ app.delete(
 );
 
 // User Access & Data — Teams Members grouped by Department
-app.get(
-  "/api/user-access/team-members",
-  requireAuth,
-  async (req, res) => {
-    if (!_sbTeamMembersEnabled() && !teamMembersDatabaseId) {
-      return res.status(500).json({ error: "Team Members data source is not configured." });
-    }
-
-    res.set("Cache-Control", "no-store");
-
-    try {
-      const forceFresh =
-        String(req.query?._fresh || "") === "1" ||
-        String(req.get("X-Ops-Hard-Refresh") || "") === "1";
-
-      if (_sbTeamMembersEnabled()) {
-        const sbCacheKey = "cache:api:user-access:team-members:supabase:v1";
-        if (forceFresh) await cacheDel(sbCacheKey);
-        const payload = forceFresh
-          ? await _sbQueryAllTeamMembersForUserAccess()
-          : await cacheGetOrSet(sbCacheKey, 5 * 60, _sbQueryAllTeamMembersForUserAccess);
-        return res.json(payload);
-      }
-
-      if (forceFresh) await cacheDel(USER_ACCESS_CACHE_KEY);
-      const payload = forceFresh
-        ? await queryAllTeamMembersForUserAccess()
-        : await cacheGetOrSet(USER_ACCESS_CACHE_KEY, 5 * 60, queryAllTeamMembersForUserAccess);
-      return res.json(payload);
-    } catch (error) {
-      console.error("GET /api/user-access/team-members error:", error?.details || error?.body || error);
-      return res.status(500).json({ error: error?.message || "Failed to load Users Center." });
-    }
-  },
-);
-
 // Team members (for assignment) — requires Requested Orders
 app.get(
   "/api/team-members",
@@ -15981,14 +15837,6 @@ async function _pageBootstrapKpis(req) {
   ]);
 }
 
-async function _pageBootstrapUsersCenter(req) {
-  return Promise.all([
-    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapAccountPayload(req)),
-    _pageBootstrapLoad('/api/user-access/team-members', 2 * 60_000, () => _pageBootstrapFetchExistingRoute(req, '/api/user-access/team-members', 35_000)),
-    _pageBootstrapLoad('/api/user-access/signup-requests?status=pending', 30_000, () => _pageBootstrapFetchExistingRoute(req, '/api/user-access/signup-requests?status=pending', 20_000)),
-  ]);
-}
-
 async function _pageBootstrapTaskManagement(req, view) {
   const cleanView = _taskManagementSubpageByView(view)?.view || '';
   if (!cleanView) {
@@ -16221,10 +16069,6 @@ app.get('/api/page-bootstrap', requireAuth, async (req, res) => {
     } else if (scope === 'kpis') {
       if (!_pageBootstrapHasPageAccess(req, 'KPIs')) return _pageAccessDeniedResponse(req, res);
       results = await _pageBootstrapKpis(req);
-    } else if (scope === 'users-center') {
-      const canAccessUsersCenter = USER_ACCESS_PAGE_ALIASES.some((pageName) => _pageBootstrapHasPageAccess(req, pageName));
-      if (!canAccessUsersCenter) return _pageAccessDeniedResponse(req, res);
-      results = await _pageBootstrapUsersCenter(req);
     } else if (scope === 'task-management') {
       const view = _taskManagementSubpageByView(req.query?.view || '')?.view || '';
       const pageName = _taskManagementViewAccessPage(view);
