@@ -5,6 +5,14 @@
   "installCommand": "npm install",
   "rewrites": [
     {
+      "source": "/api/expenses/screenshot/:expenseId",
+      "destination": "/next/api/expenses/screenshot-direct?expenseId=:expenseId"
+    },
+    {
+      "source": "/api/expenses/export/:kind(pdf|excel)",
+      "destination": "/next/api/expenses/export-direct?kind=:kind"
+    },
+    {
       "source": "/api/orders/requested/paged-summary",
       "destination": "/next/api/orders/requested/paged-summary"
     },

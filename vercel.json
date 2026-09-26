@@ -86,6 +86,20 @@
       ]
     },
     {
+      "src": "^/api/expenses/screenshot/([^/]+)$",
+      "dest": "${NEXT_FRONTEND_ORIGIN}/next/api/expenses/screenshot-direct?expenseId=$1",
+      "env": [
+        "NEXT_FRONTEND_ORIGIN"
+      ]
+    },
+    {
+      "src": "^/api/expenses/export/(pdf|excel)$",
+      "dest": "${NEXT_FRONTEND_ORIGIN}/next/api/expenses/export-direct?kind=$1",
+      "env": [
+        "NEXT_FRONTEND_ORIGIN"
+      ]
+    },
+    {
       "src": "/(.*)",
       "dest": "/EmptyCanvas/api/index.js"
     }

@@ -2,7 +2,6 @@ const { PassThrough } = require("stream");
 
 const SUPPORTED_EXPORT_TASKS = Object.freeze([
   "event-request-pdf",
-  "expense-pdf",
 ]);
 
 function collectStream(stream) {
@@ -34,24 +33,12 @@ async function renderPipedPdf(renderer, payload) {
   return await bufferPromise;
 }
 
-async function renderExpensePdf(payload) {
-  const generateExpensePDF = require("./pdfGenerator");
-  return await new Promise((resolve, reject) => {
-    generateExpensePDF(payload || {}, (error, buffer) => {
-      if (error) reject(error);
-      else resolve(Buffer.from(buffer || []));
-    });
-  });
-}
-
 async function renderExportTask(type, payload) {
   switch (String(type || "")) {
     case "event-request-pdf": {
       const { pipeEventRequestPDF } = require("./eventRequestPdf");
       return await renderPipedPdf(pipeEventRequestPDF, payload || {});
     }
-    case "expense-pdf":
-      return await renderExpensePdf(payload || {});
     default: {
       const error = new Error(`Unsupported export task: ${String(type || "unknown")}`);
       error.code = "UNSUPPORTED_EXPORT_TASK";

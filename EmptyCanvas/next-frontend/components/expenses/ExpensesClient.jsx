@@ -760,7 +760,7 @@ function ExportModal({ account, items, onClose, notify }) {
     if (!selectedItems.length) return notify("No expenses match the selected period.", "error");
     setBusy(true);
     try {
-      const response = await fetch(`/api/expenses/export/${fileType}`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userName: `Expenses — ${text(account?.name || account?.username) || "User"}`, userId: text(account?.id || account?.userId), items: selectedItems, dateFrom, dateTo }) });
+      const response = await fetch("/next/api/expenses/export-direct", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scope: "current", kind: fileType, userName: `Expenses — ${text(account?.name || account?.username) || "User"}`, userId: text(account?.id || account?.userId), items: selectedItems, dateFrom, dateTo }) });
       if (response.status === 401) { window.location.href = "/login?next=/next/expenses"; return; }
       if (!response.ok) { const body = await response.json().catch(() => null); throw new Error(body?.error || "Expense export failed."); }
       downloadBlob(await response.blob(), responseFileName(response, fileType === "excel" ? "expenses.xlsx" : "expenses.pdf"));
@@ -807,7 +807,7 @@ function ScreenshotModal({ transaction, onClose }) {
         </div>
         <div className="expense-shots-modal__body">
           {screenshots.length ? <div className="expense-shots-modal__grid">{screenshots.map((shot, index) => {
-            const fallback = `/api/expenses/screenshot/${encodeURIComponent(text(transaction?.id))}?index=${index}`;
+            const fallback = `/next/api/expenses/screenshot-direct?expenseId=${encodeURIComponent(text(transaction?.id))}&index=${index}`;
             const href = shot.url || fallback;
             return <a className="expense-shots-modal__item" href={href} target="_blank" rel="noreferrer" key={`${href}-${index}`}><span className="expense-shots-modal__image-wrap"><img className="expense-shots-modal__image" src={href} alt={shot.name} /></span><span className="expense-shots-modal__caption">{shot.name}</span></a>;
           })}</div> : <div className="expense-shots-modal__empty"><div className="expense-shots-modal__empty-icon"><ClassicExpenseIcon name="image" size={24}/></div><div>No screenshots uploaded for this expense.</div></div>}

@@ -512,7 +512,7 @@ function UserExpensesModal({ user, onClose, onUsersRefresh, notify }) {
     if (!exportItems.length) return notify("No expenses", dateFilterActive ? "No expenses found for the selected period." : "No expenses to download.", "info");
     setExporting(true);
     try {
-      const response = await fetch("/api/expenses/export/excel", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userName: `Expenses — ${user.name}`, userId, items: exportItems, dateFrom, dateTo, lastSettledAt: payload?.lastSettledAt, lastSettledDate: payload?.lastSettledDate }) });
+      const response = await fetch("/next/api/expenses/export-direct", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scope: "users", kind: "excel", userName: `Expenses — ${user.name}`, userId, items: exportItems, dateFrom, dateTo, lastSettledAt: payload?.lastSettledAt, lastSettledDate: payload?.lastSettledDate }) });
       if (response.status === 401) { window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`; return; }
       if (!response.ok) { const body = await response.json().catch(() => null); throw new Error(body?.error || "Expense export failed."); }
       downloadBlob(await response.blob(), responseFileName(response, `${user.name}_expenses.xlsx`));

@@ -1139,3 +1139,49 @@ export async function deleteExpenseForAdmin(expenseId) {
   return { success: true, deletedId: id, storage, source: "supabase-next" };
 }
 
+
+export async function expenseScreenshotForId(expenseId, index = 0) {
+  const id = text(expenseId);
+  if (!id) {
+    const error = new Error("Missing expenseId.");
+    error.status = 400;
+    throw error;
+  }
+
+  const idCandidates = [id];
+  const compactUuid = id.replace(/-/g, "");
+  if (/^[0-9a-f]{32}$/i.test(compactUuid)) {
+    const hyphenated = `${compactUuid.slice(0, 8)}-${compactUuid.slice(8, 12)}-${compactUuid.slice(12, 16)}-${compactUuid.slice(16, 20)}-${compactUuid.slice(20)}`;
+    if (!idCandidates.includes(hyphenated)) idCandidates.push(hyphenated);
+    if (!idCandidates.includes(compactUuid)) idCandidates.push(compactUuid);
+  }
+
+  let row = null;
+  for (const candidate of idCandidates) {
+    row = await selectById(expensesTable(), candidate).catch(() => null);
+    if (row) break;
+  }
+  if (!row) {
+    const error = new Error("Expense screenshot not found.");
+    error.status = 404;
+    throw error;
+  }
+
+  const screenshots = parseScreenshots(valueFor(row, ["screenshot", "Screenshot", "files_media"]));
+  const parsedIndex = Number.parseInt(String(index ?? "0"), 10);
+  const safeIndex = Number.isFinite(parsedIndex) && parsedIndex >= 0 ? parsedIndex : 0;
+  const shot = screenshots[safeIndex] || screenshots[0] || null;
+  const url = text(shot?.url);
+  if (!url || !/^https?:\/\//i.test(url)) {
+    const error = new Error("No screenshot.");
+    error.status = 404;
+    throw error;
+  }
+
+  return {
+    id,
+    index: safeIndex,
+    name: text(shot?.name) || `Receipt ${safeIndex + 1}`,
+    url,
+  };
+}
