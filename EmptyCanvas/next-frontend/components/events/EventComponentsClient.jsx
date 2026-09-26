@@ -680,6 +680,7 @@ export default function EventComponentsClient({ account, initialComponents, init
   const [adminPassword, setAdminPassword] = useState("");
   const [authBusy, setAuthBusy] = useState(false);
   const [authError, setAuthError] = useState("");
+  const [authorizationToken, setAuthorizationToken] = useState("");
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState("");
@@ -772,8 +773,9 @@ export default function EventComponentsClient({ account, initialComponents, init
     };
   }
 
-  function openAuthorizedForm(intent, component = null) {
+  function openAuthorizedForm(intent, component = null, tokenValue = "") {
     setForm(component ? componentToForm(component) : { ...EMPTY_FORM });
+    setAuthorizationToken(text(tokenValue));
     setFormMode(intent);
     setFormError("");
   }
@@ -784,7 +786,7 @@ export default function EventComponentsClient({ account, initialComponents, init
       return;
     }
     if (accessLevel === "admin") {
-      openAuthorizedForm(intent, component);
+      openAuthorizedForm(intent, component, "");
       return;
     }
     setAuthorization({ intent, component });
@@ -803,7 +805,7 @@ export default function EventComponentsClient({ account, initialComponents, init
     setAuthBusy(true);
     setAuthError("");
     try {
-      await requestJson("/api/events/admin/verify", {
+      const verified = await requestJson("/next/api/events/admin/verify", {
         method: "POST",
         body: JSON.stringify({
           password,
@@ -814,7 +816,7 @@ export default function EventComponentsClient({ account, initialComponents, init
       const next = authorization;
       setAuthorization(null);
       setAdminPassword("");
-      openAuthorizedForm(next.intent, next.component);
+      openAuthorizedForm(next.intent, next.component, verified?.authorizationToken || "");
     } catch (error) {
       setAuthError(error?.message || "Invalid Admin password.");
     } finally {
@@ -853,10 +855,12 @@ export default function EventComponentsClient({ account, initialComponents, init
         const isImage = String(file?.type || "").toLowerCase().startsWith("image/");
         if (isImage) {
           const prepared = await compressImage(file);
-          const payload = await requestJson("/api/events/components/photo-upload", {
+          const payload = await requestJson("/next/api/events/mutations-direct", {
             method: "POST",
             body: JSON.stringify({
+              action: "upload-photo",
               componentId: form.id || "",
+              authorizationToken,
               dataUrl: prepared.dataUrl,
               fileName: prepared.fileName,
             }),
@@ -873,10 +877,12 @@ export default function EventComponentsClient({ account, initialComponents, init
         if (file.size > 2.6 * 1024 * 1024) {
           throw new Error(`${file.name} is too large. Non-image files must be 2.6 MB or less.`);
         }
-        const payload = await requestJson("/api/events/components/file-upload", {
+        const payload = await requestJson("/next/api/events/mutations-direct", {
           method: "POST",
           body: JSON.stringify({
+            action: "upload-file",
             componentId: form.id || "",
+            authorizationToken,
             dataUrl: await readBlobAsDataUrl(file),
             fileName: file.name || "attachment",
             size: file.size || 0,
@@ -964,9 +970,14 @@ export default function EventComponentsClient({ account, initialComponents, init
       };
 
       const editing = formMode === "edit" && form.id;
-      const payload = await requestJson(editing ? `/api/events/components/${encodeURIComponent(form.id)}` : "/api/events/components", {
-        method: editing ? "PATCH" : "POST",
-        body: JSON.stringify(body),
+      const payload = await requestJson("/next/api/events/mutations-direct", {
+        method: "POST",
+        body: JSON.stringify({
+          action: editing ? "update-component" : "create-component",
+          componentId: editing ? form.id : "",
+          authorizationToken,
+          payload: body,
+        }),
       });
       const saved = payload?.component;
       if (saved?.id) {
@@ -976,6 +987,7 @@ export default function EventComponentsClient({ account, initialComponents, init
       }
       if (newCategory) await refreshCategories().catch(() => null);
       setFormMode("");
+      setAuthorizationToken("");
       setForm({ ...EMPTY_FORM });
       setToast({ type: "success", title: "Event Components", message: editing ? "Component updated." : "Component added." });
     } catch (error) {
@@ -996,7 +1008,10 @@ export default function EventComponentsClient({ account, initialComponents, init
     setDeleteBusy(true);
     setDeleteError("");
     try {
-      await requestJson(`/api/events/components/${encodeURIComponent(deleteTarget.id)}`, { method: "DELETE" });
+      await requestJson("/next/api/events/mutations-direct", {
+        method: "POST",
+        body: JSON.stringify({ action: "delete-component", componentId: deleteTarget.id }),
+      });
       setComponents((current) => current.filter((item) => text(item?.id) !== text(deleteTarget.id)));
       setToast({ type: "success", title: "Event Components", message: "Component deleted." });
       setDeleteTarget(null);
@@ -1108,7 +1123,7 @@ export default function EventComponentsClient({ account, initialComponents, init
         onAssets={handleAssets}
         onRemovePhoto={removeFormPhoto}
         onRemoveAttachment={removeFormAttachment}
-        onClose={() => { if (!formBusy) { setFormMode(""); setFormError(""); } }}
+        onClose={() => { if (!formBusy) { setFormMode(""); setAuthorizationToken(""); setFormError(""); } }}
         onSubmit={submitForm}
       />
 

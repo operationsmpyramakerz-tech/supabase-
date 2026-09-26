@@ -488,7 +488,7 @@ export default function EventsClient({ account, initialEvents = [], bootstrapWar
     setAuthorizationError("");
     try {
       const isWorkflow = authorization.kind === "workflow";
-      await requestJson("/api/events/admin/verify", {
+      const verified = await requestJson("/next/api/events/admin/verify", {
         method: "POST",
         body: JSON.stringify(isWorkflow ? {
           password,
@@ -505,6 +505,7 @@ export default function EventsClient({ account, initialEvents = [], bootstrapWar
 
       if (!isWorkflow && authorization.value === "edit") {
         const editId = authorization.eventId;
+        try { window.sessionStorage.setItem(`erp.events.editAuth.${editId}`, text(verified?.authorizationToken)); } catch {}
         setAuthorization(null);
         navigateWithinApp(`/next/events/new?edit=${encodeURIComponent(editId)}`);
         return;
@@ -525,6 +526,7 @@ export default function EventsClient({ account, initialEvents = [], bootstrapWar
             : "The request will move from Submitted to In progress.",
         label: isCancel ? "Confirm cancellation" : targetStatus === "completed" ? "Confirm delivery" : "Confirm approval",
         danger: isCancel,
+        authorizationToken: text(verified?.authorizationToken),
       });
     } catch (error) {
       setAuthorizationError(error.message || "Invalid Admin password.");
@@ -538,15 +540,20 @@ export default function EventsClient({ account, initialEvents = [], bootstrapWar
     setBusy(true);
     try {
       const isCancel = confirmation.kind === "request_action";
-      const body = await requestJson(
-        isCancel
-          ? `/api/events/${encodeURIComponent(confirmation.eventId)}/request-action`
-          : `/api/events/${encodeURIComponent(confirmation.eventId)}/workflow-transition`,
-        {
-          method: "POST",
-          body: JSON.stringify(isCancel ? { action: "cancel" } : { targetStatus: confirmation.value }),
-        },
-      );
+      const body = await requestJson("/next/api/events/mutations-direct", {
+        method: "POST",
+        body: JSON.stringify(isCancel ? {
+          action: "request-action",
+          eventId: confirmation.eventId,
+          requestAction: "cancel",
+          authorizationToken: confirmation.authorizationToken,
+        } : {
+          action: "workflow-transition",
+          eventId: confirmation.eventId,
+          targetStatus: confirmation.value,
+          authorizationToken: confirmation.authorizationToken,
+        }),
+      });
       updateEvent(body.event);
       setConfirmation(null);
       setToast({ type: "success", title: "Events", message: isCancel ? "Event request cancelled." : confirmation.value === "completed" ? "Event request marked as Done." : "Event request marked as In progress." });

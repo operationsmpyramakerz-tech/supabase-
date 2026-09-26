@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { navigateWithinApp } from "../../lib/client-navigation";
 
 const STANDARD_EVENT_TYPES = [
@@ -304,6 +304,17 @@ export default function EventRequestFormClient({
   const [ratesError, setRatesError] = useState("");
   const [savingRates, setSavingRates] = useState(false);
   const [ratesAuthorized, setRatesAuthorized] = useState(!!initialCanEditRates || accessLevel === "admin");
+  const [ratesAuthorizationToken, setRatesAuthorizationToken] = useState("");
+  const [editAuthorizationToken, setEditAuthorizationToken] = useState("");
+
+  useEffect(() => {
+    if (!editingId || accessLevel === "admin") return;
+    try {
+      const key = `erp.events.editAuth.${editingId}`;
+      const stored = window.sessionStorage.getItem(key) || "";
+      if (stored) setEditAuthorizationToken(stored);
+    } catch {}
+  }, [editingId, accessLevel]);
 
   const projectComponents = useMemo(() => components.filter((item) => text(item.category) === "project"), [components]);
   const marketingComponents = useMemo(() => components.filter((item) => text(item.category) === "marketing_material"), [components]);
@@ -386,8 +397,11 @@ export default function EventRequestFormClient({
     if (!label) return notify("info", "Event Type", "Enter a name for the new event type.");
     setSavingType(true);
     try {
-      const payload = await requestJson("/api/events/types", { method: "POST", body: JSON.stringify({ label }) });
-      const nextTypes = normalizeTypes(Array.isArray(payload?.types) ? payload.types : types);
+      const payload = await requestJson("/next/api/events/mutations-direct", {
+        method: "POST",
+        body: JSON.stringify({ action: "create-type", label }),
+      });
+      const nextTypes = normalizeTypes([...(Array.isArray(types) ? types : []), ...(payload?.type ? [payload.type] : [])]);
       setTypes(nextTypes);
       updateField("eventType", text(payload?.type?.code) || nextTypes[nextTypes.length - 1]?.code || "tech_day");
       setCustomTypeName("");
@@ -502,10 +516,18 @@ export default function EventRequestFormClient({
     if (validationError) return;
     setSubmitting(true);
     try {
-      await requestJson(editingId ? `/api/events/${encodeURIComponent(editingId)}` : "/api/events", {
-        method: editingId ? "PATCH" : "POST",
-        body: JSON.stringify(payload()),
+      await requestJson("/next/api/events/mutations-direct", {
+        method: "POST",
+        body: JSON.stringify({
+          action: editingId ? "update-event" : "create-event",
+          eventId: editingId || "",
+          authorizationToken: editingId ? editAuthorizationToken : "",
+          payload: payload(),
+        }),
       });
+      if (editingId) {
+        try { window.sessionStorage.removeItem(`erp.events.editAuth.${editingId}`); } catch {}
+      }
       notify("success", "Events", editingId ? "Event request updated successfully." : "Event request submitted successfully.");
       window.setTimeout(() => { navigateWithinApp("/next/events"); }, 550);
     } catch (submitError) {
@@ -539,10 +561,11 @@ export default function EventRequestFormClient({
     setAuthorizingRates(true);
     setRateAuthError("");
     try {
-      await requestJson("/api/events/admin/verify", {
+      const verified = await requestJson("/next/api/events/admin/verify", {
         method: "POST",
         body: JSON.stringify({ password, intent: "governorate_rates" }),
       });
+      setRatesAuthorizationToken(text(verified?.authorizationToken));
       setRatesAuthorized(true);
       setShowRateAuth(false);
       const payloadData = await requestJson(`/next/api/events/governorate-rates?includeInactive=1&_ts=${Date.now()}`);
@@ -578,13 +601,18 @@ export default function EventRequestFormClient({
     setSavingRates(true);
     setRatesError("");
     try {
-      const response = await requestJson("/api/events/governorate-rates", {
-        method: "PATCH",
-        body: JSON.stringify({ rates: cleaned }),
+      const response = await requestJson("/next/api/events/mutations-direct", {
+        method: "POST",
+        body: JSON.stringify({
+          action: "save-governorate-rates",
+          authorizationToken: ratesAuthorizationToken,
+          rates: cleaned,
+        }),
       });
       const saved = Array.isArray(response?.rates) ? response.rates : cleaned;
       setRates(saved.filter((item) => item?.isActive !== false));
       setRatesAuthorized(accessLevel === "admin");
+      if (accessLevel !== "admin") setRatesAuthorizationToken("");
       setShowRates(false);
       notify("success", "Transport rates", "Governorate transport rates were updated.");
     } catch (saveError) {

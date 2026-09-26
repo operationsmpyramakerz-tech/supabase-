@@ -34,6 +34,9 @@ function aliasesForPage(value = "") {
     operationsorders: ["operationsorders", "requestedorders", "operationsrequestedorders", "schoolsrequestedorders"],
     maintenanceorders: ["maintenanceorders", "maintenance"],
     ordersreview: ["ordersreview", "svorders", "supervisionorders"],
+    eventrequests: ["eventrequests", "eventsrequests", "events", "eventsnew", "eventsrequestsnew", "eventsrequestscreate"],
+    eventcomponents: ["eventcomponents", "events"],
+    eventcalendar: ["eventcalendar", "eventscalendar", "events"],
   };
   return new Set([clean, ...(groups[clean] || [])].filter(Boolean));
 }
@@ -137,6 +140,18 @@ export async function verifyPageAdminPasswordDirect(account = {}, password = "",
   if (level === "admin") return true;
   if (level === null) return null;
 
+  const admin = await adminPasswordFromSupabase();
+  if (!admin.supported) return null;
+  return admin.password === clean;
+}
+
+// Verify the shared Admin account password exactly, without the page-Admin
+// convenience bypass. Events workflow actions use this stronger check because
+// the product intentionally asks for the shared password even when the signed-in
+// user already has Admin access to the Events page.
+export async function verifySharedAdminPasswordDirect(password = "") {
+  const clean = text(password);
+  if (!clean || clean === PAGE_ADMIN_BYPASS_TOKEN) return false;
   const admin = await adminPasswordFromSupabase();
   if (!admin.supported) return null;
   return admin.password === clean;
