@@ -134,6 +134,29 @@ async function requestJson(url, options = {}) {
   return body;
 }
 
+let usersCenterAuthorization = { token: "", expiresAt: 0 };
+function cacheUsersCenterAuthorization(payload = {}) {
+  const tokenValue = text(payload?.authorizationToken);
+  if (!tokenValue) { usersCenterAuthorization = { token: "", expiresAt: 0 }; return ""; }
+  const expiresAt = Number(payload?.expiresAt) || (Date.now() + Math.max(30, Number(payload?.expiresInSeconds) || 300) * 1000);
+  usersCenterAuthorization = { token: tokenValue, expiresAt };
+  return tokenValue;
+}
+function currentUsersCenterAuthorizationToken() {
+  if (!usersCenterAuthorization.token || usersCenterAuthorization.expiresAt <= Date.now() + 1500) { usersCenterAuthorization = { token: "", expiresAt: 0 }; return ""; }
+  return usersCenterAuthorization.token;
+}
+async function usersCenterMutation(action, payload = {}) {
+  const authorizationToken = currentUsersCenterAuthorizationToken();
+  if (!authorizationToken) { const error = new Error("Admin verification expired. Please enter the Admin password first."); error.status = 403; throw error; }
+  try {
+    return await requestJson("/next/api/users-center/mutations-direct", { method: "POST", body: JSON.stringify({ action, ...payload, authorizationToken }) });
+  } catch (error) {
+    if (error?.status === 403 && /verification|authorization|expired/i.test(error?.message || "")) usersCenterAuthorization = { token: "", expiresAt: 0 };
+    throw error;
+  }
+}
+
 function UAIcon({ name }) {
   const common = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true };
   const paths = {
@@ -221,7 +244,7 @@ function ModernSelect({ value, onChange, options = [], placeholder = "Select", d
 
 function PasswordModal({ action, onClose, onVerified }) {
   const [password, setPassword] = useState(""); const [busy, setBusy] = useState(false); const [error, setError] = useState("");
-  async function submit(event) { event.preventDefault(); if (!text(password)) return setError("Please enter the Admin password."); setBusy(true); setError(""); try { await requestJson("/api/user-access/admin/verify", { method: "POST", body: JSON.stringify({ password }) }); await onVerified(); } catch (err) { setError(err.message); } finally { setBusy(false); } }
+  async function submit(event) { event.preventDefault(); if (!text(password)) return setError("Please enter the Admin password."); setBusy(true); setError(""); try { const verified = await requestJson("/next/api/users-center/admin/verify", { method: "POST", body: JSON.stringify({ password }) }); cacheUsersCenterAuthorization(verified); await onVerified(); } catch (err) { setError(err.message); } finally { setBusy(false); } }
   return <Modal title="Admin Verification" onClose={onClose} modalClass="ua-modal--small" compact icon="lock" closeDisabled={busy} bodyClass="ua-modal__body--compact" zIndex={10060} footer={<><button type="button" className="ua-btn ua-btn--light" onClick={onClose} disabled={busy}>Cancel</button><button type="submit" form="ua-next-admin-password-form" className="ua-btn ua-btn--dark" disabled={busy}><UAIcon name="unlock"/><span>{busy ? "Checking..." : "Continue"}</span></button></>}>
     <form id="ua-next-admin-password-form" onSubmit={submit}><label className="ua-form-field ua-form-field--wide"><span>Admin Password</span><input autoFocus type="password" autoComplete="current-password" placeholder="Enter Admin password" value={password} onChange={(event) => setPassword(event.target.value)}/></label><div className="ua-form-error">{error}</div></form>
   </Modal>;
@@ -330,15 +353,34 @@ function AddDepartmentFolder({ onClick }) {
 async function readRawFileAsDataUrl(file) { return await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result || "")); reader.onerror = () => reject(new Error("Failed to read file.")); reader.readAsDataURL(file); }); }
 function shouldCompressImage(file) { const type = lower(file?.type); const name = lower(file?.name); if (type === "image/gif" || type === "image/svg+xml" || /\.(gif|svg)$/i.test(name)) return false; return type.startsWith("image/") || /\.(png|jpe?g|webp|bmp|avif)$/i.test(name); }
 async function compressDataUrl(file, raw) { if (!shouldCompressImage(file)) return raw; try { const image = await new Promise((resolve, reject) => { const img = new Image(); img.onload = () => resolve(img); img.onerror = () => reject(new Error("Failed to load image for compression.")); img.src = raw; }); const ratio = Math.min(1, 1400 / Math.max(1, image.naturalWidth || image.width), 1400 / Math.max(1, image.naturalHeight || image.height)); const canvas = document.createElement("canvas"); canvas.width = Math.max(1, Math.round((image.naturalWidth || image.width) * ratio)); canvas.height = Math.max(1, Math.round((image.naturalHeight || image.height) * ratio)); const context = canvas.getContext("2d", { alpha: true }); context.drawImage(image, 0, 0, canvas.width, canvas.height); let compressed = canvas.toDataURL("image/webp", .74); if (!/^data:image\/webp/i.test(compressed)) compressed = canvas.toDataURL("image/jpeg", .76); return compressed && compressed.length < raw.length ? compressed : raw; } catch { return raw; } }
-async function uploadUserFile(file, kind) { if (!file) return null; if (file.size > 12 * 1024 * 1024) throw new Error("File is too large. Maximum size is 12MB."); const raw = await readRawFileAsDataUrl(file); const dataUrl = await compressDataUrl(file, raw); return await requestJson("/api/user-access/upload-file", { method: "POST", body: JSON.stringify({ dataUrl, filename: file.name || "upload.bin", kind }) }); }
+async function uploadUserFile(file, kind) {
+  if (!file) return null;
+  if (file.size > 12 * 1024 * 1024) throw new Error("File is too large. Maximum size is 12MB.");
+  const authorizationToken = currentUsersCenterAuthorizationToken();
+  if (!authorizationToken) throw new Error("Admin verification expired. Please enter the Admin password first.");
+  let blob = file;
+  let compressed = false;
+  if (shouldCompressImage(file)) {
+    const raw = await readRawFileAsDataUrl(file);
+    const dataUrl = await compressDataUrl(file, raw);
+    if (dataUrl !== raw) { blob = await fetch(dataUrl).then((response) => response.blob()); compressed = true; }
+  }
+  const originalName = file.name || "upload.bin";
+  const compressedExtension = blob.type === "image/webp" ? "webp" : blob.type === "image/jpeg" ? "jpg" : "";
+  const filename = compressed && compressedExtension ? `${originalName.replace(/\.[^.]+$/, "") || "image"}.${compressedExtension}` : originalName;
+  const ticket = await requestJson("/next/api/users-center/upload-ticket", { method: "POST", body: JSON.stringify({ authorizationToken, filename, mime: blob.type || file.type || "application/octet-stream", size: blob.size, kind }) });
+  const upload = await fetch(ticket.upload.signedUrl, { method: ticket.upload.method || "PUT", headers: ticket.upload.headers || {}, body: blob });
+  if (!upload.ok) throw new Error(`Storage upload failed with status ${upload.status}.`);
+  return { ok: true, url: ticket.upload.publicUrl || ticket.url, name: originalName, mime: blob.type || file.type || "application/octet-stream" };
+}
 
 function SignupRequestsModal({ departments, positions = [], onClose, onChanged, notify }) {
   const [status, setStatus] = useState("pending"); const [requests, setRequests] = useState([]); const [loading, setLoading] = useState(true); const [error, setError] = useState(""); const [approve, setApprove] = useState(null); const [rejecting, setRejecting] = useState(null); const [form, setForm] = useState({ department: "", position: "" }); const [busy, setBusy] = useState(false);
   async function load(nextStatus = status) { setLoading(true); setError(""); try { const body = await requestJson(`/next/api/users-center/signup-requests?status=${encodeURIComponent(nextStatus)}&fresh=1&_=${Date.now()}`); setRequests(body.requests || []); } catch (err) { setRequests([]); setError(err.message); } finally { setLoading(false); } }
   useEffect(() => { load("pending"); }, []);
   function beginApprove(request) { setApprove(request); setForm({ department: "", position: "" }); setError(""); }
-  async function approveSubmit(event) { event.preventDefault(); if (!text(form.department) || !text(form.position)) return setError("Please select department and position."); setBusy(true); setError(""); try { const body = await requestJson(`/api/user-access/signup-requests/${encodeURIComponent(approve.id)}/approve`, { method: "POST", body: JSON.stringify(form) }); setApprove(null); notify?.("success", "Request approved", body.emailWarning ? `Approved, but email warning: ${body.emailWarning}` : "The user was added and notified by email."); await Promise.all([load(status), onChanged()]); } catch (err) { setError(err.message); notify?.("error", "Approval failed", err.message); } finally { setBusy(false); } }
-  async function rejectConfirmed() { if (!rejecting || busy) return; setBusy(true); setError(""); try { const body = await requestJson(`/api/user-access/signup-requests/${encodeURIComponent(rejecting.id)}/reject`, { method: "POST", body: "{}" }); setRejecting(null); notify?.("success", "Request rejected", body.emailWarning ? `Rejected, but email warning: ${body.emailWarning}` : "The user was notified by email."); await Promise.all([load(status), onChanged()]); } catch (err) { setError(err.message); notify?.("error", "Reject failed", err.message); } finally { setBusy(false); } }
+  async function approveSubmit(event) { event.preventDefault(); if (!text(form.department) || !text(form.position)) return setError("Please select department and position."); setBusy(true); setError(""); try { const body = await usersCenterMutation("signup-approve", { requestId: approve.id, ...form }); setApprove(null); notify?.("success", "Request approved", body.emailWarning ? `Approved, but email warning: ${body.emailWarning}` : "The user was added and notified by email."); await Promise.all([load(status), onChanged()]); } catch (err) { setError(err.message); notify?.("error", "Approval failed", err.message); } finally { setBusy(false); } }
+  async function rejectConfirmed() { if (!rejecting || busy) return; setBusy(true); setError(""); try { const body = await usersCenterMutation("signup-reject", { requestId: rejecting.id }); setRejecting(null); notify?.("success", "Request rejected", body.emailWarning ? `Rejected, but email warning: ${body.emailWarning}` : "The user was notified by email."); await Promise.all([load(status), onChanged()]); } catch (err) { setError(err.message); notify?.("error", "Reject failed", err.message); } finally { setBusy(false); } }
   const tabs = <div className="ua-signup-request-tabs" role="tablist" aria-label="Sign up request status filter">{["pending", "approved", "rejected"].map((item) => <button type="button" key={item} className={status === item ? "is-active" : ""} onClick={() => { setStatus(item); load(item); }}>{item[0].toUpperCase() + item.slice(1)}</button>)}</div>;
   const availableDepartments = departments.filter((department) => lower(department.name) !== "no department").map((department) => department.name).sort((a, b) => a.localeCompare(b));
   return <>
@@ -355,7 +397,7 @@ function SignupRequestsModal({ departments, positions = [], onClose, onChanged, 
 
 function DepartmentForm({ department, onClose, onSaved }) {
   const [name, setName] = useState(department?.name || ""); const [busy, setBusy] = useState(false); const [error, setError] = useState(""); const isEdit = !!department;
-  async function submit(event) { event.preventDefault(); const clean = text(name).replace(/\s+/g, " "); if (!clean) return setError("Department name is required."); setBusy(true); setError(""); try { const endpoint = isEdit ? `/api/user-access/departments/${encodeURIComponent(department.id)}` : "/api/user-access/departments"; const body = await requestJson(endpoint, { method: isEdit ? "PATCH" : "POST", body: JSON.stringify({ name: clean }) }); await onSaved(body); onClose(); } catch (err) { setError(err.message); } finally { setBusy(false); } }
+  async function submit(event) { event.preventDefault(); const clean = text(name).replace(/\s+/g, " "); if (!clean) return setError("Department name is required."); setBusy(true); setError(""); try { const body = await usersCenterMutation(isEdit ? "department-update" : "department-create", { ...(isEdit ? { departmentId: department.id } : {}), name: clean }); await onSaved(body); onClose(); } catch (err) { setError(err.message); } finally { setBusy(false); } }
   return <Modal title={isEdit ? "Edit Department" : "New Department"} subtitle={isEdit ? "Rename this department for all assigned team members." : ""} onClose={onClose} modalClass="ua-modal--small" compact icon="folder" closeDisabled={busy} bodyClass="ua-modal__body--compact" footer={<><button type="button" className="ua-btn ua-btn--light" onClick={onClose} disabled={busy}>Cancel</button><button type="submit" form="ua-next-department-form" className="ua-btn ua-btn--dark" disabled={busy}><UAIcon name="save"/><span>{busy ? "Saving..." : isEdit ? "Save Department" : "Create Department"}</span></button></>}><form id="ua-next-department-form" onSubmit={submit}><label className="ua-form-field ua-form-field--wide"><span>Department Name</span><input autoFocus type="text" autoComplete="off" placeholder="e.g. Operations" value={name} onChange={(event) => setName(event.target.value)} /></label><div className="ua-form-error">{error}</div></form></Modal>;
 }
 
@@ -461,7 +503,7 @@ function SvAccessManager({ summary, onOpen, hidden }) {
 
 function SchoolField({ field, value, onChange, notify }) {
   const [newName, setNewName] = useState(""); const [busy, setBusy] = useState(false); const [localOptions, setLocalOptions] = useState(() => unique([value, ...(field.options || [])].filter(Boolean)));
-  async function addSchool() { const clean = text(newName); if (!clean) return notify("warning", "Missing school", "Enter the new school / column name first."); setBusy(true); try { const body = await requestJson("/api/user-access/stocktaking-columns", { method: "POST", body: JSON.stringify({ name: clean }) }); const label = body.label || clean; setLocalOptions((current) => unique([label, ...current])); onChange(label); setNewName(""); notify("success", "School added", `${label} was added to Stocktaking.`); } catch (err) { notify("error", "Could not add school", err.message); } finally { setBusy(false); } }
+  async function addSchool() { const clean = text(newName); if (!clean) return notify("warning", "Missing school", "Enter the new school / column name first."); setBusy(true); try { const body = await usersCenterMutation("stocktaking-column-create", { name: clean }); const label = body.label || clean; setLocalOptions((current) => unique([label, ...current])); onChange(label); setNewName(""); notify("success", "School added", `${label} was added to Stocktaking.`); } catch (err) { notify("error", "Could not add school", err.message); } finally { setBusy(false); } }
   const footer = <div className="ua-inline-add ua-modern-select-add" onClick={(event) => event.stopPropagation()}><input type="text" value={newName} onChange={(event) => setNewName(event.target.value)} placeholder="Add new Stocktaking column"/><button type="button" className="ua-mini-btn" onClick={addSchool} disabled={busy}>{busy ? "Adding..." : "Add column"}</button><small>All Stocktaking table columns are shown here.</small></div>;
   return <div className="ua-form-field ua-form-field--wide ua-form-field--modern-select ua-form-field--school"><span>Stocktaking</span><ModernSelect value={value} onChange={onChange} options={localOptions} placeholder="Select stocktaking column" footer={footer}/></div>;
 }
@@ -511,7 +553,6 @@ function MemberForm({ member, selectedDepartment, editableFields, departments, p
     });
 
     try {
-      const endpoint = isEdit ? `/api/user-access/team-members/${encodeURIComponent(member.id)}` : "/api/user-access/team-members";
       const fields = { ...values };
       if (hasStocktaking && autoStocktakingColumn) {
         const schoolField = schema.find((field) => fieldKey(field.name) === "school");
@@ -534,10 +575,7 @@ function MemberForm({ member, selectedDepartment, editableFields, departments, p
           : [];
       }
 
-      const body = await requestJson(endpoint, {
-        method: isEdit ? "PATCH" : "POST",
-        body: JSON.stringify(payload),
-      });
+      const body = await usersCenterMutation(isEdit ? "member-update" : "member-create", { ...(isEdit ? { memberId: member.id } : {}), ...payload });
 
       // Refresh the directory in the background. It should not keep the user
       // waiting after the member and permissions have already been saved.
@@ -579,7 +617,7 @@ function MemberForm({ member, selectedDepartment, editableFields, departments, p
 
 function MoveMemberModal({ member, departments, onClose, onSaved }) {
   const current = departments.find((department) => lower(department.name) === lower(member.department)); const [departmentId, setDepartmentId] = useState(current?.id || ""); const [busy, setBusy] = useState(false); const [error, setError] = useState(""); const selected = departments.find((department) => department.id === departmentId);
-  async function submit(event) { event.preventDefault(); if (!departmentId) return setError("Please select a target department."); if (lower(selected?.name) === lower(member.department)) return setError("This user is already inside this department."); setBusy(true); setError(""); try { const body = await requestJson(`/api/user-access/team-members/${encodeURIComponent(member.id)}/department`, { method: "PATCH", body: JSON.stringify({ departmentId }) }); await onSaved(body, departmentId); onClose(); } catch (err) { setError(err.message); } finally { setBusy(false); } }
+  async function submit(event) { event.preventDefault(); if (!departmentId) return setError("Please select a target department."); if (lower(selected?.name) === lower(member.department)) return setError("This user is already inside this department."); setBusy(true); setError(""); try { const body = await usersCenterMutation("member-move", { memberId: member.id, departmentId }); await onSaved(body, departmentId); onClose(); } catch (err) { setError(err.message); } finally { setBusy(false); } }
   return <Modal title="Move Member" subtitle={`Move ${member.name || "this user"} to another department.`} onClose={onClose} modalClass="ua-modal--small" compact icon="move" closeDisabled={busy} bodyClass="ua-modal__body--compact" footer={<><button type="button" className="ua-btn ua-btn--light" onClick={onClose} disabled={busy}>Cancel</button><button type="submit" form="ua-next-move-member" className="ua-btn ua-btn--dark" disabled={busy}><UAIcon name="move"/><span>{busy ? "Moving..." : "Move"}</span></button></>}><form id="ua-next-move-member" onSubmit={submit}><div className="ua-form-field ua-form-field--wide ua-form-field--modern-select"><span>Target Department</span><ModernSelect value={selected?.name || ""} onChange={(name) => setDepartmentId(departments.find((department) => department.name === name)?.id || "")} options={departments.map((department) => department.name)} placeholder="Choose department"/></div><div className="ua-form-error">{error}</div></form></Modal>;
 }
 
@@ -593,7 +631,7 @@ function PageAccessModal({ member, draftRows, onDraftRows, onClose, onSaved, pro
         ? await requestJson("/next/api/users-center/pages")
         : await requestJson(`/next/api/users-center/page-access?id=${encodeURIComponent(member.id)}`); const nextRows = isCreate ? normalizeAccessRows((body.pages || []).map((page) => ({ ...page, accessLevel: "edit", isEnabled: false }))) : normalizeAccessRows(body.pages || []); if (active) setRows(nextRows); } catch (err) { if (active) setError(err.message); } finally { if (active) setLoading(false); } })(); return () => { active = false; }; }, [member?.id]);
   function patch(index, values) { setRows((current) => current.map((row, i) => i === index ? { ...row, ...values, accessLevel: values.accessLevel ? normalizeAccessLevel(values.accessLevel) : row.accessLevel } : row)); }
-  async function save() { if (loading || busy) return; if (isCreate) { onDraftRows(rows); onSaved?.(rows); onClose(); return; } protect({ title: "Save page access", message: `Apply this page-access matrix to ${member.name}?` }, async () => { setBusy(true); setError(""); try { const body = await requestJson(`/api/user-access/team-members/${encodeURIComponent(member.id)}/page-access`, { method: "PATCH", body: JSON.stringify({ pages: rows.map((row) => ({ pageId: row.pageId, pageKey: row.pageKey, isEnabled: !!row.isEnabled, accessLevel: row.accessLevel })) }) }); const saved = normalizeAccessRows(body.pages || rows); setRows(saved); await onSaved?.(saved, body.summary); onClose(); } catch (err) { setError(err.message); } finally { setBusy(false); } }); }
+  async function save() { if (loading || busy) return; if (isCreate) { onDraftRows(rows); onSaved?.(rows); onClose(); return; } protect({ title: "Save page access", message: `Apply this page-access matrix to ${member.name}?` }, async () => { setBusy(true); setError(""); try { const body = await usersCenterMutation("page-access-save", { memberId: member.id, pages: rows.map((row) => ({ pageId: row.pageId, pageKey: row.pageKey, isEnabled: !!row.isEnabled, accessLevel: row.accessLevel })) }); const saved = normalizeAccessRows(body.pages || rows); setRows(saved); await onSaved?.(saved, body.summary); onClose(); } catch (err) { setError(err.message); } finally { setBusy(false); } }); }
   const events = new Set(["event-calendar", "event-requests", "event-components"]); const tasks = new Set(["task-management-all-tasks", "task-management-my-tasks", "task-management-delegated-tasks", "all-tasks", "my-tasks", "delegated-tasks"]); const b2c = new Set(["b2c-customer-database", "customer-database", "b2c-customer-form", "customer-form"]);
   function inSet(row, set) { return set.has(lower(row.pageKey)); }
   const eventRows = rows.map((row, index) => ({ row, index })).filter(({ row }) => inSet(row, events)); const taskRows = rows.map((row, index) => ({ row, index })).filter(({ row }) => inSet(row, tasks)); const b2cRows = rows.map((row, index) => ({ row, index })).filter(({ row }) => inSet(row, b2c));
@@ -608,7 +646,7 @@ function SvAccessModal({ member, allMembers, draftRows, onDraftRows, onClose, on
   const visible = rows.filter((row) => !search || lower(`${row.name} ${row.department} ${row.position} ${row.email}`).includes(lower(search)));
   function toggle(id, enabled) { setRows((current) => current.map((row) => row.memberId === id ? { ...row, isEnabled: enabled } : row)); }
   function enableVisible() { const ids = new Set(visible.map((row) => row.memberId)); setRows((current) => current.map((row) => ids.has(row.memberId) ? { ...row, isEnabled: true } : row)); }
-  async function save() { if (isCreate) { onDraftRows(rows); await onSaved?.(rows); onClose(); return; } protect({ title: "Save Orders Review visibility", message: `Update which team members ${member.name} can see in Orders Review?` }, async () => { setBusy(true); setError(""); try { const body = await requestJson(`/api/user-access/team-members/${encodeURIComponent(member.id)}/sv-access`, { method: "PATCH", body: JSON.stringify({ members: rows.filter((row) => row.isEnabled).map((row) => ({ memberId: row.memberId })) }) }); const saved = normalizeSvRows(body.members || rows); setRows(saved); await onSaved?.(saved, body.summary); onClose(); } catch (err) { setError(err.message); } finally { setBusy(false); } }); }
+  async function save() { if (isCreate) { onDraftRows(rows); await onSaved?.(rows); onClose(); return; } protect({ title: "Save Orders Review visibility", message: `Update which team members ${member.name} can see in Orders Review?` }, async () => { setBusy(true); setError(""); try { const body = await usersCenterMutation("sv-access-save", { memberId: member.id, members: rows.filter((row) => row.isEnabled).map((row) => ({ memberId: row.memberId })) }); const saved = normalizeSvRows(body.members || rows); setRows(saved); await onSaved?.(saved, body.summary); onClose(); } catch (err) { setError(err.message); } finally { setBusy(false); } }); }
   return <Modal title="Orders Supervision" subtitle={`Enable team members whose orders should be visible to ${isCreate ? "the new user" : member?.name || "this user"} in Orders Review.`} onClose={onClose} modalClass="ua-modal--sv-access" compact icon="users" closeDisabled={busy} bodyClass="ua-sv-access-body" zIndex={10020} footer={<><button type="button" className="ua-btn ua-btn--light" onClick={onClose} disabled={busy}>Cancel</button><button type="button" className="ua-btn ua-btn--dark" onClick={save} disabled={busy || loading}><UAIcon name="save"/><span>{busy ? "Saving..." : "Save Users"}</span></button></>}><div className="ua-sv-access-tools"><label className="ua-sv-search"><UAIcon name="search"/><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search team members..." autoComplete="off"/></label><button type="button" className="ua-mini-btn" onClick={enableVisible} disabled={loading || busy}>Enable all visible</button></div>{loading ? <div className="ua-page-access-loading"><span/> Loading team members...</div> : null}{error ? <div className="ua-form-error">{error}</div> : null}{!loading ? <div className="ua-sv-access-list">{visible.length ? visible.map((row) => <div className={`ua-sv-access-row ${row.isEnabled ? "is-enabled" : ""}`} key={row.memberId}><div className="ua-sv-access-person"><Avatar member={row} small/><div><strong><span className="ua-sv-access-name">{row.name}</span>{row.isSelf ? <span className="ua-sv-self-badge">This user</span> : null}</strong><small>{[row.department, row.position].filter(Boolean).join(" • ") || row.email || "Team member"}</small></div></div><label className="ua-switch" title={`Enable ${row.name}`}><input type="checkbox" checked={row.isEnabled} onChange={(event) => toggle(row.memberId, event.target.checked)}/><span/></label></div>) : <div className="ua-empty">Sorry, No data available</div>}</div> : null}</Modal>;
 }
 
@@ -646,7 +684,7 @@ export default function UsersCenterClient({ initialDirectory, initialSignupReque
   useEffect(() => { function close(event) { if (!event.target.closest(".ua-member-menu-wrap")) setMemberMenu(""); } document.addEventListener("click", close); return () => document.removeEventListener("click", close); }, []);
   useEffect(() => { function closeDepartmentActions(event) { if (!event.target.closest(".ua-folder")) setDepartmentActions(""); } document.addEventListener("pointerdown", closeDepartmentActions); return () => document.removeEventListener("pointerdown", closeDepartmentActions); }, []);
 
-  async function protect(descriptor, action) { try { const probe = await requestJson("/api/user-access/admin/verify", { method: "POST", body: "{}" }); if (probe?.ok) return await action(); return undefined; } catch (err) { if ([400, 401, 403].includes(err.status) && /password|required|invalid|verification/i.test(err.message)) setPasswordAction({ ...descriptor, action }); else notify("error", descriptor?.title || "Action failed", err.message); return undefined; } }
+  async function protect(descriptor, action) { try { if (currentUsersCenterAuthorizationToken()) return await action(); const probe = await requestJson("/next/api/users-center/admin/verify", { method: "POST", body: "{}" }); if (probe?.ok) { cacheUsersCenterAuthorization(probe); return await action(); } return undefined; } catch (err) { if ([400, 403].includes(err.status) && /password|required|invalid|verification|authorization/i.test(err.message)) setPasswordAction({ ...descriptor, action }); else notify("error", descriptor?.title || "Action failed", err.message); return undefined; } }
   function protectedOpen(descriptor, opener) { return protect(descriptor, async () => opener()); }
   async function openMember(mode, member = null) {
     setPageAccessRows([]);
@@ -680,8 +718,8 @@ export default function UsersCenterClient({ initialDirectory, initialSignupReque
     }
   }
 
-  function deleteDepartment(department) { protectedOpen({ title: "Delete department", message: `Delete ${department.name}?` }, () => setConfirm({ danger: true, title: "Delete Department", message: Number(department.count || 0) ? `Delete ${department.name} department? ${department.count} user${Number(department.count) === 1 ? "" : "s"} will be moved to No Department.` : `Delete ${department.name} department?`, confirmLabel: "Delete Department", onConfirm: async () => { const body = await requestJson(`/api/user-access/departments/${encodeURIComponent(department.id)}`, { method: "DELETE" }); backDepartments(false); await refresh(); notify("success", "Department deleted", body.message || "Department deleted."); setConfirm(null); } })); }
-  function deleteMember(member) { protectedOpen({ title: "Delete team member", message: `Delete ${member.name}?` }, () => setConfirm({ danger: true, title: "Delete Team Member", message: `Delete ${member.name || "this user"} permanently from Team Members? This action cannot be undone.`, confirmLabel: "Delete Member", onConfirm: async () => { const body = await requestJson(`/api/user-access/team-members/${encodeURIComponent(member.id)}`, { method: "DELETE" }); await refresh(); notify("success", "Member deleted", body.message || "Team member deleted."); setConfirm(null); } })); }
+  function deleteDepartment(department) { protectedOpen({ title: "Delete department", message: `Delete ${department.name}?` }, () => setConfirm({ danger: true, title: "Delete Department", message: Number(department.count || 0) ? `Delete ${department.name} department? ${department.count} user${Number(department.count) === 1 ? "" : "s"} will be moved to No Department.` : `Delete ${department.name} department?`, confirmLabel: "Delete Department", onConfirm: async () => { const body = await usersCenterMutation("department-delete", { departmentId: department.id }); backDepartments(false); await refresh(); notify("success", "Department deleted", body.message || "Department deleted."); setConfirm(null); } })); }
+  function deleteMember(member) { protectedOpen({ title: "Delete team member", message: `Delete ${member.name}?` }, () => setConfirm({ danger: true, title: "Delete Team Member", message: `Delete ${member.name || "this user"} permanently from Team Members? This action cannot be undone.`, confirmLabel: "Delete Member", onConfirm: async () => { const body = await usersCenterMutation("member-delete", { memberId: member.id }); await refresh(); notify("success", "Member deleted", body.message || "Team member deleted."); setConfirm(null); } })); }
 
   return <section className="ua-page-body">
     <Toast value={toast} onClose={() => setToast(null)}/>

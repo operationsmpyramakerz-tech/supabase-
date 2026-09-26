@@ -377,6 +377,7 @@ async function redisUrlCommand(command, { timeoutMs = SESSION_LOOKUP_TIMEOUT_MS 
     const operation = (() => {
       if (op === "MGET") return client.mGet((command || []).slice(1).map(String));
       if (op === "GET") return client.get(String(command?.[1] || ""));
+      if (op === "SET") return client.set(String(command?.[1] || ""), String(command?.[2] ?? ""));
       const error = new Error(`Unsupported direct Redis command: ${op}`);
       error.code = "DIRECT_SESSION_COMMAND_UNSUPPORTED";
       throw error;
@@ -903,6 +904,39 @@ export async function getDirectSessionAccountGate(requiredPages = [], options = 
       },
     });
   }
+}
+
+export function clearDirectSessionAccountCaches(memberId = "") {
+  const id = text(memberId);
+  if (id) {
+    memberAccessCache.delete(id);
+    memberAccessInflight.delete(id);
+    memberRowCache.delete(id);
+    memberRowInflight.delete(id);
+    return;
+  }
+  memberAccessCache.clear();
+  memberAccessInflight.clear();
+  memberRowCache.clear();
+  memberRowInflight.clear();
+}
+
+export async function setDirectUserAuthRevokedAt(memberId = "", timestamp = Date.now()) {
+  const id = text(memberId);
+  if (!id) return 0;
+  const value = Math.max(0, Number(timestamp) || Date.now());
+  const backends = [];
+  if (redisUrlValue()) backends.push("redis-url");
+  if (hasRestSessionBackend()) backends.push("rest");
+  if (!backends.length) {
+    const error = new Error("Direct session storage is not configured for auth revocation.");
+    error.code = "DIRECT_SESSION_UNAVAILABLE";
+    throw error;
+  }
+  const results = await Promise.allSettled(backends.map((backend) => sessionCommand(["SET", `op:auth-revoked:${id}`, String(value)], { backend })));
+  if (!results.some((result) => result.status === "fulfilled")) throw results[0]?.reason || new Error("Failed to store auth revocation timestamp.");
+  clearDirectSessionAccountCaches(id);
+  return value;
 }
 
 export const __directSessionAccountTest = {
