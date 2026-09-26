@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { fetchLegacyJson } from "../../../../../lib/legacy-api";
-import { getLegacyAccountGate } from "../../../../../lib/products-auth";
+import { getDirectAccountGate } from "../../../../../lib/products-auth";
 import { initializeCurrentOrderEditDirect } from "../../../../../lib/shopping-cart-order-service";
 
 export const dynamic = "force-dynamic";
@@ -16,25 +15,9 @@ function noStore(payload, init = {}) {
   });
 }
 
-async function legacyFallback(body = {}) {
-  const legacy = await fetchLegacyJson("/api/orders/current/edit/init", {
-    method: "POST",
-    body: {
-      orderIds: body?.orderIds,
-      adminPassword: body?.adminPassword,
-    },
-    timeoutMs: 25_000,
-  });
-  if (legacy.ok && legacy.data) return noStore(legacy.data, { status: legacy.status || 200 });
-  return noStore(
-    { error: legacy.error || legacy.data?.error || "Failed to init edit" },
-    { status: legacy.status || 502 },
-  );
-}
-
 export async function POST(request) {
   const body = await request.json().catch(() => ({}));
-  const gate = await getLegacyAccountGate(["Current Orders"]);
+  const gate = await getDirectAccountGate(["Current Orders"]);
   if (!gate.ok) {
     return noStore({ error: gate.error || "Authentication required." }, { status: gate.status || 503 });
   }
@@ -46,12 +29,15 @@ export async function POST(request) {
       adminPassword: body?.adminPassword,
     });
     if (result) return noStore(result);
+    return noStore(
+      { error: "This order cannot be edited through the direct Supabase path." },
+      { status: 503 },
+    );
   } catch (error) {
     if (error?.code === "DIRECT_SHOPPING_CART_ORDER_FAILED") {
       return noStore({ error: error?.message || "Failed to init edit" }, { status: Number(error?.status) || 500 });
     }
-    console.warn("[current-orders] direct edit init failed; using Legacy fallback:", error?.message || error);
+    console.error("[current-orders] direct edit init failed:", error?.message || error);
+    return noStore({ error: error?.message || "Failed to init edit" }, { status: Number(error?.status) || 500 });
   }
-
-  return await legacyFallback(body);
 }

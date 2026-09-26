@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { fetchLegacyJson } from "../../../../lib/legacy-api";
-import { getLegacyAccountGate } from "../../../../lib/products-auth";
+import { getDirectAccountGate } from "../../../../lib/products-auth";
 import { directPageMutationAccess } from "../../../../lib/order-action-auth";
 import {
   createMaintenanceChecklistItem,
@@ -31,28 +30,15 @@ function directErrorResponse(error) {
 }
 
 async function accountGate() {
-  return await getLegacyAccountGate(["Maintenance Orders", "Operations Orders"]);
-}
-
-async function legacyFallback(method, body = {}) {
-  const id = String(body?.id || "").trim();
-  const path = ["PATCH", "DELETE"].includes(method) && id
-    ? `/api/orders/maintenance-checklist/${encodeURIComponent(id)}`
-    : "/api/orders/maintenance-checklist";
-  const legacy = await fetchLegacyJson(path, {
-    method,
-    ...(method === "GET" || method === "DELETE" ? {} : { body: { text: body?.text ?? body?.value } }),
-    timeoutMs: 20_000,
-  });
-  if (legacy.ok && legacy.data) return noStore(legacy.data, { status: legacy.status || 200 });
-  return noStore(
-    { error: legacy.error || legacy.data?.error || "Maintenance checklist action failed." },
-    { status: legacy.status || 502 },
-  );
+  return await getDirectAccountGate(["Maintenance Orders", "Operations Orders"]);
 }
 
 function writeAccess(account = {}) {
   return directPageMutationAccess(account, ["Maintenance Orders", "Operations Orders"]);
+}
+
+function directUnavailable(message = "The direct maintenance checklist service is unavailable.") {
+  return noStore({ error: message }, { status: 503 });
 }
 
 export async function GET() {
@@ -61,10 +47,11 @@ export async function GET() {
   try {
     const items = await listMaintenanceChecklistItems();
     if (items !== null) return noStore({ items });
+    return directUnavailable();
   } catch (error) {
-    console.warn("[maintenance-checklist] direct GET failed; using Legacy fallback:", error?.message || error);
+    console.error("[maintenance-checklist] direct GET failed:", error?.message || error);
+    return noStore({ error: error?.message || "Failed to load maintenance checklist." }, { status: Number(error?.status) || 500 });
   }
-  return await legacyFallback("GET");
 }
 
 export async function POST(request) {
@@ -74,17 +61,18 @@ export async function POST(request) {
 
   const access = writeAccess(gate.account);
   if (access === false) return noStore({ error: "Edit access is required for this action." }, { status: 403 });
-  if (access === null) return await legacyFallback("POST", body);
+  if (access === null) return directUnavailable("The direct page permission context is unavailable.");
 
   try {
     const result = await createMaintenanceChecklistItem({ account: gate.account, value: body?.text ?? body?.value });
     if (result) return noStore(result, { status: result?.existing ? 200 : 201 });
+    return directUnavailable();
   } catch (error) {
     const response = directErrorResponse(error);
     if (response) return response;
-    console.warn("[maintenance-checklist] direct POST failed; using Legacy fallback:", error?.message || error);
+    console.error("[maintenance-checklist] direct POST failed:", error?.message || error);
+    return noStore({ error: error?.message || "Maintenance checklist action failed." }, { status: Number(error?.status) || 500 });
   }
-  return await legacyFallback("POST", body);
 }
 
 export async function PATCH(request) {
@@ -94,17 +82,18 @@ export async function PATCH(request) {
 
   const access = writeAccess(gate.account);
   if (access === false) return noStore({ error: "Edit access is required for this action." }, { status: 403 });
-  if (access === null) return await legacyFallback("PATCH", body);
+  if (access === null) return directUnavailable("The direct page permission context is unavailable.");
 
   try {
     const result = await updateMaintenanceChecklistItem({ id: body?.id, value: body?.text ?? body?.value });
     if (result) return noStore(result);
+    return directUnavailable();
   } catch (error) {
     const response = directErrorResponse(error);
     if (response) return response;
-    console.warn("[maintenance-checklist] direct PATCH failed; using Legacy fallback:", error?.message || error);
+    console.error("[maintenance-checklist] direct PATCH failed:", error?.message || error);
+    return noStore({ error: error?.message || "Maintenance checklist action failed." }, { status: Number(error?.status) || 500 });
   }
-  return await legacyFallback("PATCH", body);
 }
 
 export async function DELETE(request) {
@@ -114,15 +103,16 @@ export async function DELETE(request) {
 
   const access = writeAccess(gate.account);
   if (access === false) return noStore({ error: "Edit access is required for this action." }, { status: 403 });
-  if (access === null) return await legacyFallback("DELETE", body);
+  if (access === null) return directUnavailable("The direct page permission context is unavailable.");
 
   try {
     const result = await deleteMaintenanceChecklistItem({ id: body?.id });
     if (result) return noStore(result);
+    return directUnavailable();
   } catch (error) {
     const response = directErrorResponse(error);
     if (response) return response;
-    console.warn("[maintenance-checklist] direct DELETE failed; using Legacy fallback:", error?.message || error);
+    console.error("[maintenance-checklist] direct DELETE failed:", error?.message || error);
+    return noStore({ error: error?.message || "Maintenance checklist action failed." }, { status: Number(error?.status) || 500 });
   }
-  return await legacyFallback("DELETE", body);
 }

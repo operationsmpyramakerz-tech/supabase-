@@ -8,6 +8,7 @@ import { canUseOrderCandidateRpc, loadOrderCandidateNumbersRpc, noteOrderCandida
 import { canUseOrderCardSummaryRpc, canUseOrderSummaryRpc, loadOrderCardSummariesRpc, loadOrderSummaryRowsRpc, noteOrderCardSummaryRpcError, noteOrderSummaryRpcError } from "./order-summary-rpc";
 import { getReviewerVisibility as reviewerVisibility } from "./reviewer-visibility-service";
 import { measurePerformance, recordPerformanceSample } from "./performance-profiler";
+import { directPageMutationAccess } from "./order-action-auth";
 
 const PAGE_LIMIT = 36;
 const PAGE_MAX = 80;
@@ -752,6 +753,13 @@ function directMutationError(message, status, code = "DIRECT_REVIEW_MUTATION_FAI
   return error;
 }
 
+function ensureReviewMutationAccess(account = {}) {
+  const access = directPageMutationAccess(account, "Orders Review");
+  if (access === null) return null;
+  if (!access) throw directMutationError("Edit access is required for this action.", 403);
+  return true;
+}
+
 async function allowedReviewRow(account, id) {
   if (!isSupabaseConfigured()) return null;
   const cleanId = text(id);
@@ -835,6 +843,9 @@ async function invalidateLegacyReviewCaches(account = {}) {
 }
 
 export async function updateOrdersReviewApproval({ account, id, decision, rejectedReason = "" } = {}) {
+  const access = ensureReviewMutationAccess(account || {});
+  if (access === null) return null;
+
   const cleanId = text(id);
   const raw = norm(decision);
   const normalizedDecision = raw === "approved" ? "Approved" : raw === "rejected" ? "Rejected" : raw === "not started" ? "Not Started" : "";
@@ -870,6 +881,9 @@ export async function updateOrdersReviewApproval({ account, id, decision, reject
 }
 
 export async function updateOrdersReviewQuantity({ account, id, value } = {}) {
+  const access = ensureReviewMutationAccess(account || {});
+  if (access === null) return null;
+
   const cleanId = text(id);
   const numericValue = Number(value);
   if (!cleanId) throw directMutationError("Missing id", 400);
@@ -1041,6 +1055,9 @@ export async function performOrdersReviewProtectedAction({
   approvals = null,
   approvalStatus = "",
 } = {}) {
+  const access = ensureReviewMutationAccess(account || {});
+  if (access === null) return null;
+
   const cleanAction = text(action).toLowerCase().replace(/[_\s]+/g, "-");
   if (!["archive", "unarchive", "verify-edit", "update-approval"].includes(cleanAction)) {
     throw directMutationError("Unsupported protected action", 400);

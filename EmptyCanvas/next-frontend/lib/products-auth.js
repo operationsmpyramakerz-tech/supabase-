@@ -18,22 +18,20 @@ function accountMemberId(account = {}) {
   ).trim();
 }
 
-async function getLegacyAccountGateInternal(requiredPages = [], onSource = () => {}, options = {}) {
-  // First try the lightweight Next -> Upstash session -> Supabase permission
-  // path. If this deployment/session is not eligible, keep the established
-  // Legacy Express account endpoint as a compatibility fallback.
+async function getDirectOrBridgedAccountGateInternal(requiredPages = [], onSource = () => {}, options = {}) {
+  // Preferred path: Next reads the signed Express session from the same
+  // Redis/Upstash store, then rebuilds the account + permission matrix from
+  // Supabase. Authorization is therefore decided entirely in Next.
   const direct = await getDirectSessionAccountGate(requiredPages, options).catch(() => null);
   if (direct) {
     onSource("direct");
     return direct;
   }
 
-  // If Next cannot read the Redis session store directly, reuse the existing
-  // authenticated Express heartbeat as a tiny session bridge. It returns the
-  // member id + cached account snapshot only; authorization still happens in
-  // Next against fresh Supabase page-access rows when a protected page is
-  // requested. This avoids the expensive /api/account compatibility call on
-  // every Vercel instance that does not have Redis credentials.
+  // Compatibility bridge while the root Express deployment still owns the
+  // session cookie. This endpoint supplies authenticated session identity only;
+  // page permissions are rebuilt and checked by Next against fresh Supabase
+  // rows through getDirectAccountGateFromSessionContext.
   const sessionStatus = await fetchLegacyJson("/api/session-status", {
     timeoutMs: 3_000,
     maxAttempts: 1,
@@ -56,6 +54,15 @@ async function getLegacyAccountGateInternal(requiredPages = [], onSource = () =>
     }
   }
 
+  return null;
+}
+
+async function getLegacyAccountGateInternal(requiredPages = [], onSource = () => {}, options = {}) {
+  const direct = await getDirectOrBridgedAccountGateInternal(requiredPages, onSource, options);
+  if (direct) return direct;
+
+  // General compatibility path for modules that have not completed the Next
+  // authorization cutover yet. Orders mutation routes no longer use this path.
   onSource("legacy");
   const response = await fetchLegacyJson("/api/account", { timeoutMs: 15000 });
 
@@ -89,6 +96,41 @@ async function getLegacyAccountGateInternal(requiredPages = [], onSource = () =>
 
   return { ok: true, status: 200, error: "", account: response.data, memberId: accountMemberId(response.data) };
 }
+
+export async function getDirectAccountGate(requiredPages = [], options = {}) {
+  const startedAt = performance.now();
+  let source = "direct";
+  let result = null;
+  let thrown = null;
+  try {
+    result = await getDirectOrBridgedAccountGateInternal(requiredPages, (value) => { source = value || source; }, options);
+    if (result) return result;
+    result = {
+      ok: false,
+      status: 503,
+      error: "The direct authentication context is unavailable. Please sign in again or retry shortly.",
+      account: null,
+    };
+    return result;
+  } catch (error) {
+    thrown = error;
+    throw error;
+  } finally {
+    recordPerformanceSample({
+      category: "auth",
+      name: options?.authOnly === true ? "account-gate-direct-auth-only" : "account-gate-direct",
+      durationMs: performance.now() - startedAt,
+      ok: thrown ? false : Boolean(result?.ok) || [401, 403].includes(Number(result?.status)),
+      status: Number(result?.status) || (thrown ? Number(thrown?.status) || 500 : (result ? 0 : 503)),
+      meta: {
+        source,
+        requiredPages: Array.isArray(requiredPages) ? requiredPages.length : (requiredPages ? 1 : 0),
+        authOnly: options?.authOnly === true,
+      },
+    });
+  }
+}
+
 export async function getLegacyAccountGate(requiredPages = [], options = {}) {
   const startedAt = performance.now();
   let source = "direct";
@@ -115,4 +157,3 @@ export async function getLegacyAccountGate(requiredPages = [], options = {}) {
     });
   }
 }
-

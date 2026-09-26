@@ -10,6 +10,7 @@ import { applyOrderSearchPlan, canUseOrderSearchText, createOrderSearchPlan, not
 import { canUseOrderCandidateRpc, loadOrderCandidateNumbersRpc, noteOrderCandidateRpcError } from "./order-candidate-rpc";
 import { canUseOrderCardSummaryRpc, canUseOrderSummaryRpc, loadOrderCardSummariesRpc, loadOrderSummaryRowsRpc, noteOrderCardSummaryRpcError, noteOrderSummaryRpcError } from "./order-summary-rpc";
 import { measurePerformance, recordPerformanceSample } from "./performance-profiler";
+import { directPageMutationAccess } from "./order-action-auth";
 
 const PAGE_LIMIT = 36;
 const PAGE_MAX = 80;
@@ -792,6 +793,14 @@ function directOperationsMutationError(message, status = 500) {
   return error;
 }
 
+
+function ensureOperationsMutationAccess(account = {}) {
+  const access = directPageMutationAccess(account, ["Requested Orders", "Operations Orders"]);
+  if (access === null) return null;
+  if (!access) throw directOperationsMutationError("Edit access is required for this action.", 403);
+  return true;
+}
+
 function operationsAccessToken(value) {
   return text(value).toLowerCase().replace(/[^a-z0-9]/g, "");
 }
@@ -981,6 +990,9 @@ export async function createOperationsRepeatOrder({
   orderIds = [],
   action = "",
 } = {}) {
+  const access = ensureOperationsMutationAccess(account || {});
+  if (access === null) return null;
+
   const mode = text(action).toLowerCase().replace(/[_\s]+/g, "-");
   const config = mode === "create-withdrawal"
     ? {
@@ -1224,6 +1236,9 @@ export async function invalidateLegacyOperationsCaches(account = {}) {
 }
 
 export async function updateOperationsApproval({ account, ids = [], decision = "", rejectedReason = "" } = {}) {
+  const access = ensureOperationsMutationAccess(account || {});
+  if (access === null) return null;
+
   const raw = norm(decision);
   const normalizedDecision = raw === "approved" ? "Approved" : raw === "rejected" ? "Rejected" : raw === "not started" || raw === "not-started" ? "Not Started" : "";
   const reason = text(rejectedReason);
@@ -1274,6 +1289,9 @@ export async function markOperationsShipped({
   issueDescription = "",
   perItemIssues = [],
 } = {}) {
+  const access = ensureOperationsMutationAccess(account || {});
+  if (access === null) return null;
+
   const loaded = await loadOperationRowsByIds(orderIds);
   if (!loaded) return null;
   if (loaded.clean.some((id) => !loaded.byId.has(id))) {
@@ -1382,6 +1400,9 @@ export async function performOperationsProtectedAction({
   orderIds = [],
   adminPassword = "",
 } = {}) {
+  const access = ensureOperationsMutationAccess(account || {});
+  if (access === null) return null;
+
   const cleanAction = text(action).toLowerCase().replace(/[_\s]+/g, "-");
   if (!["archive", "unarchive", "edit-init"].includes(cleanAction)) {
     throw directOperationsMutationError("Unsupported protected action", 400);
@@ -1940,6 +1961,9 @@ export async function markOperationsArrived({
   orderReceiptFilenames = [],
   receiptNumbers = [],
 } = {}) {
+  const access = ensureOperationsMutationAccess(account || {});
+  if (access === null) return null;
+
   const loaded = await loadOperationRowsByIds(orderIds);
   if (!loaded) return null;
   if (loaded.clean.some((id) => !loaded.byId.has(id))) throw directOperationsMutationError("Orders not found", 404);
@@ -2036,6 +2060,8 @@ export async function saveOperationsEditDetails({
   quantities = null,
   unsupportedReceiptEdit = false,
 } = {}) {
+  const access = ensureOperationsMutationAccess(account || {});
+  if (access === null) return null;
   if (unsupportedReceiptEdit) return null;
   const loaded = await loadOperationRowsByIds(orderIds);
   if (!loaded) return null;

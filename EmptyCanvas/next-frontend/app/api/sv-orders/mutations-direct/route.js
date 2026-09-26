@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { fetchLegacyJson } from "../../../../lib/legacy-api";
-import { getLegacyAccountGate } from "../../../../lib/products-auth";
+import { getDirectAccountGate } from "../../../../lib/products-auth";
+import { directPageMutationAccess } from "../../../../lib/order-action-auth";
 import {
   performOrdersReviewProtectedAction,
   updateOrdersReviewApproval,
@@ -30,48 +30,9 @@ function actionKey(value) {
 
 function directErrorResponse(error) {
   if (error?.code !== "DIRECT_REVIEW_MUTATION_FAILED") return null;
-  const status = Number(error?.status) || 500;
-  return noStore({ error: error?.message || "Orders Review action failed." }, { status });
-}
-
-async function legacyFallback(action, body) {
-  let path = "";
-  let legacyBody = body;
-
-  if (action === "approval") {
-    const id = text(body?.id);
-    if (!id) return noStore({ error: "Missing id" }, { status: 400 });
-    path = `/api/sv-orders/${encodeURIComponent(id)}/approval`;
-    legacyBody = { decision: body?.decision, rejectedReason: body?.rejectedReason };
-  } else if (action === "quantity") {
-    const id = text(body?.id);
-    if (!id) return noStore({ error: "Missing id" }, { status: 400 });
-    path = `/api/sv-orders/${encodeURIComponent(id)}/quantity`;
-    legacyBody = { value: body?.value };
-  } else if (["archive", "unarchive", "verify-edit", "update-approval"].includes(action)) {
-    path = `/api/sv-orders/actions/${action}`;
-    legacyBody = {
-      orderIds: body?.orderIds,
-      adminPassword: body?.adminPassword,
-      ...(action === "update-approval" ? {
-        approvals: body?.approvals,
-        approvalStatus: body?.approvalStatus,
-        approval: body?.approval,
-      } : {}),
-    };
-  } else {
-    return noStore({ error: "Unsupported Orders Review action." }, { status: 400 });
-  }
-
-  const legacy = await fetchLegacyJson(path, {
-    method: "POST",
-    body: legacyBody,
-    timeoutMs: 25_000,
-  });
-  if (legacy.ok && legacy.data) return noStore(legacy.data, { status: legacy.status || 200 });
   return noStore(
-    { error: legacy.error || legacy.data?.error || "Orders Review action failed." },
-    { status: legacy.status || 502 },
+    { error: error?.message || "Orders Review action failed." },
+    { status: Number(error?.status) || 500 },
   );
 }
 
@@ -82,33 +43,36 @@ export async function POST(request) {
     return noStore({ error: "Unsupported Orders Review action." }, { status: 400 });
   }
 
-  const gate = await getLegacyAccountGate(["Orders Review"]);
+  const gate = await getDirectAccountGate(["Orders Review"]);
   if (!gate.ok) {
     return noStore({ error: gate.error || "Authentication required." }, { status: gate.status || 503 });
   }
 
+  const mutationAccess = directPageMutationAccess(gate.account, "Orders Review");
+  if (mutationAccess === false) {
+    return noStore({ error: "Edit access is required for this action." }, { status: 403 });
+  }
+  if (mutationAccess === null) {
+    return noStore({ error: "The direct page permission context is unavailable." }, { status: 503 });
+  }
+
   try {
+    let result = null;
     if (action === "approval") {
-      const result = await updateOrdersReviewApproval({
+      result = await updateOrdersReviewApproval({
         account: gate.account,
         id: body?.id,
         decision: body?.decision,
         rejectedReason: body?.rejectedReason,
       });
-      if (result) return noStore(result);
     } else if (action === "quantity") {
-      const result = await updateOrdersReviewQuantity({
+      result = await updateOrdersReviewQuantity({
         account: gate.account,
         id: body?.id,
         value: body?.value,
       });
-      if (result) return noStore(result);
-    } else if (gate.source === "direct-session") {
-      // Protected actions need page-level Admin semantics in addition to the
-      // shared password. The direct-session gate carries the fresh access level;
-      // if the account came from the Legacy bridge, keep using Legacy for exact
-      // compatibility instead of guessing that privilege.
-      const result = await performOrdersReviewProtectedAction({
+    } else {
+      result = await performOrdersReviewProtectedAction({
         account: gate.account,
         action,
         orderIds: body?.orderIds,
@@ -116,13 +80,20 @@ export async function POST(request) {
         approvals: body?.approvals,
         approvalStatus: body?.approvalStatus ?? body?.approval,
       });
-      if (result) return noStore(result);
     }
+
+    if (result) return noStore(result);
+    return noStore(
+      { error: "This Orders Review action is not available through the direct Supabase path." },
+      { status: 503 },
+    );
   } catch (error) {
     const response = directErrorResponse(error);
     if (response) return response;
-    console.warn(`[orders-review] direct ${action} failed; using Legacy fallback:`, error?.message || error);
+    console.error(`[orders-review] direct ${action} failed:`, error?.message || error);
+    return noStore(
+      { error: error?.message || "Orders Review action failed." },
+      { status: Number(error?.status) || 500 },
+    );
   }
-
-  return await legacyFallback(action, body);
 }
