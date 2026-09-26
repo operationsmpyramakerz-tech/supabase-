@@ -66,15 +66,15 @@
     },
     {
       "source": "/api/products/kits/:id/send-to-stock",
-      "destination": "/next/api/products/kits/:id/send-to-stock"
+      "destination": "/next/api/products/kits/send-to-stock?id=:id"
     },
     {
       "source": "/api/products/proposals/:id/make-order",
-      "destination": "/next/api/products/proposals/:id/make-order"
+      "destination": "/next/api/products/proposals/make-order?id=:id"
     },
     {
       "source": "/api/products/proposals/:id/send-to-stock",
-      "destination": "/next/api/products/proposals/:id/send-to-stock"
+      "destination": "/next/api/products/proposals/send-to-stock?id=:id"
     },
     {
       "source": "/api/products/proposals/:id/items/by-kit",

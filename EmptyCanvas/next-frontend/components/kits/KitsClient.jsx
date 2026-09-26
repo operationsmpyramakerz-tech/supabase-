@@ -1188,7 +1188,7 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
       }
       if (!receipts.length) throw new Error("No receipt images were uploaded.");
 
-      const body = await requestJson(`/next/api/products/kits/${encodeURIComponent(kit.id)}/send-to-stock`, {
+      const body = await requestJson(`/next/api/products/kits/send-to-stock?id=${encodeURIComponent(kit.id)}`, {
         method: "POST",
         body: JSON.stringify({ teamMemberId, receiptNumber: text(receiptNumber), receipts }),
       });

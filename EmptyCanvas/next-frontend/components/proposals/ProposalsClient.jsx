@@ -1968,7 +1968,7 @@ export default function ProposalsClient({
     setBusy(true);
     startActionLoading({ title: "Creating order", message: "Creating a normal order from the proposal components…" });
     try {
-      const body = await requestJson(`/next/api/products/proposals/${encodeURIComponent(proposal.id)}/make-order`, {
+      const body = await requestJson(`/next/api/products/proposals/make-order?id=${encodeURIComponent(proposal.id)}`, {
         method: "POST",
         body: JSON.stringify({ teamMemberId, adminPassword }),
       });
