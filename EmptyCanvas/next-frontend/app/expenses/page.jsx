@@ -1,8 +1,7 @@
 import { redirect } from "next/navigation";
 import AppShell from "../../components/AppShell";
 import ExpensesClient from "../../components/expenses/ExpensesClient";
-import { fetchLegacyJson } from "../../lib/legacy-api";
-import { getLegacyAccountGate } from "../../lib/products-auth";
+import { getDirectAccountGate } from "../../lib/products-auth";
 import { expensesForAccount } from "../../lib/expenses-data";
 
 export const dynamic = "force-dynamic";
@@ -24,13 +23,9 @@ function UnavailableState({ message, forbidden = false }) {
   );
 }
 
-async function legacyPayload(path, fallback) {
-  const response = await fetchLegacyJson(path, { timeoutMs: 20000 });
-  return response.ok && response.data ? response.data : fallback;
-}
 
 export default async function ExpensesPage() {
-  const gate = await getLegacyAccountGate(["Expenses"]);
+  const gate = await getDirectAccountGate(["Expenses"]);
 
   if (gate.status === 401) redirect("/login?next=/next/expenses");
   if (gate.status === 403) {
@@ -40,17 +35,11 @@ export default async function ExpensesPage() {
     return <UnavailableState message={gate.error || "The current ERP authentication service is temporarily unavailable."} />;
   }
 
-  const warnings = [];
-
   let expensePayload;
   try {
     expensePayload = await expensesForAccount(gate.account);
   } catch (directError) {
-    expensePayload = await legacyPayload("/api/expenses", null);
-    if (!expensePayload) {
-      return <UnavailableState message={directError?.message || "Expense data is temporarily unavailable."} />;
-    }
-    warnings.push("Expenses recovery path used.");
+    return <UnavailableState message={directError?.message || "Expense data is temporarily unavailable."} />;
   }
 
   // Modal-only support data (funds types, team members and approved orders)
@@ -70,7 +59,7 @@ export default async function ExpensesPage() {
       <ExpensesClient
         account={gate.account}
         initialPayload={expensePayload || { success: true, items: [] }}
-        bootstrapWarnings={warnings}
+        bootstrapWarnings={[]}
       />
     </AppShell>
   );

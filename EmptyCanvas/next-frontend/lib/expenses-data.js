@@ -1,6 +1,6 @@
 import "server-only";
 import { performance } from "node:perf_hooks";
-import { getSupabaseConfig, rpc, select, selectAll, storagePublicUrl } from "./supabase-rest";
+import { deleteById, deleteStorageObjects, getSupabaseConfig, insert, rpc, select, selectAll, selectById, storagePublicUrl, updateById, uploadStorageObject } from "./supabase-rest";
 import { listTeamMembersLite } from "./team-members-service";
 import { recordPerformanceSample } from "./performance-profiler";
 
@@ -799,5 +799,343 @@ export async function expensesForMemberId(memberId) {
     lastSettledDate: info.lastSettledDate,
     source: "supabase-next",
   };
+}
+
+function expenseError(message, status = 400, code = "DIRECT_EXPENSE_MUTATION_FAILED") {
+  const error = new Error(message || "Expense action failed.");
+  error.status = Number(status) || 400;
+  error.code = code;
+  return error;
+}
+
+function expenseFundsTypeKey(value) {
+  return text(value).toLowerCase().replace(/[^a-z0-9\u0600-\u06ff]+/g, "");
+}
+
+async function resolveExpenseMember(account = {}) {
+  let member = memberFromAccount(account);
+  if (!member.name) {
+    const members = await selectAll(teamMembersTable(), {
+      limit: 5000,
+      order: "name.asc,id.asc",
+      profileName: "expenses.member-directory-mutation-fallback",
+    });
+    member = memberIdentity(account, members);
+  }
+  if (!member.name) throw expenseError("User not found.", 400);
+  return member;
+}
+
+function expenseBaseRowForMember(member = {}, extra = {}) {
+  return {
+    notion_created_time: new Date().toISOString(),
+    team_member_name: text(member.name),
+    user_id: text(member.code || member.id),
+    team_member_raw: text(member.name),
+    team_member_url: "",
+    ...extra,
+  };
+}
+
+function cleanStorageObjectPath(filenameHint = "upload.bin") {
+  const parts = text(filenameHint || "upload.bin")
+    .split(/[\\/]+/)
+    .filter(Boolean)
+    .map((part) => part.replace(/[^a-z0-9._-]/gi, "_").replace(/^_+|_+$/g, ""))
+    .filter(Boolean);
+  return parts.join("/") || `upload-${Date.now()}.bin`;
+}
+
+async function uploadExpenseDataUrl(dataUrl, filenameHint = "receipt.jpg") {
+  const match = String(dataUrl || "").match(/^data:(.+?);base64,(.+)$/);
+  if (!match) throw expenseError("Invalid receipt image payload.", 400);
+  const contentType = text(match[1]) || "application/octet-stream";
+  const buffer = Buffer.from(match[2], "base64");
+  if (!buffer.length) throw expenseError("The receipt image is empty.", 400);
+  if (buffer.length > 15 * 1024 * 1024) throw expenseError("The receipt image is too large.", 413);
+  const uploaded = await uploadStorageObject(cleanStorageObjectPath(filenameHint), buffer, {
+    contentType,
+    upsert: true,
+  });
+  if (!uploaded?.publicUrl) throw expenseError("Receipt upload did not return a public URL.", 502);
+  return uploaded.publicUrl;
+}
+
+async function buildExpenseScreenshotText({ screenshots, screenshotDataUrl, screenshotName, prefix = "expense" } = {}) {
+  const files = [];
+  const list = Array.isArray(screenshots) ? screenshots : [];
+  for (let index = 0; index < list.length; index += 1) {
+    const item = list[index] || {};
+    const dataUrl = text(item.dataUrl || item.screenshotDataUrl);
+    if (!dataUrl) continue;
+    const originalName = text(item.name || item.filename) || "receipt.png";
+    const safeName = originalName.replace(/[^a-z0-9._-]/gi, "_");
+    const filename = `${prefix}-${Date.now()}-${index}-${Math.random().toString(16).slice(2)}-${safeName}`;
+    const url = await uploadExpenseDataUrl(dataUrl, filename);
+    files.push({ name: originalName, url });
+  }
+  if (!files.length && text(screenshotDataUrl)) {
+    const originalName = text(screenshotName) || `${prefix}-${Date.now()}.png`;
+    const safeName = originalName.replace(/[^a-z0-9._-]/gi, "_");
+    const filename = `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}-${safeName}`;
+    const url = await uploadExpenseDataUrl(screenshotDataUrl, filename);
+    files.push({ name: originalName, url });
+  }
+  return files.length ? JSON.stringify(files) : null;
+}
+
+function expenseScreenshotField(entries = []) {
+  const clean = (Array.isArray(entries) ? entries : [])
+    .map((entry, index) => ({
+      name: text(entry?.name) || `Receipt ${index + 1}`,
+      url: text(entry?.url || entry?.href || entry?.publicUrl),
+    }))
+    .filter((entry) => entry.url);
+  return clean.length ? JSON.stringify(clean) : null;
+}
+
+function storagePathsFromExpenseScreenshots(entries = []) {
+  const config = getSupabaseConfig();
+  const base = text(config.url).replace(/\/+$/, "");
+  const bucket = text(config.storageBucket);
+  if (!base || !bucket) return [];
+  const markers = [
+    `/storage/v1/object/public/${encodeURIComponent(bucket)}/`,
+    `/storage/v1/object/sign/${encodeURIComponent(bucket)}/`,
+  ];
+  const out = [];
+  for (const entry of Array.isArray(entries) ? entries : []) {
+    const rawUrl = text(entry?.url || entry);
+    if (!rawUrl) continue;
+    let path = "";
+    try {
+      const parsed = new URL(rawUrl);
+      for (const marker of markers) {
+        if (parsed.pathname.includes(marker)) {
+          path = parsed.pathname.split(marker)[1] || "";
+          break;
+        }
+      }
+    } catch {}
+    if (!path) continue;
+    try { path = decodeURIComponent(path); } catch {}
+    path = path.replace(/^\/+/, "").split("?")[0];
+    if (path) out.push(path);
+  }
+  return [...new Set(out)];
+}
+
+function invalidateExpenseDataCaches() {
+  expenseUsersSummaryCache = null;
+  expenseUsersSummaryInflight = null;
+  expenseTypeOptionsCache = null;
+  expenseTypeOptionsInflight = null;
+}
+
+export async function createExpenseCashIn(account = {}, payload = {}) {
+  const member = await resolveExpenseMember(account);
+  const date = text(payload.date);
+  const rawAmount = payload.amount;
+  if (!date || rawAmount === undefined || rawAmount === null || rawAmount === "") {
+    throw expenseError("Missing required fields.", 400);
+  }
+  const amount = Number(rawAmount);
+  if (!Number.isFinite(amount)) throw expenseError("Invalid amount.", 400);
+  const paymentBy = text(payload.paymentBy || payload.cashInFrom);
+  if (!paymentBy) throw expenseError("Payment by is required.", 400);
+
+  const fundsTypeRaw = text(payload.fundsType);
+  const fundsTypeKey = expenseFundsTypeKey(fundsTypeRaw);
+  const isOnlineTransfer = fundsTypeKey === "onlinetransfer";
+  const isCashPayment = ["cashpayment", "cashreceipt", "cashreciept"].includes(fundsTypeKey);
+  if (!fundsTypeKey || (!isOnlineTransfer && !isCashPayment)) throw expenseError("Invalid funds type.", 400);
+
+  const receiptNumber = text(payload.receiptNumber);
+  if (isCashPayment && !receiptNumber) throw expenseError("Missing receipt number.", 400);
+  const hasScreenshot = (Array.isArray(payload.screenshots) && payload.screenshots.some((shot) => text(shot?.dataUrl || shot?.screenshotDataUrl))) || !!text(payload.screenshotDataUrl);
+  if (isOnlineTransfer && !hasScreenshot) throw expenseError("Screenshot is required for online transfer.", 400);
+
+  const fundsType = fundsTypeRaw || (isOnlineTransfer ? "Online Transfer" : "Cash Payment");
+  const screenshot = await buildExpenseScreenshotText({
+    screenshots: payload.screenshots,
+    screenshotDataUrl: payload.screenshotDataUrl,
+    screenshotName: payload.screenshotName,
+    prefix: "cashin",
+  });
+  const row = await insert(expensesTable(), expenseBaseRowForMember(member, {
+    reason: receiptNumber || fundsType || "Cash In",
+    expense_date: date,
+    funds_type: fundsType,
+    cash_in: amount,
+    cash_out: null,
+    from_location: paymentBy,
+    to_location: member.name || "",
+    screenshot,
+  }));
+  invalidateExpenseDataCaches();
+  return { success: true, message: "Cash in recorded", item: serializeExpense(row || {}), source: "supabase-next" };
+}
+
+export async function createExpenseCashOut(account = {}, payload = {}) {
+  const member = await resolveExpenseMember(account);
+  const fundsType = text(payload.fundsType);
+  const date = text(payload.date);
+  if (!fundsType || !date) throw expenseError("Missing required fields.", 400);
+  const fundsTypeKey = expenseFundsTypeKey(fundsType);
+  const screenshotRequired = new Set(["owncar", "swvl", "gobus", "bybus", "train", "indrive", "uber", "uper", "didi"]);
+  const hasScreenshot = (Array.isArray(payload.screenshots) && payload.screenshots.some((shot) => text(shot?.dataUrl || shot?.screenshotDataUrl))) || !!text(payload.screenshotDataUrl);
+  if (screenshotRequired.has(fundsTypeKey) && !hasScreenshot) {
+    throw expenseError(fundsTypeKey === "owncar" ? "A Google Maps screenshot is required for Own car" : "Screenshot is required for this funds type", 400);
+  }
+  const amount = Number(payload.amount);
+  if (fundsTypeKey !== "owncar" && (!Number.isFinite(amount) || amount <= 0)) throw expenseError("Cash out amount is required.", 400);
+
+  const reason = text(payload.reason) || [
+    text(payload.orderLabel),
+    !text(payload.orderLabel) ? text(payload.orderDisplayId) : "",
+    !text(payload.orderLabel) ? text(payload.orderType) : "",
+    fundsType,
+  ].filter(Boolean).join(" • ") || "Cash out";
+  const screenshot = await buildExpenseScreenshotText({
+    screenshots: payload.screenshots,
+    screenshotDataUrl: payload.screenshotDataUrl,
+    screenshotName: payload.screenshotName,
+    prefix: "receipt",
+  });
+  const row = await insert(expensesTable(), expenseBaseRowForMember(member, {
+    reason,
+    expense_date: date,
+    funds_type: fundsType,
+    from_location: text(payload.from),
+    to_location: text(payload.to),
+    cash_out: fundsTypeKey === "owncar" ? 0 : amount,
+    cash_in: null,
+    kilometer: fundsTypeKey === "owncar" ? number(payload.kilometer, 0) : null,
+    screenshot,
+    orders_names: text(payload.orderLabel || payload.orderDisplayId) || null,
+    orders_raw: Array.isArray(payload.orderIds) ? payload.orderIds.map(text).filter(Boolean).join(",") : (text(payload.orderId) || null),
+  }));
+  invalidateExpenseDataCaches();
+  return { success: true, message: "Cash out saved successfully", item: serializeExpense(row || {}), source: "supabase-next" };
+}
+
+export async function settleExpenseAccount(account = {}, payload = {}) {
+  const member = await resolveExpenseMember(account);
+  const receiptNumber = text(payload.receiptNumber);
+  const settledBy = text(payload.settledBy || payload.paymentBy);
+  const date = text(payload.date) || new Date().toISOString().slice(0, 10);
+  const fundsTypeRaw = text(payload.fundsType);
+  const fundsTypeKey = expenseFundsTypeKey(fundsTypeRaw);
+  const isOnlineTransfer = fundsTypeKey === "onlinetransfer" || fundsTypeKey === "onlinepayment";
+  const isCashPayment = ["cashpayment", "cashreceipt", "cashreciept"].includes(fundsTypeKey);
+  const hasScreenshot = (Array.isArray(payload.screenshots) && payload.screenshots.some((shot) => text(shot?.dataUrl || shot?.screenshotDataUrl))) || !!text(payload.screenshotDataUrl);
+  if (!fundsTypeKey || (!isOnlineTransfer && !isCashPayment)) throw expenseError("Invalid funds type.", 400);
+  if (isCashPayment && !receiptNumber) throw expenseError("Missing receipt number.", 400);
+  if (isOnlineTransfer && !hasScreenshot) throw expenseError("Screenshot is required for online transfer.", 400);
+  if (!settledBy) throw expenseError("Settled by is required.", 400);
+
+  const rows = await selectCurrentExpenseRows(member);
+  const totalCashIn = rows.reduce((sum, row) => sum + number(valueFor(row, ["cash_in", "Cash in"]), 0), 0);
+  const totalCashOut = rows.reduce((sum, row) => sum + number(valueFor(row, ["cash_out", "Cash out"]), 0), 0);
+  const balance = totalCashIn - totalCashOut;
+  const settleAmount = Math.abs(balance);
+  const isPositive = balance > 0;
+  const screenshot = await buildExpenseScreenshotText({
+    screenshots: payload.screenshots,
+    screenshotDataUrl: payload.screenshotDataUrl,
+    screenshotName: payload.screenshotName,
+    prefix: "settlement",
+  });
+  await insert(expensesTable(), expenseBaseRowForMember(member, {
+    reason: "Settled my account",
+    expense_date: date,
+    funds_type: fundsTypeRaw || (isOnlineTransfer ? "Online Transfer" : "Cash Payment"),
+    from_location: settledBy,
+    to_location: member.name || "",
+    cash_in: isPositive ? 0 : settleAmount,
+    cash_out: isPositive ? settleAmount : 0,
+    orders_raw: receiptNumber || null,
+    orders_names: receiptNumber || null,
+    screenshot,
+  }));
+  invalidateExpenseDataCaches();
+  return {
+    success: true,
+    totalCashIn,
+    totalCashOut,
+    balance,
+    settleAmount,
+    direction: isPositive ? "cash_out" : "cash_in",
+    source: "supabase-next",
+  };
+}
+
+export async function updateExpenseForAdmin(expenseId, payload = {}) {
+  const id = text(expenseId);
+  if (!id) throw expenseError("Missing expense ID.", 400);
+  const current = await selectById(expensesTable(), id);
+  if (!current) throw expenseError("Expense not found.", 404);
+
+  const screenshots = [];
+  const existingUrls = Array.isArray(payload.screenshotUrls)
+    ? payload.screenshotUrls
+    : String(payload.screenshotUrls || "").split(/[\n,]+/);
+  existingUrls.map(text).filter(Boolean).forEach((url, index) => screenshots.push({ name: `Receipt ${index + 1}`, url }));
+
+  const newScreenshotText = await buildExpenseScreenshotText({
+    screenshots: Array.isArray(payload.screenshots) ? payload.screenshots : [],
+    screenshotDataUrl: payload.screenshotDataUrl,
+    screenshotName: payload.screenshotName,
+    prefix: `expense-edit-${id}`,
+  });
+  if (newScreenshotText) {
+    try {
+      const parsed = JSON.parse(newScreenshotText);
+      if (Array.isArray(parsed)) parsed.forEach((entry) => { if (text(entry?.url)) screenshots.push({ name: text(entry?.name) || "Receipt", url: text(entry.url) }); });
+    } catch {}
+  }
+
+  const unique = [];
+  const seen = new Set();
+  for (const shot of screenshots) {
+    const url = text(shot?.url);
+    if (!url || seen.has(url)) continue;
+    seen.add(url);
+    unique.push({ name: text(shot?.name) || "Receipt", url });
+  }
+
+  const patch = {
+    reason: text(payload.reason) || null,
+    expense_date: text(payload.date) || null,
+    funds_type: text(payload.fundsType) || null,
+    from_location: text(payload.from) || null,
+    to_location: text(payload.to) || null,
+    cash_in: number(payload.cashIn, 0),
+    cash_out: number(payload.cashOut, 0),
+    kilometer: number(payload.kilometer, 0),
+    cash_in_from: text(payload.cashInFrom) || null,
+    screenshot: expenseScreenshotField(unique),
+  };
+  const updated = await updateById(expensesTable(), id, patch);
+  invalidateExpenseDataCaches();
+  return { success: true, item: serializeExpense(updated || {}), source: "supabase-next" };
+}
+
+export async function deleteExpenseForAdmin(expenseId) {
+  const id = text(expenseId);
+  if (!id) throw expenseError("Missing expense ID.", 400);
+  const row = await selectById(expensesTable(), id);
+  if (!row) throw expenseError("Expense not found.", 404);
+
+  const entries = parseScreenshots(valueFor(row, ["screenshot", "Screenshot", "files_media"]));
+  const paths = storagePathsFromExpenseScreenshots(entries);
+  let storage = { deleted: 0, paths: [] };
+  if (paths.length) {
+    try { storage = await deleteStorageObjects(paths); }
+    catch (error) { storage = { deleted: 0, paths, error: error?.message || String(error) }; }
+  }
+  await deleteById(expensesTable(), id);
+  invalidateExpenseDataCaches();
+  return { success: true, deletedId: id, storage, source: "supabase-next" };
 }
 

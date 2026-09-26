@@ -435,3 +435,57 @@ export async function uploadStorageObject(objectPath, buffer, {
     clearTimeout(timeout);
   }
 }
+
+export async function deleteStorageObjects(objectPaths = [], { bucketName = null } = {}) {
+  const { url, key, storageBucket } = ensureConfigured();
+  const bucket = String(bucketName || storageBucket || "").trim();
+  const prefixes = [...new Set((Array.isArray(objectPaths) ? objectPaths : [objectPaths])
+    .map((value) => String(value || "").trim().replace(/^\/+/, ""))
+    .filter(Boolean))];
+  if (!bucket || !prefixes.length) return { deleted: 0, paths: [] };
+
+  const controller = new AbortController();
+  const timeoutMs = Math.max(
+    1000,
+    Math.min(120000, Number(process.env.SUPABASE_STORAGE_TIMEOUT_MS || process.env.SUPABASE_REQUEST_TIMEOUT_MS || 20000) || 20000),
+  );
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(`${url}/storage/v1/object/${encodeURIComponent(bucket)}`, {
+      method: "DELETE",
+      signal: controller.signal,
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ prefixes }),
+    });
+    const raw = await response.text();
+    let data = null;
+    try { data = raw ? JSON.parse(raw) : null; } catch { data = raw; }
+    if (!response.ok) {
+      const error = new Error(
+        data && typeof data === "object"
+          ? (data.message || data.error || JSON.stringify(data))
+          : (raw || `Supabase Storage delete failed with status ${response.status}`),
+      );
+      error.status = response.status;
+      error.details = data;
+      throw error;
+    }
+    return { deleted: prefixes.length, paths: prefixes, data };
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      const timeoutError = new Error(`Supabase Storage delete timed out after ${timeoutMs} ms.`);
+      timeoutError.status = 504;
+      timeoutError.code = "SUPABASE_STORAGE_TIMEOUT";
+      throw timeoutError;
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+

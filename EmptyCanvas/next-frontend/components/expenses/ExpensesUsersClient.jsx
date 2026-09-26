@@ -270,13 +270,12 @@ async function requestJson(url, options = {}) {
   return body;
 }
 
-async function requestJsonWithFallback(primaryUrl, fallbackUrl, options = {}) {
-  try {
-    return await requestJson(primaryUrl, options);
-  } catch (primaryError) {
-    if (!fallbackUrl || primaryError?.message === "Login required.") throw primaryError;
-    return await requestJson(fallbackUrl, options);
-  }
+async function requestExpenseAdminMutation(action, { expenseId, adminPassword, expense } = {}) {
+  return await requestJson("/next/api/expenses/mutations-direct", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action, expenseId, adminPassword, ...(expense ? { expense } : {}) }),
+  });
 }
 
 function shouldCompressImage(file) {
@@ -392,7 +391,15 @@ function EditExpenseModal({ item, adminPassword, onClose, onSaved, notify }) {
         const dataUrl = await fileToExpenseDataUrl(file);
         if (dataUrl) screenshots.push({ name: file.name || "receipt.webp", dataUrl });
       }
-      await requestJson(`/api/expenses/user-expense/${encodeURIComponent(text(item?.id))}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ adminPassword, expense: { date: form.date, fundsType: form.fundsType, cashIn: number(form.cashIn), cashOut: number(form.cashOut), from: form.from, to: form.to, kilometer: number(form.kilometer), cashInFrom: form.cashInFrom, reason: form.reason, screenshotUrls: form.screenshotUrls.split(/[\n]+/).map((url) => url.trim()).filter(Boolean), screenshots } }) });
+      await requestExpenseAdminMutation("admin-update", {
+        expenseId: text(item?.id),
+        adminPassword,
+        expense: {
+          date: form.date, fundsType: form.fundsType, cashIn: number(form.cashIn), cashOut: number(form.cashOut),
+          from: form.from, to: form.to, kilometer: number(form.kilometer), cashInFrom: form.cashInFrom,
+          reason: form.reason, screenshotUrls: form.screenshotUrls.split(/[\n]+/).map((url) => url.trim()).filter(Boolean), screenshots,
+        },
+      });
       notify("Saved", "Expense updated successfully.", "success");
       await onSaved();
       onClose();
@@ -466,10 +473,7 @@ function UserExpensesModal({ user, onClose, onUsersRefresh, notify }) {
   const load = async () => {
     setLoading(true);
     try {
-      setPayload(await requestJsonWithFallback(
-        `/next/api/expenses/user/${encodeURIComponent(userId)}`,
-        `/api/expenses/user/${encodeURIComponent(userId)}`,
-      ));
+      setPayload(await requestJson(`/next/api/expenses/user/${encodeURIComponent(userId)}`));
     }
     catch (error) { notify("Unable to load expenses", error?.message || "Failed to load this user's expenses.", "error"); }
     finally { setLoading(false); }
@@ -528,7 +532,9 @@ function UserExpensesModal({ user, onClose, onUsersRefresh, notify }) {
     if (!ids.length) return setAction(null);
     setDeleteBusy(true);
     try {
-      for (const id of ids) await requestJson(`/api/expenses/user-expense/${encodeURIComponent(id)}`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ adminPassword: action.password }) });
+      for (const id of ids) {
+        await requestExpenseAdminMutation("admin-delete", { expenseId: id, adminPassword: action.password });
+      }
       notify("Deleted", "Expense deleted successfully.", "success");
       setAction(null);
       await refreshAfterMutation();
@@ -570,7 +576,7 @@ export default function ExpensesUsersClient({ initialUsersPayload, bootstrapWarn
   const refresh = async () => {
     setBusy(true);
     try {
-      const body = await requestJsonWithFallback("/next/api/expenses/users?fresh=1", "/api/expenses/users");
+      const body = await requestJson("/next/api/expenses/users?fresh=1");
       setUsers(Array.isArray(body?.users) ? body.users : []);
       return body;
     } catch (error) { notify("Refresh failed", error?.message || "Failed to refresh expense users.", "error"); throw error; }

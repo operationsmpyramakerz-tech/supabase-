@@ -200,13 +200,12 @@ async function requestJson(url, options = {}) {
   }
   return body;
 }
-async function requestJsonFallback(primaryUrl, fallbackUrl, options = {}) {
-  try {
-    return await requestJson(primaryUrl, options);
-  } catch (error) {
-    if (!fallbackUrl || error?.message === "Login required.") throw error;
-    return await requestJson(fallbackUrl, options);
-  }
+async function requestExpenseMutation(action, payload = {}) {
+  return await requestJson("/next/api/expenses/mutations-direct", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action, payload }),
+  });
 }
 async function fileToCompressedDataUrl(file) {
   if (!file) return "";
@@ -443,11 +442,7 @@ function CashInModal({ options, onClose, onSaved, notify }) {
     if (isTransfer && !files.length) return notify("Transfer screenshot is required.", "error");
     setBusy(true);
     try {
-      await requestJson("/api/expenses/cash-in", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, amount: number(form.amount), screenshots: await filesPayload(files) }),
-      });
+      await requestExpenseMutation("cash-in", { ...form, amount: number(form.amount), screenshots: await filesPayload(files) });
       notify("Cash in recorded successfully.", "success");
       await onSaved();
       onClose();
@@ -559,23 +554,19 @@ function CashOutModal({ fundsTypes, orderOptions, onClose, onSaved, notify }) {
     const failed = [];
     for (const draft of drafts) {
       try {
-        await requestJson("/api/expenses/cash-out", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            orderId: isManual ? "" : text(selectedOrder?.id),
-            orderIds: isManual ? [] : (Array.isArray(selectedOrder?.relationIds) ? selectedOrder.relationIds : []),
-            orderLabel: isManual ? "Other reason" : text(selectedOrder?.label),
-            orderType: isManual ? "Manual reason" : text(selectedOrder?.orderType),
-            orderDisplayId: isManual ? "" : text(selectedOrder?.orderId),
-            reason: draft.reason,
-            fundsType: draft.fundsType,
-            date,
-            from: draft.from,
-            to: draft.to,
-            ...(typeKey(draft.fundsType) === "owncar" ? { kilometer: draft.kilometer } : { amount: draft.amount }),
-            screenshots: draft.screenshots,
-          }),
+        await requestExpenseMutation("cash-out", {
+          orderId: isManual ? "" : text(selectedOrder?.id),
+          orderIds: isManual ? [] : (Array.isArray(selectedOrder?.relationIds) ? selectedOrder.relationIds : []),
+          orderLabel: isManual ? "Other reason" : text(selectedOrder?.label),
+          orderType: isManual ? "Manual reason" : text(selectedOrder?.orderType),
+          orderDisplayId: isManual ? "" : text(selectedOrder?.orderId),
+          reason: draft.reason,
+          fundsType: draft.fundsType,
+          date,
+          from: draft.from,
+          to: draft.to,
+          ...(typeKey(draft.fundsType) === "owncar" ? { kilometer: draft.kilometer } : { amount: draft.amount }),
+          screenshots: draft.screenshots,
         });
         saved += 1;
       } catch (error) { failed.push(draft); notify(error?.message || "One expense failed to save.", "error"); }
@@ -706,7 +697,7 @@ function SettleModal({ onClose, onSaved, notify }) {
     if (isTransfer && !files.length) return notify("Transfer screenshot is required.", "error");
     setBusy(true);
     try {
-      await requestJson("/api/expenses/settle", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...form, screenshots: await filesPayload(files) }) });
+      await requestExpenseMutation("settle", { ...form, screenshots: await filesPayload(files) });
       notify("Account settlement saved.", "success");
       await onSaved();
       onClose();
@@ -1111,7 +1102,7 @@ export default function ExpensesClient({ account, initialPayload = {}, initialTy
     window.setTimeout(() => setToast((current) => current?.message === message ? null : current), 4500);
   };
   const refresh = async () => {
-    const body = await requestJsonFallback("/next/api/expenses", "/api/expenses");
+    const body = await requestJson("/next/api/expenses");
     setItems(sortTransactions(body?.items));
     setLastSettledAt(body?.lastSettledAt || null);
     setLastSettledDate(body?.lastSettledDate || null);
@@ -1123,13 +1114,13 @@ export default function ExpensesClient({ account, initialPayload = {}, initialTy
 
     const load = async () => {
       if (kind === "types") {
-        const body = await requestJsonFallback("/next/api/expenses/types", "/api/expenses/types");
+        const body = await requestJson("/next/api/expenses/types");
         setExpenseTypeOptions(Array.isArray(body?.options) ? body.options : []);
       } else if (kind === "cashInPeople") {
-        const body = await requestJsonFallback("/next/api/expenses/cash-in-from/options", "/api/expenses/cash-in-from/options");
+        const body = await requestJson("/next/api/expenses/cash-in-from/options");
         setCashInPeople(Array.isArray(body?.options) ? body.options : []);
       } else if (kind === "orders") {
-        const body = await requestJsonFallback("/next/api/expenses/orders/options", "/api/expenses/orders/options");
+        const body = await requestJson("/next/api/expenses/orders/options");
         setExpenseOrderOptions(Array.isArray(body?.options) ? body.options : []);
       }
       supportLoadedRef.current[kind] = true;

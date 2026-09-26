@@ -1,8 +1,7 @@
 import { redirect } from "next/navigation";
 import AppShell from "../../../components/AppShell";
 import ExpensesUsersClient from "../../../components/expenses/ExpensesUsersClient";
-import { fetchLegacyJson } from "../../../lib/legacy-api";
-import { getLegacyAccountGate } from "../../../lib/products-auth";
+import { getDirectAccountGate } from "../../../lib/products-auth";
 import { expenseUsersSummary } from "../../../lib/expenses-data";
 
 export const dynamic = "force-dynamic";
@@ -24,13 +23,9 @@ function UnavailableState({ message, forbidden = false }) {
   );
 }
 
-async function legacyUsersPayload() {
-  const response = await fetchLegacyJson("/api/expenses/users", { timeoutMs: 30000 });
-  return response.ok && response.data ? response.data : null;
-}
 
 export default async function ExpensesUsersPage() {
-  const gate = await getLegacyAccountGate(["Expenses Users"]);
+  const gate = await getDirectAccountGate(["Expenses Users"]);
 
   if (gate.status === 401) redirect("/login?next=/next/expenses/users");
   if (gate.status === 403) {
@@ -40,7 +35,6 @@ export default async function ExpensesUsersPage() {
     return <UnavailableState message={gate.error || "The current ERP authentication service is temporarily unavailable."} />;
   }
 
-  const warnings = [];
   let usersPayload;
   try {
     usersPayload = {
@@ -49,11 +43,7 @@ export default async function ExpensesUsersPage() {
       source: "supabase-next",
     };
   } catch (directError) {
-    usersPayload = await legacyUsersPayload();
-    if (!usersPayload) {
-      return <UnavailableState message={directError?.message || "Expense-user data is temporarily unavailable."} />;
-    }
-    warnings.push("Expense users recovery path used.");
+    return <UnavailableState message={directError?.message || "Expense-user data is temporarily unavailable."} />;
   }
 
   return (
@@ -67,7 +57,7 @@ export default async function ExpensesUsersPage() {
     >
       <ExpensesUsersClient
         initialUsersPayload={usersPayload || { success: true, users: [] }}
-        bootstrapWarnings={warnings}
+        bootstrapWarnings={[]}
       />
     </AppShell>
   );
