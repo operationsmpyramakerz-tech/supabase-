@@ -18364,18 +18364,6 @@ function _eventsModuleMissingError(error) {
     : raw || 'Events request failed.';
 }
 
-app.get('/api/events/component-categories', requireAuth, requirePage(['Event Requests', 'Event Components']), async (req, res) => {
-  res.set('Cache-Control', 'no-store');
-  try {
-    if (!_sbEventsEnabled()) return res.status(500).json({ ok: false, error: 'Supabase is not configured.' });
-    const categories = await _eventsListComponentCategoryOptions();
-    return res.json({ ok: true, categories });
-  } catch (error) {
-    console.error('GET /api/events/component-categories error:', error?.details || error);
-    return res.status(error?.status || 500).json({ ok: false, error: _eventsModuleMissingError(error) });
-  }
-});
-
 app.post('/api/events/component-categories', requireAuth, requirePage('Event Components'), async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
@@ -18387,21 +18375,6 @@ app.post('/api/events/component-categories', requireAuth, requirePage('Event Com
     return res.status(201).json({ ok: true, category, categories });
   } catch (error) {
     console.error('POST /api/events/component-categories error:', error?.details || error);
-    return res.status(error?.status || 500).json({ ok: false, error: _eventsModuleMissingError(error) });
-  }
-});
-
-app.get('/api/events/components', requireAuth, requirePage(['Event Requests', 'Event Components']), async (req, res) => {
-  res.set('Cache-Control', 'no-store');
-  try {
-    if (!_sbEventsEnabled()) return res.status(500).json({ ok: false, error: 'Supabase is not configured.' });
-    const activeOnly = String(req.query?.activeOnly || '').trim() === '1';
-    const params = ['select=*', 'order=is_active.desc,name.asc', 'limit=1000'];
-    if (activeOnly) params.push('is_active=eq.true');
-    const rows = await supabaseDb.request(`/${encodeURIComponent(_sbEventComponentsTable())}?${params.join('&')}`);
-    return res.json({ ok: true, components: (Array.isArray(rows) ? rows : []).map(_eventsSerializeComponent) });
-  } catch (error) {
-    console.error('GET /api/events/components error:', error?.details || error);
     return res.status(error?.status || 500).json({ ok: false, error: _eventsModuleMissingError(error) });
   }
 });
@@ -18638,18 +18611,6 @@ app.delete('/api/events/components/:id', requireAuth, requirePage('Event Compone
   }
 });
 
-app.get('/api/events/types', requireAuth, requirePage('Event Requests'), async (req, res) => {
-  res.set('Cache-Control', 'no-store');
-  try {
-    if (!_sbEventsEnabled()) return res.status(500).json({ ok: false, error: 'Supabase is not configured.' });
-    const types = await _eventsListTypeOptions();
-    return res.json({ ok: true, types });
-  } catch (error) {
-    console.error('GET /api/events/types error:', error?.details || error);
-    return res.status(error?.status || 500).json({ ok: false, error: _eventsModuleMissingError(error) });
-  }
-});
-
 app.post('/api/events/types', requireAuth, requirePage('Event Requests'), async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
@@ -18658,18 +18619,6 @@ app.post('/api/events/types', requireAuth, requirePage('Event Requests'), async 
     return res.status(201).json({ ok: true, type, types });
   } catch (error) {
     console.error('POST /api/events/types error:', error?.details || error);
-    return res.status(error?.status || 500).json({ ok: false, error: _eventsModuleMissingError(error) });
-  }
-});
-
-app.get('/api/events/governorate-rates', requireAuth, requirePage('Event Requests'), async (req, res) => {
-  res.set('Cache-Control', 'no-store');
-  try {
-    if (!_sbEventsEnabled()) return res.status(500).json({ ok: false, error: 'Supabase is not configured.' });
-    const rates = await _eventsListGovernorateRates({ includeInactive: String(req.query?.includeInactive || '') === '1' });
-    return res.json({ ok: true, rates, canEdit: _hasEventRequestsAdminAccess(req) || _hasEventsGovernorateRatesAccess(req) });
-  } catch (error) {
-    console.error('GET /api/events/governorate-rates error:', error?.details || error);
     return res.status(error?.status || 500).json({ ok: false, error: _eventsModuleMissingError(error) });
   }
 });
@@ -18684,33 +18633,6 @@ app.patch('/api/events/governorate-rates', requireAuth, requirePage('Event Reque
     return res.json({ ok: true, rates });
   } catch (error) {
     console.error('PATCH /api/events/governorate-rates error:', error?.details || error);
-    return res.status(error?.status || 500).json({ ok: false, error: _eventsModuleMissingError(error) });
-  }
-});
-
-app.get('/api/events', requireAuth, requirePage(['Event Calendar', 'Event Requests']), async (req, res) => {
-  res.set('Cache-Control', 'no-store');
-  try {
-    if (!_sbEventsEnabled()) return res.status(500).json({ ok: false, error: 'Supabase is not configured.' });
-    const rows = await supabaseDb.selectAll(_sbEventsTable(), { limit: 2000, order: 'created_at.desc,event_code.desc' });
-    const search = _eventsText(req.query?.search, 200).toLowerCase();
-    const requestedStatus = String(req.query?.status || '').trim();
-    const status = requestedStatus && requestedStatus.toLowerCase() !== 'all'
-      ? _eventsNormalizeStatus(requestedStatus)
-      : 'all';
-    const includeArchived = String(req.query?.includeArchived || '') === '1';
-    const list = (Array.isArray(rows) ? rows : []).map(_eventsSerializeRequest).filter((event) => {
-      if (!includeArchived && event.isArchived) return false;
-      if (status && status !== 'all' && event.status !== status) return false;
-      if (!search) return true;
-      return [event.eventCode, event.eventName, event.eventType, event.eventTypeCustom, event.organizationName, event.governorate, event.requesterName]
-        .join(' ')
-        .toLowerCase()
-        .includes(search);
-    });
-    return res.json({ ok: true, events: list });
-  } catch (error) {
-    console.error('GET /api/events error:', error?.details || error);
     return res.status(error?.status || 500).json({ ok: false, error: _eventsModuleMissingError(error) });
   }
 });
@@ -18736,20 +18658,6 @@ app.get('/api/events/:id/pdf', requireAuth, requirePage(['Event Calendar', 'Even
   } catch (error) {
     console.error('GET /api/events/:id/pdf error:', error?.details || error);
     try { if (!res.headersSent) res.status(_exportErrorStatus(error)).json({ ok: false, error: error?.message || _eventsModuleMissingError(error) }); } catch {}
-  }
-});
-
-app.get('/api/events/:id', requireAuth, requirePage(['Event Calendar', 'Event Requests']), async (req, res) => {
-  res.set('Cache-Control', 'no-store');
-  try {
-    const id = _eventsUuid(req.params?.id);
-    if (!id) return res.status(400).json({ ok: false, error: 'Invalid event ID.' });
-    const row = await supabaseDb.selectById(_sbEventsTable(), id);
-    if (!row) return res.status(404).json({ ok: false, error: 'Event request was not found.' });
-    return res.json({ ok: true, event: _eventsSerializeRequest(row) });
-  } catch (error) {
-    console.error('GET /api/events/:id error:', error?.details || error);
-    return res.status(error?.status || 500).json({ ok: false, error: _eventsModuleMissingError(error) });
   }
 });
 
@@ -18953,64 +18861,6 @@ async function _pageBootstrapLoad(url, ttlMs, loader) {
   }
 }
 
-function _pageBootstrapEventsList(rows = []) {
-  return (Array.isArray(rows) ? rows : [])
-    .map(_eventsSerializeRequest)
-    .filter((event) => !event.isArchived);
-}
-
-async function _pageBootstrapEventsNew(req) {
-  const loaders = [
-    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapAccountPayload(req)),
-    _pageBootstrapLoad('/api/events/types', 5 * 60_000, async () => ({
-      ok: true,
-      types: await _eventsListTypeOptions(),
-    })),
-    _pageBootstrapLoad('/api/events/components?activeOnly=1', 2 * 60_000, async () => {
-      const rows = await supabaseDb.request(`/${encodeURIComponent(_sbEventComponentsTable())}?select=*&order=is_active.desc,name.asc&limit=1000&is_active=eq.true`);
-      return { ok: true, components: (Array.isArray(rows) ? rows : []).map(_eventsSerializeComponent) };
-    }),
-    _pageBootstrapLoad('/api/events', 20_000, async () => {
-      const rows = await supabaseDb.selectAll(_sbEventsTable(), { limit: 2000, order: 'created_at.desc,event_code.desc' });
-      return { ok: true, events: _pageBootstrapEventsList(rows) };
-    }),
-    _pageBootstrapLoad('/api/events/governorate-rates?includeInactive=0', 60_000, async () => ({
-      ok: true,
-      rates: await _eventsListGovernorateRates({ includeInactive: false }),
-      canEdit: _hasEventRequestsAdminAccess(req) || _hasEventsGovernorateRatesAccess(req),
-    })),
-  ];
-
-  const editId = _eventsUuid(req.query?.edit || req.query?.eventId || req.query?.event_id);
-  if (editId) {
-    loaders.push(_pageBootstrapLoad(`/api/events/${encodeURIComponent(editId)}`, 15_000, async () => {
-      const row = await supabaseDb.selectById(_sbEventsTable(), editId);
-      if (!row) {
-        const error = new Error('Event request was not found.');
-        error.status = 404;
-        throw error;
-      }
-      return { ok: true, event: _eventsSerializeRequest(row) };
-    }));
-  }
-
-  return Promise.all(loaders);
-}
-
-async function _pageBootstrapEventsComponents(req) {
-  return Promise.all([
-    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapAccountPayload(req)),
-    _pageBootstrapLoad('/api/events/components', 2 * 60_000, async () => {
-      const rows = await supabaseDb.request(`/${encodeURIComponent(_sbEventComponentsTable())}?select=*&order=is_active.desc,name.asc&limit=1000`);
-      return { ok: true, components: (Array.isArray(rows) ? rows : []).map(_eventsSerializeComponent) };
-    }),
-    _pageBootstrapLoad('/api/events/component-categories', 5 * 60_000, async () => ({
-      ok: true,
-      categories: await _eventsListComponentCategoryOptions(),
-    })),
-  ]);
-}
-
 function _pageBootstrapRequestOrigin(req) {
   const configured = String(process.env.PUBLIC_APP_ORIGIN || process.env.APP_ORIGIN || '').trim();
   if (configured) {
@@ -19189,13 +19039,6 @@ async function _pageBootstrapTaskManagement(req, view) {
     _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapAccountPayload(req)),
     _pageBootstrapLoad(`/api/task-management/meta?${query}`, 30_000, () => _pageBootstrapFetchExistingRoute(req, `/api/task-management/meta?${query}`, 20_000)),
     _pageBootstrapLoad(`/api/task-management?${query}`, 10_000, () => _pageBootstrapFetchExistingRoute(req, `/api/task-management?${query}`, 35_000)),
-  ]);
-}
-
-async function _pageBootstrapEvents(req) {
-  return Promise.all([
-    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapAccountPayload(req)),
-    _pageBootstrapLoad('/api/events', 20_000, () => _pageBootstrapFetchExistingRoute(req, '/api/events', 25_000)),
   ]);
 }
 
@@ -19385,25 +19228,7 @@ app.get('/api/page-bootstrap', requireAuth, async (req, res) => {
   try {
     let results = [];
 
-    if (scope === 'events-new') {
-      if (!_pageBootstrapHasPageAccess(req, 'Event Requests')) return _pageAccessDeniedResponse(req, res);
-      if (!_sbEventsEnabled()) return res.json({ ok: true, scope, resources: [], partial: true, unsupported: true, generatedAt: Date.now() });
-      results = await _pageBootstrapEventsNew(req);
-    } else if (scope === 'events-components') {
-      if (!_pageBootstrapHasPageAccess(req, 'Event Components')) return _pageAccessDeniedResponse(req, res);
-      if (!_sbEventsEnabled()) return res.json({ ok: true, scope, resources: [], partial: true, unsupported: true, generatedAt: Date.now() });
-      results = await _pageBootstrapEventsComponents(req);
-    } else if (scope === 'events-calendar') {
-      if (!_pageBootstrapHasPageAccess(req, 'Event Calendar')) return _pageAccessDeniedResponse(req, res);
-      if (!_sbEventsEnabled()) return res.json({ ok: true, scope, resources: [], partial: true, unsupported: true, generatedAt: Date.now() });
-      results = await _pageBootstrapEvents(req);
-    } else if (scope === 'events') {
-      const canAccessEvents = _pageBootstrapHasPageAccess(req, 'Event Requests') ||
-        _pageBootstrapHasPageAccess(req, 'Event Calendar');
-      if (!canAccessEvents) return _pageAccessDeniedResponse(req, res);
-      if (!_sbEventsEnabled()) return res.json({ ok: true, scope, resources: [], partial: true, unsupported: true, generatedAt: Date.now() });
-      results = await _pageBootstrapEvents(req);
-    } else if (scope === 'notifications') {
+    if (scope === 'notifications') {
       results = await _pageBootstrapNotifications(req);
     } else if (scope === 'home') {
       results = await _pageBootstrapHome(req);

@@ -1,6 +1,6 @@
 import "server-only";
 
-import { getDirectSessionAccountGate } from "./direct-session-account";
+import { getDirectAccountGate } from "./products-auth";
 import { select, selectAll, selectById } from "./supabase-rest";
 
 const EVENT_LIST_CACHE_TTL_MS = 1_500;
@@ -571,7 +571,7 @@ export async function loadDirectEventsPageData({ mode = "events", editId = "" } 
   }[mode];
   if (!config) return null;
 
-  const gate = await getDirectSessionAccountGate(config.pages);
+  const gate = await getDirectAccountGate(config.pages);
   if (!gate) return null;
   if (!gate.ok) return { ok: false, status: gate.status, error: gate.error, account: gate.account || null, source: "direct-session" };
 
@@ -609,8 +609,14 @@ export async function loadDirectEventsPageData({ mode = "events", editId = "" } 
       warnings: [],
       source: "supabase-next",
     };
-  } catch {
-    return null;
+  } catch (error) {
+    return {
+      ok: false,
+      status: Number(error?.status) || 500,
+      error: eventsDataError(error),
+      account: gate.account || null,
+      source: "supabase-next",
+    };
   }
 }
 

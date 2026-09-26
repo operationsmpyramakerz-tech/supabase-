@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { listEvents, eventsDataError } from "../../../lib/events-data";
-import { fetchLegacyJson } from "../../../lib/legacy-api";
-import { getLegacyAccountGate } from "../../../lib/products-auth";
+import { getDirectAccountGate } from "../../../lib/products-auth";
 import { measurePerformance } from "../../../lib/performance-profiler";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +14,7 @@ function json(payload, init = {}) {
 }
 
 async function GETImpl(request) {
-  const gate = await getLegacyAccountGate(["Event Calendar", "Event Requests"]);
+  const gate = await getDirectAccountGate(["Event Calendar", "Event Requests"]);
   if (!gate.ok) return json({ ok: false, error: gate.error || "Authentication required." }, { status: gate.status || 503 });
 
   const url = new URL(request.url);
@@ -28,14 +27,8 @@ async function GETImpl(request) {
     const events = await listEvents({ includeArchived, status, search, force });
     return json({ ok: true, events, source: "supabase-next" });
   } catch (error) {
-    console.warn("[events] direct list failed; using Legacy fallback:", error?.message || error);
-    const query = new URLSearchParams();
-    if (includeArchived) query.set("includeArchived", "1");
-    if (status && status !== "all") query.set("status", status);
-    if (search) query.set("search", search);
-    const legacy = await fetchLegacyJson(`/api/events${query.toString() ? `?${query.toString()}` : ""}`, { timeoutMs: 25_000, fresh: force });
-    if (legacy.ok && legacy.data) return json({ ...legacy.data, source: legacy.data?.source || "legacy" }, { status: legacy.status || 200 });
-    return json({ ok: false, events: [], error: legacy.error || legacy.data?.error || eventsDataError(error) }, { status: legacy.status || error?.status || 502 });
+    console.error("[events] direct list failed:", error?.details || error?.message || error);
+    return json({ ok: false, events: [], error: eventsDataError(error) }, { status: error?.status || 502 });
   }
 }
 

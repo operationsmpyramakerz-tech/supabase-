@@ -407,7 +407,7 @@ export default function EventRequestFormClient({
         requestJson(`/next/api/events/types?_ts=${Date.now()}`),
         requestJson(`/next/api/events/components?activeOnly=1&_ts=${Date.now()}`),
         requestJson(`/next/api/events?_ts=${Date.now()}`),
-        requestJson(`/api/events/governorate-rates?includeInactive=0&_ts=${Date.now()}`),
+        requestJson(`/next/api/events/governorate-rates?includeInactive=0&_ts=${Date.now()}`),
       ]);
       setTypes(normalizeTypes(typePayload?.types));
       setComponents(Array.isArray(componentPayload?.components) ? componentPayload.components : []);
@@ -518,7 +518,7 @@ export default function EventRequestFormClient({
     if (viewOnly) return notify("info", "View access", "Your account cannot edit transport rates.");
     if (ratesAuthorized || accessLevel === "admin") {
       try {
-        const payloadData = await requestJson(`/api/events/governorate-rates?includeInactive=1&_ts=${Date.now()}`);
+        const payloadData = await requestJson(`/next/api/events/governorate-rates?includeInactive=1&_ts=${Date.now()}`);
         setRatesDraft((Array.isArray(payloadData?.rates) ? payloadData.rates : []).map((rate, index) => ({ ...rate, key: text(rate.id) || makeKey(`rate-${index}`) })));
       } catch {
         setRatesDraft(rates.map((rate, index) => ({ ...rate, key: text(rate.id) || makeKey(`rate-${index}`) })));
@@ -545,7 +545,7 @@ export default function EventRequestFormClient({
       });
       setRatesAuthorized(true);
       setShowRateAuth(false);
-      const payloadData = await requestJson(`/api/events/governorate-rates?includeInactive=1&_ts=${Date.now()}`);
+      const payloadData = await requestJson(`/next/api/events/governorate-rates?includeInactive=1&_ts=${Date.now()}`);
       setRatesDraft((Array.isArray(payloadData?.rates) ? payloadData.rates : []).map((rate, index) => ({ ...rate, key: text(rate.id) || makeKey(`rate-${index}`) })));
       setShowRates(true);
     } catch (authError) {

@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { listEventTypes, eventsDataError } from "../../../../lib/events-data";
+import {
+  eventsDataError,
+  hasEventRequestsAdminAccess,
+  listGovernorateRates,
+} from "../../../../lib/events-data";
 import { getDirectAccountGate } from "../../../../lib/products-auth";
 
 export const dynamic = "force-dynamic";
@@ -13,11 +17,18 @@ export async function GET(request) {
   const gate = await getDirectAccountGate(["Event Requests"]);
   if (!gate.ok) return json({ ok: false, error: gate.error || "Authentication required." }, { status: gate.status || 503 });
   const url = new URL(request.url);
+  const includeInactive = url.searchParams.get("includeInactive") === "1";
   const force = url.searchParams.has("_ts") || url.searchParams.get("_fresh") === "1";
   try {
-    return json({ ok: true, types: await listEventTypes({ force }), source: "supabase-next" });
+    const rates = await listGovernorateRates({ includeInactive, force });
+    return json({
+      ok: true,
+      rates,
+      canEdit: hasEventRequestsAdminAccess(gate.account || {}),
+      source: "supabase-next",
+    });
   } catch (error) {
-    console.error("[events] direct types failed:", error?.details || error?.message || error);
-    return json({ ok: false, types: [], error: eventsDataError(error) }, { status: error?.status || 502 });
+    console.error("[events] direct governorate rates failed:", error?.details || error?.message || error);
+    return json({ ok: false, rates: [], error: eventsDataError(error) }, { status: error?.status || 502 });
   }
 }
