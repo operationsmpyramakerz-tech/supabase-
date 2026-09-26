@@ -8,7 +8,7 @@ import {
   loadStocktakingFolderSummariesRpc,
   noteStocktakingFolderSummaryRpcError,
 } from "./stocktaking-folder-summary-rpc";
-import { getSupabaseConfig, insert, rpc, selectAll, selectById, storagePublicUrl, updateById } from "./supabase-rest";
+import { getSupabaseConfig, insert, rpc, select, selectAll, selectById, storagePublicUrl, supabaseRequest, updateById } from "./supabase-rest";
 import { verifyPageAdminPasswordDirect } from "./order-action-auth";
 
 const STOCK_ROWS_CACHE_TTL_MS = 20_000;
@@ -1108,3 +1108,257 @@ export async function updateStocktakingInventoryValue(account = {}, payload = {}
   return { ok: true, source: "supabase-next", id: stockId, column, value, row: updated || null };
 }
 
+
+
+function stocktakingPageRow(row = {}) {
+  const values = [
+    valueFor(row, ["page_key", "pageKey"]),
+    valueFor(row, ["page_name", "pageName", "name", "Name"]),
+    valueFor(row, ["route_path", "routePath", "path", "Path"]),
+  ].map(text).filter(Boolean);
+  return values.some((value) => canonical(value) === "stocktaking" || /(^|\/)stocktaking(?:$|[/?#])/i.test(value));
+}
+
+async function stocktakingOpenApiKeys() {
+  try {
+    const openApi = await supabaseRequest("/", {
+      headers: { Accept: "application/openapi+json" },
+      profileName: "stocktaking.openapi-schema",
+    });
+    const schemas = openApi?.definitions || openApi?.components?.schemas || {};
+    const wanted = canonical(stocktakingTable());
+    for (const [schemaName, schema] of Object.entries(schemas || {})) {
+      const normalized = canonical(String(schemaName || "").replace(/^public[._-]/i, ""));
+      if (normalized !== wanted && !normalized.endsWith(wanted)) continue;
+      const props = schema?.properties || schema?.items?.properties || {};
+      const keys = Object.keys(props || {}).filter(Boolean);
+      if (keys.length) return keys;
+    }
+  } catch {}
+  return [];
+}
+
+async function stocktakingSchemaKeys({ fresh = false } = {}) {
+  const sampled = await loadStockSchemaKeys({ fresh }).catch(() => []);
+  const openApi = await stocktakingOpenApiKeys().catch(() => []);
+  return [...new Set([...(sampled || []), ...(openApi || [])].map(text).filter(Boolean))];
+}
+
+async function ensureGeneratedStocktakingColumnForMember(memberRow = {}, knownKeys = []) {
+  const memberId = text(valueFor(memberRow, ["id", "ID"]));
+  const memberName = text(valueFor(memberRow, ["name", "Name", "full_name", "Full Name"])) || "Team member";
+  if (!memberId) throw stocktakingMutationError("Selected Stocktaking user was not found.", 404);
+
+  const memberKeys = Object.keys(memberRow || {});
+  const schoolKey = findKey(memberKeys, ["School", "school", "school_name", "Stocktaking Column", "stocktaking_column", "Done Column", "done_column"]);
+  if (!schoolKey) throw stocktakingMutationError("Team Members table does not have a Stocktaking/School column.", 500);
+
+  const configuredLabel = text(valueFor(memberRow, ["School", "school", "school_name", "Stocktaking Column", "stocktaking_column", "Done Column", "done_column"]));
+  const existingColumn = configuredLabel ? findQuantityColumnFromKeys(knownKeys, configuredLabel) : "";
+  if (existingColumn) {
+    return {
+      member: { id: memberId, name: memberName, stocktakingColumn: configuredLabel },
+      memberRow,
+      quantityColumn: existingColumn,
+      columnPrepared: false,
+    };
+  }
+
+  const generatedLabel = `${memberName} Stock`;
+  const generatedColumn = stockColumnKey(generatedLabel);
+  if (!/^[a-z][a-z0-9_]{1,62}$/.test(generatedColumn)) {
+    throw stocktakingMutationError("Could not generate a valid Stocktaking column for this user.", 400);
+  }
+
+  try {
+    await rpc("add_stocktaking_school_column", { column_name: generatedColumn }, { profileName: "stocktaking.prepare-member-column" });
+  } catch (error) {
+    if (/function .*add_stocktaking_school_column|Could not find the function|PGRST202|schema cache/i.test(String(error?.message || ""))) {
+      throw stocktakingMutationError("Supabase helper function is not installed. Run supabase_user_access_helpers.sql once, then try again.", 500);
+    }
+    throw error;
+  }
+
+  await updateById(teamMembersTable(), memberId, { [schoolKey]: generatedLabel });
+  invalidateStocktakingReadCaches();
+  return {
+    member: { id: memberId, name: memberName, stocktakingColumn: generatedLabel },
+    memberRow: { ...memberRow, [schoolKey]: generatedLabel },
+    quantityColumn: generatedColumn,
+    columnPrepared: true,
+  };
+}
+
+async function ensureStocktakingPageAccess(member = {}, grantedBy = "") {
+  const memberId = text(member?.id);
+  if (!memberId) throw stocktakingMutationError("Selected Stocktaking user was not found.", 404);
+
+  const pages = await selectAll("app_pages", { limit: 1000, order: "sort_order.asc", profileName: "stocktaking.prepare-access-pages" });
+  const page = (pages || []).find(stocktakingPageRow);
+  if (!page) throw stocktakingMutationError("Stocktaking is not available in the application page-access catalog.", 500);
+  const pageId = valueFor(page, ["id", "page_id", "pageId"]);
+  if (pageId === null || typeof pageId === "undefined" || text(pageId) === "") {
+    throw stocktakingMutationError("Stocktaking page access ID is missing.", 500);
+  }
+
+  let rows = [];
+  try {
+    rows = await select("team_member_page_access", {
+      select: "*",
+      team_member_id: `eq.${memberId}`,
+      page_id: `eq.${pageId}`,
+      limit: "10",
+    }, { profileName: "stocktaking.prepare-access-existing" });
+  } catch {
+    rows = [];
+  }
+  const existing = Array.isArray(rows) ? rows[0] || null : null;
+  const enabledValue = valueFor(existing || {}, ["is_enabled", "isEnabled"]);
+  const enabled = enabledValue === true || ["true", "1", "yes", "on"].includes(text(enabledValue).toLowerCase());
+  if (enabled) return { accessGranted: false };
+
+  const patch = {
+    team_member_id: memberId,
+    team_member_name: text(member?.name) || null,
+    page_id: Number.isFinite(Number(pageId)) ? Number(pageId) : pageId,
+    access_level: text(valueFor(existing || {}, ["access_level", "accessLevel"])) || "edit",
+    is_enabled: true,
+    granted_by: text(grantedBy) || text(valueFor(existing || {}, ["granted_by", "grantedBy"])) || null,
+    notes: valueFor(existing || {}, ["notes"]) ?? null,
+  };
+
+  const existingId = text(valueFor(existing || {}, ["id", "ID"]));
+  if (existingId) {
+    await updateById("team_member_page_access", existingId, patch);
+  } else if (existing) {
+    await supabaseRequest(
+      `/team_member_page_access?team_member_id=eq.${encodeURIComponent(memberId)}&page_id=eq.${encodeURIComponent(pageId)}`,
+      { method: "PATCH", headers: { Prefer: "return=minimal" }, body: patch, profileName: "stocktaking.prepare-access-update" },
+    );
+  } else {
+    await insert("team_member_page_access", patch);
+  }
+  return { accessGranted: true };
+}
+
+async function prepareStocktakingTargetMember(memberId, grantedBy = "") {
+  const id = text(memberId);
+  if (!id) throw stocktakingMutationError("Stock user is required.", 400);
+  const memberRow = await selectById(teamMembersTable(), id, { profileName: "stocktaking.prepare-member" });
+  if (!memberRow) throw stocktakingMutationError("Selected Stocktaking user was not found.", 404);
+
+  const keys = await stocktakingSchemaKeys({ fresh: true });
+  const preparedColumn = await ensureGeneratedStocktakingColumnForMember(memberRow, keys);
+  const access = await ensureStocktakingPageAccess(preparedColumn.member, grantedBy);
+  return { ...preparedColumn, ...access };
+}
+
+function validExternalReceiptPhotos(value = []) {
+  const out = [];
+  const seen = new Set();
+  for (const [index, entry] of (Array.isArray(value) ? value : []).entries()) {
+    const url = text(entry?.url);
+    if (!url || seen.has(url)) continue;
+    let parsed;
+    try { parsed = new URL(url); } catch { continue; }
+    if (!/^https?:$/i.test(parsed.protocol)) continue;
+    seen.add(url);
+    out.push({ name: text(entry?.name || entry?.filename) || `Receipt ${index + 1}`, url });
+  }
+  return out;
+}
+
+export async function sendProductEntriesToStocktaking({
+  memberId = "",
+  grantedBy = "",
+  receiptNumber = "",
+  receipts = [],
+  entries = [],
+} = {}) {
+  const cleanReceiptNumber = text(receiptNumber);
+  if (!cleanReceiptNumber) throw stocktakingMutationError("Receipt number is required.", 400);
+  const cleanReceipts = validExternalReceiptPhotos(receipts);
+  if (!cleanReceipts.length) throw stocktakingMutationError("Upload at least one receipt image before confirming.", 400);
+  const cleanEntries = (Array.isArray(entries) ? entries : []).filter((entry) => entry && Number(entry.quantity) > 0);
+  if (!cleanEntries.length) throw stocktakingMutationError("There are no components to send to Stocktaking.", 400);
+
+  const prepared = await prepareStocktakingTargetMember(memberId, grantedBy);
+  const member = prepared.member;
+  let keys = await stocktakingSchemaKeys({ fresh: true });
+  if (prepared.quantityColumn && !keys.includes(prepared.quantityColumn)) keys = [...keys, prepared.quantityColumn];
+  const quantityColumn = findQuantityColumnFromKeys(keys, member.stocktakingColumn) || prepared.quantityColumn;
+  if (!quantityColumn) throw stocktakingMutationError(`Could not resolve the Stocktaking column for ${member.name}.`, 400);
+
+  const headerKey = findKey(keys, ["header", "Header", "stock_header", "Stock Header", "main_header", "Main Header"]) || "header";
+  const tagKey = findKey(keys, ["tag", "Tag", "tags", "Tags"]) || "tag";
+  const receiptNumberKey = findKey(keys, ["receipt_number", "Receipt Number", "receipt_no", "Receipt No", "receipt", "Receipt"]) || "receipt_number";
+  const receiptPhotosKey = findKey(keys, ["receipt_photos", "Receipt Photos", "receipt_photo", "Receipt Photo", "receipt_images", "Receipt Images", "receipt_image", "Receipt Image", "order_receipt", "Order Receipt", "attachments", "Attachments", "files", "Files"]);
+  if (!receiptPhotosKey) {
+    throw stocktakingMutationError("Stocktaking is missing the receipt_photos column. Run supabase_stocktaking_receipt_photos.sql once in Supabase SQL Editor, then try Send to stock again.", 400);
+  }
+
+  const sourceProposalIdKey = findKey(keys, ["source_proposal_id", "Source Proposal ID", "proposal_id", "Proposal ID"]);
+  const sourceProposalNameKey = findKey(keys, ["source_proposal", "Source Proposal", "proposal_name", "Proposal Name"]);
+  const sourceKitIdKey = findKey(keys, ["source_kit_id", "Source Kit ID", "kit_id", "Kit ID"]);
+  const sourceKitNameKey = findKey(keys, ["source_kit", "Source Kit", "kit_name", "Kit Name"]);
+  const targetMemberIdKey = findKey(keys, ["team_member_id", "Team Member ID", "user_id", "User ID"]);
+  const targetMemberNameKey = findKey(keys, ["team_member_name", "Team Member Name", "user_name", "User Name", "username", "Username"]);
+  const receiptJson = JSON.stringify(cleanReceipts);
+  const created = [];
+  const tags = new Set();
+  let totalQuantity = 0;
+
+  const setField = (row, aliases, value, fallbackKey = "") => {
+    if (value === null || typeof value === "undefined" || value === "") return "";
+    const key = findKey(keys, aliases) || (!keys.length ? fallbackKey : "");
+    if (!key) return "";
+    row[key] = value;
+    return key;
+  };
+
+  for (const entry of cleanEntries) {
+    const quantity = Math.max(1, Math.round(Number(entry.quantity) || 1));
+    const productName = text(entry.productName || entry.name) || "Untitled Product";
+    const tag = text(entry.tag) || "Direct / legacy components";
+    const row = {
+      [headerKey]: "Main stock",
+      [tagKey]: tag,
+      [quantityColumn]: quantity,
+      [receiptNumberKey]: cleanReceiptNumber,
+      [receiptPhotosKey]: receiptJson,
+    };
+    tags.add(tag);
+    totalQuantity += quantity;
+
+    const nameKey = setField(row, ["name", "Name", "component", "Component"], productName, "name");
+    setField(row, ["product_name", "Product Name", "product", "Product", "products", "Products"], productName, nameKey ? "" : "product_name");
+    setField(row, ["product_url", "Product URL", "url", "URL", "item_url", "Item URL"], entry.productUrl || null, "product_url");
+    setField(row, ["id_code", "ID Code", "code", "Code"], entry.displayId || entry.idCode || null, "id_code");
+    if (Number.isFinite(Number(entry.unitPrice))) {
+      setField(row, ["unity_price", "unit_price", "Unity Price", "Unit Price", "one_piece_price"], Number(entry.unitPrice), "unit_price");
+    }
+
+    if (sourceProposalIdKey && text(entry.sourceProposalId)) row[sourceProposalIdKey] = text(entry.sourceProposalId);
+    if (sourceProposalNameKey && text(entry.sourceProposalName)) row[sourceProposalNameKey] = text(entry.sourceProposalName);
+    if (sourceKitIdKey && text(entry.sourceKitId)) row[sourceKitIdKey] = text(entry.sourceKitId);
+    if (sourceKitNameKey && text(entry.sourceKitName)) row[sourceKitNameKey] = text(entry.sourceKitName);
+    if (targetMemberIdKey) row[targetMemberIdKey] = member.id;
+    if (targetMemberNameKey) row[targetMemberNameKey] = member.name;
+
+    const inserted = await insertStocktakingRowSafe(row, [quantityColumn, receiptNumberKey, receiptPhotosKey]);
+    created.push(inserted || row);
+  }
+
+  invalidateStocktakingReadCaches();
+  return {
+    count: created.length,
+    totalQuantity,
+    member,
+    stocktakingColumn: quantityColumn,
+    header: "Main stock",
+    tags: [...tags],
+    receiptCount: cleanReceipts.length,
+    accessGranted: !!prepared.accessGranted,
+    columnPrepared: !!prepared.columnPrepared,
+  };
+}

@@ -65,6 +65,26 @@
       "destination": "/next/api/products/proposals/receipt-upload"
     },
     {
+      "source": "/api/products/kits/:id/send-to-stock",
+      "destination": "/next/api/products/kits/:id/send-to-stock"
+    },
+    {
+      "source": "/api/products/proposals/:id/make-order",
+      "destination": "/next/api/products/proposals/:id/make-order"
+    },
+    {
+      "source": "/api/products/proposals/:id/send-to-stock",
+      "destination": "/next/api/products/proposals/:id/send-to-stock"
+    },
+    {
+      "source": "/api/products/proposals/:id/items/by-kit",
+      "destination": "/next/api/products/proposals/:id/items/by-kit"
+    },
+    {
+      "source": "/api/products/proposals/combine/save",
+      "destination": "/next/api/products/proposals/combine/save"
+    },
+    {
       "source": "/api/products/proposals/:id/copy",
       "destination": "/next/api/products/proposals/:id/copy"
     },

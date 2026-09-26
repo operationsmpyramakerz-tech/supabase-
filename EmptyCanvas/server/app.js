@@ -18119,23 +18119,6 @@ app.get(
   },
 );
 
-app.post(
-  "/api/products/proposals/combine/save",
-  requireAuth,
-  requirePage(["Proposals", "Products"]),
-  async (req, res) => {
-    res.set("Cache-Control", "no-store");
-    try {
-      if (!_sbProductsEnabled()) return res.status(500).json({ ok: false, error: "Supabase Products table is not configured." });
-      const result = await _sbSaveCombinedProductProposal(req.body || {}, req);
-      return res.status(201).json({ ok: true, source: "supabase", ...result });
-    } catch (error) {
-      console.error("POST /api/products/proposals/combine/save error:", error?.details || error);
-      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to save combined proposal." });
-    }
-  },
-);
-
 app.get(
   "/api/products/proposals/:proposalId/pdf",
   requireAuth,
@@ -18168,42 +18151,6 @@ app.get(
         return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to download proposal Excel." });
       }
       try { res.end(); } catch {}
-    }
-  },
-);
-
-app.post(
-  "/api/products/proposals/:proposalId/send-to-stock",
-  requireAuth,
-  requirePage(["Proposals", "Products"]),
-  async (req, res) => {
-    res.set("Cache-Control", "no-store");
-    try {
-      if (!_sbProductsEnabled()) return res.status(500).json({ ok: false, error: "Supabase Products table is not configured." });
-      if (!_sbStocktakingEnabled()) return res.status(500).json({ ok: false, error: "Supabase Stocktaking table is not configured." });
-      const result = await _sbSendProposalToStocktaking(req.params.proposalId, req.body || {}, req);
-      return res.status(201).json({ ok: true, source: "supabase", ...result });
-    } catch (error) {
-      console.error("POST /api/products/proposals/:proposalId/send-to-stock error:", error?.details || error?.body || error);
-      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to send proposal to Stocktaking." });
-    }
-  },
-);
-
-app.post(
-  "/api/products/proposals/:proposalId/make-order",
-  requireAuth,
-  requirePage(["Proposals", "Products"]),
-  async (req, res) => {
-    res.set("Cache-Control", "no-store");
-    try {
-      if (!_sbOrdersEnabled()) return res.status(500).json({ ok: false, error: "Supabase Orders table is not configured." });
-      if (!await _requireProductsAdminPassword(req, res)) return;
-      const result = await _sbCreateOrderFromProposal(req.params.proposalId, req.body || {}, req);
-      return res.status(201).json({ ok: true, source: "supabase", ...result });
-    } catch (error) {
-      console.error("POST /api/products/proposals/:proposalId/make-order error:", error?.details || error);
-      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to create order from proposal." });
     }
   },
 );
@@ -18256,23 +18203,6 @@ app.post(
     } catch (error) {
       console.error("POST /api/products/proposals/:proposalId/items/by-tag error:", error?.details || error);
       return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to add products by tag." });
-    }
-  },
-);
-
-app.post(
-  "/api/products/proposals/:proposalId/items/by-kit",
-  requireAuth,
-  requirePage(["Proposals", "Products"]),
-  async (req, res) => {
-    res.set("Cache-Control", "no-store");
-    try {
-      if (!_sbProductsEnabled()) return res.status(500).json({ ok: false, error: "Supabase Products table is not configured." });
-      const detail = await _sbAddProductProposalItemsByKit(req.params.proposalId, req.body || {}, req);
-      return res.status(201).json({ ok: true, source: "supabase", ...detail });
-    } catch (error) {
-      console.error("POST /api/products/proposals/:proposalId/items/by-kit error:", error?.details || error);
-      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to add kit to proposal." });
     }
   },
 );
@@ -18426,24 +18356,6 @@ app.get(
       console.error("GET /api/products/kits/:kitId/excel error:", error?.details || error);
       if (!res.headersSent) return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to download kit Excel." });
       try { res.end(); } catch {}
-    }
-  },
-);
-
-app.post(
-  "/api/products/kits/:kitId/send-to-stock",
-  requireAuth,
-  requirePage(["Kits", "Proposals", "Products"]),
-  async (req, res) => {
-    res.set("Cache-Control", "no-store");
-    try {
-      if (!_sbProductsEnabled()) return res.status(500).json({ ok: false, error: "Supabase Products table is not configured." });
-      if (!_sbStocktakingEnabled()) return res.status(500).json({ ok: false, error: "Supabase Stocktaking table is not configured." });
-      const result = await _sbSendProposalToStocktaking(`kit:${req.params.kitId}`, req.body || {}, req);
-      return res.status(201).json({ ok: true, source: "supabase", ...result });
-    } catch (error) {
-      console.error("POST /api/products/kits/:kitId/send-to-stock error:", error?.details || error?.body || error);
-      return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to send kit to Stocktaking." });
     }
   },
 );

@@ -1,30 +1,17 @@
 import { NextResponse } from "next/server";
-import { fetchLegacyJson } from "../../../../../../lib/legacy-api";
+import { sendKitToStock } from "../../../../../../lib/proposal-kit-service";
+import { errorResponse, gateResponse, kitGate, requestBody } from "../../../../../../lib/proposal-kit-api";
 
 export const dynamic = "force-dynamic";
 
-function jsonFromLegacy(response, fallbackMessage) {
-  const status = Number(response?.status || 0) || 502;
-  const data = response?.data && typeof response.data === "object"
-    ? response.data
-    : { ok: false, error: response?.error || fallbackMessage };
-  return NextResponse.json(data, { status });
-}
-
 export async function POST(request, { params }) {
+  const gate = await kitGate();
+  if (!gate.ok) return gateResponse(gate);
   try {
     const { id } = await params;
-    const body = await request.json().catch(() => ({}));
-    const response = await fetchLegacyJson(`/api/products/kits/${encodeURIComponent(id)}/send-to-stock`, {
-      method: "POST",
-      body,
-      timeoutMs: 60000,
-    });
-    return jsonFromLegacy(response, "Failed to send kit to Stocktaking.");
+    const result = await sendKitToStock(id, await requestBody(request), gate.account);
+    return NextResponse.json({ ok: true, source: "supabase-next", ...result }, { status: 201 });
   } catch (error) {
-    return NextResponse.json(
-      { ok: false, error: error?.message || "Failed to send kit to Stocktaking." },
-      { status: 500 },
-    );
+    return errorResponse(error, "Failed to send kit to Stocktaking.");
   }
 }

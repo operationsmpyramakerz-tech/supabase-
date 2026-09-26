@@ -1703,7 +1703,7 @@ export default function ProposalsClient({
         syncProposal(body.proposal);
         notify("Proposal name updated.");
       } else if (dialog.mode === "combine") {
-        const body = await requestJson("/api/products/proposals/combine/save", {
+        const body = await requestJson("/next/api/products/proposals/combine/save", {
           method: "POST",
           body: JSON.stringify({ name, proposalIds: selectedIds, combineLogic }),
         });
@@ -1849,7 +1849,7 @@ export default function ProposalsClient({
       if (mode === "kit") {
         let body = null;
         for (const entry of selections) {
-          body = await requestJson(`/api/products/proposals/${encodeURIComponent(proposal.id)}/items/by-kit`, {
+          body = await requestJson(`/next/api/products/proposals/${encodeURIComponent(proposal.id)}/items/by-kit`, {
             method: "POST",
             body: JSON.stringify({
               kitId: entry.selected,

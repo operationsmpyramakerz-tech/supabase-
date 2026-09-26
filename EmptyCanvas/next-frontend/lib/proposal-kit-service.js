@@ -9,6 +9,8 @@ import {
   updateById,
 } from "./supabase-rest";
 import { verifyPageAdminPasswordDirect } from "./order-action-auth";
+import { getProductsList } from "./products-service";
+import { sendProductEntriesToStocktaking } from "./stocktaking-data";
 import {
   canUseKitHeadersRpc,
   canUseProposalHeadersRpc,
@@ -979,3 +981,393 @@ export async function deleteKitItem(kitId, itemId, body, account) {
   invalidateProposalKitReadCaches("kits");
   return await getKit(kitId, account);
 }
+
+
+function normalizedCombineLogic(value) {
+  const raw = text(value).toLowerCase().replace(/[\s_-]+/g, "-");
+  if (["max", "max-logic"].includes(raw)) return "max";
+  if (["min", "min-logic"].includes(raw)) return "min";
+  if (["separate", "separate-logic"].includes(raw)) return "separate";
+  return "add";
+}
+
+function proposalIds(value) {
+  const raw = Array.isArray(value) ? value : text(value).split(",");
+  const seen = new Set();
+  const out = [];
+  for (const item of raw) {
+    const id = text(item);
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
+function sourceKitsForTotal(value, totalQuantity) {
+  const target = positiveInt(totalQuantity);
+  const sources = sourceKits(value);
+  if (!sources.length) return [{ kitId: "", kitName: "Direct / legacy components", quantity: target, order: 0 }];
+  const currentTotal = sources.reduce((sum, source) => sum + positiveInt(source?.quantity), 0);
+  if (currentTotal === target) return sources;
+  if (sources.length === 1) return [{ ...sources[0], quantity: target }];
+
+  const scaled = sources.map((source, index) => {
+    const raw = (positiveInt(source?.quantity) * target) / Math.max(1, currentTotal);
+    const base = Math.floor(raw);
+    return { ...source, quantity: base, _fraction: raw - base, _index: index };
+  });
+  let assigned = scaled.reduce((sum, source) => sum + Number(source.quantity || 0), 0);
+  let remaining = target - assigned;
+  const byFraction = scaled.slice().sort((a, b) => (b._fraction - a._fraction) || (a._index - b._index));
+  for (let i = 0; remaining > 0 && byFraction.length; i = (i + 1) % byFraction.length) {
+    byFraction[i].quantity += 1;
+    remaining -= 1;
+  }
+  return scaled
+    .filter((source) => Number(source.quantity || 0) > 0)
+    .map(({ _fraction, _index, ...source }) => source);
+}
+
+function primarySourceKit(value) {
+  const sources = sourceKits(value);
+  if (!sources.length) return null;
+  return sources.slice().sort((a, b) => (Number(b.quantity || 0) - Number(a.quantity || 0)) || (Number(a.order || 0) - Number(b.order || 0)))[0] || null;
+}
+
+async function proposalProductMap({ fresh = true } = {}) {
+  const products = await getProductsList({ fresh });
+  return new Map((products || []).map((product) => [text(product?.id), product]).filter(([id]) => Boolean(id)));
+}
+
+export async function addProposalKit(proposalId, body = {}, account = {}) {
+  const parent = await selectById(proposalTable(), proposalId);
+  if (!parent) {
+    const error = new Error("Proposal not found.");
+    error.status = 404;
+    throw error;
+  }
+  await requireOwnerOrAdmin(parent, account, body?.adminPassword);
+
+  const kitId = text(body?.kitId || body?.kit_id || body?.id);
+  if (!kitId) {
+    const error = new Error("Kit is required.");
+    error.status = 400;
+    throw error;
+  }
+  const detail = await getKit(kitId, account);
+  const kit = detail?.kit;
+  const kitItems = Array.isArray(detail?.items) ? detail.items : [];
+  if (!kitItems.length) {
+    const error = new Error("This kit has no components yet.");
+    error.status = 400;
+    throw error;
+  }
+
+  const multiplier = positiveInt(body?.quantity ?? body?.qty ?? body?.kitQuantity ?? body?.kit_quantity ?? 1);
+  const mergeLogic = text(body?.mergeLogic || body?.logic || body?.quantityLogic).toLowerCase();
+  const [products, currentRows] = await Promise.all([
+    proposalProductMap({ fresh: true }),
+    rowsByForeignKey(proposalItemsTable(), "proposal_id", proposalId),
+  ]);
+  const byProduct = new Map((currentRows || []).map((row) => [text(row?.product_id), row]).filter(([id]) => Boolean(id)));
+  const now = new Date().toISOString();
+  let addedCount = 0;
+
+  for (const item of kitItems) {
+    const productId = text(item?.productId);
+    const product = products.get(productId) || { id: productId, name: text(item?.productName) };
+    if (!productId) continue;
+    const sourceQuantity = positiveInt(item?.quantity) * multiplier;
+    const incomingSources = [{ kitId, kitName: text(kit?.name) || "Untitled kit", quantity: sourceQuantity, order: 0 }];
+    const existing = byProduct.get(productId);
+    if (existing) {
+      const updatedQuantity = mergedQuantity(existing.quantity, sourceQuantity, mergeLogic);
+      const updatedSources = mergeSourceKits(existing.source_kits, incomingSources, existing.quantity, sourceQuantity, mergeLogic);
+      const updated = await updateById(proposalItemsTable(), existing.id, {
+        quantity: updatedQuantity,
+        product_name: text(product?.name) || text(existing.product_name) || "Untitled product",
+        source_kits: updatedSources,
+        updated_at: now,
+      });
+      byProduct.set(productId, updated || { ...existing, quantity: updatedQuantity, source_kits: updatedSources, updated_at: now });
+    } else {
+      const created = await insert(proposalItemsTable(), {
+        proposal_id: proposalId,
+        product_id: productId,
+        product_name: text(product?.name) || text(item?.productName) || "Untitled product",
+        quantity: sourceQuantity,
+        source_kits: incomingSources,
+        created_at: now,
+        updated_at: now,
+      });
+      byProduct.set(productId, created || {
+        proposal_id: proposalId,
+        product_id: productId,
+        product_name: text(product?.name) || text(item?.productName) || "Untitled product",
+        quantity: sourceQuantity,
+        source_kits: incomingSources,
+        created_at: now,
+        updated_at: now,
+      });
+    }
+    addedCount += 1;
+  }
+
+  await updateById(proposalTable(), proposalId, { updated_at: now });
+  invalidateProposalKitReadCaches("proposals");
+  return { ...(await getProposal(proposalId, account)), addedCount, kit };
+}
+
+function combinedSourceKitsForRow({ sources = [], sourceQuantities = {}, sourceKitQuantities = {}, combinedQuantity = 1, logic = "add" } = {}) {
+  const cleanLogic = normalizedCombineLogic(logic);
+  if (cleanLogic === "max" || cleanLogic === "min") {
+    const candidates = (sources || [])
+      .map((source, index) => ({ source, index, quantity: Number(sourceQuantities[source.id]) || 0 }))
+      .filter((entry) => entry.quantity > 0)
+      .sort((a, b) => cleanLogic === "max"
+        ? (b.quantity - a.quantity) || (a.index - b.index)
+        : (a.quantity - b.quantity) || (a.index - b.index));
+    const winnerId = candidates[0]?.source?.id;
+    return winnerId ? sourceKits(sourceKitQuantities[winnerId]) : [];
+  }
+
+  const tracked = (sources || [])
+    .map((source, index) => ({ source, index, kits: sourceKits(sourceKitQuantities[source.id] || []) }))
+    .filter((entry) => Number(sourceQuantities[entry.source.id]) > 0);
+  const hasMultiKitSplit = tracked.some((entry) => entry.kits.length > 1);
+  if (!hasMultiKitSplit && tracked.length) {
+    const candidates = new Map();
+    for (const entry of tracked) {
+      const kit = entry.kits[0];
+      if (!kit) continue;
+      const key = text(kit.kitId) || `name:${text(kit.kitName).toLowerCase()}`;
+      if (!candidates.has(key)) candidates.set(key, { kit, count: 0, quantity: 0, firstIndex: entry.index });
+      const candidate = candidates.get(key);
+      candidate.count += 1;
+      candidate.quantity += Number(sourceQuantities[entry.source.id]) || 0;
+      candidate.firstIndex = Math.min(candidate.firstIndex, entry.index);
+    }
+    const canonicalKit = [...candidates.values()].sort((a, b) =>
+      (b.count - a.count) || (b.quantity - a.quantity) || (a.firstIndex - b.firstIndex) || (Number(a.kit?.order || 0) - Number(b.kit?.order || 0))
+    )[0]?.kit;
+    if (canonicalKit) return [{ ...canonicalKit, quantity: positiveInt(combinedQuantity) }];
+  }
+
+  let effective = [];
+  for (const source of sources || []) {
+    const incoming = sourceKitQuantities[source.id] || [];
+    const currentTotal = effective.reduce((sum, kit) => sum + (Number(kit.quantity) || 0), 0) || 1;
+    effective = mergeSourceKits(effective, incoming, currentTotal, Number(sourceQuantities[source.id]) || 1, "add");
+  }
+  return effective;
+}
+
+async function combinedProposalData(ids = [], logic = "add", account = {}) {
+  const cleanIds = proposalIds(ids);
+  if (cleanIds.length < 2) {
+    const error = new Error("Please select at least two proposals to combine.");
+    error.status = 400;
+    throw error;
+  }
+  const details = [];
+  for (const id of cleanIds) details.push(await getProposal(id, account));
+  const products = await proposalProductMap({ fresh: true });
+  const sources = details.map((detail) => ({ id: text(detail?.proposal?.id), name: text(detail?.proposal?.name) || "Proposal" }));
+  const rowsMap = new Map();
+
+  for (const detail of details) {
+    const sourceId = text(detail?.proposal?.id);
+    for (const item of detail?.items || []) {
+      const productId = text(item?.productId);
+      const product = products.get(productId) || {};
+      const name = text(product?.name) || text(item?.productName) || "Untitled Product";
+      const key = productId ? `id:${productId}` : `name:${name.toLowerCase()}`;
+      const quantity = positiveInt(item?.quantity);
+      if (!rowsMap.has(key)) {
+        rowsMap.set(key, {
+          productId: productId || null,
+          productName: name,
+          tag: Array.isArray(product?.tags) ? (product.tags.map(text).find(Boolean) || "") : "",
+          sourceQuantities: {},
+          sourceKitQuantities: {},
+          quantity: 0,
+        });
+      }
+      const row = rowsMap.get(key);
+      const existingSourceQuantity = Number(row.sourceQuantities[sourceId]) || 0;
+      const itemSources = sourceKitsForTotal(item?.sourceKits || item?.source_kits || [], quantity);
+      row.sourceQuantities[sourceId] = existingSourceQuantity + quantity;
+      row.sourceKitQuantities[sourceId] = mergeSourceKits(
+        row.sourceKitQuantities[sourceId] || [],
+        itemSources,
+        existingSourceQuantity || 1,
+        quantity,
+        "add",
+      );
+      row.quantity += quantity;
+    }
+  }
+
+  const cleanLogic = normalizedCombineLogic(logic);
+  const rows = [...rowsMap.values()].map((row) => {
+    const sourceQuantities = sources.reduce((acc, source) => {
+      acc[source.id] = Number(row.sourceQuantities[source.id]) || 0;
+      return acc;
+    }, {});
+    const quantities = sources.map((source) => Number(sourceQuantities[source.id]) || 0);
+    const present = quantities.filter((value) => value > 0);
+    let combinedQuantity = quantities.reduce((sum, value) => sum + value, 0);
+    if (cleanLogic === "max") combinedQuantity = present.length ? Math.max(...present) : 0;
+    else if (cleanLogic === "min") combinedQuantity = present.length ? Math.min(...present) : 0;
+    const sourceKitQuantities = sources.reduce((acc, source) => {
+      const sourceQuantity = Number(sourceQuantities[source.id]) || 0;
+      acc[source.id] = sourceQuantity > 0 ? sourceKitsForTotal(row.sourceKitQuantities[source.id] || [], sourceQuantity) : [];
+      return acc;
+    }, {});
+    return {
+      ...row,
+      quantity: Math.max(1, Math.round(combinedQuantity || 1)),
+      sourceQuantities,
+      sourceKitQuantities,
+      sourceKits: combinedSourceKitsForRow({ sources, sourceQuantities, sourceKitQuantities, combinedQuantity, logic: cleanLogic }),
+    };
+  }).sort((a, b) => text(a.productName).localeCompare(text(b.productName), undefined, { numeric: true, sensitivity: "base" }));
+
+  const matrix = rows.map((row) => ({
+    productId: row.productId,
+    name: row.productName,
+    tag: row.tag || "",
+    quantity: row.quantity,
+    sourceQuantities: row.sourceQuantities,
+    sourceKitQuantities: row.sourceKitQuantities,
+  }));
+  const sourceText = sources.map((source) => source.name || source.id).filter(Boolean).join(", ") || "selected proposals";
+  const logicLabel = cleanLogic === "max" ? "Max logic" : cleanLogic === "min" ? "Min logic" : cleanLogic === "separate" ? "Separate logic" : "Add logic";
+  return {
+    sources,
+    rows,
+    combinedMeta: {
+      sources,
+      logic: cleanLogic,
+      note: `This proposal combines ${sourceText} using ${logicLabel}.`,
+      matrix,
+    },
+  };
+}
+
+async function attachCombinedProposalMeta(proposalId, meta = {}) {
+  const patch = {
+    combined_sources: Array.isArray(meta?.sources) ? meta.sources : [],
+    combine_logic: normalizedCombineLogic(meta?.logic),
+    combine_note: text(meta?.note) || null,
+    combined_matrix: Array.isArray(meta?.matrix) ? meta.matrix : [],
+    updated_at: new Date().toISOString(),
+  };
+  try {
+    await updateById(proposalTable(), proposalId, patch);
+  } catch (error) {
+    const message = [error?.message, error?.details?.message, error?.details?.details, error?.details?.hint]
+      .filter(Boolean).join(" ").toLowerCase();
+    if (!/combined_sources|combine_logic|combine_note|combined_matrix|column/.test(message)) throw error;
+  }
+}
+
+export async function saveCombinedProposal(body = {}, account = {}) {
+  const name = text(body?.name || body?.proposalName || body?.title);
+  if (!name) {
+    const error = new Error("Proposal name is required.");
+    error.status = 400;
+    throw error;
+  }
+  const data = await combinedProposalData(body?.proposalIds || body?.proposal_ids || body?.ids, body?.combineLogic || body?.logic || body?.combine_logic, account);
+  const usableRows = data.rows.filter((row) => text(row?.productId));
+  const proposal = await createProposalWithItems(name, usableRows.map((row) => ({
+    productId: row.productId,
+    quantity: row.quantity,
+    sourceKits: row.sourceKits,
+  })), account);
+  if (proposal?.id) await attachCombinedProposalMeta(proposal.id, data.combinedMeta);
+  const detail = proposal?.id ? await getProposal(proposal.id, account) : { proposal, items: [] };
+  return { proposal: detail?.proposal || proposal, items: detail?.items || [], combinedMeta: data.combinedMeta };
+}
+
+function receiptUploads(body = {}) {
+  return (Array.isArray(body?.receipts) ? body.receipts : [])
+    .map((item, index) => ({
+      url: text(item?.url),
+      name: text(item?.name || item?.filename) || `Receipt ${index + 1}`,
+    }))
+    .filter((item) => /^https?:\/\//i.test(item.url));
+}
+
+function stockEntriesForDetail(detail = {}, products = new Map(), { kind = "proposal" } = {}) {
+  const parent = kind === "kit" ? detail?.kit : detail?.proposal;
+  const parentId = text(parent?.id);
+  const parentName = text(parent?.name) || (kind === "kit" ? "Kit" : "Proposal");
+  const out = [];
+  for (const item of Array.isArray(detail?.items) ? detail.items : []) {
+    const product = products.get(text(item?.productId)) || {};
+    const totalQuantity = positiveInt(item?.quantity);
+    const splitSources = kind === "kit"
+      ? [{ kitId: parentId, kitName: parentName, quantity: totalQuantity, order: 0 }]
+      : sourceKitsForTotal(item?.sourceKits || item?.source_kits || [], totalQuantity);
+    for (const source of splitSources) {
+      out.push({
+        productId: text(item?.productId),
+        productName: text(product?.name) || text(item?.productName) || "Untitled Product",
+        productUrl: text(product?.url) || null,
+        displayId: text(product?.displayId) || null,
+        unitPrice: Number.isFinite(Number(product?.unitPrice)) ? Number(product.unitPrice) : null,
+        quantity: positiveInt(source?.quantity),
+        tag: text(source?.kitName) || "Direct / legacy components",
+        sourceProposalId: kind === "proposal" ? parentId : null,
+        sourceProposalName: kind === "proposal" ? parentName : null,
+        sourceKitId: kind === "kit" ? parentId : null,
+        sourceKitName: kind === "kit" ? parentName : null,
+      });
+    }
+  }
+  return out;
+}
+
+export async function sendProposalToStock(proposalId, body = {}, account = {}) {
+  const detail = await getProposal(proposalId, account);
+  if (!(detail?.items || []).length) {
+    const error = new Error("This proposal has no components to send to Stocktaking.");
+    error.status = 400;
+    throw error;
+  }
+  const products = await proposalProductMap({ fresh: true });
+  return await sendProductEntriesToStocktaking({
+    memberId: body?.teamMemberId || body?.team_member_id,
+    grantedBy: accountIdentity(account).name,
+    receiptNumber: body?.receiptNumber || body?.receipt_number,
+    receipts: receiptUploads(body),
+    entries: stockEntriesForDetail(detail, products, { kind: "proposal" }),
+  });
+}
+
+export async function sendKitToStock(kitId, body = {}, account = {}) {
+  const detail = await getKit(kitId, account);
+  if (!(detail?.items || []).length) {
+    const error = new Error("This kit has no components to send to Stocktaking.");
+    error.status = 400;
+    throw error;
+  }
+  const products = await proposalProductMap({ fresh: true });
+  return await sendProductEntriesToStocktaking({
+    memberId: body?.teamMemberId || body?.team_member_id,
+    grantedBy: accountIdentity(account).name,
+    receiptNumber: body?.receiptNumber || body?.receipt_number,
+    receipts: receiptUploads(body),
+    entries: stockEntriesForDetail(detail, products, { kind: "kit" }),
+  });
+}
+
+export const __proposalKitActionTest = {
+  normalizedCombineLogic,
+  proposalIds,
+  sourceKitsForTotal,
+  primarySourceKit,
+};

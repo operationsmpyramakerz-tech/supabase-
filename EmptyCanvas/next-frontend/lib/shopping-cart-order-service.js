@@ -8,9 +8,11 @@ import {
   insertMany,
   isSupabaseConfigured,
   select,
+  supabaseRequest,
   updateById,
 } from "./supabase-rest";
 import { getProductsList } from "./products-service";
+import { listTeamMembersLite } from "./team-members-service";
 import { loadRawOrderRowsByIds } from "./order-details-data";
 import { directPageMutationAccess, verifyPageAdminPasswordDirect } from "./order-action-auth";
 import { invalidateLegacyOperationsCaches } from "./operations-orders-data";
@@ -572,3 +574,143 @@ export const __shoppingCartOrderServiceTest = {
   cleanSubmittedProducts,
   rowOwnedByAccount,
 };
+
+
+function proposalSourceKits(value) {
+  const raw = Array.isArray(value) ? value : (() => {
+    if (!value || typeof value !== "string") return [];
+    try { return JSON.parse(value); } catch { return []; }
+  })();
+  return (Array.isArray(raw) ? raw : [])
+    .map((source, index) => ({
+      kitId: text(source?.kitId || source?.kit_id || source?.id),
+      kitName: text(source?.kitName || source?.kit_name || source?.name),
+      quantity: Math.max(1, Math.round(Number(source?.quantity || source?.qty) || 1)),
+      order: Number.isFinite(Number(source?.order)) ? Number(source.order) : index,
+    }))
+    .filter((source) => source.kitId || source.kitName);
+}
+
+function primaryProposalSourceKit(value) {
+  const sources = proposalSourceKits(value);
+  if (!sources.length) return null;
+  return sources.slice().sort((a, b) =>
+    (Number(b.quantity || 0) - Number(a.quantity || 0)) || (Number(a.order || 0) - Number(b.order || 0))
+  )[0] || null;
+}
+
+async function insertOrderRowsSafe(rows = []) {
+  let payload = (Array.isArray(rows) ? rows : []).filter((row) => row && typeof row === "object").map((row) => ({ ...row }));
+  if (!payload.length) return { count: 0, removedColumns: [] };
+  const removedColumns = [];
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    try {
+      await supabaseRequest(`/${encodeURIComponent(orderTable())}`, {
+        method: "POST",
+        headers: { Prefer: "return=minimal" },
+        body: payload,
+        timeoutMs: 45_000,
+        profileName: "orders.proposal-create-batch",
+      });
+      return { count: payload.length, removedColumns };
+    } catch (error) {
+      const message = [error?.message, error?.details?.message, error?.details?.details, error?.details?.hint]
+        .filter(Boolean).join(" ");
+      const missing =
+        (message.match(/Could not find the ['\"]([^'\"]+)['\"] column/i) || [])[1] ||
+        (message.match(/column ['\"]([^'\"]+)['\"]/i) || [])[1] ||
+        "";
+      if (!missing || !payload.some((row) => Object.prototype.hasOwnProperty.call(row, missing))) throw error;
+      payload = payload.map((row) => {
+        const next = { ...row };
+        delete next[missing];
+        return next;
+      });
+      removedColumns.push(missing);
+    }
+  }
+  throw directError(`Failed to create order after removing unsupported column(s): ${removedColumns.join(", ")}`, 500, true);
+}
+
+export async function createOrderFromProposalDirect({
+  account = {},
+  proposal = {},
+  items = [],
+  teamMemberId = "",
+} = {}) {
+  if (!isSupabaseConfigured()) return null;
+  const memberId = text(teamMemberId);
+  if (!memberId) throw directError("Team member is required.", 400);
+  const proposalId = text(proposal?.id);
+  if (!proposalId) throw directError("Proposal ID is required.", 400);
+  const proposalName = text(proposal?.name) || "Proposal";
+  const proposalItems = Array.isArray(items) ? items : [];
+  if (!proposalItems.length) throw directError("This proposal has no components yet.", 400);
+
+  const [members, products] = await Promise.all([
+    listTeamMembersLite({ fresh: true }),
+    getProductsList({ fresh: true }),
+  ]);
+  const member = (members || []).find((entry) => text(entry?.id) === memberId);
+  if (!member) throw directError("Team member not found.", 404);
+  const productMap = new Map((products || []).map((product) => [text(product?.id), product]).filter(([id]) => Boolean(id)));
+  const missing = proposalItems.find((item) => !productMap.has(text(item?.productId)));
+  if (missing) throw directError("One or more proposal components no longer exist in Products.", 400);
+
+  const orderNumber = await nextOrderNumber();
+  const now = new Date().toISOString();
+  const creatorName = accountUsername(account) || null;
+  const creatorId = accountMemberId(account) || null;
+  const rows = proposalItems.map((item) => {
+    const productId = text(item?.productId);
+    const product = productMap.get(productId) || {};
+    const qty = Math.max(1, Math.round(Number(item?.quantity) || 1));
+    const primaryKit = primaryProposalSourceKit(item?.sourceKits || item?.source_kits);
+    const numericProductId = Number(productId);
+    return {
+      reason: "Generated from Proposal",
+      order_number: orderNumber,
+      order_type: "Request Products",
+      notion_created_time: now,
+      product_id: Number.isFinite(numericProductId) ? numericProductId : null,
+      product_name: text(product?.name) || text(item?.productName) || "Unknown Product",
+      product_url: text(product?.url) || null,
+      unit_price: Number.isFinite(Number(product?.unitPrice)) ? Number(product.unitPrice) : null,
+      quantity_requested: qty,
+      quantity_progress: qty,
+      quantity_received_by_operations: 0,
+      quantity_remaining: qty,
+      status: "In Progress",
+      sv_approval: "Approved",
+      product_tag: Array.isArray(product?.tags) ? (product.tags.map(text).find(Boolean) || null) : null,
+      kit_tag: text(primaryKit?.kitName) || null,
+      source_proposal_id: proposalId,
+      source_proposal_name: proposalName,
+      source_kits: proposalSourceKits(item?.sourceKits || item?.source_kits),
+      team_member_id: member.id || memberId,
+      team_member_name: member.name || null,
+      issue_description: `Created from proposal: ${proposalName}`,
+      supervisor: null,
+      person_received_by_operations: null,
+      created_by_name: creatorName,
+      created_by_id: creatorId,
+    };
+  });
+
+  let inserted;
+  try {
+    inserted = await insertOrderRowsSafe(rows);
+  } catch (error) {
+    if (error?.code === "DIRECT_SHOPPING_CART_ORDER_FAILED") throw error;
+    throw directError(error?.message || "Failed to create order from proposal.", Number(error?.status) || 500, true);
+  }
+  await invalidateLegacyOperationsCaches(account).catch(() => {});
+  return {
+    success: true,
+    source: "supabase-direct",
+    orderNumber,
+    orderId: `ORD-${orderNumber}`,
+    count: inserted.count,
+    member,
+  };
+}
