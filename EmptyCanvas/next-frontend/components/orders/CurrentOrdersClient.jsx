@@ -1130,12 +1130,14 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
 
   async function exportOrder(options, group) {
     const kind = options?.kind === "excel" ? "excel" : "pdf";
-    const endpoint = kind === "excel" ? "/api/orders/export/excel" : "/api/orders/export/pdf";
+    const endpoint = `${DIRECT_API_BASE}/orders/export-direct`;
     const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
       body: JSON.stringify({
+        scope: "current",
+        kind,
         orderIds: group.orderIds,
         columns: options?.columns || [],
         instruction: options?.instruction || null,

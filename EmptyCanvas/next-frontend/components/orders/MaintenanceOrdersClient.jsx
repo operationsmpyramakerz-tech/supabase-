@@ -1872,11 +1872,13 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
     const template = Boolean(options?.template);
     setBusy(true);
     try {
-      const response = await fetch("/api/orders/requested/export/maintenance-pdf", {
+      const response = await fetch(`${DIRECT_API_BASE}/orders/export-direct`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
+          scope: "maintenance",
+          kind: "maintenance-pdf",
           orderIds: group.orderIds,
           tab: group.state.key,
           template,

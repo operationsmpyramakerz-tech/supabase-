@@ -2472,16 +2472,13 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
     setBusy(true);
     setActionError("");
     try {
-      const endpoint = kind === "excel"
-        ? "/api/orders/requested/export/excel"
-        : isMaintenance(group.orderType)
-          ? "/api/orders/requested/export/maintenance-pdf"
-          : "/api/orders/requested/export/pdf";
+      const endpoint = `${DIRECT_API_BASE}/orders/export-direct`;
+      const exportKind = kind === "excel" ? "excel" : (isMaintenance(group.orderType) ? "maintenance-pdf" : "pdf");
       const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ orderIds: group.orderIds, tab: selectedTab, columns: options?.columns || [], signatureLabels: options?.signatureLabels || null, instruction: options?.instruction || null, sortMode: options?.sortMode || "product-tag", repeatedComponentMode: options?.repeatedComponentMode || "merge" }),
+        body: JSON.stringify({ scope: "operations", kind: exportKind, orderIds: group.orderIds, tab: selectedTab, columns: options?.columns || [], signatureLabels: options?.signatureLabels || null, instruction: options?.instruction || null, sortMode: options?.sortMode || "product-tag", repeatedComponentMode: options?.repeatedComponentMode || "merge" }),
       });
       if (response.status === 401) {
         window.location.href = "/login?next=/next/operations-orders";

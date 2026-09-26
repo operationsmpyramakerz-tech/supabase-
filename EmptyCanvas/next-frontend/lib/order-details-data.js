@@ -292,9 +292,10 @@ function maintenanceLogMeta(value) {
       neededEntries: sparePartEntries(Array.isArray(parsed.needed) ? parsed.needed : []),
       replacedEntries: sparePartEntries(Array.isArray(parsed.replaced) ? parsed.replaced : []),
       checklist: uniqueStrings(Array.isArray(parsed.checklist) ? parsed.checklist : [], { splitComma: false }),
+      loggedAt: dateValue(parsed.loggedAt || parsed.logged_at || parsed.maintenanceLoggedAt || parsed.maintenance_logged_at) || null,
     };
   }
-  return { neededEntries: [], replacedEntries: sparePartEntries(value), checklist: [] };
+  return { neededEntries: [], replacedEntries: sparePartEntries(value), checklist: [], loggedAt: null };
 }
 
 function ordersTable() {
@@ -440,6 +441,7 @@ export function serializeOperationsOrderDetail(row = {}) {
     sparePartsNeededName: sparePartsNeeded.join(", ") || null,
     sparePartsNeededEntries: maintenanceMeta.neededEntries,
     maintenanceChecklist: maintenanceMeta.checklist,
+    maintenanceLoggedAt: maintenanceMeta.loggedAt || null,
     orderReceiptEntries: orderReceipts,
     orderReceiptNames: orderReceipts.map((entry) => entry.name).filter(Boolean),
     orderReceiptUrls: orderReceipts.map((entry) => entry.url).filter(Boolean),
@@ -458,6 +460,7 @@ export function serializeOperationsOrderDetail(row = {}) {
     rejectedReason: text(valueFor(row, ["rejected_reason", "Rejected Reason", "Reject Reason", "rejection_reason", "Rejection Reason"])) || null,
     receiptNumber: text(valueFor(row, ["receipt_number", "Receipt Number", "Store Receipt Number"])) || null,
     createdTime: dateValue(valueFor(row, ["notion_created_time", "created_time", "created_at", "Created time"])) || new Date().toISOString(),
+    updatedTime: dateValue(valueFor(row, ["updated_at", "updated_time", "last_edited_time", "Last edited time", "last_modified_at"])) || null,
     createdById,
     createdByName,
     assignedToIds: [],

@@ -72,8 +72,8 @@ function clearLegacyTemplates() {
   } catch {}
 }
 
-async function instructionApi(path = "", options = {}) {
-  const response = await fetch(`/api/orders/download-instructions${path}`, {
+async function instructionApi(options = {}) {
+  const response = await fetch(`/next/api/orders/download-instructions`, {
     credentials: "include",
     cache: "no-store",
     ...options,
@@ -98,7 +98,7 @@ async function loadTemplatesFromDatabase() {
 }
 
 async function createTemplateInDatabase(template) {
-  const payload = await instructionApi("", {
+  const payload = await instructionApi({
     method: "POST",
     body: JSON.stringify({
       title: text(template?.title),
@@ -112,9 +112,10 @@ async function createTemplateInDatabase(template) {
 async function updateTemplateInDatabase(template) {
   const id = text(template?.id);
   if (!id) return createTemplateInDatabase(template);
-  const payload = await instructionApi(`/${encodeURIComponent(id)}`, {
+  const payload = await instructionApi({
     method: "PATCH",
     body: JSON.stringify({
+      id,
       title: text(template?.title),
       englishText: text(template?.englishText),
       arabicText: text(template?.arabicText),

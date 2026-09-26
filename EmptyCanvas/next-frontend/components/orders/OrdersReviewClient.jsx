@@ -927,12 +927,14 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
 
   async function exportOrder(options, group, selectedTab) {
     const kind = options?.kind === "excel" ? "excel" : "pdf";
-    const endpoint = kind === "excel" ? "/api/sv-orders/export/excel" : "/api/sv-orders/export/pdf";
+    const endpoint = `${DIRECT_API_BASE}/orders/export-direct`;
     const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
       body: JSON.stringify({
+        scope: "review",
+        kind,
         orderIds: group.orderIds,
         tab: selectedTab,
         columns: options?.columns || [],
