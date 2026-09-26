@@ -17521,7 +17521,7 @@ async function _sbUpdateByIdWithMissingColumnFallback(table, id, sourceRow = {},
   return await supabaseDb.updateById(table, id, row);
 }
 
-// Order Draft APIs — require Create New Order
+// Create Order support APIs — require Create New Order
 app.get(
   "/api/create-order/schools",
   requireAuth,
@@ -17549,135 +17549,7 @@ app.get(
   },
 );
 
-app.get(
-  "/api/order-draft",
-  requireAuth,
-  requirePage("Create New Order"),
-  (req, res) => {
-    res.set("Cache-Control", "no-store");
-    const orderType = String(req.query?.orderType || "").trim();
 
-    // Edit flow must win over any older normal cart draft with the same order type.
-    // Otherwise Shopping Cart can show stale products or lose the original Reason.
-    const editCtx = req.session?.editingOrder;
-    const editActive = editCtx &&
-      typeof editCtx.expiresAt === "number" &&
-      Date.now() < editCtx.expiresAt &&
-      editCtx.orderType;
-    if (editActive) {
-      const editDraft = _getOrderDraftForType(req.session, editCtx.orderType);
-      if (editDraft && Array.isArray(editDraft.products) && editDraft.products.length) {
-        const reason = String(editDraft.reason || editCtx.reason || editDraft.products.find((p) => String(p?.reason || "").trim())?.reason || "").trim();
-        const products = reason
-          ? editDraft.products.map((p) => ({ ...p, reason: String(p?.reason || "").trim() || reason }))
-          : editDraft.products;
-        return res.json({ ...editDraft, products, reason });
-      }
-
-      const store = _getOrderDraftStore(req.session, editCtx.orderType);
-      const firstDraft = Object.values(store || {}).find((draft) =>
-        draft && Array.isArray(draft.products) && draft.products.length
-      );
-      if (firstDraft) {
-        const reason = String(firstDraft.reason || editCtx.reason || firstDraft.products.find((p) => String(p?.reason || "").trim())?.reason || "").trim();
-        const products = reason
-          ? firstDraft.products.map((p) => ({ ...p, reason: String(p?.reason || "").trim() || reason }))
-          : firstDraft.products;
-        return res.json({ ...firstDraft, products, reason });
-      }
-    }
-
-    const requestedDraft = _getOrderDraftForType(req.session, orderType);
-    if (requestedDraft && Array.isArray(requestedDraft.products) && requestedDraft.products.length) {
-      return res.json(requestedDraft);
-    }
-
-    return res.json(requestedDraft || {});
-  },
-);
-app.post(
-  "/api/order-draft/products",
-  requireAuth,
-  requirePage("Create New Order"),
-  async (req, res) => {
-    const { products } = req.body;
-    const requestedOrderType = String(req.body?.orderType || "").trim();
-    const orderType = _canonicalOrderTypeLabel(requestedOrderType) || requestedOrderType;
-    const isRequestMaintenance = _normKeyOrderType(orderType) === _normKeyOrderType("Request Maintenance");
-    if (!Array.isArray(products) || products.length === 0) {
-      return res.status(400).json({ error: "No products provided." });
-    }
-    // NOTE:
-    // We allow saving a cart draft even if the user hasn't entered a reason yet.
-    // Reason will be validated on checkout (/api/submit-order).
-    const clean = products
-      .map((p) => ({
-        id: String(p.id),
-        quantity: Number(p.quantity) || 0,
-        reason: String(p.reason || "").trim(),
-        issueDescription: String(p.issueDescription || "").trim(),
-        schoolId: String(p.schoolId || "").trim(),
-        expectedSparePartId: "",
-      }))
-      .filter((p) => p.id && p.quantity > 0);
-
-    if (clean.length === 0) {
-      return res
-        .status(400)
-        .json({ error: "No valid products after sanitization." });
-    }
-
-    if (isRequestMaintenance) {
-      if (clean.some((p) => !p.schoolId)) {
-        const resolvedSchool = await _resolveCurrentUserMaintenanceSchool(req);
-        const fallbackSchoolId = String(resolvedSchool?.schoolId || "").trim();
-        if (fallbackSchoolId) {
-          clean.forEach((p) => {
-            if (!p.schoolId) p.schoolId = fallbackSchoolId;
-          });
-        }
-      }
-      // School is linked when it can be resolved from the account, but it must not
-      // block Request Maintenance checkout because the UI does not ask the user
-      // to choose a school on this page.
-      if (clean.some((p) => !p.issueDescription)) {
-        return res.status(400).json({ error: "Each product must include an Issue Description." });
-      }
-    }
-
-    _setOrderDraftForType(req.session, orderType, { products: clean });
-    return res.json({ ok: true, count: clean.length });
-  },
-);
-app.post(
-  "/api/order-edit/cancel",
-  requireAuth,
-  requirePage("Create New Order"),
-  async (req, res) => {
-    try {
-      const editCtx = req.session?.editingOrder;
-      const orderType = String(req.body?.orderType || editCtx?.orderType || "").trim();
-      if (orderType) _clearOrderDraftForType(req.session, orderType);
-      delete req.session.editingOrder;
-      await _saveSessionNow(req);
-      return res.json({ ok: true });
-    } catch (err) {
-      console.error("Failed to cancel order edit:", err?.message || err);
-      return res.status(500).json({ error: "Failed to cancel edit mode." });
-    }
-  },
-);
-
-app.delete(
-  "/api/order-draft",
-  requireAuth,
-  requirePage("Create New Order"),
-  (req, res) => {
-    const orderType = String(req.query?.orderType || "").trim();
-    _clearOrderDraftForType(req.session, orderType);
-    return res.json({ ok: true });
-  },
-);
 
 // Orders listing (Current Orders)
 app.get(
@@ -26401,14 +26273,6 @@ async function _pageBootstrapFetchExistingRoute(req, pathname, timeoutMs = 10_00
   }
 }
 
-async function _pageBootstrapOrderReceipts(req, ids) {
-  const encodedIds = encodeURIComponent(String(ids || ""));
-  return Promise.all([
-    _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapAccountPayload(req)),
-    _pageBootstrapLoad(`/api/orders/order-receipts?ids=${encodedIds}`, 15_000, () => _loadOrderReceiptViewerItems(ids)),
-  ]);
-}
-
 async function _pageBootstrapHistory(req) {
   return Promise.all([
     _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapAccountPayload(req)),
@@ -26892,12 +26756,6 @@ app.get('/api/page-bootstrap', requireAuth, async (req, res) => {
       const groupId = String(req.query?.groupId || req.query?.group || '').trim();
       if (!groupId) return res.status(400).json({ ok: false, error: 'An order tracking reference is required.' });
       results = await _pageBootstrapOrderTracking(req, groupId);
-    } else if (scope === 'order-receipts') {
-      const canAccessReceipts = _pageBootstrapHasPageAccess(req, 'Expenses') || _pageBootstrapHasPageAccess(req, 'Expenses Users');
-      if (!canAccessReceipts) return _pageAccessDeniedResponse(req, res);
-      const ids = String(req.query?.ids || '').trim();
-      if (!ids) return res.status(400).json({ ok: false, error: 'Order ids are required.' });
-      results = await _pageBootstrapOrderReceipts(req, ids);
     } else if (scope === 'orders-review') {
       if (!_pageBootstrapHasPageAccess(req, 'Orders Review')) return _pageAccessDeniedResponse(req, res);
       results = await _pageBootstrapOrdersReview(req);
@@ -34916,141 +34774,6 @@ app.get(
         success: false,
         options: [],
         error: "Cannot load orders",
-      });
-    }
-  },
-);
-
-function _normalizeOrderReceiptViewerIds(rawIds) {
-  return Array.from(
-    new Set(
-      String(rawIds || "")
-        .split(",")
-        .map((value) => String(value || "").trim())
-        .filter(Boolean)
-        .map((value) => (looksLikeNotionId(value) ? toHyphenatedUUID(value) : value)),
-    ),
-  );
-}
-
-function _orderReceiptEntryType(entry = {}) {
-  const name = String(entry?.name || "").trim();
-  const url = String(entry?.url || "").trim();
-  const probe = `${name} ${url}`.toLowerCase();
-  if (/\.(png|jpe?g|gif|webp|bmp|svg)(\?|#|\s|$)/i.test(probe) || /^data:image\//i.test(url)) return "image";
-  if (/\.pdf(\?|#|\s|$)/i.test(probe)) return "pdf";
-  return "file";
-}
-
-async function _loadOrderReceiptViewerItems(rawIds) {
-  const ids = _normalizeOrderReceiptViewerIds(rawIds);
-  if (!ids.length) {
-    const error = new Error("Missing order ids");
-    error.status = 400;
-    throw error;
-  }
-
-  const items = [];
-  const seen = new Set();
-  const pushEntries = (entries = [], sourceId = "") => {
-    for (const entry of Array.isArray(entries) ? entries : []) {
-      const url = String(entry?.url || "").trim();
-      if (!url || seen.has(url)) continue;
-      seen.add(url);
-      const item = {
-        name: String(entry?.name || "Order receipt").trim() || "Order receipt",
-        url,
-        sourceId: String(sourceId || ""),
-      };
-      item.type = _orderReceiptEntryType(item);
-      items.push(item);
-    }
-  };
-
-  let receiptPropName = null;
-  try {
-    receiptPropName = await detectOrderReceiptFilesPropName();
-  } catch (error) {
-    console.warn("Order receipt property detection failed:", error?.body || error?.message || error);
-  }
-
-  for (const rawId of ids) {
-    const pageId = String(rawId || "").trim();
-    let loaded = false;
-
-    if (_sbOrdersEnabled()) {
-      const candidates = [];
-      const direct = pageId.match(/^\d+$/) ? pageId : "";
-      const ord = pageId.match(/^ord:(\d+)$/i) || pageId.match(/^ord[-\s]?(\d+)$/i);
-      if (direct) candidates.push({ mode: "id", value: direct });
-      if (ord?.[1]) candidates.push({ mode: "order", value: ord[1] });
-
-      for (const candidate of candidates) {
-        try {
-          if (candidate.mode === "id") {
-            const row = await supabaseDb.selectById(_sbOrdersTable(), candidate.value).catch(() => null);
-            if (row) {
-              const orderReceiptRaw = _sbOrderGet(row, ["order_receipt", "Order Receipt", "delivery_receipt", "Delivery Receipt", "receipt_photos", "Receipt Photos"]);
-              const maintenanceReceiptRaw = _sbOrderGet(row, ["maintenance_receipt", "Maintenance Receipt"]);
-              pushEntries(_sbNormalizeOrderReceiptEntries(orderReceiptRaw || maintenanceReceiptRaw, "Order receipt"), pageId);
-              loaded = true;
-            }
-          } else {
-            const rows = await _sbSelectOrdersRows({ approvedOnly: false });
-            const matching = (Array.isArray(rows) ? rows : []).filter((row) => {
-              const serialized = _sbSerializeOrderRow(row);
-              return String(serialized?.orderIdNumber || "") === String(candidate.value);
-            });
-            if (matching.length) {
-              for (const row of matching) {
-                const orderReceiptRaw = _sbOrderGet(row, ["order_receipt", "Order Receipt", "delivery_receipt", "Delivery Receipt", "receipt_photos", "Receipt Photos"]);
-                const maintenanceReceiptRaw = _sbOrderGet(row, ["maintenance_receipt", "Maintenance Receipt"]);
-                pushEntries(_sbNormalizeOrderReceiptEntries(orderReceiptRaw || maintenanceReceiptRaw, "Order receipt"), pageId);
-              }
-              loaded = true;
-            }
-          }
-        } catch (error) {
-          console.warn("Supabase order receipt viewer load failed:", pageId, error?.message || error);
-        }
-        if (loaded) break;
-      }
-    }
-
-    if (loaded) continue;
-
-    try {
-      const notionId = looksLikeNotionId(pageId) ? toHyphenatedUUID(pageId) : pageId;
-      const orderPage = await notion.pages.retrieve({ page_id: notionId });
-      const props = orderPage?.properties || {};
-      pushEntries(
-        getOrderReceiptEntries(
-          receiptPropName ? props?.[receiptPropName] : null,
-          receiptPropName || "Order receipt",
-        ),
-        pageId,
-      );
-    } catch (pageErr) {
-      console.warn("Order receipt viewer page load failed:", pageId, pageErr?.body || pageErr?.message || pageErr);
-    }
-  }
-
-  return { ok: true, items, ids, count: items.length };
-}
-
-app.get(
-  "/api/orders/order-receipts",
-  requireAuth,
-  requirePage(["Expenses", "Expenses Users"]),
-  async (req, res) => {
-    res.setHeader("Cache-Control", "no-store");
-    try {
-      const payload = await _loadOrderReceiptViewerItems(req.query?.ids || "");
-      return res.json(payload);
-    } catch (error) {
-      return res.status(error?.status || 500).json({
-        ok: false,
-        error: error?.status === 400 ? "Missing order ids" : "Failed to load order receipts",
       });
     }
   },

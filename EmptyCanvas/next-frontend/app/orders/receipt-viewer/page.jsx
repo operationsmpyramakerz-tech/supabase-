@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import AppShell from "../../../components/AppShell";
 import OrderReceiptViewerClient from "../../../components/orders/OrderReceiptViewerClient";
-import { fetchLegacyJson } from "../../../lib/legacy-api";
 import { loadOrderReceiptViewerItems } from "../../../lib/order-receipts-data";
 import { getLegacyAccountGate } from "../../../lib/products-auth";
 
@@ -61,22 +60,16 @@ export default async function OrderReceiptViewerPage({ searchParams }) {
   try {
     payload = await loadOrderReceiptViewerItems(ids);
   } catch (error) {
-    // Keep legacy IDs working while old expense links phase out.
-    const legacy = await fetchLegacyJson(`/api/orders/order-receipts?ids=${encodeURIComponent(ids)}`, { timeoutMs: 20_000 });
-    if (legacy.ok && legacy.data) {
-      payload = legacy.data;
-    } else {
-      return (
-        <main className="standalone-state">
-          <section className="state-card">
-            <span className="status-dot warning" />
-            <h1>The receipt viewer could not load</h1>
-            <p>{legacy.error || legacy.data?.error || error?.message || "Receipt data is temporarily unavailable."}</p>
-            <div className="actions"><a className="primary-button" href={nextPath}>Try again</a><a className="secondary-button" href="/next/home">Return Home</a></div>
-          </section>
-        </main>
-      );
-    }
+    return (
+      <main className="standalone-state">
+        <section className="state-card">
+          <span className="status-dot warning" />
+          <h1>The receipt viewer could not load</h1>
+          <p>{error?.message || "Receipt data is temporarily unavailable."}</p>
+          <div className="actions"><a className="primary-button" href={nextPath}>Try again</a><a className="secondary-button" href="/next/home">Return Home</a></div>
+        </section>
+      </main>
+    );
   }
 
   const account = gate.account;

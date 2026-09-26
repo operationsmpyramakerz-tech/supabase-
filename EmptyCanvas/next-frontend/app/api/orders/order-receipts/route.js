@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { fetchLegacyJson } from "../../../../lib/legacy-api";
 import { loadOrderReceiptViewerItems } from "../../../../lib/order-receipts-data";
 import { getLegacyAccountGate } from "../../../../lib/products-auth";
 
@@ -17,12 +16,6 @@ export async function GET(request) {
     const payload = await loadOrderReceiptViewerItems(ids, { fresh });
     return NextResponse.json(payload, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
-    // Compatibility for old Notion-style ids during the migration window.
-    if (error?.code === "LEGACY_RECEIPT_REFERENCE") {
-      const legacy = await fetchLegacyJson(`/api/orders/order-receipts?ids=${encodeURIComponent(ids)}`, { timeoutMs: 20_000 });
-      if (legacy.ok && legacy.data) return NextResponse.json(legacy.data, { headers: { "Cache-Control": "private, no-store" } });
-      return NextResponse.json({ ok: false, error: legacy.error || legacy.data?.error || error.message }, { status: legacy.status || 502 });
-    }
     return NextResponse.json({ ok: false, error: error?.message || "Failed to load order receipts." }, { status: Number(error?.status) || 500 });
   }
 }
