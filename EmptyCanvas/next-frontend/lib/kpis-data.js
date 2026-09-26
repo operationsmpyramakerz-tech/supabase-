@@ -1,6 +1,6 @@
 import "server-only";
 
-import { getDirectSessionAccountGate } from "./direct-session-account";
+import { getDirectAccountGate } from "./products-auth";
 import { select, selectAll } from "./supabase-rest";
 import { listTeamMembersLite } from "./team-members-service";
 
@@ -19,6 +19,11 @@ const EVALUATIONS_CACHE_TTL_MS = 10_000;
 
 const cache = new Map();
 const inflight = new Map();
+
+export function clearKpisCache() {
+  cache.clear();
+  inflight.clear();
+}
 
 function text(value) {
   if (value === null || typeof value === "undefined") return "";
@@ -358,7 +363,7 @@ function contextKey(context = {}) {
 }
 
 export async function directKpisContext() {
-  const gate = await getDirectSessionAccountGate(["KPIs"]);
+  const gate = await getDirectAccountGate(["KPIs"]);
   if (!gate) return null;
   if (!gate.ok) return { ok: false, status: gate.status, error: gate.error, account: gate.account || null, source: "direct-session" };
   return {

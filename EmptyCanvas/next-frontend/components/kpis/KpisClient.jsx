@@ -75,14 +75,13 @@ function directKpiReadUrl(url, options = {}) {
   const supported = path === "/api/kpis/meta"
     || path === "/api/kpis/reviews"
     || path === "/api/kpis/graph"
-    || path === "/api/kpis/standards"
-    || /^\/api\/kpis\/reviews\/[^/]+$/.test(path);
+    || path === "/api/kpis/standards";
   return supported ? `/next${raw}` : "";
 }
 
 async function requestJson(url, options = {}) {
   const directUrl = directKpiReadUrl(url, options);
-  const targets = directUrl ? [directUrl, url] : [url];
+  const targets = directUrl ? [directUrl] : [url];
   let lastError = null;
 
   for (const target of targets) {
@@ -241,7 +240,7 @@ function AdminPasswordDialog({ kind, onClose, onVerified }) {
     if (!clean) return setError("Admin password is required.");
     setBusy(true); setError("");
     try {
-      await requestJson("/api/kpis/admin/verify", { method: "POST", body: JSON.stringify({ password: clean }) });
+      await requestJson("/next/api/kpis/admin/verify", { method: "POST", body: JSON.stringify({ password: clean }) });
       onVerified(clean);
     } catch (err) { setError(err.message); } finally { setBusy(false); }
   };
@@ -379,7 +378,7 @@ function StandardForm({ meta, adminPassword, onClose, onSaved, notify }) {
     if (!form.department || !form.rolePosition) return notify("Department and role/position are required.", "error");
     setBusy(true);
     try {
-      const body = await requestJson("/api/kpis/standards", { method: "POST", body: JSON.stringify({ ...form, items, evaluations: evaluations.map((row, index) => ({ evaluationOrder: index + 1, scoreFromPercentage: number(row.from), scoreToPercentage: row.to === "" ? 100 : number(row.to), grade: text(row.grade) })).filter((row) => row.grade), adminPassword }) });
+      const body = await requestJson("/next/api/kpis/mutations-direct", { method: "POST", body: JSON.stringify({ action: "save_standard", ...form, items, evaluations: evaluations.map((row, index) => ({ evaluationOrder: index + 1, scoreFromPercentage: number(row.from), scoreToPercentage: row.to === "" ? 100 : number(row.to), grade: text(row.grade) })).filter((row) => row.grade), adminPassword }) });
       await onSaved(body, duplicate);
     } catch (err) { notify(err.message || "Failed to save KPI standard.", "error"); } finally { setBusy(false); }
   };
@@ -437,7 +436,7 @@ function ReviewCreate({ meta, adminPassword, onClose, onCreated, notify }) {
     if (!form.teamMemberId || !form.reviewMonth || !form.standardId) return notify("Employee, review month, and KPI standard are required.", "error");
     setBusy(true);
     try {
-      const body = await requestJson("/api/kpis/reviews", { method: "POST", body: JSON.stringify({ teamMemberId: form.teamMemberId, teamMemberName: selectedUser?.name || "", reviewMonth: `${form.reviewMonth}-01`, standardId: form.standardId, adminPassword }) });
+      const body = await requestJson("/next/api/kpis/mutations-direct", { method: "POST", body: JSON.stringify({ action: "create_review", teamMemberId: form.teamMemberId, teamMemberName: selectedUser?.name || "", reviewMonth: `${form.reviewMonth}-01`, standardId: form.standardId, adminPassword }) });
       await onCreated(body.reviewId, adminPassword);
     } catch (err) { notify(err.message || "Failed to create KPI review.", "error"); } finally { setBusy(false); }
   };
@@ -454,28 +453,14 @@ function ReviewCreate({ meta, adminPassword, onClose, onCreated, notify }) {
   );
 }
 
-async function fileToDataUrl(file) {
-  return await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result || "")); reader.onerror = () => reject(new Error("Failed to read evidence file.")); reader.readAsDataURL(file); });
-}
 async function directUpload(file) {
   if (!file) throw new Error("Choose an evidence file first.");
   if (file.size > 15 * 1024 * 1024) throw new Error("Evidence file must be 15 MB or smaller.");
-  const fallback = async () => {
-    const dataUrl = await fileToDataUrl(file);
-    const body = await requestJson("/api/kpis/evidence-upload", { method: "POST", body: JSON.stringify({ filename: file.name, mime: file.type, size: file.size, dataUrl }) });
-    return body.file;
-  };
-  try {
-    const ticket = await requestJson("/api/storage/upload-ticket", { method: "POST", body: JSON.stringify({ scope: "kpi-evidence", filename: file.name, mime: file.type || "application/octet-stream", size: file.size }) });
-    if (!ticket?.upload?.signedUrl || !ticket?.uploadRef) return await fallback();
-    const upload = await fetch(ticket.upload.signedUrl, { method: ticket.upload.method || "PUT", headers: ticket.upload.headers || {}, body: file });
-    if (!upload.ok) throw new Error("Direct storage upload failed.");
-    const complete = await requestJson("/api/storage/upload-complete", { method: "POST", body: JSON.stringify({ uploadRef: ticket.uploadRef }) });
-    return complete.file;
-  } catch (error) {
-    if (file.size <= 4 * 1024 * 1024) return await fallback();
-    throw error;
-  }
+  const ticket = await requestJson("/next/api/kpis/evidence-upload", { method: "POST", body: JSON.stringify({ filename: file.name, mime: file.type || "application/octet-stream", size: file.size }) });
+  if (!ticket?.upload?.signedUrl || !ticket?.file?.url) throw new Error("Evidence upload could not be prepared.");
+  const upload = await fetch(ticket.upload.signedUrl, { method: ticket.upload.method || "PUT", headers: ticket.upload.headers || {}, body: file });
+  if (!upload.ok) throw new Error("Direct evidence upload failed.");
+  return ticket.file;
 }
 
 function ReviewDetail({ reviewId, readOnly, adminPassword = "", onClose, onSaved, notify }) {
@@ -485,8 +470,7 @@ function ReviewDetail({ reviewId, readOnly, adminPassword = "", onClose, onSaved
   const [uploading, setUploading] = useState("");
   const [error, setError] = useState("");
   useEffect(() => {
-    const query = adminPassword ? `?adminPassword=${encodeURIComponent(adminPassword)}` : "";
-    requestJson(`/api/kpis/reviews/${encodeURIComponent(reviewId)}${query}`).then((body) => { setData(body); setScores((body.details || []).map((item) => ({ ...item }))); }).catch((err) => setError(err.message));
+    requestJson(`/next/api/kpis/detail-direct?id=${encodeURIComponent(reviewId)}${adminPassword ? `&adminPassword=${encodeURIComponent(adminPassword)}` : ""}`).then((body) => { setData(body); setScores((body.details || []).map((item) => ({ ...item }))); }).catch((err) => setError(err.message));
   }, [reviewId, adminPassword]);
   const grouped = useMemo(() => {
     const map = new Map();
@@ -514,7 +498,7 @@ function ReviewDetail({ reviewId, readOnly, adminPassword = "", onClose, onSaved
     if (readOnly) return;
     setBusy(true);
     try {
-      await requestJson(`/api/kpis/reviews/${encodeURIComponent(reviewId)}/scores`, { method: "PATCH", body: JSON.stringify({ scores: scores.map((item) => ({ scoreId: item.scoreId, actualPercent: item.actualPercent === "" ? null : item.actualPercent, evidenceText: item.evidenceText, managerNotes: item.managerNotes })) }) });
+      await requestJson("/next/api/kpis/mutations-direct", { method: "POST", body: JSON.stringify({ action: "update_scores", reviewId, adminPassword, scores: scores.map((item) => ({ scoreId: item.scoreId, actualPercent: item.actualPercent === "" ? null : item.actualPercent, evidenceText: item.evidenceText, managerNotes: item.managerNotes })) }) });
       await onSaved();
       onClose();
       notify("KPI scores saved successfully.", "success");
@@ -685,7 +669,7 @@ export default function KpisClient({ initialMeta, initialReviews, initialGraph, 
     if (standardFilters.position) chips.push(`Position: ${standardFilters.position}`);
     return chips;
   }, [standardFilters]);
-  const downloadReport = () => { const query = buildReviewQuery(); window.open(`/api/kpis/reviews/report.pdf${query.toString() ? `?${query.toString()}` : ""}`, "_blank", "noopener"); };
+  const downloadReport = () => { const query = buildReviewQuery(); window.open(`/next/api/kpis/report-direct${query.toString() ? `?${query.toString()}` : ""}`, "_blank", "noopener"); };
 
   return (
     <section className="kpis-main">
