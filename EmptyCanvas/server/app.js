@@ -15288,11 +15288,55 @@ async function _pageBootstrapTaskManagement(req, view) {
     error.status = 400;
     throw error;
   }
+
+  const pageName = _taskManagementViewAccessPage(cleanView);
+  const accessLevel = _sessionPageAccessLevel(req, [pageName, 'Task Management']) || PAGE_ACCESS_LEVELS.VIEW;
+  // Keep the old bootstrap contract alive without calling removed
+  // /api/task-management endpoints over HTTP. These request-scoped values are
+  // the same ones the former requireTaskManagementView/requirePage middleware
+  // supplied to the Task Management handlers.
+  req.taskManagementView = cleanView;
+  req.opsPageAccessLevel = accessLevel;
+
   const query = `view=${encodeURIComponent(cleanView)}`;
+  const loadMeta = async () => {
+    const [currentUser, departments] = await Promise.all([_tmCurrentMember(req), _tmDepartmentOptions()]);
+    return {
+      ok: true,
+      view: cleanView,
+      currentUser,
+      departments,
+      accessLevel,
+      isPageAdmin: _taskManagementViewIsAdmin(req, cleanView),
+    };
+  };
+  const loadTickets = async () => {
+    const currentUser = await _tmCurrentMember(req);
+    let tickets = await _tmLoadAllTickets();
+    tickets = tickets.filter((ticket) => _tmTicketBelongsToView(ticket, currentUser, cleanView));
+
+    let viewerAssignmentRows = [];
+    if (cleanView === 'my' && accessLevel === PAGE_ACCESS_LEVELS.VIEW && !_taskManagementViewIsAdmin(req, 'my')) {
+      viewerAssignmentRows = await _tmAssignmentsForCurrentMember(currentUser);
+      const assignedSectionIds = new Set((viewerAssignmentRows || [])
+        .map((row) => String(_sbGet(row, ['section_id', 'sectionId']) || '').trim())
+        .filter(Boolean));
+      tickets = tickets.filter((ticket) =>
+        (ticket.sections || []).some((section) => assignedSectionIds.has(String(section.id))));
+    }
+
+    const canManageDepartment = cleanView === 'my' && _tmCanManageDepartmentWork(req);
+    tickets = tickets.map((ticket) => ({
+      ..._tmTicketForViewer(ticket, currentUser, cleanView, canManageDepartment),
+      ..._tmTicketViewerProgress(ticket, currentUser, cleanView, canManageDepartment, viewerAssignmentRows),
+    }));
+    return { ok: true, tickets };
+  };
+
   return Promise.all([
     _pageBootstrapLoad('/api/account', 15_000, () => _pageBootstrapAccountPayload(req)),
-    _pageBootstrapLoad(`/api/task-management/meta?${query}`, 30_000, () => _pageBootstrapFetchExistingRoute(req, `/api/task-management/meta?${query}`, 20_000)),
-    _pageBootstrapLoad(`/api/task-management?${query}`, 10_000, () => _pageBootstrapFetchExistingRoute(req, `/api/task-management?${query}`, 35_000)),
+    _pageBootstrapLoad(`/api/task-management/meta?${query}`, 30_000, loadMeta),
+    _pageBootstrapLoad(`/api/task-management?${query}`, 10_000, loadTickets),
   ]);
 }
 
@@ -22243,64 +22287,11 @@ async function _tmSyncTicketStatus(ticketId) {
   return ticket;
 }
 
-app.post("/api/task-management/upload", requireAuth, requireTaskManagementView(), async (req, res) => {
-  res.set("Cache-Control", "no-store");
-  try {
-    const dataUrl = String(req.body?.dataUrl || req.body?.data || "").trim();
-    const filename = _tmText(req.body?.filename || req.body?.name, 500) || "attachment";
-    const mimeHint = _tmText(req.body?.mime || req.body?.type, 180);
-    const match = dataUrl.match(/^data:([^;,]+)?;base64,([\s\S]+)$/i);
-    if (!match) return res.status(400).json({ ok: false, error: "Choose a valid attachment first." });
-    const bytes = Buffer.from(match[2], "base64");
-    if (!bytes.length) return res.status(400).json({ ok: false, error: "The selected attachment is empty." });
-    if (bytes.length > 10 * 1024 * 1024) return res.status(413).json({ ok: false, error: "The attachment must be 10 MB or less." });
-    const cleanName = filename.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || `attachment-${Date.now()}`;
-    const objectPath = `task-management/attachments/${Date.now()}-${Math.random().toString(16).slice(2)}-${cleanName}`;
-    const url = await uploadToBlobFromBase64(dataUrl, objectPath);
-    return res.status(201).json({
-      ok: true,
-      file: { name: filename, url, type: mimeHint || match[1] || "application/octet-stream", size: bytes.length },
-    });
-  } catch (error) {
-    console.error("[task-management] attachment upload error:", error?.details || error?.message || error);
-    const raw = String(error?.message || "");
-    const message = raw.includes("SUPABASE_STORAGE_OR_BLOB_TOKEN_MISSING")
-      ? "File storage is not configured. Add a Supabase Storage bucket or Vercel Blob token."
-      : (error?.message || "Failed to upload attachment.");
-    return res.status(error?.status || 500).json({ ok: false, error: message });
-  }
-});
 
-app.get("/api/task-management/meta", requireAuth, requireTaskManagementView(), async (req, res) => {
-  res.set("Cache-Control", "no-store");
-  try {
-    const [currentUser, departments] = await Promise.all([_tmCurrentMember(req), _tmDepartmentOptions()]);
-    return res.json({
-      ok: true,
-      view: req.taskManagementView,
-      currentUser,
-      departments,
-      accessLevel: req.opsPageAccessLevel || (_taskManagementViewIsAdmin(req, req.taskManagementView) ? PAGE_ACCESS_LEVELS.ADMIN : PAGE_ACCESS_LEVELS.VIEW),
-      isPageAdmin: _taskManagementViewIsAdmin(req, req.taskManagementView),
-    });
-  } catch (error) {
-    console.error("[task-management] meta error:", error?.details || error?.message || error);
-    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to load Task Management options." });
-  }
-});
 
-app.post("/api/task-management/admin/verify", requireAuth, requireTaskManagementView(), async (req, res) => {
-  res.set("Cache-Control", "no-store");
-  try {
-    const adminPages = [_taskManagementViewAccessPage(req.taskManagementView), "Task Management"].filter(Boolean);
-    const ok = await _verifyPageAdminPassword(req, req.body?.adminPassword, adminPages);
-    if (!ok) return res.status(401).json({ ok: false, error: "Invalid admin password." });
-    return res.json({ ok: true });
-  } catch (error) {
-    console.error("[task-management] admin verify error:", error?.details || error?.message || error);
-    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to verify admin password." });
-  }
-});
+
+
+
 
 function _tmSameMember(ticket = {}, currentMember = {}) {
   const currentId = _tmText(currentMember?.id || "", 120);
@@ -22409,75 +22400,9 @@ function _tmCanUpdateSectionInView(req, ticket = {}, section = {}, currentMember
   return false;
 }
 
-app.get("/api/task-management", requireAuth, requireTaskManagementView(), async (req, res) => {
-  res.set("Cache-Control", "no-store");
-  try {
-    const requestedStatus = _tmStatus(req.query?.status || "", "all");
-    const query = norm(_tmText(req.query?.q || "", 200));
-    const currentUser = await _tmCurrentMember(req);
-    let tickets = await _tmLoadAllTickets();
-    tickets = tickets.filter((ticket) =>
-      _tmTicketBelongsToView(ticket, currentUser, req.taskManagementView));
 
-    // Edit/Admin users manage every department section. View users receive only
-    // projects that contain a person task assigned directly to them.
-    let viewerAssignmentRows = [];
-    if (req.taskManagementView === "my" && _tmTaskAccessLevel(req) === "view" && !_taskManagementViewIsAdmin(req, "my")) {
-      viewerAssignmentRows = await _tmAssignmentsForCurrentMember(currentUser);
-      const assignedSectionIds = new Set((viewerAssignmentRows || [])
-        .map((row) => String(_sbGet(row, ["section_id", "sectionId"]) || "").trim())
-        .filter(Boolean));
-      tickets = tickets.filter((ticket) =>
-        (ticket.sections || []).some((section) => assignedSectionIds.has(String(section.id))));
-    }
 
-    if (requestedStatus !== "all") tickets = tickets.filter((ticket) => ticket.status === requestedStatus);
-    if (query) {
-      tickets = tickets.filter((ticket) => {
-        const haystack = [
-          ticket.ticketCode, ticket.title, ticket.description, ticket.createdByName,
-          ...(ticket.sections || []).flatMap((section) => [section.department, section.request, section.details, section.deliveryDate, section.attachment?.name]),
-        ].map(norm).join(" ");
-        return haystack.includes(query);
-      });
-    }
-    const canManageDepartment = req.taskManagementView === "my" && _tmCanManageDepartmentWork(req);
-    tickets = tickets.map((ticket) => ({
-      ..._tmTicketForViewer(ticket, currentUser, req.taskManagementView, canManageDepartment),
-      ..._tmTicketViewerProgress(ticket, currentUser, req.taskManagementView, canManageDepartment, viewerAssignmentRows),
-    }));
-    return res.json({ ok: true, tickets });
-  } catch (error) {
-    console.error("[task-management] list error:", error?.details || error?.message || error);
-    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to load tickets." });
-  }
-});
 
-app.get("/api/task-management/:id", requireAuth, requireTaskManagementView(), async (req, res) => {
-  res.set("Cache-Control", "no-store");
-  try {
-    const ticket = await _tmLoadTicketById(req.params.id);
-    if (!ticket) return res.status(404).json({ ok: false, error: "Ticket not found." });
-    const currentUser = await _tmCurrentMember(req);
-    if (!_tmTicketBelongsToView(ticket, currentUser, req.taskManagementView)) {
-      return res.status(403).json({ ok: false, error: "This ticket is not available in the selected Task Management view." });
-    }
-    const canManageDepartment = req.taskManagementView === "my" && _tmCanManageDepartmentWork(req);
-    const viewerAssignmentRows = req.taskManagementView === "my" && !canManageDepartment
-      ? await _tmAssignmentsForCurrentMember(currentUser)
-      : [];
-    return res.json({
-      ok: true,
-      ticket: {
-        ..._tmTicketForViewer(ticket, currentUser, req.taskManagementView, canManageDepartment),
-        ..._tmTicketViewerProgress(ticket, currentUser, req.taskManagementView, canManageDepartment, viewerAssignmentRows),
-      },
-    });
-  } catch (error) {
-    console.error("[task-management] detail error:", error?.details || error?.message || error);
-    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to load ticket." });
-  }
-});
 
 function _tmCanvasNumber(value, fallback = 0) {
   const number = Number(value);
@@ -22816,865 +22741,38 @@ function _tmAssignmentPrerequisites(workflow = {}, assignment = {}) {
   return predecessorIds.map((id) => byId.get(id)).filter(Boolean);
 }
 
-app.post("/api/task-management", requireAuth, requirePage("Delegated Tasks"), async (req, res) => {
-  res.set("Cache-Control", "no-store");
-  try {
-    if (!supabaseDb.isConfigured()) return res.status(503).json({ ok: false, error: "Supabase is not configured." });
-
-    const title = _tmText(req.body?.title, 500);
-    const description = _tmText(req.body?.description, 8000);
-    const rawPriority = _tmText(req.body?.priority, 30);
-    const priority = _tmPriority(rawPriority);
-    const dueDate = _tmDate(req.body?.dueDate);
-    const plan = _tmBuildWorkflowPlan(req.body?.sections, req.body?.edges);
-    const sections = plan.sections;
-    const edges = plan.edges;
-
-    if (!title) return res.status(400).json({ ok: false, error: "Project title is required." });
-    if (!["urgent", "high", "normal", "low"].includes(rawPriority.toLowerCase())) return res.status(400).json({ ok: false, error: "Project priority is required." });
-    if (!dueDate) return res.status(400).json({ ok: false, error: "Project target date is required." });
-    if (!sections.length) return res.status(400).json({ ok: false, error: "Add at least one workflow block." });
-    const invalid = sections.find((section) => !section.department || !section.request || !section.deliveryDate);
-    if (invalid) return res.status(400).json({ ok: false, error: "Each workflow block requires a department, requested action, and delivery date." });
-    const lateSection = sections.find((section) => section.deliveryDate > dueDate);
-    if (lateSection) return res.status(400).json({ ok: false, error: "A workflow block delivery date cannot be after the project target date." });
-
-    const currentUser = await _tmCurrentMember(req);
-    const created = await supabaseDb.insert(_tmTicketsTable(), {
-      title,
-      description: description || null,
-      priority,
-      due_date: dueDate,
-      status: "not_started",
-      created_by_id: currentUser.id || null,
-      created_by_name: currentUser.name || null,
-    });
-    const ticketId = _tmId(created);
-    if (!ticketId) throw new Error("Project was created without an ID.");
-
-    try {
-      const createdSectionIds = new Map();
-      for (const section of sections) {
-        const sectionPayload = {
-          ticket_id: ticketId,
-          department: section.department,
-          request_text: section.request,
-          details: section.details || null,
-          delivery_date: section.deliveryDate || null,
-          sort_order: section.sortOrder,
-          execution_group: section.executionGroup,
-          canvas_x: section.canvasX || null,
-          canvas_y: section.canvasY || null,
-          status: "not_started",
-        };
-        Object.assign(sectionPayload, _tmAttachmentColumns(section.attachments || section.attachment));
-        const createdSection = await supabaseDb.insert(_tmSectionsTable(), sectionPayload);
-        const createdId = _tmId(createdSection);
-        if (!createdId) throw new Error("Workflow block was created without an ID.");
-        createdSectionIds.set(section.clientId, createdId);
-      }
-      for (const edge of edges) {
-        const fromSectionId = createdSectionIds.get(edge.from);
-        const toSectionId = createdSectionIds.get(edge.to);
-        if (!fromSectionId || !toSectionId) throw new Error("Workflow arrow could not be linked to its blocks.");
-        await supabaseDb.insert(_tmEdgesTable(), {
-          ticket_id: ticketId,
-          from_section_id: fromSectionId,
-          to_section_id: toSectionId,
-        });
-      }
-    } catch (sectionError) {
-      // Cascading deletion keeps sections and workflow arrows from being orphaned.
-      await supabaseDb.deleteById(_tmTicketsTable(), ticketId).catch(() => null);
-      throw sectionError;
-    }
-
-    const ticket = await _tmLoadTicketById(ticketId);
-    return res.status(201).json({ ok: true, ticket });
-  } catch (error) {
-    console.error("[task-management] create error:", error?.details || error?.message || error);
-    const detail = String(error?.message || "");
-    const message = /delivery_date.*schema cache|Could not find the .*delivery_date/i.test(detail)
-      ? "The workflow block delivery-date column is not installed. Run the supplied delivery-date SQL migration, then refresh this page."
-      : (/(attachments|attachment_(name|url|type|size)).*schema cache|Could not find the .*(attachments|attachment_)/i.test(detail)
-        ? "Task Management multi-attachment columns are not installed. Run the supplied multi-attachments SQL migration, then refresh this page."
-        : (/relation .* does not exist|Could not find the table|schema cache/i.test(detail)
-          ? "Task Management workflow tables are not installed. Run the supplied Supabase SQL migration, then refresh this page."
-          : (error?.message || "Failed to create project.")));
-    return res.status(error?.status || 500).json({ ok: false, error: message });
-  }
-});
-
-
-
-app.post("/api/task-management/:id/mark-delivered", requireAuth, requireTaskManagementView(), async (req, res) => {
-  res.set("Cache-Control", "no-store");
-  try {
-    if (req.taskManagementView !== "delegated") {
-      return res.status(403).json({ ok: false, error: "Projects can be marked as delivered from Delegated Tasks only." });
-    }
-    const ticketId = String(req.params.id || "").trim();
-    const ticket = await _tmLoadTicketById(ticketId);
-    if (!ticket) return res.status(404).json({ ok: false, error: "Project not found." });
-    const currentUser = await _tmCurrentMember(req);
-    if (!_tmSameMember(ticket, currentUser) && !_taskManagementViewIsAdmin(req, "delegated")) {
-      return res.status(403).json({ ok: false, error: "Only the project creator or an admin can mark it as delivered." });
-    }
-    if (ticket.isArchived) {
-      return res.status(409).json({ ok: false, error: "Unarchive this project before marking it as delivered." });
-    }
-
-    const now = new Date().toISOString();
-    const sectionIds = (ticket.sections || []).map((section) => String(section.id || "")).filter(Boolean);
-    if (sectionIds.length) {
-      await supabaseDb.updateByIds(_tmSectionsTable(), sectionIds, {
-        status: "completed",
-        completed_at: now,
-        completed_by_id: currentUser.id || null,
-        completed_by_name: currentUser.name || null,
-        updated_at: now,
-      });
-
-      const assignmentGroups = await Promise.all(sectionIds.map((sectionId) => supabaseDb.select(_tmAssignmentsTable(), {
-        select: "id,section_id,status",
-        section_id: `eq.${_sbRestFilterValue(sectionId)}`,
-        limit: 1000,
-        order: "id.asc",
-      })));
-      const assignmentIds = assignmentGroups.flat()
-        .map((row) => String(_sbGet(row, ["id", "ID"]) || ""))
-        .filter(Boolean);
-      if (assignmentIds.length) {
-        await supabaseDb.updateByIds(_tmAssignmentsTable(), assignmentIds, {
-          status: "completed",
-          updated_at: now,
-        });
-      }
-    }
-    await supabaseDb.updateById(_tmTicketsTable(), ticketId, { status: "completed", updated_at: now });
-    const updated = await _tmLoadTicketById(ticketId);
-    return res.json({ ok: true, ticket: updated });
-  } catch (error) {
-    console.error("[task-management] mark delivered error:", error?.details || error?.message || error);
-    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to mark the project as delivered." });
-  }
-});
-
-app.patch("/api/task-management/:id/archive", requireAuth, requireTaskManagementView(), async (req, res) => {
-  res.set("Cache-Control", "no-store");
-  try {
-    const ticketId = String(req.params.id || "").trim();
-    const ticket = await _tmLoadTicketById(ticketId);
-    if (!ticket) return res.status(404).json({ ok: false, error: "Project not found." });
-    const currentUser = await _tmCurrentMember(req);
-    const isCurrentViewAdmin = _taskManagementViewIsAdmin(req, req.taskManagementView);
-    const isAvailable = _tmTicketBelongsToView(ticket, currentUser, req.taskManagementView);
-    if (!isAvailable) {
-      return res.status(403).json({ ok: false, error: "This project is not available in the selected Task Management view." });
-    }
-    let authorized = isCurrentViewAdmin;
-    if (!authorized) {
-      const adminPages = [_taskManagementViewAccessPage(req.taskManagementView), "Task Management"].filter(Boolean);
-      authorized = await _verifyPageAdminPassword(req, req.body?.adminPassword, adminPages);
-    }
-    if (!authorized) return res.status(401).json({ ok: false, error: "Invalid admin password." });
-
-    const archived = req.body?.archived !== false;
-    const now = new Date().toISOString();
-    try {
-      await supabaseDb.updateById(_tmTicketsTable(), ticketId, {
-        is_archived: archived,
-        archived_at: archived ? now : null,
-        archived_by_id: archived ? (currentUser.id || null) : null,
-        archived_by_name: archived ? (currentUser.name || null) : null,
-        archived_from_view: archived ? req.taskManagementView : null,
-        updated_at: now,
-      });
-    } catch (error) {
-      const detail = String(error?.message || "");
-      if (/is_archived|archived_at|archived_by_|archived_from_view/i.test(detail)) {
-        const missing = new Error("The per-user project archive fields are not installed. Run the supplied Task Management personal-archive SQL migration, then refresh the page.");
-        missing.status = 503;
-        throw missing;
-      }
-      throw error;
-    }
-    const updated = await _tmLoadTicketById(ticketId);
-    return res.json({ ok: true, ticket: updated });
-  } catch (error) {
-    console.error("[task-management] archive project error:", error?.details || error?.message || error);
-    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to archive the project." });
-  }
-});
-
-app.delete("/api/task-management/:id", requireAuth, requireTaskManagementView(), async (req, res) => {
-  res.set("Cache-Control", "no-store");
-  try {
-    if (!supabaseDb.isConfigured()) return res.status(503).json({ ok: false, error: "Supabase is not configured." });
-    const ticketId = String(req.params.id || "").trim();
-    if (!ticketId) return res.status(400).json({ ok: false, error: "Missing project ID." });
-    const ticket = await _tmLoadTicketById(ticketId);
-    if (!ticket) return res.status(404).json({ ok: false, error: "Project not found." });
-
-    const currentUser = await _tmCurrentMember(req);
-    const isCurrentViewAdmin = _taskManagementViewIsAdmin(req, req.taskManagementView);
-    const isAvailable = ticket.isArchived
-      ? ((_tmArchivedByMember(ticket, currentUser) && _tmArchiveView(ticket) === req.taskManagementView) || isCurrentViewAdmin)
-      : _tmTicketBelongsToView(ticket, currentUser, req.taskManagementView);
-    if (!isAvailable) {
-      return res.status(403).json({ ok: false, error: "This project is not available in the selected Task Management view." });
-    }
-
-    let authorized = isCurrentViewAdmin;
-    if (!authorized) {
-      const adminPages = [_taskManagementViewAccessPage(req.taskManagementView), "Task Management"].filter(Boolean);
-      authorized = await _verifyPageAdminPassword(req, req.body?.adminPassword, adminPages);
-    }
-    if (!authorized) return res.status(401).json({ ok: false, error: "Invalid admin password." });
-
-    // The Task Management foreign keys use cascading deletion. Removing the
-    // project therefore removes its department blocks, arrows, team tasks, and
-    // team-task arrows in one atomic database operation.
-    await supabaseDb.deleteById(_tmTicketsTable(), ticketId);
-    return res.json({ ok: true, deletedId: ticketId });
-  } catch (error) {
-    console.error("[task-management] delete project error:", error?.details || error?.message || error);
-    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to delete project." });
-  }
-});
-
-app.put("/api/task-management/:id", requireAuth, requireTaskManagementView(), async (req, res) => {
-  res.set("Cache-Control", "no-store");
-  try {
-    if (!supabaseDb.isConfigured()) return res.status(503).json({ ok: false, error: "Supabase is not configured." });
-
-    const ticketId = String(req.params.id || "").trim();
-    if (!ticketId) return res.status(400).json({ ok: false, error: "Missing project ID." });
-
-    const existingTicket = await _tmLoadTicketById(ticketId);
-    if (!existingTicket) return res.status(404).json({ ok: false, error: "Project not found." });
-
-    const currentUser = await _tmCurrentMember(req);
-    if (!_tmTicketBelongsToView(existingTicket, currentUser, req.taskManagementView)) {
-      return res.status(403).json({ ok: false, error: "This project is not available in the selected Task Management view." });
-    }
-
-    const adminPages = [_taskManagementViewAccessPage(req.taskManagementView), "Task Management"].filter(Boolean);
-    const authorized = await _verifyPageAdminPassword(req, req.body?.adminPassword, adminPages);
-    if (!authorized) return res.status(401).json({ ok: false, error: "Invalid admin password." });
-
-    const title = _tmText(req.body?.title, 500);
-    const description = _tmText(req.body?.description, 8000);
-    const rawPriority = _tmText(req.body?.priority, 30);
-    const priority = _tmPriority(rawPriority);
-    const dueDate = _tmDate(req.body?.dueDate);
-    const plan = _tmBuildWorkflowPlan(req.body?.sections, req.body?.edges);
-    const sections = plan.sections;
-    const edges = plan.edges;
-
-    if (!title) return res.status(400).json({ ok: false, error: "Project title is required." });
-    if (!["urgent", "high", "normal", "low"].includes(rawPriority.toLowerCase())) return res.status(400).json({ ok: false, error: "Project priority is required." });
-    if (!dueDate) return res.status(400).json({ ok: false, error: "Project target date is required." });
-    if (!sections.length) return res.status(400).json({ ok: false, error: "Add at least one workflow block." });
-    const invalid = sections.find((section) => !section.department || !section.request || !section.deliveryDate);
-    if (invalid) return res.status(400).json({ ok: false, error: "Each workflow block requires a department, requested action, and delivery date." });
-    const lateSection = sections.find((section) => section.deliveryDate > dueDate);
-    if (lateSection) return res.status(400).json({ ok: false, error: "A workflow block delivery date cannot be after the project target date." });
-
-    const now = new Date().toISOString();
-    await supabaseDb.updateById(_tmTicketsTable(), ticketId, {
-      title,
-      description: description || null,
-      priority,
-      due_date: dueDate,
-      updated_at: now,
-    });
-
-    const existingSectionsById = new Map((existingTicket.sections || []).map((section) => [String(section.id), section]));
-    const resolvedSectionIds = new Map();
-    const retainedSectionIds = new Set();
-
-    for (const section of sections) {
-      const sectionPayload = {
-        ticket_id: ticketId,
-        department: section.department,
-        request_text: section.request,
-        details: section.details || null,
-        delivery_date: section.deliveryDate,
-        sort_order: section.sortOrder,
-        execution_group: section.executionGroup,
-        canvas_x: section.canvasX || null,
-        canvas_y: section.canvasY || null,
-        ..._tmAttachmentColumns(section.attachments || section.attachment),
-        updated_at: now,
-      };
-
-      const existingSection = existingSectionsById.get(String(section.clientId));
-      if (existingSection) {
-        await supabaseDb.updateById(_tmSectionsTable(), existingSection.id, sectionPayload);
-        resolvedSectionIds.set(section.clientId, String(existingSection.id));
-        retainedSectionIds.add(String(existingSection.id));
-      } else {
-        const createdSection = await supabaseDb.insert(_tmSectionsTable(), {
-          ...sectionPayload,
-          status: "not_started",
-          created_at: now,
-        });
-        const createdId = _tmId(createdSection);
-        if (!createdId) throw new Error("Workflow block was created without an ID.");
-        resolvedSectionIds.set(section.clientId, createdId);
-        retainedSectionIds.add(createdId);
-      }
-    }
-
-    const edgeIds = (existingTicket.edges || []).map((edge) => String(edge.id || "")).filter(Boolean);
-    if (edgeIds.length) await supabaseDb.deleteByIds(_tmEdgesTable(), edgeIds);
-
-    const removedSectionIds = (existingTicket.sections || [])
-      .map((section) => String(section.id || ""))
-      .filter((id) => id && !retainedSectionIds.has(id));
-    if (removedSectionIds.length) await supabaseDb.deleteByIds(_tmSectionsTable(), removedSectionIds);
-
-    for (const edge of edges) {
-      const fromSectionId = resolvedSectionIds.get(edge.from);
-      const toSectionId = resolvedSectionIds.get(edge.to);
-      if (!fromSectionId || !toSectionId) throw new Error("Workflow arrow could not be linked to its blocks.");
-      await supabaseDb.insert(_tmEdgesTable(), {
-        ticket_id: ticketId,
-        from_section_id: fromSectionId,
-        to_section_id: toSectionId,
-      });
-    }
-
-    const ticket = await _tmSyncTicketStatus(ticketId) || await _tmLoadTicketById(ticketId);
-    return res.json({ ok: true, ticket });
-  } catch (error) {
-    console.error("[task-management] update project error:", error?.details || error?.message || error);
-    const detail = String(error?.message || "");
-    const message = /delivery_date.*schema cache|Could not find the .*delivery_date/i.test(detail)
-      ? "The workflow block delivery-date column is not installed. Run the supplied delivery-date SQL migration, then refresh this page."
-      : (/(attachments|attachment_(name|url|type|size)).*schema cache|Could not find the .*(attachments|attachment_)/i.test(detail)
-        ? "Task Management multi-attachment columns are not installed. Run the supplied multi-attachments SQL migration, then refresh this page."
-        : (error?.message || "Failed to update project."));
-    return res.status(error?.status || 500).json({ ok: false, error: message });
-  }
-});
-
-
-app.get("/api/task-management/sections/:id/people-workflow", requireAuth, requireTaskManagementView(), async (req, res) => {
-  res.set("Cache-Control", "no-store");
-  try {
-    if (req.taskManagementView !== "my") return res.status(403).json({ ok: false, error: "Team assignment workflows are available from My Tasks only." });
-    const sectionId = String(req.params.id || "").trim();
-    const sectionRow = await supabaseDb.selectById(_tmSectionsTable(), sectionId);
-    if (!sectionRow) return res.status(404).json({ ok: false, error: "Workflow section not found." });
-    const ticket = await _tmLoadTicketById(_sbGet(sectionRow, ["ticket_id", "ticketId"]));
-    const currentUser = await _tmCurrentMember(req);
-    const section = (ticket?.sections || []).find((item) => String(item.id) === sectionId);
-    if (!_tmTicketBelongsToView(ticket, currentUser, "my")) return res.status(403).json({ ok: false, error: "This project is not assigned to your department." });
-    _tmAssertOwnDepartmentSection(ticket, section, currentUser);
-    const [members, workflow] = await Promise.all([
-      _tmMembersForDepartment(section.department),
-      _tmLoadPeopleWorkflow(sectionId),
-    ]);
-    const visibleWorkflow = _tmWorkflowForViewer(workflow, currentUser, { revealAll: _tmCanManageDepartmentWork(req), published: _tmStatus(section?.status) === "completed" });
-    return res.json({
-      ok: true,
-      section,
-      members,
-      assignments: visibleWorkflow.assignments,
-      edges: visibleWorkflow.edges,
-      accessLevel: req.opsPageAccessLevel || PAGE_ACCESS_LEVELS.VIEW,
-    });
-  } catch (error) {
-    console.error("[task-management] people workflow load error:", error?.details || error?.message || error);
-    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to load the team workflow." });
-  }
-});
-
-app.put("/api/task-management/sections/:id/people-workflow", requireAuth, requireTaskManagementView(), async (req, res) => {
-  res.set("Cache-Control", "no-store");
-  try {
-    if (req.taskManagementView !== "my") return res.status(403).json({ ok: false, error: "Team assignment workflows are available from My Tasks only." });
-    const sectionId = String(req.params.id || "").trim();
-    const sectionRow = await supabaseDb.selectById(_tmSectionsTable(), sectionId);
-    if (!sectionRow) return res.status(404).json({ ok: false, error: "Workflow section not found." });
-    const ticket = await _tmLoadTicketById(_sbGet(sectionRow, ["ticket_id", "ticketId"]));
-    const currentUser = await _tmCurrentMember(req);
-    const section = (ticket?.sections || []).find((item) => String(item.id) === sectionId);
-    if (!_tmTicketBelongsToView(ticket, currentUser, "my")) return res.status(403).json({ ok: false, error: "This project is not assigned to your department." });
-    _tmAssertOwnDepartmentSection(ticket, section, currentUser);
-    if (!_tmCanManageDepartmentWork(req)) {
-      return res.status(403).json({ ok: false, error: "Edit or Admin access is required to assign tasks to team members." });
-    }
-
-    const members = await _tmMembersForDepartment(section.department);
-    const membersById = new Map(members.map((member) => [String(member.id), member]));
-    const plan = _tmBuildPeopleWorkflowPlan(req.body?.assignments, req.body?.edges);
-    if (!plan.assignments.length) return res.status(400).json({ ok: false, error: "Add at least one person task." });
-    const invalid = plan.assignments.find((assignment) => !assignment.assigneeId || !assignment.task || !assignment.deliveryDate);
-    if (invalid) return res.status(400).json({ ok: false, error: "Every person task requires a team member, assigned task, and delivery date." });
-    const outsideDepartment = plan.assignments.find((assignment) => !membersById.has(String(assignment.assigneeId)));
-    if (outsideDepartment) return res.status(400).json({ ok: false, error: "Every selected person must belong to your department." });
-    const departmentDeliveryDate = String(section?.deliveryDate || "").trim();
-    const latePersonTask = departmentDeliveryDate
-      ? plan.assignments.find((assignment) => String(assignment.deliveryDate || "").trim() > departmentDeliveryDate)
-      : null;
-    if (latePersonTask) {
-      return res.status(400).json({ ok: false, error: "A personal task delivery date cannot be after its department task delivery date." });
-    }
-
-    const existing = await _tmLoadPeopleWorkflow(sectionId);
-    const existingById = new Map((existing.assignments || []).map((assignment) => [String(assignment.id), assignment]));
-    const retainedIds = new Set();
-    const resolvedIds = new Map();
-    const now = new Date().toISOString();
-
-    for (const assignment of plan.assignments) {
-      const member = membersById.get(String(assignment.assigneeId));
-      const payload = {
-        section_id: sectionId,
-        assignee_id: String(member.id),
-        assignee_name: member.name,
-        task_text: assignment.task,
-        details: assignment.details || null,
-        delivery_date: assignment.deliveryDate,
-        sort_order: assignment.sortOrder,
-        execution_group: assignment.executionGroup,
-        canvas_x: assignment.canvasX || null,
-        canvas_y: assignment.canvasY || null,
-        ..._tmAttachmentColumns(assignment.attachments || assignment.attachment),
-        updated_at: now,
-      };
-      const previous = existingById.get(String(assignment.clientId));
-      if (previous) {
-        await supabaseDb.updateById(_tmAssignmentsTable(), previous.id, payload);
-        retainedIds.add(String(previous.id));
-        resolvedIds.set(String(assignment.clientId), String(previous.id));
-      } else {
-        const created = await supabaseDb.insert(_tmAssignmentsTable(), {
-          ...payload,
-          status: "not_started",
-          created_at: now,
-        });
-        const createdId = _tmId(created);
-        if (!createdId) throw new Error("Person task was created without an ID.");
-        retainedIds.add(createdId);
-        resolvedIds.set(String(assignment.clientId), createdId);
-      }
-    }
-
-    const oldEdgeIds = (existing.edges || []).map((edge) => String(edge.id || "")).filter(Boolean);
-    if (oldEdgeIds.length) await supabaseDb.deleteByIds(_tmAssignmentEdgesTable(), oldEdgeIds);
-    const removedIds = (existing.assignments || []).map((assignment) => String(assignment.id || "")).filter((id) => id && !retainedIds.has(id));
-    if (removedIds.length) await supabaseDb.deleteByIds(_tmAssignmentsTable(), removedIds);
-
-    for (const edge of plan.edges) {
-      const fromId = resolvedIds.get(String(edge.from));
-      const toId = resolvedIds.get(String(edge.to));
-      if (!fromId || !toId) throw new Error("A team workflow arrow could not be linked to its person tasks.");
-      await supabaseDb.insert(_tmAssignmentEdgesTable(), {
-        section_id: sectionId,
-        from_assignment_id: fromId,
-        to_assignment_id: toId,
-        created_at: now,
-      });
-    }
-
-    // Creating or saving at least one team-member subtask means the department
-    // has started working on this section. Move the parent section to In progress
-    // automatically, while preserving terminal/review statuses.
-    let sectionStatus = _tmStatus(section?.status);
-    if (plan.assignments.length && sectionStatus === "not_started") {
-      sectionStatus = "in_progress";
-      await supabaseDb.updateById(_tmSectionsTable(), sectionId, {
-        status: sectionStatus,
-        updated_at: now,
-      });
-      await _tmSyncTicketStatus(ticket.id);
-    }
-
-    const saved = await _tmLoadPeopleWorkflow(sectionId);
-    const visibleWorkflow = _tmWorkflowForViewer(saved, currentUser, { revealAll: _tmCanManageDepartmentWork(req), published: sectionStatus === "completed" });
-    return res.json({ ok: true, members, sectionStatus, assignments: visibleWorkflow.assignments, edges: visibleWorkflow.edges });
-  } catch (error) {
-    console.error("[task-management] people workflow save error:", error?.details || error?.message || error);
-    const detail = String(error?.message || "");
-    const message = /(attachments).*schema cache|Could not find the .*attachments/i.test(detail)
-      ? "The team-task multi-attachment column is not installed. Run the supplied multi-attachments SQL migration, then refresh this page."
-      : (/relation .* does not exist|Could not find the table|schema cache/i.test(detail)
-        ? "The My Tasks team-workflow tables are not installed. Run the supplied My Tasks SQL migration, then refresh this page."
-        : (error?.message || "Failed to save the team workflow."));
-    return res.status(error?.status || 500).json({ ok: false, error: message });
-  }
-});
-
-
-app.delete("/api/task-management/sections/:id/people-workflow", requireAuth, requireTaskManagementView(), async (req, res) => {
-  res.set("Cache-Control", "no-store");
-  try {
-    if (req.taskManagementView !== "my") return res.status(403).json({ ok: false, error: "Team assignment workflows are available from My Tasks only." });
-    const sectionId = String(req.params.id || "").trim();
-    const sectionRow = await supabaseDb.selectById(_tmSectionsTable(), sectionId);
-    if (!sectionRow) return res.status(404).json({ ok: false, error: "Workflow section not found." });
-    const ticket = await _tmLoadTicketById(_sbGet(sectionRow, ["ticket_id", "ticketId"]));
-    const currentUser = await _tmCurrentMember(req);
-    const section = (ticket?.sections || []).find((item) => String(item.id) === sectionId);
-    if (!_tmTicketBelongsToView(ticket, currentUser, "my")) return res.status(403).json({ ok: false, error: "This project is not assigned to your department." });
-    _tmAssertOwnDepartmentSection(ticket, section, currentUser);
-    if (!_tmCanManageDepartmentWork(req)) return res.status(403).json({ ok: false, error: "Edit or Admin access is required to delete team tasks." });
-
-    const existing = await _tmLoadPeopleWorkflow(sectionId);
-    const edgeIds = (existing.edges || []).map((edge) => String(edge.id || "")).filter(Boolean);
-    const assignmentIds = (existing.assignments || []).map((assignment) => String(assignment.id || "")).filter(Boolean);
-    if (edgeIds.length) await supabaseDb.deleteByIds(_tmAssignmentEdgesTable(), edgeIds);
-    if (assignmentIds.length) await supabaseDb.deleteByIds(_tmAssignmentsTable(), assignmentIds);
-    return res.json({ ok: true, sectionId, assignments: [], edges: [] });
-  } catch (error) {
-    console.error("[task-management] people workflow delete error:", error?.details || error?.message || error);
-    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to delete the team workflow." });
-  }
-});
-
-app.patch("/api/task-management/sections/:id/people-workflow/archive", requireAuth, requireTaskManagementView(), async (req, res) => {
-  res.set("Cache-Control", "no-store");
-  try {
-    if (req.taskManagementView !== "my") return res.status(403).json({ ok: false, error: "Team assignment workflows are available from My Tasks only." });
-    const sectionId = String(req.params.id || "").trim();
-    const sectionRow = await supabaseDb.selectById(_tmSectionsTable(), sectionId);
-    if (!sectionRow) return res.status(404).json({ ok: false, error: "Workflow section not found." });
-    const ticket = await _tmLoadTicketById(_sbGet(sectionRow, ["ticket_id", "ticketId"]));
-    const currentUser = await _tmCurrentMember(req);
-    const section = (ticket?.sections || []).find((item) => String(item.id) === sectionId);
-    if (!_tmTicketBelongsToView(ticket, currentUser, "my")) return res.status(403).json({ ok: false, error: "This project is not assigned to your department." });
-    _tmAssertOwnDepartmentSection(ticket, section, currentUser);
-    if (!_tmCanManageDepartmentWork(req)) return res.status(403).json({ ok: false, error: "Edit or Admin access is required to archive team tasks." });
-
-    const archived = !!req.body?.archived;
-    const existing = await _tmLoadPeopleWorkflow(sectionId);
-    const now = new Date().toISOString();
-    for (const assignment of existing.assignments || []) {
-      const patch = archived
-        ? { status: "cancelled", updated_at: now }
-        : { status: "not_started", rejection_reason: null, updated_at: now };
-      await supabaseDb.updateById(_tmAssignmentsTable(), assignment.id, patch);
-    }
-    const saved = await _tmLoadPeopleWorkflow(sectionId);
-    return res.json({ ok: true, sectionId, archived, assignments: saved.assignments, edges: saved.edges });
-  } catch (error) {
-    console.error("[task-management] people workflow archive error:", error?.details || error?.message || error);
-    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to update the team workflow archive state." });
-  }
-});
-
-
-app.patch("/api/task-management/assignments/:id/archive", requireAuth, requireTaskManagementView(), async (req, res) => {
-  res.set("Cache-Control", "no-store");
-  try {
-    if (req.taskManagementView !== "my") return res.status(403).json({ ok: false, error: "Team-member tasks can be managed from My Tasks only." });
-    const assignmentId = String(req.params.id || "").trim();
-    const assignmentRow = await supabaseDb.selectById(_tmAssignmentsTable(), assignmentId);
-    if (!assignmentRow) return res.status(404).json({ ok: false, error: "Team-member task not found." });
-    const assignment = _tmSerializeAssignment(assignmentRow);
-    const sectionRow = await supabaseDb.selectById(_tmSectionsTable(), assignment.sectionId);
-    if (!sectionRow) return res.status(404).json({ ok: false, error: "Workflow section not found." });
-    const ticket = await _tmLoadTicketById(_sbGet(sectionRow, ["ticket_id", "ticketId"]));
-    const currentUser = await _tmCurrentMember(req);
-    const section = (ticket?.sections || []).find((item) => String(item.id) === String(assignment.sectionId));
-    if (!_tmTicketBelongsToView(ticket, currentUser, "my")) return res.status(403).json({ ok: false, error: "This project is not assigned to your department." });
-    _tmAssertOwnDepartmentSection(ticket, section, currentUser);
-    if (!_tmCanManageDepartmentWork(req)) return res.status(403).json({ ok: false, error: "Edit or Admin access is required to archive team tasks." });
-
-    const archived = !!req.body?.archived;
-    const now = new Date().toISOString();
-    await supabaseDb.updateById(_tmAssignmentsTable(), assignmentId, archived
-      ? { status: "cancelled", updated_at: now }
-      : { status: "not_started", rejection_reason: null, updated_at: now });
-    const updatedRow = await supabaseDb.selectById(_tmAssignmentsTable(), assignmentId);
-    return res.json({ ok: true, archived, assignment: _tmSerializeAssignment(updatedRow) });
-  } catch (error) {
-    console.error("[task-management] assignment archive error:", error?.details || error?.message || error);
-    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to update the team-member task archive state." });
-  }
-});
-
-app.delete("/api/task-management/assignments/:id", requireAuth, requireTaskManagementView(), async (req, res) => {
-  res.set("Cache-Control", "no-store");
-  try {
-    if (req.taskManagementView !== "my") return res.status(403).json({ ok: false, error: "Team-member tasks can be managed from My Tasks only." });
-    const assignmentId = String(req.params.id || "").trim();
-    const assignmentRow = await supabaseDb.selectById(_tmAssignmentsTable(), assignmentId);
-    if (!assignmentRow) return res.status(404).json({ ok: false, error: "Team-member task not found." });
-    const assignment = _tmSerializeAssignment(assignmentRow);
-    const sectionRow = await supabaseDb.selectById(_tmSectionsTable(), assignment.sectionId);
-    if (!sectionRow) return res.status(404).json({ ok: false, error: "Workflow section not found." });
-    const ticket = await _tmLoadTicketById(_sbGet(sectionRow, ["ticket_id", "ticketId"]));
-    const currentUser = await _tmCurrentMember(req);
-    const section = (ticket?.sections || []).find((item) => String(item.id) === String(assignment.sectionId));
-    if (!_tmTicketBelongsToView(ticket, currentUser, "my")) return res.status(403).json({ ok: false, error: "This project is not assigned to your department." });
-    _tmAssertOwnDepartmentSection(ticket, section, currentUser);
-    if (!_tmCanManageDepartmentWork(req)) return res.status(403).json({ ok: false, error: "Edit or Admin access is required to delete team tasks." });
-
-    const workflow = await _tmLoadPeopleWorkflow(assignment.sectionId);
-    const connectedEdgeIds = (workflow.edges || [])
-      .filter((edge) => String(edge.from || edge.fromAssignmentId || "") === assignmentId || String(edge.to || edge.toAssignmentId || "") === assignmentId)
-      .map((edge) => String(edge.id || ""))
-      .filter(Boolean);
-    if (connectedEdgeIds.length) await supabaseDb.deleteByIds(_tmAssignmentEdgesTable(), connectedEdgeIds);
-    await supabaseDb.deleteByIds(_tmAssignmentsTable(), [assignmentId]);
-    return res.json({ ok: true, assignmentId, sectionId: assignment.sectionId });
-  } catch (error) {
-    console.error("[task-management] assignment delete error:", error?.details || error?.message || error);
-    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to delete the team-member task." });
-  }
-});
-
-app.patch("/api/task-management/assignments/:id/work", requireAuth, requireTaskManagementView(), async (req, res) => {
-  res.set("Cache-Control", "no-store");
-  try {
-    if (req.taskManagementView !== "my") {
-      return res.status(403).json({ ok: false, error: "Team-member work can be updated from My Tasks only." });
-    }
-    const assignmentId = String(req.params.id || "").trim();
-    const assignmentRow = await supabaseDb.selectById(_tmAssignmentsTable(), assignmentId);
-    if (!assignmentRow) return res.status(404).json({ ok: false, error: "Team-member task not found." });
-
-    const assignment = _tmSerializeAssignment(assignmentRow);
-    const sectionRow = await supabaseDb.selectById(_tmSectionsTable(), assignment.sectionId);
-    if (!sectionRow) return res.status(404).json({ ok: false, error: "Department workflow section not found." });
-    const ticket = await _tmLoadTicketById(_sbGet(sectionRow, ["ticket_id", "ticketId"]));
-    const currentUser = await _tmCurrentMember(req);
-    const section = (ticket?.sections || []).find((item) => String(item.id) === String(assignment.sectionId));
-    if (!_tmTicketBelongsToView(ticket, currentUser, "my")) {
-      return res.status(403).json({ ok: false, error: "This project is not assigned to your department." });
-    }
-    _tmAssertOwnDepartmentSection(ticket, section, currentUser);
-    if (!_tmCanEditAssignmentWork(req, assignment, currentUser)) {
-      return res.status(403).json({ ok: false, error: "You can update only the team-member task assigned to you." });
-    }
-
-    const status = _tmStatus(req.body?.status, "");
-    if (!["not_started", "in_progress", "rejected", "completed"].includes(status)) {
-      return res.status(400).json({ ok: false, error: "A valid task status is required." });
-    }
-    const rejectionReason = _tmText(req.body?.rejectionReason, 4000);
-    if (status === "rejected" && !rejectionReason) {
-      return res.status(400).json({ ok: false, error: "Rejected reason is required when the task status is Rejected." });
-    }
-
-    const workflowBefore = await _tmLoadPeopleWorkflow(assignment.sectionId);
-    const liveAssignment = (workflowBefore.assignments || []).find((item) => String(item.id) === assignmentId) || assignment;
-    const blockedBy = _tmAssignmentPrerequisites(workflowBefore, liveAssignment)
-      .find((item) => _tmStatus(item?.status) !== "completed");
-    if (blockedBy && ["in_progress", "completed"].includes(status)) {
-      return res.status(409).json({ ok: false, error: "Complete the connected prerequisite team task first." });
-    }
-
-    const workReport = _tmText(req.body?.workReport, 12000);
-    const workLink = _tmText(req.body?.workLink, 4000);
-    if (workLink && !/^https?:\/\//i.test(workLink)) {
-      return res.status(400).json({ ok: false, error: "Work link must start with http:// or https://." });
-    }
-    const workFiles = _tmAttachments(req.body?.workFiles || req.body?.workFile || []);
-    const patch = {
-      status,
-      work_report: workReport || null,
-      rejection_reason: status === "rejected" ? rejectionReason : null,
-      work_link: workLink || null,
-      ..._tmWorkFileColumns(workFiles),
-      updated_at: new Date().toISOString(),
-    };
-    await supabaseDb.updateById(_tmAssignmentsTable(), assignmentId, patch);
-
-    const saved = await _tmLoadPeopleWorkflow(assignment.sectionId);
-    const liveSection = _tmSerializeSection(sectionRow);
-    const teamDraftReport = _tmBuildTeamDraftReport(saved, liveSection.workReport || liveSection.completionNote || "");
-    const latestLinkOwner = _tmLatestTeamWorkAsset(saved, "link");
-    const latestFileOwner = _tmLatestTeamWorkAsset(saved, "file");
-    await supabaseDb.updateById(_tmSectionsTable(), assignment.sectionId, {
-      work_report: teamDraftReport || null,
-      completion_note: teamDraftReport || null,
-      work_link: latestLinkOwner?.workLink || liveSection.workLink || null,
-      work_file_name: latestFileOwner?.workFile?.name || liveSection.workFile?.name || null,
-      work_file_url: latestFileOwner?.workFile?.url || liveSection.workFile?.url || null,
-      work_file_type: latestFileOwner?.workFile?.type || liveSection.workFile?.type || null,
-      work_file_size: latestFileOwner?.workFile?.size || liveSection.workFile?.size || null,
-      updated_at: new Date().toISOString(),
-    });
-    const visibleWorkflow = _tmWorkflowForViewer(saved, currentUser, { revealAll: _tmCanManageDepartmentWork(req), published: _tmStatus(section?.status) === "completed" });
-    const updatedAssignment = (visibleWorkflow.assignments || []).find((item) => String(item.id) === assignmentId) || null;
-    return res.json({
-      ok: true,
-      sectionId: assignment.sectionId,
-      assignment: updatedAssignment,
-      assignments: visibleWorkflow.assignments,
-      edges: visibleWorkflow.edges,
-    });
-  } catch (error) {
-    console.error("[task-management] assignment work update error:", error?.details || error?.message || error);
-    const detail = String(error?.message || "");
-    const message = /(work_file_|work_report|rejection_reason|work_link).*schema cache|Could not find the .*(work_file_|work_report|rejection_reason|work_link)/i.test(detail)
-      ? "The team-member work columns are not installed. Run the supplied My Tasks SQL migration, then refresh this page."
-      : (error?.message || "Failed to update the team-member task.");
-    return res.status(error?.status || 500).json({ ok: false, error: message });
-  }
-});
-
-app.patch("/api/task-management/sections/:id/work", requireAuth, requireTaskManagementView(), async (req, res) => {
-  res.set("Cache-Control", "no-store");
-  try {
-    if (req.taskManagementView !== "my") return res.status(403).json({ ok: false, error: "Section work can be updated from My Tasks only." });
-    const sectionId = String(req.params.id || "").trim();
-    const sectionRow = await supabaseDb.selectById(_tmSectionsTable(), sectionId);
-    if (!sectionRow) return res.status(404).json({ ok: false, error: "Workflow section not found." });
-    const ticket = await _tmLoadTicketById(_sbGet(sectionRow, ["ticket_id", "ticketId"]));
-    const currentUser = await _tmCurrentMember(req);
-    const section = (ticket?.sections || []).find((item) => String(item.id) === sectionId);
-    if (!_tmTicketBelongsToView(ticket, currentUser, "my")) return res.status(403).json({ ok: false, error: "This project is not assigned to your department." });
-    _tmAssertOwnDepartmentSection(ticket, section, currentUser);
-    if (!_tmCanManageDepartmentWork(req)) {
-      return res.status(403).json({ ok: false, error: "Department work can be updated only by users with Edit or Admin access." });
-    }
-
-    const status = _tmStatus(req.body?.status, "");
-    if (!["not_started", "in_progress", "rejected", "completed"].includes(status)) {
-      return res.status(400).json({ ok: false, error: "A valid task status is required." });
-    }
-    const rejectionReason = _tmText(req.body?.rejectionReason, 4000);
-    if (status === "rejected" && !rejectionReason) {
-      return res.status(400).json({ ok: false, error: "Rejected reason is required when the task status is Rejected." });
-    }
-
-    const prerequisiteOpenSection = _tmSectionPrerequisites(ticket, section)
-      .find((item) => _tmStatus(item.status) !== "completed");
-    if (prerequisiteOpenSection && ["in_progress", "completed"].includes(status)) {
-      return res.status(409).json({ ok: false, error: "Complete the connected prerequisite block first before starting this section." });
-    }
-
-    const workReport = _tmText(req.body?.workReport, 12000);
-    const workLink = _tmText(req.body?.workLink, 4000);
-    if (workLink && !/^https?:\/\//i.test(workLink)) return res.status(400).json({ ok: false, error: "Work link must start with http:// or https://." });
-    const workFiles = _tmAttachments(req.body?.workFiles || req.body?.workFile || []);
-    const now = new Date().toISOString();
-    const patch = {
-      status,
-      work_report: workReport || null,
-      completion_note: workReport || null,
-      rejection_reason: status === "rejected" ? rejectionReason : null,
-      work_link: workLink || null,
-      ..._tmWorkFileColumns(workFiles),
-      updated_at: now,
-    };
-    if (status === "in_progress" && !section?.startedAt) patch.started_at = now;
-    if (status === "completed") {
-      patch.completed_at = now;
-      patch.completed_by_id = currentUser.id || null;
-      patch.completed_by_name = currentUser.name || null;
-    } else {
-      patch.completed_at = null;
-      patch.completed_by_id = null;
-      patch.completed_by_name = null;
-    }
-
-    await supabaseDb.updateById(_tmSectionsTable(), sectionId, patch);
-
-    // The department manager is the owner of the parent block. Whenever they
-    // change its status, keep every visible team-member card under that block
-    // on the same status. Archived team cards use `cancelled`, so they are
-    // intentionally excluded and remain archived/hidden for their assignees.
-    const teamAssignmentRows = await supabaseDb.select(_tmAssignmentsTable(), {
-      select: "id,status",
-      section_id: `eq.${_sbRestFilterValue(sectionId)}`,
-      limit: 1000,
-      order: "id.asc",
-    });
-    const activeTeamAssignmentIds = (teamAssignmentRows || [])
-      .filter((row) => _tmStatus(_sbGet(row, ["status", "Status"])) !== "cancelled")
-      .map((row) => String(_sbGet(row, ["id", "ID"]) || ""))
-      .filter(Boolean);
-    if (activeTeamAssignmentIds.length) {
-      await supabaseDb.updateByIds(_tmAssignmentsTable(), activeTeamAssignmentIds, {
-        status,
-        rejection_reason: status === "rejected" ? rejectionReason : null,
-        updated_at: now,
-      });
-    }
-
-    const updatedTicket = await _tmSyncTicketStatus(ticket.id) || await _tmLoadTicketById(ticket.id);
-    const updatedSection = (updatedTicket?.sections || []).find((item) => String(item.id) === sectionId) || null;
-    return res.json({ ok: true, ticket: updatedTicket, section: updatedSection });
-  } catch (error) {
-    console.error("[task-management] work update error:", error?.details || error?.message || error);
-    const detail = String(error?.message || "");
-    const message = /(work_report|rejection_reason|work_link|work_file_).*schema cache|Could not find the .*(work_report|rejection_reason|work_link|work_file_)/i.test(detail)
-      ? "The My Tasks work fields are not installed. Run the supplied My Tasks SQL migration, then refresh this page."
-      : (error?.message || "Failed to update task work.");
-    return res.status(error?.status || 500).json({ ok: false, error: message });
-  }
-});
-
-app.patch("/api/task-management/sections/:id", requireAuth, requireTaskManagementView(), async (req, res) => {
-  res.set("Cache-Control", "no-store");
-  try {
-    const sectionId = String(req.params.id || "").trim();
-    if (!sectionId) return res.status(400).json({ ok: false, error: "Missing section ID." });
-    const sectionRow = await supabaseDb.selectById(_tmSectionsTable(), sectionId);
-    if (!sectionRow) return res.status(404).json({ ok: false, error: "Workflow section not found." });
-
-    const ticket = await _tmLoadTicketById(_sbGet(sectionRow, ["ticket_id", "ticketId"]));
-    if (!ticket) return res.status(404).json({ ok: false, error: "Ticket not found." });
-    const currentUser = await _tmCurrentMember(req);
-    const section = (ticket.sections || []).find((item) => String(item.id) === sectionId);
-    if (!_tmTicketBelongsToView(ticket, currentUser, req.taskManagementView)) {
-      return res.status(403).json({ ok: false, error: "This ticket is not available in the selected Task Management view." });
-    }
-    const canUpdate = _tmCanUpdateSectionInView(req, ticket, section, currentUser, req.taskManagementView);
-    if (!canUpdate) return res.status(403).json({ ok: false, error: "You can update only the workflow work assigned to you in this view." });
-
-    const requestedStatus = req.body && Object.prototype.hasOwnProperty.call(req.body, "status")
-      ? _tmStatus(req.body.status, "")
-      : "";
-    if (!["not_started", "in_progress", "rejected", "completed"].includes(requestedStatus)) {
-      return res.status(400).json({ ok: false, error: "A valid section status is required." });
-    }
-
-    // A block can start only after the blocks directly connected to it are
-    // completed. Older tickets without saved arrows still fall back to their
-    // serial/parallel execution-group behavior.
-    const prerequisiteOpenSection = _tmSectionPrerequisites(ticket, section)
-      .find((item) => _tmStatus(item.status) !== "completed");
-    if (prerequisiteOpenSection && ["in_progress", "completed"].includes(requestedStatus)) {
-      return res.status(409).json({
-        ok: false,
-        error: `Complete the connected prerequisite block first before starting this section.`,
-      });
-    }
-
-    const completionNote = req.body && Object.prototype.hasOwnProperty.call(req.body, "completionNote")
-      ? _tmText(req.body.completionNote, 8000)
-      : undefined;
-    const now = new Date().toISOString();
-    const patch = { status: requestedStatus, updated_at: now };
-    if (typeof completionNote !== "undefined") patch.completion_note = completionNote || null;
-    if (requestedStatus === "in_progress" && !section?.startedAt) patch.started_at = now;
-    if (requestedStatus === "completed") {
-      patch.completed_at = now;
-      patch.completed_by_id = currentUser.id || null;
-      patch.completed_by_name = currentUser.name || null;
-    } else if (requestedStatus !== "completed") {
-      patch.completed_at = null;
-      patch.completed_by_id = null;
-      patch.completed_by_name = null;
-    }
-
-    await supabaseDb.updateById(_tmSectionsTable(), sectionId, patch);
-    const updatedTicket = await _tmSyncTicketStatus(ticket.id);
-    return res.json({ ok: true, ticket: updatedTicket || await _tmLoadTicketById(ticket.id) });
-  } catch (error) {
-    console.error("[task-management] section update error:", error?.details || error?.message || error);
-    return res.status(error?.status || 500).json({ ok: false, error: error?.message || "Failed to update workflow section." });
-  }
-});
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 // ---- API: notifications list / read ----
 

@@ -1,6 +1,6 @@
 import "server-only";
 
-import { getDirectSessionAccountGate } from "./direct-session-account";
+import { getDirectAccountGate } from "./products-auth";
 import { select, selectById } from "./supabase-rest";
 import { listTeamMembersLite } from "./team-members-service";
 
@@ -476,14 +476,21 @@ async function loadSummaryTickets(context = {}) {
   return tickets.map((ticket) => ({ ...ticket, ...viewerProgress(ticket, member, context, assignmentRows) }));
 }
 
-async function loadDetailTicket(id, context = {}) {
-  const row = await selectById(ticketsTable(), id);
+export async function loadRawTaskManagementTicket(id) {
+  const cleanId = text(id);
+  if (!cleanId) return null;
+  const row = await selectById(ticketsTable(), cleanId);
   if (!row) return null;
   const [sectionRows, edgeRows] = await Promise.all([
-    select(sectionsTable(), { select: "*", ticket_id: `eq.${id}`, limit: "1000", order: "sort_order.asc,id.asc" }),
-    select(edgesTable(), { select: "*", ticket_id: `eq.${id}`, limit: "3000", order: "id.asc" }),
+    select(sectionsTable(), { select: "*", ticket_id: `eq.${cleanId}`, limit: "1000", order: "sort_order.asc,id.asc" }),
+    select(edgesTable(), { select: "*", ticket_id: `eq.${cleanId}`, limit: "3000", order: "id.asc" }),
   ]);
-  const ticket = serializeTicket(row, Array.isArray(sectionRows) ? sectionRows : [], Array.isArray(edgeRows) ? edgeRows : [], { summary: false });
+  return serializeTicket(row, Array.isArray(sectionRows) ? sectionRows : [], Array.isArray(edgeRows) ? edgeRows : [], { summary: false });
+}
+
+async function loadDetailTicket(id, context = {}) {
+  const ticket = await loadRawTaskManagementTicket(id);
+  if (!ticket) return null;
   const member = currentMember(context);
   if (!belongsToView(ticket, member, context.view)) {
     const error = new Error("This ticket is not available in the selected Task Management view.");
@@ -551,9 +558,8 @@ export async function taskManagementMeta(context = {}, { force = false } = {}) {
 export async function directTaskManagementContext(view) {
   const config = VIEW_CONFIG[view];
   if (!config) return { ok: false, status: 400, error: "A valid Task Management view is required." };
-  const gate = await getDirectSessionAccountGate([config.pageName]);
-  if (!gate) return null;
-  if (!gate.ok) return { ok: false, status: gate.status, error: gate.error, account: gate.account || null, source: "direct-session" };
+  const gate = await getDirectAccountGate([config.pageName]);
+  if (!gate?.ok) return { ok: false, status: gate?.status || 503, error: gate?.error || "Task Management authentication is unavailable.", account: gate?.account || null, source: "next-account-gate" };
   const access = taskViewAccess(gate.account, view);
   return {
     ok: true,
@@ -563,8 +569,40 @@ export async function directTaskManagementContext(view) {
     memberId: gate.memberId || "",
     accessLevel: access.accessLevel,
     isPageAdmin: access.isPageAdmin,
-    source: "direct-session",
+    source: "next-account-gate",
   };
+}
+
+export function taskManagementCurrentMember(context = {}) {
+  return currentMember(context);
+}
+
+export function taskManagementCanManageDepartment(context = {}) {
+  return canManageDepartment(context);
+}
+
+export function taskManagementTicketBelongsToView(ticket = {}, member = {}, view = "") {
+  return belongsToView(ticket, member, view);
+}
+
+export function taskManagementSameMember(ticket = {}, member = {}) {
+  return sameMember(ticket, member);
+}
+
+export function taskManagementArchivedByMember(ticket = {}, member = {}) {
+  return archivedByMember(ticket, member);
+}
+
+export function taskManagementArchiveView(ticket = {}) {
+  return archiveView(ticket);
+}
+
+export function normalizeTaskManagementStatus(value, fallback = "not_started") {
+  return normalizeStatus(value, fallback);
+}
+
+export function taskManagementStatusLabel(value) {
+  return statusLabel(value);
 }
 
 export async function loadDirectTaskManagementPageData({ view } = {}) {

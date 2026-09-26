@@ -4,7 +4,6 @@ import {
   taskManagementMeta,
   taskManagementDataError,
 } from "../../../../lib/task-management-data";
-import { fetchLegacyJson } from "../../../../lib/legacy-api";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -23,13 +22,9 @@ export async function GET(request) {
 
   try {
     const context = await directTaskManagementContext(view);
-    if (context?.ok) return json({ ...(await taskManagementMeta(context, { force })), source: "supabase-next" });
-    if (context && !context.ok) return json({ ok: false, error: context.error || "Task Management is not available." }, { status: context.status || 403 });
+    if (!context?.ok) return json({ ok: false, error: context?.error || "Task Management is not available." }, { status: context?.status || 503 });
+    return json({ ...(await taskManagementMeta(context, { force })), source: "supabase-next" });
   } catch (error) {
-    console.warn("[task-management] direct meta failed; using Legacy fallback:", error?.message || error);
+    return json({ ok: false, error: taskManagementDataError(error) }, { status: Number(error?.status) || 500 });
   }
-
-  const legacy = await fetchLegacyJson(`/api/task-management/meta?view=${encodeURIComponent(view)}`, { timeoutMs: 20_000, fresh: force });
-  if (legacy.ok && legacy.data) return json({ ...legacy.data, source: legacy.data?.source || "legacy" }, { status: legacy.status || 200 });
-  return json({ ok: false, error: legacy.error || legacy.data?.error || taskManagementDataError(new Error("Task Management options are unavailable.")) }, { status: legacy.status || 502 });
 }

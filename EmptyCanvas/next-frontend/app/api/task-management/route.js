@@ -4,7 +4,6 @@ import {
   listTaskManagementTickets,
   taskManagementDataError,
 } from "../../../lib/task-management-data";
-import { fetchLegacyJson } from "../../../lib/legacy-api";
 import { measurePerformance } from "../../../lib/performance-profiler";
 
 export const dynamic = "force-dynamic";
@@ -24,18 +23,12 @@ async function GETImpl(request) {
 
   try {
     const context = await directTaskManagementContext(view);
-    if (context?.ok) {
-      const tickets = await listTaskManagementTickets(context, { force });
-      return json({ ok: true, tickets, source: "supabase-next" });
-    }
-    if (context && !context.ok) return json({ ok: false, error: context.error || "Task Management is not available." }, { status: context.status || 403 });
+    if (!context?.ok) return json({ ok: false, error: context?.error || "Task Management is not available." }, { status: context?.status || 503 });
+    const tickets = await listTaskManagementTickets(context, { force });
+    return json({ ok: true, tickets, source: "supabase-next" });
   } catch (error) {
-    console.warn("[task-management] direct list failed; using Legacy fallback:", error?.message || error);
+    return json({ ok: false, tickets: [], error: taskManagementDataError(error) }, { status: Number(error?.status) || 500 });
   }
-
-  const legacy = await fetchLegacyJson(`/api/task-management?view=${encodeURIComponent(view)}`, { timeoutMs: 35_000, fresh: force });
-  if (legacy.ok && legacy.data) return json({ ...legacy.data, source: legacy.data?.source || "legacy" }, { status: legacy.status || 200 });
-  return json({ ok: false, tickets: [], error: legacy.error || legacy.data?.error || taskManagementDataError(new Error("Task Management list is unavailable.")) }, { status: legacy.status || 502 });
 }
 
 export async function GET(request) {

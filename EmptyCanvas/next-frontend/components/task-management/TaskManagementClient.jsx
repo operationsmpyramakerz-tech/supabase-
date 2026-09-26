@@ -159,9 +159,9 @@ function readAsDataUrl(file) {
 }
 async function fallbackTaskUpload(file, view) {
   const dataUrl = await readAsDataUrl(file);
-  const payload = await requestJson(`/api/task-management/upload?view=${encodeURIComponent(view)}`, {
+  const payload = await requestJson(`/next/api/task-management/upload-direct?view=${encodeURIComponent(view)}`, {
     method: "POST",
-    body: JSON.stringify({ dataUrl, filename: file.name, mime: file.type || "", size: file.size }),
+    body: JSON.stringify({ view, dataUrl, filename: file.name, mime: file.type || "", size: file.size }),
   });
   return payload.file;
 }
@@ -757,7 +757,7 @@ function ProjectEditor({ editor, meta, view, onClose, onSaved, notify }) {
     try {
       const isEdit = !!draft.id;
       const payload = { title, description: text(draft.description), priority: text(draft.priority) || "Normal", dueDate, sections, edges, ...(isEdit ? { adminPassword: draft.adminPassword || "" } : {}) };
-      const result = await requestJson(isEdit ? `/api/task-management/${encodeURIComponent(draft.id)}?view=${encodeURIComponent(view)}` : "/api/task-management", { method: isEdit ? "PUT" : "POST", body: JSON.stringify(payload) });
+      const result = await requestJson("/next/api/task-management/mutations-direct", { method: "POST", body: JSON.stringify({ action: isEdit ? "ticket-update" : "ticket-create", view, ticketId: draft.id || "", ...payload }) });
       notify("success", isEdit ? "Project updated" : "Project created", isEdit ? "The project workflow changes were saved." : "The project workflow is ready and arrows now control the execution sequence.");
       onSaved(result.ticket);
     } catch (saveError) { setError(saveError?.message || "The project could not be saved."); }
@@ -821,10 +821,7 @@ function WorkEditor({ target, view, onClose, onSaved, notify }) {
     if (form.status === "rejected" && !text(form.rejectionReason)) return setError("Enter the rejected reason.");
     setBusy(true); setError("");
     try {
-      const endpoint = target.targetType === "assignment"
-        ? `/api/task-management/assignments/${encodeURIComponent(target.id)}/work?view=my`
-        : `/api/task-management/sections/${encodeURIComponent(target.id)}/work?view=my`;
-      const result = await requestJson(endpoint, { method: "PATCH", body: JSON.stringify(form) });
+      const result = await requestJson("/next/api/task-management/mutations-direct", { method: "POST", body: JSON.stringify({ action: target.targetType === "assignment" ? "assignment-work" : "section-work", view: "my", ...(target.targetType === "assignment" ? { assignmentId: target.id } : { sectionId: target.id }), ...form }) });
       notify("success", "Task work updated", `${target.task || target.request || "Task"} was updated.`);
       onSaved(result);
     } catch (saveError) { setError(saveError?.message || "The task work could not be updated."); }
@@ -877,7 +874,7 @@ function TeamWorkflowModal({ section, meta, onClose, onWork, notify, onParentRef
   const load = async () => {
     setBusy(true); setError("");
     try {
-      const result = await requestJson(`/api/task-management/sections/${encodeURIComponent(section.id)}/people-workflow?view=my`);
+      const result = await requestJson("/next/api/task-management/mutations-direct", { method: "POST", body: JSON.stringify({ action: "people-workflow-get", view: "my", sectionId: section.id }) });
       const items = (result.assignments || []).map((assignment, index) => ({
         ...assignment,
         clientId: text(assignment.id) || newClientId("assignment"),
@@ -950,7 +947,7 @@ function TeamWorkflowModal({ section, meta, onClose, onWork, notify, onParentRef
           sortOrder: index + 1, executionGroup, canvasX: Math.round(number(item.canvasX)), canvasY: Math.round(number(item.canvasY)),
         };
       });
-      const result = await requestJson(`/api/task-management/sections/${encodeURIComponent(section.id)}/people-workflow?view=my`, { method: "PUT", body: JSON.stringify({ assignments, edges }) });
+      const result = await requestJson("/next/api/task-management/mutations-direct", { method: "POST", body: JSON.stringify({ action: "people-workflow-save", view: "my", sectionId: section.id, assignments, edges }) });
       notify("success", "Team workflow saved", `${assignments.length} team task${assignments.length === 1 ? "" : "s"} saved.`);
       setWorkflow((current) => ({ ...(current || {}), ...result }));
       setDraft((result.assignments || []).map((assignment, index) => ({
@@ -965,7 +962,7 @@ function TeamWorkflowModal({ section, meta, onClose, onWork, notify, onParentRef
   const archiveAssignment = async (assignment) => {
     const archived = assignment.status !== "cancelled";
     try {
-      const result = await requestJson(`/api/task-management/assignments/${encodeURIComponent(assignment.id)}/archive?view=my`, { method: "PATCH", body: JSON.stringify({ archived }) });
+      const result = await requestJson("/next/api/task-management/mutations-direct", { method: "POST", body: JSON.stringify({ action: "assignment-archive", view: "my", assignmentId: assignment.id, archived }) });
       notify("success", archived ? "Task archived" : "Task restored", assignment.assigneeName || "Team task");
       setDraft((current) => current.map((item) => item.clientId === assignment.clientId ? { ...item, ...result.assignment } : item));
       onParentRefresh();
@@ -974,7 +971,7 @@ function TeamWorkflowModal({ section, meta, onClose, onWork, notify, onParentRef
   const deleteAssignment = async (assignment) => {
     if (!window.confirm(`Delete the task assigned to ${assignment.assigneeName || "this team member"}?`)) return;
     try {
-      await requestJson(`/api/task-management/assignments/${encodeURIComponent(assignment.id)}?view=my`, { method: "DELETE" });
+      await requestJson("/next/api/task-management/mutations-direct", { method: "POST", body: JSON.stringify({ action: "assignment-delete", view: "my", assignmentId: assignment.id }) });
       remove(assignment.clientId); notify("success", "Task deleted", assignment.assigneeName || "Team task"); onParentRefresh();
     } catch (actionError) { notify("error", "Delete failed", actionError?.message || "The team task could not be deleted."); }
   };
@@ -1176,7 +1173,7 @@ function TicketDetails({ ticket, view, meta, onClose, onEdit, onRefresh, onWork,
   const canManageDepartment = view === "my" && (["edit", "admin"].includes(lower(meta.accessLevel)) || meta.isPageAdmin);
   const refreshDetail = async () => {
     setLoading(true);
-    try { const result = await requestJson(`/next/api/task-management/${encodeURIComponent(ticket.id)}?view=${encodeURIComponent(view)}`); setLive(result.ticket || ticket); }
+    try { const result = await requestJson(`/next/api/task-management/detail-direct?id=${encodeURIComponent(ticket.id)}&view=${encodeURIComponent(view)}`); setLive(result.ticket || ticket); }
     catch (error) { notify("error", "Refresh failed", error?.message || "The project could not refresh."); }
     finally { setLoading(false); }
   };
@@ -1251,7 +1248,7 @@ function AdminActionModal({ action, ticket, view, onClose, onVerified }) {
     if (!text(password)) return setError("Enter the admin password.");
     setBusy(true); setError("");
     try {
-      await requestJson("/api/task-management/admin/verify", { method: "POST", body: JSON.stringify({ view, adminPassword: password }) });
+      await requestJson("/next/api/task-management/admin/verify", { method: "POST", body: JSON.stringify({ view, adminPassword: password }) });
       onVerified(password);
     } catch (verifyError) { setError(verifyError?.message || "Invalid admin password."); }
     finally { setBusy(false); }
@@ -1373,7 +1370,7 @@ export default function TaskManagementClient({ view, initialMeta, initialTickets
     if (!ticket?.id) return;
     try {
       const fresh = force ? `&_ts=${Date.now()}` : "";
-      const result = await requestJson(`/next/api/task-management/${encodeURIComponent(ticket.id)}?view=${encodeURIComponent(view)}${fresh}`);
+      const result = await requestJson(`/next/api/task-management/detail-direct?id=${encodeURIComponent(ticket.id)}&view=${encodeURIComponent(view)}${fresh}`);
       setSelectedTicket(result?.ticket || ticket);
     } catch (error) {
       notify("error", "Project details could not load", error?.message || "The selected project could not be opened.");
@@ -1389,14 +1386,14 @@ export default function TaskManagementClient({ view, initialMeta, initialTickets
   };
   const doArchive = async (ticket, password = "") => {
     try {
-      await requestJson(`/api/task-management/${encodeURIComponent(ticket.id)}/archive?view=${encodeURIComponent(view)}`, { method: "PATCH", body: JSON.stringify({ archived: !ticket.isArchived, adminPassword: password }) });
+      await requestJson("/next/api/task-management/mutations-direct", { method: "POST", body: JSON.stringify({ action: "ticket-archive", view, ticketId: ticket.id, archived: !ticket.isArchived, adminPassword: password }) });
       notify("success", ticket.isArchived ? "Project restored" : "Project archived", ticket.isArchived ? "The project is active and visible again to its permitted users." : "The project is hidden from everyone and is available only in your Archive tab on this page.");
       setSelectedTicket(null); setAdminAction(null); setConfirmAction(null); refresh({ silent: true });
     } catch (error) { notify("error", "Archive action failed", error?.message || "The project could not be updated."); }
   };
   const doDelete = async (ticket, password = "") => {
     try {
-      await requestJson(`/api/task-management/${encodeURIComponent(ticket.id)}?view=${encodeURIComponent(view)}`, { method: "DELETE", body: JSON.stringify({ adminPassword: password }) });
+      await requestJson("/next/api/task-management/mutations-direct", { method: "POST", body: JSON.stringify({ action: "ticket-delete", view, ticketId: ticket.id, adminPassword: password }) });
       notify("success", "Project deleted", "The project and its workflow were deleted successfully.");
       setSelectedTicket(null); setAdminAction(null); setConfirmAction(null); refresh({ silent: true });
     } catch (error) { notify("error", "Delete failed", error?.message || "The project could not be deleted."); }
@@ -1418,14 +1415,14 @@ export default function TaskManagementClient({ view, initialMeta, initialTickets
   const delivered = async (ticket) => {
     if (!window.confirm(`Mark ${ticket.ticketCode} and all workflow tasks as completed?`)) return;
     try {
-      await requestJson(`/api/task-management/${encodeURIComponent(ticket.id)}/mark-delivered?view=delegated`, { method: "POST", body: JSON.stringify({}) });
+      await requestJson("/next/api/task-management/mutations-direct", { method: "POST", body: JSON.stringify({ action: "ticket-mark-delivered", view: "delegated", ticketId: ticket.id }) });
       notify("success", "Project delivered", ticket.ticketCode); setSelectedTicket(null); refresh({ silent: true });
     } catch (error) { notify("error", "Delivery failed", error?.message || "The project could not be marked as delivered."); }
   };
   const workSaved = async () => {
     setWorkTarget(null); await refresh({ silent: true });
     if (selectedTicket) {
-      const result = await requestJson(`/next/api/task-management/${encodeURIComponent(selectedTicket.id)}?view=${encodeURIComponent(view)}&_ts=${Date.now()}`).catch(() => null);
+      const result = await requestJson(`/next/api/task-management/detail-direct?id=${encodeURIComponent(selectedTicket.id)}&view=${encodeURIComponent(view)}&_ts=${Date.now()}`).catch(() => null);
       if (result?.ticket) setSelectedTicket(result.ticket);
     }
   };
