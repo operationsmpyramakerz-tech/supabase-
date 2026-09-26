@@ -705,7 +705,7 @@ export default function EventsClient({ account, initialEvents = [], bootstrapWar
         busy={busy}
         canRequestActions={canRequestActions}
         onClose={() => setActiveEvent(null)}
-        onDownload={() => { if (activeEvent?.id) window.location.href = `/api/events/${encodeURIComponent(activeEvent.id)}/pdf`; }}
+        onDownload={() => { if (activeEvent?.id) window.location.href = `/next/api/events/pdf-direct?id=${encodeURIComponent(activeEvent.id)}`; }}
         onWorkflow={(targetStatus) => requestAuthorization("workflow", targetStatus)}
         onRequestAction={(action) => requestAuthorization("request_action", action)}
       />

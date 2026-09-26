@@ -242,7 +242,7 @@ function DetailsModal({ event, canOpenRequests, onClose }) {
 
         <footer className="events-modal__actions next-events-modal-actions">
           <div>
-            <a className="events-secondary-btn secondary-button" href={`/api/events/${encodeURIComponent(event.id)}/pdf`} target="_blank" rel="noreferrer">Download PDF</a>
+            <a className="events-secondary-btn secondary-button" href={`/next/api/events/pdf-direct?id=${encodeURIComponent(event.id)}`} target="_blank" rel="noreferrer">Download PDF</a>
             {canOpenRequests ? <a className="events-secondary-btn secondary-button" href="/next/events">Open Event Requests</a> : null}
           </div>
           <button type="button" className="events-primary-btn primary-button" onClick={onClose}>Close</button>
