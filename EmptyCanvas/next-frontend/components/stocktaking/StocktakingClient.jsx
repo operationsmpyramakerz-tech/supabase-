@@ -508,13 +508,13 @@ function ExportModal({ onClose, columnKey = "", inventorySession = null }) {
 
   const runExport = async ({ kind, columns, signatureLabels, instruction }) => {
     const fileType = kind === "excel" ? "excel" : "pdf";
-    const endpoint = fileType === "excel" ? "/api/stock/excel" : "/api/stock/pdf";
+    const endpoint = `/next/api/stock/export-direct?kind=${fileType}`;
     const params = new URLSearchParams({ columns: (columns || []).join(",") });
     if (columnKey) params.set("column", columnKey);
     if (inventorySession?.inventoryColumn) params.set("inventoryColumn", inventorySession.inventoryColumn);
     if (inventorySession?.defectedColumn) params.set("defectedColumn", inventorySession.defectedColumn);
 
-    const response = await fetch(`${endpoint}?${params.toString()}`, {
+    const response = await fetch(`${endpoint}&${params.toString()}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
@@ -619,8 +619,8 @@ function InventoryFinishModal({ session, columnKey, busy, onClose, onDone }) {
       const params = new URLSearchParams({ column: columnKey, columns: selected.join(",") });
       if (session?.inventoryColumn) params.set("inventoryColumn", session.inventoryColumn);
       if (session?.defectedColumn) params.set("defectedColumn", session.defectedColumn);
-      const endpoint = fileType === "excel" ? "/api/stock/excel" : "/api/stock/pdf";
-      const response = await fetch(`${endpoint}?${params.toString()}`, { credentials: "include", cache: "no-store" });
+      const endpoint = `/next/api/stock/export-direct?kind=${fileType}`;
+      const response = await fetch(`${endpoint}&${params.toString()}`, { credentials: "include", cache: "no-store" });
       if (response.status === 401) {
         window.location.href = "/login?next=/next/stocktaking";
         return;
@@ -853,7 +853,7 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
       if (fresh) params.set("_fresh", "1");
       if (session?.inventoryColumn) params.set("inventoryColumn", session.inventoryColumn);
       if (session?.defectedColumn) params.set("defectedColumn", session.defectedColumn);
-      let response = await fetch(`/next/api/stock?${params.toString()}`, {
+      const response = await fetch(`/next/api/stock?${params.toString()}`, {
         method: "GET",
         credentials: "include",
         cache: "no-store",
@@ -862,25 +862,7 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
         window.location.href = "/login?next=/next/stocktaking";
         return;
       }
-      let body = await response.json().catch(() => null);
-      // Compatibility fallback: keep the existing Express read path available
-      // if a deployment has an older/atypical Stocktaking schema that the new
-      // direct Supabase reader cannot resolve yet.
-      if (response.status === 403) {
-        throw new Error(body?.error || "This Stocktaking folder is not available for your access level.");
-      }
-      if (!response.ok || !Array.isArray(body)) {
-        response = await fetch(`/api/stock?${params.toString()}`, {
-          method: "GET",
-          credentials: "include",
-          cache: "no-store",
-        });
-        if (response.status === 401) {
-          window.location.href = "/login?next=/next/stocktaking";
-          return;
-        }
-        body = await response.json().catch(() => null);
-      }
+      const body = await response.json().catch(() => null);
       if (!response.ok || !Array.isArray(body)) throw new Error(body?.error || "Failed to load this Stocktaking folder.");
       setStock(body);
     } catch (loadError) {
@@ -896,12 +878,12 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
     setInventoryBusy(true);
     setInventorySaveError("");
     try {
-      const response = await fetch("/api/stock/inventory/start", {
+      const response = await fetch("/next/api/stock/mutations-direct", {
         method: "POST",
         credentials: "include",
         cache: "no-store",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ column: activeColumn.key, mode, date }),
+        body: JSON.stringify({ action: "inventory-start", column: activeColumn.key, mode, date }),
       });
       if (response.status === 401) {
         window.location.href = "/login?next=/next/stocktaking";
@@ -936,12 +918,12 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
     setStock((current) => (Array.isArray(current) ? current : []).map((item) => text(item?.id) === text(row.id) ? { ...item, [kind]: value } : item));
     const timer = setTimeout(async () => {
       try {
-        const response = await fetch(`/api/stock/${encodeURIComponent(row.id)}/inventory-value`, {
-          method: "PATCH",
+        const response = await fetch("/next/api/stock/mutations-direct", {
+          method: "POST",
           credentials: "include",
           cache: "no-store",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ column, value, stockColumn: activeColumn?.key || "" }),
+          body: JSON.stringify({ action: "inventory-value", stockId: row.id, column, value, stockColumn: activeColumn?.key || "" }),
         });
         const body = await response.json().catch(() => ({}));
         if (!response.ok || body?.ok === false) throw new Error(body?.error || `Failed to save ${kind}.`);
@@ -966,16 +948,12 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
     if (products.length) return products;
     setProductsLoading(true);
     try {
-      let response = await fetch(`/next/api/stock/products?_ts=${Date.now()}`, { credentials: "include", cache: "no-store" });
+      const response = await fetch(`/next/api/stock/products?_ts=${Date.now()}`, { credentials: "include", cache: "no-store" });
       if (response.status === 401) {
         window.location.href = "/login?next=/next/stocktaking";
         return [];
       }
-      let body = await response.json().catch(() => ({}));
-      if (!response.ok || body?.ok === false) {
-        response = await fetch(`/api/stock/products?_ts=${Date.now()}`, { credentials: "include", cache: "no-store" });
-        body = await response.json().catch(() => ({}));
-      }
+      const body = await response.json().catch(() => ({}));
       if (!response.ok || body?.ok === false) throw new Error(body?.error || "Products could not be loaded.");
       const list = (Array.isArray(body?.products) ? body.products : [])
         .map((product) => ({
@@ -1034,12 +1012,12 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
     setEditError("");
     if (fromModal) setEditPasswordError("");
     try {
-      const response = await fetch("/api/stock/edit-access", {
+      const response = await fetch("/next/api/stock/mutations-direct", {
         method: "POST",
         credentials: "include",
         cache: "no-store",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ column: activeColumn.key, adminPassword }),
+        body: JSON.stringify({ action: "edit-access", column: activeColumn.key, adminPassword }),
       });
       const body = await response.json().catch(() => ({}));
       if (response.status === 401 && body?.requiresPassword) {
@@ -1092,12 +1070,13 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
     setEditBusy(true);
     setEditError("");
     try {
-      const response = await fetch("/api/stock", {
-        method: "PATCH",
+      const response = await fetch("/next/api/stock/mutations-direct", {
+        method: "POST",
         credentials: "include",
         cache: "no-store",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          action: "update-rows",
           column: activeColumn.key,
           updates: [{ id: row.id, quantity, productId: text(editDraft.productId) || null }],
           adminPassword: editAdminPassword,
@@ -1187,12 +1166,13 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
         receiptPhotos.push({ name: text(uploadBody?.name) || prepared.name || file.name || "Receipt photo", url: text(uploadBody.url) });
       }
 
-      const response = await fetch("/api/stock", {
+      const response = await fetch("/next/api/stock/mutations-direct", {
         method: "POST",
         credentials: "include",
         cache: "no-store",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          action: "add-row",
           column: activeColumn.key,
           productId,
           quantity,

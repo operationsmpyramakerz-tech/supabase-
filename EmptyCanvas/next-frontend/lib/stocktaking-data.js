@@ -8,7 +8,8 @@ import {
   loadStocktakingFolderSummariesRpc,
   noteStocktakingFolderSummaryRpcError,
 } from "./stocktaking-folder-summary-rpc";
-import { getSupabaseConfig, selectAll, selectById, storagePublicUrl } from "./supabase-rest";
+import { getSupabaseConfig, insert, rpc, selectAll, selectById, storagePublicUrl, updateById } from "./supabase-rest";
+import { verifyPageAdminPasswordDirect } from "./order-action-auth";
 
 const STOCK_ROWS_CACHE_TTL_MS = 20_000;
 const STOCK_SCHEMA_CACHE_TTL_MS = 5 * 60_000;
@@ -793,3 +794,317 @@ export async function stocktakingForAccount(account = {}, { fresh = false } = {}
     .sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || ""), undefined, { numeric: true, sensitivity: "base" }) || String(a?.id || "").localeCompare(String(b?.id || "")));
   return await enrichComponentTags(items);
 }
+
+function stocktakingMutationError(message, status = 400, extra = {}) {
+  const error = new Error(message);
+  error.status = status;
+  Object.assign(error, extra || {});
+  return error;
+}
+
+function accountIdentity(account = {}) {
+  return {
+    id: text(account?.teamMemberId || account?.userSupabaseId || account?.userId || account?.id),
+    names: [account?.name, account?.username].map(canonical).filter(Boolean),
+  };
+}
+
+async function stocktakingOwnerForColumn(column = "", { fresh = false } = {}) {
+  const requested = text(column);
+  if (!requested) return { id: null, name: "Stock user", stocktakingLabel: "" };
+  const members = await listTeamMembersLite({ fresh }).catch(() => []);
+  const requestedBase = ownerBase(requested);
+  const owner = (members || []).find((member) => {
+    const memberColumn = text(member?.stocktakingColumn);
+    const exact = memberColumn ? findQuantityColumnFromKeys([requested], memberColumn) : "";
+    if (exact === requested) return true;
+    const bases = [member?.name, memberColumn].map(ownerBase).filter(Boolean);
+    return requestedBase && bases.includes(requestedBase);
+  }) || null;
+  const fallback = titleCase(requested).replace(/\s+Stock$/i, "").trim() || titleCase(requested);
+  return {
+    id: text(owner?.id) || null,
+    name: text(owner?.name) || fallback || "Stock user",
+    stocktakingLabel: text(owner?.stocktakingColumn) || titleCase(requested),
+  };
+}
+
+export async function authorizeStocktakingEdit(account = {}, requestedColumn = "", adminPassword = "", { fresh = false } = {}) {
+  const level = stocktakingAccessLevel(account);
+  if (!["edit", "admin"].includes(level)) {
+    throw stocktakingMutationError("Your Stocktaking access is view only.", 403);
+  }
+
+  const keys = await loadStockSchemaKeys({ fresh });
+  const quantityColumn = resolveRequestedColumnFromKeys(keys, requestedColumn);
+  const visible = level === "admin" ? true : await canAccessStocktakingColumn(account, quantityColumn, { fresh });
+  if (!visible) {
+    throw stocktakingMutationError("This Stocktaking folder is not available for your access level.", 403);
+  }
+
+  const owner = await stocktakingOwnerForColumn(quantityColumn, { fresh });
+  const identity = accountIdentity(account);
+  const sameOwner = Boolean(
+    (owner?.id && identity.id && String(owner.id) === identity.id)
+    || (owner?.name && identity.names.includes(canonical(owner.name)))
+  );
+  if (sameOwner || level === "admin") {
+    return { ok: true, quantityColumn, owner, accessLevel: level };
+  }
+
+  const password = text(adminPassword);
+  if (!password) {
+    throw stocktakingMutationError(
+      `Admin password is required to edit ${owner?.name || "this Stocktaking folder"}.`,
+      401,
+      { requiresPassword: true },
+    );
+  }
+  const verified = await verifyPageAdminPasswordDirect(account, password, ["Stocktaking"]);
+  if (verified === null) {
+    throw stocktakingMutationError("The direct Admin password context is unavailable.", 503);
+  }
+  if (!verified) {
+    throw stocktakingMutationError("Invalid Admin password.", 401, { requiresPassword: true });
+  }
+  return { ok: true, quantityColumn, owner, accessLevel: level };
+}
+
+function productUpdatePatch(targetRow = {}, product = {}) {
+  const keys = Object.keys(targetRow || {});
+  const patch = {};
+  const set = (aliases, value) => {
+    const key = findKey(keys, aliases);
+    if (!key) return;
+    patch[key] = value;
+  };
+  const productName = text(product?.name) || "Untitled Product";
+  set(["name", "Name", "component", "Component"], productName);
+  set(["product_name", "Product Name", "product", "Product", "products", "Products"], productName);
+  set(["product_id", "Product ID", "products_id", "Products ID"], product?.id || null);
+  set(["product_url", "Product URL", "url", "URL", "item_url", "Item URL"], product?.url || null);
+  set(["id_code", "ID Code", "code", "Code"], product?.displayId || product?.idCode || null);
+  set(["unity_price", "unit_price", "Unity Price", "Unit Price", "one_piece_price"], Number.isFinite(Number(product?.unitPrice)) ? Number(product.unitPrice) : null);
+  return patch;
+}
+
+function missingStocktakingColumnName(error) {
+  const raw = String(error?.message || error?.details?.message || error?.details?.details || error?.hint || error?.details || "");
+  return (
+    (raw.match(/Could not find the ['\"]([^'\"]+)['\"] column/i) || [])[1]
+    || (raw.match(/['\"]([^'\"]+)['\"] column of ['\"][^'\"]+['\"]/i) || [])[1]
+    || (raw.match(/column ['\"]([^'\"]+)['\"]/i) || [])[1]
+    || ""
+  );
+}
+
+async function insertStocktakingRowSafe(row = {}, requiredColumns = []) {
+  const payload = Object.fromEntries(Object.entries(row || {}).filter(([, value]) => typeof value !== "undefined"));
+  const required = new Set((requiredColumns || []).map(text).filter(Boolean));
+  const maxAttempts = Math.max(12, Math.min(64, Object.keys(payload).length + 4));
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    try {
+      return await insert(stocktakingTable(), payload);
+    } catch (error) {
+      const missing = missingStocktakingColumnName(error);
+      if (!missing || !Object.prototype.hasOwnProperty.call(payload, missing)) throw error;
+      if (required.has(missing)) {
+        throw stocktakingMutationError(`Missing required Stocktaking column: ${missing}.`, 400);
+      }
+      delete payload[missing];
+    }
+  }
+  throw stocktakingMutationError("Failed to insert the Stocktaking row because the table schema is incompatible.", 500);
+}
+
+function normalizeMultiline(value = "") {
+  return String(value || "").replace(/\r\n?/g, "\n").split("\n").map((line) => line.trim()).filter(Boolean).join("\n");
+}
+
+function validReceiptPhotos(value) {
+  const source = Array.isArray(value) ? value : [];
+  const out = [];
+  const seen = new Set();
+  for (let index = 0; index < source.length; index += 1) {
+    const entry = source[index] || {};
+    const url = text(entry?.url);
+    if (!url) continue;
+    let parsed;
+    try { parsed = new URL(url); } catch { throw stocktakingMutationError("Receipt photo URL must be a valid http(s) URL.", 400); }
+    if (!/^https?:$/i.test(parsed.protocol)) throw stocktakingMutationError("Receipt photo URL must be a valid http(s) URL.", 400);
+    if (seen.has(url)) continue;
+    seen.add(url);
+    out.push({ name: text(entry?.name) || `Receipt photo ${index + 1}`, url });
+  }
+  return out;
+}
+
+export async function addStocktakingRow(account = {}, payload = {}) {
+  const column = text(payload?.column || payload?.stockColumn);
+  const productId = text(payload?.productId || payload?.product_id);
+  const quantity = Number(payload?.quantity);
+  if (!column) throw stocktakingMutationError("Choose a Stocktaking folder first.", 400);
+  if (!productId) throw stocktakingMutationError("Choose a component for the new row.", 400);
+  if (!Number.isFinite(quantity)) throw stocktakingMutationError("Stock quantity must be a valid number.", 400);
+
+  const auth = await authorizeStocktakingEdit(account, column, payload?.adminPassword || payload?.password, { fresh: true });
+  const products = await listStocktakingProducts({ fresh: true });
+  const product = (products || []).find((item) => text(item?.id) === productId);
+  if (!product) throw stocktakingMutationError("The selected Product component was not found.", 404);
+
+  const keys = await loadStockSchemaKeys({ fresh: true });
+  const row = { [auth.quantityColumn]: quantity };
+  const set = (aliases, value, fallbackKey = "") => {
+    if (value === null || typeof value === "undefined" || value === "") return "";
+    const key = findKey(keys, aliases) || (!keys.length ? fallbackKey : "");
+    if (!key) return "";
+    row[key] = value;
+    return key;
+  };
+
+  const productName = text(product?.name) || "Untitled Product";
+  const nameKey = set(["name", "Name", "component", "Component"], productName, "name");
+  set(["product_name", "Product Name", "product", "Product", "products", "Products"], productName, nameKey ? "" : "product_name");
+  set(["product_id", "Product ID", "products_id", "Products ID"], product.id, "product_id");
+  set(["product_url", "Product URL", "url", "URL", "item_url", "Item URL"], product?.url || null, "product_url");
+  set(["id_code", "ID Code", "code", "Code"], product?.displayId || product?.idCode || null, "id_code");
+  set(["unity_price", "unit_price", "Unity Price", "Unit Price", "one_piece_price"], Number.isFinite(Number(product?.unitPrice)) ? Number(product.unitPrice) : null, "unit_price");
+
+  const suggestedTag = (Array.isArray(product?.tags) ? product.tags : []).map(text).find(Boolean);
+  set(["tag", "Tag", "tags", "Tags"], text(payload?.tag) || suggestedTag || "Manual", "tag");
+  set(["header", "Header", "stock_header", "Stock Header", "main_header", "Main Header"], "Main stock", "header");
+
+  const receiptNumber = normalizeMultiline(payload?.receiptNumber || payload?.receipt_number);
+  if (receiptNumber) set(["receipt_number", "Receipt Number", "receipt_no", "Receipt No", "receipt", "Receipt"], receiptNumber, "receipt_number");
+  const photos = validReceiptPhotos(payload?.receiptPhotos);
+  if (photos.length) {
+    set(
+      ["receipt_photos", "Receipt Photos", "receipt_photo", "Receipt Photo", "receipt_images", "Receipt Images", "receipt_image", "Receipt Image", "order_receipt", "Order Receipt", "attachments", "Attachments", "files", "Files"],
+      JSON.stringify(photos),
+      "receipt_photos",
+    );
+  }
+  set(["team_member_id", "Team Member ID", "user_id", "User ID"], auth?.owner?.id || null);
+  set(["team_member_name", "Team Member Name", "user_name", "User Name", "username", "Username"], auth?.owner?.name || null);
+
+  const created = await insertStocktakingRowSafe(row, [auth.quantityColumn]);
+  invalidateStocktakingReadCaches();
+  return { ok: true, source: "supabase-next", column: auth.quantityColumn, row: created || row };
+}
+
+export async function updateStocktakingRows(account = {}, payload = {}) {
+  const column = text(payload?.column || payload?.stockColumn);
+  const updates = Array.isArray(payload?.updates) ? payload.updates : [];
+  if (!column) throw stocktakingMutationError("Choose a Stocktaking folder first.", 400);
+  if (!updates.length) return { ok: true, source: "supabase-next", updatedCount: 0 };
+  if (updates.length > 500) throw stocktakingMutationError("Too many Stocktaking rows were submitted at once.", 400);
+
+  const auth = await authorizeStocktakingEdit(account, column, payload?.adminPassword || payload?.password, { fresh: true });
+  const [rows, products] = await Promise.all([loadStockRows({ fresh: true }), listStocktakingProducts({ fresh: true })]);
+  const rowById = new Map((rows || []).map((row) => [text(valueFor(row, ["id", "ID"])), row]).filter(([id]) => Boolean(id)));
+  const productMap = new Map((products || []).map((product) => [text(product?.id), product]).filter(([id]) => Boolean(id)));
+  const normalized = updates.map((update) => {
+    const id = text(update?.id);
+    const quantity = Number(update?.quantity);
+    const productId = text(update?.productId || update?.product_id);
+    const targetRow = rowById.get(id);
+    if (!id || !targetRow) throw stocktakingMutationError("One of the Stocktaking rows no longer exists. Refresh and try again.", 404);
+    if (!Number.isFinite(quantity)) throw stocktakingMutationError("Stock quantities must be valid numbers.", 400);
+    if (productId && !productMap.has(productId)) throw stocktakingMutationError("The selected Product component was not found.", 404);
+    return { id, quantity, productId, targetRow };
+  });
+
+  await Promise.all(normalized.map((update) => {
+    const patch = { [auth.quantityColumn]: update.quantity };
+    if (update.productId) Object.assign(patch, productUpdatePatch(update.targetRow, productMap.get(update.productId)));
+    return updateById(stocktakingTable(), update.id, patch);
+  }));
+  invalidateStocktakingReadCaches();
+  return { ok: true, source: "supabase-next", column: auth.quantityColumn, updatedCount: normalized.length };
+}
+
+function normalizeInventoryDate(value) {
+  const raw = text(value);
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return "";
+  const date = new Date(`${raw}T00:00:00Z`);
+  return Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== raw ? "" : raw;
+}
+
+async function ensureInventoryColumn(label = "", knownKeys = []) {
+  const desired = stockColumnKey(label);
+  if (!/^[a-z][a-z0-9_]{1,62}$/.test(desired)) throw stocktakingMutationError("Invalid inventory column name.", 400);
+  const existing = (knownKeys || []).find((key) => key === desired) || findKey(knownKeys, [label, desired]);
+  if (existing) return existing;
+  try {
+    await rpc("add_stocktaking_school_column", { column_name: desired }, { profileName: "stocktaking.add-inventory-column" });
+  } catch (error) {
+    if (/function .*add_stocktaking_school_column|Could not find the function|PGRST202|schema cache/i.test(String(error?.message || ""))) {
+      throw stocktakingMutationError("Supabase helper function is not installed. Run supabase_user_access_helpers.sql once, then try again.", 500);
+    }
+    throw error;
+  }
+  invalidateStocktakingReadCaches();
+  return desired;
+}
+
+export async function startStocktakingInventory(account = {}, payload = {}) {
+  const column = text(payload?.column || payload?.stockColumn);
+  if (!column) throw stocktakingMutationError("Choose a Stocktaking folder first.", 400);
+  const allowed = await canAccessStocktakingColumn(account, column, { fresh: true });
+  if (!allowed && stocktakingAccessLevel(account) !== "admin") {
+    throw stocktakingMutationError("This Stocktaking folder is not available for your access level.", 403);
+  }
+  const dateISO = normalizeInventoryDate(payload?.date || payload?.inventoryDate || payload?.dateISO);
+  if (!dateISO) throw stocktakingMutationError("Choose a valid inventory date.", 400);
+  const rawMode = text(payload?.mode || payload?.columns || "both").toLowerCase();
+  const mode = rawMode === "inventory" ? "inventory" : (["defected", "defecated"].includes(rawMode) ? "defected" : "both");
+
+  let keys = await loadStockSchemaKeys({ fresh: true });
+  const quantityColumn = resolveRequestedColumnFromKeys(keys, column);
+  const owner = await stocktakingOwnerForColumn(quantityColumn, { fresh: true });
+  let inventoryColumn = "";
+  let defectedColumn = "";
+  if (mode === "inventory" || mode === "both") {
+    inventoryColumn = await ensureInventoryColumn(`${owner.name} Inventory ${dateISO}`, keys);
+    if (inventoryColumn && !keys.includes(inventoryColumn)) keys = [...keys, inventoryColumn];
+  }
+  if (mode === "defected" || mode === "both") {
+    defectedColumn = await ensureInventoryColumn(`${owner.name} Defected ${dateISO}`, keys);
+    if (defectedColumn && !keys.includes(defectedColumn)) keys = [...keys, defectedColumn];
+  }
+  return {
+    ok: true,
+    source: "supabase-next",
+    mode,
+    date: dateISO,
+    user: owner,
+    stockColumn: quantityColumn,
+    inventoryColumn: inventoryColumn || null,
+    defectedColumn: defectedColumn || null,
+  };
+}
+
+export async function updateStocktakingInventoryValue(account = {}, payload = {}) {
+  const stockId = text(payload?.stockId || payload?.id);
+  const requestedColumn = text(payload?.column);
+  const stockColumn = text(payload?.stockColumn);
+  if (!stockId || !requestedColumn) throw stocktakingMutationError("Stock row and inventory column are required.", 400);
+  if (!stockColumn) throw stocktakingMutationError("Stocktaking folder is required.", 400);
+  const allowed = await canAccessStocktakingColumn(account, stockColumn, { fresh: false });
+  if (!allowed && stocktakingAccessLevel(account) !== "admin") {
+    throw stocktakingMutationError("This Stocktaking folder is not available for your access level.", 403);
+  }
+  const keys = await loadStockSchemaKeys({ fresh: true });
+  const column = keys.find((key) => key === requestedColumn) || findKey(keys, [requestedColumn]);
+  if (!column || !isInventoryMetaColumn(column)) throw stocktakingMutationError("The selected inventory column is invalid.", 400);
+  const raw = payload?.value;
+  const value = raw === null || typeof raw === "undefined" || raw === "" ? null : Number(raw);
+  if (value !== null && (!Number.isFinite(value) || value < 0)) {
+    throw stocktakingMutationError("Inventory values must be zero or greater.", 400);
+  }
+  const updated = await updateById(stocktakingTable(), stockId, { [column]: value });
+  invalidateStocktakingReadCaches();
+  return { ok: true, source: "supabase-next", id: stockId, column, value, row: updated || null };
+}
+

@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { getLegacyAccountGate } from "../../../lib/products-auth";
+import { getDirectAccountGate } from "../../../lib/products-auth";
 import { canAccessStocktakingColumn, stocktakingForAccount, stocktakingForColumn } from "../../../lib/stocktaking-data";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request) {
-  const gate = await getLegacyAccountGate(["Stocktaking"]);
+  const gate = await getDirectAccountGate(["Stocktaking"]);
   if (!gate.ok) {
     return NextResponse.json(
       { ok: false, error: gate.error || "Access denied." },

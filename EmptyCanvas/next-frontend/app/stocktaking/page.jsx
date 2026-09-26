@@ -1,9 +1,8 @@
 import { redirect } from "next/navigation";
 import AppShell from "../../components/AppShell";
 import StocktakingClient from "../../components/stocktaking/StocktakingClient";
-import { fetchLegacyJson } from "../../lib/legacy-api";
-import { getLegacyAccountGate } from "../../lib/products-auth";
-import { filterStocktakingFoldersForAccount, listStocktakingFolders } from "../../lib/stocktaking-data";
+import { getDirectAccountGate } from "../../lib/products-auth";
+import { listStocktakingFolders } from "../../lib/stocktaking-data";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -24,25 +23,8 @@ function UnavailableState({ message, forbidden = false }) {
   );
 }
 
-async function loadInitialStocktakingColumns() {
-  try {
-    return { columns: await listStocktakingFolders(), error: "" };
-  } catch (error) {
-    const directError = error?.message || "Stocktaking columns are temporarily unavailable.";
-    // Compatibility fallback only. The server filters this route too, and the
-    // page applies its account filter before rendering any folder cards.
-    const legacy = await fetchLegacyJson("/api/stock/columns", { timeoutMs: 20_000 });
-    if (legacy.ok && legacy.data?.ok && Array.isArray(legacy.data?.columns)) {
-      return { columns: legacy.data.columns, error: "" };
-    }
-    return { columns: null, error: directError };
-  }
-}
-
 export default async function StocktakingPage() {
-  const gatePromise = getLegacyAccountGate(["Stocktaking"]);
-  const columnsPromise = loadInitialStocktakingColumns();
-  const gate = await gatePromise;
+  const gate = await getDirectAccountGate(["Stocktaking"]);
 
   if (gate.status === 401) redirect("/login?next=/next/stocktaking");
   if (!gate.ok && gate.status === 403) {
@@ -52,12 +34,12 @@ export default async function StocktakingPage() {
     return <UnavailableState message={gate.error || "Stocktaking authentication is temporarily unavailable."} />;
   }
 
-  const { columns, error: columnsError } = await columnsPromise;
-
-  if (!Array.isArray(columns)) {
-    return <UnavailableState message={columnsError || "Stocktaking data is temporarily unavailable."} />;
+  let columns;
+  try {
+    columns = await listStocktakingFolders({ account: gate.account });
+  } catch (error) {
+    return <UnavailableState message={error?.message || "Stocktaking data is temporarily unavailable."} />;
   }
-  const visibleColumns = await filterStocktakingFoldersForAccount(columns, gate.account);
 
   return (
     <AppShell
@@ -67,7 +49,7 @@ export default async function StocktakingPage() {
       activePath="/next/stocktaking"
       bodyClass="stocktaking-page"
     >
-      <StocktakingClient initialColumns={visibleColumns} />
+      <StocktakingClient initialColumns={columns} />
     </AppShell>
   );
 }
