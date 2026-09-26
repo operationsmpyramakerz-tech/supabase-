@@ -1,8 +1,6 @@
 const { PassThrough } = require("stream");
 
 const SUPPORTED_EXPORT_TASKS = Object.freeze([
-  "delivery-pdf",
-  "maintenance-pdf",
   "event-request-pdf",
   "expense-pdf",
 ]);
@@ -48,14 +46,6 @@ async function renderExpensePdf(payload) {
 
 async function renderExportTask(type, payload) {
   switch (String(type || "")) {
-    case "delivery-pdf": {
-      const { pipeDeliveryReceiptPDF } = require("./deliveryReceiptPdf");
-      return await renderPipedPdf(pipeDeliveryReceiptPDF, payload || {});
-    }
-    case "maintenance-pdf": {
-      const { pipeMaintenanceReceiptPDF } = require("./maintenanceReceiptPdf");
-      return await renderPipedPdf(pipeMaintenanceReceiptPDF, payload || {});
-    }
     case "event-request-pdf": {
       const { pipeEventRequestPDF } = require("./eventRequestPdf");
       return await renderPipedPdf(pipeEventRequestPDF, payload || {});
