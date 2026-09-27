@@ -724,6 +724,13 @@ export async function stocktakingForColumn(column, { inventoryColumn = "", defec
   return await enrichComponentTags(items);
 }
 
+export async function resolveStocktakingQuantityColumnForLabel(label, { fresh = false } = {}) {
+  const requested = text(label);
+  if (!requested) return "";
+  const schemaKeys = await loadStockSchemaKeys({ fresh });
+  return findQuantityColumnFromKeys(schemaKeys, requested) || "";
+}
+
 export async function listStocktakingProducts({ fresh = false } = {}) {
   const catalog = await getProductsCatalog({ fresh });
   return Array.isArray(catalog?.products) ? catalog.products : [];
