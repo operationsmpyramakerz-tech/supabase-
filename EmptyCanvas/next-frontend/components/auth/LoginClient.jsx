@@ -133,7 +133,7 @@ export default function LoginClient({ requestedNext = "/next/home", backendAvail
       warmAccountCache({ allowedPages: Array.isArray(result?.allowedPages) ? result.allowedPages : [] }, username);
 
       try {
-        const accountResponse = await fetch(`/api/account?_next_login_check=${Date.now()}`, {
+        const accountResponse = await fetch(`/next/api/account?_next_login_check=${Date.now()}`, {
           credentials: "same-origin",
           cache: "no-store",
         });

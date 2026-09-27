@@ -1,12 +1,12 @@
 import { redirect } from "next/navigation";
 import AppShell from "../../components/AppShell";
 import AccountClient from "../../components/account/AccountClient";
-import { getLegacyAccountGate } from "../../lib/products-auth";
+import { getDirectAccountGate } from "../../lib/products-auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function AccountPage() {
-  const gate = await getLegacyAccountGate([]);
+  const gate = await getDirectAccountGate([]);
 
   if (gate.status === 401) redirect("/login?next=/next/account");
 

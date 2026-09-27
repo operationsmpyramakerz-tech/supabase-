@@ -4,20 +4,6 @@ import { fetchLegacyJson } from "./legacy-api";
 import { getDirectAccountGateFromSessionContext, getDirectSessionAccountGate } from "./direct-session-account";
 import { recordPerformanceSample } from "./performance-profiler";
 
-function normalize(value) {
-  return String(value || "").trim().toLowerCase();
-}
-
-function accountMemberId(account = {}) {
-  return String(
-    account?.teamMemberId
-    || account?.userSupabaseId
-    || account?.userId
-    || account?.id
-    || "",
-  ).trim();
-}
-
 async function getDirectOrBridgedAccountGateInternal(requiredPages = [], onSource = () => {}, options = {}) {
   // Preferred path: Next reads the signed Express session from the same
   // Redis/Upstash store, then rebuilds the account + permission matrix from
@@ -61,40 +47,18 @@ async function getLegacyAccountGateInternal(requiredPages = [], onSource = () =>
   const direct = await getDirectOrBridgedAccountGateInternal(requiredPages, onSource, options);
   if (direct) return direct;
 
-  // General compatibility path for modules that have not completed the Next
-  // authorization cutover yet. Orders mutation routes no longer use this path.
-  onSource("legacy");
-  const response = await fetchLegacyJson("/api/account", { timeoutMs: 15000 });
-
-  if (response.status === 401) {
-    return { ok: false, status: 401, error: "Authentication required.", account: null };
-  }
-  if (!response.ok || !response.data) {
-    return {
-      ok: false,
-      status: response.status || 503,
-      error: response.error || response.data?.error || "The authentication service is unavailable.",
-      account: null,
-    };
-  }
-
-  const pages = Array.isArray(requiredPages) ? requiredPages : [requiredPages];
-  const wanted = pages.map(normalize).filter(Boolean);
-  if (wanted.length) {
-    const allowed = new Set((response.data.allowedPages || []).map(normalize).filter(Boolean));
-    const hasAccess = wanted.some((page) => allowed.has(page));
-    if (!hasAccess) {
-      return {
-        ok: false,
-        status: 403,
-        error: `${pages.join(" or ")} access is not allowed for this account.`,
-        account: response.data,
-        memberId: accountMemberId(response.data),
-      };
-    }
-  }
-
-  return { ok: true, status: 200, error: "", account: response.data, memberId: accountMemberId(response.data) };
+  // Phase 39: account reads no longer fall back to the Express /api/account
+  // route. Authentication must resolve from the direct session store or the
+  // lightweight authenticated session-status bridge, then rebuild from
+  // Supabase in Next.
+  onSource("direct-unavailable");
+  return {
+    ok: false,
+    status: 503,
+    error: "The direct authentication context is unavailable. Please sign in again or retry shortly.",
+    account: null,
+    memberId: "",
+  };
 }
 
 export async function getDirectAccountGate(requiredPages = [], options = {}) {

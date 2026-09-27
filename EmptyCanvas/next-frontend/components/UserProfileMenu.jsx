@@ -157,18 +157,11 @@ export default function UserProfileMenu({ account }) {
 
       try {
         const query = `_refresh=${encodeURIComponent(String(Date.now()))}`;
-        let response = await fetch(`/next/api/account?${query}`, {
+        const response = await fetch(`/next/api/account?${query}`, {
           credentials: "include",
           cache: "no-store",
           headers: { Accept: "application/json", "Cache-Control": "no-cache" },
         });
-        if (!response.ok && response.status !== 401 && response.status !== 403) {
-          response = await fetch(`/api/account?${query}`, {
-            credentials: "include",
-            cache: "no-store",
-            headers: { Accept: "application/json", "Cache-Control": "no-cache" },
-          });
-        }
         if (!response.ok) return;
         const fresh = await response.json().catch(() => null);
         if (!cancelled && fresh && typeof fresh === "object") setProfileAccount((current) => ({ ...current, ...fresh }));

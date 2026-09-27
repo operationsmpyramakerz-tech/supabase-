@@ -142,6 +142,12 @@ async function readFileAsDataUrl(file) {
   });
 }
 
+async function dataUrlToBlob(dataUrl) {
+  const response = await fetch(String(dataUrl || ""));
+  if (!response.ok) throw new Error("The prepared image could not be converted for upload.");
+  return await response.blob();
+}
+
 async function loadImage(dataUrl) {
   return await new Promise((resolve, reject) => {
     const image = new Image();
@@ -412,12 +418,12 @@ function EditFieldModal({ field, account, onClose, onSaved }) {
     try {
       // PATCH already verifies the current password. Avoiding a separate verify request
       // keeps the save flow faster while preserving the same server-side protection.
-      await requestJson("/api/account", {
+      await requestJson("/next/api/account", {
         method: "PATCH",
         body: JSON.stringify({ currentPassword, [field.key]: normalizedValue || null }),
       }, { redirectOn401: false });
 
-      const refreshed = await requestJson("/api/account", {}, { redirectOn401: true });
+      const refreshed = await requestJson("/next/api/account", {}, { redirectOn401: true });
       onSaved(normalizeAccount(refreshed), `${field.label} updated successfully.`);
       onClose();
     } catch (saveError) {
@@ -673,7 +679,7 @@ function ImageUploadModal({ imageRequest, onClose, onSaved }) {
     setBusy(true);
     setError("");
     try {
-      await requestJson("/api/account/verify-password", {
+      await requestJson("/next/api/account/verify-password", {
         method: "POST",
         body: JSON.stringify({ currentPassword }),
       }, { redirectOn401: false });
@@ -688,10 +694,33 @@ function ImageUploadModal({ imageRequest, onClose, onSaved }) {
             viewport?.width,
             viewport?.height,
           );
-      const endpoint = kind === "cover" ? "/api/account/cover-photo" : "/api/account/profile-picture";
-      const result = await requestJson(endpoint, {
+      const blob = await dataUrlToBlob(dataUrl);
+      if (!blob.size) throw new Error("The prepared image is empty.");
+      if (blob.size > 10 * 1024 * 1024) throw new Error("Image is too large. Maximum size is 10MB.");
+
+      const ticket = await requestJson("/next/api/account/image-upload-ticket", {
         method: "POST",
-        body: JSON.stringify({ dataUrl, filename: imageRequest.file.name, currentPassword }),
+        body: JSON.stringify({
+          kind,
+          filename: imageRequest.file.name,
+          mime: blob.type || "image/webp",
+          size: blob.size,
+          currentPassword,
+        }),
+      }, { redirectOn401: false });
+
+      const uploadResponse = await fetch(ticket?.upload?.signedUrl || "", {
+        method: ticket?.upload?.method || "PUT",
+        headers: ticket?.upload?.headers || {},
+        body: blob,
+      });
+      if (!uploadResponse.ok) {
+        throw new Error(`Image upload failed with status ${uploadResponse.status}.`);
+      }
+
+      const result = await requestJson("/next/api/account/image-direct", {
+        method: "POST",
+        body: JSON.stringify({ kind, path: ticket.path || ticket?.upload?.path, currentPassword }),
       }, { redirectOn401: false });
       onSaved(kind, safeUrl(kind === "cover" ? result.coverPhotoUrl : result.photoUrl));
       onClose();
@@ -960,8 +989,7 @@ export default function AccountClient({ initialAccount }) {
     const label = kind === "cover" ? "cover photo" : "profile picture";
     setBusyAction(`remove-${kind}`);
     try {
-      const endpoint = kind === "cover" ? "/api/account/cover-photo" : "/api/account/profile-picture";
-      await requestJson(endpoint, { method: "DELETE" });
+      await requestJson(`/next/api/account/image-direct?kind=${encodeURIComponent(kind)}`, { method: "DELETE" });
       const next = { ...account, [kind === "cover" ? "coverPhotoUrl" : "photoUrl"]: "" };
       setAccount(next);
       syncAccountChrome(next);
