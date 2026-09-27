@@ -54,15 +54,23 @@ function matchingStandards(meta, user) {
   const exact = (meta?.standards || []).filter((standard) => lower(standard.department) === department && lower(standard.rolePosition) === position);
   return exact.length ? exact : (meta?.standards || []).filter((standard) => lower(standard.department) === department || lower(standard.rolePosition) === position);
 }
-function isUrlEvidence(value) { return /^https?:\/\//i.test(text(value)) || /^\/api\/storage\/file\//i.test(text(value)); }
-function evidenceFileName(value) {
+function evidenceUrl(value) {
   const raw = text(value);
+  const legacy = raw.match(/^\/api\/storage\/file\/([A-Za-z0-9._~-]+)(?:\?([^#]*))?$/i);
+  if (!legacy) return raw;
+  const query = new URLSearchParams(legacy[2] || "");
+  query.set("reference", legacy[1]);
+  return `/next/api/storage/file-direct?${query.toString()}`;
+}
+function isUrlEvidence(value) { const raw = evidenceUrl(value); return /^https?:\/\//i.test(raw) || /^\/next\/api\/storage\/file-direct\?reference=/i.test(raw); }
+function evidenceFileName(value) {
+  const raw = evidenceUrl(value);
   if (!raw) return "No evidence uploaded";
   try {
     const url = new URL(raw, typeof window !== "undefined" ? window.location.origin : "http://localhost");
     const explicitName = text(url.searchParams.get("name"));
     if (explicitName) return explicitName;
-    if (/^\/api\/storage\/file\//i.test(url.pathname || "")) return "Evidence file";
+    if (/^\/(?:api\/storage\/file|next\/api\/storage\/file-direct)/i.test(url.pathname || "")) return "Evidence file";
     return decodeURIComponent((url.pathname || "").split("/").filter(Boolean).pop() || "Evidence file") || "Evidence file";
   } catch { return raw; }
 }
@@ -526,7 +534,7 @@ function ReviewDetail({ reviewId, readOnly, adminPassword = "", onClose, onSaved
               const percentValue = scoreValue === "" ? 0 : scoreToPercentage(scoreValue, item.weightPercent);
               return <article className={`kpis-score-subcard ${readOnly ? "kpis-score-subcard--readonly" : ""}`} key={item.scoreId}>
                 <div className="kpis-score-subcard__head"><div className="kpis-score-subcard__title"><span>{item.subsectionOrder || "—"}</span><div><h4>{item.subsection || "KPI subsection"}</h4>{item.subsectionDescription ? <p>{item.subsectionDescription}</p> : null}</div></div><div className="kpis-score-weight-pill"><span>Weight</span><strong>{number(item.weightPercent).toFixed(1)}</strong></div></div>
-                {readOnly ? <><div className="kpis-score-readonly-grid"><div className="kpis-score-readonly-card"><span>Score</span><strong>{scoreValue === "" ? "—" : number(scoreValue).toFixed(1)}</strong></div><div className="kpis-score-readonly-card"><span>KPI %</span><strong>{percentValue.toFixed(1)}%</strong></div></div><div className="kpis-score-readonly-notes"><div><span>Evidence</span>{text(item.evidenceText) ? (isUrlEvidence(item.evidenceText) ? <a className="kpis-evidence-link" href={item.evidenceText} target="_blank" rel="noopener noreferrer"><Icon name="paperclip"/><strong>{evidenceFileName(item.evidenceText)}</strong></a> : <p>{evidenceFileName(item.evidenceText)}</p>) : <p>—</p>}</div><div><span>Manager notes</span><p>{text(item.managerNotes) || "—"}</p></div></div></> : <><div className="kpis-score-subcard__body"><label className="kpis-score-input-card"><span>Score</span><input className="kpis-input" type="number" min="0" max={number(item.weightPercent)} step="0.01" value={scoreValue} onChange={(event) => update(item.scoreId, { actualPercent: event.target.value })} /></label><div className="kpis-score-percent-card"><span>KPI %</span><strong>{percentValue.toFixed(1)}%</strong></div></div><div className="kpis-score-notes kpis-score-notes--modern kpis-score-notes--evidence"><div className="kpis-evidence-card"><span>Evidence</span><input id={`kpi-evidence-${item.scoreId}`} type="file" hidden onChange={(event) => uploadEvidence(item.scoreId, event.target.files?.[0])} /><button className="kpis-evidence-upload" type="button" disabled={uploading === item.scoreId} onClick={() => document.getElementById(`kpi-evidence-${item.scoreId}`)?.click()}>{uploading === item.scoreId ? <><span className="kpis-loading-dot"/><strong>Uploading...</strong></> : <><Icon name="upload-cloud"/><strong>Upload evidence</strong></>}</button><small>{evidenceFileName(item.evidenceText)}</small></div><label>Manager notes<textarea className="kpis-textarea" rows="2" value={item.managerNotes || ""} onChange={(event) => update(item.scoreId, { managerNotes: event.target.value })} /></label></div></>}
+                {readOnly ? <><div className="kpis-score-readonly-grid"><div className="kpis-score-readonly-card"><span>Score</span><strong>{scoreValue === "" ? "—" : number(scoreValue).toFixed(1)}</strong></div><div className="kpis-score-readonly-card"><span>KPI %</span><strong>{percentValue.toFixed(1)}%</strong></div></div><div className="kpis-score-readonly-notes"><div><span>Evidence</span>{text(item.evidenceText) ? (isUrlEvidence(item.evidenceText) ? <a className="kpis-evidence-link" href={evidenceUrl(item.evidenceText)} target="_blank" rel="noopener noreferrer"><Icon name="paperclip"/><strong>{evidenceFileName(item.evidenceText)}</strong></a> : <p>{evidenceFileName(item.evidenceText)}</p>) : <p>—</p>}</div><div><span>Manager notes</span><p>{text(item.managerNotes) || "—"}</p></div></div></> : <><div className="kpis-score-subcard__body"><label className="kpis-score-input-card"><span>Score</span><input className="kpis-input" type="number" min="0" max={number(item.weightPercent)} step="0.01" value={scoreValue} onChange={(event) => update(item.scoreId, { actualPercent: event.target.value })} /></label><div className="kpis-score-percent-card"><span>KPI %</span><strong>{percentValue.toFixed(1)}%</strong></div></div><div className="kpis-score-notes kpis-score-notes--modern kpis-score-notes--evidence"><div className="kpis-evidence-card"><span>Evidence</span><input id={`kpi-evidence-${item.scoreId}`} type="file" hidden onChange={(event) => uploadEvidence(item.scoreId, event.target.files?.[0])} /><button className="kpis-evidence-upload" type="button" disabled={uploading === item.scoreId} onClick={() => document.getElementById(`kpi-evidence-${item.scoreId}`)?.click()}>{uploading === item.scoreId ? <><span className="kpis-loading-dot"/><strong>Uploading...</strong></> : <><Icon name="upload-cloud"/><strong>Upload evidence</strong></>}</button><small>{evidenceFileName(item.evidenceText)}</small></div><label>Manager notes<textarea className="kpis-textarea" rows="2" value={item.managerNotes || ""} onChange={(event) => update(item.scoreId, { managerNotes: event.target.value })} /></label></div></>}
               </article>;
             })}</div>
           </div>)}

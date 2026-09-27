@@ -18,7 +18,7 @@ async function responseJson(response) {
 async function createTicket(scope, file) {
   let response;
   try {
-    response = await fetch("/api/storage/upload-ticket", {
+    response = await fetch("/next/api/storage/upload-ticket", {
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
@@ -98,7 +98,7 @@ function putFile(ticket, file, onProgress) {
 async function completeUpload(uploadRef) {
   let response;
   try {
-    response = await fetch("/api/storage/upload-complete", {
+    response = await fetch("/next/api/storage/upload-complete", {
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },

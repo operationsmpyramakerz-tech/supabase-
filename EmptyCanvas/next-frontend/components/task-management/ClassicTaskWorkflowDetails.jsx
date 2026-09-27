@@ -32,12 +32,12 @@ function readAsDataUrl(file){ return new Promise((resolve,reject)=>{ const r=new
 async function uploadOne(file){
   if(num(file?.size)>10*1024*1024) throw new Error("Attachments must be 10 MB or less.");
   try{
-    const prep=await fetch("/api/storage/upload-ticket",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({scope:"task-management",filename:file.name,mime:file.type||"application/octet-stream",size:file.size})});
+    const prep=await fetch("/next/api/storage/upload-ticket",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({scope:"task-management",filename:file.name,mime:file.type||"application/octet-stream",size:file.size})});
     const ticket=await prep.json().catch(()=>({}));
     if(prep.ok&&ticket?.upload?.signedUrl&&ticket?.uploadRef){
       const put=await fetch(ticket.upload.signedUrl,{method:ticket.upload.method||"PUT",headers:ticket.upload.headers||{"Content-Type":file.type||"application/octet-stream"},body:file});
       if(!put.ok) throw new Error(`Storage upload failed with status ${put.status}.`);
-      const done=await requestJson("/api/storage/upload-complete",{method:"POST",body:JSON.stringify({uploadRef:ticket.uploadRef})});
+      const done=await requestJson("/next/api/storage/upload-complete",{method:"POST",body:JSON.stringify({uploadRef:ticket.uploadRef})});
       return done.file;
     }
   }catch{}

@@ -636,10 +636,23 @@ function conditionPass(condition, values = {}) {
   return true;
 }
 
+function normalizeProtectedFileUrl(value = "") {
+  const raw = text(value, 3000);
+  if (!raw) return "";
+  const legacy = raw.match(/^\/api\/storage\/file\/([A-Za-z0-9._~-]+)(?:\?([^#]*))?$/i);
+  if (legacy) {
+    const query = new URLSearchParams(legacy[2] || "");
+    query.set("reference", legacy[1]);
+    return `/next/api/storage/file-direct?${query.toString()}`;
+  }
+  return raw;
+}
+
 function safeFileEntry(value) {
   if (!value || typeof value !== "object") return null;
-  const url = text(value.url || value.href || value.publicUrl, 3000);
-  if (!/^https:\/\//i.test(url) && !/^\/api\/storage\/file\/[A-Za-z0-9._~-]+(?:[?&].*)?$/i.test(url)) return null;
+  const url = normalizeProtectedFileUrl(value.url || value.href || value.publicUrl);
+  const protectedStorage = /^\/next\/api\/storage\/file-direct\?reference=[A-Za-z0-9._%~-]+/i.test(url);
+  if (!/^https:\/\//i.test(url) && !protectedStorage) return null;
   return {
     name: text(value.name || value.filename || "Attachment", 240) || "Attachment",
     url,

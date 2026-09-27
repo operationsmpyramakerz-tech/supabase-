@@ -169,7 +169,7 @@ async function uploadTaskFile(file, view) {
   if (!file) throw new Error("Choose a file first.");
   if (number(file.size) > 10 * 1024 * 1024) throw new Error("Attachments must be 10 MB or less.");
   try {
-    const ticketResponse = await fetch("/api/storage/upload-ticket", {
+    const ticketResponse = await fetch("/next/api/storage/upload-ticket", {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
@@ -186,7 +186,7 @@ async function uploadTaskFile(file, view) {
       body: file,
     });
     if (!put.ok) throw new Error(`Storage upload failed with status ${put.status}.`);
-    const complete = await requestJson("/api/storage/upload-complete", {
+    const complete = await requestJson("/next/api/storage/upload-complete", {
       method: "POST",
       body: JSON.stringify({ uploadRef: ticket.uploadRef }),
     });

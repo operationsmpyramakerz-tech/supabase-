@@ -149,10 +149,23 @@ function ticketCode(row = {}) {
   return Number.isFinite(numeric) ? `TKT-${String(Math.max(0, numeric)).padStart(5, "0")}` : (id ? `TKT-${id}` : "TKT");
 }
 
+function normalizeStorageFileUrl(value = "") {
+  const raw = text(value, 4000);
+  if (!raw) return "";
+  const legacy = raw.match(/^\/api\/storage\/file\/([A-Za-z0-9._~-]+)(?:\?([^#]*))?$/i);
+  if (legacy) {
+    const query = new URLSearchParams(legacy[2] || "");
+    query.set("reference", legacy[1]);
+    return `/next/api/storage/file-direct?${query.toString()}`;
+  }
+  if (/^\/next\/api\/storage\/file-direct\?reference=/i.test(raw)) return raw;
+  return raw;
+}
+
 function attachment(value = {}) {
   if (!value || typeof value !== "object") return null;
-  const url = text(value.url || value.attachmentUrl || value.attachment_url, 4000);
-  const protectedStorage = /^\/api\/storage\/file\/[A-Za-z0-9._~-]+(?:[?&].*)?$/i.test(url);
+  const url = normalizeStorageFileUrl(value.url || value.attachmentUrl || value.attachment_url);
+  const protectedStorage = /^\/next\/api\/storage\/file-direct\?reference=[A-Za-z0-9._%~-]+/i.test(url);
   if (!url || (!/^https?:\/\//i.test(url) && !protectedStorage)) return null;
   return {
     name: text(value.name || value.filename || value.attachmentName || value.attachment_name, 500) || "Attachment",
