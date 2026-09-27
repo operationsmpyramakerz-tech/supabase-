@@ -40,10 +40,9 @@ function UnavailableState({ message }) {
 }
 
 export default async function NotificationsPage() {
-  // Fast path: validate the session in Next and read the user's saved
-  // notifications directly from Supabase. Notification generation/scanning is
-  // still kept as a background compatibility job so page navigation does not
-  // wait for the legacy Express scan.
+  // Validate the session in Next and read the user's saved notifications
+  // directly from Supabase. Notification generation/scanning is handled by the
+  // direct Next refresh route and never blocks the initial page render.
   const gate = await getLegacyAccountGate([]);
   if (gate.status === 401) redirect("/login?next=/next/notifications");
 
@@ -53,16 +52,6 @@ export default async function NotificationsPage() {
 
   if (gate.ok && gate.memberId) {
     notifications = await notificationsForMember(gate.memberId, { limit: 80 }).catch(() => null);
-  }
-
-  // Older sessions that do not expose a Supabase member id can still use the
-  // existing notification endpoint without paying for the full page bootstrap.
-  if (gate.ok && !notifications) {
-    const legacyNotifications = await fetchLegacyJson("/api/notifications?limit=80", { timeoutMs: 8_000, fresh: true });
-    if (legacyNotifications.ok && legacyNotifications.data) {
-      notifications = legacyNotifications.data;
-      warnings.push("Notification list loaded through the compatibility path.");
-    }
   }
 
   // Deep recovery only. The normal route no longer depends on page-bootstrap.

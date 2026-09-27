@@ -28,15 +28,6 @@ async function requestJson(url, options = {}) {
   return body;
 }
 
-async function requestJsonWithFallback(directUrl, legacyUrl, options = {}) {
-  try {
-    return await requestJson(directUrl, options);
-  } catch (directError) {
-    if (!legacyUrl) throw directError;
-    return await requestJson(legacyUrl, options);
-  }
-}
-
 function triggerBackgroundNotificationScan() {
   const now = Date.now();
   const storageKey = "ops.notifications.last-background-scan";
@@ -46,7 +37,7 @@ function triggerBackgroundNotificationScan() {
     window.sessionStorage.setItem(storageKey, String(now));
   } catch {}
 
-  return fetch(`/api/notifications/refresh?limit=1&_=${now}`, {
+  return fetch(`/next/api/notifications/refresh?limit=12&_=${now}`, {
     credentials: "include",
     cache: "no-store",
   }).catch(() => null);
@@ -68,10 +59,7 @@ export default function NotificationsBell({ classic = false }) {
   async function load({ quiet = false } = {}) {
     if (!quiet) setLoading(true);
     try {
-      const body = await requestJsonWithFallback(
-        `/next/api/notifications?limit=12`,
-        `/api/notifications?limit=12`,
-      );
+      const body = await requestJson(`/next/api/notifications?limit=12`);
       const nextItems = Array.isArray(body?.items) ? body.items : [];
       setItems(nextItems);
       setUnreadCount(Number(body?.unreadCount) || nextItems.filter((item) => !item?.read).length);
@@ -158,7 +146,7 @@ export default function NotificationsBell({ classic = false }) {
     setItems((current) => current.map((row) => String(row?.id) === id ? { ...row, read: true } : row));
     setUnreadCount((count) => Math.max(0, count - 1));
     try {
-      await requestJsonWithFallback("/next/api/notifications/read", "/api/notifications/read", {
+      await requestJson("/next/api/notifications/read", {
         method: "POST",
         body: JSON.stringify({ id }),
       });
@@ -174,7 +162,7 @@ export default function NotificationsBell({ classic = false }) {
     setItems((current) => current.map((item) => ({ ...item, read: true })));
     setUnreadCount(0);
     try {
-      await requestJsonWithFallback("/next/api/notifications/read-all", "/api/notifications/read-all", {
+      await requestJson("/next/api/notifications/read-all", {
         method: "POST",
         body: "{}",
       });

@@ -19628,16 +19628,19 @@ async function _runSupabaseNotificationsScan({ force = false } = {}) {
 
     // ---- Orders: notify users who can see order pages from Supabase only ----
     let ordersChangedCount = 0;
+    let ordersChangedRows = [];
     if (_sbOrdersEnabled()) {
       try {
-        const changed = await _sbCronRowsEditedSince(_sbOrdersTable(), lastIso, { limit: 3000 });
-        ordersChangedCount = changed.length;
+        ordersChangedRows = await _sbCronRowsEditedSince(_sbOrdersTable(), lastIso, { limit: 3000 });
+        ordersChangedCount = ordersChangedRows.length;
       } catch (e) {
         console.warn("[notifications] Supabase orders check failed:", e?.message || e);
+        ordersChangedRows = [];
       }
     }
 
     if (ordersChangedCount > 0 && users.length) {
+      const ordersNewestTs = Math.max(...ordersChangedRows.map(_sbCronRowUpdatedAt).filter(Boolean), Date.now());
       const orderPages = new Set([
         "Current Orders",
         "Requested Orders",
@@ -19651,14 +19654,14 @@ async function _runSupabaseNotificationsScan({ force = false } = {}) {
         const canSee = allowed.some((pageName) => orderPages.has(pageName));
         if (!canSee) continue;
 
-        const id = `orders:sb:${nowIso}:${_notificationScopedUserKey(u.id)}`;
+        const id = `orders:sb:${ordersNewestTs}:${_notificationScopedUserKey(u.id)}`;
         await _addNotification(u.id, {
           id,
           type: "orders",
           title: "Orders updated",
           body: `${ordersChangedCount} change(s) detected`,
           url: "/next/home",
-          ts: Date.now(),
+          ts: ordersNewestTs,
           read: false,
         });
         bump(u.id, "orders");
@@ -19667,28 +19670,31 @@ async function _runSupabaseNotificationsScan({ force = false } = {}) {
 
     // ---- Stocktaking: notify users who can see Stocktaking from Supabase only ----
     let stockChangedCount = 0;
+    let stockChangedRows = [];
     if (_sbStocktakingEnabled()) {
       try {
-        const changed = await _sbCronRowsEditedSince(_sbStocktakingTable(), lastIso, { limit: 3000 });
-        stockChangedCount = changed.length;
+        stockChangedRows = await _sbCronRowsEditedSince(_sbStocktakingTable(), lastIso, { limit: 3000 });
+        stockChangedCount = stockChangedRows.length;
       } catch (e) {
         console.warn("[notifications] Supabase stocktaking check failed:", e?.message || e);
+        stockChangedRows = [];
       }
     }
 
     if (stockChangedCount > 0 && users.length) {
+      const stockNewestTs = Math.max(...stockChangedRows.map(_sbCronRowUpdatedAt).filter(Boolean), Date.now());
       for (const u of users) {
         const allowed = Array.isArray(u.allowedPages) ? u.allowedPages : [];
         if (!allowed.includes("Stocktaking")) continue;
 
-        const id = `stock:sb:${nowIso}:${_notificationScopedUserKey(u.id)}`;
+        const id = `stock:sb:${stockNewestTs}:${_notificationScopedUserKey(u.id)}`;
         await _addNotification(u.id, {
           id,
           type: "stock",
           title: "Stocktaking updated",
           body: `${stockChangedCount} change(s) detected`,
           url: "/next/stocktaking",
-          ts: Date.now(),
+          ts: stockNewestTs,
           read: false,
         });
         bump(u.id, "stock");
@@ -19726,7 +19732,7 @@ async function _runSupabaseNotificationsScan({ force = false } = {}) {
       source: "supabase",
       lastIso,
       nowIso,
-      tasksChanged: tasksChanged.length,
+      tasksChanged: 0,
       expensesChanged: expensesChanged.length,
       ordersChanged: ordersChangedCount,
       stockChanged: stockChangedCount,
@@ -20981,97 +20987,10 @@ function _tmAssignmentPrerequisites(workflow = {}, assignment = {}) {
 
 
 
-// ---- API: notifications list / read ----
-
-async function _handleNotificationsList(req, res) {
-  res.set("Cache-Control", "no-store");
-  try {
-    const userId = await _resolveNotificationUserId(req);
-    if (!userId) return res.status(404).json({ success: false, error: "User not found" });
-
-    // The bell refresh performs a throttled Supabase scan, then reads the stored Supabase notifications table.
-    await _runSupabaseNotificationsScan({ force: false }).catch((error) => {
-      console.warn("[notifications] auto Supabase scan skipped/failed:", error?.message || error);
-    });
-
-    const limit = Math.max(1, Math.min(80, Number(req.query.limit) || 25));
-    const data = await _loadUserNotifications(userId);
-    const items = (data.items || []).sort((a, b) => (b.ts || 0) - (a.ts || 0)).slice(0, limit);
-    const unreadCount = (data.items || []).reduce((acc, n) => acc + (n && !n.read ? 1 : 0), 0);
-    return res.json({ success: true, source: _sbNotificationsEnabled() ? "supabase" : "fallback", items, unreadCount });
-  } catch (e) {
-    console.error("notifications get error", e?.body || e);
-    return res.status(500).json({ success: false, error: "Failed to load notifications" });
-  }
-}
-
-app.get("/api/notifications", requireAuth, _handleNotificationsList);
-
-// Backward-compatible endpoint used by cached builds. Without this alias, old
-// clients poll a 404 every few seconds and can make order pages feel frozen.
-app.get("/api/notifications/refresh", requireAuth, _handleNotificationsList);
-
-app.post("/api/notifications/read", requireAuth, async (req, res) => {
-  res.set("Cache-Control", "no-store");
-  try {
-    const userId = await _resolveNotificationUserId(req);
-    if (!userId) return res.status(404).json({ success: false, error: "User not found" });
-    const id = String(req.body?.id || "").trim();
-    if (!id) return res.status(400).json({ success: false, error: "Missing id" });
-    const changed = await _markNotificationRead(userId, id);
-    res.json({ success: true, changed });
-  } catch (e) {
-    console.error("notifications read error", e?.body || e);
-    res.status(500).json({ success: false, error: "Failed to mark read" });
-  }
-});
-
-app.post("/api/notifications/read-all", requireAuth, async (req, res) => {
-  res.set("Cache-Control", "no-store");
-  try {
-    const userId = await _resolveNotificationUserId(req);
-    if (!userId) return res.status(404).json({ success: false, error: "User not found" });
-    const changed = await _markAllNotificationsRead(userId);
-    res.json({ success: true, changed });
-  } catch (e) {
-    console.error("notifications read-all error", e?.body || e);
-    res.status(500).json({ success: false, error: "Failed to mark all read" });
-  }
-});
-
-/**
- * Debug endpoint — create a test in-app notification + (if configured) a push notification.
- * Open it while logged in: /api/notifications/test
- */
-app.get("/api/notifications/test", requireAuth, async (req, res) => {
-  try {
-    const userId = await _resolveNotificationUserId(req);
-    if (!userId) return res.status(404).json({ error: "User not found" });
-
-    const notif = {
-      id: _randId("test"),
-      type: "test",
-      title: "Test notification",
-      body: "This is a test notification from the server ✅",
-      url: "/next/home",
-      ts: Date.now(),
-      read: false,
-    };
-
-    await _addNotification(userId, notif);
-
-    const push = await _sendPushToUser(userId, {
-      title: "Operations",
-      body: "✅ Push notifications working (test)",
-      url: "/next/home",
-    });
-
-    res.json({ success: true, notif, push });
-  } catch (e) {
-    console.error("notifications test error:", e?.message || e);
-    res.status(500).json({ success: false, error: "test failed" });
-  }
-});
+// ---- Notifications list/read/test moved to Next.js (Phase 40) ----
+// Notification generation helpers stay here temporarily for the cron + push
+// compatibility endpoints below, while the interactive notification center
+// now reads and mutates Supabase directly through /next/api/notifications/*.
 
 
 // ---- API: push subscribe/unsubscribe & public key ----
