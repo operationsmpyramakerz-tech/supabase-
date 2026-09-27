@@ -1,11 +1,12 @@
-# Next.js Migration Status — Phase 46
+# Next.js Migration Status — Phase 47
 
-The Operations Hub application has completed the functional migration from the
-legacy Express business layer to the Next.js/Supabase application.
+The Operations Hub functional migration is complete. The Next.js/Supabase
+deployment is now the primary application and the historical Express backend is
+retired from Vercel runtime traffic.
 
-## Current production ownership
+## Production ownership
 
-The Next.js deployment now owns:
+The Next deployment owns:
 
 - login, logout, session validation and authorization
 - all business reads and mutations
@@ -15,50 +16,63 @@ The Next.js deployment now owns:
 - notifications and Web Push
 - the scheduled notification scan
 - PWA manifest, icons, service worker and offline fallback
+- compatibility API rewrites for old cached clients
+- redirects for old Express/classic HTML bookmarks
+- health/readiness compatibility URLs
 
-The Express deployment no longer executes business APIs. `server/app.js` is a
-small compatibility shell that only provides health/readiness responses, old
-bookmark redirects, legacy static PWA files during the transition, and an
-explicit `410 LEGACY_API_RETIRED` response for stale API calls that were not
-already rewritten to Next.
+The legacy Vercel configs now contain only an edge rewrite to the Next
+deployment. They do not build or invoke the Express serverless function.
+`EmptyCanvas/api/index.js` is a 410 retirement safety stub only.
 
 ## Required Next.js environment
 
-The Next deployment must keep the normal Supabase environment variables plus a
-persistent session backend and the same session secret used when the direct
-session cutover was completed:
+Keep these core variables in the Next Vercel project:
 
 ```text
-SUPABASE_URL
-SUPABASE_SERVICE_ROLE_KEY
+SUPABASE_URL (or the Supabase URL alias already used by the app)
+SUPABASE_SERVICE_ROLE_KEY / SUPABASE_SECRET_KEY
 SESSION_SECRET
 UPSTASH_REDIS_REST_URL
 UPSTASH_REDIS_REST_TOKEN
 ```
 
-`UPSTASH_REDIS_URL` / `REDIS_URL` may be used instead of the REST pair when
-appropriate. `LEGACY_BACKEND_ORIGIN` is no longer required by the Next runtime.
+Keep the feature-specific variables you actively use, including the VAPID keys
+for browser push and `CRON_SECRET` when the notification cron is protected.
 
-## Retirement verification
+The Next runtime no longer needs:
+
+```text
+LEGACY_BACKEND_ORIGIN
+NEXT_FRONTEND_ORIGIN
+NEXT_FRONTEND_PUBLIC_ORIGIN
+ENABLE_NEXT_FRONTEND
+```
+
+Do not remove `SESSION_SECRET` or the Upstash variables; they are now part of
+the primary Next session implementation.
+
+## Phase 47 verification
 
 After deployment, verify:
 
-1. `/next/api/system/retirement-status` returns `retirementReady: true`.
-2. Logout and login work from `/next/login`.
-3. Home and Create New Order load without the legacy backend.
-4. PWA install diagnostics can load `/service-worker.js`, `/manifest.webmanifest`
-   and `/icons/icon-192.png` from the Next deployment itself.
-5. Browser push Test Notification succeeds.
-6. The Vercel cron is owned by the Next project at
-   `/next/api/cron/notifications` and only one project schedules it.
+1. `/next/api/system/retirement-status` returns `phase: 47` and
+   `retirementReady: true`.
+2. `/health` and `/ready` work directly on the Next deployment/domain.
+3. Old paths such as `/home`, `/login.html`, `/current-orders.html` and
+   `/orders/order-receipt-viewer` redirect to their `/next/...` equivalents.
+4. Old compatibility API paths such as `/api/login`, `/api/session-status`,
+   `/api/page-bootstrap` and `/api/components` resolve in the Next project.
+5. Login, Home, Create Order, Current Orders, uploads, exports, notifications,
+   push and PWA install all work normally.
 
-## Final shutdown step
+## Domain cutover and legacy project shutdown
 
-Once the checks above pass on the production domain, the legacy deployment can
-be removed from routing. Keep it available only as a temporary rollback target
-until the final domain/DNS cutover has been observed for the agreed rollback
-window.
+Once the verification above passes, move the production custom domain from the
+legacy Vercel project to the Next Vercel project. The Next project already owns
+root PWA assets and old bookmark redirects, so no Express routing is required.
 
-The application must not reintroduce network fallbacks from Next to Express.
-If a direct Next/Supabase path fails, fix that path rather than masking the
-failure behind the retired backend.
+Keep the old Vercel project without the production domain only for the desired
+rollback window. Its current config is edge-only and forwards to the Next
+deployment. After the rollback window, the legacy Vercel project can be deleted.
+
+See `README_BACKEND_RETIREMENT.md` for the final cleanup list.

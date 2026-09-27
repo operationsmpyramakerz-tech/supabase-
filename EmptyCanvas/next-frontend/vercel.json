@@ -5,6 +5,62 @@
   "installCommand": "npm install",
   "rewrites": [
     {
+      "source": "/health",
+      "destination": "/next/api/health"
+    },
+    {
+      "source": "/ready",
+      "destination": "/next/api/health"
+    },
+    {
+      "source": "/api/supabase/:path*",
+      "destination": "/next/api/health"
+    },
+    {
+      "source": "/api/login",
+      "destination": "/next/api/auth/login"
+    },
+    {
+      "source": "/api/logout",
+      "destination": "/next/api/auth/logout"
+    },
+    {
+      "source": "/api/session-status",
+      "destination": "/next/api/auth/session-status"
+    },
+    {
+      "source": "/api/signup-request",
+      "destination": "/next/api/auth/signup-request"
+    },
+    {
+      "source": "/api/forgot-password",
+      "destination": "/next/api/auth/forgot-password"
+    },
+    {
+      "source": "/api/history",
+      "destination": "/next/api/history"
+    },
+    {
+      "source": "/api/history/clear",
+      "destination": "/next/api/history"
+    },
+    {
+      "source": "/api/app-download-links",
+      "destination": "/next/api/system/app-download-links"
+    },
+    {
+      "source": "/api/hard-refresh",
+      "destination": "/next/api/system/hard-refresh"
+    },
+    {
+      "source": "/api/session-diagnostics",
+      "destination": "/next/api/system/session-diagnostics"
+    },
+    {
+      "source": "/api/team-members/:id/public",
+      "destination": "/next/api/team-members/public?key=:id"
+    },
+    {
       "source": "/service-worker.js",
       "destination": "/next/service-worker.js"
     },
@@ -213,6 +269,366 @@
     {
       "source": "/",
       "destination": "/next/login",
+      "permanent": false
+    },
+    {
+      "source": "/login",
+      "destination": "/next/login",
+      "permanent": false
+    },
+    {
+      "source": "/dashboard",
+      "destination": "/next/home",
+      "permanent": false
+    },
+    {
+      "source": "/home",
+      "destination": "/next/home",
+      "permanent": false
+    },
+    {
+      "source": "/user-access",
+      "destination": "/next/users-center",
+      "permanent": false
+    },
+    {
+      "source": "/orders",
+      "destination": "/next/orders",
+      "permanent": false
+    },
+    {
+      "source": "/orders/sv-orders",
+      "destination": "/next/orders-review",
+      "permanent": false
+    },
+    {
+      "source": "/orders/tracking",
+      "destination": "/next/orders/tracking",
+      "permanent": false
+    },
+    {
+      "source": "/orders/requested",
+      "destination": "/next/operations-orders",
+      "permanent": false
+    },
+    {
+      "source": "/orders/maintenance-orders",
+      "destination": "/next/maintenance-orders",
+      "permanent": false
+    },
+    {
+      "source": "/orders/new",
+      "destination": "/next/orders/new",
+      "permanent": false
+    },
+    {
+      "source": "/orders/new/products",
+      "destination": "/next/orders/new",
+      "permanent": false
+    },
+    {
+      "source": "/orders/order-receipt-viewer",
+      "destination": "/next/orders/receipt-viewer",
+      "permanent": false
+    },
+    {
+      "source": "/events",
+      "destination": "/next/events",
+      "permanent": false
+    },
+    {
+      "source": "/events/requests",
+      "destination": "/next/events",
+      "permanent": false
+    },
+    {
+      "source": "/events/calendar",
+      "destination": "/next/events-calendar",
+      "permanent": false
+    },
+    {
+      "source": "/events/new",
+      "destination": "/next/events/new",
+      "permanent": false
+    },
+    {
+      "source": "/events/components",
+      "destination": "/next/event-components",
+      "permanent": false
+    },
+    {
+      "source": "/events/components/new",
+      "destination": "/next/event-components?create=1",
+      "permanent": false
+    },
+    {
+      "source": "/b2c",
+      "destination": "/next/b2c/database",
+      "permanent": false
+    },
+    {
+      "source": "/b2c/database/:id",
+      "destination": "/next/b2c/database/:id",
+      "permanent": false
+    },
+    {
+      "source": "/b2c/database",
+      "destination": "/next/b2c/database",
+      "permanent": false
+    },
+    {
+      "source": "/b2c/form",
+      "destination": "/next/b2c/forms",
+      "permanent": false
+    },
+    {
+      "source": "/stocktaking",
+      "destination": "/next/stocktaking",
+      "permanent": false
+    },
+    {
+      "source": "/products",
+      "destination": "/next/products",
+      "permanent": false
+    },
+    {
+      "source": "/proposals",
+      "destination": "/next/proposals",
+      "permanent": false
+    },
+    {
+      "source": "/kits",
+      "destination": "/next/kits",
+      "permanent": false
+    },
+    {
+      "source": "/task-management",
+      "destination": "/next/task-management/all-tasks",
+      "permanent": false
+    },
+    {
+      "source": "/task-management/all-tasks",
+      "destination": "/next/task-management/all-tasks",
+      "permanent": false
+    },
+    {
+      "source": "/task-management/my-tasks",
+      "destination": "/next/task-management/my-tasks",
+      "permanent": false
+    },
+    {
+      "source": "/task-management/delegated-tasks",
+      "destination": "/next/task-management/delegated-tasks",
+      "permanent": false
+    },
+    {
+      "source": "/kpis",
+      "destination": "/next/kpis",
+      "permanent": false
+    },
+    {
+      "source": "/account",
+      "destination": "/next/account",
+      "permanent": false
+    },
+    {
+      "source": "/history",
+      "destination": "/next/history",
+      "permanent": false
+    },
+    {
+      "source": "/backup",
+      "destination": "/next/backup",
+      "permanent": false
+    },
+    {
+      "source": "/how-it-works",
+      "destination": "/next/how-it-works",
+      "permanent": false
+    },
+    {
+      "source": "/notifications",
+      "destination": "/next/notifications",
+      "permanent": false
+    },
+    {
+      "source": "/expenses",
+      "destination": "/next/expenses",
+      "permanent": false
+    },
+    {
+      "source": "/expenses/users",
+      "destination": "/next/expenses/users",
+      "permanent": false
+    },
+    {
+      "source": "/pwa-start",
+      "destination": "/next/pwa-start",
+      "permanent": false
+    },
+    {
+      "source": "/pwa-offline",
+      "destination": "/next/pwa-offline",
+      "permanent": false
+    },
+    {
+      "source": "/index.html",
+      "destination": "/next/login",
+      "permanent": false
+    },
+    {
+      "source": "/login.html",
+      "destination": "/next/login",
+      "permanent": false
+    },
+    {
+      "source": "/home.html",
+      "destination": "/next/home",
+      "permanent": false
+    },
+    {
+      "source": "/user-access.html",
+      "destination": "/next/users-center",
+      "permanent": false
+    },
+    {
+      "source": "/current-orders.html",
+      "destination": "/next/orders",
+      "permanent": false
+    },
+    {
+      "source": "/sv-orders.html",
+      "destination": "/next/orders-review",
+      "permanent": false
+    },
+    {
+      "source": "/requested-orders.html",
+      "destination": "/next/operations-orders",
+      "permanent": false
+    },
+    {
+      "source": "/maintenance-orders.html",
+      "destination": "/next/maintenance-orders",
+      "permanent": false
+    },
+    {
+      "source": "/create-order-products.html",
+      "destination": "/next/orders/new",
+      "permanent": false
+    },
+    {
+      "source": "/events.html",
+      "destination": "/next/events",
+      "permanent": false
+    },
+    {
+      "source": "/events-calendar.html",
+      "destination": "/next/events-calendar",
+      "permanent": false
+    },
+    {
+      "source": "/events-new.html",
+      "destination": "/next/events/new",
+      "permanent": false
+    },
+    {
+      "source": "/events-components.html",
+      "destination": "/next/event-components",
+      "permanent": false
+    },
+    {
+      "source": "/events-components-new.html",
+      "destination": "/next/event-components?create=1",
+      "permanent": false
+    },
+    {
+      "source": "/b2c-database.html",
+      "destination": "/next/b2c/database",
+      "permanent": false
+    },
+    {
+      "source": "/b2c-table.html",
+      "destination": "/next/b2c/database",
+      "permanent": false
+    },
+    {
+      "source": "/b2c-form.html",
+      "destination": "/next/b2c/forms",
+      "permanent": false
+    },
+    {
+      "source": "/stocktaking.html",
+      "destination": "/next/stocktaking",
+      "permanent": false
+    },
+    {
+      "source": "/products.html",
+      "destination": "/next/products",
+      "permanent": false
+    },
+    {
+      "source": "/proposals.html",
+      "destination": "/next/proposals",
+      "permanent": false
+    },
+    {
+      "source": "/kits.html",
+      "destination": "/next/kits",
+      "permanent": false
+    },
+    {
+      "source": "/task-management.html",
+      "destination": "/next/task-management/all-tasks",
+      "permanent": false
+    },
+    {
+      "source": "/kpis.html",
+      "destination": "/next/kpis",
+      "permanent": false
+    },
+    {
+      "source": "/account.html",
+      "destination": "/next/account",
+      "permanent": false
+    },
+    {
+      "source": "/history.html",
+      "destination": "/next/history",
+      "permanent": false
+    },
+    {
+      "source": "/backup.html",
+      "destination": "/next/backup",
+      "permanent": false
+    },
+    {
+      "source": "/how-it-works.html",
+      "destination": "/next/how-it-works",
+      "permanent": false
+    },
+    {
+      "source": "/notifications.html",
+      "destination": "/next/notifications",
+      "permanent": false
+    },
+    {
+      "source": "/expenses.html",
+      "destination": "/next/expenses",
+      "permanent": false
+    },
+    {
+      "source": "/expenses-users.html",
+      "destination": "/next/expenses/users",
+      "permanent": false
+    },
+    {
+      "source": "/pwa-start.html",
+      "destination": "/next/pwa-start",
+      "permanent": false
+    },
+    {
+      "source": "/pwa-offline.html",
+      "destination": "/next/pwa-offline",
       "permanent": false
     }
   ],

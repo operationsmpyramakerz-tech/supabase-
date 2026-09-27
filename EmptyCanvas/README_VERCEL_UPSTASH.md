@@ -1,26 +1,38 @@
+# Vercel + Upstash — Current Next.js Setup (Phase 47)
 
-# Vercel + Upstash Redis Patch (EmptyCanvas/)
+The legacy Express Vercel backend is retired. The production application now
+runs from `EmptyCanvas/next-frontend`.
 
-**What changed**
-- Added Serverless entry: `api/index.js`
-- Extracted server app: `server/app.js` (no `app.listen`, fixed static paths)
-- Redis session store: `server/session-redis.js`
-- Local dev runner: `server/local.js`
-- Vercel rewrites: `vercel.json`
-- Updated `package.json` to include `redis` & `connect-redis` and local scripts
+## Required session configuration
 
-**Environment variables (Vercel Project → Settings → Environment Variables)**
-- `Notion_API_Key`
-- `Products_Database`
-- `Products_list`
-- `Team_Members`
-- `School_Stocktaking_DB_ID`
-- `Funds`
-- `SESSION_SECRET` (32+ chars random)
-- `UPSTASH_REDIS_URL` (from Upstash dashboard, e.g. `rediss://:PASSWORD@HOST:PORT`)
+The Next Vercel project must keep a persistent session store and secret:
 
-**Deploy**
-1. Push these files into your repo under `EmptyCanvas/` (keep your `public/` as-is).
-2. On Vercel → New Project → Import your repo → Root Directory = `EmptyCanvas/`.
-3. Add the env vars above and Deploy.
-4. Local dev: `npm install` then `npm run dev` inside `EmptyCanvas/`.
+```text
+SESSION_SECRET
+UPSTASH_REDIS_REST_URL
+UPSTASH_REDIS_REST_TOKEN
+```
+
+`UPSTASH_REDIS_URL` or `REDIS_URL` can be used instead of the REST pair when an
+appropriate Redis connection is available, but the REST pair is the preferred
+serverless configuration on Vercel.
+
+The same Next project must also keep its Supabase URL/service key variables.
+
+## No legacy origin required
+
+Phase 47 does not use the Express backend for authentication or business data.
+The following variables are no longer required by the Next runtime and can be
+removed after the Phase 47 deployment is verified:
+
+```text
+LEGACY_BACKEND_ORIGIN
+NEXT_FRONTEND_ORIGIN
+NEXT_FRONTEND_PUBLIC_ORIGIN
+ENABLE_NEXT_FRONTEND
+```
+
+Do not remove `SESSION_SECRET` or the Upstash values; they are part of the live
+Next authentication/session implementation.
+
+See `README_BACKEND_RETIREMENT.md` for the final domain cutover and cleanup.
