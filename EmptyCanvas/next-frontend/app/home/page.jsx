@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import AppShell from "../../components/AppShell";
 import { DashboardNotice, QuickActionsCard, RecentOrdersCard, ScopeCard } from "../../components/home/DashboardCards";
 import HomeOverviewClient from "../../components/home/HomeOverviewClient";
-import { fetchLegacyJson } from "../../lib/legacy-api";
+import { fetchDirectPageBootstrap } from "../../lib/page-bootstrap-direct";
 import { getLegacyAccountGate } from "../../lib/products-auth";
 import { loadHomeOverviewDirect } from "../../lib/home-overview-data";
 
@@ -56,7 +56,7 @@ async function legacyHomeBootstrap(requestedUserId, duration) {
   const query = new URLSearchParams({ scope: "home" });
   if (requestedUserId !== "all") query.set("analysisUser", requestedUserId);
   if (duration !== "all") query.set("analysisDuration", duration);
-  return await fetchLegacyJson(`/api/page-bootstrap?${query.toString()}`, { timeoutMs: 20000 });
+  return await fetchDirectPageBootstrap(`/api/page-bootstrap?${query.toString()}`);
 }
 
 export default async function HomePage({ searchParams }) {

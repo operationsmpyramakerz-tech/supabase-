@@ -26,12 +26,14 @@ export async function GET() {
   return NextResponse.json(
     {
       ok: true,
-      phase: 47,
+      phase: 48,
       source: "next-only",
       deploymentMode: "next-primary",
       legacyBackendRequired: false,
       legacyBusinessApiDependency: false,
       legacyNetworkFallbackEnabled: false,
+      legacyCompatibilityAdapterNetworkAccess: false,
+      gitSyncSafeDynamicCompatibilityCallers: 4,
       legacyCompatibilityApiRoutesOwnedByNext: true,
       legacyPageRedirectsOwnedByNext: true,
       legacyVercelRuntimeRequired: false,
@@ -48,6 +50,7 @@ export async function GET() {
         canRemoveLegacyBackendOriginFromNext: true,
         canDetachLegacyBackendDomainAfterCutover: true,
         canDeleteLegacyVercelProjectAfterRollbackWindow: true,
+        nextRuntimeIsolatedFromExpress: true,
       },
     },
     { headers: { "Cache-Control": "no-store" } },

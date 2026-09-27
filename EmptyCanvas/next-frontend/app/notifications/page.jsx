@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import AppShell from "../../components/AppShell";
 import NotificationsClient from "../../components/notifications/NotificationsClient";
-import { fetchLegacyJson } from "../../lib/legacy-api";
+import { fetchDirectPageBootstrap } from "../../lib/page-bootstrap-direct";
 import { notificationsForMember } from "../../lib/notifications-data";
 import { getLegacyAccountGate } from "../../lib/products-auth";
 
@@ -56,7 +56,7 @@ export default async function NotificationsPage() {
 
   // Deep recovery only. The normal route no longer depends on page-bootstrap.
   if (!gate.ok || !account || !notifications) {
-    const response = await fetchLegacyJson("/api/page-bootstrap?scope=notifications", { timeoutMs: 20_000 });
+    const response = await fetchDirectPageBootstrap("/api/page-bootstrap?scope=notifications");
     if (response.status === 401 || response.status === 403) redirect("/login?next=/next/notifications");
     if (!response.ok || !response.data?.ok) {
       return <UnavailableState message={response.error || response.data?.error || gate.error || "The current ERP API is temporarily unavailable."} />;

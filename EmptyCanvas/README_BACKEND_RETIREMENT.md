@@ -1,4 +1,4 @@
-# Backend Retirement — Phase 47
+# Backend Retirement — Phase 48
 
 Phase 47 retires the legacy Express backend from production execution.
 
@@ -70,3 +70,14 @@ Do not delete `EmptyCanvas/next-frontend/` or its `public/` directory.
 The old package files can be simplified separately after the rollback window;
 leaving them in Git does not make the Express backend active because Vercel no
 longer routes requests into the legacy function.
+
+
+## Phase 48 status
+
+The Next runtime is isolated from Express. `lib/legacy-api.js` is now a local-only
+compatibility shim used by four pre-existing bracket-named route/page files; it cannot
+make a network request to the legacy backend. It may remain in the repo without keeping
+the legacy backend alive.
+
+Phase 49 is repository pruning: delete the retired backend source folders and duplicate
+legacy deployment files after the rollback window.

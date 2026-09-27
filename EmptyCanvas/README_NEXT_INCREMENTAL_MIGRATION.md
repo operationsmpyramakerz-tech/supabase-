@@ -1,6 +1,6 @@
-# Next.js Migration Status — Phase 47
+# Next.js Migration Status — Phase 48
 
-The Operations Hub functional migration is complete. The Next.js/Supabase
+The Operations Hub functional migration is complete. Phase 48 performs the final GitSync-safe Next-runtime cleanup. The Next.js/Supabase
 deployment is now the primary application and the historical Express backend is
 retired from Vercel runtime traffic.
 
@@ -76,3 +76,15 @@ rollback window. Its current config is edge-only and forwards to the Next
 deployment. After the rollback window, the legacy Vercel project can be deleted.
 
 See `README_BACKEND_RETIREMENT.md` for the final cleanup list.
+
+
+## Phase 48 — GitSync-safe Next runtime cleanup
+
+All non-dynamic pages now call the direct page-bootstrap helper explicitly instead
+of going through `legacy-api.js`. The compatibility helper has **no network access**
+and remains only for four existing bracket-named route/page files that are intentionally
+left unchanged because those paths are difficult to upload through the Android GitSync
+workflow. This does not create a production dependency on Express.
+
+The remaining work is repository pruning only: remove the retired `server/`, `api/`,
+legacy `public/` and PM2 files after the rollback window. No business migration remains.

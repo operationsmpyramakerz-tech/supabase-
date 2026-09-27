@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import AppShell from "../../components/AppShell";
 import KpisClient from "../../components/kpis/KpisClient";
 import { loadDirectKpisPageData } from "../../lib/kpis-data";
-import { fetchLegacyJson } from "../../lib/legacy-api";
+import { fetchDirectPageBootstrap } from "../../lib/page-bootstrap-direct";
 
 export const dynamic = "force-dynamic";
 
@@ -39,7 +39,7 @@ export default async function KpisPage() {
   }
 
   if (!pageData?.ok) {
-    const response = await fetchLegacyJson("/api/page-bootstrap?scope=kpis", { timeoutMs: 40000 });
+    const response = await fetchDirectPageBootstrap("/api/page-bootstrap?scope=kpis");
     if (response.status === 401) redirect("/login?next=/next/kpis");
     if (response.status === 403) {
       return (

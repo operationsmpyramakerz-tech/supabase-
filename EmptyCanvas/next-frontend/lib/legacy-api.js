@@ -19,12 +19,12 @@ function metricNameFor(pathname = "") {
 }
 
 /**
- * Compatibility adapter retained only so older Server Components do not need a
- * risky route/file rename during the final migration cleanup.
+ * Local-only compatibility adapter. It never calls the retired Express backend.
  *
- * Phase 46 deliberately removes every network fallback to the Express backend.
- * page-bootstrap is resolved locally from Supabase/Next helpers. Any other
- * former legacy path is retired and returns 410 immediately.
+ * Phase 48 removes this helper from every non-dynamic page. It remains only for
+ * a few existing bracket-named routes/pages that are intentionally left untouched
+ * for GitSync compatibility. page-bootstrap resolves locally from Supabase/Next;
+ * any other historical path returns 410 immediately.
  */
 export async function fetchLegacyJson(pathname, options = {}) {
   const startedAt = performance.now();
