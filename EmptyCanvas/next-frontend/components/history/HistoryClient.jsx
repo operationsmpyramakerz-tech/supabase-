@@ -347,7 +347,7 @@ function ClearHistoryModal({ onClose, onCleared }) {
     setBusy(true);
     setError("");
     try {
-      await requestJson("/api/history/clear", {
+      await requestJson("/next/api/history", {
         method: "DELETE",
         body: JSON.stringify({ adminPassword: password }),
       });

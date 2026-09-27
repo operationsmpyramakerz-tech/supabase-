@@ -10,7 +10,7 @@ export default function PwaStartClient() {
     let cancelled = false;
     const timer = window.setTimeout(async () => {
       try {
-        const response = await fetch("/api/session-status", {
+        const response = await fetch("/next/api/auth/session-status", {
           credentials: "include",
           cache: "no-store",
           headers: { accept: "application/json" },

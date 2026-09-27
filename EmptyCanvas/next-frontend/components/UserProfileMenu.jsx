@@ -112,7 +112,7 @@ async function clearBrowserCachesForHardRefresh() {
 }
 
 async function clearServerCaches() {
-  const response = await fetch(`/api/hard-refresh?_fresh=1&_refresh=${encodeURIComponent(String(Date.now()))}`, {
+  const response = await fetch(`/next/api/system/hard-refresh?_fresh=1&_refresh=${encodeURIComponent(String(Date.now()))}`, {
     method: "POST",
     credentials: "include",
     cache: "no-store",
@@ -301,7 +301,7 @@ export default function UserProfileMenu({ account }) {
   async function logout() {
     if (loggingOut) return;
     setLoggingOut(true);
-    try { await fetch("/api/logout", { method: "POST", credentials: "include" }); } catch {}
+    try { await fetch("/next/api/auth/logout", { method: "POST", credentials: "include" }); } catch {}
     try { sessionStorage.clear(); } catch {}
     try { document.cookie = `${ALLOWED_PAGES_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`; } catch {}
     try { document.cookie = `${PROFILE_URL_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`; } catch {}

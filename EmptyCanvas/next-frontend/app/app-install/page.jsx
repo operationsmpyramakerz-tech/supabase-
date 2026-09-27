@@ -1,16 +1,18 @@
 import { redirect } from "next/navigation";
 import AppShell from "../../components/AppShell";
 import AppInstallClient from "../../components/app-install/AppInstallClient";
-import { fetchLegacyJson } from "../../lib/legacy-api";
-import { getLegacyAccountGate } from "../../lib/products-auth";
+import { headers } from "next/headers";
+import { buildAppDownloadLinks } from "../../lib/app-download-links";
+import { getDirectAccountGate } from "../../lib/products-auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function AppInstallPage() {
-  const [gate, linksResponse] = await Promise.all([
-    getLegacyAccountGate([]),
-    fetchLegacyJson("/api/app-download-links", { timeoutMs: 10000 }),
-  ]);
+  const gate = await getDirectAccountGate([]);
+  const headerStore = await headers();
+  const proto = String(headerStore.get("x-forwarded-proto") || "https").split(",")[0].trim() || "https";
+  const host = String(headerStore.get("x-forwarded-host") || headerStore.get("host") || "").split(",")[0].trim();
+  const links = buildAppDownloadLinks(host ? `${proto}://${host}` : "");
 
   if (gate.status === 401) redirect("/login?next=/next/app-install");
 
@@ -37,7 +39,7 @@ export default async function AppInstallPage() {
       eyebrow="Progressive Web App and device installation"
       activePath="/next/app-install"
     >
-      <AppInstallClient initialLinks={linksResponse.ok ? (linksResponse.data || {}) : {}} />
+      <AppInstallClient initialLinks={links} />
     </AppShell>
   );
 }

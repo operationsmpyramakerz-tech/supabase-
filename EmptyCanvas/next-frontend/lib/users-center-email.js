@@ -105,3 +105,28 @@ export async function sendUsersCenterSignupStatusEmail(args = {}) {
   const sentWithSmtp = await sendWithSmtp(email); if (sentWithSmtp) return { provider: "smtp" };
   const error = new Error("Email service is not configured. Add RESEND_API_KEY or SMTP settings."); error.status = 500; throw error;
 }
+
+function buildPasswordRecoveryEmail({ to, name, password }) {
+  const safeName = text(name) || "Team Member";
+  const subject = "Operations Dashboard Password Recovery";
+  const plainText = [
+    `Hello ${safeName},`,
+    "",
+    "You requested your Operations Dashboard password.",
+    "",
+    `Your registered password is: ${password}`,
+    "",
+    "If you did not request this email, please contact your administrator.",
+  ].join("\n");
+  const html = `<div style="font-family:Arial,sans-serif;line-height:1.6;color:#111827;max-width:560px;margin:0 auto;padding:24px;"><div style="border:1px solid #fed7aa;border-radius:18px;padding:22px;background:#fff7ed;"><h2 style="margin:0 0 10px;color:#111827;">Operations Dashboard Password Recovery</h2><p style="margin:0 0 14px;color:#374151;">Hello ${escapeHtml(safeName)},</p><p style="margin:0 0 14px;color:#374151;">You requested your Operations Dashboard password.</p><div style="background:#ffffff;border:1px solid #fdba74;border-radius:14px;padding:16px;margin:18px 0;"><div style="font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#9a3412;font-weight:700;margin-bottom:6px;">Registered Password</div><div style="font-size:20px;font-weight:800;color:#111827;word-break:break-word;">${escapeHtml(password)}</div></div><p style="margin:0;color:#6b7280;font-size:13px;">If you did not request this email, please contact your administrator.</p></div></div>`;
+  return { to, subject, text: plainText, html };
+}
+
+export async function sendPasswordRecoveryEmail(args = {}) {
+  const email = buildPasswordRecoveryEmail(args);
+  const sentWithResend = await sendWithResend(email); if (sentWithResend) return { provider: "resend" };
+  const sentWithSmtp = await sendWithSmtp(email); if (sentWithSmtp) return { provider: "smtp" };
+  const error = new Error("Email service is not configured. Add RESEND_API_KEY + PASSWORD_RECOVERY_FROM_EMAIL, or SMTP_HOST + SMTP_PORT + SMTP_USER + SMTP_PASS + SMTP_FROM in Vercel Environment Variables.");
+  error.status = 500;
+  throw error;
+}

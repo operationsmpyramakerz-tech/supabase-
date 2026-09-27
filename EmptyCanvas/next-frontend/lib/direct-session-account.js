@@ -448,6 +448,7 @@ async function resolveDirectSessionCookie(cookieValue) {
   let sessionValue = null;
   let sessionBackend = "";
   let lastError = null;
+  let successfulLookup = false;
 
   for (let index = 0; index < backends.length; index += 1) {
     const backend = backends[index];
@@ -462,6 +463,7 @@ async function resolveDirectSessionCookie(cookieValue) {
         backend,
         timeoutMs: attemptBudget,
       });
+      successfulLookup = true;
       const candidates = Array.isArray(values) ? values : [values];
       sessionValue = candidates.map(parseSessionValue).find(Boolean) || null;
       if (sessionValue) {
@@ -474,11 +476,14 @@ async function resolveDirectSessionCookie(cookieValue) {
   }
 
   if (!sessionValue) {
+    if (successfulLookup) {
+      return { definitive: true, status: 401, session: null, error: "Session expired or was not found.", backend: "" };
+    }
     return {
       definitive: false,
       status: 503,
       session: null,
-      error: lastError?.message || "Session was not found in the configured direct session stores.",
+      error: lastError?.message || "Session storage could not be reached.",
       backend: "",
     };
   }
@@ -769,9 +774,9 @@ export async function getDirectAccountGateFromSessionContext(context = {}, requi
   const sessionBackend = text(context?.sessionBackend || context?.backend || "session-bridge");
 
   // Auth-only callers (notification bell, login redirect checks, public profile)
-  // only need a verified session identity. When this helper is fed by the
-  // authenticated Express /api/session-status bridge, requireAuth has already
-  // performed the authoritative session/revocation check.
+  // only need a verified session identity. This context helper is retained for
+  // compatibility with direct session payloads and tests; production auth now
+  // reads the signed session store directly from Next.
   if (options?.authOnly === true) {
     return {
       ok: true,
@@ -846,8 +851,7 @@ export async function getDirectAccountGateFromSessionContext(context = {}, requi
 async function getDirectSessionAccountGateInternal(requiredPages = [], options = {}) {
   // Prefer a direct Redis/Upstash read when Vercel has the same session-store
   // credentials as Express. If not, products-auth can bootstrap this same
-  // direct Supabase gate from the lightweight authenticated session-status
-  // bridge without paying for /api/account.
+  // direct Supabase gate from the signed Redis/Upstash session store.
   if (!redisUrlValue() && !hasRestSessionBackend()) return null;
 
   const resolved = await readDirectSession();

@@ -20,13 +20,6 @@ async function fetchProfile(identifier, { fresh = false } = {}) {
   let response = await fetch(`/next/api/team-members/public?key=${encoded}${freshQuery}`, { credentials: "include", cache: "no-store" });
   let body = await readJson(response);
 
-  // Compatibility fallback remains available while the migration is running.
-  // Do not call Express unless the direct Next/Supabase route actually failed.
-  if (!response.ok && response.status !== 401) {
-    response = await fetch(`/api/team-members/${encoded}/public`, { credentials: "include", cache: "no-store" });
-    body = await readJson(response);
-  }
-
   if (!response.ok) {
     const error = new Error(body?.error || "Failed to load user profile.");
     error.status = response.status;

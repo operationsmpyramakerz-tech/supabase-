@@ -1,9 +1,8 @@
 import { redirect } from "next/navigation";
 import AppShell from "../../components/AppShell";
 import HistoryClient from "../../components/history/HistoryClient";
-import { fetchLegacyJson } from "../../lib/legacy-api";
 import { historyList } from "../../lib/history-data";
-import { getLegacyAccountGate } from "../../lib/products-auth";
+import { getDirectAccountGate } from "../../lib/products-auth";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -24,14 +23,8 @@ function UnavailableState({ message, forbidden = false }) {
   );
 }
 
-async function legacyHistoryPayload() {
-  const response = await fetchLegacyJson("/api/history?limit=1000", { timeoutMs: 20_000, fresh: true });
-  if (!response.ok || !response.data) return null;
-  return response.data;
-}
-
 export default async function HistoryPage() {
-  const gate = await getLegacyAccountGate(["History"]);
+  const gate = await getDirectAccountGate(["History"]);
 
   if (gate.status === 401) redirect("/login?next=/next/history");
   if (gate.status === 403) {
@@ -41,24 +34,14 @@ export default async function HistoryPage() {
     return <UnavailableState message={gate.error || "The current ERP authentication service is temporarily unavailable."} />;
   }
 
-  const warnings = [];
   let historyPayload = null;
-
   try {
-    historyPayload = await historyList({ limit: 1000 });
+    historyPayload = await historyList({ limit: 1000, fresh: true });
   } catch (directError) {
-    historyPayload = await legacyHistoryPayload();
-    if (!historyPayload) {
-      return <UnavailableState message={directError?.message || "System History data is temporarily unavailable."} />;
-    }
-    warnings.push("History list loaded through the compatibility path.");
+    return <UnavailableState message={directError?.message || "System History data is temporarily unavailable."} />;
   }
-
-  if (!historyPayload) {
-    historyPayload = await legacyHistoryPayload();
-    if (!historyPayload) return <UnavailableState message="System History data is temporarily unavailable." />;
-    warnings.push("History list loaded through the compatibility path.");
-  }
+  if (!historyPayload) return <UnavailableState message="System History data is temporarily unavailable." />;
+  const warnings = [];
 
   return (
     <AppShell

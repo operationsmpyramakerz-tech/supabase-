@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
-import { fetchLegacyJson } from "../../../lib/legacy-api";
 import { historyList } from "../../../lib/history-data";
-import { getLegacyAccountGate } from "../../../lib/products-auth";
+import { getDirectAccountGate } from "../../../lib/products-auth";
+import { directPageAccessLevel, verifyPageAdminPasswordDirect } from "../../../lib/order-action-auth";
+import { supabaseRequest } from "../../../lib/supabase-rest";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -17,7 +18,7 @@ function response(payload, init = {}) {
 }
 
 export async function GET(request) {
-  const gate = await getLegacyAccountGate(["History"]);
+  const gate = await getDirectAccountGate(["History"]);
   if (!gate.ok) return response({ ok: false, error: gate.error || "Authentication required." }, { status: gate.status || 503 });
 
   const url = new URL(request.url);
@@ -27,17 +28,30 @@ export async function GET(request) {
   try {
     const payload = await historyList({ limit, fresh });
     if (payload) return response(payload);
+    return response({ ok: false, rows: [], error: "History data is not available." }, { status: 503 });
   } catch (error) {
-    console.warn("[history] direct list failed; using Legacy fallback:", error?.message || error);
+    return response({ ok: false, rows: [], error: error?.message || "Failed to load system history." }, { status: Number(error?.status) || 500 });
   }
+}
 
-  const legacy = await fetchLegacyJson(`/api/history?limit=${encodeURIComponent(limit)}`, {
-    timeoutMs: 20_000,
-    fresh,
-  });
-  if (legacy.ok && legacy.data) return response({ ...legacy.data, source: legacy.data?.source || "legacy" }, { status: legacy.status || 200 });
-  return response(
-    { ok: false, rows: [], error: legacy.error || legacy.data?.error || "Failed to load system history." },
-    { status: legacy.status || 502 },
-  );
+export async function DELETE(request) {
+  const gate = await getDirectAccountGate(["History"]);
+  if (!gate.ok) return response({ ok: false, error: gate.error || "Authentication required." }, { status: gate.status || 503 });
+
+  try {
+    const body = await request.json().catch(() => ({}));
+    const adminPassword = String(body?.adminPassword || body?.password || "").trim();
+    if (!adminPassword) return response({ ok: false, error: "Admin password is required." }, { status: 400 });
+    const level = directPageAccessLevel(gate.account || {}, ["History"]);
+    if (level !== "admin") {
+      const verified = await verifyPageAdminPasswordDirect(gate.account || {}, adminPassword, ["History"]);
+      if (verified === null) return response({ ok: false, error: "The direct Admin password context is unavailable." }, { status: 503 });
+      if (!verified) return response({ ok: false, error: "Invalid admin password." }, { status: 401 });
+    }
+    const table = String(process.env.SUPABASE_HISTORY_TABLE || "operation_history").trim() || "operation_history";
+    await supabaseRequest(`/${encodeURIComponent(table)}?id=not.is.null`, { method: "DELETE", headers: { Prefer: "return=minimal" } });
+    return response({ ok: true, source: "supabase-next" });
+  } catch (error) {
+    return response({ ok: false, error: error?.message || "Failed to clear history." }, { status: Number(error?.status) || 500 });
+  }
 }

@@ -1,6 +1,50 @@
 {
   "rewrites": [
     {
+      "source": "/api/login",
+      "destination": "https://operations-hub-next-pilot.vercel.app/next/api/auth/login"
+    },
+    {
+      "source": "/api/logout",
+      "destination": "https://operations-hub-next-pilot.vercel.app/next/api/auth/logout"
+    },
+    {
+      "source": "/api/session-status",
+      "destination": "https://operations-hub-next-pilot.vercel.app/next/api/auth/session-status"
+    },
+    {
+      "source": "/api/signup-request",
+      "destination": "https://operations-hub-next-pilot.vercel.app/next/api/auth/signup-request"
+    },
+    {
+      "source": "/api/forgot-password",
+      "destination": "https://operations-hub-next-pilot.vercel.app/next/api/auth/forgot-password"
+    },
+    {
+      "source": "/api/history",
+      "destination": "https://operations-hub-next-pilot.vercel.app/next/api/history"
+    },
+    {
+      "source": "/api/history/clear",
+      "destination": "https://operations-hub-next-pilot.vercel.app/next/api/history"
+    },
+    {
+      "source": "/api/app-download-links",
+      "destination": "https://operations-hub-next-pilot.vercel.app/next/api/system/app-download-links"
+    },
+    {
+      "source": "/api/hard-refresh",
+      "destination": "https://operations-hub-next-pilot.vercel.app/next/api/system/hard-refresh"
+    },
+    {
+      "source": "/api/session-diagnostics",
+      "destination": "https://operations-hub-next-pilot.vercel.app/next/api/system/session-diagnostics"
+    },
+    {
+      "source": "/api/team-members/:id/public",
+      "destination": "https://operations-hub-next-pilot.vercel.app/next/api/team-members/public?key=:id"
+    },
+    {
       "source": "/api/push/vapid-public-key",
       "destination": "https://operations-hub-next-pilot.vercel.app/next/api/push/vapid-public-key"
     },

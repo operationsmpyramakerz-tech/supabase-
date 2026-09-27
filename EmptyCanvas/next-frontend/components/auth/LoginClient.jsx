@@ -109,7 +109,7 @@ export default function LoginClient({ requestedNext = "/next/home", backendAvail
     const password = String(form.get("password") || "");
 
     try {
-      const response = await fetch("/api/login", {
+      const response = await fetch("/next/api/auth/login", {
         method: "POST",
         credentials: "same-origin",
         cache: "no-store",
@@ -161,7 +161,7 @@ export default function LoginClient({ requestedNext = "/next/home", backendAvail
     const email = String(form.get("email") || "").trim();
 
     try {
-      const response = await fetch("/api/forgot-password", {
+      const response = await fetch("/next/api/auth/forgot-password", {
         method: "POST",
         credentials: "same-origin",
         cache: "no-store",
@@ -203,7 +203,7 @@ export default function LoginClient({ requestedNext = "/next/home", backendAvail
 
     setBusy(true);
     try {
-      const response = await fetch("/api/signup-request", {
+      const response = await fetch("/next/api/auth/signup-request", {
         method: "POST",
         credentials: "same-origin",
         cache: "no-store",
