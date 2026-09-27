@@ -2,7 +2,7 @@ import "server-only";
 
 import { getSupabaseConfig, select } from "./supabase-rest";
 import { getProductsCatalog } from "./products-service";
-import { listKitFolders, listKitMembership, listKits } from "./proposal-kit-service";
+import { getProposal, listKitFolders, listKitMembership, listKits } from "./proposal-kit-service";
 
 function text(value) {
   if (value === null || typeof value === "undefined") return "";
@@ -410,6 +410,7 @@ export function serializeOperationsOrderDetail(row = {}) {
     orderIdPrefix: Number.isFinite(orderNumber) ? "ORD" : null,
     orderIdNumber: Number.isFinite(orderNumber) ? orderNumber : null,
     reason,
+    productId: text(valueFor(row, ["product_id", "Product ID", "productId"])) || null,
     productName: text(valueFor(row, ["product_name", "Product Name", "product", "Product"])) || "Unknown Product",
     productPageId: text(valueFor(row, ["product_url", "product", "Product"])) || null,
     productUrl: text(valueFor(row, ["product_url", "Product URL"])) || null,
@@ -501,6 +502,7 @@ export function serializeReviewOrderDetail(row = {}) {
     orderIdNumber: Number.isFinite(orderNumber) ? orderNumber : null,
     reason: text(valueFor(row, ["reason", "Reason"])) || "No Reason",
     issueDescription: text(valueFor(row, ["issue_description", "Issue Description", "actual_issue_description", "Actual Issue Description"])) || "",
+    productId: text(valueFor(row, ["product_id", "Product ID", "productId"])) || null,
     productName: text(valueFor(row, ["product_name", "Product Name", "product", "Product"])) || "Unknown Product",
     productUrl: text(valueFor(row, ["product_url", "Product URL"])) || null,
     productImage: null,
@@ -526,19 +528,99 @@ export function serializeReviewOrderDetail(row = {}) {
   };
 }
 
-function needsLegacyProposalLookup(item = {}) {
+function needsProposalSourceLookup(item = {}) {
   const generated = item?.sourceProposalId || item?.sourceProposalName || /^created\s+from\s+proposal\s*:/i.test(text(item?.issueDescription));
   return Boolean(generated && !(Array.isArray(item?.sourceKits) && item.sourceKits.length));
 }
 
-export async function enrichOrderDetailGrouping(items = []) {
-  const rows = Array.isArray(items) ? items : [];
-  if (!rows.length) return rows;
-  if (rows.some(needsLegacyProposalLookup)) {
-    const error = new Error("Legacy proposal source lookup is required for this order.");
-    error.code = "DIRECT_ORDER_DETAILS_REQUIRES_LEGACY";
-    throw error;
+function proposalNameFromItem(item = {}) {
+  const stored = text(item?.sourceProposalName);
+  if (stored) return stored;
+  const match = text(item?.issueDescription).match(/^created\s+from\s+proposal\s*:\s*(.+)$/i);
+  return text(match?.[1]);
+}
+
+function proposalHeaderTable() {
+  return text(process.env.SUPABASE_PRODUCT_PROPOSALS_TABLE || "product_proposals") || "product_proposals";
+}
+
+async function resolveProposalIdByName(name = "", cache = new Map()) {
+  const clean = text(name);
+  if (!clean) return "";
+  const key = normKey(clean);
+  if (cache.has(key)) return cache.get(key);
+  let resolved = "";
+  try {
+    const rows = await select(proposalHeaderTable(), {
+      select: "id,name,updated_at",
+      name: `eq.${clean}`,
+      order: "updated_at.desc",
+      limit: "1",
+    }, { profileName: "orders.proposal-source-by-name" });
+    resolved = text(Array.isArray(rows) ? rows[0]?.id : "");
+  } catch {}
+  cache.set(key, resolved);
+  return resolved;
+}
+
+function proposalItemMatchesOrder(item = {}, proposalItem = {}) {
+  const orderProductId = text(item?.productId);
+  const proposalProductId = text(proposalItem?.productId);
+  if (orderProductId && proposalProductId && orderProductId === proposalProductId) return true;
+  const orderName = normKey(item?.productName);
+  const proposalName = normKey(proposalItem?.productName);
+  return Boolean(orderName && proposalName && orderName === proposalName);
+}
+
+async function resolveDirectProposalSources(items = []) {
+  const rows = (Array.isArray(items) ? items : []).map((item) => ({ ...item }));
+  const unresolved = rows.filter(needsProposalSourceLookup);
+  if (!unresolved.length) return rows;
+
+  const proposalById = new Map();
+  const proposalIdByName = new Map();
+  const loadProposal = async (proposalId) => {
+    const id = text(proposalId);
+    if (!id) return null;
+    if (proposalById.has(id)) return proposalById.get(id);
+    let detail = null;
+    try { detail = await getProposal(id, {}); } catch {}
+    proposalById.set(id, detail);
+    return detail;
+  };
+
+  for (const item of unresolved) {
+    const proposalName = proposalNameFromItem(item);
+    let proposalId = text(item?.sourceProposalId);
+    if (!proposalId && proposalName) proposalId = await resolveProposalIdByName(proposalName, proposalIdByName);
+    const detail = await loadProposal(proposalId);
+    const proposalItems = Array.isArray(detail?.items) ? detail.items : [];
+    const match = proposalItems.find((entry) => proposalItemMatchesOrder(item, entry)) || null;
+    const resolvedSources = sourceKits(match?.sourceKits || match?.source_kits);
+    if (resolvedSources.length) {
+      item.sourceKits = resolvedSources;
+      item.sourceProposalId = proposalId || item.sourceProposalId || null;
+      item.sourceProposalName = text(detail?.proposal?.name) || proposalName || item.sourceProposalName || null;
+      continue;
+    }
+
+    // Older order schemas may have kept only the primary kit tag. Keep the
+    // order usable instead of blocking the detail screen when the original
+    // proposal source row can no longer be reconstructed.
+    const fallbackKit = text(item?.kitTag);
+    const fallbackQuantity = Math.abs(Number(item?.quantityProgress ?? item?.quantityEditedBySupervisor ?? item?.quantityRequested ?? item?.quantity ?? 0));
+    if (fallbackKit && fallbackQuantity > 0) {
+      item.sourceKits = [{ kitId: "", kitName: fallbackKit, quantity: fallbackQuantity, order: 0 }];
+    }
   }
+
+  return rows;
+}
+
+export async function enrichOrderDetailGrouping(items = []) {
+  let rows = Array.isArray(items) ? items : [];
+  if (!rows.length) return rows;
+  rows = await resolveDirectProposalSources(rows);
 
   let catalog = { products: [] };
   let memberships = [];
