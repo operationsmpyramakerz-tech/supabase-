@@ -17,17 +17,12 @@ export async function GET() {
   const supabaseConfigured = isSupabaseConfigured();
   const pushConfigured = configured("VAPID_PUBLIC_KEY") && configured("VAPID_PRIVATE_KEY");
   const cronProtected = configured("CRON_SECRET");
-  const legacyOriginStillConfigured = configured(
-    "LEGACY_BACKEND_ORIGIN",
-    "NEXT_FRONTEND_ORIGIN",
-    "NEXT_FRONTEND_PUBLIC_ORIGIN",
-  );
-
   return NextResponse.json(
     {
       ok: true,
-      phase: 48,
+      phase: 49,
       source: "next-only",
+      repositoryMode: "next-supabase-only",
       deploymentMode: "next-primary",
       legacyBackendRequired: false,
       legacyBusinessApiDependency: false,
@@ -44,13 +39,13 @@ export async function GET() {
       cronProtected,
       pwaAssetsOwnedByNext: true,
       notificationCronOwnedByNext: true,
-      legacyOriginStillConfigured,
       retirementReady: supabaseConfigured && directSessionConfigured && sessionSecretConfigured,
       cleanup: {
-        canRemoveLegacyBackendOriginFromNext: true,
-        canDetachLegacyBackendDomainAfterCutover: true,
-        canDeleteLegacyVercelProjectAfterRollbackWindow: true,
+        legacySourceTreeRequired: false,
+        parentForwardingConfigRequired: false,
+        expressDependenciesRequired: false,
         nextRuntimeIsolatedFromExpress: true,
+        repositoryCleanupComplete: true,
       },
     },
     { headers: { "Cache-Control": "no-store" } },

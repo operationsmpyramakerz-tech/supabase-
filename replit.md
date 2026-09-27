@@ -1,48 +1,52 @@
-# Operations Hub ERP — Current Architecture
-
-## Overview
-
-Operations Hub is the Pyramakerz operations ERP. The application has completed
-its migration from the historical Express/Notion architecture to a Next.js +
-Supabase architecture.
+# Operations Hub ERP — Final Architecture
 
 ## Production application
 
-- **Framework:** Next.js App Router
+Operations Hub is now a Next.js + Supabase application. The historical Express
+backend has been retired and is not required by the production runtime.
+
 - **Application root:** `EmptyCanvas/next-frontend`
-- **Primary database:** Supabase
-- **Sessions:** signed session cookie + Upstash Redis
-- **File storage:** Supabase Storage
+- **Framework:** Next.js App Router
+- **Database:** Supabase
+- **Sessions:** signed cookie + Upstash Redis
+- **Storage:** Supabase Storage
 - **Deployment:** Vercel
-- **PWA:** manifest, service worker, offline fallback and icons are served by the
-  Next deployment
+- **PWA:** owned by the Next deployment
 - **Notifications:** Supabase-backed notifications + Web Push
-- **Scheduled work:** Vercel cron runs the Next notification scanner
+- **Scheduled jobs:** Vercel Cron -> Next notification scanner
 
-## Authentication and authorization
+## Repository layout
 
-Login, logout, session validation, page permissions and admin verification run
-inside the Next application. The Next session store requires `SESSION_SECRET`
-and persistent Upstash/Redis configuration.
+Runtime source lives under `EmptyCanvas/next-frontend/`.
 
-## Legacy backend status
+The SQL files directly under `EmptyCanvas/` are retained database migrations /
+performance scripts and are intentionally not part of the application runtime.
 
-Phase 47 retires the Express backend from production runtime traffic. Legacy
-Vercel configs are edge-forwarding compatibility only and do not execute the
-old business server. Old page URLs and compatibility API URLs are owned by the
-Next Vercel configuration.
+The repository no longer needs the historical `EmptyCanvas/server/`,
+`EmptyCanvas/api/`, legacy `EmptyCanvas/public/`, PM2 configuration, parent
+Vercel forwarding configs, or Express/Notion package dependencies.
 
-The source under `EmptyCanvas/server/` is retained temporarily only as rollback
-history and can be deleted after the rollback window. New work must not add
-business logic or network fallbacks to that legacy server.
+## Required production environment
 
-## Migration rule
+Keep the active Supabase variables plus:
 
-All new reads, mutations, exports, uploads, authentication and scheduled jobs
-must be implemented in `EmptyCanvas/next-frontend` using Next/Supabase. Do not
-reintroduce Express or Notion as a production data path.
+- `SESSION_SECRET`
+- `UPSTASH_REDIS_REST_URL`
+- `UPSTASH_REDIS_REST_TOKEN`
 
-For deployment and cleanup details, see:
+Keep feature variables that are in use, such as the VAPID keys and
+`CRON_SECRET`. `NEXT_FRONTEND_BASE_PATH` is optional because `/next` is the
+default base path.
 
-- `EmptyCanvas/README_NEXT_INCREMENTAL_MIGRATION.md`
-- `EmptyCanvas/README_BACKEND_RETIREMENT.md`
+Legacy routing variables such as `LEGACY_BACKEND_ORIGIN`,
+`NEXT_FRONTEND_ORIGIN`, `NEXT_FRONTEND_PUBLIC_ORIGIN`, and
+`ENABLE_NEXT_FRONTEND` are not part of the runtime anymore.
+
+## Development rule
+
+All new reads, mutations, exports, uploads, authentication, scheduled jobs and
+business logic must stay inside `EmptyCanvas/next-frontend` and use
+Next/Supabase. Do not reintroduce Express or Notion as a production data path.
+
+A small local-only compatibility helper remains for four pre-existing
+bracket-named routes/pages. It performs no network request to a legacy backend.
