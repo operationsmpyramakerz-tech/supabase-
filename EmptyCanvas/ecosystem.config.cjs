@@ -23,34 +23,30 @@ const backendPort = positiveInteger(process.env.PORT, 5000);
 const nextFrontendPort = positiveInteger(process.env.NEXT_FRONTEND_PORT, 3001);
 const enableNextFrontend = envTrue(process.env.ENABLE_NEXT_FRONTEND);
 const nextFrontendOrigin = process.env.NEXT_FRONTEND_ORIGIN || `http://127.0.0.1:${nextFrontendPort}`;
-const legacyBackendOrigin = process.env.LEGACY_BACKEND_INTERNAL_ORIGIN || `http://127.0.0.1:${backendPort}`;
 
 const apps = [
   {
-    name: process.env.PM2_APP_NAME || "operations-hub",
+    // Phase 46: this process is only a lightweight compatibility shell for old
+    // bookmarks/static assets and health probes. No business API runs here.
+    name: process.env.PM2_APP_NAME || "operations-hub-compat",
     cwd: __dirname,
     script: path.join(__dirname, "server", "local.js"),
     exec_mode: "cluster",
     instances,
     instance_var: "INSTANCE_ID",
-
-    // PM2 waits for local.js to send "ready", enabling zero-downtime reloads.
     wait_ready: true,
     listen_timeout: positiveInteger(process.env.PM2_LISTEN_TIMEOUT_MS, 20000),
     kill_timeout: positiveInteger(process.env.PM2_KILL_TIMEOUT_MS, 35000),
     shutdown_with_message: true,
-
     autorestart: true,
     exp_backoff_restart_delay: 100,
-    max_memory_restart: process.env.PM2_MAX_MEMORY_RESTART || "750M",
+    max_memory_restart: process.env.PM2_MAX_MEMORY_RESTART || "250M",
     min_uptime: "10s",
     max_restarts: 10,
-
     merge_logs: true,
     time: true,
     out_file: process.env.PM2_OUT_LOG || path.join(__dirname, "logs", "app-out.log"),
     error_file: process.env.PM2_ERROR_LOG || path.join(__dirname, "logs", "app-error.log"),
-
     env: {
       NODE_ENV: "production",
       PM2_CLUSTER_MODE: "1",
@@ -68,9 +64,8 @@ const apps = [
   },
 ];
 
-// The Next.js process is deliberately optional. The existing Express ERP stays
-// production-safe until the pilot has been installed, built, and explicitly
-// enabled with ENABLE_NEXT_FRONTEND=true.
+// Optional local/self-hosted single-machine mode. The Next process no longer
+// receives a LEGACY_BACKEND_* origin because Phase 46 removed that dependency.
 if (enableNextFrontend) {
   apps.push({
     name: process.env.PM2_NEXT_APP_NAME || "operations-hub-next",
@@ -78,36 +73,30 @@ if (enableNextFrontend) {
     script: path.join(__dirname, "next-frontend", "server.js"),
     exec_mode: "fork",
     instances: 1,
-
     wait_ready: true,
     listen_timeout: positiveInteger(process.env.PM2_NEXT_LISTEN_TIMEOUT_MS, 45000),
     kill_timeout: positiveInteger(process.env.PM2_NEXT_KILL_TIMEOUT_MS, 25000),
     shutdown_with_message: true,
-
     autorestart: true,
     exp_backoff_restart_delay: 250,
     max_memory_restart: process.env.PM2_NEXT_MAX_MEMORY_RESTART || "600M",
     min_uptime: "10s",
     max_restarts: 10,
-
     merge_logs: true,
     time: true,
     out_file: process.env.PM2_NEXT_OUT_LOG || path.join(__dirname, "logs", "next-out.log"),
     error_file: process.env.PM2_NEXT_ERROR_LOG || path.join(__dirname, "logs", "next-error.log"),
-
     env: {
       NODE_ENV: "production",
       NEXT_FRONTEND_HOST: process.env.NEXT_FRONTEND_HOST || "127.0.0.1",
       NEXT_FRONTEND_PORT: String(nextFrontendPort),
       NEXT_FRONTEND_BASE_PATH: process.env.NEXT_FRONTEND_BASE_PATH || "/next",
-      LEGACY_BACKEND_INTERNAL_ORIGIN: legacyBackendOrigin,
     },
     env_production: {
       NODE_ENV: "production",
       NEXT_FRONTEND_HOST: process.env.NEXT_FRONTEND_HOST || "127.0.0.1",
       NEXT_FRONTEND_PORT: String(nextFrontendPort),
       NEXT_FRONTEND_BASE_PATH: process.env.NEXT_FRONTEND_BASE_PATH || "/next",
-      LEGACY_BACKEND_INTERNAL_ORIGIN: legacyBackendOrigin,
     },
   });
 }

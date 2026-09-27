@@ -5,6 +5,26 @@
   "installCommand": "npm install",
   "rewrites": [
     {
+      "source": "/service-worker.js",
+      "destination": "/next/service-worker.js"
+    },
+    {
+      "source": "/manifest.webmanifest",
+      "destination": "/next/manifest.webmanifest"
+    },
+    {
+      "source": "/manifest.json",
+      "destination": "/next/manifest.json"
+    },
+    {
+      "source": "/offline-fallback.html",
+      "destination": "/next/offline-fallback.html"
+    },
+    {
+      "source": "/icons/:path*",
+      "destination": "/next/icons/:path*"
+    },
+    {
       "source": "/api/page-bootstrap",
       "destination": "/next/api/system/page-bootstrap-direct"
     },
@@ -194,6 +214,45 @@
       "source": "/",
       "destination": "/next/login",
       "permanent": false
+    }
+  ],
+  "crons": [
+    {
+      "path": "/next/api/cron/notifications",
+      "schedule": "0 9 * * *"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/service-worker.js",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, no-store, must-revalidate"
+        },
+        {
+          "key": "Service-Worker-Allowed",
+          "value": "/"
+        }
+      ]
+    },
+    {
+      "source": "/manifest.webmanifest",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, no-store, must-revalidate"
+        }
+      ]
+    },
+    {
+      "source": "/manifest.json",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, no-store, must-revalidate"
+        }
+      ]
     }
   ]
 }

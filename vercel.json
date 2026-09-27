@@ -214,11 +214,5 @@
       "src": "/(.*)",
       "dest": "/EmptyCanvas/api/index.js"
     }
-  ],
-  "crons": [
-    {
-      "path": "/api/cron/notifications",
-      "schedule": "0 9 * * *"
-    }
   ]
 }
