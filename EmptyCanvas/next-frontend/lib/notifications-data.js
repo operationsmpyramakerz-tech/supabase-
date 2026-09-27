@@ -2,6 +2,7 @@ import "server-only";
 
 import crypto from "node:crypto";
 import { select, selectAll, supabaseRequest, updateById } from "./supabase-rest";
+import { sendPushToMember } from "./push-notifications";
 
 const NOTIFICATION_CACHE_TTL_MS = 5_000;
 const NOTIFICATION_CACHE_MAX = 200;
@@ -447,7 +448,10 @@ export async function addTestNotificationForMember(memberId) {
     read: false,
   };
   await saveNotificationForMember(id, notif);
-  return { success: true, notif, push: { ok: false, skipped: true, reason: "Push delivery is handled by the push service." } };
+  const push = await sendPushToMember(id, { title: notif.title, body: notif.body, url: notif.url }).catch((error) => ({
+    ok: false, sent: 0, error: error?.message || "Push delivery failed",
+  }));
+  return { success: true, notif, push };
 }
 
 export async function runNotificationsScan({ force = false } = {}) {
@@ -468,6 +472,15 @@ export async function runNotificationsScan({ force = false } = {}) {
     const lastIso = text(lastState?.iso) || new Date(Date.now() - 5 * 60 * 1000).toISOString();
     const users = await notificationUsers().catch(() => []);
     const notified = new Set();
+    const perUser = new Map();
+    const bump = (memberId, type, amount = 1) => {
+      const id = text(memberId);
+      if (!id) return;
+      const counts = perUser.get(id) || { expenses: 0, orders: 0, stock: 0, other: 0 };
+      if (Object.prototype.hasOwnProperty.call(counts, type)) counts[type] += amount;
+      else counts.other += amount;
+      perUser.set(id, counts);
+    };
 
     let expensesChanged = [];
     try {
@@ -496,6 +509,7 @@ export async function runNotificationsScan({ force = false } = {}) {
             read: false,
           });
           notified.add(userId);
+          bump(userId, "expenses");
         }
       }
     } catch {
@@ -523,6 +537,7 @@ export async function runNotificationsScan({ force = false } = {}) {
           read: false,
         });
         notified.add(user.id);
+        bump(user.id, "orders");
       }
     }
 
@@ -546,7 +561,23 @@ export async function runNotificationsScan({ force = false } = {}) {
           read: false,
         });
         notified.add(user.id);
+        bump(user.id, "stock");
       }
+    }
+
+    let pushUsers = 0;
+    for (const [memberId, counts] of perUser.entries()) {
+      const parts = [];
+      if (counts.expenses) parts.push(`${counts.expenses} expense update(s)`);
+      if (counts.orders) parts.push(`${counts.orders} orders update(s)`);
+      if (counts.stock) parts.push(`${counts.stock} stock update(s)`);
+      if (counts.other) parts.push(`${counts.other} update(s)`);
+      const out = await sendPushToMember(memberId, {
+        title: "Operations updates",
+        body: parts.slice(0, 3).join(", ") || "New updates available",
+        url: "/next/home",
+      }).catch(() => ({ ok: false, sent: 0 }));
+      if (out?.ok && Number(out?.sent || 0) > 0) pushUsers += 1;
     }
 
     await notificationStateSet(NOTIFICATION_LASTCHECK_KEY, { iso: nowIso });
@@ -562,7 +593,7 @@ export async function runNotificationsScan({ force = false } = {}) {
       ordersChanged: ordersChanged.length,
       stockChanged: stockChanged.length,
       usersNotified: notified.size,
-      pushUsers: 0,
+      pushUsers,
     };
   })();
 

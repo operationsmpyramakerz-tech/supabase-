@@ -34,7 +34,7 @@ const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   compress: true,
-  serverExternalPackages: ["exceljs", "pdfkit"],
+  serverExternalPackages: ["exceljs", "pdfkit", "web-push"],
 
   // The production pilot is deployed as a separate Vercel project. The Next
   // browser code intentionally keeps using the existing same-origin /api URLs

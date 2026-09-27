@@ -20636,71 +20636,12 @@ function _tmAssignmentPrerequisites(workflow = {}, assignment = {}) {
 
 
 // ---- Notifications list/read/test moved to Next.js (Phase 40) ----
-// Notification generation helpers stay here temporarily for the cron + push
-// compatibility endpoints below, while the interactive notification center
-// now reads and mutates Supabase directly through /next/api/notifications/*.
+// Legacy notification/push helpers remain here temporarily for final Express cleanup.
+// All interactive notification, push-subscription, and cron execution routes now live in Next.js.
 
 
-// ---- API: push subscribe/unsubscribe & public key ----
+// ---- Push subscription endpoints moved to Next.js (Phase 43) ----
 
-app.get("/api/push/vapid-public-key", requireAuth, (req, res) => {
-  res.set("Cache-Control", "no-store");
-  res.json({ success: true, enabled: _WEBPUSH_READY, publicKey: _VAPID_PUBLIC_KEY || "" });
-});
-
-app.post("/api/push/subscribe", requireAuth, async (req, res) => {
-  res.set("Cache-Control", "no-store");
-  try {
-    const userId = await _resolveNotificationUserId(req);
-    if (!userId) return res.status(404).json({ success: false, error: "User not found" });
-    const sub = req.body?.subscription || req.body;
-    const out = await _upsertPushSubscription(userId, sub);
-    if (!out.ok) return res.status(400).json({ success: false, error: out.error });
-    res.json({ success: true });
-  } catch (e) {
-    console.error("push subscribe error", e?.body || e);
-    res.status(500).json({ success: false, error: "Failed to save subscription" });
-  }
-});
-
-app.post("/api/push/unsubscribe", requireAuth, async (req, res) => {
-  res.set("Cache-Control", "no-store");
-  try {
-    const userId = await _resolveNotificationUserId(req);
-    if (!userId) return res.status(404).json({ success: false, error: "User not found" });
-    const endpoint = String(req.body?.endpoint || "").trim();
-    const out = await _removePushSubscription(userId, endpoint);
-    if (!out.ok) return res.status(400).json({ success: false, error: out.error });
-    res.json({ success: true });
-  } catch (e) {
-    console.error("push unsubscribe error", e?.body || e);
-    res.status(500).json({ success: false, error: "Failed to remove subscription" });
-  }
-});
-
-// ---- Cron endpoint: scan Supabase tables and save notifications in Supabase ----
-// IMPORTANT: protect this route with CRON_SECRET (env var) when used by Vercel Cron.
-app.get("/api/cron/notifications", async (req, res) => {
-  res.set("Cache-Control", "no-store");
-  try {
-    const secret = String(process.env.CRON_SECRET || "").trim();
-    const authHeader = String(req.headers["authorization"] || "").trim();
-    const bearer = authHeader.toLowerCase().startsWith("bearer ")
-      ? authHeader.slice(7).trim()
-      : authHeader;
-    const legacyHeaderSecret = String(req.headers["x-cron-secret"] || "").trim();
-    const querySecret = String(req.query.secret || "").trim();
-
-    if (secret && bearer !== secret && legacyHeaderSecret !== secret && querySecret !== secret) {
-      return res.status(401).json({ ok: false, error: "Unauthorized" });
-    }
-
-    const out = await _runSupabaseNotificationsScan({ force: true });
-    return res.json(out);
-  } catch (e) {
-    console.error("[cron] Supabase notifications error", e?.body || e);
-    res.status(500).json({ ok: false, error: "Supabase notification scan failed" });
-  }
-});
+// ---- Notification cron moved to Next.js (Phase 43) ----
 
 module.exports = app;

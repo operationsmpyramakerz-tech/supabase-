@@ -1,6 +1,22 @@
 {
   "rewrites": [
     {
+      "source": "/api/push/vapid-public-key",
+      "destination": "https://operations-hub-next-pilot.vercel.app/next/api/push/vapid-public-key"
+    },
+    {
+      "source": "/api/push/subscribe",
+      "destination": "https://operations-hub-next-pilot.vercel.app/next/api/push/subscribe"
+    },
+    {
+      "source": "/api/push/unsubscribe",
+      "destination": "https://operations-hub-next-pilot.vercel.app/next/api/push/unsubscribe"
+    },
+    {
+      "source": "/api/cron/notifications",
+      "destination": "https://operations-hub-next-pilot.vercel.app/next/api/cron/notifications"
+    },
+    {
       "source": "/api/products/admin/verify",
       "destination": "https://operations-hub-next-pilot.vercel.app/next/api/products/admin/verify"
     },

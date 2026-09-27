@@ -60,7 +60,7 @@ function PushSettings() {
       return;
     }
     try {
-      const keyPayload = await requestJson("/api/push/vapid-public-key");
+      const keyPayload = await requestJson("/next/api/push/vapid-public-key");
       const key = notificationText(keyPayload?.publicKey);
       setPublicKey(key);
       if (!keyPayload?.enabled || !key) {
@@ -101,7 +101,7 @@ function PushSettings() {
           applicationServerKey: urlBase64ToUint8Array(publicKey),
         });
       }
-      await requestJson("/api/push/subscribe", {
+      await requestJson("/next/api/push/subscribe", {
         method: "POST",
         body: JSON.stringify({ subscription: subscription.toJSON ? subscription.toJSON() : subscription }),
       });
@@ -121,7 +121,7 @@ function PushSettings() {
       const registration = await navigator.serviceWorker.ready;
       const subscription = await registration.pushManager.getSubscription();
       if (subscription) {
-        await requestJson("/api/push/unsubscribe", {
+        await requestJson("/next/api/push/unsubscribe", {
           method: "POST",
           body: JSON.stringify({ endpoint: subscription.endpoint }),
         });

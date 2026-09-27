@@ -5,6 +5,22 @@
   "installCommand": "npm install",
   "rewrites": [
     {
+      "source": "/api/push/vapid-public-key",
+      "destination": "/next/api/push/vapid-public-key"
+    },
+    {
+      "source": "/api/push/subscribe",
+      "destination": "/next/api/push/subscribe"
+    },
+    {
+      "source": "/api/push/unsubscribe",
+      "destination": "/next/api/push/unsubscribe"
+    },
+    {
+      "source": "/api/cron/notifications",
+      "destination": "/next/api/cron/notifications"
+    },
+    {
       "source": "/api/expenses/screenshot/:expenseId",
       "destination": "/next/api/expenses/screenshot-direct?expenseId=:expenseId"
     },
