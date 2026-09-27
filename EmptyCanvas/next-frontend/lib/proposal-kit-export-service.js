@@ -894,6 +894,17 @@ function excelBorder() {
   };
 }
 
+function excelNumberFormat(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return "General";
+  // Some mobile spreadsheet apps render an optional-decimal format such as
+  // `#,##0.##` as `7.` for whole numbers. Use an integer-only format for
+  // whole values and keep optional decimals only when a real fraction exists.
+  return Number.isInteger(numeric)
+    ? "#,##0;-#,##0;0"
+    : "#,##0.######;-#,##0.######;0";
+}
+
 function excelColumnsFor(context, columns, includeTotalQty) {
   if (context.scope !== "combined") return columns.map((col) => ({ ...col, header: col.label, width: col.excelWidth || 16 }));
   const out = [];
@@ -983,6 +994,7 @@ async function renderExcel(context, columns, includeTotalQty) {
     left.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF3F4F6" } };
     left.alignment = { horizontal: "center", vertical: "middle" };
     right.value = value;
+    right.numFmt = excelNumberFormat(value);
     right.font = { bold: true, color: { argb: index === 2 ? "FFC2410C" : "FF2563EB" } };
     right.alignment = { horizontal: "center", vertical: "middle" };
     left.border = excelBorder();
@@ -1026,7 +1038,9 @@ async function renderExcel(context, columns, includeTotalQty) {
         cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: style.fill } };
         cell.font = { bold: true, color: { argb: style.color } };
       } else if (visualIndex % 2 === 1) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF9FAFB" } };
-      if (["quantity", "unitPrice", "totalPrice", "totalQty"].includes(col.key) || String(col.key || "").startsWith("sourceQty:")) cell.numFmt = "#,##0.##;-#,##0.##;0";
+      if (["quantity", "unitPrice", "totalPrice", "totalQty"].includes(col.key) || String(col.key || "").startsWith("sourceQty:")) {
+        cell.numFmt = excelNumberFormat(cell.value);
+      }
       if (col.key === "totalPrice") cell.font = { bold: true, color: { argb: "FFC2410C" } };
       if (col.key === "name" && normalizeUrlForPdf(item?.url)) {
         cell.value = { text: String(cell.value || item?.name || "Component"), hyperlink: normalizeUrlForPdf(item.url) };
