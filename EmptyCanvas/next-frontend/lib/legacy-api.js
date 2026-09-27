@@ -1,6 +1,7 @@
 import { cookies, headers } from "next/headers";
 import { performance } from "node:perf_hooks";
 import { recordPerformanceSample } from "./performance-profiler";
+import { fetchDirectPageBootstrap } from "./page-bootstrap-direct";
 
 const ACCOUNT_BRIDGE_CACHE_TTL_MS = 15_000;
 const ACCOUNT_BRIDGE_CACHE_MAX_ENTRIES = 250;
@@ -101,6 +102,13 @@ function retryableGetStatus(status) {
 }
 
 export async function fetchLegacyJson(pathname, options = {}) {
+  const requestedPath = String(pathname || "/");
+  let localUrl = null;
+  try { localUrl = new URL(requestedPath, "http://next.local"); } catch {}
+  if (String(localUrl?.pathname || "") === "/api/page-bootstrap") {
+    return await fetchDirectPageBootstrap(requestedPath);
+  }
+
   const origin = backendOrigin();
   if (!origin) {
     return {

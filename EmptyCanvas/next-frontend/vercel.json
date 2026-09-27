@@ -5,6 +5,34 @@
   "installCommand": "npm install",
   "rewrites": [
     {
+      "source": "/api/page-bootstrap",
+      "destination": "/next/api/system/page-bootstrap-direct"
+    },
+    {
+      "source": "/api/create-order/schools",
+      "destination": "/next/api/orders/shopping-cart/schools"
+    },
+    {
+      "source": "/api/order-types",
+      "destination": "/next/api/orders/shopping-cart/order-types"
+    },
+    {
+      "source": "/api/components",
+      "destination": "/next/api/orders/shopping-cart/components"
+    },
+    {
+      "source": "/api/submit-order",
+      "destination": "/next/api/orders/shopping-cart/submit-direct"
+    },
+    {
+      "source": "/api/update-received",
+      "destination": "/next/api/orders/current/update-received-direct"
+    },
+    {
+      "source": "/api/team-members",
+      "destination": "/next/api/team-members"
+    },
+    {
       "source": "/api/push/vapid-public-key",
       "destination": "/next/api/push/vapid-public-key"
     },

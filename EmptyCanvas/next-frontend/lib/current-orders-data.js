@@ -1,7 +1,7 @@
 import "server-only";
 import { performance } from "node:perf_hooks";
 
-import { deleteByIds, isSupabaseConfigured, select, updateByIds } from "./supabase-rest";
+import { deleteByIds, isSupabaseConfigured, select, updateById, updateByIds } from "./supabase-rest";
 import { invalidateLegacyOperationsCaches, serializeOperationsCompactSummaryRow } from "./operations-orders-data";
 import { loadRawOrderRowsByIds, serializeOperationsOrderDetail } from "./order-details-data";
 import { consumeOrderSummaryWindows, loadOrderRowsByNumbers, scanOrderNumberCandidates } from "./order-pagination";
@@ -477,6 +477,23 @@ export async function loadCurrentOrderDetails({ account = {}, orderIds = [] } = 
   }
 
   return visible.map(serializeOperationsOrderDetail);
+}
+
+export async function markCurrentOrderReceivedDirect({ account = {}, orderPageId = "" } = {}) {
+  if (!isSupabaseConfigured()) return null;
+  const id = text(orderPageId);
+  if (!id) throw directCurrentMutationError("Missing orderPageId", 400);
+  if (!/^\d+$/.test(id)) return null;
+
+  const rows = await loadRawOrderRowsByIds([id]);
+  if (!Array.isArray(rows) || !rows.length) throw directCurrentMutationError("Order not found", 404);
+
+  // Preserve the legacy endpoint semantics: Current Orders page access is the
+  // authorization boundary for marking a row Received. Do not add an owner-only
+  // restriction here because supervisors historically used this endpoint too.
+  await updateById(tableName(), id, { status: "Received" });
+  await invalidateLegacyOperationsCaches(account).catch(() => {});
+  return { success: true, status: "Received", source: "supabase-direct" };
 }
 
 function directCurrentMutationError(message, status = 500) {

@@ -1,6 +1,34 @@
 {
   "rewrites": [
     {
+      "source": "/api/page-bootstrap",
+      "destination": "https://operations-hub-next-pilot.vercel.app/next/api/system/page-bootstrap-direct"
+    },
+    {
+      "source": "/api/create-order/schools",
+      "destination": "https://operations-hub-next-pilot.vercel.app/next/api/orders/shopping-cart/schools"
+    },
+    {
+      "source": "/api/order-types",
+      "destination": "https://operations-hub-next-pilot.vercel.app/next/api/orders/shopping-cart/order-types"
+    },
+    {
+      "source": "/api/components",
+      "destination": "https://operations-hub-next-pilot.vercel.app/next/api/orders/shopping-cart/components"
+    },
+    {
+      "source": "/api/submit-order",
+      "destination": "https://operations-hub-next-pilot.vercel.app/next/api/orders/shopping-cart/submit-direct"
+    },
+    {
+      "source": "/api/update-received",
+      "destination": "https://operations-hub-next-pilot.vercel.app/next/api/orders/current/update-received-direct"
+    },
+    {
+      "source": "/api/team-members",
+      "destination": "https://operations-hub-next-pilot.vercel.app/next/api/team-members"
+    },
+    {
       "source": "/api/login",
       "destination": "https://operations-hub-next-pilot.vercel.app/next/api/auth/login"
     },

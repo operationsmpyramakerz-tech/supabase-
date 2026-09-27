@@ -5,7 +5,7 @@ import { listTeamMembersLite } from "../../../lib/team-members-service";
 export const dynamic = "force-dynamic";
 
 export async function GET(request) {
-  const gate = await getLegacyAccountGate(["Proposals", "Kits", "Products"]);
+  const gate = await getLegacyAccountGate(["Proposals", "Kits", "Products", "Requested Orders"]);
   if (!gate.ok) {
     return NextResponse.json(
       { ok: false, members: [], error: gate.error || "Access is not available." },
