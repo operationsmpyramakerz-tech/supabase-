@@ -23,8 +23,15 @@ function UnavailableState({ message, forbidden = false }) {
 }
 
 export default async function MaintenanceOrdersPage() {
-  // Phase 18 cutover: the page no longer falls back to Express page-bootstrap.
-  const gate = await getLegacyAccountGate(["Maintenance Orders"]);
+  // Auth and the first maintenance summary page are independent reads. Start
+  // them together so navigation pays the slower of the two waits instead of
+  // adding the Upstash/account-gate latency on top of the Supabase order read.
+  const [gate, directResult] = await Promise.all([
+    getLegacyAccountGate(["Maintenance Orders"]),
+    loadMaintenanceOrdersInitialPage()
+      .then((payload) => ({ payload, error: null }))
+      .catch((error) => ({ payload: null, error })),
+  ]);
 
   if (gate.status === 401) redirect("/login?next=/next/maintenance-orders");
   if (gate.status === 403) {
@@ -34,16 +41,11 @@ export default async function MaintenanceOrdersPage() {
     return <UnavailableState message={gate.error || "The account service is temporarily unavailable."} />;
   }
 
-  let ordersPayload = null;
-  try {
-    ordersPayload = await loadMaintenanceOrdersInitialPage();
-  } catch (error) {
-    return <UnavailableState message={error?.message || "Maintenance Orders could not be loaded from Supabase."} />;
-  }
-  if (!ordersPayload) {
-    return <UnavailableState message="Maintenance Orders direct Supabase data is unavailable." />;
+  if (!directResult?.payload) {
+    return <UnavailableState message={directResult?.error?.message || "Maintenance Orders direct Supabase data is unavailable."} />;
   }
 
+  const ordersPayload = directResult.payload;
   const orders = Array.isArray(ordersPayload)
     ? ordersPayload
     : (Array.isArray(ordersPayload?.items) ? ordersPayload.items : []);

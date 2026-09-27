@@ -1,15 +1,17 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import ClassicOrderIcon from "./ClassicOrderIcon";
 import { groupOrderItems, OrderGroupHeader, OrderSortButton } from "./OrderGrouping";
-import OrderDownloadModal from "./OrderDownloadModal";
 import OrderComponentSearch, { matchesOrderComponentSearch } from "./OrderComponentSearch";
 import ActionLoadingModal, { useActionLoading } from "../ActionLoadingModal";
 import { loadTeamMemberPublicProfile } from "../../lib/team-member-public-client";
 
-// Direct Next route handlers must include the configured /next basePath.
-// Root /api/* belongs to the Legacy Express app on the public ERP origin.
+const OrderDownloadModal = dynamic(() => import("./OrderDownloadModal"), { ssr: false });
+
+// Direct route handlers live under the configured /next basePath. Keep the
+// explicit prefix so client requests stay inside the standalone Next deployment.
 const DIRECT_API_BASE = "/next/api";
 
 const OPERATIONS_EXPORT_COLUMNS = [

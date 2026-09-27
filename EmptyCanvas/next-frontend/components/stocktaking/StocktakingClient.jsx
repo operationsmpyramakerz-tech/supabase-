@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import OrderDownloadModal from "../orders/OrderDownloadModal";
+import dynamic from "next/dynamic";
+
+const OrderDownloadModal = dynamic(() => import("../orders/OrderDownloadModal"), { ssr: false });
 
 const EXPORT_COLUMNS = [
   { value: "stock", label: "Stock", checked: true },
