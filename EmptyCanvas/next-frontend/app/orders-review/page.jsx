@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import AppShell from "../../components/AppShell";
 import OrdersReviewClient from "../../components/orders/OrdersReviewClient";
 import { getLegacyAccountGate } from "../../lib/products-auth";
+import { getDirectAccountGateFromSessionContext } from "../../lib/direct-session-account";
 import { loadOrdersReviewInitialPage } from "../../lib/orders-review-data";
 
 export const dynamic = "force-dynamic";
@@ -23,11 +24,26 @@ function UnavailableState({ message, forbidden = false }) {
 }
 
 export default async function OrdersReviewPage() {
-  // Phase 18 cutover: the reviewer workspace now loads its first page directly
-  // from Supabase and no longer uses the Express page-bootstrap recovery path.
-  const gate = await getLegacyAccountGate(["Orders Review"]);
+  // Phase 51 performance: the verified session gives us the reviewer identity
+  // immediately. Refresh page permission and load the first review page in
+  // parallel, but never render the payload unless the fresh gate allows it.
+  const sessionGate = await getLegacyAccountGate([], { authOnly: true });
 
-  if (gate.status === 401) redirect("/login?next=/next/orders-review");
+  if (sessionGate.status === 401) redirect("/login?next=/next/orders-review");
+  if (!sessionGate.ok || !sessionGate.account) {
+    return <UnavailableState message={sessionGate.error || "The account service is temporarily unavailable."} />;
+  }
+
+  const [gate, directResult] = await Promise.all([
+    getDirectAccountGateFromSessionContext(sessionGate, ["Orders Review"]),
+    loadOrdersReviewInitialPage({ account: sessionGate.account })
+      .then((payload) => ({ payload, error: null }))
+      .catch((error) => ({ payload: null, error })),
+  ]);
+
+  if (!gate) {
+    return <UnavailableState message="The account permission service is temporarily unavailable." />;
+  }
   if (gate.status === 403) {
     return <UnavailableState forbidden message="Your account does not have access to the Orders Review page." />;
   }
@@ -35,14 +51,9 @@ export default async function OrdersReviewPage() {
     return <UnavailableState message={gate.error || "The account service is temporarily unavailable."} />;
   }
 
-  let activePayload = null;
-  try {
-    activePayload = await loadOrdersReviewInitialPage({ account: gate.account });
-  } catch (error) {
-    return <UnavailableState message={error?.message || "Orders Review could not be loaded from Supabase."} />;
-  }
+  const activePayload = directResult?.payload;
   if (!activePayload) {
-    return <UnavailableState message="Orders Review direct Supabase data is unavailable." />;
+    return <UnavailableState message={directResult?.error?.message || "Orders Review direct Supabase data is unavailable."} />;
   }
 
   const orders = Array.isArray(activePayload)

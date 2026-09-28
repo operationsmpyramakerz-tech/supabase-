@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import AppShell from "../../../components/AppShell";
 import OrderTrackingClient from "../../../components/orders/OrderTrackingClient";
 import { getLegacyAccountGate } from "../../../lib/products-auth";
+import { getDirectAccountGateFromSessionContext } from "../../../lib/direct-session-account";
 import { loadOrderTracking } from "../../../lib/order-tracking-data";
 
 export const dynamic = "force-dynamic";
@@ -40,8 +41,34 @@ export default async function OrderTrackingPage({ searchParams }) {
     );
   }
 
-  const gate = await getLegacyAccountGate(["Current Orders"]);
-  if (!gate.ok && gate.status === 401) redirect(`/login?next=${encodeURIComponent(currentPath)}`);
+  const sessionGate = await getLegacyAccountGate([], { authOnly: true });
+  if (!sessionGate.ok && sessionGate.status === 401) redirect(`/login?next=${encodeURIComponent(currentPath)}`);
+  if (!sessionGate.ok || !sessionGate.account) {
+    return (
+      <StandaloneState
+        title="Order Tracking could not load"
+        message={sessionGate.error || "The authentication service is temporarily unavailable."}
+        secondaryHref={currentPath}
+      />
+    );
+  }
+
+  const [gate, trackingResult] = await Promise.all([
+    getDirectAccountGateFromSessionContext(sessionGate, ["Current Orders"]),
+    loadOrderTracking({ account: sessionGate.account, groupId })
+      .then((tracking) => ({ tracking, error: null }))
+      .catch((error) => ({ tracking: null, error })),
+  ]);
+
+  if (!gate) {
+    return (
+      <StandaloneState
+        title="Order Tracking could not load"
+        message="The account permission service is temporarily unavailable."
+        secondaryHref={currentPath}
+      />
+    );
+  }
   if (!gate.ok && gate.status === 403) {
     return (
       <StandaloneState
@@ -62,13 +89,8 @@ export default async function OrderTrackingPage({ searchParams }) {
     );
   }
 
-  let tracking = null;
-  let failure = null;
-  try {
-    tracking = await loadOrderTracking({ account: gate.account, groupId });
-  } catch (error) {
-    failure = error;
-  }
+  const tracking = trackingResult?.tracking || null;
+  const failure = trackingResult?.error || null;
 
   if (!tracking) {
     const missing = Number(failure?.status) === 404;

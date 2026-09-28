@@ -4,6 +4,7 @@ import { DashboardNotice, QuickActionsCard, RecentOrdersCard, ScopeCard } from "
 import HomeOverviewClient from "../../components/home/HomeOverviewClient";
 import { fetchDirectPageBootstrap } from "../../lib/page-bootstrap-direct";
 import { getLegacyAccountGate } from "../../lib/products-auth";
+import { getDirectAccountGateFromSessionContext } from "../../lib/direct-session-account";
 import { loadHomeOverviewDirect } from "../../lib/home-overview-data";
 
 export const dynamic = "force-dynamic";
@@ -65,23 +66,36 @@ export default async function HomePage({ searchParams }) {
   const requestedDuration = text(Array.isArray(params?.analysisDuration) ? params.analysisDuration[0] : params?.analysisDuration) || "all";
   const duration = ["all", "week", "month", "year"].includes(requestedDuration) ? requestedDuration : "all";
 
-  // Fast path: resolve the signed-in account directly in Next, then load the
-  // dashboard datasets from Supabase in parallel. Home no longer waits for the
-  // monolithic Express page-bootstrap request before it can render.
-  const gate = await getLegacyAccountGate([]);
+  // Phase 51 performance: verify the signed session first, then refresh the
+  // lightweight member profile while the dashboard datasets are loading. Home
+  // does not need a fresh permission matrix here; its allowedPages snapshot is
+  // already part of the authenticated session and matches the previous gate.
+  const sessionGate = await getLegacyAccountGate([], { authOnly: true });
 
-  if (gate.status === 401) redirect("/login?next=/next/home");
+  if (sessionGate.status === 401) redirect("/login?next=/next/home");
 
-  let account = gate.ok ? gate.account : null;
+  let gate = sessionGate;
+  let account = sessionGate.ok ? sessionGate.account : null;
   let overview = null;
   let bootstrapWarnings = [];
 
   if (account) {
-    overview = await loadHomeOverviewDirect({
-      account,
-      requestedUserId,
-      duration,
-    }).catch(() => null);
+    const [freshGate, overviewResult] = await Promise.all([
+      getDirectAccountGateFromSessionContext(sessionGate, []),
+      loadHomeOverviewDirect({
+        account,
+        requestedUserId,
+        duration,
+      }).catch(() => null),
+    ]);
+    if (freshGate) {
+      gate = freshGate;
+      account = freshGate.ok ? freshGate.account : null;
+    } else {
+      gate = { ...sessionGate, ok: false, status: 503, error: "The account profile service is temporarily unavailable." };
+      account = null;
+    }
+    overview = overviewResult;
   }
 
   // Compatibility fallback only. The normal Home path never waits for the

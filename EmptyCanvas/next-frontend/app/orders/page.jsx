@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import AppShell from "../../components/AppShell";
 import CurrentOrdersClient from "../../components/orders/CurrentOrdersClient";
 import { getLegacyAccountGate } from "../../lib/products-auth";
+import { getDirectAccountGateFromSessionContext } from "../../lib/direct-session-account";
 import { loadCurrentOrdersInitialPage } from "../../lib/current-orders-data";
 
 export const dynamic = "force-dynamic";
@@ -23,11 +24,26 @@ function UnavailableState({ message, forbidden = false }) {
 }
 
 export default async function CurrentOrdersPage() {
-  // Phase 18 cutover: Current Orders now renders from the Next/Supabase path
-  // only. Express page-bootstrap is no longer part of the page read path.
-  const gate = await getLegacyAccountGate(["Current Orders"]);
+  // Phase 51 performance: validate the signed session first, then overlap the
+  // fresh permission matrix with the first Current Orders query. The order
+  // payload is never rendered unless the fresh page-access gate succeeds.
+  const sessionGate = await getLegacyAccountGate([], { authOnly: true });
 
-  if (gate.status === 401) redirect("/login?next=/next/orders");
+  if (sessionGate.status === 401) redirect("/login?next=/next/orders");
+  if (!sessionGate.ok || !sessionGate.account) {
+    return <UnavailableState message={sessionGate.error || "The account service is temporarily unavailable."} />;
+  }
+
+  const [gate, directResult] = await Promise.all([
+    getDirectAccountGateFromSessionContext(sessionGate, ["Current Orders"]),
+    loadCurrentOrdersInitialPage({ account: sessionGate.account })
+      .then((payload) => ({ payload, error: null }))
+      .catch((error) => ({ payload: null, error })),
+  ]);
+
+  if (!gate) {
+    return <UnavailableState message="The account permission service is temporarily unavailable." />;
+  }
   if (gate.status === 403) {
     return <UnavailableState forbidden message="Your account does not have access to the Current Orders page." />;
   }
@@ -35,14 +51,9 @@ export default async function CurrentOrdersPage() {
     return <UnavailableState message={gate.error || "The account service is temporarily unavailable."} />;
   }
 
-  let ordersPayload = null;
-  try {
-    ordersPayload = await loadCurrentOrdersInitialPage({ account: gate.account });
-  } catch (error) {
-    return <UnavailableState message={error?.message || "Current Orders could not be loaded from Supabase."} />;
-  }
+  const ordersPayload = directResult?.payload;
   if (!ordersPayload) {
-    return <UnavailableState message="Current Orders direct Supabase data is unavailable." />;
+    return <UnavailableState message={directResult?.error?.message || "Current Orders direct Supabase data is unavailable."} />;
   }
 
   const orders = Array.isArray(ordersPayload)

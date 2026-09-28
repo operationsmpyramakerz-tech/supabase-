@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import AppShell from "../AppShell";
 import ShoppingCartClient from "./ShoppingCartClient";
 import { getLegacyAccountGate } from "../../lib/products-auth";
+import { getDirectAccountGateFromSessionContext } from "../../lib/direct-session-account";
 import { loadShoppingCartInitialData } from "../../lib/shopping-cart-data";
 
 function StateCard({ title, message, publicPath, retry = false }) {
@@ -35,8 +36,36 @@ export default async function ShoppingCartPageServer({
   if (editKey) loginParams.set("editKey", editKey);
   const loginNext = `${publicPath}${loginParams.toString() ? `?${loginParams.toString()}` : ""}`;
 
-  const gate = await getLegacyAccountGate(["Create New Order"]);
-  if (!gate.ok && gate.status === 401) redirect(`/login?next=${encodeURIComponent(loginNext)}`);
+  const sessionGate = await getLegacyAccountGate([], { authOnly: true });
+  if (!sessionGate.ok && sessionGate.status === 401) redirect(`/login?next=${encodeURIComponent(loginNext)}`);
+  if (!sessionGate.ok || !sessionGate.account) {
+    return (
+      <StateCard
+        title="The new Shopping Cart could not load"
+        message={sessionGate.error || "The authentication service is temporarily unavailable."}
+        publicPath={publicPath}
+        retry
+      />
+    );
+  }
+
+  const [gate, initialResult] = await Promise.all([
+    getDirectAccountGateFromSessionContext(sessionGate, ["Create New Order"]),
+    loadShoppingCartInitialData()
+      .then((initial) => ({ initial, error: null }))
+      .catch((error) => ({ initial: null, error })),
+  ]);
+
+  if (!gate) {
+    return (
+      <StateCard
+        title="The new Shopping Cart could not load"
+        message="The account permission service is temporarily unavailable."
+        publicPath={publicPath}
+        retry
+      />
+    );
+  }
   if (!gate.ok && gate.status === 403) {
     return (
       <StateCard
@@ -66,14 +95,12 @@ export default async function ShoppingCartPageServer({
     "account"
   ).trim() || "account";
 
-  let initial;
-  try {
-    initial = await loadShoppingCartInitialData();
-  } catch (error) {
+  const initial = initialResult?.initial;
+  if (!initial) {
     return (
       <StateCard
         title="The new Shopping Cart could not load"
-        message={error?.message || "The product catalog is temporarily unavailable."}
+        message={initialResult?.error?.message || "The product catalog is temporarily unavailable."}
         publicPath={publicPath}
         retry
       />
