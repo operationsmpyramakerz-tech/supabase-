@@ -2,14 +2,12 @@
 
 import ShellStyleLinks from "./ShellStyleLinks";
 import { useLayoutEffect } from "react";
+import dynamic from "next/dynamic";
 import { usePersistentShellContext } from "./PersistentShellContext";
 import Link from "next/link";
 import NotificationsBell from "./notifications/NotificationsBell";
 import UserProfileMenu from "./UserProfileMenu";
 import HeaderSearch from "./HeaderSearch";
-import TaskManagementSidebarFlyout from "./task-management/TaskManagementSidebarFlyout";
-import EventsSidebarFlyout from "./events/EventsSidebarFlyout";
-import ShoppingCartSidebarFlyout from "./orders/ShoppingCartSidebarFlyout";
 import {
   BodyClassSync,
   ClassicChromeAccessSync,
@@ -22,6 +20,10 @@ import {
   HeaderMenuToggle,
   SidebarBrandToggle,
 } from "./ClassicShellControls";
+
+const TaskManagementSidebarFlyout = dynamic(() => import("./task-management/TaskManagementSidebarFlyout"), { ssr: false });
+const EventsSidebarFlyout = dynamic(() => import("./events/EventsSidebarFlyout"), { ssr: false });
+const ShoppingCartSidebarFlyout = dynamic(() => import("./orders/ShoppingCartSidebarFlyout"), { ssr: false });
 
 const MODULE_LINKS = [
   { label: "Notifications", href: "/next/notifications", permissions: [], alwaysVisible: true },

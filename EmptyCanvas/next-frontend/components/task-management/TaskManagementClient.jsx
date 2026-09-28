@@ -2,13 +2,15 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import dynamic from "next/dynamic";
 import { BodyClassSync } from "../ClassicShellControls";
 import NotificationsBell from "../notifications/NotificationsBell";
 import UserProfileMenu from "../UserProfileMenu";
 import ActionLoadingModal, { useActionLoading } from "../ActionLoadingModal";
-import ClassicTaskWorkflowDetails from "./ClassicTaskWorkflowDetails";
 import ClassicTaskSelect from "./ClassicTaskSelect";
 import { loadTeamMemberPublicProfile } from "../../lib/team-member-public-client";
+
+const ClassicTaskWorkflowDetails = dynamic(() => import("./ClassicTaskWorkflowDetails"), { ssr: false });
 
 const STATUS_OPTIONS = [
   ["all", "All", "layers"],
