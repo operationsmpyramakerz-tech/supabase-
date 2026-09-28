@@ -4,10 +4,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { navigateWithinApp } from "../../lib/client-navigation";
 import ClassicOrderIcon from "./ClassicOrderIcon";
-import { groupOrderItems, OrderGroupHeader, OrderSortButton } from "./OrderGrouping";
-import OrderComponentSearch, { matchesOrderComponentSearch } from "./OrderComponentSearch";
 
-const OrderDownloadModal = dynamic(() => import("./OrderDownloadModal"), { ssr: false });
+const loadCurrentOrdersHeavyModals = () => import("./CurrentOrdersHeavyModals");
+const CurrentOrdersHeavyModals = dynamic(loadCurrentOrdersHeavyModals, { ssr: false });
 
 // Direct route handlers live under the configured /next basePath. Keep the
 // explicit prefix so client requests stay inside the standalone Next deployment.
@@ -593,263 +592,6 @@ function ProgressTrack({ value }) {
   );
 }
 
-function OrderDetailsModal({ group, tab, busy, onClose, onAction, onReason, onExport }) {
-  const [moreOpen, setMoreOpen] = useState(false);
-  const [sortMode, setSortMode] = useState("product-tag");
-  const [downloadOpen, setDownloadOpen] = useState(false);
-  const [componentSearch, setComponentSearch] = useState("");
-  const moreRef = useRef(null);
-
-  useEffect(() => {
-    if (!group) return undefined;
-    const onKey = (event) => {
-      if (event.key !== "Escape") return;
-      if (downloadOpen) {
-        event.preventDefault();
-        setDownloadOpen(false);
-        return;
-      }
-      if (moreOpen) {
-        event.preventDefault();
-        setMoreOpen(false);
-        return;
-      }
-      onClose();
-    };
-    const onPointerDown = (event) => {
-      if (moreOpen && !moreRef.current?.contains(event.target)) setMoreOpen(false);
-    };
-    window.addEventListener("keydown", onKey);
-    document.addEventListener("pointerdown", onPointerDown, true);
-    document.body.classList.add("co-modal-open");
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      document.removeEventListener("pointerdown", onPointerDown, true);
-      document.body.classList.remove("co-modal-open");
-    };
-  }, [group, moreOpen, downloadOpen, onClose]);
-
-  useEffect(() => { setMoreOpen(false); setDownloadOpen(false); setSortMode("product-tag"); setComponentSearch(""); }, [group?.key, tab]);
-  if (!group) return null;
-
-  const archived = group.status === "archive";
-  const maintenance = isMaintenanceOrder(group.orderType);
-  const headerTitle = orderTypeHeaderTitle(group.orderType, group.orderTypeColor, statusLabel(group.status));
-  const tabItems = itemsForCurrentTab(group.items, tab);
-  const searchedTabItems = componentSearch.trim()
-    ? tabItems.filter((item) => matchesOrderComponentSearch(item, componentSearch))
-    : tabItems;
-  const groupedItems = groupOrderItems(searchedTabItems, sortMode);
-  const reasons = [...new Set(group.items.map(rejectedReason).filter(Boolean))].join("\n");
-  const modalStatus = tab === "remaining" ? "remaining" : tab === "shipped" ? "shipped" : group.status;
-
-  const menuAction = (action) => {
-    setMoreOpen(false);
-    onAction(action, group);
-  };
-
-  const renderItem = (item, index) => {
-    const qtyRequested = finite(item?.quantityRequested ?? item?.quantity_requested ?? item?.quantity);
-    const qtyEditedRaw = supervisorEditedQuantity(item);
-    const hasEdited = qtyEditedRaw !== null && qtyEditedRaw !== undefined && qtyEditedRaw !== "" && finite(qtyEditedRaw) !== qtyRequested;
-    const base = baseQuantity(item);
-    const received = receivedQuantity(item);
-    const remaining = remainingQuantity(item);
-    const stage = statusIndex(item?.status);
-    const itemStatus = tab === "remaining"
-      ? "remaining"
-      : tab === "shipped" && stage === 3
-        ? "shipped"
-        : tab === "all" && stage === 3 && !maintenance && Math.abs(remaining) > 1e-9
-          ? "remaining"
-          : statusTabForItem(item);
-    const itemReason = rejectedReason(item);
-    const safeUrl = text(item?.productUrl);
-    const partialRemaining = tab === "all" && !maintenance && hasPartialRemaining(item);
-    const visibleQty = tab === "remaining" ? remaining : tab === "shipped" && Math.abs(received) > 1e-9 ? received : base;
-    const qtyMarkup = partialRemaining
-      ? <span className="sv-qty-diff"><span className="sv-qty-old">{formatQuantity(base)}</span><strong className="sv-qty-new">{formatQuantity(remaining)}</strong></span>
-      : hasEdited && tab !== "remaining" && tab !== "shipped"
-        ? <span className="sv-qty-diff"><span className="sv-qty-old">{formatQuantity(qtyRequested)}</span><strong className="sv-qty-new">{formatQuantity(base)}</strong></span>
-        : <strong>{formatQuantity(visibleQty)}</strong>;
-    const displayTotal = (tab === "remaining" || tab === "shipped") ? Math.abs(visibleQty) * Math.abs(finite(item?.unitPrice ?? item?.unit_price ?? item?.price)) : itemTotal(item);
-    return (
-      <div className="co-item" key={text(item?.id) || index}>
-        <div className="co-item-left">
-          <div className="co-item-title">
-            <div className="co-item-name">{text(item?.productName) || "Unknown Product"}</div>
-            {/^[hH][tT][tT][pP][sS]?:\/\//.test(safeUrl) ? <a className="co-item-link" href={safeUrl} target="_blank" rel="noopener noreferrer" title="Open link" aria-label="Open component link"><ClassicOrderIcon name="external-link" /></a> : null}
-          </div>
-          {!maintenance ? <div className="co-item-sub">Unit: {formatMoney(item?.unitPrice)} · Total: {formatMoney(displayTotal)}</div> : null}
-        </div>
-        <div className="co-item-right">
-          {maintenance ? <div className="co-item-issue-desc">{text(item?.issueDescription || item?.reason) || "—"}</div> : <div className="co-item-total">{tab === "remaining" ? "Qty remaining:" : "Qty:"} {qtyMarkup}</div>}
-          <StatusPill status={itemStatus} className="co-item-status" reason={itemReason} onReason={onReason} />
-        </div>
-      </div>
-    );
-  };
-
-  return (
-    <div className="co-modal-overlay is-open" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <div className="co-modal-dialog" role="dialog" aria-modal="true" aria-label={`${group.orderIdLabel} details`}>
-        <div className="co-modal-more" ref={moreRef}>
-          <button type="button" className="co-modal-more-btn" aria-label="Order actions" aria-haspopup="menu" aria-expanded={moreOpen} onClick={() => setMoreOpen((state) => !state)}><span className="co-modal-more-dots" aria-hidden="true">⋮</span></button>
-          {moreOpen ? (
-            <div className="co-modal-more-panel" role="menu" aria-label="Order actions">
-              {!archived ? <button type="button" className="co-modal-more-item" onClick={() => menuAction("edit")}><ClassicOrderIcon name="edit-2" /><span>Edit</span></button> : null}
-              {!archived ? <button type="button" className="co-modal-more-item" onClick={() => menuAction("archive")}><ClassicOrderIcon name="archive" /><span>Archive</span></button> : null}
-              {archived ? <button type="button" className="co-modal-more-item" onClick={() => menuAction("unarchive")}><ClassicOrderIcon name="rotate-ccw" /><span>UnArchive</span></button> : null}
-              <button type="button" className="co-modal-more-item co-modal-more-item--danger" onClick={() => menuAction("delete")}><ClassicOrderIcon name="trash-2" /><span>Delete</span></button>
-            </div>
-          ) : null}
-        </div>
-        <button type="button" className="co-modal-close" onClick={onClose} aria-label="Close order details" />
-
-        <div className="co-modal-header"><div className="co-modal-head-left"><div className="co-modal-status">{headerTitle}</div><div className="co-modal-status-sub" hidden /></div></div>
-        <div className="next-current-order-modal-summary" aria-label="Order summary">
-          <div><span>Order</span><strong>{group.orderIdLabel}</strong></div>
-          <div><span>Date</span><strong>{formatDate(group.latestCreated)}</strong></div>
-          <div><span>Components</span><strong>{tabItems.length}</strong></div>
-          <div className="next-current-order-modal-summary__status"><span>Status</span>{tab === "all" && group.stage === 2 && hasMixedApprovedRejected(group.items) ? <MixedStatusPill /> : <StatusPill status={modalStatus} reason={reasons} onReason={onReason} />}</div>
-        </div>
-        <ProgressTrack value={archived ? 4 : progressIndex(group)} />
-
-        <div className="co-modal-body">
-          {!maintenance ? (
-            <div className="co-modal-meta">
-              <div className="co-meta-row co-meta-row--reason"><span>Reason</span><strong>{group.reason}</strong></div>
-              {((tab === "shipped" || tab === "arrived") && group.operationsByName) || (tab === "arrived" && group.receiptEntries?.length) ? (
-                <div className="next-operations-meta-pair">
-                  {(tab === "shipped" || tab === "arrived") && group.operationsByName ? (
-                    <div className="co-meta-row"><span>Received by</span><strong>{group.operationsByName}</strong></div>
-                  ) : null}
-                  {tab === "arrived" && group.receiptEntries?.length ? (
-                    <div className="co-meta-row next-operations-receipt-meta">
-                      <span>Receipt photos</span>
-                      <strong className="next-operations-receipt-meta__links">
-                        {group.receiptEntries.map((entry, index) => (
-                          <a
-                            className="next-operations-receipt-meta__link"
-                            href={entry.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            title={entry.name}
-                            key={`${entry.url}-${index}`}
-                          >
-                            <ClassicOrderIcon name="image" />
-                            <span>{entry.name || `Photo ${index + 1}`}</span>
-                          </a>
-                        ))}
-                      </strong>
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-          <div className="co-modal-actions ro-actions ro-actions--right order-group-sort-actions order-modal-search-actions">
-            <OrderComponentSearch key={`${group.key}:${tab}`} value={componentSearch} onChange={setComponentSearch} disabled={busy} />
-            <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => setDownloadOpen(true)} disabled={busy}><ClassicOrderIcon name="download" /><span>Download</span></button>
-            <OrderSortButton value={sortMode} onChange={setSortMode} />
-          </div>
-          <div className="co-modal-items order-component-groups">
-            {groupedItems.length ? groupedItems.map((section) => (
-              <section className="order-component-group" key={`${section.folderName || "products"}:${section.tag}`}>
-                <OrderGroupHeader group={section} mode={sortMode} />
-                <div className="order-component-group__items">{section.items.map(renderItem)}</div>
-              </section>
-            )) : <div className="order-component-search-empty">{componentSearch.trim() ? "No matching components." : "No items."}</div>}
-          </div>
-        </div>
-        <OrderDownloadModal
-          open={downloadOpen}
-          title={`Download ${group.orderIdLabel}`}
-          defaultSignatureLabels={orderTypeKey(group.orderType) === "withdrawproducts" ? ["Received From", "Operations", "Storekeeper"] : ["Storekeeper", "Operations", "Delivered to"]}
-          showSignatureOptions={!maintenance}
-          showRepeatedComponentOptions={!maintenance}
-          defaultRepeatedComponentMode="merge"
-          onClose={() => setDownloadOpen(false)}
-          onDownload={(options) => onExport({ ...options, sortMode }, { ...group, items: tabItems, orderIds: tabItems.map((item) => text(item?.id)).filter(Boolean) })}
-        />
-      </div>
-    </div>
-  );
-}
-
-function PasswordModal({ state, busy, error, onCancel, onSubmit }) {
-  const [password, setPassword] = useState("");
-  useEffect(() => setPassword(""), [state?.action, state?.group?.key]);
-  useEffect(() => {
-    if (!state) return undefined;
-    const onKey = (event) => { if (event.key === "Escape" && !busy) onCancel(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [state, busy, onCancel]);
-  if (!state) return null;
-  const config = ACTIONS[state.action];
-  return (
-    <div className="co-submodal-overlay is-open req-edit-modal" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onCancel(); }}>
-      <form className="co-submodal-dialog req-edit-dialog" role="dialog" aria-modal="true" onSubmit={(event) => { event.preventDefault(); onSubmit(password); }}>
-        <button type="button" className="co-submodal-close" onClick={onCancel} aria-label="Close admin password dialog" />
-        <div className="co-submodal-header req-edit-header">
-          <div className={`req-edit-icon ${config.danger ? "req-edit-icon--danger" : ""}`} aria-hidden="true"><ClassicOrderIcon name={config.icon || "shield"} /></div>
-          <div><div className="co-submodal-title">{config.title}</div><div className="co-submodal-sub">{config.description}</div></div>
-        </div>
-        <div className="co-submodal-body">
-          <label className="co-submodal-label" htmlFor="current-order-admin-password">Admin password</label>
-          <input id="current-order-admin-password" className="co-submodal-input" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoFocus autoComplete="current-password" placeholder="••••••••" disabled={busy} />
-          <div className="co-submodal-error" role="alert" aria-live="polite">{error}</div>
-        </div>
-        <div className="co-submodal-actions">
-          <button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancel} disabled={busy}>Cancel</button>
-          <button type="submit" className={`ro-action-btn ${config.danger ? "ro-action-btn--danger" : "ro-action-btn--dark"}`} disabled={busy || !password.trim()}>{busy ? "Working…" : config.button}</button>
-        </div>
-      </form>
-    </div>
-  );
-}
-
-function RejectedReasonModal({ reason, onClose }) {
-  if (!reason) return null;
-  return (
-    <div className="co-submodal-overlay is-open" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <div className="co-submodal-dialog reject-reason-dialog" role="dialog" aria-modal="true" aria-label="Rejected reason">
-        <button type="button" className="co-submodal-close" onClick={onClose} aria-label="Close rejected reason" />
-        <div className="co-submodal-header req-edit-header"><div className="req-edit-icon req-edit-icon--danger" aria-hidden="true"><ClassicOrderIcon name="x-circle" /></div><div><div className="co-submodal-title">Rejected reason</div><div className="co-submodal-sub">Reason saved with this rejected component.</div></div></div>
-        <div className="co-submodal-body"><div className="rejected-reason-view-text">{reason}</div></div>
-        <div className="co-submodal-actions"><button type="button" className="ro-action-btn ro-action-btn--dark" onClick={onClose}>Done</button></div>
-      </div>
-    </div>
-  );
-}
-
-function DeleteConfirmationModal({ state, busy, onCancel, onConfirm }) {
-  useEffect(() => {
-    if (!state) return undefined;
-    const onKey = (event) => { if (event.key === "Escape" && !busy) onCancel(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [state, busy, onCancel]);
-
-  if (!state) return null;
-  const count = state.group?.items?.length || state.group?.orderIds?.length || 1;
-  return (
-    <div className="co-confirm-overlay is-open next-current-order-delete-confirm" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onCancel(); }}>
-      <div className="co-confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="currentOrderDeleteTitle" aria-describedby="currentOrderDeleteMessage">
-        <div className="co-confirm-icon" aria-hidden="true"><ClassicOrderIcon name="trash-2" /></div>
-        <div className="co-confirm-title" id="currentOrderDeleteTitle">Delete {state.group?.orderIdLabel || "order"}?</div>
-        <div className="co-confirm-message" id="currentOrderDeleteMessage">
-          You’re going to permanently delete this order and its {count} saved component{count === 1 ? "" : "s"}. This action cannot be undone.
-        </div>
-        <div className="co-confirm-actions">
-          <button type="button" className="co-confirm-btn co-confirm-btn--light" onClick={onCancel} disabled={busy}>Cancel</button>
-          <button type="button" className="co-confirm-btn co-confirm-btn--dark next-current-order-delete-confirm__danger" onClick={onConfirm} disabled={busy}>{busy ? "Deleting…" : "Delete permanently"}</button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export default function CurrentOrdersClient({ initialOrders = [], initialPageInfo = null, bootstrapWarnings = [] }) {
   const [orders, setOrders] = useState(Array.isArray(initialOrders) ? initialOrders : []);
@@ -1007,6 +749,7 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
   }
 
   async function openOrderDetails(group) {
+    void loadCurrentOrdersHeavyModals();
     if (!group) return;
     const needsDetails = (Array.isArray(group.items) ? group.items : []).some((item) => Boolean(item?.summaryOnly));
     if (!needsDetails) {
@@ -1195,7 +938,7 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
 
       <section className="card" id="current-orders">
         <div className="co-cards" id="orders-list">
-          {visibleGroups.length ? visibleGroups.map((group) => <OrderCard group={group} activeTab={tab} onOpen={openOrderDetails} onReason={setReasonView} key={group.key} />) : listLoading ? (
+          {visibleGroups.length ? visibleGroups.map((group) => <OrderCard group={group} activeTab={tab} onOpen={openOrderDetails} onReason={(reason) => { void loadCurrentOrdersHeavyModals(); setReasonView(reason); }} key={group.key} />) : listLoading ? (
             <div className="ops-no-data-state" role="status" aria-live="polite"><div className="ops-no-data-state__text">Loading orders…</div></div>
           ) : (
             <div className="ops-no-data-state" role="status" aria-live="polite"><img className="ops-no-data-state__image" src="/next/images/no-data-illustration.png" alt="" loading="lazy"/><div className="ops-no-data-state__text">Sorry, No data available</div></div>
@@ -1218,10 +961,26 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
         ) : null}
       </section>
 
-      <OrderDetailsModal group={selected} tab={tab} busy={busy} onClose={() => setSelected(null)} onAction={beginAction} onReason={setReasonView} onExport={exportOrder} />
-      <PasswordModal state={actionState} busy={busy} error={actionError} onCancel={() => { if (!busy) { setActionState(null); setActionError(""); } }} onSubmit={submitAction} />
-      <DeleteConfirmationModal state={deleteConfirm} busy={busy} onCancel={() => { if (!busy) setDeleteConfirm(null); }} onConfirm={confirmDelete} />
-      <RejectedReasonModal reason={reasonView} onClose={() => setReasonView("")} />
+      {(selected || actionState || deleteConfirm || reasonView) ? (
+        <CurrentOrdersHeavyModals
+          selected={selected}
+          tab={tab}
+          busy={busy}
+          onCloseSelected={() => setSelected(null)}
+          onAction={beginAction}
+          onReason={setReasonView}
+          onExport={exportOrder}
+          actionState={actionState}
+          actionError={actionError}
+          onCancelAction={() => { if (!busy) { setActionState(null); setActionError(""); } }}
+          onSubmitAction={submitAction}
+          deleteConfirm={deleteConfirm}
+          onCancelDelete={() => { if (!busy) setDeleteConfirm(null); }}
+          onConfirmDelete={confirmDelete}
+          reasonView={reasonView}
+          onCloseReason={() => setReasonView("")}
+        />
+      ) : null}
     </section>
   );
 }

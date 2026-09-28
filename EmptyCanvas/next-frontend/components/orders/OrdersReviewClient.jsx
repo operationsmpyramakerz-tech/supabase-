@@ -3,11 +3,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import ClassicOrderIcon from "./ClassicOrderIcon";
-import { groupOrderItems, OrderGroupHeader, OrderSortButton } from "./OrderGrouping";
-import OrderComponentSearch, { matchesOrderComponentSearch } from "./OrderComponentSearch";
 import { loadTeamMemberPublicProfile } from "../../lib/team-member-public-client";
 
-const OrderDownloadModal = dynamic(() => import("./OrderDownloadModal"), { ssr: false });
+const loadOrdersReviewHeavyModals = () => import("./OrdersReviewHeavyModals");
+const OrdersReviewHeavyModals = dynamic(loadOrdersReviewHeavyModals, { ssr: false });
 
 // Direct route handlers live under the configured /next basePath. Keep the
 // explicit prefix so client requests stay inside the standalone Next deployment.
@@ -317,301 +316,6 @@ function ProgressTrack({ value }) {
   })}</div>;
 }
 
-function QuantityEditor({ item, busy, onSave, onCancel }) {
-  const [value, setValue] = useState(formatQuantity(effectiveQuantity(item)));
-  useEffect(() => setValue(formatQuantity(effectiveQuantity(item))), [item?.id, item?.quantityEdited, item?.quantity]);
-  return <form className="next-classic-qty-editor" onSubmit={(event) => { event.preventDefault(); onSave(item, value); onCancel(); }}>
-    <input className="sv-qty-input" type="number" step="any" value={value} onChange={(event) => setValue(event.target.value)} disabled={busy} aria-label={`Quantity for ${text(item?.productName) || "component"}`} />
-    <div className="sv-qty-actions"><button type="button" className="sv-qty-btn" onClick={onCancel}>×</button><button type="submit" className="ro-action-btn ro-action-btn--dark" disabled={busy || !text(value)}>Save</button></div>
-  </form>;
-}
-
-function ReviewDetailsLoadState({ group, loading, error, onRetry, onClose }) {
-  useEffect(() => {
-    if (!group) return undefined;
-    const onKey = (event) => { if (event.key === "Escape") onClose(); };
-    window.addEventListener("keydown", onKey);
-    document.body.classList.add("co-modal-open");
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      document.body.classList.remove("co-modal-open");
-    };
-  }, [group, onClose]);
-  if (!group) return null;
-  return <div className="co-modal-overlay is-open" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <div className="co-modal-dialog next-review-order-modal" role="dialog" aria-modal="true" aria-label={`${group.orderIdLabel} review details`}>
-      <button type="button" className="co-modal-close" onClick={onClose} aria-label="Close order details" />
-      <div className="co-modal-header"><div className="co-modal-head-left"><div className="co-modal-status">Order review</div></div></div>
-      <div className="next-review-order-modal-summary" aria-label="Review order summary">
-        <div><span>Order</span><strong>{group.orderIdLabel}</strong></div>
-        <div><span>Date</span><strong>{formatDate(group.latestCreated)}</strong></div>
-        <div><span>Components</span><strong>{group.items.length}</strong></div>
-      </div>
-      <div className="co-modal-body">
-        <div className={`creator-profile-state ${error ? "creator-profile-state--error" : ""}`}>
-          <span>{error || (loading ? "Loading order details..." : "Preparing order details...")}</span>
-          {error ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={onRetry}>Try again</button> : null}
-        </div>
-      </div>
-    </div>
-  </div>;
-}
-
-function ReviewDetailsModal({ group, activeTab, busyIds, onClose, onQuantitySave, onDecision, onBulkDecision, onPasswordAction, onReason, onExport }) {
-  const [moreOpen, setMoreOpen] = useState(false);
-  const [editingQty, setEditingQty] = useState("");
-  const [sortMode, setSortMode] = useState("product-tag");
-  const [downloadOpen, setDownloadOpen] = useState(false);
-  const [componentSearch, setComponentSearch] = useState("");
-  const moreRef = useRef(null);
-
-  useEffect(() => {
-    if (!group) return undefined;
-    const onKey = (event) => {
-      if (event.key !== "Escape") return;
-      if (downloadOpen) {
-        event.preventDefault();
-        setDownloadOpen(false);
-        return;
-      }
-      if (moreOpen) {
-        event.preventDefault();
-        setMoreOpen(false);
-        return;
-      }
-      onClose();
-    };
-    const onPointerDown = (event) => {
-      if (moreOpen && !moreRef.current?.contains(event.target)) setMoreOpen(false);
-    };
-    window.addEventListener("keydown", onKey);
-    document.addEventListener("pointerdown", onPointerDown, true);
-    document.body.classList.add("co-modal-open");
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      document.removeEventListener("pointerdown", onPointerDown, true);
-      document.body.classList.remove("co-modal-open");
-    };
-  }, [group, moreOpen, downloadOpen, onClose]);
-
-  useEffect(() => { setMoreOpen(false); setEditingQty(""); setDownloadOpen(false); setSortMode("product-tag"); setComponentSearch(""); }, [group?.key, activeTab]);
-  if (!group) return null;
-
-  const archived = group.archived;
-  const approval = group.approval;
-  const canAct = !archived && approval === "not-started" && activeTab === "not-started";
-  const showEdit = !archived && (approval === "approved" || approval === "rejected" || activeTab === "approved" || activeTab === "rejected");
-  const showArchive = !archived && ["not-started", "approved", "rejected"].includes(activeTab);
-  const showUnarchive = archived || activeTab === "archive";
-  const maintenance = isMaintenanceOrder(group.orderType);
-  const headerTitle = orderTypeHeaderTitle(group.orderType, group.orderTypeColor, statusLabel(approval));
-  const searchedItems = componentSearch.trim()
-    ? group.items.filter((item) => matchesOrderComponentSearch(item, componentSearch))
-    : group.items;
-  const groupedItems = groupOrderItems(searchedItems, sortMode);
-  const state = archived ? "archive" : approval;
-
-  const menuAction = (action) => {
-    setMoreOpen(false);
-    onPasswordAction(action, group);
-  };
-
-  const renderItem = (item, index) => {
-    const itemApproval = approvalKey(item?.approval ?? item?.svApproval ?? item?.sv_approval);
-    const itemBusy = busyIds.has(text(item?.id));
-    const itemReason = text(item?.rejectedReason ?? item?.rejected_reason);
-    const qtyRequested = finite(item?.quantityRequested ?? item?.quantity_requested ?? item?.quantity);
-    const qtyEdited = item?.quantityEdited ?? item?.quantity_edited_by_supervisor ?? item?.quantityEditedBySupervisor;
-    const showEdited = qtyEdited !== null && qtyEdited !== undefined && qtyEdited !== "" && finite(qtyEdited) !== qtyRequested;
-    const safeUrl = text(item?.productUrl ?? item?.product_url);
-    return <div className="co-item next-review-order-item" key={text(item?.id) || index}>
-      <div className="co-item-left"><div className="co-item-title"><div className="co-item-name">{text(item?.productName) || "Unknown Product"}</div>{/^https?:\/\//i.test(safeUrl) ? <a className="co-item-link" href={safeUrl} target="_blank" rel="noopener noreferrer" title="Open component link" aria-label="Open component link" onClick={(event) => event.stopPropagation()}><ClassicOrderIcon name="external-link" /></a> : null}</div>{!maintenance ? <div className="co-item-sub">Unit: {formatMoney(item?.unitPrice)} · Total: {formatMoney(itemTotal(item))}</div> : null}</div>
-      <div className="co-item-right">
-        {maintenance ? <div className="co-item-issue-desc">{text(item?.issueDescription || item?.reason) || "—"}</div> : <div className="co-item-total">Qty: {showEdited ? <span className="sv-qty-diff"><span className="sv-qty-old">{formatQuantity(qtyRequested)}</span><strong className="sv-qty-new">{formatQuantity(qtyEdited)}</strong></span> : <strong>{formatQuantity(qtyRequested)}</strong>}</div>}
-        <ApprovalPill approval={itemApproval} className="co-item-status" reason={itemReason} onReason={onReason} />
-        {canAct && !maintenance ? <div className="next-review-item-actions"><button className="next-review-action-btn next-review-action-btn--edit" type="button" disabled={itemBusy} onClick={() => setEditingQty((current) => current === text(item?.id) ? "" : text(item?.id))}><ClassicOrderIcon name="edit-2" /><span>Edit qty</span></button><button className="next-review-action-btn next-review-action-btn--reject" type="button" disabled={itemBusy} onClick={() => onDecision(item, "Rejected")}><ClassicOrderIcon name="x" /><span>Reject</span></button><button className="next-review-action-btn next-review-action-btn--approve" type="button" disabled={itemBusy} onClick={() => onDecision(item, "Approved")}><ClassicOrderIcon name="check" /><span>Approve</span></button></div> : null}
-        {editingQty === text(item?.id) ? <QuantityEditor item={item} busy={itemBusy} onSave={onQuantitySave} onCancel={() => setEditingQty("")} /> : null}
-      </div>
-    </div>;
-  };
-
-  return <div className="co-modal-overlay is-open" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <div className="co-modal-dialog next-review-order-modal" role="dialog" aria-modal="true" aria-label={`${group.orderIdLabel} review details`}>
-      {(showEdit || showArchive || showUnarchive) ? <div className="co-modal-more" ref={moreRef}>
-        <button type="button" className="co-modal-more-btn" aria-label="Order review actions" aria-haspopup="menu" aria-expanded={moreOpen} onClick={() => setMoreOpen((stateValue) => !stateValue)}><span className="co-modal-more-dots">⋮</span></button>
-        {moreOpen ? <div className="co-modal-more-panel" role="menu" aria-label="Order review actions">
-          {showEdit ? <button type="button" className="co-modal-more-item" onClick={() => menuAction("editReview")}><ClassicOrderIcon name="edit-2" /><span>Edit review</span></button> : null}
-          {showArchive ? <button type="button" className="co-modal-more-item" onClick={() => menuAction("archive")}><ClassicOrderIcon name="archive" /><span>Archive</span></button> : null}
-          {showUnarchive ? <button type="button" className="co-modal-more-item" onClick={() => menuAction("unarchive")}><ClassicOrderIcon name="rotate-ccw" /><span>UnArchive</span></button> : null}
-        </div> : null}
-      </div> : null}
-      <button type="button" className="co-modal-close" onClick={onClose} aria-label="Close order details" />
-      <div className="co-modal-header"><div className="co-modal-head-left"><div className="co-modal-status">{headerTitle}</div></div></div>
-
-      <div className="next-review-order-modal-summary" aria-label="Review order summary">
-        <div><span>Order</span><strong>{group.orderIdLabel}</strong></div>
-        <div><span>Date</span><strong>{formatDate(group.latestCreated)}</strong></div>
-        <div><span>Components</span><strong>{group.items.length}</strong></div>
-        <div className="next-review-order-modal-summary__status"><span>Review</span>{approval === "mixed" && !archived ? <MixedStatusPill /> : <ApprovalPill approval={state} />}</div>
-      </div>
-
-      <ProgressTrack value={archived ? 4 : workflowProgress(group)} />
-      <div className="co-modal-body">
-        {!maintenance ? <div className="co-modal-meta"><div className="co-meta-row co-meta-row--reason"><span>Reason</span><strong>{group.reason}</strong></div></div> : null}
-        <div className="co-modal-actions ro-actions ro-actions--right order-group-sort-actions order-modal-search-actions">
-          <OrderComponentSearch key={`${group.key}:${activeTab}`} value={componentSearch} onChange={setComponentSearch} />
-          <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => setDownloadOpen(true)}><ClassicOrderIcon name="download" /><span>Download</span></button>
-          <OrderSortButton value={sortMode} onChange={setSortMode} />
-        </div>
-        {canAct ? <div className="next-review-bulk-actions"><div><span>Review all components</span><strong>Apply one decision to every item in this order.</strong></div><div className="next-classic-review-actions"><button className="btn btn-success btn-xs" type="button" onClick={() => onBulkDecision(group, "Approved")}><ClassicOrderIcon name="check" /> Approve all</button><button className="btn btn-danger btn-xs" type="button" onClick={() => onBulkDecision(group, "Rejected")}><ClassicOrderIcon name="x" /> Reject all</button></div></div> : null}
-        <div className="co-modal-items order-component-groups">
-          {groupedItems.length ? groupedItems.map((section) => (
-            <section className="order-component-group" key={`${section.folderName || "products"}:${section.tag}`}>
-              <OrderGroupHeader group={section} mode={sortMode} />
-              <div className="order-component-group__items">{section.items.map(renderItem)}</div>
-            </section>
-          )) : <div className="order-component-search-empty">{componentSearch.trim() ? "No matching components." : "No items."}</div>}
-        </div>
-      </div>
-      <OrderDownloadModal
-        open={downloadOpen}
-        title={`Download ${group.orderIdLabel}`}
-        defaultSignatureLabels={orderTypeKey(group.orderType) === "withdrawproducts" ? ["Received From", "Operations", "Storekeeper"] : ["Storekeeper", "Operations", "Delivered to"]}
-        showSignatureOptions={!maintenance}
-        showRepeatedComponentOptions={!maintenance}
-        defaultRepeatedComponentMode="merge"
-        onClose={() => setDownloadOpen(false)}
-        onDownload={(options) => onExport({ ...options, sortMode }, group, activeTab)}
-      />
-    </div>
-  </div>;
-}
-
-function PasswordModal({ state, busy, error, onCancel, onSubmit }) {
-  const [password, setPassword] = useState("");
-  useEffect(() => setPassword(""), [state?.action, state?.group?.key]);
-  useEffect(() => {
-    if (!state) return undefined;
-    const onKey = (event) => { if (event.key === "Escape" && !busy) onCancel(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [state, busy, onCancel]);
-  if (!state) return null;
-  const config = PASSWORD_ACTIONS[state.action];
-  return <div className="co-submodal-overlay is-open req-edit-modal" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onCancel(); }}>
-    <form className="co-submodal-dialog req-edit-dialog" role="dialog" aria-modal="true" onSubmit={(event) => { event.preventDefault(); onSubmit(password); }}>
-      <button type="button" className="co-submodal-close" onClick={onCancel} aria-label="Close admin password dialog" />
-      <div className="co-submodal-header req-edit-header"><div className={`req-edit-icon ${config.danger ? "req-edit-icon--danger" : ""}`}><ClassicOrderIcon name={config.icon} /></div><div><div className="co-submodal-title">{config.title}</div><div className="co-submodal-sub">{config.description}</div></div></div>
-      <div className="co-submodal-body"><label className="co-submodal-label" htmlFor="review-admin-password">Admin password</label><input id="review-admin-password" className="co-submodal-input" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoFocus autoComplete="current-password" placeholder="••••••••" disabled={busy}/><div className="co-submodal-error" role="alert" aria-live="polite">{error}</div></div>
-      <div className="co-submodal-actions"><button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancel} disabled={busy}>Cancel</button><button type="submit" className={`ro-action-btn ${config.danger ? "ro-action-btn--danger" : "ro-action-btn--dark"}`} disabled={busy || !password.trim()}>{busy ? "Working…" : config.button}</button></div>
-    </form>
-  </div>;
-}
-
-function RejectionModal({ state, busy, error, onCancel, onSubmit }) {
-  const [reason, setReason] = useState("");
-  useEffect(() => setReason(""), [state?.key]);
-  useEffect(() => {
-    if (!state) return undefined;
-    const onKey = (event) => { if (event.key === "Escape" && !busy) onCancel(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [state, busy, onCancel]);
-  if (!state) return null;
-  return <div className="co-submodal-overlay is-open" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onCancel(); }}><form className="co-submodal-dialog reject-reason-dialog" role="dialog" aria-modal="true" onSubmit={(event) => { event.preventDefault(); onSubmit(reason); }}>
-    <button type="button" className="co-submodal-close" onClick={onCancel} aria-label="Close rejected reason dialog" />
-    <div className="co-submodal-header req-edit-header"><div className="req-edit-icon req-edit-icon--danger"><ClassicOrderIcon name="x-circle" /></div><div><div className="co-submodal-title">Rejected reason</div><div className="co-submodal-sub">Add the reason that should be saved with the rejected component{state.group ? "s" : ""}.</div></div></div>
-    <div className="co-submodal-body"><label className="co-submodal-label" htmlFor="review-reject-reason">Reason</label><textarea id="review-reject-reason" className="co-submodal-textarea reject-reason-input" value={reason} onChange={(event) => setReason(event.target.value)} autoFocus disabled={busy}/><div className="co-submodal-error" role="alert" aria-live="polite">{error}</div></div>
-    <div className="co-submodal-actions"><button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancel} disabled={busy}>Cancel</button><button type="submit" className="ro-action-btn ro-action-btn--danger" disabled={busy || !reason.trim()}>{busy ? "Saving…" : "Reject"}</button></div>
-  </form></div>;
-}
-
-function ReviewEditorModal({ state, busy, error, onCancel, onSubmit }) {
-  const [approvals, setApprovals] = useState({});
-  useEffect(() => {
-    if (!state?.group) return;
-    const next = {};
-    state.group.items.forEach((item) => { next[text(item?.id)] = normalizeApproval(item?.approval ?? item?.svApproval ?? item?.sv_approval); });
-    setApprovals(next);
-  }, [state?.group?.key]);
-  useEffect(() => {
-    if (!state) return undefined;
-    const onKey = (event) => { if (event.key === "Escape" && !busy) onCancel(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [state, busy, onCancel]);
-  if (!state?.group) return null;
-  const choices = [
-    { value: "Not Started", label: "Not started", icon: "pause-circle" },
-    { value: "Approved", label: "Approved", icon: "check-circle" },
-    { value: "Rejected", label: "Rejected", icon: "x-circle" },
-  ];
-  return <div className="co-submodal-overlay is-open sv-review-edit-modal" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onCancel(); }}><form className="co-submodal-dialog sv-review-edit-dialog next-review-editor-dialog" role="dialog" aria-modal="true" onSubmit={(event) => { event.preventDefault(); onSubmit(approvals); }}>
-    <button type="button" className="co-submodal-close" onClick={onCancel} aria-label="Close review edit dialog" />
-    <div className="co-submodal-header req-edit-header"><div className="req-edit-icon"><ClassicOrderIcon name="edit-2" /></div><div><div className="co-submodal-title">Edit review decision</div><div className="co-submodal-sub">Update the approval status for each component.</div></div></div>
-    <div className="co-submodal-body"><div className="co-submodal-fields"><div className="co-submodal-field"><div className="co-submodal-label">Component approval status</div><div className="sv-review-edit-items">{state.group.items.map((item) => {
-      const id = text(item?.id);
-      const value = approvals[id] || "Not Started";
-      const valueClass = value === "Approved" ? "is-approved" : value === "Rejected" ? "is-rejected" : "is-not-started";
-      return <div className={`sv-review-edit-item next-review-edit-item ${valueClass}`} key={id}><div className="sv-review-edit-item__info"><div className="sv-review-edit-item__name">{text(item?.productName) || "Component"}</div><div className="sv-review-edit-item__sub">Qty: {formatQuantity(effectiveQuantity(item))}</div></div><div className="next-review-status-picker" role="radiogroup" aria-label={`Approval status for ${text(item?.productName) || "component"}`}>{choices.map((choice) => <button type="button" key={choice.value} className={`next-review-status-choice next-review-status-choice--${choice.value === "Approved" ? "approved" : choice.value === "Rejected" ? "rejected" : "pending"} ${value === choice.value ? "is-active" : ""}`} role="radio" aria-checked={value === choice.value} onClick={() => setApprovals((current) => ({ ...current, [id]: choice.value }))} disabled={busy}><ClassicOrderIcon name={choice.icon} /><span>{choice.label}</span></button>)}</div></div>;
-    })}</div></div></div><div className="co-submodal-error" role="alert" aria-live="polite">{error}</div></div>
-    <div className="co-submodal-actions"><button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancel} disabled={busy}>Cancel</button><button type="submit" className="ro-action-btn ro-action-btn--dark" disabled={busy}>{busy ? "Saving…" : "Confirm"}</button></div>
-  </form></div>;
-}
-
-function RejectedReasonModal({ reason, onClose }) {
-  useEffect(() => {
-    if (!reason) return undefined;
-    const onKey = (event) => { if (event.key === "Escape") onClose(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [reason, onClose]);
-  if (!reason) return null;
-  return <div className="co-submodal-overlay is-open" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><div className="co-submodal-dialog reject-reason-dialog" role="dialog" aria-modal="true"><button type="button" className="co-submodal-close" onClick={onClose} aria-label="Close rejected reason"/><div className="co-submodal-header req-edit-header"><div className="req-edit-icon req-edit-icon--danger"><ClassicOrderIcon name="x-circle"/></div><div><div className="co-submodal-title">Rejected reason</div><div className="co-submodal-sub">Reason saved with this rejected component.</div></div></div><div className="co-submodal-body"><div className="rejected-reason-view-text">{reason}</div></div><div className="co-submodal-actions"><button type="button" className="ro-action-btn ro-action-btn--dark" onClick={onClose}>Done</button></div></div></div>;
-}
-
-function profileFieldValue(profile, aliases = []) {
-  const wanted = new Set(aliases.map((value) => lower(value).replace(/[^a-z0-9]/g, "")));
-  const topLevel = Object.entries(profile || {}).find(([key, value]) => wanted.has(lower(key).replace(/[^a-z0-9]/g, "")) && text(value));
-  if (topLevel) return text(topLevel[1]);
-  const field = (Array.isArray(profile?.fields) ? profile.fields : []).find((item) => wanted.has(lower(item?.label || item?.name || item?.key).replace(/[^a-z0-9]/g, "")) && text(item?.value));
-  return text(field?.value);
-}
-function safeHttpUrl(value) {
-  const url = text(value);
-  return /^https?:\/\//i.test(url) ? url : "";
-}
-function CreatorProfilePopover({ state, onClose }) {
-  if (!state) return null;
-  const profile = state.profile || {};
-  const name = profileFieldValue(profile, ["name", "full name", "username"]) || text(state.name) || "Creator";
-  const department = profileFieldValue(profile, ["department", "dept"]);
-  const position = profileFieldValue(profile, ["position", "job title", "title"]);
-  const phone = profileFieldValue(profile, ["phone", "mobile", "phone number"]);
-  const email = profileFieldValue(profile, ["email", "email address"]);
-  const employeeCode = profileFieldValue(profile, ["employee code", "employee id", "code"]);
-  const photoUrl = safeHttpUrl(profile?.photoUrl || profile?.profilePicture || profile?.profile_picture);
-  const files = (Array.isArray(profile?.filesMedia) ? profile.filesMedia : Array.isArray(profile?.files_media) ? profile.files_media : []).map((file) => ({
-    name: text(file?.name || file?.filename || file?.title) || "File",
-    url: safeHttpUrl(file?.url || file?.href),
-  }));
-  const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "U";
-  const subtitle = [position, department].filter(Boolean).join(" • ") || "Team member";
-  const details = [
-    ["Department", department], ["Position", position], ["Phone", phone], ["Email", email], ["Employee code", employeeCode],
-  ].filter(([, value]) => value);
-
-  return <div className="creator-profile-popover is-open next-review-creator-popover" style={{ left: state.left, top: state.top }} aria-hidden="false"><div className="creator-profile-window" role="dialog" aria-modal="false" aria-label="Created by profile">
-    <button type="button" className="creator-profile-close" onClick={onClose} aria-label="Close"><span className="creator-profile-close-x">×</span></button>
-    <div className="creator-profile-head"><div className={`creator-profile-avatar ${photoUrl ? "has-image" : ""}`}>{photoUrl ? <img src={photoUrl} alt={name}/> : <span>{initials}</span>}</div><div className="creator-profile-title-wrap"><div className="creator-profile-kicker">Created by</div><div className="creator-profile-name">{name}</div><div className="creator-profile-subtitle">{subtitle}</div></div></div>
-    {state.loading ? <div className="creator-profile-state"><span>Loading user details...</span></div> : state.error ? <div className="creator-profile-state creator-profile-state--error"><span>Could not load this user details.</span></div> : <>
-      <div className="creator-profile-section-title">Profile details</div>
-      {details.length ? <div className="creator-profile-fields next-review-creator-fields">{details.map(([label, value]) => <div className="creator-profile-field" key={label}><span>{label}</span><strong>{value}</strong></div>)}</div> : <div className="creator-profile-empty creator-profile-empty--fields"><span>No profile details available.</span></div>}
-      <div className="creator-profile-section-title creator-profile-section-title--files">Files &amp; media</div>
-      {files.length ? <div className="creator-profile-files">{files.map((file, index) => file.url ? <a className="creator-profile-file" href={file.url} target="_blank" rel="noopener noreferrer" key={`${file.name}-${index}`}><span className="creator-profile-file-icon"><ClassicOrderIcon name="clipboard" /></span><span className="creator-profile-file-body"><span className="creator-profile-file-name">{file.name}</span></span><span className="creator-profile-file-open"><ClassicOrderIcon name="external-link" /></span></a> : <div className="creator-profile-file creator-profile-file--disabled" key={`${file.name}-${index}`}><span className="creator-profile-file-icon"><ClassicOrderIcon name="clipboard" /></span><span className="creator-profile-file-body"><span className="creator-profile-file-name">{file.name}</span></span></div>)}</div> : <div className="creator-profile-empty"><span>No files or media.</span></div>}
-    </>}
-  </div></div>;
-}
 export default function OrdersReviewClient({ initialOrders = [], initialPageInfo = null, bootstrapWarnings = [] }) {
   const [orders, setOrders] = useState(Array.isArray(initialOrders) ? initialOrders : []);
   const [pageInfo, setPageInfo] = useState(initialPageInfo || { hasMore: false, nextCursor: null, limit: 36 });
@@ -746,6 +450,7 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
     });
   }
   async function openReviewDetails(group, { force = false } = {}) {
+    void loadOrdersReviewHeavyModals();
     if (!group?.key) return;
     setSelectedKey(group.key);
     setDetailError("");
@@ -905,6 +610,7 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
     } catch (error) { setEditorError(error?.message || "Review decisions could not be updated."); } finally { setEditorBusy(false); }
   }
   async function openCreatorProfile(anchor, group) {
+    void loadOrdersReviewHeavyModals();
     const rect = anchor.getBoundingClientRect();
     const width = Math.min(330, window.innerWidth - 28);
     const estimatedHeight = Math.min(500, Math.max(240, window.innerHeight - 28));
@@ -977,12 +683,43 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
 
     <section className="orders-review-list-surface" id="sv-orders"><div className="co-cards" id="sv-list">{visibleGroups.length ? visibleGroups.map((group) => <OrderReviewCard group={group} activeTab={tab} onOpen={openReviewDetails} onCreator={openCreatorProfile} key={group.key}/>) : listLoading ? <div className="ops-no-data-state" role="status" aria-live="polite"><div className="ops-no-data-state__text">Loading orders…</div></div> : <div className="ops-no-data-state" role="status" aria-live="polite"><img className="ops-no-data-state__image" src="/next/images/no-data-illustration.png" alt="" loading="lazy"/><div className="ops-no-data-state__text">Sorry, No data available</div></div>}</div>{pageInfo?.hasMore ? <div style={{ display: "flex", justifyContent: "center", padding: "16px 0 4px" }}><button type="button" className="ro-action-btn ro-action-btn--light" disabled={listLoading} onClick={() => fetchReviewPage({ reset: false }).catch((error) => showNotice(error?.message || "Failed to load more orders."))}>{listLoading ? "Loading…" : "Load more orders"}</button></div> : null}</section>
 
-    {selectedKey && !selected ? <ReviewDetailsLoadState group={selectedSummary} loading={detailLoadingKey === selectedKey} error={detailError} onRetry={() => selectedSummary && openReviewDetails(selectedSummary, { force: true })} onClose={closeReviewDetails}/> : null}
-    <ReviewDetailsModal group={selected} activeTab={tab} busyIds={busyIds} onClose={closeReviewDetails} onQuantitySave={saveQuantity} onDecision={beginDecision} onBulkDecision={beginBulkDecision} onPasswordAction={beginPasswordAction} onReason={setReasonView} onExport={exportOrder}/>
-    <PasswordModal state={passwordState} busy={passwordBusy} error={passwordError} onCancel={() => { if (!passwordBusy) { setPasswordState(null); setPasswordError(""); } }} onSubmit={submitPasswordAction}/>
-    <RejectionModal state={rejectionState} busy={rejectionBusy} error={rejectionError} onCancel={() => { if (!rejectionBusy) { setRejectionState(null); setRejectionError(""); } }} onSubmit={submitRejection}/>
-    <ReviewEditorModal state={editorState} busy={editorBusy} error={editorError} onCancel={() => { if (!editorBusy) { setEditorState(null); setEditorError(""); } }} onSubmit={submitReviewEditor}/>
-    <RejectedReasonModal reason={reasonView} onClose={() => setReasonView("")}/>
-    <CreatorProfilePopover state={creatorState} onClose={() => setCreatorState(null)}/>
+    {(selectedKey || selected || passwordState || rejectionState || editorState || reasonView || creatorState) ? (
+      <OrdersReviewHeavyModals
+        selectedKey={selectedKey}
+        selected={selected}
+        selectedSummary={selectedSummary}
+        detailLoadingKey={detailLoadingKey}
+        detailError={detailError}
+        onRetryDetails={() => selectedSummary && openReviewDetails(selectedSummary, { force: true })}
+        onCloseDetails={closeReviewDetails}
+        tab={tab}
+        busyIds={busyIds}
+        onQuantitySave={saveQuantity}
+        onDecision={beginDecision}
+        onBulkDecision={beginBulkDecision}
+        onPasswordAction={beginPasswordAction}
+        onReason={setReasonView}
+        onExport={exportOrder}
+        passwordState={passwordState}
+        passwordBusy={passwordBusy}
+        passwordError={passwordError}
+        onCancelPassword={() => { if (!passwordBusy) { setPasswordState(null); setPasswordError(""); } }}
+        onSubmitPassword={submitPasswordAction}
+        rejectionState={rejectionState}
+        rejectionBusy={rejectionBusy}
+        rejectionError={rejectionError}
+        onCancelRejection={() => { if (!rejectionBusy) { setRejectionState(null); setRejectionError(""); } }}
+        onSubmitRejection={submitRejection}
+        editorState={editorState}
+        editorBusy={editorBusy}
+        editorError={editorError}
+        onCancelEditor={() => { if (!editorBusy) { setEditorState(null); setEditorError(""); } }}
+        onSubmitEditor={submitReviewEditor}
+        reasonView={reasonView}
+        onCloseReason={() => setReasonView("")}
+        creatorState={creatorState}
+        onCloseCreator={() => setCreatorState(null)}
+      />
+    ) : null}
   </section>;
 }
