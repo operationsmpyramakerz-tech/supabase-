@@ -4,6 +4,7 @@ import NotificationsClient from "../../components/notifications/NotificationsCli
 import { fetchDirectPageBootstrap } from "../../lib/page-bootstrap-direct";
 import { notificationsForMember } from "../../lib/notifications-data";
 import { getLegacyAccountGate } from "../../lib/products-auth";
+import { getDirectAccountGateFromSessionContext } from "../../lib/direct-session-account";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -40,18 +41,30 @@ function UnavailableState({ message }) {
 }
 
 export default async function NotificationsPage() {
-  // Validate the session in Next and read the user's saved notifications
-  // directly from Supabase. Notification generation/scanning is handled by the
-  // direct Next refresh route and never blocks the initial page render.
-  const gate = await getLegacyAccountGate([]);
-  if (gate.status === 401) redirect("/login?next=/next/notifications");
+  // Phase 52 performance: validate only the signed session first. Once the
+  // member id is known, refresh the account/profile and read notifications in
+  // parallel instead of serializing two independent Supabase reads.
+  const sessionGate = await getLegacyAccountGate([], { authOnly: true });
+  if (sessionGate.status === 401) redirect("/login?next=/next/notifications");
 
-  let account = gate.ok ? gate.account : null;
+  let gate = sessionGate;
+  let account = sessionGate.ok ? sessionGate.account : null;
   let notifications = null;
   const warnings = [];
 
-  if (gate.ok && gate.memberId) {
-    notifications = await notificationsForMember(gate.memberId, { limit: 80 }).catch(() => null);
+  if (sessionGate.ok && sessionGate.account && sessionGate.memberId) {
+    const [freshGate, notificationPayload] = await Promise.all([
+      getDirectAccountGateFromSessionContext(sessionGate, []).catch(() => null),
+      notificationsForMember(sessionGate.memberId, { limit: 80 }).catch(() => null),
+    ]);
+    if (freshGate) {
+      gate = freshGate;
+      account = freshGate.ok ? freshGate.account : null;
+    } else {
+      gate = { ...sessionGate, ok: false, status: 503, error: "The account profile service is temporarily unavailable." };
+      account = null;
+    }
+    notifications = notificationPayload;
   }
 
   // Deep recovery only. The normal route no longer depends on page-bootstrap.

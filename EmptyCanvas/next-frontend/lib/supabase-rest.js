@@ -223,9 +223,12 @@ export async function selectAll(table, { limit = 1000, order = "", select: selec
 }
 
 export async function selectById(table, id, options = {}) {
+  const selectExpr = String(options?.select || "*").trim() || "*";
+  const requestOptions = { ...(options || {}) };
+  delete requestOptions.select;
   const rows = await supabaseRequest(
-    `/${encodeTableName(table)}?select=*&id=eq.${encodeFilterValue(id)}&limit=1`,
-    options,
+    `/${encodeTableName(table)}?select=${encodeURIComponent(selectExpr)}&id=eq.${encodeFilterValue(id)}&limit=1`,
+    requestOptions,
   );
   return Array.isArray(rows) ? rows[0] || null : null;
 }

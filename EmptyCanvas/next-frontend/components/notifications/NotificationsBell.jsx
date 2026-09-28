@@ -11,6 +11,36 @@ import {
   notificationTone,
 } from "./notification-utils";
 
+const BELL_CACHE_KEY = "ops.notifications.bell-cache.v1";
+const BELL_CACHE_MAX_AGE_MS = 30_000;
+const BELL_REQUEST_MIN_INTERVAL_MS = 12_000;
+
+function readBellCache() {
+  if (typeof window === "undefined") return null;
+  try {
+    const cached = JSON.parse(window.sessionStorage.getItem(BELL_CACHE_KEY) || "null");
+    if (!cached || typeof cached !== "object") return null;
+    const savedAt = Number(cached.savedAt) || 0;
+    const items = Array.isArray(cached.items) ? cached.items : [];
+    const unreadCount = Number(cached.unreadCount) || 0;
+    if (!savedAt) return null;
+    return { savedAt, items, unreadCount };
+  } catch {
+    return null;
+  }
+}
+
+function writeBellCache(items = [], unreadCount = 0) {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(BELL_CACHE_KEY, JSON.stringify({
+      savedAt: Date.now(),
+      items: Array.isArray(items) ? items.slice(0, 12) : [],
+      unreadCount: Number(unreadCount) || 0,
+    }));
+  } catch {}
+}
+
 async function requestJson(url, options = {}) {
   const response = await fetch(url, {
     credentials: "include",
@@ -52,39 +82,72 @@ export default function NotificationsBell({ classic = false }) {
   const [error, setError] = useState("");
   const rootRef = useRef(null);
   const panelRef = useRef(null);
+  const lastLoadedAtRef = useRef(0);
+  const loadPromiseRef = useRef(null);
   const [panelStyle, setPanelStyle] = useState({});
 
   const preview = useMemo(() => items.slice(0, 7), [items]);
 
-  async function load({ quiet = false } = {}) {
+  async function load({ quiet = false, force = false } = {}) {
+    const now = Date.now();
+    if (!force && now - lastLoadedAtRef.current < BELL_REQUEST_MIN_INTERVAL_MS) return null;
+    if (loadPromiseRef.current) return await loadPromiseRef.current;
+
     if (!quiet) setLoading(true);
+    const pending = (async () => {
+      try {
+        const body = await requestJson(`/next/api/notifications?limit=12`);
+        const nextItems = Array.isArray(body?.items) ? body.items : [];
+        const nextUnread = Number(body?.unreadCount) || nextItems.filter((item) => !item?.read).length;
+        setItems(nextItems);
+        setUnreadCount(nextUnread);
+        lastLoadedAtRef.current = Date.now();
+        writeBellCache(nextItems, nextUnread);
+        setError("");
+
+        triggerBackgroundNotificationScan().then(async (response) => {
+          if (!response?.ok) return;
+          try {
+            const updated = await requestJson(`/next/api/notifications?limit=12&fresh=1`);
+            const updatedItems = Array.isArray(updated?.items) ? updated.items : [];
+            const updatedUnread = Number(updated?.unreadCount) || updatedItems.filter((item) => !item?.read).length;
+            setItems(updatedItems);
+            setUnreadCount(updatedUnread);
+            lastLoadedAtRef.current = Date.now();
+            writeBellCache(updatedItems, updatedUnread);
+          } catch {}
+        });
+        return body;
+      } catch (loadError) {
+        if (!quiet) setError(loadError.message || "Could not load notifications.");
+        return null;
+      } finally {
+        if (!quiet) setLoading(false);
+      }
+    })();
+
+    loadPromiseRef.current = pending;
     try {
-      const body = await requestJson(`/next/api/notifications?limit=12`);
-      const nextItems = Array.isArray(body?.items) ? body.items : [];
-      setItems(nextItems);
-      setUnreadCount(Number(body?.unreadCount) || nextItems.filter((item) => !item?.read).length);
-      setError("");
-      triggerBackgroundNotificationScan().then(async (response) => {
-        if (!response?.ok) return;
-        try {
-          const updated = await requestJson(`/next/api/notifications?limit=12&fresh=1`);
-          const updatedItems = Array.isArray(updated?.items) ? updated.items : [];
-          setItems(updatedItems);
-          setUnreadCount(Number(updated?.unreadCount) || updatedItems.filter((item) => !item?.read).length);
-        } catch {}
-      });
-    } catch (loadError) {
-      if (!quiet) setError(loadError.message || "Could not load notifications.");
+      return await pending;
     } finally {
-      if (!quiet) setLoading(false);
+      if (loadPromiseRef.current === pending) loadPromiseRef.current = null;
     }
   }
 
   useEffect(() => {
-    load();
+    const cached = readBellCache();
+    if (cached) {
+      setItems(cached.items);
+      setUnreadCount(cached.unreadCount);
+      lastLoadedAtRef.current = cached.savedAt;
+    }
+    if (!cached || Date.now() - cached.savedAt > BELL_CACHE_MAX_AGE_MS) {
+      load({ quiet: Boolean(cached) });
+    }
+
     const timer = window.setInterval(() => {
       if (document.visibilityState === "visible") load({ quiet: true });
-    }, 45000);
+    }, 60000);
     const onVisible = () => {
       if (document.visibilityState === "visible") load({ quiet: true });
     };
@@ -143,8 +206,11 @@ export default function NotificationsBell({ classic = false }) {
   async function markRead(item) {
     const id = notificationText(item?.id);
     if (!id || item?.read) return;
-    setItems((current) => current.map((row) => String(row?.id) === id ? { ...row, read: true } : row));
-    setUnreadCount((count) => Math.max(0, count - 1));
+    const nextItems = items.map((row) => String(row?.id) === id ? { ...row, read: true } : row);
+    const nextUnread = Math.max(0, unreadCount - 1);
+    setItems(nextItems);
+    setUnreadCount(nextUnread);
+    writeBellCache(nextItems, nextUnread);
     try {
       await requestJson("/next/api/notifications/read", {
         method: "POST",
@@ -159,8 +225,10 @@ export default function NotificationsBell({ classic = false }) {
     if (!unreadCount) return;
     const previous = items;
     const previousCount = unreadCount;
-    setItems((current) => current.map((item) => ({ ...item, read: true })));
+    const nextItems = items.map((item) => ({ ...item, read: true }));
+    setItems(nextItems);
     setUnreadCount(0);
+    writeBellCache(nextItems, 0);
     try {
       await requestJson("/next/api/notifications/read-all", {
         method: "POST",

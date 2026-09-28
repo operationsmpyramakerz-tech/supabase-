@@ -25,6 +25,52 @@ function ordersTable() {
   return text(process.env.SUPABASE_ORDERS_TABLE) || "orders";
 }
 
+
+const TRACKING_ROW_SELECT = [
+  "id",
+  "order_number",
+  "quantity_progress",
+  "quantity_requested",
+  "quantity_edited_by_supervisor",
+  "quantity_received_by_operations",
+  "quantity_remaining",
+  "status",
+  "order_type",
+  "sv_approval",
+  "team_member_name",
+  "team_member_id",
+  "person_received_by_operations",
+  "spare_parts_replaced",
+  "order_receipt",
+  "maintenance_receipt",
+  "source_proposal_id",
+  "source_proposal_name",
+  "source_kits",
+  "issue_description",
+  "reason",
+  "product_id",
+  "product_name",
+  "product_url",
+  "unit_price",
+  "serial_number",
+  "actual_issue_description",
+  "repair_action",
+  "resolution_method",
+  "operations_approval",
+  "rejected_reason",
+  "receipt_number",
+  "notion_created_time",
+  "created_at",
+  "updated_at",
+  "supervisor",
+  "product_tag",
+  "customize_id",
+  "kit_tag",
+  "kit_folder",
+].join(",");
+
+let trackingProjectionSupported = true;
+
 function accountUsername(account = {}) {
   return text(account?.username || account?.name);
 }
@@ -42,13 +88,43 @@ function visibleRow(row = {}, account = {}) {
 }
 
 async function rowsByOrderNumber(orderNumber, account) {
-  const rows = await select(ordersTable(), {
-    select: "*",
+  const params = {
     order_number: `eq.${Number(orderNumber)}`,
     order: "notion_created_time.desc,id.desc",
     limit: "500",
-  }, { profileName: "orders.tracking.rows" });
-  return (Array.isArray(rows) ? rows : []).filter((row) => visibleRow(row, account));
+  };
+  let rows = null;
+  if (trackingProjectionSupported) {
+    try {
+      rows = await select(ordersTable(), {
+        ...params,
+        select: TRACKING_ROW_SELECT,
+      }, { profileName: "orders.tracking.rows-compact" });
+    } catch {
+      trackingProjectionSupported = false;
+    }
+  }
+  if (!Array.isArray(rows)) {
+    rows = await select(ordersTable(), {
+      ...params,
+      select: "*",
+    }, { profileName: "orders.tracking.rows-fallback" });
+  }
+  return rows.filter((row) => visibleRow(row, account));
+}
+
+async function rowById(reference) {
+  if (trackingProjectionSupported) {
+    try {
+      return await selectById(ordersTable(), reference, {
+        select: TRACKING_ROW_SELECT,
+        profileName: "orders.tracking.row-compact",
+      });
+    } catch {
+      trackingProjectionSupported = false;
+    }
+  }
+  return await selectById(ordersTable(), reference, { profileName: "orders.tracking.row-fallback" });
 }
 
 async function enrichProducts(items = []) {
@@ -101,7 +177,7 @@ export async function loadOrderTracking({ account = {}, groupId = "" } = {}) {
   // then use its order_number to fetch the complete order group.
   if (!Number.isFinite(targetOrderNumber)) {
     try {
-      const row = await selectById(ordersTable(), cleanRef);
+      const row = await rowById(cleanRef);
       if (row && visibleRow(row, account)) {
         baseRow = row;
         const item = serializeOperationsOrderDetail(row);

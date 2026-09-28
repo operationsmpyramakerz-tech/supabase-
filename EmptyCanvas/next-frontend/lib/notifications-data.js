@@ -175,7 +175,7 @@ async function notificationStateGet(key) {
   if (!cleanKey) return null;
   try {
     const rows = await select(notificationStateTable(), {
-      select: "*",
+      select: "key,value,updated_at",
       key: `eq.${cleanKey}`,
       limit: "1",
     }, { profileName: "notifications.state-get" });
@@ -246,9 +246,36 @@ async function rowsEditedSince(table, afterIso, { limit = 3000 } = {}) {
 
 async function notificationUsers() {
   const [members, pages, accessRows] = await Promise.all([
-    selectAll(teamMembersTable(), { limit: 5000, order: "id.asc", profileName: "notifications.scan.members" }).catch(() => []),
-    selectAll("app_pages", { limit: 1000, order: "sort_order.asc", profileName: "notifications.scan.pages" }).catch(() => []),
-    selectAll("team_member_page_access", { limit: 5000, order: "team_member_id.asc", profileName: "notifications.scan.access" }).catch(() => []),
+    selectAll(teamMembersTable(), {
+      limit: 5000,
+      order: "id.asc",
+      select: "id,name,department,allowed_pages",
+      profileName: "notifications.scan.members-compact",
+    }).catch(() => selectAll(teamMembersTable(), {
+      limit: 5000,
+      order: "id.asc",
+      profileName: "notifications.scan.members-fallback",
+    }).catch(() => [])),
+    selectAll("app_pages", {
+      limit: 1000,
+      order: "sort_order.asc",
+      select: "id,page_name,page_key,route_path,sort_order",
+      profileName: "notifications.scan.pages-compact",
+    }).catch(() => selectAll("app_pages", {
+      limit: 1000,
+      order: "sort_order.asc",
+      profileName: "notifications.scan.pages-fallback",
+    }).catch(() => [])),
+    selectAll("team_member_page_access", {
+      limit: 5000,
+      order: "team_member_id.asc",
+      select: "team_member_id,page_id,is_enabled,access_level",
+      profileName: "notifications.scan.access-compact",
+    }).catch(() => selectAll("team_member_page_access", {
+      limit: 5000,
+      order: "team_member_id.asc",
+      profileName: "notifications.scan.access-fallback",
+    }).catch(() => [])),
   ]);
 
   const pagesById = new Map();
