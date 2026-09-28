@@ -137,7 +137,7 @@ function readJson(response) {
   return response.json().catch(() => null);
 }
 
-function postJson(url, body) {
+async function postJson(url, body) {
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -154,7 +154,7 @@ function postJson(url, body) {
   return data;
 }
 
-function saveMaintenanceChecklistItem(value) {
+async function saveMaintenanceChecklistItem(value) {
   const clean = text(value);
   if (!clean) throw new Error("Checklist text is required.");
   const response = await fetch(`${DIRECT_API_BASE}/orders/maintenance-checklist`, {
@@ -173,7 +173,7 @@ function saveMaintenanceChecklistItem(value) {
   return data?.item || null;
 }
 
-function updateMaintenanceChecklistItem(id, value) {
+async function updateMaintenanceChecklistItem(id, value) {
   const cleanId = text(id);
   const clean = text(value);
   if (!cleanId) throw new Error("Checklist item id is required.");
@@ -194,7 +194,7 @@ function updateMaintenanceChecklistItem(id, value) {
   return data?.item || null;
 }
 
-function deleteMaintenanceChecklistItem(id) {
+async function deleteMaintenanceChecklistItem(id) {
   const cleanId = text(id);
   if (!cleanId) throw new Error("Checklist item id is required.");
   const response = await fetch(`${DIRECT_API_BASE}/orders/maintenance-checklist`, {

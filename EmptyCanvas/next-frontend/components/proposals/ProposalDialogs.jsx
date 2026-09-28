@@ -68,7 +68,7 @@ function apiErrorMessage(body, fallback) {
   return text(body?.error || body?.message) || fallback;
 }
 
-function requestJson(url, options = {}) {
+async function requestJson(url, options = {}) {
   const response = await fetch(url, {
     credentials: "include",
     cache: "no-store",
