@@ -1,0 +1,1781 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
+import ClassicOrderIcon from "./ClassicOrderIcon";
+import { groupOrderItems, OrderGroupHeader, OrderSortButton } from "./OrderGrouping";
+import OrderComponentSearch, { matchesOrderComponentSearch } from "./OrderComponentSearch";
+
+const OrderDownloadModal = dynamic(() => import("./OrderDownloadModal"), { ssr: false });
+
+const DIRECT_API_BASE = "/next/api";
+
+const STATUS_COLORS = {
+  "under-supervision": { bg: "#FFEDD5", fg: "#9A3412", bd: "#FED7AA" },
+  approved: { bg: "#D1FAE5", fg: "#065F46", bd: "#A7F3D0" },
+  rejected: { bg: "#FEE2E2", fg: "#B91C1C", bd: "#FECACA" },
+  remaining: { bg: "#FEF3C7", fg: "#92400E", bd: "#FDE68A" },
+  received: { bg: "#DBEAFE", fg: "#1D4ED8", bd: "#BFDBFE" },
+  shipped: { bg: "#DBEAFE", fg: "#1D4ED8", bd: "#BFDBFE" },
+  delivered: { bg: "#D1FAE5", fg: "#065F46", bd: "#A7F3D0" },
+  arrived: { bg: "#D1FAE5", fg: "#065F46", bd: "#A7F3D0" },
+  archive: { bg: "#EDE9FE", fg: "#6D28D9", bd: "#DDD6FE" },
+  mixed: { bg: "#F3F4F6", fg: "#374151", bd: "#D1D5DB" },
+};
+
+const OPERATIONS_EXPORT_COLUMNS = [
+  ["idCode", "ID Code"],
+  ["component", "Component"],
+  ["qty", "Quantity"],
+  ["receivedQty", "Received Qty"],
+  ["remainingQty", "Remaining Qty"],
+  ["deliveredQty", "Delivered Qty"],
+  ["unit", "Unit Cost"],
+  ["total", "Total Cost"],
+];
+
+function text(value) {
+  return String(value ?? "").trim();
+}
+
+function lower(value) {
+  return text(value).toLowerCase();
+}
+
+function finite(value, fallback = 0) {
+  if (value === null || value === undefined || value === "") return fallback;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function roundQty(value) {
+  return Math.round(finite(value) * 1e6) / 1e6;
+}
+
+function dateValue(value) {
+  const date = new Date(value || 0);
+  return Number.isNaN(date.getTime()) ? new Date(0) : date;
+}
+
+function formatDate(value) {
+  const date = dateValue(value);
+  if (!date.getTime()) return "—";
+  return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric" }).format(date);
+}
+
+function formatMoney(value) {
+  return new Intl.NumberFormat("en-EG", {
+    style: "currency",
+    currency: "EGP",
+    maximumFractionDigits: 2,
+  }).format(finite(value));
+}
+
+function formatQuantity(value) {
+  const number = roundQty(value);
+  return Number.isInteger(number) ? String(number) : String(number);
+}
+
+function orderTypeKey(value) {
+  return lower(value).replace(/[^a-z0-9]/g, "");
+}
+
+function orderTypeMeta(value) {
+  const key = orderTypeKey(value);
+  if (key === "requestproducts") return { label: "Request Products", icon: "shopping-cart", bg: "#DCFCE7", fg: "#166534", bd: "#86EFAC" };
+  if (key === "withdrawproducts") return { label: "Withdraw Products", icon: "log-out", bg: "#FEE2E2", fg: "#B91C1C", bd: "#FECACA" };
+  if (key === "requestmaintenance") return { label: "Request Maintenance", icon: "tool", bg: "#FEF3C7", fg: "#92400E", bd: "#FDE68A" };
+  return { label: text(value) || "Order", icon: "package", bg: "#E5E7EB", fg: "#374151", bd: "#D1D5DB" };
+}
+
+function isMaintenance(value) {
+  return orderTypeKey(value) === "requestmaintenance";
+}
+
+function statusIndex(value) {
+  const status = lower(value).replace(/[_-]+/g, " ");
+  if (/(archive|archived)/.test(status)) return 5;
+  if (/(arrived|delivered|received)/.test(status)) return 4;
+  if (/(shipped|shipping|on the way|delivering|prepared)/.test(status)) return 3;
+  if (/(in progress|inprogress|progress|approved)/.test(status)) return 2;
+  return 1;
+}
+
+function approvalKey(value) {
+  const state = lower(value).replace(/[_.-]+/g, " ");
+  if (state.includes("reject")) return "rejected";
+  if (state.includes("approv")) return "approved";
+  return "not-started";
+}
+
+function itemRejectedReason(item) {
+  return text(item?.rejectedReason ?? item?.rejected_reason);
+}
+
+function itemDecision(item) {
+  const operations = approvalKey(item?.operationsApproval ?? item?.operations_approval);
+  const supervisor = approvalKey(item?.svApproval ?? item?.sv_approval);
+  if (operations === "rejected" || supervisor === "rejected" || itemRejectedReason(item)) return "rejected";
+  if (operations === "approved" || supervisor === "approved" || statusIndex(item?.status) === 2) return "approved";
+  return "not-started";
+}
+
+function requestedQuantity(item) {
+  const value = item?.quantityRequested ?? item?.quantity_requested ?? item?.quantity;
+  return roundQty(value);
+}
+
+function supervisorEditedQuantity(item) {
+  return item?.quantityEditedBySupervisor ?? item?.quantity_edited_by_supervisor ?? item?.quantityProgress ?? item?.quantity_progress;
+}
+
+function baseQuantity(item) {
+  const edited = supervisorEditedQuantity(item);
+  if (edited !== null && edited !== undefined && edited !== "") return roundQty(edited);
+  // The requested-orders API also exposes `quantity` as the effective quantity,
+  // so keep it as the legacy fallback when the original field is unavailable.
+  const original = item?.quantityRequested ?? item?.quantity_requested;
+  if (original !== null && original !== undefined && original !== "") return roundQty(original);
+  return roundQty(item?.quantity);
+}
+
+function receivedQuantity(item) {
+  const value = item?.quantityReceived ?? item?.quantity_received_by_operations;
+  if (value === null || value === undefined || value === "") return 0;
+  return roundQty(value);
+}
+
+function remainingQuantity(item) {
+  const base = baseQuantity(item);
+  const received = receivedQuantity(item);
+  const storedRaw = item?.quantityRemaining ?? item?.quantity_remaining;
+  const stored = storedRaw === null || storedRaw === undefined || storedRaw === "" ? null : roundQty(storedRaw);
+  const edited = Boolean(item?.quantityReceivedEdited ?? item?.quantity_received_edited);
+  if (stored !== null) {
+    if (!edited && Math.abs(base) > 1e-9 && Math.abs(received) < 1e-9 && Math.abs(stored) < 1e-9) return base;
+    return stored;
+  }
+  return roundQty(base - received);
+}
+
+function deliveredQuantity(item) {
+  const explicit = item?.deliveredQty ?? item?.quantityDelivered ?? item?.quantity_delivered;
+  if (explicit !== null && explicit !== undefined && explicit !== "") return roundQty(explicit);
+  return /(arrived|delivered|received)/i.test(text(item?.status)) ? receivedQuantity(item) : 0;
+}
+
+function effectiveQuantity(item) {
+  return baseQuantity(item);
+}
+
+function itemTotal(item) {
+  return Math.abs(effectiveQuantity(item)) * Math.abs(finite(item?.unitPrice ?? item?.unit_price ?? item?.price));
+}
+
+function splitNames(value) {
+  if (Array.isArray(value)) return value.map(text).filter(Boolean);
+  return text(value).split(/[,\n]+/).map((item) => item.trim()).filter(Boolean);
+}
+
+function normalizeSpareEntries(item = {}) {
+  const entries = [];
+  const seen = new Set();
+  const add = (entry = {}) => {
+    const id = text(entry?.id ?? entry?.productId ?? entry?.sparePartId);
+    let name = text(entry?.name ?? entry?.label ?? entry?.component ?? entry?.sparePartName);
+    let qty = Number(entry?.qty ?? entry?.quantity ?? 1);
+    if (!Number.isFinite(qty) || qty <= 0) qty = 1;
+    qty = Math.max(1, Math.round(qty));
+    const qtyMatch = name.match(/(?:\s*[x×]\s*|\s*\(\s*qty\s*:?\s*)(\d+(?:\.\d+)?)\s*\)?\s*$/i);
+    if (qtyMatch) {
+      const parsed = Number(qtyMatch[1]);
+      if (Number.isFinite(parsed) && parsed > 0) qty = Math.max(1, Math.round(parsed));
+      name = name.slice(0, qtyMatch.index).trim();
+    }
+    const key = `${id || lower(name)}|${qty}`;
+    if ((!id && !name) || seen.has(key)) return;
+    seen.add(key);
+    entries.push({ id, name, qty });
+  };
+
+  if (Array.isArray(item?.sparePartsReplacedEntries)) item.sparePartsReplacedEntries.forEach(add);
+  if (!entries.length) {
+    const ids = splitNames(item?.sparePartsReplacedIds?.length ? item.sparePartsReplacedIds : item?.sparePartsReplacedId);
+    const names = splitNames(item?.sparePartsReplacedNames?.length ? item.sparePartsReplacedNames : item?.sparePartsReplacedName);
+    if (ids.length) ids.forEach((id, index) => add({ id, name: names[index] || "" }));
+    else names.forEach((name) => add({ name }));
+  }
+  return entries;
+}
+
+function maintenanceIssueText(item = {}) {
+  return text(item?.issueDescription ?? item?.reason) || "—";
+}
+
+function visibleIssueDescription(item = {}) {
+  const value = text(item?.issueDescription);
+  if (/^created from proposal:/i.test(value)) return "";
+  return value;
+}
+
+function groupKey(item, index) {
+  const number = Number(item?.orderIdNumber);
+  if (Number.isFinite(number)) return `order:${number}`;
+  const direct = text(item?.orderId);
+  if (direct && direct !== `ORD-${text(item?.id)}`) return `order:${direct}`;
+  const date = text(item?.createdTime).slice(0, 16);
+  const owner = lower(item?.createdByName ?? item?.teamMemberId);
+  const reason = lower(item?.reason);
+  const fallback = `${date}|${owner}|${reason}`;
+  return fallback.replace(/\|/g, "") ? fallback : `row:${text(item?.id) || index}`;
+}
+
+function orderIdLabel(items) {
+  const explicit = [...new Set(items.map((item) => text(item?.orderId)).filter(Boolean))];
+  if (explicit.length === 1) return explicit[0];
+  const numbers = [...new Set(items.map((item) => Number(item?.orderIdNumber)).filter(Number.isFinite))].sort((a, b) => a - b);
+  if (numbers.length === 1) return `ORD-${numbers[0]}`;
+  if (numbers.length > 1) return `ORD-${numbers[0]} : ORD-${numbers[numbers.length - 1]}`;
+  if (explicit.length > 1) return `${explicit[0]} : ${explicit[explicit.length - 1]}`;
+  return "Order";
+}
+
+function receiptEntriesFromItem(item) {
+  const entries = [];
+  const direct = Array.isArray(item?.orderReceiptEntries) ? item.orderReceiptEntries : [];
+  direct.forEach((entry) => {
+    const url = text(entry?.url ?? entry?.rawUrl ?? entry?.raw);
+    const name = text(entry?.name ?? entry?.filename) || "Receipt photo";
+    if (url) entries.push({ name, url });
+  });
+  const urls = Array.isArray(item?.orderReceiptUrls) ? item.orderReceiptUrls : [item?.orderReceiptUrl];
+  const names = Array.isArray(item?.orderReceiptNames) ? item.orderReceiptNames : [item?.orderReceiptName];
+  urls.filter(Boolean).forEach((url, index) => entries.push({ name: text(names[index]) || `Receipt photo ${index + 1}`, url: text(url) }));
+  return entries;
+}
+
+function buildGroups(rows) {
+  const sorted = [...(Array.isArray(rows) ? rows : [])].sort((a, b) => dateValue(b?.createdTime) - dateValue(a?.createdTime));
+  const map = new Map();
+
+  sorted.forEach((item, index) => {
+    const key = groupKey(item, index);
+    if (!map.has(key)) {
+      map.set(key, {
+        key,
+        items: [],
+        latestCreated: item?.createdTime,
+        orderType: item?.orderType,
+        orderTypeColor: item?.orderTypeColor,
+        createdByName: item?.createdByName,
+        createdById: item?.createdById ?? item?.teamMemberId,
+      });
+    }
+    const group = map.get(key);
+    group.items.push(item);
+    if (dateValue(item?.createdTime) > dateValue(group.latestCreated)) group.latestCreated = item?.createdTime;
+    if (!group.orderType && item?.orderType) group.orderType = item.orderType;
+    if (!group.orderTypeColor && item?.orderTypeColor) group.orderTypeColor = item.orderTypeColor;
+    if (!group.createdByName && item?.createdByName) group.createdByName = item.createdByName;
+    if (!group.createdById && (item?.createdById ?? item?.teamMemberId)) group.createdById = item?.createdById ?? item?.teamMemberId;
+  });
+
+  return [...map.values()].map((group) => {
+    const reasons = group.items.map((item) => text(item?.reason)).filter(Boolean);
+    const counts = reasons.reduce((acc, reason) => acc.set(reason, (acc.get(reason) || 0) + 1), new Map());
+    const reason = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "No reason";
+    const summaryItem = group.items.find((item) => item?._summaryCard);
+    const stage = summaryItem ? (Number(summaryItem._groupStage) || statusIndex(summaryItem.status)) : Math.max(...group.items.map((item) => statusIndex(item?.status)), 1);
+    const decisions = group.items.map(itemDecision);
+    const hasApproved = summaryItem ? Boolean(summaryItem._groupHasApproved) : decisions.includes("approved");
+    const hasRejected = summaryItem ? Boolean(summaryItem._groupHasRejected) : decisions.includes("rejected");
+    const hasRemaining = summaryItem ? Boolean(summaryItem._groupHasRemaining) : group.items.some((item) => Math.abs(remainingQuantity(item)) > 1e-9);
+    const hasReceived = summaryItem ? Boolean(summaryItem._groupHasReceived) : group.items.some((item) => Math.abs(receivedQuantity(item)) > 1e-9);
+    const receiptEntries = [];
+    const receiptSeen = new Set();
+    group.items.flatMap(receiptEntriesFromItem).forEach((entry) => {
+      const key = `${entry.url}|${entry.name}`;
+      if (!receiptSeen.has(key)) {
+        receiptSeen.add(key);
+        receiptEntries.push(entry);
+      }
+    });
+    const rejectedReasons = [...new Set(group.items.map(itemRejectedReason).filter(Boolean))];
+    const operationsNames = [...new Set(group.items.map((item) => text(item?.operationsByName)).filter(Boolean))];
+    const receiptNumbers = [...new Set(group.items.flatMap((item) => text(item?.receiptNumber).split(/[\n,]+/)).map((item) => item.trim()).filter(Boolean))];
+
+    let state = "under-supervision";
+    if (stage >= 5) state = "archive";
+    else if (stage >= 4) state = "delivered";
+    else if (stage >= 3) state = hasRemaining && !isMaintenance(group.orderType) ? "remaining" : "received";
+    else if (hasRejected) state = "rejected";
+    else if (hasApproved) state = "approved";
+
+    return {
+      ...group,
+      reason,
+      stage,
+      state,
+      hasApproved,
+      hasRejected,
+      hasRemaining,
+      hasReceived,
+      orderIdLabel: orderIdLabel(group.items),
+      orderIds: [...new Set(group.items.flatMap((item) => Array.isArray(item?.orderIds) && item.orderIds.length ? item.orderIds : [item?.id]).map(text).filter(Boolean))],
+      total: group.items.reduce((sum, item) => sum + itemTotal(item), 0),
+      receivedTotal: group.items.reduce((sum, item) => sum + Math.abs(receivedQuantity(item)) * Math.abs(finite(item?.unitPrice)), 0),
+      remainingTotal: group.items.reduce((sum, item) => sum + Math.abs(remainingQuantity(item)) * Math.abs(finite(item?.unitPrice)), 0),
+      rejectedReason: rejectedReasons.join("\n"),
+      operationsByName: operationsNames.length === 1 ? operationsNames[0] : operationsNames.length ? "Multiple" : "",
+      receiptNumber: receiptNumbers.join(", "),
+      receiptEntries,
+    };
+  }).sort((a, b) => dateValue(b.latestCreated) - dateValue(a.latestCreated));
+}
+
+function groupMatchesTab(group, tab) {
+  if (tab === "all") return group.stage < 5;
+  if (tab === "archive") return group.stage >= 5;
+  if (tab === "delivered") return group.stage === 4;
+  if (tab === "remaining") return group.stage === 3 && !isMaintenance(group.orderType) && group.hasRemaining;
+  if (tab === "received") return group.stage === 3 && (isMaintenance(group.orderType) || group.hasReceived);
+  if (tab === "approved") return group.stage === 2 && group.hasApproved;
+  if (tab === "rejected") return group.stage === 2 && group.hasRejected;
+  return false;
+}
+
+
+function groupsForTab(groups, orders, tab) {
+  if (tab === "approved" || tab === "rejected") {
+    const scopedRows = (Array.isArray(orders) ? orders : []).filter((item) => statusIndex(item?.status) === 2 && itemDecision(item) === tab);
+    return buildGroups(scopedRows);
+  }
+  return groups.filter((group) => groupMatchesTab(group, tab));
+}
+
+function itemsForOperationsTab(items, tab) {
+  const source = Array.isArray(items) ? items : [];
+  if (tab === "remaining") return source.filter((item) => Math.abs(remainingQuantity(item)) > 1e-9);
+  if (tab === "received") return source.filter((item) => Math.abs(receivedQuantity(item)) > 1e-9);
+  return source;
+}
+
+
+function splitOrderDisplayQuantity(value, breakdown = []) {
+  const sources = Array.isArray(breakdown) ? breakdown : [];
+  const total = roundQty(value);
+  if (!sources.length || Math.abs(total) < 1e-9) return sources.map(() => 0);
+  if (sources.length === 1) return [total];
+
+  const sign = total < 0 ? -1 : 1;
+  const target = Math.max(0, Math.round(Math.abs(total)));
+  const weights = sources.map((source) => Math.max(0, finite(source?.quantity)));
+  const weightTotal = weights.reduce((sum, weight) => sum + weight, 0);
+  if (weightTotal <= 0) return sources.map((_, index) => index === 0 ? total : 0);
+
+  const parts = weights.map((weight, index) => {
+    const raw = (weight * target) / weightTotal;
+    const base = Math.floor(raw);
+    return { index, value: base, fraction: raw - base };
+  });
+  let remaining = target - parts.reduce((sum, part) => sum + part.value, 0);
+  const ranked = parts.slice().sort((a, b) => (b.fraction - a.fraction) || (a.index - b.index));
+  for (let i = 0; remaining > 0 && ranked.length; i = (i + 1) % ranked.length) {
+    ranked[i].value += 1;
+    remaining -= 1;
+  }
+  return parts.sort((a, b) => a.index - b.index).map((part) => sign * part.value);
+}
+
+function expandOrderItemsForDisplay(items = []) {
+  const out = [];
+  for (const item of Array.isArray(items) ? items : []) {
+    const breakdown = (Array.isArray(item?.sourceBreakdown) ? item.sourceBreakdown : [])
+      .filter((source) => Math.abs(finite(source?.quantity)) > 1e-9);
+    if (breakdown.length <= 1) {
+      out.push(item);
+      continue;
+    }
+
+    const requestedParts = splitOrderDisplayQuantity(requestedQuantity(item), breakdown);
+    const baseParts = splitOrderDisplayQuantity(baseQuantity(item), breakdown);
+    const receivedParts = splitOrderDisplayQuantity(receivedQuantity(item), breakdown);
+    const remainingParts = splitOrderDisplayQuantity(remainingQuantity(item), breakdown);
+    const itemId = text(item?.id) || "item";
+
+    breakdown.forEach((source, sourceIndex) => {
+      out.push({
+        ...item,
+        _displayKey: `${itemId}:${text(source?.kitId) || text(source?.kitTag) || sourceIndex}:${sourceIndex}`,
+        _displaySourceIndex: sourceIndex,
+        _displaySourceCount: breakdown.length,
+        sourceBreakdown: [source],
+        kitTag: text(source?.kitTag) || text(item?.kitTag) || "Unassigned kit",
+        kitFolderName: text(source?.kitFolderName) || text(item?.kitFolderName) || "Unfiled Kits",
+        quantity: baseParts[sourceIndex] ?? 0,
+        quantityRequested: requestedParts[sourceIndex] ?? 0,
+        quantityProgress: baseParts[sourceIndex] ?? 0,
+        quantityEditedBySupervisor: baseParts[sourceIndex] ?? 0,
+        quantityReceived: receivedParts[sourceIndex] ?? 0,
+        quantityRemaining: remainingParts[sourceIndex] ?? 0,
+      });
+    });
+  }
+  return out;
+}
+
+function groupSearchText(group) {
+  return [
+    group.orderIdLabel,
+    group.reason,
+    group.createdByName,
+    group.orderType,
+    group.operationsByName,
+    group.receiptNumber,
+    group.rejectedReason,
+    ...group.items.flatMap((item) => [item?.productName, item?.reason, item?.issueDescription, item?.actualIssueDescription, item?.repairAction, item?.resolutionMethod]),
+  ].map(lower).join(" ");
+}
+
+function statusLabel(group) {
+  if (group.stage >= 5) return "Archive";
+  if (group.stage >= 4) return "Delivered";
+  if (group.stage >= 3) return group.hasRemaining && !isMaintenance(group.orderType) ? "Remaining" : "Shipping";
+  if (group.hasRejected && group.hasApproved) return "Mixed review";
+  if (group.hasRejected) return "Rejected";
+  if (group.hasApproved) return "Approved";
+  return "Under Supervision";
+}
+
+function statusClass(group) {
+  if (group.stage >= 5) return "status-archive";
+  if (group.stage >= 4) return "status-arrived";
+  if (group.stage >= 3) return group.hasRemaining && !isMaintenance(group.orderType) ? "status-remaining" : "status-shipped";
+  if (group.hasRejected && group.hasApproved) return "status-mixed";
+  if (group.hasRejected) return "status-rejected";
+  if (group.hasApproved) return "status-approved";
+  return "status-under-supervision";
+}
+
+function itemStatus(item) {
+  const stage = statusIndex(item?.status);
+  if (stage >= 5) return { label: "Archive", className: "status-archive" };
+  if (stage >= 4) return { label: "Delivered", className: "status-arrived" };
+  if (stage >= 3) return { label: "Shipping", className: "status-shipped" };
+  const decision = itemDecision(item);
+  if (decision === "rejected") return { label: "Rejected", className: "status-rejected" };
+  if (decision === "approved") return { label: "Approved", className: "status-approved" };
+  return { label: "Under Supervision", className: "status-under-supervision" };
+}
+
+async function readJson(response) {
+  return response.json().catch(() => ({}));
+}
+
+async function postJson(url, body) {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    cache: "no-store",
+    body: JSON.stringify(body || {}),
+  });
+  const data = await readJson(response);
+  if (response.status === 401) {
+    const message = text(data?.error) || "Unauthorized request.";
+    if (/password/i.test(message)) throw new Error(message);
+    window.location.href = "/login?next=/next/operations-orders";
+    throw new Error("Your session has expired.");
+  }
+  if (!response.ok) {
+    const syncDetail = Array.isArray(data?.stocktakingSyncErrors)
+      ? text(data.stocktakingSyncErrors.find((item) => text(item?.message))?.message)
+      : "";
+    const baseMessage = text(data?.error) || "The operation could not be completed.";
+    throw new Error(syncDetail ? `${baseMessage} ${syncDetail}` : baseMessage);
+  }
+  return data;
+}
+
+
+function Progress({ stage }) {
+  const icons = ["eye", "activity", "truck", "home"];
+  const safe = Math.min(4, Math.max(1, stage >= 5 ? 4 : stage));
+  return (
+    <div className="co-track-pill" role="img" aria-label="Order progress">
+      {icons.map((icon, index) => {
+        const step = index + 1;
+        return <span className="next-classic-track-fragment" key={icon}><span className={`co-track-step ${step <= safe ? "is-active" : ""} ${step === safe ? "is-current" : ""}`}><ClassicOrderIcon name={icon} /></span>{step < 4 ? <span className={`co-track-conn ${step < safe ? "is-active" : ""}`} /> : null}</span>;
+      })}
+    </div>
+  );
+}
+
+function OrderModal({ group, tab, busy, onClose, onAction, onExport, editMode, onPatchEditItem, onUpsertEditAddition, onSaveEdit, onCancelEdit }) {
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [downloadOpen, setDownloadOpen] = useState(false);
+  const [sortMode, setSortMode] = useState("product-tag");
+  const [componentSearch, setComponentSearch] = useState("");
+  const [editItemState, setEditItemState] = useState(null);
+  const moreRef = useRef(null);
+  // Keep Edit mode on exactly the same grouping/sort the user was viewing
+  // before opening the admin edit flow. The edit UI hides the Sort control,
+  // so its grouping must not drift while the order switches into Edit mode.
+  const editSortModeRef = useRef("product-tag");
+
+  useEffect(() => {
+    if (!group) return undefined;
+    document.body.classList.add("co-modal-open");
+    const onKey = (event) => {
+      if (event.key !== "Escape") return;
+      if (editItemState) {
+        setEditItemState(null);
+        return;
+      }
+      if (downloadOpen || moreOpen) {
+        setDownloadOpen(false);
+        setMoreOpen(false);
+        return;
+      }
+      if (editMode) return;
+      onClose();
+    };
+    const onPointerDown = (event) => {
+      if (moreOpen && moreRef.current && !moreRef.current.contains(event.target)) setMoreOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => {
+      document.body.classList.remove("co-modal-open");
+      window.removeEventListener("keydown", onKey);
+      document.removeEventListener("pointerdown", onPointerDown);
+    };
+  }, [group, onClose, moreOpen, downloadOpen, editMode, editItemState]);
+
+  useEffect(() => {
+    setMoreOpen(false);
+    setDownloadOpen(false);
+    setSortMode("product-tag");
+    setComponentSearch("");
+    setEditItemState(null);
+  }, [group?.key, tab]);
+
+  if (!group) return null;
+  const maintenance = isMaintenance(group.orderType);
+  const type = orderTypeMeta(group.orderType);
+  const archived = group.stage >= 5;
+  const delivered = group.stage === 4;
+  const shipping = group.stage === 3;
+
+  const canReceive = !maintenance && (
+    (tab === "approved" && group.stage === 2 && group.hasApproved)
+    || (tab === "remaining" && group.stage === 3 && group.hasRemaining)
+  );
+  const canRejectComponents = tab === "approved" && group.stage === 2 && !maintenance;
+  const canDeliver = tab === "received" && shipping;
+  const canCreateWithdrawal = tab === "delivered" && delivered && orderTypeKey(group.orderType) === "requestproducts";
+  const canCreateDelivery = tab === "delivered" && delivered && orderTypeKey(group.orderType) === "withdrawproducts";
+  const showDownload = !(maintenance && tab === "approved");
+  const isEditing = Boolean(editMode && editMode.groupKey === group.key);
+  const editItemsById = editMode?.itemsById || {};
+  const editChanges = editMode?.changes || {};
+  const applyEditDraft = (item) => {
+    const id = text(item?.id);
+    const displayKey = text(item?._displayKey) || id;
+    const serverItem = editItemsById[id] || {};
+    const patch = editChanges[displayKey] || editChanges[id] || {};
+    if (!id || (!Object.keys(serverItem).length && !Object.keys(patch).length)) return item;
+
+    // Proposal-generated orders can persist one database row for a component that
+    // belongs to multiple kits. The normal order view expands that row into one
+    // visible line per kit. In Edit mode those visible lines must keep their own
+    // quantities instead of being replaced by the aggregate quantity returned by
+    // edit/init for the shared database row.
+    const splitDisplay = Number(item?._displaySourceCount || 0) > 1;
+    const requestedQty = patch.requestedQty ?? (splitDisplay ? item?.quantityRequested : (serverItem.requestedQty ?? item?.quantityRequested));
+    const receivedQty = patch.receivedQty ?? (splitDisplay ? item?.quantityReceived : (serverItem.receivedQty ?? item?.quantityReceived));
+    const remainingQty = patch.remainingQty ?? (splitDisplay ? item?.quantityRemaining : (serverItem.remainingQty ?? item?.quantityRemaining));
+    const effectiveStatus = patch.status ?? serverItem.status ?? item?.status;
+    const deliveredQty = patch.deliveredQty ?? (splitDisplay
+      ? (/(arrived|delivered|received)/i.test(text(effectiveStatus)) ? roundQty(receivedQty) : 0)
+      : (serverItem.deliveredQty ?? deliveredQuantity(item)));
+    return {
+      ...item,
+      ...serverItem,
+      ...patch,
+      // The edit/init endpoint returns the raw persisted order row. The normal
+      // Operations Orders view is already enriched with the proposal/kit
+      // grouping metadata used by the Sort menu. Keep that presentation
+      // identity from the currently displayed row so simply entering Edit mode
+      // cannot move a component to another kit/product group. Explicit edits
+      // still win through `patch`.
+      _displayKey: item?._displayKey,
+      _displaySourceIndex: item?._displaySourceIndex,
+      _displaySourceCount: item?._displaySourceCount,
+      productName: patch.productName ?? item?.productName ?? serverItem.productName,
+      productUrl: patch.productUrl ?? item?.productUrl ?? serverItem.productUrl,
+      unitPrice: patch.unitPrice ?? serverItem.unitPrice ?? item?.unitPrice,
+      productTag: patch.productTag ?? item?.productTag ?? serverItem.productTag,
+      productTags: patch.productTag
+        ? [patch.productTag]
+        : (Array.isArray(item?.productTags) ? item.productTags : serverItem.productTags),
+      kitTag: patch.kitTag ?? item?.kitTag ?? serverItem.kitTag,
+      kitFolderName: item?.kitFolderName ?? serverItem.kitFolderName,
+      kitTags: Array.isArray(item?.kitTags) ? item.kitTags : serverItem.kitTags,
+      kitMemberships: Array.isArray(item?.kitMemberships) ? item.kitMemberships : serverItem.kitMemberships,
+      sourceKits: Array.isArray(item?.sourceKits) ? item.sourceKits : serverItem.sourceKits,
+      sourceBreakdown: Array.isArray(item?.sourceBreakdown) ? item.sourceBreakdown : serverItem.sourceBreakdown,
+      status: patch.status ?? serverItem.status ?? item?.status,
+      // Keep both API-style aliases and the normalized display fields scoped to
+      // this visible kit row. `serverItem` contains the aggregate values for the
+      // shared database row, so leaving requestedQty/receivedQty/etc. untouched
+      // makes the Edit component modal show the sum of all kit memberships.
+      requestedQty,
+      receivedQty,
+      remainingQty,
+      deliveredQty,
+      quantityRequested: requestedQty,
+      quantity: requestedQty,
+      quantityProgress: null,
+      quantityEditedBySupervisor: null,
+      quantityReceived: receivedQty,
+      quantityRemaining: remainingQty,
+      quantityReceivedEdited: true,
+    };
+  };
+  const baseTabItems = itemsForOperationsTab(group.items, tab).map(applyEditDraft);
+  const editAdditions = isEditing
+    ? (Array.isArray(editMode?.additions) ? editMode.additions : []).map((addition, index) => {
+        const draftKey = text(addition?.draftKey) || `new-${index + 1}`;
+        const requestedQty = roundQty(Number(addition?.requestedQty) || 0);
+        const receivedQty = roundQty(Number(addition?.receivedQty) || 0);
+        const remainingQty = roundQty(Number(addition?.remainingQty ?? (requestedQty - receivedQty)) || 0);
+        const deliveredQty = roundQty(Number(addition?.deliveredQty) || 0);
+        return {
+          ...addition,
+          id: `draft:${draftKey}`,
+          _displayKey: `draft:${draftKey}`,
+          _draftKey: draftKey,
+          _isNew: true,
+          quantityRequested: requestedQty,
+          quantity: requestedQty,
+          quantityProgress: requestedQty,
+          quantityReceived: receivedQty,
+          quantityRemaining: remainingQty,
+          quantityReceivedEdited: true,
+          deliveredQty,
+          productTags: text(addition?.productTag) ? [text(addition.productTag)] : [],
+          sourceKits: [],
+          sourceBreakdown: [],
+        };
+      })
+    : [];
+  const tabItems = isEditing ? [...baseTabItems, ...editAdditions] : baseTabItems;
+  const displayTabItems = expandOrderItemsForDisplay(tabItems).map(applyEditDraft);
+  const searchedDisplayItems = componentSearch.trim()
+    ? displayTabItems.filter((item) => matchesOrderComponentSearch(item, componentSearch))
+    : displayTabItems;
+  const effectiveSortMode = isEditing ? editSortModeRef.current : sortMode;
+  const groupedItems = groupOrderItems(searchedDisplayItems, effectiveSortMode);
+
+  const menuAction = (action) => {
+    if (action === "edit") editSortModeRef.current = sortMode;
+    setMoreOpen(false);
+    onAction(action, group);
+  };
+
+  const exportActionGroup = {
+    ...group,
+    items: tabItems,
+    orderIds: tabItems.map((item) => text(item?.id)).filter(Boolean),
+  };
+  const exportAction = (options) => onExport({ ...options, sortMode }, exportActionGroup, tab);
+  const receiveActionGroup = tab === "remaining"
+    ? {
+        ...group,
+        items: tabItems,
+        orderIds: tabItems.map((item) => text(item?.id)).filter(Boolean),
+      }
+    : group;
+
+  const renderItem = (item, index) => {
+    const base = baseQuantity(item);
+    const received = receivedQuantity(item);
+    const remaining = remainingQuantity(item);
+    const stage = statusIndex(item?.status);
+    const state = tab === "remaining"
+      ? { label: "Remaining", className: "status-remaining" }
+      : tab === "received" && stage === 3
+        ? { label: "Shipping", className: "status-shipped" }
+        : tab === "all" && stage === 3 && !maintenance && Math.abs(remaining) > 1e-9
+          ? { label: "Remaining", className: "status-remaining" }
+          : itemStatus(item);
+    const vars = STATUS_COLORS[state.className.replace(/^status-/, "")] || STATUS_COLORS["under-supervision"];
+    const safeUrl = text(item?.productUrl ?? item?.product_url);
+    const itemId = text(item?.id);
+    const itemName = text(item?.productName) || "Product";
+    const receivedWasEdited = Boolean(item?.quantityReceivedEdited ?? item?.quantity_received_edited) || Math.abs(received) > 1e-9;
+    const showReceivedValue = tab === "received" || tab === "delivered" || tab === "archive";
+    const visibleQty = tab === "remaining"
+      ? remaining
+      : showReceivedValue && receivedWasEdited
+        ? received
+        : base;
+    const partialRemainingInAll = tab === "all"
+      && stage === 3
+      && !maintenance
+      && Math.abs(received) > 1e-9
+      && Math.abs(remaining) > 1e-9
+      && Math.abs(remaining) < Math.abs(base) - 1e-9;
+    const showReceivedDiff = (tab === "delivered" || tab === "archive") && receivedWasEdited && Math.abs(received - base) > 1e-9;
+    const qtyMarkup = partialRemainingInAll
+      ? <span className="sv-qty-diff"><span className="sv-qty-old">{formatQuantity(base)}</span><strong className="sv-qty-new">{formatQuantity(remaining)}</strong></span>
+      : showReceivedDiff
+        ? <span className="sv-qty-diff"><span className="sv-qty-old">{formatQuantity(base)}</span><strong className="sv-qty-new">{formatQuantity(received)}</strong></span>
+        : <strong>{formatQuantity(visibleQty)}</strong>;
+    const displayTotal = Math.abs(visibleQty) * Math.abs(finite(item?.unitPrice ?? item?.unit_price ?? item?.price));
+    const openEditor = () => {
+      if (!isEditing || !itemId) return;
+      if (item?._isNew) {
+        setEditItemState({
+          mode: "add",
+          draftKey: text(item?._draftKey),
+          item,
+          defaultStatus: text(item?.status),
+          defaultReason: text(item?.reason || group?.reason),
+          version: Date.now(),
+        });
+        return;
+      }
+      setEditItemState({ mode: "edit", item: applyEditDraft(item), version: Date.now() });
+    };
+    return <div
+      className={`co-item ${isEditing ? "next-operations-editable-item" : ""}`}
+      key={text(item?._displayKey) || itemId || index}
+      role={isEditing ? "button" : undefined}
+      tabIndex={isEditing ? 0 : undefined}
+      onClick={openEditor}
+      onKeyDown={isEditing ? (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openEditor(); } } : undefined}
+      aria-label={isEditing ? `Edit ${itemName}` : undefined}
+    >
+      <div className="co-item-left">
+        <div className="co-item-title">
+          <div className="co-item-name">{itemName}</div>
+          {/^https?:\/\//i.test(safeUrl) ? <a className="co-item-link" href={safeUrl} target="_blank" rel="noopener noreferrer" title="Open link" aria-label={`Open link for ${itemName}`} onClick={(event) => event.stopPropagation()}><ClassicOrderIcon name="external-link" /></a> : null}
+        </div>
+        {!maintenance ? <div className="co-item-sub">Unit: {formatMoney(item?.unitPrice ?? item?.unit_price ?? item?.price)} · Total: {formatMoney(displayTotal)}</div> : null}
+        {visibleIssueDescription(item) ? <div className="co-item-issue-desc">{visibleIssueDescription(item)}</div> : null}
+        {text(item?.actualIssueDescription) ? <div className="co-item-issue-desc"><b>Actual issue:</b> {text(item.actualIssueDescription)}</div> : null}
+        {text(item?.repairAction) ? <div className="co-item-issue-desc"><b>Repair:</b> {text(item.repairAction)}</div> : null}
+      </div>
+      <div className="co-item-right">
+        <div className="co-item-total">{tab === "remaining" ? "Qty remaining:" : "Qty:"} {qtyMarkup}</div>
+        <span className="co-item-status" style={{ "--tag-bg": vars.bg, "--tag-fg": vars.fg, "--tag-border": vars.bd }}>{state.label}</span>
+        {!isEditing && canRejectComponents && itemId ? <button className="btn btn-danger btn-xs req-ops-reject" type="button" title="Reject component" disabled={busy} onClick={(event) => { event.stopPropagation(); onAction("reject", { ...group, orderIds: [itemId], actionScope: "component", actionItemName: itemName }); }}><ClassicOrderIcon name="x" /> Reject</button> : null}
+      </div>
+    </div>;
+  };
+
+  return (
+    <div className="co-modal-overlay is-open" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget && !isEditing) onClose(); }}>
+      <div className="co-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="operations-order-title">
+        {!isEditing ? <div className="co-modal-more" ref={moreRef}>
+          <button type="button" className="co-modal-more-btn" aria-label="Order actions" aria-haspopup="menu" aria-expanded={moreOpen} onClick={() => setMoreOpen((value) => !value)}>
+            <span className="co-modal-more-dots" aria-hidden="true">⋮</span>
+          </button>
+          {moreOpen ? <div className="co-modal-more-panel" role="menu" aria-label="Order actions">
+            {!archived ? <button type="button" className="co-modal-more-item" role="menuitem" onClick={() => menuAction("edit")}><ClassicOrderIcon name="edit-2" /><span>Edit</span></button> : null}
+            {!archived ? <button type="button" className="co-modal-more-item" role="menuitem" onClick={() => menuAction("archive")}><ClassicOrderIcon name="archive" /><span>Archive</span></button> : null}
+            {archived ? <button type="button" className="co-modal-more-item" role="menuitem" onClick={() => menuAction("unarchive")}><ClassicOrderIcon name="rotate-ccw" /><span>UnArchive</span></button> : null}
+          </div> : null}
+        </div> : <div className="next-operations-edit-mode-badge"><ClassicOrderIcon name="edit-2" /><span>Edit mode</span></div>}
+
+        <button type="button" className="co-modal-close" onClick={onClose} aria-label="Close order details" />
+        <div className="co-modal-header"><div className="co-modal-head-left"><div className="co-modal-status" id="operations-order-title">{type.label}</div><div className="co-modal-status-sub" hidden /></div></div>
+        <div className="next-operations-order-modal-summary" aria-label="Order summary">
+          <div><span>Order</span><strong>{group.orderIdLabel}</strong></div>
+          <div><span>Date</span><strong>{formatDate(group.latestCreated)}</strong></div>
+          <div><span>Components</span><strong>{displayTabItems.length}</strong></div>
+          <div className="next-operations-order-modal-summary__total"><span>{isMaintenance(group.orderType) ? "Order Type" : "Estimate Total"}</span><strong>{isMaintenance(group.orderType) ? "Maintenance request" : formatMoney(group.total)}</strong></div>
+        </div>
+        <Progress stage={group.stage} />
+        <div className="co-modal-body">
+          <div className="co-modal-meta">
+            <div className="co-meta-row co-meta-row--reason"><span>Reason</span><strong>{group.reason}</strong></div>
+            {group.receiptNumber ? <div className="co-meta-row"><span>Store Receipt Number</span><strong>{group.receiptNumber}</strong></div> : null}
+            {(group.operationsByName || group.receiptEntries.length) ? (
+              <div className="next-operations-meta-pair">
+                {group.operationsByName ? <div className="co-meta-row"><span>Received by</span><strong>{group.operationsByName}</strong></div> : null}
+                {group.receiptEntries.length ? (
+                  <div className="co-meta-row next-operations-receipt-meta">
+                    <span>Receipt photos</span>
+                    <strong className="next-operations-receipt-meta__links">
+                      {group.receiptEntries.map((entry, index) => (
+                        <a
+                          className="next-operations-receipt-meta__link"
+                          href={entry.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          title={entry.name}
+                          key={`${entry.url}-${index}`}
+                        >
+                          <ClassicOrderIcon name="image" />
+                          <span>{entry.name || `Photo ${index + 1}`}</span>
+                        </a>
+                      ))}
+                    </strong>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+            {group.rejectedReason ? <div className="co-meta-row co-meta-row--reason co-meta-row--reject-reason"><span>Rejected reason</span><strong>{group.rejectedReason}</strong></div> : null}
+          </div>
+
+          {!isEditing ? <div className="co-modal-actions ro-actions ro-actions--right order-modal-search-actions">
+            <OrderComponentSearch key={`${group.key}:${tab}`} value={componentSearch} onChange={setComponentSearch} disabled={busy} collapseOnToggle />
+            {showDownload ? <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => setDownloadOpen(true)} disabled={busy}><ClassicOrderIcon name="download" /><span>Download</span></button> : null}
+            <OrderSortButton value={sortMode} onChange={setSortMode} />
+            {canReceive ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction("receive", receiveActionGroup)} disabled={busy}><ClassicOrderIcon name="truck" />Received by operations</button> : null}
+            {maintenance && tab === "approved" && group.stage === 2 && !archived ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction("technical-visit", group)} disabled={busy}><ClassicOrderIcon name="tool" />Request Technical Visit</button> : null}
+            {maintenance && tab === "approved" && group.stage === 2 && !archived ? <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => onAction("maintenance-log", group)} disabled={busy}><ClassicOrderIcon name="clipboard" />Log Maintenance</button> : null}
+            {canDeliver ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction(maintenance ? "maintenance-deliver" : "deliver", group)} disabled={busy}><ClassicOrderIcon name="check-circle" />Mark as Delivered</button> : null}
+            {canCreateWithdrawal ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction("withdrawal", group)} disabled={busy}><ClassicOrderIcon name="repeat" />Create Withdrawal</button> : null}
+            {canCreateDelivery ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction("delivery", group)} disabled={busy}><ClassicOrderIcon name="package" />Create Delivery</button> : null}
+          </div> : <>
+            <div className="co-modal-actions ro-actions ro-actions--right order-modal-search-actions next-operations-edit-actions">
+              <OrderComponentSearch key={`${group.key}:${tab}:edit`} value={componentSearch} onChange={setComponentSearch} disabled={busy} collapseOnToggle />
+              <button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancelEdit} disabled={busy}>Cancel</button>
+              <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onSaveEdit(editChanges)} disabled={busy || (!Object.keys(editChanges).length && !(Array.isArray(editMode?.additions) && editMode.additions.length))}>{busy ? "Saving…" : "Save changes"}</button>
+            </div>
+            <div className="next-operations-edit-mode-note"><ClassicOrderIcon name="info" /><span>Tap any component to edit its product, status and quantities.</span></div>
+          </>}
+
+          <div className="co-modal-items order-component-groups">
+            {groupedItems.length ? groupedItems.map((section) => (
+              <section className="order-component-group" key={`${section.folderName || "products"}:${section.tag}`}>
+                <OrderGroupHeader group={section} mode={effectiveSortMode} />
+                <div className="order-component-group__items">{section.items.map(renderItem)}</div>
+              </section>
+            )) : <div className="order-component-search-empty">{componentSearch.trim() ? "No matching components." : "No items."}</div>}
+          </div>
+          {isEditing ? (
+            <div className="next-operations-edit-footer">
+              <button
+                type="button"
+                className="next-operations-add-component-btn"
+                onClick={() => {
+                  const defaultStatus = text(displayTabItems.find((item) => !item?._isNew)?.status)
+                    || text(group?.items?.[0]?.status)
+                    || (group.stage >= 4 ? "Arrived" : group.stage === 3 ? "Shipped" : "In Progress");
+                  setEditItemState({
+                    mode: "add",
+                    draftKey: "",
+                    item: null,
+                    defaultStatus,
+                    defaultReason: text(group?.reason),
+                    version: Date.now(),
+                  });
+                }}
+                disabled={busy}
+              >
+                <span className="next-operations-add-component-btn__icon" aria-hidden="true">+</span>
+                <span className="next-operations-add-component-btn__copy">
+                  <strong>Add component</strong>
+                  <small>Add a new component to this order</small>
+                </span>
+              </button>
+            </div>
+          ) : null}
+        </div>
+        <OrderDownloadModal
+          open={downloadOpen}
+          title={`Download ${group.orderIdLabel}`}
+          columnOptions={!maintenance ? OPERATIONS_EXPORT_COLUMNS : null}
+          defaultColumns={(tab === "received" || tab === "delivered") ? ["idCode", "component", "qty"] : null}
+          defaultSignatureLabels={orderTypeKey(group.orderType) === "withdrawproducts" ? ["Received From", "Operations", "Storekeeper"] : ["Storekeeper", "Operations", "Delivered to"]}
+          showSignatureOptions={!maintenance}
+          showRepeatedComponentOptions={!maintenance}
+          defaultRepeatedComponentMode="merge"
+          onClose={() => setDownloadOpen(false)}
+          onDownload={exportAction}
+        />
+        <OperationsComponentEditModal
+          state={editItemState}
+          products={editMode?.products || []}
+          statusOptions={editMode?.statusOptions || []}
+          busy={busy}
+          onCancel={() => setEditItemState(null)}
+          onApply={(patch) => {
+            if (patch?.isNew) onUpsertEditAddition(patch);
+            else onPatchEditItem(patch);
+            setEditItemState(null);
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function TechnicalVisitModal({ state, busy, error, onCancel, onSubmit }) {
+  const group = state?.group;
+  const [issues, setIssues] = useState({});
+
+  useEffect(() => {
+    if (!group) return;
+    const initial = {};
+    [...group.items]
+      .sort((a, b) => text(a?.productName).localeCompare(text(b?.productName), undefined, { sensitivity: "base", numeric: true }))
+      .forEach((item) => { initial[text(item?.id)] = maintenanceIssueText(item) === "—" ? "" : maintenanceIssueText(item); });
+    setIssues(initial);
+  }, [group]);
+
+  useEffect(() => {
+    if (!group) return undefined;
+    const onKey = (event) => { if (event.key === "Escape" && !busy) onCancel(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [group, busy, onCancel]);
+
+  if (!group) return null;
+  const items = [...group.items].sort((a, b) => text(a?.productName).localeCompare(text(b?.productName), undefined, { sensitivity: "base", numeric: true }));
+
+  function submit(event) {
+    event.preventDefault();
+    const perItemIssues = items.map((item) => ({ orderId: text(item?.id), issueDescription: text(issues[text(item?.id)]) })).filter((entry) => entry.orderId);
+    if (!perItemIssues.length || perItemIssues.some((entry) => !entry.issueDescription)) {
+      onSubmit({ validationError: "Issue description is required for every component." });
+      return;
+    }
+    const issueDescription = items.map((item, index) => `${text(item?.productName) || `Component ${index + 1}`}: ${text(issues[text(item?.id)])}`).join("\n");
+    onSubmit({ issueDescription, perItemIssues });
+  }
+
+  return <div className="co-submodal-overlay is-open next-operations-tech-visit-overlay" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onCancel(); }}>
+    <form className="co-submodal-dialog next-operations-tech-visit-dialog" role="dialog" aria-modal="true" onSubmit={submit}>
+      <button type="button" className="co-submodal-close" onClick={onCancel} disabled={busy} aria-label="Close technical visit" />
+      <div className="co-submodal-header next-operations-tech-visit-header"><div className="req-edit-icon"><ClassicOrderIcon name="tool" /></div><div><div className="co-submodal-title">Request Technical Visit</div><div className="co-submodal-sub">Review the issue description for every maintenance component before sending the request.</div></div></div>
+      <div className="co-submodal-body next-operations-tech-visit-body">
+        <div className="next-operations-tech-visit-list">{items.map((item, index) => { const id = text(item?.id); return <section className="next-operations-tech-visit-card" key={id || index}><div className="next-operations-tech-visit-card__head"><span>Component {index + 1}</span><strong>{text(item?.productName) || "Component"}</strong></div><label className="co-submodal-field"><span className="co-submodal-label">Issue Description</span><textarea className="co-submodal-textarea" rows={4} value={issues[id] ?? ""} onChange={(event) => setIssues((current) => ({ ...current, [id]: event.target.value }))} placeholder="Describe this component issue" disabled={busy} /></label></section>; })}</div>
+        <div className="co-submodal-error" role="alert" aria-live="polite">{error}</div>
+      </div>
+      <div className="co-submodal-actions"><button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancel} disabled={busy}>Cancel</button><button type="submit" className="ro-action-btn ro-action-btn--dark" disabled={busy}>{busy ? "Requesting…" : "Confirm"}</button></div>
+    </form>
+  </div>;
+}
+
+function MaintenanceModernSelect({ value, options, placeholder, searchable = false, onChange, disabled = false, ariaLabel }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const wrapRef = useRef(null);
+  const selected = options.find((option) => text(option.value) === text(value));
+  const selectedLabel = selected?.label || text(value) || placeholder;
+  const visible = searchable && query.trim() ? options.filter((option) => lower(option.label).includes(lower(query))) : options;
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const outside = (event) => { if (!wrapRef.current?.contains(event.target)) setOpen(false); };
+    const key = (event) => { if (event.key === "Escape") setOpen(false); };
+    document.addEventListener("pointerdown", outside, true);
+    document.addEventListener("keydown", key);
+    return () => { document.removeEventListener("pointerdown", outside, true); document.removeEventListener("keydown", key); };
+  }, [open]);
+
+  useEffect(() => { if (!open) setQuery(""); }, [open]);
+
+  return (
+    <div ref={wrapRef} className={`next-maintenance-modern-select ${open ? "is-open" : ""} ${disabled ? "is-disabled" : ""}`}>
+      <button type="button" className="next-maintenance-modern-select__trigger" aria-haspopup="listbox" aria-expanded={open} aria-label={ariaLabel || placeholder} disabled={disabled} onClick={() => setOpen((state) => !state)}><span>{selectedLabel}</span><ClassicOrderIcon name="chevron-down" /></button>
+      {open ? <div className="next-maintenance-modern-select__menu" role="listbox" aria-label={ariaLabel || placeholder}>
+        {searchable ? <div className="next-maintenance-modern-select__search"><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search components" autoFocus /></div> : null}
+        <div className="next-maintenance-modern-select__options">
+          <button type="button" role="option" aria-selected={!value} className={`next-maintenance-modern-select__option ${!value ? "is-selected" : ""}`} onClick={() => { onChange(""); setOpen(false); }}><span>{placeholder}</span>{!value ? <ClassicOrderIcon name="check" /> : null}</button>
+          {visible.map((option) => <button type="button" role="option" aria-selected={text(value) === text(option.value)} className={`next-maintenance-modern-select__option ${text(value) === text(option.value) ? "is-selected" : ""}`} onClick={() => { onChange(option.value); setOpen(false); }} key={`${text(option.value)}-${text(option.label)}`}><span>{option.label}</span>{text(value) === text(option.value) ? <ClassicOrderIcon name="check" /> : null}</button>)}
+          {searchable && query.trim() && !visible.length ? <div className="next-maintenance-modern-select__empty">No matching components</div> : null}
+        </div>
+      </div> : null}
+    </div>
+  );
+}
+
+function emptyLogForItem(item) {
+  const existingSpares = normalizeSpareEntries(item);
+  return {
+    orderId: text(item?.id),
+    productName: text(item?.productName) || "Component",
+    issueDescription: maintenanceIssueText(item),
+    serialNumber: text(item?.serialNumber),
+    resolutionMethod: text(item?.resolutionMethod),
+    actualIssueDescription: text(item?.actualIssueDescription),
+    repairAction: text(item?.repairAction),
+    spareParts: existingSpares.length ? existingSpares : [{ id: "", name: "", qty: 1 }],
+  };
+}
+
+function OperationsMaintenanceLogModal({ group, options, busy, error, onCancel, onSubmit }) {
+  const [logs, setLogs] = useState([]);
+
+  useEffect(() => {
+    setLogs(group ? [...group.items].sort((a, b) => text(a?.productName).localeCompare(text(b?.productName), undefined, { sensitivity: "base", numeric: true })).map(emptyLogForItem) : []);
+  }, [group]);
+
+  useEffect(() => {
+    if (!group) return undefined;
+    const onKey = (event) => { if (event.key === "Escape" && !busy) onCancel(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [group, busy, onCancel]);
+
+  if (!group) return null;
+  const resolutionMethods = (Array.isArray(options?.resolutionMethods) ? options.resolutionMethods : []).map((option) => ({ value: text(option?.name ?? option?.value ?? option), label: text(option?.name ?? option?.label ?? option) })).filter((option) => option.value);
+  const spareOptions = (Array.isArray(options?.spareParts) ? options.spareParts : []).map((option) => ({ value: text(option?.id ?? option?.value ?? option?.name), label: text(option?.name ?? option?.label ?? option?.value) })).filter((option) => option.value || option.label);
+
+  function patchLog(index, patch) {
+    setLogs((current) => current.map((entry, entryIndex) => entryIndex === index ? { ...entry, ...patch } : entry));
+  }
+
+  function patchSpare(logIndex, spareIndex, patch) {
+    setLogs((current) => current.map((entry, entryIndex) => {
+      if (entryIndex !== logIndex) return entry;
+      const spareParts = entry.spareParts.map((part, partIndex) => partIndex === spareIndex ? { ...part, ...patch } : part);
+      return { ...entry, spareParts };
+    }));
+  }
+
+  function addSpare(logIndex) {
+    setLogs((current) => current.map((entry, entryIndex) => entryIndex === logIndex ? { ...entry, spareParts: [...entry.spareParts, { id: "", name: "", qty: 1 }] } : entry));
+  }
+
+  function removeSpare(logIndex, spareIndex) {
+    setLogs((current) => current.map((entry, entryIndex) => {
+      if (entryIndex !== logIndex) return entry;
+      const spareParts = entry.spareParts.filter((_, partIndex) => partIndex !== spareIndex);
+      return { ...entry, spareParts: spareParts.length ? spareParts : [{ id: "", name: "", qty: 1 }] };
+    }));
+  }
+
+  function submit(event) {
+    event.preventDefault();
+    const normalized = logs.map((entry) => {
+      const spareParts = entry.spareParts.map((part) => {
+        const id = text(part?.id);
+        const selected = spareOptions.find((option) => text(option?.value) === id);
+        const name = text(selected?.label ?? part?.name);
+        const qtyValue = Number(part?.qty);
+        const qty = Number.isFinite(qtyValue) && qtyValue > 0 ? Math.max(1, Math.round(qtyValue)) : 1;
+        return { id, name, qty };
+      }).filter((part) => part.id || part.name);
+      return {
+        orderId: entry.orderId,
+        serialNumber: text(entry.serialNumber),
+        resolutionMethod: text(entry.resolutionMethod),
+        actualIssueDescription: text(entry.actualIssueDescription),
+        repairAction: text(entry.repairAction),
+        spareParts,
+        sparePartIds: spareParts.map((part) => part.id).filter(Boolean),
+        sparePartNames: spareParts.map((part) => part.name).filter(Boolean),
+      };
+    });
+    onSubmit(normalized);
+  }
+
+  return (
+    <div className="co-submodal-overlay is-open next-maintenance-log-overlay" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onCancel(); }}>
+      <form className="co-submodal-dialog req-maintenance-log-dialog next-maintenance-log-dialog" role="dialog" aria-modal="true" onSubmit={submit}>
+        <button type="button" className="co-submodal-close" onClick={onCancel} disabled={busy} aria-label="Close" />
+        <div className="co-submodal-header next-maintenance-log-header"><div className="req-edit-icon"><ClassicOrderIcon name="clipboard" /></div><div><div className="co-submodal-title">Log Maintenance</div></div></div>
+        <div className="co-submodal-body req-maintenance-log-body">
+          <div className="req-maintenance-log-items">
+            {logs.map((entry, logIndex) => <section className="req-maintenance-log-card next-maintenance-log-card" key={entry.orderId || logIndex}>
+              <div className="req-maintenance-log-card__head"><div><div className="req-maintenance-log-card__label">Component {logIndex + 1}</div><div className="req-maintenance-log-card__title">{entry.productName}</div><div className="req-maintenance-log-card__issue"><span>Issue:</span> {entry.issueDescription}</div></div></div>
+              <div className="req-maintenance-log-card__fields">
+                <label className="co-submodal-field next-maintenance-serial-field"><span className="co-submodal-label">Serial Number</span><input className="co-submodal-input" type="text" value={entry.serialNumber} onChange={(event) => patchLog(logIndex, { serialNumber: event.target.value })} disabled={busy} placeholder="Enter equipment serial number" autoComplete="off" /></label>
+                <label className="co-submodal-field"><span className="co-submodal-label">Resolution Method</span><MaintenanceModernSelect value={entry.resolutionMethod} options={resolutionMethods} placeholder="Select resolution method" onChange={(value) => patchLog(logIndex, { resolutionMethod: value })} disabled={busy} ariaLabel={`Resolution method for ${entry.productName}`} /></label>
+                <label className="co-submodal-field"><span className="co-submodal-label">The Actual Issue Description</span><textarea className="co-submodal-textarea" dir="auto" value={entry.actualIssueDescription} onChange={(event) => patchLog(logIndex, { actualIssueDescription: event.target.value })} disabled={busy} rows={4} placeholder="Write the actual issue description" /></label>
+                <label className="co-submodal-field"><span className="co-submodal-label">Repair Action</span><textarea className="co-submodal-textarea" dir="auto" value={entry.repairAction} onChange={(event) => patchLog(logIndex, { repairAction: event.target.value })} disabled={busy} rows={4} placeholder="Write the repair action" /></label>
+                <div className="co-submodal-field req-maintenance-log-card__spares">
+                  <div className="req-maintenance-spare-head"><span className="co-submodal-label">Spare parts replaced</span></div>
+                  <div className="req-maintenance-spare-list">{entry.spareParts.map((part, spareIndex) => <div className="req-maintenance-spare-row next-maintenance-spare-row" key={`${logIndex}-${spareIndex}`}>
+                    <div className="co-submodal-field req-maintenance-spare-row__part"><span className="co-submodal-label">Spare part</span><MaintenanceModernSelect value={part.id || part.name} options={spareOptions} placeholder="Select component" searchable onChange={(value) => { const selected = spareOptions.find((option) => option.value === value); patchSpare(logIndex, spareIndex, { id: selected ? value : "", name: selected?.label || value }); }} disabled={busy} ariaLabel={`Spare part ${spareIndex + 1} for ${entry.productName}`} /></div>
+                    <label className="co-submodal-field req-maintenance-spare-row__qty"><span className="co-submodal-label">Qty</span><input className="co-submodal-input" type="number" min="1" step="1" inputMode="numeric" value={part.qty} onChange={(event) => patchSpare(logIndex, spareIndex, { qty: event.target.value })} disabled={busy} /></label>
+                    <button type="button" className="req-maintenance-spare-row__remove" onClick={() => removeSpare(logIndex, spareIndex)} disabled={busy} aria-label={entry.spareParts.length <= 1 ? "Clear spare part" : "Remove spare part"}><span aria-hidden="true">×</span></button>
+                  </div>)}</div>
+                  <button type="button" className="req-maintenance-spare-add req-maintenance-spare-add--full" onClick={() => addSpare(logIndex)} disabled={busy}><span className="req-maintenance-spare-add__icon">+</span><span>Add spare part</span></button>
+                </div>
+              </div>
+            </section>)}
+          </div>
+          <div className="co-submodal-error" role="alert" aria-live="polite">{error}</div>
+        </div>
+        <div className="co-submodal-actions"><button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancel} disabled={busy}>Cancel</button><button type="submit" className="ro-action-btn ro-action-btn--dark" disabled={busy}>{busy ? "Saving…" : "Confirm"}</button></div>
+      </form>
+    </div>
+  );
+}
+
+
+function OperationsMaintenanceDoneModal({ group, busy, error, onCancel, onSubmit }) {
+  const [files, setFiles] = useState([]);
+  const [receiptNumbers, setReceiptNumbers] = useState([""]);
+  const inputRef = useRef(null);
+  const requiresReceiptNumbers = Boolean(group?.items?.flatMap(normalizeSpareEntries).length);
+
+  useEffect(() => {
+    setFiles([]);
+    setReceiptNumbers([""]);
+  }, [group?.key]);
+
+  useEffect(() => {
+    if (!group) return undefined;
+    const onKey = (event) => { if (event.key === "Escape" && !busy) onCancel(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [group, busy, onCancel]);
+
+  if (!group) return null;
+
+  function submit(event) {
+    event.preventDefault();
+    onSubmit({ files, receiptNumbers });
+  }
+
+  function patchReceipt(index, value) {
+    setReceiptNumbers((current) => current.map((entry, entryIndex) => entryIndex === index ? value : entry));
+  }
+
+  function removeReceipt(index) {
+    setReceiptNumbers((current) => {
+      const next = current.filter((_, entryIndex) => entryIndex !== index);
+      return next.length ? next : [""];
+    });
+  }
+
+  return (
+    <div className="co-submodal-overlay is-open next-maintenance-receipt-overlay" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onCancel(); }}>
+      <form className="co-submodal-dialog next-maintenance-receipt-dialog" role="dialog" aria-modal="true" onSubmit={submit}>
+        <button type="button" className="co-submodal-close" onClick={onCancel} disabled={busy} aria-label="Close" />
+        <div className="co-submodal-header"><div><div className="co-submodal-title">Upload Signed Maintenance Report</div><div className="co-submodal-sub">Please upload the maintenance report after it has been signed.</div></div></div>
+        <div className="co-submodal-body">
+          {requiresReceiptNumbers ? <div className="co-submodal-field next-maintenance-receipt-numbers"><span className="co-submodal-label">Store Receipt Number</span><div className="co-submodal-inputs next-maintenance-receipt-inputs">{receiptNumbers.map((value, index) => <div className="next-maintenance-receipt-input-row" key={index}><input className="co-submodal-input req-delivery-receipt-input" value={value} onChange={(event) => patchReceipt(index, event.target.value)} placeholder={index === 0 ? "e.g. 12345, 67890" : "Other receipt number"} disabled={busy} inputMode="numeric" aria-label={`Store Receipt Number ${index + 1}`} />{index > 0 ? <button type="button" className="next-maintenance-receipt-input-remove" onClick={() => removeReceipt(index)} disabled={busy} aria-label={`Remove Store Receipt Number ${index + 1}`}>×</button> : null}</div>)}</div><button type="button" className="ro-action-btn ro-action-btn--light co-submodal-add" onClick={() => setReceiptNumbers((current) => [...current, ""])} disabled={busy}>Add Other Receipt</button></div> : null}
+          <div className="co-submodal-field"><span className="co-submodal-label">Signed maintenance report images</span><input ref={inputRef} className="co-upload-field__input" type="file" accept="image/*" multiple hidden onChange={(event) => setFiles(Array.from(event.target.files || []))} disabled={busy} /><button type="button" className="co-upload-field next-maintenance-upload-field" onClick={() => inputRef.current?.click()} disabled={busy}><span className="co-upload-field__icon"><ClassicOrderIcon name="upload-cloud" /></span><span className="co-upload-field__content"><span className="co-upload-field__title">{files.length ? `${files.length} image${files.length === 1 ? "" : "s"} selected` : "Choose images"}</span><span className="co-upload-field__meta">{files.length ? files.map((file) => file.name).join(" • ") : "PNG, JPG or WEBP"}</span></span></button></div>
+          <div className="co-submodal-error" role="alert" aria-live="polite">{error}</div>
+        </div>
+        <div className="co-submodal-actions"><button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancel} disabled={busy}>Cancel</button><button type="submit" className="ro-action-btn ro-action-btn--dark" disabled={busy || !files.length}>{busy ? "Uploading…" : "Confirm"}</button></div>
+      </form>
+    </div>
+  );
+}
+
+
+function RejectModal({ state, busy, error, onCancel, onSubmit }) {
+  const [reason, setReason] = useState("");
+  useEffect(() => setReason(""), [state?.group?.key]);
+  if (!state) return null;
+  const componentScope = state?.group?.actionScope === "component";
+  const title = componentScope ? "Reject component" : "Reject operations order";
+  const subtitle = componentScope ? `Write the reason before rejecting ${text(state?.group?.actionItemName) || "this component"}.` : "Enter the reason that will be saved for every selected component.";
+  return <div className="co-submodal-overlay is-open" aria-hidden="false"><form className="co-submodal-dialog reject-reason-dialog" role="dialog" aria-modal="true" onSubmit={(event) => { event.preventDefault(); onSubmit(reason); }}><button type="button" className="co-submodal-close" onClick={onCancel} aria-label="Close"/><div className="co-submodal-header req-edit-header"><div className="req-edit-icon req-edit-icon--danger"><ClassicOrderIcon name="x-circle" /></div><div><div className="co-submodal-title">{title}</div><div className="co-submodal-sub">{subtitle}</div></div></div><div className="co-submodal-body"><label className="co-submodal-label">Rejected reason</label><textarea className="co-submodal-input next-classic-textarea" value={reason} onChange={(event) => setReason(event.target.value)} autoFocus disabled={busy}/><div className="co-submodal-error" role="alert">{error}</div></div><div className="co-submodal-actions"><button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancel} disabled={busy}>Cancel</button><button type="submit" className="ro-action-btn ro-action-btn--danger" disabled={busy || !reason.trim()}>{busy ? "Saving…" : "Reject"}</button></div></form></div>;
+}
+
+function EditPasswordModal({ state, busy, error, onCancel, onSubmit }) {
+  const [password, setPassword] = useState("");
+  useEffect(() => setPassword(""), [state?.group?.key]);
+  if (!state) return null;
+  return <div className="co-submodal-overlay is-open" aria-hidden="false"><form className="co-submodal-dialog req-edit-dialog" role="dialog" aria-modal="true" onSubmit={(event) => { event.preventDefault(); onSubmit(password); }}><button type="button" className="co-submodal-close" onClick={onCancel} aria-label="Close"/><div className="co-submodal-header req-edit-header"><div className="req-edit-icon"><ClassicOrderIcon name="edit-2" /></div><div><div className="co-submodal-title">Edit operations order</div></div></div><div className="co-submodal-body"><label className="co-submodal-label">Admin password</label><input className="co-submodal-input" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoFocus disabled={busy}/><div className="co-submodal-error" role="alert">{error}</div></div><div className="co-submodal-actions"><button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancel} disabled={busy}>Cancel</button><button type="submit" className="ro-action-btn ro-action-btn--dark" disabled={busy || !password.trim()}>{busy ? "Checking…" : "Continue"}</button></div></form></div>;
+}
+
+function OperationsModernDropdown({
+  label,
+  value,
+  options = [],
+  onChange,
+  placeholder = "Select option",
+  searchable = false,
+  searchPlaceholder = "Search…",
+  disabled = false,
+}) {
+  const rootRef = useRef(null);
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+
+  const normalizedOptions = (Array.isArray(options) ? options : [])
+    .map((option) => typeof option === "string"
+      ? { value: option, label: option, searchText: option }
+      : {
+          ...option,
+          value: text(option?.value),
+          label: text(option?.label),
+          searchText: text(option?.searchText || `${option?.label || ""} ${option?.meta || ""}`),
+        })
+    .filter((option) => option.value);
+  const selected = normalizedOptions.find((option) => String(option.value) === String(value || "")) || null;
+  const normalizedQuery = lower(query);
+  const visibleOptions = normalizedOptions.filter((option) => (
+    !normalizedQuery || lower(option.searchText || option.label).includes(normalizedQuery)
+  ));
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onPointerDown = (event) => {
+      if (rootRef.current && !rootRef.current.contains(event.target)) setOpen(false);
+    };
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) setQuery("");
+  }, [open, value]);
+
+  return (
+    <div className={`next-operations-modern-select ${open ? "is-open" : ""}`} ref={rootRef}>
+      <span className="co-submodal-label">{label}</span>
+      <button
+        type="button"
+        className="next-operations-modern-select__trigger"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        disabled={disabled}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <span className={selected ? "" : "is-placeholder"}>{selected?.label || placeholder}</span>
+        <ClassicOrderIcon name="chevron-down" />
+      </button>
+      {open ? (
+        <div className="next-operations-modern-select__menu">
+          {searchable ? (
+            <div className="next-operations-modern-select__search-wrap">
+              <input
+                className="next-operations-modern-select__search"
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={searchPlaceholder}
+                autoFocus
+              />
+            </div>
+          ) : null}
+          <div className="next-operations-modern-select__options" role="listbox">
+            {visibleOptions.length ? visibleOptions.map((option) => {
+              const active = String(option.value) === String(value || "");
+              return (
+                <button
+                  type="button"
+                  className={`next-operations-modern-select__option ${active ? "is-selected" : ""}`}
+                  role="option"
+                  aria-selected={active}
+                  key={option.value}
+                  onClick={() => {
+                    onChange(option.value);
+                    setOpen(false);
+                    setQuery("");
+                  }}
+                >
+                  <span className="next-operations-modern-select__option-copy">
+                    <strong>{option.label}</strong>
+                    {option.meta ? <small>{option.meta}</small> : null}
+                  </span>
+                  {active ? <ClassicOrderIcon name="check" /> : null}
+                </button>
+              );
+            }) : <div className="next-operations-modern-select__empty">No matching products.</div>}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function OperationsComponentEditModal({ state, products = [], statusOptions = [], busy, onCancel, onApply }) {
+  const isAddMode = state?.mode === "add";
+  const item = state?.item || null;
+  const [form, setForm] = useState(null);
+  const [validationError, setValidationError] = useState("");
+  const [customizeIdOpen, setCustomizeIdOpen] = useState(false);
+  const customizeIdInputRef = useRef(null);
+
+  useEffect(() => {
+    if (!item && !isAddMode) {
+      setForm(null);
+      setValidationError("");
+      setCustomizeIdOpen(false);
+      return;
+    }
+
+    const source = item || {};
+    const sourceSpecific = Number(source?._displaySourceCount || 0) > 1;
+    const fallbackStatus = text(state?.defaultStatus) || "In Progress";
+    const status = text(source?.status) || fallbackStatus;
+    const requested = isAddMode && !item
+      ? 1
+      : Number(sourceSpecific
+          ? (source?.quantityRequested ?? requestedQuantity(source))
+          : (source?.requestedQty ?? source?.quantityRequested ?? requestedQuantity(source))) || 0;
+    const received = isAddMode && !item
+      ? (/(arrived|delivered|received)/i.test(status) ? requested : 0)
+      : Number(sourceSpecific
+          ? (source?.quantityReceived ?? receivedQuantity(source))
+          : (source?.receivedQty ?? source?.quantityReceived ?? receivedQuantity(source))) || 0;
+    const remaining = isAddMode && !item
+      ? roundQty(requested - received)
+      : Number(sourceSpecific
+          ? (source?.quantityRemaining ?? remainingQuantity(source))
+          : (source?.remainingQty ?? source?.quantityRemaining ?? remainingQuantity(source))) || 0;
+    const delivered = isAddMode && !item
+      ? (/(arrived|delivered|received)/i.test(status) ? received : 0)
+      : Number(sourceSpecific
+          ? (/(arrived|delivered|received)/i.test(status) ? received : 0)
+          : (source?.deliveredQty ?? deliveredQuantity(source))) || 0;
+    const matchedProduct = products.find((product) => String(product?.id || "") === String(source?.productId || ""))
+      || products.find((product) => lower(product?.name) === lower(source?.productName));
+
+    setForm({
+      id: isAddMode ? "" : text(source?.id),
+      draftKey: text(state?.draftKey || source?._draftKey),
+      productId: text(matchedProduct?.id || source?.productId),
+      productName: text(matchedProduct?.name || source?.productName),
+      status,
+      requestedQty: String(requested),
+      receivedQty: String(received),
+      remainingQty: String(remaining),
+      deliveredQty: String(delivered),
+      unitPrice: String(source?.unitPrice ?? source?.unit_price ?? source?.price ?? matchedProduct?.unitPrice ?? ""),
+      productTag: text(source?.productTag ?? source?.product_tag) || text(matchedProduct?.tags?.[0]),
+      kitTag: text(source?.kitTag ?? source?.kit_tag),
+      reason: text(source?.reason) || text(state?.defaultReason),
+      issueDescription: text(source?.issueDescription ?? source?.issue_description),
+      productUrl: text(source?.productUrl ?? source?.product_url ?? matchedProduct?.url),
+      productIdCode: text(source?.productIdCode ?? source?.idCode ?? matchedProduct?.displayId),
+      customizeId: text(source?.customizeId ?? source?.customize_id),
+    });
+    setCustomizeIdOpen(Boolean(text(source?.customizeId ?? source?.customize_id)));
+    setValidationError("");
+  }, [item?.id, item?._draftKey, state?.version, state?.defaultStatus, state?.defaultReason, state?.draftKey, products, isAddMode]);
+
+  if ((!item && !isAddMode) || !form) return null;
+
+  const isFinalStatus = /(arrived|delivered|received)/i.test(form.status);
+  const num = (value) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+  const syncRequested = (value) => setForm((current) => {
+    const requested = num(value);
+    const received = num(current.receivedQty);
+    return {
+      ...current,
+      requestedQty: value,
+      remainingQty: String(roundQty(requested - received)),
+      deliveredQty: /(arrived|delivered|received)/i.test(current.status) ? String(roundQty(received)) : "0",
+    };
+  });
+  const syncReceived = (value) => setForm((current) => {
+    const requested = num(current.requestedQty);
+    const received = num(value);
+    return {
+      ...current,
+      receivedQty: value,
+      remainingQty: String(roundQty(requested - received)),
+      deliveredQty: /(arrived|delivered|received)/i.test(current.status) ? String(roundQty(received)) : "0",
+    };
+  });
+  const syncRemaining = (value) => setForm((current) => {
+    const requested = num(current.requestedQty);
+    const remaining = num(value);
+    const received = roundQty(requested - remaining);
+    return {
+      ...current,
+      remainingQty: value,
+      receivedQty: String(received),
+      deliveredQty: /(arrived|delivered|received)/i.test(current.status) ? String(received) : "0",
+    };
+  });
+  const syncDelivered = (value) => setForm((current) => {
+    if (!/(arrived|delivered|received)/i.test(current.status)) return current;
+    const requested = num(current.requestedQty);
+    const delivered = num(value);
+    return {
+      ...current,
+      deliveredQty: value,
+      receivedQty: String(delivered),
+      remainingQty: String(roundQty(requested - delivered)),
+    };
+  });
+
+  function selectProduct(productId) {
+    const product = products.find((entry) => String(entry?.id || "") === String(productId || ""));
+    if (!product) {
+      setForm((current) => ({ ...current, productId }));
+      return;
+    }
+    setForm((current) => ({
+      ...current,
+      productId: String(product.id),
+      productName: text(product.name),
+      productUrl: text(product.url),
+      unitPrice: product.unitPrice === null || product.unitPrice === undefined ? "" : String(product.unitPrice),
+      productTag: text(product?.tags?.[0]) || current.productTag,
+      productIdCode: text(product?.displayId),
+      customizeId: String(current?.productId || "") === String(product.id) ? current.customizeId : "",
+    }));
+    if (String(form?.productId || "") !== String(product.id)) setCustomizeIdOpen(false);
+    setValidationError("");
+  }
+
+  function selectStatus(value) {
+    setForm((current) => {
+      const final = /(arrived|delivered|received)/i.test(value);
+      const received = num(current.receivedQty);
+      return { ...current, status: value, deliveredQty: final ? String(roundQty(received)) : "0" };
+    });
+    setValidationError("");
+  }
+
+  function submit(event) {
+    event.preventDefault();
+    const numericKeys = ["requestedQty", "receivedQty", "remainingQty", "deliveredQty"];
+    if (!form.productId) {
+      setValidationError("Please select a component.");
+      return;
+    }
+    if (!form.status) {
+      setValidationError("Please select a status.");
+      return;
+    }
+    if (numericKeys.some((key) => form[key] === "" || !Number.isFinite(Number(form[key])))) {
+      setValidationError("All quantity fields must contain valid numbers.");
+      return;
+    }
+    setValidationError("");
+    const source = Array.isArray(item?.sourceBreakdown) ? item.sourceBreakdown[0] : null;
+    const sourceSpecific = !isAddMode && Number(item?._displaySourceCount || 0) > 1;
+    onApply({
+      isNew: isAddMode,
+      draftKey: isAddMode ? (text(form.draftKey) || text(state?.draftKey)) : "",
+      id: isAddMode ? "" : form.id,
+      editKey: isAddMode ? "" : (text(item?._displayKey) || form.id),
+      sourceSpecific,
+      sourceIndex: !isAddMode && Number.isInteger(item?._displaySourceIndex) ? item._displaySourceIndex : null,
+      sourceCount: !isAddMode && Number.isInteger(item?._displaySourceCount) ? item._displaySourceCount : null,
+      sourceKitId: isAddMode ? "" : text(source?.kitId),
+      sourceKitName: isAddMode ? text(form.kitTag) : text(source?.kitTag || form.kitTag),
+      productId: form.productId,
+      productName: form.productName,
+      productUrl: form.productUrl,
+      status: form.status,
+      requestedQty: roundQty(Number(form.requestedQty)),
+      receivedQty: roundQty(Number(form.receivedQty)),
+      remainingQty: roundQty(Number(form.remainingQty)),
+      deliveredQty: roundQty(Number(form.deliveredQty)),
+      unitPrice: form.unitPrice === "" ? null : Number(form.unitPrice),
+      productTag: form.productTag,
+      kitTag: form.kitTag,
+      reason: form.reason,
+      issueDescription: form.issueDescription,
+      customizeId: text(form.customizeId) || null,
+    });
+  }
+
+  const statuses = Array.from(new Set([...(statusOptions || []), form.status].map(text).filter(Boolean)));
+  const productOptions = (Array.isArray(products) ? products : []).map((product) => ({
+    value: String(product?.id || ""),
+    label: text(product?.name) || "Unnamed product",
+    meta: text(product?.displayId),
+    searchText: `${product?.displayId || ""} ${product?.name || ""}`,
+  }));
+  const statusDropdownOptions = statuses.map((status) => ({ value: status, label: status, searchText: status }));
+
+  return (
+    <div className="co-submodal-overlay is-open next-operations-component-edit-overlay" aria-hidden="false">
+      <form className="co-submodal-dialog next-operations-component-edit-dialog" role="dialog" aria-modal="true" onSubmit={submit}>
+        <button type="button" className="co-submodal-close" onClick={onCancel} disabled={busy} aria-label={isAddMode ? "Close component creator" : "Close component editor"} />
+        <div className="co-submodal-header req-edit-header next-operations-component-edit-header">
+          <div className="req-edit-icon"><ClassicOrderIcon name="edit-2" /></div>
+          <div><div className="co-submodal-title">{isAddMode ? "Add component" : "Edit component"}</div></div>
+        </div>
+        <div className="co-submodal-body next-operations-component-edit-body">
+          <div className="next-operations-edit-grid next-operations-edit-grid--primary">
+            <OperationsModernDropdown
+              label="Component"
+              value={form.productId}
+              options={productOptions}
+              onChange={selectProduct}
+              placeholder="Select component"
+              searchable
+              searchPlaceholder="Search by component name or ID code…"
+              disabled={busy}
+            />
+            <OperationsModernDropdown
+              label="Status"
+              value={form.status}
+              options={statusDropdownOptions}
+              onChange={selectStatus}
+              placeholder="Select status"
+              disabled={busy}
+            />
+          </div>
+
+          <div className="next-operations-custom-id-row">
+            <label className="co-submodal-field next-operations-edit-field next-operations-custom-id-display">
+              <span className="co-submodal-label">ID</span>
+              <input
+                className="co-submodal-input"
+                value={text(form.productIdCode)}
+                placeholder="No ID"
+                readOnly
+                aria-label="Component ID"
+              />
+            </label>
+            <button
+              type="button"
+              className={`next-operations-customize-id-btn ${customizeIdOpen ? "is-active" : ""}`}
+              onClick={() => {
+                setCustomizeIdOpen((current) => {
+                  const next = !current;
+                  if (!current) window.setTimeout(() => customizeIdInputRef.current?.focus(), 20);
+                  return next;
+                });
+              }}
+              disabled={busy}
+            >
+              <ClassicOrderIcon name="edit-2" />
+              <span>Customize ID</span>
+            </button>
+            {customizeIdOpen ? (
+              <label className="co-submodal-field next-operations-edit-field next-operations-custom-id-input">
+                <span className="co-submodal-label">Customized ID</span>
+                <input
+                  ref={customizeIdInputRef}
+                  className="co-submodal-input"
+                  type="text"
+                  value={form.customizeId}
+                  onChange={(event) => setForm((current) => ({ ...current, customizeId: event.target.value }))}
+                  placeholder={text(form.productIdCode) ? `Original ID: ${text(form.productIdCode)}` : "Enter a temporary ID"}
+                  disabled={busy}
+                />
+                <span className="next-operations-edit-hint">Saved only for this order component and its Stocktaking row.</span>
+              </label>
+            ) : null}
+          </div>
+
+          <div className="next-operations-edit-section">
+            <div className="next-operations-edit-section__title">Quantities</div>
+            <div className="next-operations-edit-qty-grid">
+              <label className="co-submodal-field next-operations-edit-field"><span className="co-submodal-label">Requested Qty</span><input className="co-submodal-input" type="number" step="any" value={form.requestedQty} onChange={(event) => syncRequested(event.target.value)} disabled={busy} /></label>
+              <label className="co-submodal-field next-operations-edit-field"><span className="co-submodal-label">Received Qty</span><input className="co-submodal-input" type="number" step="any" value={form.receivedQty} onChange={(event) => syncReceived(event.target.value)} disabled={busy} /></label>
+              <label className="co-submodal-field next-operations-edit-field"><span className="co-submodal-label">Remaining Qty</span><input className="co-submodal-input" type="number" step="any" value={form.remainingQty} onChange={(event) => syncRemaining(event.target.value)} disabled={busy} /></label>
+              <label className="co-submodal-field next-operations-edit-field"><span className="co-submodal-label">Delivered Qty</span><input className="co-submodal-input" type="number" step="any" value={form.deliveredQty} onChange={(event) => syncDelivered(event.target.value)} disabled={busy || !isFinalStatus} /><span className="next-operations-edit-hint">Available when status is Arrived/Delivered.</span></label>
+            </div>
+          </div>
+
+          <div className="next-operations-edit-grid">
+            <label className="co-submodal-field next-operations-edit-field"><span className="co-submodal-label">Product tag</span><input className="co-submodal-input" value={form.productTag} onChange={(event) => setForm((current) => ({ ...current, productTag: event.target.value }))} disabled={busy} /></label>
+            <label className="co-submodal-field next-operations-edit-field"><span className="co-submodal-label">Kit tag</span><input className="co-submodal-input" value={form.kitTag} onChange={(event) => setForm((current) => ({ ...current, kitTag: event.target.value }))} disabled={busy} /></label>
+          </div>
+          <label className="co-submodal-field next-operations-edit-field next-operations-edit-field--wide"><span className="co-submodal-label">Reason</span><input className="co-submodal-input" value={form.reason} onChange={(event) => setForm((current) => ({ ...current, reason: event.target.value }))} disabled={busy} /></label>
+          <label className="co-submodal-field next-operations-edit-field next-operations-edit-field--wide"><span className="co-submodal-label">Issue description</span><textarea className="co-submodal-textarea" rows={3} value={form.issueDescription} onChange={(event) => setForm((current) => ({ ...current, issueDescription: event.target.value }))} disabled={busy} /></label>
+          {validationError ? <div className="co-submodal-error next-operations-component-edit-error" role="alert">{validationError}</div> : null}
+        </div>
+        <div className="co-submodal-actions next-operations-component-edit-actions">
+          <button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancel} disabled={busy}>Cancel</button>
+          <button type="submit" className="ro-action-btn ro-action-btn--dark" disabled={busy || !form.productId || !form.status}>{busy ? "Saving…" : isAddMode ? "Add component" : "Save component"}</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function ArchiveModal({ state, busy, error, onCancel, onSubmit }) {
+  const [password, setPassword] = useState("");
+  useEffect(() => setPassword(""), [state?.group?.key]);
+  if (!state) return null;
+  return <div className="co-submodal-overlay is-open" aria-hidden="false"><form className="co-submodal-dialog req-edit-dialog" role="dialog" aria-modal="true" onSubmit={(event) => { event.preventDefault(); onSubmit(password); }}><button type="button" className="co-submodal-close" onClick={onCancel} aria-label="Close"/><div className="co-submodal-header req-edit-header"><div className="req-edit-icon"><ClassicOrderIcon name="archive" /></div><div><div className="co-submodal-title">Archive operations order</div><div className="co-submodal-sub">Enter the Operations Orders admin password to move this order to Archive.</div></div></div><div className="co-submodal-body"><label className="co-submodal-label">Admin password</label><input className="co-submodal-input" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoFocus disabled={busy}/><div className="co-submodal-error" role="alert">{error}</div></div><div className="co-submodal-actions"><button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancel} disabled={busy}>Cancel</button><button type="submit" className="ro-action-btn ro-action-btn--dark" disabled={busy || !password.trim()}>{busy ? "Archiving…" : "Archive"}</button></div></form></div>;
+}
+
+function ReceiveModal({ state, busy, error, onCancel, onSubmit }) {
+  const group = state?.group;
+  const [receiptNumber, setReceiptNumber] = useState("");
+  const [issueDescription, setIssueDescription] = useState("");
+  const [quantities, setQuantities] = useState({});
+  const [searchQuery, setSearchQuery] = useState("");
+  useEffect(() => {
+    if (!group) return;
+    // Receive-now values must always start empty. The order quantity is shown
+    // separately as read-only so confirming the modal can never receive the
+    // whole outstanding quantity by accident.
+    setQuantities({});
+    setReceiptNumber("");
+    setIssueDescription("");
+    setSearchQuery("");
+  }, [group]);
+  if (!group) return null;
+  const searchNeedle = lower(searchQuery);
+  const visibleItems = group.items.filter((item) => {
+    if (!searchNeedle) return true;
+    return [
+      item?.productName,
+      item?.idCode,
+      item?.displayId,
+      item?.productTag,
+      item?.kitTag,
+      item?.reason,
+    ].map(lower).some((value) => value.includes(searchNeedle));
+  });
+  const receivableItems = group.items.filter((item) => Math.abs(remainingQuantity(item)) > 1e-9);
+  const hasReceiveQuantity = receivableItems.some((item) => {
+    const id = text(item?.id);
+    const maxNow = Math.abs(remainingQuantity(item));
+    return Math.min(maxNow, Math.max(0, finite(quantities[id]))) > 1e-9;
+  });
+  const allReceiveQuantitiesSelected = receivableItems.length > 0 && receivableItems.every((item) => {
+    const id = text(item?.id);
+    const maxNow = Math.abs(remainingQuantity(item));
+    return Math.min(maxNow, Math.max(0, finite(quantities[id]))) >= maxNow - 1e-9;
+  });
+  const setItemReceiveAll = (item, checked) => {
+    const id = text(item?.id);
+    const maxNow = Math.abs(remainingQuantity(item));
+    if (!id || maxNow <= 1e-9) return;
+    setQuantities((current) => ({ ...current, [id]: checked ? formatQuantity(maxNow) : "" }));
+  };
+  const setAllReceiveQuantities = (checked) => {
+    setQuantities((current) => {
+      const next = { ...current };
+      group.items.forEach((item) => {
+        const id = text(item?.id);
+        const maxNow = Math.abs(remainingQuantity(item));
+        if (!id || maxNow <= 1e-9) return;
+        next[id] = checked ? formatQuantity(maxNow) : "";
+      });
+      return next;
+    });
+  };
+  return <div className="co-submodal-overlay is-open next-operations-receive-modal" aria-hidden="false">
+    <form className="co-submodal-dialog next-operations-receive-dialog" role="dialog" aria-modal="true" aria-labelledby="operations-receive-title" onSubmit={(event) => { event.preventDefault(); onSubmit({ receiptNumber, issueDescription, quantities }); }}>
+      <div className="co-submodal-header next-operations-receive-header">
+        <div className="req-edit-icon"><ClassicOrderIcon name="truck" /></div>
+        <div><div className="co-submodal-title" id="operations-receive-title">Receive components</div><div className="co-submodal-sub">Confirm the receipt details and the quantity received now.</div></div>
+      </div>
+      <div className="co-submodal-body next-operations-receive-body">
+        <div className="next-operations-receive-fields">
+          <label className="next-operations-receive-field"><span className="co-submodal-label">Receipt number <em>Optional</em></span><input className="co-submodal-input" value={receiptNumber} onChange={(event) => setReceiptNumber(event.target.value)} placeholder="One or more receipt numbers" autoComplete="off"/></label>
+          <label className="next-operations-receive-field"><span className="co-submodal-label">Issue description <em>Optional</em></span><input className="co-submodal-input" value={issueDescription} onChange={(event) => setIssueDescription(event.target.value)} placeholder="Shared note for received components"/></label>
+        </div>
+        <label className="next-operations-receive-search">
+          <input
+            className="co-submodal-input"
+            type="search"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            onKeyDown={(event) => { if (event.key === "Enter") event.preventDefault(); }}
+            placeholder="Search components..."
+            autoComplete="off"
+            aria-label="Search receive components"
+          />
+        </label>
+        <section className="next-operations-receive-quantities" aria-labelledby="operations-receive-quantities-title">
+          <div className="next-operations-receive-section-head">
+            <div><span className="next-operations-receive-kicker">Components</span><strong id="operations-receive-quantities-title">Received quantities</strong></div>
+            <div className="next-operations-receive-head-actions">
+              <label className={`next-operations-receive-check next-operations-receive-check--all${allReceiveQuantitiesSelected ? " is-checked" : ""}${receivableItems.length ? "" : " is-disabled"}`}>
+                <input type="checkbox" checked={allReceiveQuantitiesSelected} onChange={(event) => setAllReceiveQuantities(event.target.checked)} disabled={!receivableItems.length || busy} />
+                <span className="next-operations-receive-check-box" aria-hidden="true"><span>✓</span></span>
+                <span className="next-operations-receive-check-label">Receive all</span>
+              </label>
+              <span className="next-operations-receive-count">{visibleItems.length}</span>
+            </div>
+          </div>
+          <div className="next-operations-receive-list">{visibleItems.length ? visibleItems.map((item) => {
+            const id = text(item?.id);
+            const base = baseQuantity(item);
+            const received = receivedQuantity(item);
+            const remaining = remainingQuantity(item);
+            const maxNow = Math.abs(remaining);
+            const receiveNow = Math.min(maxNow, Math.max(0, finite(quantities[id])));
+            const sign = base < 0 ? -1 : 1;
+            const previewReceived = roundQty(received + (sign * receiveNow));
+            const previewRemaining = roundQty(remaining - (sign * receiveNow));
+            const receiveAllSelected = maxNow > 1e-9 && receiveNow >= maxNow - 1e-9;
+            return <div className={`next-operations-receive-row${receiveAllSelected ? " is-selected" : ""}`} key={id}>
+              <label className={`next-operations-receive-check next-operations-receive-check--row${receiveAllSelected ? " is-checked" : ""}${maxNow <= 1e-9 ? " is-disabled" : ""}`} title={maxNow > 1e-9 ? "Fill the full remaining quantity" : "Nothing remaining to receive"}>
+                <input type="checkbox" checked={receiveAllSelected} onChange={(event) => setItemReceiveAll(item, event.target.checked)} disabled={maxNow <= 1e-9 || busy} aria-label={`Receive full remaining quantity for ${text(item?.productName) || "component"}`} />
+                <span className="next-operations-receive-check-box" aria-hidden="true"><span>✓</span></span>
+              </label>
+              <span className="next-operations-receive-info"><span className="next-operations-receive-name">{text(item?.productName) || "Product"}</span><span className="next-operations-receive-sub">Received {formatQuantity(previewReceived)} <b>·</b> Remaining {formatQuantity(previewRemaining)}</span></span>
+              <span className="next-operations-receive-qty-controls">
+                <span className="next-operations-receive-input-wrap next-operations-receive-input-wrap--readonly"><span>Qty</span><input className="co-submodal-input next-operations-receive-input" type="text" value={formatQuantity(Math.abs(remaining))} readOnly tabIndex={-1} aria-label={`Remaining quantity for ${text(item?.productName) || "component"}`}/></span>
+                <span className="next-operations-receive-input-wrap"><span>Received now</span><input className="co-submodal-input next-operations-receive-input" type="number" min="0" max={maxNow || undefined} step="any" inputMode="decimal" value={quantities[id] ?? ""} onChange={(event) => setQuantities((current) => ({ ...current, [id]: event.target.value }))} placeholder="0" aria-label={`Quantity received now for ${text(item?.productName) || "component"}`}/></span>
+              </span>
+            </div>;
+          }) : <div className="next-operations-receive-empty">No components match your search.</div>}</div>
+        </section>
+        <div className="co-submodal-error" role="alert" aria-live="polite">{error}</div>
+      </div>
+      <div className="co-submodal-actions next-operations-receive-actions"><button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancel} disabled={busy}>Cancel</button><button type="submit" className="ro-action-btn ro-action-btn--dark" disabled={busy || !hasReceiveQuantity}>{busy ? "Receiving…" : "Confirm receipt"}</button></div>
+    </form>
+  </div>;
+}
+
+function ConfirmModal({ state, busy, error, onCancel, onSubmit }) {
+  const [receiptPhotos, setReceiptPhotos] = useState([]);
+  const receiptPhotosInputRef = useRef(null);
+  useEffect(() => setReceiptPhotos([]), [state?.action, state?.group?.key]);
+  if (!state) return null;
+  const configs = { approve: ["Approve operations order", "Every component in this order will be approved by Operations.", "Approve", "check-circle"], deliver: ["Mark order delivered", "Upload the receipt photos, then the order will move to Delivered and stocktaking synchronization will run.", "Mark delivered", "check-circle"], unarchive: ["Restore archived order", "The order will return to the active workflow.", "UnArchive", "rotate-ccw"], withdrawal: ["Create withdrawal order", "A new withdrawal order will be created from delivered quantities.", "Create Withdrawal", "log-out"], delivery: ["Create delivery order", "A new delivery order will be created from delivered quantities.", "Create Delivery", "package"] };
+  const config = configs[state.action] || ["Confirm action", "Continue with this operation?", "Continue", "check-circle"];
+  const isDeliver = state.action === "deliver";
+  return <div className="co-submodal-overlay is-open" aria-hidden="false"><form className="co-submodal-dialog" role="dialog" aria-modal="true" onSubmit={(event) => { event.preventDefault(); onSubmit(isDeliver ? { files: receiptPhotos } : {}); }}><button type="button" className="co-submodal-close" onClick={onCancel} aria-label="Close"/><div className="co-submodal-header req-edit-header"><div className="req-edit-icon"><ClassicOrderIcon name={config[3]} /></div><div><div className="co-submodal-title">{config[0]}</div><div className="co-submodal-sub">{config[1]}</div></div></div><div className="co-submodal-body">{isDeliver ? <div className="co-submodal-field"><span className="co-submodal-label">Receipt photos <em>Required</em></span><input ref={receiptPhotosInputRef} className="co-upload-field__input" type="file" accept="image/*" multiple hidden required onChange={(event) => setReceiptPhotos(Array.from(event.target.files || []))} disabled={busy} /><button type="button" className="co-upload-field next-maintenance-upload-field" onClick={() => receiptPhotosInputRef.current?.click()} disabled={busy}><span className="co-upload-field__icon"><ClassicOrderIcon name="upload-cloud" /></span><span className="co-upload-field__content"><span className="co-upload-field__title">{receiptPhotos.length ? `${receiptPhotos.length} photo${receiptPhotos.length === 1 ? "" : "s"} selected` : "Choose receipt photos"}</span><span className="co-upload-field__meta">{receiptPhotos.length ? receiptPhotos.map((file) => file.name).join(" • ") : "PNG, JPG or WEBP"}</span></span></button></div> : null}<div className="co-submodal-error" role="alert">{error}</div></div><div className="co-submodal-actions"><button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancel} disabled={busy}>Cancel</button><button type="submit" className="ro-action-btn ro-action-btn--dark" disabled={busy || (isDeliver && !receiptPhotos.length)}>{busy ? (isDeliver ? "Uploading…" : "Working…") : config[2]}</button></div></form></div>;
+}
+
+
+export default function OperationsOrdersHeavyModals({
+  selected,
+  tab,
+  busy,
+  onCloseOrder,
+  onAction,
+  onExport,
+  editMode,
+  onPatchEditItem,
+  onUpsertEditAddition,
+  onSaveEdit,
+  onCancelEdit,
+  actionState,
+  actionError,
+  maintenanceOptions,
+  onCancelAction,
+  onSubmitAction,
+}) {
+  if (!selected && !actionState) return null;
+  return (
+    <>
+      <OrderModal
+        group={selected}
+        tab={tab}
+        busy={busy}
+        onClose={onCloseOrder}
+        onAction={onAction}
+        onExport={onExport}
+        editMode={editMode}
+        onPatchEditItem={onPatchEditItem}
+        onUpsertEditAddition={onUpsertEditAddition}
+        onSaveEdit={onSaveEdit}
+        onCancelEdit={onCancelEdit}
+      />
+      <RejectModal state={actionState?.action === "reject" ? actionState : null} busy={busy} error={actionError} onCancel={onCancelAction} onSubmit={onSubmitAction} />
+      <EditPasswordModal state={actionState?.action === "edit" ? actionState : null} busy={busy} error={actionError} onCancel={onCancelAction} onSubmit={onSubmitAction} />
+      <ArchiveModal state={actionState?.action === "archive" ? actionState : null} busy={busy} error={actionError} onCancel={onCancelAction} onSubmit={onSubmitAction} />
+      <ReceiveModal state={actionState?.action === "receive" ? actionState : null} busy={busy} error={actionError} onCancel={onCancelAction} onSubmit={onSubmitAction} />
+      <TechnicalVisitModal state={actionState?.action === "technical-visit" ? actionState : null} busy={busy} error={actionError} onCancel={onCancelAction} onSubmit={onSubmitAction} />
+      <OperationsMaintenanceLogModal group={actionState?.action === "maintenance-log" ? actionState.group : null} options={maintenanceOptions || {}} busy={busy} error={actionError} onCancel={onCancelAction} onSubmit={onSubmitAction} />
+      <OperationsMaintenanceDoneModal group={actionState?.action === "maintenance-deliver" ? actionState.group : null} busy={busy} error={actionError} onCancel={onCancelAction} onSubmit={onSubmitAction} />
+      <ConfirmModal state={["approve", "deliver", "unarchive", "withdrawal", "delivery"].includes(actionState?.action) ? actionState : null} busy={busy} error={actionError} onCancel={onCancelAction} onSubmit={onSubmitAction} />
+    </>
+  );
+}
