@@ -614,7 +614,7 @@ export default function BackupClient({ initialTables = [] }) {
                         suppressFolderClickRef.current = false;
                         return;
                       }
-                      router.push(`/next/backup/${encodeURIComponent(item.key)}?folder=${encodeURIComponent(activePage.key)}`);
+                      router.push(`/backup/${encodeURIComponent(item.key)}?folder=${encodeURIComponent(activePage.key)}`);
                     }}
                     aria-label={`Open ${item.pageName || item.tableName}. Press and hold for actions.`}
                     aria-haspopup="menu"

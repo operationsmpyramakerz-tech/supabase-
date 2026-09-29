@@ -27,8 +27,8 @@ export default async function TaskManagementIndexPage() {
 
   const allowed = allowedTokens(gate.account.allowedPages);
   const broad = allowed.has("task management") || allowed.has("taskmanagement") || allowed.has("department tickets") || allowed.has("/task-management") || allowed.has("task-management");
-  if (broad || allowed.has("all tasks") || allowed.has("/task-management/all-tasks") || allowed.has("task-management/all-tasks")) redirect("/next/task-management/all-tasks");
-  if (allowed.has("my tasks") || allowed.has("/task-management/my-tasks") || allowed.has("task-management/my-tasks")) redirect("/next/task-management/my-tasks");
-  if (allowed.has("delegated tasks") || allowed.has("/task-management/delegated-tasks") || allowed.has("task-management/delegated-tasks")) redirect("/next/task-management/delegated-tasks");
+  if (broad || allowed.has("all tasks") || allowed.has("/task-management/all-tasks") || allowed.has("task-management/all-tasks")) redirect("/task-management/all-tasks");
+  if (allowed.has("my tasks") || allowed.has("/task-management/my-tasks") || allowed.has("task-management/my-tasks")) redirect("/task-management/my-tasks");
+  if (allowed.has("delegated tasks") || allowed.has("/task-management/delegated-tasks") || allowed.has("task-management/delegated-tasks")) redirect("/task-management/delegated-tasks");
   redirect("/home");
 }

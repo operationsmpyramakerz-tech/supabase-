@@ -19,5 +19,5 @@ export default async function ShoppingCartIndexPage({ searchParams }) {
   if (String(query?.editKey || "").trim()) params.set("editKey", String(query.editKey).trim());
 
   const suffix = params.toString() ? `?${params.toString()}` : "";
-  redirect(`/next/orders/new/${flow}${suffix}`);
+  redirect(`/orders/new/${flow}${suffix}`);
 }
