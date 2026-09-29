@@ -519,19 +519,6 @@ function templateReportFileName(group) {
   return `maintenance-template-${safe}.pdf`;
 }
 
-function Progress({ stage }) {
-  const icons = ["eye", "activity", "truck", "home"];
-  const safeStage = Math.max(1, Math.min(4, Number(stage) || 1));
-  return (
-    <div className="co-track-pill next-maintenance-track-pill" role="img" aria-label={`Order progress step ${safeStage} of 4`}>
-      {icons.map((icon, index) => {
-        const step = index + 1;
-        return <span className="next-classic-track-fragment" key={icon}><span className={`co-track-step ${step <= safeStage ? "is-active" : ""} ${step === safeStage ? "is-current" : ""}`}><ClassicOrderIcon name={icon} /></span>{step < 4 ? <span className={`co-track-conn ${step < safeStage ? "is-active" : ""}`} /> : null}</span>;
-      })}
-    </div>
-  );
-}
-
 function MaintenanceCard({ group, onOpen, onCreator }) {
   const vars = MAINTENANCE_STATUS_COLORS[group.state.key] || MAINTENANCE_STATUS_COLORS["not-started"];
   const thumbStyle = { "--co-thumb-bg": "#FEF3C7", "--co-thumb-fg": "#92400E", "--co-thumb-border": "#FDE68A" };
