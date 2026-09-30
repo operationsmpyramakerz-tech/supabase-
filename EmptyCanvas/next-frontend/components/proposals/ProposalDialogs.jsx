@@ -789,7 +789,7 @@ function ReceiptImagePreviewGrid({ files, busy, onRemove }) {
   );
 }
 
-export function MakeOrderModal({ proposal, members, busy, onClose, onSubmit }) {
+export function MakeOrderModal({ proposal, members, membersLoading = false, busy, onClose, onSubmit }) {
   const teamMembers = useMemo(() => (Array.isArray(members) ? members : []).filter((member) => text(member?.id) && text(member?.name)), [members]);
   const [memberId, setMemberId] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
@@ -823,7 +823,7 @@ export function MakeOrderModal({ proposal, members, busy, onClose, onSubmit }) {
         <ModernSelect
           label="Team Member *"
           value={memberId}
-          placeholder={teamMembers.length ? "Select team member" : "No team members available"}
+          placeholder={membersLoading ? "Loading team members…" : teamMembers.length ? "Select team member" : "No team members available"}
           searchable
           options={teamMembers.map((member) => ({
             value: member.id,
@@ -831,7 +831,7 @@ export function MakeOrderModal({ proposal, members, busy, onClose, onSubmit }) {
             meta: [text(member.department), text(member.position)].filter(Boolean).join(" · "),
           }))}
           onChange={(value) => { setMemberId(value); setError(""); }}
-          disabled={busy}
+          disabled={busy || membersLoading}
         />
 
         <label>
@@ -854,7 +854,7 @@ export function MakeOrderModal({ proposal, members, busy, onClose, onSubmit }) {
         {error ? <div className="next-proposals-error products-form-error">{error}</div> : null}
         <div className="next-proposals-form__actions products-modal__actions">
           <button type="button" className="products-btn products-btn--light" onClick={close} disabled={busy}>Cancel</button>
-          <button type="submit" className="products-btn products-btn--dark" disabled={busy || !teamMembers.length}>
+          <button type="submit" className="products-btn products-btn--dark" disabled={busy || membersLoading || !teamMembers.length}>
             <ProposalIcon name="shoppingBag" /><span>{busy ? "Creating…" : "Create Order"}</span>
           </button>
         </div>
