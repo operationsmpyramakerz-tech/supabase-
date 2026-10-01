@@ -1,9 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { navigateWithinApp } from "../../lib/client-navigation";
 import EventIcon from "./EventIcon";
-import { loadTeamMemberPublicProfile } from "../../lib/team-member-public-client";
+
+
+const loadEventsDialogs = () => import("./EventsDialogs");
+const EventsDetailsModal = dynamic(() => loadEventsDialogs().then((module) => module.EventsDetailsModal), { ssr: false });
+const AuthorizationModal = dynamic(() => loadEventsDialogs().then((module) => module.AuthorizationModal), { ssr: false });
+const ConfirmationModal = dynamic(() => loadEventsDialogs().then((module) => module.ConfirmationModal), { ssr: false });
+const ProfileModal = dynamic(() => loadEventsDialogs().then((module) => module.ProfileModal), { ssr: false });
 
 const STATUS_LABELS = {
   submitted: "Submitted",
@@ -38,23 +45,10 @@ function lower(value) {
   return text(value).toLowerCase();
 }
 
-function number(value) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
 function normalizeStatus(value) {
   const status = lower(value).replace(/[\s-]+/g, "_");
   if (status === "under_review" || status === "approved") return "submitted";
   return Object.prototype.hasOwnProperty.call(STATUS_LABELS, status) ? status : "submitted";
-}
-
-function formatMoney(value) {
-  return new Intl.NumberFormat("en-EG", {
-    style: "currency",
-    currency: "EGP",
-    maximumFractionDigits: 2,
-  }).format(number(value));
 }
 
 function toDate(value) {
@@ -156,214 +150,9 @@ function StatusPill({ status }) {
   return <span className={`events-status events-status--${key} next-events-status next-events-status--${key}`}>{STATUS_LABELS[key]}</span>;
 }
 
-function SummaryCard({ label, value, note, tone = "default" }) {
-  return (
-    <article className={`next-events-summary-card next-events-summary-card--${tone}`}>
-      <small>{label}</small>
-      <strong>{value}</strong>
-      <span>{note}</span>
-    </article>
-  );
-}
-
-function DetailItem({ label, value, wide = false }) {
-  return (
-    <div className={`events-detail-item next-events-detail-item${wide ? " wide" : ""}`}>
-      <small>{label}</small>
-      <strong>{text(value) || "—"}</strong>
-    </div>
-  );
-}
-
-function ItemList({ items, component = false, empty }) {
-  if (!Array.isArray(items) || !items.length) return <p className="next-events-empty-copy">{empty}</p>;
-  return (
-    <ul className="events-detail-list next-events-item-list">
-      {items.map((item, index) => {
-        const title = component ? item?.name : item?.title;
-        const notes = component ? item?.notes : [item?.description, item?.notes].map(text).filter(Boolean).join(" · ");
-        const quantity = number(item?.quantity);
-        const total = number(item?.totalCost || quantity * number(item?.unitCost || item?.workingCost));
-        return (
-          <li key={`${text(title)}-${index}`}>
-            <strong>{text(title) || "Untitled item"}</strong>
-            <small>{quantity || 0} required{notes ? ` · ${notes}` : ""} · {formatMoney(total)}</small>
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
-
-function EventsDetailsModal({ event, busy, onClose, onDownload, onWorkflow, onRequestAction, canRequestActions }) {
-  if (!event) return null;
-  const mapUrl = safeUrl(event.locationUrl);
-  const utilities = [event.requiresPower && "Power points", event.requiresInternet && "Internet", event.requiresSoundSystem && "Sound system"].filter(Boolean).join(" · ") || "No special utilities selected";
-  const status = normalizeStatus(event.status);
-  const workflow = status === "submitted"
-    ? { targetStatus: "in_progress", label: "Mark as approved" }
-    : status === "in_progress"
-      ? { targetStatus: "completed", label: "Mark as delivered" }
-      : null;
-
-  return (
-    <div className="events-modal-overlay next-modal-layer" role="presentation" onMouseDown={(mouseEvent) => { if (mouseEvent.target === mouseEvent.currentTarget) onClose(); }}>
-      <section className="events-modal events-modal--detail next-modal next-events-details-modal" role="dialog" aria-modal="true" aria-label="Event request details">
-        <header className="events-modal__header next-events-modal-head">
-          <div>
-            <span className="next-events-kicker">{event.eventCode || "Event request"}</span>
-            <h2>{event.eventName || "Untitled Event"}</h2>
-            <p>{formatDateRange(event)}</p>
-          </div>
-          <div><StatusPill status={event.status} /><button type="button" className="events-modal__close next-modal-close" onClick={onClose} aria-label="Close">×</button></div>
-        </header>
-
-        <div className="events-detail-content next-events-detail-body">
-          <section className="events-detail-block next-events-detail-section">
-            <h3>Overview</h3>
-            <div className="events-detail-grid next-events-detail-grid">
-              <DetailItem label="Type" value={typeLabel(event)} />
-              <DetailItem label="Organization" value={event.organizationName} />
-              <DetailItem label="Expected attendees" value={event.expectedAttendees ? String(event.expectedAttendees) : "—"} />
-              <DetailItem label="Requested by" value={event.requesterName} />
-            </div>
-          </section>
-
-          <section className="events-detail-block next-events-detail-section">
-            <h3>Contact</h3>
-            <div className="events-detail-grid next-events-detail-grid">
-              <DetailItem label="Contact person" value={event.contactPerson} />
-              <DetailItem label="Phone" value={event.contactPhone} />
-              <DetailItem label="Email" value={event.contactEmail} />
-              <DetailItem label="Created" value={formatDateTime(event.createdAt)} />
-            </div>
-          </section>
-
-          <section className="events-detail-block events-detail-block--wide next-events-detail-section next-events-detail-section--wide">
-            <h3>Target audience</h3>
-            <p>{text(event.audience) || "No audience details were added."}</p>
-          </section>
-
-          <section className="events-detail-block next-events-detail-section">
-            <h3>Projects</h3>
-            <ItemList items={event.projects} empty="No projects were added." />
-          </section>
-
-          <section className="events-detail-block next-events-detail-section">
-            <h3>Marketing materials</h3>
-            <ItemList items={event.marketingMaterials} component empty="No marketing materials were added." />
-          </section>
-
-          <section className="events-detail-block next-events-detail-section">
-            <h3>Venue requirements</h3>
-            <ItemList items={event.venueRequirements} component empty="No venue requirements were added." />
-          </section>
-
-          <section className="events-detail-block next-events-detail-section">
-            <h3>Venue & location</h3>
-            <div className="events-detail-grid next-events-detail-grid">
-              <DetailItem label="Venue" value={event.venueName} />
-              <DetailItem label="Venue type" value={event.venueType} />
-              <DetailItem label="Governorate" value={event.governorate} />
-              <DetailItem label="Setup time" value={formatDateTime(event.venueSetupTime)} />
-            </div>
-            {mapUrl ? <a className="next-events-map-link" href={mapUrl} target="_blank" rel="noreferrer">Open map location ↗</a> : null}
-          </section>
-
-          <section className="events-detail-block next-events-detail-section">
-            <h3>Site notes</h3>
-            <div className="events-detail-grid next-events-detail-grid">
-              <DetailItem label="Utilities" value={utilities} wide />
-              <DetailItem label="Venue notes" value={event.venueNotes || "No venue notes were added."} wide />
-            </div>
-          </section>
-
-          <section className="events-detail-block events-detail-block--wide next-events-detail-section next-events-detail-section--wide">
-            <h3>Cost summary</h3>
-            <div className="next-events-cost-grid">
-              <span><small>Working cost</small><strong>{formatMoney(event.workingCost)}</strong></span>
-              <span><small>Transport cost</small><strong>{formatMoney(event.transportCost)}</strong></span>
-              <span><small>Total cost</small><strong>{formatMoney(event.totalCost)}</strong></span>
-            </div>
-          </section>
-
-          {text(event.operationsNotes) ? (
-            <section className="events-detail-block events-detail-block--wide next-events-detail-section next-events-detail-section--wide"><h3>Operations notes</h3><p>{event.operationsNotes}</p></section>
-          ) : null}
-        </div>
-
-        <footer className="events-modal__actions next-events-modal-actions">
-          <div>
-            {canRequestActions ? <button type="button" className="events-secondary-btn secondary" disabled={busy} onClick={() => onRequestAction("edit")}>Edit</button> : null}
-            {canRequestActions && status !== "cancelled" ? <button type="button" className="danger" disabled={busy} onClick={() => onRequestAction("cancel")}>Cancel request</button> : null}
-          </div>
-          <div>
-            <button type="button" className="events-secondary-btn secondary" onClick={onDownload}>Download PDF</button>
-            {workflow && canRequestActions ? <button type="button" className="events-primary-btn primary" disabled={busy} onClick={() => onWorkflow(workflow.targetStatus)}>{workflow.label}</button> : null}
-          </div>
-        </footer>
-      </section>
-    </div>
-  );
-}
-
-function AuthorizationModal({ authorization, busy, error, onClose, onPassword, onSubmit }) {
-  if (!authorization) return null;
-  return (
-    <div className="events-modal-overlay next-modal-layer" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <form className="events-modal events-modal--authorization next-modal next-events-auth-modal" onSubmit={onSubmit}>
-        <header className="events-modal__header next-events-modal-head"><div><span className="next-events-kicker">Admin verification</span><h2>{authorization.title}</h2><p>Enter the shared Events Admin password to continue.</p></div><button type="button" className="events-modal__close next-modal-close" onClick={onClose}>×</button></header>
-        <label className="events-field next-field"><span>Admin password</span><input autoFocus type="password" value={authorization.password} onChange={(event) => onPassword(event.target.value)} placeholder="Enter Admin password" /></label>
-        {error ? <div className="events-form-error next-events-form-error">{error}</div> : null}
-        <footer className="events-modal__actions next-events-modal-actions"><span /><div><button type="button" className="events-secondary-btn secondary" onClick={onClose}>Cancel</button><button type="submit" className="events-primary-btn primary" disabled={busy}>{busy ? "Verifying..." : "Verify & continue"}</button></div></footer>
-      </form>
-    </div>
-  );
-}
-
-function ConfirmationModal({ confirmation, busy, onClose, onConfirm }) {
-  if (!confirmation) return null;
-  return (
-    <div className="events-modal-overlay next-modal-layer" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section className="events-modal events-modal--workflow-confirm next-modal next-events-confirm-modal" role="dialog" aria-modal="true">
-        <header className="events-modal__header next-events-modal-head"><div><span className="next-events-kicker">Confirm action</span><h2>{confirmation.title}</h2><p>{confirmation.message}</p></div><button type="button" className="events-modal__close next-modal-close" onClick={onClose}>×</button></header>
-        <footer className="events-modal__actions next-events-modal-actions"><span /><div><button type="button" className="events-secondary-btn secondary" onClick={onClose}>Back</button><button type="button" className={confirmation.danger ? "danger" : "primary"} disabled={busy} onClick={onConfirm}>{busy ? "Updating..." : confirmation.label}</button></div></footer>
-      </section>
-    </div>
-  );
-}
-
-function ProfileModal({ profileState, onClose }) {
-  if (!profileState) return null;
-  const profile = profileState.profile || {};
-  const initials = (text(profile.name || profileState.name) || "U").split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("");
-  return (
-    <div className="events-modal-overlay next-modal-layer" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section className="events-modal next-modal next-events-profile-modal" role="dialog" aria-modal="true">
-        <header className="events-modal__header next-events-modal-head"><div><span className="next-events-kicker">Created by</span><h2>{profile.name || profileState.name || "Team member"}</h2><p>{[profile.position, profile.department].map(text).filter(Boolean).join(" · ") || "Team member"}</p></div><button type="button" className="events-modal__close next-modal-close" onClick={onClose}>×</button></header>
-        {profileState.loading ? <div className="next-events-profile-state">Loading profile details...</div> : profileState.error ? <div className="events-form-error next-events-form-error">{profileState.error}</div> : (
-          <div className="next-events-profile-body">
-            <div className="next-events-avatar">{profile.photoUrl ? <img src={profile.photoUrl} alt="" /> : <span>{initials}</span>}</div>
-            <div className="events-detail-grid next-events-detail-grid">
-              <DetailItem label="Name" value={profile.name || profile.username} />
-              <DetailItem label="Department" value={profile.department} />
-              <DetailItem label="Position" value={profile.position} />
-              <DetailItem label="Employee code" value={profile.employeeCode} />
-              <DetailItem label="Phone" value={profile.phone} />
-              <DetailItem label="Email" value={profile.email} />
-            </div>
-          </div>
-        )}
-      </section>
-    </div>
-  );
-}
-
-export default function EventsClient({ account, initialEvents = [], bootstrapWarnings = [] }) {
+export default function EventsClient({ account, initialEvents = [] }) {
   const permissions = useMemo(() => allowedSet(account), [account]);
   const canRequestActions = permissions.has("event requests");
-  const canOpenCalendar = permissions.has("event calendar");
-  const canOpenComponents = permissions.has("event components");
 
   const [events, setEvents] = useState(() => initialEvents.map((event) => ({ ...event, status: normalizeStatus(event.status) })));
   const [query, setQuery] = useState("");
@@ -433,24 +222,8 @@ export default function EventsClient({ account, initialEvents = [], bootstrapWar
     });
   }, [events, query, status, eventType]);
 
-  const counts = useMemo(() => {
-    const result = { all: events.length, submitted: 0, in_progress: 0, completed: 0, cancelled: 0 };
-    for (const event of events) result[normalizeStatus(event.status)] += 1;
-    return result;
-  }, [events]);
-
-  const totalCost = useMemo(() => events.reduce((total, event) => total + number(event.totalCost), 0), [events]);
-  const upcoming = useMemo(() => events.filter((event) => {
-    const date = toDate(event.eventStartDate);
-    return date && date.getTime() >= Date.now() && normalizeStatus(event.status) !== "cancelled";
-  }).length, [events]);
-
-  const refreshEvents = async () => {
-    const body = await requestJson(`/next/api/events?_ts=${Date.now()}`);
-    setEvents((Array.isArray(body.events) ? body.events : []).map((event) => ({ ...event, status: normalizeStatus(event.status) })));
-  };
-
   const openDetails = async (event) => {
+    void loadEventsDialogs();
     setActiveEvent(event);
     try {
       const body = await requestJson(`/next/api/events/${encodeURIComponent(event.id)}?_ts=${Date.now()}`);
@@ -467,6 +240,7 @@ export default function EventsClient({ account, initialEvents = [], bootstrapWar
   };
 
   const requestAuthorization = (kind, value) => {
+    void loadEventsDialogs();
     const event = activeEvent;
     if (!event) return;
     const title = kind === "workflow"
@@ -566,10 +340,12 @@ export default function EventsClient({ account, initialEvents = [], bootstrapWar
 
   const openProfile = async (event, clickEvent) => {
     clickEvent.stopPropagation();
+    void loadEventsDialogs();
     const key = text(event.createdByUserId || event.requesterName);
     const name = text(event.requesterName) || "Creator";
     setProfileState({ loading: true, name, profile: null, error: "" });
     try {
+      const { loadTeamMemberPublicProfile } = await import("../../lib/team-member-public-client");
       const body = await loadTeamMemberPublicProfile(key || name);
       setProfileState({ loading: false, name, profile: body, error: "" });
     } catch (error) {
@@ -700,18 +476,20 @@ export default function EventsClient({ account, initialEvents = [], bootstrapWar
         )}
       </section>
 
-      <EventsDetailsModal
-        event={activeEvent}
-        busy={busy}
-        canRequestActions={canRequestActions}
-        onClose={() => setActiveEvent(null)}
-        onDownload={() => { if (activeEvent?.id) window.location.href = `/next/api/events/pdf-direct?id=${encodeURIComponent(activeEvent.id)}`; }}
-        onWorkflow={(targetStatus) => requestAuthorization("workflow", targetStatus)}
-        onRequestAction={(action) => requestAuthorization("request_action", action)}
-      />
-      <AuthorizationModal authorization={authorization} busy={busy} error={authorizationError} onClose={() => { setAuthorization(null); setAuthorizationError(""); }} onPassword={(password) => setAuthorization((current) => ({ ...current, password }))} onSubmit={authorize} />
-      <ConfirmationModal confirmation={confirmation} busy={busy} onClose={() => setConfirmation(null)} onConfirm={confirmAction} />
-      <ProfileModal profileState={profileState} onClose={() => setProfileState(null)} />
+      {activeEvent ? (
+        <EventsDetailsModal
+          event={activeEvent}
+          busy={busy}
+          canRequestActions={canRequestActions}
+          onClose={() => setActiveEvent(null)}
+          onDownload={() => { if (activeEvent?.id) window.location.href = `/next/api/events/pdf-direct?id=${encodeURIComponent(activeEvent.id)}`; }}
+          onWorkflow={(targetStatus) => requestAuthorization("workflow", targetStatus)}
+          onRequestAction={(action) => requestAuthorization("request_action", action)}
+        />
+      ) : null}
+      {authorization ? <AuthorizationModal authorization={authorization} busy={busy} error={authorizationError} onClose={() => { setAuthorization(null); setAuthorizationError(""); }} onPassword={(password) => setAuthorization((current) => ({ ...current, password }))} onSubmit={authorize} /> : null}
+      {confirmation ? <ConfirmationModal confirmation={confirmation} busy={busy} onClose={() => setConfirmation(null)} onConfirm={confirmAction} /> : null}
+      {profileState ? <ProfileModal profileState={profileState} onClose={() => setProfileState(null)} /> : null}
     </section>
   );
 }
