@@ -1,14 +1,24 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { uploadB2cFile } from "../../lib/b2c-direct-upload";
+import dynamic from "next/dynamic";
+
+const NewFormDialog = dynamic(() => import("./B2cFormDialogs").then((module) => module.NewFormDialog), { ssr: false });
+const FormDetailsEditor = dynamic(() => import("./B2cFormDialogs").then((module) => module.FormDetailsEditor), { ssr: false });
+const BuilderDialog = dynamic(() => import("./B2cFormDialogs").then((module) => module.BuilderDialog), { ssr: false });
+
+function preloadB2cFormDialogs() {
+  void import("./B2cFormDialogs");
+}
+function preloadB2cUpload() {
+  void import("../../lib/b2c-direct-upload");
+}
 
 const TYPE_LABELS = {
   text: "Text", number: "Number", select: "Select", multi_select: "Multi-select",
   date: "Date", files: "Files & media", checkbox: "Checkbox", url: "URL",
   email: "Email", phone: "Phone", formula: "Formula", place: "Place",
 };
-const VALUELESS_OPERATORS = new Set(["has_value", "is_empty", "is_checked", "not_checked"]);
 const FORM_ACCESS_ALIASES = ["customer form", "b2c customer form", "b2c", "/b2c", "/b2c/form"];
 const DATABASE_ACCESS_ALIASES = ["customer database", "b2c customer database", "b2c", "/b2c", "/b2c/database"];
 
@@ -101,6 +111,7 @@ async function requestReadJson(directUrl) {
   return await requestJson(directUrl);
 }
 async function uploadFile(file, onProgress = () => {}) {
+  const { uploadB2cFile } = await import("../../lib/b2c-direct-upload");
   return await uploadB2cFile(file, onProgress);
 }
 function emptyValues(fields) {
@@ -157,187 +168,6 @@ function Toast({ toast, onClose }) {
       <div><strong>{toast.title || "B2C Forms"}</strong><span>{toast.message}</span></div>
       <button type="button" onClick={onClose} aria-label="Close">×</button>
     </div>
-  );
-}
-
-function ClassicModal({ title, subtitle, eyebrow = "B2C form", builder = false, onClose, children }) {
-  useEffect(() => {
-    const old = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = old; };
-  }, []);
-  return (
-    <div className="b2c-overlay next-b2c-classic-form-overlay" aria-hidden="false" onMouseDown={(event) => {
-      if (event.target === event.currentTarget || event.target.classList.contains("b2c-overlay__backdrop")) onClose();
-    }}>
-      <div className="b2c-overlay__backdrop" />
-      <section className={`b2c-dialog ${builder ? "b2c-dialog--builder" : "b2c-dialog--small"}`} role="dialog" aria-modal="true" aria-label={title}>
-        <button className="b2c-dialog__close" type="button" onClick={onClose} aria-label="Close">×</button>
-        <div className={`b2c-dialog__header ${builder ? "b2c-dialog__header--builder" : ""}`}>
-          <div><span className="b2c-eyebrow">{eyebrow}</span><h2>{title}</h2>{subtitle ? <p>{subtitle}</p> : null}</div>
-        </div>
-        {children}
-      </section>
-    </div>
-  );
-}
-
-function FormDetailsEditor({ form, busy, onClose, onSave }) {
-  const [name, setName] = useState(form?.name || "");
-  const [description, setDescription] = useState(form?.description || "");
-  const [error, setError] = useState("");
-  const submit = async (event) => {
-    event.preventDefault();
-    setError("");
-    if (!text(name)) return setError("Form name is required.");
-    try { await onSave({ name: text(name), description: text(description) }); }
-    catch (saveError) { setError(saveError?.message || "The form could not be updated."); }
-  };
-  return (
-    <ClassicModal title="Edit Form Details" subtitle="Update the form name and description without changing its questions." eyebrow="Form details" onClose={onClose}>
-      <form onSubmit={submit}>
-        <div className="b2c-form-grid">
-          <label className="b2c-form-control b2c-form-control--wide"><span>Form name <em>*</em></span><input autoFocus maxLength={120} value={name} onChange={(event) => setName(event.target.value)} /></label>
-          <label className="b2c-form-control b2c-form-control--wide"><span>Description</span><textarea maxLength={500} value={description} onChange={(event) => setDescription(event.target.value)} /></label>
-        </div>
-        {error ? <div className="b2c-dialog__error">{error}</div> : null}
-        <div className="b2c-dialog__actions">
-          <button type="button" className="b2c-secondary-btn" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="submit" className="b2c-primary-btn" disabled={busy}>{busy ? "Saving…" : "Save Details"}</button>
-        </div>
-      </form>
-    </ClassicModal>
-  );
-}
-
-function NewFormDialog({ databases, busy, defaultDatabaseId, onClose, onCreate }) {
-  const [name, setName] = useState("");
-  const [databaseId, setDatabaseId] = useState(defaultDatabaseId || "");
-  const [description, setDescription] = useState("");
-  const [error, setError] = useState("");
-  const submit = async (event) => {
-    event.preventDefault();
-    setError("");
-    if (!text(name) || !text(databaseId)) return setError("Form name and linked table are required.");
-    try { await onCreate({ name: text(name), databaseId: text(databaseId), description: text(description) }); }
-    catch (createError) { setError(createError?.message || "The form could not be created."); }
-  };
-  return (
-    <ClassicModal title="Create B2C Form" subtitle="Link this form to one existing data table." eyebrow="New form" onClose={onClose}>
-      <form onSubmit={submit}>
-        <div className="b2c-form-grid">
-          <label className="b2c-form-control b2c-form-control--wide"><span>Form name <em>*</em></span><input autoFocus maxLength={120} placeholder="e.g. Customer Update Form" value={name} onChange={(event) => setName(event.target.value)} /></label>
-          <label className="b2c-form-control b2c-form-control--wide"><span>Linked table <em>*</em></span><select value={databaseId} onChange={(event) => setDatabaseId(event.target.value)}><option value="">Choose a data table</option>{databases.map((database) => <option value={database.id} key={database.id}>{database.name}</option>)}</select></label>
-          <label className="b2c-form-control b2c-form-control--wide"><span>Description</span><textarea maxLength={500} value={description} onChange={(event) => setDescription(event.target.value)} /></label>
-        </div>
-        {!databases.length ? <div className="next-b2c-classic-form-note">Create a B2C data table before creating a form. <a href="/next/b2c/database">Open Database</a></div> : null}
-        {error ? <div className="b2c-dialog__error">{error}</div> : null}
-        <div className="b2c-dialog__actions">
-          <button type="button" className="b2c-secondary-btn" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="submit" className="b2c-primary-btn" disabled={busy || !databases.length}><Icon name="plus" />{busy ? "Creating…" : "Create Form"}</button>
-        </div>
-      </form>
-    </ClassicModal>
-  );
-}
-
-function BuilderDialog({ form, fields, busy, onClose, onSave }) {
-  const [draft, setDraft] = useState(() => fields.map((field, index) => ({ ...normalizeField(field, index), sortOrder: index + 1 })));
-  const [error, setError] = useState("");
-  const [dragIndex, setDragIndex] = useState(-1);
-  const update = (index, patch) => setDraft((current) => current.map((item, position) => position === index ? { ...item, ...patch } : item));
-  const updateCondition = (index, patch) => setDraft((current) => current.map((item, position) => position === index ? { ...item, condition: { ...(item.condition || {}), ...patch } } : item));
-  const move = (index, direction) => setDraft((current) => {
-    const target = index + direction;
-    if (target < 0 || target >= current.length) return current;
-    const copy = [...current];
-    const [item] = copy.splice(index, 1);
-    copy.splice(target, 0, item);
-    return copy;
-  });
-  const drop = (targetIndex) => {
-    if (dragIndex < 0 || targetIndex < 0 || dragIndex === targetIndex) return setDragIndex(-1);
-    setDraft((current) => {
-      const copy = [...current];
-      const [item] = copy.splice(dragIndex, 1);
-      copy.splice(targetIndex, 0, item);
-      return copy;
-    });
-    setDragIndex(-1);
-  };
-  const remove = (index) => {
-    const removed = draft[index];
-    if (!removed || !window.confirm(`Remove “${removed.label}” from this form? The original database property and historical values will remain.`)) return;
-    setDraft((current) => current
-      .filter((_, position) => position !== index)
-      .map((item) => item.condition?.fieldKey === removed.key ? { ...item, condition: { enabled: false, fieldKey: "", operator: "equals", value: "" } } : item));
-  };
-  const submit = async (event) => {
-    event.preventDefault();
-    setError("");
-    const invalid = draft.find((item) => item.condition?.enabled && !text(item.condition.fieldKey));
-    if (invalid) return setError(`Choose the controlling question for ${invalid.label}.`);
-    try {
-      await onSave(draft.map((item, index) => ({
-        fieldId: item.fieldId || item.id,
-        formRequired: Boolean(item.formRequired),
-        sortOrder: index + 1,
-        condition: item.condition?.enabled
-          ? { enabled: true, fieldKey: text(item.condition.fieldKey), operator: text(item.condition.operator) || "equals", value: item.condition.value ?? "" }
-          : { enabled: false, fieldKey: "", operator: "equals", value: "" },
-      })));
-    } catch (saveError) { setError(saveError?.message || "The form builder could not be saved."); }
-  };
-  return (
-    <ClassicModal title={`Edit ${form?.name || "Form"}`} subtitle="Reorder questions, decide which fields are required, and add conditional visibility." eyebrow="Form builder" builder onClose={onClose}>
-      <form className="next-b2c-classic-builder-form" onSubmit={submit}>
-        <div className="b2c-builder-guide"><Icon name="branch" /><span>Conditions use answers from other fields. Required validation is applied only while the question is visible.</span></div>
-        <div className="b2c-form-builder-list">
-          {draft.length ? draft.map((item, index) => {
-            const condition = item.condition || {};
-            const controlling = draft.filter((_, position) => position !== index);
-            return (
-              <article
-                className={`b2c-column-card b2c-form-builder-card ${dragIndex === index ? "is-dragging" : ""}`}
-                onDragOver={(event) => event.preventDefault()}
-                onDrop={() => drop(index)}
-                tabIndex={0}
-                aria-label={`Form question ${index + 1}`}
-                key={item.fieldId || item.id || item.key}
-              >
-                <span className="b2c-column-order" aria-hidden="true">{index + 1}</span>
-                <div className="b2c-field-control b2c-form-builder-question"><label>Question</label><strong>{item.label}</strong><small>{TYPE_LABELS[item.type] || "Text"}</small></div>
-                <label className="b2c-field-required">
-                  <input className="b2c-switch-input" type="checkbox" checked={Boolean(item.formRequired)} onChange={(event) => update(index, { formRequired: event.target.checked })} />
-                  <span className="b2c-switch-ui" aria-hidden="true" /><span className="b2c-field-required__label">Required</span>
-                </label>
-                <div className="b2c-column-actions">
-                  <button type="button" className="b2c-column-drag-handle" draggable onDragStart={() => setDragIndex(index)} onDragEnd={() => setDragIndex(-1)} title="Drag to reorder" aria-label={`Drag question ${index + 1} to reorder`}><span className="b2c-drag-dots" aria-hidden="true" /></button>
-                  <button type="button" onClick={() => remove(index)} title="Delete question from this form" aria-label="Delete question from this form"><Icon name="trash" size={14} /></button>
-                </div>
-                <label className="b2c-form-builder-toggle b2c-form-builder-condition-toggle"><input type="checkbox" checked={Boolean(condition.enabled)} onChange={(event) => updateCondition(index, event.target.checked ? { enabled: true } : { enabled: false, fieldKey: "", operator: "equals", value: "" })} /> Conditional visibility</label>
-                <div className={`b2c-form-builder-condition ${condition.enabled ? "" : "is-disabled"}`}>
-                  <select disabled={!condition.enabled} value={condition.fieldKey || ""} onChange={(event) => updateCondition(index, { fieldKey: event.target.value })}>
-                    <option value="">Show when…</option>
-                    {controlling.map((field) => <option value={field.key} key={field.key}>{field.label}</option>)}
-                  </select>
-                  <select disabled={!condition.enabled} value={condition.operator || "equals"} onChange={(event) => updateCondition(index, { operator: event.target.value })}>
-                    <option value="equals">equals</option><option value="not_equals">does not equal</option><option value="contains">contains</option>
-                    <option value="has_value">has value</option><option value="is_empty">is empty</option><option value="is_checked">is checked</option><option value="not_checked">is not checked</option>
-                  </select>
-                  <input disabled={!condition.enabled || VALUELESS_OPERATORS.has(condition.operator)} value={condition.value ?? ""} onChange={(event) => updateCondition(index, { value: event.target.value })} placeholder={VALUELESS_OPERATORS.has(condition.operator) ? "No value required" : "Value"} />
-                </div>
-              </article>
-            );
-          }) : <div className="b2c-builder-empty">This form has no visible questions. Add properties from the Database table, or reopen the table builder to restore questions.</div>}
-        </div>
-        {error ? <div className="b2c-dialog__error">{error}</div> : null}
-        <div className="b2c-dialog__actions">
-          <button type="button" className="b2c-secondary-btn" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="submit" className="b2c-primary-btn" disabled={busy}><Icon name="save" />{busy ? "Saving…" : "Save Form Builder"}</button>
-        </div>
-      </form>
-    </ClassicModal>
   );
 }
 
@@ -468,7 +298,7 @@ export default function B2cFormsClient({ account, initialPayload, initialSelecte
     try {
       const payload = await requestReadJson(`/next/api/b2c/forms/${encodeURIComponent(formId)}?_fresh=1`);
       applyFormPayload(payload);
-      if (openBuilder) setDialog("builder");
+      if (openBuilder) { preloadB2cFormDialogs(); setDialog("builder"); }
       return payload;
     } catch (error) {
       notify(error?.message || "The form could not be opened.", "error");
@@ -612,7 +442,7 @@ export default function B2cFormsClient({ account, initialPayload, initialSelecte
               <div className="b2c-top-actions">
                 {canUseDatabase ? <a className="b2c-secondary-btn" href="/next/b2c/database"><Icon name="database" /><span>Database</span></a> : null}
                 <button className="b2c-secondary-btn b2c-compact-btn" type="button" onClick={() => refreshLibrary().catch(() => {})} disabled={busy === "refresh"}><Icon name="refresh" />{busy === "refresh" ? "Refreshing…" : "Refresh"}</button>
-                {canManage ? <button className="b2c-primary-btn" type="button" onClick={() => setDialog("new")}><Icon name="plus" /><span>New Form</span></button> : null}
+                {canManage ? <button className="b2c-primary-btn" type="button" onPointerEnter={preloadB2cFormDialogs} onFocus={preloadB2cFormDialogs} onClick={() => { preloadB2cFormDialogs(); setDialog("new"); }}><Icon name="plus" /><span>New Form</span></button> : null}
               </div>
             </div>
 
@@ -633,7 +463,7 @@ export default function B2cFormsClient({ account, initialPayload, initialSelecte
                     <span className="b2c-form-card__fields">{formatNumber(form.fieldCount)} field{form.fieldCount === 1 ? "" : "s"}</span>
                     <div className="b2c-form-card__actions">
                       <button type="button" onClick={() => openForm(form.id).catch(() => {})} disabled={busy === `open:${form.id}`}><Icon name="play" size={14} />{busy === `open:${form.id}` ? "Opening…" : canSubmit ? "Open" : "Preview"}</button>
-                      {canManage ? <button type="button" title="Edit form" aria-label={`Edit ${form.name}`} onClick={() => openForm(form.id, { openBuilder: true }).catch(() => {})}><Icon name="sliders" size={14} /></button> : null}
+                      {canManage ? <button type="button" title="Edit form" aria-label={`Edit ${form.name}`} onPointerEnter={preloadB2cFormDialogs} onFocus={preloadB2cFormDialogs} onClick={() => { preloadB2cFormDialogs(); openForm(form.id, { openBuilder: true }).catch(() => {}); }}><Icon name="sliders" size={14} /></button> : null}
                     </div>
                   </div>
                 </article>
@@ -655,8 +485,8 @@ export default function B2cFormsClient({ account, initialPayload, initialSelecte
               </div>
               <div className="b2c-top-actions">
                 {canUseDatabase && activeForm.databaseId ? <a className="b2c-secondary-btn b2c-compact-btn" href={`/next/b2c/database/${encodeURIComponent(activeForm.databaseId)}`}><Icon name="database" /> Open Table</a> : null}
-                {canManage ? <button className="b2c-secondary-btn b2c-compact-btn" type="button" onClick={() => setDialog("details")}>Edit Details</button> : null}
-                {canManage ? <button className="b2c-secondary-btn" type="button" onClick={() => setDialog("builder")}><Icon name="sliders" /><span>Edit Form</span></button> : null}
+                {canManage ? <button className="b2c-secondary-btn b2c-compact-btn" type="button" onPointerEnter={preloadB2cFormDialogs} onFocus={preloadB2cFormDialogs} onClick={() => { preloadB2cFormDialogs(); setDialog("details"); }}>Edit Details</button> : null}
+                {canManage ? <button className="b2c-secondary-btn" type="button" onPointerEnter={preloadB2cFormDialogs} onFocus={preloadB2cFormDialogs} onClick={() => { preloadB2cFormDialogs(); setDialog("builder"); }}><Icon name="sliders" /><span>Edit Form</span></button> : null}
               </div>
             </div>
 
@@ -672,7 +502,7 @@ export default function B2cFormsClient({ account, initialPayload, initialSelecte
 
             <form ref={formRef} className="b2c-customer-form" onSubmit={submitRecord} noValidate={false}>
               <div className="b2c-form-grid">
-                {fields.length ? fields.map((field) => <DynamicField key={field.id || field.key} field={field} value={values[field.key]} selectedFiles={selectedFiles[field.key] || []} visible={Boolean(fieldVisibility[field.key])} onChange={(value) => { setValues((current) => ({ ...current, [field.key]: value })); setSubmitted(false); setSubmitError(""); }} onFiles={(files) => { setSelectedFiles((current) => ({ ...current, [field.key]: files })); setSubmitted(false); setSubmitError(""); }} />) : <div className="b2c-conditional-note">This form has no fields yet. Configure properties in Database, then open Form Builder.</div>}
+                {fields.length ? fields.map((field) => <DynamicField key={field.id || field.key} field={field} value={values[field.key]} selectedFiles={selectedFiles[field.key] || []} visible={Boolean(fieldVisibility[field.key])} onChange={(value) => { setValues((current) => ({ ...current, [field.key]: value })); setSubmitted(false); setSubmitError(""); }} onFiles={(files) => { if (files.length) preloadB2cUpload(); setSelectedFiles((current) => ({ ...current, [field.key]: files })); setSubmitted(false); setSubmitError(""); }} />) : <div className="b2c-conditional-note">This form has no fields yet. Configure properties in Database, then open Form Builder.</div>}
               </div>
               {uploadState ? <div className="next-b2c-classic-upload-progress"><div><strong>Uploading {uploadState.file}</strong><span>{uploadState.field} · File {uploadState.current} of {uploadState.total}</span></div><progress max="100" value={uploadState.percent || 0} /><b>{Math.round(uploadState.percent || 0)}%</b></div> : null}
               {submitError ? <div className="b2c-form-error">{submitError}</div> : null}
