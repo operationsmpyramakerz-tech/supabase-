@@ -132,23 +132,28 @@ async function buildOrderMap(rows = []) {
   const map = new Map();
   if (!ids.length) return map;
 
-  for (let index = 0; index < ids.length; index += 150) {
-    const batch = ids.slice(index, index + 150);
+  const batches = [];
+  for (let index = 0; index < ids.length; index += 150) batches.push(ids.slice(index, index + 150));
+
+  const groups = await Promise.all(batches.map(async (batch) => {
     try {
       const orderRows = await select(ordersTable(), {
         select: "id,order_number,reason,product_name",
         id: `in.(${batch.join(",")})`,
         limit: String(Math.max(150, batch.length)),
       });
-      for (const row of Array.isArray(orderRows) ? orderRows : []) {
-        const id = safeText(row?.id);
-        const number = Number(row?.order_number);
-        const label = Number.isFinite(number) ? `ORD-${number}` : (safeText(row?.reason) || safeText(row?.product_name) || id);
-        if (id && label) map.set(id, label);
-      }
+      return Array.isArray(orderRows) ? orderRows : [];
     } catch {
       // Entity enrichment is optional. The audit row itself is still usable.
+      return [];
     }
+  }));
+
+  for (const row of groups.flat()) {
+    const id = safeText(row?.id);
+    const number = Number(row?.order_number);
+    const label = Number.isFinite(number) ? `ORD-${number}` : (safeText(row?.reason) || safeText(row?.product_name) || id);
+    if (id && label) map.set(id, label);
   }
   return map;
 }

@@ -51,7 +51,6 @@ export default async function HistoryPage() {
       activePath="/next/history"
     >
       <HistoryClient
-        account={gate.account}
         initialRows={Array.isArray(historyPayload?.rows) ? historyPayload.rows : []}
         bootstrapWarnings={warnings}
       />
