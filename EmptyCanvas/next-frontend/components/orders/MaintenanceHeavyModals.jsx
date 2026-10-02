@@ -13,6 +13,28 @@ const MAINTENANCE_SPARE_EXPORT_COLUMNS = [
 
 const DIRECT_API_BASE = "/next/api";
 
+const MAINTENANCE_ACTIONS = {
+  edit: {
+    title: "Edit maintenance log",
+    description: "Enter the Maintenance Orders admin password to edit the saved maintenance details.",
+    button: "Continue",
+    icon: "edit-2",
+  },
+  archive: {
+    title: "Archive maintenance order",
+    description: "Enter the Maintenance Orders admin password to move this order to Archive.",
+    button: "Archive",
+    icon: "archive",
+  },
+  delete: {
+    title: "Delete maintenance order",
+    description: "Enter the Maintenance Orders admin password to permanently delete this order.",
+    button: "Delete",
+    icon: "trash-2",
+    danger: true,
+  },
+};
+
 function text(value) {
   return String(value ?? "").trim();
 }
