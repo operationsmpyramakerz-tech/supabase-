@@ -484,6 +484,7 @@ function pageAliases(page = {}) {
     "events-calendar": ["Event Calendar", "Events"],
     "event-requests": ["Event Requests", "Events"],
     "event-components": ["Event Components", "Events"],
+    "event-team": ["Event Team", "Events"],
     b2c: ["B2C"],
     "b2c-customer-database": ["Customer Database", "B2C"],
     "customer-database": ["Customer Database", "B2C"],

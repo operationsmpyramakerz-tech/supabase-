@@ -72,7 +72,8 @@ function routePerformanceStyles(localPath) {
   }
   if (localPath === "/events" || localPath.startsWith("/events/")
     || localPath === "/events-calendar" || localPath.startsWith("/events-calendar/")
-    || localPath === "/event-components" || localPath.startsWith("/event-components/")) {
+    || localPath === "/event-components" || localPath.startsWith("/event-components/")
+    || localPath === "/event-team" || localPath.startsWith("/event-team/")) {
     return ["/next/css/events-performance.css?v=css-phase3"];
   }
   if (localPath === "/kpis" || localPath.startsWith("/kpis/")) {
@@ -108,6 +109,7 @@ function routeDefaults(localPath) {
     "/events": { title: "Events", activePath: "/next/events" },
     "/events-calendar": { title: "Events", activePath: "/next/events-calendar" },
     "/event-components": { title: "Events", activePath: "/next/event-components" },
+    "/event-team": { title: "Events", activePath: "/next/event-team" },
     "/events/new": { title: "New Event Request", activePath: "/next/events/new" },
     "/orders/new": { title: "Shopping Cart", activePath: "/next/orders/new" },
     "/b2c": { title: "B2C", activePath: "/next/b2c" },

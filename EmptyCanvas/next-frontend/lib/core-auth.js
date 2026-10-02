@@ -217,7 +217,7 @@ function legacyPageName(page = {}) {
     "orders-review": "Orders Review", expenses: "Expenses", "expenses-users": "Expenses Users", b2b: "B2B", "task-management": "Task Management",
     "all-tasks": "All Tasks", "my-tasks": "My Tasks", "delegated-tasks": "Delegated Tasks", b2c: "B2C", "customer-database": "Customer Database",
     "customer-form": "Customer Form", kpis: "KPIs", events: "Events", "event-calendar": "Event Calendar", "event-requests": "Event Requests",
-    "event-components": "Event Components", history: "History", backup: "Backup", database: "Backup", "users-center": "Users Center", "user-access-data": "Users Center",
+    "event-components": "Event Components", "event-team": "Event Team", history: "History", backup: "Backup", database: "Backup", "users-center": "Users Center", "user-access-data": "Users Center",
   };
   return names[key] || text(page.page_name || page.pageName || page.name || page.route_path || page.routePath);
 }
@@ -230,7 +230,7 @@ function expandUiAliases(values = []) {
   if (set.has("Proposals")) add("Saved Quotations", "/proposals");
   if (set.has("Kits")) add("Product Kits", "Saved Kits", "/kits");
   if (set.has("Task Management")) add("All Tasks", "My Tasks", "Delegated Tasks", "/task-management", "/task-management/all-tasks", "/task-management/my-tasks", "/task-management/delegated-tasks");
-  if (set.has("Events")) add("Event Calendar", "Event Requests", "Event Components", "/events", "/events/calendar", "/events/requests", "/events/components");
+  if (set.has("Events")) add("Event Calendar", "Event Requests", "Event Components", "Event Team", "/events", "/events/calendar", "/events/requests", "/events/components", "/events/team");
   if (set.has("B2C")) add("Customer Database", "Customer Form", "/b2c/database", "/b2c/form");
   if (set.has("Users Center")) add("User Access & Data", "User Access and Data", "User Access", "Team Members");
   return Array.from(set);

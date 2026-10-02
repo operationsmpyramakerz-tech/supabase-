@@ -5,7 +5,7 @@ import { ClassicStableLoadingHeader, ClassicStableLoadingSidebar } from "./Class
 const SIDEBAR_ITEMS = 18;
 
 export default function ClassicEventsLoading({ mode = "requests" }) {
-  const title = mode === "components" ? "Event Components" : mode === "calendar" ? "Event Calendar" : mode === "form" ? "New Event Request" : "Events";
+  const title = mode === "components" ? "Event Components" : mode === "calendar" ? "Event Calendar" : mode === "team" ? "Event Team" : mode === "form" ? "New Event Request" : "Events";
   return (
     <>
       <ShellStyleLinks />

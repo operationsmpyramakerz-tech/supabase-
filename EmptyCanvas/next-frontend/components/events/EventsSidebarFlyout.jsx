@@ -28,6 +28,14 @@ const PAGES = Object.freeze([
     label: "Event Components",
     icon: "layers",
   },
+  {
+    key: "team",
+    name: "Event Team",
+    route: "/next/event-team",
+    legacyRoute: "/events/team",
+    label: "Event Team",
+    icon: "users",
+  },
 ]);
 
 function normalize(value) {
@@ -51,8 +59,7 @@ function normalizedAllowedValues(allowedPages) {
 function allowedEventPages(allowedPages) {
   const values = normalizedAllowedValues(allowedPages);
   const broad = values.has("events") || values.has("/events") || values.has("events page");
-  return PAGES.filter((page) => {
-    if (broad) return true;
+  const matches = (page) => {
     const name = normalize(page.name);
     const route = normalize(page.route);
     const legacyRoute = normalize(page.legacyRoute);
@@ -61,7 +68,11 @@ function allowedEventPages(allowedPages) {
       || values.has(route.replace(/^\//, ""))
       || values.has(legacyRoute)
       || values.has(legacyRoute.replace(/^\//, ""));
-  });
+  };
+  // Event Team is a shared Events workforce page. Existing Events users should
+  // see it immediately without requiring a new page-access row in Supabase.
+  const inheritedTeamAccess = broad || PAGES.filter((page) => page.key !== "team").some(matches);
+  return PAGES.filter((page) => broad || matches(page) || (page.key === "team" && inheritedTeamAccess));
 }
 
 function iconSvg(name) {
@@ -71,6 +82,9 @@ function iconSvg(name) {
   }
   if (name === "clipboard") {
     return `<svg ${common}><path d="M9 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3"></path><rect x="9" y="3" width="6" height="4" rx="2"></rect><line x1="8" y1="12" x2="16" y2="12"></line><line x1="8" y1="16" x2="16" y2="16"></line></svg>`;
+  }
+  if (name === "users") {
+    return `<svg ${common}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>`;
   }
   return `<svg ${common}><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>`;
 }

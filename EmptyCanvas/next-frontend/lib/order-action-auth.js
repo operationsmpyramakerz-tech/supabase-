@@ -37,6 +37,7 @@ function aliasesForPage(value = "") {
     eventrequests: ["eventrequests", "eventsrequests", "events", "eventsnew", "eventsrequestsnew", "eventsrequestscreate"],
     eventcomponents: ["eventcomponents", "events"],
     eventcalendar: ["eventcalendar", "eventscalendar", "events"],
+    eventteam: ["eventteam", "events"],
   };
   return new Set([clean, ...(groups[clean] || [])].filter(Boolean));
 }

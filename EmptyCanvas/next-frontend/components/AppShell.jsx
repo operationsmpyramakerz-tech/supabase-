@@ -38,6 +38,7 @@ const MODULE_LINKS = [
   { label: "New Event Request", href: "/next/events/new", permissions: ["Event Requests"] },
   { label: "Event Calendar", href: "/next/events-calendar", permissions: ["Event Calendar"] },
   { label: "Event Components", href: "/next/event-components", permissions: ["Event Components"] },
+  { label: "Event Team", href: "/next/event-team", permissions: ["Event Requests", "Event Calendar", "Event Components", "Events"] },
   { label: "Products", href: "/next/products", permissions: ["Products"] },
   { label: "Proposals", href: "/next/proposals", permissions: ["Proposals", "Products"] },
   { label: "Kits", href: "/next/kits", permissions: ["Kits", "Proposals", "Products"] },
@@ -61,7 +62,7 @@ export const CLASSIC_MAIN_LINKS = [
   { label: "Orders Review", href: "/next/orders-review", icon: "award", permissions: ["Orders Review"] },
   { label: "Operations Orders", href: "/next/operations-orders", icon: "users", permissions: ["Requested Orders", "Operations Orders"] },
   { label: "Maintenance Orders", href: "/next/maintenance-orders", icon: "tool", permissions: ["Maintenance Orders"] },
-  { label: "Events", href: "/next/events", icon: "calendar", permissions: ["Event Requests", "Event Calendar", "Event Components", "Events", "/events", "/events/requests", "/events/calendar", "/events/components"] },
+  { label: "Events", href: "/next/events", icon: "calendar", permissions: ["Event Requests", "Event Calendar", "Event Components", "Event Team", "Events", "/events", "/events/requests", "/events/calendar", "/events/components", "/events/team"] },
   { label: "Shopping Cart", href: "/next/orders/new", icon: "shopping-cart", permissions: ["Create New Order", "Shopping Cart", "Cart", "/orders/new"] },
   { label: "Stocktaking", href: "/next/stocktaking", icon: "archive", permissions: ["Stocktaking"] },
   { label: "B2C", href: "/next/b2c", icon: "user-plus", permissions: ["B2C", "Customer Database", "B2C Customer Database", "Customer Form", "B2C Customer Form", "/b2c/database", "/b2c/form"] },
@@ -121,7 +122,9 @@ function isClassicNavActive(activePath, href) {
       || current === "/next/events-calendar"
       || current.startsWith("/next/events-calendar/")
       || current === "/next/event-components"
-      || current.startsWith("/next/event-components/");
+      || current.startsWith("/next/event-components/")
+      || current === "/next/event-team"
+      || current.startsWith("/next/event-team/");
   }
   return isActive(activePath, href);
 }

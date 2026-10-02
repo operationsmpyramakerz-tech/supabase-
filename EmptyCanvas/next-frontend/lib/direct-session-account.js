@@ -122,10 +122,11 @@ function pageAliases(value = "") {
     kpis: ["kpis", "kpi"],
     proposals: ["proposals", "productproposals"],
     kits: ["kits", "productkits"],
-    events: ["events", "eventcalendar", "eventrequests", "eventcomponents"],
+    events: ["events", "eventcalendar", "eventrequests", "eventcomponents", "eventteam"],
     eventcalendar: ["eventcalendar", "eventscalendar", "events"],
     eventrequests: ["eventrequests", "events"],
     eventcomponents: ["eventcomponents", "events"],
+    eventteam: ["eventteam", "events"],
     taskmanagement: ["taskmanagement", "departmenttickets", "taskmanagementtickets"],
     departmenttickets: ["taskmanagement", "departmenttickets", "taskmanagementtickets"],
     alltasks: ["alltasks", "taskmanagement", "departmenttickets", "taskmanagementtickets"],
@@ -175,6 +176,7 @@ const LEGACY_PAGE_KEY_NAMES = Object.freeze({
   "events-calendar": "Event Calendar",
   "event-requests": "Event Requests",
   "event-components": "Event Components",
+  "event-team": "Event Team",
   history: "History",
   "system-history": "History",
   backup: "Backup",
@@ -205,7 +207,7 @@ function expandUiAliases(values = []) {
   if (set.has("All Tasks")) add("/task-management/all-tasks");
   if (set.has("My Tasks")) add("/task-management/my-tasks");
   if (set.has("Delegated Tasks")) add("/task-management/delegated-tasks");
-  if (set.has("Events")) add("Event Calendar", "Event Requests", "Event Components", "/events", "/events/calendar", "/events/requests", "/events/components");
+  if (set.has("Events")) add("Event Calendar", "Event Requests", "Event Components", "Event Team", "/events", "/events/calendar", "/events/requests", "/events/components", "/events/team");
   if (set.has("Event Calendar")) add("/events/calendar");
   if (set.has("Event Requests")) add("/events/requests");
   if (set.has("Event Components")) add("/events/components");

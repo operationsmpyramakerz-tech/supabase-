@@ -28,7 +28,9 @@ function resolvedActiveHref(pathname, hrefs) {
   const isEventsChild = current === "/events-calendar"
     || current.startsWith("/events-calendar/")
     || current === "/event-components"
-    || current.startsWith("/event-components/");
+    || current.startsWith("/event-components/")
+    || current === "/event-team"
+    || current.startsWith("/event-team/");
   if (isEventsChild && candidates.includes("/next/events")) return "/next/events";
 
   const matches = candidates
