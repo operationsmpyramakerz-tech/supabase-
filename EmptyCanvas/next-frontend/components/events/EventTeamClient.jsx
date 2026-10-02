@@ -7,7 +7,6 @@ const TABS = Object.freeze([
   { key: "instructor", label: "Instructors", icon: "user" },
   { key: "usher", label: "Ushers", icon: "award" },
   { key: "organizer", label: "Organizers", icon: "clipboard" },
-  { key: "attendance", label: "Attendance", icon: "check-circle" },
 ]);
 
 const ROLE_LABELS = Object.freeze({ instructor: "Instructor", usher: "Usher", organizer: "Organizer" });
@@ -416,23 +415,8 @@ export default function EventTeamClient({ account, initialMembers = [], initialA
     } : current);
   }
 
-  const visibleCount = tab === "attendance" ? filteredAttendance.length : filteredMembers.length;
-
   return (
     <div className="events-shell event-team-shell">
-      <section className="event-team-hero">
-        <div>
-          <span className="events-eyebrow"><EventIcon name="user" /> Event workforce</span>
-          <h2>Event Team</h2>
-          <p>Manage instructors, ushers, organizers, and attendance for every event from one place.</p>
-        </div>
-        <div className="event-team-hero__stats">
-          <span><strong>{members.length}</strong><small>Team members</small></span>
-          <span><strong>{attendance.filter((item) => item?.status === "present").length}</strong><small>Present records</small></span>
-          <span><strong>{events.length}</strong><small>Events</small></span>
-        </div>
-      </section>
-
       {bootstrapError ? (
         <div className="events-stage2k-notice is-warning event-team-warning">
           <strong>Setup required:</strong> {bootstrapError}
@@ -440,38 +424,30 @@ export default function EventTeamClient({ account, initialMembers = [], initialA
         </div>
       ) : null}
 
+      <section className="event-team-toolbar" aria-label="Event team controls">
+        <div className="event-team-tabs" role="tablist" aria-label="Event team categories">
+          {TABS.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              className={`event-team-tab${tab === item.key ? " is-active" : ""}`}
+              onClick={() => { setTab(item.key); setQuery(""); }}
+              role="tab"
+              aria-selected={tab === item.key}
+            >
+              <EventIcon name={item.icon} />
+              <span>{item.label}</span>
+              <b>{counts[item.key] || 0}</b>
+            </button>
+          ))}
+        </div>
+        <button type="button" className="event-team-add" onClick={openAdd} disabled={!canEdit || busy}>
+          <EventIcon name="plus-circle" />
+          <span>Add new</span>
+        </button>
+      </section>
+
       <section className="event-team-panel">
-        <div className="event-team-toolbar">
-          <div className="event-team-tabs" role="tablist" aria-label="Event team categories">
-            {TABS.map((item) => (
-              <button
-                key={item.key}
-                type="button"
-                className={`event-team-tab${tab === item.key ? " is-active" : ""}`}
-                onClick={() => { setTab(item.key); setQuery(""); }}
-                role="tab"
-                aria-selected={tab === item.key}
-              >
-                <EventIcon name={item.icon} />
-                <span>{item.label}</span>
-                <b>{counts[item.key] || 0}</b>
-              </button>
-            ))}
-          </div>
-          <button type="button" className="event-team-add" onClick={openAdd} disabled={!canEdit || busy}>
-            <EventIcon name="plus-circle" />
-            <span>{tab === "attendance" ? "Add attendance" : "Add new"}</span>
-          </button>
-        </div>
-
-        <div className="event-team-list-meta">
-          <div>
-            <strong>{TABS.find((item) => item.key === tab)?.label}</strong>
-            <span>{visibleCount} {visibleCount === 1 ? "record" : "records"}</span>
-          </div>
-          {!canEdit ? <span className="event-team-view-only">View only</span> : null}
-        </div>
-
         {tab !== "attendance" ? (
           <div className="event-team-table-wrap">
             <table className="event-team-table">
@@ -517,7 +493,7 @@ export default function EventTeamClient({ account, initialMembers = [], initialA
                 ))}
               </tbody>
             </table>
-            {!filteredMembers.length ? <div className="event-team-empty-state"><EventIcon name="user" /><strong>No records yet</strong><span>Add the first {ROLE_LABELS[tab]?.toLowerCase() || "team member"} to get started.</span></div> : null}
+            {!filteredMembers.length ? <div className="event-team-empty-state"><EventIcon name="user" /><strong>No records yet</strong></div> : null}
           </div>
         ) : (
           <div className="event-team-table-wrap">
