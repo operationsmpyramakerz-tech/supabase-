@@ -9655,3 +9655,36 @@ body.orders-review-page .next-classic-orders-parity .next-review-order-modal .ne
     width: 100% !important;
   }
 }
+
+/* ========================================================================
+   Events secondary sidebar — compact mobile page switcher
+   2026-10-02
+   Keep all four Events pages visible in one row on phones. The accessible
+   labels remain on each link, while the visible captions are hidden so the
+   dock behaves as an icon-only page switcher.
+   ===================================================================== */
+@media (max-width: 768px) {
+  .events-secondary-sidebar .events-secondary-sidebar__rail {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: 6px !important;
+  }
+
+  .events-secondary-sidebar .events-secondary-sidebar__link {
+    min-width: 0 !important;
+    min-height: 54px !important;
+    height: 54px !important;
+    padding: 5px 2px !important;
+    gap: 0 !important;
+  }
+
+  .events-secondary-sidebar .events-secondary-sidebar__link span {
+    display: none !important;
+  }
+
+  .events-secondary-sidebar .events-secondary-sidebar__link svg {
+    width: 20px !important;
+    height: 20px !important;
+    padding: 8px !important;
+    margin: 0 auto !important;
+  }
+}
