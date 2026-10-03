@@ -9688,3 +9688,51 @@ body.orders-review-page .next-classic-orders-parity .next-review-order-modal .ne
     margin: 0 auto !important;
   }
 }
+
+/* ========================================================================
+   Global page viewport polish — 2026-10-03
+   - Keep every page scrollable while hiding the grey browser scrollbar.
+   - On phones, let the page canvas/content sit slightly wider than the
+     floating bottom navigation dock without creating horizontal overflow.
+   ===================================================================== */
+body.next-classic-shell-active .classic-app-shell .main-content > main {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+body.next-classic-shell-active .classic-app-shell .main-content > main::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+  display: none !important;
+}
+
+/* The sidebar can still be wheel/touch scrolled; only its visual track is hidden. */
+body.next-classic-shell-active .classic-app-shell > .sidebar .sidebar-nav {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+body.next-classic-shell-active .classic-app-shell > .sidebar .sidebar-nav::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+  display: none !important;
+}
+
+@media (max-width: 768px) {
+  body.next-classic-shell-active .classic-app-shell .main-content > main {
+    width: auto !important;
+    max-width: none !important;
+    margin-left: 4px !important;
+    margin-right: 4px !important;
+    box-sizing: border-box !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell .next-classic-page-content {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding-left: 4px !important;
+    padding-right: 4px !important;
+    box-sizing: border-box !important;
+  }
+}
+

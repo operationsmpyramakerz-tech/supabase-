@@ -23,6 +23,43 @@ const EXPORT_COLUMNS = [
   ["totalPrice", "Total Cost"],
 ];
 
+// Keep the lightweight value helpers local to the Kits client. These were
+// accidentally dropped during the Kits/Proposals split, which caused the page
+// to throw a ReferenceError as soon as the initial catalog was normalized.
+function text(value) {
+  return String(value ?? "").trim();
+}
+
+function lower(value) {
+  return text(value).toLowerCase();
+}
+
+function number(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatNumber(value) {
+  return new Intl.NumberFormat("en-EG", { maximumFractionDigits: 2 }).format(number(value));
+}
+
+function formatMoney(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return "—";
+  return new Intl.NumberFormat("en-EG", {
+    style: "currency",
+    currency: "EGP",
+    maximumFractionDigits: 2,
+  }).format(parsed);
+}
+
+function normalizedUrl(value) {
+  const url = text(value);
+  if (!url) return "";
+  if (/^(https?:|data:|blob:)/i.test(url)) return url;
+  return `https://${url.replace(/^\/+/, "")}`;
+}
+
 function normalizeUsersCenterMembers(payload) {
   const direct = Array.isArray(payload?.members) ? payload.members : [];
   const departments = Array.isArray(payload?.departments) ? payload.departments : [];

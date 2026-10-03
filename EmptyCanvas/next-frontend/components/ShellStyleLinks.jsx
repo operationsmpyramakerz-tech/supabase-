@@ -6,7 +6,7 @@ const SHELL_STYLES = Object.freeze([
   "/next/css/style.css?v=bidi-mixed-v1",
   "/next/css/ui-redesign.css?v=sidebar-page-label-frame-v3",
   "/next/css/page-canvas-fix.css?v=dark-page-background-v4",
-  "/next/css/classic-parity.css?v=classic-parity-css-phase3",
+  "/next/css/classic-parity.css?v=global-canvas-v4",
 ]);
 
 export default function ShellStyleLinks() {
