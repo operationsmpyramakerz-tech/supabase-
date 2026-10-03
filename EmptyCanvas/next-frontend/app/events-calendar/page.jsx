@@ -39,7 +39,7 @@ export default async function EventsCalendarPage() {
   }
 
   return (
-    <AppShell account={pageData.account} title="Events" eyebrow="Event execution schedule" activePath="/next/events-calendar" bodyClass="events-page events-calendar-page" pageStyles={["/next/css/events.css?v=next-stage-2k-events"]}>
+    <AppShell account={pageData.account} title="Events" eyebrow="Event execution schedule" activePath="/next/events-calendar" bodyClass="events-page events-calendar-page" pageStyles={["/next/css/events.css?v=next-stage-2l-calendar-fit"]}>
       <EventsCalendarClient
         account={pageData.account}
         initialEvents={Array.isArray(pageData.events) ? pageData.events : []}
