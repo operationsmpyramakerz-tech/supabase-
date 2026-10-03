@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { navigateWithinApp } from "../../lib/client-navigation";
+import EventIcon from "./EventIcon";
 
 const STANDARD_EVENT_TYPES = [
   { code: "tech_day", label: "Tech Day", isCustom: false },
@@ -225,19 +226,72 @@ function Toast({ toast, onClose }) {
 
 function Field({ label, required, wide, children }) {
   return (
-    <label className={`events-field next-event-form-field${wide ? " events-field--wide is-wide" : ""}`}>
+    <div className={`events-field next-event-form-field${wide ? " events-field--wide is-wide" : ""}`}>
       <span>{label}{required ? <em>*</em> : null}</span>
       {children}
-    </label>
+    </div>
+  );
+}
+
+function ModernSelect({ value, onChange, options = [], placeholder = "Select", disabled = false, searchable = false, ariaLabel = "Select option" }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const rootRef = useRef(null);
+  const normalized = useMemo(() => options.map((option) => typeof option === "string" ? { value: option, label: option } : { value: text(option?.value), label: text(option?.label) || text(option?.value) }), [options]);
+  const selected = normalized.find((option) => text(option.value) === text(value));
+  const filtered = useMemo(() => {
+    const needle = lower(query);
+    if (!needle) return normalized;
+    return normalized.filter((option) => lower(option.label).includes(needle));
+  }, [normalized, query]);
+
+  useEffect(() => {
+    if (!open) {
+      setQuery("");
+      return undefined;
+    }
+    function closeFromOutside(event) {
+      if (!rootRef.current?.contains(event.target)) setOpen(false);
+    }
+    function closeFromEscape(event) {
+      if (event.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", closeFromOutside);
+    document.addEventListener("keydown", closeFromEscape);
+    return () => {
+      document.removeEventListener("mousedown", closeFromOutside);
+      document.removeEventListener("keydown", closeFromEscape);
+    };
+  }, [open]);
+
+  return (
+    <div ref={rootRef} className={`events-modern-select next-event-modern-select${open ? " is-open" : ""}${disabled ? " is-disabled" : ""}`}>
+      <button type="button" className="events-modern-select__trigger" aria-label={ariaLabel} aria-haspopup="listbox" aria-expanded={open} disabled={disabled} onClick={() => setOpen((current) => !current)}>
+        <span className={selected ? "" : "is-placeholder"}>{selected?.label || placeholder}</span>
+        <span className="next-event-select-chevron" aria-hidden="true">⌄</span>
+      </button>
+      <div className="events-modern-select__menu next-event-modern-select__menu" hidden={!open}>
+        {searchable && open ? <div className="next-event-select-search"><EventIcon name="search" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search…" autoFocus /></div> : null}
+        <div className="next-event-select-options" role="listbox">
+          {filtered.length ? filtered.map((option) => (
+            <button type="button" role="option" aria-selected={text(option.value) === text(value)} className={`events-modern-select__option${text(option.value) === text(value) ? " is-selected" : ""}`} key={option.value || option.label} onClick={() => { onChange(option.value); setOpen(false); }}>
+              <span>{option.label}</span>{text(option.value) === text(value) ? <EventIcon name="check" /> : null}
+            </button>
+          )) : <div className="next-event-select-empty">No matching options</div>}
+        </div>
+      </div>
+    </div>
   );
 }
 
 function FormSection({ number: sectionNumber, icon, title, description, action, children }) {
   return (
     <section className="events-form-section next-event-form-section">
-      <header className="events-form-section__heading">
-        <span className="events-section-icon next-event-form-section__icon">{icon}</span>
-        <div><h2>{sectionNumber}. {title}</h2><p>{description}</p></div>
+      <header className="events-form-section__heading next-event-form-section__heading">
+        <div className="next-event-form-section__title">
+          <span className="events-section-icon next-event-form-section__icon"><EventIcon name={icon} /><b>{sectionNumber}</b></span>
+          <div><span className="next-event-section-kicker">Step {String(sectionNumber).padStart(2, "0")}</span><h2>{title}</h2><p>{description}</p></div>
+        </div>
         {action || null}
       </header>
       {children}
@@ -246,7 +300,7 @@ function FormSection({ number: sectionNumber, icon, title, description, action, 
 }
 
 function EmptyRows({ label }) {
-  return <div className="events-empty-repeat next-event-form-empty"><span>＋</span><strong>No {label} added yet</strong><small>Use the button above to add the first item.</small></div>;
+  return <div className="events-empty-repeat next-event-form-empty"><EventIcon name="plus-circle" /><div><strong>No {label} added yet</strong><small>Add the first item when it is needed.</small></div></div>;
 }
 
 export default function EventRequestFormClient({
@@ -627,21 +681,19 @@ export default function EventRequestFormClient({
       <Toast toast={toast} onClose={() => setToast(null)} />
 
       <div className="events-form-top">
-        <a className="events-back-link" href="/next/events-calendar" aria-label="Back to Calendar" title="Back to Calendar">←</a>
+        <a className="events-back-link" href="/next/events-calendar" aria-label="Back to Calendar" title="Back to Calendar"><EventIcon name="chevron-left" /></a>
       </div>
 
       {bootstrapWarnings.length ? <div className="events-stage2k-notice next-event-form-warning">Some optional reference data could not be loaded. Refresh the catalogues before submitting if a list looks incomplete.</div> : null}
       {viewOnly ? <div className="events-stage2k-notice is-info next-event-form-warning">Your Event Requests access is View only. You can inspect the form, but submission and catalogue changes are disabled.</div> : null}
 
       <form className="next-event-form" onSubmit={submit}>
-        <FormSection number="1" icon="◫" title="Event Overview" description="Who is requesting the event, and when will it happen?">
+        <FormSection number="1" icon="clipboard" title="Event Overview" description="Who is requesting the event, and when will it happen?">
           <div className="events-form-grid next-event-form-grid">
             <Field label="Event Name" required wide><input value={form.eventName} onChange={(event) => updateField("eventName", event.target.value)} maxLength={240} placeholder="Example: Green Valley School Tech Day 2026" disabled={viewOnly} /></Field>
             <Field label="Event Type" required>
               <div className="next-event-type-control">
-                <select value={form.eventType} onChange={(event) => updateField("eventType", event.target.value)} disabled={viewOnly}>
-                  {types.map((item) => <option value={item.code} key={item.code}>{item.label}</option>)}
-                </select>
+                <ModernSelect value={form.eventType} onChange={(value) => updateField("eventType", value)} options={types.map((item) => ({ value: item.code, label: item.label }))} placeholder="Select event type" disabled={viewOnly} ariaLabel="Event type" />
                 {!viewOnly ? <button type="button" onClick={() => setCustomTypeOpen((current) => !current)}>＋ Type</button> : null}
               </div>
             </Field>
@@ -667,13 +719,13 @@ export default function EventRequestFormClient({
           </div>
         </FormSection>
 
-        <FormSection number="2" icon="⚙" title="Projects" description="Add every activity, kit, or technical project required for the event." action={<button type="button" className="events-inline-add next-event-inline-add" onClick={addProject} disabled={viewOnly}>＋ Add Project</button>}>
+        <FormSection number="2" icon="cpu" title="Projects" description="Add every activity, kit, or technical project required for the event." action={<button type="button" className="events-inline-add next-event-inline-add" onClick={addProject} disabled={viewOnly}><EventIcon name="plus-circle" /> Add Project</button>}>
           <div className="events-repeat-list next-event-repeat-list">
             {!projects.length ? <EmptyRows label="projects" /> : projects.map((item) => {
               const component = components.find((entry) => text(entry.id) === text(item.componentId));
               return (
                 <article className="events-repeat-row events-repeat-row--project next-event-repeat-row next-event-repeat-row--project" key={item.key}>
-                  <Field label="Project / Activity"><select value={item.componentId} onChange={(event) => selectProject(item.key, event.target.value)} disabled={viewOnly}><option value="">Select component</option>{projectComponents.map((entry) => <option value={entry.id} key={entry.id}>{entry.name}</option>)}</select></Field>
+                  <Field label="Project / Activity"><ModernSelect value={item.componentId} onChange={(value) => selectProject(item.key, value)} options={projectComponents.map((entry) => ({ value: entry.id, label: entry.name }))} placeholder="Select project" searchable disabled={viewOnly} ariaLabel="Project or activity" /></Field>
                   <Field label="Quantity"><input type="number" min="0" step="1" value={item.quantity} onChange={(event) => updateProject(item.key, { quantity: event.target.value })} disabled={viewOnly} /></Field>
                   <Field label="Working Cost"><input type="number" min="0" step="0.01" value={item.workingCost} onChange={(event) => updateProject(item.key, { workingCost: event.target.value })} disabled={viewOnly} /></Field>
                   <Field label="Description / Notes" wide><textarea rows={2} value={item.description} onChange={(event) => updateProject(item.key, { description: event.target.value })} maxLength={1500} disabled={viewOnly} /></Field>
@@ -686,7 +738,7 @@ export default function EventRequestFormClient({
 
         <ComponentSection
           number="3"
-          icon="▣"
+          icon="image"
           title="Marketing Materials"
           description="Select reusable marketing materials and the quantity required."
           kind="marketing"
@@ -702,7 +754,7 @@ export default function EventRequestFormClient({
 
         <ComponentSection
           number="4"
-          icon="⌁"
+          icon="tool"
           title="Venue Requirements"
           description="List equipment, setup items, and venue needs required for proper execution."
           kind="venue"
@@ -716,16 +768,13 @@ export default function EventRequestFormClient({
           onRemove={(key) => setVenueRequirements((current) => current.filter((item) => item.key !== key))}
         />
 
-        <FormSection number="5" icon="⌖" title="Venue & Location Details" description="Give Operations enough detail to prepare the team, transport, and setup.">
+        <FormSection number="5" icon="map-pin" title="Venue & Location Details" description="Give Operations enough detail to prepare the team, transport, and setup.">
           <div className="events-form-grid next-event-form-grid">
             <Field label="Venue Name" required wide><input value={form.venueName} onChange={(event) => updateField("venueName", event.target.value)} maxLength={240} placeholder="Example: Main Sports Hall" disabled={viewOnly} /></Field>
             <Field label="Venue Type"><input value={form.venueType} onChange={(event) => updateField("venueType", event.target.value)} maxLength={120} placeholder="School hall, outdoor area…" disabled={viewOnly} /></Field>
             <Field label="Governorate / Area" required>
               <div className="next-event-governorate-control">
-                <select value={form.governorate} onChange={(event) => updateField("governorate", event.target.value)} disabled={viewOnly}>
-                  <option value="">Select governorate</option>
-                  {rates.filter((rate) => rate?.isActive !== false && text(rate.areaName)).map((rate) => <option value={rate.areaName} key={rate.id || rate.areaName}>{rate.areaName}</option>)}
-                </select>
+                <ModernSelect value={form.governorate} onChange={(value) => updateField("governorate", value)} options={rates.filter((rate) => rate?.isActive !== false && text(rate.areaName)).map((rate) => ({ value: rate.areaName, label: rate.areaName }))} placeholder="Select governorate" searchable disabled={viewOnly} ariaLabel="Governorate or area" />
                 {!viewOnly ? <button type="button" onClick={openRateEditor}>Edit rates</button> : null}
               </div>
             </Field>
@@ -790,7 +839,7 @@ export default function EventRequestFormClient({
 
 function ComponentSection({ number: sectionNumber, icon, title, description, kind, rows, source, allComponents, viewOnly, onAdd, onSelect, onUpdate, onRemove }) {
   return (
-    <FormSection number={sectionNumber} icon={icon} title={title} description={description} action={<button type="button" className="events-inline-add next-event-inline-add" onClick={onAdd} disabled={viewOnly}>＋ Add {kind === "marketing" ? "Material" : "Requirement"}</button>}>
+    <FormSection number={sectionNumber} icon={icon} title={title} description={description} action={<button type="button" className="events-inline-add next-event-inline-add" onClick={onAdd} disabled={viewOnly}><EventIcon name="plus-circle" /> Add {kind === "marketing" ? "Material" : "Requirement"}</button>}>
       <div className="events-repeat-list next-event-repeat-list">
         {!rows.length ? <EmptyRows label={kind === "marketing" ? "marketing materials" : "venue requirements"} /> : rows.map((item) => {
           const component = allComponents.find((entry) => text(entry.id) === text(item.componentId));
@@ -798,7 +847,7 @@ function ComponentSection({ number: sectionNumber, icon, title, description, kin
           const link = safeHttpUrl(component?.linkUrl);
           return (
             <article className="events-repeat-row next-event-repeat-row next-event-repeat-row--component" key={item.key}>
-              <Field label="Component"><select value={item.componentId} onChange={(event) => onSelect(item.key, event.target.value)} disabled={viewOnly}><option value="">Select component</option>{source.map((entry) => <option value={entry.id} key={entry.id}>{entry.name}</option>)}</select></Field>
+              <Field label="Component"><ModernSelect value={item.componentId} onChange={(value) => onSelect(item.key, value)} options={source.map((entry) => ({ value: entry.id, label: entry.name }))} placeholder="Select component" searchable disabled={viewOnly} ariaLabel="Event component" /></Field>
               <Field label="Quantity"><input type="number" min="0" step="0.01" value={item.quantity} onChange={(event) => onUpdate(item.key, { quantity: event.target.value })} disabled={viewOnly} /></Field>
               <div className="next-event-component-cost"><small>Cost</small><strong>{component ? money(cost) : "Select a component"}</strong><span>{component ? `${money(componentUnitCost(component))} / unit · ${lower(component.ownershipType) === "external_rental" ? "External Rental" : "Company Owned"}` : "Cost details appear here."}</span></div>
               <Field label="Notes" wide><textarea rows={2} value={item.notes} onChange={(event) => onUpdate(item.key, { notes: event.target.value })} maxLength={1000} disabled={viewOnly} /></Field>
