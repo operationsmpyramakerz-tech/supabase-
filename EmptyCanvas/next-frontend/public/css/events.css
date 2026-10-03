@@ -1616,6 +1616,497 @@ body.events-components-page .events-components-workspace .events-component-cards
   .events-calendar-toolbar>*{font-size:.75rem!important;}
 }
 
+
+
+/* ========================================================================== 
+   Event Calendar — mobile week dashboard (Oct 2026)
+   Mobile follows a compact one-week dashboard pattern: week strip, three
+   summary cards, then the selected day's event cards. Desktop keeps the
+   established month + sidebar calendar.
+   ========================================================================== */
+.events-calendar-mobile-view{display:none;}
+.events-calendar-desktop-view{display:block;}
+
+@media(max-width:760px){
+  .events-calendar-page .events-calendar-shell{
+    width:100%;
+    max-width:100%;
+    padding:6px 6px calc(118px + env(safe-area-inset-bottom));
+  }
+  .events-calendar-page .events-calendar-workspace{
+    width:100%;
+    max-width:100%;
+    padding:14px;
+    border:1px solid rgba(255,255,255,.84);
+    border-radius:24px;
+    background:linear-gradient(160deg,rgba(255,255,255,.96),rgba(248,250,255,.91));
+    box-shadow:0 18px 42px rgba(15,23,42,.12);
+    overflow:visible;
+  }
+  .events-calendar-desktop-view{display:none;}
+  .events-calendar-mobile-view{
+    display:block;
+    width:100%;
+    min-width:0;
+  }
+
+  .events-mobile-calendar-head{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    margin:0 2px 14px;
+  }
+  .events-mobile-calendar-head>div{
+    min-width:0;
+  }
+  .events-mobile-calendar-head>div>span{
+    display:block;
+    margin-bottom:3px;
+    color:#8b94a7;
+    font-size:.67rem;
+    line-height:1.2;
+    font-weight:800;
+  }
+  .events-mobile-calendar-head h2{
+    margin:0;
+    color:#0b1020;
+    font-size:1.58rem;
+    line-height:1.05;
+    letter-spacing:-.055em;
+    font-weight:950;
+  }
+  .events-mobile-add{
+    display:inline-flex;
+    min-width:0;
+    min-height:42px;
+    align-items:center;
+    justify-content:center;
+    gap:7px;
+    padding:0 12px;
+    border:0;
+    border-radius:14px;
+    background:#0b1020;
+    color:#fff;
+    box-shadow:0 10px 20px rgba(11,16,32,.17);
+    font-family:inherit;
+    font-size:.72rem;
+    line-height:1;
+    font-weight:900;
+    white-space:nowrap;
+    cursor:pointer;
+  }
+  .events-mobile-add svg{width:17px;height:17px;}
+
+  .events-mobile-week-card{
+    padding:10px 10px 8px;
+    border:1px solid rgba(15,23,42,.08);
+    border-radius:20px;
+    background:rgba(255,255,255,.96);
+    box-shadow:0 8px 20px rgba(15,23,42,.05);
+  }
+  .events-mobile-week-toolbar{
+    display:grid;
+    grid-template-columns:38px minmax(0,1fr) 38px;
+    align-items:center;
+    gap:8px;
+    margin-bottom:7px;
+  }
+  .events-mobile-week-toolbar>button:not(.events-mobile-week-month){
+    display:grid;
+    width:38px;
+    height:38px;
+    place-items:center;
+    border:1px solid rgba(15,23,42,.08);
+    border-radius:12px;
+    background:#fff;
+    color:#1f2937;
+    box-shadow:0 4px 12px rgba(15,23,42,.045);
+    cursor:pointer;
+  }
+  .events-mobile-week-toolbar>button:not(.events-mobile-week-month) svg{width:17px;height:17px;}
+  .events-mobile-week-month{
+    display:flex;
+    min-width:0;
+    min-height:38px;
+    align-items:center;
+    justify-content:center;
+    flex-direction:column;
+    gap:1px;
+    border:0;
+    background:transparent;
+    color:#0f172a;
+    cursor:pointer;
+  }
+  .events-mobile-week-month strong{
+    font-size:.92rem;
+    line-height:1.1;
+    font-weight:950;
+    letter-spacing:-.025em;
+  }
+  .events-mobile-week-month span{
+    color:#8b94a7;
+    font-size:.56rem;
+    line-height:1.2;
+    font-weight:800;
+  }
+  .events-mobile-week-strip{
+    display:grid;
+    grid-template-columns:repeat(7,minmax(0,1fr));
+    gap:4px;
+    width:100%;
+    min-width:0;
+  }
+  .events-mobile-week-day{
+    position:relative;
+    display:flex;
+    min-width:0;
+    min-height:66px;
+    align-items:center;
+    justify-content:flex-start;
+    flex-direction:column;
+    gap:4px;
+    padding:7px 2px 5px;
+    border:1px solid transparent;
+    border-radius:14px;
+    background:#f7f8fb;
+    color:#111827;
+    font-family:inherit;
+    cursor:pointer;
+    transition:transform .16s ease,background .16s ease,color .16s ease,box-shadow .16s ease;
+  }
+  .events-mobile-week-day span{
+    overflow:hidden;
+    width:100%;
+    color:#8992a3;
+    font-size:.52rem;
+    line-height:1;
+    font-weight:850;
+    text-align:center;
+    text-overflow:clip;
+    text-transform:uppercase;
+    white-space:nowrap;
+  }
+  .events-mobile-week-day strong{
+    display:grid;
+    width:28px;
+    height:28px;
+    place-items:center;
+    border-radius:10px;
+    font-size:.83rem;
+    line-height:1;
+    font-weight:950;
+  }
+  .events-mobile-week-day i{
+    width:4px;
+    height:4px;
+    margin-top:auto;
+    border-radius:999px;
+    background:transparent;
+  }
+  .events-mobile-week-day.has-events i{background:#2b6fe8;}
+  .events-mobile-week-day.is-today:not(.is-selected){
+    border-color:rgba(109,40,217,.16);
+    background:#faf8ff;
+  }
+  .events-mobile-week-day.is-today:not(.is-selected) strong{color:#6d28d9;}
+  .events-mobile-week-day.is-selected{
+    border-color:#111827;
+    background:#0b1020;
+    color:#fff;
+    box-shadow:0 9px 18px rgba(15,23,42,.18);
+    transform:translateY(-1px);
+  }
+  .events-mobile-week-day.is-selected span{color:rgba(255,255,255,.72);}
+  .events-mobile-week-day.is-selected strong{color:#fff;}
+  .events-mobile-week-day.is-selected i{background:#a78bfa;}
+
+  .events-mobile-summary-grid{
+    display:grid;
+    grid-template-columns:repeat(3,minmax(0,1fr));
+    gap:8px;
+    margin-top:12px;
+  }
+  .events-mobile-summary-card{
+    position:relative;
+    min-width:0;
+    min-height:108px;
+    overflow:hidden;
+    padding:11px 10px 10px;
+    border:1px solid rgba(15,23,42,.08);
+    border-radius:17px;
+    background:#fff;
+    box-shadow:0 7px 18px rgba(15,23,42,.045);
+  }
+  .events-mobile-summary-card:before{
+    content:"";
+    position:absolute;
+    top:0;
+    left:10px;
+    right:10px;
+    height:3px;
+    border-radius:0 0 99px 99px;
+    background:#94a3b8;
+  }
+  .events-mobile-summary-card--past:before{background:#ef4444;}
+  .events-mobile-summary-card--upcoming:before{background:#f59e0b;}
+  .events-mobile-summary-card--month:before{background:#7c3aed;}
+  .events-mobile-summary-card>span{
+    display:flex;
+    min-width:0;
+    align-items:center;
+    gap:4px;
+    overflow:hidden;
+    color:#667085;
+    font-size:.57rem;
+    line-height:1.15;
+    font-weight:900;
+    text-overflow:ellipsis;
+    text-transform:uppercase;
+    white-space:nowrap;
+  }
+  .events-mobile-summary-card>span svg{
+    width:13px;
+    height:13px;
+    flex:0 0 auto;
+  }
+  .events-mobile-summary-card>strong{
+    display:block;
+    margin-top:9px;
+    color:#0b1020;
+    font-size:1.65rem;
+    line-height:1;
+    letter-spacing:-.055em;
+    font-weight:950;
+  }
+  .events-mobile-summary-card>small{
+    display:block;
+    overflow:hidden;
+    margin-top:6px;
+    color:#9aa2b2;
+    font-size:.53rem;
+    line-height:1.25;
+    font-weight:800;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+
+  .events-mobile-day-feed{
+    margin-top:18px;
+  }
+  .events-mobile-day-feed__head{
+    display:flex;
+    align-items:flex-end;
+    justify-content:space-between;
+    gap:10px;
+    margin:0 2px 10px;
+  }
+  .events-mobile-day-feed__head>div{min-width:0;}
+  .events-mobile-day-feed__head span{
+    display:block;
+    margin-bottom:3px;
+    color:#7c3aed;
+    font-size:.59rem;
+    line-height:1;
+    letter-spacing:.055em;
+    font-weight:950;
+  }
+  .events-mobile-day-feed__head h3{
+    margin:0;
+    color:#0b1020;
+    font-size:1.08rem;
+    line-height:1.15;
+    letter-spacing:-.035em;
+    font-weight:950;
+  }
+  .events-mobile-day-feed__head>b{
+    display:grid;
+    min-width:32px;
+    height:32px;
+    place-items:center;
+    border-radius:11px;
+    background:#f3efff;
+    color:#6d28d9;
+    font-size:.78rem;
+    font-weight:950;
+  }
+  .events-mobile-event-list{
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+  }
+  .events-mobile-event-card{
+    display:grid;
+    grid-template-columns:50px minmax(0,1fr) auto;
+    align-items:center;
+    gap:10px;
+    width:100%;
+    min-width:0;
+    padding:9px 10px;
+    border:1px solid rgba(15,23,42,.08);
+    border-radius:17px;
+    background:#fff;
+    color:inherit;
+    font-family:inherit;
+    box-shadow:0 7px 18px rgba(15,23,42,.045);
+    text-align:left;
+    cursor:pointer;
+  }
+  .events-mobile-event-card__date{
+    display:flex;
+    min-height:50px;
+    align-items:center;
+    justify-content:center;
+    flex-direction:column;
+    border-radius:13px;
+    background:#f4f4f7;
+  }
+  .events-mobile-event-card__date strong{
+    color:#0b1020;
+    font-size:1rem;
+    line-height:1;
+    font-weight:950;
+  }
+  .events-mobile-event-card__date small{
+    margin-top:4px;
+    color:#7c8493;
+    font-size:.55rem;
+    line-height:1;
+    font-weight:900;
+    text-transform:uppercase;
+  }
+  .events-mobile-event-card__body{
+    display:flex;
+    min-width:0;
+    flex-direction:column;
+  }
+  .events-mobile-event-card__body>span{
+    overflow:hidden;
+    color:#7c3aed;
+    font-size:.54rem;
+    line-height:1.2;
+    font-weight:900;
+    text-overflow:ellipsis;
+    text-transform:uppercase;
+    white-space:nowrap;
+  }
+  .events-mobile-event-card__body>strong{
+    overflow:hidden;
+    margin-top:3px;
+    color:#111827;
+    font-size:.78rem;
+    line-height:1.25;
+    font-weight:950;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  .events-mobile-event-card__body>small{
+    overflow:hidden;
+    margin-top:3px;
+    color:#8b94a7;
+    font-size:.59rem;
+    line-height:1.25;
+    font-weight:750;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  .events-mobile-event-card__side{
+    display:flex;
+    min-width:0;
+    align-items:flex-end;
+    justify-content:center;
+    flex-direction:column;
+    gap:6px;
+  }
+  .events-mobile-event-card__side .events-status{
+    max-width:82px;
+    min-height:22px;
+    padding:0 7px;
+    font-size:.5rem;
+    line-height:22px;
+    white-space:nowrap;
+  }
+  .events-mobile-event-card__side>svg{
+    width:15px;
+    height:15px;
+    color:#737b8b;
+  }
+  .events-mobile-day-empty{
+    display:flex;
+    min-height:176px;
+    align-items:center;
+    justify-content:center;
+    flex-direction:column;
+    gap:6px;
+    padding:20px 16px;
+    border:1px dashed rgba(109,40,217,.2);
+    border-radius:19px;
+    background:rgba(255,255,255,.74);
+    text-align:center;
+  }
+  .events-mobile-day-empty>span{
+    display:grid;
+    width:48px;
+    height:48px;
+    place-items:center;
+    margin-bottom:2px;
+    border-radius:16px;
+    background:#f3efff;
+    color:#7c3aed;
+  }
+  .events-mobile-day-empty>span svg{width:23px;height:23px;}
+  .events-mobile-day-empty>strong{
+    color:#1f2937;
+    font-size:.83rem;
+    font-weight:950;
+  }
+  .events-mobile-day-empty>small{
+    max-width:260px;
+    color:#8b94a7;
+    font-size:.62rem;
+    line-height:1.45;
+    font-weight:700;
+  }
+  .events-mobile-day-empty>button{
+    display:inline-flex;
+    min-height:38px;
+    align-items:center;
+    justify-content:center;
+    gap:6px;
+    margin-top:5px;
+    padding:0 12px;
+    border:0;
+    border-radius:12px;
+    background:#0b1020;
+    color:#fff;
+    font-family:inherit;
+    font-size:.65rem;
+    line-height:1;
+    font-weight:900;
+    cursor:pointer;
+  }
+  .events-mobile-day-empty>button svg{width:15px;height:15px;}
+}
+
+@media(max-width:420px){
+  .events-calendar-page .events-calendar-shell{padding-inline:4px;}
+  .events-calendar-page .events-calendar-workspace{padding:11px;border-radius:21px;}
+  .events-mobile-calendar-head h2{font-size:1.42rem;}
+  .events-mobile-add{padding-inline:10px;font-size:.66rem;}
+  .events-mobile-week-card{padding-inline:8px;}
+  .events-mobile-week-day{min-height:62px;border-radius:12px;}
+  .events-mobile-week-day span{font-size:.48rem;}
+  .events-mobile-week-day strong{width:26px;height:26px;font-size:.78rem;}
+  .events-mobile-summary-grid{gap:6px;}
+  .events-mobile-summary-card{min-height:102px;padding-inline:8px;}
+  .events-mobile-summary-card>span{font-size:.51rem;}
+  .events-mobile-summary-card>strong{font-size:1.48rem;}
+  .events-mobile-summary-card>small{font-size:.49rem;}
+  .events-mobile-event-card{grid-template-columns:46px minmax(0,1fr) auto;gap:8px;padding:8px;}
+  .events-mobile-event-card__date{min-height:46px;}
+  .events-mobile-event-card__side .events-status{display:none;}
+}
+
 /* ========================================================================== 
    Event Request form — compact modern workspace (Oct 2026)
    ========================================================================== */

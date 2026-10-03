@@ -292,6 +292,46 @@ export default function EventsCalendarClient({ account, initialEvents = [], boot
     .sort((a, b) => (startDate(b)?.getTime() || -Infinity) - (startDate(a)?.getTime() || -Infinity)), [datedEvents, today]);
 
   const selectedDayEvents = useMemo(() => eventsForDate(selectedDate), [datedEvents, selectedKey]);
+  const mobileScheduledDayEvents = useMemo(() => selectedDayEvents
+    .filter((event) => normalizeStatus(event.status) !== "cancelled")
+    .sort((a, b) => (startDate(a)?.getTime() || Infinity) - (startDate(b)?.getTime() || Infinity)), [selectedDayEvents]);
+
+  const mobileUpcoming = useMemo(() => datedEvents
+    .filter((event) => {
+      const end = endDate(event);
+      return end && end >= today && normalizeStatus(event.status) !== "cancelled";
+    })
+    .sort((a, b) => (startDate(a)?.getTime() || Infinity) - (startDate(b)?.getTime() || Infinity)), [datedEvents, today]);
+
+  const mobilePast = useMemo(() => datedEvents
+    .filter((event) => {
+      const end = endDate(event);
+      return end && end < today && normalizeStatus(event.status) !== "cancelled";
+    })
+    .sort((a, b) => (startDate(b)?.getTime() || -Infinity) - (startDate(a)?.getTime() || -Infinity)), [datedEvents, today]);
+
+  const currentMonthEvents = useMemo(() => {
+    const currentMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    const nextMonthStart = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+    return datedEvents.filter((event) => {
+      if (normalizeStatus(event.status) === "cancelled") return false;
+      const start = startDate(event);
+      const end = endDate(event);
+      return Boolean(start && end && end >= currentMonthStart && start < nextMonthStart);
+    });
+  }, [datedEvents, today]);
+
+  const mobileWeekDays = useMemo(() => {
+    const offset = (selectedDate.getDay() + 6) % 7;
+    const first = new Date(selectedDate);
+    first.setDate(selectedDate.getDate() - offset);
+    return Array.from({ length: 7 }, (_, index) => {
+      const day = new Date(first);
+      day.setDate(first.getDate() + index);
+      return day;
+    });
+  }, [selectedKey]);
+
   const list = activeList === "past" ? past : upcoming;
   function selectDate(day) {
     setSelectedKey(dateKey(day));
@@ -320,9 +360,119 @@ export default function EventsCalendarClient({ account, initialEvents = [], boot
     navigateWithinApp(`/next/events/new?${params.toString()}`);
   }
 
+  function shiftSelectedWeek(direction) {
+    const next = new Date(selectedDate);
+    next.setDate(selectedDate.getDate() + (direction * 7));
+    selectDate(next);
+  }
+
   return (
     <section className="events-shell events-calendar-shell">
-      <section className="events-calendar-workspace" aria-labelledby="eventsCalendarTitle">
+      <section className="events-calendar-workspace" aria-label="Event calendar">
+        <section className="events-calendar-mobile-view" aria-label="Mobile event schedule">
+          <header className="events-mobile-calendar-head">
+            <div>
+              <span>{formatDate(selectedDate, { weekday: "long", day: "numeric", month: "short" })}</span>
+              <h2>Event Schedule</h2>
+            </div>
+            {canCreate ? (
+              <button type="button" className="events-mobile-add" onClick={openNewEvent}>
+                <EventIcon name="plus-circle" />
+                <span>Add event</span>
+              </button>
+            ) : null}
+          </header>
+
+          <section className="events-mobile-week-card" aria-label="Weekly event calendar">
+            <div className="events-mobile-week-toolbar">
+              <button type="button" onClick={() => shiftSelectedWeek(-1)} aria-label="Previous week"><EventIcon name="chevron-left" /></button>
+              <button type="button" className="events-mobile-week-month" onClick={() => selectDate(new Date())}>
+                <strong>{selectedDate.toLocaleDateString("en-GB", { month: "long" })}</strong>
+                <span>{selectedDate.getFullYear()} · Today</span>
+              </button>
+              <button type="button" onClick={() => shiftSelectedWeek(1)} aria-label="Next week"><EventIcon name="chevron-right" /></button>
+            </div>
+
+            <div className="events-mobile-week-strip">
+              {mobileWeekDays.map((day) => {
+                const selected = dateKey(day) === selectedKey;
+                const current = sameDay(day, today);
+                const scheduled = eventsForDate(day).filter((event) => normalizeStatus(event.status) !== "cancelled");
+                return (
+                  <button
+                    type="button"
+                    key={dateKey(day)}
+                    className={`events-mobile-week-day${selected ? " is-selected" : ""}${current ? " is-today" : ""}${scheduled.length ? " has-events" : ""}`}
+                    onClick={() => selectDate(day)}
+                    aria-pressed={selected}
+                    aria-label={`${formatDate(day, { weekday: "long", day: "numeric", month: "long" })}${scheduled.length ? `, ${scheduled.length} event${scheduled.length === 1 ? "" : "s"}` : ""}`}
+                  >
+                    <span>{day.toLocaleDateString("en-GB", { weekday: "short" })}</span>
+                    <strong>{day.getDate()}</strong>
+                    <i aria-hidden="true" />
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+
+          <section className="events-mobile-summary-grid" aria-label="Event summary">
+            <article className="events-mobile-summary-card events-mobile-summary-card--past">
+              <span><EventIcon name="archive" /> Past</span>
+              <strong>{mobilePast.length}</strong>
+              <small>all previous events</small>
+            </article>
+            <article className="events-mobile-summary-card events-mobile-summary-card--upcoming">
+              <span><EventIcon name="clock" /> Upcoming</span>
+              <strong>{mobileUpcoming.length}</strong>
+              <small>scheduled ahead</small>
+            </article>
+            <article className="events-mobile-summary-card events-mobile-summary-card--month">
+              <span><EventIcon name="calendar" /> This month</span>
+              <strong>{currentMonthEvents.length}</strong>
+              <small>{today.toLocaleDateString("en-GB", { month: "short", year: "numeric" })}</small>
+            </article>
+          </section>
+
+          <section className="events-mobile-day-feed" aria-labelledby="eventsMobileDayTitle">
+            <div className="events-mobile-day-feed__head">
+              <div>
+                <span>{sameDay(selectedDate, today) ? "TODAY" : selectedDate.toLocaleDateString("en-GB", { weekday: "long" }).toUpperCase()}</span>
+                <h3 id="eventsMobileDayTitle">{formatDate(selectedDate, { day: "numeric", month: "long", year: "numeric" })}</h3>
+              </div>
+              <b>{mobileScheduledDayEvents.length}</b>
+            </div>
+
+            <div className="events-mobile-event-list">
+              {mobileScheduledDayEvents.length ? mobileScheduledDayEvents.map((event) => (
+                <button type="button" className="events-mobile-event-card" key={event.id} onClick={() => openEventDetails(event)}>
+                  <span className="events-mobile-event-card__date">
+                    <strong>{formatDate(startDate(event), { day: "2-digit" })}</strong>
+                    <small>{formatDate(startDate(event), { month: "short" })}</small>
+                  </span>
+                  <span className="events-mobile-event-card__body">
+                    <span>{typeLabel(event)}</span>
+                    <strong>{event.eventName || "Untitled Event"}</strong>
+                    <small>{event.organizationName || event.governorate || "Location to be confirmed"}</small>
+                  </span>
+                  <span className="events-mobile-event-card__side">
+                    <StatusPill status={event.status} />
+                    <EventIcon name="arrow-up-right" />
+                  </span>
+                </button>
+              )) : (
+                <div className="events-mobile-day-empty">
+                  <span><EventIcon name="calendar" /></span>
+                  <strong>No events on this date</strong>
+                  <small>Select another day from the week above{canCreate ? " or add a new event." : "."}</small>
+                  {canCreate ? <button type="button" onClick={openNewEvent}><EventIcon name="plus-circle" /> Add event</button> : null}
+                </div>
+              )}
+            </div>
+          </section>
+        </section>
+
+        <div className="events-calendar-desktop-view">
         <div className="events-calendar-workspace__top">
           <div>
             <span className="events-eyebrow"><EventIcon name="calendar" /> Event schedule</span>
@@ -425,6 +575,7 @@ export default function EventsCalendarClient({ account, initialEvents = [], boot
               </div>
             </section>
           </aside>
+        </div>
         </div>
       </section>
 
