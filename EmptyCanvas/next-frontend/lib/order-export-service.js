@@ -536,13 +536,18 @@ function resolveSparePartsForItem(item = {}, productMaps = {}) {
     const key = `${id || normKey(name)}|${qty}`;
     if (!key || seen.has(key)) return;
     seen.add(key);
+    const storedUnit = Number(entry?.unitPrice ?? entry?.unit);
+    const catalogUnit = Number(product?.unitPrice);
+    const unit = Number.isFinite(storedUnit) && storedUnit > 0
+      ? storedUnit
+      : (Number.isFinite(catalogUnit) && catalogUnit > 0
+        ? catalogUnit
+        : (Number.isFinite(storedUnit) ? storedUnit : (Number.isFinite(catalogUnit) ? catalogUnit : 0)));
     out.push({
       id: id || text(product?.id),
       idCode: text(entry?.displayId || entry?.idCode || product?.displayId),
       name: name || "Spare part",
-      unit: Number.isFinite(Number(entry?.unitPrice ?? entry?.unit))
-        ? Number(entry?.unitPrice ?? entry?.unit)
-        : (Number.isFinite(Number(product?.unitPrice)) ? Number(product.unitPrice) : 0),
+      unit,
       qty,
       link: text(entry?.url || entry?.link || product?.url),
     });

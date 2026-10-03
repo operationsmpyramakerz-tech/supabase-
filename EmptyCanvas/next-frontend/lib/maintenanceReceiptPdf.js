@@ -27,8 +27,13 @@ function ensureText(value, fallback = "—") {
 
 function money(value) {
   const n = Number(value);
-  if (!Number.isFinite(n)) return "£0.00";
-  return `£${n.toFixed(2)}`;
+  if (!Number.isFinite(n)) return "EGP 0.00";
+  return `EGP ${n.toFixed(2)}`;
+}
+
+function safeExternalUrl(value) {
+  const raw = String(value || "").trim();
+  return /^https?:\/\//i.test(raw) ? raw : "";
 }
 
 // PDFKit/fontkit shapes Arabic glyphs correctly, but PDFKit still lays out the
@@ -143,7 +148,8 @@ function normalizeSpareParts(item = {}) {
         const unit = Number.isFinite(Number(part?.unit ?? part?.unitPrice)) ? Number(part?.unit ?? part?.unitPrice) : 0;
         const qty = Number.isFinite(Number(part?.qty ?? part?.quantity)) ? Number(part?.qty ?? part?.quantity) : 1;
         const total = Number.isFinite(Number(part?.total)) ? Number(part.total) : unit * qty;
-        return { name, idCode, unit, qty, total };
+        const link = safeExternalUrl(part?.link || part?.url);
+        return { name, idCode, unit, qty, total, link };
       })
       .filter((part) => {
         const key = `${part.idCode}|${part.name}`.toLowerCase();
@@ -276,11 +282,13 @@ async function pipeMaintenanceReceiptPDF(params = {}, stream) {
     return isArabic ? withNativeArabicPdfText(doc, build) : build();
   };
 
-  const drawValueLayout = (layout, x, y, width, { fontName = "Helvetica", fontSize = 8.8, lineGap = 1, color = COLORS.text, align } = {}) => {
+  const drawValueLayout = (layout, x, y, width, { fontName = "Helvetica", fontSize = 8.8, lineGap = 1, color = COLORS.text, align, link } = {}) => {
+    const safeLink = safeExternalUrl(link);
     const render = () => doc.fillColor(color).font(fontName).fontSize(fontSize).text(layout.display, x, y, {
       width,
       lineGap,
       align: align || layout.align,
+      ...(safeLink ? { link: safeLink, underline: true } : {}),
     });
     return layout.isArabic ? withNativeArabicPdfText(doc, render) : render();
   };
@@ -492,7 +500,14 @@ async function pipeMaintenanceReceiptPDF(params = {}, stream) {
       layout.columns.forEach((col) => {
         const value = spareCellText(part, col.key);
         const layoutValue = makeValueLayout(value, Math.max(20, col.width - 8), 8.2, col.numeric ? "Helvetica-Bold" : "Helvetica", 1);
-        drawValueLayout(layoutValue, cursorX, rowY + 7, Math.max(20, col.width - 8), { fontName: col.numeric ? "Helvetica-Bold" : "Helvetica", fontSize: 8.2, lineGap: 1, align: col.numeric ? "right" : undefined });
+        drawValueLayout(layoutValue, cursorX, rowY + 7, Math.max(20, col.width - 8), {
+          fontName: col.numeric ? "Helvetica-Bold" : "Helvetica",
+          fontSize: 8.2,
+          lineGap: 1,
+          align: col.numeric ? "right" : undefined,
+          color: col.key === "component" && part?.link ? "#2563EB" : COLORS.text,
+          link: col.key === "component" ? part?.link : "",
+        });
         cursorX += col.width;
       });
       rowY += rowH;
