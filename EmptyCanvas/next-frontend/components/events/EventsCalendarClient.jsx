@@ -370,18 +370,15 @@ export default function EventsCalendarClient({ account, initialEvents = [], boot
     <section className="events-shell events-calendar-shell">
       <section className="events-calendar-workspace" aria-label="Event calendar">
         <section className="events-calendar-mobile-view" aria-label="Mobile event schedule">
-          <header className="events-mobile-calendar-head">
-            <div>
-              <span>{formatDate(selectedDate, { weekday: "long", day: "numeric", month: "short" })}</span>
-              <h2>Event Schedule</h2>
-            </div>
-            {canCreate ? (
-              <button type="button" className="events-mobile-add" onClick={openNewEvent}>
-                <EventIcon name="plus-circle" />
-                <span>Add event</span>
-              </button>
-            ) : null}
-          </header>
+          {canCreate ? (
+            <button type="button" className="events-mobile-add-card" onClick={openNewEvent} aria-label="Add new event">
+              <span className="events-mobile-add-card__copy">
+                <strong>Add new</strong>
+                <small>Create a new event</small>
+              </span>
+              <span className="events-mobile-add-card__plus"><EventIcon name="plus-circle" /></span>
+            </button>
+          ) : null}
 
           <section className="events-mobile-week-card" aria-label="Weekly event calendar">
             <div className="events-mobile-week-toolbar">
@@ -464,8 +461,7 @@ export default function EventsCalendarClient({ account, initialEvents = [], boot
                 <div className="events-mobile-day-empty">
                   <span><EventIcon name="calendar" /></span>
                   <strong>No events on this date</strong>
-                  <small>Select another day from the week above{canCreate ? " or add a new event." : "."}</small>
-                  {canCreate ? <button type="button" onClick={openNewEvent}><EventIcon name="plus-circle" /> Add event</button> : null}
+                  <small>Select another day from the week above{canCreate ? " or use the Add new card above." : "."}</small>
                 </div>
               )}
             </div>

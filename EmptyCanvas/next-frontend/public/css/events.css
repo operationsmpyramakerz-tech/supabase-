@@ -2754,3 +2754,126 @@ body.events-components-page .events-components-workspace .events-component-cards
   box-shadow:none;
   font-size:.8rem;
 }
+
+
+/* ==========================================================================
+   Event Calendar mobile polish — 2026-10-03
+   Wider page canvas + component-style Add new card.
+   ========================================================================== */
+@media(max-width:760px){
+  body.events-calendar-page .events-calendar-shell{
+    width:100%!important;
+    max-width:none!important;
+    padding-left:2px!important;
+    padding-right:2px!important;
+  }
+  body.events-calendar-page .events-calendar-workspace{
+    width:100%!important;
+    max-width:none!important;
+    padding:9px!important;
+    border-radius:22px!important;
+  }
+  body.events-calendar-page .events-calendar-mobile-view{
+    width:100%;
+  }
+
+  .events-mobile-add-card{
+    position:relative;
+    display:flex;
+    width:100%;
+    min-height:128px;
+    align-items:stretch;
+    justify-content:space-between;
+    gap:16px;
+    overflow:hidden;
+    margin:0 0 10px;
+    padding:18px 20px;
+    border:1.5px dashed rgba(109,40,217,.34);
+    border-radius:20px;
+    background:linear-gradient(145deg,#fbfaff 0%,#f3efff 58%,#fff 100%);
+    color:#312e81;
+    text-align:left;
+    font:inherit;
+    cursor:pointer;
+    box-shadow:0 10px 24px rgba(76,29,149,.065);
+    transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease,background .18s ease;
+  }
+  .events-mobile-add-card:before{
+    content:"";
+    position:absolute;
+    width:150px;
+    height:150px;
+    right:-48px;
+    top:-62px;
+    border-radius:46px;
+    transform:rotate(18deg);
+    background:linear-gradient(145deg,rgba(124,58,237,.13),rgba(124,58,237,0));
+    pointer-events:none;
+  }
+  .events-mobile-add-card:active{transform:scale(.992);}
+  .events-mobile-add-card:focus-visible{
+    outline:3px solid rgba(109,40,217,.18);
+    outline-offset:2px;
+    border-color:rgba(109,40,217,.62);
+  }
+  .events-mobile-add-card__copy{
+    position:relative;
+    z-index:1;
+    display:flex;
+    min-width:0;
+    align-self:flex-start;
+    flex-direction:column;
+    gap:6px;
+  }
+  .events-mobile-add-card__copy strong{
+    color:#312e81;
+    font-size:1.14rem;
+    line-height:1.1;
+    font-weight:950;
+    letter-spacing:-.025em;
+  }
+  .events-mobile-add-card__copy small{
+    color:#7c7398;
+    font-size:.72rem;
+    line-height:1.35;
+    font-weight:750;
+  }
+  .events-mobile-add-card__plus{
+    position:relative;
+    z-index:1;
+    display:grid;
+    width:56px;
+    height:56px;
+    flex:0 0 56px;
+    place-items:center;
+    align-self:flex-end;
+    margin-top:auto;
+    border-radius:999px;
+    background:linear-gradient(145deg,#6d28d9,#4f46e5);
+    color:#fff;
+    box-shadow:0 16px 28px rgba(91,33,182,.25);
+  }
+  .events-mobile-add-card__plus svg{width:26px;height:26px;stroke-width:1.9;}
+
+  .events-mobile-week-card{
+    border-radius:18px!important;
+    padding:9px 8px 7px!important;
+  }
+  .events-mobile-summary-grid{
+    gap:6px!important;
+    margin-top:9px!important;
+  }
+  .events-mobile-summary-card{
+    min-height:102px!important;
+    padding:10px 8px 9px!important;
+    border-radius:15px!important;
+  }
+  .events-mobile-day-feed{margin-top:14px!important;}
+}
+
+@media(max-width:420px){
+  body.events-calendar-page .events-calendar-shell{padding-left:0!important;padding-right:0!important;}
+  body.events-calendar-page .events-calendar-workspace{padding:7px!important;border-radius:20px!important;}
+  .events-mobile-add-card{min-height:118px;padding:16px;border-radius:18px;}
+  .events-mobile-add-card__plus{width:52px;height:52px;flex-basis:52px;}
+}
