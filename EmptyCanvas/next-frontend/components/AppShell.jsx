@@ -166,13 +166,8 @@ export default function AppShell({
 }) {
   const persistentShell = usePersistentShellContext();
   const allowedPages = Array.isArray(account?.allowedPages) ? account.allowedPages : [];
-  const systemCoverUrl = String(account?.coverPhotoUrl || account?.coverPhoto || "").trim();
-  const systemCoverStyle = systemCoverUrl
-    ? { "--ops-system-cover-image": `url(${JSON.stringify(systemCoverUrl)})` }
-    : undefined;
-
   const classicLinks = CLASSIC_MAIN_LINKS.filter((link) => canSee(link, allowedPages));
-  const combinedBodyClass = [bodyClass, "next-classic-shell-active", systemCoverUrl ? "ops-has-system-cover" : ""].filter(Boolean).join(" ");
+  const combinedBodyClass = [bodyClass, "next-classic-shell-active"].filter(Boolean).join(" ");
 
   useLayoutEffect(() => {
     if (!persistentShell?.persistent || typeof persistentShell.registerPage !== "function") return;
@@ -240,7 +235,7 @@ export default function AppShell({
           <div className="sidebar-footer" />
         </aside>
 
-        <div className="main-content" style={systemCoverStyle}>
+        <div className="main-content">
           <header className="main-header dash-header dash-hide-row2">
             <div className="header-row1">
               <div className="left">

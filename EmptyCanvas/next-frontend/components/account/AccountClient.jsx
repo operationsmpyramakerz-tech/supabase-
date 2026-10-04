@@ -131,7 +131,6 @@ function normalizeAccount(account = {}) {
     email: text(account?.email),
     employeeCode: text(account?.employeeCode),
     photoUrl: safeUrl(account?.photoUrl),
-    coverPhotoUrl: safeUrl(account?.coverPhotoUrl),
     passwordSet: account?.passwordSet === true,
     filesMedia: normalizeFiles(account?.filesMedia),
   };
@@ -181,6 +180,14 @@ function Icon({ name, size = 18 }) {
     eyeOff: <><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a20.7 20.7 0 0 1 5.06-6.94"/><path d="M1 1l22 22"/><path d="M9.88 9.88A3 3 0 0 0 12 15a3 3 0 0 0 2.12-.88"/></>,
     sun: <><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></>,
     moon: <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"/>,
+    user: <><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></>,
+    building: <><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M9 21v-4h6v4"/><path d="M8 7h.01M12 7h.01M16 7h.01M8 11h.01M12 11h.01M16 11h.01"/></>,
+    briefcase: <><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M3 12h18"/></>,
+    phone: <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.69 2.8a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.33 1.84.56 2.8.69A2 2 0 0 1 22 16.92Z"/>,
+    mail: <><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></>,
+    hash: <><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></>,
+    chevron: <polyline points="9 18 15 12 9 6"/>,
+    camera: <><path d="M14.5 4 16 6h3a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3l1.5-2Z"/><circle cx="12" cy="13" r="3"/></>,
   };
   return <svg {...common}>{paths[name] || paths.file}</svg>;
 }
@@ -283,7 +290,6 @@ export default function AccountClient({ initialAccount }) {
   const [removeRequest, setRemoveRequest] = useState("");
   const [theme, setTheme] = useState("light");
   const profileInputRef = useRef(null);
-  const coverInputRef = useRef(null);
 
   useEffect(() => {
     const syncTheme = () => setTheme(currentTheme());
@@ -328,7 +334,6 @@ export default function AccountClient({ initialAccount }) {
     if (imageRequest?.preview) URL.revokeObjectURL(imageRequest.preview);
     setImageRequest(null);
     if (profileInputRef.current) profileInputRef.current.value = "";
-    if (coverInputRef.current) coverInputRef.current.value = "";
   }
 
   function selectImage(kind, file) {
@@ -339,18 +344,17 @@ export default function AccountClient({ initialAccount }) {
     setImageRequest({ kind, file, preview: URL.createObjectURL(file) });
   }
 
-  async function removeImage(kind) {
-    const label = kind === "cover" ? "cover photo" : "profile picture";
-    setBusyAction(`remove-${kind}`);
+  async function removeImage() {
+    setBusyAction("remove-profile");
     try {
-      await requestJson(`/next/api/account/image-direct?kind=${encodeURIComponent(kind)}`, { method: "DELETE" });
-      const next = { ...account, [kind === "cover" ? "coverPhotoUrl" : "photoUrl"]: "" };
+      await requestJson("/next/api/account/image-direct?kind=profile", { method: "DELETE" });
+      const next = { ...account, photoUrl: "" };
       setAccount(next);
       syncAccountChrome(next);
       setRemoveRequest("");
-      showToast("success", "Removed", `${kind === "cover" ? "Cover photo" : "Profile picture"} removed successfully.`);
+      showToast("success", "Removed", "Profile picture removed successfully.");
     } catch (error) {
-      showToast("error", "Remove failed", error?.message || `The ${label} could not be removed.`);
+      showToast("error", "Remove failed", error?.message || "The profile picture could not be removed.");
     } finally {
       setBusyAction("");
     }
@@ -365,117 +369,94 @@ export default function AccountClient({ initialAccount }) {
       <Toast toast={toast} onClose={() => setToast(null)} />
 
       <div id="account-content">
-        <div className="account-panel account-panel--profile account-profile-modern">
-          <section className="profile-hero-section" aria-label="User profile header">
-            <div className="profile-cover-section" data-field="coverPhoto">
-              <button className="profile-cover-display" type="button" aria-label="Change cover photo" title="Change cover photo" onClick={() => coverInputRef.current?.click()}>
-                {account.coverPhotoUrl ? <img className="profile-cover-image" src={account.coverPhotoUrl} alt={`${displayName} cover photo`} /> : <span className="profile-cover-fallback" aria-hidden="true" />}
+        <div className="account-panel account-panel--profile profile-settings-page">
+          <section className="profile-settings-summary" aria-label="Profile summary">
+            <div className="profile-settings-avatar-wrap">
+              <button className="profile-settings-avatar" type="button" aria-label="Change profile picture" onClick={() => profileInputRef.current?.click()}>
+                {account.photoUrl ? <img src={account.photoUrl} width="84" height="84" alt={`${displayName} profile picture`} /> : <span>{initials(displayName)}</span>}
               </button>
-              {account.coverPhotoUrl ? (
-                <button className="profile-cover-remove profile-image-remove" type="button" aria-label="Remove cover photo" title="Remove cover photo" onClick={() => setRemoveRequest("cover")} disabled={busyAction === "remove-cover"}>
-                  <Icon name="x" size={18} />
+              <button className="profile-settings-avatar-edit" type="button" aria-label="Edit profile picture" onClick={() => profileInputRef.current?.click()} disabled={busyAction === "remove-profile"}>
+                <Icon name="camera" size={15} />
+              </button>
+              {account.photoUrl ? (
+                <button className="profile-settings-avatar-remove" type="button" aria-label="Remove profile picture" onClick={() => setRemoveRequest("profile")} disabled={busyAction === "remove-profile"}>
+                  <Icon name="x" size={14} />
                 </button>
               ) : null}
-              <button className="profile-cover-edit" type="button" aria-label="Edit cover photo" title="Edit cover photo" onClick={() => coverInputRef.current?.click()} disabled={busyAction === "remove-cover"}>
-                <Icon name="edit" size={18} />
-              </button>
-              <input ref={coverInputRef} className="acc-file-input profile-cover-file-input" type="file" accept="image/*" hidden onChange={(event) => selectImage("cover", event.target.files?.[0])} />
+              <input ref={profileInputRef} className="acc-file-input" type="file" accept="image/*" hidden onChange={(event) => selectImage("profile", event.target.files?.[0])} />
             </div>
-
-            <div className="profile-identity-block">
-              <div className="profile-avatar-section" data-field="profilePicture">
-                <div className="profile-avatar-shell">
-                  <button className="profile-avatar-display" type="button" aria-label="Change profile picture" title="Change profile picture" onClick={() => profileInputRef.current?.click()}>
-                    {account.photoUrl ? <img className="profile-avatar-image" src={account.photoUrl} width="142" height="142" alt={`${displayName} profile picture`} /> : <span className="profile-avatar-fallback" aria-hidden="true">{initials(displayName)}</span>}
-                  </button>
-                  <button className="profile-avatar-edit" type="button" aria-label="Edit profile picture" title="Edit profile picture" onClick={() => profileInputRef.current?.click()} disabled={busyAction === "remove-profile"}>
-                    <Icon name="edit" size={18} />
-                  </button>
-                  {account.photoUrl ? (
-                    <button className="profile-avatar-remove profile-image-remove" type="button" aria-label="Remove profile picture" title="Remove profile picture" onClick={() => setRemoveRequest("profile")} disabled={busyAction === "remove-profile"}>
-                      <Icon name="x" size={18} />
-                    </button>
-                  ) : null}
-                  <input ref={profileInputRef} className="acc-file-input profile-avatar-file-input" type="file" accept="image/*" hidden onChange={(event) => selectImage("profile", event.target.files?.[0])} />
-                </div>
-              </div>
-              <h2 className="profile-identity-name">{displayName}</h2>
-              <div className="profile-identity-subtitle">{subtitle}</div>
+            <div className="profile-settings-summary-copy">
+              <h2>{displayName}</h2>
+              <p>{account.email || "No email added"}</p>
+              <small>{subtitle}</small>
             </div>
           </section>
 
-          <section className="profile-appearance-section" aria-label="Appearance settings">
-            <div className="profile-appearance-row">
-              <span className="profile-appearance-icon" aria-hidden="true"><Icon name={theme === "dark" ? "moon" : "sun"} size={18} /></span>
-              <div className="profile-appearance-copy">
-                <div className="profile-appearance-label">Theme</div>
-                <div className="profile-appearance-value">{theme === "dark" ? "Dark mode" : "Light mode"}</div>
-              </div>
-              <button
-                type="button"
-                className={`profile-theme-switch ${theme === "dark" ? "is-dark" : ""}`}
-                role="switch"
-                aria-checked={theme === "dark"}
-                aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
-                onClick={toggleTheme}
-              >
-                <span className="profile-theme-switch__track" aria-hidden="true">
-                  <span className="profile-theme-switch__thumb">
-                    <Icon name={theme === "dark" ? "moon" : "sun"} size={14} />
-                  </span>
+          <section className="profile-settings-section" aria-labelledby="profile-account-heading">
+            <h3 id="profile-account-heading">Account</h3>
+            <div className="profile-settings-list">
+              {FIELD_META.map((field) => {
+                const iconName = { name: "user", department: "building", position: "briefcase", phone: "phone", email: "mail", employeeCode: "hash", password: "lock" }[field.key] || "user";
+                const display = fieldDisplay(account, field);
+                return (
+                  <button className="profile-settings-row" type="button" key={field.key} onClick={() => setEditField(field)} aria-label={`Edit ${field.label}`}>
+                    <span className="profile-settings-row-icon" aria-hidden="true"><Icon name={iconName} size={19} /></span>
+                    <span className="profile-settings-row-copy">
+                      <strong>{field.key === "password" ? "Password & Security" : field.label}</strong>
+                      <small>{display}</small>
+                    </span>
+                    <span className="profile-settings-chevron" aria-hidden="true"><Icon name="chevron" size={18} /></span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+
+          <section className="profile-settings-section" aria-labelledby="profile-preferences-heading">
+            <h3 id="profile-preferences-heading">Preferences</h3>
+            <div className="profile-settings-list">
+              <div className="profile-settings-row profile-settings-row--static">
+                <span className="profile-settings-row-icon" aria-hidden="true"><Icon name={theme === "dark" ? "moon" : "sun"} size={19} /></span>
+                <span className="profile-settings-row-copy">
+                  <strong>Theme</strong>
+                  <small>{theme === "dark" ? "Dark" : "Light"}</small>
                 </span>
+                <button
+                  type="button"
+                  className={`profile-settings-theme-switch ${theme === "dark" ? "is-dark" : ""}`}
+                  role="switch"
+                  aria-checked={theme === "dark"}
+                  aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+                  onClick={toggleTheme}
+                >
+                  <span><Icon name={theme === "dark" ? "moon" : "sun"} size={14} /></span>
+                </button>
+              </div>
+              <button className="profile-settings-row" type="button" onClick={() => document.getElementById("profile-files-media")?.scrollIntoView({ behavior: "smooth", block: "start" })}>
+                <span className="profile-settings-row-icon" aria-hidden="true"><Icon name="paperclip" size={19} /></span>
+                <span className="profile-settings-row-copy">
+                  <strong>Files &amp; media</strong>
+                  <small>{files.length ? `${files.length} attachment${files.length === 1 ? "" : "s"}` : "No attachments"}</small>
+                </span>
+                <span className="profile-settings-chevron" aria-hidden="true"><Icon name="chevron" size={18} /></span>
               </button>
             </div>
           </section>
 
-          <div className="profile-fields-list">
-            {FIELD_META.map((field) => {
-              const hasValue = fieldHasValue(account, field);
-              return (
-                <section className="profile-field-card" data-field={field.key} key={field.key}>
-                  <div className={`profile-field-box ${field.key === "password" ? "profile-field-box--password" : ""}`}>
-                    <div className="profile-field-copy">
-                      <div className="profile-field-label">{field.label}</div>
-                      <span className={`profile-field-value ${hasValue ? "" : "is-placeholder"}`}>{fieldDisplay(account, field)}</span>
-                    </div>
-                    <button className="profile-field-edit acc-action acc-edit" type="button" aria-label={`Edit ${field.label}`} title={`Edit ${field.label}`} onClick={() => setEditField(field)}>
-                      <Icon name="edit" size={16} />
-                    </button>
-                  </div>
-                </section>
-              );
-            })}
-          </div>
-
-          <section className="profile-files-media-section" aria-label="Files and media">
-            <div className="profile-files-media-head">
-              <span className="profile-files-media-badge"><Icon name="paperclip" size={18} /></span>
-              <div>
-                <div className="profile-files-media-title">Files &amp; media</div>
-                <div className="profile-files-media-sub">{files.length ? `${files.length} item${files.length === 1 ? "" : "s"} attached to your profile` : "Attachments from your Team Members record"}</div>
-              </div>
-            </div>
-            <div className="profile-media-files-grid">
+          <section className="profile-settings-section profile-settings-files" id="profile-files-media" aria-label="Files and media">
+            <h3>Files &amp; media</h3>
+            <div className="profile-settings-file-list">
               {files.length ? files.map((file, index) => {
                 const host = hostLabel(file.url);
-                const inner = (
+                const content = (
                   <>
-                    <span className="profile-media-file-icon"><Icon name={fileIcon(file)} size={18} /></span>
-                    <span className="profile-media-file-body"><span className="profile-media-file-name">{file.name || host || `File ${index + 1}`}</span>{host ? <span className="profile-media-file-url">{host}</span> : null}</span>
-                    {file.url ? <span className="profile-media-file-open"><Icon name="external" size={17} /></span> : null}
+                    <span className="profile-settings-file-icon"><Icon name={fileIcon(file)} size={18} /></span>
+                    <span className="profile-settings-file-copy"><strong>{file.name || host || `File ${index + 1}`}</strong>{host ? <small>{host}</small> : null}</span>
+                    {file.url ? <span className="profile-settings-chevron"><Icon name="external" size={17} /></span> : null}
                   </>
                 );
-                return file.url ? (
-                  <a className="profile-media-file-card" href={file.url} target="_blank" rel="noopener noreferrer" key={`${file.name}-${index}`}>{inner}</a>
-                ) : (
-                  <div className="profile-media-file-card profile-media-file-card--disabled" key={`${file.name}-${index}`}>{inner}</div>
-                );
-              }) : (
-                <div className="profile-media-empty">
-                  <span className="profile-media-empty-icon"><Icon name="folder" size={18} /></span>
-                  <span>No files or links added yet.</span>
-                </div>
-              )}
+                return file.url ? <a className="profile-settings-file" href={file.url} target="_blank" rel="noopener noreferrer" key={`${file.name}-${index}`}>{content}</a> : <div className="profile-settings-file" key={`${file.name}-${index}`}>{content}</div>;
+              }) : <div className="profile-settings-empty"><Icon name="folder" size={20} /><span>No files or links added yet.</span></div>}
             </div>
           </section>
         </div>
@@ -494,11 +475,11 @@ export default function AccountClient({ initialAccount }) {
         <ImageUploadModal
           imageRequest={imageRequest}
           onClose={closeImageModal}
-          onSaved={(kind, url) => {
-            const next = { ...account, [kind === "cover" ? "coverPhotoUrl" : "photoUrl"]: url };
+          onSaved={(_kind, url) => {
+            const next = { ...account, photoUrl: url };
             setAccount(next);
             syncAccountChrome(next);
-            showToast("success", "Saved", kind === "cover" ? "Cover photo updated successfully." : "Profile picture updated successfully.");
+            showToast("success", "Saved", "Profile picture updated successfully.");
           }}
         />
       ) : null}
@@ -508,7 +489,7 @@ export default function AccountClient({ initialAccount }) {
           kind={removeRequest}
           busy={busyAction === `remove-${removeRequest}`}
           onClose={() => { if (!busyAction) setRemoveRequest(""); }}
-          onConfirm={() => removeImage(removeRequest)}
+          onConfirm={removeImage}
         />
       ) : null}
     </section>

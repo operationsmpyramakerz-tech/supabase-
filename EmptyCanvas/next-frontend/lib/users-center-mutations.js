@@ -76,7 +76,6 @@ function valueForLabel(row, label) {
   if (key === "password") aliases.push("Password", "password", "passcode", "pin");
   if (key === "position") aliases.push("Position", "position", "role");
   if (key === "profilepicture") aliases.push("Profile picture", "Profile Picture", "Profile Photo", "Profile photo", "profile_picture", "profile_picture_url", "profile_photo", "profile_photo_url", "photo", "photo_url", "avatar", "avatar_url", "image", "image_url", "picture", "picture_url");
-  if (key === "coverphoto") aliases.push("Cover photo", "Cover Photo", "Cover Image", "cover_photo", "cover_photo_url", "cover_image", "cover_image_url", "cover", "cover_url", "banner", "banner_url", "profile_cover", "profile_cover_url");
   if (key === "filesmedia") aliases.push("Files & media", "files_media", "files", "media");
   if (key === "employeecode") aliases.push("Employee Code", "employee_code", "employeeCode", "code");
   if (key === "email") aliases.push("Email", "email", "mail");
@@ -113,7 +112,7 @@ function nonEditableColumn(key) {
 }
 
 function labelForColumn(key) {
-  const known = { id: "ID", createdat: "Created time", updatedat: "Updated time", department: "Department", name: "Name", phone: "Phone", school: "School", password: "Password", allowedpages: "Allowed Pages", svschools: "S.V Schools", position: "Position", profilepicture: "Profile picture", coverphoto: "Cover photo", filesmedia: "Files & media", employeecode: "Employee Code", email: "Email" };
+  const known = { id: "ID", createdat: "Created time", updatedat: "Updated time", department: "Department", name: "Name", phone: "Phone", school: "School", password: "Password", allowedpages: "Allowed Pages", svschools: "S.V Schools", position: "Position", profilepicture: "Profile picture", filesmedia: "Files & media", employeecode: "Employee Code", email: "Email" };
   const normalized = canon(key);
   return known[normalized] || text(key).replace(/_/g, " ").replace(/\s+/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }

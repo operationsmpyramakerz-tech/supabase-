@@ -60,7 +60,7 @@ function serializeMember(row = {}) {
 async function loadTeamMembers() {
   // Keep this intentionally lean. Pages such as Proposals/Kits only need the
   // assignment identity fields, not the full Users Center directory payload.
-  // Avoid downloading profile photos, cover photos, permissions and other
+  // Avoid downloading profile photos, permissions and other
   // Users Center fields just to populate an assignee dropdown.
   let rows;
   if (teamMembersProjectionSupported !== false) {
@@ -182,7 +182,6 @@ function serializePublicProfile(row = {}) {
   const email = text(valueFor(row, ["email", "Email", "mail", "Mail"]));
   const employeeCode = text(valueFor(row, ["employee_code", "employeeCode", "Employee Code", "code", "Code"]));
   const photoUrl = extractUrl(valueFor(row, ["profile_picture", "profile_picture_url", "profile_photo", "profile_photo_url", "photo", "photo_url", "avatar", "avatar_url", "Profile picture", "Profile Picture"]));
-  const coverPhotoUrl = extractUrl(valueFor(row, ["cover_photo", "cover_photo_url", "cover_image", "cover_image_url", "cover", "cover_url", "Cover photo", "Cover Photo"]));
   const filesMedia = publicProfileFiles(valueFor(row, ["files_media", "files", "media", "Files & media", "Files and media"]));
   const fields = [
     ["Name", name, "text"],
@@ -202,7 +201,6 @@ function serializePublicProfile(row = {}) {
     email,
     employeeCode,
     photoUrl,
-    coverPhotoUrl,
     filesMedia,
     fields,
     source: "supabase-next",

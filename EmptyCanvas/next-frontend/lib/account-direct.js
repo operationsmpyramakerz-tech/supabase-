@@ -104,32 +104,6 @@ function profilePictureKey(row = {}) {
   }) || "";
 }
 
-function coverPhotoKey(row = {}) {
-  const direct = findKey(row, [
-    "Cover photo",
-    "Cover Photo",
-    "Cover Image",
-    "cover_photo",
-    "cover_photo_url",
-    "cover_image",
-    "cover_image_url",
-    "cover",
-    "cover_url",
-    "banner",
-    "banner_url",
-    "profile_cover",
-    "profile_cover_url",
-  ]);
-  if (direct) return direct;
-
-  return Object.keys(row || {}).find((key) => {
-    const normalized = canon(key);
-    if (!normalized || ["filesmedia", "allowedpages", "password", "profilepicture"].includes(normalized)) return false;
-    const hasCoverWord = normalized.includes("cover") || normalized.includes("banner");
-    const hasImageWord = normalized.includes("picture") || normalized.includes("photo") || normalized.includes("image") || normalized.includes("pic") || normalized.includes("url");
-    return hasCoverWord && hasImageWord;
-  }) || "";
-}
 
 function coercePatchValue(existingValue, nextValue) {
   if (nextValue === null || typeof nextValue === "undefined") return null;
@@ -207,16 +181,17 @@ export async function updateAccountDirect(account = {}, body = {}) {
 function normalizeImageKind(value = "") {
   const kind = text(value).toLowerCase();
   if (["profile", "profile-picture", "profile_picture"].includes(kind)) return "profile";
-  if (["cover", "cover-photo", "cover_photo"].includes(kind)) return "cover";
-  throw httpError("Image type must be profile or cover.", 400);
+  throw httpError("Only profile picture updates are supported.", 400);
 }
 
 function imageColumnKey(row = {}, kind = "") {
-  return normalizeImageKind(kind) === "cover" ? coverPhotoKey(row) : profilePictureKey(row);
+  normalizeImageKind(kind);
+  return profilePictureKey(row);
 }
 
 function imageFolder(kind = "") {
-  return normalizeImageKind(kind) === "cover" ? "cover-photos" : "profile-pictures";
+  normalizeImageKind(kind);
+  return "profile-pictures";
 }
 
 function safeFilename(value = "") {
@@ -263,15 +238,10 @@ export async function prepareAccountImageUpload(account = {}, input = {}) {
 
   const key = imageColumnKey(row, kind);
   if (!key) {
-    throw httpError(
-      kind === "cover"
-        ? "Cover photo field is not configured. Run the user profile cover photo SQL file first."
-        : "Profile picture field is not configured.",
-      400,
-    );
+    throw httpError("Profile picture field is not configured.", 400);
   }
 
-  const filename = safeFilename(input?.filename || (kind === "cover" ? "cover-photo.webp" : "profile-picture.webp"));
+  const filename = safeFilename(input?.filename || "profile-picture.webp");
   const objectPath = `team-members/${imageFolder(kind)}/${id}/${Date.now()}-${crypto.randomUUID()}-${filename}`;
   const ticket = await createSignedUploadUrl(objectPath);
 
@@ -297,7 +267,7 @@ export async function finalizeAccountImage(account = {}, input = {}) {
   const { id, row } = await verifyAccountPassword(account, input?.currentPassword);
   const path = ownedImagePath(input?.path, kind, id);
   const key = imageColumnKey(row, kind);
-  if (!key) throw httpError(kind === "cover" ? "Cover photo field is not configured." : "Profile picture field is not configured.", 400);
+  if (!key) throw httpError("Profile picture field is not configured.", 400);
 
   const publicUrl = storagePublicUrl(path);
   if (!publicUrl) throw httpError("Supabase Storage is not configured.", 500);
@@ -306,24 +276,20 @@ export async function finalizeAccountImage(account = {}, input = {}) {
   await deleteOldOwnedImage(row, key, path);
   clearAccountCaches(id);
 
-  return kind === "cover"
-    ? { ok: true, success: true, coverPhotoUrl: publicUrl, source: "supabase-next", row: updated || null }
-    : { ok: true, success: true, photoUrl: publicUrl, source: "supabase-next", row: updated || null };
+  return { ok: true, success: true, photoUrl: publicUrl, source: "supabase-next", row: updated || null };
 }
 
 export async function removeAccountImage(account = {}, kindValue = "") {
   const kind = normalizeImageKind(kindValue);
   const { id, row } = await currentMember(account);
   const key = imageColumnKey(row, kind);
-  if (!key) throw httpError(kind === "cover" ? "Cover photo field is not configured." : "Profile picture field is not configured.", 400);
+  if (!key) throw httpError("Profile picture field is not configured.", 400);
 
   await updateById(teamMembersTable(), id, { [key]: null });
   await deleteOldOwnedImage(row, key, "");
   clearAccountCaches(id);
 
-  return kind === "cover"
-    ? { ok: true, success: true, coverPhotoUrl: "", source: "supabase-next" }
-    : { ok: true, success: true, photoUrl: "", source: "supabase-next" };
+  return { ok: true, success: true, photoUrl: "", source: "supabase-next" };
 }
 
 export function normalizeAccountPayload(account = {}) {
@@ -338,7 +304,6 @@ export function normalizeAccountPayload(account = {}) {
     email: text(account?.email),
     employeeCode: text(account?.employeeCode) || null,
     photoUrl: text(account?.photoUrl || account?.profilePicture || account?.profile_picture),
-    coverPhotoUrl: text(account?.coverPhotoUrl || account?.coverPhoto || account?.cover_photo),
     filesMedia: Array.isArray(account?.filesMedia) ? account.filesMedia : [],
     passwordSet: account?.passwordSet === true,
     source: "supabase-next",
@@ -348,7 +313,6 @@ export function normalizeAccountPayload(account = {}) {
 export const __accountDirectTest = {
   accountFieldKey,
   profilePictureKey,
-  coverPhotoKey,
   coercePatchValue,
   normalizeImageKind,
   storagePathFromPublicUrl,

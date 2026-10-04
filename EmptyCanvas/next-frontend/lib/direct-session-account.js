@@ -24,7 +24,7 @@ const MEMBER_ROW_CACHE_TTL_MS = boundedCacheTtl(process.env.DIRECT_AUTH_MEMBER_C
 
 const APP_PAGES_COMPACT_SELECT = "id,page_key,page_name,route_path,sort_order";
 const MEMBER_ACCESS_COMPACT_SELECT = "team_member_id,page_id,access_level,is_enabled";
-const MEMBER_ROW_COMPACT_SELECT = "id,name,position,department,profile_picture,cover_photo,phone,email,employee_code";
+const MEMBER_ROW_COMPACT_SELECT = "id,name,position,department,profile_picture,phone,email,employee_code";
 
 let appPagesCache = null;
 let appPagesInflight = null;
@@ -705,7 +705,6 @@ function accountFromFreshMember(baseAccount = {}, row = {}, session = {}) {
   const position = text(valueFor(row, ["position", "Position", "job_title", "Job Title"])) || text(baseAccount.position);
   const department = text(valueFor(row, ["department", "Department"])) || text(baseAccount.department);
   const photoUrl = directUrl(valueFor(row, ["profile_picture", "Profile picture", "Profile Picture", "photo_url", "Photo URL"])) || text(baseAccount.photoUrl || baseAccount.profilePicture || baseAccount.profile_picture);
-  const coverPhotoUrl = directUrl(valueFor(row, ["cover_photo", "Cover photo", "Cover Photo", "cover_photo_url", "Cover URL"])) || text(baseAccount.coverPhotoUrl || baseAccount.coverPhoto);
   const phone = text(valueFor(row, ["phone", "Phone"])) || text(baseAccount.phone);
   const email = text(valueFor(row, ["email", "Email"])) || text(baseAccount.email);
   const employeeCode = text(valueFor(row, ["employee_code", "Employee Code"])) || baseAccount.employeeCode || null;
@@ -717,7 +716,6 @@ function accountFromFreshMember(baseAccount = {}, row = {}, session = {}) {
     department,
     position,
     photoUrl,
-    coverPhotoUrl,
     phone,
     email,
     employeeCode,

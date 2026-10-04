@@ -283,7 +283,6 @@ function accountPayload(row, username, bundle) {
     department: text(valueFor(row, ["department", "Department"])),
     position: text(valueFor(row, ["position", "Position", "role", "Role"])),
     photoUrl: urlValue(valueFor(row, ["profile_picture", "profile_picture_url", "Profile picture", "Profile Picture", "photo", "photo_url"])),
-    coverPhotoUrl: urlValue(valueFor(row, ["cover_photo", "cover_photo_url", "Cover photo", "Cover Photo"])),
     phone: text(valueFor(row, ["phone", "Phone", "mobile"])),
     email: text(valueFor(row, ["email", "Email", "mail"])),
     employeeCode: text(valueFor(row, ["employee_code", "employeeCode", "Employee Code", "code"])) || null,

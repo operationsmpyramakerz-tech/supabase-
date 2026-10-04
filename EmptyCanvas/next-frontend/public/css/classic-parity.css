@@ -9736,3 +9736,62 @@ body.next-classic-shell-active .classic-app-shell > .sidebar .sidebar-nav::-webk
   }
 }
 
+
+/* ========================================================================
+   Coverless workspace + wider page canvas — 2026-10-04
+   Cover photos are no longer part of the ERP shell. Keep the workspace clean
+   and give real page content more horizontal room on every authenticated page.
+   ======================================================================== */
+body.next-classic-shell-active:not(.login-page):not(.pwa-offline):not(.pwa-start) .classic-app-shell > .main-content{
+  background: #f5f6f8 !important;
+  background-color: #f5f6f8 !important;
+  background-image: none !important;
+}
+
+body.next-classic-shell-active:not(.login-page):not(.pwa-offline):not(.pwa-start) .classic-app-shell > .main-content::before,
+body.next-classic-shell-active:not(.login-page):not(.pwa-offline):not(.pwa-start) .classic-app-shell > .main-content::after{
+  display: none !important;
+  content: none !important;
+  background: none !important;
+  background-image: none !important;
+}
+
+body.next-classic-shell-active:not(.login-page):not(.pwa-offline):not(.pwa-start) .classic-app-shell > .main-content > main{
+  margin-left: 8px !important;
+  margin-right: 8px !important;
+  margin-bottom: 8px !important;
+  border-radius: 24px !important;
+  background-color: #ffffff !important;
+}
+
+html[data-theme="dark"] body.next-classic-shell-active:not(.login-page):not(.pwa-offline):not(.pwa-start) .classic-app-shell > .main-content{
+  background: #000000 !important;
+  background-color: #000000 !important;
+}
+
+html[data-theme="dark"] body.next-classic-shell-active:not(.login-page):not(.pwa-offline):not(.pwa-start) .classic-app-shell > .main-content > main{
+  background-color: #07090d !important;
+}
+
+@media (max-width: 768px){
+  body.next-classic-shell-active:not(.login-page):not(.pwa-offline):not(.pwa-start) .classic-app-shell > .main-content > main,
+  body.next-classic-shell-active:not(.login-page):not(.pwa-offline):not(.pwa-start) .classic-app-shell > .main-content > main.container,
+  body.next-classic-shell-active:not(.login-page):not(.pwa-offline):not(.pwa-start) .classic-app-shell > .main-content > main.container-full-width,
+  body.next-classic-shell-active:not(.login-page):not(.pwa-offline):not(.pwa-start) .classic-app-shell > .main-content > main.page-body,
+  body.next-classic-shell-active:not(.login-page):not(.pwa-offline):not(.pwa-start) .classic-app-shell > .main-content > main.tasks-v2-main{
+    width: auto !important;
+    max-width: none !important;
+    margin-left: 3px !important;
+    margin-right: 3px !important;
+    margin-bottom: 4px !important;
+    border-radius: 20px !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell .next-classic-page-content{
+    width: 100% !important;
+    max-width: 100% !important;
+    padding-left: 3px !important;
+    padding-right: 3px !important;
+    box-sizing: border-box !important;
+  }
+}

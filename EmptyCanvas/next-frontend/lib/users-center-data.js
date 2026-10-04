@@ -277,6 +277,7 @@ function nonEditableColumn(key) {
     "lasteditedtime",
     "createdtime",
     "isactive",
+    "coverphoto",
     "svschoolsraw",
     "svschoolsnotionurls",
     "svschoolmemberids",
@@ -379,7 +380,6 @@ function valueForLabel(row, label) {
   if (key === "svschools") aliases.push("S.V Schools", "sv_schools", "SV Schools", "schools");
   if (key === "position") aliases.push("Position", "position", "role");
   if (key === "profilepicture") aliases.push("Profile picture", "Profile Picture", "Profile Photo", "Profile photo", "profile_picture", "profile_picture_url", "profile_photo", "profile_photo_url", "photo", "photo_url", "avatar", "avatar_url", "image", "image_url", "picture", "picture_url");
-  if (key === "coverphoto") aliases.push("Cover photo", "Cover Photo", "Cover Image", "cover_photo", "cover_photo_url", "cover_image", "cover_image_url", "cover", "cover_url", "banner", "banner_url", "profile_cover", "profile_cover_url");
   if (key === "filesmedia") aliases.push("Files & media", "files_media", "files", "media");
   if (key === "employeecode") aliases.push("Employee Code", "employee_code", "code");
   if (key === "email") aliases.push("Email", "email", "mail");
@@ -415,7 +415,6 @@ function serializeMember(row = {}, editableFields = []) {
     email: text(valueForLabel(row, "Email")),
     employeeCode: text(valueForLabel(row, "Employee Code")),
     photoUrl: extractUrl(valueForLabel(row, "Profile picture")),
-    coverPhotoUrl: extractUrl(valueForLabel(row, "Cover photo")),
     createdTime: dateText(valueFor(row, ["created_at", "Created time", "created_time"])),
     lastEditedTime: dateText(valueFor(row, ["updated_at", "Updated time", "last_edited_time"])),
     fields,

@@ -2055,3 +2055,494 @@ html[data-theme="dark"] body.page-account .profile-avatar-shell{
     --profile-cover-notch-offset: 37px;
   }
 }
+
+/* ========================================================================
+   User Profile — settings-list redesign / cover removed — 2026-10-04
+   Inspired by compact mobile profile/settings patterns: one identity card,
+   grouped account rows, simple preference controls, and no decorative cover.
+   ======================================================================== */
+body.page-account .account-page-shell{
+  width: 100%;
+  max-width: none;
+  margin: 0 !important;
+  padding: clamp(10px, 1.8vw, 18px) !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+body.page-account #account-content{
+  width: 100%;
+}
+
+body.page-account .profile-settings-page{
+  width: min(100%, 820px);
+  margin: 0 auto;
+  padding: 0 0 28px;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+body.page-account .profile-settings-summary{
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid #e7e9ee;
+  border-radius: 22px;
+  background: #fff;
+  box-shadow: 0 8px 28px rgba(15,23,42,.045);
+}
+
+body.page-account .profile-settings-avatar-wrap{
+  position: relative;
+  width: 84px;
+  height: 84px;
+  flex: 0 0 84px;
+}
+
+body.page-account .profile-settings-avatar{
+  width: 84px;
+  height: 84px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid #e4e7ec;
+  border-radius: 50%;
+  background: #f3f4f6;
+  color: #111827;
+  font: inherit;
+  font-size: 1.25rem;
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(15,23,42,.08);
+}
+
+body.page-account .profile-settings-avatar img{
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+body.page-account .profile-settings-avatar-edit,
+body.page-account .profile-settings-avatar-remove{
+  position: absolute;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #111827;
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 5px 14px rgba(15,23,42,.18);
+}
+
+body.page-account .profile-settings-avatar-edit{
+  right: -2px;
+  bottom: 2px;
+  width: 31px;
+  height: 31px;
+}
+
+body.page-account .profile-settings-avatar-remove{
+  top: -3px;
+  right: -3px;
+  width: 27px;
+  height: 27px;
+  background: #fff;
+  border-color: #e5e7eb;
+  color: #dc2626;
+}
+
+body.page-account .profile-settings-avatar-edit:disabled,
+body.page-account .profile-settings-avatar-remove:disabled{
+  opacity: .55;
+  cursor: wait;
+}
+
+body.page-account .profile-settings-summary-copy{
+  min-width: 0;
+}
+
+body.page-account .profile-settings-summary-copy h2{
+  margin: 0;
+  color: #101828;
+  font-size: clamp(1.15rem, 2.4vw, 1.55rem);
+  line-height: 1.15;
+  font-weight: 900;
+  letter-spacing: -.025em;
+}
+
+body.page-account .profile-settings-summary-copy p,
+body.page-account .profile-settings-summary-copy small{
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.page-account .profile-settings-summary-copy p{
+  margin: 5px 0 0;
+  color: #667085;
+  font-size: .9rem;
+  font-weight: 650;
+}
+
+body.page-account .profile-settings-summary-copy small{
+  margin-top: 4px;
+  color: #98a2b3;
+  font-size: .78rem;
+  font-weight: 700;
+}
+
+body.page-account .profile-settings-section{
+  margin-top: 22px;
+  scroll-margin-top: 88px;
+}
+
+body.page-account .profile-settings-section > h3{
+  margin: 0 0 9px;
+  padding: 0 4px;
+  color: #7a8291;
+  font-size: .82rem;
+  line-height: 1.2;
+  font-weight: 800;
+  letter-spacing: .01em;
+}
+
+body.page-account .profile-settings-list,
+body.page-account .profile-settings-file-list{
+  overflow: hidden;
+  border: 1px solid #e7e9ee;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 8px 28px rgba(15,23,42,.035);
+}
+
+body.page-account .profile-settings-row{
+  width: 100%;
+  min-height: 64px;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  border: 0;
+  border-bottom: 1px solid #edf0f3;
+  background: #fff;
+  color: #111827;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  transition: background-color .16s ease, transform .16s ease;
+}
+
+body.page-account .profile-settings-row:last-child{
+  border-bottom: 0;
+}
+
+body.page-account button.profile-settings-row:hover{
+  background: #fafafa;
+}
+
+body.page-account button.profile-settings-row:active{
+  background: #f5f6f8;
+}
+
+body.page-account .profile-settings-row--static{
+  cursor: default;
+}
+
+body.page-account .profile-settings-row-icon,
+body.page-account .profile-settings-file-icon{
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: #f5f6f8;
+  color: #3f4753;
+}
+
+body.page-account .profile-settings-row-copy,
+body.page-account .profile-settings-file-copy{
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+body.page-account .profile-settings-row-copy strong,
+body.page-account .profile-settings-file-copy strong{
+  min-width: 0;
+  overflow: hidden;
+  color: #171a21;
+  font-size: .92rem;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.page-account .profile-settings-row-copy small,
+body.page-account .profile-settings-file-copy small{
+  min-width: 0;
+  overflow: hidden;
+  color: #98a2b3;
+  font-size: .78rem;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.page-account .profile-settings-chevron{
+  display: grid;
+  place-items: center;
+  color: #98a2b3;
+}
+
+body.page-account .profile-settings-theme-switch{
+  position: relative;
+  width: 54px;
+  height: 32px;
+  padding: 3px;
+  border: 1px solid #d9dee6;
+  border-radius: 999px;
+  background: #eef1f5;
+  cursor: pointer;
+  transition: background-color .2s ease, border-color .2s ease;
+}
+
+body.page-account .profile-settings-theme-switch > span{
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #fff;
+  color: #586174;
+  box-shadow: 0 2px 7px rgba(15,23,42,.13);
+  transform: translateX(0);
+  transition: transform .2s ease;
+}
+
+body.page-account .profile-settings-theme-switch.is-dark{
+  background: #191c23;
+  border-color: #191c23;
+}
+
+body.page-account .profile-settings-theme-switch.is-dark > span{
+  color: #111827;
+  transform: translateX(22px);
+}
+
+body.page-account .profile-settings-file{
+  min-height: 60px;
+  display: grid;
+  grid-template-columns: 38px minmax(0,1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #edf0f3;
+  color: inherit;
+  text-decoration: none;
+}
+
+body.page-account .profile-settings-file:last-child{
+  border-bottom: 0;
+}
+
+body.page-account a.profile-settings-file:hover{
+  background: #fafafa;
+}
+
+body.page-account .profile-settings-empty{
+  min-height: 70px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 16px;
+  color: #98a2b3;
+  font-size: .84rem;
+  font-weight: 700;
+}
+
+body.page-account .profile-settings-avatar:focus-visible,
+body.page-account .profile-settings-avatar-edit:focus-visible,
+body.page-account .profile-settings-avatar-remove:focus-visible,
+body.page-account .profile-settings-row:focus-visible,
+body.page-account .profile-settings-theme-switch:focus-visible,
+body.page-account .profile-settings-file:focus-visible{
+  outline: 3px solid rgba(99,102,241,.2);
+  outline-offset: 2px;
+}
+
+html[data-theme="dark"] body.page-account .profile-settings-summary,
+html[data-theme="dark"] body.page-account .profile-settings-list,
+html[data-theme="dark"] body.page-account .profile-settings-file-list,
+html[data-theme="dark"] body.page-account .profile-settings-row{
+  border-color: #252a33;
+  background: #11141a;
+}
+
+html[data-theme="dark"] body.page-account .profile-settings-row,
+html[data-theme="dark"] body.page-account .profile-settings-file{
+  border-bottom-color: #252a33;
+}
+
+html[data-theme="dark"] body.page-account button.profile-settings-row:hover,
+html[data-theme="dark"] body.page-account a.profile-settings-file:hover{
+  background: #161a21;
+}
+
+html[data-theme="dark"] body.page-account .profile-settings-summary-copy h2,
+html[data-theme="dark"] body.page-account .profile-settings-row-copy strong,
+html[data-theme="dark"] body.page-account .profile-settings-file-copy strong{
+  color: #f8fafc;
+}
+
+html[data-theme="dark"] body.page-account .profile-settings-summary-copy p,
+html[data-theme="dark"] body.page-account .profile-settings-summary-copy small,
+html[data-theme="dark"] body.page-account .profile-settings-section > h3,
+html[data-theme="dark"] body.page-account .profile-settings-row-copy small,
+html[data-theme="dark"] body.page-account .profile-settings-file-copy small,
+html[data-theme="dark"] body.page-account .profile-settings-chevron{
+  color: #9aa4b2;
+}
+
+html[data-theme="dark"] body.page-account .profile-settings-row-icon,
+html[data-theme="dark"] body.page-account .profile-settings-file-icon{
+  background: #1d222b;
+  color: #cbd5e1;
+}
+
+@media (max-width: 768px){
+  body.page-account .account-page-shell{
+    padding: 6px 5px 18px !important;
+  }
+
+  body.page-account .profile-settings-page{
+    width: 100%;
+    padding-bottom: 20px;
+  }
+
+  body.page-account .profile-settings-summary{
+    gap: 13px;
+    padding: 15px;
+    border-radius: 18px;
+  }
+
+  body.page-account .profile-settings-avatar-wrap,
+  body.page-account .profile-settings-avatar{
+    width: 72px;
+    height: 72px;
+  }
+
+  body.page-account .profile-settings-avatar-wrap{
+    flex-basis: 72px;
+  }
+
+  body.page-account .profile-settings-avatar-edit{
+    width: 28px;
+    height: 28px;
+  }
+
+  body.page-account .profile-settings-avatar-remove{
+    width: 25px;
+    height: 25px;
+  }
+
+  body.page-account .profile-settings-summary-copy h2{
+    font-size: 1.08rem;
+  }
+
+  body.page-account .profile-settings-summary-copy p{
+    font-size: .78rem;
+  }
+
+  body.page-account .profile-settings-summary-copy small{
+    font-size: .7rem;
+  }
+
+  body.page-account .profile-settings-section{
+    margin-top: 18px;
+  }
+
+  body.page-account .profile-settings-section > h3{
+    margin-bottom: 8px;
+    padding-inline: 3px;
+    font-size: .76rem;
+  }
+
+  body.page-account .profile-settings-list,
+  body.page-account .profile-settings-file-list{
+    border-radius: 17px;
+  }
+
+  body.page-account .profile-settings-row{
+    min-height: 58px;
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+    gap: 10px;
+    padding: 9px 11px;
+  }
+
+  body.page-account .profile-settings-row-icon,
+  body.page-account .profile-settings-file-icon{
+    width: 34px;
+    height: 34px;
+    border-radius: 11px;
+  }
+
+  body.page-account .profile-settings-row-copy strong,
+  body.page-account .profile-settings-file-copy strong{
+    font-size: .84rem;
+  }
+
+  body.page-account .profile-settings-row-copy small,
+  body.page-account .profile-settings-file-copy small{
+    font-size: .7rem;
+  }
+
+  body.page-account .profile-settings-theme-switch{
+    width: 50px;
+    height: 30px;
+  }
+
+  body.page-account .profile-settings-theme-switch > span{
+    width: 22px;
+    height: 22px;
+  }
+
+  body.page-account .profile-settings-theme-switch.is-dark > span{
+    transform: translateX(20px);
+  }
+
+  body.page-account .profile-settings-file{
+    min-height: 56px;
+    grid-template-columns: 34px minmax(0,1fr) auto;
+    gap: 10px;
+    padding: 9px 11px;
+  }
+}
+
+@media (max-width: 390px){
+  body.page-account .profile-settings-summary{
+    padding: 13px;
+  }
+
+  body.page-account .profile-settings-avatar-wrap,
+  body.page-account .profile-settings-avatar{
+    width: 66px;
+    height: 66px;
+  }
+
+  body.page-account .profile-settings-summary-copy h2{
+    font-size: 1rem;
+  }
+}

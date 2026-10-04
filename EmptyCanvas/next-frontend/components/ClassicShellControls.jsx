@@ -12,7 +12,6 @@ const SIDEBAR_SCROLL_LEFT_COOKIE = "ops_ui_sidebar_scroll_left_v1";
 const CHROME_CACHE_KEY = "ops.ui.chrome.v1";
 const ALLOWED_PAGES_KEY = "allowedPages";
 const ALLOWED_PAGES_COOKIE = "ops_ui_allowed_pages_v1";
-const COVER_URL_COOKIE = "ops_ui_cover_url_v1";
 const PROFILE_URL_COOKIE = "ops_ui_profile_url_v1";
 
 function setCollapsed(collapsed) {
@@ -56,47 +55,15 @@ export function BodyClassSync({ className = "" }) {
 export function ClassicChromeAccessSync({ account }) {
   const hasAllowedPages = Array.isArray(account?.allowedPages);
   const allowedPages = hasAllowedPages ? account.allowedPages : null;
-  const coverPhotoUrl = String(account?.coverPhotoUrl || account?.coverPhoto || "").trim();
   const profilePhotoUrl = String(account?.photoUrl || account?.profilePicture || account?.profile_picture || "").trim();
 
   useLayoutEffect(() => {
-    // Keep the system cover on the persistent <html> element instead of only
-    // on the route-owned .main-content node. Next.js swaps that node for each
-    // route loading fallback; keeping the cover variable/class at the root
-    // means navigation can replace only the page content without flashing the
-    // white loading canvas or re-resolving the cover image every time.
+    // Cover photos were removed from the ERP. Clear any legacy root/cookie/cache
+    // state so old sessions cannot repaint a former cover during navigation.
     const root = document.documentElement;
-    if (coverPhotoUrl) {
-      root.classList.add("ops-has-persistent-cover");
-      root.style.setProperty("--ops-system-cover-image", `url(${JSON.stringify(coverPhotoUrl)})`);
-
-      // Persist the cover URL in a compact same-site cookie as well.  Route
-      // loading fallbacks can be server-rendered before this client component
-      // hydrates (and a hard navigation starts with a fresh <html> node), so
-      // local/session storage alone cannot prevent the white cover flash.
-      // RootLayout reads this cookie and seeds the class/CSS variable in the
-      // very first HTML response.
-      try {
-        const encodedCover = encodeURIComponent(coverPhotoUrl);
-        if (encodedCover.length < 3600) {
-          document.cookie = `${COVER_URL_COOKIE}=${encodedCover}; Path=/; Max-Age=2592000; SameSite=Lax`;
-        }
-      } catch {}
-
-      // Warm the decoded image once. Subsequent route transitions reuse the
-      // same browser resource while only the page content changes.
-      try {
-        const image = new Image();
-        image.decoding = "async";
-        image.src = coverPhotoUrl;
-      } catch {}
-    } else {
-      root.classList.remove("ops-has-persistent-cover");
-      root.style.removeProperty("--ops-system-cover-image");
-      try {
-        document.cookie = `${COVER_URL_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`;
-      } catch {}
-    }
+    root.classList.remove("ops-has-persistent-cover");
+    root.style.removeProperty("--ops-system-cover-image");
+    try { document.cookie = `ops_ui_cover_url_v1=; Path=/; Max-Age=0; SameSite=Lax`; } catch {}
 
     // Keep the profile photo on the persistent <html> element as well. Route
     // loading fallbacks replace the live header, so seeding the same photo at
@@ -152,16 +119,18 @@ export function ClassicChromeAccessSync({ account }) {
       const name = String(account?.name || account?.username || current?.name || current?.username || "").trim();
       const photoUrl = String(account?.photoUrl || account?.profilePicture || current?.photoUrl || "").trim();
 
+      const currentWithoutCover = { ...current };
+      delete currentWithoutCover.coverPhotoUrl;
+      delete currentWithoutCover.coverPhoto;
       localStorage.setItem(CHROME_CACHE_KEY, JSON.stringify({
-        ...current,
+        ...currentWithoutCover,
         ...(name ? { name, username: name } : {}),
         ...(photoUrl ? { photoUrl } : {}),
-        ...(coverPhotoUrl ? { coverPhotoUrl } : {}),
         allowedPages,
         savedAt: Date.now(),
       }));
     } catch {}
-  }, [account, allowedPages, hasAllowedPages, coverPhotoUrl, profilePhotoUrl]);
+  }, [account, allowedPages, hasAllowedPages, profilePhotoUrl]);
 
   return null;
 }
