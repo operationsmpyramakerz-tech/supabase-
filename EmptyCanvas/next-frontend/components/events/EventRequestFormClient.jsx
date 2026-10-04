@@ -284,13 +284,24 @@ function ModernSelect({ value, onChange, options = [], placeholder = "Select", d
   );
 }
 
-function FormSection({ number: sectionNumber, icon, title, description, action, children }) {
+function FormSection({ number: sectionNumber, icon, title, description, action, backHref = "", children }) {
   return (
     <section className="events-form-section next-event-form-section">
       <header className="events-form-section__heading next-event-form-section__heading">
-        <div className="next-event-form-section__title">
-          <span className="events-section-icon next-event-form-section__icon"><EventIcon name={icon} /><b>{sectionNumber}</b></span>
-          <div><span className="next-event-section-kicker">Step {String(sectionNumber).padStart(2, "0")}</span><h2>{title}</h2><p>{description}</p></div>
+        <div className="next-event-form-section__lead">
+          {backHref ? (
+            <a className="next-event-section-back" href={backHref} aria-label="Back to Calendar" title="Back to Calendar">
+              <EventIcon name="chevron-left" />
+            </a>
+          ) : null}
+          <div className="next-event-form-section__title">
+            <span className="events-section-icon next-event-form-section__icon"><EventIcon name={icon} /></span>
+            <div className="next-event-form-section__copy">
+              <span className="next-event-section-kicker">Step <b>{String(sectionNumber).padStart(2, "0")}</b></span>
+              <h2>{title}</h2>
+              <p>{description}</p>
+            </div>
+          </div>
         </div>
         {action || null}
       </header>
@@ -680,15 +691,11 @@ export default function EventRequestFormClient({
     <section className="events-shell events-shell--form next-event-form-page">
       <Toast toast={toast} onClose={() => setToast(null)} />
 
-      <div className="events-form-top">
-        <a className="events-back-link" href="/next/events-calendar" aria-label="Back to Calendar" title="Back to Calendar"><EventIcon name="chevron-left" /></a>
-      </div>
-
       {bootstrapWarnings.length ? <div className="events-stage2k-notice next-event-form-warning">Some optional reference data could not be loaded. Refresh the catalogues before submitting if a list looks incomplete.</div> : null}
       {viewOnly ? <div className="events-stage2k-notice is-info next-event-form-warning">Your Event Requests access is View only. You can inspect the form, but submission and catalogue changes are disabled.</div> : null}
 
       <form className="next-event-form" onSubmit={submit}>
-        <FormSection number="1" icon="clipboard" title="Event Overview" description="Who is requesting the event, and when will it happen?">
+        <FormSection number="1" icon="clipboard" title="Event Overview" description="Who is requesting the event, and when will it happen?" backHref="/next/events-calendar">
           <div className="events-form-grid next-event-form-grid">
             <Field label="Event Name" required wide><input value={form.eventName} onChange={(event) => updateField("eventName", event.target.value)} maxLength={240} placeholder="Example: Green Valley School Tech Day 2026" disabled={viewOnly} /></Field>
             <Field label="Event Type" required>
