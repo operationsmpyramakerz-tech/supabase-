@@ -289,7 +289,7 @@ function ModernSelect({ value, onChange, options = [], placeholder = "Select", d
             {selected?.meta ? <small>{selected.meta}</small> : null}
           </span>
         </span>
-        <span className="next-event-select-chevron" aria-hidden="true">⌄</span>
+        <span className="next-event-select-chevron" aria-hidden="true"><EventIcon name="chevron-down" /></span>
       </button>
       <div className="events-modern-select__menu next-event-modern-select__menu" hidden={!open}>
         {searchable && open ? <div className="next-event-select-search"><EventIcon name="search" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search…" autoFocus /></div> : null}
@@ -342,18 +342,61 @@ function projectPhoto(component) {
   return candidates.map(safeHttpUrl).find(Boolean) || "";
 }
 
-function ProjectPicker({ components, alreadySelected = [], onClose, onConfirm }) {
+const COMPONENT_PICKER_META = Object.freeze({
+  project: {
+    eyebrow: "Project library",
+    title: "Select Projects",
+    description: "Choose one or more Project Resources from Event Components.",
+    search: "Search projects…",
+    badge: "Project Resource",
+    icon: "cpu",
+    singular: "Project",
+    plural: "Projects",
+    empty: "No projects found",
+    category: "project",
+    theme: { accent: "#2563eb", accent2: "#0ea5e9", soft: "#eff6ff", surface: "#f8fbff", border: "rgba(37,99,235,.24)", text: "#1d4ed8" },
+  },
+  marketing: {
+    eyebrow: "Material library",
+    title: "Select Materials",
+    description: "Choose one or more Marketing Materials from Event Components.",
+    search: "Search materials…",
+    badge: "Marketing Material",
+    icon: "image",
+    singular: "Material",
+    plural: "Materials",
+    empty: "No materials found",
+    category: "marketing_material",
+    theme: { accent: "#ea580c", accent2: "#f59e0b", soft: "#fff7ed", surface: "#fffbf5", border: "rgba(234,88,12,.24)", text: "#c2410c" },
+  },
+  venue: {
+    eyebrow: "Venue library",
+    title: "Select Venue Requirements",
+    description: "Choose one or more Venue Equipment items from Event Components.",
+    search: "Search venue requirements…",
+    badge: "Venue Equipment",
+    icon: "tool",
+    singular: "Requirement",
+    plural: "Requirements",
+    empty: "No venue requirements found",
+    category: "venue_equipment",
+    theme: { accent: "#059669", accent2: "#14b8a6", soft: "#ecfdf5", surface: "#f5fffb", border: "rgba(5,150,105,.24)", text: "#047857" },
+  },
+});
+
+function ComponentPicker({ kind = "project", components, alreadySelected = [], onClose, onConfirm }) {
+  const meta = COMPONENT_PICKER_META[kind] || COMPONENT_PICKER_META.project;
   const [query, setQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const existing = useMemo(() => new Set((Array.isArray(alreadySelected) ? alreadySelected : []).map(text).filter(Boolean)), [alreadySelected]);
   const visible = useMemo(() => {
     const needle = lower(query);
     return (Array.isArray(components) ? components : []).filter((component) => {
-      if (component?.isActive === false || text(component?.category) !== "project") return false;
+      if (component?.isActive === false || text(component?.category) !== meta.category) return false;
       if (!needle) return true;
       return [component?.name, component?.description, component?.ownershipType].some((value) => lower(value).includes(needle));
     });
-  }, [components, query]);
+  }, [components, query, meta.category]);
 
   useEffect(() => {
     function onKeyDown(event) {
@@ -375,23 +418,31 @@ function ProjectPicker({ components, alreadySelected = [], onClose, onConfirm })
   }
 
   const selectedCount = selectedIds.size;
+  const categoryStyle = {
+    "--event-cat-accent": meta.theme.accent,
+    "--event-cat-accent-2": meta.theme.accent2,
+    "--event-cat-soft": meta.theme.soft,
+    "--event-cat-surface": meta.theme.surface,
+    "--event-cat-border": meta.theme.border,
+    "--event-cat-text": meta.theme.text,
+  };
 
   return (
     <div className="events-modal-overlay next-modal-layer next-event-project-picker-layer" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section className="next-event-project-picker" role="dialog" aria-modal="true" aria-label="Select projects">
+      <section className={`next-event-project-picker next-event-project-picker--${kind}`} role="dialog" aria-modal="true" aria-label={meta.title}>
         <header className="next-event-project-picker__head">
           <div>
-            <span>Project library</span>
-            <h2>Select Projects</h2>
-            <p>Choose one or more Project Resources from Event Components.</p>
+            <span>{meta.eyebrow}</span>
+            <h2>{meta.title}</h2>
+            <p>{meta.description}</p>
           </div>
-          <button type="button" onClick={onClose} aria-label="Close project selector">×</button>
+          <button type="button" onClick={onClose} aria-label={`Close ${meta.title.toLowerCase()}`}>×</button>
         </header>
 
         <div className="next-event-project-picker__toolbar">
           <label className="next-event-project-picker__search">
             <EventIcon name="search" />
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search projects…" autoFocus />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={meta.search} autoFocus />
           </label>
           <span className="next-event-project-picker__count">{selectedCount} selected</span>
         </div>
@@ -405,17 +456,17 @@ function ProjectPicker({ components, alreadySelected = [], onClose, onConfirm })
             const external = lower(component?.ownershipType) === "external_rental";
             const unit = componentUnitCost(component);
             return (
-              <article className={`events-component-card next-event-project-choice${isSelected ? " is-selected" : ""}${isExisting ? " is-existing" : ""}`} key={id || component?.name}>
+              <article className={`events-component-card next-event-project-choice${isSelected ? " is-selected" : ""}${isExisting ? " is-existing" : ""}`} style={categoryStyle} key={id || component?.name}>
                 <button
                   type="button"
                   className="next-event-project-choice__pick"
                   onClick={() => toggle(id)}
                   disabled={isExisting}
                   aria-pressed={isSelected}
-                  aria-label={`${isExisting ? "Already added" : isSelected ? "Unselect" : "Select"} ${component?.name || "project"}`}
+                  aria-label={`${isExisting ? "Already added" : isSelected ? "Unselect" : "Select"} ${component?.name || meta.singular.toLowerCase()}`}
                 >
                   <div className="events-component-card__top">
-                    <span className="events-component-badge"><EventIcon name="cpu" />Project Resource</span>
+                    <span className="events-component-badge"><EventIcon name={meta.icon} />{meta.badge}</span>
                     <span className={`next-event-project-choice__state${isExisting ? " is-existing" : isSelected ? " is-selected" : ""}`}>
                       {isExisting ? "Added" : isSelected ? "Selected" : "Select"}
                     </span>
@@ -424,7 +475,7 @@ function ProjectPicker({ components, alreadySelected = [], onClose, onConfirm })
                     {photo ? <img src={photo} alt="" loading="lazy" /> : <EventIcon name="box" />}
                   </div>
                   <div className="events-component-card__body">
-                    <h3 title={component?.name || ""}>{component?.name || "Untitled project"}</h3>
+                    <h3 title={component?.name || ""}>{component?.name || `Untitled ${meta.singular.toLowerCase()}`}</h3>
                     <p>{text(component?.description) || "No description added yet."}</p>
                   </div>
                   <div className="events-component-card__meta">
@@ -439,13 +490,13 @@ function ProjectPicker({ components, alreadySelected = [], onClose, onConfirm })
               </article>
             );
           })}
-          {!visible.length ? <div className="next-event-project-picker__empty"><EventIcon name="search" /><strong>No projects found</strong><span>Try another search term.</span></div> : null}
+          {!visible.length ? <div className="next-event-project-picker__empty"><EventIcon name="search" /><strong>{meta.empty}</strong><span>Try another search term.</span></div> : null}
         </div>
 
         <footer className="next-event-project-picker__footer">
           <button type="button" className="events-secondary-btn secondary-button" onClick={onClose}>Cancel</button>
           <button type="button" className="events-primary-btn primary-button" disabled={!selectedCount} onClick={() => onConfirm(Array.from(selectedIds))}>
-            {selectedCount ? `Add ${selectedCount} Project${selectedCount === 1 ? "" : "s"}` : "Select Projects"}
+            {selectedCount ? `Add ${selectedCount} ${selectedCount === 1 ? meta.singular : meta.plural}` : `Select ${meta.plural}`}
           </button>
         </footer>
       </section>
@@ -494,7 +545,7 @@ export default function EventRequestFormClient({
   })));
   const [customTypeOpen, setCustomTypeOpen] = useState(false);
   const [customTypeName, setCustomTypeName] = useState("");
-  const [projectPickerOpen, setProjectPickerOpen] = useState(false);
+  const [componentPickerKind, setComponentPickerKind] = useState("");
   const [savingType, setSavingType] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -562,7 +613,7 @@ export default function EventRequestFormClient({
   function addProject() {
     if (viewOnly) return notify("info", "View access", "Your account can review this form but cannot change it.");
     if (!projectComponents.length) return notify("info", "Project catalogue", "There are no active Project Resource components.");
-    setProjectPickerOpen(true);
+    setComponentPickerKind("project");
   }
 
   function addSelectedProjects(componentIds) {
@@ -584,7 +635,7 @@ export default function EventRequestFormClient({
         });
       return [...current, ...additions];
     });
-    setProjectPickerOpen(false);
+    setComponentPickerKind("");
   }
 
   function updateProject(key, patch) {
@@ -605,8 +656,27 @@ export default function EventRequestFormClient({
     if (viewOnly) return notify("info", "View access", "Your account can review this form but cannot change it.");
     const source = kind === "marketing" ? marketingComponents : venueComponents;
     if (!source.length) return notify("info", "Event Components", `There are no active ${kind === "marketing" ? "Marketing Material" : "Venue Equipment"} components.`);
+    setComponentPickerKind(kind);
+  }
+
+  function addSelectedComponents(kind, componentIds) {
+    const source = kind === "marketing" ? marketingComponents : venueComponents;
     const setter = kind === "marketing" ? setMarketing : setVenueRequirements;
-    setter((current) => [...current, { key: makeKey(kind), componentId: "", quantity: 1, notes: "" }]);
+    const wanted = new Set((Array.isArray(componentIds) ? componentIds : []).map(text).filter(Boolean));
+    if (!wanted.size) return;
+    setter((current) => {
+      const existing = new Set(current.map((item) => text(item.componentId)).filter(Boolean));
+      const additions = source
+        .filter((component) => wanted.has(text(component.id)) && !existing.has(text(component.id)))
+        .map((component) => ({
+          key: makeKey(kind),
+          componentId: text(component.id),
+          quantity: component?.defaultQuantity ?? 1,
+          notes: "",
+        }));
+      return [...current, ...additions];
+    });
+    setComponentPickerKind("");
   }
 
   function updateComponentRow(kind, key, patch) {
@@ -982,12 +1052,13 @@ export default function EventRequestFormClient({
         </footer>
       </form>
 
-      {projectPickerOpen ? (
-        <ProjectPicker
-          components={projectComponents}
-          alreadySelected={projects.map((item) => item.componentId)}
-          onClose={() => setProjectPickerOpen(false)}
-          onConfirm={addSelectedProjects}
+      {componentPickerKind ? (
+        <ComponentPicker
+          kind={componentPickerKind}
+          components={componentPickerKind === "project" ? projectComponents : componentPickerKind === "marketing" ? marketingComponents : venueComponents}
+          alreadySelected={(componentPickerKind === "project" ? projects : componentPickerKind === "marketing" ? marketing : venueRequirements).map((item) => item.componentId)}
+          onClose={() => setComponentPickerKind("")}
+          onConfirm={(componentIds) => componentPickerKind === "project" ? addSelectedProjects(componentIds) : addSelectedComponents(componentPickerKind, componentIds)}
         />
       ) : null}
 

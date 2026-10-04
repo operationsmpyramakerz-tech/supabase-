@@ -39,6 +39,7 @@ export default function EventIcon({ name, className = "" }) {
     "plus-circle": <><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></>,
     "chevron-left": <polyline points="15 18 9 12 15 6"/>,
     "chevron-right": <polyline points="9 18 15 12 9 6"/>,
+    "chevron-down": <polyline points="6 9 12 15 18 9"/>,
     clock: <><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></>,
     archive: <><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></>,
     paperclip: <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 1 1-2.83-2.83l8.49-8.48"/>,
