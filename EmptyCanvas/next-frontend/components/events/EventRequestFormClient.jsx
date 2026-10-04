@@ -12,6 +12,14 @@ const STANDARD_EVENT_TYPES = [
   { code: "exhibition", label: "Exhibition", isCustom: false },
 ];
 
+const EVENT_TYPE_META = {
+  tech_day: { icon: "cpu", meta: "Hands-on technology day" },
+  seminar: { icon: "mic", meta: "Talks, sessions, and presentations" },
+  steam_fair: { icon: "layers", meta: "STEAM showcase and activity fair" },
+  competition: { icon: "award", meta: "Challenge or judged competition" },
+  exhibition: { icon: "image", meta: "Showcase or exhibition" },
+};
+
 function text(value) {
   return String(value ?? "").trim();
 }
@@ -233,11 +241,18 @@ function Field({ label, required, wide, children }) {
   );
 }
 
-function ModernSelect({ value, onChange, options = [], placeholder = "Select", disabled = false, searchable = false, ariaLabel = "Select option" }) {
+function ModernSelect({ value, onChange, options = [], placeholder = "Select", disabled = false, searchable = false, ariaLabel = "Select option", variant = "" }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const rootRef = useRef(null);
-  const normalized = useMemo(() => options.map((option) => typeof option === "string" ? { value: option, label: option } : { value: text(option?.value), label: text(option?.label) || text(option?.value) }), [options]);
+  const normalized = useMemo(() => options.map((option) => typeof option === "string"
+    ? { value: option, label: option, icon: "", meta: "" }
+    : {
+        value: text(option?.value),
+        label: text(option?.label) || text(option?.value),
+        icon: text(option?.icon),
+        meta: text(option?.meta),
+      }), [options]);
   const selected = normalized.find((option) => text(option.value) === text(value));
   const filtered = useMemo(() => {
     const needle = lower(query);
@@ -265,9 +280,15 @@ function ModernSelect({ value, onChange, options = [], placeholder = "Select", d
   }, [open]);
 
   return (
-    <div ref={rootRef} className={`events-modern-select next-event-modern-select${open ? " is-open" : ""}${disabled ? " is-disabled" : ""}`}>
+    <div ref={rootRef} className={`events-modern-select next-event-modern-select${variant ? ` next-event-modern-select--${variant}` : ""}${open ? " is-open" : ""}${disabled ? " is-disabled" : ""}`}>
       <button type="button" className="events-modern-select__trigger" aria-label={ariaLabel} aria-haspopup="listbox" aria-expanded={open} disabled={disabled} onClick={() => setOpen((current) => !current)}>
-        <span className={selected ? "" : "is-placeholder"}>{selected?.label || placeholder}</span>
+        <span className={`next-event-select-trigger-copy${selected ? "" : " is-placeholder"}`}>
+          {selected?.icon ? <span className="next-event-select-trigger-icon"><EventIcon name={selected.icon} /></span> : null}
+          <span>
+            <strong>{selected?.label || placeholder}</strong>
+            {selected?.meta ? <small>{selected.meta}</small> : null}
+          </span>
+        </span>
         <span className="next-event-select-chevron" aria-hidden="true">⌄</span>
       </button>
       <div className="events-modern-select__menu next-event-modern-select__menu" hidden={!open}>
@@ -275,7 +296,9 @@ function ModernSelect({ value, onChange, options = [], placeholder = "Select", d
         <div className="next-event-select-options" role="listbox">
           {filtered.length ? filtered.map((option) => (
             <button type="button" role="option" aria-selected={text(option.value) === text(value)} className={`events-modern-select__option${text(option.value) === text(value) ? " is-selected" : ""}`} key={option.value || option.label} onClick={() => { onChange(option.value); setOpen(false); }}>
-              <span>{option.label}</span>{text(option.value) === text(value) ? <EventIcon name="check" /> : null}
+              {option.icon ? <span className="next-event-select-option-icon"><EventIcon name={option.icon} /></span> : null}
+              <span className="next-event-select-option-copy"><strong>{option.label}</strong>{option.meta ? <small>{option.meta}</small> : null}</span>
+              {text(option.value) === text(value) ? <span className="next-event-select-option-check"><EventIcon name="check" /></span> : null}
             </button>
           )) : <div className="next-event-select-empty">No matching options</div>}
         </div>
@@ -284,7 +307,7 @@ function ModernSelect({ value, onChange, options = [], placeholder = "Select", d
   );
 }
 
-function FormSection({ number: sectionNumber, icon, title, description, action, backHref = "", children }) {
+function FormSection({ number: sectionNumber, icon, title, description = "", action, backHref = "", children }) {
   return (
     <section className="events-form-section next-event-form-section">
       <header className="events-form-section__heading next-event-form-section__heading">
@@ -299,11 +322,11 @@ function FormSection({ number: sectionNumber, icon, title, description, action, 
             <div className="next-event-form-section__copy">
               <span className="next-event-section-kicker">Step <b>{String(sectionNumber).padStart(2, "0")}</b></span>
               <h2>{title}</h2>
-              <p>{description}</p>
+              {description ? <p>{description}</p> : null}
             </div>
           </div>
         </div>
-        {action || null}
+        {action ? <div className="next-event-section-action">{action}</div> : null}
       </header>
       {children}
     </section>
@@ -312,6 +335,122 @@ function FormSection({ number: sectionNumber, icon, title, description, action, 
 
 function EmptyRows({ label }) {
   return <div className="events-empty-repeat next-event-form-empty"><EventIcon name="plus-circle" /><div><strong>No {label} added yet</strong><small>Add the first item when it is needed.</small></div></div>;
+}
+
+function projectPhoto(component) {
+  const candidates = Array.isArray(component?.photoUrls) ? component.photoUrls : [component?.photoUrl];
+  return candidates.map(safeHttpUrl).find(Boolean) || "";
+}
+
+function ProjectPicker({ components, alreadySelected = [], onClose, onConfirm }) {
+  const [query, setQuery] = useState("");
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const existing = useMemo(() => new Set((Array.isArray(alreadySelected) ? alreadySelected : []).map(text).filter(Boolean)), [alreadySelected]);
+  const visible = useMemo(() => {
+    const needle = lower(query);
+    return (Array.isArray(components) ? components : []).filter((component) => {
+      if (component?.isActive === false || text(component?.category) !== "project") return false;
+      if (!needle) return true;
+      return [component?.name, component?.description, component?.ownershipType].some((value) => lower(value).includes(needle));
+    });
+  }, [components, query]);
+
+  useEffect(() => {
+    function onKeyDown(event) {
+      if (event.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
+  function toggle(componentId) {
+    const id = text(componentId);
+    if (!id || existing.has(id)) return;
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  const selectedCount = selectedIds.size;
+
+  return (
+    <div className="events-modal-overlay next-modal-layer next-event-project-picker-layer" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <section className="next-event-project-picker" role="dialog" aria-modal="true" aria-label="Select projects">
+        <header className="next-event-project-picker__head">
+          <div>
+            <span>Project library</span>
+            <h2>Select Projects</h2>
+            <p>Choose one or more Project Resources from Event Components.</p>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Close project selector">×</button>
+        </header>
+
+        <div className="next-event-project-picker__toolbar">
+          <label className="next-event-project-picker__search">
+            <EventIcon name="search" />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search projects…" autoFocus />
+          </label>
+          <span className="next-event-project-picker__count">{selectedCount} selected</span>
+        </div>
+
+        <div className="next-event-project-picker__grid">
+          {visible.map((component) => {
+            const id = text(component?.id);
+            const isSelected = selectedIds.has(id);
+            const isExisting = existing.has(id);
+            const photo = projectPhoto(component);
+            const external = lower(component?.ownershipType) === "external_rental";
+            const unit = componentUnitCost(component);
+            return (
+              <article className={`events-component-card next-event-project-choice${isSelected ? " is-selected" : ""}${isExisting ? " is-existing" : ""}`} key={id || component?.name}>
+                <button
+                  type="button"
+                  className="next-event-project-choice__pick"
+                  onClick={() => toggle(id)}
+                  disabled={isExisting}
+                  aria-pressed={isSelected}
+                  aria-label={`${isExisting ? "Already added" : isSelected ? "Unselect" : "Select"} ${component?.name || "project"}`}
+                >
+                  <div className="events-component-card__top">
+                    <span className="events-component-badge"><EventIcon name="cpu" />Project Resource</span>
+                    <span className={`next-event-project-choice__state${isExisting ? " is-existing" : isSelected ? " is-selected" : ""}`}>
+                      {isExisting ? "Added" : isSelected ? "Selected" : "Select"}
+                    </span>
+                  </div>
+                  <div className="events-component-card__photo">
+                    {photo ? <img src={photo} alt="" loading="lazy" /> : <EventIcon name="box" />}
+                  </div>
+                  <div className="events-component-card__body">
+                    <h3 title={component?.name || ""}>{component?.name || "Untitled project"}</h3>
+                    <p>{text(component?.description) || "No description added yet."}</p>
+                  </div>
+                  <div className="events-component-card__meta">
+                    <div><span>Source type</span><strong>{external ? "External Rental" : "Company Owned"}</strong></div>
+                    <div><span>Default qty.</span><strong>{component?.defaultQuantity ?? 1}</strong></div>
+                  </div>
+                  <div className="events-component-card__cost">
+                    <div><span>Event cost / unit</span><strong>{money(unit)}</strong></div>
+                    <div className="events-component-card__cost-breakdown"><span>Operating {money(number(component?.operatingCost))}</span></div>
+                  </div>
+                </button>
+              </article>
+            );
+          })}
+          {!visible.length ? <div className="next-event-project-picker__empty"><EventIcon name="search" /><strong>No projects found</strong><span>Try another search term.</span></div> : null}
+        </div>
+
+        <footer className="next-event-project-picker__footer">
+          <button type="button" className="events-secondary-btn secondary-button" onClick={onClose}>Cancel</button>
+          <button type="button" className="events-primary-btn primary-button" disabled={!selectedCount} onClick={() => onConfirm(Array.from(selectedIds))}>
+            {selectedCount ? `Add ${selectedCount} Project${selectedCount === 1 ? "" : "s"}` : "Select Projects"}
+          </button>
+        </footer>
+      </section>
+    </div>
+  );
 }
 
 export default function EventRequestFormClient({
@@ -355,6 +494,7 @@ export default function EventRequestFormClient({
   })));
   const [customTypeOpen, setCustomTypeOpen] = useState(false);
   const [customTypeName, setCustomTypeName] = useState("");
+  const [projectPickerOpen, setProjectPickerOpen] = useState(false);
   const [savingType, setSavingType] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -422,7 +562,29 @@ export default function EventRequestFormClient({
   function addProject() {
     if (viewOnly) return notify("info", "View access", "Your account can review this form but cannot change it.");
     if (!projectComponents.length) return notify("info", "Project catalogue", "There are no active Project Resource components.");
-    setProjects((current) => [...current, { key: makeKey("project"), componentId: "", quantity: 1, workingCost: 0, description: "" }]);
+    setProjectPickerOpen(true);
+  }
+
+  function addSelectedProjects(componentIds) {
+    const wanted = new Set((Array.isArray(componentIds) ? componentIds : []).map(text).filter(Boolean));
+    if (!wanted.size) return;
+    setProjects((current) => {
+      const existing = new Set(current.map((item) => text(item.componentId)).filter(Boolean));
+      const additions = projectComponents
+        .filter((component) => wanted.has(text(component.id)) && !existing.has(text(component.id)))
+        .map((component) => {
+          const quantity = component?.defaultQuantity ?? 1;
+          return {
+            key: makeKey("project"),
+            componentId: text(component.id),
+            quantity,
+            workingCost: componentTotal(component, quantity),
+            description: "",
+          };
+        });
+      return [...current, ...additions];
+    });
+    setProjectPickerOpen(false);
   }
 
   function updateProject(key, patch) {
@@ -695,22 +857,35 @@ export default function EventRequestFormClient({
       {viewOnly ? <div className="events-stage2k-notice is-info next-event-form-warning">Your Event Requests access is View only. You can inspect the form, but submission and catalogue changes are disabled.</div> : null}
 
       <form className="next-event-form" onSubmit={submit}>
-        <FormSection number="1" icon="clipboard" title="Event Overview" description="Who is requesting the event, and when will it happen?" backHref="/next/events-calendar">
+        <FormSection number="1" icon="clipboard" title="Event Overview" backHref="/next/events-calendar">
           <div className="events-form-grid next-event-form-grid">
             <Field label="Event Name" required wide><input value={form.eventName} onChange={(event) => updateField("eventName", event.target.value)} maxLength={240} placeholder="Example: Green Valley School Tech Day 2026" disabled={viewOnly} /></Field>
             <Field label="Event Type" required>
               <div className="next-event-type-control">
-                <ModernSelect value={form.eventType} onChange={(value) => updateField("eventType", value)} options={types.map((item) => ({ value: item.code, label: item.label }))} placeholder="Select event type" disabled={viewOnly} ariaLabel="Event type" />
-                {!viewOnly ? <button type="button" onClick={() => setCustomTypeOpen((current) => !current)}>＋ Type</button> : null}
+                <ModernSelect
+                  value={form.eventType}
+                  onChange={(value) => updateField("eventType", value)}
+                  options={types.map((item) => ({
+                    value: item.code,
+                    label: item.label,
+                    icon: EVENT_TYPE_META[item.code]?.icon || "calendar",
+                    meta: EVENT_TYPE_META[item.code]?.meta || "Custom event type",
+                  }))}
+                  placeholder="Select event type"
+                  disabled={viewOnly}
+                  ariaLabel="Event type"
+                  variant="event-type"
+                />
+                {!viewOnly ? <button type="button" className={customTypeOpen ? "is-active" : ""} onClick={() => setCustomTypeOpen((current) => !current)}><EventIcon name="plus-circle" /><span>Add Type</span></button> : null}
               </div>
             </Field>
-            <Field label="Expected Attendees"><input type="number" min="0" step="1" value={form.expectedAttendees} onChange={(event) => updateField("expectedAttendees", event.target.value)} placeholder="0" disabled={viewOnly} /></Field>
             {customTypeOpen ? (
               <div className="next-event-custom-type is-wide">
-                <input value={customTypeName} onChange={(event) => setCustomTypeName(event.target.value)} maxLength={80} placeholder="Example: Open Day" />
+                <label><span>New event type</span><input value={customTypeName} onChange={(event) => setCustomTypeName(event.target.value)} maxLength={80} placeholder="Example: Open Day" autoFocus /></label>
                 <button type="button" onClick={saveCustomType} disabled={savingType}>{savingType ? "Saving…" : "Save type"}</button>
               </div>
             ) : null}
+            <Field label="Expected Attendees"><input type="number" min="0" step="1" value={form.expectedAttendees} onChange={(event) => updateField("expectedAttendees", event.target.value)} placeholder="0" disabled={viewOnly} /></Field>
             <Field label="Start Date & Time" required><input type="datetime-local" value={form.eventStartDate} onChange={(event) => updateField("eventStartDate", event.target.value)} disabled={viewOnly} /></Field>
             <Field label="End Date & Time"><input type="datetime-local" value={form.eventEndDate} onChange={(event) => updateField("eventEndDate", event.target.value)} disabled={viewOnly} /></Field>
             {conflicts.length ? (
@@ -726,7 +901,7 @@ export default function EventRequestFormClient({
           </div>
         </FormSection>
 
-        <FormSection number="2" icon="cpu" title="Projects" description="Add every activity, kit, or technical project required for the event." action={<button type="button" className="events-inline-add next-event-inline-add" onClick={addProject} disabled={viewOnly}><EventIcon name="plus-circle" /> Add Project</button>}>
+        <FormSection number="2" icon="cpu" title="Projects" action={<button type="button" className="events-inline-add next-event-inline-add" onClick={addProject} disabled={viewOnly}><EventIcon name="plus-circle" /> Add Project</button>}>
           <div className="events-repeat-list next-event-repeat-list">
             {!projects.length ? <EmptyRows label="projects" /> : projects.map((item) => {
               const component = components.find((entry) => text(entry.id) === text(item.componentId));
@@ -747,7 +922,6 @@ export default function EventRequestFormClient({
           number="3"
           icon="image"
           title="Marketing Materials"
-          description="Select reusable marketing materials and the quantity required."
           kind="marketing"
           rows={marketing}
           source={marketingComponents}
@@ -763,7 +937,6 @@ export default function EventRequestFormClient({
           number="4"
           icon="tool"
           title="Venue Requirements"
-          description="List equipment, setup items, and venue needs required for proper execution."
           kind="venue"
           rows={venueRequirements}
           source={venueComponents}
@@ -775,7 +948,7 @@ export default function EventRequestFormClient({
           onRemove={(key) => setVenueRequirements((current) => current.filter((item) => item.key !== key))}
         />
 
-        <FormSection number="5" icon="map-pin" title="Venue & Location Details" description="Give Operations enough detail to prepare the team, transport, and setup.">
+        <FormSection number="5" icon="map-pin" title="Venue & Location Details">
           <div className="events-form-grid next-event-form-grid">
             <Field label="Venue Name" required wide><input value={form.venueName} onChange={(event) => updateField("venueName", event.target.value)} maxLength={240} placeholder="Example: Main Sports Hall" disabled={viewOnly} /></Field>
             <Field label="Venue Type"><input value={form.venueType} onChange={(event) => updateField("venueType", event.target.value)} maxLength={120} placeholder="School hall, outdoor area…" disabled={viewOnly} /></Field>
@@ -808,6 +981,15 @@ export default function EventRequestFormClient({
           <button type="submit" className="events-primary-btn primary-button" disabled={submitting || viewOnly}>{submitting ? (editingId ? "Updating…" : "Submitting…") : (editingId ? "Update Event Request" : "Submit Event Request")}</button>
         </footer>
       </form>
+
+      {projectPickerOpen ? (
+        <ProjectPicker
+          components={projectComponents}
+          alreadySelected={projects.map((item) => item.componentId)}
+          onClose={() => setProjectPickerOpen(false)}
+          onConfirm={addSelectedProjects}
+        />
+      ) : null}
 
       {showRateAuth ? (
         <div className="events-modal-overlay next-modal-layer" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowRateAuth(false); }}>
