@@ -690,13 +690,26 @@ async function pipeMaintenanceReceiptPDF(params = {}, stream) {
     return Math.max(techH, dateH);
   };
 
-  const drawLogLegend = (x, y, label) => {
+  const LOG_PALETTES = [
+    { border: "#F59E0B", legendFill: "#FFF7ED", legendBorder: "#FED7AA", legendText: "#C2410C" },
+    { border: "#7C3AED", legendFill: "#F5F3FF", legendBorder: "#DDD6FE", legendText: "#6D28D9" },
+    { border: "#0F766E", legendFill: "#F0FDFA", legendBorder: "#99F6E4", legendText: "#0F766E" },
+    { border: "#2563EB", legendFill: "#EFF6FF", legendBorder: "#BFDBFE", legendText: "#1D4ED8" },
+  ];
+
+  const logPalette = (item, fallbackIndex = 0) => {
+    const rawIndex = Number.isFinite(Number(item?.logIndex)) ? Number(item.logIndex) : Number(fallbackIndex) || 0;
+    const normalizedIndex = Math.max(0, rawIndex);
+    return LOG_PALETTES[normalizedIndex % LOG_PALETTES.length];
+  };
+
+  const drawLogLegend = (x, y, label, palette = LOG_PALETTES[0]) => {
     const safeLabel = ensureText(label, "Log One");
     doc.font("Helvetica-Bold").fontSize(9.2);
-    const labelW = Math.min(102, Math.max(72, doc.widthOfString(safeLabel) + 28));
+    const labelW = Math.min(112, Math.max(72, doc.widthOfString(safeLabel) + 28));
     doc.save();
-    doc.roundedRect(x, y, labelW, 24, 12).fillAndStroke(COLORS.softOrange, "#FED7AA");
-    doc.fillColor(COLORS.accent).font("Helvetica-Bold").fontSize(9.2).text(safeLabel, x, y + 7, { width: labelW, align: "center" });
+    doc.roundedRect(x, y, labelW, 24, 12).fillAndStroke(palette.legendFill, palette.legendBorder);
+    doc.fillColor(palette.legendText).font("Helvetica-Bold").fontSize(9.2).text(safeLabel, x, y + 7, { width: labelW, align: "center" });
     doc.restore();
     return labelW;
   };
@@ -755,68 +768,117 @@ async function pipeMaintenanceReceiptPDF(params = {}, stream) {
     const innerW = contentW - outerPad * 2;
     const gap = 8;
     const legendReserve = 28;
+    const palette = logPalette(item, index);
     const metaH = measureLogMeta(innerW, item);
     const detailsH = maintenanceDetailsMeasure(item, false, innerW);
     const needed = Array.isArray(item.sparePartsNeeded) ? item.sparePartsNeeded : [];
     const replaced = Array.isArray(item.spareParts) ? item.spareParts : [];
-    const neededH = measureSparePartsTable(innerW, needed);
-    const replacedH = measureSparePartsTable(innerW, replaced);
-    const frameH = legendReserve + metaH + gap + detailsH + gap + neededH + gap + replacedH + 14;
 
-    if (doc.y + frameH + 8 > metrics().maxY) {
-      doc.addPage();
-      drawHeader(true);
-      drawContinuationHeader();
+    // Empty spare-parts tables are intentionally omitted from generated reports.
+    // They remain available in the blank template workflow, but a real log should
+    // only spend PDF space on component tables that contain at least one item.
+    const spareSections = [];
+    if (needed.length) {
+      spareSections.push({
+        title: "Spare Parts Needed",
+        parts: needed,
+        height: measureSparePartsTable(innerW, needed),
+      });
+    }
+    if (replaced.length) {
+      spareSections.push({
+        title: "Spare Parts Replaced",
+        parts: replaced,
+        height: measureSparePartsTable(innerW, replaced),
+      });
     }
 
-    const y = doc.y;
-    const available = metrics().maxY - y;
-    if (frameH <= available) {
-      doc.save();
-      doc.roundedRect(mL, y + 10, contentW, frameH - 10, 16).fillAndStroke("#FFFFFF", COLORS.cardBorder);
-      doc.restore();
-      drawLogLegend(mL + 14, y, item?.logLabel);
+    const tablesH = spareSections.reduce((sum, section, sectionIndex) => {
+      return sum + section.height + (sectionIndex > 0 ? gap : 0);
+    }, 0);
+    const frameH = legendReserve + metaH + gap + detailsH + (spareSections.length ? gap + tablesH : 0) + 14;
 
-      let cursorY = y + legendReserve;
-      cursorY += drawLogMeta(innerX, cursorY, innerW, item) + gap;
-      drawMaintenanceDetailsFields(item, index, cursorY, false, { x: innerX, w: innerW });
-      cursorY += detailsH + gap;
-      drawSparePartsTable(innerX, cursorY, innerW, "Spare Parts Needed", needed, "No spare parts needed");
-      cursorY += neededH + gap;
-      drawSparePartsTable(innerX, cursorY, innerW, "Spare Parts Replaced", replaced, "No spare parts replaced");
-      cursorY += replacedH;
-      doc.y = y + frameH + 10;
-      return;
-    }
-
-    // Extremely long logs can span multiple pages. Keep each continuation inside
-    // the same visual log frame language so no log data is left outside a frame.
-    const drawSegmentShell = (segmentY, segmentH, continued = false) => {
+    const drawFrameShell = (segmentY, segmentH, continued = false) => {
       doc.save();
-      doc.roundedRect(mL, segmentY + 10, contentW, segmentH - 10, 16).fillAndStroke("#FFFFFF", COLORS.cardBorder);
+      doc.roundedRect(mL, segmentY + 10, contentW, segmentH - 10, 16).fillAndStroke("#FFFFFF", palette.border);
       doc.restore();
-      drawLogLegend(mL + 14, segmentY, continued ? `${ensureText(item?.logLabel, "Log One")} · Continued` : item?.logLabel);
+      drawLogLegend(
+        mL + 14,
+        segmentY,
+        continued ? `${ensureText(item?.logLabel, "Log One")} · Continued` : item?.logLabel,
+        palette,
+      );
     };
 
+    const drawSpareSection = (section, y) => {
+      return drawSparePartsTable(innerX, y, innerW, section.title, section.parts);
+    };
+
+    // Important: do NOT move the whole log to a fresh page just because the
+    // complete log is taller than the remaining space. The old behavior caused
+    // page 1 to contain only the report header/order data while the first log
+    // started on page 2. If the complete log does not fit, start the first log
+    // segment on the current page and continue naturally.
     let segmentY = doc.y;
-    const firstSegmentH = legendReserve + metaH + gap + detailsH + 14;
-    if (segmentY + firstSegmentH > metrics().maxY) {
+    let available = metrics().maxY - segmentY;
+    const baseSegmentH = legendReserve + metaH + gap + detailsH + 14;
+
+    // Only create a new page when even the log's core (meta + maintenance data)
+    // cannot fit in the remaining area. This avoids blank first pages.
+    if (baseSegmentH > available) {
       doc.addPage();
       drawHeader(true);
       drawContinuationHeader();
       segmentY = doc.y;
+      available = metrics().maxY - segmentY;
     }
-    drawSegmentShell(segmentY, firstSegmentH, false);
+
+    // If the entire log fits in this page, keep every non-empty spare-parts table
+    // inside the SAME outer Log One/Log Two frame.
+    if (frameH <= available) {
+      drawFrameShell(segmentY, frameH, false);
+      let cursorY = segmentY + legendReserve;
+      cursorY += drawLogMeta(innerX, cursorY, innerW, item) + gap;
+      drawMaintenanceDetailsFields(item, index, cursorY, false, { x: innerX, w: innerW });
+      cursorY += detailsH;
+      spareSections.forEach((section) => {
+        cursorY += gap;
+        drawSpareSection(section, cursorY);
+        cursorY += section.height;
+      });
+      doc.y = segmentY + frameH + 10;
+      return;
+    }
+
+    // Long logs: pack as many component tables as possible into the first frame
+    // segment before creating a continuation page. This keeps the component table
+    // visually inside its log frame whenever page space allows.
+    const firstPageSections = [];
+    let firstSegmentH = baseSegmentH;
+    for (const section of spareSections) {
+      const candidateH = firstSegmentH + gap + section.height;
+      if (candidateH <= available) {
+        firstPageSections.push(section);
+        firstSegmentH = candidateH;
+      } else {
+        break;
+      }
+    }
+
+    drawFrameShell(segmentY, firstSegmentH, false);
     let cursorY = segmentY + legendReserve;
     cursorY += drawLogMeta(innerX, cursorY, innerW, item) + gap;
     drawMaintenanceDetailsFields(item, index, cursorY, false, { x: innerX, w: innerW });
+    cursorY += detailsH;
+    firstPageSections.forEach((section) => {
+      cursorY += gap;
+      drawSpareSection(section, cursorY);
+      cursorY += section.height;
+    });
     doc.y = segmentY + firstSegmentH + 10;
 
-    const spareSections = [
-      { title: "Spare Parts Needed", parts: needed, empty: "No spare parts needed", height: neededH },
-      { title: "Spare Parts Replaced", parts: replaced, empty: "No spare parts replaced", height: replacedH },
-    ];
-    spareSections.forEach((section) => {
+    const remainingSections = spareSections.slice(firstPageSections.length);
+    remainingSections.forEach((section) => {
       const segmentH = legendReserve + section.height + 14;
       if (doc.y + segmentH > metrics().maxY) {
         doc.addPage();
@@ -824,8 +886,8 @@ async function pipeMaintenanceReceiptPDF(params = {}, stream) {
         drawContinuationHeader();
       }
       const sy = doc.y;
-      drawSegmentShell(sy, segmentH, true);
-      drawSparePartsTable(innerX, sy + legendReserve, innerW, section.title, section.parts, section.empty);
+      drawFrameShell(sy, segmentH, true);
+      drawSpareSection(section, sy + legendReserve);
       doc.y = sy + segmentH + 10;
     });
   };
