@@ -766,20 +766,24 @@ function ModernSelect({ value, options, placeholder, searchable = false, onChang
   );
 }
 
-function emptyLogForItem(item) {
-  const existingNeeded = normalizeNeededSpareEntries(item);
-  const existingReplaced = normalizeSpareEntries(item);
+function emptyLogForItem(item, mode = "create") {
+  const history = Array.isArray(item?.maintenanceLogs) ? item.maintenanceLogs : [];
+  const historySerial = [...history].reverse().map((entry) => text(entry?.serialNumber)).find(Boolean) || "";
+  const fixedSerialNumber = text(item?.serialNumber) || historySerial;
+  const isSecondMode = mode === "second";
+  const existingNeeded = isSecondMode ? [] : normalizeNeededSpareEntries(item);
+  const existingReplaced = isSecondMode ? [] : normalizeSpareEntries(item);
   return {
     orderId: text(item?.id),
     productName: text(item?.productName) || "Component",
     issueDescription: issueText(item),
-    serialNumber: text(item?.serialNumber),
-    resolutionMethod: text(item?.resolutionMethod),
-    actualIssueDescription: text(item?.actualIssueDescription),
-    repairAction: text(item?.repairAction),
+    serialNumber: fixedSerialNumber,
+    resolutionMethod: isSecondMode ? "" : text(item?.resolutionMethod),
+    actualIssueDescription: isSecondMode ? "" : text(item?.actualIssueDescription),
+    repairAction: isSecondMode ? "" : text(item?.repairAction),
     sparePartsNeeded: existingNeeded.length ? existingNeeded : [{ id: "", name: "", qty: 1 }],
     sparePartsReplaced: existingReplaced.length ? existingReplaced : [{ id: "", name: "", qty: 1 }],
-    checklist: normalizeMaintenanceChecklist(item?.maintenanceChecklist),
+    checklist: isSecondMode ? [] : normalizeMaintenanceChecklist(item?.maintenanceChecklist),
   };
 }
 
@@ -790,7 +794,7 @@ export function MaintenanceLogModal({ group, mode = "create", options, busy, err
   const [checklistError, setChecklistError] = useState("");
 
   useEffect(() => {
-    setLogs(group ? [...group.items].sort((a, b) => text(a?.productName).localeCompare(text(b?.productName), undefined, { sensitivity: "base", numeric: true })).map(emptyLogForItem) : []);
+    setLogs(group ? [...group.items].sort((a, b) => text(a?.productName).localeCompare(text(b?.productName), undefined, { sensitivity: "base", numeric: true })).map((item) => emptyLogForItem(item, mode)) : []);
     setNewChecklistText({});
     setChecklistError("");
   }, [group, mode]);
@@ -944,7 +948,7 @@ export function MaintenanceLogModal({ group, mode = "create", options, busy, err
           <div className="req-edit-icon"><ClassicOrderIcon name={isEditMode ? "edit-2" : "clipboard"} /></div>
           <div className="next-maintenance-log-header__copy">
             <div className="co-submodal-title">{isEditMode ? "Edit Maintenance Log" : isSecondMode ? "Make Second Log" : "Log Maintenance"}</div>
-            <div className="co-submodal-sub">{isEditMode ? "Update the latest saved maintenance log below." : isSecondMode ? "The previous log details are copied below. Update what changed, then save the second log." : "Record the maintenance work completed for each component."}</div>
+            <div className="co-submodal-sub">{isEditMode ? "Update the latest saved maintenance log below." : isSecondMode ? "Start a fresh follow-up log. Only the machine serial number is carried over from Log One." : "Record the maintenance work completed for each component."}</div>
             <div className="next-maintenance-log-header__meta" aria-label="Maintenance log summary">
               <span><ClassicOrderIcon name="tool" />{group.orderIdLabel || "Maintenance order"}</span>
               <span><ClassicOrderIcon name="layers" />{logs.length} component{logs.length === 1 ? "" : "s"}</span>
@@ -961,7 +965,7 @@ export function MaintenanceLogModal({ group, mode = "create", options, busy, err
                 <div className="req-maintenance-log-card__issue"><span>Issue:</span> {entry.issueDescription}</div>
               </div>
               <div className="req-maintenance-log-card__fields">
-                <label className="co-submodal-field next-maintenance-serial-field"><span className="co-submodal-label">Serial Number</span><input className="co-submodal-input" type="text" value={entry.serialNumber} onChange={(event) => patchLog(logIndex, { serialNumber: event.target.value })} disabled={busy} placeholder="Enter equipment serial number" autoComplete="off" /></label>
+                <label className="co-submodal-field next-maintenance-serial-field"><span className="co-submodal-label">Serial Number</span><input className="co-submodal-input" type="text" value={entry.serialNumber} onChange={(event) => patchLog(logIndex, { serialNumber: event.target.value })} disabled={busy} readOnly={isSecondMode} aria-readonly={isSecondMode} placeholder="Enter equipment serial number" autoComplete="off" /></label>
                 <label className="co-submodal-field"><span className="co-submodal-label">Resolution Method</span><ModernSelect value={entry.resolutionMethod} options={resolutionMethods} placeholder="Select resolution method" onChange={(value) => patchLog(logIndex, { resolutionMethod: value })} disabled={busy} ariaLabel={`Resolution method for ${entry.productName}`} /></label>
                 <label className="co-submodal-field"><span className="co-submodal-label">The Actual Issue Description</span><textarea className="co-submodal-textarea" dir="auto" value={entry.actualIssueDescription} onChange={(event) => patchLog(logIndex, { actualIssueDescription: event.target.value })} disabled={busy} rows={4} placeholder="Write the actual issue description" /></label>
                 <label className="co-submodal-field"><span className="co-submodal-label">Repair Action</span><textarea className="co-submodal-textarea" dir="auto" value={entry.repairAction} onChange={(event) => patchLog(logIndex, { repairAction: event.target.value })} disabled={busy} rows={4} placeholder="Write the repair action" /></label>

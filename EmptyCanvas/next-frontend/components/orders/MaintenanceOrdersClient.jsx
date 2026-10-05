@@ -946,11 +946,23 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
   async function saveLog(perItemLogs) {
     const isEditMode = logMode === "edit";
     const isSecondMode = logMode === "second";
+    const hasSelectedSparePart = (list) => Array.isArray(list) && list.some((part) => text(part?.id) || text(part?.name));
+    const hasMeaningfulLogDetails = (entry, includeSerial = true) => Boolean(
+      (includeSerial && text(entry?.serialNumber))
+      || text(entry?.resolutionMethod)
+      || text(entry?.actualIssueDescription)
+      || text(entry?.repairAction)
+      || hasSelectedSparePart(entry?.sparePartsNeeded)
+      || hasSelectedSparePart(entry?.sparePartsReplaced)
+      || normalizeMaintenanceChecklist(entry?.checklist).length
+    );
     const logsWithDetails = isEditMode
       ? perItemLogs
-      : perItemLogs.filter((entry) => text(entry?.serialNumber) || text(entry?.resolutionMethod) || text(entry?.actualIssueDescription) || text(entry?.repairAction) || (Array.isArray(entry?.sparePartsNeeded) && entry.sparePartsNeeded.length) || (Array.isArray(entry?.sparePartsReplaced) && entry.sparePartsReplaced.length) || normalizeMaintenanceChecklist(entry?.checklist).length);
+      : perItemLogs.filter((entry) => hasMeaningfulLogDetails(entry, !isSecondMode));
     if (!logsWithDetails.length && !isEditMode) {
-      setActionError("Please fill maintenance details for at least one component. Spare parts are optional.");
+      setActionError(isSecondMode
+        ? "Please enter new maintenance details for the second log. The fixed serial number alone is not counted as a new log."
+        : "Please fill maintenance details for at least one component. Spare parts are optional.");
       return;
     }
 
