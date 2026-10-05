@@ -471,6 +471,11 @@ async function enrichMaintenanceDetailProducts(items = []) {
     const product = findProduct({ id: item?.productId, name: item?.productName, url: item?.productUrl });
     const needed = enrichSpareEntries(item?.sparePartsNeededEntries);
     const replaced = enrichSpareEntries(item?.sparePartsReplacedEntries);
+    const maintenanceLogs = (Array.isArray(item?.maintenanceLogs) ? item.maintenanceLogs : []).map((log) => ({
+      ...log,
+      sparePartsNeededEntries: enrichSpareEntries(log?.sparePartsNeededEntries),
+      sparePartsReplacedEntries: enrichSpareEntries(log?.sparePartsReplacedEntries),
+    }));
     return {
       ...item,
       productId: text(item?.productId) || text(product?.id) || null,
@@ -485,6 +490,7 @@ async function enrichMaintenanceDetailProducts(items = []) {
       sparePartsReplacedId: replaced.find((entry) => entry.id)?.id || null,
       sparePartsReplacedNames: replaced.map((entry) => entry.name).filter(Boolean),
       sparePartsReplacedName: replaced.map((entry) => entry.name).filter(Boolean).join(", ") || null,
+      maintenanceLogs,
     };
   });
 }
@@ -614,7 +620,7 @@ function normalizeMaintenanceSpareEntries(value, lookups = {}) {
   return out;
 }
 
-function maintenanceLogMetaText({ neededEntries = [], replacedEntries = [], checklist = [], loggedAt = null } = {}) {
+function maintenanceLogMetaText({ neededEntries = [], replacedEntries = [], checklist = [], loggedAt = null, technicianName = null, logs = [] } = {}) {
   const cleanEntries = (entries) => (Array.isArray(entries) ? entries : [])
     .map((entry) => ({
       id: text(entry?.id),
@@ -622,15 +628,32 @@ function maintenanceLogMetaText({ neededEntries = [], replacedEntries = [], chec
       qty: Number.isFinite(Number(entry?.qty)) ? Math.max(1, Math.round(Number(entry.qty))) : 1,
     }))
     .filter((entry) => entry.id || entry.name);
-  const cleanChecklist = uniqueMaintenanceStrings(Array.isArray(checklist) ? checklist : [], { splitComma: false })
+  const cleanChecklist = (values) => uniqueMaintenanceStrings(Array.isArray(values) ? values : [], { splitComma: false })
     .map((item) => text(item).slice(0, 800))
     .filter(Boolean);
+  const cleanLog = (entry = {}) => ({
+    serialNumber: text(entry?.serialNumber) || null,
+    resolutionMethod: text(entry?.resolutionMethod) || null,
+    actualIssueDescription: String(entry?.actualIssueDescription || "").replace(/\r\n/g, "\n").trim() || null,
+    repairAction: String(entry?.repairAction || "").replace(/\r\n/g, "\n").trim() || null,
+    needed: cleanEntries(entry?.sparePartsNeededEntries ?? entry?.neededEntries ?? entry?.needed),
+    replaced: cleanEntries(entry?.sparePartsReplacedEntries ?? entry?.replacedEntries ?? entry?.replaced),
+    checklist: cleanChecklist(entry?.maintenanceChecklist ?? entry?.checklist),
+    loggedAt: text(entry?.loggedAt ?? entry?.maintenanceLoggedAt) || null,
+    technicianName: text(entry?.technicianName) || null,
+  });
+  const cleanLogs = (Array.isArray(logs) ? logs : []).map(cleanLog).filter((entry) => Boolean(
+    entry.serialNumber || entry.resolutionMethod || entry.actualIssueDescription || entry.repairAction
+    || entry.needed.length || entry.replaced.length || entry.checklist.length || entry.loggedAt || entry.technicianName
+  ));
   return JSON.stringify({
-    v: 3,
+    v: 4,
     needed: cleanEntries(neededEntries),
     replaced: cleanEntries(replacedEntries),
-    checklist: cleanChecklist,
+    checklist: cleanChecklist(checklist),
     loggedAt: text(loggedAt) || null,
+    technicianName: text(technicianName) || null,
+    logs: cleanLogs,
   });
 }
 
@@ -725,6 +748,7 @@ export async function logMaintenanceDirect({
   moveToArrived = false,
   moveToShipping = false,
   replaceExisting = false,
+  appendLog = false,
 } = {}) {
   const access = maintenanceWorkflowAccess(account);
   if (access === null) return null;
@@ -753,7 +777,9 @@ export async function logMaintenanceDirect({
   const byName = new Map(catalog.products.map((item) => [norm(item?.name), item]).filter(([name]) => name));
   const lookups = { byId, byName };
   const maintenanceLoggedAt = new Date().toISOString();
+  const technicianName = text(account?.name || account?.username) || "User";
   const logById = new Map();
+  const beforeById = new Map(serializedBefore.map((item) => [text(item?.id), item]).filter(([id]) => id));
 
   const normalizeLog = (entry = {}) => {
     const serialNumberText = text(entry?.serialNumber || serialNumber);
@@ -810,7 +836,7 @@ export async function logMaintenanceDirect({
   let hasAnyDetails = false;
   let mutationStarted = false;
 
-  const buildPatch = (entryLog) => {
+  const buildPatch = (entryLog, previousItem = {}) => {
     const log = entryLog || fallbackLog;
     const tokenEntries = (log.rawSparePartTokens || []).map((value) => ({ id: text(value) }));
     const nameEntries = (log.requestedSparePartNames || []).map((name) => ({ name }));
@@ -827,53 +853,97 @@ export async function logMaintenanceDirect({
       log.serialNumberText || log.resolutionMethodText || log.actualIssueDescriptionText || log.repairActionText
       || needed.length || replaced.length || log.checklist.length
     );
+
+    const existingHistory = (Array.isArray(previousItem?.maintenanceLogs) ? previousItem.maintenanceLogs : []).map((entry) => ({
+      serialNumber: text(entry?.serialNumber) || null,
+      resolutionMethod: text(entry?.resolutionMethod) || null,
+      actualIssueDescription: text(entry?.actualIssueDescription) || null,
+      repairAction: text(entry?.repairAction) || null,
+      sparePartsNeededEntries: normalizeMaintenanceSpareEntries(entry?.sparePartsNeededEntries || [], lookups),
+      sparePartsReplacedEntries: normalizeMaintenanceSpareEntries(entry?.sparePartsReplacedEntries || [], lookups),
+      maintenanceChecklist: uniqueMaintenanceStrings(entry?.maintenanceChecklist || [], { splitComma: false }),
+      loggedAt: text(entry?.loggedAt) || null,
+      technicianName: text(entry?.technicianName) || null,
+    }));
+
+    if (appendLog && existingHistory.length >= 2) {
+      throw directMaintenanceMutationError("This order already has a second maintenance log.", 409);
+    }
+
+    const previousLatest = existingHistory.length ? existingHistory[existingHistory.length - 1] : null;
+    const nextEntry = {
+      serialNumber: log.serialNumberText || null,
+      resolutionMethod: log.resolutionMethodText || null,
+      actualIssueDescription: log.actualIssueDescriptionText || null,
+      repairAction: log.repairActionText || null,
+      sparePartsNeededEntries: needed,
+      sparePartsReplacedEntries: replaced,
+      maintenanceChecklist: log.checklist,
+      loggedAt: replaceExisting && previousLatest?.loggedAt ? previousLatest.loggedAt : (hasContent ? maintenanceLoggedAt : null),
+      technicianName: replaceExisting && previousLatest?.technicianName ? previousLatest.technicianName : (hasContent ? technicianName : null),
+    };
+
+    let history;
+    if (replaceExisting) {
+      history = existingHistory.length ? [...existingHistory.slice(0, -1), nextEntry] : (hasContent ? [nextEntry] : []);
+    } else if (appendLog) {
+      history = hasContent ? [...existingHistory, nextEntry] : existingHistory;
+    } else {
+      history = hasContent ? [nextEntry] : existingHistory;
+    }
+    const latest = history.length ? history[history.length - 1] : nextEntry;
     const metaText = maintenanceLogMetaText({
-      neededEntries: needed,
-      replacedEntries: replaced,
-      checklist: log.checklist,
-      loggedAt: hasContent ? maintenanceLoggedAt : null,
+      neededEntries: latest.sparePartsNeededEntries,
+      replacedEntries: latest.sparePartsReplacedEntries,
+      checklist: latest.maintenanceChecklist,
+      loggedAt: latest.loggedAt,
+      technicianName: latest.technicianName,
+      logs: history,
     });
     const patch = { updated_at: maintenanceLoggedAt };
-    if (replaceExisting) {
-      patch.serial_number = log.serialNumberText || null;
-      patch.resolution_method = log.resolutionMethodText || null;
-      patch.actual_issue_description = log.actualIssueDescriptionText || null;
-      patch.repair_action = log.repairActionText || null;
-      patch.spare_parts_replaced = hasContent ? metaText : null;
+    if (replaceExisting || appendLog) {
+      patch.serial_number = latest.serialNumber || null;
+      patch.resolution_method = latest.resolutionMethod || null;
+      patch.actual_issue_description = latest.actualIssueDescription || null;
+      patch.repair_action = latest.repairAction || null;
+      patch.spare_parts_replaced = history.length ? metaText : null;
     } else {
-      if (log.serialNumberText) patch.serial_number = log.serialNumberText;
-      if (log.resolutionMethodText) patch.resolution_method = log.resolutionMethodText;
-      if (log.actualIssueDescriptionText) patch.actual_issue_description = log.actualIssueDescriptionText;
-      if (log.repairActionText) patch.repair_action = log.repairActionText;
-      if (hasContent) patch.spare_parts_replaced = metaText;
+      if (latest.serialNumber) patch.serial_number = latest.serialNumber;
+      if (latest.resolutionMethod) patch.resolution_method = latest.resolutionMethod;
+      if (latest.actualIssueDescription) patch.actual_issue_description = latest.actualIssueDescription;
+      if (latest.repairAction) patch.repair_action = latest.repairAction;
+      if (history.length) patch.spare_parts_replaced = metaText;
     }
     if (moveToShipping) patch.status = "Shipped";
     else if (moveToArrived) patch.status = "Arrived";
     return {
       patch,
       response: {
-        serialNumber: log.serialNumberText || null,
-        resolutionMethod: log.resolutionMethodText || null,
-        actualIssueDescription: log.actualIssueDescriptionText || null,
-        repairAction: log.repairActionText || null,
+        serialNumber: latest.serialNumber || null,
+        resolutionMethod: latest.resolutionMethod || null,
+        actualIssueDescription: latest.actualIssueDescription || null,
+        repairAction: latest.repairAction || null,
         sparePartsReplacedIds: replacedIds,
         sparePartsReplacedId: replacedIds[0] || null,
         sparePartsReplacedNames: replacedNames,
         sparePartsReplacedName: replacedNames.join(", ") || null,
-        sparePartsReplacedEntries: replaced,
+        sparePartsReplacedEntries: latest.sparePartsReplacedEntries,
         sparePartsNeededNames: neededNames,
         sparePartsNeededName: neededNames.join(", ") || null,
-        sparePartsNeededEntries: needed,
-        maintenanceChecklist: log.checklist,
+        sparePartsNeededEntries: latest.sparePartsNeededEntries,
+        maintenanceChecklist: latest.maintenanceChecklist,
+        maintenanceLoggedAt: latest.loggedAt || null,
+        maintenanceTechnicianName: latest.technicianName || null,
+        maintenanceLogs: history,
       },
     };
   };
 
   try {
     for (const id of ids) {
-      const built = buildPatch(logById.get(id) || fallbackLog);
+      const built = buildPatch(logById.get(id) || fallbackLog, beforeById.get(id) || {});
       const detailKeys = ["serial_number", "resolution_method", "actual_issue_description", "repair_action", "spare_parts_replaced"];
-      const hasDetailsForRow = replaceExisting || detailKeys.some((key) => text(built.patch?.[key]));
+      const hasDetailsForRow = replaceExisting || appendLog || detailKeys.some((key) => text(built.patch?.[key]));
       hasAnyDetails = hasAnyDetails || hasDetailsForRow;
       if (!hasDetailsForRow && !moveToArrived && !moveToShipping) continue;
       const requiredColumns = built.patch?.serial_number ? ["serial_number"] : [];
@@ -882,7 +952,7 @@ export async function logMaintenanceDirect({
       updatedRows.push(updated || { ...(rows.find((row) => text(row?.id) === id) || {}), ...built.patch });
       responseById.set(id, built.response);
     }
-    if (!hasAnyDetails && !moveToArrived && !moveToShipping && !replaceExisting) {
+    if (!hasAnyDetails && !moveToArrived && !moveToShipping && !replaceExisting && !appendLog) {
       throw directMaintenanceMutationError("No maintenance details were provided.", 400);
     }
     await invalidateLegacyOperationsCaches(account).catch(() => {});

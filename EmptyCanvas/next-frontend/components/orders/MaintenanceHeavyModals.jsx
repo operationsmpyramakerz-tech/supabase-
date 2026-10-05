@@ -395,7 +395,34 @@ function MaintenanceSparePartsBlock({ title, entries, emptyText }) {
   );
 }
 
-export function MaintenanceDetailsModal({ group, busy, onClose, onLog, onDone, onExport, onAction }) {
+function maintenanceLogsForItem(item = {}) {
+  const stored = Array.isArray(item?.maintenanceLogs) ? item.maintenanceLogs.filter(Boolean) : [];
+  if (stored.length) return stored;
+  const hasLegacy = Boolean(
+    text(item?.serialNumber) || text(item?.resolutionMethod) || text(item?.actualIssueDescription) || text(item?.repairAction)
+    || normalizeNeededSpareEntries(item).length || normalizeSpareEntries(item).length || normalizeMaintenanceChecklist(item?.maintenanceChecklist).length
+  );
+  if (!hasLegacy) return [];
+  return [{
+    serialNumber: text(item?.serialNumber),
+    resolutionMethod: text(item?.resolutionMethod),
+    actualIssueDescription: text(item?.actualIssueDescription),
+    repairAction: text(item?.repairAction),
+    sparePartsNeededEntries: normalizeNeededSpareEntries(item),
+    sparePartsReplacedEntries: normalizeSpareEntries(item),
+    maintenanceChecklist: normalizeMaintenanceChecklist(item?.maintenanceChecklist),
+    loggedAt: item?.maintenanceLoggedAt || null,
+    technicianName: text(item?.maintenanceTechnicianName),
+  }];
+}
+
+function maintenanceLogLabel(index) {
+  if (index === 0) return "Log One";
+  if (index === 1) return "Log Two";
+  return `Log ${index + 1}`;
+}
+
+export function MaintenanceDetailsModal({ group, busy, onClose, onLog, onSecondLog, onDone, onExport, onAction }) {
   const [photosOpen, setPhotosOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const moreRef = useRef(null);
@@ -433,8 +460,13 @@ export function MaintenanceDetailsModal({ group, busy, onClose, onLog, onDone, o
   const canLog = group.state.key === "not-started";
   const canTemplate = group.state.key === "not-started";
   const canDone = group.state.key === "in-progress";
+  const canSecondLog = group.state.key === "in-progress" && Number(group.maxLogCount || 1) < 2;
   const canDownload = ["in-progress", "done"].includes(group.state.key);
   const showDoneMeta = group.state.key === "done";
+  const groupLogs = (group.items || []).flatMap(maintenanceLogsForItem);
+  const latestGroupLog = [...groupLogs].filter((entry) => entry?.loggedAt).sort((a, b) => new Date(b.loggedAt).getTime() - new Date(a.loggedAt).getTime())[0] || groupLogs[groupLogs.length - 1] || null;
+  const summaryDate = latestGroupLog?.loggedAt || group.latestCreated;
+  const technicianName = text(latestGroupLog?.technicianName) || "—";
 
   return (
     <>
@@ -455,7 +487,8 @@ export function MaintenanceDetailsModal({ group, busy, onClose, onLog, onDone, o
           <div className="next-maintenance-order-modal-summary" aria-label="Maintenance order summary">
             <div><span>Team member</span><strong title={group.createdByName || "—"}>{group.createdByName || "—"}</strong></div>
             <div><span>Order</span><strong>{group.orderIdLabel}</strong></div>
-            <div><span>Date</span><strong>{formatDate(group.latestCreated)}</strong></div>
+            <div><span>Date</span><strong>{formatDate(summaryDate)}</strong></div>
+            <div><span>Technician name</span><strong title={technicianName}>{technicianName}</strong></div>
             <div><span>Components</span><strong>{group.items.length}</strong></div>
             <div className="next-maintenance-order-modal-summary__status"><span>Status</span><strong>{group.state.label}</strong></div>
           </div>
@@ -470,6 +503,7 @@ export function MaintenanceDetailsModal({ group, busy, onClose, onLog, onDone, o
               {canTemplate ? <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => onExport(group, { template: true })} disabled={busy}><ClassicOrderIcon name="download" />Download Template</button> : null}
               {canDownload ? <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => onExport(group)} disabled={busy}><ClassicOrderIcon name="download" />Download</button> : null}
               {canLog ? <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => onLog(group)} disabled={busy}><ClassicOrderIcon name="clipboard" />Log Maintenance</button> : null}
+              {canSecondLog ? <button type="button" className="ro-action-btn ro-action-btn--light next-maintenance-second-log-btn" onClick={() => onSecondLog(group)} disabled={busy}><ClassicOrderIcon name="clipboard" />Make Second Log</button> : null}
               {canDone ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onDone(group)} disabled={busy}><ClassicOrderIcon name="check-circle" />Mark as Delivered</button> : null}
             </div>
 
@@ -477,13 +511,7 @@ export function MaintenanceDetailsModal({ group, busy, onClose, onLog, onDone, o
               {[...group.items].sort((a, b) => text(a?.productName).localeCompare(text(b?.productName), undefined, { sensitivity: "base", numeric: true })).map((item, index) => {
                 const productName = text(item?.productName) || "Component";
                 const productUrl = safeMaintenanceUrl(item?.productUrl);
-                const serialNumber = text(item?.serialNumber) || "—";
-                const resolutionMethod = text(item?.resolutionMethod) || "—";
-                const actualIssue = text(item?.actualIssueDescription) || "—";
-                const repairAction = text(item?.repairAction) || "—";
-                const checklist = normalizeMaintenanceChecklist(item?.maintenanceChecklist);
-                const neededSpareParts = normalizeNeededSpareEntries(item);
-                const replacedSpareParts = normalizeSpareEntries(item);
+                const logs = maintenanceLogsForItem(item);
                 const idCode = text(item?.idCode ?? item?.displayId);
                 const componentName = productUrl
                   ? <a className="next-maintenance-modal-item__name next-maintenance-modal-item__name-link" href={productUrl} target="_blank" rel="noopener noreferrer" title="Open product link"><span>{productName}</span><ClassicOrderIcon name="external-link" /></a>
@@ -499,43 +527,72 @@ export function MaintenanceDetailsModal({ group, busy, onClose, onLog, onDone, o
                     </span>
                   </div>
 
-                  <div className="next-maintenance-detail-group next-maintenance-detail-group--machine">
-                    <div className="next-maintenance-detail-group__title"><span>Machine details</span></div>
-                    <div className="next-maintenance-detail-grid next-maintenance-detail-grid--two">
-                      <div className="next-maintenance-detail-field">
-                        <span>Component</span>
-                        {productUrl ? <a className="next-maintenance-detail-field__product" href={productUrl} target="_blank" rel="noopener noreferrer"><span>{productName}</span><ClassicOrderIcon name="external-link" /></a> : <strong>{productName}</strong>}
-                        {idCode ? <small>ID: {idCode}</small> : null}
+                  {logs.length ? <div className="next-maintenance-log-history">
+                    {logs.map((log, logIndex) => {
+                      const serialNumber = text(log?.serialNumber) || "—";
+                      const resolutionMethod = text(log?.resolutionMethod) || "—";
+                      const actualIssue = text(log?.actualIssueDescription) || "—";
+                      const repairAction = text(log?.repairAction) || "—";
+                      const checklist = normalizeMaintenanceChecklist(log?.maintenanceChecklist);
+                      const neededSpareParts = Array.isArray(log?.sparePartsNeededEntries) ? log.sparePartsNeededEntries : [];
+                      const replacedSpareParts = Array.isArray(log?.sparePartsReplacedEntries) ? log.sparePartsReplacedEntries : [];
+                      const logTechnician = text(log?.technicianName) || "—";
+                      const logDate = log?.loggedAt ? formatDate(log.loggedAt) : "—";
+                      return <fieldset className="next-maintenance-log-frame" key={`${text(item?.id) || index}-log-${logIndex}`}>
+                        <legend><span>{maintenanceLogLabel(logIndex)}</span></legend>
+                        <div className="next-maintenance-log-frame__meta">
+                          <div><span>Technician name</span><strong>{logTechnician}</strong></div>
+                          <div><span>Date</span><strong>{logDate}</strong></div>
+                        </div>
+                        <div className="next-maintenance-detail-group next-maintenance-detail-group--machine">
+                          <div className="next-maintenance-detail-group__title"><span>Machine details</span></div>
+                          <div className="next-maintenance-detail-grid next-maintenance-detail-grid--two">
+                            <div className="next-maintenance-detail-field">
+                              <span>Component</span>
+                              {productUrl ? <a className="next-maintenance-detail-field__product" href={productUrl} target="_blank" rel="noopener noreferrer"><span>{productName}</span><ClassicOrderIcon name="external-link" /></a> : <strong>{productName}</strong>}
+                              {idCode ? <small>ID: {idCode}</small> : null}
+                            </div>
+                            <div className="next-maintenance-detail-field"><span>Serial number</span><strong dir="auto">{serialNumber}</strong></div>
+                          </div>
+                        </div>
+
+                        <div className="next-maintenance-modal-item__issue next-maintenance-modal-item__issue--grouped">
+                          <span>Initial issue</span>
+                          <p dir="auto">{issueText(item)}</p>
+                        </div>
+
+                        <div className="next-maintenance-detail-group next-maintenance-detail-group--action">
+                          <div className="next-maintenance-detail-group__title"><span>Maintenance action</span></div>
+                          <div className="next-maintenance-detail-grid next-maintenance-detail-grid--two">
+                            <div className="next-maintenance-detail-field"><span>Resolution method</span><strong dir="auto">{resolutionMethod}</strong></div>
+                            <div className="next-maintenance-detail-field next-maintenance-detail-field--checklist">
+                              <span>Maintenance checklist</span>
+                              {checklist.length ? <div className="next-maintenance-checklist-view">{checklist.map((value, checklistIndex) => <div className="next-maintenance-checklist-view__item" key={`${value}-${checklistIndex}`}><ClassicOrderIcon name="check-circle" /><strong dir="auto">{value}</strong></div>)}</div> : <div className="next-maintenance-detail-field__empty">No checklist items recorded</div>}
+                            </div>
+                            <div className="next-maintenance-detail-field next-maintenance-detail-field--text"><span>Actual issue description</span><strong dir="auto">{actualIssue}</strong></div>
+                            <div className="next-maintenance-detail-field next-maintenance-detail-field--text"><span>Repair action</span><strong dir="auto">{repairAction}</strong></div>
+                          </div>
+                        </div>
+
+                        <div className="next-maintenance-detail-group next-maintenance-detail-group--spares">
+                          <div className="next-maintenance-detail-group__title"><span>Spare parts</span></div>
+                          <div className="next-maintenance-spares-grid">
+                            <MaintenanceSparePartsBlock title="Spare parts needed" entries={neededSpareParts} emptyText="No spare parts needed" />
+                            <MaintenanceSparePartsBlock title="Spare parts replaced" entries={replacedSpareParts} emptyText="No spare parts replaced" />
+                          </div>
+                        </div>
+                      </fieldset>;
+                    })}
+                  </div> : <>
+                    <div className="next-maintenance-detail-group next-maintenance-detail-group--machine">
+                      <div className="next-maintenance-detail-group__title"><span>Machine details</span></div>
+                      <div className="next-maintenance-detail-grid next-maintenance-detail-grid--two">
+                        <div className="next-maintenance-detail-field"><span>Component</span>{productUrl ? <a className="next-maintenance-detail-field__product" href={productUrl} target="_blank" rel="noopener noreferrer"><span>{productName}</span><ClassicOrderIcon name="external-link" /></a> : <strong>{productName}</strong>}{idCode ? <small>ID: {idCode}</small> : null}</div>
+                        <div className="next-maintenance-detail-field"><span>Serial number</span><strong>—</strong></div>
                       </div>
-                      <div className="next-maintenance-detail-field"><span>Serial number</span><strong dir="auto">{serialNumber}</strong></div>
                     </div>
-                  </div>
-
-                  <div className="next-maintenance-modal-item__issue next-maintenance-modal-item__issue--grouped">
-                    <span>Initial issue</span>
-                    <p dir="auto">{issueText(item)}</p>
-                  </div>
-
-                  <div className="next-maintenance-detail-group next-maintenance-detail-group--action">
-                    <div className="next-maintenance-detail-group__title"><span>Maintenance action</span></div>
-                    <div className="next-maintenance-detail-grid next-maintenance-detail-grid--two">
-                      <div className="next-maintenance-detail-field"><span>Resolution method</span><strong dir="auto">{resolutionMethod}</strong></div>
-                      <div className="next-maintenance-detail-field next-maintenance-detail-field--checklist">
-                        <span>Maintenance checklist</span>
-                        {checklist.length ? <div className="next-maintenance-checklist-view">{checklist.map((value, checklistIndex) => <div className="next-maintenance-checklist-view__item" key={`${value}-${checklistIndex}`}><ClassicOrderIcon name="check-circle" /><strong dir="auto">{value}</strong></div>)}</div> : <div className="next-maintenance-detail-field__empty">No checklist items recorded</div>}
-                      </div>
-                      <div className="next-maintenance-detail-field next-maintenance-detail-field--text"><span>Actual issue description</span><strong dir="auto">{actualIssue}</strong></div>
-                      <div className="next-maintenance-detail-field next-maintenance-detail-field--text"><span>Repair action</span><strong dir="auto">{repairAction}</strong></div>
-                    </div>
-                  </div>
-
-                  <div className="next-maintenance-detail-group next-maintenance-detail-group--spares">
-                    <div className="next-maintenance-detail-group__title"><span>Spare parts</span></div>
-                    <div className="next-maintenance-spares-grid">
-                      <MaintenanceSparePartsBlock title="Spare parts needed" entries={neededSpareParts} emptyText="No spare parts needed" />
-                      <MaintenanceSparePartsBlock title="Spare parts replaced" entries={replacedSpareParts} emptyText="No spare parts replaced" />
-                    </div>
-                  </div>
+                    <div className="next-maintenance-modal-item__issue next-maintenance-modal-item__issue--grouped"><span>Initial issue</span><p dir="auto">{issueText(item)}</p></div>
+                  </>}
                 </section>;
               })}
             </div>
@@ -736,7 +793,7 @@ export function MaintenanceLogModal({ group, mode = "create", options, busy, err
     setLogs(group ? [...group.items].sort((a, b) => text(a?.productName).localeCompare(text(b?.productName), undefined, { sensitivity: "base", numeric: true })).map(emptyLogForItem) : []);
     setNewChecklistText({});
     setChecklistError("");
-  }, [group]);
+  }, [group, mode]);
 
   useEffect(() => {
     if (!group) return undefined;
@@ -747,6 +804,7 @@ export function MaintenanceLogModal({ group, mode = "create", options, busy, err
 
   if (!group) return null;
   const isEditMode = mode === "edit";
+  const isSecondMode = mode === "second";
   const resolutionMethods = (Array.isArray(options?.resolutionMethods) ? options.resolutionMethods : []).map((option) => ({ value: text(option?.name ?? option?.value ?? option), label: text(option?.name ?? option?.label ?? option) })).filter((option) => option.value);
   const spareOptions = (Array.isArray(options?.spareParts) ? options.spareParts : []).map((option) => ({ value: text(option?.id ?? option?.value ?? option?.name), label: text(option?.name ?? option?.label ?? option?.value) })).filter((option) => option.value || option.label);
   const checklistItems = (Array.isArray(options?.checklistItems) ? options.checklistItems : [])
@@ -885,8 +943,8 @@ export function MaintenanceLogModal({ group, mode = "create", options, busy, err
         <div className="co-submodal-header next-maintenance-log-header">
           <div className="req-edit-icon"><ClassicOrderIcon name={isEditMode ? "edit-2" : "clipboard"} /></div>
           <div className="next-maintenance-log-header__copy">
-            <div className="co-submodal-title">{isEditMode ? "Edit Maintenance Log" : "Log Maintenance"}</div>
-            <div className="co-submodal-sub">{isEditMode ? "Update the saved maintenance details below. Existing values are already filled in." : "Record the maintenance work completed for each component."}</div>
+            <div className="co-submodal-title">{isEditMode ? "Edit Maintenance Log" : isSecondMode ? "Make Second Log" : "Log Maintenance"}</div>
+            <div className="co-submodal-sub">{isEditMode ? "Update the latest saved maintenance log below." : isSecondMode ? "The previous log details are copied below. Update what changed, then save the second log." : "Record the maintenance work completed for each component."}</div>
             <div className="next-maintenance-log-header__meta" aria-label="Maintenance log summary">
               <span><ClassicOrderIcon name="tool" />{group.orderIdLabel || "Maintenance order"}</span>
               <span><ClassicOrderIcon name="layers" />{logs.length} component{logs.length === 1 ? "" : "s"}</span>
@@ -899,7 +957,7 @@ export function MaintenanceLogModal({ group, mode = "create", options, busy, err
               <div className="req-maintenance-log-card__head next-maintenance-log-card__head">
                 <span className="next-maintenance-log-card__icon"><ClassicOrderIcon name="tool" /></span>
                 <div className="next-maintenance-log-card__identity"><div className="req-maintenance-log-card__label">Component {logIndex + 1}</div><div className="req-maintenance-log-card__title">{entry.productName}</div></div>
-                <span className={`next-maintenance-log-card__mode ${isEditMode ? "is-edit" : ""}`}>{isEditMode ? "Editing" : "New log"}</span>
+                <span className={`next-maintenance-log-card__mode ${isEditMode ? "is-edit" : ""}`}>{isEditMode ? "Editing" : isSecondMode ? "Log Two" : "Log One"}</span>
                 <div className="req-maintenance-log-card__issue"><span>Issue:</span> {entry.issueDescription}</div>
               </div>
               <div className="req-maintenance-log-card__fields">

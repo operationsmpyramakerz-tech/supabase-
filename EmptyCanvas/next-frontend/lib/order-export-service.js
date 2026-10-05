@@ -583,39 +583,66 @@ async function renderMaintenancePdf({ payload, template = false, sparePartColumn
     .filter(Boolean);
   const checklistProvided = Array.isArray(checklist);
   const maintenanceItems = Array.isArray(payload.items) ? payload.items : [];
-  const explicitLogDates = maintenanceItems
-    .map((item) => item?.maintenanceLoggedAt)
-    .filter(Boolean)
-    .map((value) => new Date(value))
-    .filter((value) => !Number.isNaN(value.getTime()));
-  const legacyUpdatedDates = maintenanceItems
-    .filter((item) => Boolean(item?.serialNumber || item?.resolutionMethod || item?.actualIssueDescription || item?.repairAction || item?.sparePartsNeededEntries?.length || item?.sparePartsReplacedEntries?.length || item?.maintenanceChecklist?.length))
-    .map((item) => item?.updatedTime)
+  const historyForItem = (item = {}) => {
+    const stored = Array.isArray(item?.maintenanceLogs) ? item.maintenanceLogs.filter(Boolean) : [];
+    if (stored.length) return stored;
+    const hasLegacy = Boolean(item?.serialNumber || item?.resolutionMethod || item?.actualIssueDescription || item?.repairAction || item?.sparePartsNeededEntries?.length || item?.sparePartsReplacedEntries?.length || item?.maintenanceChecklist?.length);
+    return hasLegacy ? [{
+      serialNumber: item?.serialNumber,
+      resolutionMethod: item?.resolutionMethod,
+      actualIssueDescription: item?.actualIssueDescription,
+      repairAction: item?.repairAction,
+      sparePartsNeededEntries: item?.sparePartsNeededEntries || [],
+      sparePartsReplacedEntries: item?.sparePartsReplacedEntries || [],
+      maintenanceChecklist: item?.maintenanceChecklist || [],
+      loggedAt: item?.maintenanceLoggedAt || item?.updatedTime || null,
+      technicianName: item?.maintenanceTechnicianName || null,
+    }] : [];
+  };
+  const allLogs = maintenanceItems.flatMap(historyForItem);
+  const explicitLogDates = allLogs
+    .map((entry) => entry?.loggedAt)
     .filter(Boolean)
     .map((value) => new Date(value))
     .filter((value) => !Number.isNaN(value.getTime()));
   const reportDate = template
     ? new Date()
-    : (explicitLogDates.length
-      ? new Date(Math.max(...explicitLogDates.map((value) => value.getTime())))
-      : (legacyUpdatedDates.length ? new Date(Math.max(...legacyUpdatedDates.map((value) => value.getTime()))) : new Date()));
+    : (explicitLogDates.length ? new Date(Math.max(...explicitLogDates.map((value) => value.getTime()))) : new Date());
+  const latestLog = [...allLogs]
+    .filter((entry) => entry?.loggedAt)
+    .sort((a, b) => new Date(b.loggedAt).getTime() - new Date(a.loggedAt).getTime())[0] || allLogs[allLogs.length - 1] || null;
 
-  const componentLogs = maintenanceItems.map((item, index) => ({
-    idCode: payload.rows?.[index]?.idCode || "",
-    component: item?.productName || payload.rows?.[index]?.component || "Unknown Product",
-    issueDescription: item?.issueDescription || item?.reason || "No Issue",
-    serialNumber: template ? "" : (item?.serialNumber || "—"),
-    actualIssueDescription: template ? "" : (item?.actualIssueDescription || "—"),
-    repairAction: template ? "" : (item?.repairAction || "—"),
-    resolutionMethod: template ? "" : (item?.resolutionMethod || "—"),
-    sparePartsReplacedIds: template ? [] : (item?.sparePartsReplacedIds || []),
-    sparePartsReplacedNames: template ? [] : (item?.sparePartsReplacedNames || []),
-    sparePartsReplacedName: template ? "" : (item?.sparePartsReplacedName || ""),
-    sparePartsNeeded: template ? [] : resolveSpareEntries(item?.sparePartsNeededEntries || [], payload.productMaps),
-    spareParts: template ? [] : resolveSparePartsForItem(item, payload.productMaps),
-    maintenanceChecklist: checklistProvided ? selectedChecklist : (template ? [] : (Array.isArray(item?.maintenanceChecklist) ? item.maintenanceChecklist : [])),
-    link: item?.productUrl || payload.rows?.[index]?.link || "",
-  }));
+  const componentLogs = maintenanceItems.flatMap((item, index) => {
+    const itemHistory = historyForItem(item);
+    const logs = itemHistory.length ? itemHistory : [{
+      serialNumber: item?.serialNumber,
+      resolutionMethod: item?.resolutionMethod,
+      actualIssueDescription: item?.actualIssueDescription,
+      repairAction: item?.repairAction,
+      sparePartsNeededEntries: item?.sparePartsNeededEntries || [],
+      sparePartsReplacedEntries: item?.sparePartsReplacedEntries || [],
+      maintenanceChecklist: item?.maintenanceChecklist || [],
+      loggedAt: null,
+      technicianName: null,
+    }];
+    return logs.map((log, logIndex) => ({
+      idCode: payload.rows?.[index]?.idCode || "",
+      component: item?.productName || payload.rows?.[index]?.component || "Unknown Product",
+      issueDescription: item?.issueDescription || item?.reason || "No Issue",
+      serialNumber: template ? "" : (log?.serialNumber || "—"),
+      actualIssueDescription: template ? "" : (log?.actualIssueDescription || "—"),
+      repairAction: template ? "" : (log?.repairAction || "—"),
+      resolutionMethod: template ? "" : (log?.resolutionMethod || "—"),
+      sparePartsNeeded: template ? [] : resolveSpareEntries(log?.sparePartsNeededEntries || [], payload.productMaps),
+      spareParts: template ? [] : resolveSpareEntries(log?.sparePartsReplacedEntries || [], payload.productMaps),
+      maintenanceChecklist: checklistProvided && itemHistory.length <= 1 ? selectedChecklist : (template ? [] : (Array.isArray(log?.maintenanceChecklist) ? log.maintenanceChecklist : [])),
+      link: item?.productUrl || payload.rows?.[index]?.link || "",
+      logIndex,
+      logLabel: logIndex === 0 ? "Log One" : logIndex === 1 ? "Log Two" : `Log ${logIndex + 1}`,
+      loggedAt: log?.loggedAt || null,
+      technicianName: log?.technicianName || null,
+    }));
+  });
 
   const first = payload.first || {};
   const buffer = await renderPipedPdf(pipeMaintenanceReceiptPDF, {
@@ -623,6 +650,7 @@ async function renderMaintenancePdf({ payload, template = false, sparePartColumn
     orderId: payload.orderIdRange,
     createdAt: payload.createdAt,
     reportDate,
+    technicianName: latestLog?.technicianName || "—",
     requestedBy: payload.teamMember,
     teamMember: payload.teamMember,
     operationsBy: payload.operationsBy,

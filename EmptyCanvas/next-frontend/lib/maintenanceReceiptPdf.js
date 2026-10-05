@@ -183,6 +183,10 @@ function buildComponentLogs(params = {}) {
       maintenanceChecklist: Array.isArray(item?.maintenanceChecklist)
         ? item.maintenanceChecklist.map((value) => String(value || "").trim()).filter(Boolean)
         : [],
+      logIndex: Number.isFinite(Number(item?.logIndex)) ? Number(item.logIndex) : 0,
+      logLabel: ensureText(item?.logLabel, "Log One"),
+      loggedAt: item?.loggedAt || null,
+      technicianName: ensureText(item?.technicianName, "—"),
     }));
   }
 
@@ -201,6 +205,10 @@ function buildComponentLogs(params = {}) {
     maintenanceChecklist: Array.isArray(params.checklist)
       ? params.checklist.map((value) => String(value || "").trim()).filter(Boolean)
       : [],
+    logIndex: 0,
+    logLabel: "Log One",
+    loggedAt: params.reportDate || null,
+    technicianName: ensureText(params.technicianName, "—"),
   }));
 }
 
@@ -306,13 +314,14 @@ async function pipeMaintenanceReceiptPDF(params = {}, stream) {
 
   const drawOrderData = () => {
     const { mL, contentW } = metrics();
-    const gap = 10;
-    const colW = (contentW - gap * 2) / 3;
+    const gap = 8;
+    const colW = (contentW - gap * 3) / 4;
     const y = doc.y;
     const heights = [
       drawMetaCard(mL, y, colW, "Team Member", params.teamMember || params.requestedBy),
-      drawMetaCard(mL + colW + gap, y, colW, "Order ID", params.orderId),
+      drawMetaCard(mL + (colW + gap), y, colW, "Order ID", params.orderId),
       drawMetaCard(mL + (colW + gap) * 2, y, colW, "Date", formatDateTime(params.reportDate || params.createdAt || new Date())),
+      drawMetaCard(mL + (colW + gap) * 3, y, colW, "Technician Name", params.technicianName || "—"),
     ];
     doc.y = y + Math.max(...heights) + 14;
   };
@@ -667,6 +676,24 @@ async function pipeMaintenanceReceiptPDF(params = {}, stream) {
     drawOrderData();
   };
 
+  const drawLogBanner = (item) => {
+    const { mL, contentW } = metrics();
+    const label = ensureText(item?.logLabel, "Log One");
+    const tech = ensureText(item?.technicianName, "—");
+    const when = item?.loggedAt ? formatDateTime(item.loggedAt) : formatDateTime(params.reportDate || new Date());
+    ensureSpace(38);
+    const y = doc.y;
+    doc.save();
+    doc.roundedRect(mL, y + 6, contentW, 28, 10).fillAndStroke("#FFFFFF", COLORS.cardBorder);
+    const labelW = Math.min(86, Math.max(58, doc.widthOfString(label) + 22));
+    doc.roundedRect(mL + 12, y, labelW, 22, 11).fill(COLORS.softOrange);
+    doc.fillColor(COLORS.accent).font("Helvetica-Bold").fontSize(9).text(label, mL + 12, y + 7, { width: labelW, align: "center" });
+    doc.fillColor(COLORS.muted).font("Helvetica-Bold").fontSize(7.8).text(`Technician: ${tech}`, mL + 108, y + 14, { width: contentW * .42 });
+    doc.fillColor(COLORS.muted).font("Helvetica-Bold").fontSize(7.8).text(`Date: ${when}`, mL + contentW * .57, y + 14, { width: contentW * .4, align: "right" });
+    doc.restore();
+    doc.y = y + 42;
+  };
+
   const drawMaintenanceTemplateCard = (item, index) => {
     const { mL, contentW } = metrics();
     const innerW = contentW - 24;
@@ -801,7 +828,10 @@ async function pipeMaintenanceReceiptPDF(params = {}, stream) {
   const componentLogs = buildComponentLogs(params);
   componentLogs.forEach((item, index) => {
     if (templateMode) drawMaintenanceTemplateCard(item, index);
-    else drawMaintenanceCard(item, index);
+    else {
+      drawLogBanner(item);
+      drawMaintenanceCard(item, index);
+    }
   });
   drawSignatureFooters();
 

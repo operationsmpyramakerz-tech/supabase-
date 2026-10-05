@@ -313,6 +313,11 @@ function buildGroups(rows) {
     const stage = Math.max(...group.items.map((item) => statusIndex(item?.status)), 1);
     const issues = [...new Set(group.items.map(issueText).filter((value) => value && value !== "—"))];
     const hasLog = group.items.some(itemHasMaintenanceLog);
+    const logHistory = group.items.flatMap((item) => Array.isArray(item?.maintenanceLogs) ? item.maintenanceLogs : []);
+    const latestLog = logHistory
+      .filter((entry) => entry?.loggedAt)
+      .sort((a, b) => dateValue(b?.loggedAt) - dateValue(a?.loggedAt))[0] || logHistory[logHistory.length - 1] || null;
+    const maxLogCount = Math.max(0, ...group.items.map((item) => Array.isArray(item?.maintenanceLogs) ? item.maintenanceLogs.length : (itemHasMaintenanceLog(item) ? 1 : 0)));
     const receiptEntries = [];
     const receiptSeen = new Set();
     group.items.flatMap(receiptEntriesFromItem).forEach((entry) => {
@@ -329,6 +334,9 @@ function buildGroups(rows) {
       ...group,
       stage,
       hasLog,
+      logHistory,
+      latestLog,
+      maxLogCount,
       state,
       issues,
       issueSummary: issues.join(" • ") || "—",
@@ -923,8 +931,21 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
     }
   }
 
+  async function openSecondLog(group) {
+    setActionError("");
+    try {
+      await ensureOptions();
+      setLogMode("second");
+      setLogGroup(group);
+    } catch (error) {
+      setNotice(error?.message || "Failed to load maintenance form options.");
+      window.setTimeout(() => setNotice(""), 4500);
+    }
+  }
+
   async function saveLog(perItemLogs) {
     const isEditMode = logMode === "edit";
+    const isSecondMode = logMode === "second";
     const logsWithDetails = isEditMode
       ? perItemLogs
       : perItemLogs.filter((entry) => text(entry?.serialNumber) || text(entry?.resolutionMethod) || text(entry?.actualIssueDescription) || text(entry?.repairAction) || (Array.isArray(entry?.sparePartsNeeded) && entry.sparePartsNeeded.length) || (Array.isArray(entry?.sparePartsReplaced) && entry.sparePartsReplaced.length) || normalizeMaintenanceChecklist(entry?.checklist).length);
@@ -943,13 +964,14 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
         moveToArrived: false,
         moveToShipping: false,
         replaceExisting: isEditMode,
+        appendLog: isSecondMode,
       });
       await refreshOrders();
       setLogGroup(null);
       setLogMode("create");
       setSelected(null);
       if (!isEditMode) setTab("in-progress");
-      setNotice(isEditMode ? "Maintenance log updated." : "Maintenance log saved.");
+      setNotice(isEditMode ? "Maintenance log updated." : isSecondMode ? "Second maintenance log saved." : "Maintenance log saved.");
       window.setTimeout(() => setNotice(""), 4000);
     } catch (error) {
       setActionError(error?.message || "Failed to save maintenance log.");
@@ -1081,7 +1103,7 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
         {pageInfo?.hasMore ? <div style={{ display: "flex", justifyContent: "center", padding: "16px 0 4px" }}><button type="button" className="ro-action-btn ro-action-btn--light" disabled={listLoading} onClick={() => fetchOrdersPage({ reset: false }).catch((error) => { setNotice(error?.message || "Failed to load more maintenance orders."); window.setTimeout(() => setNotice(""), 4000); })}>{listLoading ? "Loading…" : "Load more orders"}</button></div> : null}
       </section>
 
-      {selected ? <MaintenanceDetailsModal group={selected} busy={busy} onClose={() => setSelected(null)} onLog={openLog} onDone={(group) => { setActionError(""); setDoneGroup(group); }} onExport={openDownload} onAction={beginAction} /> : null}
+      {selected ? <MaintenanceDetailsModal group={selected} busy={busy} onClose={() => setSelected(null)} onLog={openLog} onSecondLog={openSecondLog} onDone={(group) => { setActionError(""); setDoneGroup(group); }} onExport={openDownload} onAction={beginAction} /> : null}
       {actionState ? <MaintenanceActionPasswordModal state={actionState} busy={busy} error={actionError} onCancel={() => { setActionState(null); setActionError(""); }} onSubmit={submitAction} /> : null}
       {deleteConfirm ? <MaintenanceDeleteConfirmationModal state={deleteConfirm} busy={busy} onCancel={() => setDeleteConfirm(null)} onConfirm={confirmDelete} /> : null}
       {logGroup ? <MaintenanceLogModal group={logGroup} mode={logMode} options={options} busy={busy} error={actionError} onCancel={() => { setLogGroup(null); setLogMode("create"); setActionError(""); }} onSubmit={saveLog} onChecklistSaved={rememberChecklistItem} onChecklistUpdated={rememberChecklistItem} onChecklistDeleted={forgetChecklistItem} /> : null}

@@ -280,6 +280,30 @@ function sparePartEntries(value) {
   return entries;
 }
 
+function maintenanceLogEntry(value = {}) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const neededEntries = sparePartEntries(Array.isArray(value.needed) ? value.needed : (Array.isArray(value.sparePartsNeeded) ? value.sparePartsNeeded : []));
+  const replacedEntries = sparePartEntries(Array.isArray(value.replaced) ? value.replaced : (Array.isArray(value.sparePartsReplaced) ? value.sparePartsReplaced : []));
+  const checklist = uniqueStrings(Array.isArray(value.checklist) ? value.checklist : [], { splitComma: false });
+  const entry = {
+    serialNumber: text(value.serialNumber ?? value.serial_number) || null,
+    resolutionMethod: text(value.resolutionMethod ?? value.resolution_method) || null,
+    actualIssueDescription: text(value.actualIssueDescription ?? value.actual_issue_description) || null,
+    repairAction: text(value.repairAction ?? value.repair_action) || null,
+    sparePartsNeededEntries: neededEntries,
+    sparePartsReplacedEntries: replacedEntries,
+    maintenanceChecklist: checklist,
+    loggedAt: dateValue(value.loggedAt || value.logged_at || value.maintenanceLoggedAt || value.maintenance_logged_at) || null,
+    technicianName: text(value.technicianName ?? value.technician_name ?? value.technician) || null,
+  };
+  const hasContent = Boolean(
+    entry.serialNumber || entry.resolutionMethod || entry.actualIssueDescription || entry.repairAction
+    || entry.sparePartsNeededEntries.length || entry.sparePartsReplacedEntries.length || entry.maintenanceChecklist.length
+    || entry.loggedAt || entry.technicianName
+  );
+  return hasContent ? entry : null;
+}
+
 function maintenanceLogMeta(value) {
   let parsed = value;
   if (typeof parsed === "string") {
@@ -287,15 +311,18 @@ function maintenanceLogMeta(value) {
     if (raw) { try { parsed = JSON.parse(raw); } catch { parsed = raw; } }
   }
   if (parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      && (Array.isArray(parsed.needed) || Array.isArray(parsed.replaced) || Array.isArray(parsed.checklist))) {
+      && (Array.isArray(parsed.needed) || Array.isArray(parsed.replaced) || Array.isArray(parsed.checklist) || Array.isArray(parsed.logs))) {
+    const logs = (Array.isArray(parsed.logs) ? parsed.logs : []).map(maintenanceLogEntry).filter(Boolean);
     return {
       neededEntries: sparePartEntries(Array.isArray(parsed.needed) ? parsed.needed : []),
       replacedEntries: sparePartEntries(Array.isArray(parsed.replaced) ? parsed.replaced : []),
       checklist: uniqueStrings(Array.isArray(parsed.checklist) ? parsed.checklist : [], { splitComma: false }),
       loggedAt: dateValue(parsed.loggedAt || parsed.logged_at || parsed.maintenanceLoggedAt || parsed.maintenance_logged_at) || null,
+      technicianName: text(parsed.technicianName ?? parsed.technician_name ?? parsed.technician) || null,
+      logs,
     };
   }
-  return { neededEntries: [], replacedEntries: sparePartEntries(value), checklist: [], loggedAt: null };
+  return { neededEntries: [], replacedEntries: sparePartEntries(value), checklist: [], loggedAt: null, technicianName: null, logs: [] };
 }
 
 function ordersTable() {
@@ -403,6 +430,28 @@ export function serializeOperationsOrderDetail(row = {}) {
   const issueDescription = text(valueFor(row, ["issue_description", "Issue Description"]));
   const proposalGenerated = Boolean(sourceProposalId || sourceProposalName || sources.length || /^created\s+from\s+proposal\s*:/i.test(issueDescription));
   const reason = proposalGenerated ? "Generated from Proposal" : (text(valueFor(row, ["reason", "Reason"])) || "No Reason");
+  const serialNumber = text(valueFor(row, ["serial_number", "Serial Number"])) || null;
+  const actualIssueDescription = text(valueFor(row, ["actual_issue_description", "Actual Issue Description"])) || null;
+  const repairAction = text(valueFor(row, ["repair_action", "Repair Action"])) || null;
+  const resolutionMethod = text(valueFor(row, ["resolution_method", "Resolution Method"])) || null;
+  const legacyHasMaintenanceLog = Boolean(
+    serialNumber || actualIssueDescription || repairAction || resolutionMethod
+    || maintenanceMeta.neededEntries.length || maintenanceMeta.replacedEntries.length || maintenanceMeta.checklist.length
+  );
+  const maintenanceLogs = maintenanceMeta.logs.length
+    ? maintenanceMeta.logs
+    : (legacyHasMaintenanceLog ? [{
+      serialNumber,
+      resolutionMethod,
+      actualIssueDescription,
+      repairAction,
+      sparePartsNeededEntries: maintenanceMeta.neededEntries,
+      sparePartsReplacedEntries: maintenanceMeta.replacedEntries,
+      maintenanceChecklist: maintenanceMeta.checklist,
+      loggedAt: maintenanceMeta.loggedAt || null,
+      technicianName: maintenanceMeta.technicianName || null,
+    }] : []);
+  const latestMaintenanceLog = maintenanceLogs.length ? maintenanceLogs[maintenanceLogs.length - 1] : null;
 
   return {
     id,
@@ -428,10 +477,10 @@ export function serializeOperationsOrderDetail(row = {}) {
     orderType,
     orderTypeColor: orderTypeColor(orderType),
     issueDescription: issueDescription || null,
-    serialNumber: text(valueFor(row, ["serial_number", "Serial Number"])) || null,
-    actualIssueDescription: text(valueFor(row, ["actual_issue_description", "Actual Issue Description"])) || null,
-    repairAction: text(valueFor(row, ["repair_action", "Repair Action"])) || null,
-    resolutionMethod: text(valueFor(row, ["resolution_method", "Resolution Method"])) || null,
+    serialNumber,
+    actualIssueDescription,
+    repairAction,
+    resolutionMethod,
     resolutionMethodColor: null,
     sparePartsReplacedIds: spareEntries.map((entry) => entry.id).filter(Boolean),
     sparePartsReplacedId: spareEntries.find((entry) => entry.id)?.id || null,
@@ -442,7 +491,9 @@ export function serializeOperationsOrderDetail(row = {}) {
     sparePartsNeededName: sparePartsNeeded.join(", ") || null,
     sparePartsNeededEntries: maintenanceMeta.neededEntries,
     maintenanceChecklist: maintenanceMeta.checklist,
-    maintenanceLoggedAt: maintenanceMeta.loggedAt || null,
+    maintenanceLoggedAt: latestMaintenanceLog?.loggedAt || maintenanceMeta.loggedAt || null,
+    maintenanceTechnicianName: latestMaintenanceLog?.technicianName || maintenanceMeta.technicianName || null,
+    maintenanceLogs,
     orderReceiptEntries: orderReceipts,
     orderReceiptNames: orderReceipts.map((entry) => entry.name).filter(Boolean),
     orderReceiptUrls: orderReceipts.map((entry) => entry.url).filter(Boolean),

@@ -71,6 +71,7 @@ export async function POST(request) {
         moveToArrived: body?.moveToArrived,
         moveToShipping: body?.moveToShipping,
         replaceExisting: body?.replaceExisting,
+        appendLog: body?.appendLog,
       });
     } else if (action === "mark-arrived") {
       result = await markMaintenanceArrivedDirect({

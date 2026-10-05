@@ -922,7 +922,7 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
 }
 
 body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-modal-summary {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 
 body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item {
@@ -1334,5 +1334,132 @@ html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-p
   body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spare-row__stats > span {
     flex: 1 1 0;
     text-align: left;
+  }
+}
+
+
+/* Maintenance second-log history (2026-10-05). */
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-history {
+  display: grid;
+  gap: 16px;
+  margin-top: 12px;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame {
+  min-width: 0;
+  margin: 0;
+  padding: 12px;
+  border: 1.5px solid #f2b35c;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(255, 251, 244, .72), #fff 22%);
+  box-shadow: 0 10px 28px rgba(148, 92, 20, .06);
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame > legend {
+  margin-left: 10px;
+  padding: 0 7px;
+  color: #a64b08;
+  background: #fff;
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: .035em;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame > legend > span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 3px 9px;
+  border: 1px solid #fed7aa;
+  border-radius: 999px;
+  background: #fff7ed;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame__meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 8px;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame__meta > div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 9px 10px;
+  border: 1px solid #e7ebf1;
+  border-radius: 11px;
+  background: #f8fafc;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame__meta span {
+  color: #94a3b8;
+  font-size: 8px;
+  font-weight: 850;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame__meta strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #334155;
+  font-size: 10px;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame .next-maintenance-detail-group:first-of-type {
+  margin-top: 8px;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-second-log-btn {
+  border-color: #fdba74 !important;
+  background: #fff7ed !important;
+  color: #9a3412 !important;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-second-log-btn:hover {
+  background: #ffedd5 !important;
+}
+
+html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame {
+  border-color: #7c4a15;
+  background: linear-gradient(180deg, rgba(56, 35, 13, .72), #111827 22%);
+}
+
+html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame > legend {
+  background: #111827;
+}
+
+html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame > legend > span {
+  border-color: #7c4a15;
+  background: #2b1b0c;
+  color: #fdba74;
+}
+
+html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame__meta > div {
+  border-color: #273140;
+  background: #151d29;
+}
+
+html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame__meta strong {
+  color: #e2e8f0;
+}
+
+@media (max-width: 760px) {
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame {
+    padding: 9px;
+    border-radius: 15px;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame__meta {
+    grid-template-columns: 1fr;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-actions {
+    gap: 7px;
   }
 }
