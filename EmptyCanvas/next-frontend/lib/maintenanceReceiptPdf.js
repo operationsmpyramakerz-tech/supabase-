@@ -315,13 +315,12 @@ async function pipeMaintenanceReceiptPDF(params = {}, stream) {
   const drawOrderData = () => {
     const { mL, contentW } = metrics();
     const gap = 8;
-    const colW = (contentW - gap * 3) / 4;
+    const colW = (contentW - gap * 2) / 3;
     const y = doc.y;
     const heights = [
       drawMetaCard(mL, y, colW, "Team Member", params.teamMember || params.requestedBy),
       drawMetaCard(mL + (colW + gap), y, colW, "Order ID", params.orderId),
       drawMetaCard(mL + (colW + gap) * 2, y, colW, "Date", formatDateTime(params.reportDate || params.createdAt || new Date())),
-      drawMetaCard(mL + (colW + gap) * 3, y, colW, "Technician Name", params.technicianName || "—"),
     ];
     doc.y = y + Math.max(...heights) + 14;
   };
@@ -595,9 +594,8 @@ async function pipeMaintenanceReceiptPDF(params = {}, stream) {
     return drawChecklistBlock(x, y, w, values, !template);
   };
 
-  const machineDetailsMeasure = (item, template = false) => {
-    const { contentW } = metrics();
-    const innerW = contentW - 24;
+  const machineDetailsMeasure = (item, template = false, totalW = metrics().contentW) => {
+    const innerW = totalW - 24;
     const gap = 8;
     const fieldW = (innerW - gap) / 2;
     const componentH = measureSmallField(fieldW, item.component);
@@ -605,9 +603,8 @@ async function pipeMaintenanceReceiptPDF(params = {}, stream) {
     return 38 + Math.max(componentH, serialH) + 12;
   };
 
-  const maintenanceActionMeasure = (item, template = false) => {
-    const { contentW } = metrics();
-    const innerW = contentW - 24;
+  const maintenanceActionMeasure = (item, template = false, totalW = metrics().contentW) => {
+    const innerW = totalW - 24;
     const gap = 8;
     const fieldW = (innerW - gap) / 2;
     const resolutionH = template ? measureRuledField(2) : measureSmallField(fieldW, item.resolutionMethod);
@@ -617,24 +614,23 @@ async function pipeMaintenanceReceiptPDF(params = {}, stream) {
     return 38 + Math.max(resolutionH, checklistH) + gap + Math.max(actualH, repairH) + 12;
   };
 
-  const maintenanceDetailsMeasure = (item, template = false) => {
-    const { contentW } = metrics();
+  const maintenanceDetailsMeasure = (item, template = false, totalW = metrics().contentW) => {
     const gap = 8;
-    const machineH = machineDetailsMeasure(item, template);
-    const issueH = template
-      ? measureSmallField(contentW, item.issueDescription)
-      : measureSmallField(contentW, item.issueDescription);
-    const actionH = maintenanceActionMeasure(item, template);
+    const machineH = machineDetailsMeasure(item, template, totalW);
+    const issueH = measureSmallField(totalW, item.issueDescription);
+    const actionH = maintenanceActionMeasure(item, template, totalW);
     return machineH + gap + issueH + gap + actionH;
   };
 
-  const drawMaintenanceDetailsFields = (item, index, y, template = false) => {
-    const { mL, contentW } = metrics();
+  const drawMaintenanceDetailsFields = (item, index, y, template = false, options = {}) => {
+    const metric = metrics();
+    const mL = Number.isFinite(Number(options.x)) ? Number(options.x) : metric.mL;
+    const contentW = Number.isFinite(Number(options.w)) ? Number(options.w) : metric.contentW;
     const innerW = contentW - 24;
     const gap = 8;
     const fieldW = (innerW - gap) / 2;
 
-    const machineH = machineDetailsMeasure(item, template);
+    const machineH = machineDetailsMeasure(item, template, contentW);
     doc.save();
     doc.roundedRect(mL, y, contentW, machineH, 15).fillAndStroke("#FFFFFF", COLORS.cardBorder);
     doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(11.5).text("Machine Details", mL + 12, y + 12, { width: contentW - 24 });
@@ -649,7 +645,7 @@ async function pipeMaintenanceReceiptPDF(params = {}, stream) {
     const issueH = drawSmallField(mL, issueY, contentW, "Initial Issue", item.issueDescription);
 
     const actionY = issueY + issueH + gap;
-    const actionH = maintenanceActionMeasure(item, template);
+    const actionH = maintenanceActionMeasure(item, template, contentW);
     doc.save();
     doc.roundedRect(mL, actionY, contentW, actionH, 15).fillAndStroke("#FFFFFF", COLORS.cardBorder);
     doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(11.5).text("Maintenance Action", mL + 12, actionY + 12, { width: contentW - 24 });
@@ -669,30 +665,42 @@ async function pipeMaintenanceReceiptPDF(params = {}, stream) {
       drawSmallField(mL + 12 + fieldW + gap, secondRowY, fieldW, "Repair Action", item.repairAction);
     }
 
-    return maintenanceDetailsMeasure(item, template);
+    return maintenanceDetailsMeasure(item, template, contentW);
   };
 
   const drawContinuationHeader = () => {
     drawOrderData();
   };
 
-  const drawLogBanner = (item) => {
-    const { mL, contentW } = metrics();
-    const label = ensureText(item?.logLabel, "Log One");
-    const tech = ensureText(item?.technicianName, "—");
+  const measureLogMeta = (w, item) => {
+    const gap = 8;
+    const fieldW = (w - gap) / 2;
+    const techH = measureSmallField(fieldW, item?.technicianName || "—");
     const when = item?.loggedAt ? formatDateTime(item.loggedAt) : formatDateTime(params.reportDate || new Date());
-    ensureSpace(38);
-    const y = doc.y;
-    doc.save();
-    doc.roundedRect(mL, y + 6, contentW, 28, 10).fillAndStroke("#FFFFFF", COLORS.cardBorder);
-    const labelW = Math.min(86, Math.max(58, doc.widthOfString(label) + 22));
-    doc.roundedRect(mL + 12, y, labelW, 22, 11).fill(COLORS.softOrange);
-    doc.fillColor(COLORS.accent).font("Helvetica-Bold").fontSize(9).text(label, mL + 12, y + 7, { width: labelW, align: "center" });
-    doc.fillColor(COLORS.muted).font("Helvetica-Bold").fontSize(7.8).text(`Technician: ${tech}`, mL + 108, y + 14, { width: contentW * .42 });
-    doc.fillColor(COLORS.muted).font("Helvetica-Bold").fontSize(7.8).text(`Date: ${when}`, mL + contentW * .57, y + 14, { width: contentW * .4, align: "right" });
-    doc.restore();
-    doc.y = y + 42;
+    const dateH = measureSmallField(fieldW, when);
+    return Math.max(techH, dateH);
   };
+
+  const drawLogMeta = (x, y, w, item) => {
+    const gap = 8;
+    const fieldW = (w - gap) / 2;
+    const when = item?.loggedAt ? formatDateTime(item.loggedAt) : formatDateTime(params.reportDate || new Date());
+    const techH = drawSmallField(x, y, fieldW, "Technician Name", item?.technicianName || "—");
+    const dateH = drawSmallField(x + fieldW + gap, y, fieldW, "Date", when);
+    return Math.max(techH, dateH);
+  };
+
+  const drawLogLegend = (x, y, label) => {
+    const safeLabel = ensureText(label, "Log One");
+    doc.font("Helvetica-Bold").fontSize(9.2);
+    const labelW = Math.min(102, Math.max(72, doc.widthOfString(safeLabel) + 28));
+    doc.save();
+    doc.roundedRect(x, y, labelW, 24, 12).fillAndStroke(COLORS.softOrange, "#FED7AA");
+    doc.fillColor(COLORS.accent).font("Helvetica-Bold").fontSize(9.2).text(safeLabel, x, y + 7, { width: labelW, align: "center" });
+    doc.restore();
+    return labelW;
+  };
+
 
   const drawMaintenanceTemplateCard = (item, index) => {
     const { mL, contentW } = metrics();
@@ -742,51 +750,86 @@ async function pipeMaintenanceReceiptPDF(params = {}, stream) {
 
   const drawMaintenanceCard = (item, index) => {
     const { mL, contentW } = metrics();
-    const innerW = contentW - 24;
+    const outerPad = 12;
+    const innerX = mL + outerPad;
+    const innerW = contentW - outerPad * 2;
     const gap = 8;
+    const legendReserve = 28;
+    const metaH = measureLogMeta(innerW, item);
+    const detailsH = maintenanceDetailsMeasure(item, false, innerW);
     const needed = Array.isArray(item.sparePartsNeeded) ? item.sparePartsNeeded : [];
     const replaced = Array.isArray(item.spareParts) ? item.spareParts : [];
-    const detailsH = maintenanceDetailsMeasure(item, false);
     const neededH = measureSparePartsTable(innerW, needed);
     const replacedH = measureSparePartsTable(innerW, replaced);
-    const fullH = detailsH + gap + neededH + gap + replacedH + 14;
+    const frameH = legendReserve + metaH + gap + detailsH + gap + neededH + gap + replacedH + 14;
 
-    if (doc.y + fullH + 10 <= metrics().maxY) {
-      const y = doc.y;
-      drawMaintenanceDetailsFields(item, index, y, false);
-      let fy = y + detailsH + gap;
-      drawSparePartsTable(mL + 12, fy, innerW, "Spare Parts Needed", needed, "No spare parts needed");
-      fy += neededH + gap;
-      drawSparePartsTable(mL + 12, fy, innerW, "Spare Parts Replaced", replaced, "No spare parts replaced");
-      fy += replacedH;
-      doc.y = fy + 10;
-      return;
-    }
-
-    ensureSpace(Math.min(detailsH + 10, 180));
-    if (doc.y + detailsH + 10 > metrics().maxY) {
+    if (doc.y + frameH + 8 > metrics().maxY) {
       doc.addPage();
       drawHeader(true);
       drawContinuationHeader();
     }
-    let y = doc.y;
-    drawMaintenanceDetailsFields(item, index, y, false);
-    doc.y = y + detailsH + 10;
 
-    const sections = [
-      { h: measureSparePartsTable(contentW, needed), draw: (yy) => drawSparePartsTable(mL, yy, contentW, "Spare Parts Needed", needed, "No spare parts needed") },
-      { h: measureSparePartsTable(contentW, replaced), draw: (yy) => drawSparePartsTable(mL, yy, contentW, "Spare Parts Replaced", replaced, "No spare parts replaced") },
+    const y = doc.y;
+    const available = metrics().maxY - y;
+    if (frameH <= available) {
+      doc.save();
+      doc.roundedRect(mL, y + 10, contentW, frameH - 10, 16).fillAndStroke("#FFFFFF", COLORS.cardBorder);
+      doc.restore();
+      drawLogLegend(mL + 14, y, item?.logLabel);
+
+      let cursorY = y + legendReserve;
+      cursorY += drawLogMeta(innerX, cursorY, innerW, item) + gap;
+      drawMaintenanceDetailsFields(item, index, cursorY, false, { x: innerX, w: innerW });
+      cursorY += detailsH + gap;
+      drawSparePartsTable(innerX, cursorY, innerW, "Spare Parts Needed", needed, "No spare parts needed");
+      cursorY += neededH + gap;
+      drawSparePartsTable(innerX, cursorY, innerW, "Spare Parts Replaced", replaced, "No spare parts replaced");
+      cursorY += replacedH;
+      doc.y = y + frameH + 10;
+      return;
+    }
+
+    // Extremely long logs can span multiple pages. Keep each continuation inside
+    // the same visual log frame language so no log data is left outside a frame.
+    const drawSegmentShell = (segmentY, segmentH, continued = false) => {
+      doc.save();
+      doc.roundedRect(mL, segmentY + 10, contentW, segmentH - 10, 16).fillAndStroke("#FFFFFF", COLORS.cardBorder);
+      doc.restore();
+      drawLogLegend(mL + 14, segmentY, continued ? `${ensureText(item?.logLabel, "Log One")} · Continued` : item?.logLabel);
+    };
+
+    let segmentY = doc.y;
+    const firstSegmentH = legendReserve + metaH + gap + detailsH + 14;
+    if (segmentY + firstSegmentH > metrics().maxY) {
+      doc.addPage();
+      drawHeader(true);
+      drawContinuationHeader();
+      segmentY = doc.y;
+    }
+    drawSegmentShell(segmentY, firstSegmentH, false);
+    let cursorY = segmentY + legendReserve;
+    cursorY += drawLogMeta(innerX, cursorY, innerW, item) + gap;
+    drawMaintenanceDetailsFields(item, index, cursorY, false, { x: innerX, w: innerW });
+    doc.y = segmentY + firstSegmentH + 10;
+
+    const spareSections = [
+      { title: "Spare Parts Needed", parts: needed, empty: "No spare parts needed", height: neededH },
+      { title: "Spare Parts Replaced", parts: replaced, empty: "No spare parts replaced", height: replacedH },
     ];
-    sections.forEach((section) => {
-      if (doc.y + section.h + 10 > metrics().maxY) {
+    spareSections.forEach((section) => {
+      const segmentH = legendReserve + section.height + 14;
+      if (doc.y + segmentH > metrics().maxY) {
         doc.addPage();
         drawHeader(true);
         drawContinuationHeader();
       }
-      section.draw(doc.y);
-      doc.y += section.h + 10;
+      const sy = doc.y;
+      drawSegmentShell(sy, segmentH, true);
+      drawSparePartsTable(innerX, sy + legendReserve, innerW, section.title, section.parts, section.empty);
+      doc.y = sy + segmentH + 10;
     });
   };
+
 
   const drawFooterSignatureBox = (x, y, w, title) => {
     const h = 62;
@@ -829,7 +872,6 @@ async function pipeMaintenanceReceiptPDF(params = {}, stream) {
   componentLogs.forEach((item, index) => {
     if (templateMode) drawMaintenanceTemplateCard(item, index);
     else {
-      drawLogBanner(item);
       drawMaintenanceCard(item, index);
     }
   });
