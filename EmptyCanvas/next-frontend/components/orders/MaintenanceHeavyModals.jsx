@@ -466,7 +466,6 @@ export function MaintenanceDetailsModal({ group, busy, onClose, onLog, onSecondL
   const groupLogs = (group.items || []).flatMap(maintenanceLogsForItem);
   const latestGroupLog = [...groupLogs].filter((entry) => entry?.loggedAt).sort((a, b) => new Date(b.loggedAt).getTime() - new Date(a.loggedAt).getTime())[0] || groupLogs[groupLogs.length - 1] || null;
   const summaryDate = latestGroupLog?.loggedAt || group.latestCreated;
-  const technicianName = text(latestGroupLog?.technicianName) || "—";
 
   return (
     <>
@@ -488,9 +487,6 @@ export function MaintenanceDetailsModal({ group, busy, onClose, onLog, onSecondL
             <div><span>Team member</span><strong title={group.createdByName || "—"}>{group.createdByName || "—"}</strong></div>
             <div><span>Order</span><strong>{group.orderIdLabel}</strong></div>
             <div><span>Date</span><strong>{formatDate(summaryDate)}</strong></div>
-            <div><span>Technician name</span><strong title={technicianName}>{technicianName}</strong></div>
-            <div><span>Components</span><strong>{group.items.length}</strong></div>
-            <div className="next-maintenance-order-modal-summary__status"><span>Status</span><strong>{group.state.label}</strong></div>
           </div>
           <Progress stage={group.stage} />
           <div className="co-modal-body">
@@ -538,7 +534,7 @@ export function MaintenanceDetailsModal({ group, busy, onClose, onLog, onSecondL
                       const replacedSpareParts = Array.isArray(log?.sparePartsReplacedEntries) ? log.sparePartsReplacedEntries : [];
                       const logTechnician = text(log?.technicianName) || "—";
                       const logDate = log?.loggedAt ? formatDate(log.loggedAt) : "—";
-                      return <fieldset className="next-maintenance-log-frame" key={`${text(item?.id) || index}-log-${logIndex}`}>
+                      return <fieldset className={`next-maintenance-log-frame next-maintenance-log-frame--${logIndex === 0 ? "one" : logIndex === 1 ? "two" : "more"}`} key={`${text(item?.id) || index}-log-${logIndex}`}>
                         <legend><span>{maintenanceLogLabel(logIndex)}</span></legend>
                         <div className="next-maintenance-log-frame__meta">
                           <div><span>Technician name</span><strong>{logTechnician}</strong></div>

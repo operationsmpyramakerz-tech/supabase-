@@ -922,7 +922,7 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
 }
 
 body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-modal-summary {
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item {
@@ -1355,6 +1355,24 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   box-shadow: 0 10px 28px rgba(148, 92, 20, .06);
 }
 
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame--one {
+  border-color: #f2b35c;
+  background: linear-gradient(180deg, rgba(255, 251, 244, .78), #fff 22%);
+  box-shadow: 0 10px 28px rgba(148, 92, 20, .065);
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame--two {
+  border-color: #b9a1f4;
+  background: linear-gradient(180deg, rgba(247, 244, 255, .82), #fff 22%);
+  box-shadow: 0 10px 28px rgba(109, 74, 191, .065);
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame--more {
+  border-color: #8fc8bd;
+  background: linear-gradient(180deg, rgba(242, 251, 249, .82), #fff 22%);
+  box-shadow: 0 10px 28px rgba(36, 116, 101, .06);
+}
+
 body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame > legend {
   margin-left: 10px;
   padding: 0 7px;
@@ -1374,6 +1392,15 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   border-radius: 999px;
   background: #fff7ed;
 }
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame--one > legend { color: #a64b08; }
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame--one > legend > span { border-color: #fed7aa; background: #fff7ed; }
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame--two > legend { color: #6d42b8; }
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame--two > legend > span { border-color: #d9cff8; background: #f4f0ff; }
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame--more > legend { color: #236f63; }
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame--more > legend > span { border-color: #bfe2db; background: #effaf7; }
 
 body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame__meta {
   display: grid;
@@ -1439,6 +1466,26 @@ html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-p
   background: #2b1b0c;
   color: #fdba74;
 }
+
+html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame--one {
+  border-color: #8a5519;
+  background: linear-gradient(180deg, rgba(56, 35, 13, .72), #111827 22%);
+}
+html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame--one > legend > span { border-color: #8a5519; background: #2b1b0c; color: #fdba74; }
+
+html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame--two {
+  border-color: #6650a4;
+  background: linear-gradient(180deg, rgba(39, 29, 66, .74), #111827 22%);
+}
+html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame--two > legend { color: #c4b5fd; }
+html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame--two > legend > span { border-color: #6650a4; background: #251d3d; color: #c4b5fd; }
+
+html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame--more {
+  border-color: #387d72;
+  background: linear-gradient(180deg, rgba(20, 56, 51, .72), #111827 22%);
+}
+html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame--more > legend { color: #99e1d5; }
+html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame--more > legend > span { border-color: #387d72; background: #143833; color: #99e1d5; }
 
 html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame__meta > div {
   border-color: #273140;
