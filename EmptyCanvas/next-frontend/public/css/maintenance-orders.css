@@ -1510,3 +1510,114 @@ html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-p
     gap: 7px;
   }
 }
+
+/* Maintenance modal polish — sample-style controls + mobile dock clearance (2026-10-06). */
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog > .co-modal-close,
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog > .co-submodal-close {
+  border: 0 !important;
+  background: #c8cbd2 !important;
+  color: #fff !important;
+  box-shadow: none !important;
+  transition: background-color .18s ease, transform .18s ease;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog > .co-modal-close:hover,
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog > .co-modal-close:focus-visible,
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog > .co-submodal-close:hover,
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog > .co-submodal-close:focus-visible {
+  background: #aeb2bb !important;
+  outline: none;
+  transform: scale(.97);
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog > .co-modal-close::before,
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog > .co-submodal-close::before {
+  font-size: 25px !important;
+  font-weight: 900 !important;
+  line-height: 1 !important;
+  color: #fff !important;
+}
+
+/* Sample reference: the left action is a quiet icon-only control, not a raised chip. */
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog .co-modal-more-btn {
+  border: 0 !important;
+  background: transparent !important;
+  color: #9aa0aa !important;
+  box-shadow: none !important;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog .co-modal-more-btn:hover,
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog .co-modal-more-btn:focus-visible {
+  background: rgba(148, 163, 184, .10) !important;
+  outline: none;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog .co-modal-more-dots {
+  background: #9aa0aa !important;
+  box-shadow: 0 -7px 0 #9aa0aa, 0 7px 0 #9aa0aa !important;
+}
+
+html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog > .co-modal-close,
+html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog > .co-submodal-close {
+  background: #5e6570 !important;
+  color: #fff !important;
+}
+
+html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog .co-modal-more-dots {
+  background: #aab1bc !important;
+  box-shadow: 0 -7px 0 #aab1bc, 0 7px 0 #aab1bc !important;
+}
+
+@media (max-width: 720px) {
+  /* Keep the maintenance log sheet above the dock/background safe zone. */
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-overlay {
+    align-items: stretch !important;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog {
+    position: absolute !important;
+    top: clamp(82px, 7.7dvh, 118px) !important;
+    right: 8px !important;
+    bottom: calc(138px + env(safe-area-inset-bottom, 0px)) !important;
+    left: 8px !important;
+    width: auto !important;
+    max-height: none !important;
+    margin: 0 !important;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog > .co-submodal-close {
+    top: 14px !important;
+    right: 14px !important;
+    width: 42px !important;
+    height: 42px !important;
+    min-width: 42px !important;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog > .co-modal-close,
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog .co-modal-more-btn {
+    width: 40px !important;
+    height: 40px !important;
+    min-width: 40px !important;
+  }
+}
+
+@media (max-width: 768px) {
+  /* Win over the shared order-mobile bundle while keeping the maintenance sample styling. */
+  body.order-modal-fit-screen.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog > .co-modal-close,
+  body.order-modal-fit-screen.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog .co-modal-more-btn {
+    width: 38px !important;
+    min-width: 38px !important;
+    height: 38px !important;
+    min-height: 38px !important;
+  }
+
+  body.order-modal-fit-screen.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog > .co-modal-close {
+    top: 7px !important;
+    right: 8px !important;
+  }
+
+  body.order-modal-fit-screen.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog .co-modal-more {
+    top: 7px !important;
+    left: 8px !important;
+  }
+}

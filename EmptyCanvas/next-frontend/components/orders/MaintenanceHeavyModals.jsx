@@ -944,7 +944,7 @@ export function MaintenanceLogModal({ group, mode = "create", options, busy, err
           <div className="req-edit-icon"><ClassicOrderIcon name={isEditMode ? "edit-2" : "clipboard"} /></div>
           <div className="next-maintenance-log-header__copy">
             <div className="co-submodal-title">{isEditMode ? "Edit Maintenance Log" : isSecondMode ? "Make Second Log" : "Log Maintenance"}</div>
-            <div className="co-submodal-sub">{isEditMode ? "Update the latest saved maintenance log below." : isSecondMode ? "Start a fresh follow-up log. Only the machine serial number is carried over from Log One." : "Record the maintenance work completed for each component."}</div>
+            {!isSecondMode ? <div className="co-submodal-sub">{isEditMode ? "Update the latest saved maintenance log below." : "Record the maintenance work completed for each component."}</div> : null}
             <div className="next-maintenance-log-header__meta" aria-label="Maintenance log summary">
               <span><ClassicOrderIcon name="tool" />{group.orderIdLabel || "Maintenance order"}</span>
               <span><ClassicOrderIcon name="layers" />{logs.length} component{logs.length === 1 ? "" : "s"}</span>
