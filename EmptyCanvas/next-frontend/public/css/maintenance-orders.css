@@ -1621,3 +1621,85 @@ html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-p
     left: 8px !important;
   }
 }
+
+/* Maintenance modal controls + dock-attached log sheet — 2026-10-06 v7
+   Match the close control to the quiet three-dot action and let the log form
+   terminate at the mobile viewport edge like the Request Products sheet. */
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog > .co-modal-close,
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog > .co-submodal-close {
+  width: 38px !important;
+  min-width: 38px !important;
+  height: 38px !important;
+  min-height: 38px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  background: transparent !important;
+  color: #9aa0aa !important;
+  box-shadow: none !important;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog > .co-modal-close:hover,
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog > .co-modal-close:focus-visible,
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog > .co-submodal-close:hover,
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog > .co-submodal-close:focus-visible {
+  background: rgba(148, 163, 184, .10) !important;
+  color: #7d8490 !important;
+  outline: none !important;
+  transform: none !important;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog > .co-modal-close::before,
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog > .co-submodal-close::before {
+  font-size: 23px !important;
+  font-weight: 850 !important;
+  line-height: 1 !important;
+  color: currentColor !important;
+}
+
+html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog > .co-modal-close,
+html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog > .co-submodal-close {
+  background: transparent !important;
+  color: #aab1bc !important;
+}
+
+html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog > .co-modal-close:hover,
+html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog > .co-submodal-close:hover {
+  background: rgba(148, 163, 184, .12) !important;
+  color: #c2c8d0 !important;
+}
+
+@media (max-width: 720px) {
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-overlay {
+    align-items: flex-end !important;
+    justify-content: center !important;
+    padding: clamp(76px, 7.5dvh, 108px) 8px 0 !important;
+    overflow: hidden !important;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog {
+    position: relative !important;
+    inset: auto !important;
+    width: min(100%, 680px) !important;
+    max-width: none !important;
+    height: 100% !important;
+    max-height: none !important;
+    margin: 0 !important;
+    border-bottom: 0 !important;
+    border-radius: 22px 22px 0 0 !important;
+    box-shadow: 0 -18px 56px rgba(15, 23, 42, .20) !important;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog > .co-submodal-close {
+    top: 12px !important;
+    right: 12px !important;
+    width: 38px !important;
+    min-width: 38px !important;
+    height: 38px !important;
+    min-height: 38px !important;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-actions {
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+}
