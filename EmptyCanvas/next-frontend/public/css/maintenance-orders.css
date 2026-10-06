@@ -1849,3 +1849,68 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
     background: #0f141c !important;
   }
 }
+
+/* ========================================================================
+   Maintenance log sheet — mobile viewport / dock footer correction
+   2026-10-06 v10
+   The previous mobile sheet used height:100% inside an overlay that also had
+   top padding. On Android this made the dialog extend below the visible web
+   viewport, so the action footer was clipped behind the system/dock area.
+   Keep the same visual top gap, but make the dialog itself exactly the
+   remaining dynamic viewport height and anchor it to the bottom edge.
+   ======================================================================== */
+@media (max-width: 720px) {
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-overlay {
+    --next-maintenance-sheet-top-gap: clamp(76px, 7.5dvh, 108px);
+    box-sizing: border-box !important;
+    width: 100vw !important;
+    height: 100dvh !important;
+    min-height: 100dvh !important;
+    padding: 0 8px !important;
+    align-items: flex-end !important;
+    justify-content: center !important;
+    overflow: hidden !important;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog {
+    box-sizing: border-box !important;
+    width: min(100%, 680px) !important;
+    height: calc(100dvh - var(--next-maintenance-sheet-top-gap)) !important;
+    min-height: 0 !important;
+    max-height: calc(100dvh - var(--next-maintenance-sheet-top-gap)) !important;
+    margin: 0 !important;
+    align-self: flex-end !important;
+    overflow: hidden !important;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog .req-maintenance-log-body {
+    flex: 1 1 0 !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-actions {
+    position: relative !important;
+    inset: auto !important;
+    z-index: 20 !important;
+    flex: 0 0 auto !important;
+    width: 100% !important;
+    min-height: 76px !important;
+    box-sizing: border-box !important;
+    margin: 0 !important;
+    padding: 10px 10px max(14px, env(safe-area-inset-bottom, 0px)) !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-actions .ro-action-btn {
+    height: 52px !important;
+    min-height: 52px !important;
+  }
+
+  html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-actions {
+    background: #0f141c !important;
+  }
+}
