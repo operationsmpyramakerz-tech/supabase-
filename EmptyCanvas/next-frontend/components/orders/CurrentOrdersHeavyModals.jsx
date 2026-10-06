@@ -374,7 +374,7 @@ function OrderDetailsModal({ group, tab, busy, onClose, onAction, onReason, onEx
         </div>
         <div className="co-item-right">
           {!maintenance ? <div className="co-item-total">{tab === "remaining" ? "Qty remaining:" : "Qty:"} {qtyMarkup}</div> : null}
-          <StatusPill status={itemStatus} className="co-item-status" reason={itemReason} onReason={onReason} />
+          {!maintenance ? <StatusPill status={itemStatus} className="co-item-status" reason={itemReason} onReason={onReason} /> : null}
         </div>
       </div>
     );

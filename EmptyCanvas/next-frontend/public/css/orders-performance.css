@@ -1225,3 +1225,101 @@ body.current-orders-page .next-classic-orders-parity .next-current-order-card .n
     height: 31px;
   }
 }
+
+/* Order modal controls — match Maintenance Orders quiet icon style (2026-10-06). */
+body.current-orders-page .next-classic-orders-parity .co-modal-dialog > .co-modal-close,
+body.orders-review-page .next-classic-orders-parity .co-modal-dialog > .co-modal-close,
+body.operations-orders-page .next-classic-orders-parity .co-modal-dialog > .co-modal-close {
+  width: 38px !important;
+  min-width: 38px !important;
+  height: 38px !important;
+  min-height: 38px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  background: transparent !important;
+  color: #9aa0aa !important;
+  box-shadow: none !important;
+}
+
+body.current-orders-page .next-classic-orders-parity .co-modal-dialog > .co-modal-close:hover,
+body.current-orders-page .next-classic-orders-parity .co-modal-dialog > .co-modal-close:focus-visible,
+body.orders-review-page .next-classic-orders-parity .co-modal-dialog > .co-modal-close:hover,
+body.orders-review-page .next-classic-orders-parity .co-modal-dialog > .co-modal-close:focus-visible,
+body.operations-orders-page .next-classic-orders-parity .co-modal-dialog > .co-modal-close:hover,
+body.operations-orders-page .next-classic-orders-parity .co-modal-dialog > .co-modal-close:focus-visible {
+  background: rgba(148, 163, 184, .10) !important;
+  color: #7d8490 !important;
+  outline: none !important;
+  transform: none !important;
+}
+
+body.current-orders-page .next-classic-orders-parity .co-modal-dialog > .co-modal-close::before,
+body.orders-review-page .next-classic-orders-parity .co-modal-dialog > .co-modal-close::before,
+body.operations-orders-page .next-classic-orders-parity .co-modal-dialog > .co-modal-close::before {
+  font-size: 23px !important;
+  font-weight: 850 !important;
+  line-height: 1 !important;
+  color: currentColor !important;
+}
+
+body.current-orders-page .next-classic-orders-parity .co-modal-dialog .co-modal-more-btn,
+body.orders-review-page .next-classic-orders-parity .co-modal-dialog .co-modal-more-btn,
+body.operations-orders-page .next-classic-orders-parity .co-modal-dialog .co-modal-more-btn {
+  width: 38px !important;
+  min-width: 38px !important;
+  height: 38px !important;
+  min-height: 38px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  background: transparent !important;
+  color: #9aa0aa !important;
+  box-shadow: none !important;
+}
+
+body.current-orders-page .next-classic-orders-parity .co-modal-dialog .co-modal-more-btn:hover,
+body.current-orders-page .next-classic-orders-parity .co-modal-dialog .co-modal-more-btn:focus-visible,
+body.orders-review-page .next-classic-orders-parity .co-modal-dialog .co-modal-more-btn:hover,
+body.orders-review-page .next-classic-orders-parity .co-modal-dialog .co-modal-more-btn:focus-visible,
+body.operations-orders-page .next-classic-orders-parity .co-modal-dialog .co-modal-more-btn:hover,
+body.operations-orders-page .next-classic-orders-parity .co-modal-dialog .co-modal-more-btn:focus-visible {
+  background: rgba(148, 163, 184, .10) !important;
+  outline: none !important;
+}
+
+body.current-orders-page .next-classic-orders-parity .co-modal-dialog .co-modal-more-dots,
+body.orders-review-page .next-classic-orders-parity .co-modal-dialog .co-modal-more-dots,
+body.operations-orders-page .next-classic-orders-parity .co-modal-dialog .co-modal-more-dots {
+  background: #9aa0aa !important;
+  box-shadow: 0 -7px 0 #9aa0aa, 0 7px 0 #9aa0aa !important;
+}
+
+html[data-theme="dark"] body.current-orders-page .next-classic-orders-parity .co-modal-dialog > .co-modal-close,
+html[data-theme="dark"] body.orders-review-page .next-classic-orders-parity .co-modal-dialog > .co-modal-close,
+html[data-theme="dark"] body.operations-orders-page .next-classic-orders-parity .co-modal-dialog > .co-modal-close {
+  background: transparent !important;
+  color: #aab1bc !important;
+}
+
+html[data-theme="dark"] body.current-orders-page .next-classic-orders-parity .co-modal-dialog .co-modal-more-dots,
+html[data-theme="dark"] body.orders-review-page .next-classic-orders-parity .co-modal-dialog .co-modal-more-dots,
+html[data-theme="dark"] body.operations-orders-page .next-classic-orders-parity .co-modal-dialog .co-modal-more-dots {
+  background: #aab1bc !important;
+  box-shadow: 0 -7px 0 #aab1bc, 0 7px 0 #aab1bc !important;
+}
+
+@media (max-width: 768px) {
+  body.order-modal-fit-screen.current-orders-page .next-classic-orders-parity .co-modal-dialog > .co-modal-close,
+  body.order-modal-fit-screen.orders-review-page .next-classic-orders-parity .co-modal-dialog > .co-modal-close,
+  body.order-modal-fit-screen.operations-orders-page .next-classic-orders-parity .co-modal-dialog > .co-modal-close,
+  body.order-modal-fit-screen.current-orders-page .next-classic-orders-parity .co-modal-dialog .co-modal-more-btn,
+  body.order-modal-fit-screen.orders-review-page .next-classic-orders-parity .co-modal-dialog .co-modal-more-btn,
+  body.order-modal-fit-screen.operations-orders-page .next-classic-orders-parity .co-modal-dialog .co-modal-more-btn {
+    width: 38px !important;
+    min-width: 38px !important;
+    height: 38px !important;
+    min-height: 38px !important;
+  }
+}
+
