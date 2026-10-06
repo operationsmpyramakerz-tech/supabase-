@@ -1703,3 +1703,96 @@ html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-p
     padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)) !important;
   }
 }
+
+/* ========================================================================
+   Maintenance log sheet — invisible inner scrollbars + true dock attachment
+   2026-10-06 v8
+   Keep the long form internally scrollable, but make the mobile sheet occupy
+   the exact available viewport from its top gap through the bottom dock edge.
+   ======================================================================== */
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog,
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog *,
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog,
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog * {
+  scrollbar-width: none !important;
+  scrollbar-color: transparent transparent !important;
+  scrollbar-gutter: auto !important;
+  -ms-overflow-style: none !important;
+}
+
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog::-webkit-scrollbar,
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog *::-webkit-scrollbar,
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog::-webkit-scrollbar,
+body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog *::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+  display: none !important;
+  background: transparent !important;
+}
+
+@media (max-width: 720px) {
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-overlay {
+    --next-maintenance-sheet-top-gap: clamp(76px, 7.5dvh, 108px);
+    box-sizing: border-box !important;
+    width: 100vw !important;
+    height: 100dvh !important;
+    min-height: 100dvh !important;
+    align-items: flex-end !important;
+    justify-content: center !important;
+    padding: var(--next-maintenance-sheet-top-gap) 8px 0 !important;
+    overflow: hidden !important;
+  }
+
+  /* Same visual continuation used by the Shopping Cart add-component sheet:
+     the area touching the mobile gesture/navigation dock stays white instead
+     of exposing the dimmed page behind the sheet. */
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-overlay::after {
+    content: "";
+    position: fixed;
+    z-index: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: max(72px, env(safe-area-inset-bottom, 0px));
+    background: #fff;
+    pointer-events: none;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog {
+    position: relative !important;
+    z-index: 1 !important;
+    inset: auto !important;
+    box-sizing: border-box !important;
+    width: min(100%, 680px) !important;
+    max-width: none !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    max-height: 100% !important;
+    margin: 0 !important;
+    overflow: hidden !important;
+    border-bottom: 0 !important;
+    border-radius: 22px 22px 0 0 !important;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog .req-maintenance-log-body {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    overscroll-behavior: contain;
+  }
+
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-actions {
+    position: relative !important;
+    bottom: auto !important;
+    flex: 0 0 auto !important;
+    margin: 0 !important;
+    padding: 10px 10px max(10px, env(safe-area-inset-bottom, 0px)) !important;
+    background: #fff !important;
+  }
+
+  html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-overlay::after,
+  html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-actions {
+    background: #0f141c !important;
+  }
+}
