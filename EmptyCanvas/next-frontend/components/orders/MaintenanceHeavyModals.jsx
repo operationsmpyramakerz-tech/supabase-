@@ -471,6 +471,7 @@ export function MaintenanceDetailsModal({ group, busy, onClose, onLog, onSecondL
     <>
       <div className="co-modal-overlay is-open" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
         <div className="co-modal-dialog next-maintenance-details-dialog" role="dialog" aria-modal="true" aria-label={`${group.orderIdLabel} maintenance details`}>
+          <span className="co-modal-type-badge" style={{ "--co-order-type-accent": "#f2b705", "--co-order-type-accent-dark": "#a16207" }} aria-hidden="true"><ClassicOrderIcon name="tool" /></span>
           <div className="co-modal-more" ref={moreRef}>
             <button type="button" className="co-modal-more-btn" aria-label="Order actions" aria-haspopup="menu" aria-expanded={moreOpen} onClick={() => setMoreOpen((value) => !value)}>
               <span className="co-modal-more-dots" aria-hidden="true">⋮</span>

@@ -281,3 +281,75 @@
     background: #111318 !important;
   }
 }
+
+/* ========================================================================
+   Order details — floating order-type badge
+   2026-10-06
+   Mirrors the Shopping Cart floating type icon. The badge is centered on the
+   sheet edge and 75% of its height stays outside the card, so the existing
+   title/header geometry does not move down.
+   ===================================================================== */
+.co-modal-dialog {
+  position: relative;
+}
+
+.co-modal-type-badge {
+  --co-order-type-accent: #64748b;
+  --co-order-type-accent-dark: #334155;
+  position: absolute;
+  z-index: 12;
+  top: 0;
+  left: 50%;
+  width: 60px;
+  height: 60px;
+  display: grid;
+  place-items: center;
+  transform: translate(-50%, -75%);
+  border: 0;
+  border-radius: 19px;
+  color: #fff;
+  background: linear-gradient(145deg, var(--co-order-type-accent), var(--co-order-type-accent-dark));
+  box-shadow: 0 18px 34px -20px color-mix(in srgb, var(--co-order-type-accent) 68%, #0f172a);
+  pointer-events: none;
+}
+
+.co-modal-type-badge svg {
+  width: 27px;
+  height: 27px;
+}
+
+@media (max-width: 768px) {
+  body.order-modal-fit-screen.current-orders-page .next-classic-orders-parity .co-modal-dialog,
+  body.order-modal-fit-screen.orders-review-page .next-classic-orders-parity .co-modal-dialog,
+  body.order-modal-fit-screen.operations-orders-page .next-classic-orders-parity .co-modal-dialog,
+  body.order-modal-fit-screen.page-maintenance-orders .next-classic-maintenance-parity .co-modal-dialog {
+    /* The content itself still scrolls inside .co-modal-scroll-region. This
+       lets only the floating badge extend beyond the rounded sheet edge. */
+    overflow: visible !important;
+  }
+
+  body.order-modal-fit-screen.current-orders-page .next-classic-orders-parity .co-modal-dialog > .co-modal-header,
+  body.order-modal-fit-screen.orders-review-page .next-classic-orders-parity .co-modal-dialog > .co-modal-header,
+  body.order-modal-fit-screen.operations-orders-page .next-classic-orders-parity .co-modal-dialog > .co-modal-header,
+  body.order-modal-fit-screen.page-maintenance-orders .next-classic-maintenance-parity .co-modal-dialog > .co-modal-header {
+    border-radius: 28px 28px 0 0 !important;
+  }
+
+  body.order-modal-fit-screen.current-orders-page .next-classic-orders-parity .co-modal-type-badge,
+  body.order-modal-fit-screen.orders-review-page .next-classic-orders-parity .co-modal-type-badge,
+  body.order-modal-fit-screen.operations-orders-page .next-classic-orders-parity .co-modal-type-badge,
+  body.order-modal-fit-screen.page-maintenance-orders .next-classic-maintenance-parity .co-modal-type-badge {
+    width: 56px;
+    height: 56px;
+    border-radius: 18px;
+  }
+
+  body.order-modal-fit-screen.current-orders-page .next-classic-orders-parity .co-modal-type-badge svg,
+  body.order-modal-fit-screen.orders-review-page .next-classic-orders-parity .co-modal-type-badge svg,
+  body.order-modal-fit-screen.operations-orders-page .next-classic-orders-parity .co-modal-type-badge svg,
+  body.order-modal-fit-screen.page-maintenance-orders .next-classic-maintenance-parity .co-modal-type-badge svg {
+    width: 26px;
+    height: 26px;
+  }
+}
+

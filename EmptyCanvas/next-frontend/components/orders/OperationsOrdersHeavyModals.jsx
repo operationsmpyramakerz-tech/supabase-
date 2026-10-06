@@ -82,10 +82,10 @@ function orderTypeKey(value) {
 
 function orderTypeMeta(value) {
   const key = orderTypeKey(value);
-  if (key === "requestproducts") return { label: "Request Products", icon: "shopping-cart", bg: "#DCFCE7", fg: "#166534", bd: "#86EFAC" };
-  if (key === "withdrawproducts") return { label: "Withdraw Products", icon: "log-out", bg: "#FEE2E2", fg: "#B91C1C", bd: "#FECACA" };
-  if (key === "requestmaintenance") return { label: "Request Maintenance", icon: "tool", bg: "#FEF3C7", fg: "#92400E", bd: "#FDE68A" };
-  return { label: text(value) || "Order", icon: "package", bg: "#E5E7EB", fg: "#374151", bd: "#D1D5DB" };
+  if (key === "requestproducts") return { label: "Request Products", icon: "shopping-cart", bg: "#DCFCE7", fg: "#166534", bd: "#86EFAC", accent: "#22c55e", accentDark: "#15803d" };
+  if (key === "withdrawproducts") return { label: "Withdraw Products", icon: "log-out", bg: "#FEE2E2", fg: "#B91C1C", bd: "#FECACA", accent: "#ef4444", accentDark: "#b91c1c" };
+  if (key === "requestmaintenance") return { label: "Request Maintenance", icon: "tool", bg: "#FEF3C7", fg: "#92400E", bd: "#FDE68A", accent: "#f2b705", accentDark: "#a16207" };
+  return { label: text(value) || "Order", icon: "package", bg: "#E5E7EB", fg: "#374151", bd: "#D1D5DB", accent: "#64748b", accentDark: "#334155" };
 }
 
 function isMaintenance(value) {
@@ -779,6 +779,7 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, editMode, o
   return (
     <div className="co-modal-overlay is-open" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget && !isEditing) onClose(); }}>
       <div className="co-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="operations-order-title">
+        <span className="co-modal-type-badge" style={{ "--co-order-type-accent": type.accent, "--co-order-type-accent-dark": type.accentDark }} aria-hidden="true"><ClassicOrderIcon name={type.icon} /></span>
         {!isEditing ? <div className="co-modal-more" ref={moreRef}>
           <button type="button" className="co-modal-more-btn" aria-label="Order actions" aria-haspopup="menu" aria-expanded={moreOpen} onClick={() => setMoreOpen((value) => !value)}>
             <span className="co-modal-more-dots" aria-hidden="true">⋮</span>
