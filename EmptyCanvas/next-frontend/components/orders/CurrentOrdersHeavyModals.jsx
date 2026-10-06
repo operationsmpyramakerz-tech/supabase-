@@ -373,7 +373,7 @@ function OrderDetailsModal({ group, tab, busy, onClose, onAction, onReason, onEx
           {!maintenance ? <div className="co-item-sub">Unit: {formatMoney(item?.unitPrice)} · Total: {formatMoney(displayTotal)}</div> : null}
         </div>
         <div className="co-item-right">
-          {maintenance ? <div className="co-item-issue-desc">{text(item?.issueDescription || item?.reason) || "—"}</div> : <div className="co-item-total">{tab === "remaining" ? "Qty remaining:" : "Qty:"} {qtyMarkup}</div>}
+          {!maintenance ? <div className="co-item-total">{tab === "remaining" ? "Qty remaining:" : "Qty:"} {qtyMarkup}</div> : null}
           <StatusPill status={itemStatus} className="co-item-status" reason={itemReason} onReason={onReason} />
         </div>
       </div>
@@ -406,11 +406,9 @@ function OrderDetailsModal({ group, tab, busy, onClose, onAction, onReason, onEx
         <ProgressTrack value={archived ? 4 : progressIndex(group)} />
 
         <div className="co-modal-body">
-          {!maintenance ? (
+          {!maintenance && (((tab === "shipped" || tab === "arrived") && group.operationsByName) || (tab === "arrived" && group.receiptEntries?.length)) ? (
             <div className="co-modal-meta">
-              <div className="co-meta-row co-meta-row--reason"><span>Reason</span><strong>{group.reason}</strong></div>
-              {((tab === "shipped" || tab === "arrived") && group.operationsByName) || (tab === "arrived" && group.receiptEntries?.length) ? (
-                <div className="next-operations-meta-pair">
+              <div className="next-operations-meta-pair">
                   {(tab === "shipped" || tab === "arrived") && group.operationsByName ? (
                     <div className="co-meta-row"><span>Received by</span><strong>{group.operationsByName}</strong></div>
                   ) : null}
@@ -434,14 +432,16 @@ function OrderDetailsModal({ group, tab, busy, onClose, onAction, onReason, onEx
                       </strong>
                     </div>
                   ) : null}
-                </div>
-              ) : null}
+              </div>
             </div>
           ) : null}
           <div className="co-modal-actions ro-actions ro-actions--right order-group-sort-actions order-modal-search-actions">
             <OrderComponentSearch key={`${group.key}:${tab}`} value={componentSearch} onChange={setComponentSearch} disabled={busy} />
             <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => setDownloadOpen(true)} disabled={busy}><ClassicOrderIcon name="download" /><span>Download</span></button>
             <OrderSortButton value={sortMode} onChange={setSortMode} />
+          </div>
+          <div className="co-modal-meta co-modal-meta--after-actions">
+            <div className="co-meta-row co-meta-row--reason"><span>Reason</span><strong>{group.reason}</strong></div>
           </div>
           <div className="co-modal-items order-component-groups">
             {groupedItems.length ? groupedItems.map((section) => (

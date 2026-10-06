@@ -5353,6 +5353,11 @@ body.current-orders-page .next-classic-orders-parity .co-item-status {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+  /* Keep search on its own row, then Download + Sort side by side. */
+  body.current-orders-page .next-classic-orders-parity .order-modal-search-actions > .order-component-search {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
   body.current-orders-page .next-classic-orders-parity .co-modal-actions .ro-action-btn,
   body.current-orders-page .next-classic-orders-parity .order-sort-menu-wrap,
   body.current-orders-page .next-classic-orders-parity .order-sort-trigger {

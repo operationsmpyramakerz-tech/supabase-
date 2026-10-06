@@ -764,12 +764,12 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, editMode, o
           {/^https?:\/\//i.test(safeUrl) ? <a className="co-item-link" href={safeUrl} target="_blank" rel="noopener noreferrer" title="Open link" aria-label={`Open link for ${itemName}`} onClick={(event) => event.stopPropagation()}><ClassicOrderIcon name="external-link" /></a> : null}
         </div>
         {!maintenance ? <div className="co-item-sub">Unit: {formatMoney(item?.unitPrice ?? item?.unit_price ?? item?.price)} · Total: {formatMoney(displayTotal)}</div> : null}
-        {visibleIssueDescription(item) ? <div className="co-item-issue-desc">{visibleIssueDescription(item)}</div> : null}
+        {!maintenance && visibleIssueDescription(item) ? <div className="co-item-issue-desc">{visibleIssueDescription(item)}</div> : null}
         {text(item?.actualIssueDescription) ? <div className="co-item-issue-desc"><b>Actual issue:</b> {text(item.actualIssueDescription)}</div> : null}
         {text(item?.repairAction) ? <div className="co-item-issue-desc"><b>Repair:</b> {text(item.repairAction)}</div> : null}
       </div>
       <div className="co-item-right">
-        <div className="co-item-total">{tab === "remaining" ? "Qty remaining:" : "Qty:"} {qtyMarkup}</div>
+        {!maintenance ? <div className="co-item-total">{tab === "remaining" ? "Qty remaining:" : "Qty:"} {qtyMarkup}</div> : null}
         <span className="co-item-status" style={{ "--tag-bg": vars.bg, "--tag-fg": vars.fg, "--tag-border": vars.bd }}>{state.label}</span>
         {!isEditing && canRejectComponents && itemId ? <button className="btn btn-danger btn-xs req-ops-reject" type="button" title="Reject component" disabled={busy} onClick={(event) => { event.stopPropagation(); onAction("reject", { ...group, orderIds: [itemId], actionScope: "component", actionItemName: itemName }); }}><ClassicOrderIcon name="x" /> Reject</button> : null}
       </div>
@@ -796,12 +796,11 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, editMode, o
           <div><span>Order</span><strong>{group.orderIdLabel}</strong></div>
           <div><span>Date</span><strong>{formatDate(group.latestCreated)}</strong></div>
           <div><span>Components</span><strong>{displayTabItems.length}</strong></div>
-          <div className="next-operations-order-modal-summary__total"><span>{isMaintenance(group.orderType) ? "Order Type" : "Estimate Total"}</span><strong>{isMaintenance(group.orderType) ? "Maintenance request" : formatMoney(group.total)}</strong></div>
+          {isMaintenance(group.orderType) ? <div className="next-operations-order-modal-summary__status"><span>Status</span>{(() => { const key = statusClass(group).replace(/^status-/, ""); const vars = STATUS_COLORS[key] || STATUS_COLORS["under-supervision"]; return <span className="co-status-btn" style={{ "--tag-bg": vars.bg, "--tag-fg": vars.fg, "--tag-border": vars.bd }}>{statusLabel(group)}</span>; })()}</div> : <div className="next-operations-order-modal-summary__total"><span>Estimate Total</span><strong>{formatMoney(group.total)}</strong></div>}
         </div>
         <Progress stage={group.stage} />
         <div className="co-modal-body">
-          <div className="co-modal-meta">
-            <div className="co-meta-row co-meta-row--reason"><span>Reason</span><strong>{group.reason}</strong></div>
+          {(group.receiptNumber || group.operationsByName || group.receiptEntries.length || group.rejectedReason) ? <div className="co-modal-meta">
             {group.receiptNumber ? <div className="co-meta-row"><span>Store Receipt Number</span><strong>{group.receiptNumber}</strong></div> : null}
             {(group.operationsByName || group.receiptEntries.length) ? (
               <div className="next-operations-meta-pair">
@@ -829,7 +828,7 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, editMode, o
               </div>
             ) : null}
             {group.rejectedReason ? <div className="co-meta-row co-meta-row--reason co-meta-row--reject-reason"><span>Rejected reason</span><strong>{group.rejectedReason}</strong></div> : null}
-          </div>
+          </div> : null}
 
           {!isEditing ? <div className="co-modal-actions ro-actions ro-actions--right order-modal-search-actions">
             <OrderComponentSearch key={`${group.key}:${tab}`} value={componentSearch} onChange={setComponentSearch} disabled={busy} collapseOnToggle />
@@ -849,6 +848,10 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, editMode, o
             </div>
             <div className="next-operations-edit-mode-note"><ClassicOrderIcon name="info" /><span>Tap any component to edit its product, status and quantities.</span></div>
           </>}
+
+          <div className="co-modal-meta co-modal-meta--after-actions">
+            <div className="co-meta-row co-meta-row--reason"><span>Reason</span><strong>{group.reason}</strong></div>
+          </div>
 
           <div className="co-modal-items order-component-groups">
             {groupedItems.length ? groupedItems.map((section) => (
