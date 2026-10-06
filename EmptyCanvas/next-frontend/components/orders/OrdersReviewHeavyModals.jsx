@@ -180,6 +180,7 @@ function ReviewDetailsLoadState({ group, loading, error, onRetry, onClose }) {
     <div className="co-modal-dialog next-review-order-modal" role="dialog" aria-modal="true" aria-label={`${group.orderIdLabel} review details`}>
       <button type="button" className="co-modal-close" onClick={onClose} aria-label="Close order details" />
       <div className="co-modal-header"><div className="co-modal-head-left"><div className="co-modal-status">Order review</div></div></div>
+      <div className="co-modal-scroll-region">
       <div className="next-review-order-modal-summary" aria-label="Review order summary">
         <div><span>Order</span><strong>{group.orderIdLabel}</strong></div>
         <div><span>Date</span><strong>{formatDate(group.latestCreated)}</strong></div>
@@ -190,6 +191,7 @@ function ReviewDetailsLoadState({ group, loading, error, onRetry, onClose }) {
           <span>{error || (loading ? "Loading order details..." : "Preparing order details...")}</span>
           {error ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={onRetry}>Try again</button> : null}
         </div>
+      </div>
       </div>
     </div>
   </div>;
@@ -286,6 +288,7 @@ function ReviewDetailsModal({ group, activeTab, busyIds, onClose, onQuantitySave
       <button type="button" className="co-modal-close" onClick={onClose} aria-label="Close order details" />
       <div className="co-modal-header"><div className="co-modal-head-left"><div className="co-modal-status">{headerTitle}</div></div></div>
 
+      <div className="co-modal-scroll-region">
       <div className="next-review-order-modal-summary" aria-label="Review order summary">
         <div><span>Order</span><strong>{group.orderIdLabel}</strong></div>
         <div><span>Date</span><strong>{formatDate(group.latestCreated)}</strong></div>
@@ -310,6 +313,7 @@ function ReviewDetailsModal({ group, activeTab, busyIds, onClose, onQuantitySave
             </section>
           )) : <div className="order-component-search-empty">{componentSearch.trim() ? "No matching components." : "No items."}</div>}
         </div>
+      </div>
       </div>
       <OrderDownloadModal
         open={downloadOpen}

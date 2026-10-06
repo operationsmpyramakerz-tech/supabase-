@@ -483,6 +483,7 @@ export function MaintenanceDetailsModal({ group, busy, onClose, onLog, onSecondL
           </div>
           <button type="button" className="co-modal-close" onClick={onClose} aria-label="Close order details" />
           <div className="co-modal-header"><div className="co-modal-head-left"><div className="co-modal-status">Request Maintenance</div></div></div>
+          <div className="co-modal-scroll-region">
           <div className="next-maintenance-order-modal-summary" aria-label="Maintenance order summary">
             <div><span>Team member</span><strong title={group.createdByName || "—"}>{group.createdByName || "—"}</strong></div>
             <div><span>Order</span><strong>{group.orderIdLabel}</strong></div>
@@ -592,6 +593,7 @@ export function MaintenanceDetailsModal({ group, busy, onClose, onLog, onSecondL
                 </section>;
               })}
             </div>
+          </div>
           </div>
         </div>
       </div>

@@ -397,6 +397,7 @@ function OrderDetailsModal({ group, tab, busy, onClose, onAction, onReason, onEx
         <button type="button" className="co-modal-close" onClick={onClose} aria-label="Close order details" />
 
         <div className="co-modal-header"><div className="co-modal-head-left"><div className="co-modal-status">{headerTitle}</div><div className="co-modal-status-sub" hidden /></div></div>
+        <div className="co-modal-scroll-region">
         <div className="next-current-order-modal-summary" aria-label="Order summary">
           <div><span>Order</span><strong>{group.orderIdLabel}</strong></div>
           <div><span>Date</span><strong>{formatDate(group.latestCreated)}</strong></div>
@@ -451,6 +452,7 @@ function OrderDetailsModal({ group, tab, busy, onClose, onAction, onReason, onEx
               </section>
             )) : <div className="order-component-search-empty">{componentSearch.trim() ? "No matching components." : "No items."}</div>}
           </div>
+        </div>
         </div>
         <OrderDownloadModal
           open={downloadOpen}

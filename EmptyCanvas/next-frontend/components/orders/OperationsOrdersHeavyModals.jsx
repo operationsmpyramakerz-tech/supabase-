@@ -792,6 +792,7 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, editMode, o
 
         <button type="button" className="co-modal-close" onClick={onClose} aria-label="Close order details" />
         <div className="co-modal-header"><div className="co-modal-head-left"><div className="co-modal-status" id="operations-order-title">{type.label}</div><div className="co-modal-status-sub" hidden /></div></div>
+        <div className="co-modal-scroll-region">
         <div className="next-operations-order-modal-summary" aria-label="Order summary">
           <div><span>Order</span><strong>{group.orderIdLabel}</strong></div>
           <div><span>Date</span><strong>{formatDate(group.latestCreated)}</strong></div>
@@ -889,6 +890,7 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, editMode, o
               </button>
             </div>
           ) : null}
+        </div>
         </div>
         <OrderDownloadModal
           open={downloadOpen}

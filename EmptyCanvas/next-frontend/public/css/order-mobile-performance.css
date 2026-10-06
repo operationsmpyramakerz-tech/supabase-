@@ -171,3 +171,111 @@
     line-height: 1.25 !important;
   }
 }
+
+
+/* ========================================================================
+   Order details — mobile bottom-sheet layout
+   2026-10-06
+   Current Orders / Orders Review / Operations Orders / Maintenance Orders
+   now use the same mobile sheet geometry as Shopping Cart: full width,
+   anchored to the viewport bottom, rounded only at the top, fixed header,
+   and a dedicated scroll region for the order content.
+   ===================================================================== */
+.co-modal-scroll-region {
+  display: contents;
+}
+
+@media (max-width: 768px) {
+  body.order-modal-fit-screen.current-orders-page .next-classic-orders-parity .co-modal-overlay.is-open,
+  body.order-modal-fit-screen.orders-review-page .next-classic-orders-parity .co-modal-overlay.is-open,
+  body.order-modal-fit-screen.operations-orders-page .next-classic-orders-parity .co-modal-overlay.is-open,
+  body.order-modal-fit-screen.page-maintenance-orders .next-classic-maintenance-parity .co-modal-overlay.is-open {
+    align-items: flex-end !important;
+    justify-content: center !important;
+    padding: clamp(76px, 7.5dvh, 108px) 0 0 !important;
+    overflow: hidden !important;
+  }
+
+  body.order-modal-fit-screen.current-orders-page .next-classic-orders-parity .co-modal-dialog,
+  body.order-modal-fit-screen.orders-review-page .next-classic-orders-parity .co-modal-dialog,
+  body.order-modal-fit-screen.operations-orders-page .next-classic-orders-parity .co-modal-dialog,
+  body.order-modal-fit-screen.page-maintenance-orders .next-classic-maintenance-parity .co-modal-dialog {
+    width: 100vw !important;
+    max-width: none !important;
+    min-height: 0 !important;
+    height: auto !important;
+    max-height: calc(100dvh - clamp(76px, 7.5dvh, 108px)) !important;
+    margin: 0 !important;
+    padding: 12px 10px max(12px, env(safe-area-inset-bottom, 0px)) !important;
+    border-left: 0 !important;
+    border-right: 0 !important;
+    border-bottom: 0 !important;
+    border-radius: 28px 28px 0 0 !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overscroll-behavior: contain !important;
+  }
+
+  body.order-modal-fit-screen.current-orders-page .next-classic-orders-parity .co-modal-dialog > .co-modal-header,
+  body.order-modal-fit-screen.orders-review-page .next-classic-orders-parity .co-modal-dialog > .co-modal-header,
+  body.order-modal-fit-screen.operations-orders-page .next-classic-orders-parity .co-modal-dialog > .co-modal-header,
+  body.order-modal-fit-screen.page-maintenance-orders .next-classic-maintenance-parity .co-modal-dialog > .co-modal-header {
+    flex: 0 0 auto !important;
+    position: relative !important;
+    z-index: 6 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    background: #fff !important;
+  }
+
+  body.order-modal-fit-screen.current-orders-page .next-classic-orders-parity .co-modal-dialog > .co-modal-scroll-region,
+  body.order-modal-fit-screen.orders-review-page .next-classic-orders-parity .co-modal-dialog > .co-modal-scroll-region,
+  body.order-modal-fit-screen.operations-orders-page .next-classic-orders-parity .co-modal-dialog > .co-modal-scroll-region,
+  body.order-modal-fit-screen.page-maintenance-orders .next-classic-maintenance-parity .co-modal-dialog > .co-modal-scroll-region {
+    display: flex !important;
+    flex: 1 1 auto !important;
+    flex-direction: column !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    max-width: 100% !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    overscroll-behavior: contain !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+    padding: 0 0 4px !important;
+  }
+
+  body.order-modal-fit-screen.current-orders-page .next-classic-orders-parity .co-modal-dialog > .co-modal-scroll-region::-webkit-scrollbar,
+  body.order-modal-fit-screen.orders-review-page .next-classic-orders-parity .co-modal-dialog > .co-modal-scroll-region::-webkit-scrollbar,
+  body.order-modal-fit-screen.operations-orders-page .next-classic-orders-parity .co-modal-dialog > .co-modal-scroll-region::-webkit-scrollbar,
+  body.order-modal-fit-screen.page-maintenance-orders .next-classic-maintenance-parity .co-modal-dialog > .co-modal-scroll-region::-webkit-scrollbar {
+    width: 0 !important;
+    height: 0 !important;
+    display: none !important;
+  }
+
+  /* Keep the controls in the fixed sheet header while the content scrolls. */
+  body.order-modal-fit-screen.current-orders-page .next-classic-orders-parity .co-modal-dialog > .co-modal-close,
+  body.order-modal-fit-screen.orders-review-page .next-classic-orders-parity .co-modal-dialog > .co-modal-close,
+  body.order-modal-fit-screen.operations-orders-page .next-classic-orders-parity .co-modal-dialog > .co-modal-close,
+  body.order-modal-fit-screen.page-maintenance-orders .next-classic-maintenance-parity .co-modal-dialog > .co-modal-close {
+    z-index: 9 !important;
+  }
+
+  body.order-modal-fit-screen.current-orders-page .next-classic-orders-parity .co-modal-dialog > .co-modal-more,
+  body.order-modal-fit-screen.orders-review-page .next-classic-orders-parity .co-modal-dialog > .co-modal-more,
+  body.order-modal-fit-screen.operations-orders-page .next-classic-orders-parity .co-modal-dialog > .co-modal-more,
+  body.order-modal-fit-screen.page-maintenance-orders .next-classic-maintenance-parity .co-modal-dialog > .co-modal-more,
+  body.order-modal-fit-screen.operations-orders-page .next-classic-orders-parity .co-modal-dialog > .next-operations-edit-mode-badge {
+    z-index: 9 !important;
+  }
+
+  html[data-theme="dark"] body.order-modal-fit-screen.current-orders-page .next-classic-orders-parity .co-modal-dialog > .co-modal-header,
+  html[data-theme="dark"] body.order-modal-fit-screen.orders-review-page .next-classic-orders-parity .co-modal-dialog > .co-modal-header,
+  html[data-theme="dark"] body.order-modal-fit-screen.operations-orders-page .next-classic-orders-parity .co-modal-dialog > .co-modal-header,
+  html[data-theme="dark"] body.order-modal-fit-screen.page-maintenance-orders .next-classic-maintenance-parity .co-modal-dialog > .co-modal-header {
+    background: #111318 !important;
+  }
+}
