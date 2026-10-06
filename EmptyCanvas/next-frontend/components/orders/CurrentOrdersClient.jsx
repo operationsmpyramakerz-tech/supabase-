@@ -536,10 +536,8 @@ function OrderCard({ group, activeTab, onOpen, onReason }) {
   const thumbStyle = { "--co-thumb-bg": type.bg, "--co-thumb-fg": type.fg, "--co-thumb-border": type.bd };
   const reasons = [...new Set(group.items.map(rejectedReason).filter(Boolean))].join("\n");
   const mixed = activeTab === "all" && group.stage === 2 && hasMixedApprovedRejected(group.items);
-  const displayItems = itemsForCurrentTab(group.items, activeTab);
   const displayStatus = activeTab === "remaining" ? "remaining" : activeTab === "shipped" ? "shipped" : group.status;
-  const displayTotal = activeTab === "remaining" ? group.remainingTotal : activeTab === "shipped" ? group.receivedTotal : group.total;
-  const progress = group.status === "archive" ? 100 : Math.min(100, progressIndex(group) * 25);
+  const creatorName = text(group.createdByName) || "—";
 
   return (
     <article
@@ -558,15 +556,13 @@ function OrderCard({ group, activeTab, onOpen, onReason }) {
             <span className="co-sub">{formatDate(group.latestCreated)}</span>
           </div>
         </div>
-        <div className="co-qty" title={`${displayItems.length} component${displayItems.length === 1 ? "" : "s"}`}>x{displayItems.length}</div>
-      </div>
-      <div className="co-divider" />
-      <div className="co-bottom">
-        <div className="co-est"><div className="co-est-label">Estimate Total</div><div className="co-est-value">{formatMoney(displayTotal)}</div></div>
-        <div className="co-actions">
-          {mixed ? <MixedStatusPill /> : <StatusPill status={displayStatus} reason={reasons} onReason={onReason} />}
-          <span className="next-current-order-progress next-current-order-progress--icon-only" aria-label={`${progress}% workflow progress`} title={`${progress}% workflow progress`}>
-            <ClassicOrderIcon name="percent" />
+        <div className="next-current-card-head-actions">
+          <div className="next-current-card-status">
+            {mixed ? <MixedStatusPill /> : <StatusPill status={displayStatus} reason={reasons} onReason={onReason} />}
+          </div>
+          <span className="next-current-creator-chip" aria-label={`Created by ${creatorName}`} title={`Created by ${creatorName}`}>
+            <span className="next-current-creator-label">{creatorName}</span>
+            <span className="next-current-creator-icon"><ClassicOrderIcon name="user" /></span>
           </span>
         </div>
       </div>

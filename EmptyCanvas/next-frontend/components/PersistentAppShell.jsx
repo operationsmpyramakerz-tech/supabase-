@@ -24,7 +24,7 @@ function routePerformanceStyles(localPath) {
   // the same cascade while unrelated pages avoid parsing those selectors.
   if (["/orders", "/orders-review", "/operations-orders"].includes(localPath)) {
     return [
-      "/next/css/orders-performance.css?v=css-phase1",
+      "/next/css/orders-performance.css?v=current-cards-parity-v2",
       "/next/css/order-mobile-performance.css?v=css-phase3",
     ];
   }

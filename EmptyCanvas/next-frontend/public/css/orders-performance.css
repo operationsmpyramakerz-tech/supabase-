@@ -1048,3 +1048,180 @@ body.orders-review-page .next-classic-orders-parity .next-review-order-modal .ne
     width: 100% !important;
   }
 }
+
+/* ========================================================================
+   Current Orders cards — Operations Orders visual parity
+   2026-10-06
+   ------------------------------------------------------------------------
+   Keep the order-type icon/color per request / withdrawal / maintenance,
+   but use the compact Operations Orders hierarchy: identity + date on the
+   left, status + creator on the right. Price, quantity and progress summary
+   are intentionally kept inside the order details modal instead of the card.
+   ===================================================================== */
+body.current-orders-page .next-classic-orders-parity .next-current-order-card {
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+body.current-orders-page .next-classic-orders-parity .next-current-order-card .co-top {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  min-height: 66px;
+}
+
+body.current-orders-page .next-classic-orders-parity .next-current-order-card .co-main {
+  min-width: 0;
+  align-self: center;
+}
+
+body.current-orders-page .next-classic-orders-parity .next-current-order-card .co-qty,
+body.current-orders-page .next-classic-orders-parity .next-current-order-card .co-divider,
+body.current-orders-page .next-classic-orders-parity .next-current-order-card .co-bottom,
+body.current-orders-page .next-classic-orders-parity .next-current-order-card .next-current-order-progress {
+  display: none !important;
+}
+
+body.current-orders-page .next-classic-orders-parity .next-current-order-card .next-current-card-head-actions {
+  min-width: 112px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 5px;
+  margin-left: auto;
+}
+
+body.current-orders-page .next-classic-orders-parity .next-current-order-card .next-current-card-status {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  min-width: 0;
+}
+
+body.current-orders-page .next-classic-orders-parity .next-current-order-card .next-current-card-head-actions .co-status-btn,
+body.current-orders-page .next-classic-orders-parity .next-current-order-card .next-current-card-head-actions .sv-mixed-approval-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  height: 30px;
+  min-height: 30px;
+  margin: 0;
+  padding: 0 11px;
+  border-radius: 999px;
+  font-size: 9.5px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: none;
+}
+
+body.current-orders-page .next-classic-orders-parity .next-current-order-card .next-current-creator-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0;
+  width: auto;
+  min-width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #fff;
+  overflow: visible;
+}
+
+body.current-orders-page .next-classic-orders-parity .next-current-order-card .next-current-creator-label {
+  display: flex;
+  align-items: center;
+  height: 30px;
+  max-width: 150px;
+  margin-right: -11px;
+  padding: 0 20px 0 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-radius: 999px 4px 4px 999px;
+  background: #020617;
+  color: #fff;
+  font-size: 9.5px;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: 0 7px 16px rgba(2, 6, 23, .12);
+}
+
+body.current-orders-page .next-classic-orders-parity .next-current-order-card .next-current-creator-icon {
+  position: relative;
+  z-index: 1;
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #020617;
+  color: #fff;
+  box-shadow: 0 7px 16px rgba(2, 6, 23, .16);
+}
+
+body.current-orders-page .next-classic-orders-parity .next-current-order-card .next-current-creator-icon svg {
+  display: block;
+  width: 15px;
+  height: 15px;
+  margin: 0 !important;
+  transform: none !important;
+}
+
+@media (max-width: 720px) {
+  body.current-orders-page .next-classic-orders-parity .next-current-order-card {
+    padding-top: 8px !important;
+    padding-bottom: 8px !important;
+  }
+
+  body.current-orders-page .next-classic-orders-parity .next-current-order-card .co-top {
+    grid-template-columns: 46px minmax(0, 1fr) auto !important;
+    gap: 8px !important;
+    min-height: 58px !important;
+  }
+
+  body.current-orders-page .next-classic-orders-parity .next-current-order-card .next-current-card-head-actions {
+    min-width: 96px;
+    max-width: 138px;
+    gap: 4px;
+  }
+
+  body.current-orders-page .next-classic-orders-parity .next-current-order-card .next-current-card-head-actions .co-status-btn,
+  body.current-orders-page .next-classic-orders-parity .next-current-order-card .next-current-card-head-actions .sv-mixed-approval-pill {
+    height: 27px;
+    min-height: 27px;
+    max-width: none;
+    padding: 0 9px;
+    font-size: 8.5px;
+  }
+
+  body.current-orders-page .next-classic-orders-parity .next-current-order-card .next-current-creator-chip {
+    min-width: 31px;
+    height: 31px;
+  }
+
+  body.current-orders-page .next-classic-orders-parity .next-current-order-card .next-current-creator-label {
+    height: 27px;
+    max-width: 112px;
+    margin-right: -10px;
+    padding: 0 18px 0 9px;
+    font-size: 8.5px;
+    border-radius: 999px 4px 4px 999px;
+  }
+
+  body.current-orders-page .next-classic-orders-parity .next-current-order-card .next-current-creator-icon {
+    width: 31px;
+    min-width: 31px;
+    height: 31px;
+  }
+}
