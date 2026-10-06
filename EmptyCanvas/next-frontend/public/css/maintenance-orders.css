@@ -2031,3 +2031,15 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
     border-top-color: #273140 !important;
   }
 }
+
+/* ========================================================================
+   Maintenance Log — lift mobile footer actions above the phone navigation bar
+   2026-10-06 v12
+   Keep the existing Add Component proportions, but reserve a little more
+   space below Cancel / Confirm so both controls stay fully visible on Android.
+   ======================================================================== */
+@media (max-width: 720px) {
+  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-actions {
+    padding-bottom: calc(3rem + env(safe-area-inset-bottom, 0px)) !important;
+  }
+}

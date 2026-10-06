@@ -30,7 +30,7 @@ function routePerformanceStyles(localPath) {
   }
   if (localPath === "/maintenance-orders") {
     return [
-      "/next/css/maintenance-orders.css?v=maintenance-log-add-component-parity-v11",
+      "/next/css/maintenance-orders.css?v=maintenance-log-footer-lift-v12",
       "/next/css/order-mobile-performance.css?v=css-phase3",
     ];
   }
