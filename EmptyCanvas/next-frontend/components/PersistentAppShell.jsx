@@ -25,13 +25,13 @@ function routePerformanceStyles(localPath) {
   if (["/orders", "/orders-review", "/operations-orders"].includes(localPath)) {
     return [
       "/next/css/orders-performance.css?v=modal-controls-maintenance-parity-v3",
-      "/next/css/order-mobile-performance.css?v=bottom-sheet-orders-v1",
+      "/next/css/order-mobile-performance.css?v=bottom-sheet-dock-clearance-v2",
     ];
   }
   if (localPath === "/maintenance-orders") {
     return [
       "/next/css/maintenance-orders.css?v=maintenance-log-footer-lift-v12",
-      "/next/css/order-mobile-performance.css?v=bottom-sheet-orders-v1",
+      "/next/css/order-mobile-performance.css?v=bottom-sheet-dock-clearance-v2",
     ];
   }
   if (localPath === "/orders/new" || localPath.startsWith("/orders/new/")) {

@@ -244,7 +244,9 @@
     overscroll-behavior: contain !important;
     -webkit-overflow-scrolling: touch !important;
     scrollbar-width: none !important;
-    padding: 0 0 4px !important;
+    /* Keep the final order rows clear of the mobile dock / phone navigation area. */
+    padding: 0 0 calc(104px + env(safe-area-inset-bottom, 0px)) !important;
+    scroll-padding-bottom: calc(104px + env(safe-area-inset-bottom, 0px)) !important;
   }
 
   body.order-modal-fit-screen.current-orders-page .next-classic-orders-parity .co-modal-dialog > .co-modal-scroll-region::-webkit-scrollbar,
