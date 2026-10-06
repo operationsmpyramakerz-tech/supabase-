@@ -160,3 +160,15 @@ html[data-theme="dark"] body.event-team-page .event-team-modal__close{background
 .event-team-delete-confirm:disabled{opacity:.55;cursor:not-allowed;}
 html[data-theme="dark"] body.event-team-page .event-team-delete-dialog h3{color:#f8fafc!important;}
 html[data-theme="dark"] body.event-team-page .event-team-delete-dialog p{color:#aab4c4!important;}
+
+/* Public self-registration link for each Event Team role. */
+.event-team-public-link{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:48px;flex:0 0 auto;border:1px solid rgba(76,29,149,.14);border-radius:15px;background:#faf8ff;padding:0 15px;color:#5b21b6;font:900 .82rem/1 inherit;cursor:pointer;transition:.16s ease;}
+.event-team-public-link:hover{transform:translateY(-1px);background:#f5f0ff;}
+.event-team-public-link:disabled{opacity:.48;cursor:not-allowed;transform:none;}
+.event-team-public-link svg{width:17px;height:17px;}
+.event-team-table{min-width:1300px;}
+html[data-theme="dark"] body.event-team-page .event-team-public-link{border-color:#40365f;background:#171424;color:#c4b5fd;}
+@media(max-width:760px){
+  .event-team-public-link{width:100%;min-height:44px;}
+  .event-team-table{min-width:1240px;}
+}

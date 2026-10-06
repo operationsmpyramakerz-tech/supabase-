@@ -207,7 +207,7 @@ export default function EventTeamClient({ account, initialMembers = [], initialA
     return members.filter((member) => {
       if (member?.role !== tab) return false;
       if (!q) return true;
-      return [member?.name, member?.phone, member?.email, member?.governorate, member?.instapay, member?.wallet, member?.station]
+      return [member?.name, member?.nationalId, member?.phone, member?.email, member?.governorate, member?.instapay, member?.wallet, member?.station]
         .map(lower)
         .join(" ")
         .includes(q);
@@ -238,6 +238,29 @@ export default function EventTeamClient({ account, initialMembers = [], initialA
     if (canEdit) return true;
     setToast({ type: "info", title: "View-only access", message: "Your Events permission does not allow changes." });
     return false;
+  }
+
+  async function copyPublicLink() {
+    if (!TABS.some((item) => item.key === tab)) return;
+    const url = `${window.location.origin}/next/event-team/join/${tab}`;
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+      } else {
+        const input = document.createElement("textarea");
+        input.value = url;
+        input.setAttribute("readonly", "");
+        input.style.position = "fixed";
+        input.style.opacity = "0";
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand("copy");
+        input.remove();
+      }
+      setToast({ type: "success", title: "Public registration link", message: `${ROLE_LABELS[tab] || "Team"} link copied.` });
+    } catch {
+      setToast({ type: "error", title: "Public registration link", message: url });
+    }
   }
 
   function openAdd() {
@@ -441,6 +464,10 @@ export default function EventTeamClient({ account, initialMembers = [], initialA
             </button>
           ))}
         </div>
+        <button type="button" className="event-team-public-link" onClick={copyPublicLink} disabled={busy}>
+          <EventIcon name="external-link" />
+          <span>Public link</span>
+        </button>
         <button type="button" className="event-team-add" onClick={openAdd} disabled={!canEdit || busy}>
           <EventIcon name="plus-circle" />
           <span>Add new</span>
@@ -454,13 +481,14 @@ export default function EventTeamClient({ account, initialMembers = [], initialA
               <thead>
                 <tr>
                   <th>Name</th>
+                  <th>ID Number</th>
                   <th>Phone</th>
                   <th>Email</th>
                   <th>Governorate</th>
                   <th>InstaPay</th>
                   <th>Wallet</th>
                   <th>Station</th>
-                  <th>ID</th>
+                  <th>ID Photo</th>
                   <th>Status</th>
                   <th aria-label="Actions" />
                 </tr>
@@ -469,13 +497,14 @@ export default function EventTeamClient({ account, initialMembers = [], initialA
                 {filteredMembers.map((member) => (
                   <tr key={member.id}>
                     <td data-label="Name"><strong className="event-team-person-name">{member.name || "—"}</strong></td>
+                    <td data-label="ID Number">{member.nationalId || "—"}</td>
                     <td data-label="Phone">{member.phone || "—"}</td>
                     <td data-label="Email">{member.email ? <a href={`mailto:${member.email}`}>{member.email}</a> : "—"}</td>
                     <td data-label="Governorate">{member.governorate || "—"}</td>
                     <td data-label="InstaPay">{member.instapay || "—"}</td>
                     <td data-label="Wallet">{member.wallet || "—"}</td>
                     <td data-label="Station"><span className="event-team-station">{member.station || "—"}</span></td>
-                    <td data-label="ID">
+                    <td data-label="ID Photo">
                       {member.idPhotoUrl ? (
                         <a className="event-team-id-thumb" href={member.idPhotoUrl} target="_blank" rel="noreferrer" aria-label={`Open ${member.name || "member"} ID`}>
                           <img src={member.idPhotoUrl} alt="" />

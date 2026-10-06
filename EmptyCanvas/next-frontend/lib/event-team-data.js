@@ -79,6 +79,7 @@ function serializeMember(row = {}) {
     id: String(row?.id || ""),
     role: normalizeRole(row?.role),
     name: text(row?.name, 180),
+    nationalId: text(row?.national_id || row?.nationalId, 40),
     phone: text(row?.phone, 60),
     email: text(row?.email, 220),
     governorate: text(row?.governorate, 120),
@@ -133,7 +134,7 @@ function memberWriteRow(body = {}, account = {}) {
     throw error;
   }
 
-  return {
+  const row = {
     role: normalizeRole(body?.role),
     name,
     phone: text(body?.phone, 60) || null,
@@ -147,6 +148,11 @@ function memberWriteRow(body = {}, account = {}) {
     is_active: bool(body?.isActive ?? body?.is_active, true),
     updated_by_user_id: memberIdFromAccount(account),
   };
+
+  if (Object.prototype.hasOwnProperty.call(body || {}, "nationalId") || Object.prototype.hasOwnProperty.call(body || {}, "national_id")) {
+    row.national_id = text(body?.nationalId || body?.national_id, 40) || null;
+  }
+  return row;
 }
 
 function attendanceWriteRow(body = {}, account = {}) {
