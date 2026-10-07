@@ -1,0 +1,50 @@
+/* ========================================================================
+   Unified light workspace — 2026-10-07
+
+   Keep every authenticated ERP page on one continuous pure-white surface in
+   light mode.  This removes the old light-grey shell/workspace contrast that
+   made each route look like a large white card floating over a grey page.
+
+   Component cards, toolbars, status pills and intentional tinted controls keep
+   their own styling.  Dark mode is intentionally untouched.
+   ======================================================================== */
+html[data-theme="light"] body.next-classic-shell-active:not(.login-page):not(.pwa-offline):not(.pwa-start),
+html[data-theme="light"] body.next-classic-shell-active:not(.login-page):not(.pwa-offline):not(.pwa-start) .classic-app-shell,
+html[data-theme="light"] body.next-classic-shell-active:not(.login-page):not(.pwa-offline):not(.pwa-start) .classic-app-shell > .main-content,
+html[data-theme="light"] body.next-classic-shell-active:not(.login-page):not(.pwa-offline):not(.pwa-start) .classic-app-shell > .main-content > .main-header,
+html[data-theme="light"] body.next-classic-shell-active:not(.login-page):not(.pwa-offline):not(.pwa-start) .classic-app-shell > .main-content > main,
+html[data-theme="light"] body.next-classic-shell-active:not(.login-page):not(.pwa-offline):not(.pwa-start) .classic-app-shell > .main-content > main.container,
+html[data-theme="light"] body.next-classic-shell-active:not(.login-page):not(.pwa-offline):not(.pwa-start) .classic-app-shell > .main-content > main.container-full-width,
+html[data-theme="light"] body.next-classic-shell-active:not(.login-page):not(.pwa-offline):not(.pwa-start) .classic-app-shell > .main-content > main.page-body,
+html[data-theme="light"] body.next-classic-shell-active:not(.login-page):not(.pwa-offline):not(.pwa-start) .classic-app-shell > .main-content > main.tasks-v2-main,
+html[data-theme="light"] body.next-classic-shell-active:not(.login-page):not(.pwa-offline):not(.pwa-start) .classic-app-shell .next-classic-page-content {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  background-image: none !important;
+}
+
+/* Remove only page/shell-level framing.  Child cards keep their own borders,
+   shadows and rounded shapes. */
+html[data-theme="light"] body.next-classic-shell-active:not(.login-page):not(.pwa-offline):not(.pwa-start) .classic-app-shell,
+html[data-theme="light"] body.next-classic-shell-active:not(.login-page):not(.pwa-offline):not(.pwa-start) .classic-app-shell > .main-content,
+html[data-theme="light"] body.next-classic-shell-active:not(.login-page):not(.pwa-offline):not(.pwa-start) .classic-app-shell > .main-content > main,
+html[data-theme="light"] body.next-classic-shell-active:not(.login-page):not(.pwa-offline):not(.pwa-start) .classic-app-shell > .main-content > main.container,
+html[data-theme="light"] body.next-classic-shell-active:not(.login-page):not(.pwa-offline):not(.pwa-start) .classic-app-shell > .main-content > main.container-full-width,
+html[data-theme="light"] body.next-classic-shell-active:not(.login-page):not(.pwa-offline):not(.pwa-start) .classic-app-shell > .main-content > main.page-body,
+html[data-theme="light"] body.next-classic-shell-active:not(.login-page):not(.pwa-offline):not(.pwa-start) .classic-app-shell > .main-content > main.tasks-v2-main {
+  border-color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+/* Old shell/cover pseudo layers can leave a grey wash around the page even
+   when the actual <main> is white.  Neutralize them in light mode only. */
+html[data-theme="light"] body.next-classic-shell-active:not(.login-page):not(.pwa-offline):not(.pwa-start) .classic-app-shell > .main-content::before,
+html[data-theme="light"] body.next-classic-shell-active:not(.login-page):not(.pwa-offline):not(.pwa-start) .classic-app-shell > .main-content::after,
+html[data-theme="light"] body.next-classic-shell-active:not(.login-page):not(.pwa-offline):not(.pwa-start) .classic-app-shell > .main-content > .main-header::before,
+html[data-theme="light"] body.next-classic-shell-active:not(.login-page):not(.pwa-offline):not(.pwa-start) .classic-app-shell > .main-content > .main-header::after,
+html[data-theme="light"] body.next-classic-shell-active:not(.login-page):not(.pwa-offline):not(.pwa-start) .classic-app-shell > .main-content > main::before,
+html[data-theme="light"] body.next-classic-shell-active:not(.login-page):not(.pwa-offline):not(.pwa-start) .classic-app-shell > .main-content > main::after {
+  background: none !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
