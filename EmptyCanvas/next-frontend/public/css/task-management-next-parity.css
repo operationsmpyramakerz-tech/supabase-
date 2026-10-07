@@ -949,3 +949,176 @@ html[data-theme="dark"] body.task-management-page .tm-mobile-day-empty{
   background:#111318;
   border-color:rgba(249,115,22,.3);
 }
+
+/* ========================================================================
+   Workflow Builder — mobile bottom-sheet parity with Orders / Shopping Cart
+   2026-10-08
+   Full-width sheet, rounded top corners, fixed header, scrolling content only.
+   ===================================================================== */
+.task-management-page .tm-builder-scroll-region{
+  display:contents;
+}
+
+@media(max-width:900px){
+  .task-management-page .tm-overlay.tm-overlay--builder-layer{
+    align-items:flex-end!important;
+    justify-content:center!important;
+    padding:clamp(72px,7.5dvh,104px) 0 0!important;
+    overflow:hidden!important;
+  }
+
+  .task-management-page .tm-overlay.tm-overlay--builder-layer::after{
+    content:"";
+    position:fixed;
+    z-index:0;
+    left:0;
+    right:0;
+    bottom:0;
+    height:max(72px,env(safe-area-inset-bottom,0px));
+    background:#fff;
+    pointer-events:none;
+  }
+
+  .task-management-page .tm-overlay.tm-overlay--builder-layer>.tm-overlay__backdrop{
+    position:fixed!important;
+    inset:0!important;
+  }
+
+  .task-management-page .tm-dialog.tm-dialog--builder{
+    position:relative!important;
+    z-index:1!important;
+    width:100vw!important;
+    max-width:none!important;
+    min-height:0!important;
+    height:calc(100dvh - clamp(72px,7.5dvh,104px))!important;
+    max-height:calc(100dvh - clamp(72px,7.5dvh,104px))!important;
+    margin:0!important;
+    padding:0!important;
+    border-left:0!important;
+    border-right:0!important;
+    border-bottom:0!important;
+    border-radius:28px 28px 0 0!important;
+    background:#fff!important;
+    overflow:hidden!important;
+    display:flex!important;
+    flex-direction:column!important;
+    overscroll-behavior:contain!important;
+  }
+
+  .task-management-page .tm-dialog--builder>.tm-builder-header{
+    position:relative!important;
+    z-index:8!important;
+    flex:0 0 auto!important;
+    width:100%!important;
+    min-height:86px!important;
+    margin:0!important;
+    padding:18px 18px 14px!important;
+    align-items:flex-start!important;
+    border-bottom:1px solid #eceef2!important;
+    border-radius:28px 28px 0 0!important;
+    background:#fff!important;
+    box-shadow:0 10px 24px -24px rgba(15,23,42,.36)!important;
+  }
+
+  .task-management-page .tm-dialog--builder>.tm-builder-header>div{
+    min-width:0;
+    padding-right:10px;
+  }
+
+  .task-management-page .tm-dialog--builder>.tm-builder-header .tm-eyebrow{
+    display:block;
+    margin-bottom:4px;
+  }
+
+  .task-management-page .tm-dialog--builder>.tm-builder-header h2{
+    margin:0!important;
+    font-size:1.34rem!important;
+    line-height:1.12!important;
+    letter-spacing:-.035em!important;
+  }
+
+  .task-management-page .tm-dialog--builder>.tm-builder-header .tm-icon-btn{
+    flex:0 0 auto!important;
+    margin-top:0!important;
+  }
+
+  .task-management-page .tm-builder-scroll-region{
+    display:flex!important;
+    flex:1 1 auto!important;
+    flex-direction:column!important;
+    min-width:0!important;
+    min-height:0!important;
+    width:100%!important;
+    overflow-x:hidden!important;
+    overflow-y:auto!important;
+    overscroll-behavior:contain!important;
+    -webkit-overflow-scrolling:touch!important;
+    scrollbar-width:none!important;
+    padding:0 14px calc(118px + env(safe-area-inset-bottom,0px))!important;
+    scroll-padding-bottom:calc(118px + env(safe-area-inset-bottom,0px))!important;
+  }
+
+  .task-management-page .tm-builder-scroll-region::-webkit-scrollbar{
+    width:0!important;
+    height:0!important;
+    display:none!important;
+  }
+
+  .task-management-page .tm-builder-scroll-region>.tm-builder-toolbar{
+    flex:0 0 auto!important;
+    margin:14px 0 12px!important;
+  }
+
+  .task-management-page .tm-builder-scroll-region>.tm-builder-canvas-wrap{
+    flex:0 0 auto!important;
+    width:100%!important;
+    height:max(430px,56dvh)!important;
+    min-height:430px!important;
+    overflow:hidden!important;
+  }
+
+  .task-management-page .tm-builder-scroll-region>.tm-builder-legend{
+    flex:0 0 auto!important;
+    padding:12px 2px 4px!important;
+  }
+
+  .task-management-page .tm-builder-scroll-region>.tm-form-error{
+    flex:0 0 auto!important;
+    margin:10px 0 0!important;
+  }
+}
+
+@media(max-width:640px){
+  .task-management-page .tm-dialog--builder>.tm-builder-header{
+    min-height:80px!important;
+    padding:16px 16px 12px!important;
+  }
+
+  .task-management-page .tm-dialog--builder>.tm-builder-header h2{
+    font-size:1.2rem!important;
+  }
+
+  .task-management-page .tm-builder-scroll-region{
+    padding-left:12px!important;
+    padding-right:12px!important;
+  }
+
+  .task-management-page .tm-builder-scroll-region>.tm-builder-toolbar{
+    margin-top:12px!important;
+  }
+
+  .task-management-page .tm-builder-scroll-region>.tm-builder-canvas-wrap{
+    height:520px!important;
+    min-height:520px!important;
+  }
+}
+
+html[data-theme="dark"] body.task-management-page .tm-overlay.tm-overlay--builder-layer::after,
+html[data-theme="dark"] body.task-management-page .tm-dialog.tm-dialog--builder,
+html[data-theme="dark"] body.task-management-page .tm-dialog--builder>.tm-builder-header{
+  background:#111318!important;
+}
+html[data-theme="dark"] body.task-management-page .tm-dialog--builder>.tm-builder-header{
+  border-bottom-color:#292d35!important;
+}
+

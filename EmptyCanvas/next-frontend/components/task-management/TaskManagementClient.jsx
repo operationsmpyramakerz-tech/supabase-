@@ -603,7 +603,7 @@ export default function TaskManagementClient({ view, initialMeta, initialTickets
 
   return (
     <section className="task-management-page next-task-classic-parity">
-      <link rel="stylesheet" href="/next/css/task-management-next-parity.css?v=event-calendar-parity-v4" />
+      <link rel="stylesheet" href="/next/css/task-management-next-parity.css?v=workflow-bottom-sheet-v5" />
       <BodyClassSync className="task-management-page" />
       <Toast toast={toast} onClose={() => setToast(null)} />
       <header className="main-header tm-page-header next-task-classic-header">
@@ -639,7 +639,7 @@ export default function TaskManagementClient({ view, initialMeta, initialTickets
               </div>
               {canCreate ? <button type="button" className="tm-new-ticket tm-new-ticket--toolbar" onClick={() => setEditor(editorFromTicket())}><FeatherIcon name="plus" /><span>Add Project</span></button> : null}
             </div>
-            <section className="tm-ticket-grid" aria-live="polite">{busy ? <div className="modern-loading" role="status"><div className="modern-loading__spinner" /><div className="modern-loading__text">Loading projects</div></div> : activeTickets.length ? activeTickets.map((ticket) => <ProjectCard ticket={ticket} view={view} onOpen={openTicket} onRejected={() => setRejectedReason((ticket.sections || []).find((section) => section.status === "rejected" && text(section.rejectionReason))?.rejectionReason || "No rejected reason was provided.")} key={ticket.id} />) : <div className="tm-empty-state"><div className="tm-empty-state__icon"><FeatherIcon name="git-branch" /></div><h2>{copy.empty}</h2><p>{copy.emptyText}</p>{canCreate ? <button className="tm-btn tm-btn--primary" type="button" onClick={() => setEditor(editorFromTicket())}><FeatherIcon name="plus" />Add Project</button> : null}</div>}</section>
+            <section className="tm-ticket-grid" aria-live="polite">{busy ? <div className="modern-loading" role="status"><div className="modern-loading__spinner" /><div className="modern-loading__text">Loading projects</div></div> : activeTickets.length ? activeTickets.map((ticket) => <ProjectCard ticket={ticket} view={view} onOpen={openTicket} onRejected={() => setRejectedReason((ticket.sections || []).find((section) => section.status === "rejected" && text(section.rejectionReason))?.rejectionReason || "No rejected reason was provided.")} key={ticket.id} />) : <div className="tm-empty-state"><div className="tm-empty-state__icon"><FeatherIcon name="git-branch" /></div><h2>{copy.empty}</h2><p>{copy.emptyText}</p></div>}</section>
           </section>
         </div>
       </main>
