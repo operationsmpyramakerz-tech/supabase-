@@ -5,7 +5,7 @@ import { usePersistentShellContext } from "./PersistentShellContext";
 const SHELL_STYLES = Object.freeze([
   "/next/css/style.css?v=bidi-mixed-v1",
   "/next/css/ui-redesign.css?v=sidebar-page-label-frame-v3",
-  "/next/css/page-canvas-fix.css?v=dark-page-background-v4",
+  "/next/css/page-canvas-fix.css?v=current-orders-list-surface-v5",
   "/next/css/classic-parity.css?v=order-modal-reason-status-v2",
 ]);
 
