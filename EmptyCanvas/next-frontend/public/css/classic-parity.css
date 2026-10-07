@@ -9800,3 +9800,28 @@ html[data-theme="dark"] body.next-classic-shell-active:not(.login-page):not(.pwa
     box-sizing: border-box !important;
   }
 }
+
+/* ========================================================================
+   Current Orders — remove the large page-height white canvas (2026-10-07)
+   The previous cleanup removed only #current-orders.card, while the shared
+   authenticated shell still painted <main> white. Keep the real toolbar/order
+   cards, but let the Current Orders page itself use the workspace background.
+   ======================================================================== */
+body.next-classic-shell-active.current-orders-page .classic-app-shell > .main-content > main.next-classic-page-content,
+body.next-classic-shell-active.current-orders-page .classic-app-shell > .main-content > main.container-full-width {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  border: 0 !important;
+  border-color: transparent !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+html[data-theme="dark"] body.next-classic-shell-active.current-orders-page .classic-app-shell > .main-content > main.next-classic-page-content,
+html[data-theme="dark"] body.next-classic-shell-active.current-orders-page .classic-app-shell > .main-content > main.container-full-width {
+  background: transparent !important;
+  background-color: transparent !important;
+}
