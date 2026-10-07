@@ -1366,3 +1366,47 @@ html[data-theme="dark"] body.current-orders-page.next-classic-shell-active .clas
   background-image: none !important;
 }
 
+
+/* ========================================================================
+   Current Orders — true single white page surface (2026-10-07)
+   Remove the remaining light-grey shell/workspace tint around the Current
+   Orders canvas.  Every page-level layer is white in light mode, while the
+   toolbar and order cards keep their own component styling.
+   ======================================================================== */
+html[data-theme="light"] body.current-orders-page.next-classic-shell-active,
+html[data-theme="light"] body.current-orders-page.next-classic-shell-active .classic-app-shell,
+html[data-theme="light"] body.current-orders-page.next-classic-shell-active .classic-app-shell > .main-content,
+html[data-theme="light"] body.current-orders-page.next-classic-shell-active .classic-app-shell > .main-content > .main-header,
+html[data-theme="light"] body.current-orders-page.next-classic-shell-active .classic-app-shell > .main-content > main,
+html[data-theme="light"] body.current-orders-page.next-classic-shell-active .classic-app-shell > .main-content > main.next-classic-page-content,
+html[data-theme="light"] body.current-orders-page.next-classic-shell-active .classic-app-shell > .main-content > main.current-orders-main-surface,
+html[data-theme="light"] body.current-orders-page .next-classic-orders-parity,
+html[data-theme="light"] body.current-orders-page .next-classic-orders-parity #current-orders,
+html[data-theme="light"] body.current-orders-page .next-classic-orders-parity #orders-list {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  background-image: none !important;
+}
+
+/* The old shell/card geometry can reveal a grey ring even when the center is
+   white.  Keep the layout spacing, but make the page-level surface visually
+   continuous with the white workspace. */
+html[data-theme="light"] body.current-orders-page.next-classic-shell-active .classic-app-shell,
+html[data-theme="light"] body.current-orders-page.next-classic-shell-active .classic-app-shell > .main-content,
+html[data-theme="light"] body.current-orders-page.next-classic-shell-active .classic-app-shell > .main-content > main,
+html[data-theme="light"] body.current-orders-page .next-classic-orders-parity,
+html[data-theme="light"] body.current-orders-page .next-classic-orders-parity #current-orders {
+  border-color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+html[data-theme="light"] body.current-orders-page.next-classic-shell-active .classic-app-shell > .main-content::before,
+html[data-theme="light"] body.current-orders-page.next-classic-shell-active .classic-app-shell > .main-content::after,
+html[data-theme="light"] body.current-orders-page.next-classic-shell-active .classic-app-shell > .main-content > .main-header::before,
+html[data-theme="light"] body.current-orders-page.next-classic-shell-active .classic-app-shell > .main-content > .main-header::after,
+html[data-theme="light"] body.current-orders-page.next-classic-shell-active .classic-app-shell > .main-content > main::before,
+html[data-theme="light"] body.current-orders-page.next-classic-shell-active .classic-app-shell > .main-content > main::after {
+  background: none !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
