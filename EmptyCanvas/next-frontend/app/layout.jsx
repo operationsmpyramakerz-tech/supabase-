@@ -1,5 +1,6 @@
 import Script from "next/script";
 import InternalNavigationBridge from "../components/InternalNavigationBridge";
+import SystemNotificationIsland from "../components/SystemNotificationIsland";
 import PersistentAppShell from "../components/PersistentAppShell";
 import { cookies } from "next/headers";
 import "./globals.css";
@@ -99,6 +100,7 @@ export default async function RootLayout({ children }) {
       </head>
       <body>
         <InternalNavigationBridge />
+        <SystemNotificationIsland />
         <PersistentAppShell initialAccount={shellAccount}>
           {children}
         </PersistentAppShell>
