@@ -8,6 +8,7 @@ import NotificationsBell from "../notifications/NotificationsBell";
 import UserProfileMenu from "../UserProfileMenu";
 import ClassicTaskSelect from "./ClassicTaskSelect";
 import { loadTeamMemberPublicProfile } from "../../lib/team-member-public-client";
+import { navigateWithinApp } from "../../lib/client-navigation";
 
 const ClassicTaskWorkflowDetails = dynamic(() => import("./ClassicTaskWorkflowDetails"), { ssr: false });
 const TaskManagementDialogs = dynamic(() => import("./TaskManagementDialogs"), { ssr: false });
@@ -292,6 +293,164 @@ function CalendarAgenda({ tickets, selectedDate, onSelectDate, month, onMonthCha
   );
 }
 
+function MobileTaskDashboard({ tickets, view, selectedDate, onSelectDate, onOpenTicket, canCreate, onCreate, availableViews = [], activeStatus, onStatusChange }) {
+  const selected = dateFromKey(selectedDate) || new Date();
+  const today = new Date();
+  const todayValue = todayKey();
+  const weekStart = new Date(selected);
+  weekStart.setDate(selected.getDate() - ((selected.getDay() + 6) % 7));
+  const weekDays = Array.from({ length: 7 }, (_, index) => {
+    const day = new Date(weekStart);
+    day.setDate(weekStart.getDate() + index);
+    return day;
+  });
+  const liveTickets = (Array.isArray(tickets) ? tickets : []).filter((ticket) => !ticket?.isArchived);
+  const selectedTasks = liveTickets
+    .filter((ticket) => dateKey(ticket?.dueDate) === selectedDate)
+    .sort((a, b) => text(a?.ticketCode).localeCompare(text(b?.ticketCode), undefined, { numeric: true }));
+  const dayCounts = new Map();
+  for (const ticket of liveTickets) {
+    const key = dateKey(ticket?.dueDate);
+    if (key) dayCounts.set(key, (dayCounts.get(key) || 0) + 1);
+  }
+  const statusCounts = {
+    not_started: liveTickets.filter((ticket) => text(ticket?.status) === "not_started").length,
+    in_progress: liveTickets.filter((ticket) => text(ticket?.status) === "in_progress").length,
+    completed: liveTickets.filter((ticket) => text(ticket?.status) === "completed").length,
+  };
+  const shiftWeek = (direction) => {
+    const next = new Date(selected);
+    next.setDate(selected.getDate() + (direction * 7));
+    onSelectDate(dateKey(next));
+  };
+  const resetToday = () => onSelectDate(todayValue);
+  const selectedLabel = selectedDate === todayValue
+    ? "TODAY"
+    : selected.toLocaleDateString(undefined, { weekday: "long" }).toUpperCase();
+
+  return (
+    <section className="tm-mobile-dashboard" aria-label="Task Management mobile dashboard">
+      {availableViews.length > 1 ? (
+        <nav className="tm-mobile-view-switcher" aria-label="Task Management views">
+          {availableViews.map((item) => (
+            <button
+              type="button"
+              key={item.key}
+              className={`tm-mobile-view-switcher__item${item.key === view ? " is-active" : ""}`}
+              onClick={() => navigateWithinApp(`/next/task-management/${item.slug}`)}
+              aria-current={item.key === view ? "page" : undefined}
+            >
+              <FeatherIcon name={item.key === "all" ? "layers" : item.key === "my" ? "check-circle" : "git-branch"} />
+              <span>{item.label}</span>
+            </button>
+          ))}
+        </nav>
+      ) : null}
+
+      {canCreate ? (
+        <button type="button" className="tm-mobile-add-card" onClick={onCreate} aria-label="Add new project">
+          <span className="tm-mobile-add-card__copy">
+            <strong>Add new</strong>
+            <small>Create a new delegated project</small>
+          </span>
+          <span className="tm-mobile-add-card__plus"><FeatherIcon name="plus-square" /></span>
+        </button>
+      ) : null}
+
+      <section className="tm-mobile-week-card" aria-label="Weekly task calendar">
+        <div className="tm-mobile-week-toolbar">
+          <button type="button" onClick={() => shiftWeek(-1)} aria-label="Previous week"><FeatherIcon name="chevron-left" /></button>
+          <button type="button" className="tm-mobile-week-month" onClick={resetToday}>
+            <strong>{selected.toLocaleDateString(undefined, { month: "long" })}</strong>
+            <span>{selected.getFullYear()} · Today</span>
+          </button>
+          <button type="button" onClick={() => shiftWeek(1)} aria-label="Next week"><FeatherIcon name="chevron-right" /></button>
+        </div>
+        <div className="tm-mobile-week-strip">
+          {weekDays.map((day) => {
+            const key = dateKey(day);
+            const selectedDay = key === selectedDate;
+            const current = key === todayValue;
+            const count = dayCounts.get(key) || 0;
+            return (
+              <button
+                type="button"
+                key={key}
+                className={`tm-mobile-week-day${selectedDay ? " is-selected" : ""}${current ? " is-today" : ""}${count ? " has-tasks" : ""}`}
+                onClick={() => onSelectDate(key)}
+                aria-pressed={selectedDay}
+                aria-label={`${day.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}${count ? `, ${count} task${count === 1 ? "" : "s"}` : ""}`}
+              >
+                <span>{day.toLocaleDateString(undefined, { weekday: "short" })}</span>
+                <strong>{day.getDate()}</strong>
+                <i aria-hidden="true" />
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="tm-mobile-summary-grid" aria-label="Task summary">
+        <button type="button" className={`tm-mobile-summary-card tm-mobile-summary-card--not-started${activeStatus === "not_started" ? " is-active" : ""}`} onClick={() => onStatusChange(activeStatus === "not_started" ? "all" : "not_started")}>
+          <span><FeatherIcon name="circle" /> Not started</span>
+          <strong>{statusCounts.not_started}</strong>
+          <small>waiting to begin</small>
+        </button>
+        <button type="button" className={`tm-mobile-summary-card tm-mobile-summary-card--progress${activeStatus === "in_progress" ? " is-active" : ""}`} onClick={() => onStatusChange(activeStatus === "in_progress" ? "all" : "in_progress")}>
+          <span><FeatherIcon name="activity" /> In progress</span>
+          <strong>{statusCounts.in_progress}</strong>
+          <small>active workflow</small>
+        </button>
+        <button type="button" className={`tm-mobile-summary-card tm-mobile-summary-card--done${activeStatus === "completed" ? " is-active" : ""}`} onClick={() => onStatusChange(activeStatus === "completed" ? "all" : "completed")}>
+          <span><FeatherIcon name="check-circle" /> Done</span>
+          <strong>{statusCounts.completed}</strong>
+          <small>completed projects</small>
+        </button>
+      </section>
+
+      <section className="tm-mobile-day-feed" aria-labelledby="tmMobileDayTitle">
+        <div className="tm-mobile-day-feed__head">
+          <div>
+            <span>{selectedLabel}</span>
+            <h3 id="tmMobileDayTitle">{selected.toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })}</h3>
+          </div>
+          <b>{selectedTasks.length}</b>
+        </div>
+        <div className="tm-mobile-task-list">
+          {selectedTasks.length ? selectedTasks.map((ticket) => {
+            const stats = ticketStats(ticket, view);
+            const due = dateFromKey(dateKey(ticket?.dueDate)) || selected;
+            const departments = ticketDepartments(ticket);
+            return (
+              <button type="button" className="tm-mobile-task-card" key={ticket.id} onClick={() => onOpenTicket(ticket)}>
+                <span className="tm-mobile-task-card__date">
+                  <strong>{String(due.getDate()).padStart(2, "0")}</strong>
+                  <small>{due.toLocaleDateString(undefined, { month: "short" })}</small>
+                </span>
+                <span className="tm-mobile-task-card__body">
+                  <span>{ticket.ticketCode || "Project"}</span>
+                  <strong>{ticket.title || "Untitled project"}</strong>
+                  <small>{departments.join(" · ") || `${stats.completed}/${stats.total} complete`}</small>
+                </span>
+                <span className="tm-mobile-task-card__side">
+                  <StatusPill status={ticket.status} archived={ticket.isArchived} />
+                  <small>{stats.progress}%</small>
+                </span>
+              </button>
+            );
+          }) : (
+            <div className="tm-mobile-day-empty">
+              <span><FeatherIcon name="calendar" /></span>
+              <strong>No tasks on this date</strong>
+              <small>Select another day from the week above{canCreate ? " or use the Add new card above." : "."}</small>
+            </div>
+          )}
+        </div>
+      </section>
+    </section>
+  );
+}
+
 function ProjectCard({ ticket, view, onOpen, onRejected }) {
   const stats = ticketStats(ticket, view);
   return (
@@ -462,6 +621,7 @@ export default function TaskManagementClient({ view, initialMeta, initialTickets
 
   return (
     <section className="task-management-page next-task-classic-parity">
+      <link rel="stylesheet" href="/next/css/task-management-next-parity.css?v=event-calendar-parity-v4" />
       <BodyClassSync className="task-management-page" />
       <Toast toast={toast} onClose={() => setToast(null)} />
       <header className="main-header tm-page-header next-task-classic-header">
@@ -470,9 +630,25 @@ export default function TaskManagementClient({ view, initialMeta, initialTickets
       </header>
       {bootstrapWarnings.length ? <div className="dashboard-notice"><strong>Some Task Management resources loaded through fallback.</strong><span>The page remains usable while those resources recover.</span></div> : null}
       <main className="container-full-width tm-main">
+        <MobileTaskDashboard
+          tickets={tickets}
+          view={view}
+          selectedDate={selectedDate}
+          onSelectDate={setSelectedDate}
+          onOpenTicket={openTicket}
+          canCreate={canCreate}
+          onCreate={() => setEditor(editorFromTicket())}
+          availableViews={availableViews}
+          activeStatus={status}
+          onStatusChange={setStatus}
+        />
         <div className="tm-agenda-layout">
           <CalendarAgenda tickets={agendaTickets} selectedDate={selectedDate} onSelectDate={setSelectedDate} month={month} onMonthChange={setMonth} onOpenTicket={openTicket} view={view} />
           <section className="tm-tasks-column" aria-label="Task list">
+            <div className="tm-mobile-list-heading">
+              <div><span>PROJECTS</span><h2>{copy.label}</h2></div>
+              <b>{activeTickets.length}</b>
+            </div>
             <div className="tm-toolbar tm-orders-toolbar" role="toolbar" aria-label="Task Management status and department filters">
               <div className="tm-toolbar__scroll"><div className="tm-tabs tm-tabs--orders" role="tablist" aria-label="Project status">{STATUS_OPTIONS.map(([value, label, icon]) => <button className={`tm-tab${status === value ? " is-active" : ""}`} type="button" onClick={() => setStatus(value)} role="tab" aria-selected={status === value} title={label} key={value}><span className="tm-tab__icon"><FeatherIcon name={icon} /></span><span className="tm-tab__label">{label}</span></button>)}</div></div>
               <div className="tm-toolbar__divider" aria-hidden="true" />
