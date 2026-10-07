@@ -1013,7 +1013,24 @@
   transform:translateX(-50%);
   transform-origin:50% 0%;
   animation:classicCartOrderConfirmationLife 6.68s linear both;
-  will-change:transform,opacity,filter;
+  will-change:transform,translate,opacity,filter;
+  translate:0 var(--cart-island-drag-y,0px);
+  touch-action:pan-x;
+  user-select:none;
+  -webkit-user-select:none;
+}
+.classic-cart-order-confirmation.is-dragging{
+  cursor:grabbing;
+  transition:none;
+}
+.classic-cart-order-confirmation.is-snap-back{
+  transition:translate .18s cubic-bezier(.2,.8,.2,1);
+}
+.classic-cart-order-confirmation.is-swipe-dismissed{
+  translate:0 -150px !important;
+  opacity:0 !important;
+  transition:translate .18s cubic-bezier(.22,.8,.22,1),opacity .16s ease !important;
+  pointer-events:none;
 }
 .classic-cart-order-confirmation::after{
   content:"";

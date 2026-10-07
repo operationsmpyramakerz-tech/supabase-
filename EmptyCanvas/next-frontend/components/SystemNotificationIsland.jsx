@@ -4,7 +4,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 const SYSTEM_NOTIFICATION_EVENT = "pyramakerz:system-notification";
+const SYSTEM_NOTIFICATION_UNDO_EVENT = "pyramakerz:system-notification-undo";
 const DEFAULT_DURATION = 4700;
+const SWIPE_DISMISS_DISTANCE = 46;
+const SWIPE_DISMISS_DURATION = 180;
 
 const LEGACY_NOTICE_SELECTOR = [
   ".next-toast",
@@ -127,15 +130,51 @@ export function showSystemNotification(payload) {
 
 export default function SystemNotificationIsland() {
   const [notice, setNotice] = useState(null);
+  const [undoing, setUndoing] = useState(false);
   const timerRef = useRef(null);
   const seenRef = useRef(new WeakMap());
   const alertRef = useRef(null);
+  const islandRef = useRef(null);
+  const swipeCleanupTimerRef = useRef(null);
+  const dragRef = useRef({ active: false, pointerId: null, startY: 0, lastY: 0 });
 
-  const dismiss = useCallback(() => {
+  const clearNoticeTimer = useCallback(() => {
     if (timerRef.current) window.clearTimeout(timerRef.current);
     timerRef.current = null;
-    setNotice(null);
   }, []);
+
+  const resetDragVisuals = useCallback(() => {
+    const node = islandRef.current;
+    if (!node) return;
+    node.classList.remove("is-dragging", "is-snap-back", "is-swipe-dismissed");
+    node.style.removeProperty("--system-island-drag-y");
+  }, []);
+
+  const dismiss = useCallback(() => {
+    clearNoticeTimer();
+    if (swipeCleanupTimerRef.current) window.clearTimeout(swipeCleanupTimerRef.current);
+    swipeCleanupTimerRef.current = null;
+    dragRef.current = { active: false, pointerId: null, startY: 0, lastY: 0 };
+    setUndoing(false);
+    setNotice(null);
+  }, [clearNoticeTimer]);
+
+  const dismissWithSwipe = useCallback(() => {
+    const node = islandRef.current;
+    clearNoticeTimer();
+    dragRef.current.active = false;
+    if (!node) {
+      dismiss();
+      return;
+    }
+    node.classList.remove("is-dragging", "is-snap-back");
+    node.classList.add("is-swipe-dismissed");
+    swipeCleanupTimerRef.current = window.setTimeout(() => {
+      swipeCleanupTimerRef.current = null;
+      setUndoing(false);
+      setNotice(null);
+    }, SWIPE_DISMISS_DURATION + 40);
+  }, [clearNoticeTimer, dismiss]);
 
   const pushNotice = useCallback((payload = {}) => {
     const type = ["success", "error", "warning", "info"].includes(payload.type) ? payload.type : "info";
@@ -143,14 +182,110 @@ export default function SystemNotificationIsland() {
     if (!message) return;
     const title = cleanText(payload.title) || defaultTitle(type, message);
     const duration = Math.max(2200, Number(payload.duration) || DEFAULT_DURATION);
+    const onUndo = typeof payload.onUndo === "function"
+      ? payload.onUndo
+      : (typeof payload.undo === "function" ? payload.undo : null);
+    const undoLabel = cleanText(payload.undoLabel) || "Undo";
 
-    if (timerRef.current) window.clearTimeout(timerRef.current);
-    setNotice({ id: `${Date.now()}-${Math.random().toString(36).slice(2)}`, type, title, message, duration });
+    clearNoticeTimer();
+    if (swipeCleanupTimerRef.current) window.clearTimeout(swipeCleanupTimerRef.current);
+    swipeCleanupTimerRef.current = null;
+    resetDragVisuals();
+    setUndoing(false);
+    setNotice({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      type,
+      title,
+      message,
+      duration,
+      onUndo,
+      undoLabel,
+      undoData: payload.undoData ?? null,
+    });
     timerRef.current = window.setTimeout(() => {
       timerRef.current = null;
       setNotice(null);
     }, duration + 120);
+  }, [clearNoticeTimer, resetDragVisuals]);
+
+  const handleUndo = useCallback(async () => {
+    if (!notice || undoing) return;
+    clearNoticeTimer();
+    setUndoing(true);
+
+    try {
+      if (typeof notice.onUndo === "function") {
+        await notice.onUndo(notice);
+      } else {
+        window.dispatchEvent(new CustomEvent(SYSTEM_NOTIFICATION_UNDO_EVENT, {
+          detail: {
+            id: notice.id,
+            type: notice.type,
+            title: notice.title,
+            message: notice.message,
+            undoData: notice.undoData,
+          },
+        }));
+      }
+    } finally {
+      dismiss();
+    }
+  }, [clearNoticeTimer, dismiss, notice, undoing]);
+
+  const handlePointerDown = useCallback((event) => {
+    if (!notice || undoing) return;
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    if (event.target instanceof Element && event.target.closest("button")) return;
+
+    const node = islandRef.current;
+    if (!node) return;
+
+    dragRef.current = {
+      active: true,
+      pointerId: event.pointerId,
+      startY: event.clientY,
+      lastY: event.clientY,
+    };
+    node.classList.remove("is-snap-back", "is-swipe-dismissed");
+    node.classList.add("is-dragging");
+    node.style.setProperty("--system-island-drag-y", "0px");
+    try { node.setPointerCapture(event.pointerId); } catch {}
+  }, [notice, undoing]);
+
+  const handlePointerMove = useCallback((event) => {
+    const drag = dragRef.current;
+    if (!drag.active || drag.pointerId !== event.pointerId) return;
+    const node = islandRef.current;
+    if (!node) return;
+
+    drag.lastY = event.clientY;
+    const rawDelta = event.clientY - drag.startY;
+    const delta = rawDelta <= 0 ? rawDelta : Math.min(12, rawDelta * 0.18);
+    node.style.setProperty("--system-island-drag-y", `${delta}px`);
   }, []);
+
+  const finishPointerGesture = useCallback((event) => {
+    const drag = dragRef.current;
+    if (!drag.active || drag.pointerId !== event.pointerId) return;
+    const node = islandRef.current;
+    if (!node) return;
+
+    const delta = drag.lastY - drag.startY;
+    dragRef.current = { active: false, pointerId: null, startY: 0, lastY: 0 };
+    try { node.releasePointerCapture(event.pointerId); } catch {}
+
+    if (delta <= -SWIPE_DISMISS_DISTANCE) {
+      dismissWithSwipe();
+      return;
+    }
+
+    node.classList.remove("is-dragging");
+    node.classList.add("is-snap-back");
+    node.style.setProperty("--system-island-drag-y", "0px");
+    window.setTimeout(() => {
+      node.classList.remove("is-snap-back");
+    }, 190);
+  }, [dismissWithSwipe]);
 
   useEffect(() => {
     const handleEvent = (event) => pushNotice(event?.detail || {});
@@ -200,19 +335,25 @@ export default function SystemNotificationIsland() {
       observer.disconnect();
       window.removeEventListener(SYSTEM_NOTIFICATION_EVENT, handleEvent);
       if (window.alert === alertRef.current) window.alert = previousAlert;
-      if (timerRef.current) window.clearTimeout(timerRef.current);
+      clearNoticeTimer();
+      if (swipeCleanupTimerRef.current) window.clearTimeout(swipeCleanupTimerRef.current);
     };
-  }, [pushNotice]);
+  }, [clearNoticeTimer, pushNotice]);
 
   if (!notice || typeof document === "undefined") return null;
 
   return createPortal(
     <div
+      ref={islandRef}
       key={notice.id}
-      className={`system-notification-island is-${notice.type}`}
+      className={`system-notification-island is-${notice.type}${undoing ? " is-undoing" : ""}`}
       style={{ "--system-island-duration": `${notice.duration}ms` }}
       role="status"
       aria-live={notice.type === "error" ? "assertive" : "polite"}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={finishPointerGesture}
+      onPointerCancel={finishPointerGesture}
     >
       <svg className="system-notification-island__progress" viewBox="0 0 500 92" preserveAspectRatio="none" aria-hidden="true">
         <rect className="system-notification-island__track" x="3" y="3" width="494" height="86" rx="43" pathLength="100" />
@@ -223,7 +364,15 @@ export default function SystemNotificationIsland() {
         <strong>{notice.title}</strong>
         <small>{notice.message}</small>
       </span>
-      <button className="system-notification-island__close" type="button" onClick={dismiss} aria-label="Close notification">×</button>
+      <button
+        className="system-notification-island__undo"
+        type="button"
+        onClick={handleUndo}
+        disabled={undoing}
+        aria-label={notice.undoLabel}
+      >
+        {undoing ? "..." : notice.undoLabel}
+      </button>
     </div>,
     document.body,
   );

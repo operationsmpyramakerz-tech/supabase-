@@ -2112,8 +2112,32 @@ a { color: inherit; text-decoration: none; }
   transform:translateX(-50%);
   transform-origin:50% 0%;
   animation:systemNotificationIslandLife var(--system-island-duration) linear both;
-  will-change:transform,opacity,filter;
+  will-change:transform,translate,opacity,filter;
+  translate:0 var(--system-island-drag-y,0px);
+  touch-action:pan-x;
+  user-select:none;
+  -webkit-user-select:none;
 }
+.system-notification-island.is-dragging{
+  cursor:grabbing;
+  transition:none;
+}
+.system-notification-island.is-snap-back{
+  transition:translate .18s cubic-bezier(.2,.8,.2,1);
+}
+.system-notification-island.is-swipe-dismissed{
+  translate:0 -150px !important;
+  opacity:0 !important;
+  transition:translate .18s cubic-bezier(.22,.8,.22,1),opacity .16s ease !important;
+  pointer-events:none;
+}
+.system-notification-island.is-undoing{
+  pointer-events:none;
+}
+.system-notification-island.is-undoing .system-notification-island__undo{
+  pointer-events:auto;
+}
+
 .system-notification-island::after{
   content:"";
   position:absolute;
@@ -2194,26 +2218,29 @@ a { color: inherit; text-decoration: none; }
   overflow:hidden;
   text-overflow:ellipsis;
 }
-.system-notification-island__close{
+.system-notification-island__undo{
   position:relative;
   z-index:2;
-  width:42px;
+  min-width:74px;
   height:34px;
+  padding:0 15px;
   border:1px solid rgba(255,255,255,.88);
   border-radius:999px;
   background:rgba(255,255,255,.96);
-  color:#111;
+  color:#d64545;
   font:inherit;
-  font-size:1.18rem;
+  font-size:.72rem;
   line-height:1;
-  font-weight:800;
+  font-weight:900;
+  letter-spacing:-.01em;
   cursor:pointer;
   touch-action:manipulation;
   -webkit-tap-highlight-color:transparent;
   box-shadow:0 5px 14px -9px rgba(255,255,255,.7);
 }
-.system-notification-island__close:active{transform:scale(.96)}
-.system-notification-island__close:focus-visible{outline:2px solid var(--system-island-accent);outline-offset:2px}
+.system-notification-island__undo:active{transform:scale(.96)}
+.system-notification-island__undo:focus-visible{outline:2px solid var(--system-island-accent);outline-offset:2px}
+.system-notification-island__undo:disabled{opacity:.68;cursor:wait}
 @keyframes systemNotificationIslandProgress{
   from{stroke-dashoffset:0}
   to{stroke-dashoffset:100}
@@ -2245,12 +2272,12 @@ a { color: inherit; text-decoration: none; }
   .system-notification-island__copy{gap:3px}
   .system-notification-island__copy strong{font-size:.80rem}
   .system-notification-island__copy small{font-size:.62rem}
-  .system-notification-island__close{width:38px;height:30px;font-size:1rem}
+  .system-notification-island__undo{min-width:64px;height:30px;padding:0 11px;font-size:.64rem}
   .system-notification-island::after{display:none}
 }
 @media(max-width:380px){
   .system-notification-island{width:calc(100vw - 38px);padding-left:10px;padding-right:10px;gap:7px}
-  .system-notification-island__close{width:36px}
+  .system-notification-island__undo{min-width:58px;padding:0 9px;font-size:.61rem}
 }
 @media(prefers-reduced-motion:reduce){
   .system-notification-island{animation:systemNotificationIslandFade var(--system-island-duration) ease both}

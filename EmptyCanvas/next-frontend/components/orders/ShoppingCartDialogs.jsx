@@ -172,6 +172,10 @@ const ORDER_DISSOLVE_PARTICLES = Array.from({ length: 168 }, (_, index) => {
 export function OrderSubmissionBar({ submission, onDone, onUndo }) {
   const [undoing, setUndoing] = useState(false);
   const [exploding, setExploding] = useState(false);
+  const islandRef = useRef(null);
+  const swipeDismissTimerRef = useRef(null);
+  const suppressNextClickRef = useRef(false);
+  const dragRef = useRef({ active: false, pointerId: null, startY: 0, lastY: 0, moved: false });
 
   useEffect(() => {
     if (!submission || undoing || exploding) return undefined;
@@ -179,14 +183,73 @@ export function OrderSubmissionBar({ submission, onDone, onUndo }) {
     return () => window.clearTimeout(timer);
   }, [submission, onDone, undoing, exploding]);
 
+  useEffect(() => () => {
+    if (swipeDismissTimerRef.current) window.clearTimeout(swipeDismissTimerRef.current);
+  }, []);
+
   if (!submission) return null;
   const meta = orderTypeMeta(submission.orderType);
   const orderQuery = text(submission.orderId);
   const viewOrderUrl = orderQuery ? `/next/orders?q=${encodeURIComponent(orderQuery)}` : "/next/orders";
 
   const openCurrentOrder = () => {
+    if (suppressNextClickRef.current) {
+      suppressNextClickRef.current = false;
+      return;
+    }
     if (undoing || exploding) return;
     navigateWithinApp(viewOrderUrl);
+  };
+
+  const beginSwipe = (event) => {
+    if (undoing || exploding) return;
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    if (event.target instanceof Element && event.target.closest("button")) return;
+    const node = islandRef.current;
+    if (!node) return;
+    dragRef.current = { active: true, pointerId: event.pointerId, startY: event.clientY, lastY: event.clientY, moved: false };
+    node.classList.remove("is-snap-back", "is-swipe-dismissed");
+    node.classList.add("is-dragging");
+    node.style.setProperty("--cart-island-drag-y", "0px");
+    try { node.setPointerCapture(event.pointerId); } catch {}
+  };
+
+  const moveSwipe = (event) => {
+    const drag = dragRef.current;
+    if (!drag.active || drag.pointerId !== event.pointerId) return;
+    const node = islandRef.current;
+    if (!node) return;
+    drag.lastY = event.clientY;
+    const rawDelta = event.clientY - drag.startY;
+    if (Math.abs(rawDelta) > 7) drag.moved = true;
+    const delta = rawDelta <= 0 ? rawDelta : Math.min(12, rawDelta * 0.18);
+    node.style.setProperty("--cart-island-drag-y", `${delta}px`);
+  };
+
+  const finishSwipe = (event) => {
+    const drag = dragRef.current;
+    if (!drag.active || drag.pointerId !== event.pointerId) return;
+    const node = islandRef.current;
+    if (!node) return;
+    const delta = drag.lastY - drag.startY;
+    suppressNextClickRef.current = drag.moved;
+    dragRef.current = { active: false, pointerId: null, startY: 0, lastY: 0, moved: false };
+    try { node.releasePointerCapture(event.pointerId); } catch {}
+
+    if (delta <= -46) {
+      node.classList.remove("is-dragging", "is-snap-back");
+      node.classList.add("is-swipe-dismissed");
+      swipeDismissTimerRef.current = window.setTimeout(() => {
+        swipeDismissTimerRef.current = null;
+        onDone(null);
+      }, 220);
+      return;
+    }
+
+    node.classList.remove("is-dragging");
+    node.classList.add("is-snap-back");
+    node.style.setProperty("--cart-island-drag-y", "0px");
+    window.setTimeout(() => node.classList.remove("is-snap-back"), 190);
   };
   const undoOrder = async (event) => {
     event.preventDefault();
@@ -205,11 +268,16 @@ export function OrderSubmissionBar({ submission, onDone, onUndo }) {
 
   return (
     <div
+      ref={islandRef}
       className={`classic-cart-order-confirmation${undoing ? " is-undoing" : ""}${exploding ? " is-exploding" : ""}`}
       role="button"
       tabIndex={exploding ? -1 : 0}
       aria-live="polite"
       aria-label={`Open ${submission.orderId || "current order"}`}
+      onPointerDown={beginSwipe}
+      onPointerMove={moveSwipe}
+      onPointerUp={finishSwipe}
+      onPointerCancel={finishSwipe}
       onClick={openCurrentOrder}
       onKeyDown={(event) => {
         if (event.target !== event.currentTarget || undoing || exploding) return;
