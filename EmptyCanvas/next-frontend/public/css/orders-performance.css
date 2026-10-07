@@ -1323,37 +1323,46 @@ html[data-theme="dark"] body.operations-orders-page .next-classic-orders-parity 
   }
 }
 /* ========================================================================
-   Current Orders — definitive page-canvas removal (2026-10-07)
-   This route stylesheet loads after the shared shell styles, so keep the
-   Current Orders workspace flush with the shell background and leave only
-   the toolbar + individual order cards visible.
+   Current Orders — one continuous white workspace (2026-10-07)
+   The user wants the page background, toolbar area and order-list workspace to
+   read as one surface.  Paint both the shell workspace and the route <main>
+   white, then remove the route canvas edge/shadow so the old large rounded
+   white card is no longer visually distinguishable from its surroundings.
+   Individual order cards and toolbar controls keep their own styling.
    ======================================================================== */
-body.current-orders-page.next-classic-shell-active .classic-app-shell > .main-content > main.next-classic-page-content,
-body.current-orders-page.next-classic-shell-active .classic-app-shell > .main-content > main.container-full-width,
-.classic-app-shell > .main-content > main.current-orders-main-surface {
-  background: #f5f6f8 !important;
-  background-color: #f5f6f8 !important;
+html:not([data-theme="dark"]) body.current-orders-page.next-classic-shell-active,
+html:not([data-theme="dark"]) body.current-orders-page.next-classic-shell-active .classic-app-shell,
+html:not([data-theme="dark"]) body.current-orders-page.next-classic-shell-active .classic-app-shell > .main-content,
+html:not([data-theme="dark"]) body.current-orders-page.next-classic-shell-active .classic-app-shell > .main-content > main.next-classic-page-content,
+html:not([data-theme="dark"]) body.current-orders-page.next-classic-shell-active .classic-app-shell > .main-content > main.container-full-width,
+html:not([data-theme="dark"]) body.current-orders-page.next-classic-shell-active .classic-app-shell > .main-content > main.current-orders-main-surface,
+html:not([data-theme="dark"]) body.current-orders-page .next-classic-orders-parity,
+html:not([data-theme="dark"]) body.current-orders-page .next-classic-orders-parity #current-orders.card {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
   background-image: none !important;
+}
+
+html:not([data-theme="dark"]) body.current-orders-page.next-classic-shell-active .classic-app-shell > .main-content > main.next-classic-page-content,
+html:not([data-theme="dark"]) body.current-orders-page.next-classic-shell-active .classic-app-shell > .main-content > main.container-full-width,
+html:not([data-theme="dark"]) body.current-orders-page.next-classic-shell-active .classic-app-shell > .main-content > main.current-orders-main-surface,
+html:not([data-theme="dark"]) body.current-orders-page .next-classic-orders-parity,
+html:not([data-theme="dark"]) body.current-orders-page .next-classic-orders-parity #current-orders.card {
   border: 0 !important;
+  border-color: transparent !important;
   border-radius: 0 !important;
   box-shadow: none !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
 
-body.current-orders-page .next-classic-orders-parity {
-  background: transparent !important;
-  background-color: transparent !important;
-  background-image: none !important;
-  border: 0 !important;
-  border-radius: 0 !important;
-  box-shadow: none !important;
-}
-
+/* Preserve the existing true-black Current Orders workspace in dark mode. */
+html[data-theme="dark"] body.current-orders-page.next-classic-shell-active .classic-app-shell > .main-content,
 html[data-theme="dark"] body.current-orders-page.next-classic-shell-active .classic-app-shell > .main-content > main.next-classic-page-content,
 html[data-theme="dark"] body.current-orders-page.next-classic-shell-active .classic-app-shell > .main-content > main.container-full-width,
-html[data-theme="dark"] .classic-app-shell > .main-content > main.current-orders-main-surface {
+html[data-theme="dark"] body.current-orders-page.next-classic-shell-active .classic-app-shell > .main-content > main.current-orders-main-surface {
   background: #000000 !important;
   background-color: #000000 !important;
+  background-image: none !important;
 }
 
