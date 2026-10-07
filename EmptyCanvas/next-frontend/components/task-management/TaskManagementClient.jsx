@@ -8,7 +8,6 @@ import NotificationsBell from "../notifications/NotificationsBell";
 import UserProfileMenu from "../UserProfileMenu";
 import ClassicTaskSelect from "./ClassicTaskSelect";
 import { loadTeamMemberPublicProfile } from "../../lib/team-member-public-client";
-import { navigateWithinApp } from "../../lib/client-navigation";
 
 const ClassicTaskWorkflowDetails = dynamic(() => import("./ClassicTaskWorkflowDetails"), { ssr: false });
 const TaskManagementDialogs = dynamic(() => import("./TaskManagementDialogs"), { ssr: false });
@@ -293,7 +292,7 @@ function CalendarAgenda({ tickets, selectedDate, onSelectDate, month, onMonthCha
   );
 }
 
-function MobileTaskDashboard({ tickets, view, selectedDate, onSelectDate, onOpenTicket, canCreate, onCreate, availableViews = [], activeStatus, onStatusChange }) {
+function MobileTaskDashboard({ tickets, view, selectedDate, onSelectDate, onOpenTicket, canCreate, onCreate, activeStatus, onStatusChange }) {
   const selected = dateFromKey(selectedDate) || new Date();
   const today = new Date();
   const todayValue = todayKey();
@@ -330,23 +329,6 @@ function MobileTaskDashboard({ tickets, view, selectedDate, onSelectDate, onOpen
 
   return (
     <section className="tm-mobile-dashboard" aria-label="Task Management mobile dashboard">
-      {availableViews.length > 1 ? (
-        <nav className="tm-mobile-view-switcher" aria-label="Task Management views">
-          {availableViews.map((item) => (
-            <button
-              type="button"
-              key={item.key}
-              className={`tm-mobile-view-switcher__item${item.key === view ? " is-active" : ""}`}
-              onClick={() => navigateWithinApp(`/next/task-management/${item.slug}`)}
-              aria-current={item.key === view ? "page" : undefined}
-            >
-              <FeatherIcon name={item.key === "all" ? "layers" : item.key === "my" ? "check-circle" : "git-branch"} />
-              <span>{item.label}</span>
-            </button>
-          ))}
-        </nav>
-      ) : null}
-
       {canCreate ? (
         <button type="button" className="tm-mobile-add-card" onClick={onCreate} aria-label="Add new project">
           <span className="tm-mobile-add-card__copy">
@@ -476,7 +458,7 @@ function editorFromTicket(ticket = null) {
 
 
 
-export default function TaskManagementClient({ view, initialMeta, initialTickets, availableViews, account = {}, bootstrapWarnings = [] }) {
+export default function TaskManagementClient({ view, initialMeta, initialTickets, account = {}, bootstrapWarnings = [] }) {
   const [tickets, setTickets] = useState(Array.isArray(initialTickets) ? initialTickets : []);
   const [meta, setMeta] = useState(initialMeta || {});
   const [status, setStatus] = useState("all");
@@ -638,7 +620,6 @@ export default function TaskManagementClient({ view, initialMeta, initialTickets
           onOpenTicket={openTicket}
           canCreate={canCreate}
           onCreate={() => setEditor(editorFromTicket())}
-          availableViews={availableViews}
           activeStatus={status}
           onStatusChange={setStatus}
         />
