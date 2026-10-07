@@ -168,6 +168,11 @@ export default function AppShell({
   const allowedPages = Array.isArray(account?.allowedPages) ? account.allowedPages : [];
   const classicLinks = CLASSIC_MAIN_LINKS.filter((link) => canSee(link, allowedPages));
   const combinedBodyClass = [bodyClass, "next-classic-shell-active"].filter(Boolean).join(" ");
+  const pageMainClass = [
+    "container-full-width",
+    "next-classic-page-content",
+    activePath === "/next/orders" ? "current-orders-main-surface" : "",
+  ].filter(Boolean).join(" ");
 
   useLayoutEffect(() => {
     if (!persistentShell?.persistent || typeof persistentShell.registerPage !== "function") return;
@@ -253,7 +258,7 @@ export default function AppShell({
             <div className="header-row2"><h1 className="page-title">{title}</h1></div>
           </header>
 
-          <main className="container-full-width next-classic-page-content">
+          <main className={pageMainClass}>
             {children}
           </main>
         </div>

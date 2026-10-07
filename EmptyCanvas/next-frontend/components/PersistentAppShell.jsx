@@ -24,7 +24,7 @@ function routePerformanceStyles(localPath) {
   // the same cascade while unrelated pages avoid parsing those selectors.
   if (["/orders", "/orders-review", "/operations-orders"].includes(localPath)) {
     return [
-      "/next/css/orders-performance.css?v=modal-controls-maintenance-parity-v3",
+      "/next/css/orders-performance.css?v=current-orders-canvas-removed-v4",
       "/next/css/order-mobile-performance.css?v=floating-order-type-icon-v3",
     ];
   }
@@ -88,7 +88,7 @@ function routePerformanceStyles(localPath) {
 function routeDefaults(localPath) {
   const exact = {
     "/home": { title: "Home", activePath: "/next/home" },
-    "/orders": { title: "Current Orders", activePath: "/next/orders" },
+    "/orders": { title: "Current Orders", activePath: "/next/orders", bodyClass: "current-orders-page order-modal-fit-screen" },
     "/orders-review": { title: "Orders Review", activePath: "/next/orders-review" },
     "/operations-orders": { title: "Operations Orders", activePath: "/next/operations-orders" },
     "/maintenance-orders": { title: "Maintenance Orders", activePath: "/next/maintenance-orders" },

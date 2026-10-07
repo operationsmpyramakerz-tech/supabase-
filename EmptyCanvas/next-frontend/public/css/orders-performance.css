@@ -1322,4 +1322,38 @@ html[data-theme="dark"] body.operations-orders-page .next-classic-orders-parity 
     min-height: 38px !important;
   }
 }
+/* ========================================================================
+   Current Orders — definitive page-canvas removal (2026-10-07)
+   This route stylesheet loads after the shared shell styles, so keep the
+   Current Orders workspace flush with the shell background and leave only
+   the toolbar + individual order cards visible.
+   ======================================================================== */
+body.current-orders-page.next-classic-shell-active .classic-app-shell > .main-content > main.next-classic-page-content,
+body.current-orders-page.next-classic-shell-active .classic-app-shell > .main-content > main.container-full-width,
+.classic-app-shell > .main-content > main.current-orders-main-surface {
+  background: #f5f6f8 !important;
+  background-color: #f5f6f8 !important;
+  background-image: none !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+body.current-orders-page .next-classic-orders-parity {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+html[data-theme="dark"] body.current-orders-page.next-classic-shell-active .classic-app-shell > .main-content > main.next-classic-page-content,
+html[data-theme="dark"] body.current-orders-page.next-classic-shell-active .classic-app-shell > .main-content > main.container-full-width,
+html[data-theme="dark"] .classic-app-shell > .main-content > main.current-orders-main-surface {
+  background: #000000 !important;
+  background-color: #000000 !important;
+}
 
