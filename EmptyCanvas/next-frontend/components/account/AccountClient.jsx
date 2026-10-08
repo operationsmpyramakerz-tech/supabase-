@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 
 const EditFieldModal = dynamic(() => import("./AccountDialogs").then((module) => module.EditFieldModal), { ssr: false });
+const NotificationPreferencesPanel = dynamic(() => import("../notifications/NotificationPreferencesPanel"), { ssr: false });
 const ImageUploadModal = dynamic(() => import("./AccountDialogs").then((module) => module.ImageUploadModal), { ssr: false });
 const RemoveImageModal = dynamic(() => import("./AccountDialogs").then((module) => module.RemoveImageModal), { ssr: false });
 
@@ -289,6 +290,7 @@ export default function AccountClient({ initialAccount }) {
   const [busyAction, setBusyAction] = useState("");
   const [removeRequest, setRemoveRequest] = useState("");
   const [theme, setTheme] = useState("light");
+  const [showNotificationPreferences, setShowNotificationPreferences] = useState(false);
   const profileInputRef = useRef(null);
 
   useEffect(() => {
@@ -432,6 +434,15 @@ export default function AccountClient({ initialAccount }) {
                   <span><Icon name={theme === "dark" ? "moon" : "sun"} size={14} /></span>
                 </button>
               </div>
+              <button className="profile-settings-row" type="button" aria-expanded={showNotificationPreferences} onClick={() => setShowNotificationPreferences((value) => !value)}>
+                <span className="profile-settings-row-icon" aria-hidden="true"><Icon name="alert" size={19} /></span>
+                <span className="profile-settings-row-copy">
+                  <strong>Notifications</strong>
+                  <small>Customize In-App, Push and Email notifications</small>
+                </span>
+                <span className="profile-settings-chevron" aria-hidden="true"><Icon name="chevron" size={18} /></span>
+              </button>
+              {showNotificationPreferences ? <NotificationPreferencesPanel /> : null}
               <button className="profile-settings-row" type="button" onClick={() => document.getElementById("profile-files-media")?.scrollIntoView({ behavior: "smooth", block: "start" })}>
                 <span className="profile-settings-row-icon" aria-hidden="true"><Icon name="paperclip" size={19} /></span>
                 <span className="profile-settings-row-copy">

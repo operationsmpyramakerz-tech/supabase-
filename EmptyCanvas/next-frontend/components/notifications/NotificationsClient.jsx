@@ -73,6 +73,13 @@ function PushSettings() {
       }
       const registration = await navigator.serviceWorker.ready.catch(() => null);
       const subscription = registration ? await registration.pushManager.getSubscription() : null;
+      // A shared device can change accounts. Rebind its existing endpoint to
+      // the currently authenticated member whenever the settings are opened.
+      if (subscription && Notification.permission === "granted") {
+        await requestJson("/next/api/push/subscribe", {
+          method: "POST", body: JSON.stringify({ subscription: subscription.toJSON() }),
+        });
+      }
       setStatus(subscription ? "on" : "off");
     } catch (error) {
       setMessage(error.message || "Push status could not be checked.");
@@ -170,6 +177,8 @@ export default function NotificationsClient({ initialItems = [], initialUnreadCo
   const [type, setType] = useState("all");
   const [sort, setSort] = useState("newest");
   const [loading, setLoading] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState("");
   const [message, setMessage] = useState("");
 
   const typeOptions = useMemo(() => {
@@ -229,6 +238,18 @@ export default function NotificationsClient({ initialItems = [], initialUnreadCo
     }
   }
 
+  async function sendTest() {
+    setTesting(true);
+    setTestResult("");
+    try {
+      const result = await requestJson("/next/api/notifications/test", { method: "POST", body: "{}" });
+      const label = (sent, skipped) => sent ? "sent" : skipped ? "disabled/skipped" : "not delivered";
+      setTestResult(`Test complete · In-App: ${result.inAppSaved ? "saved" : "disabled"} · Push: ${label(result.push?.sent > 0, result.push?.skipped)} · Email: ${label(result.email?.ok, result.email?.skipped)}${result.email?.reason ? ` (${result.email.reason})` : ""}`);
+      await refresh();
+    } catch (error) { setTestResult(error.message || "Notification test failed."); }
+    finally { setTesting(false); }
+  }
+
   async function markRead(item) {
     const id = notificationText(item?.id);
     if (!id || item?.read) return;
@@ -279,11 +300,13 @@ export default function NotificationsClient({ initialItems = [], initialUnreadCo
           <div className="next-notifications-hero__meta"><b>{source.includes("supabase") ? "Supabase notifications" : "Notification fallback store"}</b><span>Up to 80 recent updates</span></div>
         </div>
         <div className="next-notifications-hero__actions">
+          <button type="button" onClick={sendTest} disabled={testing}>{testing ? "Testing…" : "Send test notification"}</button>
           <button type="button" onClick={refresh} disabled={loading}>{loading ? "Refreshing…" : "Refresh"}</button>
           <button type="button" className="is-secondary" onClick={markAllRead} disabled={!unreadCount}>Mark all as read</button>
         </div>
       </article>
 
+      {testResult ? <div className="next-notifications-warning" role="status">{testResult}</div> : null}
       {bootstrapWarnings.length ? <div className="next-notifications-warning">Some startup resources were delayed. The page remains usable and can be refreshed.</div> : null}
       {message ? <div className="next-notifications-warning is-error">{message}<button type="button" onClick={() => setMessage("")}>×</button></div> : null}
 

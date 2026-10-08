@@ -13,7 +13,7 @@ function noStore(payload, status = 200) {
   });
 }
 
-export async function GET() {
+export async function POST() {
   const gate = await getDirectAccountGate([], { authOnly: true });
   if (!gate.ok || !gate.memberId) {
     return noStore({ success: false, error: gate.error || "Authentication required." }, gate.status || 503);

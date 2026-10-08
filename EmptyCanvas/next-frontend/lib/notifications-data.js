@@ -3,6 +3,8 @@ import "server-only";
 import crypto from "node:crypto";
 import { select, selectAll, supabaseRequest, updateById } from "./supabase-rest";
 import { sendPushToMember } from "./push-notifications";
+import { sendNotificationEmail } from "./notification-email";
+import { allowsChannel, defaultNotificationPreferences, getNotificationPreferences, isQuietHour } from "./notification-preferences";
 
 const NOTIFICATION_CACHE_TTL_MS = 5_000;
 const NOTIFICATION_CACHE_MAX = 200;
@@ -318,10 +320,25 @@ function canSeeAnyPage(user, pageNames = []) {
   return pageNames.some((page) => allowed.has(canonical(page)));
 }
 
+// Defaults are used while the migration is rolling out, without blocking older notifications.
+// Once a user saves preferences, their choices are read from Supabase on the server.
+const settingsCache = new Map();
+async function settingsForMember(memberId) {
+  const key = text(memberId);
+  const cached = settingsCache.get(key);
+  if (cached?.expires > Date.now()) return cached.value;
+  const value = await getNotificationPreferences(key).then((row) => row.settings).catch(() => defaultNotificationPreferences());
+  if (settingsCache.size > 250) settingsCache.clear();
+  settingsCache.set(key, { value, expires: Date.now() + 1_000 });
+  return value;
+}
+
 async function saveNotificationForMember(memberId, notif = {}) {
   const userId = text(memberId);
   const notificationId = text(notif.id);
   if (!userId || !notificationId) return false;
+  const settings = await settingsForMember(userId);
+  if (!allowsChannel(settings, notif.type, "in_app")) return false;
 
   const existing = await select(notificationTable(), {
     select: "id,notification_id,read",
@@ -474,11 +491,24 @@ export async function addTestNotificationForMember(memberId) {
     ts: Date.now(),
     read: false,
   };
-  await saveNotificationForMember(id, notif);
-  const push = await sendPushToMember(id, { title: notif.title, body: notif.body, url: notif.url }).catch((error) => ({
+  const preferences = await settingsForMember(id);
+  const saved = await saveNotificationForMember(id, notif);
+  const push = allowsChannel(preferences, "test", "push") && !isQuietHour(preferences)
+    ? await sendPushToMember(id, { title: notif.title, body: notif.body, url: notif.url }).catch((error) => ({
     ok: false, sent: 0, error: error?.message || "Push delivery failed",
-  }));
-  return { success: true, notif, push };
+  })) : { ok: false, sent: 0, skipped: true, reason: "disabled-by-user-or-quiet-hours" };
+  let email = { ok: false, skipped: true, reason: "disabled-by-user" };
+  if (allowsChannel(preferences, "test", "email")) {
+    try {
+      const team = await select(teamMembersTable(), { select: "id,name,email", id: `eq.${id}`, limit: "1" }, { profileName: "notifications.test.member" });
+      const member = Array.isArray(team) ? team[0] : null;
+      email = await sendNotificationEmail({
+        to: member?.email, name: member?.name, id: `${id}-${notif.id}`,
+        title: notif.title, body: notif.body, url: "/next/notifications", category: "System",
+      });
+    } catch { email = { ok: false, reason: "member-email-unavailable" }; }
+  }
+  return { success: true, notif: saved ? notif : null, inAppSaved: saved, push, email };
 }
 
 export async function runNotificationsScan({ force = false } = {}) {
@@ -594,11 +624,20 @@ export async function runNotificationsScan({ force = false } = {}) {
 
     let pushUsers = 0;
     for (const [memberId, counts] of perUser.entries()) {
+      const settings = await settingsForMember(memberId);
+      if (isQuietHour(settings)) continue;
+      const pushed = {
+        expenses: counts.expenses && allowsChannel(settings, "expenses", "push") ? counts.expenses : 0,
+        orders: counts.orders && allowsChannel(settings, "orders", "push") ? counts.orders : 0,
+        stock: counts.stock && allowsChannel(settings, "stock", "push") ? counts.stock : 0,
+        other: counts.other && allowsChannel(settings, "other", "push") ? counts.other : 0,
+      };
+      if (!Object.values(pushed).some(Boolean)) continue;
       const parts = [];
-      if (counts.expenses) parts.push(`${counts.expenses} expense update(s)`);
-      if (counts.orders) parts.push(`${counts.orders} orders update(s)`);
-      if (counts.stock) parts.push(`${counts.stock} stock update(s)`);
-      if (counts.other) parts.push(`${counts.other} update(s)`);
+      if (pushed.expenses) parts.push(`${pushed.expenses} expense update(s)`);
+      if (pushed.orders) parts.push(`${pushed.orders} orders update(s)`);
+      if (pushed.stock) parts.push(`${pushed.stock} stock update(s)`);
+      if (pushed.other) parts.push(`${pushed.other} update(s)`);
       const out = await sendPushToMember(memberId, {
         title: "Operations updates",
         body: parts.slice(0, 3).join(", ") || "New updates available",

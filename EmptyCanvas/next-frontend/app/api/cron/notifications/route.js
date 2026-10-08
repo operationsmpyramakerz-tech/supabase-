@@ -12,15 +12,12 @@ function noStore(payload, status = 200) {
 
 function authorized(request) {
   const secret = String(process.env.CRON_SECRET || "").trim();
-  if (!secret) return true;
-  const authHeader = String(request.headers.get("authorization") || "").trim();
-  const bearer = authHeader.toLowerCase().startsWith("bearer ") ? authHeader.slice(7).trim() : authHeader;
-  const legacy = String(request.headers.get("x-cron-secret") || "").trim();
-  const query = String(request.nextUrl.searchParams.get("secret") || "").trim();
-  return bearer === secret || legacy === secret || query === secret;
+  if (!secret) return false; // Never expose a public cron mutation endpoint.
+  return request.headers.get("authorization") === `Bearer ${secret}`;
 }
 
 export async function GET(request) {
+  if (!process.env.CRON_SECRET?.trim()) return noStore({ ok: false, error: "CRON_SECRET is not configured." }, 503);
   if (!authorized(request)) return noStore({ ok: false, error: "Unauthorized" }, 401);
   try {
     return noStore(await runNotificationsScan({ force: true }));

@@ -1,0 +1,46 @@
+.erp-notification-preferences { border:1px solid var(--line,#e5e7eb); border-radius:18px; background:var(--surface,#fff); color:var(--text,#171717); padding:18px; display:grid; gap:17px; }
+.erp-notification-preferences__intro { display:flex; align-items:start; justify-content:space-between; gap:12px; }
+.erp-notification-preferences h4 { font-size:16px; font-weight:800; margin:0 0 5px; }
+.erp-notification-preferences p { margin:0; }
+.erp-notification-preferences__intro p,.erp-notification-preferences small,.erp-notification-preferences__footnote {color:var(--muted,#6b7280); font-size:12px;line-height:1.5;}
+.erp-notification-preferences__tag { flex:none; border-radius:999px; padding:6px 10px; font-size:10px;font-weight:700;background:var(--surface-soft,#f3f4f6); }
+.erp-notification-preferences__matrix {display:grid; border:1px solid var(--line,#e5e7eb);border-radius:14px; overflow:hidden;}
+.erp-notification-preferences__heading,.erp-notification-preferences__line {display:grid;grid-template-columns:minmax(120px,1fr) repeat(3,minmax(42px,66px));align-items:center;gap:6px;padding:10px 12px;}
+.erp-notification-preferences__heading{background:var(--surface-soft,#f7f7f7);font-size:11px;font-weight:800;color:var(--muted,#6b7280);}
+.erp-notification-preferences__heading span:not(:first-child){text-align:center;}
+.erp-notification-preferences__line {border-top:1px solid var(--line,#eee);min-height:60px;}
+.erp-notification-preferences__cat{display:grid;gap:2px;min-width:0;}
+.erp-notification-preferences__cat strong{font-size:13px;}
+.erp-notification-preferences__cat small{font-size:10px;}
+.erp-notification-preferences__check{display:flex;align-items:center;justify-content:center;min-height:38px;cursor:pointer;position:relative;}
+.erp-notification-preferences__check input{position:absolute;opacity:0;width:28px;height:28px;cursor:pointer;}
+.erp-notification-preferences__check span{display:flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:8px;border:1.5px solid var(--line,#d1d5db);background:var(--surface,#fff);pointer-events:none;transition:background .15s,border-color .15s;}
+.erp-notification-preferences__check input:checked+span {background:#f97316;border-color:#f97316;}
+.erp-notification-preferences__check input:checked+span::after {content:"";width:10px;height:6px;border-left:2px solid white;border-bottom:2px solid white;transform:rotate(-45deg) translate(1px,-1px);}
+.erp-notification-preferences__check input:focus-visible+span {outline:3px solid #fb923c;outline-offset:2px;}
+.erp-notification-preferences__details{display:grid;gap:12px;}
+.erp-notification-preferences__field,.erp-notification-preferences__quiet{padding:12px;border:1px solid var(--line,#e5e7eb);border-radius:12px;display:grid;gap:8px;}
+.erp-notification-preferences__field>strong,.erp-notification-preferences__quiet strong{font-size:13px;}
+.erp-notification-preferences__field select,.erp-notification-preferences__hours input{background:var(--surface,#fff);color:inherit;border:1px solid var(--line,#d1d5db);padding:9px;border-radius:9px;width:100%;min-width:0;}
+.erp-notification-preferences__quiet-toggle{display:flex;justify-content:space-between;align-items:center;gap:14px;}
+.erp-notification-preferences__quiet-toggle span{display:grid;gap:5px;}
+.erp-notification-preferences__quiet-toggle input{width:19px;height:19px;accent-color:#f97316;}
+.erp-notification-preferences__hours{display:grid;grid-template-columns:1fr 1fr;gap:9px;}
+.erp-notification-preferences__hours label{display:grid;gap:5px;font-size:11px;font-weight:700;}
+.erp-notification-preferences__hours label:last-child{grid-column:1/-1;}
+.erp-notification-preferences__footer{display:flex;justify-content:flex-end;gap:10px;align-items:center;flex-wrap:wrap;}
+.erp-notification-preferences__footer button{min-height:40px;padding:9px 14px;border-radius:10px;font-size:12px;font-weight:800;border:1px solid var(--line,#ddd);cursor:pointer;}
+.erp-notification-preferences__reset{background:var(--surface,#fff);color:inherit;}
+.erp-notification-preferences__save{background:#f97316;color:#fff!important;border-color:#f97316!important;}
+.erp-notification-preferences__footer button:disabled{opacity:.5;cursor:not-allowed;}
+.erp-notification-preferences__alert{background:#fef2f2;color:#991b1b;border-radius:10px;padding:12px;font-size:12px;}
+.erp-notification-preferences__alert button{text-decoration:underline;font-weight:700;margin-left:8px;}
+.erp-notification-preferences__saved{background:#f0fdf4;color:#166534;border-radius:10px;padding:10px;font-size:12px;}
+.erp-notification-preferences__loading{padding:24px;text-align:center;color:var(--muted,#6b7280);}
+@media(max-width:540px){.erp-notification-preferences{padding:12px;}.erp-notification-preferences__heading,.erp-notification-preferences__line{grid-template-columns:minmax(100px,1fr) repeat(3,47px);gap:2px;padding:8px 6px;}.erp-notification-preferences__intro{flex-wrap:wrap;}.erp-notification-preferences__cat strong{font-size:12px;}.erp-notification-preferences__cat small{font-size:9px;}}
+/* Honor the ERP's dark theme without changing the existing profile surfaces. */
+html[data-theme="dark"] .erp-notification-preferences {
+  --surface:#11141a; --surface-soft:#181c24; --line:#29303b; --text:#f5f6f9; --muted:#a2adbd;
+}
+html[data-theme="dark"] .erp-notification-preferences__field select,
+html[data-theme="dark"] .erp-notification-preferences__hours input {color-scheme:dark;}

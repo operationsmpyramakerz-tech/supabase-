@@ -1,7 +1,7 @@
 // Operations Hub PWA Service Worker
 // Phase 46: served directly by the Next deployment; no legacy static host required.
 // Bump this value whenever we change static assets so old deployments don't stay cached.
-const CACHE_NAME = "ops-cache-next-pwa-v23";
+const CACHE_NAME = "ops-cache-next-pwa-v24";
 
 const PRECACHE_URLS = [
   "/offline-fallback.html",
@@ -146,7 +146,12 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const url = event.notification?.data?.url || "/next/notifications";
+  // Never navigate to arbitrary external URLs embedded in a push payload.
+  let url = "/next/notifications";
+  try {
+    const target = new URL(event.notification?.data?.url || url, self.location.origin);
+    if (target.origin === self.location.origin) url = target.pathname + target.search + target.hash;
+  } catch {}
 
   event.waitUntil(
     (async () => {

@@ -129,6 +129,18 @@ export async function upsertPushSubscription(memberId, subscription) {
   const existing = await selectById(subscriptionsTable(), idValue, { profileName: "push.subscription.lookup" }).catch(() => null);
   if (existing) await updateById(subscriptionsTable(), idValue, row);
   else await insert(subscriptionsTable(), { ...row, created_at: now });
+
+  // An endpoint belongs to a browser installation, not permanently to a user.
+  // If someone signs in with another account on a shared phone, transfer the
+  // endpoint rather than accidentally notifying the previous signed-in user.
+  const matches = await select(subscriptionsTable(), {
+    select: "id,user_id", endpoint: `eq.${cleaned.endpoint}`, limit: "50",
+  }, { profileName: "push.subscriptions.endpoint-owner" });
+  for (const candidate of matches || []) {
+    if (String(candidate.id) !== idValue && candidate.id) {
+      await deleteById(subscriptionsTable(), candidate.id);
+    }
+  }
   return { success: true };
 }
 
