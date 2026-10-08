@@ -309,6 +309,26 @@ function builderArrowPath(fromId, toId, anchors, fallbackFrom, fallbackTo, orien
   return `M ${sx} ${sy} C ${sx + (distance * direction)} ${sy}, ${tx - (distance * direction)} ${ty}, ${tx} ${ty}`;
 }
 
+function builderArrowMidpoint(fromId, toId, anchors, fallbackFrom, fallbackTo, orientation = "horizontal") {
+  const fromAnchor = anchors?.[fromId]?.out;
+  const toAnchor = anchors?.[toId]?.in;
+  let sx; let sy; let tx; let ty;
+  if (fromAnchor && toAnchor) {
+    sx = fromAnchor.x; sy = fromAnchor.y; tx = toAnchor.x; ty = toAnchor.y;
+  } else if (orientation === "vertical") {
+    sx = number(fallbackFrom?.canvasX) + 150;
+    sy = number(fallbackFrom?.canvasY) + 170;
+    tx = number(fallbackTo?.canvasX) + 150;
+    ty = number(fallbackTo?.canvasY);
+  } else {
+    sx = number(fallbackFrom?.canvasX) + 300;
+    sy = number(fallbackFrom?.canvasY) + 86;
+    tx = number(fallbackTo?.canvasX);
+    ty = number(fallbackTo?.canvasY) + 86;
+  }
+  return { x: (sx + tx) / 2, y: (sy + ty) / 2 };
+}
+
 
 function FeatherIcon({ name, className = "" }) {
   const common = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true, className };
@@ -381,6 +401,7 @@ function ProjectEditor({ editor, meta, view, onClose, onSaved, notify }) {
   const [mode, setMode] = useState(editor.id ? "builder" : "meta");
   const [blockId, setBlockId] = useState("");
   const [connectFrom, setConnectFrom] = useState("");
+  const [selectedConnection, setSelectedConnection] = useState(null);
   const [zoom, setZoom] = useState(1);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState("");
@@ -458,6 +479,12 @@ function ProjectEditor({ editor, meta, view, onClose, onSaved, notify }) {
     }) }));
     setConnectFrom("");
   };
+  const removeConnection = (fromId, toId) => {
+    setDraft((current) => ({ ...current, sections: current.sections.map((section) => section.clientId === toId
+      ? { ...section, dependsOn: (section.dependsOn || []).filter((id) => id !== fromId) }
+      : section) }));
+    setSelectedConnection(null);
+  };
   const expandCanvas = ({ left = 0, top = 0, right = 0, bottom = 0 } = {}) => {
     const shiftX = Math.max(0, Math.ceil(number(left)));
     const shiftY = Math.max(0, Math.ceil(number(top)));
@@ -528,7 +555,8 @@ function ProjectEditor({ editor, meta, view, onClose, onSaved, notify }) {
     return true;
   };
   const startPan = (event) => {
-    if (event.button !== 0 || event.isPrimary === false || dragRef.current || event.target.closest(".tm-builder-block,button")) return;
+    if (event.button !== 0 || event.isPrimary === false || dragRef.current || event.target.closest(".tm-builder-block,button,.tm-builder-edge-hit")) return;
+    setSelectedConnection(null);
     const wrap = canvasWrapRef.current;
     if (!wrap) return;
     event.preventDefault();
@@ -624,7 +652,8 @@ function ProjectEditor({ editor, meta, view, onClose, onSaved, notify }) {
       <div ref={canvasWrapRef} className="tm-builder-canvas-wrap" onPointerDown={startPan} onPointerMove={moveCanvas} onPointerUp={endCanvasGesture} onPointerCancel={endCanvasGesture}>
         <div className="tm-builder-canvas-stage" style={{ width: boardWidth * zoom, height: boardHeight * zoom }}>
           <div ref={boardRef} className="tm-builder-board" style={{ width: boardWidth, height: boardHeight, transform: `scale(${zoom})`, transformOrigin: "0 0" }}>
-            <svg className="tm-connection-layer" width={boardWidth} height={boardHeight} viewBox={`0 0 ${boardWidth} ${boardHeight}`} aria-hidden="true"><defs><marker id="nextTmArrow" markerWidth="7" markerHeight="7" refX="7" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 z" className="tm-arrow-marker" /></marker></defs>{edgeList.map((edge) => { const from = draft.sections.find((s) => s.clientId === edge.from); const to = draft.sections.find((s) => s.clientId === edge.to); if (!from || !to) return null; return <path key={`${edge.from}-${edge.to}`} className="tm-builder-arrow" markerEnd="url(#nextTmArrow)" d={builderArrowPath(edge.from, edge.to, anchors, from, to, "horizontal")} />; })}</svg>
+            <svg className="tm-connection-layer" width={boardWidth} height={boardHeight} viewBox={`0 0 ${boardWidth} ${boardHeight}`} aria-hidden="true"><defs><marker id="nextTmArrow" markerWidth="7" markerHeight="7" refX="7" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 z" className="tm-arrow-marker" /></marker></defs>{edgeList.map((edge) => { const from = draft.sections.find((s) => s.clientId === edge.from); const to = draft.sections.find((s) => s.clientId === edge.to); if (!from || !to) return null; const edgeKey = `${edge.from}-${edge.to}`; const path = builderArrowPath(edge.from, edge.to, anchors, from, to, "horizontal"); const selected = selectedConnection?.from === edge.from && selectedConnection?.to === edge.to; return <g key={edgeKey}><path className={`tm-builder-arrow${selected ? " is-selected" : ""}`} markerEnd="url(#nextTmArrow)" d={path} /><path className="tm-builder-edge-hit" d={path} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); setSelectedConnection({ from: edge.from, to: edge.to }); }} /></g>; })}</svg>
+            {selectedConnection ? (() => { const from = draft.sections.find((s) => s.clientId === selectedConnection.from); const to = draft.sections.find((s) => s.clientId === selectedConnection.to); if (!from || !to) return null; const point = builderArrowMidpoint(selectedConnection.from, selectedConnection.to, anchors, from, to, "horizontal"); return <button type="button" className="tm-builder-connection-delete" style={{ left: point.x, top: point.y }} aria-label="Delete connection" title="Delete connection" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); removeConnection(selectedConnection.from, selectedConnection.to); }}><FeatherIcon name="x" /></button>; })() : null}
             {draft.sections.map((section, index) => <article data-builder-node={section.clientId} className={`tm-builder-block${connectFrom === section.clientId ? " is-connect-source" : ""}`} style={{ left: number(section.canvasX), top: number(section.canvasY) }} key={section.clientId}><button type="button" className="tm-builder-socket tm-builder-socket--in" aria-label="Connect into block" onClick={() => toggleConnection(section.clientId)} /><div className="tm-builder-block__head" onPointerDown={(event) => startDrag(event, section)}><span className="tm-builder-block__number">{blockLabels.get(text(section.clientId)) || index + 1}</span><span className="tm-builder-block__title"><b>{section.department || "Department"}</b><small>{section.deliveryDate ? `Delivery ${formatDate(section.deliveryDate)}` : "Set delivery date"}</small></span><span className="tm-builder-block__actions"><button type="button" className="tm-builder-icon-btn" onClick={() => setBlockId(section.clientId)}><FeatherIcon name="edit" /></button><button type="button" className="tm-builder-icon-btn tm-builder-icon-btn--danger" onClick={() => removeSection(section.clientId)}><FeatherIcon name="trash" /></button></span></div><button type="button" className="tm-builder-block__body" onClick={() => setBlockId(section.clientId)}><span className="tm-builder-block__label">Requested action</span><strong>{section.request || "Click to add requested action"}</strong><span className={`tm-builder-block__details${section.details ? "" : " tm-builder-block__details--empty"}`}>{section.details || "No extra details"}</span></button><button type="button" className="tm-builder-socket tm-builder-socket--out" aria-label="Start connection" onClick={() => setConnectFrom(section.clientId)} /></article>)}
           </div>
         </div>

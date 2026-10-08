@@ -1552,3 +1552,74 @@ html[data-theme="dark"] .task-management-page .tm-builder-status__divider{
   background:#343943;
 }
 
+/* ========================================================================
+   Workflow Builder — selectable/deletable connections
+   2026-10-08
+   Tap a connection to select it, then use the floating X to remove it.
+   ===================================================================== */
+.task-management-page .tm-connection-layer{
+  pointer-events:none;
+}
+
+.task-management-page .tm-builder-edge-hit{
+  fill:none;
+  stroke:transparent;
+  stroke-width:22px;
+  stroke-linecap:round;
+  stroke-linejoin:round;
+  pointer-events:stroke;
+  cursor:pointer;
+}
+
+.task-management-page .tm-builder-arrow.is-selected{
+  stroke:#f97316!important;
+  stroke-width:2.8px!important;
+  filter:drop-shadow(0 2px 3px rgba(249,115,22,.20))!important;
+}
+
+.task-management-page .tm-builder-connection-delete{
+  position:absolute;
+  z-index:8;
+  width:34px;
+  height:34px;
+  display:grid;
+  place-items:center;
+  padding:0;
+  border:3px solid #fff;
+  border-radius:999px;
+  background:#111827;
+  color:#fff;
+  box-shadow:0 8px 20px rgba(15,23,42,.22);
+  transform:translate(-50%,-50%);
+  cursor:pointer;
+  touch-action:manipulation;
+}
+
+.task-management-page .tm-builder-connection-delete svg{
+  width:17px!important;
+  height:17px!important;
+  stroke-width:2.7!important;
+}
+
+.task-management-page .tm-builder-connection-delete:active{
+  transform:translate(-50%,-50%) scale(.94);
+}
+
+html[data-theme="dark"] .task-management-page .tm-builder-connection-delete{
+  border-color:#1b1d22;
+  background:#fff;
+  color:#111827;
+}
+
+@media (max-width:900px){
+  .task-management-page .tm-builder-edge-hit{stroke-width:28px;}
+  .task-management-page .tm-builder-connection-delete{
+    width:38px;
+    height:38px;
+  }
+  .task-management-page .tm-builder-connection-delete svg{
+    width:19px!important;
+    height:19px!important;
+  }
+}
+
