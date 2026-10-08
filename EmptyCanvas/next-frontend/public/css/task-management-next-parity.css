@@ -1429,3 +1429,126 @@ html[data-theme="dark"] body.task-management-page
   }
 }
 
+/* ========================================================================
+   Workflow Builder — raised actions + centered modern status label
+   2026-10-08
+   Raise the mobile actions farther above Android navigation and present
+   Blocks / Connections as a centered pill instead of plain toolbar text.
+   ===================================================================== */
+.task-management-page .tm-builder-toolbar__status{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+  width:max-content;
+  max-width:100%;
+  min-width:0;
+  margin-inline:auto;
+  padding:8px 13px;
+  border:1px solid #e5e7eb;
+  border-radius:999px;
+  background:#fff;
+  color:#64748b;
+  box-shadow:0 5px 14px rgba(15,23,42,.06);
+  font-size:12px;
+  font-weight:800;
+  line-height:1;
+  text-align:center;
+}
+
+.task-management-page .tm-builder-status__item{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:5px;
+  white-space:nowrap;
+}
+
+.task-management-page .tm-builder-status__item svg,
+.task-management-page .tm-builder-toolbar__status.is-connecting > svg{
+  width:15px;
+  height:15px;
+  flex:0 0 15px;
+  stroke-width:2.15;
+}
+
+.task-management-page .tm-builder-status__item strong{
+  color:#111827;
+  font-size:13px;
+  font-weight:950;
+}
+
+.task-management-page .tm-builder-status__item > span{
+  color:#7b8493;
+  font-weight:850;
+}
+
+.task-management-page .tm-builder-status__divider{
+  width:1px;
+  height:18px;
+  flex:0 0 1px;
+  background:#e5e7eb;
+}
+
+.task-management-page .tm-builder-toolbar__status.is-connecting{
+  gap:7px;
+  color:#374151;
+}
+
+@media (max-width:900px){
+  body.task-management-page > .tm-overlay.tm-overlay--builder-layer
+  .tm-builder-toolbar__status{
+    align-self:center!important;
+    flex:none!important;
+    min-height:0!important;
+    margin:3px auto 1px!important;
+    padding:9px 14px!important;
+    text-align:center!important;
+  }
+
+  body.task-management-page > .tm-overlay.tm-overlay--builder-layer
+  > .tm-dialog.tm-dialog--builder
+  > .tm-builder-mobile-footer{
+    padding-top:10px!important;
+    padding-bottom:calc(48px + env(safe-area-inset-bottom,0px))!important;
+  }
+}
+
+@media (max-width:420px){
+  body.task-management-page > .tm-overlay.tm-overlay--builder-layer
+  > .tm-dialog.tm-dialog--builder
+  > .tm-builder-mobile-footer{
+    padding-bottom:calc(44px + env(safe-area-inset-bottom,0px))!important;
+  }
+
+  body.task-management-page > .tm-overlay.tm-overlay--builder-layer
+  .tm-builder-toolbar__status{
+    gap:8px!important;
+    padding:8px 12px!important;
+  }
+
+  body.task-management-page > .tm-overlay.tm-overlay--builder-layer
+  .tm-builder-status__item{
+    gap:4px!important;
+  }
+}
+
+html[data-theme="dark"] .task-management-page .tm-builder-toolbar__status{
+  border-color:#30343c;
+  background:#171a20;
+  color:#c7ced9;
+  box-shadow:none;
+}
+
+html[data-theme="dark"] .task-management-page .tm-builder-status__item strong{
+  color:#f8fafc;
+}
+
+html[data-theme="dark"] .task-management-page .tm-builder-status__item > span{
+  color:#aab3c2;
+}
+
+html[data-theme="dark"] .task-management-page .tm-builder-status__divider{
+  background:#343943;
+}
+
