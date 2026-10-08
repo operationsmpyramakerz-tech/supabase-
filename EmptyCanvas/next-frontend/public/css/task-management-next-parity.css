@@ -1122,3 +1122,99 @@ html[data-theme="dark"] body.task-management-page .tm-dialog--builder>.tm-builde
   border-bottom-color:#292d35!important;
 }
 
+
+/* ========================================================================
+   Workflow Builder — mobile viewport + dock-safe bottom sheet hard override
+   2026-10-08
+   The legacy builder rules above carry higher-specificity width/height values.
+   This final block intentionally wins over them so the builder uses the whole
+   available phone width and stops exactly above the fixed 80px mobile dock.
+   ===================================================================== */
+@media (max-width:900px){
+  body.task-management-page > .tm-overlay.tm-overlay--builder-layer{
+    position:fixed!important;
+    top:0!important;
+    right:0!important;
+    left:0!important;
+    bottom:0!important;
+    width:100vw!important;
+    height:100dvh!important;
+    min-height:0!important;
+    display:flex!important;
+    align-items:stretch!important;
+    justify-content:stretch!important;
+    justify-items:stretch!important;
+    padding:8px 0 0!important;
+    box-sizing:border-box!important;
+    overflow:hidden!important;
+  }
+
+  body.task-management-page > .tm-overlay.tm-overlay--builder-layer::after{
+    content:none!important;
+    display:none!important;
+  }
+
+  body.task-management-page > .tm-overlay.tm-overlay--builder-layer > .tm-overlay__backdrop{
+    position:absolute!important;
+    inset:0!important;
+  }
+
+  body.task-management-page > .tm-overlay.tm-overlay--builder-layer > .tm-dialog.tm-dialog--builder{
+    position:relative!important;
+    z-index:1!important;
+    flex:1 1 auto!important;
+    align-self:stretch!important;
+    width:100%!important;
+    min-width:100%!important;
+    max-width:none!important;
+    height:100%!important;
+    min-height:0!important;
+    max-height:none!important;
+    margin:0!important;
+    padding:0!important;
+    border-right:0!important;
+    border-bottom:0!important;
+    border-left:0!important;
+    border-radius:28px 28px 0 0!important;
+    overflow:hidden!important;
+    display:flex!important;
+    flex-direction:column!important;
+    box-sizing:border-box!important;
+  }
+
+  body.task-management-page > .tm-overlay.tm-overlay--builder-layer > .tm-dialog.tm-dialog--builder > .tm-builder-header{
+    position:relative!important;
+    top:auto!important;
+    flex:0 0 auto!important;
+    width:100%!important;
+    margin:0!important;
+  }
+
+  body.task-management-page > .tm-overlay.tm-overlay--builder-layer > .tm-dialog.tm-dialog--builder > .tm-builder-scroll-region{
+    flex:1 1 0!important;
+    min-height:0!important;
+    height:auto!important;
+    max-height:none!important;
+    overflow-y:auto!important;
+    overflow-x:hidden!important;
+    padding-bottom:18px!important;
+    scroll-padding-bottom:18px!important;
+  }
+}
+
+@media (max-width:768px){
+  body.task-management-page > .tm-overlay.tm-overlay--builder-layer{
+    /* 80px dock + 18px dock offset: identical to the global mobile dock. */
+    bottom:calc(98px + env(safe-area-inset-bottom,0px))!important;
+    height:auto!important;
+  }
+
+  body.task-management-page > .tm-overlay.tm-overlay--builder-layer > .tm-dialog.tm-dialog--builder{
+    height:100%!important;
+    min-height:0!important;
+  }
+}
+
+html[data-theme="dark"] body.task-management-page > .tm-overlay.tm-overlay--builder-layer > .tm-dialog.tm-dialog--builder{
+  background:#111318!important;
+}
