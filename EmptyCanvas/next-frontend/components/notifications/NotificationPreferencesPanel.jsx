@@ -151,7 +151,7 @@ export default function NotificationPreferencesPanel() {
             <button type="button" className="erp-notification-preferences__reset" onClick={reset} disabled={busy}>Restore defaults</button>
             <button type="button" className="erp-notification-preferences__save" onClick={save} disabled={busy || !dirty}>{busy ? "Saving…" : "Save preferences"}</button>
           </div>
-          <p className="erp-notification-preferences__footnote">Push also requires browser permission and a device subscription. Email routing and scheduled digests are enabled in a later rollout phase.</p>
+          <p className="erp-notification-preferences__footnote">Push requires browser permission and a device subscription. Email testing uses your configured SMTP (Gmail) or Resend account. Automatic event emails and scheduled digests are coming in a later phase.</p>
         </>
       )}
     </section>

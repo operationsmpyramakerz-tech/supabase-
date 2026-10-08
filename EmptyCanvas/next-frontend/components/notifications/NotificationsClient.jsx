@@ -244,7 +244,22 @@ export default function NotificationsClient({ initialItems = [], initialUnreadCo
     try {
       const result = await requestJson("/next/api/notifications/test", { method: "POST", body: "{}" });
       const label = (sent, skipped) => sent ? "sent" : skipped ? "disabled/skipped" : "not delivered";
-      setTestResult(`Test complete · In-App: ${result.inAppSaved ? "saved" : "disabled"} · Push: ${label(result.push?.sent > 0, result.push?.skipped)} · Email: ${label(result.email?.ok, result.email?.skipped)}${result.email?.reason ? ` (${result.email.reason})` : ""}`);
+      const emailLabel = result.email?.ok
+        ? `accepted by ${result.email?.provider === "gmail-smtp" ? "Gmail SMTP" : "Resend"}`
+        : label(false, result.email?.skipped);
+      const emailReasons = {
+        "smtp-auth-failed": "Gmail sign-in failed; review SMTP_USER and the App Password in Vercel",
+        "smtp-timeout": "Gmail did not respond; retry or check SMTP host/port",
+        "smtp-connection-failed": "Could not connect to the SMTP server",
+        "smtp-tls-failed": "SMTP secure connection failed",
+        "smtp-invalid-configuration": "Check SMTP_FROM, SMTP_USER and SMTP_PORT",
+        "smtp-send-failed": "SMTP server did not accept the message",
+        "email-provider-not-configured": "Gmail SMTP or Resend is not configured",
+        "no-email-address": "No email is registered for this account",
+        "disabled-by-user": "Email is disabled in your System notification preferences",
+      };
+      const emailDetail = emailReasons[result.email?.reason] || result.email?.reason || "";
+      setTestResult(`Test complete · In-App: ${result.inAppSaved ? "saved" : "disabled"} · Push: ${label(result.push?.sent > 0, result.push?.skipped)} · Email: ${emailLabel}${emailDetail ? ` (${emailDetail})` : ""}`);
       await refresh();
     } catch (error) { setTestResult(error.message || "Notification test failed."); }
     finally { setTesting(false); }

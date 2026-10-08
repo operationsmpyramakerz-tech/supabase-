@@ -1,5 +1,7 @@
 import "server-only";
 
+import { smtpConfigured, sendNotificationViaSmtp, smtpFailureReason } from "./notification-smtp";
+
 // Transactional email transport for the notification engine. The notification
 // event integrations and scheduled digests are rolled out separately.
 function htmlEscape(input) {
@@ -48,10 +50,21 @@ export function renderNotificationEmail({ name, title, body, url, category = "Sy
 export async function sendNotificationEmail({ to, id, ...message } = {}) {
   const recipient = validEmail(to);
   if (!recipient) return { ok: false, skipped: true, reason: "no-email-address" };
+  const email = renderNotificationEmail(message);
+  // Prefer the company's Gmail account when SMTP is configured. Never fall
+  // back to another provider after a Gmail attempt: an ambiguous network
+  // failure could otherwise produce two copies of the same notification.
+  if (smtpConfigured()) {
+    try {
+      return await sendNotificationViaSmtp({ to: recipient, ...email });
+    } catch (error) {
+      console.error("Notification SMTP delivery failed:", smtpFailureReason(error));
+      return { ok: false, provider: "gmail-smtp", reason: smtpFailureReason(error) };
+    }
+  }
   const apiKey = String(process.env.RESEND_API_KEY || "").trim();
   const sender = String(process.env.ERP_NOTIFICATION_FROM_EMAIL || process.env.RESEND_FROM_EMAIL || process.env.PASSWORD_RECOVERY_FROM_EMAIL || "").trim();
-  if (!apiKey || !sender) return { ok: false, skipped: true, reason: "resend-not-configured" };
-  const email = renderNotificationEmail(message);
+  if (!apiKey || !sender) return { ok: false, skipped: true, reason: "email-provider-not-configured" };
   const headers = { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" };
   // Resend deduplicates the same event/member pair when the caller retries it.
   if (id) headers["Idempotency-Key"] = `erp-notification/${String(id).replace(/[^a-zA-Z0-9:_-]/g, "-").slice(0, 170)}`;
