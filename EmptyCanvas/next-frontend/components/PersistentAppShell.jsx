@@ -88,7 +88,7 @@ function routePerformanceStyles(localPath) {
 function routeDefaults(localPath) {
   const exact = {
     "/home": { title: "Home", activePath: "/next/home" },
-    "/orders": { title: "Current Orders", activePath: "/next/orders", bodyClass: "current-orders-page order-modal-fit-screen" },
+    "/orders": { title: "My Orders", activePath: "/next/orders", bodyClass: "current-orders-page order-modal-fit-screen" },
     "/orders-review": { title: "Orders Review", activePath: "/next/orders-review" },
     "/operations-orders": { title: "Operations Orders", activePath: "/next/operations-orders" },
     "/maintenance-orders": { title: "Maintenance Orders", activePath: "/next/maintenance-orders" },

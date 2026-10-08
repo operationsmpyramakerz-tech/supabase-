@@ -28,7 +28,7 @@ const ShoppingCartSidebarFlyout = dynamic(() => import("./orders/ShoppingCartSid
 const MODULE_LINKS = [
   { label: "Notifications", href: "/next/notifications", permissions: [], alwaysVisible: true },
   { label: "How it works", href: "/next/how-it-works", permissions: [], alwaysVisible: true },
-  { label: "Current Orders", href: "/next/orders", permissions: ["Current Orders"] },
+  { label: "My Orders", href: "/next/orders", permissions: ["Current Orders"] },
   { label: "Orders Review", href: "/next/orders-review", permissions: ["Orders Review"] },
   { label: "Operations Orders", href: "/next/operations-orders", permissions: ["Requested Orders", "Operations Orders"] },
   { label: "Maintenance Orders", href: "/next/maintenance-orders", permissions: ["Maintenance Orders"] },
@@ -58,7 +58,7 @@ const MODULE_LINKS = [
 // routes/profile controls, just like the current Classic interface.
 export const CLASSIC_MAIN_LINKS = [
   { label: "Home", href: "/next/home", icon: "home", permissions: [], alwaysVisible: true, boundary: "workspace" },
-  { label: "Current Orders", href: "/next/orders", icon: "list", permissions: ["Current Orders"] },
+  { label: "My Orders", href: "/next/orders", icon: "list", permissions: ["Current Orders"] },
   { label: "Orders Review", href: "/next/orders-review", icon: "award", permissions: ["Orders Review"] },
   { label: "Operations Orders", href: "/next/operations-orders", icon: "users", permissions: ["Requested Orders", "Operations Orders"] },
   { label: "Maintenance Orders", href: "/next/maintenance-orders", icon: "tool", permissions: ["Maintenance Orders"] },

@@ -7,7 +7,7 @@ import { loadOrderTracking } from "../../../lib/order-tracking-data";
 
 export const dynamic = "force-dynamic";
 
-function StandaloneState({ title, message, primaryHref = "/next/orders", primaryLabel = "Return to Current Orders", secondaryHref = "" }) {
+function StandaloneState({ title, message, primaryHref = "/next/orders", primaryLabel = "Return to My Orders", secondaryHref = "" }) {
   return (
     <main className="standalone-state">
       <section className="state-card">
@@ -34,9 +34,9 @@ export default async function OrderTrackingPage({ searchParams }) {
     return (
       <StandaloneState
         title="Order reference is missing"
-        message="Open Order Tracking from a Current Orders card or a linked order so the tracking reference is included."
+        message="Open Order Tracking from a My Orders card or a linked order so the tracking reference is included."
         primaryHref="/next/orders"
-        primaryLabel="Open Current Orders"
+        primaryLabel="Open My Orders"
       />
     );
   }
@@ -73,7 +73,7 @@ export default async function OrderTrackingPage({ searchParams }) {
     return (
       <StandaloneState
         title="Order Tracking is not available"
-        message="Your account does not have access to Current Orders."
+        message="Your account does not have access to My Orders."
         primaryHref="/next/home"
         primaryLabel="Return to Home"
       />
@@ -98,7 +98,7 @@ export default async function OrderTrackingPage({ searchParams }) {
       <AppShell
         account={gate.account}
         title="Order Tracking"
-        eyebrow="Current Orders delivery journey"
+        eyebrow="My Orders delivery journey"
         activePath="/next/orders"
       >
         <main className="standalone-state standalone-state--inside">
@@ -107,7 +107,7 @@ export default async function OrderTrackingPage({ searchParams }) {
             <h1>{missing ? "Order not found" : "Tracking data is temporarily unavailable"}</h1>
             <p>{missing ? "The selected order is no longer available to this account." : (failure?.message || "The tracking resource could not be loaded from Supabase.")}</p>
             <div className="actions">
-              <a className="primary-button" href="/next/orders">Return to Current Orders</a>
+              <a className="primary-button" href="/next/orders">Return to My Orders</a>
               <a className="secondary-button" href={currentPath}>Refresh the page</a>
             </div>
           </section>
@@ -120,7 +120,7 @@ export default async function OrderTrackingPage({ searchParams }) {
     <AppShell
       account={gate.account}
       title="Order Tracking"
-      eyebrow="Current Orders delivery journey"
+      eyebrow="My Orders delivery journey"
       activePath="/next/orders"
     >
       <OrderTrackingClient

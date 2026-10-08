@@ -12,7 +12,7 @@ function UnavailableState({ message, forbidden = false }) {
     <main className="standalone-state">
       <section className="state-card">
         <span className="status-dot warning" />
-        <h1>{forbidden ? "Current Orders is not available" : "The new Current Orders page could not load"}</h1>
+        <h1>{forbidden ? "My Orders is not available" : "The new My Orders page could not load"}</h1>
         <p>{message}</p>
         <div className="actions">
           {!forbidden ? <a className="primary-button" href="/next/orders">Try again</a> : null}
@@ -45,7 +45,7 @@ export default async function CurrentOrdersPage() {
     return <UnavailableState message="The account permission service is temporarily unavailable." />;
   }
   if (gate.status === 403) {
-    return <UnavailableState forbidden message="Your account does not have access to the Current Orders page." />;
+    return <UnavailableState forbidden message="Your account does not have access to the My Orders page." />;
   }
   if (!gate.ok || !gate.account) {
     return <UnavailableState message={gate.error || "The account service is temporarily unavailable."} />;
@@ -53,7 +53,7 @@ export default async function CurrentOrdersPage() {
 
   const ordersPayload = directResult?.payload;
   if (!ordersPayload) {
-    return <UnavailableState message={directResult?.error?.message || "Current Orders direct Supabase data is unavailable."} />;
+    return <UnavailableState message={directResult?.error?.message || "My Orders direct Supabase data is unavailable."} />;
   }
 
   const orders = Array.isArray(ordersPayload)
@@ -64,7 +64,7 @@ export default async function CurrentOrdersPage() {
   return (
     <AppShell
       account={gate.account}
-      title="Current Orders"
+      title="My Orders"
       eyebrow="Live order portfolio"
       activePath="/next/orders"
       bodyClass="order-modal-fit-screen current-orders-page"

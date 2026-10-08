@@ -21,7 +21,7 @@ function hasAccess(account, aliases = []) {
 function quickActions(account) {
   const actions = [{ href: "/next/home", icon: "activity", title: "Refresh dashboard", sub: "Quick overview of your work" }];
   if (hasAccess(account, ["Create New Order", "Shopping Cart", "/orders/new"])) actions.push({ href: "/next/orders/new", icon: "plus-circle", title: "Create new order", sub: "Start a new components request" });
-  if (hasAccess(account, ["Current Orders", "/orders"])) actions.push({ href: "/next/orders", icon: "list", title: "Current orders", sub: "Track your recent requests" });
+  if (hasAccess(account, ["Current Orders", "/orders"])) actions.push({ href: "/next/orders", icon: "list", title: "My Orders", sub: "Track your recent requests" });
   if (hasAccess(account, ["Requested Orders", "Operations Orders", "/orders/requested"])) actions.push({ href: "/next/operations-orders", icon: "users", title: "Operations orders", sub: "Review schools requested orders" });
   if (hasAccess(account, ["Stocktaking", "/stocktaking"])) actions.push({ href: "/next/stocktaking", icon: "archive", title: "Stocktaking", sub: "View your school inventory" });
   if (hasAccess(account, ["Expenses", "/expenses"])) actions.push({ href: "/next/expenses", icon: "dollar-sign", title: "Expenses", sub: "Your cash in/out records" });
