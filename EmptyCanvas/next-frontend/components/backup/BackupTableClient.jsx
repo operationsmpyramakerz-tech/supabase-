@@ -20,20 +20,15 @@ function Icon({ name = "database" }) {
   const icons = {
     database: <><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></>,
     arrowLeft: <><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></>,
-    refresh: <><path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 4v5h5"/><path d="M4 13a8.1 8.1 0 0 0 15.5 2M20 20v-5h-5"/></>,
     edit: <><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></>,
     save: <><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></>,
     x: <><path d="M18 6 6 18"/><path d="m6 6 12 12"/></>,
-    download: <><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></>,
     chevronLeft: <path d="m15 18-6-6 6-6"/>,
     chevronRight: <path d="m9 18 6-6-6-6"/>,
-    shield: <><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></>,
-    search: <><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></>,
     plus: <><path d="M12 5v14"/><path d="M5 12h14"/></>,
   };
   return <svg {...common}>{icons[name] || icons.database}</svg>;
 }
-
 
 function columnType(column = {}) {
   return lower(column?.type || column?.format || column?.raw?.format);
