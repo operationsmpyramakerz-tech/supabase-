@@ -48,3 +48,89 @@ html[data-theme="light"] body.next-classic-shell-active:not(.login-page):not(.pw
   background-image: none !important;
   box-shadow: none !important;
 }
+
+/* ========================================================================
+   Global page title — plain bold text + vertical accent
+   2026-10-08
+
+   Replace the old white pill/label around every authenticated page title with
+   a clean bold heading and a short vertical line immediately to its left.
+   This targets the shared AppShell title, so the treatment stays consistent
+   across Home, Orders, Events, Task Management, Inventory, Users, etc.
+   ======================================================================== */
+body.next-classic-shell-active .classic-app-shell .main-header .dash-title{
+  position:relative!important;
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:flex-start!important;
+  gap:10px!important;
+  width:auto!important;
+  min-width:0!important;
+  max-width:min(54vw,460px)!important;
+  min-height:40px!important;
+  padding:0!important;
+  border:0!important;
+  border-radius:0!important;
+  background:transparent!important;
+  background-image:none!important;
+  box-shadow:none!important;
+  color:#0f172a!important;
+  font-size:clamp(20px,2.1vw,28px)!important;
+  font-weight:950!important;
+  line-height:1.05!important;
+  letter-spacing:-.025em!important;
+  white-space:nowrap!important;
+  overflow:hidden!important;
+  text-overflow:ellipsis!important;
+}
+
+body.next-classic-shell-active .classic-app-shell .main-header .dash-title::before{
+  content:""!important;
+  display:block!important;
+  width:4px!important;
+  height:27px!important;
+  flex:0 0 4px!important;
+  border-radius:999px!important;
+  background:#0b0c10!important;
+  box-shadow:none!important;
+}
+
+@media (max-width:768px){
+  body.next-classic-shell-active .classic-app-shell .main-header .dash-title{
+    max-width:min(50vw,240px)!important;
+    min-height:40px!important;
+    padding:0!important;
+    gap:9px!important;
+    border-radius:0!important;
+    font-size:clamp(18px,5.2vw,23px)!important;
+    line-height:1!important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell .main-header .dash-title::before{
+    width:4px!important;
+    height:24px!important;
+    flex-basis:4px!important;
+  }
+
+  /* Expanded search still gets room, without turning the title back into a pill. */
+  body.next-classic-shell-active .classic-app-shell .main-header
+  .header-row1:has(.system-header-search.is-expanded) .dash-title{
+    max-width:118px!important;
+    padding:0!important;
+  }
+}
+
+/* Keep the same design readable in dark mode. */
+html[data-theme="dark"] body.next-classic-shell-active
+.classic-app-shell .main-header .dash-title{
+  color:#f8fafc!important;
+  background:transparent!important;
+  border:0!important;
+  box-shadow:none!important;
+}
+
+html[data-theme="dark"] body.next-classic-shell-active
+.classic-app-shell .main-header .dash-title::before{
+  background:#f8fafc!important;
+}
+
