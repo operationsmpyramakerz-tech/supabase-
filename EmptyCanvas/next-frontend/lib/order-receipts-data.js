@@ -308,8 +308,16 @@ async function loadDirect(rawIds) {
   }
   const items = [];
   const seen = new Set();
-  for (const sourceId of ids) {
-    const rows = await rowsForReference(sourceId);
+  const rowsBySource = [];
+  const batchSize = 6;
+  for (let index = 0; index < ids.length; index += batchSize) {
+    const batch = await Promise.all(ids.slice(index, index + batchSize).map(async (sourceId) => ({
+      sourceId,
+      rows: await rowsForReference(sourceId),
+    })));
+    rowsBySource.push(...batch);
+  }
+  for (const { sourceId, rows } of rowsBySource) {
     for (const row of rows) {
       const entries = normalizeEntries(orderReceiptRaw(row), "Order receipt");
       for (const entry of entries) {

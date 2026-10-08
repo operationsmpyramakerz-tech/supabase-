@@ -630,21 +630,35 @@ async function resolveDirectProposalSources(items = []) {
 
   const proposalById = new Map();
   const proposalIdByName = new Map();
-  const loadProposal = async (proposalId) => {
-    const id = text(proposalId);
-    if (!id) return null;
-    if (proposalById.has(id)) return proposalById.get(id);
-    let detail = null;
-    try { detail = await getProposal(id, {}); } catch {}
-    proposalById.set(id, detail);
-    return detail;
+
+  // Resolve each unique legacy proposal name concurrently instead of making
+  // every order component wait for the previous component's lookup.
+  const unresolvedNames = [...new Set(unresolved
+    .filter((item) => !text(item?.sourceProposalId))
+    .map(proposalNameFromItem)
+    .filter(Boolean))];
+  await Promise.all(unresolvedNames.map((name) => resolveProposalIdByName(name, proposalIdByName)));
+
+  const proposalIdForItem = (item) => {
+    const directId = text(item?.sourceProposalId);
+    if (directId) return directId;
+    const name = proposalNameFromItem(item);
+    return name ? text(proposalIdByName.get(normKey(name))) : "";
   };
+
+  // A detail payload can serve several components from the same proposal.
+  // Load every unique proposal once, in parallel, then reuse it below.
+  const proposalIds = [...new Set(unresolved.map(proposalIdForItem).filter(Boolean))];
+  await Promise.all(proposalIds.map(async (proposalId) => {
+    let detail = null;
+    try { detail = await getProposal(proposalId, {}); } catch {}
+    proposalById.set(proposalId, detail);
+  }));
 
   for (const item of unresolved) {
     const proposalName = proposalNameFromItem(item);
-    let proposalId = text(item?.sourceProposalId);
-    if (!proposalId && proposalName) proposalId = await resolveProposalIdByName(proposalName, proposalIdByName);
-    const detail = await loadProposal(proposalId);
+    const proposalId = proposalIdForItem(item);
+    const detail = proposalId ? proposalById.get(proposalId) : null;
     const proposalItems = Array.isArray(detail?.items) ? detail.items : [];
     const match = proposalItems.find((entry) => proposalItemMatchesOrder(item, entry)) || null;
     const resolvedSources = sourceKits(match?.sourceKits || match?.source_kits);

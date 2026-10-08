@@ -3,6 +3,30 @@ import "server-only";
 import { performance } from "node:perf_hooks";
 import { recordPerformanceSample } from "./performance-profiler";
 
+const supabaseGetInflight = new Map();
+
+function stableHeadersKey(headers = {}) {
+  const entries = Object.entries(headers || {})
+    .map(([key, value]) => [String(key).toLowerCase(), String(value ?? "")])
+    .sort((a, b) => a[0].localeCompare(b[0]) || a[1].localeCompare(b[1]));
+  return JSON.stringify(entries);
+}
+
+function supabaseGetDedupeKey(pathname, options = {}) {
+  return JSON.stringify({
+    pathname: String(pathname || ""),
+    timeoutMs: Number(options.timeoutMs || process.env.SUPABASE_REQUEST_TIMEOUT_MS || 15000) || 15000,
+    attempts: Number(options.attempts || process.env.SUPABASE_READ_ATTEMPTS || 2) || 2,
+    headers: stableHeadersKey(options.headers || {}),
+  });
+}
+
+function cloneSupabasePayload(value) {
+  if (value === null || typeof value !== "object") return value;
+  try { return structuredClone(value); } catch {}
+  try { return JSON.parse(JSON.stringify(value)); } catch { return value; }
+}
+
 function cleanBaseUrl(raw) {
   return String(raw || "").trim().replace(/\/+$/, "").replace(/\/rest\/v1\/?$/i, "");
 }
@@ -76,8 +100,31 @@ function retryableStatus(status) {
 }
 
 export async function supabaseRequest(pathname, options = {}) {
-  const { url, key } = ensureConfigured();
   const method = String(options.method || "GET").toUpperCase();
+
+  // A write is a freshness boundary. Do not let a GET started before a mutation
+  // satisfy an identical read that starts after the mutation.
+  if (method !== "GET" && supabaseGetInflight.size) supabaseGetInflight.clear();
+
+  // System-wide runtime dedupe: identical GETs that are already in flight share
+  // one Supabase request. Nothing is cached after completion, so reads stay
+  // fresh while duplicate concurrent work is removed. Abortable callers keep
+  // their own request so one consumer cannot cancel another consumer's read.
+  if (method === "GET" && options?.dedupe !== false && !options?.signal && options?.body === undefined) {
+    const dedupeKey = supabaseGetDedupeKey(pathname, options);
+    const existing = supabaseGetInflight.get(dedupeKey);
+    if (existing) return cloneSupabasePayload(await existing);
+
+    const pending = supabaseRequest(pathname, { ...options, dedupe: false });
+    supabaseGetInflight.set(dedupeKey, pending);
+    try {
+      return cloneSupabasePayload(await pending);
+    } finally {
+      if (supabaseGetInflight.get(dedupeKey) === pending) supabaseGetInflight.delete(dedupeKey);
+    }
+  }
+
+  const { url, key } = ensureConfigured();
   const metricStartedAt = performance.now();
   let metricStatus = 0;
   let metricOk = false;
