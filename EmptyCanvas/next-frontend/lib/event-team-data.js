@@ -1,7 +1,6 @@
 import "server-only";
 
 import { deleteById, insert, select, selectById, updateById, uploadStorageObject } from "./supabase-rest";
-import { listEvents } from "./events-data";
 
 const TEAM_ROLES = new Set(["instructor", "usher", "organizer"]);
 const ATTENDANCE_STATUSES = new Set(["planned", "present", "late", "absent", "excused"]);
@@ -206,12 +205,8 @@ export async function listEventTeamAttendance() {
 }
 
 export async function loadEventTeamPageData(account = null) {
-  const [members, attendance, events] = await Promise.all([
-    listEventTeamMembers(),
-    listEventTeamAttendance(),
-    listEvents({ includeArchived: true }),
-  ]);
-  return { members, attendance, events, account };
+  const members = await listEventTeamMembers();
+  return { members, account };
 }
 
 export async function createEventTeamMember(body = {}, account = {}) {

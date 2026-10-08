@@ -50,7 +50,7 @@ export default async function EventTeamPage() {
     <AppShell
       account={gate.account}
       title="Events"
-      eyebrow="Event workforce & attendance"
+      eyebrow="Event workforce"
       activePath="/next/event-team"
       bodyClass="events-page event-team-page"
       pageStyles={["/next/css/events.css?v=event-team-v1", "/next/css/event-team.css?v=event-team-public-portal-v3"]}
@@ -58,8 +58,6 @@ export default async function EventTeamPage() {
       <EventTeamClient
         account={gate.account}
         initialMembers={Array.isArray(pageData?.members) ? pageData.members : []}
-        initialAttendance={Array.isArray(pageData?.attendance) ? pageData.attendance : []}
-        initialEvents={Array.isArray(pageData?.events) ? pageData.events : []}
         bootstrapError={loadError}
       />
     </AppShell>
