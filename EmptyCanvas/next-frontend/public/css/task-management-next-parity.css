@@ -1309,3 +1309,123 @@ html[data-theme="dark"] body.task-management-page
   }
 }
 
+/* ========================================================================
+   Workflow Builder — compact no-scroll mobile layout + larger action icons
+   2026-10-08
+   Fits toolbar + canvas + legend + footer inside the phone viewport without
+   page scrolling, raises the bottom actions, and makes action icons match text.
+   ===================================================================== */
+@media (max-width:900px){
+  body.task-management-page > .tm-overlay.tm-overlay--builder-layer
+  > .tm-dialog.tm-dialog--builder
+  > .tm-builder-header{
+    min-height:64px!important;
+    padding:14px 18px!important;
+    align-items:center!important;
+  }
+
+  body.task-management-page > .tm-overlay.tm-overlay--builder-layer
+  > .tm-dialog.tm-dialog--builder
+  > .tm-builder-header .tm-eyebrow{
+    margin:0!important;
+    font-size:.88rem!important;
+    line-height:1.1!important;
+  }
+
+  body.task-management-page > .tm-overlay.tm-overlay--builder-layer
+  > .tm-dialog.tm-dialog--builder
+  > .tm-builder-scroll-region{
+    display:flex!important;
+    flex:1 1 0!important;
+    flex-direction:column!important;
+    min-height:0!important;
+    overflow:hidden!important;
+    padding:0 12px 8px!important;
+    scroll-padding-bottom:0!important;
+  }
+
+  body.task-management-page > .tm-overlay.tm-overlay--builder-layer
+  > .tm-dialog.tm-dialog--builder
+  > .tm-builder-scroll-region
+  > .tm-builder-toolbar{
+    flex:0 0 auto!important;
+    margin:10px 0 8px!important;
+  }
+
+  body.task-management-page > .tm-overlay.tm-overlay--builder-layer
+  > .tm-dialog.tm-dialog--builder
+  > .tm-builder-scroll-region
+  > .tm-builder-canvas-wrap{
+    flex:1 1 0!important;
+    height:auto!important;
+    min-height:260px!important;
+    max-height:none!important;
+    overflow:hidden!important;
+  }
+
+  body.task-management-page > .tm-overlay.tm-overlay--builder-layer
+  > .tm-dialog.tm-dialog--builder
+  > .tm-builder-scroll-region
+  > .tm-builder-legend{
+    flex:0 0 auto!important;
+    padding:8px 2px 4px!important;
+    gap:6px!important;
+  }
+
+  body.task-management-page > .tm-overlay.tm-overlay--builder-layer
+  > .tm-dialog.tm-dialog--builder
+  > .tm-builder-scroll-region
+  > .tm-builder-legend span{
+    font-size:.82rem!important;
+    line-height:1.25!important;
+  }
+
+  body.task-management-page > .tm-overlay.tm-overlay--builder-layer
+  > .tm-dialog.tm-dialog--builder
+  > .tm-builder-mobile-footer{
+    padding:10px 16px calc(32px + env(safe-area-inset-bottom,0px))!important;
+  }
+
+  /* Toolbar and footer icons: visually balanced with the button labels. */
+  body.task-management-page > .tm-overlay.tm-overlay--builder-layer
+  .tm-builder-toolbar button svg,
+  body.task-management-page > .tm-overlay.tm-overlay--builder-layer
+  .tm-builder-mobile-footer button svg{
+    width:20px!important;
+    height:20px!important;
+    min-width:20px!important;
+    flex:0 0 20px!important;
+    stroke-width:2.2!important;
+  }
+
+  body.task-management-page > .tm-overlay.tm-overlay--builder-layer
+  .tm-builder-tool--icon svg{
+    width:19px!important;
+    height:19px!important;
+    min-width:19px!important;
+    flex-basis:19px!important;
+  }
+
+  body.task-management-page > .tm-overlay.tm-overlay--builder-layer
+  > .tm-dialog.tm-dialog--builder
+  > .tm-builder-header .tm-icon-btn svg{
+    width:21px!important;
+    height:21px!important;
+  }
+}
+
+@media (max-width:420px){
+  body.task-management-page > .tm-overlay.tm-overlay--builder-layer
+  > .tm-dialog.tm-dialog--builder
+  > .tm-builder-scroll-region
+  > .tm-builder-canvas-wrap{
+    min-height:230px!important;
+  }
+
+  body.task-management-page > .tm-overlay.tm-overlay--builder-layer
+  > .tm-dialog.tm-dialog--builder
+  > .tm-builder-mobile-footer{
+    padding-bottom:calc(28px + env(safe-area-inset-bottom,0px))!important;
+  }
+}
+
