@@ -86,7 +86,7 @@ export default function NotificationsBell({ classic = false }) {
   const loadPromiseRef = useRef(null);
   const [panelStyle, setPanelStyle] = useState({});
 
-  const preview = useMemo(() => items.slice(0, 7), [items]);
+  const preview = useMemo(() => items.slice(0, 5), [items]);
 
   async function load({ quiet = false, force = false } = {}) {
     const now = Date.now();
@@ -268,8 +268,8 @@ export default function NotificationsBell({ classic = false }) {
         <div className="notif-center-shell">
           <div className="notif-center-card">
             <div className="notif-center-head">
-              <div className="notif-center-title">Notification</div>
-              <button type="button" className="notif-center-markall" onClick={markAllRead} disabled={!unreadCount}>Mark all as read</button>
+              <div className="notif-center-title">Notifications</div>
+              <button type="button" className="notif-center-markall" onClick={markAllRead} disabled={!unreadCount}>Mark all read</button>
             </div>
 
             <div className="notif-center-tabs" role="tablist" aria-label="Notification filters">
