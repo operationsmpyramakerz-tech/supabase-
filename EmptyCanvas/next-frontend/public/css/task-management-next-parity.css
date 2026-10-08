@@ -1280,3 +1280,32 @@ html[data-theme="dark"] body.task-management-page
   background:#111318!important;
   border-top-color:#292d35!important;
 }
+
+/* ========================================================================
+   Workflow Builder — mobile bottom edge / footer clearance fix
+   2026-10-08
+   The app dock is hidden while the builder is open, so the sheet must extend
+   to the actual viewport bottom instead of reserving the normal dock space.
+   This keeps the complete white footer visible below Cancel / Create Project.
+   ===================================================================== */
+@media (max-width:768px){
+  body.task-management-page > .tm-overlay.tm-overlay--builder-layer{
+    bottom:0!important;
+    height:100dvh!important;
+    min-height:100dvh!important;
+  }
+
+  body.task-management-page > .tm-overlay.tm-overlay--builder-layer
+  > .tm-dialog.tm-dialog--builder{
+    height:100%!important;
+    min-height:0!important;
+    max-height:none!important;
+  }
+
+  body.task-management-page > .tm-overlay.tm-overlay--builder-layer
+  > .tm-dialog.tm-dialog--builder
+  > .tm-builder-mobile-footer{
+    padding-bottom:calc(20px + env(safe-area-inset-bottom,0px))!important;
+  }
+}
+
