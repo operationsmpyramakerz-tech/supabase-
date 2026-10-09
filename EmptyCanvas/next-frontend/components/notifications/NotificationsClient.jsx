@@ -8,7 +8,6 @@ import {
   groupNotificationRows,
   modernNotificationUrl,
   notificationDateTime,
-  notificationMatches,
   notificationScope,
   notificationText,
   notificationTimeAgo,
@@ -42,10 +41,6 @@ function NotificationGlyph({ toneKey = "general" }) {
 
 function FilterGlyph() {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 5h16"/><path d="M7 12h10"/><path d="M10 19h4"/></svg>;
-}
-
-function SearchGlyph() {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.7-3.7"/></svg>;
 }
 
 async function requestJson(url, options = {}) {
@@ -313,7 +308,6 @@ function DeliveryHistory() {
 export default function NotificationsClient({ initialItems = [], initialUnreadCount = 0, source = "", bootstrapWarnings = [] }) {
   const [items, setItems] = useState(Array.isArray(initialItems) ? initialItems : []);
   const [unreadCount, setUnreadCount] = useState(Number(initialUnreadCount) || 0);
-  const [query, setQuery] = useState("");
   const [scope, setScope] = useState("all");
   const [type, setType] = useState("all");
   const [sort, setSort] = useState("newest");
@@ -347,7 +341,6 @@ export default function NotificationsClient({ initialItems = [], initialUnreadCo
 
   const filtered = useMemo(() => {
     const result = items.filter((item) => {
-      if (!notificationMatches(item, query)) return false;
       if (type !== "all" && (notificationText(item?.type).toLowerCase() || "general") !== type) return false;
       if (scope === "unread" && item?.read) return false;
       if (readFilter === "unread" && item?.read) return false;
@@ -359,7 +352,7 @@ export default function NotificationsClient({ initialItems = [], initialUnreadCo
       ? notificationTimestamp(a?.ts) - notificationTimestamp(b?.ts)
       : notificationTimestamp(b?.ts) - notificationTimestamp(a?.ts));
     return result;
-  }, [items, query, scope, type, sort, readFilter]);
+  }, [items, scope, type, sort, readFilter]);
 
   const groupedRows = useMemo(() => groupNotificationRows(filtered, groupSimilar), [filtered, groupSimilar]);
   const feedSections = useMemo(() => {
@@ -374,7 +367,7 @@ export default function NotificationsClient({ initialItems = [], initialUnreadCo
       { key: "earlier", label: "Earlier", rows: buckets.earlier },
     ].filter((section) => section.rows.length);
   }, [groupedRows]);
-  const resetFilters = () => { setQuery(""); setType("all"); setSort("newest"); setScope("all"); setReadFilter("all"); setGroupSimilar(true); };
+  const resetFilters = () => { setType("all"); setSort("newest"); setScope("all"); setReadFilter("all"); setGroupSimilar(true); };
 
   const activeAdvancedFilters = Number(type !== "all") + Number(readFilter !== "all") + Number(sort !== "newest") + Number(!groupSimilar);
 
@@ -500,39 +493,24 @@ export default function NotificationsClient({ initialItems = [], initialUnreadCo
 
   return (
     <section className="next-notifications-page next-notifications-v4 next-notifications-appfeed">
-      <div className="next-notifications-commandbar">
-        <div className="next-notifications-commandbar__status">
-          <strong>{unreadCount ? `${unreadCount} unread` : "You're all caught up"}</strong>
-          <span>{counts.today} today · {counts.week} this week</span>
-        </div>
-        <div className="next-notifications-commandbar__actions">
-          <button type="button" className="is-icon" onClick={refresh} disabled={loading} aria-label="Refresh notifications" title="Refresh notifications">↻</button>
-          <button type="button" onClick={markAllRead} disabled={!unreadCount}>Mark all read</button>
-        </div>
-      </div>
-
       {testResult ? <div className="next-notifications-warning" role="status">{testResult}</div> : null}
       {bootstrapWarnings.length ? <div className="next-notifications-warning">Some startup resources were delayed. You can refresh the page.</div> : null}
       {message ? <div className="next-notifications-warning is-error" role="alert">{message}<button type="button" onClick={() => setMessage("")} aria-label="Dismiss error">×</button></div> : null}
 
-      <div className="next-notifications-searchrow">
-        <label className="next-notifications-search">
-          <span className="next-notifications-search__icon"><SearchGlyph /></span>
-          <input aria-label="Search notifications" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search notifications" />
-          {query ? <button type="button" onClick={() => setQuery("")} aria-label="Clear search">×</button> : null}
-        </label>
-        <button type="button" className={`next-notifications-filter-button${activeAdvancedFilters ? " has-active" : ""}`} onClick={() => setFilterOpen(true)} aria-label="Open notification filters">
-          <FilterGlyph />
-          <span>Filters</span>
-          {activeAdvancedFilters ? <b>{activeAdvancedFilters}</b> : null}
-        </button>
+      <div className="next-notifications-controls">
+        <nav className="next-notifications-quickfilters" aria-label="Notification filters">
+          {[ ["all", "All", counts.all], ["unread", "Unread", counts.unread] ].map(([value, label, count]) => (
+            <button type="button" key={value} aria-pressed={scope === value} className={scope === value ? "is-active" : ""} onClick={() => setScope(value)}>{label}<b>{count}</b></button>
+          ))}
+        </nav>
+        <div className="next-notifications-controls__actions">
+          <button type="button" className="next-notifications-mark-read" onClick={markAllRead} disabled={!unreadCount} title="Mark all notifications as read">Mark all read</button>
+          <button type="button" className={`next-notifications-filter-button${activeAdvancedFilters ? " has-active" : ""}`} onClick={() => setFilterOpen(true)} aria-label="Sort and filter notifications" title="Sort and filter notifications">
+            <FilterGlyph />
+            {activeAdvancedFilters ? <b>{activeAdvancedFilters}</b> : null}
+          </button>
+        </div>
       </div>
-
-      <nav className="next-notifications-quickfilters" aria-label="Notification filters">
-        {[ ["all", "All", counts.all], ["unread", "Unread", counts.unread] ].map(([value, label, count]) => (
-          <button type="button" key={value} aria-pressed={scope === value} className={scope === value ? "is-active" : ""} onClick={() => setScope(value)}>{label}<b>{count}</b></button>
-        ))}
-      </nav>
 
       <div className="next-notifications-feed" aria-live="polite">
         {feedSections.length ? feedSections.map((section) => (
@@ -552,7 +530,7 @@ export default function NotificationsClient({ initialItems = [], initialUnreadCo
                 return (
                   <article className={`next-notifications-row${unread ? " is-unread" : ""}${multiple ? " is-grouped" : ""}`} key={group.id}>
                     <button type="button" className={`next-notif-icon is-${tone.key}`} onClick={() => openItem(first)} aria-label={`Open ${notificationText(first.title)}`}>
-                      <NotificationGlyph toneKey={tone.key} />
+                      <span className="next-notifications-icon-glyph"><NotificationGlyph toneKey={tone.key} /></span>
                       {unread ? <i aria-hidden="true" /> : null}
                     </button>
                     <div className="next-notifications-row__main">

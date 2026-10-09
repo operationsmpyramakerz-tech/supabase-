@@ -1132,3 +1132,156 @@ html[data-theme="dark"] .next-notifications-appfeed .next-notifications-group-ch
 html[data-theme="dark"] .next-notifications-group-child__copy strong{color:#f8fafc!important}
 html[data-theme="dark"] .next-notifications-group-child__index{background:#252c36!important;color:#c7ced8!important}
 
+
+/* Notifications v7 — single compact action row; precise glyph centering. */
+.next-notifications-appfeed .next-notifications-controls{
+  display:flex!important;
+  align-items:center!important;
+  justify-content:space-between!important;
+  gap:8px!important;
+  min-width:0!important;
+  width:100%!important;
+  margin:12px 0 24px!important;
+}
+.next-notifications-appfeed .next-notifications-quickfilters{
+  flex:0 1 auto!important;
+  min-width:0!important;
+  width:auto!important;
+  gap:7px!important;
+  margin:0!important;
+}
+.next-notifications-appfeed .next-notifications-quickfilters button{
+  flex-shrink:0!important;
+  white-space:nowrap!important;
+  padding:0 10px!important;
+}
+.next-notifications-appfeed .next-notifications-controls__actions{
+  display:flex!important;
+  flex:0 0 auto!important;
+  align-items:center!important;
+  justify-content:flex-end!important;
+  gap:7px!important;
+  margin-left:auto!important;
+}
+.next-notifications-appfeed .next-notifications-mark-read{
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  flex:0 0 auto!important;
+  min-width:0!important;
+  height:38px!important;
+  padding:0 11px!important;
+  border:1px solid #e7eaf0!important;
+  border-radius:13px!important;
+  background:#fff!important;
+  color:#344054!important;
+  font:inherit!important;
+  font-size:10px!important;
+  font-weight:850!important;
+  line-height:1!important;
+  white-space:nowrap!important;
+  box-shadow:0 5px 16px rgba(15,23,42,.04)!important;
+  cursor:pointer!important;
+}
+.next-notifications-appfeed .next-notifications-mark-read:disabled{
+  opacity:.42!important;
+  cursor:default!important;
+}
+.next-notifications-appfeed .next-notifications-controls .next-notifications-filter-button{
+  flex:0 0 38px!important;
+  display:grid!important;
+  place-items:center!important;
+  width:38px!important;
+  min-width:38px!important;
+  height:38px!important;
+  min-height:38px!important;
+  padding:0!important;
+  margin:0!important;
+  border-radius:13px!important;
+}
+.next-notifications-appfeed .next-notifications-controls .next-notifications-filter-button svg{
+  width:19px!important;
+  height:19px!important;
+  margin:auto!important;
+}
+/* The glyph is positioned independently of the icon button's intrinsic line-box. */
+.next-notifications-appfeed .next-notif-icon{
+  position:relative!important;
+  padding:0!important;
+  line-height:0!important;
+  overflow:visible!important;
+}
+.next-notifications-appfeed .next-notif-icon .next-notifications-icon-glyph{
+  position:absolute!important;
+  inset:0!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  width:100%!important;
+  height:100%!important;
+  line-height:0!important;
+  pointer-events:none!important;
+}
+.next-notifications-appfeed .next-notif-icon .next-notifications-icon-glyph svg{
+  position:absolute!important;
+  top:50%!important;
+  left:50%!important;
+  width:22px!important;
+  height:22px!important;
+  margin:0!important;
+  flex:none!important;
+  transform:translate(-50%,-50%)!important;
+}
+@media(max-width:620px){
+  .next-notifications-appfeed .next-notifications-controls{
+    gap:6px!important;
+    margin:8px 0 23px!important;
+  }
+  .next-notifications-appfeed .next-notifications-quickfilters,
+  .next-notifications-appfeed .next-notifications-controls__actions{gap:6px!important;}
+  .next-notifications-appfeed .next-notifications-quickfilters button{
+    height:36px!important;
+    min-height:36px!important;
+    padding:0 9px!important;
+  }
+  .next-notifications-appfeed .next-notifications-mark-read{
+    height:36px!important;
+    padding:0 9px!important;
+    font-size:9.5px!important;
+  }
+  .next-notifications-appfeed .next-notifications-controls .next-notifications-filter-button{
+    flex-basis:36px!important;
+    width:36px!important;
+    min-width:36px!important;
+    height:36px!important;
+    min-height:36px!important;
+  }
+  .next-notifications-appfeed .next-notif-icon .next-notifications-icon-glyph svg{
+    width:21px!important;
+    height:21px!important;
+  }
+}
+@media(max-width:370px){
+  .next-notifications-appfeed .next-notifications-controls,
+  .next-notifications-appfeed .next-notifications-quickfilters,
+  .next-notifications-appfeed .next-notifications-controls__actions{gap:4px!important;}
+  .next-notifications-appfeed .next-notifications-quickfilters button{
+    gap:4px!important;
+    padding:0 7px!important;
+    font-size:9px!important;
+  }
+  .next-notifications-appfeed .next-notifications-mark-read{
+    padding:0 7px!important;
+    font-size:9px!important;
+  }
+  .next-notifications-appfeed .next-notifications-controls .next-notifications-filter-button{
+    flex-basis:34px!important;
+    width:34px!important;
+    min-width:34px!important;
+  }
+}
+html[data-theme="dark"] .next-notifications-appfeed .next-notifications-mark-read{
+  background:#12161d!important;
+  border-color:#2b313b!important;
+  color:#e5e7eb!important;
+}
