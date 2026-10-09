@@ -43,6 +43,61 @@ function FilterGlyph() {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 5h16"/><path d="M7 12h10"/><path d="M10 19h4"/></svg>;
 }
 
+// Custom, keyboard-accessible dropdowns keep the filter sheet consistent across
+// Android, iOS and desktop instead of opening each platform's native picker.
+function NotificationFilterDropdown({ id, label, value, options, open, onToggle, onSelect }) {
+  const selected = options.find((option) => option.value === value) || options[0];
+  const labelId = `notification-filter-${id}-label`;
+  const buttonId = `notification-filter-${id}-button`;
+  const menuId = `notification-filter-${id}-options`;
+
+  return (
+    <div className="next-notifications-filter-field" onKeyDown={(event) => {
+      if (open && event.key === "Escape") {
+        event.stopPropagation();
+        onToggle(false);
+        event.currentTarget.querySelector(".next-notifications-filter-select__trigger")?.focus();
+      }
+    }}>
+      <span id={labelId}>{label}</span>
+      <div className={`next-notifications-filter-select${open ? " is-open" : ""}`}>
+        <button
+          id={buttonId}
+          type="button"
+          className="next-notifications-filter-select__trigger"
+          aria-labelledby={`${labelId} ${buttonId}`}
+          aria-expanded={open}
+          aria-controls={menuId}
+          onClick={() => onToggle(!open)}
+        >
+          <span>{selected.label}</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+        </button>
+        {open ? (
+          <div id={menuId} className="next-notifications-filter-select__options" role="group" aria-labelledby={labelId}>
+            {options.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                className={`next-notifications-filter-select__option${value === option.value ? " is-selected" : ""}`}
+                aria-pressed={value === option.value}
+                onClick={() => {
+                  onSelect(option.value);
+                  onToggle(false);
+                  document.getElementById(buttonId)?.focus();
+                }}
+              >
+                <span>{option.label}</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6" /></svg>
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 async function requestJson(url, options = {}) {
   const response = await fetch(url, {
     credentials: "include",
@@ -319,6 +374,7 @@ export default function NotificationsClient({ initialItems = [], initialUnreadCo
   const [testResult, setTestResult] = useState("");
   const [message, setMessage] = useState("");
   const [filterOpen, setFilterOpen] = useState(false);
+  const [openDropdown, setOpenDropdown] = useState(null);
 
   const typeOptions = useMemo(() => {
     const unique = new Map();
@@ -373,7 +429,10 @@ export default function NotificationsClient({ initialItems = [], initialUnreadCo
 
   useEffect(() => {
     document.body.classList.toggle("notifications-filter-sheet-open", filterOpen);
-    if (!filterOpen) return undefined;
+    if (!filterOpen) {
+      setOpenDropdown(null);
+      return undefined;
+    }
     const onKeyDown = (event) => {
       if (event.key === "Escape") setFilterOpen(false);
     };
@@ -577,31 +636,38 @@ export default function NotificationsClient({ initialItems = [], initialUnreadCo
                 <span>Notification center</span>
                 <h2 id="notification-filter-title">Filters</h2>
               </div>
-              <button type="button" onClick={() => setFilterOpen(false)} aria-label="Close filters">×</button>
+              <button type="button" className="next-notifications-filter-sheet__close" onClick={() => setFilterOpen(false)} aria-label="Close filters" title="Close filters">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg>
+              </button>
             </header>
             <div className="next-notifications-filter-sheet__body">
-              <label className="next-notifications-filter-field">
-                <span>Category</span>
-                <select value={type} onChange={event => setType(event.target.value)}>
-                  <option value="all">All categories</option>
-                  {typeOptions.map(([value, label]) => <option value={value} key={value}>{label}</option>)}
-                </select>
-              </label>
-              <label className="next-notifications-filter-field">
-                <span>Status</span>
-                <select value={readFilter} onChange={event => setReadFilter(event.target.value)}>
-                  <option value="all">All statuses</option>
-                  <option value="unread">Unread only</option>
-                  <option value="read">Read only</option>
-                </select>
-              </label>
-              <label className="next-notifications-filter-field">
-                <span>Order</span>
-                <select value={sort} onChange={event => setSort(event.target.value)}>
-                  <option value="newest">Newest first</option>
-                  <option value="oldest">Oldest first</option>
-                </select>
-              </label>
+              <NotificationFilterDropdown
+                id="category"
+                label="Category"
+                value={type}
+                options={[{ value: "all", label: "All categories" }, ...typeOptions.map(([value, label]) => ({ value, label }))]}
+                open={openDropdown === "category"}
+                onToggle={(shouldOpen) => setOpenDropdown(shouldOpen ? "category" : null)}
+                onSelect={setType}
+              />
+              <NotificationFilterDropdown
+                id="status"
+                label="Status"
+                value={readFilter}
+                options={[{ value: "all", label: "All statuses" }, { value: "unread", label: "Unread only" }, { value: "read", label: "Read only" }]}
+                open={openDropdown === "status"}
+                onToggle={(shouldOpen) => setOpenDropdown(shouldOpen ? "status" : null)}
+                onSelect={setReadFilter}
+              />
+              <NotificationFilterDropdown
+                id="order"
+                label="Order"
+                value={sort}
+                options={[{ value: "newest", label: "Newest first" }, { value: "oldest", label: "Oldest first" }]}
+                open={openDropdown === "order"}
+                onToggle={(shouldOpen) => setOpenDropdown(shouldOpen ? "order" : null)}
+                onSelect={setSort}
+              />
               <label className="next-notifications-filter-toggle">
                 <span>
                   <strong>Group related updates</strong>

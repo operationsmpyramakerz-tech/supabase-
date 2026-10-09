@@ -1285,3 +1285,177 @@ html[data-theme="dark"] .next-notifications-appfeed .next-notifications-mark-rea
   border-color:#2b313b!important;
   color:#e5e7eb!important;
 }
+
+
+/* Notifications v8 — safe footer, custom pickers and compact close button. */
+.next-notifications-filter-sheet__head .next-notifications-filter-sheet__close{
+  flex:0 0 38px!important;
+  width:38px!important;
+  height:38px!important;
+  min-height:38px!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  padding:0!important;
+  border:1px solid #e8ebef!important;
+  border-radius:12px!important;
+  background:#f8f9fb!important;
+  color:#344054!important;
+  box-shadow:0 2px 7px rgba(15,23,42,.035)!important;
+  cursor:pointer!important;
+  transition:background .18s,border-color .18s,transform .18s!important;
+}
+.next-notifications-filter-sheet__close svg{
+  display:block!important;
+  width:17px!important;
+  height:17px!important;
+  flex:none!important;
+}
+.next-notifications-filter-sheet__close:hover{
+  background:#eef1f6!important;
+  border-color:#d9dee7!important;
+}
+.next-notifications-filter-sheet__close:active{transform:scale(.95)!important}
+.next-notifications-filter-sheet__close:focus-visible,
+.next-notifications-filter-select__trigger:focus-visible,
+.next-notifications-filter-select__option:focus-visible{
+  outline:2px solid #f97316!important;
+  outline-offset:2px!important;
+}
+
+.next-notifications-filter-field .next-notifications-filter-select{
+  display:block!important;
+  min-width:0!important;
+}
+.next-notifications-filter-select__trigger{
+  width:100%!important;
+  min-height:54px!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:space-between!important;
+  gap:12px!important;
+  padding:0 16px!important;
+  border:1px solid #dfe4ea!important;
+  border-radius:15px!important;
+  background:#f8fafc!important;
+  color:#111827!important;
+  font:inherit!important;
+  font-size:12px!important;
+  font-weight:850!important;
+  line-height:1.3!important;
+  text-align:left!important;
+  cursor:pointer!important;
+  transition:border-color .18s,background .18s,box-shadow .18s!important;
+}
+.next-notifications-filter-select__trigger>span{
+  min-width:0!important;
+  overflow:hidden!important;
+  text-overflow:ellipsis!important;
+  white-space:nowrap!important;
+}
+.next-notifications-filter-select__trigger svg{
+  display:block!important;
+  width:18px!important;
+  height:18px!important;
+  color:#667085!important;
+  flex:0 0 18px!important;
+  transition:transform .18s!important;
+}
+.next-notifications-filter-select.is-open .next-notifications-filter-select__trigger{
+  border-color:#b7c2d4!important;
+  background:#fff!important;
+  box-shadow:0 0 0 3px rgba(44,65,106,.065)!important;
+}
+.next-notifications-filter-select.is-open .next-notifications-filter-select__trigger svg{
+  transform:rotate(180deg)!important;
+}
+.next-notifications-filter-select__options{
+  display:grid!important;
+  gap:4px!important;
+  max-height:232px!important;
+  overflow-y:auto!important;
+  margin-top:8px!important;
+  padding:6px!important;
+  border:1px solid #e5e9f1!important;
+  border-radius:16px!important;
+  background:#fff!important;
+  box-shadow:0 9px 26px rgba(15,23,42,.085)!important;
+  scrollbar-width:none!important;
+  -webkit-overflow-scrolling:touch!important;
+}
+.next-notifications-filter-select__options::-webkit-scrollbar{display:none!important}
+.next-notifications-filter-select__option{
+  width:100%!important;
+  min-height:43px!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:space-between!important;
+  gap:10px!important;
+  padding:9px 12px!important;
+  border:0!important;
+  border-radius:11px!important;
+  background:transparent!important;
+  color:#344054!important;
+  font:inherit!important;
+  font-size:12px!important;
+  font-weight:750!important;
+  line-height:1.3!important;
+  text-align:left!important;
+  cursor:pointer!important;
+  transition:background .15s,color .15s!important;
+}
+.next-notifications-filter-select__option:hover{background:#f5f7fa!important}
+.next-notifications-filter-select__option.is-selected{
+  background:#eff3fa!important;
+  color:#1c3155!important;
+  font-weight:900!important;
+}
+.next-notifications-filter-select__option svg{
+  width:16px!important;
+  height:16px!important;
+  flex:0 0 16px!important;
+  visibility:hidden!important;
+}
+.next-notifications-filter-select__option.is-selected svg{visibility:visible!important}
+
+/* The Android navigation bar / web-app bottom overlay can cover the normal
+   sheet footer. Reserve extra room beneath the buttons, not over them. */
+@media(max-width:620px){
+  .next-notifications-filter-sheet{
+    min-height:0!important;
+    max-height:min(86dvh,900px)!important;
+  }
+  .next-notifications-filter-sheet__footer{
+    padding-bottom:calc(74px + env(safe-area-inset-bottom,0px))!important;
+  }
+}
+@media(min-width:621px){
+  .next-notifications-filter-sheet__footer{
+    padding-bottom:calc(26px + env(safe-area-inset-bottom,0px))!important;
+  }
+}
+html[data-theme="dark"] .next-notifications-filter-sheet__head .next-notifications-filter-sheet__close{
+  background:#1e2632!important;
+  border-color:#303b4a!important;
+  color:#e5e7eb!important;
+}
+html[data-theme="dark"] .next-notifications-filter-select__trigger{
+  background:#181e27!important;
+  border-color:#303741!important;
+  color:#f8fafc!important;
+}
+html[data-theme="dark"] .next-notifications-filter-select.is-open .next-notifications-filter-select__trigger{
+  background:#1b2330!important;
+  border-color:#65738a!important;
+}
+html[data-theme="dark"] .next-notifications-filter-select__trigger svg{color:#a3aec1!important}
+html[data-theme="dark"] .next-notifications-filter-select__options{
+  background:#191f28!important;
+  border-color:#303741!important;
+}
+html[data-theme="dark"] .next-notifications-filter-select__option{color:#e5e7eb!important}
+html[data-theme="dark"] .next-notifications-filter-select__option:hover{background:#252e3b!important}
+html[data-theme="dark"] .next-notifications-filter-select__option.is-selected{
+  background:#253750!important;
+  color:#fff!important;
+}
