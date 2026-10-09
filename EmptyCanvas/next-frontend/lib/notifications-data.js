@@ -333,7 +333,7 @@ async function settingsForMember(memberId) {
   return value;
 }
 
-async function saveNotificationForMember(memberId, notif = {}) {
+export async function saveNotificationForMember(memberId, notif = {}) {
   const userId = text(memberId);
   const notificationId = text(notif.id);
   if (!userId || !notificationId) return false;
@@ -573,13 +573,20 @@ export async function runNotificationsScan({ force = false } = {}) {
       expensesChanged = [];
     }
 
+    // Phase-2 queue replaces generic order broadcasts. A missing migration
+    // keeps the legacy scan available until the new event table is installed.
+    const eventEngineReady = await select("erp_notification_events", {
+      select: "id", limit: "1",
+    }, { profileName: "notifications.events.enabled" }).then(() => true).catch(() => false);
     let ordersChanged = [];
-    try {
-      ordersChanged = await rowsEditedSince(ordersTable(), lastIso, { limit: 3000 });
-    } catch {
-      ordersChanged = [];
+    if (!eventEngineReady) {
+      try {
+        ordersChanged = await rowsEditedSince(ordersTable(), lastIso, { limit: 3000 });
+      } catch {
+        ordersChanged = [];
+      }
     }
-    if (ordersChanged.length && users.length) {
+    if (!eventEngineReady && ordersChanged.length && users.length) {
       const newestTs = Math.max(...ordersChanged.map(rowUpdatedAt).filter(Boolean), Date.now());
       const orderPages = ["Current Orders", "Requested Orders", "Operations Orders", "Orders Review", "Maintenance Orders"];
       for (const user of users) {

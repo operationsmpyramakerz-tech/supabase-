@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { notificationsForMember, runNotificationsScan } from "../../../../lib/notifications-data";
+import { dispatchQueuedNotifications } from "../../../../lib/notification-event-worker";
 import { getDirectAccountGate } from "../../../../lib/products-auth";
 
 export const dynamic = "force-dynamic";
@@ -22,9 +23,13 @@ export async function GET(request) {
   try {
     const force = request.nextUrl.searchParams.get("force") === "1";
     const limit = Math.max(1, Math.min(80, Number(request.nextUrl.searchParams.get("limit")) || 25));
+    // Keep the existing refresh path working if the Phase-2 SQL isn't installed.
+    const queue = await dispatchQueuedNotifications({ limit: 4 }).catch((error) => ({
+      ok: false, error: error?.message || "Notification queue temporarily unavailable",
+    }));
     const scan = await runNotificationsScan({ force });
     const list = await notificationsForMember(gate.memberId, { limit, fresh: true });
-    return noStore({ ...list, scan });
+    return noStore({ ...list, scan, queue });
   } catch (error) {
     console.error("GET /next/api/notifications/refresh error:", error?.details || error);
     return noStore({ success: false, error: error?.message || "Failed to refresh notifications." }, Number(error?.status) || 500);

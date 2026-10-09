@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
+import { dispatchQueuedNotifications } from "../../../../../lib/notification-event-worker";
 import { getDirectAccountGate } from "../../../../../lib/products-auth";
 import {
   logMaintenanceDirect,
@@ -8,6 +9,7 @@ import {
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+export const maxDuration = 60;
 
 function noStore(payload, init = {}) {
   return NextResponse.json(payload, {
@@ -82,7 +84,13 @@ export async function POST(request) {
         receiptNumbers: body?.receiptNumbers ?? body?.receiptNumber,
       });
     }
-    if (result) return noStore(result);
+    if (result) {
+      if (["log-maintenance", "mark-arrived"].includes(action) && result?.ok !== false && result?.success !== false) {
+        after(() => dispatchQueuedNotifications({ limit: 5 }).catch((error) =>
+          console.warn("[notifications] Maintenance delivery deferred:", error?.message)));
+      }
+      return noStore(result);
+    }
     return noStore(
       { error: "This Maintenance Orders action is not available through the direct Supabase path." },
       { status: 503 },

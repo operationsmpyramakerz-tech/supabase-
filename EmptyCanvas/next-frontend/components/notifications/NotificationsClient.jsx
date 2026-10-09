@@ -259,7 +259,14 @@ export default function NotificationsClient({ initialItems = [], initialUnreadCo
         "disabled-by-user": "Email is disabled in your System notification preferences",
       };
       const emailDetail = emailReasons[result.email?.reason] || result.email?.reason || "";
-      setTestResult(`Test complete · In-App: ${result.inAppSaved ? "saved" : "disabled"} · Push: ${label(result.push?.sent > 0, result.push?.skipped)} · Email: ${emailLabel}${emailDetail ? ` (${emailDetail})` : ""}`);
+      const pushReason = result.push?.error === "No subscriptions"
+        ? "Enable Push on this device first"
+        : result.push?.error === "Push disabled"
+          ? "Check VAPID keys in Vercel"
+          : result.push?.error === "Subscriptions unavailable"
+            ? "Could not load device subscriptions"
+            : result.push?.error || "";
+      setTestResult(`Test complete · In-App: ${result.inAppSaved ? "saved" : "disabled"} · Push: ${label(result.push?.sent > 0, result.push?.skipped)}${!result.push?.skipped && !result.push?.ok && pushReason ? ` (${pushReason})` : ""} · Email: ${emailLabel}${emailDetail ? ` (${emailDetail})` : ""}`);
       await refresh();
     } catch (error) { setTestResult(error.message || "Notification test failed."); }
     finally { setTesting(false); }

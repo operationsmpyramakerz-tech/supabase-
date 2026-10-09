@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
+import { dispatchQueuedNotifications } from "../../../../lib/notification-event-worker";
 
 import { directTaskManagementContext } from "../../../../lib/task-management-data";
 import {
@@ -21,9 +22,14 @@ import {
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+export const maxDuration = 60;
 export const runtime = "nodejs";
 
 function text(value) { return String(value ?? "").trim(); }
+function deliverTaskEvents() {
+  after(() => dispatchQueuedNotifications({ limit: 6 }).catch((error) =>
+    console.warn("[notifications] Task delivery deferred:", error?.message)));
+}
 function json(payload, status = 200) {
   return NextResponse.json(payload, { status, headers: { "Cache-Control": "private, no-store" } });
 }
@@ -54,6 +60,7 @@ export async function POST(request) {
     }
     if (action === "ticket-mark-delivered") {
       const ticket = await markTaskManagementDelivered(context, body?.ticketId || body?.id);
+      deliverTaskEvents();
       return json({ ok: true, ticket, source: "supabase-next" });
     }
     if (action === "people-workflow-get") {
@@ -62,6 +69,7 @@ export async function POST(request) {
     }
     if (action === "people-workflow-save") {
       const result = await saveTaskManagementPeopleWorkflow(context, body?.sectionId || body?.id, body);
+      deliverTaskEvents();
       return json({ ok: true, ...result, source: "supabase-next" });
     }
     if (action === "people-workflow-delete") {
@@ -82,6 +90,7 @@ export async function POST(request) {
     }
     if (action === "assignment-work") {
       const result = await updateTaskManagementAssignmentWork(context, body?.assignmentId || body?.id, body);
+      deliverTaskEvents();
       return json({ ok: true, ...result, source: "supabase-next" });
     }
     if (action === "section-work") {
