@@ -16,6 +16,38 @@ import {
   notificationTone,
 } from "./notification-utils";
 
+
+function NotificationGlyph({ toneKey = "general" }) {
+  const common = {
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 2,
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+    "aria-hidden": true,
+  };
+  const paths = {
+    order: <><circle cx="9" cy="20" r="1"/><circle cx="20" cy="20" r="1"/><path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6"/></>,
+    maintenance: <><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-7.9 7.9l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 7.9-7.9z"/></>,
+    expense: <><line x1="12" y1="2" x2="12" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7H14a3.5 3.5 0 0 1 0 7H6"/></>,
+    stock: <><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></>,
+    task: <><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></>,
+    event: <><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18"/><path d="m9 16 2 2 4-4"/></>,
+    test: <><path d="M9 3h6"/><path d="M10 3v5.5L5.5 17a2.5 2.5 0 0 0 2.2 3.7h8.6a2.5 2.5 0 0 0 2.2-3.7L14 8.5V3"/><path d="M8 15h8"/></>,
+    general: <><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></>,
+  };
+  return <svg {...common}>{paths[toneKey] || paths.general}</svg>;
+}
+
+function FilterGlyph() {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 5h16"/><path d="M7 12h10"/><path d="M10 19h4"/></svg>;
+}
+
+function SearchGlyph() {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.7-3.7"/></svg>;
+}
+
 async function requestJson(url, options = {}) {
   const response = await fetch(url, {
     credentials: "include",
@@ -82,6 +114,7 @@ function PushSettings() {
   const [status, setStatus] = useState("checking");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [filterOpen, setFilterOpen] = useState(false);
   const [publicKey, setPublicKey] = useState("");
   const [serverIssue, setServerIssue] = useState("");
 
@@ -343,6 +376,22 @@ export default function NotificationsClient({ initialItems = [], initialUnreadCo
   }, [groupedRows]);
   const resetFilters = () => { setQuery(""); setType("all"); setSort("newest"); setScope("all"); setReadFilter("all"); };
 
+  const activeAdvancedFilters = Number(type !== "all") + Number(readFilter !== "all") + Number(sort !== "newest") + Number(!groupSimilar);
+
+  useEffect(() => {
+    document.body.classList.toggle("notifications-filter-sheet-open", filterOpen);
+    if (!filterOpen) return undefined;
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") setFilterOpen(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.classList.remove("notifications-filter-sheet-open");
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [filterOpen]);
+
+
   async function refresh() {
     if (loading) return;
     setLoading(true);
@@ -468,21 +517,15 @@ export default function NotificationsClient({ initialItems = [], initialUnreadCo
 
       <div className="next-notifications-searchrow">
         <label className="next-notifications-search">
-          <span className="sr-only">Search notifications</span>
-          <i aria-hidden="true">⌕</i>
-          <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search notifications" />
+          <span className="next-notifications-search__icon"><SearchGlyph /></span>
+          <input aria-label="Search notifications" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search notifications" />
           {query ? <button type="button" onClick={() => setQuery("")} aria-label="Clear search">×</button> : null}
         </label>
-        <details className="next-notifications-filter-popover">
-          <summary>Filters</summary>
-          <div className="next-notifications-filter-popover__body">
-            <label><span>Category</span><select value={type} onChange={event => setType(event.target.value)}><option value="all">All categories</option>{typeOptions.map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>
-            <label><span>Status</span><select value={readFilter} onChange={event => setReadFilter(event.target.value)}><option value="all">All statuses</option><option value="unread">Unread</option><option value="read">Read</option></select></label>
-            <label><span>Order</span><select value={sort} onChange={event => setSort(event.target.value)}><option value="newest">Newest</option><option value="oldest">Oldest</option></select></label>
-            <label className="next-notifications-group-toggle"><input type="checkbox" checked={groupSimilar} onChange={event => setGroupSimilar(event.target.checked)} /> Group related updates</label>
-            <button type="button" onClick={resetFilters}>Reset filters</button>
-          </div>
-        </details>
+        <button type="button" className={`next-notifications-filter-button${activeAdvancedFilters ? " has-active" : ""}`} onClick={() => setFilterOpen(true)} aria-label="Open notification filters">
+          <FilterGlyph />
+          <span>Filters</span>
+          {activeAdvancedFilters ? <b>{activeAdvancedFilters}</b> : null}
+        </button>
       </div>
 
       <nav className="next-notifications-quickfilters" aria-label="Notification filters">
@@ -509,7 +552,7 @@ export default function NotificationsClient({ initialItems = [], initialUnreadCo
                 return (
                   <article className={`next-notifications-row ${unread ? "is-unread" : ""}`} key={group.id}>
                     <button type="button" className={`next-notif-icon is-${tone.key}`} onClick={() => openItem(first)} aria-label={`Open ${notificationText(first.title)}`}>
-                      <span>{tone.label}</span>
+                      <NotificationGlyph toneKey={tone.key} />
                       {unread ? <i aria-hidden="true" /> : null}
                     </button>
                     <div className="next-notifications-row__main">
@@ -533,6 +576,56 @@ export default function NotificationsClient({ initialItems = [], initialUnreadCo
           </section>
         )) : <div className="next-notifications-empty"><span>✓</span><h3>No updates found</h3><p>Try changing your filters or check for new activity.</p><button type="button" onClick={resetFilters}>Show all</button></div>}
       </div>
+
+
+      {filterOpen ? (
+        <div className="next-notifications-filter-sheet-layer" role="dialog" aria-modal="true" aria-labelledby="notification-filter-title" onMouseDown={(event) => { if (event.target === event.currentTarget) setFilterOpen(false); }}>
+          <section className="next-notifications-filter-sheet">
+            <header className="next-notifications-filter-sheet__head">
+              <div>
+                <span>Notification center</span>
+                <h2 id="notification-filter-title">Filters</h2>
+              </div>
+              <button type="button" onClick={() => setFilterOpen(false)} aria-label="Close filters">×</button>
+            </header>
+            <div className="next-notifications-filter-sheet__body">
+              <label className="next-notifications-filter-field">
+                <span>Category</span>
+                <select value={type} onChange={event => setType(event.target.value)}>
+                  <option value="all">All categories</option>
+                  {typeOptions.map(([value, label]) => <option value={value} key={value}>{label}</option>)}
+                </select>
+              </label>
+              <label className="next-notifications-filter-field">
+                <span>Status</span>
+                <select value={readFilter} onChange={event => setReadFilter(event.target.value)}>
+                  <option value="all">All statuses</option>
+                  <option value="unread">Unread only</option>
+                  <option value="read">Read only</option>
+                </select>
+              </label>
+              <label className="next-notifications-filter-field">
+                <span>Order</span>
+                <select value={sort} onChange={event => setSort(event.target.value)}>
+                  <option value="newest">Newest first</option>
+                  <option value="oldest">Oldest first</option>
+                </select>
+              </label>
+              <label className="next-notifications-filter-toggle">
+                <span>
+                  <strong>Group related updates</strong>
+                  <small>Combine updates that belong to the same activity.</small>
+                </span>
+                <input type="checkbox" checked={groupSimilar} onChange={event => setGroupSimilar(event.target.checked)} />
+              </label>
+            </div>
+            <footer className="next-notifications-filter-sheet__footer">
+              <button type="button" className="is-secondary" onClick={resetFilters}>Reset</button>
+              <button type="button" className="is-primary" onClick={() => setFilterOpen(false)}>Show results</button>
+            </footer>
+          </section>
+        </div>
+      ) : null}
 
       <details className="next-notifications-device next-notifications-settings-card">
         <summary><span>Notification settings</span><small>Push · Preferences · Test tools</small></summary>
