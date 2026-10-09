@@ -43,6 +43,8 @@ async function patchClaim(event, updates) {
     body: updates,
     profileName: "notifications.events.progress",
   });
+  // Keep local channel flags in sync for correct final-failure audit records.
+  Object.assign(event, updates);
 }
 
 async function deliver(event) {
@@ -59,14 +61,21 @@ async function deliver(event) {
     ts: Date.parse(event.created_at) || Date.now(),
     read: false,
   };
+  // One stable tray entry for consecutive updates to the SAME referenced
+  // order/task; each change still gets its own In-App record and delivery log.
+  // Do not collapse generic same-title updates from different records.
+  const reference = `${notif.title} ${notif.body}`.match(/\b(?:TKT|ORD|MNT|MTN|REQ)[-\s]?\d{3,}\b/i)?.[0];
+  const pushTag = reference
+    ? `erp-${type}-${reference.replace(/\s+/g, "-").toLowerCase()}`
+    : `erp-${event.id}`;
   const audit = (channel, outcome, reason = "", provider = "") => logNotificationDelivery({
     eventId: event.id, recipientId: memberId, channel, outcome, reason, provider,
   });
   if (!event.in_app_done) {
     if (allowsChannel(settings, type, "in_app")) {
       try {
-        await saveNotificationForMember(memberId, notif);
-        await audit("in_app", "stored", "", "in-app");
+        const stored = await saveNotificationForMember(memberId, notif);
+        await audit("in_app", stored ? "stored" : "skipped", stored ? "" : "preferences disabled", stored ? "in-app" : "");
       } catch (error) {
         await audit("in_app", "retrying", "Delivery could not be completed");
         throw error;
@@ -86,7 +95,7 @@ async function deliver(event) {
       try {
         pushed = await sendPushToMember(memberId, {
           title: notif.title, body: notif.body, url: notif.url,
-          tag: `erp-${event.id}`,
+          tag: pushTag,
         });
       } catch (error) {
         await audit("push", "retrying", "push provider error");
@@ -94,7 +103,7 @@ async function deliver(event) {
       }
       // No registered device is a permanent skip for this event. Provider or
       // subscription-query failures are retried later, without blocking email.
-      if (!pushed.ok) {
+      if (!pushed.ok || Number(pushed.sent) < 1) {
         console.info("[notification-event] Push not accepted", safe(pushed.error, 80));
         if (!["No subscriptions"].includes(pushed.error) && !pushed.expired) {
           pushRetryError = safe(pushed.error, 100) || "Push delivery failed";
@@ -161,6 +170,12 @@ async function recover(event, error) {
       next_attempt_at: new Date(Date.now() + delayMinutes * 60_000).toISOString(),
       lease_token: null, lease_until: null, last_error: message,
     });
+    if (exhausted) {
+      await Promise.all(["in_app", "push", "email"].filter(channel => !event[`${channel}_done`]).map(channel =>
+        logNotificationDelivery({ eventId: event.id, recipientId: event.recipient_id,
+          channel, outcome: "failed", reason: message })
+      ));
+    }
   } catch (updateError) {
     console.error("[notification-event] Could not release event lease", updateError?.message);
   }

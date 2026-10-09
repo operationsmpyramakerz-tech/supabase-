@@ -468,6 +468,28 @@ export async function markNotificationReadForMember(memberId, notificationId) {
   return { success: true, changed: !bool(row.read, false) };
 }
 
+export async function markNotificationsReadForMember(memberId, notificationIds) {
+  const id = text(memberId);
+  if (!id) throw Object.assign(new Error("Notification user is not available."), { status: 401 });
+  if (!Array.isArray(notificationIds) || notificationIds.length < 1 || notificationIds.length > 20) {
+    throw Object.assign(new Error("Provide 1–20 notification ids."), { status: 400 });
+  }
+  const ids = [...new Set(notificationIds.map(value => String(value ?? "").trim()))];
+  if (ids.some(value => !value || value.length > 200 || /[\x00-\x1f]/.test(value))) {
+    throw Object.assign(new Error("Invalid notification id."), { status: 400 });
+  }
+  // Restrict the UPDATE to this authenticated user's rows. Quoted PostgREST
+  // in.(...) values protect ids containing colons, commas or parentheses.
+  const inFilter = `in.(${ids.map(value => JSON.stringify(value)).join(",")})`;
+  const rows = await supabaseRequest(`/${encodeURIComponent(notificationTable())}?user_id=eq.${encodeURIComponent(id)}&notification_id=${encodeURIComponent(inFilter)}&read=eq.false`, {
+    method: "PATCH", headers: { Prefer: "return=representation" },
+    body: { read: true, updated_at: new Date().toISOString() },
+    profileName: "notifications.mark-group-read",
+  });
+  invalidate(id);
+  return { success: true, changed: Array.isArray(rows) ? rows.length : 0 };
+}
+
 export async function markAllNotificationsReadForMember(memberId) {
   const id = text(memberId);
   if (!id) {

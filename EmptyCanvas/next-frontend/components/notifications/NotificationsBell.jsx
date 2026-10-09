@@ -11,35 +11,10 @@ import {
   notificationTone,
 } from "./notification-utils";
 
-const BELL_CACHE_KEY = "ops.notifications.bell-cache.v1";
-const BELL_CACHE_MAX_AGE_MS = 30_000;
+// Notification titles can contain confidential work details. Do not cache them
+// in browser storage that persists across ERP user sign-outs/account switches.
 const BELL_REQUEST_MIN_INTERVAL_MS = 12_000;
-
-function readBellCache() {
-  if (typeof window === "undefined") return null;
-  try {
-    const cached = JSON.parse(window.sessionStorage.getItem(BELL_CACHE_KEY) || "null");
-    if (!cached || typeof cached !== "object") return null;
-    const savedAt = Number(cached.savedAt) || 0;
-    const items = Array.isArray(cached.items) ? cached.items : [];
-    const unreadCount = Number(cached.unreadCount) || 0;
-    if (!savedAt) return null;
-    return { savedAt, items, unreadCount };
-  } catch {
-    return null;
-  }
-}
-
-function writeBellCache(items = [], unreadCount = 0) {
-  if (typeof window === "undefined") return;
-  try {
-    window.sessionStorage.setItem(BELL_CACHE_KEY, JSON.stringify({
-      savedAt: Date.now(),
-      items: Array.isArray(items) ? items.slice(0, 12) : [],
-      unreadCount: Number(unreadCount) || 0,
-    }));
-  } catch {}
-}
+let lastBackgroundScanAt = 0;
 
 async function requestJson(url, options = {}) {
   const response = await fetch(url, {
@@ -60,16 +35,10 @@ async function requestJson(url, options = {}) {
 
 function triggerBackgroundNotificationScan() {
   const now = Date.now();
-  const storageKey = "ops.notifications.last-background-scan";
-  try {
-    const previous = Number(window.sessionStorage.getItem(storageKey) || 0) || 0;
-    if (now - previous < 2 * 60 * 1000) return Promise.resolve(null);
-    window.sessionStorage.setItem(storageKey, String(now));
-  } catch {}
-
+  if (now - lastBackgroundScanAt < 2 * 60 * 1000) return Promise.resolve(null);
+  lastBackgroundScanAt = now;
   return fetch(`/next/api/notifications/refresh?limit=12&_=${now}`, {
-    credentials: "include",
-    cache: "no-store",
+    credentials: "include", cache: "no-store",
   }).catch(() => null);
 }
 
@@ -102,7 +71,6 @@ export default function NotificationsBell({ classic = false }) {
         setItems(nextItems);
         setUnreadCount(nextUnread);
         lastLoadedAtRef.current = Date.now();
-        writeBellCache(nextItems, nextUnread);
         setError("");
 
         triggerBackgroundNotificationScan().then(async (response) => {
@@ -114,7 +82,6 @@ export default function NotificationsBell({ classic = false }) {
             setItems(updatedItems);
             setUnreadCount(updatedUnread);
             lastLoadedAtRef.current = Date.now();
-            writeBellCache(updatedItems, updatedUnread);
           } catch {}
         });
         return body;
@@ -135,15 +102,10 @@ export default function NotificationsBell({ classic = false }) {
   }
 
   useEffect(() => {
-    const cached = readBellCache();
-    if (cached) {
-      setItems(cached.items);
-      setUnreadCount(cached.unreadCount);
-      lastLoadedAtRef.current = cached.savedAt;
-    }
-    if (!cached || Date.now() - cached.savedAt > BELL_CACHE_MAX_AGE_MS) {
-      load({ quiet: Boolean(cached) });
-    }
+    // Discard notification previews saved by older versions. They were not
+    // account-scoped and should not survive a user switch on a shared phone.
+    try { window.sessionStorage.removeItem("ops.notifications.bell-cache.v1"); } catch {}
+    load();
 
     const timer = window.setInterval(() => {
       if (document.visibilityState === "visible") load({ quiet: true });
@@ -210,7 +172,6 @@ export default function NotificationsBell({ classic = false }) {
     const nextUnread = Math.max(0, unreadCount - 1);
     setItems(nextItems);
     setUnreadCount(nextUnread);
-    writeBellCache(nextItems, nextUnread);
     try {
       await requestJson("/next/api/notifications/read", {
         method: "POST",
@@ -228,7 +189,6 @@ export default function NotificationsBell({ classic = false }) {
     const nextItems = items.map((item) => ({ ...item, read: true }));
     setItems(nextItems);
     setUnreadCount(0);
-    writeBellCache(nextItems, 0);
     try {
       await requestJson("/next/api/notifications/read-all", {
         method: "POST",

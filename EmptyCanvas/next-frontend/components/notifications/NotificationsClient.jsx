@@ -410,6 +410,24 @@ export default function NotificationsClient({ initialItems = [], initialUnreadCo
     }
   }
 
+  async function markGroupRead(group) {
+    const ids = (group?.items || []).filter(item => !item.read).map(item => String(item.id));
+    if (!ids.length) return;
+    const toRead = new Set(ids);
+    setItems(current => current.map(item => toRead.has(String(item.id)) ? { ...item, read: true } : item));
+    setUnreadCount(count => Math.max(0, count - ids.length));
+    try {
+      for (let offset = 0; offset < ids.length; offset += 20) {
+        await requestJson("/next/api/notifications/read-batch", {
+          method: "POST", body: JSON.stringify({ ids: ids.slice(offset, offset + 20) }),
+        });
+      }
+    } catch (error) {
+      setMessage(error.message || "Could not mark this group as read.");
+      await refresh();
+    }
+  }
+
   async function markAllRead() {
     if (!unreadCount) return;
     const previous = items;
@@ -476,7 +494,7 @@ export default function NotificationsClient({ initialItems = [], initialUnreadCo
           <button type="button" onClick={resetFilters}>Reset</button>
         </div>
         <div className="next-notifications-group-settings">
-          <label><input type="checkbox" checked={groupSimilar} onChange={event => setGroupSimilar(event.target.checked)} /> Group identical updates</label>
+          <label><input type="checkbox" checked={groupSimilar} onChange={event => setGroupSimilar(event.target.checked)} /> Group related updates</label>
           <span>{groupedRows.length} {groupedRows.length === 1 ? "entry" : "entries"}</span>
         </div>
         <div className="next-notifications-list">
@@ -500,6 +518,7 @@ export default function NotificationsClient({ initialItems = [], initialUnreadCo
                   <time title={notificationDateTime(first.ts)}>{notificationTimeAgo(first.ts)}</time>
                   <div>
                     {multiple ? <button type="button" aria-expanded={expanded} onClick={() => setOpenGroups(prev => expanded ? prev.filter(id => id !== group.id) : [...prev, group.id])}>{expanded ? "Less" : "Details"}</button> : null}
+                    {multiple && unread ? <button type="button" onClick={() => markGroupRead(group)} aria-label={`Mark ${unread} notifications in this group as read`}>Read group</button> : null}
                     {!multiple && unread ? <button type="button" onClick={() => markRead(first)}>Read</button> : null}
                     {target ? <button type="button" className="is-open" onClick={() => openItem(first)}>Open</button> : null}
                   </div>

@@ -76,3 +76,7 @@
 .next-notifications-v4 .next-notifications-delivery__error{color:#b91c1c;border-color:#fecaca}
 .next-notifications-v4 .next-notifications-delivery__foot{margin:0;font-size:9px;color:#98a2b3;line-height:1.5}
 @media(max-width:520px){.next-notifications-v4 .next-notifications-delivery__head{align-items:flex-start;flex-direction:column}.next-notifications-v4 .next-notifications-delivery__counts{grid-template-columns:repeat(2,minmax(0,1fr))}.next-notifications-v4 .next-notifications-delivery__channels{gap:5px}.next-notifications-v4 .next-notifications-delivery__channel{padding:7px}.next-notifications-v4 .next-notifications-delivery__channel strong{font-size:9px}}
+
+/* Phase 6: keep group actions readable without overflowing mobile cards. */
+.next-notifications-v4 .next-notifications-row__side>div{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:5px}
+@media(max-width:520px){.next-notifications-v4 .next-notifications-row__side>div{justify-content:flex-start}}
