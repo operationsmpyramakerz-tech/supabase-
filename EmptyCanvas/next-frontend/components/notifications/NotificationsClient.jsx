@@ -211,10 +211,6 @@ function PushSettings() {
   );
 }
 
-function StatCard({ label, value, note, tone = "neutral" }) {
-  return <article className={`next-notifications-stat is-${tone}`}><span>{label}</span><strong>{value}</strong><small>{note}</small></article>;
-}
-
 function DeliveryHistory() {
   const [history, setHistory] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -333,6 +329,18 @@ export default function NotificationsClient({ initialItems = [], initialUnreadCo
   }, [items, query, scope, type, sort, readFilter]);
 
   const groupedRows = useMemo(() => groupNotificationRows(filtered, groupSimilar), [filtered, groupSimilar]);
+  const feedSections = useMemo(() => {
+    const buckets = { today: [], week: [], earlier: [] };
+    groupedRows.forEach((group) => {
+      const bucket = notificationScope(group?.items?.[0]?.ts);
+      (buckets[bucket] || buckets.earlier).push(group);
+    });
+    return [
+      { key: "today", label: "Today", rows: buckets.today },
+      { key: "week", label: "This Week", rows: buckets.week },
+      { key: "earlier", label: "Earlier", rows: buckets.earlier },
+    ].filter((section) => section.rows.length);
+  }, [groupedRows]);
   const resetFilters = () => { setQuery(""); setType("all"); setSort("newest"); setScope("all"); setReadFilter("all"); };
 
   async function refresh() {
@@ -442,86 +450,92 @@ export default function NotificationsClient({ initialItems = [], initialUnreadCo
   }
 
   return (
-    <section className="next-notifications-page next-notifications-v4">
-      <header className="next-notifications-hero">
-        <div>
-          <span>Activity center</span>
-          <h2>Notifications</h2>
-          <p>Updates that matter to you, all in one place.</p>
+    <section className="next-notifications-page next-notifications-v4 next-notifications-appfeed">
+      <div className="next-notifications-commandbar">
+        <div className="next-notifications-commandbar__status">
+          <strong>{unreadCount ? `${unreadCount} unread` : "You're all caught up"}</strong>
+          <span>{counts.today} today · {counts.week} this week</span>
         </div>
-        <div className="next-notifications-hero__actions">
-          <button type="button" onClick={refresh} disabled={loading}>{loading ? "Refreshing…" : "↻ Refresh"}</button>
-          <button type="button" className="is-secondary" onClick={markAllRead} disabled={!unreadCount}>Mark all read</button>
+        <div className="next-notifications-commandbar__actions">
+          <button type="button" className="is-icon" onClick={refresh} disabled={loading} aria-label="Refresh notifications" title="Refresh notifications">↻</button>
+          <button type="button" onClick={markAllRead} disabled={!unreadCount}>Mark all read</button>
         </div>
-      </header>
+      </div>
 
       {testResult ? <div className="next-notifications-warning" role="status">{testResult}</div> : null}
       {bootstrapWarnings.length ? <div className="next-notifications-warning">Some startup resources were delayed. You can refresh the page.</div> : null}
       {message ? <div className="next-notifications-warning is-error" role="alert">{message}<button type="button" onClick={() => setMessage("")} aria-label="Dismiss error">×</button></div> : null}
 
-      <div className="next-notifications-stats" aria-label="Notification overview">
-        <StatCard label="Unread" value={unreadCount} note="Needs your attention" tone={unreadCount ? "warning" : "success"} />
-        <StatCard label="Recent" value={counts.all} note="Latest saved updates" tone="primary" />
-        <StatCard label="Today" value={counts.today} note="Received today" tone="success" />
+      <div className="next-notifications-searchrow">
+        <label className="next-notifications-search">
+          <span className="sr-only">Search notifications</span>
+          <i aria-hidden="true">⌕</i>
+          <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search notifications" />
+          {query ? <button type="button" onClick={() => setQuery("")} aria-label="Clear search">×</button> : null}
+        </label>
+        <details className="next-notifications-filter-popover">
+          <summary>Filters</summary>
+          <div className="next-notifications-filter-popover__body">
+            <label><span>Category</span><select value={type} onChange={event => setType(event.target.value)}><option value="all">All categories</option>{typeOptions.map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>
+            <label><span>Status</span><select value={readFilter} onChange={event => setReadFilter(event.target.value)}><option value="all">All statuses</option><option value="unread">Unread</option><option value="read">Read</option></select></label>
+            <label><span>Order</span><select value={sort} onChange={event => setSort(event.target.value)}><option value="newest">Newest</option><option value="oldest">Oldest</option></select></label>
+            <label className="next-notifications-group-toggle"><input type="checkbox" checked={groupSimilar} onChange={event => setGroupSimilar(event.target.checked)} /> Group related updates</label>
+            <button type="button" onClick={resetFilters}>Reset filters</button>
+          </div>
+        </details>
       </div>
 
-      <article className="next-notifications-workspace">
-        <header>
-          <div><span>Your activity</span><h2>Updates</h2></div>
-          <strong>{filtered.length} shown</strong>
-        </header>
-        <nav className="next-notifications-tabs" aria-label="Period filters">
-          {[["all", "All", counts.all], ["unread", "Unread", counts.unread], ["today", "Today", counts.today], ["week", "This week", counts.week], ["earlier", "Earlier", counts.earlier]].map(([value, label, count]) => (
-            <button type="button" key={value} aria-pressed={scope === value} className={scope === value ? "is-active" : ""} onClick={() => setScope(value)}>{label}<b>{count}</b></button>
-          ))}
-        </nav>
-        <div className="next-notifications-toolbar">
-          <label className="next-notifications-search"><span>Search notifications</span><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search titles or details…" /></label>
-          <label><span>Category</span><select value={type} onChange={event => setType(event.target.value)}><option value="all">All categories</option>{typeOptions.map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>
-          <label><span>Status</span><select value={readFilter} onChange={event => setReadFilter(event.target.value)}><option value="all">All statuses</option><option value="unread">Unread</option><option value="read">Read</option></select></label>
-          <label><span>Order</span><select value={sort} onChange={event => setSort(event.target.value)}><option value="newest">Newest</option><option value="oldest">Oldest</option></select></label>
-          <button type="button" onClick={resetFilters}>Reset</button>
-        </div>
-        <div className="next-notifications-group-settings">
-          <label><input type="checkbox" checked={groupSimilar} onChange={event => setGroupSimilar(event.target.checked)} /> Group related updates</label>
-          <span>{groupedRows.length} {groupedRows.length === 1 ? "entry" : "entries"}</span>
-        </div>
-        <div className="next-notifications-list">
-          {groupedRows.length ? groupedRows.map(group => {
-            const first = group.items[0];
-            const tone = notificationTone(first);
-            const multiple = group.items.length > 1;
-            const expanded = openGroups.includes(group.id);
-            const unread = group.items.filter(item => !item.read).length;
-            const target = modernNotificationUrl(first.url);
-            return (
-              <article className={`next-notifications-row ${unread ? "is-unread" : ""}`} key={group.id}>
-                <button type="button" className={`next-notif-icon is-${tone.key}`} onClick={() => openItem(first)} aria-label={`Open ${notificationText(first.title)}`}>{tone.label}</button>
-                <div className="next-notifications-row__main">
-                  <div><span>{notificationText(first.type) || "General"}</span>{unread ? <em>{unread} unread</em> : null}{multiple ? <em className="is-grouped">{group.items.length} updates</em> : null}</div>
-                  <h3>{notificationText(first.title) || "Notification"}</h3>
-                  <p>{notificationText(first.body) || "Open to view this update."}</p>
-                  {multiple && expanded ? <div className="next-notifications-group-children">{group.items.map(item => <div key={item.id}><button type="button" onClick={() => openItem(item)}>{notificationTimeAgo(item.ts)} · {item.read ? "Read" : "Unread"} ↗</button></div>)}</div> : null}
-                </div>
-                <div className="next-notifications-row__side">
-                  <time title={notificationDateTime(first.ts)}>{notificationTimeAgo(first.ts)}</time>
-                  <div>
-                    {multiple ? <button type="button" aria-expanded={expanded} onClick={() => setOpenGroups(prev => expanded ? prev.filter(id => id !== group.id) : [...prev, group.id])}>{expanded ? "Less" : "Details"}</button> : null}
-                    {multiple && unread ? <button type="button" onClick={() => markGroupRead(group)} aria-label={`Mark ${unread} notifications in this group as read`}>Read group</button> : null}
-                    {!multiple && unread ? <button type="button" onClick={() => markRead(first)}>Read</button> : null}
-                    {target ? <button type="button" className="is-open" onClick={() => openItem(first)}>Open</button> : null}
-                  </div>
-                </div>
-              </article>
-            );
-          }) : <div className="next-notifications-empty"><span>✓</span><h3>No updates found</h3><p>Try changing your filters or check for new activity.</p><button type="button" onClick={resetFilters}>Show all</button></div>}
-        </div>
-      </article>
+      <nav className="next-notifications-quickfilters" aria-label="Notification filters">
+        {[ ["all", "All", counts.all], ["unread", "Unread", counts.unread] ].map(([value, label, count]) => (
+          <button type="button" key={value} aria-pressed={scope === value} className={scope === value ? "is-active" : ""} onClick={() => setScope(value)}>{label}<b>{count}</b></button>
+        ))}
+      </nav>
 
-      <DeliveryHistory />
+      <div className="next-notifications-feed" aria-live="polite">
+        {feedSections.length ? feedSections.map((section) => (
+          <section className="next-notifications-section" key={section.key}>
+            <div className="next-notifications-section__head">
+              <h2>{section.label}</h2>
+              <span>{section.rows.length}</span>
+            </div>
+            <div className="next-notifications-list">
+              {section.rows.map(group => {
+                const first = group.items[0];
+                const tone = notificationTone(first);
+                const multiple = group.items.length > 1;
+                const expanded = openGroups.includes(group.id);
+                const unread = group.items.filter(item => !item.read).length;
+                const target = modernNotificationUrl(first.url);
+                return (
+                  <article className={`next-notifications-row ${unread ? "is-unread" : ""}`} key={group.id}>
+                    <button type="button" className={`next-notif-icon is-${tone.key}`} onClick={() => openItem(first)} aria-label={`Open ${notificationText(first.title)}`}>
+                      <span>{tone.label}</span>
+                      {unread ? <i aria-hidden="true" /> : null}
+                    </button>
+                    <div className="next-notifications-row__main">
+                      <h3>
+                        <button type="button" onClick={() => openItem(first)}>{notificationText(first.title) || "Notification"}</button>
+                        <time title={notificationDateTime(first.ts)}>{notificationTimeAgo(first.ts)}</time>
+                      </h3>
+                      <p>{notificationText(first.body) || "Open to view this update."}</p>
+                      <div className="next-notifications-row__meta">
+                        <span>{notificationText(first.type) || "General"}</span>
+                        {multiple ? <button type="button" aria-expanded={expanded} onClick={() => setOpenGroups(prev => expanded ? prev.filter(id => id !== group.id) : [...prev, group.id])}>{group.items.length} updates</button> : null}
+                        {unread ? <button type="button" onClick={() => multiple ? markGroupRead(group) : markRead(first)}>{multiple ? "Mark group read" : "Mark read"}</button> : null}
+                      </div>
+                      {multiple && expanded ? <div className="next-notifications-group-children">{group.items.map(item => <div key={item.id}><button type="button" onClick={() => openItem(item)}>{notificationTimeAgo(item.ts)} · {item.read ? "Read" : "Unread"} ↗</button></div>)}</div> : null}
+                    </div>
+                    {target ? <button type="button" className="next-notifications-row__open" onClick={() => openItem(first)} aria-label="Open notification">›</button> : null}
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+        )) : <div className="next-notifications-empty"><span>✓</span><h3>No updates found</h3><p>Try changing your filters or check for new activity.</p><button type="button" onClick={resetFilters}>Show all</button></div>}
+      </div>
 
-      <details className="next-notifications-device">
-        <summary><span>Device & test tools</span><small>Push settings · Test delivery · Preferences</small></summary>
+      <details className="next-notifications-device next-notifications-settings-card">
+        <summary><span>Notification settings</span><small>Push · Preferences · Test tools</small></summary>
         <div className="next-notifications-device__body">
           <PushSettings />
           <div className="next-notifications-device__links">
@@ -530,6 +544,8 @@ export default function NotificationsClient({ initialItems = [], initialUnreadCo
           </div>
         </div>
       </details>
+
+      <DeliveryHistory />
       <small className="next-notifications-v4__source">{source.includes("supabase") ? "Synced with Supabase" : "Notification history"} · Showing up to 80 recent updates</small>
     </section>
   );
