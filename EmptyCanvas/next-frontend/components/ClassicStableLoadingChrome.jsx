@@ -4,31 +4,12 @@ import { cookies } from "next/headers";
 import { BodyClassSync, ClassicMobileDockStructure, ClassicSidebarViewportKeeper } from "./ClassicShellControls";
 import { getLegacyAccountGate } from "../lib/products-auth";
 import ClassicStableLoadingNavItem from "./ClassicStableLoadingNavItem";
+import { CLASSIC_MAIN_LINKS, canSeeNavigationLink } from "../lib/navigation-config";
 
 const ALLOWED_PAGES_COOKIE = "ops_ui_allowed_pages_v1";
 const PROFILE_URL_COOKIE = "ops_ui_profile_url_v1";
 const SIDEBAR_SCROLL_COOKIE = "ops_ui_sidebar_scroll_top_v1";
 const SIDEBAR_SCROLL_LEFT_COOKIE = "ops_ui_sidebar_scroll_left_v1";
-
-const CLASSIC_MAIN_LINKS = [
-  { label: "Home", href: "/next/home", icon: "home", permissions: [], alwaysVisible: true, boundary: "workspace" },
-  { label: "My Orders", href: "/next/orders", icon: "list", permissions: ["Current Orders"] },
-  { label: "Orders Review", href: "/next/orders-review", icon: "award", permissions: ["Orders Review"] },
-  { label: "Operations Orders", href: "/next/operations-orders", icon: "users", permissions: ["Requested Orders", "Operations Orders"] },
-  { label: "Maintenance Orders", href: "/next/maintenance-orders", icon: "tool", permissions: ["Maintenance Orders"] },
-  { label: "Events", href: "/next/events", icon: "calendar", permissions: ["Event Requests", "Event Calendar", "Event Components", "Event Team", "Events", "/events", "/events/requests", "/events/calendar", "/events/components", "/events/team"] },
-  { label: "Shopping Cart", href: "/next/orders/new", icon: "shopping-cart", permissions: ["Create New Order", "Shopping Cart", "Cart", "/orders/new"] },
-  { label: "Stocktaking", href: "/next/stocktaking", icon: "archive", permissions: ["Stocktaking"] },
-  { label: "B2C", href: "/next/b2c", icon: "user-plus", permissions: ["B2C", "Customer Database", "B2C Customer Database", "Customer Form", "B2C Customer Form", "/b2c/database", "/b2c/form"] },
-  { label: "Products", href: "/next/products", icon: "package", permissions: ["Products", "Product", "Components"] },
-  { label: "Kits", href: "/next/kits", icon: "briefcase", permissions: ["Kits", "Proposals", "Products"] },
-  { label: "Proposals", href: "/next/proposals", icon: "file-text", permissions: ["Proposals", "Products"] },
-  { label: "Expenses", href: "/next/expenses", icon: "dollar-sign", permissions: ["Expenses"] },
-  { label: "Expenses by Users", href: "/next/expenses/users", icon: "credit-card", permissions: ["Expenses Users"] },
-  { label: "Task Management", href: "/next/task-management", icon: "git-branch", permissions: ["All Tasks", "My Tasks", "Delegated Tasks", "Task Management"] },
-  { label: "KPIs", href: "/next/kpis", icon: "bar-chart-2", permissions: ["KPIs"] },
-  { label: "Users Center", href: "/next/users-center", icon: "shield", permissions: ["Users Center", "User Access & Data", "User Access and Data", "User Access", "Team Members"], boundary: "users" },
-];
 
 function ClassicIcon({ name }) {
   const common = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true };
@@ -53,17 +34,6 @@ function ClassicIcon({ name }) {
     search: <><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></>,
   };
   return <svg {...common}>{paths[name] || paths.home}</svg>;
-}
-
-function normalize(value) {
-  return String(value || "").trim().toLowerCase();
-}
-
-function canSee(link, allowedPages) {
-  if (link?.alwaysVisible) return true;
-  const allowed = new Set((Array.isArray(allowedPages) ? allowedPages : []).map(normalize));
-  if (!allowed.size) return false;
-  return (link.permissions || []).some((permission) => allowed.has(normalize(permission)));
 }
 
 function BellIcon() {
@@ -150,7 +120,7 @@ export async function ClassicStableLoadingSidebar({ activeIndex = -1 }) {
   const allowed = Array.isArray(chrome?.allowedPages) ? chrome.allowedPages : [];
   const links = CLASSIC_MAIN_LINKS
     .map((link, originalIndex) => ({ ...link, originalIndex }))
-    .filter((link) => canSee(link, allowed));
+    .filter((link) => canSeeNavigationLink(link, allowed));
   const visibleHrefs = links.map((link) => link.href);
   const loadingViewportStyle = {
     "--next-loading-sidebar-scroll-top": `${Math.round(chrome?.scrollTop || 0)}px`,

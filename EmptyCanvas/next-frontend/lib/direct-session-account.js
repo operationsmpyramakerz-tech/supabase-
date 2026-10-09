@@ -797,23 +797,12 @@ export async function getDirectAccountGateFromSessionContext(context = {}, requi
   try {
     const requestedPages = (Array.isArray(requiredPages) ? requiredPages : [requiredPages]).map(text).filter(Boolean);
 
-    // Pages that only need the signed-in account (Home, Account, Notifications,
-    // generic shells) do not need to rebuild the permission matrix. Refresh the
-    // member row so profile/role changes are current, but reuse the authenticated
-    // session snapshot for allowedPages/pageAccess. Permission-protected routes
-    // still read the fresh page-access rows below before making a decision.
-    if (!requestedPages.length) {
-      const memberRow = await readFreshMemberRow(memberId);
-      if (!memberRow) return null;
-      const account = {
-        ...accountFromFreshMember(baseAccount, memberRow, session),
-        id: memberId,
-        userSupabaseId: memberId,
-        teamMemberId: memberId,
-      };
-      return { ok: true, status: 200, error: "", account, source: "session-context", memberId, sessionBackend };
-    }
-
+    // Every authenticated AppShell page must resolve the same permission matrix.
+    // Previously Home / Account / Notifications reused the permission snapshot
+    // stored in the login session while protected pages refreshed Supabase access.
+    // That made dock/sidebar items disappear on Home and reappear after opening a
+    // protected page. Keep authOnly fast above, but for any rendered AppShell page
+    // refresh member + page access together (the underlying reads are cached).
     const [memberRow, pages, accessRows] = await Promise.all([
       readFreshMemberRow(memberId),
       listAppPages(),
@@ -828,8 +817,20 @@ export async function getDirectAccountGateFromSessionContext(context = {}, requi
       return null;
     }
 
+    const configuredPageAliases = pages.flatMap((page) => {
+      const pageName = legacyPageName(page);
+      return [
+        pageName,
+        text(page.page_name || page.pageName || page.name),
+        text(page.page_key || page.pageKey),
+        text(page.route_path || page.routePath),
+      ].filter(Boolean);
+    });
     const allowedPages = isAdmin
-      ? expandUiAliases(Array.isArray(baseAccount.allowedPages) ? baseAccount.allowedPages : [])
+      ? expandUiAliases([
+          ...(Array.isArray(baseAccount.allowedPages) ? baseAccount.allowedPages : []),
+          ...configuredPageAliases,
+        ])
       : expandUiAliases(
           freshPageAccess.flatMap((row) => [row.pageName, ...(Array.isArray(row.aliases) ? row.aliases : [])]).filter(Boolean),
         );
