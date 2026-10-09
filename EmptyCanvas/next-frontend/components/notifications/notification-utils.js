@@ -96,7 +96,10 @@ export function modernNotificationUrl(value) {
   try {
     const origin = typeof window !== "undefined" ? window.location.origin : "https://operations.local";
     const parsed = new URL(raw, origin);
-    if (parsed.origin !== origin && origin !== "https://operations.local") return parsed.href;
+    // Stored notifications can originate from mutable ERP data. Navigation must
+    // never execute javascript:/data: URLs or forward a user to an external
+    // domain supplied by a notification payload (phishing/open redirect).
+    if (!(["http:", "https:"].includes(parsed.protocol)) || parsed.origin !== origin) return "";
     if (parsed.pathname.startsWith("/next/")) return `${parsed.pathname}${parsed.search}${parsed.hash}`;
 
     for (const [legacy, next] of NEXT_ROUTE_MAP) {
@@ -107,7 +110,7 @@ export function modernNotificationUrl(value) {
     }
     return `${parsed.pathname}${parsed.search}${parsed.hash}`;
   } catch {
-    return raw;
+    return "";
   }
 }
 

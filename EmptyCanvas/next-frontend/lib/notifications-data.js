@@ -4,13 +4,13 @@ import crypto from "node:crypto";
 import { select, selectAll, supabaseRequest, updateById } from "./supabase-rest";
 import { sendPushToMember } from "./push-notifications";
 import { sendNotificationEmail } from "./notification-email";
-import { allowsChannel, defaultNotificationPreferences, getNotificationPreferences, isQuietHour } from "./notification-preferences";
+import { allowsChannel, getNotificationPreferences, isQuietHour } from "./notification-preferences";
 
 const NOTIFICATION_CACHE_TTL_MS = 5_000;
 const NOTIFICATION_CACHE_MAX = 200;
 const NOTIFICATION_AUTOSCAN_INTERVAL_MS = Math.max(
   5_000,
-  Math.min(120_000, Number(process.env.NOTIFICATIONS_AUTOSCAN_INTERVAL_MS || 10_000) || 10_000),
+  Math.min(120_000, Number(process.env.NOTIFICATIONS_AUTOSCAN_INTERVAL_MS || 60_000) || 60_000),
 );
 const NOTIFICATION_LASTCHECK_KEY = "notif:next:lastCheck:v1";
 const NOTIFICATION_AUTOSCAN_KEY = "notif:next:autoScan:v1";
@@ -30,7 +30,14 @@ async function phase3Installed() {
     installed = await supabaseRequest("/rpc/erp_notification_phase3_enabled", {
       method: "POST", body: {}, profileName: "notifications.phase3.ready",
     }) === true;
-  } catch { /* Keep the legacy feed until the SQL migration is installed. */ }
+  } catch (error) {
+    // "Migration missing" and "Supabase temporarily unavailable" are not
+    // interchangeable. The latter must NOT wake the legacy broad scanner,
+    // otherwise staff may receive duplicate notices from unrelated records.
+    const message = String(error?.message || "");
+    installed = Number(error?.status) === 404 || /PGRST202|schema cache|Could not find the function/i.test(message)
+      ? false : null;
+  }
   phase3Cache = { until: Date.now() + 30_000, installed };
   return installed;
 }
@@ -276,7 +283,7 @@ async function notificationUsers() {
       limit: 5000,
       order: "id.asc",
       profileName: "notifications.scan.members-fallback",
-    }).catch(() => [])),
+    })),
     selectAll("app_pages", {
       limit: 1000,
       order: "sort_order.asc",
@@ -339,14 +346,14 @@ function canSeeAnyPage(user, pageNames = []) {
   return pageNames.some((page) => allowed.has(canonical(page)));
 }
 
-// Defaults are used while the migration is rolling out, without blocking older notifications.
-// Once a user saves preferences, their choices are read from Supabase on the server.
+// Missing preference rows use defaults inside getNotificationPreferences.
+// A DATABASE FAILURE must never re-enable channels the member disabled.
 const settingsCache = new Map();
 async function settingsForMember(memberId) {
   const key = text(memberId);
   const cached = settingsCache.get(key);
   if (cached?.expires > Date.now()) return cached.value;
-  const value = await getNotificationPreferences(key).then((row) => row.settings).catch(() => defaultNotificationPreferences());
+  const value = (await getNotificationPreferences(key)).settings;
   if (settingsCache.size > 250) settingsCache.clear();
   settingsCache.set(key, { value, expires: Date.now() + 1_000 });
   return value;
@@ -602,7 +609,12 @@ export async function runNotificationsScan({ force = false } = {}) {
     const nowIso = now.toISOString();
     const lastState = (await notificationStateGet(NOTIFICATION_LASTCHECK_KEY)) || {};
     const lastIso = text(lastState?.iso) || new Date(Date.now() - 5 * 60 * 1000).toISOString();
-    const users = await notificationUsers().catch(() => []);
+    // If a legacy scan source fails, retry its time window later rather than
+    // advancing lastCheck and silently losing updates from that source.
+    let scanIncomplete = false;
+    let users = [];
+    try { users = await notificationUsers(); }
+    catch { scanIncomplete = true; }
     const notified = new Set();
     const perUser = new Map();
     const bump = (memberId, type, amount = 1) => {
@@ -616,8 +628,9 @@ export async function runNotificationsScan({ force = false } = {}) {
 
     let expensesChanged = [];
     const newExpenseEventsReady = await phase3Installed();
+    if (newExpenseEventsReady === null) scanIncomplete = true;
     try {
-      if (!newExpenseEventsReady) expensesChanged = await rowsEditedSince(expensesTable(), lastIso, { limit: 3000 });
+      if (newExpenseEventsReady === false) expensesChanged = await rowsEditedSince(expensesTable(), lastIso, { limit: 3000 });
       for (const row of expensesChanged) {
         const rowId = text(valueFor(row, ["id", "ID"]));
         const reason = text(valueFor(row, ["reason", "Reason", "description", "Description", "title", "Title"])) || "Expense updated";
@@ -646,19 +659,29 @@ export async function runNotificationsScan({ force = false } = {}) {
         }
       }
     } catch {
+      scanIncomplete = true;
       expensesChanged = [];
     }
 
     // Phase-2 queue replaces generic order broadcasts. A missing migration
     // keeps the legacy scan available until the new event table is installed.
-    const eventEngineReady = await select("erp_notification_events", {
-      select: "id", limit: "1",
-    }, { profileName: "notifications.events.enabled" }).then(() => true).catch(() => false);
+    let eventEngineReady = true;
+    try {
+      await select("erp_notification_events", {
+        select: "id", limit: "1",
+      }, { profileName: "notifications.events.enabled" });
+    } catch (error) {
+      const message = String(error?.message || "");
+      const missing = Number(error?.status) === 404 || /PGRST205|42P01|relation .* does not exist/i.test(message);
+      if (missing) eventEngineReady = false;
+      else scanIncomplete = true; // Never broadcast generic orders on probe failure.
+    }
     let ordersChanged = [];
     if (!eventEngineReady) {
       try {
         ordersChanged = await rowsEditedSince(ordersTable(), lastIso, { limit: 3000 });
       } catch {
+        scanIncomplete = true;
         ordersChanged = [];
       }
     }
@@ -685,6 +708,7 @@ export async function runNotificationsScan({ force = false } = {}) {
     try {
       stockChanged = await rowsEditedSince(stocktakingTable(), lastIso, { limit: 3000 });
     } catch {
+      scanIncomplete = true;
       stockChanged = [];
     }
     if (stockChanged.length && users.length) {
@@ -729,11 +753,16 @@ export async function runNotificationsScan({ force = false } = {}) {
       if (out?.ok && Number(out?.sent || 0) > 0) pushUsers += 1;
     }
 
-    await notificationStateSet(NOTIFICATION_LASTCHECK_KEY, { iso: nowIso });
+    if (!scanIncomplete) {
+      await notificationStateSet(NOTIFICATION_LASTCHECK_KEY, { iso: nowIso });
+    } else {
+      console.warn("[notifications] Legacy scanner will retry its previous window after a source error.");
+    }
     await notificationStateSet(NOTIFICATION_AUTOSCAN_KEY, { ts: Date.now(), iso: nowIso });
 
     return {
       ok: true,
+      incomplete: scanIncomplete,
       source: "supabase",
       lastIso,
       nowIso,

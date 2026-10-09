@@ -21,13 +21,15 @@ export async function GET(request) {
   }
 
   try {
-    const force = request.nextUrl.searchParams.get("force") === "1";
+    // This endpoint is accessible to every logged-in member. Never let a
+    // query parameter bypass the global scan throttle for expensive scans;
+    // only the authenticated CRON_SECRET job can explicitly force a scan.
     const limit = Math.max(1, Math.min(80, Number(request.nextUrl.searchParams.get("limit")) || 25));
     // Keep the existing refresh path working if the Phase-2 SQL isn't installed.
     const queue = await dispatchQueuedNotifications({ limit: 4 }).catch((error) => ({
       ok: false, error: error?.message || "Notification queue temporarily unavailable",
     }));
-    const scan = await runNotificationsScan({ force });
+    const scan = await runNotificationsScan({ force: false });
     const list = await notificationsForMember(gate.memberId, { limit, fresh: true });
     return noStore({ ...list, scan, queue });
   } catch (error) {

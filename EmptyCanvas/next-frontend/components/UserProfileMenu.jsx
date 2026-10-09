@@ -301,7 +301,36 @@ export default function UserProfileMenu({ account }) {
   async function logout() {
     if (loggingOut) return;
     setLoggingOut(true);
-    try { await fetch("/next/api/auth/logout", { method: "POST", credentials: "include" }); } catch {}
+    // Never register a new Service Worker during logout; only revoke a push
+    // subscription already installed on this browser. Bound the wait so a
+    // blocked browser API cannot stop someone from signing out.
+    let pushSubscription = null;
+    if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
+      let timer;
+      try {
+        pushSubscription = await Promise.race([
+          navigator.serviceWorker.getRegistration("/").then(registration => registration?.pushManager?.getSubscription?.() || null),
+          new Promise(resolve => { timer = setTimeout(() => resolve(null), 1500); }),
+        ]);
+      } catch {} finally { clearTimeout(timer); }
+    }
+    let logoutSucceeded = false;
+    try {
+      const response = await fetch("/next/api/auth/logout", {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pushEndpoint: pushSubscription?.endpoint || "" }),
+      });
+      logoutSucceeded = response.ok;
+    } catch {}
+    if (!logoutSucceeded) {
+      setLoggingOut(false);
+      window.alert("Could not sign out. Please check your connection and try again.");
+      return;
+    }
+    if (pushSubscription) {
+      try { await pushSubscription.unsubscribe(); } catch {}
+    }
     try { sessionStorage.clear(); } catch {}
     try { document.cookie = `${ALLOWED_PAGES_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`; } catch {}
     try { document.cookie = `${PROFILE_URL_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`; } catch {}

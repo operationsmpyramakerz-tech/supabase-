@@ -128,7 +128,7 @@ export default function NotificationPreferencesPanel() {
           </div>
           <div className="erp-notification-preferences__details">
             <label className="erp-notification-preferences__field">
-              <strong>Email digest</strong><small>Daily and weekly digests will be activated when scheduled email delivery is connected.</small>
+              <strong>Email digest</strong><small>Choose how often to receive a summary of non-urgent ERP updates.</small>
               <select value={settings.digest} onChange={(event) => { setSettings((p) => ({ ...p, digest: event.target.value })); setSaved(false); }}>
                 <option value="off">No summary</option><option value="daily">Daily summary</option><option value="weekly">Weekly summary</option>
               </select>
