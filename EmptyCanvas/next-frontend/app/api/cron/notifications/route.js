@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { runNotificationsScan } from "../../../../lib/notifications-data";
 import { supabaseRequest } from "../../../../lib/supabase-rest";
 import { dispatchQueuedNotifications } from "../../../../lib/notification-event-worker";
+import { dispatchNotificationDigests } from "../../../../lib/notification-digest";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -37,8 +38,15 @@ export async function GET(request) {
       }
     }
     const queue = await dispatchQueuedNotifications({ limit: 20 });
+    // Digest failures are isolated: Orders/Tasks and Push must continue working.
+    let digest;
+    try { digest = await dispatchNotificationDigests(); }
+    catch (error) {
+      console.warn("[notifications] Digest worker deferred:", error?.message);
+      digest = { installed: true, error: "Digest temporarily unavailable" };
+    }
     const scan = await runNotificationsScan({ force: true });
-    return noStore({ ...scan, queue, reminders });
+    return noStore({ ...scan, queue, reminders, digest });
   } catch (error) {
     console.error("GET /next/api/cron/notifications error:", error?.details || error);
     return noStore({ ok: false, error: error?.message || "Notification scan failed." }, Number(error?.status) || 500);

@@ -5,6 +5,7 @@ import { getNotificationPreferences, allowsChannel, isQuietHour } from "./notifi
 import { sendNotificationEmail } from "./notification-email";
 import { sendPushToMember } from "./push-notifications";
 import { saveNotificationForMember } from "./notifications-data";
+import { digestAvailable, eligibleForDigest, enqueueDigestEvent } from "./notification-digest";
 
 // Event records are inserted atomically by Supabase triggers. The RPC claims
 // them with row locks and a temporary lease, preventing parallel cron/route
@@ -82,7 +83,11 @@ async function deliver(event) {
     if (pushCompleted) await patchClaim(event, { push_done: true });
   }
   if (!event.email_done) {
-    if (allowsChannel(settings, type, "email")) {
+    if (allowsChannel(settings, type, "email") && eligibleForDigest(event, settings) && await digestAvailable()) {
+      // Persist digest eligibility before marking email as complete; a retry
+      // cannot lose the email or enqueue it twice (event_id is unique).
+      await enqueueDigestEvent(event);
+    } else if (allowsChannel(settings, type, "email")) {
       const rows = await select(process.env.SUPABASE_TEAM_MEMBERS_TABLE || "team_members", {
         select: "id,name,email", id: `eq.${memberId}`, limit: "1",
       }, { profileName: "notifications.events.recipient" });

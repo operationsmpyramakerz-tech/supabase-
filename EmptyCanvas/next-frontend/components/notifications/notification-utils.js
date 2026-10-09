@@ -120,3 +120,20 @@ export function notificationMatches(item, query) {
     .toLowerCase();
   return haystack.includes(clean);
 }
+
+// Presentation-only grouping: never combine different task/order messages just
+// because they navigate to the same page. Every child keeps its own read state.
+export function groupNotificationRows(items, enabled = true) {
+  if (!enabled) return (items || []).map((item) => ({ id: String(item.id), items: [item] }));
+  const groups = [];
+  const known = new Map();
+  for (const item of Array.isArray(items) ? items : []) {
+    const timestamp = notificationTimestamp(item.ts);
+    const key = [notificationText(item.type).toLowerCase(), notificationText(item.title),
+      notificationText(item.body), notificationText(item.url), Math.floor(timestamp / 86_400_000)].join("\u001f");
+    let group = known.get(key);
+    if (!group) { group = { id: String(item.id), items: [] }; groups.push(group); known.set(key, group); }
+    group.items.push(item);
+  }
+  return groups;
+}

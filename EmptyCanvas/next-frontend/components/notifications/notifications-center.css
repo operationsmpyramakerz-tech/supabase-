@@ -1,0 +1,50 @@
+/* Phase 4 compact notification center. Scoped overrides: the existing topbar,
+   dock, sidebar and bell keep their global styles. */
+.next-notifications-page.next-notifications-v4{gap:14px;padding-bottom:32px}
+.next-notifications-v4 .next-notifications-hero{min-height:0;padding:18px 21px;gap:14px;border-radius:19px;background:#111827;box-shadow:none}
+.next-notifications-v4 .next-notifications-hero h2{font-size:22px;margin:4px 0;letter-spacing:-.025em}
+.next-notifications-v4 .next-notifications-hero p{font-size:11px;line-height:1.5}
+.next-notifications-v4 .next-notifications-hero>div>span{font-size:9px;color:#fcb685}
+.next-notifications-v4 .next-notifications-hero__actions{display:flex;min-width:0;flex-wrap:wrap;gap:7px}
+.next-notifications-v4 .next-notifications-hero__actions button{min-height:34px;background:#f97316;border-color:#f97316;border-radius:10px;font-size:10px;padding:0 12px}
+.next-notifications-v4 .next-notifications-hero__actions button.is-secondary{background:rgba(255,255,255,.09);border-color:rgba(255,255,255,.22)}
+.next-notifications-v4 .next-notifications-stats{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.next-notifications-v4 .next-notifications-stat{min-height:72px;padding:12px 14px;gap:3px;border-radius:15px;box-shadow:none}
+.next-notifications-v4 .next-notifications-stat strong{font-size:22px}
+.next-notifications-v4 .next-notifications-stat small{font-size:9px}
+.next-notifications-v4 .next-notifications-workspace{border-radius:19px;box-shadow:none}
+.next-notifications-v4 .next-notifications-workspace>header{padding:13px 15px}
+.next-notifications-v4 .next-notifications-workspace>header h2{font-size:15px}
+.next-notifications-v4 .next-notifications-tabs{padding:10px 12px;gap:6px;scrollbar-width:none}
+.next-notifications-v4 .next-notifications-tabs::-webkit-scrollbar{display:none}
+.next-notifications-v4 .next-notifications-tabs button{font-size:10px;min-height:32px;padding:0 10px}
+.next-notifications-v4 .next-notifications-tabs button.is-active{background:#111827;border-color:#111827;color:#fff}
+.next-notifications-v4 .next-notifications-tabs button.is-active b{background:#f97316}
+.next-notifications-v4 .next-notifications-toolbar{grid-template-columns:minmax(180px,1.5fr) repeat(3,minmax(110px,.7fr)) auto;gap:7px;padding:11px 12px}
+.next-notifications-v4 .next-notifications-toolbar input,.next-notifications-v4 .next-notifications-toolbar select,.next-notifications-v4 .next-notifications-toolbar>button{min-height:36px;font-size:10px}
+.next-notifications-v4 .next-notifications-group-settings{display:flex;align-items:center;justify-content:space-between;padding:10px 15px;font-size:10px;color:#667085;border-bottom:1px solid #edf0f4}
+.next-notifications-v4 .next-notifications-group-settings label{display:flex;align-items:center;gap:7px;cursor:pointer}
+.next-notifications-v4 .next-notifications-group-settings input{accent-color:#f97316}
+.next-notifications-v4 .next-notifications-row{padding:13px 14px;gap:11px}
+.next-notifications-v4 .next-notifications-row.is-unread{background:#fffaf5;box-shadow:inset 3px 0 #f97316}
+.next-notifications-v4 .next-notifications-row__main h3{font-size:12px}
+.next-notifications-v4 .next-notifications-row__main>div em.is-grouped{background:#f1f5f9;color:#475569}
+.next-notifications-v4 .next-notifications-row__side{min-width:110px}
+.next-notifications-v4 .next-notifications-row__side button.is-open{background:#fff7ed;border-color:#fed7aa;color:#c2410c}
+.next-notifications-v4 .next-notifications-group-children{display:grid;gap:5px;margin-top:6px}
+.next-notifications-v4 .next-notifications-group-children button{border:0;background:#f8fafc;color:#475569;border-radius:7px;padding:7px 9px;text-align:left;font-size:10px;cursor:pointer}
+.next-notifications-v4 .next-notifications-device{background:#fff;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden}
+.next-notifications-v4 .next-notifications-device>summary{padding:13px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:pointer;list-style:none;color:#344054;font-size:12px;font-weight:800}
+.next-notifications-v4 .next-notifications-device>summary::-webkit-details-marker{display:none}
+.next-notifications-v4 .next-notifications-device>summary:after{content:'+';font-size:20px;color:#f97316;order:3}
+.next-notifications-v4 .next-notifications-device[open]>summary:after{content:'−'}
+.next-notifications-v4 .next-notifications-device>summary small{font-size:9px;font-weight:500;color:#98a2b3}
+.next-notifications-v4 .next-notifications-device__body{border-top:1px solid #edf0f4;padding:12px;display:grid;gap:12px}
+.next-notifications-v4 .next-notifications-push{box-shadow:none}
+.next-notifications-v4 .next-notifications-device__links{display:flex;flex-wrap:wrap;gap:8px}
+.next-notifications-v4 .next-notifications-device__links button,.next-notifications-v4 .next-notifications-device__links a{background:#111827;border:1px solid #111827;border-radius:10px;color:#fff;text-decoration:none;min-height:35px;display:inline-flex;align-items:center;padding:0 13px;font:inherit;font-size:10px;font-weight:800;cursor:pointer}
+.next-notifications-v4 .next-notifications-device__links a{background:#fff;color:#374151;border-color:#e2e8f0}
+.next-notifications-v4__source{font-size:9px;color:#98a2b3;text-align:center}
+@media(max-width:1100px){.next-notifications-v4 .next-notifications-toolbar{grid-template-columns:repeat(4,minmax(0,1fr))}.next-notifications-v4 .next-notifications-search{grid-column:1/-1}}
+@media(max-width:760px){.next-notifications-v4 .next-notifications-hero{flex-direction:row;align-items:center}.next-notifications-v4 .next-notifications-hero__actions{width:auto}.next-notifications-v4 .next-notifications-toolbar{grid-template-columns:repeat(2,minmax(0,1fr))}.next-notifications-v4 .next-notifications-search{grid-column:1/-1}.next-notifications-v4 .next-notifications-hero__actions button{flex:none}}
+@media(max-width:520px){.next-notifications-v4 .next-notifications-hero{padding:15px;flex-direction:column;align-items:stretch}.next-notifications-v4 .next-notifications-hero__actions{display:flex;width:100%}.next-notifications-v4 .next-notifications-hero__actions button{flex:1}.next-notifications-v4 .next-notifications-stats{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}.next-notifications-v4 .next-notifications-stat{padding:10px 8px;min-height:68px}.next-notifications-v4 .next-notifications-stat small{display:none}.next-notifications-v4 .next-notifications-row{grid-template-columns:36px minmax(0,1fr);gap:9px}.next-notifications-v4 .next-notifications-row__side{grid-column:2;display:flex;align-items:center;justify-content:space-between;width:100%;gap:8px}.next-notifications-v4 .next-notifications-device>summary{flex-wrap:wrap}.next-notifications-v4 .next-notifications-device>summary small{width:100%;order:2}}
