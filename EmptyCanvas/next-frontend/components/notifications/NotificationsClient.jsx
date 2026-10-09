@@ -114,7 +114,6 @@ function PushSettings() {
   const [status, setStatus] = useState("checking");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
-  const [filterOpen, setFilterOpen] = useState(false);
   const [publicKey, setPublicKey] = useState("");
   const [serverIssue, setServerIssue] = useState("");
 
@@ -325,6 +324,7 @@ export default function NotificationsClient({ initialItems = [], initialUnreadCo
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState("");
   const [message, setMessage] = useState("");
+  const [filterOpen, setFilterOpen] = useState(false);
 
   const typeOptions = useMemo(() => {
     const unique = new Map();
@@ -374,7 +374,7 @@ export default function NotificationsClient({ initialItems = [], initialUnreadCo
       { key: "earlier", label: "Earlier", rows: buckets.earlier },
     ].filter((section) => section.rows.length);
   }, [groupedRows]);
-  const resetFilters = () => { setQuery(""); setType("all"); setSort("newest"); setScope("all"); setReadFilter("all"); };
+  const resetFilters = () => { setQuery(""); setType("all"); setSort("newest"); setScope("all"); setReadFilter("all"); setGroupSimilar(true); };
 
   const activeAdvancedFilters = Number(type !== "all") + Number(readFilter !== "all") + Number(sort !== "newest") + Number(!groupSimilar);
 
