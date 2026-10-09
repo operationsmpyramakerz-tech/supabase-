@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
+import { dispatchQueuedNotifications } from "../../../../lib/notification-event-worker";
 import { getDirectAccountGate } from "../../../../lib/products-auth";
 import { directPageMutationAccess, verifyPageAdminPasswordDirect } from "../../../../lib/order-action-auth";
 import {
@@ -13,6 +14,11 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 export const maxDuration = 60;
+
+function dispatchExpenseAlerts() {
+  after(() => dispatchQueuedNotifications({ limit: 6 }).catch(error =>
+    console.warn("[notifications] Expense delivery deferred:", error?.message)));
+}
 
 function text(value) {
   return String(value ?? "").trim();
@@ -83,6 +89,7 @@ export async function POST(request) {
         result = await deleteExpenseForAdmin(body?.expenseId);
       }
     }
+    if (["cash-in", "settle", "admin-update"].includes(action)) dispatchExpenseAlerts();
     return noStore(result || { success: true, source: "supabase-next" });
   } catch (error) {
     console.error(`[expenses] direct ${action} failed:`, error?.details || error?.message || error);

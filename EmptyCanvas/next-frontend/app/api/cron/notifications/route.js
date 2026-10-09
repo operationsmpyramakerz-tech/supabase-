@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { runNotificationsScan } from "../../../../lib/notifications-data";
+import { supabaseRequest } from "../../../../lib/supabase-rest";
 import { dispatchQueuedNotifications } from "../../../../lib/notification-event-worker";
 
 export const dynamic = "force-dynamic";
@@ -21,9 +22,23 @@ export async function GET(request) {
   if (!process.env.CRON_SECRET?.trim()) return noStore({ ok: false, error: "CRON_SECRET is not configured." }, 503);
   if (!authorized(request)) return noStore({ ok: false, error: "Unauthorized" }, 401);
   try {
-    const queue = await dispatchQueuedNotifications({ limit: 12 });
+    // Phase-3 reminders enqueue once per Cairo calendar date. If Phase-3 SQL
+    // is not installed yet, keep the existing cron working unchanged.
+    let reminders = { installed: false, created: 0 };
+    try {
+      const created = await supabaseRequest("/rpc/enqueue_erp_task_deadline_reminders", {
+        method: "POST", body: {}, profileName: "notifications.deadline.enqueue",
+      });
+      reminders = { installed: true, created: Number(created) || 0 };
+    } catch (error) {
+      if (Number(error?.status) !== 404 && !/PGRST202|schema cache|enqueue_erp_task_deadline_reminders/i.test(String(error?.message || ""))) {
+        console.warn("[notifications] Deadline enqueue deferred:", error?.message);
+        reminders = { installed: true, error: "Reminder enqueue temporarily unavailable" };
+      }
+    }
+    const queue = await dispatchQueuedNotifications({ limit: 20 });
     const scan = await runNotificationsScan({ force: true });
-    return noStore({ ...scan, queue });
+    return noStore({ ...scan, queue, reminders });
   } catch (error) {
     console.error("GET /next/api/cron/notifications error:", error?.details || error);
     return noStore({ ok: false, error: error?.message || "Notification scan failed." }, Number(error?.status) || 500);

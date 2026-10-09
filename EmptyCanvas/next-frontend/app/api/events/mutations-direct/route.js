@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
+import { dispatchQueuedNotifications } from "../../../../lib/notification-event-worker";
 
 import {
   archiveEventRequest,
@@ -35,6 +36,11 @@ function json(payload, init = {}) {
 
 function text(value) {
   return String(value ?? "").trim();
+}
+
+function dispatchEventAlerts() {
+  after(() => dispatchQueuedNotifications({ limit: 6 }).catch(error =>
+    console.warn("[notifications] Event delivery deferred:", error?.message)));
 }
 
 function uuid(value) {
@@ -77,6 +83,7 @@ export async function POST(request) {
         requireToken(body, gate.account, "events-request-action", { eventId, action: "edit" });
       }
       const event = await updateEventRequest(eventId, body?.payload || body, gate.account || {});
+      dispatchEventAlerts();
       return json({ ok: true, event, source: "supabase-next" });
     }
 
@@ -86,6 +93,7 @@ export async function POST(request) {
       if (!eventId || !transition) return json({ ok: false, error: "Invalid event request workflow action." }, { status: 400 });
       requireToken(body, gate.account, "events-request-workflow", { eventId, targetStatus: transition.to });
       const result = await transitionEventRequest(eventId, transition.to);
+      dispatchEventAlerts();
       return json({ ok: true, ...result, source: "supabase-next" });
     }
 
@@ -95,6 +103,7 @@ export async function POST(request) {
       if (!eventId || requestAction !== "cancel") return json({ ok: false, error: "Invalid event request action." }, { status: 400 });
       requireToken(body, gate.account, "events-request-action", { eventId, action: "cancel" });
       const event = await cancelEventRequest(eventId);
+      dispatchEventAlerts();
       return json({ ok: true, action: "cancel", event, source: "supabase-next" });
     }
 

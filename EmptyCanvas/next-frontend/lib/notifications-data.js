@@ -18,6 +18,19 @@ const NOTIFICATION_AUTOSCAN_KEY = "notif:next:autoScan:v1";
 const listCache = new Map();
 const listInflight = new Map();
 let scanInflight = null;
+let phase3Cache = { until: 0, installed: false };
+async function phase3Installed() {
+  if (Date.now() < phase3Cache.until) return phase3Cache.installed;
+  let installed = false;
+  try {
+    installed = await supabaseRequest("/rpc/erp_notification_phase3_enabled", {
+      method: "POST", body: {}, profileName: "notifications.phase3.ready",
+    }) === true;
+  } catch { /* Keep the legacy feed until the SQL migration is installed. */ }
+  phase3Cache = { until: Date.now() + 30_000, installed };
+  return installed;
+}
+
 
 function text(value) {
   if (value === null || typeof value === "undefined") return "";
@@ -540,8 +553,9 @@ export async function runNotificationsScan({ force = false } = {}) {
     };
 
     let expensesChanged = [];
+    const newExpenseEventsReady = await phase3Installed();
     try {
-      expensesChanged = await rowsEditedSince(expensesTable(), lastIso, { limit: 3000 });
+      if (!newExpenseEventsReady) expensesChanged = await rowsEditedSince(expensesTable(), lastIso, { limit: 3000 });
       for (const row of expensesChanged) {
         const rowId = text(valueFor(row, ["id", "ID"]));
         const reason = text(valueFor(row, ["reason", "Reason", "description", "Description", "title", "Title"])) || "Expense updated";

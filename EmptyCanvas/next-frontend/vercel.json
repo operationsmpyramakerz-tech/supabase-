@@ -635,7 +635,7 @@
   "crons": [
     {
       "path": "/next/api/cron/notifications",
-      "schedule": "0 9 * * *"
+      "schedule": "0 6 * * *"
     }
   ],
   "headers": [
