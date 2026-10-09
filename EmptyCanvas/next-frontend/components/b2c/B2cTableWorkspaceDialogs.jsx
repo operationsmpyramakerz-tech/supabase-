@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { DeleteConfirmDialog } from "../shared/SystemDeleteDialogs";
 
 const READ_ONLY_TYPES = new Set(["formula"]);
 
@@ -103,13 +104,16 @@ export function RecordEditor({ record, fields, busy, onClose, onSave }) {
 export function DeleteRecordModal({ record, busy, onClose, onConfirm }) {
   const [confirmation, setConfirmation] = useState("");
   const matches = text(confirmation).toLowerCase() === "delete";
-  return (
-    <Modal title={`Delete ${record.customerCode}?`} subtitle="This record and all of its saved values will be permanently removed." badge="!" danger onClose={onClose}>
-      <div className="next-b2c-delete-record">
-        <p>Type <strong>DELETE</strong> to confirm.</p>
-        <input autoFocus value={confirmation} onChange={(event) => setConfirmation(event.target.value)} />
-        <footer><button type="button" className="next-b2c-table-btn secondary" onClick={onClose} disabled={busy}>Cancel</button><button type="button" className="next-b2c-table-btn danger" onClick={onConfirm} disabled={busy || !matches}>{busy ? "Deleting…" : "Delete Permanently"}</button></footer>
-      </div>
-    </Modal>
-  );
+  return <DeleteConfirmDialog
+    title={`Delete ${record.customerCode}?`}
+    message="This record and all of its saved values will be permanently removed. This action cannot be undone."
+    busy={busy}
+    onCancel={onClose}
+    onConfirm={onConfirm}
+    confirmDisabled={!matches}
+  >
+    <label className="system-delete-dialog__field"><span>Type <strong>DELETE</strong> to confirm</span><input autoFocus value={confirmation} onChange={(event) => setConfirmation(event.target.value)} /></label>
+    {!matches ? <div className="system-delete-dialog__hint">The delete button will work after you type DELETE.</div> : null}
+  </DeleteConfirmDialog>;
 }
+

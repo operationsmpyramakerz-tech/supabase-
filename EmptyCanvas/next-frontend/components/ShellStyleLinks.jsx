@@ -4,7 +4,7 @@ import { usePersistentShellContext } from "./PersistentShellContext";
 
 const SHELL_STYLES = Object.freeze([
   "/next/css/style.css?v=bidi-mixed-v1",
-  "/next/css/ui-redesign.css?v=notifications-modern-compact-v4",
+  "/next/css/ui-redesign.css?v=system-delete-dialog-v1",
   "/next/css/page-canvas-fix.css?v=current-orders-list-surface-v5",
   "/next/css/classic-parity.css?v=current-orders-page-canvas-removed-v3",
 ]);

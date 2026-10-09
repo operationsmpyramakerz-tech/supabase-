@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import ActionLoadingModal, { useActionLoading } from "../ActionLoadingModal";
+import { DeleteConfirmDialog, DeleteVerificationDialog } from "../shared/SystemDeleteDialogs";
 import { cacheUsersCenterAuthorization, currentUsersCenterAuthorizationToken, requestJson, usersCenterMutation } from "./usersCenterClientShared";
 
 function text(value) { return String(value ?? "").trim(); }
@@ -201,7 +202,10 @@ function ModernSelect({ value, onChange, options = [], placeholder = "Select", d
 
 function PasswordModal({ action, onClose, onVerified }) {
   const [password, setPassword] = useState(""); const [busy, setBusy] = useState(false); const [error, setError] = useState("");
-  async function submit(event) { event.preventDefault(); if (!text(password)) return setError("Please enter the Admin password."); setBusy(true); setError(""); try { const verified = await requestJson("/next/api/users-center/admin/verify", { method: "POST", body: JSON.stringify({ password }) }); cacheUsersCenterAuthorization(verified); await onVerified(); } catch (err) { setError(err.message); } finally { setBusy(false); } }
+  async function verifyPassword(cleanPassword) { if (!text(cleanPassword)) return setError("Please enter the Admin password."); setBusy(true); setError(""); try { const verified = await requestJson("/next/api/users-center/admin/verify", { method: "POST", body: JSON.stringify({ password: cleanPassword }) }); cacheUsersCenterAuthorization(verified); await onVerified(); } catch (err) { setError(err.message); } finally { setBusy(false); } }
+  async function submit(event) { event.preventDefault(); await verifyPassword(password); }
+  const isDelete = /^delete\b/i.test(text(action?.title));
+  if (isDelete) return <DeleteVerificationDialog title={action?.title || "Delete item"} password={password} onPasswordChange={setPassword} busy={busy} error={error} onCancel={onClose} onSubmit={verifyPassword} />;
   return <Modal title="Admin Verification" onClose={onClose} modalClass="ua-modal--small" compact icon="lock" closeDisabled={busy} bodyClass="ua-modal__body--compact" zIndex={10060} footer={<><button type="button" className="ua-btn ua-btn--light" onClick={onClose} disabled={busy}>Cancel</button><button type="submit" form="ua-next-admin-password-form" className="ua-btn ua-btn--dark" disabled={busy}><UAIcon name="unlock"/><span>{busy ? "Checking..." : "Continue"}</span></button></>}>
     <form id="ua-next-admin-password-form" onSubmit={submit}><label className="ua-form-field ua-form-field--wide"><span>Admin Password</span><input autoFocus type="password" autoComplete="current-password" placeholder="Enter Admin password" value={password} onChange={(event) => setPassword(event.target.value)}/></label><div className="ua-form-error">{error}</div></form>
   </Modal>;
@@ -210,7 +214,8 @@ function PasswordModal({ action, onClose, onVerified }) {
 function ConfirmModal({ value, onClose }) {
   const [busy, setBusy] = useState(false); const [error, setError] = useState("");
   async function confirm() { if (busy) return; setBusy(true); setError(""); try { await value?.onConfirm?.(); } catch (err) { setError(err.message); } finally { setBusy(false); } }
-  return <Modal title={value?.title || "Confirm action"} subtitle={value?.message || "Are you sure?"} onClose={onClose} modalClass="ua-modal--small ua-confirm-modal" compact icon="alert" dangerIcon closeDisabled={busy} zIndex={10050} footer={<><button type="button" className="ua-btn ua-btn--light" onClick={onClose} disabled={busy}>Cancel</button><button type="button" className={`ua-btn ${value?.danger ? "ua-btn--danger" : "ua-btn--dark"}`} onClick={confirm} disabled={busy}><UAIcon name={value?.danger ? "trash" : "check"}/><span>{busy ? "Working..." : (value?.confirmLabel || "Confirm")}</span></button></>}>{error ? <div className="ua-form-error">{error}</div> : null}</Modal>;
+  if (value?.danger) return <DeleteConfirmDialog title={value?.title || "Delete item?"} message={value?.message || "This action cannot be undone."} busy={busy} error={error} onCancel={onClose} onConfirm={confirm} confirmLabel={value?.confirmLabel || "Yes, Delete!"} />;
+  return <Modal title={value?.title || "Confirm action"} subtitle={value?.message || "Are you sure?"} onClose={onClose} modalClass="ua-modal--small ua-confirm-modal" compact icon="alert" closeDisabled={busy} zIndex={10050} footer={<><button type="button" className="ua-btn ua-btn--light" onClick={onClose} disabled={busy}>Cancel</button><button type="button" className="ua-btn ua-btn--dark" onClick={confirm} disabled={busy}><UAIcon name="check"/><span>{busy ? "Working..." : (value?.confirmLabel || "Confirm")}</span></button></>}>{error ? <div className="ua-form-error">{error}</div> : null}</Modal>;
 }
 
 function Avatar({ member, small = false }) {

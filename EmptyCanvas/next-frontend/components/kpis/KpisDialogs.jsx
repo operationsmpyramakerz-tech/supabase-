@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { confirmDelete } from "../../lib/client-confirm";
 
 function text(value) { return String(value ?? "").trim(); }
 function lower(value) { return text(value).toLowerCase(); }
@@ -306,11 +307,11 @@ export function StandardForm({ meta, adminPassword, onClose, onSaved, notify }) 
 
   const updateItem = (sectionId, itemId, patch) => setSections((rows) => rows.map((section) => section.id === sectionId ? { ...section, items: section.items.map((item) => item.id === itemId ? { ...item, ...patch } : item) } : section));
   const removeSection = async (section) => {
-    const confirmed = window.OpsDeleteConfirm?.confirm ? await window.OpsDeleteConfirm.confirm({ title: "Delete KPI section?", itemType: "KPI section", itemName: section.title || "KPI section", message: `You’re going to delete “${section.title || "this KPI section"}” and every subsection inside it. This action cannot be undone after saving.` }) : window.confirm(`Delete “${section.title || "this KPI section"}” and all of its subsections?`);
+    const confirmed = await confirmDelete({ title: "Delete KPI section?", itemType: "KPI section", itemName: section.title || "KPI section", message: `You’re going to delete “${section.title || "this KPI section"}” and every subsection inside it. This action cannot be undone after saving.` });
     if (confirmed) setSections((rows) => rows.filter((row) => row.id !== section.id));
   };
   const removeItem = async (sectionId, item) => {
-    const confirmed = window.OpsDeleteConfirm?.confirm ? await window.OpsDeleteConfirm.confirm({ title: "Delete KPI subsection?", itemType: "KPI subsection", itemName: item.title || "KPI subsection", message: `Delete “${item.title || "this KPI subsection"}”? This action cannot be undone after saving.` }) : window.confirm(`Delete “${item.title || "this KPI subsection"}”?`);
+    const confirmed = await confirmDelete({ title: "Delete KPI subsection?", itemType: "KPI subsection", itemName: item.title || "KPI subsection", message: `Delete “${item.title || "this KPI subsection"}”? This action cannot be undone after saving.` });
     if (confirmed) setSections((rows) => rows.map((section) => section.id === sectionId ? { ...section, items: section.items.filter((row) => row.id !== item.id) } : section));
   };
   const submit = async (event) => {

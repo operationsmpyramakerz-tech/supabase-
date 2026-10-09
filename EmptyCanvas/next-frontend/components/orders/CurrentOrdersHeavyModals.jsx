@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import ClassicOrderIcon from "./ClassicOrderIcon";
 import { groupOrderItems, OrderGroupHeader, OrderSortButton } from "./OrderGrouping";
 import OrderComponentSearch, { matchesOrderComponentSearch } from "./OrderComponentSearch";
+import { DeleteConfirmDialog, DeleteVerificationDialog } from "../shared/SystemDeleteDialogs";
 
 const OrderDownloadModal = dynamic(() => import("./OrderDownloadModal"), { ssr: false });
 
@@ -482,6 +483,9 @@ function PasswordModal({ state, busy, error, onCancel, onSubmit }) {
   }, [state, busy, onCancel]);
   if (!state) return null;
   const config = ACTIONS[state.action];
+  if (state.action === "delete") {
+    return <DeleteVerificationDialog title={`Delete ${state.group?.orderIdLabel || "order"}`} password={password} onPasswordChange={setPassword} busy={busy} error={error} onCancel={onCancel} onSubmit={onSubmit} />;
+  }
   return (
     <div className="co-submodal-overlay is-open req-edit-modal" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onCancel(); }}>
       <form className="co-submodal-dialog req-edit-dialog" role="dialog" aria-modal="true" onSubmit={(event) => { event.preventDefault(); onSubmit(password); }}>
@@ -519,31 +523,17 @@ function RejectedReasonModal({ reason, onClose }) {
 }
 
 function DeleteConfirmationModal({ state, busy, onCancel, onConfirm }) {
-  useEffect(() => {
-    if (!state) return undefined;
-    const onKey = (event) => { if (event.key === "Escape" && !busy) onCancel(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [state, busy, onCancel]);
-
   if (!state) return null;
   const count = state.group?.items?.length || state.group?.orderIds?.length || 1;
-  return (
-    <div className="co-confirm-overlay is-open next-current-order-delete-confirm" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onCancel(); }}>
-      <div className="co-confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="currentOrderDeleteTitle" aria-describedby="currentOrderDeleteMessage">
-        <div className="co-confirm-icon" aria-hidden="true"><ClassicOrderIcon name="trash-2" /></div>
-        <div className="co-confirm-title" id="currentOrderDeleteTitle">Delete {state.group?.orderIdLabel || "order"}?</div>
-        <div className="co-confirm-message" id="currentOrderDeleteMessage">
-          You’re going to permanently delete this order and its {count} saved component{count === 1 ? "" : "s"}. This action cannot be undone.
-        </div>
-        <div className="co-confirm-actions">
-          <button type="button" className="co-confirm-btn co-confirm-btn--light" onClick={onCancel} disabled={busy}>Cancel</button>
-          <button type="button" className="co-confirm-btn co-confirm-btn--dark next-current-order-delete-confirm__danger" onClick={onConfirm} disabled={busy}>{busy ? "Deleting…" : "Delete permanently"}</button>
-        </div>
-      </div>
-    </div>
-  );
+  return <DeleteConfirmDialog
+    title={`Delete ${state.group?.orderIdLabel || "order"}?`}
+    message={`You’re going to permanently delete this order and its ${count} saved component${count === 1 ? "" : "s"}. This action cannot be undone.`}
+    busy={busy}
+    onCancel={onCancel}
+    onConfirm={onConfirm}
+  />;
 }
+
 export default function CurrentOrdersHeavyModals({
   selected,
   tab,

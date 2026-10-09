@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { DeleteConfirmDialog, DeleteVerificationDialog } from "../shared/SystemDeleteDialogs";
 
 function text(value) {
   return String(value ?? "").trim();
@@ -305,44 +306,29 @@ export function HistoryClearModal({ onClose, onCleared }) {
     }
   }
 
-  const footer = stage === "password" ? (
-    <>
-      <button type="button" className="next-history-btn secondary" onClick={onClose} disabled={busy}>Cancel</button>
-      <button type="button" className="next-history-btn danger" onClick={() => {
-        if (!text(password)) return setError("Admin password is required.");
-        setError("");
-        setStage("confirm");
-      }} disabled={busy}>Continue</button>
-    </>
-  ) : (
-    <>
-      <button type="button" className="next-history-btn secondary" onClick={() => setStage("password")} disabled={busy}>Back</button>
-      <button type="button" className="next-history-btn danger" onClick={clearHistory} disabled={busy}>{busy ? "Deleting…" : "Delete all history"}</button>
-    </>
-  );
+  if (stage === "password") {
+    return <DeleteVerificationDialog
+      title="Delete system history"
+      password={password}
+      onPasswordChange={(value) => { setPassword(value); setError(""); }}
+      busy={busy}
+      error={error}
+      onCancel={onClose}
+      onSubmit={(clean) => { if (!text(clean)) return setError("Admin password is required."); setError(""); setStage("confirm"); }}
+      confirmLabel="Continue"
+    />;
+  }
 
-  return (
-    <Modal
-      title={stage === "password" ? "Clear system history" : "Final confirmation"}
-      subtitle={stage === "password" ? "Admin authorization is required." : "This action cannot be undone."}
-      onClose={onClose}
-      footer={footer}
-    >
-      {stage === "password" ? (
-        <div className="next-history-clear-form">
-          <div className="next-history-danger-note"><strong>Permanent deletion</strong><span>Every saved system-action record will be removed from the audit table.</span></div>
-          <label><span>Admin password</span><input autoFocus type="password" autoComplete="off" value={password} onChange={(event) => setPassword(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); if (text(password)) setStage("confirm"); } }} placeholder="Enter admin password" /></label>
-          {error ? <div className="next-history-inline-error">{error}</div> : null}
-        </div>
-      ) : (
-        <div className="next-history-final-warning">
-          <span>!</span>
-          <h3>Delete every history record?</h3>
-          <p>The audit trail will become empty immediately. The deleted records cannot be recovered from this page.</p>
-        </div>
-      )}
-    </Modal>
-  );
+  return <DeleteConfirmDialog
+    title="Delete every history record?"
+    message="The audit trail will become empty immediately. The deleted records cannot be recovered from this page."
+    busy={busy}
+    error={error}
+    onCancel={() => setStage("password")}
+    onConfirm={clearHistory}
+    cancelLabel="Back"
+    confirmLabel="Yes, Delete!"
+  />;
 }
 
 function ModernSelect({ label, value, options, isOpen, onToggle, onChange }) {

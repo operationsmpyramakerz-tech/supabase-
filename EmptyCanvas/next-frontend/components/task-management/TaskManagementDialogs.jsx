@@ -3,6 +3,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import ActionLoadingModal, { useActionLoading } from "../ActionLoadingModal";
 import ClassicTaskSelect from "./ClassicTaskSelect";
+import { DeleteConfirmDialog, DeleteVerificationDialog } from "../shared/SystemDeleteDialogs";
+import { confirmDelete } from "../../lib/client-confirm";
 
 const WORK_STATUS_OPTIONS = [
   ["not_started", "Not started"],
@@ -840,7 +842,8 @@ function TeamWorkflowModal({ section, meta, onClose, onWork, notify, onParentRef
     } catch (actionError) { notify("error", "Action failed", actionError?.message || "The team task could not be updated."); }
   };
   const deleteAssignment = async (assignment) => {
-    if (!window.confirm(`Delete the task assigned to ${assignment.assigneeName || "this team member"}?`)) return;
+    const confirmed = await confirmDelete({ title: "Delete team task?", itemType: "team task", itemName: assignment.assigneeName || "this team member", message: `The task assigned to ${assignment.assigneeName || "this team member"} will be permanently deleted.` });
+    if (!confirmed) return;
     try {
       await requestJson("/next/api/task-management/mutations-direct", { method: "POST", body: JSON.stringify({ action: "assignment-delete", view: "my", assignmentId: assignment.id }) });
       remove(assignment.clientId); notify("success", "Task deleted", assignment.assigneeName || "Team task"); onParentRefresh();
@@ -1052,6 +1055,9 @@ function AdminActionModal({ action, ticket, view, onClose, onVerified }) {
     } catch (verifyError) { setError(verifyError?.message || "Invalid admin password."); }
     finally { setBusy(false); }
   };
+  if (action === "delete") {
+    return <DeleteVerificationDialog title={label} password={password} onPasswordChange={setPassword} busy={busy} error={error} onCancel={onClose} onSubmit={() => submit({ preventDefault() {} })} />;
+  }
   return <div className="tm-overlay tm-overlay--above" role="dialog" aria-modal="true">
     <div className="tm-overlay__backdrop" onClick={onClose} />
     <section className="tm-dialog tm-dialog--admin">
@@ -1072,10 +1078,11 @@ function ProjectConfirmModal({ confirmAction, onCancel, onConfirm }) {
     : restoring
       ? `“${ticket.title || ticket.ticketCode || "This project"}” will be restored and visible again to the users who normally have access to it.`
       : `“${ticket.title || ticket.ticketCode || "This project"}” will be hidden from everyone and kept only in your Archive tab on this Task Management page.`;
+  if (deleting) return <DeleteConfirmDialog title={title} message={message} onCancel={onCancel} onConfirm={onConfirm} />;
   return <div className="tm-overlay tm-overlay--top" role="dialog" aria-modal="true"><div className="tm-overlay__backdrop" onClick={onCancel} /><section className="tm-dialog tm-dialog--archive-confirm">
-    <div className="tm-archive-confirm__icon"><FeatherIcon name={deleting ? "trash" : "archive"} /></div>
+    <div className="tm-archive-confirm__icon"><FeatherIcon name="archive" /></div>
     <h2>{title}</h2><p>{message}</p>
-    <div className="tm-archive-confirm__actions"><button type="button" className="tm-btn tm-btn--secondary" onClick={onCancel}>{deleting ? "No, keep it" : "No, keep it"}</button><button type="button" className={`tm-btn ${deleting ? "tm-btn--danger" : "tm-btn--archive"}`} onClick={onConfirm}><FeatherIcon name={deleting ? "trash" : "archive"} /><span>{deleting ? "Yes, Delete!" : restoring ? "Yes, Restore" : "Yes, Archive"}</span></button></div>
+    <div className="tm-archive-confirm__actions"><button type="button" className="tm-btn tm-btn--secondary" onClick={onCancel}>No, keep it</button><button type="button" className="tm-btn tm-btn--archive" onClick={onConfirm}><FeatherIcon name="archive" /><span>{restoring ? "Yes, Restore" : "Yes, Archive"}</span></button></div>
   </section></div>;
 }
 

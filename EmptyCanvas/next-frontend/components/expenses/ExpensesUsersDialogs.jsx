@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { DeleteConfirmDialog, DeleteVerificationDialog } from "../shared/SystemDeleteDialogs";
 
 const SETTLEMENT_KEY = "settledmyaccount";
 
@@ -364,7 +365,8 @@ function ExpenseActionModal({ title, subtitle, onClose, children, actions, dange
 function AdminPasswordModal({ mode, count = 1, onClose, onContinue }) {
   const [password, setPassword] = useState("");
   const isDelete = mode === "delete";
-  return <ExpenseActionModal title={isDelete ? "Delete expense" : "Edit expense"} subtitle={isDelete ? (count > 1 ? `This will delete ${count} expense rows and their uploaded receipts.` : "This will delete this expense and its uploaded receipts.") : "Enter the Admin password to edit this expense."} onClose={onClose} actions={<><button type="button" className="expense-user-action-btn expense-user-action-btn--muted" onClick={onClose}>Cancel</button><button type="button" className={`expense-user-action-btn ${isDelete ? "expense-user-action-btn--danger" : "expense-user-action-btn--primary"}`} onClick={() => onContinue(password.trim())}>{isDelete ? "Delete" : "Continue"}</button></>}><div className="expense-user-action-field"><label>Admin password</label><input type="password" autoFocus autoComplete="current-password" placeholder="Enter Admin password" value={password} onChange={(event) => setPassword(event.target.value)} /></div></ExpenseActionModal>;
+  if (isDelete) return <DeleteVerificationDialog title={count > 1 ? "Delete expense card" : "Delete expense"} password={password} onPasswordChange={setPassword} onCancel={onClose} onSubmit={onContinue} />;
+  return <ExpenseActionModal title="Edit expense" subtitle="Enter the Admin password to edit this expense." onClose={onClose} actions={<><button type="button" className="expense-user-action-btn expense-user-action-btn--muted" onClick={onClose}>Cancel</button><button type="button" className="expense-user-action-btn expense-user-action-btn--primary" onClick={() => onContinue(password.trim())}>Continue</button></>}><div className="expense-user-action-field"><label>Admin password</label><input type="password" autoFocus autoComplete="current-password" placeholder="Enter Admin password" value={password} onChange={(event) => setPassword(event.target.value)} /></div></ExpenseActionModal>;
 }
 
 function EditExpenseModal({ item, adminPassword, onClose, onSaved, notify }) {
@@ -406,7 +408,7 @@ function EditExpenseModal({ item, adminPassword, onClose, onSaved, notify }) {
 }
 
 function DeleteConfirmationModal({ count, onClose, onConfirm, busy }) {
-  return <ExpenseActionModal title={count > 1 ? "Delete expense card?" : "Delete expense?"} subtitle={count > 1 ? `You’re going to permanently delete ${count} expense rows and all uploaded receipts. This action cannot be undone.` : "You’re going to permanently delete this expense and its uploaded receipts. This action cannot be undone."} onClose={onClose} actions={<><button type="button" className="expense-user-action-btn expense-user-action-btn--muted" onClick={onClose} disabled={busy}>Cancel</button><button type="button" className="expense-user-action-btn expense-user-action-btn--danger" onClick={onConfirm} disabled={busy}>{busy ? "Deleting..." : "Delete"}</button></>} />;
+  return <DeleteConfirmDialog title={count > 1 ? "Delete expense card?" : "Delete expense?"} message={count > 1 ? `You’re going to permanently delete ${count} expense rows and all uploaded receipts. This action cannot be undone.` : "You’re going to permanently delete this expense and its uploaded receipts. This action cannot be undone."} busy={busy} onCancel={onClose} onConfirm={onConfirm} />;
 }
 
 function getExpenseOrderTypeMeta(type) {

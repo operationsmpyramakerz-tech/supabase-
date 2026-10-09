@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import EventIcon from "./EventIcon";
+import { DeleteConfirmDialog } from "../shared/SystemDeleteDialogs";
 
 function text(value) {
   return String(value ?? "").trim();
@@ -298,28 +299,14 @@ export function AuthorizationModal({ authorization, busy, error, password, onPas
 
 export function DeleteModal({ component, busy, error, onClose, onConfirm }) {
   if (!component) return null;
-  return (
-    <div className="events-modal-overlay next-modal-layer" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
-      <section className="events-modal next-modal next-events-confirm-modal" role="dialog" aria-modal="true">
-        <header className="events-modal__header next-events-modal-head">
-          <div>
-            <span className="next-events-kicker">Permanent deletion</span>
-            <h2>Delete “{component.name || "this component"}”?</h2>
-            <p>Existing event requests keep their saved snapshot, but this catalogue record cannot be restored.</p>
-          </div>
-          <button type="button" className="events-modal__close next-modal-close" onClick={onClose} disabled={busy}>×</button>
-        </header>
-        {error ? <div className="events-form-error next-events-form-error">{error}</div> : null}
-        <footer className="events-modal__actions next-events-modal-actions">
-          <span />
-          <div>
-            <button type="button" className="events-secondary-btn secondary-button" onClick={onClose} disabled={busy}>Cancel</button>
-            <button type="button" className="danger-button" onClick={onConfirm} disabled={busy}>{busy ? "Deleting..." : "Delete permanently"}</button>
-          </div>
-        </footer>
-      </section>
-    </div>
-  );
+  return <DeleteConfirmDialog
+    title={`Delete “${component.name || "this component"}”?`}
+    message="Existing event requests keep their saved snapshot, but this catalogue record will be permanently deleted and cannot be restored."
+    busy={busy}
+    error={error}
+    onCancel={onClose}
+    onConfirm={onConfirm}
+  />;
 }
 
 export function PhotoGalleryModal({ component, onClose }) {

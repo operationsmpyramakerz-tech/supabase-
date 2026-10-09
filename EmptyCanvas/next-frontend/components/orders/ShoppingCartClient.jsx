@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { confirmDelete } from "../../lib/client-confirm";
 import dynamic from "next/dynamic";
 import { navigateWithinApp } from "../../lib/client-navigation";
 
@@ -922,7 +923,8 @@ export default function ShoppingCartClient({
 
   const clearCart = async () => {
     if (!cart.length) return;
-    if (!window.confirm("Clear all products from this cart?")) return;
+    const confirmed = await confirmDelete({ title: "Clear cart?", itemType: "cart", message: "All products currently added to this cart will be removed." });
+    if (!confirmed) return;
     setCart([]);
     await persistDraft([]);
   };

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { confirmDelete as showDeleteConfirm } from "../../lib/client-confirm";
+import { DeleteVerificationDialog } from "../shared/SystemDeleteDialogs";
 
 const MAX_CSV_SIZE = 25 * 1024 * 1024;
 
@@ -250,39 +251,17 @@ export default function BackupDialogs({ mode, target, onClose, onSuccess, onToas
   if (!target || (mode !== "import" && mode !== "delete")) return null;
 
   if (mode === "delete") {
-    return (
-      <Portal>
-        <div className="backup-delete-modal">
-          <div className="backup-modal-backdrop" onMouseDown={() => { if (!busy) onClose?.(); }} />
-          <section className="backup-delete-card" role="dialog" aria-modal="true" aria-labelledby="backupDeleteTitle">
-            <button type="button" className="backup-modal-close" onClick={() => onClose?.()} aria-label="Close" disabled={busy}><Icon name="x" /></button>
-            <div className="backup-delete-head">
-              <span className="backup-delete-icon"><Icon name="trash-2" /></span>
-              <div>
-                <p className="backup-kicker">DELETE DATA</p>
-                <h2 id="backupDeleteTitle">{target.isAll ? "Delete all data?" : `Delete ${target.pageName || target.tableName}?`}</h2>
-              </div>
-            </div>
-            <p className="backup-delete-copy">
-              {target.isAll
-                ? "A ZIP export containing CSV files will download first, then all table rows will be deleted."
-                : `A CSV export will download first, then all rows in “${target.tableName}” will be deleted.`}
-            </p>
-            <label className="backup-field">
-              <span>Admin password</span>
-              <input type="password" autoComplete="off" placeholder="Enter admin password" value={password} onChange={(event) => { setPassword(event.target.value); setError(""); }} onKeyDown={(event) => { if (event.key === "Enter" && !busy) confirmDelete(); }} autoFocus />
-            </label>
-            {error ? <p className="backup-error">{error}</p> : null}
-            <div className="backup-delete-actions">
-              <button type="button" className="backup-cancel-btn" onClick={() => onClose?.()} disabled={busy}>Cancel</button>
-              <button type="button" className={`backup-delete-next-btn ${busy ? "is-loading" : ""}`} onClick={confirmDelete} disabled={busy}>
-                <Icon name="trash-2" /><span>{busy ? (stage || "Deleting...") : "Delete data"}</span>
-              </button>
-            </div>
-          </section>
-        </div>
-      </Portal>
-    );
+    return <DeleteVerificationDialog
+      title={target.isAll ? "Delete all data" : `Delete ${target.pageName || target.tableName}`}
+      password={password}
+      onPasswordChange={(value) => { setPassword(value); setError(""); }}
+      busy={busy}
+      error={error}
+      onCancel={() => onClose?.()}
+      onSubmit={() => confirmDelete()}
+      confirmLabel="Continue"
+      busyLabel={stage || "Working…"}
+    />;
   }
 
   return (

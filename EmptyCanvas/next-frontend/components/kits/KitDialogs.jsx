@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { DeleteVerificationDialog } from "../shared/SystemDeleteDialogs";
 
 const EXPORT_COLUMNS = [
   ["idCode", "ID Code"],
@@ -595,6 +596,20 @@ export function PasswordModal({ request, busy, onClose, onVerified }) {
       setError(verifyError?.message || "Invalid Admin password.");
     }
   };
+
+  const deleteVerification = /delete/i.test(`${request?.title || ""} ${request?.message || ""}`);
+  if (deleteVerification) {
+    return <DeleteVerificationDialog
+      title={request?.title && !/^admin password required$/i.test(request.title) ? request.title : "Delete item"}
+      password={password}
+      onPasswordChange={(value) => { setPassword(value); setError(""); }}
+      busy={busy}
+      error={error}
+      onCancel={onClose}
+      onSubmit={() => submit({ preventDefault() {} })}
+      confirmLabel="Continue"
+    />;
+  }
 
   return (
     <Modal title={request?.title || "Admin password required"} subtitle={request?.message || "Enter the Admin password to continue."} icon="⌾" onClose={onClose}>

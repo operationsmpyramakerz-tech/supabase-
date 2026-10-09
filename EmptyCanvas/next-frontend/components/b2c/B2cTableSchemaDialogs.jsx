@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
+import { confirmDelete } from "../../lib/client-confirm";
 import B2CFormulaEngine from "../../lib/b2c-formula-engine";
 
 const FIELD_TYPES = [
@@ -120,9 +121,10 @@ export function SchemaBuilder({ fields, records, busy, onClose, onSave }) {
   const update = (index, patch) => setDraft((current) => current.map((field, position) => position === index ? { ...field, ...patch } : field));
   const updateOptions = (index, patch) => setDraft((current) => current.map((field, position) => position === index ? { ...field, options: { ...(field.options || {}), ...patch } } : field));
   const add = () => setDraft((current) => [...current, normalizeField({ label: "New property", type: "text", required: false }, current.length)]);
-  const remove = (index) => {
+  const remove = async (index) => {
     const field = draft[index];
-    if (!window.confirm(`Remove “${field.label}” from this table schema? Existing values for this property may be removed after saving.`)) return;
+    const confirmed = await confirmDelete({ title: "Remove property?", itemType: "property", itemName: field.label, message: `Remove “${field.label}” from this table schema? Existing values for this property may be removed after saving.` });
+    if (!confirmed) return;
     setDraft((current) => current.filter((_, position) => position !== index));
   };
   const move = (from, to) => {
@@ -133,7 +135,10 @@ export function SchemaBuilder({ fields, records, busy, onClose, onSave }) {
     const normalized = draft.map((field, index) => ({ ...field, label: text(field.label), sortOrder: index + 1, options: { options: SELECT_TYPES.has(field.type) ? [...new Set((field.options?.options || []).map(text).filter(Boolean))].slice(0, 100) : [], formula: field.type === "formula" ? text(field.options?.formula) || null : null } }));
     if (normalized.some((field) => !field.label)) return setError("Every property needs a name.");
     const removed = fields.filter((field) => !normalized.some((item) => item.id && item.id === field.id));
-    if (removed.length && !window.confirm(`${removed.length} saved propert${removed.length === 1 ? "y is" : "ies are"} being removed. Existing values may be lost. Continue?`)) return;
+    if (removed.length) {
+      const confirmed = await confirmDelete({ title: "Remove saved properties?", itemType: "saved properties", itemName: `${removed.length} ${removed.length === 1 ? "property" : "properties"}`, message: `${removed.length} saved propert${removed.length === 1 ? "y is" : "ies are"} being removed. Existing values may be lost after saving.` });
+      if (!confirmed) return;
+    }
     if (engine?.expressionInfo) {
       for (const field of normalized) {
         if (field.type === "formula" && field.options?.formula) {

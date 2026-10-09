@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { navigateWithinApp } from "../../lib/client-navigation";
+import { DeleteConfirmDialog } from "../shared/SystemDeleteDialogs";
 
 function text(value) { return String(value ?? "").trim(); }
 function lower(value) { return text(value).toLowerCase(); }
@@ -109,23 +110,25 @@ function DeleteModal({ database, busy, onClose, onConfirm }) {
   const [confirmation, setConfirmation] = useState("");
   const [error, setError] = useState("");
   const matches = text(confirmation) === database.name;
-  const submit = async (event) => {
-    event.preventDefault();
+  const confirm = async () => {
     if (!matches) return setError("Type the exact table name to confirm deletion.");
     setError("");
     try { await onConfirm(); }
     catch (submitError) { setError(submitError?.message || "The table could not be deleted."); }
   };
-  return (
-    <ClassicModal title="Delete database?" subtitle={`You’re going to permanently delete “${database.name}”, including all properties, forms, and records.`} eyebrow="Permanent action" onClose={onClose}>
-      <form onSubmit={submit}>
-        <div className="next-b2c-classic-delete-summary"><strong>{database.name}</strong><span>{formatNumber(database.fieldCount)} properties · {formatNumber(database.recordCount)} records</span></div>
-        <div className="b2c-form-grid"><label className="b2c-form-control b2c-form-control--wide"><span>Type “{database.name}” to confirm</span><input autoFocus value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="off" /></label></div>
-        {error ? <div className="b2c-dialog__error">{error}</div> : null}
-        <div className="b2c-dialog__actions"><button type="button" className="b2c-secondary-btn" onClick={onClose} disabled={busy}>Cancel</button><button type="submit" className="b2c-primary-btn next-b2c-danger-btn" disabled={busy || !matches}>{busy ? "Deleting…" : "Delete Permanently"}</button></div>
-      </form>
-    </ClassicModal>
-  );
+  return <DeleteConfirmDialog
+    title="Delete database?"
+    message={`You’re going to permanently delete “${database.name}”, including all properties, forms, and records. This action cannot be undone.`}
+    busy={busy}
+    error={error}
+    onCancel={onClose}
+    onConfirm={confirm}
+    confirmDisabled={!matches}
+    confirmLabel="Yes, Delete!"
+  >
+    <div className="next-b2c-classic-delete-summary"><strong>{database.name}</strong><span>{formatNumber(database.fieldCount)} properties · {formatNumber(database.recordCount)} records</span></div>
+    <label className="system-delete-dialog__field"><span>Type “{database.name}” to confirm</span><input autoFocus value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="off" /></label>
+  </DeleteConfirmDialog>;
 }
 
 function DatabaseCard({ database, busy, menuOpen, onToggleMenu, onEdit, onCopy, onDelete }) {

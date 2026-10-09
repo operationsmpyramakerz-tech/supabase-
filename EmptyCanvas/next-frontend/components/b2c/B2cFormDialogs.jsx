@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { confirmDelete } from "../../lib/client-confirm";
 
 const TYPE_LABELS = {
   text: "Text", number: "Number", select: "Select", multi_select: "Multi-select",
@@ -151,9 +152,11 @@ export function BuilderDialog({ form, fields, busy, onClose, onSave }) {
     });
     setDragIndex(-1);
   };
-  const remove = (index) => {
+  const remove = async (index) => {
     const removed = draft[index];
-    if (!removed || !window.confirm(`Remove “${removed.label}” from this form? The original database property and historical values will remain.`)) return;
+    if (!removed) return;
+    const confirmed = await confirmDelete({ title: "Remove question?", itemType: "question", itemName: removed.label, message: `Remove “${removed.label}” from this form? The original database property and historical values will remain.` });
+    if (!confirmed) return;
     setDraft((current) => current
       .filter((_, position) => position !== index)
       .map((item) => item.condition?.fieldKey === removed.key ? { ...item, condition: { enabled: false, fieldKey: "", operator: "equals", value: "" } } : item));

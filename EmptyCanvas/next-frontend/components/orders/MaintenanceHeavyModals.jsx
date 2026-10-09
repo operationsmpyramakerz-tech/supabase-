@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import ClassicOrderIcon from "./ClassicOrderIcon";
+import { DeleteConfirmDialog, DeleteVerificationDialog } from "../shared/SystemDeleteDialogs";
+import { confirmDelete as confirmDeleteAction } from "../../lib/client-confirm";
 
 const MAINTENANCE_SPARE_EXPORT_COLUMNS = [
   ["idCode", "ID Code"],
@@ -238,13 +240,11 @@ async function deleteMaintenanceChecklistItem(id) {
 function MaintenanceChecklistOption({ item, checked, disabled, onToggle, onUpdated, onDeleted, onError }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(item?.text || "");
-  const [confirmDelete, setConfirmDelete] = useState(false);
   const [working, setWorking] = useState(false);
 
   useEffect(() => {
     setDraft(item?.text || "");
     setEditing(false);
-    setConfirmDelete(false);
   }, [item?.id, item?.text]);
 
   const locked = disabled || working;
@@ -259,8 +259,7 @@ function MaintenanceChecklistOption({ item, checked, disabled, onToggle, onUpdat
       const normalized = saved || { ...item, text: value };
       onUpdated?.(item, normalized);
       setEditing(false);
-      setConfirmDelete(false);
-    } catch (error) {
+      } catch (error) {
       onError?.(error?.message || "Failed to update checklist item.");
     } finally {
       setWorking(false);
@@ -276,13 +275,12 @@ function MaintenanceChecklistOption({ item, checked, disabled, onToggle, onUpdat
       onDeleted?.(item);
     } catch (error) {
       onError?.(error?.message || "Failed to delete checklist item.");
-      setConfirmDelete(false);
-    } finally {
+      } finally {
       setWorking(false);
     }
   }
 
-  return <div className={`next-maintenance-checklist-option${editing ? " is-editing" : ""}${confirmDelete ? " is-delete-confirm" : ""}`}>
+  return <div className={`next-maintenance-checklist-option${editing ? " is-editing" : ""}`}>
     {editing ? <input
       className="next-maintenance-checklist-option__edit-input"
       type="text"
@@ -304,12 +302,9 @@ function MaintenanceChecklistOption({ item, checked, disabled, onToggle, onUpdat
       {editing ? <>
         <button type="button" className="next-maintenance-checklist-icon-btn next-maintenance-checklist-icon-btn--save" onClick={saveEdit} disabled={locked || !text(draft)} aria-label="Save checklist item" title="Save"><ClassicOrderIcon name="check" /></button>
         <button type="button" className="next-maintenance-checklist-icon-btn" onClick={() => { setDraft(item.text); setEditing(false); }} disabled={locked} aria-label="Cancel checklist edit" title="Cancel"><ClassicOrderIcon name="x" /></button>
-      </> : confirmDelete ? <>
-        <button type="button" className="next-maintenance-checklist-icon-btn next-maintenance-checklist-icon-btn--danger" onClick={confirmRemove} disabled={locked} aria-label="Confirm delete checklist item" title="Confirm delete"><ClassicOrderIcon name="check" /></button>
-        <button type="button" className="next-maintenance-checklist-icon-btn" onClick={() => setConfirmDelete(false)} disabled={locked} aria-label="Cancel delete checklist item" title="Cancel"><ClassicOrderIcon name="x" /></button>
       </> : <>
         <button type="button" className="next-maintenance-checklist-icon-btn" onClick={() => { setDraft(item.text); setEditing(true); }} disabled={locked || !item?.id} aria-label="Edit checklist item" title="Edit"><ClassicOrderIcon name="edit-2" /></button>
-        <button type="button" className="next-maintenance-checklist-icon-btn next-maintenance-checklist-icon-btn--danger" onClick={() => setConfirmDelete(true)} disabled={locked || !item?.id} aria-label="Delete checklist item" title="Delete"><ClassicOrderIcon name="trash-2" /></button>
+        <button type="button" className="next-maintenance-checklist-icon-btn next-maintenance-checklist-icon-btn--danger" onClick={async () => { const confirmed = await confirmDeleteAction({ title: "Delete checklist item?", itemType: "checklist item", itemName: item.text, message: `“${item.text}” will be permanently removed from the maintenance checklist.` }); if (confirmed) confirmRemove(); }} disabled={locked || !item?.id} aria-label="Delete checklist item" title="Delete"><ClassicOrderIcon name="trash-2" /></button>
       </>}
     </div>
   </div>;
@@ -1103,6 +1098,9 @@ export function MaintenanceActionPasswordModal({ state, busy, error, onCancel, o
   if (!state) return null;
   const config = MAINTENANCE_ACTIONS[state.action];
   if (!config) return null;
+  if (state.action === "delete") {
+    return <DeleteVerificationDialog title={`Delete ${state.group?.orderIdLabel || "maintenance order"}`} password={password} onPasswordChange={setPassword} busy={busy} error={error} onCancel={onCancel} onSubmit={onSubmit} />;
+  }
   return (
     <div className="co-submodal-overlay is-open req-edit-modal" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onCancel(); }}>
       <form className="co-submodal-dialog req-edit-dialog" role="dialog" aria-modal="true" onSubmit={(event) => { event.preventDefault(); onSubmit(password); }}>
@@ -1126,28 +1124,14 @@ export function MaintenanceActionPasswordModal({ state, busy, error, onCancel, o
 }
 
 export function MaintenanceDeleteConfirmationModal({ state, busy, onCancel, onConfirm }) {
-  useEffect(() => {
-    if (!state) return undefined;
-    const onKey = (event) => { if (event.key === "Escape" && !busy) onCancel(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [state, busy, onCancel]);
   if (!state) return null;
   const count = state.group?.items?.length || state.group?.orderIds?.length || 1;
-  return (
-    <div className="co-confirm-overlay is-open next-maintenance-order-delete-confirm" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onCancel(); }}>
-      <div className="co-confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="maintenanceOrderDeleteTitle" aria-describedby="maintenanceOrderDeleteMessage">
-        <div className="co-confirm-icon" aria-hidden="true"><ClassicOrderIcon name="trash-2" /></div>
-        <div className="co-confirm-title" id="maintenanceOrderDeleteTitle">Delete {state.group?.orderIdLabel || "maintenance order"}?</div>
-        <div className="co-confirm-message" id="maintenanceOrderDeleteMessage">
-          You’re going to permanently delete this maintenance order and its {count} saved component{count === 1 ? "" : "s"}. This action cannot be undone.
-        </div>
-        <div className="co-confirm-actions">
-          <button type="button" className="co-confirm-btn co-confirm-btn--light" onClick={onCancel} disabled={busy}>Cancel</button>
-          <button type="button" className="co-confirm-btn co-confirm-btn--dark next-maintenance-order-delete-confirm__danger" onClick={onConfirm} disabled={busy}>{busy ? "Deleting…" : "Delete permanently"}</button>
-        </div>
-      </div>
-    </div>
-  );
+  return <DeleteConfirmDialog
+    title={`Delete ${state.group?.orderIdLabel || "maintenance order"}?`}
+    message={`You’re going to permanently delete this maintenance order and its ${count} saved component${count === 1 ? "" : "s"}. This action cannot be undone.`}
+    busy={busy}
+    onCancel={onCancel}
+    onConfirm={onConfirm}
+  />;
 }
 

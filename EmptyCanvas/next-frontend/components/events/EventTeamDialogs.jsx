@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import EventIcon from "./EventIcon";
+import { DeleteConfirmDialog } from "../shared/SystemDeleteDialogs";
 
 const ROLE_LABELS = Object.freeze({ instructor: "Instructor", usher: "Usher", organizer: "Organizer" });
 
@@ -212,18 +213,12 @@ export function EventTeamDeleteDialog({ member, onClose, onDeleted }) {
     }
   }
 
-  return (
-    <Modal label="Delete team member" onClose={() => { if (!busy) onClose?.(); }}>
-      <div className="event-team-delete-dialog">
-        <div className="event-team-delete-dialog__icon"><EventIcon name="trash-2" /></div>
-        <h3>Delete team member?</h3>
-        <p>{`${text(member?.name) || "This person"} will be removed.`}</p>
-        {error ? <div className="event-team-form-error">{error}</div> : null}
-        <div className="event-team-modal__actions">
-          <button type="button" className="events-secondary-btn" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="button" className="event-team-delete-confirm" onClick={confirmDelete} disabled={busy}>{busy ? "Deleting..." : "Delete"}</button>
-        </div>
-      </div>
-    </Modal>
-  );
+  return <DeleteConfirmDialog
+    title="Delete team member?"
+    message={`${text(member?.name) || "This person"} will be permanently removed from the event team.`}
+    busy={busy}
+    error={error}
+    onCancel={onClose}
+    onConfirm={confirmDelete}
+  />;
 }
