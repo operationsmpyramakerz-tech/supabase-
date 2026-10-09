@@ -74,7 +74,7 @@ async function deliver(event) {
   if (!event.in_app_done) {
     if (allowsChannel(settings, type, "in_app")) {
       try {
-        const stored = await saveNotificationForMember(memberId, notif);
+        const stored = await saveNotificationForMember(memberId, notif, { settings });
         await audit("in_app", stored ? "stored" : "skipped", stored ? "" : "preferences disabled", stored ? "in-app" : "");
       } catch (error) {
         await audit("in_app", "retrying", "Delivery could not be completed");

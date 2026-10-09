@@ -17,7 +17,11 @@ const NOTIFICATION_AUTOSCAN_KEY = "notif:next:autoScan:v1";
 
 const listCache = new Map();
 const listInflight = new Map();
+const listRevisions = new Map();
 let scanInflight = null;
+// The optional Phase-7 RPC returns the newest rows and an exact unread count
+// in one indexed DB operation. Older deployments keep the legacy read path.
+let feedRpcState = { supported: true, checkedUntil: 0 };
 let phase3Cache = { until: 0, installed: false };
 async function phase3Installed() {
   if (Date.now() < phase3Cache.until) return phase3Cache.installed;
@@ -143,7 +147,9 @@ function cacheKey(memberId, limit) {
 }
 
 function invalidate(memberId) {
-  const prefix = `${text(memberId)}:`;
+  const id = text(memberId);
+  listRevisions.set(id, (listRevisions.get(id) || 0) + 1);
+  const prefix = `${id}:`;
   for (const key of listCache.keys()) {
     if (key.startsWith(prefix)) listCache.delete(key);
   }
@@ -346,11 +352,13 @@ async function settingsForMember(memberId) {
   return value;
 }
 
-export async function saveNotificationForMember(memberId, notif = {}) {
+export async function saveNotificationForMember(memberId, notif = {}, { settings: preloadedSettings = null } = {}) {
   const userId = text(memberId);
   const notificationId = text(notif.id);
   if (!userId || !notificationId) return false;
-  const settings = await settingsForMember(userId);
+  // Event-worker deliveries already fetched preferences for this recipient.
+  // Reuse that snapshot and avoid an extra Supabase lookup per event.
+  const settings = preloadedSettings || await settingsForMember(userId);
   if (!allowsChannel(settings, notif.type, "in_app")) return false;
 
   const existing = await select(notificationTable(), {
@@ -410,34 +418,66 @@ export async function notificationsForMember(memberId, { limit = 25, fresh = fal
 
   const cleanLimit = safeLimit(limit);
   const key = cacheKey(id, cleanLimit);
+  const revision = listRevisions.get(id) || 0;
   if (!fresh) {
     const cached = listCache.get(key);
     if (cached?.expiresAt > Date.now()) return cached.value;
     if (listInflight.has(key)) return await listInflight.get(key);
   }
 
-  const pending = select(notificationTable(), {
-    select: "id,notification_id,type,title,body,url,read,ts,created_at",
-    user_id: `eq.${id}`,
-    order: "ts.desc",
-    limit: "200",
-  }, { profileName: "notifications.list" }).then((rows) => {
+  const pending = (async () => {
+    // Only use the RPC with the default table; custom-table installations still
+    // use the original query rather than accidentally reading the wrong data.
+    if (notificationTable() === "notifications" &&
+        (feedRpcState.supported || Date.now() >= feedRpcState.checkedUntil)) {
+      try {
+        const feed = await supabaseRequest("/rpc/erp_notification_feed_v7", {
+          method: "POST",
+          body: { p_member_id: id, p_limit: cleanLimit },
+          profileName: "notifications.feed.v7",
+        });
+        if (!feed || !Array.isArray(feed.items) || !Number.isFinite(Number(feed.unreadCount))) {
+          throw new Error("Notification feed returned an invalid result.");
+        }
+        feedRpcState = { supported: true, checkedUntil: 0 };
+        return {
+          success: true, source: "supabase",
+          items: feed.items.map(itemFromRow).filter(Boolean),
+          unreadCount: Math.max(0, Number(feed.unreadCount)),
+        };
+      } catch (error) {
+        // Optional migration: do not interrupt existing notifications while
+        // Supabase's schema cache catches up or the SQL is not yet installed.
+        const reason = String(error?.message || "");
+        if (![403, 404].includes(Number(error?.status)) && !/PGRST202|schema cache|Could not find the function/i.test(reason)) throw error;
+        feedRpcState = { supported: false, checkedUntil: Date.now() + 60_000 };
+      }
+    }
+    // Legacy fallback is deliberately unchanged to support deployments that
+    // have not installed the optional Phase-7 SQL yet.
+    const rows = await select(notificationTable(), {
+      select: "id,notification_id,type,title,body,url,read,ts,created_at",
+      user_id: `eq.${id}`,
+      order: "ts.desc",
+      limit: "200",
+    }, { profileName: "notifications.list.legacy" });
     const allItems = (Array.isArray(rows) ? rows : [])
       .map(itemFromRow)
       .filter(Boolean)
       .sort((a, b) => Number(b.ts || 0) - Number(a.ts || 0));
     return {
-      success: true,
-      source: "supabase",
+      success: true, source: "supabase",
       items: allItems.slice(0, cleanLimit),
       unreadCount: allItems.reduce((count, item) => count + (!item.read ? 1 : 0), 0),
     };
-  });
+  })();
 
   if (!fresh) listInflight.set(key, pending);
   try {
     const value = await pending;
-    setCache(key, value);
+    // A mark-as-read or new delivery may have occurred while Supabase was
+    // responding. Never reintroduce an older list into this process cache.
+    if ((listRevisions.get(id) || 0) === revision) setCache(key, value);
     return value;
   } finally {
     if (listInflight.get(key) === pending) listInflight.delete(key);

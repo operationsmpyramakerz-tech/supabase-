@@ -37,13 +37,6 @@ async function requestJson(url, options = {}) {
   return body;
 }
 
-function triggerBackgroundNotificationScan() {
-  return fetch(`/next/api/notifications/refresh?limit=80&_=${Date.now()}`, {
-    credentials: "include",
-    cache: "no-store",
-  }).catch(() => null);
-}
-
 function urlBase64ToUint8Array(base64String) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
@@ -343,22 +336,18 @@ export default function NotificationsClient({ initialItems = [], initialUnreadCo
   const resetFilters = () => { setQuery(""); setType("all"); setSort("newest"); setScope("all"); setReadFilter("all"); };
 
   async function refresh() {
+    if (loading) return;
     setLoading(true);
     setMessage("");
     try {
-      const body = await requestJson(`/next/api/notifications?limit=80&fresh=1&_=${Date.now()}`);
+      // The refresh endpoint processes the queue and returns the final feed.
+      // Previously this action made an initial GET, a refresh and another GET.
+      const body = await requestJson("/next/api/notifications/refresh?limit=80");
       const nextItems = Array.isArray(body?.items) ? body.items : [];
+      const exactCount = Number(body?.unreadCount);
       setItems(nextItems);
-      setUnreadCount(Number(body?.unreadCount) || nextItems.filter((item) => !item?.read).length);
-      triggerBackgroundNotificationScan().then(async (response) => {
-        if (!response?.ok) return;
-        try {
-          const updated = await requestJson(`/next/api/notifications?limit=80&fresh=1&_=${Date.now()}`);
-          const updatedItems = Array.isArray(updated?.items) ? updated.items : [];
-          setItems(updatedItems);
-          setUnreadCount(Number(updated?.unreadCount) || updatedItems.filter((item) => !item?.read).length);
-        } catch {}
-      });
+      setUnreadCount(Number.isFinite(exactCount) && exactCount >= 0
+        ? exactCount : nextItems.filter((item) => !item?.read).length);
     } catch (error) {
       setMessage(error.message || "Notifications could not be refreshed.");
     } finally {

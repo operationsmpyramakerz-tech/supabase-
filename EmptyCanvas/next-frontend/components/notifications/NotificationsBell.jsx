@@ -15,6 +15,7 @@ import {
 // in browser storage that persists across ERP user sign-outs/account switches.
 const BELL_REQUEST_MIN_INTERVAL_MS = 12_000;
 let lastBackgroundScanAt = 0;
+let backgroundScanInflight = null;
 
 async function requestJson(url, options = {}) {
   const response = await fetch(url, {
@@ -34,12 +35,16 @@ async function requestJson(url, options = {}) {
 }
 
 function triggerBackgroundNotificationScan() {
+  // Multiple bells can mount on the same page. One wake-up per tab is enough;
+  // the server's event-claim RPC also protects against concurrent workers.
+  if (backgroundScanInflight) return Promise.resolve(null);
   const now = Date.now();
   if (now - lastBackgroundScanAt < 2 * 60 * 1000) return Promise.resolve(null);
   lastBackgroundScanAt = now;
-  return fetch(`/next/api/notifications/refresh?limit=12&_=${now}`, {
-    credentials: "include", cache: "no-store",
-  }).catch(() => null);
+  backgroundScanInflight = requestJson(`/next/api/notifications/refresh?limit=12`, {
+    method: "GET",
+  }).catch(() => null).finally(() => { backgroundScanInflight = null; });
+  return backgroundScanInflight;
 }
 
 export default function NotificationsBell({ classic = false }) {
@@ -53,43 +58,45 @@ export default function NotificationsBell({ classic = false }) {
   const panelRef = useRef(null);
   const lastLoadedAtRef = useRef(0);
   const loadPromiseRef = useRef(null);
+  const mutationEpochRef = useRef(0);
+  const mountedRef = useRef(false);
   const [panelStyle, setPanelStyle] = useState({});
 
   const preview = useMemo(() => items.slice(0, 5), [items]);
+
+  function applyFeed(body, epoch) {
+    if (!mountedRef.current || epoch !== mutationEpochRef.current) return;
+    const nextItems = Array.isArray(body?.items) ? body.items : [];
+    const exactCount = Number(body?.unreadCount);
+    setItems(nextItems);
+    setUnreadCount(Number.isFinite(exactCount) && exactCount >= 0
+      ? exactCount : nextItems.filter((item) => !item?.read).length);
+    lastLoadedAtRef.current = Date.now();
+    setError("");
+  }
 
   async function load({ quiet = false, force = false } = {}) {
     const now = Date.now();
     if (!force && now - lastLoadedAtRef.current < BELL_REQUEST_MIN_INTERVAL_MS) return null;
     if (loadPromiseRef.current) return await loadPromiseRef.current;
 
+    const epoch = mutationEpochRef.current;
     if (!quiet) setLoading(true);
     const pending = (async () => {
       try {
-        const body = await requestJson(`/next/api/notifications?limit=12`);
-        const nextItems = Array.isArray(body?.items) ? body.items : [];
-        const nextUnread = Number(body?.unreadCount) || nextItems.filter((item) => !item?.read).length;
-        setItems(nextItems);
-        setUnreadCount(nextUnread);
-        lastLoadedAtRef.current = Date.now();
-        setError("");
-
-        triggerBackgroundNotificationScan().then(async (response) => {
-          if (!response?.ok) return;
-          try {
-            const updated = await requestJson(`/next/api/notifications?limit=12&fresh=1`);
-            const updatedItems = Array.isArray(updated?.items) ? updated.items : [];
-            const updatedUnread = Number(updated?.unreadCount) || updatedItems.filter((item) => !item?.read).length;
-            setItems(updatedItems);
-            setUnreadCount(updatedUnread);
-            lastLoadedAtRef.current = Date.now();
-          } catch {}
+        const body = await requestJson("/next/api/notifications?limit=12");
+        applyFeed(body, epoch);
+        // The refresh endpoint already returns the updated rows. Do not issue
+        // a second identical GET after it; this saves one DB round trip.
+        triggerBackgroundNotificationScan().then((updated) => {
+          if (updated?.success) applyFeed(updated, epoch);
         });
         return body;
       } catch (loadError) {
-        if (!quiet) setError(loadError.message || "Could not load notifications.");
+        if (!quiet && mountedRef.current) setError(loadError.message || "Could not load notifications.");
         return null;
       } finally {
-        if (!quiet) setLoading(false);
+        if (!quiet && mountedRef.current) setLoading(false);
       }
     })();
 
@@ -102,6 +109,7 @@ export default function NotificationsBell({ classic = false }) {
   }
 
   useEffect(() => {
+    mountedRef.current = true;
     // Discard notification previews saved by older versions. They were not
     // account-scoped and should not survive a user switch on a shared phone.
     try { window.sessionStorage.removeItem("ops.notifications.bell-cache.v1"); } catch {}
@@ -116,6 +124,7 @@ export default function NotificationsBell({ classic = false }) {
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("focus", onVisible);
     return () => {
+      mountedRef.current = false;
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("focus", onVisible);
@@ -168,6 +177,7 @@ export default function NotificationsBell({ classic = false }) {
   async function markRead(item) {
     const id = notificationText(item?.id);
     if (!id || item?.read) return;
+    mutationEpochRef.current += 1;
     const nextItems = items.map((row) => String(row?.id) === id ? { ...row, read: true } : row);
     const nextUnread = Math.max(0, unreadCount - 1);
     setItems(nextItems);
@@ -178,12 +188,14 @@ export default function NotificationsBell({ classic = false }) {
         body: JSON.stringify({ id }),
       });
     } catch {
-      load({ quiet: true });
+      // Force re-read: the optimistic update may have failed.
+      load({ quiet: true, force: true });
     }
   }
 
   async function markAllRead() {
     if (!unreadCount) return;
+    mutationEpochRef.current += 1;
     const previous = items;
     const previousCount = unreadCount;
     const nextItems = items.map((item) => ({ ...item, read: true }));

@@ -188,23 +188,28 @@ export async function sendPushToMember(memberId, payload = {}) {
   let sent = 0;
   let expired = 0;
   let firstFailure = null;
-  for (const subscription of subscriptions) {
-    try {
-      await webpush.sendNotification(subscription, message);
-      sent += 1;
-    } catch (error) {
-      const status = Number(error?.statusCode || error?.status) || 0;
-      if (status === 404 || status === 410) {
-        expired += 1;
-        await removePushSubscription(id, subscription.endpoint).catch(() => undefined);
-      } else {
-        if (!firstFailure) firstFailure = {
-          code: status === 401 || status === 403 ? "push-authorization-failed" : "push-provider-error",
-          status,
-        };
-        console.warn("[next-push] send failed:", status || "unknown", error?.message || error);
+  // Bound concurrent provider requests to avoid a 20-device account keeping
+  // an entire notification worker waiting on sequential push round trips.
+  // Four at a time keeps bursts controlled while preserving result semantics.
+  for (let offset = 0; offset < subscriptions.length; offset += 4) {
+    await Promise.all(subscriptions.slice(offset, offset + 4).map(async (subscription) => {
+      try {
+        await webpush.sendNotification(subscription, message);
+        sent += 1;
+      } catch (error) {
+        const status = Number(error?.statusCode || error?.status) || 0;
+        if (status === 404 || status === 410) {
+          expired += 1;
+          await removePushSubscription(id, subscription.endpoint).catch(() => undefined);
+        } else {
+          if (!firstFailure) firstFailure = {
+            code: status === 401 || status === 403 ? "push-authorization-failed" : "push-provider-error",
+            status,
+          };
+          console.warn("[next-push] send failed:", status || "unknown", error?.message || error);
+        }
       }
-    }
+    }));
   }
   return {
     ok: sent > 0,
