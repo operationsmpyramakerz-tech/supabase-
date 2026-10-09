@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { isSupabaseConfigured } from "../../../../lib/supabase-rest";
+import { validateVapidSettings } from "../../../../lib/push-vapid-config";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -15,7 +16,7 @@ export async function GET() {
   );
   const sessionSecretConfigured = configured("SESSION_SECRET");
   const supabaseConfigured = isSupabaseConfigured();
-  const pushConfigured = configured("VAPID_PUBLIC_KEY") && configured("VAPID_PRIVATE_KEY");
+  const pushConfigured = validateVapidSettings().enabled;
   const cronProtected = configured("CRON_SECRET");
   return NextResponse.json(
     {

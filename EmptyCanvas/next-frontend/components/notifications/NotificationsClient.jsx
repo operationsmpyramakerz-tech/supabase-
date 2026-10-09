@@ -48,11 +48,46 @@ function urlBase64ToUint8Array(base64String) {
   return Uint8Array.from([...rawData].map((character) => character.charCodeAt(0)));
 }
 
+// Do not wait for serviceWorker.ready before attempting registration: on a new
+// installation it may never resolve unless someone registers the worker first.
+async function activePushWorker() {
+  const container = navigator.serviceWorker;
+  let registration = await container.getRegistration("/");
+  if (!registration) registration = await container.register("/service-worker.js", { scope: "/" });
+  let timer;
+  try {
+    return await Promise.race([
+      container.ready,
+      new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("Service Worker did not become ready. Refresh the PWA and try again.")), 12000); }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function matchesVapidKey(subscription, publicKey) {
+  const stored = subscription?.options?.applicationServerKey;
+  if (!stored) return true; // Some browsers do not expose this field.
+  const expected = urlBase64ToUint8Array(publicKey);
+  const actual = new Uint8Array(stored);
+  return actual.length === expected.length && actual.every((byte, index) => byte === expected[index]);
+}
+
+function pushFailureMessage(push) {
+  if (push?.code === "missing-public-key" || push?.code === "missing-private-key" || push?.code === "missing-subject") return push.error;
+  if (push?.code === "mismatched-key-pair" || push?.code?.startsWith("invalid-")) return push.error;
+  if (push?.code === "push-authorization-failed" || push?.code === "expired-subscriptions") return push.error;
+  if (push?.error === "No subscriptions") return "Enable Push on this device first";
+  if (push?.error === "Subscriptions unavailable") return "Could not load device subscriptions";
+  return push?.error || "";
+}
+
 function PushSettings() {
   const [status, setStatus] = useState("checking");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [publicKey, setPublicKey] = useState("");
+  const [serverIssue, setServerIssue] = useState("");
 
   async function inspect() {
     if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) {
@@ -63,6 +98,7 @@ function PushSettings() {
       const keyPayload = await requestJson("/next/api/push/vapid-public-key");
       const key = notificationText(keyPayload?.publicKey);
       setPublicKey(key);
+      setServerIssue(notificationText(keyPayload?.message));
       if (!keyPayload?.enabled || !key) {
         setStatus("server-disabled");
         return;
@@ -71,8 +107,12 @@ function PushSettings() {
         setStatus("blocked");
         return;
       }
-      const registration = await navigator.serviceWorker.ready.catch(() => null);
-      const subscription = registration ? await registration.pushManager.getSubscription() : null;
+      const registration = await activePushWorker();
+      const subscription = await registration.pushManager.getSubscription();
+      if (subscription && !matchesVapidKey(subscription, key)) {
+        setStatus("outdated");
+        return;
+      }
       // A shared device can change accounts. Rebind its existing endpoint to
       // the currently authenticated member whenever the settings are opened.
       if (subscription && Notification.permission === "granted") {
@@ -81,6 +121,7 @@ function PushSettings() {
         });
       }
       setStatus(subscription ? "on" : "off");
+      setMessage("");
     } catch (error) {
       setMessage(error.message || "Push status could not be checked.");
       setStatus("error");
@@ -99,9 +140,17 @@ function PushSettings() {
         setStatus(permission === "denied" ? "blocked" : "off");
         throw new Error("Browser notification permission was not granted.");
       }
-      let registration = await navigator.serviceWorker.ready.catch(() => null);
-      if (!registration) registration = await navigator.serviceWorker.register("/service-worker.js", { scope: "/" });
+      const registration = await activePushWorker();
       let subscription = await registration.pushManager.getSubscription();
+      if (subscription && !matchesVapidKey(subscription, publicKey)) {
+        // An old browser subscription is still bound to an earlier VAPID pair.
+        // Remove the stale endpoint before registering the replacement.
+        await requestJson("/next/api/push/unsubscribe", {
+          method: "POST", body: JSON.stringify({ endpoint: subscription.endpoint }),
+        });
+        await subscription.unsubscribe();
+        subscription = null;
+      }
       if (!subscription) {
         subscription = await registration.pushManager.subscribe({
           userVisibleOnly: true,
@@ -125,7 +174,7 @@ function PushSettings() {
     setBusy(true);
     setMessage("");
     try {
-      const registration = await navigator.serviceWorker.ready;
+      const registration = await activePushWorker();
       const subscription = await registration.pushManager.getSubscription();
       if (subscription) {
         await requestJson("/next/api/push/unsubscribe", {
@@ -146,7 +195,8 @@ function PushSettings() {
   const labels = {
     checking: ["Checking", "Reviewing this browser and server configuration."],
     unsupported: ["Not supported", "This browser or device does not support web push notifications."],
-    "server-disabled": ["Server setup required", "VAPID keys are not configured in the ERP environment."],
+    "server-disabled": ["Server setup required", serverIssue || "Review VAPID settings in Vercel."],
+    outdated: ["Reconnect this device", "This browser uses an old VAPID key. Reconnect to use the current server credentials."],
     blocked: ["Blocked by browser", "Allow notifications in the browser settings, then refresh this page."],
     on: ["Enabled", "This device can receive ERP push updates."],
     off: ["Disabled", "Enable push to receive updates outside the open browser tab."],
@@ -158,9 +208,9 @@ function PushSettings() {
     <article className={`next-notifications-push is-${status}`}>
       <div className="next-notifications-push__mark">PS</div>
       <div><span>Device notifications</span><h3>{title}</h3><p>{description}</p>{message ? <small>{message}</small> : null}</div>
-      {status === "off" ? <button type="button" onClick={enable} disabled={busy}>{busy ? "Enabling…" : "Enable push"}</button> : null}
+      {["off", "outdated"].includes(status) ? <button type="button" onClick={enable} disabled={busy}>{busy ? "Connecting…" : status === "outdated" ? "Reconnect push" : "Enable push"}</button> : null}
       {status === "on" ? <button type="button" className="is-danger" onClick={disable} disabled={busy}>{busy ? "Disabling…" : "Disable push"}</button> : null}
-      {["checking", "error"].includes(status) ? <button type="button" onClick={inspect} disabled={busy}>Check again</button> : null}
+      {["checking", "error", "server-disabled", "blocked"].includes(status) ? <button type="button" onClick={inspect} disabled={busy}>Check again</button> : null}
     </article>
   );
 }
@@ -259,13 +309,7 @@ export default function NotificationsClient({ initialItems = [], initialUnreadCo
         "disabled-by-user": "Email is disabled in your System notification preferences",
       };
       const emailDetail = emailReasons[result.email?.reason] || result.email?.reason || "";
-      const pushReason = result.push?.error === "No subscriptions"
-        ? "Enable Push on this device first"
-        : result.push?.error === "Push disabled"
-          ? "Check VAPID keys in Vercel"
-          : result.push?.error === "Subscriptions unavailable"
-            ? "Could not load device subscriptions"
-            : result.push?.error || "";
+      const pushReason = pushFailureMessage(result.push);
       setTestResult(`Test complete · In-App: ${result.inAppSaved ? "saved" : "disabled"} · Push: ${label(result.push?.sent > 0, result.push?.skipped)}${!result.push?.skipped && !result.push?.ok && pushReason ? ` (${pushReason})` : ""} · Email: ${emailLabel}${emailDetail ? ` (${emailDetail})` : ""}`);
       await refresh();
     } catch (error) { setTestResult(error.message || "Notification test failed."); }
@@ -332,14 +376,14 @@ export default function NotificationsClient({ initialItems = [], initialUnreadCo
       {bootstrapWarnings.length ? <div className="next-notifications-warning">Some startup resources were delayed. The page remains usable and can be refreshed.</div> : null}
       {message ? <div className="next-notifications-warning is-error">{message}<button type="button" onClick={() => setMessage("")}>×</button></div> : null}
 
+      <PushSettings />
+
       <div className="next-notifications-stats">
         <StatCard label="Recent updates" value={counts.all} note="Saved in your notification history" tone="primary" />
         <StatCard label="Unread" value={unreadCount || counts.unread} note="Requires your attention" tone={unreadCount ? "warning" : "success"} />
         <StatCard label="Today" value={counts.today} note="Updates received since midnight" tone="success" />
         <StatCard label="This week" value={counts.today + counts.week} note="Monday through today" />
       </div>
-
-      <PushSettings />
 
       <article className="next-notifications-workspace">
         <header>

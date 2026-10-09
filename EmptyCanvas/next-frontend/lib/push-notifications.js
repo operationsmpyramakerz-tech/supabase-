@@ -2,6 +2,7 @@ import "server-only";
 
 import crypto from "node:crypto";
 import webpush from "web-push";
+import { validateVapidSettings } from "./push-vapid-config";
 import { deleteById, insert, select, selectById, updateById } from "./supabase-rest";
 
 function text(value) {
@@ -22,7 +23,7 @@ function privateKey() {
 }
 
 function subject() {
-  return text(process.env.VAPID_SUBJECT) || "mailto:admin@example.com";
+  return text(process.env.VAPID_SUBJECT);
 }
 
 function rowId(memberId, endpoint) {
@@ -71,7 +72,8 @@ function configureWebPush() {
   if (configuredSignature === signature) return configuredOk;
   configuredSignature = signature;
   configuredOk = false;
-  if (!pub || !priv) return false;
+  const validation = validateVapidSettings();
+  if (!validation.enabled) return false;
   try {
     webpush.setVapidDetails(sub, pub, priv);
     configuredOk = true;
@@ -83,10 +85,14 @@ function configureWebPush() {
 
 export function pushConfiguration() {
   const pub = publicKey();
+  const validation = validateVapidSettings();
+  const enabled = validation.enabled && configureWebPush();
   return {
     success: true,
-    enabled: Boolean(pub && privateKey() && configureWebPush()),
-    publicKey: pub,
+    enabled,
+    publicKey: enabled ? pub : "",
+    code: enabled ? "ready" : validation.enabled ? "initialization-failed" : validation.code,
+    message: enabled ? validation.message : validation.enabled ? "Web Push could not initialize; inspect Vercel runtime logs." : validation.message,
   };
 }
 
@@ -164,7 +170,10 @@ export async function removePushSubscription(memberId, endpoint) {
 export async function sendPushToMember(memberId, payload = {}) {
   const id = text(memberId);
   if (!id) return { ok: false, sent: 0, error: "User not found" };
-  if (!configureWebPush()) return { ok: false, sent: 0, error: "Push disabled" };
+  if (!configureWebPush()) {
+    const configuration = pushConfiguration();
+    return { ok: false, sent: 0, error: configuration.message, code: configuration.code };
+  }
 
   let subscriptions = [];
   try {
@@ -178,6 +187,7 @@ export async function sendPushToMember(memberId, payload = {}) {
   const message = JSON.stringify(payload && typeof payload === "object" ? payload : {});
   let sent = 0;
   let expired = 0;
+  let firstFailure = null;
   for (const subscription of subscriptions) {
     try {
       await webpush.sendNotification(subscription, message);
@@ -188,9 +198,23 @@ export async function sendPushToMember(memberId, payload = {}) {
         expired += 1;
         await removePushSubscription(id, subscription.endpoint).catch(() => undefined);
       } else {
+        if (!firstFailure) firstFailure = {
+          code: status === 401 || status === 403 ? "push-authorization-failed" : "push-provider-error",
+          status,
+        };
         console.warn("[next-push] send failed:", status || "unknown", error?.message || error);
       }
     }
   }
-  return { ok: sent > 0, sent, expired, error: sent > 0 ? "" : "Push delivery failed" };
+  return {
+    ok: sent > 0,
+    sent,
+    expired,
+    code: sent > 0 ? "ready" : expired > 0 ? "expired-subscriptions" : firstFailure?.code || "delivery-failed",
+    error: sent > 0 ? "" : expired > 0
+      ? "Device subscription expired. Re-enable Push on this phone."
+      : firstFailure?.code === "push-authorization-failed"
+        ? "Push provider rejected the subscription (401/403). Reconnect this device's Push subscription."
+        : firstFailure?.status ? `Push service returned HTTP ${firstFailure.status}.` : "Push delivery failed",
+  };
 }
