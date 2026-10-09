@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { navigateWithinApp } from "../../lib/client-navigation";
+import { deliveryLabel } from "../../lib/notification-delivery-utils";
 import "./notifications-center.css";
 import {
   groupNotificationRows,
@@ -219,6 +220,73 @@ function PushSettings() {
 
 function StatCard({ label, value, note, tone = "neutral" }) {
   return <article className={`next-notifications-stat is-${tone}`}><span>{label}</span><strong>{value}</strong><small>{note}</small></article>;
+}
+
+function DeliveryHistory() {
+  const [history, setHistory] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function load() {
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const result = await requestJson("/next/api/notifications/delivery");
+      setHistory(result);
+    } catch (failure) {
+      setError(failure.message || "Delivery records are temporarily unavailable.");
+    } finally { setBusy(false); }
+  }
+
+  return (
+    <details className="next-notifications-device next-notifications-delivery" onToggle={event => { if (event.currentTarget.open && !history && !busy) load(); }}>
+      <summary><span>Delivery history</span><small>In-App · Push · Email · Last 30 events</small></summary>
+      <div className="next-notifications-device__body">
+        <div className="next-notifications-delivery__head">
+          <p>Private delivery attempts for your account. Provider acceptance does not confirm that a message was read or received on a device.</p>
+          <button type="button" onClick={load} disabled={busy}>{busy ? "Loading…" : "Refresh history"}</button>
+        </div>
+        {error ? <p className="next-notifications-delivery__error" role="alert">{error}</p> : null}
+        {history && !history.installed ? <p className="next-notifications-delivery__empty">Delivery monitoring isn't installed yet. Apply the Phase 5 SQL migration, then try again. Existing notifications will continue working.</p> : null}
+        {history?.installed ? (
+          <>
+            <div className="next-notifications-delivery__counts">
+              <span><strong>{history.totals?.events || 0}</strong> Recent events</span>
+              <span><strong>{history.totals?.accepted || 0}</strong> Processed</span>
+              <span><strong>{history.totals?.retrying || 0}</strong> In progress</span>
+              <span><strong>{history.totals?.failed || 0}</strong> Exhausted retries</span>
+            </div>
+            {history.rows?.length ? (
+              <div className="next-notifications-delivery__list">
+                {history.rows.map(entry => (
+                  <article key={entry.id} className="next-notifications-delivery__row">
+                    <div className="next-notifications-delivery__title">
+                      <div><span>{entry.category}</span><h3>{entry.title}</h3></div>
+                      <time title={notificationDateTime(entry.at)}>{notificationTimeAgo(entry.at)}</time>
+                    </div>
+                    <div className="next-notifications-delivery__channels">
+                      {[["in_app", "In-App"], ["push", "Push"], ["email", "Email"]].map(([key, label]) => {
+                        const attempt = entry.channels?.[key];
+                        const outcome = attempt?.outcome || "pending";
+                        return <div key={key} className={`next-notifications-delivery__channel is-${outcome}`}>
+                          <strong>{label}</strong>
+                          <span>{attempt ? deliveryLabel(key, outcome) : "Not recorded"}</span>
+                          {attempt?.detail ? <small>{attempt.detail}</small> : null}
+                          {attempt?.provider ? <small>{attempt.provider}</small> : null}
+                        </div>;
+                      })}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : <p className="next-notifications-delivery__empty">No delivery events yet. New automated ERP events will appear here after they are processed.</p>}
+            <p className="next-notifications-delivery__foot">Tracking begins after installing Phase 5. Attempts are retained for up to 90 days. Only your events are shown.</p>
+          </>
+        ) : null}
+      </div>
+    </details>
+  );
 }
 
 export default function NotificationsClient({ initialItems = [], initialUnreadCount = 0, source = "", bootstrapWarnings = [] }) {
@@ -441,6 +509,8 @@ export default function NotificationsClient({ initialItems = [], initialUnreadCo
           }) : <div className="next-notifications-empty"><span>✓</span><h3>No updates found</h3><p>Try changing your filters or check for new activity.</p><button type="button" onClick={resetFilters}>Show all</button></div>}
         </div>
       </article>
+
+      <DeliveryHistory />
 
       <details className="next-notifications-device">
         <summary><span>Device & test tools</span><small>Push settings · Test delivery · Preferences</small></summary>

@@ -6,6 +6,7 @@ import { sendNotificationEmail } from "./notification-email";
 import { sendPushToMember } from "./push-notifications";
 import { saveNotificationForMember } from "./notifications-data";
 import { digestAvailable, eligibleForDigest, enqueueDigestEvent } from "./notification-digest";
+import { logNotificationDelivery } from "./notification-delivery-log";
 
 // Event records are inserted atomically by Supabase triggers. The RPC claims
 // them with row locks and a temporary lease, preventing parallel cron/route
@@ -58,18 +59,39 @@ async function deliver(event) {
     ts: Date.parse(event.created_at) || Date.now(),
     read: false,
   };
+  const audit = (channel, outcome, reason = "", provider = "") => logNotificationDelivery({
+    eventId: event.id, recipientId: memberId, channel, outcome, reason, provider,
+  });
   if (!event.in_app_done) {
-    if (allowsChannel(settings, type, "in_app")) await saveNotificationForMember(memberId, notif);
+    if (allowsChannel(settings, type, "in_app")) {
+      try {
+        await saveNotificationForMember(memberId, notif);
+        await audit("in_app", "stored", "", "in-app");
+      } catch (error) {
+        await audit("in_app", "retrying", "Delivery could not be completed");
+        throw error;
+      }
+    } else await audit("in_app", "skipped", "preferences disabled");
     await patchClaim(event, { in_app_done: true });
   }
   let pushRetryError = "";
   if (!event.push_done) {
     let pushCompleted = true;
-    if (allowsChannel(settings, type, "push") && !isQuietHour(settings)) {
-      const pushed = await sendPushToMember(memberId, {
-        title: notif.title, body: notif.body, url: notif.url,
-        tag: `erp-${event.id}`,
-      });
+    if (!allowsChannel(settings, type, "push")) {
+      await audit("push", "skipped", "preferences disabled");
+    } else if (isQuietHour(settings)) {
+      await audit("push", "skipped", "quiet hours");
+    } else {
+      let pushed;
+      try {
+        pushed = await sendPushToMember(memberId, {
+          title: notif.title, body: notif.body, url: notif.url,
+          tag: `erp-${event.id}`,
+        });
+      } catch (error) {
+        await audit("push", "retrying", "push provider error");
+        pushed = { ok: false, error: "Push provider error", code: "push-provider-error" };
+      }
       // No registered device is a permanent skip for this event. Provider or
       // subscription-query failures are retried later, without blocking email.
       if (!pushed.ok) {
@@ -77,8 +99,11 @@ async function deliver(event) {
         if (!["No subscriptions"].includes(pushed.error) && !pushed.expired) {
           pushRetryError = safe(pushed.error, 100) || "Push delivery failed";
           pushCompleted = false;
+          if (pushed.error !== "Push provider error") await audit("push", "retrying", pushed.code || pushed.error);
+        } else {
+          await audit("push", "skipped", pushed.error);
         }
-      }
+      } else await audit("push", "accepted", "", "web-push");
     }
     if (pushCompleted) await patchClaim(event, { push_done: true });
   }
@@ -87,25 +112,35 @@ async function deliver(event) {
       // Persist digest eligibility before marking email as complete; a retry
       // cannot lose the email or enqueue it twice (event_id is unique).
       await enqueueDigestEvent(event);
+      await audit("email", "queued", "digest scheduled", "digest");
     } else if (allowsChannel(settings, type, "email")) {
       const rows = await select(process.env.SUPABASE_TEAM_MEMBERS_TABLE || "team_members", {
         select: "id,name,email", id: `eq.${memberId}`, limit: "1",
       }, { profileName: "notifications.events.recipient" });
       const member = rows?.[0];
       if (member?.email) {
-        const result = await sendNotificationEmail({
-          to: member.email, name: member.name,
-          id: `erp-event-${event.id}-${memberId}`,
-          title: notif.title, body: notif.body, url: notif.url,
-          category: type.charAt(0).toUpperCase() + type.slice(1),
-        });
+        let result;
+        try {
+          result = await sendNotificationEmail({
+            to: member.email, name: member.name,
+            id: `erp-event-${event.id}-${memberId}`,
+            title: notif.title, body: notif.body, url: notif.url,
+            category: type.charAt(0).toUpperCase() + type.slice(1),
+          });
+        } catch {
+          await audit("email", "retrying", "email send failed");
+          throw new Error("Email provider request failed");
+        }
         if (!result.ok) {
+          await audit("email", "retrying", result.reason || "email send failed", result.provider);
           throw new Error(`Email not accepted: ${safe(result.reason, 100) || "delivery failed"}`);
         }
+        await audit("email", "accepted", "", result.provider);
       } else {
         console.info("[notification-event] Member has no registered email");
+        await audit("email", "skipped", "no email address");
       }
-    }
+    } else await audit("email", "skipped", "preferences disabled");
     await patchClaim(event, { email_done: true });
   }
   if (pushRetryError) throw new Error(`Push not accepted: ${pushRetryError}`);

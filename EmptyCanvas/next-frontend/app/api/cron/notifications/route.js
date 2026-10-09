@@ -45,6 +45,13 @@ export async function GET(request) {
       console.warn("[notifications] Digest worker deferred:", error?.message);
       digest = { installed: true, error: "Digest temporarily unavailable" };
     }
+    // Optional Phase-5 history retention: older delivery metadata is purged.
+    // Missing migration never disrupts notifications, reminders or digests.
+    try {
+      await supabaseRequest("/rpc/prune_erp_notification_delivery_attempts", {
+        method: "POST", body: {}, profileName: "notifications.delivery.retention",
+      });
+    } catch { /* Phase 5 migration may not yet be installed. */ }
     const scan = await runNotificationsScan({ force: true });
     return noStore({ ...scan, queue, reminders, digest });
   } catch (error) {

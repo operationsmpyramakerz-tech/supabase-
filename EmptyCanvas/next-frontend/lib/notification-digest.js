@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { select, supabaseRequest } from "./supabase-rest";
 import { allowsChannel, getNotificationPreferences, normalizeNotificationPreferences, notificationCategory } from "./notification-preferences";
 import { sendNotificationDigestEmail } from "./notification-email";
+import { logNotificationDelivery } from "./notification-delivery-log";
 
 const TABLE = "erp_notification_digest_items";
 const clean = (value, length = 500) => String(value ?? "").trim().slice(0, length);
@@ -74,12 +75,19 @@ export async function dispatchNotificationDigests() {
   }
   let sent = 0, skipped = 0, deferred = 0;
   async function sendOne(id, items) {
+    async function audit(itemsToLog, outcome, reason = "") {
+      await Promise.all(itemsToLog.map(row => logNotificationDelivery({
+        eventId: row.event_id, recipientId: id, channel: "email", outcome,
+        reason, provider: "digest",
+      })));
+    }
     try {
       const { settings } = await getNotificationPreferences(id);
       const allowed = settings.digest !== "off" && items.filter(row => allowsChannel(settings, row.category, "email"));
       // Recheck preferences at delivery time: users can revoke consent after enqueue.
       if (!allowed || !allowed.length) {
         await markItems(items, { sent_at: new Date().toISOString(), claim_token: null, claim_until: null, last_error: null });
+        await audit(items, "skipped", "preferences disabled");
         return "skipped";
       }
       const team = await select(process.env.SUPABASE_TEAM_MEMBERS_TABLE || "team_members", {
@@ -88,6 +96,7 @@ export async function dispatchNotificationDigests() {
       const member = team?.[0];
       if (!member?.email) {
         await markItems(items, { sent_at: new Date().toISOString(), claim_token: null, claim_until: null, last_error: "No email address" });
+        await audit(items, "skipped", "no email address");
         return "skipped";
       }
       const result = await sendNotificationDigestEmail({ to: member.email, name: member.name,
@@ -96,6 +105,8 @@ export async function dispatchNotificationDigests() {
       });
       if (!result.ok) throw new Error(`Digest email not accepted: ${clean(result.reason, 80)}`);
       await markItems(items, { sent_at: new Date().toISOString(), claim_token: null, claim_until: null, last_error: null });
+      await audit(allowed, "accepted");
+      await audit(items.filter(row => !allowed.includes(row)), "skipped", "preferences disabled");
       return "sent";
     } catch (error) {
       // Retry after claim expiry. An SMTP timeout can be ambiguous; exactly-once
@@ -103,6 +114,7 @@ export async function dispatchNotificationDigests() {
       console.warn("[notification-digest] Delivery deferred:", clean(error?.message, 110));
       try { await markItems(items, { claim_token: null, claim_until: null, last_error: clean(error?.message, 180) }); }
       catch { /* Lease expiry will unblock the next attempt. */ }
+      await audit(items, "retrying", "digest delivery failed");
       return "deferred";
     }
   }
