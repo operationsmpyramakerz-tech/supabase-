@@ -729,3 +729,406 @@ html[data-theme="dark"] .next-notifications-filter-sheet__footer .is-secondary{b
 html[data-theme="dark"] .next-notifications-search,
 html[data-theme="dark"] .next-notifications-filter-button{background:#12161d!important;border-color:#2b313b!important;color:#e5e7eb!important}
 
+/* ==========================================================================
+   Notifications v6 — aligned controls + framed cards + grouped cards
+   2026-10-09
+   ========================================================================== */
+
+/* ---------- Top controls ---------- */
+.next-notifications-appfeed .next-notifications-commandbar{
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr) auto!important;
+  align-items:center!important;
+  column-gap:12px!important;
+  row-gap:8px!important;
+  width:100%!important;
+  padding:8px 0 16px!important;
+}
+.next-notifications-appfeed .next-notifications-commandbar__status{
+  min-width:0!important;
+  justify-self:start!important;
+}
+.next-notifications-appfeed .next-notifications-commandbar__actions{
+  display:flex!important;
+  align-items:center!important;
+  justify-content:flex-end!important;
+  gap:8px!important;
+  flex-wrap:nowrap!important;
+}
+.next-notifications-appfeed .next-notifications-commandbar__actions button{
+  height:42px!important;
+  min-height:42px!important;
+  margin:0!important;
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  line-height:1!important;
+}
+.next-notifications-appfeed .next-notifications-commandbar__actions button.is-icon{
+  width:42px!important;
+  min-width:42px!important;
+  flex:0 0 42px!important;
+}
+.next-notifications-appfeed .next-notifications-commandbar__actions button:not(.is-icon){
+  min-width:118px!important;
+  white-space:nowrap!important;
+}
+
+/* Search and filter ALWAYS stay on the same line. */
+.next-notifications-appfeed .next-notifications-searchrow{
+  display:flex!important;
+  align-items:stretch!important;
+  justify-content:stretch!important;
+  gap:9px!important;
+  width:100%!important;
+  min-width:0!important;
+  margin:0 0 12px!important;
+}
+.next-notifications-appfeed .next-notifications-search{
+  flex:1 1 0!important;
+  width:0!important;
+  min-width:0!important;
+  height:50px!important;
+  margin:0!important;
+}
+.next-notifications-appfeed .next-notifications-filter-button{
+  flex:0 0 50px!important;
+  width:50px!important;
+  min-width:50px!important;
+  height:50px!important;
+  margin:0!important;
+  padding:0!important;
+  display:grid!important;
+  place-items:center!important;
+  border-radius:16px!important;
+}
+.next-notifications-appfeed .next-notifications-filter-button>span{display:none!important}
+.next-notifications-appfeed .next-notifications-filter-button svg{
+  display:block!important;
+  width:20px!important;
+  height:20px!important;
+  margin:auto!important;
+  flex:none!important;
+}
+.next-notifications-appfeed .next-notifications-filter-button b{
+  position:absolute!important;
+  top:-5px!important;
+  right:-5px!important;
+}
+
+.next-notifications-appfeed .next-notifications-quickfilters{
+  display:flex!important;
+  align-items:center!important;
+  justify-content:flex-start!important;
+  gap:8px!important;
+  width:100%!important;
+  margin:0 0 24px!important;
+}
+.next-notifications-appfeed .next-notifications-quickfilters button{
+  height:38px!important;
+  min-height:38px!important;
+  margin:0!important;
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  gap:7px!important;
+  line-height:1!important;
+}
+.next-notifications-appfeed .next-notifications-quickfilters button b{
+  display:grid!important;
+  place-items:center!important;
+  line-height:1!important;
+}
+
+/* ---------- Section cards ---------- */
+.next-notifications-appfeed .next-notifications-feed{
+  gap:30px!important;
+}
+.next-notifications-appfeed .next-notifications-section{
+  gap:10px!important;
+}
+.next-notifications-appfeed .next-notifications-list{
+  display:grid!important;
+  gap:10px!important;
+}
+
+/* Every notification has a clear standalone frame. */
+.next-notifications-appfeed .next-notifications-row{
+  position:relative!important;
+  display:grid!important;
+  grid-template-columns:52px minmax(0,1fr) 30px!important;
+  align-items:center!important;
+  gap:12px!important;
+  min-height:82px!important;
+  padding:13px 14px!important;
+  border:1px solid #e7eaf0!important;
+  border-radius:19px!important;
+  background:#fff!important;
+  box-shadow:0 7px 22px rgba(15,23,42,.055)!important;
+  overflow:hidden!important;
+}
+.next-notifications-appfeed .next-notifications-row:hover{
+  border-color:#dce1e8!important;
+  box-shadow:0 10px 28px rgba(15,23,42,.075)!important;
+}
+.next-notifications-appfeed .next-notifications-row.is-unread{
+  border-color:#fed7aa!important;
+  background:linear-gradient(110deg,#fffaf5 0%,#fff 58%)!important;
+  box-shadow:0 8px 24px rgba(249,115,22,.07)!important;
+}
+.next-notifications-appfeed .next-notifications-row.is-unread::before{
+  content:""!important;
+  position:absolute!important;
+  left:0!important;
+  top:18px!important;
+  bottom:18px!important;
+  width:3px!important;
+  border-radius:0 999px 999px 0!important;
+  background:#f97316!important;
+}
+
+/* Grouped notifications are a visually distinct framed card. */
+.next-notifications-appfeed .next-notifications-row.is-grouped{
+  border-color:#d9dee7!important;
+  background:linear-gradient(145deg,#ffffff 0%,#fafbfc 100%)!important;
+  box-shadow:0 9px 26px rgba(15,23,42,.065)!important;
+}
+.next-notifications-appfeed .next-notifications-row.is-grouped::after{
+  content:"GROUPED"!important;
+  position:absolute!important;
+  top:9px!important;
+  right:12px!important;
+  height:20px!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  padding:0 7px!important;
+  border-radius:999px!important;
+  background:#eef2f6!important;
+  color:#7b8493!important;
+  font-size:7px!important;
+  font-weight:950!important;
+  letter-spacing:.08em!important;
+}
+.next-notifications-appfeed .next-notifications-row.is-grouped.is-unread{
+  border-color:#fdba74!important;
+  background:linear-gradient(145deg,#fffaf5 0%,#fff 72%)!important;
+}
+
+/* ---------- Icon label alignment ---------- */
+.next-notifications-appfeed .next-notif-icon{
+  width:48px!important;
+  height:48px!important;
+  min-width:48px!important;
+  padding:0!important;
+  margin:0!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  place-items:unset!important;
+  line-height:0!important;
+  align-self:center!important;
+  justify-self:center!important;
+  border-radius:16px!important;
+}
+.next-notifications-appfeed .next-notif-icon svg{
+  display:block!important;
+  width:22px!important;
+  height:22px!important;
+  margin:0!important;
+  flex:0 0 22px!important;
+  transform:none!important;
+}
+.next-notifications-appfeed .next-notif-icon>i{
+  right:-2px!important;
+  bottom:-2px!important;
+}
+
+/* Meta labels are centered as well. */
+.next-notifications-appfeed .next-notifications-row__meta{
+  display:flex!important;
+  align-items:center!important;
+  flex-wrap:wrap!important;
+  gap:6px!important;
+}
+.next-notifications-appfeed .next-notifications-row__meta>span,
+.next-notifications-appfeed .next-notifications-row__meta>button{
+  min-height:22px!important;
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  padding:0 8px!important;
+  line-height:1!important;
+  text-align:center!important;
+}
+
+/* Keep the open arrow centered vertically in the card. */
+.next-notifications-appfeed .next-notifications-row__open{
+  align-self:center!important;
+  justify-self:center!important;
+  margin:0!important;
+  line-height:1!important;
+}
+
+/* ---------- Expanded grouped updates ---------- */
+.next-notifications-appfeed .next-notifications-group-children{
+  grid-column:1/-1!important;
+  display:grid!important;
+  gap:7px!important;
+  margin-top:7px!important;
+  padding-top:9px!important;
+  border-top:1px solid #edf0f3!important;
+}
+.next-notifications-appfeed .next-notifications-group-child{
+  width:100%!important;
+  min-height:52px!important;
+  display:grid!important;
+  grid-template-columns:28px minmax(0,1fr) 22px!important;
+  align-items:center!important;
+  gap:9px!important;
+  padding:8px 9px!important;
+  border:1px solid #e6e9ee!important;
+  border-radius:13px!important;
+  background:#fff!important;
+  color:#344054!important;
+  text-align:left!important;
+  font:inherit!important;
+  cursor:pointer!important;
+  box-shadow:0 3px 10px rgba(15,23,42,.035)!important;
+}
+.next-notifications-appfeed .next-notifications-group-child.is-unread{
+  border-color:#fed7aa!important;
+  background:#fffaf5!important;
+}
+.next-notifications-group-child__index{
+  width:28px!important;
+  height:28px!important;
+  display:grid!important;
+  place-items:center!important;
+  border-radius:9px!important;
+  background:#f2f4f7!important;
+  color:#667085!important;
+  font-size:9px!important;
+  font-weight:950!important;
+}
+.next-notifications-group-child.is-unread .next-notifications-group-child__index{
+  background:#ffedd5!important;
+  color:#c2410c!important;
+}
+.next-notifications-group-child__copy{
+  min-width:0!important;
+  display:grid!important;
+  gap:2px!important;
+}
+.next-notifications-group-child__copy strong{
+  overflow:hidden!important;
+  text-overflow:ellipsis!important;
+  white-space:nowrap!important;
+  color:#111827!important;
+  font-size:10px!important;
+  font-weight:900!important;
+}
+.next-notifications-group-child__copy small{
+  overflow:hidden!important;
+  text-overflow:ellipsis!important;
+  white-space:nowrap!important;
+  color:#98a2b3!important;
+  font-size:8.5px!important;
+  font-weight:700!important;
+}
+.next-notifications-group-child__arrow{
+  display:grid!important;
+  place-items:center!important;
+  color:#98a2b3!important;
+  font-size:20px!important;
+}
+
+/* ---------- Mobile ---------- */
+@media(max-width:620px){
+  .next-notifications-appfeed{
+    padding-left:16px!important;
+    padding-right:16px!important;
+  }
+  .next-notifications-appfeed .next-notifications-commandbar{
+    grid-template-columns:minmax(0,1fr) auto!important;
+    gap:8px!important;
+    padding-top:4px!important;
+  }
+  .next-notifications-appfeed .next-notifications-commandbar__actions{
+    gap:6px!important;
+  }
+  .next-notifications-appfeed .next-notifications-commandbar__actions button{
+    height:40px!important;
+    min-height:40px!important;
+  }
+  .next-notifications-appfeed .next-notifications-commandbar__actions button.is-icon{
+    width:40px!important;
+    min-width:40px!important;
+    flex-basis:40px!important;
+  }
+  .next-notifications-appfeed .next-notifications-commandbar__actions button:not(.is-icon){
+    min-width:0!important;
+    padding:0 12px!important;
+  }
+  .next-notifications-appfeed .next-notifications-searchrow{
+    display:flex!important;
+    flex-wrap:nowrap!important;
+  }
+  .next-notifications-appfeed .next-notifications-search{
+    flex:1 1 0!important;
+    width:0!important;
+  }
+  .next-notifications-appfeed .next-notifications-filter-button{
+    flex:0 0 50px!important;
+  }
+  .next-notifications-appfeed .next-notifications-row{
+    grid-template-columns:48px minmax(0,1fr) 24px!important;
+    gap:10px!important;
+    min-height:78px!important;
+    padding:12px!important;
+    border-radius:17px!important;
+  }
+  .next-notifications-appfeed .next-notif-icon{
+    width:46px!important;
+    height:46px!important;
+    min-width:46px!important;
+    border-radius:15px!important;
+  }
+  .next-notifications-appfeed .next-notif-icon svg{
+    width:21px!important;
+    height:21px!important;
+    flex-basis:21px!important;
+  }
+  .next-notifications-appfeed .next-notifications-row.is-grouped::after{
+    top:7px!important;
+    right:9px!important;
+  }
+}
+
+/* Dark mode frames */
+html[data-theme="dark"] .next-notifications-appfeed .next-notifications-row{
+  border-color:#2d3440!important;
+  background:#151a22!important;
+  box-shadow:none!important;
+}
+html[data-theme="dark"] .next-notifications-appfeed .next-notifications-row.is-unread{
+  border-color:rgba(249,115,22,.42)!important;
+  background:linear-gradient(110deg,rgba(249,115,22,.10),#151a22 58%)!important;
+}
+html[data-theme="dark"] .next-notifications-appfeed .next-notifications-row.is-grouped{
+  border-color:#39414d!important;
+  background:linear-gradient(145deg,#171c24,#131820)!important;
+}
+html[data-theme="dark"] .next-notifications-appfeed .next-notifications-row.is-grouped::after{
+  background:#242b35!important;
+  color:#b9c1cc!important;
+}
+html[data-theme="dark"] .next-notifications-appfeed .next-notifications-group-child{
+  border-color:#303741!important;
+  background:#191f28!important;
+  color:#e5e7eb!important;
+  box-shadow:none!important;
+}
+html[data-theme="dark"] .next-notifications-group-child__copy strong{color:#f8fafc!important}
+html[data-theme="dark"] .next-notifications-group-child__index{background:#252c36!important;color:#c7ced8!important}
+

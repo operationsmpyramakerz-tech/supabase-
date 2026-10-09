@@ -550,7 +550,7 @@ export default function NotificationsClient({ initialItems = [], initialUnreadCo
                 const unread = group.items.filter(item => !item.read).length;
                 const target = modernNotificationUrl(first.url);
                 return (
-                  <article className={`next-notifications-row ${unread ? "is-unread" : ""}`} key={group.id}>
+                  <article className={`next-notifications-row${unread ? " is-unread" : ""}${multiple ? " is-grouped" : ""}`} key={group.id}>
                     <button type="button" className={`next-notif-icon is-${tone.key}`} onClick={() => openItem(first)} aria-label={`Open ${notificationText(first.title)}`}>
                       <NotificationGlyph toneKey={tone.key} />
                       {unread ? <i aria-hidden="true" /> : null}
@@ -566,7 +566,20 @@ export default function NotificationsClient({ initialItems = [], initialUnreadCo
                         {multiple ? <button type="button" aria-expanded={expanded} onClick={() => setOpenGroups(prev => expanded ? prev.filter(id => id !== group.id) : [...prev, group.id])}>{group.items.length} updates</button> : null}
                         {unread ? <button type="button" onClick={() => multiple ? markGroupRead(group) : markRead(first)}>{multiple ? "Mark group read" : "Mark read"}</button> : null}
                       </div>
-                      {multiple && expanded ? <div className="next-notifications-group-children">{group.items.map(item => <div key={item.id}><button type="button" onClick={() => openItem(item)}>{notificationTimeAgo(item.ts)} · {item.read ? "Read" : "Unread"} ↗</button></div>)}</div> : null}
+                      {multiple && expanded ? (
+                        <div className="next-notifications-group-children">
+                          {group.items.map((item, index) => (
+                            <button type="button" className={`next-notifications-group-child${item.read ? "" : " is-unread"}`} key={item.id} onClick={() => openItem(item)}>
+                              <span className="next-notifications-group-child__index">{index + 1}</span>
+                              <span className="next-notifications-group-child__copy">
+                                <strong>{notificationText(item.title) || "Notification update"}</strong>
+                                <small>{notificationText(item.body) || "Open this update"} · {notificationTimeAgo(item.ts)}</small>
+                              </span>
+                              <span className="next-notifications-group-child__arrow" aria-hidden="true">›</span>
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
                     {target ? <button type="button" className="next-notifications-row__open" onClick={() => openItem(first)} aria-label="Open notification">›</button> : null}
                   </article>
