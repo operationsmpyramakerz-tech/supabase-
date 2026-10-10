@@ -3,6 +3,8 @@ import "server-only";
 import { performance } from "node:perf_hooks";
 import { buildWorkspaceTrend } from "./home-trend-analytics.mjs";
 import { buildWorkspaceBacklog } from "./home-operational-analytics.mjs";
+import { createLifecycleScope } from "./home-lifecycle-analytics.mjs";
+import { loadHomeLifecycleAnalytics } from "./home-lifecycle-data";
 import { isSupabaseConfigured, select } from "./supabase-rest";
 import { serializeOperationsSummaryRow } from "./operations-orders-data";
 import { stocktakingForAccount } from "./stocktaking-data";
@@ -799,6 +801,11 @@ function buildHomeOverviewFromAggregates({
     ? expenseSummaryValue
     : expensesSummary({ items: [] });
 
+  const allRowCounts = new Map(source.map((group) => [text(group.key), number(group.itemCount)]));
+  const lifecycleScopeFor = (groups) => createLifecycleScope(groups.map((group) => ({
+    ...group, itemCount: allRowCounts.get(text(group.key)) || group.itemCount,
+  })));
+
   const overview = {
     currentMatrix,
     reviewMatrix,
@@ -815,6 +822,12 @@ function buildHomeOverviewFromAggregates({
       review: buildWorkspaceTrend(reviewUnfiltered, REVIEW_STATUS_DEFINITIONS, (group) => group.statusBucket || "pending", globalDuration, undefined, "pending"),
       operations: buildWorkspaceTrend(operationsUnfiltered, OPERATIONS_STATUS_DEFINITIONS, (group) => group.statusBucket || "pending", globalDuration, undefined, "pending"),
       maintenance: buildWorkspaceTrend(maintenanceUnfiltered, MAINTENANCE_STATUS_DEFINITIONS, (group) => group.statusBucket || "pending", globalDuration, undefined, "pending"),
+    },
+    lifecycleScopes: {
+      current: lifecycleScopeFor(currentGroups),
+      review: lifecycleScopeFor(reviewGroups),
+      operations: lifecycleScopeFor(operationsGroups),
+      maintenance: lifecycleScopeFor(maintenanceGroups),
     },
     stockTagSummaries: resolvedStockAnalysis.summaries || stockTagAnalysis([]).summaries,
     stockTags: Array.isArray(resolvedStockAnalysis.tags) ? resolvedStockAnalysis.tags : [],
@@ -896,6 +909,12 @@ function buildHomeOverview({
       review: buildWorkspaceTrend(reviewUnfiltered, REVIEW_STATUS_DEFINITIONS, bucketReview, globalDuration, undefined, "pending"),
       operations: buildWorkspaceTrend(operationsUnfiltered, OPERATIONS_STATUS_DEFINITIONS, bucketOperations, globalDuration, undefined, "pending"),
       maintenance: buildWorkspaceTrend(maintenanceUnfiltered, MAINTENANCE_STATUS_DEFINITIONS, bucketMaintenance, globalDuration, undefined, "pending"),
+    },
+    lifecycleScopes: {
+      current: createLifecycleScope(currentGroups),
+      review: createLifecycleScope(reviewGroups),
+      operations: createLifecycleScope(operationsGroups),
+      maintenance: createLifecycleScope(maintenanceGroups),
     },
     stockTagSummaries: resolvedStockAnalysis.summaries || stockTagAnalysis([]).summaries,
     stockTags: Array.isArray(resolvedStockAnalysis.tags) ? resolvedStockAnalysis.tags : [],
@@ -1034,8 +1053,21 @@ async function loadHomeOverviewDirectImpl({
   if (showOperations) visibleTrends.operations = overview.trendAnalysis?.operations;
   if (showMaintenance) visibleTrends.maintenance = overview.trendAnalysis?.maintenance;
 
+  // SQL audit data is queried ONLY for the permission-scoped, already-filtered
+  // order numbers. Do not serialize raw order identifiers or events to the UI.
+  const { lifecycleScopes = {}, ...publicOverview } = overview;
+  const visibleLifecycleScopes = {};
+  if (showCurrent) visibleLifecycleScopes.current = lifecycleScopes.current || [];
+  if (showReview) visibleLifecycleScopes.review = lifecycleScopes.review || [];
+  if (showOperations) visibleLifecycleScopes.operations = lifecycleScopes.operations || [];
+  if (showMaintenance) visibleLifecycleScopes.maintenance = lifecycleScopes.maintenance || [];
+  const lifecycleAnalysis = needsOrderOverview
+    ? await loadHomeLifecycleAnalytics(visibleLifecycleScopes)
+    : { state: "ready", workspaces: {} };
+
   return {
-    ...overview,
+    ...publicOverview,
+    lifecycleAnalysis,
     backlogAnalysis: visibleBacklog,
     trendAnalysis: visibleTrends,
     selectedUser: selectedUser?.id ? {

@@ -252,6 +252,62 @@ function BacklogHealth({ workspaces, backlogAnalysis = {}, selectedDuration = "a
   );
 }
 
+function processingTimeText(hours) {
+  if (hours === null || !Number.isFinite(Number(hours))) return "—";
+  const value = Number(hours);
+  if (value < 1) return value > 0 && value * 60 < 1 ? "<1 min" : `${Math.round(value * 60)} min`;
+  if (value < 48) return `${value.toLocaleString("en-EG", { maximumFractionDigits: 1 })} hrs`;
+  return `${(value / 24).toLocaleString("en-EG", { maximumFractionDigits: 1 })} days`;
+}
+
+function ProcessingTimeInsights({ workspaces, lifecycleAnalysis = {} }) {
+  const [active, setActive] = useState("current");
+  const available = workspaces.filter(({ definition }) => Boolean(lifecycleAnalysis?.workspaces?.[definition.key]));
+  if (!workspaces.length) return null;
+  const selected = available.find(({ definition }) => definition.key === active) || available[0];
+  const state = lifecycleAnalysis?.state || "unavailable";
+  const data = selected ? lifecycleAnalysis.workspaces[selected.definition.key] : null;
+
+  return (
+    <section className="erp-home-cycle" aria-label="Audited order processing times">
+      <div className="erp-home-cycle__head">
+        <div>
+          <span className="erp-home-dashboard__eyebrow"><Icon name="clock" /> WORKFLOW PERFORMANCE</span>
+          <h2>Processing time</h2>
+          <p>Measured from recorded workflow events, not estimated from current statuses.</p>
+        </div>
+        {state === "ready" ? <div className="erp-home-cycle__tabs" role="group" aria-label="Processing time workspace">
+          {available.map(({ definition }) => <button key={definition.key} type="button"
+            className={selected?.definition.key === definition.key ? "is-active" : ""}
+            aria-pressed={selected?.definition.key === definition.key}
+            onClick={() => setActive(definition.key)}>{definition.shortTitle}</button>)}
+        </div> : null}
+      </div>
+      {state !== "ready" ? (
+        <div className="erp-home-cycle__notice" role="status">
+          <Icon name="alert" />
+          <div><strong>{state === "needs-setup" ? "Lifecycle tracking needs activation" : state === "too-many-orders" ? "Narrow the Analysis filter" : "Processing time data unavailable"}</strong>
+            <p>{state === "needs-setup" ? "Run supabase_order_lifecycle_audit.sql once in Supabase. New order changes will then be recorded automatically."
+              : state === "too-many-orders" || state === "too-many-events" ? "This selection is too large for the safe analytics limit. Choose a shorter period or a specific user."
+              : "Order activity remains available. Processing times will appear when the audit table can be read."}</p>
+          </div>
+        </div>
+      ) : data ? (
+        <>
+          <div className="erp-home-cycle__scope"><strong>{data.label}</strong><span>{data.sample} completed timeline{data.sample === 1 ? "" : "s"} verified</span></div>
+          <div className="erp-home-cycle__metrics">
+            <div><span>Median processing time</span><strong>{processingTimeText(data.medianHours)}</strong><small>Middle value of completed timelines</small></div>
+            <div><span>Average processing time</span><strong>{processingTimeText(data.averageHours)}</strong><small>From the same verified sample</small></div>
+            <div><span>Fastest</span><strong>{processingTimeText(data.minHours)}</strong><small>Recorded completion</small></div>
+            <div><span>Longest</span><strong>{processingTimeText(data.maxHours)}</strong><small>Recorded completion</small></div>
+          </div>
+          <p className="erp-home-cycle__hint">{data.audited} of {data.eligible} selected orders have a complete recorded creation history. {data.excluded} lack full history; older orders are intentionally excluded. {data.sample === 0 ? "No verified completed timeline is available yet. " : ""}Times are elapsed calendar hours, not business hours. No SLA target has been configured.</p>
+        </>
+      ) : <p className="erp-home-cycle__hint">No accessible order workspaces in this selection.</p>}
+    </section>
+  );
+}
+
 function ComparisonMetric({ title, value, previous, delta, format = "number" }) {
   const showMoney = format === "money";
   const label = showMoney ? compactMoney(value) : Number(value || 0).toLocaleString("en-EG");
@@ -608,6 +664,7 @@ export default function HomeOverviewClient({
   maintenanceSummary,
   trendAnalysis = {},
   backlogAnalysis = {},
+  lifecycleAnalysis = {},
   stockTagSummaries,
   stockTags,
   expenseSummary,
@@ -643,6 +700,7 @@ export default function HomeOverviewClient({
           </div>
           <FocusQueue workspaces={available} trendAnalysis={trendAnalysis} />
           <BacklogHealth workspaces={available} backlogAnalysis={backlogAnalysis} selectedDuration={selectedDuration} />
+          <ProcessingTimeInsights workspaces={available} lifecycleAnalysis={lifecycleAnalysis} />
           <TrendInsights workspaces={available} trendAnalysis={trendAnalysis} />
           <div className="erp-home-dashboard__section-heading">
             <div><span>DETAILED ANALYSIS</span><h2>Order breakdown</h2></div>
