@@ -188,6 +188,70 @@ function FocusQueue({ workspaces, trendAnalysis = {} }) {
   );
 }
 
+function BacklogHealth({ workspaces, backlogAnalysis = {}, selectedDuration = "all" }) {
+  const [active, setActive] = useState("current");
+  const available = workspaces.filter(({ definition }) => Boolean(backlogAnalysis?.[definition.key]));
+  const selected = available.find(({ definition }) => definition.key === active) || available[0];
+  if (!selected) return null;
+  const data = backlogAnalysis[selected.definition.key];
+  const known = Number(data.dated || 0);
+  const oldest = Array.isArray(data.oldest) ? data.oldest : [];
+  const bands = Array.isArray(data.bands) ? data.bands : [];
+  const medianText = data.medianAgeDays === null || data.medianAgeDays === undefined ? "—" : `${data.medianAgeDays}d`;
+  const averageText = data.averageAgeDays === null || data.averageAgeDays === undefined ? "—" : `${data.averageAgeDays}d`;
+
+  return (
+    <section className="erp-home-backlog" aria-label="Open order age analysis">
+      <div className="erp-home-backlog__header">
+        <div className="erp-home-backlog__title">
+          <span className="erp-home-dashboard__eyebrow"><Icon name="clock"/> OPERATIONAL INSIGHTS</span>
+          <h2>Backlog health</h2>
+          <p>How long the orders that are still open have been waiting since creation.</p>
+        </div>
+        <div className="erp-home-backlog__tabs" role="group" aria-label="Backlog workspace">
+          {available.map(({ definition }) => (
+            <button key={definition.key} type="button" className={selected.definition.key === definition.key ? "is-active" : ""}
+              aria-pressed={selected.definition.key === definition.key}
+              onClick={() => setActive(definition.key)}>{definition.shortTitle}</button>
+          ))}
+        </div>
+      </div>
+      <div className="erp-home-backlog__body">
+        <div className="erp-home-backlog__main">
+          <div className="erp-home-backlog__kpis">
+            <div><span>Open orders</span><strong>{Number(data.open || 0).toLocaleString("en-EG")}</strong></div>
+            <div><span>Median age</span><strong>{medianText}</strong></div>
+            <div><span>Average age</span><strong>{averageText}</strong></div>
+            <div className="erp-home-backlog__kpi--alert"><span>Created 14+ days ago</span><strong>{Number(data.fourteenPlus || 0).toLocaleString("en-EG")}</strong></div>
+          </div>
+          <div className="erp-home-backlog__distribution-title"><strong>Age of currently open orders</strong><span>{known} dated</span></div>
+          {known ? (
+            <div className="erp-home-backlog__bar" role="img" aria-label={bands.map((band) => `${band.label}: ${band.count}`).join(", ")}>
+              {bands.filter((band) => band.count > 0).map((band) => <span key={band.key} style={{ width: `${band.count / known * 100}%`, background: band.color }} title={`${band.label}: ${band.count}`} />)}
+            </div>
+          ) : <div className="erp-home-backlog__bar erp-home-backlog__bar--empty" aria-label="No dated open orders" />}
+          <div className="erp-home-backlog__legend">
+            {bands.map((band) => <div key={band.key}><i style={{ background: band.color }} /><span>{band.label}</span><strong>{band.count}</strong></div>)}
+          </div>
+          {Number(data.unknownDate || 0) > 0 ? <p className="erp-home-backlog__warning">{data.unknownDate} open order(s) have no valid creation date. They are included in the open count, but excluded from age statistics.</p> : null}
+          <p className="erp-home-backlog__hint">Ages are measured from creation, not from the last status change. This is not completion time or a configured SLA.{selectedDuration !== "all" ? " Only orders created within the selected period are included." : ""}</p>
+        </div>
+        <aside className="erp-home-backlog__oldest">
+          <div className="erp-home-backlog__oldest-head"><div><strong>Oldest open orders</strong><span>Prioritize follow-up</span></div><Icon name="alert" /></div>
+          {oldest.length ? <div className="erp-home-backlog__oldest-list">
+            {oldest.map((item, index) => <div className="erp-home-backlog__oldest-row" key={`${item.key}-${index}`}>
+              <span className="erp-home-backlog__oldest-rank">{index + 1}</span>
+              <div><strong>{item.label}</strong><span>Created {new Date(item.createdTime).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</span></div>
+              <b>{item.ageDays}d</b>
+            </div>)}
+          </div> : <p className="erp-home-backlog__none">No dated open orders for this workspace and period.</p>}
+          <Link className="erp-home-backlog__open" href={toRouterPath(selected.definition.href)}>Open {selected.definition.title} <Icon name="arrow" /></Link>
+        </aside>
+      </div>
+    </section>
+  );
+}
+
 function ComparisonMetric({ title, value, previous, delta, format = "number" }) {
   const showMoney = format === "money";
   const label = showMoney ? compactMoney(value) : Number(value || 0).toLocaleString("en-EG");
@@ -209,6 +273,7 @@ function ComparisonMetric({ title, value, previous, delta, format = "number" }) 
 
 function TrendInsights({ workspaces, trendAnalysis = {} }) {
   const [active, setActive] = useState("current");
+  const [selectedBin, setSelectedBin] = useState(null);
   const available = workspaces.filter(({ definition }) => Boolean(trendAnalysis?.[definition.key]));
   const selected = available.find(({ definition }) => definition.key === active) || available[0];
   if (!selected) return null;
@@ -217,6 +282,7 @@ function TrendInsights({ workspaces, trendAnalysis = {} }) {
   const bins = Array.isArray(data.bins) ? data.bins : [];
   const max = Number(data.max || 0);
   const legend = Array.isArray(data.statusDefinitions) ? data.statusDefinitions : [];
+  const activeBin = bins.find((bin) => `${selected.definition.key}:${bin.key}` === selectedBin);
 
   return (
     <section className="erp-home-trends" aria-label="Orders trends and period comparison">
@@ -224,7 +290,7 @@ function TrendInsights({ workspaces, trendAnalysis = {} }) {
         <div className="erp-home-trends__heading">
           <span className="erp-home-dashboard__eyebrow"><Icon name="chart" /> TIME-BASED INSIGHTS</span>
           <h2>Orders activity</h2>
-          <p>Created orders over time. Workspaces are not added together.</p>
+          <p>Creation dates grouped by the orders' current status. Tap a bar for details.</p>
         </div>
         <div className="erp-home-trends__tabs" role="tablist" aria-label="Choose order workspace">
           {available.map(({ definition }) => (
@@ -241,9 +307,11 @@ function TrendInsights({ workspaces, trendAnalysis = {} }) {
             <span className="erp-home-trends__bar-total">{Number(data.current?.count || 0).toLocaleString("en-EG")} orders</span>
           </div>
           {max > 0 ? (
-            <div className="erp-home-trends__chart" role="img" aria-label={`${selected.definition.title}: ${bins.map((bin) => `${bin.label}: ${bin.count}`).join(", ")}`}>
+            <div className="erp-home-trends__chart" role="group" aria-label={`${selected.definition.title}: ${bins.map((bin) => `${bin.label}: ${bin.count}`).join(", ")}`}>
               {bins.map((bin) => (
-                <div className="erp-home-trends__column" key={bin.key} title={`${bin.label}: ${bin.count} orders`}>
+                <button type="button" className={`erp-home-trends__column${activeBin?.key === bin.key ? " is-selected" : ""}`} key={bin.key}
+                  title={`${bin.label}: ${bin.count} orders`} aria-pressed={activeBin?.key === bin.key} aria-label={`${bin.label}: ${bin.count} orders. Show status breakdown.`}
+                  onClick={() => setSelectedBin((prior) => prior === `${selected.definition.key}:${bin.key}` ? null : `${selected.definition.key}:${bin.key}`)}>
                   <span className="erp-home-trends__count">{bin.count || ""}</span>
                   <div className="erp-home-trends__track">
                     <div className="erp-home-trends__stack" style={{ height: `${bin.count ? (bin.count / max * 100) : 0}%` }}>
@@ -253,13 +321,19 @@ function TrendInsights({ workspaces, trendAnalysis = {} }) {
                     </div>
                   </div>
                   <span className="erp-home-trends__date" title={bin.label}>{bin.shortLabel || bin.label}</span>
-                </div>
+                </button>
               ))}
             </div>
           ) : <div className="erp-home-trends__empty"><Icon name="chart" /><strong>No dated orders in this period</strong><span>Activity will appear here when dated orders are available.</span></div>}
           <div className="erp-home-trends__legend">
             {legend.map((item) => <span key={item.key}><i style={{ background: item.color }} />{item.label}</span>)}
           </div>
+          {activeBin ? <div className="erp-home-trends__drilldown" aria-live="polite">
+            <div className="erp-home-trends__drilldown-head"><strong>{activeBin.label} · {activeBin.count} orders</strong><button type="button" aria-label="Close chart details" onClick={() => setSelectedBin(null)}>×</button></div>
+            <div className="erp-home-trends__drilldown-values">
+              {activeBin.parts.map((part) => <span key={part.key}><i style={{ background: part.color }} />{part.label}<b>{part.count}</b></span>)}
+            </div>
+          </div> : null}
           {Number(data.undated || 0) > 0 ? <p className="erp-home-trends__note">{data.undated} order(s) have no usable creation date and are excluded from date comparisons.</p> : null}
         </div>
         <aside className="erp-home-trends__comparison" aria-label="Previous period comparison">
@@ -533,6 +607,7 @@ export default function HomeOverviewClient({
   operationsMatrix,
   maintenanceSummary,
   trendAnalysis = {},
+  backlogAnalysis = {},
   stockTagSummaries,
   stockTags,
   expenseSummary,
@@ -567,6 +642,7 @@ export default function HomeOverviewClient({
             {available.map(({ definition, matrix }) => <SummaryTile key={definition.key} definition={definition} summary={safeStatus(matrix)} />)}
           </div>
           <FocusQueue workspaces={available} trendAnalysis={trendAnalysis} />
+          <BacklogHealth workspaces={available} backlogAnalysis={backlogAnalysis} selectedDuration={selectedDuration} />
           <TrendInsights workspaces={available} trendAnalysis={trendAnalysis} />
           <div className="erp-home-dashboard__section-heading">
             <div><span>DETAILED ANALYSIS</span><h2>Order breakdown</h2></div>

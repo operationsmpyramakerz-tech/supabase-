@@ -2,6 +2,7 @@ import "server-only";
 
 import { performance } from "node:perf_hooks";
 import { buildWorkspaceTrend } from "./home-trend-analytics.mjs";
+import { buildWorkspaceBacklog } from "./home-operational-analytics.mjs";
 import { isSupabaseConfigured, select } from "./supabase-rest";
 import { serializeOperationsSummaryRow } from "./operations-orders-data";
 import { stocktakingForAccount } from "./stocktaking-data";
@@ -803,6 +804,12 @@ function buildHomeOverviewFromAggregates({
     reviewMatrix,
     operationsMatrix,
     maintenanceSummary,
+    backlogAnalysis: {
+      current: buildWorkspaceBacklog(currentUnfiltered, { statusOf: (group) => group.statusBucket || "progress", openStatuses: ["progress"], duration: globalDuration }),
+      review: buildWorkspaceBacklog(reviewUnfiltered, { statusOf: (group) => group.statusBucket || "pending", openStatuses: ["pending"], duration: globalDuration }),
+      operations: buildWorkspaceBacklog(operationsUnfiltered, { statusOf: (group) => group.statusBucket || "pending", openStatuses: ["pending", "received"], duration: globalDuration }),
+      maintenance: buildWorkspaceBacklog(maintenanceUnfiltered, { statusOf: (group) => group.statusBucket || "pending", openStatuses: ["pending", "progress"], duration: globalDuration }),
+    },
     trendAnalysis: {
       current: buildWorkspaceTrend(currentUnfiltered, CURRENT_STATUS_DEFINITIONS, (group) => group.statusBucket || "progress", globalDuration, undefined, "progress"),
       review: buildWorkspaceTrend(reviewUnfiltered, REVIEW_STATUS_DEFINITIONS, (group) => group.statusBucket || "pending", globalDuration, undefined, "pending"),
@@ -878,6 +885,12 @@ function buildHomeOverview({
     reviewMatrix,
     operationsMatrix,
     maintenanceSummary,
+    backlogAnalysis: {
+      current: buildWorkspaceBacklog(currentUnfiltered, { statusOf: bucketCurrent, openStatuses: ["progress"], duration: globalDuration }),
+      review: buildWorkspaceBacklog(reviewUnfiltered, { statusOf: bucketReview, openStatuses: ["pending"], duration: globalDuration }),
+      operations: buildWorkspaceBacklog(operationsUnfiltered, { statusOf: bucketOperations, openStatuses: ["pending", "received"], duration: globalDuration }),
+      maintenance: buildWorkspaceBacklog(maintenanceUnfiltered, { statusOf: bucketMaintenance, openStatuses: ["pending", "progress"], duration: globalDuration }),
+    },
     trendAnalysis: {
       current: buildWorkspaceTrend(currentUnfiltered, CURRENT_STATUS_DEFINITIONS, bucketCurrent, globalDuration, undefined, "progress"),
       review: buildWorkspaceTrend(reviewUnfiltered, REVIEW_STATUS_DEFINITIONS, bucketReview, globalDuration, undefined, "pending"),
@@ -1009,7 +1022,12 @@ async function loadHomeOverviewDirectImpl({
     overviewSource = needsOrderOverview ? "supabase-direct-row-fallback" : "supabase-direct";
   }
 
-  // Do not serialize even derived trend data for workspaces the account cannot open.
+  // Do not serialize even derived analytics for workspaces the account cannot open.
+  const visibleBacklog = {};
+  if (showCurrent) visibleBacklog.current = overview.backlogAnalysis?.current;
+  if (showReview) visibleBacklog.review = overview.backlogAnalysis?.review;
+  if (showOperations) visibleBacklog.operations = overview.backlogAnalysis?.operations;
+  if (showMaintenance) visibleBacklog.maintenance = overview.backlogAnalysis?.maintenance;
   const visibleTrends = {};
   if (showCurrent) visibleTrends.current = overview.trendAnalysis?.current;
   if (showReview) visibleTrends.review = overview.trendAnalysis?.review;
@@ -1018,6 +1036,7 @@ async function loadHomeOverviewDirectImpl({
 
   return {
     ...overview,
+    backlogAnalysis: visibleBacklog,
     trendAnalysis: visibleTrends,
     selectedUser: selectedUser?.id ? {
       id: String(selectedUser.id),
