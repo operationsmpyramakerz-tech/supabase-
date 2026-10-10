@@ -1,0 +1,281 @@
+/* ERP Home redesign – Phase 1.
+   All new components use the erp-home namespace to avoid inherited card/ring
+   rules accumulated in classic-parity.css and home.css. */
+body.page-home .erp-home-dashboard {
+  --eh-bg: #ffffff;
+  --eh-surface: #f8fafc;
+  --eh-soft: #f2f5f9;
+  --eh-text: #101828;
+  --eh-muted: #798496;
+  --eh-border: #e9edf2;
+  --eh-orange: #ed7021;
+  --eh-shadow: 0 10px 29px rgba(16,24,40,.045);
+  width: 100%;
+  min-width: 0;
+  display: block;
+  color: var(--eh-text);
+  font-variant-numeric: tabular-nums;
+}
+body.page-home .erp-home-dashboard *,
+body.page-home .erp-home-dashboard *::before,
+body.page-home .erp-home-dashboard *::after { box-sizing: border-box; }
+body.page-home .erp-home-dashboard svg { width: 19px; height: 19px; flex-shrink: 0; }
+body.page-home .erp-home-dashboard__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 20px;
+  position: relative;
+  z-index: 15;
+}
+body.page-home .erp-home-dashboard__heading { min-width: 0; }
+body.page-home .erp-home-dashboard__eyebrow,
+body.page-home .erp-home-dashboard__section-heading > div > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: .11em;
+  line-height: 1.5;
+  color: var(--eh-orange);
+}
+body.page-home .erp-home-dashboard__eyebrow svg { height: 15px; width: 15px; }
+body.page-home .erp-home-dashboard__heading h2,
+body.page-home .erp-home-dashboard__section-heading h2 {
+  font-size: clamp(21px, 2.6vw, 26px);
+  font-weight: 850;
+  letter-spacing: -.04em;
+  margin: 4px 0 4px;
+  line-height: 1.15;
+  color: var(--eh-text);
+}
+body.page-home .erp-home-dashboard__heading p,
+body.page-home .erp-home-dashboard__section-heading > p {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.5;
+  margin: 0;
+  color: var(--eh-muted);
+}
+body.page-home .erp-home-dashboard .home-global-analysis { flex: 0 0 auto; }
+body.page-home .erp-home-dashboard .home-global-analysis__trigger {
+  min-height: 42px !important;
+  border-radius: 13px !important;
+  padding: 0 12px !important;
+  background: var(--eh-bg) !important;
+  border-color: var(--eh-border) !important;
+  box-shadow: var(--eh-shadow) !important;
+  color: var(--eh-text) !important;
+}
+body.page-home .erp-home-dashboard .home-global-analysis__trigger .home-global-analysis__icon {
+  background: #fff1e8;
+  color: #dd6a22;
+}
+body.page-home .erp-home-dashboard .home-global-analysis__trigger strong { display: inline !important; }
+body.page-home .erp-home-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0,1fr));
+  align-items: stretch;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+body.page-home .erp-home-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  position: relative;
+  min-width: 0;
+  min-height: 161px;
+  padding: 15px;
+  border: 1px solid var(--eh-border);
+  border-radius: 19px;
+  background: var(--eh-bg);
+  color: var(--eh-text);
+  box-shadow: var(--eh-shadow);
+  text-decoration: none;
+  overflow: hidden;
+  transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+}
+body.page-home .erp-home-tile:hover,
+body.page-home .erp-home-tile:focus-visible {
+  transform: translateY(-2px);
+  border-color: #f9bf98;
+  box-shadow: 0 14px 35px rgba(16,24,40,.10);
+  outline: none;
+}
+body.page-home .erp-home-tile__top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+body.page-home .erp-home-tile__icon {
+  width: 35px; height: 35px;
+  display: grid; place-items: center;
+  background: #fff0e4;
+  color: #de6519;
+  border-radius: 11px;
+}
+body.page-home .erp-home-tile--review .erp-home-tile__icon { background: #efeafe; color: #7250be; }
+body.page-home .erp-home-tile--operations .erp-home-tile__icon { background: #e7f6f0; color: #148462; }
+body.page-home .erp-home-tile--maintenance .erp-home-tile__icon { background: #eaf1ff; color: #3972bb; }
+body.page-home .erp-home-tile__arrow { opacity: .6; width: 15px !important; height: 15px !important; }
+body.page-home .erp-home-tile__title { font-size: 12px; font-weight: 750; color: var(--eh-muted); }
+body.page-home .erp-home-tile__total { font-size: clamp(27px, 2.8vw, 35px); line-height: 1.2; font-weight: 850; letter-spacing: -.045em; }
+body.page-home .erp-home-tile__value { font-size: 11px; font-weight: 750; color: var(--eh-muted); white-space: nowrap; }
+body.page-home .erp-home-distribution {
+  width: 100%; height: 8px;
+  display: flex;
+  gap: 2px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--eh-soft);
+}
+body.page-home .erp-home-distribution > span { display: block; flex-shrink: 1; min-width: 0; }
+body.page-home .erp-home-distribution > span:first-child { border-radius: 99px 0 0 99px; }
+body.page-home .erp-home-distribution > span:last-child { border-radius: 0 99px 99px 0; }
+body.page-home .erp-home-distribution > span:only-child { border-radius: 99px; }
+body.page-home .erp-home-distribution > .erp-home-distribution__empty { width: 100%; background: var(--eh-soft); border-radius: 99px; }
+body.page-home .erp-home-tile > .erp-home-distribution { height: 5px; margin-top: auto; }
+body.page-home .erp-home-focus {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 15px 18px;
+  border: 1px solid #f5e1d2;
+  border-radius: 19px;
+  background: linear-gradient(108deg, #fff6ed 0%, #fff 64%);
+  margin-bottom: 29px;
+}
+body.page-home .erp-home-focus__head { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 0 0 175px; }
+body.page-home .erp-home-focus__icon { width: 37px; height: 37px; border-radius: 12px; display: grid; place-items: center; background: #ffe7d3; color: #d66c24; flex-shrink: 0; }
+body.page-home .erp-home-focus h3 { font-size: 14px; font-weight: 850; margin: 0 0 3px; color: var(--eh-text); }
+body.page-home .erp-home-focus p { font-size: 10px; line-height: 1.35; color: var(--eh-muted); margin: 0; }
+body.page-home .erp-home-focus__items { flex: 1; min-width: 0; display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 8px; }
+body.page-home .erp-home-focus__item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  padding: 12px 10px;
+  background: var(--eh-bg);
+  color: var(--eh-text);
+  border: 1px solid var(--eh-border);
+  border-radius: 12px;
+  text-decoration: none;
+  font-size: 11px;
+  font-weight: 700;
+}
+body.page-home .erp-home-focus__item > span { flex: 1; min-width: 0; }
+body.page-home .erp-home-focus__item strong { font-size: 17px; font-weight: 850; }
+body.page-home .erp-home-focus__item svg { width: 13px; height: 13px; color: var(--eh-muted); }
+body.page-home .erp-home-focus__item:focus-visible { outline: 2px solid #ee7e3d; outline-offset: 2px; }
+body.page-home .erp-home-dashboard__section-heading { display: flex; align-items: end; justify-content: space-between; gap: 14px; margin-bottom: 14px; }
+body.page-home .erp-home-dashboard__section-heading h2 { margin: 4px 0 0; font-size: 21px; }
+body.page-home .erp-home-order-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 14px; }
+body.page-home .erp-home-order-card {
+  min-width: 0;
+  padding: 20px;
+  background: var(--eh-bg);
+  border: 1px solid var(--eh-border);
+  border-radius: 21px;
+  box-shadow: var(--eh-shadow);
+  overflow: visible;
+}
+body.page-home .erp-home-order-card__head { display: flex; align-items: center; gap: 12px; }
+body.page-home .erp-home-order-card__icon { flex: 0 0 42px; width: 42px; height: 42px; display: grid; place-items: center; border-radius: 14px; color: #df6b23; background: #fff0e5; }
+body.page-home .erp-home-order-card--review .erp-home-order-card__icon { background: #f1eafd; color: #7955c0; }
+body.page-home .erp-home-order-card--operations .erp-home-order-card__icon { background: #e7f6f0; color: #168763; }
+body.page-home .erp-home-order-card--maintenance .erp-home-order-card__icon { background: #eaf1ff; color: #3972bb; }
+body.page-home .erp-home-order-card__identity { flex: 1; min-width: 0; }
+body.page-home .erp-home-order-card__identity h3 { margin: 0; font-weight: 850; line-height: 1.3; font-size: 16px; }
+body.page-home .erp-home-order-card__identity h3 a { color: var(--eh-text); text-decoration: none; }
+body.page-home .erp-home-order-card__identity p { margin: 4px 0 0; font-size: 11px; color: var(--eh-muted); line-height: 1.35; }
+body.page-home .erp-home-order-card__visit { flex: 0 0 32px; display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid var(--eh-border); background: var(--eh-surface); color: var(--eh-text); border-radius: 50%; transition: transform .15s; }
+body.page-home .erp-home-order-card__visit:hover { transform: translateX(2px); }
+body.page-home .erp-home-order-card__visit svg { width: 17px; height: 17px; }
+body.page-home .erp-home-order-card__figures { display: grid; grid-template-columns: .8fr 1.2fr; margin: 18px 0 16px; padding: 15px; background: var(--eh-surface); border-radius: 14px; }
+body.page-home .erp-home-order-card__figures > div { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+body.page-home .erp-home-order-card__figures > div + div { border-left: 1px solid var(--eh-border); padding-left: 15px; }
+body.page-home .erp-home-order-card__figures span { font-size: 11px; font-weight: 700; color: var(--eh-muted); }
+body.page-home .erp-home-order-card__figures strong { font-size: 24px; line-height: 1.18; font-weight: 850; color: var(--eh-text); letter-spacing: -.035em; }
+body.page-home .erp-home-order-card__figures .erp-home-order-card__amount strong { font-size: clamp(15px, 1.6vw, 19px); overflow-wrap: anywhere; }
+body.page-home .erp-home-order-card__analysis-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 11px; }
+body.page-home .erp-home-order-card__analysis-head > span { font-size: 12px; font-weight: 850; }
+body.page-home .erp-home-order-card__segmented { display: flex; align-items: center; padding: 3px; gap: 2px; background: var(--eh-soft); border-radius: 10px; }
+body.page-home .erp-home-order-card__segmented button { appearance: none; border: 0; background: transparent; padding: 5px 11px; min-height: 28px; border-radius: 8px; color: var(--eh-muted); font: inherit; font-size: 11px; font-weight: 800; cursor: pointer; }
+body.page-home .erp-home-order-card__segmented button.is-active { background: var(--eh-bg); color: var(--eh-text); box-shadow: 0 2px 6px rgba(16,24,40,.09); }
+body.page-home .erp-home-order-card__segmented button:focus-visible { outline: 2px solid #ee7e3d; }
+body.page-home .erp-home-order-card > .erp-home-distribution { margin-bottom: 13px; }
+body.page-home .erp-home-order-card__status-list { display: grid; gap: 2px; }
+body.page-home .erp-home-order-card__status { display: grid; align-items: center; grid-template-columns: minmax(0,1fr) minmax(65px,auto) 34px 34px; gap: 8px; padding: 9px 3px; border-bottom: 1px solid var(--eh-border); font-size: 11px; color: var(--eh-muted); }
+body.page-home .erp-home-order-card__status:last-child { border-bottom: 0; }
+body.page-home .erp-home-order-card__status-label { display: flex; align-items: center; gap: 7px; font-weight: 750; min-width: 0; color: var(--eh-text); }
+body.page-home .erp-home-order-card__status-label i { display: block; width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; }
+body.page-home .erp-home-order-card__status-value { text-align: right; overflow-wrap: anywhere; }
+body.page-home .erp-home-order-card__status strong { color: var(--eh-text); text-align: right; font-weight: 850; font-size: 13px; }
+body.page-home .erp-home-order-card__percentage { text-align: right; font-size: 10px; }
+body.page-home .erp-home-secondary { margin-top: 28px; }
+body.page-home .erp-home-secondary__grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; }
+body.page-home .erp-home-secondary__grid > * { min-width: 0; grid-column: auto !important; }
+body.page-home .erp-home-secondary__grid .home-stock-card { border-radius: 21px; border: 1px solid var(--eh-border); }
+body.page-home .erp-home-secondary__grid .home-expense-monthly-card { grid-column: auto !important; }
+body.page-home .erp-home-details { margin-top: 16px !important; gap: 14px !important; }
+body.page-home .erp-home-details > * { min-width: 0; border-radius: 21px !important; }
+body.page-home .erp-home-details .home-scope { grid-column: 1/-1; }
+
+@media (max-width: 1100px) {
+  body.page-home .erp-home-tiles { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  body.page-home .erp-home-focus { flex-direction: column; align-items: stretch; gap: 12px; }
+  body.page-home .erp-home-focus__head { flex: 0 0 auto; }
+}
+@media (max-width: 760px) {
+  body.page-home .erp-home-dashboard__header { align-items: flex-start; margin-bottom: 15px; }
+  body.page-home .erp-home-dashboard__heading p { max-width: 240px; }
+  body.page-home .erp-home-dashboard .home-global-analysis__trigger { min-height: 39px !important; padding: 0 8px !important; gap: 5px !important; }
+  body.page-home .erp-home-dashboard .home-global-analysis__trigger strong { display: none !important; }
+  body.page-home .erp-home-dashboard .home-global-analysis__icon { width: 29px; height: 29px; }
+  body.page-home .erp-home-focus__items { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  body.page-home .erp-home-order-grid, body.page-home .erp-home-secondary__grid { grid-template-columns: 1fr; }
+  body.page-home .erp-home-dashboard__section-heading > p { display: none; }
+  body.page-home .erp-home-details .home-scope { grid-column: auto; }
+}
+@media (max-width: 430px) {
+  body.page-home .erp-home-tiles { gap: 9px; }
+  body.page-home .erp-home-tile { min-height: 151px; padding: 12px; border-radius: 17px; }
+  body.page-home .erp-home-tile__top { margin-bottom: 9px; }
+  body.page-home .erp-home-tile__title { font-size: 11px; }
+  body.page-home .erp-home-tile__icon { width: 32px; height: 32px; }
+  body.page-home .erp-home-tile__total { font-size: 29px; }
+  body.page-home .erp-home-tile__value { font-size: 10px; }
+  body.page-home .erp-home-focus { padding: 13px; margin-bottom: 24px; }
+  body.page-home .erp-home-focus__item { padding: 10px 8px; font-size: 10px; }
+  body.page-home .erp-home-order-card { padding: 14px; border-radius: 18px; }
+  body.page-home .erp-home-order-card__identity h3 { font-size: 15px; }
+  body.page-home .erp-home-order-card__figures { padding: 12px; }
+  body.page-home .erp-home-order-card__figures > div + div { padding-left: 11px; }
+  body.page-home .erp-home-order-card__status { grid-template-columns: minmax(0,1fr) minmax(62px,auto) 29px 29px; gap: 5px; font-size: 10px; }
+  body.page-home .erp-home-order-card__percentage { font-size: 9px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.page-home .erp-home-tile, body.page-home .erp-home-order-card__visit { transition: none; }
+}
+/* Dark mode: respect the same html theme flag as the rest of the ERP. */
+html[data-theme="dark"] body.page-home .erp-home-dashboard {
+  --eh-bg: #15191f;
+  --eh-surface: #1c2129;
+  --eh-soft: #292f39;
+  --eh-text: #f7f8fa;
+  --eh-muted: #a3acba;
+  --eh-border: #303742;
+  --eh-shadow: 0 10px 24px rgba(0,0,0,.16);
+}
+html[data-theme="dark"] body.page-home .erp-home-focus { background: linear-gradient(105deg,#282018,#15191f 70%); border-color: #423228; }
+html[data-theme="dark"] body.page-home .erp-home-focus__icon { background: #4c2d1b; color: #ffa46a; }
+html[data-theme="dark"] body.page-home .erp-home-tile__icon { background: #493020; }
+html[data-theme="dark"] body.page-home .erp-home-tile--review .erp-home-tile__icon { background: #302443; }
+html[data-theme="dark"] body.page-home .erp-home-tile--operations .erp-home-tile__icon { background: #18392e; }
+html[data-theme="dark"] body.page-home .erp-home-tile--maintenance .erp-home-tile__icon { background: #1b3046; }
+html[data-theme="dark"] body.page-home .erp-home-order-card__icon { background: #493020; }
+html[data-theme="dark"] body.page-home .erp-home-order-card--review .erp-home-order-card__icon { background: #302443; }
+html[data-theme="dark"] body.page-home .erp-home-order-card--operations .erp-home-order-card__icon { background: #18392e; }
+html[data-theme="dark"] body.page-home .erp-home-order-card--maintenance .erp-home-order-card__icon { background: #1b3046; }
+html[data-theme="dark"] body.page-home .erp-home-dashboard .home-global-analysis__trigger .home-global-analysis__icon { background:#3b281b; }

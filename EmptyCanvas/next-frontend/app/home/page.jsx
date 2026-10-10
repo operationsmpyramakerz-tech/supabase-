@@ -128,7 +128,7 @@ export default async function HomePage({ searchParams }) {
       title="Home"
       activePath="/next/home"
       bodyClass="page-home"
-      pageStyles={["/next/css/home.css?v=home-hidden-scrollbar-v3"]}
+      pageStyles={["/next/css/home.css?v=home-hidden-scrollbar-v3", "/next/css/home-dashboard-v2.css?v=20261011-1"]}
     >
       <DashboardNotice omitted={bootstrapWarnings} />
 
@@ -152,7 +152,7 @@ export default async function HomePage({ searchParams }) {
         showExpenses={overview.showExpenses}
       />
 
-      <section aria-label="Details" className="home-grid">
+      <section aria-label="Recent activity and shortcuts" className="home-grid erp-home-details">
         {overview.showCurrent ? <RecentOrdersCard orders={overview.recentOrders || []} totalGroups={overview.currentTotalGroups || 0} /> : null}
         <QuickActionsCard actions={actions} />
         <ScopeCard account={account} />
