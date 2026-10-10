@@ -128,7 +128,7 @@ export default async function HomePage({ searchParams }) {
       title="Home"
       activePath="/next/home"
       bodyClass="page-home"
-      pageStyles={["/next/css/home.css?v=home-hidden-scrollbar-v3", "/next/css/home-dashboard-v2.css?v=20261011-1"]}
+      pageStyles={["/next/css/home.css?v=home-hidden-scrollbar-v3", "/next/css/home-dashboard-v2.css?v=20261011-2"]}
     >
       <DashboardNotice omitted={bootstrapWarnings} />
 
@@ -141,6 +141,7 @@ export default async function HomePage({ searchParams }) {
         reviewMatrix={overview.reviewMatrix}
         operationsMatrix={overview.operationsMatrix}
         maintenanceSummary={overview.maintenanceSummary}
+        trendAnalysis={overview.trendAnalysis}
         stockTagSummaries={overview.stockTagSummaries}
         stockTags={overview.stockTags}
         expenseSummary={overview.expenseSummary}

@@ -162,7 +162,7 @@ function OrderOverviewCard({ definition, matrix, statusOnly = false }) {
   );
 }
 
-function FocusQueue({ workspaces }) {
+function FocusQueue({ workspaces, trendAnalysis = {} }) {
   const focusDefinitions = {
     current: { key: "progress", label: "In progress" },
     review: { key: "pending", label: "Pending review" },
@@ -172,7 +172,8 @@ function FocusQueue({ workspaces }) {
   const entries = workspaces.map(({ definition, matrix }) => {
     const target = focusDefinitions[definition.key];
     const bucket = safeStatus(matrix).buckets?.find((item) => item.key === target.key);
-    return { ...definition, focusLabel: target.label, count: Number(bucket?.count || 0) };
+    const aging = trendAnalysis?.[definition.key]?.aging;
+    return { ...definition, focusLabel: target.label, count: Number(bucket?.count || 0), aging };
   });
   if (!entries.length) return null;
   return (
@@ -180,8 +181,93 @@ function FocusQueue({ workspaces }) {
       <div className="erp-home-focus__head"><span className="erp-home-focus__icon"><Icon name="clock"/></span><div><h3>Needs follow-up</h3><p>Current status counts across your accessible workspaces</p></div></div>
       <div className="erp-home-focus__items">
         {entries.map((entry) => (
-          <Link key={entry.key} href={toRouterPath(entry.href)} className="erp-home-focus__item"><span>{entry.focusLabel}</span><strong>{entry.count.toLocaleString("en-EG")}</strong><Icon name="arrow" /></Link>
+          <Link key={entry.key} href={toRouterPath(entry.href)} className="erp-home-focus__item"><span className="erp-home-focus__item-label">{entry.focusLabel}{Number(entry.aging?.olderThan7Days || 0) > 0 ? <small>{entry.aging.olderThan7Days} created 7+ days ago</small> : null}</span><strong>{entry.count.toLocaleString("en-EG")}</strong><Icon name="arrow" /></Link>
         ))}
+      </div>
+    </section>
+  );
+}
+
+function ComparisonMetric({ title, value, previous, delta, format = "number" }) {
+  const showMoney = format === "money";
+  const label = showMoney ? compactMoney(value) : Number(value || 0).toLocaleString("en-EG");
+  const previousLabel = showMoney ? compactMoney(previous) : Number(previous || 0).toLocaleString("en-EG");
+  let trendLabel = "No change";
+  if (delta !== null && Number.isFinite(delta)) trendLabel = `${delta > 0 ? "+" : ""}${delta}%`;
+  else if (Number(value) > 0 && Number(previous) === 0) trendLabel = "New activity";
+  return (
+    <div className="erp-home-trend-metric">
+      <span className="erp-home-trend-metric__label">{title}</span>
+      <strong title={showMoney ? money(value) : undefined}>{label}</strong>
+      <div className="erp-home-trend-metric__bottom">
+        <span className={`erp-home-trend-metric__change${delta > 0 ? " is-up" : delta < 0 ? " is-down" : ""}`}>{trendLabel}</span>
+        <span title={showMoney ? money(previous) : undefined}>Prior: {previousLabel}</span>
+      </div>
+    </div>
+  );
+}
+
+function TrendInsights({ workspaces, trendAnalysis = {} }) {
+  const [active, setActive] = useState("current");
+  const available = workspaces.filter(({ definition }) => Boolean(trendAnalysis?.[definition.key]));
+  const selected = available.find(({ definition }) => definition.key === active) || available[0];
+  if (!selected) return null;
+
+  const data = trendAnalysis[selected.definition.key];
+  const bins = Array.isArray(data.bins) ? data.bins : [];
+  const max = Number(data.max || 0);
+  const legend = Array.isArray(data.statusDefinitions) ? data.statusDefinitions : [];
+
+  return (
+    <section className="erp-home-trends" aria-label="Orders trends and period comparison">
+      <div className="erp-home-trends__top">
+        <div className="erp-home-trends__heading">
+          <span className="erp-home-dashboard__eyebrow"><Icon name="chart" /> TIME-BASED INSIGHTS</span>
+          <h2>Orders activity</h2>
+          <p>Created orders over time. Workspaces are not added together.</p>
+        </div>
+        <div className="erp-home-trends__tabs" role="tablist" aria-label="Choose order workspace">
+          {available.map(({ definition }) => (
+            <button key={definition.key} type="button" role="tab" aria-selected={selected.definition.key === definition.key}
+              className={selected.definition.key === definition.key ? "is-active" : ""}
+              onClick={() => setActive(definition.key)}>{definition.shortTitle}</button>
+          ))}
+        </div>
+      </div>
+      <div className="erp-home-trends__body">
+        <div className="erp-home-trends__visual" role="tabpanel" aria-label={`${selected.definition.title} orders activity`}>
+          <div className="erp-home-trends__chart-title">
+            <div><strong>{data.trendLabel}</strong><span>{data.compareLabel}</span></div>
+            <span className="erp-home-trends__bar-total">{Number(data.current?.count || 0).toLocaleString("en-EG")} orders</span>
+          </div>
+          {max > 0 ? (
+            <div className="erp-home-trends__chart" role="img" aria-label={`${selected.definition.title}: ${bins.map((bin) => `${bin.label}: ${bin.count}`).join(", ")}`}>
+              {bins.map((bin) => (
+                <div className="erp-home-trends__column" key={bin.key} title={`${bin.label}: ${bin.count} orders`}>
+                  <span className="erp-home-trends__count">{bin.count || ""}</span>
+                  <div className="erp-home-trends__track">
+                    <div className="erp-home-trends__stack" style={{ height: `${bin.count ? (bin.count / max * 100) : 0}%` }}>
+                      {bin.parts.filter((part) => part.count > 0).map((part) => (
+                        <span key={part.key} style={{ backgroundColor: part.color, flex: part.count }} title={`${part.label}: ${part.count}`} />
+                      ))}
+                    </div>
+                  </div>
+                  <span className="erp-home-trends__date" title={bin.label}>{bin.shortLabel || bin.label}</span>
+                </div>
+              ))}
+            </div>
+          ) : <div className="erp-home-trends__empty"><Icon name="chart" /><strong>No dated orders in this period</strong><span>Activity will appear here when dated orders are available.</span></div>}
+          <div className="erp-home-trends__legend">
+            {legend.map((item) => <span key={item.key}><i style={{ background: item.color }} />{item.label}</span>)}
+          </div>
+          {Number(data.undated || 0) > 0 ? <p className="erp-home-trends__note">{data.undated} order(s) have no usable creation date and are excluded from date comparisons.</p> : null}
+        </div>
+        <aside className="erp-home-trends__comparison" aria-label="Previous period comparison">
+          <span className="erp-home-trends__comparison-label">PERIOD COMPARISON</span>
+          <ComparisonMetric title="Orders created" value={data.current?.count || 0} previous={data.previous?.count || 0} delta={data.countDelta} />
+          <ComparisonMetric title="Value of created orders" value={data.current?.cost || 0} previous={data.previous?.cost || 0} delta={data.costDelta} format="money" />
+          <p>Changes compare creation dates, not completion dates. An increase is not necessarily a performance improvement.</p>
+        </aside>
       </div>
     </section>
   );
@@ -446,6 +532,7 @@ export default function HomeOverviewClient({
   reviewMatrix,
   operationsMatrix,
   maintenanceSummary,
+  trendAnalysis = {},
   stockTagSummaries,
   stockTags,
   expenseSummary,
@@ -479,7 +566,8 @@ export default function HomeOverviewClient({
           <div className="erp-home-tiles" aria-label="Order workspace totals">
             {available.map(({ definition, matrix }) => <SummaryTile key={definition.key} definition={definition} summary={safeStatus(matrix)} />)}
           </div>
-          <FocusQueue workspaces={available} />
+          <FocusQueue workspaces={available} trendAnalysis={trendAnalysis} />
+          <TrendInsights workspaces={available} trendAnalysis={trendAnalysis} />
           <div className="erp-home-dashboard__section-heading">
             <div><span>DETAILED ANALYSIS</span><h2>Order breakdown</h2></div>
             <p>Each workspace is calculated separately</p>

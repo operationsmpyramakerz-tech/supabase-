@@ -1,6 +1,7 @@
 import "server-only";
 
 import { performance } from "node:perf_hooks";
+import { buildWorkspaceTrend } from "./home-trend-analytics.mjs";
 import { isSupabaseConfigured, select } from "./supabase-rest";
 import { serializeOperationsSummaryRow } from "./operations-orders-data";
 import { stocktakingForAccount } from "./stocktaking-data";
@@ -748,39 +749,43 @@ function buildHomeOverviewFromAggregates({
   const applyDuration = (values) => filterGroupsByTime(Array.isArray(values) ? values : [], globalDuration);
 
   const currentSource = selectedGroups || source.filter((group) => aggregateMatchesCurrentAccount(group, account));
-  const currentGroups = applyDuration(currentSource.map((group) => {
+  const currentUnfiltered = currentSource.map((group) => {
     const view = aggregateGroupView(group, "all", "currentBucket");
     view.statusBucket = lower(group.currentBucket) || "progress";
     return view;
-  }));
+  });
+  const currentGroups = applyDuration(currentUnfiltered);
 
   const reviewSource = selectedGroups || source.filter((group) => (
     number(group.reviewItemCount) > 0 && aggregateVisibleToReviewer(group, reviewer)
   ));
-  const reviewGroups = applyDuration(reviewSource.map((group) => {
+  const reviewUnfiltered = reviewSource.map((group) => {
     const subset = selectedGroups ? "all" : "review";
     const view = aggregateGroupView(group, subset, selectedGroups ? "reviewBucketAll" : "reviewBucket");
     view.statusBucket = lower(selectedGroups ? group.reviewBucketAll : group.reviewBucket) || "pending";
     return view;
-  }));
+  });
+  const reviewGroups = applyDuration(reviewUnfiltered);
 
   const approvedSource = (selectedGroups || source).filter((group) => (
     group.hasApprovedRows || number(group.approvedItemCount) > 0
   ));
-  const operationsGroups = applyDuration(approvedSource
+  const operationsUnfiltered = approvedSource
     .map((group) => {
       const view = aggregateGroupView(group, "approved", "approvedOperationsBucket");
       view.statusBucket = lower(group.approvedOperationsBucket) || "pending";
       return view;
     })
-    .filter((group) => orderTypeBucket(group) !== "maintenance"));
-  const maintenanceGroups = applyDuration(approvedSource
+    .filter((group) => orderTypeBucket(group) !== "maintenance");
+  const operationsGroups = applyDuration(operationsUnfiltered);
+  const maintenanceUnfiltered = approvedSource
     .map((group) => {
       const view = aggregateGroupView(group, "approved", "approvedMaintenanceBucket");
       view.statusBucket = lower(group.approvedMaintenanceBucket) || "pending";
       return view;
     })
-    .filter((group) => orderTypeBucket(group) === "maintenance"));
+    .filter((group) => orderTypeBucket(group) === "maintenance");
+  const maintenanceGroups = applyDuration(maintenanceUnfiltered);
 
   const currentMatrix = analysisMatrix(currentGroups, CURRENT_STATUS_DEFINITIONS, (group) => group.statusBucket || "progress");
   const reviewMatrix = analysisMatrix(reviewGroups, REVIEW_STATUS_DEFINITIONS, (group) => group.statusBucket || "pending");
@@ -798,6 +803,12 @@ function buildHomeOverviewFromAggregates({
     reviewMatrix,
     operationsMatrix,
     maintenanceSummary,
+    trendAnalysis: {
+      current: buildWorkspaceTrend(currentUnfiltered, CURRENT_STATUS_DEFINITIONS, (group) => group.statusBucket || "progress", globalDuration, undefined, "progress"),
+      review: buildWorkspaceTrend(reviewUnfiltered, REVIEW_STATUS_DEFINITIONS, (group) => group.statusBucket || "pending", globalDuration, undefined, "pending"),
+      operations: buildWorkspaceTrend(operationsUnfiltered, OPERATIONS_STATUS_DEFINITIONS, (group) => group.statusBucket || "pending", globalDuration, undefined, "pending"),
+      maintenance: buildWorkspaceTrend(maintenanceUnfiltered, MAINTENANCE_STATUS_DEFINITIONS, (group) => group.statusBucket || "pending", globalDuration, undefined, "pending"),
+    },
     stockTagSummaries: resolvedStockAnalysis.summaries || stockTagAnalysis([]).summaries,
     stockTags: Array.isArray(resolvedStockAnalysis.tags) ? resolvedStockAnalysis.tags : [],
     expenseSummary: resolvedExpenseSummary,
@@ -835,29 +846,21 @@ function buildHomeOverview({
   expenseSummaryValue = null,
 } = {}) {
   const globalDuration = ["all", "week", "month", "year"].includes(duration) ? duration : "all";
-  const applyGlobalFilters = (groups) => filterGroupsByTime(
-    (Array.isArray(groups) ? groups : []).filter((group) => groupMatchesUser(group, selectedUser)),
-    globalDuration,
-  );
-
   const selectedRowsAvailable = Array.isArray(selectedSystemRows);
   const selectedApprovedRows = selectedRowsAvailable
     ? selectedSystemRows.filter((row) => lower(row.svApproval ?? row.sv_approval ?? row.approval) === "approved")
     : null;
 
-  const currentGroups = selectedRowsAvailable
-    ? filterGroupsByTime(groupRows(selectedSystemRows), globalDuration)
-    : applyGlobalFilters(groupRows(currentRows));
-  const reviewGroups = selectedRowsAvailable
-    ? filterGroupsByTime(groupRows(selectedSystemRows), globalDuration)
-    : applyGlobalFilters(groupRows(reviewRows));
+  const selectScope = (groups) => (Array.isArray(groups) ? groups : []).filter((group) => groupMatchesUser(group, selectedUser));
+  const currentUnfiltered = selectScope(groupRows(selectedRowsAvailable ? selectedSystemRows : currentRows));
+  const reviewUnfiltered = selectScope(groupRows(selectedRowsAvailable ? selectedSystemRows : reviewRows));
   const requestedGroups = groupRows(selectedApprovedRows ?? requestedRows);
-  const operationsGroups = selectedRowsAvailable
-    ? filterGroupsByTime(requestedGroups.filter((group) => orderTypeBucket(group) !== "maintenance"), globalDuration)
-    : applyGlobalFilters(requestedGroups.filter((group) => orderTypeBucket(group) !== "maintenance"));
-  const maintenanceGroups = selectedRowsAvailable
-    ? filterGroupsByTime(requestedGroups.filter((group) => orderTypeBucket(group) === "maintenance"), globalDuration)
-    : applyGlobalFilters(requestedGroups.filter((group) => orderTypeBucket(group) === "maintenance"));
+  const operationsUnfiltered = selectScope(requestedGroups.filter((group) => orderTypeBucket(group) !== "maintenance"));
+  const maintenanceUnfiltered = selectScope(requestedGroups.filter((group) => orderTypeBucket(group) === "maintenance"));
+  const currentGroups = filterGroupsByTime(currentUnfiltered, globalDuration);
+  const reviewGroups = filterGroupsByTime(reviewUnfiltered, globalDuration);
+  const operationsGroups = filterGroupsByTime(operationsUnfiltered, globalDuration);
+  const maintenanceGroups = filterGroupsByTime(maintenanceUnfiltered, globalDuration);
 
   const currentMatrix = analysisMatrix(currentGroups, CURRENT_STATUS_DEFINITIONS, bucketCurrent);
   const reviewMatrix = analysisMatrix(reviewGroups, REVIEW_STATUS_DEFINITIONS, bucketReview);
@@ -875,6 +878,12 @@ function buildHomeOverview({
     reviewMatrix,
     operationsMatrix,
     maintenanceSummary,
+    trendAnalysis: {
+      current: buildWorkspaceTrend(currentUnfiltered, CURRENT_STATUS_DEFINITIONS, bucketCurrent, globalDuration, undefined, "progress"),
+      review: buildWorkspaceTrend(reviewUnfiltered, REVIEW_STATUS_DEFINITIONS, bucketReview, globalDuration, undefined, "pending"),
+      operations: buildWorkspaceTrend(operationsUnfiltered, OPERATIONS_STATUS_DEFINITIONS, bucketOperations, globalDuration, undefined, "pending"),
+      maintenance: buildWorkspaceTrend(maintenanceUnfiltered, MAINTENANCE_STATUS_DEFINITIONS, bucketMaintenance, globalDuration, undefined, "pending"),
+    },
     stockTagSummaries: resolvedStockAnalysis.summaries || stockTagAnalysis([]).summaries,
     stockTags: Array.isArray(resolvedStockAnalysis.tags) ? resolvedStockAnalysis.tags : [],
     expenseSummary: resolvedExpenseSummary,
@@ -1000,8 +1009,16 @@ async function loadHomeOverviewDirectImpl({
     overviewSource = needsOrderOverview ? "supabase-direct-row-fallback" : "supabase-direct";
   }
 
+  // Do not serialize even derived trend data for workspaces the account cannot open.
+  const visibleTrends = {};
+  if (showCurrent) visibleTrends.current = overview.trendAnalysis?.current;
+  if (showReview) visibleTrends.review = overview.trendAnalysis?.review;
+  if (showOperations) visibleTrends.operations = overview.trendAnalysis?.operations;
+  if (showMaintenance) visibleTrends.maintenance = overview.trendAnalysis?.maintenance;
+
   return {
     ...overview,
+    trendAnalysis: visibleTrends,
     selectedUser: selectedUser?.id ? {
       id: String(selectedUser.id),
       name: selectedUser.name || selectedUser.username || String(selectedUser.id),
