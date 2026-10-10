@@ -308,6 +308,73 @@ function ProcessingTimeInsights({ workspaces, lifecycleAnalysis = {} }) {
   );
 }
 
+function SlaMonitoring({ workspaces, lifecycleAnalysis = {} }) {
+  const [active, setActive] = useState("current");
+  if (!workspaces.length) return null;
+  const sla = lifecycleAnalysis?.sla;
+  const auditReady = lifecycleAnalysis?.state === "ready";
+  const slaReady = auditReady && sla?.state === "ready";
+  const selected = workspaces.find(({ definition }) => definition.key === active) || workspaces[0];
+  const data = slaReady ? sla?.workspaces?.[selected.definition.key] : null;
+  const configured = Boolean(data?.configured);
+  const statuses = configured ? [
+    { key: "activeOnTrack", label: "On track", tone: "good", detail: "Open · below warning level" },
+    { key: "activeWarning", label: "Approaching target", tone: "warn", detail: `Open · ${data.warningPercent}% of target used` },
+    { key: "activeOverdue", label: "Over target", tone: "bad", detail: "Open · target exceeded" },
+    { key: "completedOnTime", label: "Completed on time", tone: "good", detail: "Verified completed orders" },
+    { key: "completedLate", label: "Completed late", tone: "bad", detail: "Verified completed orders" },
+  ] : [];
+  const tracked = configured ? data.audited : 0;
+  return (
+    <section className="erp-home-sla" aria-label="Optional SLA monitoring">
+      <div className="erp-home-sla__head">
+        <div>
+          <span className="erp-home-dashboard__eyebrow"><Icon name="alert" /> SERVICE TARGETS</span>
+          <h2>SLA monitoring</h2>
+          <p>Optional deadlines measured from verified order events, for each workflow independently.</p>
+        </div>
+        <div className="erp-home-sla__tabs" role="group" aria-label="SLA workspace">
+          {workspaces.map(({ definition }) => <button key={definition.key} type="button"
+            className={selected.definition.key === definition.key ? "is-active" : ""}
+            aria-pressed={selected.definition.key === definition.key}
+            onClick={() => setActive(definition.key)}>{definition.shortTitle}</button>)}
+        </div>
+      </div>
+      {!auditReady ? (
+        <div className="erp-home-sla__notice" role="status"><Icon name="alert" /><div><strong>Lifecycle data not available</strong><p>Activate or restore the lifecycle audit first. SLA deadlines will never be inferred from order creation dates alone.</p></div></div>
+      ) : !slaReady ? (
+        <div className="erp-home-sla__notice" role="status"><Icon name="alert" /><div><strong>{sla?.state === "needs-setup" ? "SLA configuration needs setup" : "SLA settings unavailable"}</strong><p>{sla?.state === "needs-setup" ? "Run supabase_home_sla_policies.sql in Supabase SQL Editor. All targets start disabled." : "Check the server-side Supabase service-role permission for the SLA policies table."}</p></div></div>
+      ) : !configured ? (
+        <div className="erp-home-sla__notice" role="status"><Icon name="clock" /><div><strong>No active target for {selected.definition.title}</strong><p>Choose and enable a target in Supabase (erp_home_sla_policies). No deadlines, overdue labels, or alerts are assumed until a policy is approved.</p></div></div>
+      ) : (
+        <>
+          <div className="erp-home-sla__policy">
+            <div><span>Configured target</span><strong>{processingTimeText(data.targetHours)}</strong><small>{data.label}</small></div>
+            <div><span>Advance warning</span><strong>{data.warningPercent}%</strong><small>Of allowed elapsed time</small></div>
+            <div><span>Closed within target</span><strong>{data.onTimePercent === null ? "—" : `${data.onTimePercent}%`}</strong><small>{data.completionSample} verified completion{data.completionSample === 1 ? "" : "s"}</small></div>
+          </div>
+          <div className="erp-home-sla__statuses">
+            {statuses.map((status) => <div className={`erp-home-sla__status erp-home-sla__status--${status.tone}`} key={status.key}>
+              <span>{status.label}</span><strong>{Number(data[status.key] || 0).toLocaleString("en-EG")}</strong><small>{status.detail}</small>
+            </div>)}
+          </div>
+          <div className="erp-home-sla__coverage">
+            <span><strong>{tracked}</strong> of {data.eligible} selected orders have complete audit histories</span>
+            {Number(data.awaitingStart || 0) > 0 ? <span>{data.awaitingStart} awaiting this workflow stage</span> : null}
+          </div>
+          {data.topOverdue?.length ? <div className="erp-home-sla__overdue">
+            <div className="erp-home-sla__overdue-title"><strong>Longest-running overdue orders</strong><Link href={toRouterPath(selected.definition.href)}>Open workspace <Icon name="arrow" /></Link></div>
+            <div className="erp-home-sla__overdue-list">{data.topOverdue.map((order) => <div key={order.orderNumber}>
+              <strong>Order #{order.orderNumber}</strong><span>{processingTimeText(order.elapsedHours)} elapsed</span>
+            </div>)}</div>
+          </div> : null}
+        </>
+      )}
+      <p className="erp-home-sla__footnote">SLA targets use continuous calendar hours (including weekends). This is a read-only dashboard: no automatic email, push notification, escalation, or enforced approval is enabled. Older orders without complete audit histories are excluded.</p>
+    </section>
+  );
+}
+
 function ComparisonMetric({ title, value, previous, delta, format = "number" }) {
   const showMoney = format === "money";
   const label = showMoney ? compactMoney(value) : Number(value || 0).toLocaleString("en-EG");
@@ -701,6 +768,7 @@ export default function HomeOverviewClient({
           <FocusQueue workspaces={available} trendAnalysis={trendAnalysis} />
           <BacklogHealth workspaces={available} backlogAnalysis={backlogAnalysis} selectedDuration={selectedDuration} />
           <ProcessingTimeInsights workspaces={available} lifecycleAnalysis={lifecycleAnalysis} />
+          <SlaMonitoring workspaces={available} lifecycleAnalysis={lifecycleAnalysis} />
           <TrendInsights workspaces={available} trendAnalysis={trendAnalysis} />
           <div className="erp-home-dashboard__section-heading">
             <div><span>DETAILED ANALYSIS</span><h2>Order breakdown</h2></div>

@@ -551,3 +551,58 @@ body.page-home .erp-home-cycle__notice strong { font-size:12px; color:var(--eh-t
 body.page-home .erp-home-cycle__notice p { font-size:11px; color:var(--eh-muted); line-height:1.6; margin:5px 0 0; }
 @media(max-width:850px) { body.page-home .erp-home-cycle__metrics { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media(max-width:650px) { body.page-home .erp-home-cycle { padding:14px; border-radius:19px; } body.page-home .erp-home-cycle__head { flex-direction:column; align-items:stretch; gap:13px; } body.page-home .erp-home-cycle__tabs { width:100%; } body.page-home .erp-home-cycle__tabs button { flex:1 0 auto; padding-inline:10px; } body.page-home .erp-home-cycle__metrics>div { min-height:94px; padding:11px; } }
+
+/* Phase 5 — optional, audited SLA monitoring. Never implies enforced deadlines. */
+body.page-home .erp-home-sla { min-width:0; padding:clamp(16px,2vw,23px); margin:0 0 17px; border:1px solid var(--eh-border); border-radius:22px; background:var(--eh-bg); box-shadow:var(--eh-shadow); }
+body.page-home .erp-home-sla__head { display:flex; justify-content:space-between; align-items:flex-end; gap:16px; margin-bottom:16px; }
+body.page-home .erp-home-sla__head h2 { font-size:clamp(18px,2vw,23px); font-weight:850; letter-spacing:-.035em; color:var(--eh-text); margin:5px 0; }
+body.page-home .erp-home-sla__head p { font-size:11px; line-height:1.5; color:var(--eh-muted); margin:0; font-weight:600; }
+body.page-home .erp-home-sla__tabs { display:flex; gap:4px; max-width:100%; flex-shrink:0; overflow-x:auto; scrollbar-width:none; padding:4px; border-radius:13px; border:1px solid var(--eh-border); background:var(--eh-surface); }
+body.page-home .erp-home-sla__tabs::-webkit-scrollbar { display:none; }
+body.page-home .erp-home-sla__tabs button { appearance:none; border:0; background:transparent; white-space:nowrap; min-height:32px; border-radius:9px; padding:7px 12px; color:var(--eh-muted); font-size:11px; font-weight:800; cursor:pointer; }
+body.page-home .erp-home-sla__tabs button.is-active { background:var(--eh-bg); color:var(--eh-text); box-shadow:0 2px 6px rgba(16,24,40,.10); }
+body.page-home .erp-home-sla__tabs button:focus-visible { outline:2px solid var(--eh-orange); outline-offset:-2px; }
+body.page-home .erp-home-sla__notice { display:flex; align-items:flex-start; gap:11px; padding:16px; border:1px dashed var(--eh-border); background:var(--eh-surface); border-radius:14px; }
+body.page-home .erp-home-sla__notice svg { color:var(--eh-orange); flex:0 0 19px; width:19px; height:19px; }
+body.page-home .erp-home-sla__notice strong { display:block; color:var(--eh-text); font-size:12px; font-weight:850; }
+body.page-home .erp-home-sla__notice p { color:var(--eh-muted); font-size:11px; line-height:1.55; margin:5px 0 0; }
+body.page-home .erp-home-sla__policy { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; margin-bottom:12px; }
+body.page-home .erp-home-sla__policy>div { min-width:0; display:flex; flex-direction:column; gap:6px; padding:14px; border:1px solid var(--eh-border); background:var(--eh-surface); border-radius:14px; }
+body.page-home .erp-home-sla__policy span, body.page-home .erp-home-sla__status span { color:var(--eh-muted); font-size:10px; font-weight:800; }
+body.page-home .erp-home-sla__policy strong { color:var(--eh-text); font-size:clamp(20px,2.4vw,27px); letter-spacing:-.035em; line-height:1.15; font-weight:850; }
+body.page-home .erp-home-sla__policy small, body.page-home .erp-home-sla__status small { color:var(--eh-muted); font-size:10px; line-height:1.45; font-weight:600; }
+body.page-home .erp-home-sla__statuses { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:9px; }
+body.page-home .erp-home-sla__status { min-width:0; display:flex; flex-direction:column; gap:7px; padding:12px; border-radius:12px; border:1px solid var(--eh-border); background:var(--eh-surface); }
+body.page-home .erp-home-sla__status strong { font-size:24px; font-weight:850; line-height:1.15; color:var(--eh-text); }
+body.page-home .erp-home-sla__status--warn strong { color:#a55b13; }
+body.page-home .erp-home-sla__status--bad strong { color:#bb3d48; }
+body.page-home .erp-home-sla__status--good strong { color:#15845b; }
+body.page-home .erp-home-sla__coverage { display:flex; justify-content:space-between; flex-wrap:wrap; gap:7px; padding-top:13px; font-size:10px; font-weight:650; color:var(--eh-muted); }
+body.page-home .erp-home-sla__coverage strong { color:var(--eh-text); font-weight:850; }
+body.page-home .erp-home-sla__overdue { background:var(--eh-surface); border:1px solid var(--eh-border); border-radius:13px; padding:13px; margin-top:13px; }
+body.page-home .erp-home-sla__overdue-title { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:11px; }
+body.page-home .erp-home-sla__overdue-title>strong { color:var(--eh-text); font-size:12px; font-weight:850; }
+body.page-home .erp-home-sla__overdue-title>a { display:inline-flex; align-items:center; gap:4px; color:var(--eh-orange); text-decoration:none; font-size:11px; font-weight:800; }
+body.page-home .erp-home-sla__overdue-title svg { width:14px; height:14px; }
+body.page-home .erp-home-sla__overdue-list { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:8px; }
+body.page-home .erp-home-sla__overdue-list>div { display:flex; align-items:center; justify-content:space-between; gap:6px; min-width:0; padding:10px; background:var(--eh-bg); border:1px solid var(--eh-border); border-radius:10px; }
+body.page-home .erp-home-sla__overdue-list strong { font-size:11px; color:var(--eh-text); font-weight:800; }
+body.page-home .erp-home-sla__overdue-list span { font-size:10px; color:#bb3d48; font-weight:800; white-space:nowrap; }
+body.page-home .erp-home-sla__footnote { margin:12px 0 0; font-size:10px; font-weight:650; color:var(--eh-muted); line-height:1.55; }
+@media(max-width:1050px) { body.page-home .erp-home-sla__statuses { grid-template-columns:repeat(3,minmax(0,1fr)); } }
+@media(max-width:650px) {
+  body.page-home .erp-home-sla { padding:14px; border-radius:19px; }
+  body.page-home .erp-home-sla__head { flex-direction:column; align-items:stretch; gap:12px; }
+  body.page-home .erp-home-sla__tabs { width:100%; }
+  body.page-home .erp-home-sla__tabs button { flex:1 0 auto; padding-inline:10px; }
+  body.page-home .erp-home-sla__policy { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  body.page-home .erp-home-sla__policy>div:last-child { grid-column:1/-1; }
+  body.page-home .erp-home-sla__statuses { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  body.page-home .erp-home-sla__status { padding:11px; }
+  body.page-home .erp-home-sla__overdue-title { flex-wrap:wrap; }
+}
+@media(max-width:355px) { body.page-home .erp-home-sla__statuses { grid-template-columns:minmax(0,1fr); } }
+html[data-theme="dark"] body.page-home .erp-home-sla__status--warn strong { color:#f0ae68; }
+html[data-theme="dark"] body.page-home .erp-home-sla__status--bad strong,
+html[data-theme="dark"] body.page-home .erp-home-sla__overdue-list span { color:#ff8c93; }
+html[data-theme="dark"] body.page-home .erp-home-sla__status--good strong { color:#67d7a9; }

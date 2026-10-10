@@ -2,6 +2,8 @@ import 'server-only';
 
 import { isSupabaseConfigured, select } from './supabase-rest';
 import { buildLifecycleAnalytics } from './home-lifecycle-analytics.mjs';
+import { buildSlaAnalytics } from './home-sla-analytics.mjs';
+import { loadHomeSlaPolicies } from './home-sla-policies';
 
 const MAX_ORDERS = 1200;
 const CHUNK_SIZE = 60;
@@ -14,11 +16,13 @@ export async function loadHomeLifecycleAnalytics(scopes = {}) {
     Array.isArray(scope) ? scope.map((order) => String(order.orderNumber)) : []))]
     .filter((number) => /^[1-9]\d*$/.test(number));
 
-  if (!ordered.length) return { state: 'ready', workspaces: buildLifecycleAnalytics(scopes, []) };
   if (ordered.length > MAX_ORDERS) return { state: 'too-many-orders', workspaces: {} };
   if (!isSupabaseConfigured()) return { state: 'unavailable', workspaces: {} };
 
   try {
+    // SLA and processing-time metrics share the same access-scoped audit events.
+    // Policies remain disabled until explicitly configured in Supabase.
+    const policiesPromise = loadHomeSlaPolicies();
     const events = [];
     for (let i = 0; i < ordered.length; i += CHUNK_SIZE) {
       const numbers = ordered.slice(i, i + CHUNK_SIZE);
@@ -39,7 +43,11 @@ export async function loadHomeLifecycleAnalytics(scopes = {}) {
         if (offset >= MAX_EVENTS_PER_CHUNK) return { state: 'too-many-events', workspaces: {} };
       }
     }
-    return { state: 'ready', workspaces: buildLifecycleAnalytics(scopes, events) };
+    const policyResult = await policiesPromise;
+    const sla = policyResult.state === 'ready'
+      ? buildSlaAnalytics(scopes, events, policyResult.policies)
+      : { state: policyResult.state, workspaces: {} };
+    return { state: 'ready', workspaces: buildLifecycleAnalytics(scopes, events), sla }; 
   } catch (error) {
     const body = [error?.message, error?.details?.message, error?.details?.code].filter(Boolean).join(' ').toLowerCase();
     const missing = /does not exist|could not find|schema cache|pgrst205|42p01/.test(body);

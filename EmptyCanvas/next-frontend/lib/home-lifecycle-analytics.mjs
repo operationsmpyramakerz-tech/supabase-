@@ -48,7 +48,7 @@ function transitionTime(events, reached) {
   return previouslyReached ? at : null;
 }
 
-function auditedTimeline(events, expectedRows) {
+export function auditedOrderTimeline(events, expectedRows) {
   const rows = new Map();
   for (const event of events || []) {
     const rowId = String(event.row_id ?? event.rowId ?? '').trim();
@@ -132,7 +132,7 @@ export function buildLifecycleAnalytics(scopes = {}, events = []) {
     let audited = 0;
     const durations = [];
     for (const order of scope) {
-      const timeline = auditedTimeline(byNumber.get(String(order.orderNumber)) || [], Number(order.expectedRows));
+      const timeline = auditedOrderTimeline(byNumber.get(String(order.orderNumber)) || [], Number(order.expectedRows));
       if (!timeline) continue;
       audited++;
       const start = timeline[definition.from];
