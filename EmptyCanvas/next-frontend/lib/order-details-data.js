@@ -1,8 +1,8 @@
 import "server-only";
 
 import { getSupabaseConfig, select } from "./supabase-rest";
-import { getProductsCatalog } from "./products-service";
-import { getProposal, listKitFolders, listKitMembership, listKits } from "./proposal-kit-service";
+import { getProductsList } from "./products-service";
+import { getProposal, getKitGroupingReferences, listKitFolders } from "./proposal-kit-service";
 
 function text(value) {
   if (value === null || typeof value === "undefined") return "";
@@ -687,16 +687,21 @@ export async function enrichOrderDetailGrouping(items = []) {
   if (!rows.length) return rows;
   // Proposal-source reconstruction and catalog/kit lookups are independent.
   // Run them together instead of serializing their latency on every order tap.
-  const [resolvedRows, catalog, memberships, kits, folders] = await Promise.all([
+  // Only the product records (not the separate tags/units catalog) are
+  // needed here. Kit header names and memberships come from one snapshot;
+  // loading the full Kits page list would otherwise perform an unnecessary
+  // item-count scan on the first order open.
+  const [resolvedRows, productsResult, kitReferences, folders] = await Promise.all([
     resolveDirectProposalSources(rows),
-    getProductsCatalog().catch(() => ({ products: [] })),
-    listKitMembership().catch(() => []),
-    listKits({}).catch(() => []),
+    getProductsList().catch(() => []),
+    getKitGroupingReferences().catch(() => ({ memberships: [], kits: [] })),
     listKitFolders({}).catch(() => []),
   ]);
   rows = resolvedRows;
 
-  const products = Array.isArray(catalog?.products) ? catalog.products : [];
+  const products = Array.isArray(productsResult) ? productsResult : [];
+  const memberships = kitReferences?.memberships || [];
+  const kits = kitReferences?.kits || [];
   const productByName = new Map();
   const productByUrl = new Map();
   for (const product of products) {

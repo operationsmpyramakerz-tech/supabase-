@@ -7,7 +7,7 @@ import { consumeOrderSummaryWindows, loadOrderRowsByNumbers, scanOrderNumberCand
 import { applyOrderSearchPlan, canUseOrderSearchText, createOrderSearchPlan, noteOrderSearchTextError } from "./order-search-hotpath";
 import { canUseOrderCandidateRpc, loadOrderCandidateNumbersRpc, noteOrderCandidateRpcError } from "./order-candidate-rpc";
 import { measurePerformance, recordPerformanceSample } from "./performance-profiler";
-import { getProductsCatalog } from "./products-service";
+import { getProductsCatalog, getProductsList } from "./products-service";
 import { invalidateLegacyOperationsCaches, markOperationsArrived } from "./operations-orders-data";
 import { directPageMutationAccess, verifyPageAdminPasswordDirect } from "./order-action-auth";
 import { listMaintenanceChecklistItems } from "./maintenance-checklist-data";
@@ -419,8 +419,9 @@ async function enrichMaintenanceDetailProducts(items = []) {
 
   let products = [];
   try {
-    const catalog = await getProductsCatalog();
-    products = Array.isArray(catalog?.products) ? catalog.products : [];
+    // Order details require individual product metadata, not the independent
+    // tags/units dropdown catalogs used by editing forms.
+    products = await getProductsList();
   } catch {}
   if (!products.length) return rows;
 

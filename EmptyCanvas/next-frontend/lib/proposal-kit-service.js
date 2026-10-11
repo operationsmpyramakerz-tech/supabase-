@@ -854,8 +854,10 @@ export async function listKits(account, { fresh = false } = {}) {
   return headers.map((row) => kitHeader(row, Number(row.items_count) || 0, resolvedAccount));
 }
 
-export async function listKitMembership({ fresh = false } = {}) {
-  const { headers, items } = await kitListSnapshot({ fresh });
+// Both order-detail grouping and the Kits page need the same membership
+// snapshot. Sharing its projection avoids loading a second kit-header list and
+// calculating kit item counts just to resolve folder names for an order.
+function kitMembershipsFromSnapshot({ headers = [], items = [] } = {}) {
   const kitNames = new Map(headers.map((row) => [text(row.id), text(row.name) || "Untitled kit"]));
   const byProduct = new Map();
   for (const item of items || []) {
@@ -872,6 +874,22 @@ export async function listKitMembership({ fresh = false } = {}) {
       .map(([id, name]) => ({ id, name }))
       .sort((a, b) => a.name.localeCompare(b.name)),
   }));
+}
+
+export async function listKitMembership({ fresh = false } = {}) {
+  return kitMembershipsFromSnapshot(await kitListSnapshot({ fresh }));
+}
+
+export async function getKitGroupingReferences() {
+  const snapshot = await kitListSnapshot();
+  return {
+    memberships: kitMembershipsFromSnapshot(snapshot),
+    kits: snapshot.headers.map((row) => ({
+      id: text(row.id),
+      name: text(row.name) || "Untitled kit",
+      folderId: text(row.folder_id),
+    })),
+  };
 }
 
 export async function getKit(id, account) {
