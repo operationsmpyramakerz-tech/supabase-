@@ -120,7 +120,7 @@ export default function ShoppingCartSidebarFlyout({ allowedPages = [], activePat
       const latestPath = String(window.location.pathname || currentPath).replace(/\/+$/, "");
       panel.innerHTML = `<div class="task-management-secondary-sidebar__rail shopping-cart-secondary-sidebar__rail">${pages.map((page) => {
         const active = latestPath === page.route || latestPath.startsWith(`${page.route}/`);
-        return `<a class="task-management-secondary-sidebar__link shopping-cart-secondary-sidebar__link${active ? " is-active" : ""}" href="${page.route}" role="menuitem" aria-label="${page.label}">${iconSvg(page.icon)}<span>${page.label}</span></a>`;
+        return `<a class="task-management-secondary-sidebar__link shopping-cart-secondary-sidebar__link${active ? " is-active" : ""}" href="${page.route}" role="menuitem" aria-label="${page.label}">${iconSvg(page.icon)}<span>${page.label.split(" ").join("<br>")}</span></a>`;
       }).join("")}</div>`;
     };
 

@@ -350,3 +350,58 @@ html[data-theme] body.next-classic-shell-active .classic-app-shell a.nav-link[ar
     overflow-wrap: anywhere !important;
   }
 }
+
+/* Shopping Cart secondary dock: show the full three two-word page labels.
+   The generic task flyout deliberately truncates one-line captions; scope
+   this mobile override to Shopping Cart so Tasks and Events remain unchanged. */
+@media (max-width: 768px) {
+  html[data-theme] body .shopping-cart-secondary-sidebar {
+    height: 194px !important;
+    min-height: 194px !important;
+    padding: 10px 8px 84px !important;
+  }
+
+  html[data-theme] body .shopping-cart-secondary-sidebar .shopping-cart-secondary-sidebar__rail {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 4px !important;
+    align-items: stretch !important;
+  }
+
+  html[data-theme] body .shopping-cart-secondary-sidebar .shopping-cart-secondary-sidebar__link {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 6px !important;
+    box-sizing: border-box !important;
+    height: 96px !important;
+    min-height: 96px !important;
+    min-width: 0 !important;
+    padding: 7px 1px !important;
+    text-align: center !important;
+  }
+
+  html[data-theme] body .shopping-cart-secondary-sidebar .shopping-cart-secondary-sidebar__link > svg {
+    width: 18px !important;
+    height: 18px !important;
+    padding: 6px !important;
+    margin: 0 auto !important;
+  }
+
+  html[data-theme] body .shopping-cart-secondary-sidebar .shopping-cart-secondary-sidebar__link > span {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    overflow-wrap: normal !important;
+    word-break: normal !important;
+    color: inherit !important;
+    font-size: clamp(8px, 2.55vw, 10px) !important;
+    font-weight: 750 !important;
+    line-height: 1.25 !important;
+    text-align: center !important;
+  }
+}
