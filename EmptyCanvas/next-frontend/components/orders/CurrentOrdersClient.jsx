@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { navigateWithinApp } from "../../lib/client-navigation";
 import ClassicOrderIcon from "./ClassicOrderIcon";
-import OrdersEmptyState, { OrdersListHeader } from "./OrdersEmptyState";
+import OrderTypeBadge from "./OrderTypeBadge";
+import OrdersEmptyState, { OrdersListHeader, sortOrderGroups } from "./OrdersEmptyState";
 import CurrentOrderCreatorPopover from "./CurrentOrderCreatorPopover";
 
 const loadCurrentOrdersHeavyModals = () => import("./CurrentOrdersHeavyModals");
@@ -552,8 +553,11 @@ function OrderCard({ group, activeTab, onOpen, onReason, onCreator }) {
     >
       <div className="co-top">
         <div className="co-main">
-          <div className="co-title">{group.orderIdLabel}</div>
-          <div className="orders-workspace-user" title={group.createdByName || "Unknown user"}>{group.createdByName || "Unknown user"}</div>
+          <OrderTypeBadge type={group.orderType} color={group.orderTypeColor} />
+          <div className="orders-workspace-order-info">
+            <div className="co-title">{group.orderIdLabel}</div>
+            <div className="orders-workspace-user" title={group.createdByName || "Unknown user"}>{group.createdByName || "Unknown user"}</div>
+          </div>
         </div>
         <div className="next-current-card-head-actions">
           <div className="next-current-card-status">
@@ -595,6 +599,7 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
   const [tab, setTab] = useState("all");
   const [type, setType] = useState("all");
   const [query, setQuery] = useState("");
+  const [sortMode, setSortMode] = useState("latest");
   const [selected, setSelected] = useState(null);
   const [actionState, setActionState] = useState(null);
   const [actionError, setActionError] = useState("");
@@ -682,6 +687,8 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
       return !needle || serverFilteredQuery || groupSearchText(group).includes(needle);
     });
   }, [statusGroups, type, query, pageInfo]);
+
+  const sortedVisibleGroups = useMemo(() => sortOrderGroups(visibleGroups, sortMode), [visibleGroups, sortMode]);
 
   async function fetchOrdersPage({ reset = true, fresh = false } = {}) {
     const requestId = ++listRequestRef.current;
@@ -932,9 +939,9 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
       </div>
 
       <section className="card" id="current-orders">
-        <OrdersListHeader count={visibleGroups.length} hasMore={pageInfo?.hasMore} busy={listLoading} />
+        <OrdersListHeader count={visibleGroups.length} hasMore={pageInfo?.hasMore} busy={listLoading} sortMode={sortMode} onSortChange={setSortMode} />
         <div className="co-cards" id="orders-list">
-          {visibleGroups.length ? visibleGroups.map((group) => <OrderCard group={group} activeTab={tab} onOpen={openOrderDetails} onReason={(reason) => { void loadCurrentOrdersHeavyModals(); setReasonView(reason); }} onCreator={(anchor, selectedGroup) => { const bounds = anchor.getBoundingClientRect(); setCreatorPreview({ id: selectedGroup.createdById, name: selectedGroup.createdByName, left: Math.max(12, Math.min(bounds.right - 320, window.innerWidth - 332)), top: bounds.bottom + 8, above: bounds.top }); }} key={group.key} />) : listLoading ? (
+          {visibleGroups.length ? sortedVisibleGroups.map((group) => <OrderCard group={group} activeTab={tab} onOpen={openOrderDetails} onReason={(reason) => { void loadCurrentOrdersHeavyModals(); setReasonView(reason); }} onCreator={(anchor, selectedGroup) => { const bounds = anchor.getBoundingClientRect(); setCreatorPreview({ id: selectedGroup.createdById, name: selectedGroup.createdByName, left: Math.max(12, Math.min(bounds.right - 320, window.innerWidth - 332)), top: bounds.bottom + 8, above: bounds.top }); }} key={group.key} />) : listLoading ? (
             <div className="ops-no-data-state" role="status" aria-live="polite"><div className="ops-no-data-state__text">Loading orders…</div></div>
           ) : (
             <OrdersEmptyState filtered={tab !== "all" || type !== "all" || !!query.trim()} context={"my-orders"} onReset={() => { setTab("all"); setType("all"); setQuery(""); }} />

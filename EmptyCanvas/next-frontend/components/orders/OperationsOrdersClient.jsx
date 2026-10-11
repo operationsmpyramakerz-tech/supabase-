@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import ClassicOrderIcon from "./ClassicOrderIcon";
-import OrdersEmptyState, { OrdersListHeader } from "./OrdersEmptyState";
+import OrderTypeBadge from "./OrderTypeBadge";
+import OrdersEmptyState, { OrdersListHeader, sortOrderGroups } from "./OrdersEmptyState";
 import ActionLoadingModal, { useActionLoading } from "../ActionLoadingModal";
 import { loadTeamMemberPublicProfile } from "../../lib/team-member-public-client";
 
@@ -691,8 +692,11 @@ function OperationsOrderCard({ group, tab, onOpen, onCreator }) {
     <article className="co-card next-operations-order-card" role="button" tabIndex={0} aria-label={`Open ${group.orderIdLabel}`} onClick={() => onOpen(group)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen(group); } }}>
       <div className="co-top">
         <div className="co-main">
-          <div className="co-title">{group.orderIdLabel}</div>
-          <div className="orders-workspace-user" title={group.createdByName || "Unknown user"}>{group.createdByName || "Unknown user"}</div>
+          <OrderTypeBadge type={group.orderType} color={group.orderTypeColor} />
+          <div className="orders-workspace-order-info">
+            <div className="co-title">{group.orderIdLabel}</div>
+            <div className="orders-workspace-user" title={group.createdByName || "Unknown user"}>{group.createdByName || "Unknown user"}</div>
+          </div>
         </div>
         <div className="next-operations-card-head-actions">
           <div className="next-operations-card-status">
@@ -754,6 +758,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
   const [tab, setTab] = useState("all");
   const [type, setType] = useState("all");
   const [query, setQuery] = useState("");
+  const [sortMode, setSortMode] = useState("latest");
   const [selected, setSelected] = useState(null);
   const [actionState, setActionState] = useState(null);
   const [actionError, setActionError] = useState("");
@@ -845,6 +850,8 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
       return !needle || serverFilteredQuery || groupSearchText(group).includes(needle);
     });
   }, [tabGroups, type, query, pageInfo]);
+
+  const sortedVisibleGroups = useMemo(() => sortOrderGroups(visibleGroups, sortMode), [visibleGroups, sortMode]);
 
   const downloadOrderOptions = useMemo(() => tabGroups.map((group) => {
     const scopedItems = itemsForOperationsTab(group?.items || [], tab);
@@ -1401,9 +1408,9 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
       </div>
 
       <section className="operations-orders-list-surface" id="operations-orders-list">
-        <OrdersListHeader count={visibleGroups.length} hasMore={pageInfo?.hasMore} busy={listLoading} />
+        <OrdersListHeader count={visibleGroups.length} hasMore={pageInfo?.hasMore} busy={listLoading} sortMode={sortMode} onSortChange={setSortMode} />
         <div className="co-cards" id="requested-list">
-          {visibleGroups.length ? visibleGroups.map((group) => <OperationsOrderCard group={group} tab={tab} onOpen={openOrderDetails} onCreator={openCreatorProfile} key={group.key} />) : listLoading ? <div className="ops-no-data-state" role="status" aria-live="polite"><div className="ops-no-data-state__text">Loading orders…</div></div> : <OrdersEmptyState filtered={tab !== "all" || type !== "all" || !!query.trim()} context={"orders"} onReset={() => { setTab("all"); setType("all"); setQuery(""); }} />}
+          {visibleGroups.length ? sortedVisibleGroups.map((group) => <OperationsOrderCard group={group} tab={tab} onOpen={openOrderDetails} onCreator={openCreatorProfile} key={group.key} />) : listLoading ? <div className="ops-no-data-state" role="status" aria-live="polite"><div className="ops-no-data-state__text">Loading orders…</div></div> : <OrdersEmptyState filtered={tab !== "all" || type !== "all" || !!query.trim()} context={"orders"} onReset={() => { setTab("all"); setType("all"); setQuery(""); }} />}
         </div>
         {pageInfo?.hasMore ? <div style={{ display: "flex", justifyContent: "center", padding: "16px 0 4px" }}><button type="button" className="ro-action-btn ro-action-btn--light" disabled={listLoading} onClick={() => fetchOrdersPage({ reset: false }).catch((error) => { setNotice(error?.message || "Failed to load more orders."); window.setTimeout(() => setNotice(""), 4000); })}>{listLoading ? "Loading…" : "Load more orders"}</button></div> : null}
       </section>

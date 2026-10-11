@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import ClassicOrderIcon from "./ClassicOrderIcon";
-import OrdersEmptyState, { OrdersListHeader } from "./OrdersEmptyState";
+import OrderTypeBadge from "./OrderTypeBadge";
+import OrdersEmptyState, { OrdersListHeader, sortOrderGroups } from "./OrdersEmptyState";
 import { loadTeamMemberPublicProfile } from "../../lib/team-member-public-client";
 
 const MaintenanceDetailsModal = dynamic(() => import("./MaintenanceHeavyModals").then((module) => module.MaintenanceDetailsModal), { ssr: false });
@@ -534,8 +535,11 @@ function MaintenanceCard({ group, onOpen, onCreator }) {
     <article className="co-card next-maintenance-order-card" role="button" tabIndex={0} aria-label={`Open ${group.orderIdLabel}`} onClick={() => onOpen(group)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen(group); } }}>
       <div className="co-top">
         <div className="co-main">
-          <div className="co-title">{group.orderIdLabel}</div>
-          <div className="orders-workspace-user" title={group.createdByName || "Unknown user"}>{group.createdByName || "Unknown user"}</div>
+          <OrderTypeBadge type={group.orderType || "Request Maintenance"} color={undefined} />
+          <div className="orders-workspace-order-info">
+            <div className="co-title">{group.orderIdLabel}</div>
+            <div className="orders-workspace-user" title={group.createdByName || "Unknown user"}>{group.createdByName || "Unknown user"}</div>
+          </div>
         </div>
         <div className="next-maintenance-card-head-actions">
           <div className="next-maintenance-card-status">
@@ -598,6 +602,7 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
   const [tab, setTab] = useState("all");
   const [type, setType] = useState("all");
   const [query, setQuery] = useState("");
+  const [sortMode, setSortMode] = useState("latest");
   const [selected, setSelected] = useState(null);
   const [logGroup, setLogGroup] = useState(null);
   const [logMode, setLogMode] = useState("create");
@@ -679,6 +684,8 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
       return !needle || serverFilteredQuery || groupSearchText(group).includes(needle);
     });
   }, [groups, tab, type, query, pageInfo]);
+
+  const sortedVisibleGroups = useMemo(() => sortOrderGroups(visibleGroups, sortMode), [visibleGroups, sortMode]);
 
   async function fetchOrdersPage({ reset = true, fresh = false } = {}) {
     const requestId = ++listRequestRef.current;
@@ -1109,8 +1116,8 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
       </div>
 
       <section className="next-maintenance-orders-list-surface">
-        <OrdersListHeader count={visibleGroups.length} hasMore={pageInfo?.hasMore} busy={listLoading} />
-        <div className="co-cards" id="requested-list">{visibleGroups.length ? visibleGroups.map((group) => <MaintenanceCard group={group} onOpen={openOrderDetails} onCreator={openCreatorProfile} key={group.key} />) : listLoading ? <div className="ops-no-data-state" role="status" aria-live="polite"><div className="ops-no-data-state__text">Loading maintenance orders…</div></div> : <OrdersEmptyState filtered={tab !== "all" || type !== "all" || !!query.trim()} context={"orders"} onReset={() => { setTab("all"); setType("all"); setQuery(""); }} />}</div>
+        <OrdersListHeader count={visibleGroups.length} hasMore={pageInfo?.hasMore} busy={listLoading} sortMode={sortMode} onSortChange={setSortMode} />
+        <div className="co-cards" id="requested-list">{visibleGroups.length ? sortedVisibleGroups.map((group) => <MaintenanceCard group={group} onOpen={openOrderDetails} onCreator={openCreatorProfile} key={group.key} />) : listLoading ? <div className="ops-no-data-state" role="status" aria-live="polite"><div className="ops-no-data-state__text">Loading maintenance orders…</div></div> : <OrdersEmptyState filtered={tab !== "all" || type !== "all" || !!query.trim()} context={"orders"} onReset={() => { setTab("all"); setType("all"); setQuery(""); }} />}</div>
         {pageInfo?.hasMore ? <div style={{ display: "flex", justifyContent: "center", padding: "16px 0 4px" }}><button type="button" className="ro-action-btn ro-action-btn--light" disabled={listLoading} onClick={() => fetchOrdersPage({ reset: false }).catch((error) => { setNotice(error?.message || "Failed to load more maintenance orders."); window.setTimeout(() => setNotice(""), 4000); })}>{listLoading ? "Loading…" : "Load more orders"}</button></div> : null}
       </section>
 

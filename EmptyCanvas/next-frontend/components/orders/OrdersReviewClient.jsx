@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import ClassicOrderIcon from "./ClassicOrderIcon";
-import OrdersEmptyState, { OrdersListHeader } from "./OrdersEmptyState";
+import OrderTypeBadge from "./OrderTypeBadge";
+import OrdersEmptyState, { OrdersListHeader, sortOrderGroups } from "./OrdersEmptyState";
 import { loadTeamMemberPublicProfile } from "../../lib/team-member-public-client";
 
 const loadOrdersReviewHeavyModals = () => import("./OrdersReviewHeavyModals");
@@ -291,8 +292,11 @@ function OrderReviewCard({ group, activeTab, onOpen, onCreator }) {
     <article className="co-card next-review-order-card" role="button" tabIndex={0} aria-label={`Open ${group.orderIdLabel}`} onClick={() => onOpen(group)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen(group); } }}>
       <div className="co-top">
         <div className="co-main">
-          <div className="co-title">{group.orderIdLabel}</div>
-          <div className="orders-workspace-user" title={group.createdByName || "Unknown user"}>{group.createdByName || "Unknown user"}</div>
+          <OrderTypeBadge type={group.orderType} color={group.orderTypeColor} />
+          <div className="orders-workspace-order-info">
+            <div className="co-title">{group.orderIdLabel}</div>
+            <div className="orders-workspace-user" title={group.createdByName || "Unknown user"}>{group.createdByName || "Unknown user"}</div>
+          </div>
         </div>
         <div className="next-review-card-head-actions">
           <div className="next-review-card-status">{mixed ? <MixedStatusPill /> : <ApprovalPill approval={state} />}</div>
@@ -321,6 +325,7 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
   const [tab, setTab] = useState("all");
   const [type, setType] = useState("all");
   const [query, setQuery] = useState("");
+  const [sortMode, setSortMode] = useState("latest");
   const [selectedKey, setSelectedKey] = useState("");
   const [busyIds, setBusyIds] = useState(new Set());
   const [notice, setNotice] = useState("");
@@ -421,6 +426,8 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
       return !needle || serverFilteredQuery || groupSearchText(group).includes(needle);
     });
   }, [statusGroups, type, query, pageInfo]);
+
+  const sortedVisibleGroups = useMemo(() => sortOrderGroups(visibleGroups, sortMode), [visibleGroups, sortMode]);
 
   function showNotice(message) {
     setNotice(message);
@@ -679,7 +686,7 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
       </div>
     </div>
 
-    <section className="orders-review-list-surface" id="sv-orders"><OrdersListHeader count={visibleGroups.length} hasMore={pageInfo?.hasMore} busy={listLoading} /><div className="co-cards" id="sv-list">{visibleGroups.length ? visibleGroups.map((group) => <OrderReviewCard group={group} activeTab={tab} onOpen={openReviewDetails} onCreator={openCreatorProfile} key={group.key}/>) : listLoading ? <div className="ops-no-data-state" role="status" aria-live="polite"><div className="ops-no-data-state__text">Loading orders…</div></div> : <OrdersEmptyState filtered={tab !== "all" || type !== "all" || !!query.trim()} context={"orders"} onReset={() => { setTab("all"); setType("all"); setQuery(""); }} />}</div>{pageInfo?.hasMore ? <div style={{ display: "flex", justifyContent: "center", padding: "16px 0 4px" }}><button type="button" className="ro-action-btn ro-action-btn--light" disabled={listLoading} onClick={() => fetchReviewPage({ reset: false }).catch((error) => showNotice(error?.message || "Failed to load more orders."))}>{listLoading ? "Loading…" : "Load more orders"}</button></div> : null}</section>
+    <section className="orders-review-list-surface" id="sv-orders"><OrdersListHeader count={visibleGroups.length} hasMore={pageInfo?.hasMore} busy={listLoading} sortMode={sortMode} onSortChange={setSortMode} /><div className="co-cards" id="sv-list">{visibleGroups.length ? sortedVisibleGroups.map((group) => <OrderReviewCard group={group} activeTab={tab} onOpen={openReviewDetails} onCreator={openCreatorProfile} key={group.key}/>) : listLoading ? <div className="ops-no-data-state" role="status" aria-live="polite"><div className="ops-no-data-state__text">Loading orders…</div></div> : <OrdersEmptyState filtered={tab !== "all" || type !== "all" || !!query.trim()} context={"orders"} onReset={() => { setTab("all"); setType("all"); setQuery(""); }} />}</div>{pageInfo?.hasMore ? <div style={{ display: "flex", justifyContent: "center", padding: "16px 0 4px" }}><button type="button" className="ro-action-btn ro-action-btn--light" disabled={listLoading} onClick={() => fetchReviewPage({ reset: false }).catch((error) => showNotice(error?.message || "Failed to load more orders."))}>{listLoading ? "Loading…" : "Load more orders"}</button></div> : null}</section>
 
     {(selectedKey || selected || passwordState || rejectionState || editorState || reasonView || creatorState) ? (
       <OrdersReviewHeavyModals

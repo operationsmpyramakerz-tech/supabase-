@@ -11,6 +11,7 @@ export default function ClassicOrderIcon({ name, className = "" }) {
   };
 
   const paths = {
+    "sort-desc": <><path d="M4 7h12"/><path d="M4 12h9"/><path d="M4 17h6"/><path d="m16 16 3 3 3-3"/><path d="M19 5v14"/></>,
     layers: <><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></>,
     eye: <><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></>,
     "check-circle": <><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></>,

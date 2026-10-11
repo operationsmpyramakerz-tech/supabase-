@@ -429,3 +429,63 @@ html.ops-theme-dark body .orders-workspace {
 }
 html[data-theme="dark"] body .orders-workspace.orders-workspace .orders-toolbar .tab-portfolio.active,
 html.ops-theme-dark body .orders-workspace.orders-workspace .orders-toolbar .tab-portfolio.active { background: #f45b17 !important; color: #fff !important; }
+
+/* Orders Workspace phase 2: restore each order-type icon beside the code, keeping
+   the username directly below the code and the status/creator column intact. */
+body .orders-workspace.orders-workspace .co-cards .co-card .co-main {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  align-self: center !important;
+  gap: 12px !important;
+}
+body .orders-workspace.orders-workspace .co-cards .co-card .orders-workspace-order-info {
+  display: flex;
+  flex: 1 1 0%;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  min-width: 0;
+  gap: 7px;
+}
+body .orders-workspace.orders-workspace .co-cards .co-card .orders-workspace-type-icon {
+  display: inline-flex !important;
+  flex: 0 0 52px !important;
+  width: 52px !important;
+  min-width: 52px !important;
+  max-width: 52px !important;
+  height: 52px !important;
+  min-height: 52px !important;
+  max-height: 52px !important;
+  box-sizing: border-box !important;
+  border-radius: 16px !important;
+  padding: 0 !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: var(--co-thumb-bg, #e5e7eb) !important;
+  border: 1px solid var(--co-thumb-border, #d1d5db) !important;
+  color: var(--co-thumb-fg, #374151) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.6) !important;
+}
+body .orders-workspace.orders-workspace .co-cards .co-card .orders-workspace-type-icon svg {
+  width: 27px !important;
+  height: 27px !important;
+  stroke-width: 2.15 !important;
+}
+/* Sort acts on loaded results; the count remains server-page aware. */
+body .orders-workspace .orders-workspace-list-head__tools { display: flex; flex-wrap: nowrap; align-items: center; justify-content: flex-end; gap: 10px; min-width: 0; }
+body .orders-workspace .orders-workspace-sort { display: inline-flex; align-items: center; gap: 4px; min-height: 34px; padding: 0 8px; background: var(--ow-surface); color: var(--ow-ink); border: 1px solid var(--ow-border); border-radius: 11px; cursor: pointer; }
+body .orders-workspace .orders-workspace-sort > svg { width: 15px; height: 15px; flex: 0 0 auto; }
+body .orders-workspace .orders-workspace-sort select { max-width: 108px; min-height: 32px; padding: 0 2px; border: 0; outline: 0; background: transparent; color: inherit; font: inherit; font-size: 12px; font-weight: 750; cursor: pointer; }
+body .orders-workspace .orders-workspace-sort select option { background: var(--ow-surface); color: var(--ow-ink); }
+body .orders-workspace .orders-workspace-sort:focus-within { outline: 2px solid var(--ow-selection); outline-offset: 2px; }
+body .orders-workspace .orders-workspace-sort__sr { position: absolute; overflow: hidden; clip: rect(0,0,0,0); width: 1px; height: 1px; }
+@media (max-width: 768px) {
+  body .orders-workspace.orders-workspace .co-cards .co-card .co-main { gap: 10px !important; }
+  body .orders-workspace.orders-workspace .co-cards .co-card .orders-workspace-type-icon { width: 48px !important; min-width: 48px !important; max-width: 48px !important; height: 48px !important; min-height: 48px !important; max-height: 48px !important; flex-basis: 48px !important; border-radius: 14px !important; }
+  body .orders-workspace.orders-workspace .co-cards .co-card .orders-workspace-type-icon svg { width: 25px !important; height: 25px !important; }
+  body .orders-workspace .orders-workspace-list-head__tools { gap: 6px; }
+  body .orders-workspace .orders-workspace-sort { min-height: 32px; }
+  body .orders-workspace .orders-workspace-list-head__count { font-size: 10px; }
+}
