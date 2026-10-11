@@ -103,6 +103,22 @@ function accountUsername(account = {}) {
   return text(account?.username || account?.name);
 }
 
+function accountMemberId(account = {}) {
+  return text(account?.teamMemberId || account?.userSupabaseId);
+}
+
+// IDs are authoritative when both sides provide one. Older orders without an
+// owner ID retain their legacy name check; names must never override a
+// conflicting persisted owner ID.
+function ownedByAccount(row = {}, account = {}) {
+  const ownerId = text(row?.team_member_id ?? row?.teamMemberId ?? row?.createdById);
+  const memberId = accountMemberId(account);
+  if (ownerId && memberId) return ownerId === memberId;
+  const ownerName = text(row?.team_member_name ?? row?.createdByName ?? row?.["Teams Members"] ?? row?.teams_members);
+  const username = accountUsername(account);
+  return Boolean(ownerName && username) && memberMatches(ownerName, username);
+}
+
 function memberMatches(createdByName, username) {
   const user = norm(username);
   const by = norm(createdByName);
@@ -218,7 +234,7 @@ function memberCandidateNames(account = {}) {
 
 function memberClauses(account = {}) {
   const clauses = [];
-  const memberId = String(account?.teamMemberId || account?.userSupabaseId || "")
+  const memberId = String(accountMemberId(account) || "")
     .trim()
     .replace(/[^0-9A-Za-z_-]/g, "");
   if (memberId) clauses.push(`team_member_id.eq.${memberId}`);
@@ -297,14 +313,13 @@ async function rowsByNumbers(numbers = [], signal = null, includeLocalSearchFiel
 
 function groupRows(rows = [], account = {}, includeLocalSearchFields = false) {
   const startedAt = performance.now();
-  const username = accountUsername(account);
   const groups = new Map();
   for (const row of rows) {
-    // Reject non-owned rows before doing quantity/status serialization work.
-    if (!memberMatches(row?.team_member_name ?? row?.["Teams Members"] ?? row?.teams_members, username)) continue;
+    // Use immutable creator identity when available; names can change.
+    if (!ownedByAccount(row, account)) continue;
     const item = serializeOperationsCompactSummaryRow(row, {
       includeSearchText: includeLocalSearchFields,
-      includeCreatedById: false,
+      includeCreatedById: true,
     });
     const orderNumber = Number(item?.orderIdNumber);
     if (!Number.isFinite(orderNumber)) continue;
@@ -331,7 +346,7 @@ export async function loadCurrentOrdersPage({
 } = {}) {
   if (!isSupabaseConfigured()) return null;
   const username = accountUsername(account);
-  if (!username) return null;
+  if (!username && !accountMemberId(account)) return null;
 
   const safeLimit = pageLimit(limit);
   const outputGroups = [];
@@ -463,11 +478,7 @@ export async function loadCurrentOrderDetails({ account = {}, orderIds = [] } = 
   if (!ids.length) return [];
 
   const rows = await loadRawOrderRowsByIds(ids);
-  const username = accountUsername(account);
-  const visible = (Array.isArray(rows) ? rows : []).filter((row) => {
-    const item = serializeOperationsOrderDetail(row);
-    return memberMatches(item?.createdByName, username);
-  });
+  const visible = (Array.isArray(rows) ? rows : []).filter((row) => ownedByAccount(row, account));
 
   const visibleIds = new Set(visible.map((row) => text(row?.id)).filter(Boolean));
   if (ids.some((id) => !visibleIds.has(id))) {

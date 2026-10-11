@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { navigateWithinApp } from "../../lib/client-navigation";
 import ClassicOrderIcon from "./ClassicOrderIcon";
+import OrdersEmptyState, { OrdersListHeader } from "./OrdersEmptyState";
+import CurrentOrderCreatorPopover from "./CurrentOrderCreatorPopover";
 
 const loadCurrentOrdersHeavyModals = () => import("./CurrentOrdersHeavyModals");
 const CurrentOrdersHeavyModals = dynamic(loadCurrentOrdersHeavyModals, { ssr: false });
@@ -314,6 +316,7 @@ function buildGroups(rows) {
         orderType: item?.orderType,
         orderTypeColor: item?.orderTypeColor,
         createdByName: item?.createdByName,
+        createdById: item?.createdById || item?.teamMemberId,
       });
     }
     const group = map.get(key);
@@ -325,6 +328,7 @@ function buildGroups(rows) {
     if (!group.orderType && item?.orderType) group.orderType = item.orderType;
     if (!group.orderTypeColor && item?.orderTypeColor) group.orderTypeColor = item.orderTypeColor;
     if (!group.createdByName && item?.createdByName) group.createdByName = item.createdByName;
+    if (!group.createdById && (item?.createdById || item?.teamMemberId)) group.createdById = item?.createdById || item?.teamMemberId;
   }
 
   return [...map.values()].map((group) => {
@@ -531,9 +535,7 @@ function StatusPill({ status, className = "co-status-btn", reason = "", onReason
   return <span className={className} style={style}>{statusLabel(status)}</span>;
 }
 
-function OrderCard({ group, activeTab, onOpen, onReason }) {
-  const type = orderTypeMeta(group.orderType, group.orderTypeColor);
-  const thumbStyle = { "--co-thumb-bg": type.bg, "--co-thumb-fg": type.fg, "--co-thumb-border": type.bd };
+function OrderCard({ group, activeTab, onOpen, onReason, onCreator }) {
   const reasons = [...new Set(group.items.map(rejectedReason).filter(Boolean))].join("\n");
   const mixed = activeTab === "all" && group.stage === 2 && hasMixedApprovedRejected(group.items);
   const displayStatus = activeTab === "remaining" ? "remaining" : activeTab === "shipped" ? "shipped" : group.status;
@@ -549,21 +551,17 @@ function OrderCard({ group, activeTab, onOpen, onReason }) {
       onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen(group); } }}
     >
       <div className="co-top">
-        <div className="co-thumb co-thumb--order-type" style={thumbStyle} title={type.label} aria-label={type.label}><ClassicOrderIcon name={type.icon} /></div>
         <div className="co-main">
           <div className="co-title">{group.orderIdLabel}</div>
-          <div className="next-current-order-meta">
-            <span className="co-sub">{formatDate(group.latestCreated)}</span>
-          </div>
+          <div className="orders-workspace-user" title={group.createdByName || "Unknown user"}>{group.createdByName || "Unknown user"}</div>
         </div>
         <div className="next-current-card-head-actions">
           <div className="next-current-card-status">
             {mixed ? <MixedStatusPill /> : <StatusPill status={displayStatus} reason={reasons} onReason={onReason} />}
           </div>
-          <span className="next-current-creator-chip" aria-label={`Created by ${creatorName}`} title={`Created by ${creatorName}`}>
-            <span className="next-current-creator-label">{creatorName}</span>
+          <button type="button" className="co-creator-btn next-current-creator-chip" aria-label={`View creator: ${creatorName}`} title={`Created by ${creatorName}`} onClick={(event) => { event.preventDefault(); event.stopPropagation(); onCreator(event.currentTarget, group); }}>
             <span className="next-current-creator-icon"><ClassicOrderIcon name="user" /></span>
-          </span>
+          </button>
         </div>
       </div>
     </article>
@@ -590,6 +588,7 @@ function ProgressTrack({ value }) {
 
 
 export default function CurrentOrdersClient({ initialOrders = [], initialPageInfo = null, bootstrapWarnings = [] }) {
+  const [creatorPreview, setCreatorPreview] = useState(null);
   const [orders, setOrders] = useState(Array.isArray(initialOrders) ? initialOrders : []);
   const [pageInfo, setPageInfo] = useState(initialPageInfo || { hasMore: false, nextCursor: null, limit: 36 });
   const [listLoading, setListLoading] = useState(false);
@@ -909,7 +908,7 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
   }
 
   return (
-    <section className="next-classic-orders-parity">
+    <section className="next-classic-orders-parity orders-workspace">
       {bootstrapWarnings.length ? <div className="dashboard-notice"><strong>Partial data</strong><span>One resource was not available during the initial load.</span></div> : null}
       {notice ? <div className="orders-parity-success" role="status"><ClassicOrderIcon name="check-circle" />{notice}</div> : null}
 
@@ -933,11 +932,12 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
       </div>
 
       <section className="card" id="current-orders">
+        <OrdersListHeader count={visibleGroups.length} hasMore={pageInfo?.hasMore} busy={listLoading} />
         <div className="co-cards" id="orders-list">
-          {visibleGroups.length ? visibleGroups.map((group) => <OrderCard group={group} activeTab={tab} onOpen={openOrderDetails} onReason={(reason) => { void loadCurrentOrdersHeavyModals(); setReasonView(reason); }} key={group.key} />) : listLoading ? (
+          {visibleGroups.length ? visibleGroups.map((group) => <OrderCard group={group} activeTab={tab} onOpen={openOrderDetails} onReason={(reason) => { void loadCurrentOrdersHeavyModals(); setReasonView(reason); }} onCreator={(anchor, selectedGroup) => { const bounds = anchor.getBoundingClientRect(); setCreatorPreview({ id: selectedGroup.createdById, name: selectedGroup.createdByName, left: Math.max(12, Math.min(bounds.right - 320, window.innerWidth - 332)), top: bounds.bottom + 8, above: bounds.top }); }} key={group.key} />) : listLoading ? (
             <div className="ops-no-data-state" role="status" aria-live="polite"><div className="ops-no-data-state__text">Loading orders…</div></div>
           ) : (
-            <div className="ops-no-data-state" role="status" aria-live="polite"><img className="ops-no-data-state__image" src="/next/images/no-data-illustration.png" alt="" loading="lazy"/><div className="ops-no-data-state__text">Sorry, No data available</div></div>
+            <OrdersEmptyState filtered={tab !== "all" || type !== "all" || !!query.trim()} context={"my-orders"} onReset={() => { setTab("all"); setType("all"); setQuery(""); }} />
           )}
         </div>
         {pageInfo?.hasMore ? (
@@ -957,6 +957,7 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
         ) : null}
       </section>
 
+      {creatorPreview ? <CurrentOrderCreatorPopover creator={creatorPreview} onClose={() => setCreatorPreview(null)} /> : null}
       {(selected || actionState || deleteConfirm || reasonView) ? (
         <CurrentOrdersHeavyModals
           selected={selected}

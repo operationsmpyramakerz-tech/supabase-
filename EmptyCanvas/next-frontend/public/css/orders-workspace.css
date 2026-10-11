@@ -1,0 +1,431 @@
+/* Pyramakerz Orders Workspace — unified compact lists (2026-10-11)
+   Route-scoped to the four Orders screens. Keeps the existing order workflow,
+   status filtering, creator popovers and detail dialogs intact. */
+body .orders-workspace {
+  --ow-surface: #fff;
+  --ow-ink: #101827;
+  --ow-muted: #7b8495;
+  --ow-border: #e8eaf0;
+  --ow-control: #fff;
+  --ow-selection: #f45b17;
+  width: 100%;
+  min-width: 0;
+}
+
+/* A smaller, labeled status navigation with an independent type-filter button. */
+body .orders-workspace.orders-workspace .orders-toolbar {
+  display: flex !important;
+  grid-template-columns: none !important;
+  align-items: stretch !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  gap: 10px !important;
+  min-width: 0 !important;
+  height: auto !important;
+  margin: 6px 0 14px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+}
+body .orders-workspace.orders-workspace .orders-toolbar__divider {
+  display: none !important;
+}
+body .orders-workspace.orders-workspace .orders-toolbar__scroll {
+  display: flex !important;
+  order: 0 !important;
+  flex: 1 1 0% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  width: auto !important;
+  height: 58px !important;
+  min-height: 58px !important;
+  padding: 5px !important;
+  align-items: center !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  border-radius: 20px !important;
+  border: 1px solid var(--ow-border) !important;
+  background: var(--ow-control) !important;
+  box-shadow: 0 8px 22px rgba(15,23,42,.06) !important;
+  scrollbar-width: none !important;
+  overscroll-behavior-x: contain !important;
+}
+body .orders-workspace.orders-workspace .orders-toolbar__scroll::-webkit-scrollbar {
+  display: none !important;
+}
+body .orders-workspace.orders-workspace .orders-toolbar .portfolio-tabs {
+  display: flex !important;
+  width: max-content !important;
+  min-width: max-content !important;
+  height: auto !important;
+  min-height: 48px !important;
+  padding: 0 !important;
+  gap: 4px !important;
+  margin: 0 !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+}
+body .orders-workspace.orders-workspace .orders-toolbar .portfolio-tabs::before { display: none !important; }
+body .orders-workspace.orders-workspace .orders-toolbar .tab-portfolio {
+  box-sizing: border-box !important;
+  flex: 0 0 auto !important;
+  width: auto !important;
+  max-width: none !important;
+  min-width: 64px !important;
+  height: 46px !important;
+  min-height: 46px !important;
+  display: inline-flex !important;
+  flex-direction: row !important;
+  gap: 7px !important;
+  justify-content: center !important;
+  align-items: center !important;
+  padding: 0 14px !important;
+  border-radius: 15px !important;
+  background: transparent !important;
+  border: 0 !important;
+  color: var(--ow-ink) !important;
+  box-shadow: none !important;
+  white-space: nowrap !important;
+  text-transform: none !important;
+  transition: color .15s ease, background .15s ease, transform .15s ease !important;
+}
+body .orders-workspace.orders-workspace .orders-toolbar .tab-portfolio.active,
+body .orders-workspace.orders-workspace .orders-toolbar .tab-portfolio[aria-selected="true"] {
+  background: #101827 !important;
+  color: #fff !important;
+  box-shadow: none !important;
+}
+body .orders-workspace.orders-workspace .orders-toolbar .tab-portfolio:hover:not(.active):not([aria-selected="true"]) {
+  background: rgba(15,23,42,.06) !important;
+  color: var(--ow-ink) !important;
+}
+body .orders-workspace.orders-workspace .orders-toolbar .order-status-tab__icon {
+  display: inline-flex !important;
+  position: static !important;
+  flex: 0 0 auto !important;
+  width: 18px !important;
+  height: 18px !important;
+  min-width: 18px !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  color: inherit !important;
+}
+body .orders-workspace.orders-workspace .orders-toolbar .order-status-tab__icon svg { width: 18px !important; height: 18px !important; }
+body .orders-workspace.orders-workspace .orders-toolbar .order-status-tab__copy { display: inline-flex !important; gap: 4px !important; align-items: center !important; }
+body .orders-workspace.orders-workspace .orders-toolbar .order-status-tab__label {
+  display: inline !important;
+  position: static !important;
+  width: auto !important;
+  height: auto !important;
+  max-width: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  overflow: visible !important;
+  clip: auto !important;
+  clip-path: none !important;
+  white-space: nowrap !important;
+  color: inherit !important;
+  font-size: 12px !important;
+  font-weight: 780 !important;
+  line-height: 1.2 !important;
+}
+body .orders-workspace.orders-workspace .orders-type-filter {
+  order: 1 !important;
+  position: relative !important;
+  z-index: 80 !important;
+  flex: 0 0 58px !important;
+  width: 58px !important;
+  min-width: 58px !important;
+  height: 58px !important;
+  min-height: 58px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+body .orders-workspace.orders-workspace .orders-type-filter__button {
+  display: flex !important;
+  box-sizing: border-box !important;
+  width: 58px !important;
+  min-width: 58px !important;
+  height: 58px !important;
+  min-height: 58px !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 !important;
+  border-radius: 20px !important;
+  border: 1px solid var(--ow-border) !important;
+  background: var(--ow-control) !important;
+  box-shadow: 0 8px 22px rgba(15,23,42,.06) !important;
+  color: var(--ow-ink) !important;
+}
+body .orders-workspace.orders-workspace .orders-type-filter__button-icon {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 31px !important;
+  height: 31px !important;
+  border-radius: 11px !important;
+  background: transparent !important;
+  color: var(--ow-ink) !important;
+  box-shadow: none !important;
+}
+body .orders-workspace.orders-workspace .orders-type-filter.is-filtered .orders-type-filter__button-icon,
+body .orders-workspace.orders-workspace .orders-type-filter.is-open .orders-type-filter__button-icon {
+  background: var(--ow-selection) !important;
+  color: #fff !important;
+}
+body .orders-workspace.orders-workspace .orders-type-filter__button-icon svg { width: 22px !important; height: 22px !important; }
+body .orders-workspace.orders-workspace .orders-type-filter__button-label { position: absolute !important; width: 1px !important; height: 1px !important; clip: rect(0,0,0,0) !important; overflow: hidden !important; }
+body .orders-workspace.orders-workspace .orders-type-filter__panel { top: calc(100% + 8px) !important; right: 0 !important; left: auto !important; z-index: 120 !important; max-width: min(340px, calc(100vw - 30px)) !important; }
+
+/* Only order number + user on the left, status + creator ICON on the right. */
+body .orders-workspace.orders-workspace .co-cards { display: grid !important; gap: 10px !important; }
+body .orders-workspace.orders-workspace .co-cards .co-card {
+  box-sizing: border-box !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 92px !important;
+  height: auto !important;
+  margin: 0 !important;
+  padding: 16px 18px !important;
+  border-radius: 22px !important;
+  border: 1px solid var(--ow-border) !important;
+  background: var(--ow-surface) !important;
+  color: var(--ow-ink) !important;
+  box-shadow: 0 5px 19px rgba(15,23,42,.045) !important;
+  transition: border-color .18s ease, transform .18s ease, box-shadow .18s ease !important;
+  cursor: pointer !important;
+}
+body .orders-workspace.orders-workspace .co-cards .co-card:hover {
+  border-color: rgba(244,91,23,.35) !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 8px 24px rgba(15,23,42,.075) !important;
+}
+body .orders-workspace.orders-workspace .co-cards .co-card:focus-visible,
+body .orders-workspace.orders-workspace .co-cards .co-creator-btn:focus-visible,
+body .orders-workspace.orders-workspace .orders-type-filter__button:focus-visible,
+body .orders-workspace.orders-workspace .tab-portfolio:focus-visible {
+  outline: 2px solid var(--ow-selection) !important;
+  outline-offset: 2px !important;
+}
+body .orders-workspace.orders-workspace .co-cards .co-card .co-top {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 58px !important;
+  align-items: center !important;
+  gap: 10px !important;
+}
+body .orders-workspace.orders-workspace .co-cards .co-card .co-main {
+  min-width: 0 !important;
+  width: 100% !important;
+  display: flex !important;
+  align-self: center !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  justify-content: center !important;
+  gap: 7px !important;
+  overflow: hidden !important;
+}
+body .orders-workspace.orders-workspace .co-cards .co-card .co-title {
+  min-width: 0 !important;
+  margin: 0 !important;
+  font-size: clamp(18px, 3vw, 21px) !important;
+  line-height: 1.08 !important;
+  letter-spacing: -.035em !important;
+  color: var(--ow-ink) !important;
+  font-weight: 870 !important;
+}
+body .orders-workspace.orders-workspace .co-cards .orders-workspace-user {
+  display: block !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  font-size: 13px !important;
+  line-height: 1.35 !important;
+  font-weight: 650 !important;
+  color: var(--ow-muted) !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  text-align: start !important;
+}
+body .orders-workspace.orders-workspace .co-cards .next-operations-card-head-actions,
+body .orders-workspace.orders-workspace .co-cards .next-review-card-head-actions,
+body .orders-workspace.orders-workspace .co-cards .next-current-card-head-actions,
+body .orders-workspace.orders-workspace .co-cards .next-maintenance-card-head-actions {
+  display: flex !important;
+  min-width: 92px !important;
+  max-width: 48vw !important;
+  align-self: center !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+  align-items: flex-end !important;
+  justify-content: center !important;
+  margin: 0 !important;
+}
+body .orders-workspace.orders-workspace .co-cards .co-status-btn,
+body .orders-workspace.orders-workspace .co-cards .sv-mixed-approval-pill {
+  display: inline-flex !important;
+  max-width: 100% !important;
+  width: auto !important;
+  min-width: 0 !important;
+  min-height: 28px !important;
+  height: auto !important;
+  padding: 6px 12px !important;
+  border-radius: 99px !important;
+  font-size: 11px !important;
+  line-height: 1.1 !important;
+  font-weight: 790 !important;
+  white-space: nowrap !important;
+  box-shadow: none !important;
+}
+body .orders-workspace.orders-workspace .co-cards .co-creator-btn,
+body .orders-workspace.orders-workspace .co-cards .next-current-creator-chip {
+  box-sizing: border-box !important;
+  display: inline-flex !important;
+  position: relative !important;
+  width: 34px !important;
+  min-width: 34px !important;
+  max-width: 34px !important;
+  height: 34px !important;
+  min-height: 34px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 50% !important;
+  border: 1px solid #252c3e !important;
+  background: #0b1223 !important;
+  color: #fff !important;
+  box-shadow: none !important;
+  cursor: pointer !important;
+  overflow: hidden !important;
+}
+body .orders-workspace.orders-workspace .co-cards .co-creator-btn:hover { background: #f45b17 !important; border-color: #f45b17 !important; }
+body .orders-workspace.orders-workspace .co-cards .next-operations-creator-label,
+body .orders-workspace.orders-workspace .co-cards .next-review-creator-label,
+body .orders-workspace.orders-workspace .co-cards .next-maintenance-creator-label,
+body .orders-workspace.orders-workspace .co-cards .next-current-creator-label { display: none !important; }
+body .orders-workspace.orders-workspace .co-cards .next-operations-creator-icon,
+body .orders-workspace.orders-workspace .co-cards .next-review-creator-icon,
+body .orders-workspace.orders-workspace .co-cards .next-maintenance-creator-icon,
+body .orders-workspace.orders-workspace .co-cards .next-current-creator-icon {
+  display: flex !important;
+  position: static !important;
+  flex: 0 0 100% !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border-radius: 50% !important;
+  background: transparent !important;
+  color: inherit !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+body .orders-workspace.orders-workspace .co-cards .co-creator-btn svg { width: 18px !important; height: 18px !important; stroke-width: 2 !important; }
+
+/* Contextual list count (loaded, not a fabricated global count). */
+body .orders-workspace .orders-workspace-list-head {
+  display: flex;
+  width: 100%;
+  min-height: 34px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px 7px;
+  color: var(--ow-muted);
+}
+body .orders-workspace .orders-workspace-list-head__title { font-size: 13px; font-weight: 850; letter-spacing: -.01em; color: var(--ow-ink); }
+body .orders-workspace .orders-workspace-list-head__count { font-size: 11px; font-weight: 680; color: var(--ow-muted); }
+body .orders-workspace .orders-workspace-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 270px;
+  padding: 35px 20px;
+  border: 1px dashed var(--ow-border);
+  border-radius: 22px;
+  background: var(--ow-surface);
+  text-align: center;
+}
+body .orders-workspace .orders-workspace-empty__icon { display: inline-grid; place-items: center; width: 56px; height: 56px; border-radius: 19px; background: rgba(244,91,23,.095); color: #e85a1b; }
+body .orders-workspace .orders-workspace-empty__icon svg { width: 26px; height: 26px; }
+body .orders-workspace .orders-workspace-empty strong { font-size: 17px; font-weight: 850; color: var(--ow-ink); }
+body .orders-workspace .orders-workspace-empty p { max-width: 280px; margin: 0; font-size: 12px; line-height: 1.55; color: var(--ow-muted); }
+body .orders-workspace .orders-workspace-empty__reset { display: inline-flex; gap: 8px; align-items: center; justify-content: center; height: 38px; padding: 0 15px; margin-top: 4px; border: 0; border-radius: 12px; background: #f45b17; color: white; cursor: pointer; font-size: 12px; font-weight: 780; }
+body .orders-workspace .orders-workspace-empty__reset svg { width: 16px; height: 16px; }
+body .orders-workspace .orders-workspace-empty__reset:focus-visible { outline: 2px solid #f45b17; outline-offset: 3px; }
+body .orders-workspace .orders-workspace-current-creator {
+  position: fixed; z-index: 12000; box-sizing: border-box;
+  width: min(320px, calc(100vw - 24px)); overflow-y: auto;
+  border: 1px solid var(--ow-border); border-radius: 18px;
+  background: var(--ow-surface); color: var(--ow-ink);
+  box-shadow: 0 18px 50px rgba(15,23,42,.17); padding: 18px;
+}
+body .orders-workspace .orders-workspace-current-creator__heading { color: var(--ow-muted); font-size: 11px; font-weight: 750; margin-bottom: 6px; }
+body .orders-workspace .orders-workspace-current-creator strong { display: block; font-size: 16px; margin: 0 36px 8px 0; }
+body .orders-workspace .orders-workspace-current-creator p { color: var(--ow-muted); font-size: 12px; }
+body .orders-workspace .orders-workspace-current-creator__close { position: absolute; right: 10px; top: 10px; display: grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: 10px; color: var(--ow-ink); background: rgba(100,116,139,.1); cursor: pointer; }
+body .orders-workspace .orders-workspace-current-creator__close svg { width: 16px; height: 16px; }
+body .orders-workspace .orders-workspace-current-creator__details { display: grid; gap: 7px; margin-top: 12px; }
+body .orders-workspace .orders-workspace-current-creator__details > div { display: grid; gap: 3px; }
+body .orders-workspace .orders-workspace-current-creator__details span { font-size: 10px; color: var(--ow-muted); }
+body .orders-workspace .orders-workspace-current-creator__details b { font-size: 12px; overflow-wrap: anywhere; }
+
+@media (max-width: 768px) {
+  body .orders-workspace.orders-workspace .orders-toolbar { gap: 8px !important; margin: 0 0 12px !important; }
+  body .orders-workspace.orders-workspace .orders-toolbar__scroll { height: 53px !important; min-height: 53px !important; border-radius: 18px !important; }
+  body .orders-workspace.orders-workspace .orders-toolbar .portfolio-tabs { min-height: 43px !important; }
+  body .orders-workspace.orders-workspace .orders-toolbar .tab-portfolio { height: 42px !important; min-height: 42px !important; min-width: 58px !important; padding: 0 12px !important; border-radius: 13px !important; }
+  body .orders-workspace.orders-workspace .orders-toolbar .order-status-tab__icon,
+  body .orders-workspace.orders-workspace .orders-toolbar .order-status-tab__icon svg { width: 16px !important; height: 16px !important; }
+  body .orders-workspace.orders-workspace .orders-toolbar .order-status-tab__label { font-size: 11px !important; }
+  body .orders-workspace.orders-workspace .orders-type-filter,
+  body .orders-workspace.orders-workspace .orders-type-filter__button { flex-basis: 53px !important; width: 53px !important; min-width: 53px !important; height: 53px !important; min-height: 53px !important; border-radius: 18px !important; }
+  body .orders-workspace.orders-workspace .co-cards { gap: 9px !important; padding-bottom: 0 !important; }
+  body .orders-workspace.orders-workspace .operations-orders-list-surface,
+  body .orders-workspace.orders-workspace .orders-review-list-surface,
+  body .orders-workspace.orders-workspace .next-maintenance-orders-list-surface,
+  body .orders-workspace.orders-workspace #current-orders { padding-bottom: calc(155px + env(safe-area-inset-bottom, 0px)) !important; }
+  body .orders-workspace.orders-workspace .co-cards .co-card { padding: 14px 15px !important; min-height: 84px !important; border-radius: 19px !important; }
+  body .orders-workspace.orders-workspace .co-cards .co-card .co-top { min-height: 56px !important; gap: 8px !important; }
+  body .orders-workspace.orders-workspace .co-cards .co-card .co-title { font-size: 18px !important; }
+  body .orders-workspace.orders-workspace .co-cards .orders-workspace-user { font-size: 12px !important; }
+  body .orders-workspace.orders-workspace .co-cards .co-status-btn,
+  body .orders-workspace.orders-workspace .co-cards .sv-mixed-approval-pill { padding: 6px 10px !important; font-size: 10px !important; min-height: 27px !important; }
+  body .orders-workspace.orders-workspace .co-cards .co-creator-btn,
+  body .orders-workspace.orders-workspace .co-cards .next-current-creator-chip { width: 32px !important; min-width: 32px !important; max-width: 32px !important; height: 32px !important; min-height: 32px !important; }
+}
+@media (min-width: 769px) {
+  body .orders-workspace.orders-workspace .co-cards { grid-template-columns: repeat(auto-fill, minmax(min(100%, 345px), 1fr)) !important; padding-bottom: 36px !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+  body .orders-workspace.orders-workspace .co-cards .co-card,
+  body .orders-workspace.orders-workspace .orders-toolbar .tab-portfolio { transition: none !important; }
+}
+html[data-theme="dark"] body .orders-workspace,
+html.ops-theme-dark body .orders-workspace {
+  --ow-surface: #151923;
+  --ow-ink: #f6f7fa;
+  --ow-muted: #abb1bf;
+  --ow-border: #303847;
+  --ow-control: #171c27;
+}
+html[data-theme="dark"] body .orders-workspace.orders-workspace .orders-toolbar .tab-portfolio.active,
+html.ops-theme-dark body .orders-workspace.orders-workspace .orders-toolbar .tab-portfolio.active { background: #f45b17 !important; color: #fff !important; }

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import ClassicOrderIcon from "./ClassicOrderIcon";
+import OrdersEmptyState, { OrdersListHeader } from "./OrdersEmptyState";
 import { loadTeamMemberPublicProfile } from "../../lib/team-member-public-client";
 
 const MaintenanceDetailsModal = dynamic(() => import("./MaintenanceHeavyModals").then((module) => module.MaintenanceDetailsModal), { ssr: false });
@@ -529,21 +530,18 @@ function templateReportFileName(group) {
 
 function MaintenanceCard({ group, onOpen, onCreator }) {
   const vars = MAINTENANCE_STATUS_COLORS[group.state.key] || MAINTENANCE_STATUS_COLORS["not-started"];
-  const thumbStyle = { "--co-thumb-bg": "#FEF3C7", "--co-thumb-fg": "#92400E", "--co-thumb-border": "#FDE68A" };
   return (
     <article className="co-card next-maintenance-order-card" role="button" tabIndex={0} aria-label={`Open ${group.orderIdLabel}`} onClick={() => onOpen(group)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen(group); } }}>
       <div className="co-top">
-        <div className="co-thumb co-thumb--order-type" style={thumbStyle} title="Request Maintenance" aria-label="Request Maintenance"><ClassicOrderIcon name="tool" /></div>
         <div className="co-main">
           <div className="co-title">{group.orderIdLabel}</div>
-          <div className="next-maintenance-order-meta"><span className="co-sub">{formatDate(group.latestCreated)}</span></div>
+          <div className="orders-workspace-user" title={group.createdByName || "Unknown user"}>{group.createdByName || "Unknown user"}</div>
         </div>
         <div className="next-maintenance-card-head-actions">
           <div className="next-maintenance-card-status">
             <span className="co-status-btn" style={{ "--tag-bg": vars.bg, "--tag-fg": vars.fg, "--tag-border": vars.bd }}>{group.state.label}</span>
           </div>
           <button type="button" className="co-creator-btn next-maintenance-creator-btn" aria-label={`Created by ${group.createdByName || "user"}`} title={`Created by ${group.createdByName || "user"}`} onClick={(event) => { event.preventDefault(); event.stopPropagation(); onCreator(event.currentTarget, group); }}>
-            <span className="next-maintenance-creator-label">{group.createdByName || "—"}</span>
             <span className="next-maintenance-creator-icon"><ClassicOrderIcon name="user" /></span>
           </button>
         </div>
@@ -1098,7 +1096,7 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
   }
 
   return (
-    <section className="next-classic-orders-parity next-classic-maintenance-parity">
+    <section className="next-classic-orders-parity next-classic-maintenance-parity orders-workspace">
       {bootstrapWarnings.length ? <div className="dashboard-notice"><strong>Partial data</strong><span>One resource was not available during the initial load.</span></div> : null}
       {notice ? <div className="orders-parity-success" role="status"><ClassicOrderIcon name="check-circle" />{notice}</div> : null}
 
@@ -1111,7 +1109,8 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
       </div>
 
       <section className="next-maintenance-orders-list-surface">
-        <div className="co-cards" id="requested-list">{visibleGroups.length ? visibleGroups.map((group) => <MaintenanceCard group={group} onOpen={openOrderDetails} onCreator={openCreatorProfile} key={group.key} />) : listLoading ? <div className="ops-no-data-state" role="status" aria-live="polite"><div className="ops-no-data-state__text">Loading maintenance orders…</div></div> : <div className="ops-no-data-state" role="status" aria-live="polite"><img className="ops-no-data-state__image" src="/next/images/no-data-illustration.png" alt="" loading="lazy" /><div className="ops-no-data-state__text">Sorry, No data available</div></div>}</div>
+        <OrdersListHeader count={visibleGroups.length} hasMore={pageInfo?.hasMore} busy={listLoading} />
+        <div className="co-cards" id="requested-list">{visibleGroups.length ? visibleGroups.map((group) => <MaintenanceCard group={group} onOpen={openOrderDetails} onCreator={openCreatorProfile} key={group.key} />) : listLoading ? <div className="ops-no-data-state" role="status" aria-live="polite"><div className="ops-no-data-state__text">Loading maintenance orders…</div></div> : <OrdersEmptyState filtered={tab !== "all" || type !== "all" || !!query.trim()} context={"orders"} onReset={() => { setTab("all"); setType("all"); setQuery(""); }} />}</div>
         {pageInfo?.hasMore ? <div style={{ display: "flex", justifyContent: "center", padding: "16px 0 4px" }}><button type="button" className="ro-action-btn ro-action-btn--light" disabled={listLoading} onClick={() => fetchOrdersPage({ reset: false }).catch((error) => { setNotice(error?.message || "Failed to load more maintenance orders."); window.setTimeout(() => setNotice(""), 4000); })}>{listLoading ? "Loading…" : "Load more orders"}</button></div> : null}
       </section>
 

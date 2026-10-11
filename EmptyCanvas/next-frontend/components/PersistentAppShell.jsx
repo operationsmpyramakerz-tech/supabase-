@@ -26,12 +26,14 @@ function routePerformanceStyles(localPath) {
     return [
       "/next/css/orders-performance.css?v=current-orders-pure-white-v6",
       "/next/css/order-mobile-performance.css?v=floating-order-type-icon-v3",
+      "/next/css/orders-workspace.css?v=orders-workspace-v1",
     ];
   }
   if (localPath === "/maintenance-orders") {
     return [
       "/next/css/maintenance-orders.css?v=maintenance-log-footer-lift-v12",
       "/next/css/order-mobile-performance.css?v=floating-order-type-icon-v3",
+      "/next/css/orders-workspace.css?v=orders-workspace-v1",
     ];
   }
   if (localPath === "/orders/new" || localPath.startsWith("/orders/new/")) {
