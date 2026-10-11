@@ -459,6 +459,19 @@ function selectedCombinedColumnDefs(columns, payload, opts = {}) {
   return out;
 }
 
+function filterCombinedRowsWithValues(payload, selectedColumns = []) {
+  const combinedMetricColumns = (Array.isArray(selectedColumns) ? selectedColumns : [])
+    .filter((column) => column?.combinedMetricKey && text(column?.key));
+  if (!combinedMetricColumns.length || !Array.isArray(payload?.rows)) return payload;
+
+  const rows = payload.rows.filter((row) => combinedMetricColumns.some((column) => {
+    const value = Number(cellValue(row, column.key));
+    return Number.isFinite(value) && Math.abs(value) > 1e-9;
+  }));
+
+  return rows.length === payload.rows.length ? payload : { ...payload, rows };
+}
+
 function normalizeOrderExportColumns(columns, { tab = "" } = {}) {
   const defs = new Map(ORDER_EXPORT_COLUMN_DEFS.map((column) => [column.key, column]));
   const tabKey = text(tab).toLowerCase();
@@ -620,23 +633,26 @@ async function renderDeliveryPdf({ payload, tab, columns, instruction, sortMode,
   const combinedColumnDefs = Array.isArray(payload?.combinedOrders) && payload.combinedOrders.length > 1
     ? selectedCombinedColumnDefs(columns, payload, { tab })
     : null;
+  const exportPayload = combinedColumnDefs
+    ? filterCombinedRowsWithValues(payload, combinedColumnDefs)
+    : payload;
   const hideCosts = !selectedExportColumns.includes("unit") && !selectedExportColumns.includes("total");
   const exportInstruction = normalizeInstruction(instruction);
   const exportSortMode = normalizeSortMode(sortMode);
   const exportSignatureLabels = normalizeSignatureLabels(signatureLabels, payload.receiptView.signatureLabels);
   const buffer = await renderPipedPdf(pipeDeliveryReceiptPDF, {
-    orderId: payload.orderIdRange,
-    createdAt: payload.createdAt,
-    teamMember: payload.teamMember,
-    preparedBy: payload.groupReason,
-    rows: payload.rows,
+    orderId: exportPayload.orderIdRange,
+    createdAt: exportPayload.createdAt,
+    teamMember: exportPayload.teamMember,
+    preparedBy: exportPayload.groupReason,
+    rows: exportPayload.rows,
     groupMode: exportSortMode,
-    grandQty: payload.grandQty,
-    grandTotal: payload.grandTotal,
+    grandQty: exportPayload.grandQty,
+    grandTotal: exportPayload.grandTotal,
     metaLayout: "teamReasonFirst",
     showReasonTagBar: false,
     groupByReason: false,
-    headerColorKey: payload.groupReason,
+    headerColorKey: exportPayload.groupReason,
     showCosts: !hideCosts,
     exportColumns: selectedExportColumns,
     exportColumnDefs: combinedColumnDefs,
@@ -645,14 +661,14 @@ async function renderDeliveryPdf({ payload, tab, columns, instruction, sortMode,
     instructionEnglishText: exportInstruction.englishText,
     instructionArabicText: exportInstruction.arabicText,
     instructionText: exportInstruction.text,
-    documentTitle: payload.receiptView.documentTitle,
-    recipientLabelLeft: payload.receiptView.recipientLabelLeft,
-    thirdSignatureLabel: payload.receiptView.thirdSignatureLabel,
+    documentTitle: exportPayload.receiptView.documentTitle,
+    recipientLabelLeft: exportPayload.receiptView.recipientLabelLeft,
+    thirdSignatureLabel: exportPayload.receiptView.thirdSignatureLabel,
     signatureLabels: exportSignatureLabels,
   });
   return {
     buffer,
-    fileName: `${payload?.combinedOrders?.length > 1 ? "combined_orders" : payload.receiptView.filePrefix}_${safeExportName(payload.orderIdRange)}.pdf`,
+    fileName: `${exportPayload?.combinedOrders?.length > 1 ? "combined_orders" : exportPayload.receiptView.filePrefix}_${safeExportName(exportPayload.orderIdRange)}.pdf`,
     contentType: "application/pdf",
   };
 }
@@ -1180,15 +1196,18 @@ async function renderExcel({ payload, tab, columns, instruction, sortMode }) {
   const selectedColumns = isCombined
     ? selectedCombinedColumnDefs(columns, payload, { tab })
     : selectedColumnDefs(columns, { tab });
+  const exportPayload = isCombined
+    ? filterCombinedRowsWithValues(payload, selectedColumns)
+    : payload;
   const exportInstruction = normalizeInstruction(instruction);
   const exportSortMode = normalizeSortMode(sortMode);
-  const isMaintenance = orderTypeKey(payload?.first?.orderType) === orderTypeKey("Request Maintenance");
+  const isMaintenance = orderTypeKey(exportPayload?.first?.orderType) === orderTypeKey("Request Maintenance");
   const buffer = isMaintenance
-    ? await renderMaintenanceExcel(payload, { selectedColumns, exportInstruction })
-    : await renderProposalStyleExcel(payload, { selectedColumns, exportInstruction, exportSortMode });
+    ? await renderMaintenanceExcel(exportPayload, { selectedColumns, exportInstruction })
+    : await renderProposalStyleExcel(exportPayload, { selectedColumns, exportInstruction, exportSortMode });
   return {
     buffer,
-    fileName: `${isCombined ? "combined_orders" : (isMaintenance ? "maintenance_order" : "order")}_${safeExportName(payload.orderIdRange)}.xlsx`,
+    fileName: `${isCombined ? "combined_orders" : (isMaintenance ? "maintenance_order" : "order")}_${safeExportName(exportPayload.orderIdRange)}.xlsx`,
     contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   };
 }
@@ -1244,4 +1263,5 @@ export const __orderExportServiceTest = {
   normalizeCombinedOrders,
   combinedMetricColumnKey,
   selectedCombinedColumnDefs,
+  filterCombinedRowsWithValues,
 };
