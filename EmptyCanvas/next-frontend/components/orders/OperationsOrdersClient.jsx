@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import ClassicOrderIcon from "./ClassicOrderIcon";
+import { createOrderDetailsLoader } from "./orderDetailsLoader";
+import OrderDetailsLoadingOverlay from "./OrderDetailsLoadingOverlay";
 import OrderTypeBadge from "./OrderTypeBadge";
 import OrdersEmptyState, { OrdersListHeader, sortOrderGroups } from "./OrdersEmptyState";
 import ActionLoadingModal, { useActionLoading } from "../ActionLoadingModal";
@@ -687,9 +689,9 @@ function downloadBlob(blob, filename) {
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function OperationsOrderCard({ group, tab, onOpen, onCreator }) {
+function OperationsOrderCard({ group, tab, onOpen, onCreator, onPrefetch }) {
   return (
-    <article className="co-card next-operations-order-card" role="button" tabIndex={0} aria-label={`Open ${group.orderIdLabel}`} onClick={() => onOpen(group)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen(group); } }}>
+    <article className="co-card next-operations-order-card" role="button" tabIndex={0} aria-label={`Open ${group.orderIdLabel}`} onPointerEnter={(event) => { if (event.pointerType === "mouse" || event.pointerType === "pen") onPrefetch(group, true); }} onPointerLeave={() => onPrefetch(null, true)} onTouchStart={() => onPrefetch(group)} onFocus={() => onPrefetch(group)} onClick={() => onOpen(group)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen(group); } }}>
       <div className="co-top">
         <div className="co-main">
           <OrderTypeBadge type={group.orderType} color={group.orderTypeColor} />
@@ -768,7 +770,14 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
   const [creatorState, setCreatorState] = useState(null);
   const [maintenanceOptions, setMaintenanceOptions] = useState(null);
   const creatorProfileCache = useRef(new Map());
-  const orderDetailsCache = useRef(new Map());
+  // Scoped to this screen; invalidate after every list refresh or mutation.
+  const detailsLoaderRef = useRef(null);
+  if (!detailsLoaderRef.current) detailsLoaderRef.current = createOrderDetailsLoader({
+    endpoint: `${DIRECT_API_BASE}/orders/requested/details-direct`,
+    buildGroups,
+  });
+  const [openingGroup, setOpeningGroup] = useState(null);
+  const openRequestRef = useRef(0);
   const listRequestRef = useRef(0);
   const listAbortRef = useRef(null);
   const initialFilterKeyRef = useRef("all|all|");
@@ -901,7 +910,9 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
       });
       setPageInfo(nextPageInfo);
       if (reset) {
-        orderDetailsCache.current.clear();
+        detailsLoaderRef.current.clear();
+        ++openRequestRef.current;
+        setOpeningGroup(null);
         setSelected(null);
         setEditMode(null);
       }
@@ -920,46 +931,38 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
 
   async function openOrderDetails(group) {
     if (!group) return;
-    // Start loading the heavy details/edit/receive modal chunk while the order
-    // detail request is in flight so opening an order does not add a second
-    // serial wait after the network response.
+    const requestId = ++openRequestRef.current;
+    // Begin loading the modal code and the data in parallel. The lightweight
+    // overlay appears immediately, so a slow Supabase response never looks
+    // like an unresponsive card.
     void loadOperationsOrdersHeavyModals();
-    const needsDetails = (Array.isArray(group.items) ? group.items : []).some((item) => Boolean(item?.summaryOnly));
-    if (!needsDetails) {
-      setSelected(group);
-      return;
-    }
-
-    const cacheKey = text(group.key || group.orderIdLabel || group.orderIds?.join("|"));
-    const cached = cacheKey ? orderDetailsCache.current.get(cacheKey) : null;
-    if (cached) {
-      setSelected(cached);
-      return;
-    }
-
+    setSelected(null);
+    const needsDetails = detailsLoaderRef.current.needsDetails(group);
+    setOpeningGroup(needsDetails && !detailsLoaderRef.current.isReady(group) ? group : null);
     try {
-      const response = await fetch(`${DIRECT_API_BASE}/orders/requested/details-direct`, {
-        method: "POST",
-        credentials: "include",
-        cache: "no-store",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderIds: group.orderIds }),
-      });
-      if (response.status === 401) {
-        window.location.href = "/login?next=/next/operations-orders";
-        return;
-      }
-      const data = await readJson(response);
-      if (!response.ok) throw new Error(data?.error || "Failed to load order details.");
-      const detailedGroups = buildGroups(Array.isArray(data) ? data : []);
-      const detailed = detailedGroups.find((item) => item.key === group.key) || detailedGroups[0];
-      if (!detailed) throw new Error("This order no longer exists or has no components.");
-      if (cacheKey) orderDetailsCache.current.set(cacheKey, detailed);
-      setSelected(detailed);
+      const detail = await detailsLoaderRef.current.get(group);
+      if (requestId !== openRequestRef.current) return;
+      setOpeningGroup(null);
+      setSelected(detail);
     } catch (error) {
+      if (requestId !== openRequestRef.current) return;
+      setOpeningGroup(null);
+      if (error?.status === 401) { window.location.href = "/login?next=/next/operations-orders"; return; }
       setNotice(error?.message || "Failed to load order details.");
       window.setTimeout(() => setNotice(""), 4500);
     }
+  }
+
+  function closeOrderDetails() {
+    ++openRequestRef.current; // prevent a late response from reopening a closed dialog
+    setOpeningGroup(null);
+    setSelected(null);
+    setEditMode(null);
+  }
+
+  function prefetchOrderDetails(group, hover = false) {
+    if (!group) { detailsLoaderRef.current.cancelPrefetch(); return; }
+    detailsLoaderRef.current.prefetch(group, { defer: hover });
   }
 
   async function beginAction(action, group) {
@@ -1410,17 +1413,18 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
       <section className="operations-orders-list-surface" id="operations-orders-list">
         <OrdersListHeader count={visibleGroups.length} hasMore={pageInfo?.hasMore} busy={listLoading} sortMode={sortMode} onSortChange={setSortMode} />
         <div className="co-cards" id="requested-list">
-          {visibleGroups.length ? sortedVisibleGroups.map((group) => <OperationsOrderCard group={group} tab={tab} onOpen={openOrderDetails} onCreator={openCreatorProfile} key={group.key} />) : listLoading ? <div className="ops-no-data-state" role="status" aria-live="polite"><div className="ops-no-data-state__text">Loading orders…</div></div> : <OrdersEmptyState filtered={tab !== "all" || type !== "all" || !!query.trim()} context={"orders"} onReset={() => { setTab("all"); setType("all"); setQuery(""); }} />}
+          {visibleGroups.length ? sortedVisibleGroups.map((group) => <OperationsOrderCard group={group} tab={tab} onOpen={openOrderDetails} onPrefetch={prefetchOrderDetails} onCreator={openCreatorProfile} key={group.key} />) : listLoading ? <div className="ops-no-data-state" role="status" aria-live="polite"><div className="ops-no-data-state__text">Loading orders…</div></div> : <OrdersEmptyState filtered={tab !== "all" || type !== "all" || !!query.trim()} context={"orders"} onReset={() => { setTab("all"); setType("all"); setQuery(""); }} />}
         </div>
         {pageInfo?.hasMore ? <div style={{ display: "flex", justifyContent: "center", padding: "16px 0 4px" }}><button type="button" className="ro-action-btn ro-action-btn--light" disabled={listLoading} onClick={() => fetchOrdersPage({ reset: false }).catch((error) => { setNotice(error?.message || "Failed to load more orders."); window.setTimeout(() => setNotice(""), 4000); })}>{listLoading ? "Loading…" : "Load more orders"}</button></div> : null}
       </section>
 
+      <OrderDetailsLoadingOverlay group={openingGroup} onCancel={closeOrderDetails} />
       {(selected || actionState) ? (
         <OperationsOrdersHeavyModals
           selected={selected}
           tab={tab}
           busy={busy}
-          onCloseOrder={() => { setSelected(null); setEditMode(null); }}
+          onCloseOrder={closeOrderDetails}
           onAction={beginAction}
           onExport={exportOrder}
           orderOptions={downloadOrderOptions}

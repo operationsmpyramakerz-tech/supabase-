@@ -685,20 +685,16 @@ async function resolveDirectProposalSources(items = []) {
 export async function enrichOrderDetailGrouping(items = []) {
   let rows = Array.isArray(items) ? items : [];
   if (!rows.length) return rows;
-  rows = await resolveDirectProposalSources(rows);
-
-  let catalog = { products: [] };
-  let memberships = [];
-  let kits = [];
-  let folders = [];
-  try {
-    [catalog, memberships, kits, folders] = await Promise.all([
-      getProductsCatalog().catch(() => ({ products: [] })),
-      listKitMembership().catch(() => []),
-      listKits({}).catch(() => []),
-      listKitFolders({}).catch(() => []),
-    ]);
-  } catch {}
+  // Proposal-source reconstruction and catalog/kit lookups are independent.
+  // Run them together instead of serializing their latency on every order tap.
+  const [resolvedRows, catalog, memberships, kits, folders] = await Promise.all([
+    resolveDirectProposalSources(rows),
+    getProductsCatalog().catch(() => ({ products: [] })),
+    listKitMembership().catch(() => []),
+    listKits({}).catch(() => []),
+    listKitFolders({}).catch(() => []),
+  ]);
+  rows = resolvedRows;
 
   const products = Array.isArray(catalog?.products) ? catalog.products : [];
   const productByName = new Map();

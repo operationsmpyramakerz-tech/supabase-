@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import ClassicOrderIcon from "./ClassicOrderIcon";
+import { createOrderDetailsLoader } from "./orderDetailsLoader";
 import OrderTypeBadge from "./OrderTypeBadge";
 import OrdersEmptyState, { OrdersListHeader, sortOrderGroups } from "./OrdersEmptyState";
 import { loadTeamMemberPublicProfile } from "../../lib/team-member-public-client";
@@ -285,11 +286,11 @@ function ApprovalPill({ approval, className = "co-status-btn", reason = "", onRe
   return <span className={className} style={style}>{statusLabel(key)}</span>;
 }
 
-function OrderReviewCard({ group, activeTab, onOpen, onCreator }) {
+function OrderReviewCard({ group, activeTab, onOpen, onPrefetch, onCreator }) {
   const state = group.archived ? "archive" : group.approval;
   const mixed = activeTab === "all" && !group.archived && group.approval === "mixed";
   return (
-    <article className="co-card next-review-order-card" role="button" tabIndex={0} aria-label={`Open ${group.orderIdLabel}`} onClick={() => onOpen(group)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen(group); } }}>
+    <article className="co-card next-review-order-card" role="button" tabIndex={0} aria-label={`Open ${group.orderIdLabel}`} onPointerEnter={(event) => { if (event.pointerType === "mouse" || event.pointerType === "pen") onPrefetch(group, true); }} onPointerLeave={() => onPrefetch(null, true)} onTouchStart={() => onPrefetch(group)} onFocus={() => onPrefetch(group)} onClick={() => onOpen(group)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen(group); } }}>
       <div className="co-top">
         <div className="co-main">
           <OrderTypeBadge type={group.orderType} color={group.orderTypeColor} />
@@ -342,6 +343,12 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
   const [creatorState, setCreatorState] = useState(null);
   const [detailGroups, setDetailGroups] = useState(() => new Map());
   const [detailLoadingKey, setDetailLoadingKey] = useState("");
+  const detailRequestIdRef = useRef(0);
+  const detailsLoaderRef = useRef(null);
+  if (!detailsLoaderRef.current) detailsLoaderRef.current = createOrderDetailsLoader({
+    endpoint: `${DIRECT_API_BASE}/sv-orders/details-direct`,
+    buildGroups,
+  });
   const [detailError, setDetailError] = useState("");
   const creatorProfileCache = useRef(new Map());
   const listRequestRef = useRef(0);
@@ -434,6 +441,7 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
     window.setTimeout(() => setNotice(""), 3500);
   }
   function closeReviewDetails() {
+    ++detailRequestIdRef.current;
     setSelectedKey("");
     setDetailLoadingKey("");
     setDetailError("");
@@ -457,38 +465,31 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
   async function openReviewDetails(group, { force = false } = {}) {
     void loadOrdersReviewHeavyModals();
     if (!group?.key) return;
+    const requestId = ++detailRequestIdRef.current;
     setSelectedKey(group.key);
     setDetailError("");
     if (!force && detailGroups.has(group.key)) return;
     setDetailLoadingKey(group.key);
     try {
-      const response = await fetch(`${DIRECT_API_BASE}/sv-orders/details-direct`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        cache: "no-store",
-        body: JSON.stringify({ orderIds: group.orderIds || [] }),
-      });
-      if (response.status === 401) {
-        window.location.href = "/login?next=/next/orders-review";
-        return;
-      }
-      const data = await readJson(response);
-      if (!response.ok) throw new Error(data?.error || "Failed to load order details.");
-      const rows = Array.isArray(data) ? data : (Array.isArray(data?.items) ? data.items : []);
-      const groups = buildGroups(rows);
-      const detail = groups.find((candidate) => candidate.key === group.key) || groups[0] || null;
-      if (!detail) throw new Error("No order details were returned.");
+      const detail = await detailsLoaderRef.current.get(group, { fresh: force });
+      if (requestId !== detailRequestIdRef.current) return;
       setDetailGroups((current) => {
         const next = new Map(current);
-        next.set(group.key, { ...detail, key: group.key });
+        next.set(group.key, detail);
         return next;
       });
     } catch (error) {
+      if (requestId !== detailRequestIdRef.current) return;
+      if (error?.status === 401) { window.location.href = "/login?next=/next/orders-review"; return; }
       setDetailError(error?.message || "Order details could not be loaded.");
     } finally {
-      setDetailLoadingKey((current) => current === group.key ? "" : current);
+      if (requestId === detailRequestIdRef.current) setDetailLoadingKey("");
     }
+  }
+
+  function prefetchReviewDetails(group, hover = false) {
+    if (!group) { detailsLoaderRef.current.cancelPrefetch(); return; }
+    detailsLoaderRef.current.prefetch(group, { defer: hover });
   }
   async function fetchReviewPage({ reset = true } = {}) {
     const requestId = ++listRequestRef.current;
@@ -522,6 +523,9 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
       setPageInfo(nextPageInfo);
       if (reset) {
         setSelectedKey("");
+        detailsLoaderRef.current.clear();
+        ++detailRequestIdRef.current;
+        setDetailLoadingKey("");
         setDetailGroups(new Map());
         setDetailError("");
       }
@@ -686,7 +690,7 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
       </div>
     </div>
 
-    <section className="orders-review-list-surface" id="sv-orders"><OrdersListHeader count={visibleGroups.length} hasMore={pageInfo?.hasMore} busy={listLoading} sortMode={sortMode} onSortChange={setSortMode} /><div className="co-cards" id="sv-list">{visibleGroups.length ? sortedVisibleGroups.map((group) => <OrderReviewCard group={group} activeTab={tab} onOpen={openReviewDetails} onCreator={openCreatorProfile} key={group.key}/>) : listLoading ? <div className="ops-no-data-state" role="status" aria-live="polite"><div className="ops-no-data-state__text">Loading orders…</div></div> : <OrdersEmptyState filtered={tab !== "all" || type !== "all" || !!query.trim()} context={"orders"} onReset={() => { setTab("all"); setType("all"); setQuery(""); }} />}</div>{pageInfo?.hasMore ? <div style={{ display: "flex", justifyContent: "center", padding: "16px 0 4px" }}><button type="button" className="ro-action-btn ro-action-btn--light" disabled={listLoading} onClick={() => fetchReviewPage({ reset: false }).catch((error) => showNotice(error?.message || "Failed to load more orders."))}>{listLoading ? "Loading…" : "Load more orders"}</button></div> : null}</section>
+    <section className="orders-review-list-surface" id="sv-orders"><OrdersListHeader count={visibleGroups.length} hasMore={pageInfo?.hasMore} busy={listLoading} sortMode={sortMode} onSortChange={setSortMode} /><div className="co-cards" id="sv-list">{visibleGroups.length ? sortedVisibleGroups.map((group) => <OrderReviewCard group={group} activeTab={tab} onOpen={openReviewDetails} onPrefetch={prefetchReviewDetails} onCreator={openCreatorProfile} key={group.key}/>) : listLoading ? <div className="ops-no-data-state" role="status" aria-live="polite"><div className="ops-no-data-state__text">Loading orders…</div></div> : <OrdersEmptyState filtered={tab !== "all" || type !== "all" || !!query.trim()} context={"orders"} onReset={() => { setTab("all"); setType("all"); setQuery(""); }} />}</div>{pageInfo?.hasMore ? <div style={{ display: "flex", justifyContent: "center", padding: "16px 0 4px" }}><button type="button" className="ro-action-btn ro-action-btn--light" disabled={listLoading} onClick={() => fetchReviewPage({ reset: false }).catch((error) => showNotice(error?.message || "Failed to load more orders."))}>{listLoading ? "Loading…" : "Load more orders"}</button></div> : null}</section>
 
     {(selectedKey || selected || passwordState || rejectionState || editorState || reasonView || creatorState) ? (
       <OrdersReviewHeavyModals

@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import ClassicOrderIcon from "./ClassicOrderIcon";
+import { createOrderDetailsLoader } from "./orderDetailsLoader";
+import OrderDetailsLoadingOverlay from "./OrderDetailsLoadingOverlay";
 import OrderTypeBadge from "./OrderTypeBadge";
 import OrdersEmptyState, { OrdersListHeader, sortOrderGroups } from "./OrdersEmptyState";
 import { loadTeamMemberPublicProfile } from "../../lib/team-member-public-client";
@@ -529,10 +531,10 @@ function templateReportFileName(group) {
   return `maintenance-template-${safe}.pdf`;
 }
 
-function MaintenanceCard({ group, onOpen, onCreator }) {
+function MaintenanceCard({ group, onOpen, onCreator, onPrefetch }) {
   const vars = MAINTENANCE_STATUS_COLORS[group.state.key] || MAINTENANCE_STATUS_COLORS["not-started"];
   return (
-    <article className="co-card next-maintenance-order-card" role="button" tabIndex={0} aria-label={`Open ${group.orderIdLabel}`} onClick={() => onOpen(group)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen(group); } }}>
+    <article className="co-card next-maintenance-order-card" role="button" tabIndex={0} aria-label={`Open ${group.orderIdLabel}`} onPointerEnter={(event) => { if (event.pointerType === "mouse" || event.pointerType === "pen") onPrefetch(group, true); }} onPointerLeave={() => onPrefetch(null, true)} onTouchStart={() => onPrefetch(group)} onFocus={() => onPrefetch(group)} onClick={() => onOpen(group)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen(group); } }}>
       <div className="co-top">
         <div className="co-main">
           <OrderTypeBadge type={group.orderType || "Request Maintenance"} color={undefined} />
@@ -615,7 +617,14 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
   const [notice, setNotice] = useState("");
   const [creatorState, setCreatorState] = useState(null);
   const creatorProfileCache = useRef(new Map());
-  const orderDetailsCache = useRef(new Map());
+  // Scoped to this screen; invalidate after every list refresh or mutation.
+  const detailsLoaderRef = useRef(null);
+  if (!detailsLoaderRef.current) detailsLoaderRef.current = createOrderDetailsLoader({
+    endpoint: `${DIRECT_API_BASE}/orders/maintenance/details-direct`,
+    buildGroups,
+  });
+  const [openingGroup, setOpeningGroup] = useState(null);
+  const openRequestRef = useRef(0);
   const listRequestRef = useRef(0);
   const listAbortRef = useRef(null);
   const initialFilterKeyRef = useRef("all|all|");
@@ -731,7 +740,9 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
       });
       setPageInfo(nextPageInfo);
       if (reset) {
-        orderDetailsCache.current.clear();
+        detailsLoaderRef.current.clear();
+        ++openRequestRef.current;
+        setOpeningGroup(null);
         setSelected(null);
       }
     } catch (error) {
@@ -749,42 +760,37 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
 
   async function openOrderDetails(group) {
     if (!group) return;
-    const needsDetails = (Array.isArray(group.items) ? group.items : []).some((item) => Boolean(item?.summaryOnly));
-    if (!needsDetails) {
-      setSelected(group);
-      return;
-    }
-
-    const cacheKey = text(group.key || group.orderIdLabel || group.orderIds?.join("|"));
-    const cached = cacheKey ? orderDetailsCache.current.get(cacheKey) : null;
-    if (cached) {
-      setSelected(cached);
-      return;
-    }
-
+    const requestId = ++openRequestRef.current;
+    // Begin loading the modal code and the data in parallel. The lightweight
+    // overlay appears immediately, so a slow Supabase response never looks
+    // like an unresponsive card.
+    void import("./MaintenanceHeavyModals");
+    setSelected(null);
+    const needsDetails = detailsLoaderRef.current.needsDetails(group);
+    setOpeningGroup(needsDetails && !detailsLoaderRef.current.isReady(group) ? group : null);
     try {
-      const response = await fetch(`${DIRECT_API_BASE}/orders/maintenance/details-direct`, {
-        method: "POST",
-        credentials: "include",
-        cache: "no-store",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderIds: group.orderIds }),
-      });
-      if (response.status === 401) {
-        window.location.href = "/login?next=/next/maintenance-orders";
-        return;
-      }
-      const data = await readJson(response);
-      if (!response.ok) throw new Error(data?.error || "Failed to load maintenance order details.");
-      const detailedGroups = buildGroups(Array.isArray(data) ? data : []);
-      const detailed = detailedGroups.find((item) => item.key === group.key) || detailedGroups[0];
-      if (!detailed) throw new Error("This maintenance order no longer exists or has no components.");
-      if (cacheKey) orderDetailsCache.current.set(cacheKey, detailed);
-      setSelected(detailed);
+      const detail = await detailsLoaderRef.current.get(group);
+      if (requestId !== openRequestRef.current) return;
+      setOpeningGroup(null);
+      setSelected(detail);
     } catch (error) {
-      setNotice(error?.message || "Failed to load maintenance order details.");
+      if (requestId !== openRequestRef.current) return;
+      setOpeningGroup(null);
+      if (error?.status === 401) { window.location.href = "/login?next=/next/maintenance-orders"; return; }
+      setNotice(error?.message || "Failed to load order details.");
       window.setTimeout(() => setNotice(""), 4500);
     }
+  }
+
+  function closeOrderDetails() {
+    ++openRequestRef.current; // prevent a late response from reopening a closed dialog
+    setOpeningGroup(null);
+    setSelected(null);
+  }
+
+  function prefetchOrderDetails(group, hover = false) {
+    if (!group) { detailsLoaderRef.current.cancelPrefetch(); return; }
+    detailsLoaderRef.current.prefetch(group, { defer: hover });
   }
 
   function beginAction(action, group) {
@@ -1117,11 +1123,12 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
 
       <section className="next-maintenance-orders-list-surface">
         <OrdersListHeader count={visibleGroups.length} hasMore={pageInfo?.hasMore} busy={listLoading} sortMode={sortMode} onSortChange={setSortMode} />
-        <div className="co-cards" id="requested-list">{visibleGroups.length ? sortedVisibleGroups.map((group) => <MaintenanceCard group={group} onOpen={openOrderDetails} onCreator={openCreatorProfile} key={group.key} />) : listLoading ? <div className="ops-no-data-state" role="status" aria-live="polite"><div className="ops-no-data-state__text">Loading maintenance orders…</div></div> : <OrdersEmptyState filtered={tab !== "all" || type !== "all" || !!query.trim()} context={"orders"} onReset={() => { setTab("all"); setType("all"); setQuery(""); }} />}</div>
+        <div className="co-cards" id="requested-list">{visibleGroups.length ? sortedVisibleGroups.map((group) => <MaintenanceCard group={group} onOpen={openOrderDetails} onPrefetch={prefetchOrderDetails} onCreator={openCreatorProfile} key={group.key} />) : listLoading ? <div className="ops-no-data-state" role="status" aria-live="polite"><div className="ops-no-data-state__text">Loading maintenance orders…</div></div> : <OrdersEmptyState filtered={tab !== "all" || type !== "all" || !!query.trim()} context={"orders"} onReset={() => { setTab("all"); setType("all"); setQuery(""); }} />}</div>
         {pageInfo?.hasMore ? <div style={{ display: "flex", justifyContent: "center", padding: "16px 0 4px" }}><button type="button" className="ro-action-btn ro-action-btn--light" disabled={listLoading} onClick={() => fetchOrdersPage({ reset: false }).catch((error) => { setNotice(error?.message || "Failed to load more maintenance orders."); window.setTimeout(() => setNotice(""), 4000); })}>{listLoading ? "Loading…" : "Load more orders"}</button></div> : null}
       </section>
 
-      {selected ? <MaintenanceDetailsModal group={selected} busy={busy} onClose={() => setSelected(null)} onLog={openLog} onSecondLog={openSecondLog} onDone={(group) => { setActionError(""); setDoneGroup(group); }} onExport={openDownload} onAction={beginAction} /> : null}
+      <OrderDetailsLoadingOverlay group={openingGroup} onCancel={closeOrderDetails} />
+      {selected ? <MaintenanceDetailsModal group={selected} busy={busy} onClose={closeOrderDetails} onLog={openLog} onSecondLog={openSecondLog} onDone={(group) => { setActionError(""); setDoneGroup(group); }} onExport={openDownload} onAction={beginAction} /> : null}
       {actionState ? <MaintenanceActionPasswordModal state={actionState} busy={busy} error={actionError} onCancel={() => { setActionState(null); setActionError(""); }} onSubmit={submitAction} /> : null}
       {deleteConfirm ? <MaintenanceDeleteConfirmationModal state={deleteConfirm} busy={busy} onCancel={() => setDeleteConfirm(null)} onConfirm={confirmDelete} /> : null}
       {logGroup ? <MaintenanceLogModal group={logGroup} mode={logMode} options={options} busy={busy} error={actionError} onCancel={() => { setLogGroup(null); setLogMode("create"); setActionError(""); }} onSubmit={saveLog} onChecklistSaved={rememberChecklistItem} onChecklistUpdated={rememberChecklistItem} onChecklistDeleted={forgetChecklistItem} /> : null}
