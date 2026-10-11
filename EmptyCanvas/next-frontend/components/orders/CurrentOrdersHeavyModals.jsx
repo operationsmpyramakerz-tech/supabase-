@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import ClassicOrderIcon from "./ClassicOrderIcon";
 import { groupOrderItems, OrderSortButton } from "./OrderGrouping";
@@ -322,17 +322,20 @@ function OrderDetailsModal({ group, tab, busy, onClose, onAction, onReason, onEx
   }, [group, moreOpen, downloadOpen, onClose]);
 
   useEffect(() => { setMoreOpen(false); setDownloadOpen(false); setSortMode("product-tag"); setComponentSearch(""); }, [group?.key, tab]);
-  if (!group) return null;
 
   const archived = group.status === "archive";
   const maintenance = isMaintenanceOrder(group.orderType);
   const headerTitle = orderTypeHeaderTitle(group.orderType, group.orderTypeColor, statusLabel(group.status));
   const typeMeta = orderTypeMeta(group.orderType, group.orderTypeColor);
-  const tabItems = itemsForCurrentTab(group.items, tab);
-  const searchedTabItems = componentSearch.trim()
-    ? tabItems.filter((item) => matchesOrderComponentSearch(item, componentSearch))
-    : tabItems;
-  const groupedItems = groupOrderItems(searchedTabItems, sortMode);
+  // Grouping can be expensive on long orders. Opening menus or receipt panels
+  // must not re-sort every item unless the selected order/filter actually changes.
+  const tabItems = useMemo(() => itemsForCurrentTab(group.items, tab), [group.items, tab]);
+  const groupedItems = useMemo(() => {
+    const matches = componentSearch.trim()
+      ? tabItems.filter((item) => matchesOrderComponentSearch(item, componentSearch))
+      : tabItems;
+    return groupOrderItems(matches, sortMode);
+  }, [group.key, tabItems, componentSearch, sortMode]);
   const reasons = [...new Set(group.items.map(rejectedReason).filter(Boolean))].join("\n");
   const modalStatus = tab === "remaining" ? "remaining" : tab === "shipped" ? "shipped" : group.status;
 
@@ -440,7 +443,7 @@ function OrderDetailsModal({ group, tab, busy, onClose, onAction, onReason, onEx
               </div>
             </div>
           ) : null}
-          <div className="co-modal-actions ro-actions ro-actions--right order-group-sort-actions order-modal-search-actions">
+          <div className="co-modal-actions ro-actions ro-actions--right order-group-sort-actions order-modal-search-actions order-detail-toolkit">
             <OrderComponentSearch key={`${group.key}:${tab}`} value={componentSearch} onChange={setComponentSearch} disabled={busy} />
             <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => setDownloadOpen(true)} disabled={busy}><ClassicOrderIcon name="download" /><span>Download</span></button>
             <OrderSortButton value={sortMode} onChange={setSortMode} />
@@ -452,6 +455,8 @@ function OrderDetailsModal({ group, tab, busy, onClose, onAction, onReason, onEx
             groups={groupedItems}
             mode={sortMode}
             query={componentSearch}
+            sourceCount={tabItems.length}
+            onClearSearch={() => setComponentSearch("")}
             resetKey={JSON.stringify([group?.key, tab, sortMode, componentSearch])}
             renderItem={renderItem}
           />
@@ -554,7 +559,7 @@ export default function CurrentOrdersHeavyModals({
 }) {
   return (
     <>
-      <OrderDetailsModal
+      {selected ? <OrderDetailsModal
         group={selected}
         tab={tab}
         busy={busy}
@@ -562,7 +567,7 @@ export default function CurrentOrdersHeavyModals({
         onAction={onAction}
         onReason={onReason}
         onExport={onExport}
-      />
+      /> : null}
       <PasswordModal
         state={actionState}
         busy={busy}

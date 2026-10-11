@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import ClassicOrderIcon from "./ClassicOrderIcon";
 import { confirmDelete as confirmDeleteAction } from "../../lib/client-confirm";
@@ -562,7 +562,6 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, orderOption
     setEditItemState(null);
   }, [group?.key, tab]);
 
-  if (!group) return null;
   const maintenance = isMaintenance(group.orderType);
   const type = orderTypeMeta(group.orderType);
   const archived = group.stage >= 5;
@@ -654,7 +653,11 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, orderOption
       quantityReceivedEdited: true,
     };
   };
-  const baseTabItems = itemsForOperationsTab(group.items, tab).map(applyEditDraft);
+  // Build the heavy proposal/kit expansion only when the order or edit draft
+  // changes. Toggling a menu or download sheet must not re-expand 100+ rows.
+  const effectiveSortMode = isEditing ? editSortModeRef.current : sortMode;
+  const { tabItems, displayTabItems, groupedItems } = useMemo(() => {
+    const baseTabItems = itemsForOperationsTab(group.items, tab).map(applyEditDraft);
   const editAdditions = isEditing
     ? (Array.isArray(editMode?.additions) ? editMode.additions : []).map((addition, index) => {
         const draftKey = text(addition?.draftKey) || `new-${index + 1}`;
@@ -686,8 +689,9 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, orderOption
   const searchedDisplayItems = componentSearch.trim()
     ? displayTabItems.filter((item) => matchesOrderComponentSearch(item, componentSearch))
     : displayTabItems;
-  const effectiveSortMode = isEditing ? editSortModeRef.current : sortMode;
   const groupedItems = groupOrderItems(searchedDisplayItems, effectiveSortMode);
+    return { tabItems, displayTabItems, groupedItems };
+  }, [group.key, group.items, tab, editMode, isEditing, componentSearch, sortMode]);
 
   const menuAction = (action) => {
     if (action === "edit") editSortModeRef.current = sortMode;
@@ -859,24 +863,28 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, orderOption
             {group.rejectedReason ? <div className="co-meta-row co-meta-row--reason co-meta-row--reject-reason"><span>Rejected reason</span><strong>{group.rejectedReason}</strong></div> : null}
           </div> : null}
 
-          {!isEditing ? <div className="co-modal-actions ro-actions ro-actions--right order-modal-search-actions">
+          {!isEditing ? <div className="co-modal-actions ro-actions ro-actions--right order-modal-search-actions order-detail-toolkit">
             <OrderComponentSearch key={`${group.key}:${tab}`} value={componentSearch} onChange={setComponentSearch} disabled={busy} collapseOnToggle />
             {showDownload ? <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => setDownloadOpen(true)} disabled={busy}><ClassicOrderIcon name="download" /><span>Download</span></button> : null}
             <OrderSortButton value={sortMode} onChange={setSortMode} />
+          </div> : null}
+          {!isEditing && (canReceive || canDeliver || canCreateWithdrawal || canCreateDelivery || (maintenance && tab === "approved" && group.stage === 2 && !archived)) ? (
+          <div className="co-modal-actions ro-actions order-detail-workflow-actions">
             {canReceive ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction("receive", receiveActionGroup)} disabled={busy}><ClassicOrderIcon name="truck" />Received by operations</button> : null}
             {maintenance && tab === "approved" && group.stage === 2 && !archived ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction("technical-visit", group)} disabled={busy}><ClassicOrderIcon name="tool" />Request Technical Visit</button> : null}
             {maintenance && tab === "approved" && group.stage === 2 && !archived ? <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => onAction("maintenance-log", group)} disabled={busy}><ClassicOrderIcon name="clipboard" />Log Maintenance</button> : null}
             {canDeliver ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction(maintenance ? "maintenance-deliver" : "deliver", group)} disabled={busy}><ClassicOrderIcon name="check-circle" />Mark as Delivered</button> : null}
             {canCreateWithdrawal ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction("withdrawal", group)} disabled={busy}><ClassicOrderIcon name="repeat" />Create Withdrawal</button> : null}
             {canCreateDelivery ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction("delivery", group)} disabled={busy}><ClassicOrderIcon name="package" />Create Delivery</button> : null}
-          </div> : <>
-            <div className="co-modal-actions ro-actions ro-actions--right order-modal-search-actions next-operations-edit-actions">
+          </div>) : null}
+          {isEditing ? <>
+            <div className="co-modal-actions ro-actions ro-actions--right order-modal-search-actions next-operations-edit-actions order-detail-toolkit">
               <OrderComponentSearch key={`${group.key}:${tab}:edit`} value={componentSearch} onChange={setComponentSearch} disabled={busy} collapseOnToggle />
               <button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancelEdit} disabled={busy}>Cancel</button>
               <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onSaveEdit(editChanges)} disabled={busy || (!Object.keys(editChanges).length && !(Array.isArray(editMode?.additions) && editMode.additions.length) && !Object.keys(editDeletions).length)}>{busy ? "Saving…" : "Save changes"}</button>
             </div>
             <div className="next-operations-edit-mode-note"><ClassicOrderIcon name="info" /><span>Tap any component to edit its product, status and quantities.</span></div>
-          </>}
+          </> : null}
 
           <div className="co-modal-meta co-modal-meta--after-actions">
             <div className="co-meta-row co-meta-row--reason"><span>Reason</span><strong>{group.reason}</strong></div>
@@ -886,6 +894,8 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, orderOption
             groups={groupedItems}
             mode={effectiveSortMode}
             query={componentSearch}
+            sourceCount={displayTabItems.length}
+            onClearSearch={() => setComponentSearch("")}
             resetKey={JSON.stringify([group?.key, tab, effectiveSortMode, componentSearch])}
             renderItem={renderItem}
           />
@@ -1823,7 +1833,7 @@ export default function OperationsOrdersHeavyModals({
   if (!selected && !actionState) return null;
   return (
     <>
-      <OrderModal
+      {selected ? <OrderModal
         group={selected}
         tab={tab}
         busy={busy}
@@ -1837,7 +1847,7 @@ export default function OperationsOrdersHeavyModals({
         onDeleteEditItem={onDeleteEditItem}
         onSaveEdit={onSaveEdit}
         onCancelEdit={onCancelEdit}
-      />
+      /> : null}
       <RejectModal state={actionState?.action === "reject" ? actionState : null} busy={busy} error={actionError} onCancel={onCancelAction} onSubmit={onSubmitAction} />
       <EditPasswordModal state={actionState?.action === "edit" ? actionState : null} busy={busy} error={actionError} onCancel={onCancelAction} onSubmit={onSubmitAction} />
       <ArchiveModal state={actionState?.action === "archive" ? actionState : null} busy={busy} error={actionError} onCancel={onCancelAction} onSubmit={onSubmitAction} />

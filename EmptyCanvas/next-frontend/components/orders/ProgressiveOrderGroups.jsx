@@ -16,6 +16,8 @@ export default function ProgressiveOrderGroups({
   renderItem,
   query = "",
   resetKey = "",
+  sourceCount,
+  onClearSearch,
 }) {
   const [page, setPage] = useState({ key: resetKey, limit: PAGE_SIZE });
   const sentinelRef = useRef(null);
@@ -28,6 +30,8 @@ export default function ProgressiveOrderGroups({
   const limit = page.key === resetKey ? page.limit : PAGE_SIZE;
   const visibleCount = Math.min(limit, total);
   const hasMore = visibleCount < total;
+  const isFiltered = Boolean(query.trim());
+  const totalBeforeSearch = Number.isFinite(sourceCount) ? sourceCount : total;
   const visibleGroups = useMemo(() => {
     let remaining = visibleCount;
     const result = [];
@@ -65,19 +69,27 @@ export default function ProgressiveOrderGroups({
 
   return (
     <div className="order-components-panel">
-      {total ? (
-        <div className="order-components-panel__heading">
-          <strong>Components</strong>
-          <span aria-live="off">{hasMore ? `${visibleCount} of ${total} shown` : `${total} item${total === 1 ? "" : "s"}`}</span>
-        </div>
-      ) : null}
+      <div className="order-components-panel__heading">
+        <strong>Components</strong>
+        <span role="status" aria-live="polite" aria-atomic="true">
+          {isFiltered
+            ? `${total} match${total === 1 ? "" : "es"} of ${totalBeforeSearch}`
+            : hasMore ? `${visibleCount} of ${total} shown` : `${total} item${total === 1 ? "" : "s"}`}
+        </span>
+        {isFiltered && typeof onClearSearch === "function" ? (
+          <button type="button" className="order-components-panel__clear" onClick={onClearSearch}>Clear search</button>
+        ) : null}
+      </div>
       <div className="co-modal-items order-component-groups">
         {visibleGroups.length ? visibleGroups.map((section) => (
           <section className="order-component-group" key={`${section.folderName || "products"}:${section.tag}`}>
             <OrderGroupHeader group={section} mode={mode} />
             <div className="order-component-group__items">{section.visibleItems.map(renderItem)}</div>
           </section>
-        )) : <div className="order-component-search-empty">{query.trim() ? "No matching components." : "No items."}</div>}
+        )) : <div className="order-component-search-empty" role="status">
+          <span>{isFiltered ? "No components match your search." : "No components in this order."}</span>
+          {isFiltered && typeof onClearSearch === "function" ? <button type="button" onClick={onClearSearch}>Show all components</button> : null}
+        </div>}
       </div>
       {hasMore ? (
         <div className="order-components-panel__more" ref={sentinelRef}>

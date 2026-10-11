@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import ClassicOrderIcon from "./ClassicOrderIcon";
+import OrderComponentSearch, { matchesOrderComponentSearch } from "./OrderComponentSearch";
 import { DeleteConfirmDialog, DeleteVerificationDialog } from "../shared/SystemDeleteDialogs";
 import { confirmDelete as confirmDeleteAction } from "../../lib/client-confirm";
 
@@ -420,10 +421,12 @@ function maintenanceLogLabel(index) {
 export function MaintenanceDetailsModal({ group, busy, onClose, onLog, onSecondLog, onDone, onExport, onAction }) {
   const [photosOpen, setPhotosOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [componentSearch, setComponentSearch] = useState("");
   const moreRef = useRef(null);
   useEffect(() => {
     setPhotosOpen(false);
     setMoreOpen(false);
+    setComponentSearch("");
   }, [group?.key]);
   useEffect(() => {
     if (!group) return undefined;
@@ -445,7 +448,6 @@ export function MaintenanceDetailsModal({ group, busy, onClose, onLog, onSecondL
       document.removeEventListener("pointerdown", onPointerDown);
     };
   }, [group, onClose, photosOpen, moreOpen]);
-  if (!group) return null;
 
   const menuAction = (action) => {
     setMoreOpen(false);
@@ -458,9 +460,19 @@ export function MaintenanceDetailsModal({ group, busy, onClose, onLog, onSecondL
   const canSecondLog = group.state.key === "in-progress" && Number(group.maxLogCount || 1) < 2;
   const canDownload = ["in-progress", "done"].includes(group.state.key);
   const showDoneMeta = group.state.key === "done";
-  const groupLogs = (group.items || []).flatMap(maintenanceLogsForItem);
-  const latestGroupLog = [...groupLogs].filter((entry) => entry?.loggedAt).sort((a, b) => new Date(b.loggedAt).getTime() - new Date(a.loggedAt).getTime())[0] || groupLogs[groupLogs.length - 1] || null;
+  const { latestGroupLog, visibleMaintenanceItems } = useMemo(() => {
+    const logs = (group.items || []).flatMap(maintenanceLogsForItem);
+    const latestLog = [...logs].filter((entry) => entry?.loggedAt).sort((a, b) => new Date(b.loggedAt).getTime() - new Date(a.loggedAt).getTime())[0] || logs[logs.length - 1] || null;
+    const query = componentSearch.trim().toLowerCase();
+    const visibleItems = (group.items || [])
+      .filter((item) => !query || matchesOrderComponentSearch(item, query)
+        || text(item?.idCode ?? item?.displayId).toLowerCase().includes(query)
+        || maintenanceLogsForItem(item).some((log) => text(log?.serialNumber).toLowerCase().includes(query)))
+      .sort((a, b) => text(a?.productName).localeCompare(text(b?.productName), undefined, { sensitivity: "base", numeric: true }));
+    return { latestGroupLog: latestLog, visibleMaintenanceItems: visibleItems };
+  }, [group.key, group.items, componentSearch]);
   const summaryDate = latestGroupLog?.loggedAt || group.latestCreated;
+
 
   return (
     <>
@@ -492,7 +504,7 @@ export function MaintenanceDetailsModal({ group, busy, onClose, onLog, onSecondL
               <div className="co-meta-row"><span>Receipt Photos</span><strong><button type="button" className="co-inline-receipt-photos-btn" disabled={!group.receiptEntries.length} onClick={() => setPhotosOpen(true)}><ClassicOrderIcon name="image" /><span>{group.receiptEntries.length ? (group.receiptEntries.length === 1 ? "View photo" : `View ${group.receiptEntries.length} photos`) : "No photos"}</span></button></strong></div>
             </div> : null}
 
-            <div className="co-modal-actions ro-actions ro-actions--right next-maintenance-modal-actions">
+            <div className="co-modal-actions ro-actions ro-actions--right next-maintenance-modal-actions order-detail-workflow-actions">
               {canTemplate ? <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => onExport(group, { template: true })} disabled={busy}><ClassicOrderIcon name="download" />Download Template</button> : null}
               {canDownload ? <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => onExport(group)} disabled={busy}><ClassicOrderIcon name="download" />Download</button> : null}
               {canLog ? <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => onLog(group)} disabled={busy}><ClassicOrderIcon name="clipboard" />Log Maintenance</button> : null}
@@ -500,12 +512,17 @@ export function MaintenanceDetailsModal({ group, busy, onClose, onLog, onSecondL
               {canDone ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onDone(group)} disabled={busy}><ClassicOrderIcon name="check-circle" />Mark as Delivered</button> : null}
             </div>
 
+            <div className="co-modal-actions ro-actions order-detail-toolkit next-maintenance-search-tools">
+              <OrderComponentSearch value={componentSearch} onChange={setComponentSearch} ariaLabel="Search maintenance components or serial numbers" collapseOnToggle />
+            </div>
             <div className="order-components-panel__heading next-maintenance-components-heading">
               <strong>Components</strong>
-              <span>{group.items.length} item{group.items.length === 1 ? "" : "s"}</span>
+              <span role="status" aria-live="polite">{componentSearch.trim() ? `${visibleMaintenanceItems.length} matches of ${group.items.length}` : `${group.items.length} item${group.items.length === 1 ? "" : "s"}`}</span>
+              {componentSearch.trim() ? <button type="button" className="order-components-panel__clear" onClick={() => setComponentSearch("")}>Clear search</button> : null}
             </div>
             <div className="co-modal-items next-maintenance-modal-items">
-              {[...group.items].sort((a, b) => text(a?.productName).localeCompare(text(b?.productName), undefined, { sensitivity: "base", numeric: true })).map((item, index) => {
+              {!visibleMaintenanceItems.length ? <div className="order-component-search-empty" role="status">No matching components. <button type="button" onClick={() => setComponentSearch("")}>Show all components</button></div> : null}
+              {visibleMaintenanceItems.map((item, index) => {
                 const productName = text(item?.productName) || "Component";
                 const productUrl = safeMaintenanceUrl(item?.productUrl);
                 const logs = maintenanceLogsForItem(item);

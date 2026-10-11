@@ -692,3 +692,171 @@ html[data-theme="dark"] .orders-workspace .order-components-panel__all { backgro
   .orders-workspace .order-components-panel__more { padding: 9px; }
   .orders-workspace .order-components-panel__more button { min-height: 36px; }
 }
+
+/* Orders workspace | Phase 6: focused detail actions and searchable components.
+   Intentionally scoped: do not alter cards, notifications or the floating dock. */
+.orders-workspace .co-modal-dialog .co-modal-body > .co-modal-actions.order-detail-toolkit {
+  box-sizing: border-box !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  margin-block: 7px 5px !important;
+  padding: 8px !important;
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 8px !important;
+  border: 1px solid #e5e9ef !important;
+  border-radius: 15px !important;
+  background: #f8fafc !important;
+}
+.orders-workspace .co-modal-dialog .order-detail-toolkit > .order-component-search {
+  flex: 0 1 auto !important;
+  margin-right: auto !important;
+}
+.orders-workspace .co-modal-dialog .order-detail-toolkit > .order-sort-menu-wrap {
+  flex: 0 0 auto !important;
+  min-width: 0 !important;
+}
+.orders-workspace .co-modal-dialog .order-detail-toolkit > .ro-action-btn,
+.orders-workspace .co-modal-dialog .order-detail-toolkit .order-sort-trigger {
+  min-height: 38px !important;
+  border-radius: 11px !important;
+}
+.orders-workspace .co-modal-dialog .co-modal-body > .co-modal-actions.order-detail-workflow-actions {
+  box-sizing: border-box !important;
+  width: 100% !important;
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 8px !important;
+  margin: 4px 0 8px !important;
+  padding: 0 !important;
+  justify-content: flex-start !important;
+}
+.orders-workspace .co-modal-dialog .order-detail-workflow-actions > .ro-action-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-width: 0 !important;
+  min-height: 40px !important;
+  padding: 9px 13px !important;
+  border-radius: 12px !important;
+  white-space: normal !important;
+  text-align: center !important;
+  line-height: 1.25 !important;
+}
+.orders-workspace .order-components-panel__heading { min-width: 0; }
+.orders-workspace .order-components-panel__heading > span { margin-left: auto; }
+.orders-workspace .order-components-panel__clear,
+.orders-workspace .order-component-search-empty > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 6px 9px;
+  border-radius: 9px;
+  border: 1px solid #d7dee8;
+  background: #fff;
+  color: #0f172a;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.orders-workspace .order-component-search-empty { flex-direction: column; gap: 10px; }
+.orders-workspace .order-components-panel__clear:hover,
+.orders-workspace .order-component-search-empty > button:hover { border-color: #f97316; }
+.orders-workspace .order-components-panel__clear:focus-visible,
+.orders-workspace .order-component-search-empty > button:focus-visible { outline: 2px solid #f97316; outline-offset: 2px; }
+/* Maintenance modal also uses the same compact expandable search. */
+.orders-workspace.next-classic-maintenance-parity .next-maintenance-search-tools > .order-component-search {
+  --order-search-size: 38px;
+  display: flex;
+  position: relative;
+  height: 38px;
+  width: 38px;
+  flex-shrink: 0;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid #dfe4eb;
+  border-radius: 12px;
+  background: #fff;
+  transition: width .18s ease;
+}
+.orders-workspace.next-classic-maintenance-parity .next-maintenance-search-tools > .order-component-search.is-expanded {
+  width: min(310px, 100%);
+}
+.orders-workspace.next-classic-maintenance-parity .next-maintenance-search-tools .order-component-search__toggle,
+.orders-workspace.next-classic-maintenance-parity .next-maintenance-search-tools .order-component-search__close {
+  flex: 0 0 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 38px;
+  padding: 0;
+  border: 0;
+  background: #0f172a;
+  color: #fff;
+  cursor: pointer;
+}
+.orders-workspace.next-classic-maintenance-parity .next-maintenance-search-tools .order-component-search__close {
+  flex-basis: 30px;
+  height: 29px;
+  margin-right: 4px;
+  border-radius: 8px;
+  color: #334155;
+  background: #e8ecf1;
+  opacity: 0;
+  pointer-events: none;
+}
+.orders-workspace.next-classic-maintenance-parity .next-maintenance-search-tools .order-component-search.is-expanded .order-component-search__close { opacity: 1; pointer-events: auto; }
+.orders-workspace.next-classic-maintenance-parity .next-maintenance-search-tools .order-component-search__input {
+  width: 0;
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  padding: 0 7px;
+  background: transparent;
+  color: #0f172a;
+  font-size: 12px;
+  opacity: 0;
+}
+.orders-workspace.next-classic-maintenance-parity .next-maintenance-search-tools .order-component-search.is-expanded .order-component-search__input { opacity: 1; }
+.orders-workspace.next-classic-maintenance-parity .next-maintenance-search-tools .order-component-search__toggle svg,
+.orders-workspace.next-classic-maintenance-parity .next-maintenance-search-tools .order-component-search__close svg { width: 17px; height: 17px; }
+@media (max-width: 700px) {
+  .orders-workspace .co-modal-dialog .co-modal-body > .co-modal-actions.order-detail-toolkit {
+    display: grid !important;
+    grid-template-columns: minmax(0,1fr) minmax(0,1fr) !important;
+    gap: 7px !important;
+    padding: 7px !important;
+  }
+  .orders-workspace .co-modal-dialog .order-detail-toolkit > .order-component-search {
+    grid-column: 1 / -1 !important;
+    justify-self: start !important;
+    margin: 0 !important;
+  }
+  .orders-workspace .co-modal-dialog .order-detail-toolkit > .ro-action-btn,
+  .orders-workspace .co-modal-dialog .order-detail-toolkit > .order-sort-menu-wrap {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+  .orders-workspace .co-modal-dialog .order-detail-toolkit .order-sort-trigger { width: 100% !important; }
+  .orders-workspace .co-modal-dialog .order-detail-toolkit.next-maintenance-search-tools > .order-component-search { max-width: 100%; }
+  .orders-workspace .co-modal-dialog .co-modal-body > .co-modal-actions.order-detail-workflow-actions { display: grid !important; grid-template-columns: minmax(0,1fr) !important; }
+  .orders-workspace .co-modal-dialog .order-detail-workflow-actions > .ro-action-btn { width: 100% !important; }
+  .orders-workspace .order-components-panel__heading { gap: 6px 9px; }
+}
+html[data-theme="dark"] .orders-workspace .co-modal-dialog .co-modal-body > .co-modal-actions.order-detail-toolkit {
+  background: #111722 !important;
+  border-color: #343e4b !important;
+}
+html[data-theme="dark"] .orders-workspace .order-components-panel__clear,
+html[data-theme="dark"] .orders-workspace .order-component-search-empty > button {
+  background: #202936; color: #f8fafc; border-color: #414d5e;
+}
+html[data-theme="dark"] .orders-workspace.next-classic-maintenance-parity .next-maintenance-search-tools > .order-component-search { background: #151d29; border-color: #414d5e; }
+html[data-theme="dark"] .orders-workspace.next-classic-maintenance-parity .next-maintenance-search-tools .order-component-search__input { color: #fff; }
+
+@media (prefers-reduced-motion: reduce) { .orders-workspace.next-classic-maintenance-parity .next-maintenance-search-tools > .order-component-search { transition: none; } }

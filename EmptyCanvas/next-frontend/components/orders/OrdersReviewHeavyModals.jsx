@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import ClassicOrderIcon from "./ClassicOrderIcon";
 import { groupOrderItems, OrderSortButton } from "./OrderGrouping";
@@ -176,7 +176,6 @@ function ReviewDetailsLoadState({ group, loading, error, onRetry, onClose }) {
       document.body.classList.remove("co-modal-open");
     };
   }, [group, onClose]);
-  if (!group) return null;
   const typeMeta = orderTypeMeta(group.orderType, group.orderTypeColor);
   return <div className="co-modal-overlay is-open" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <div className="co-modal-dialog next-review-order-modal" role="dialog" aria-modal="true" aria-label={`${group.orderIdLabel} review details`}>
@@ -249,10 +248,12 @@ function ReviewDetailsModal({ group, activeTab, busyIds, onClose, onQuantitySave
   const maintenance = isMaintenanceOrder(group.orderType);
   const headerTitle = orderTypeHeaderTitle(group.orderType, group.orderTypeColor, statusLabel(approval));
   const typeMeta = orderTypeMeta(group.orderType, group.orderTypeColor);
-  const searchedItems = componentSearch.trim()
-    ? group.items.filter((item) => matchesOrderComponentSearch(item, componentSearch))
-    : group.items;
-  const groupedItems = groupOrderItems(searchedItems, sortMode);
+  const groupedItems = useMemo(() => {
+    const matches = componentSearch.trim()
+      ? group.items.filter((item) => matchesOrderComponentSearch(item, componentSearch))
+      : group.items;
+    return groupOrderItems(matches, sortMode);
+  }, [group.key, group.items, componentSearch, sortMode]);
   const state = archived ? "archive" : approval;
 
   const menuAction = (action) => {
@@ -303,17 +304,19 @@ function ReviewDetailsModal({ group, activeTab, busyIds, onClose, onQuantitySave
 
       <ProgressTrack value={archived ? 4 : workflowProgress(group)} />
       <div className="co-modal-body">
-        <div className="co-modal-actions ro-actions ro-actions--right order-group-sort-actions order-modal-search-actions">
+        <div className="co-modal-actions ro-actions ro-actions--right order-group-sort-actions order-modal-search-actions order-detail-toolkit">
           <OrderComponentSearch key={`${group.key}:${activeTab}`} value={componentSearch} onChange={setComponentSearch} />
           <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => setDownloadOpen(true)}><ClassicOrderIcon name="download" /><span>Download</span></button>
           <OrderSortButton value={sortMode} onChange={setSortMode} />
         </div>
         <div className="co-modal-meta co-modal-meta--after-actions"><div className="co-meta-row co-meta-row--reason"><span>Reason</span><strong>{group.reason}</strong></div></div>
-        {canAct ? <div className="next-review-bulk-actions"><div><span>Review all components</span><strong>Apply one decision to every item in this order.</strong></div><div className="next-classic-review-actions"><button className="btn btn-success btn-xs" type="button" onClick={() => onBulkDecision(group, "Approved")}><ClassicOrderIcon name="check" /> Approve all</button><button className="btn btn-danger btn-xs" type="button" onClick={() => onBulkDecision(group, "Rejected")}><ClassicOrderIcon name="x" /> Reject all</button></div></div> : null}
+        {canAct ? <div className="next-review-bulk-actions"><div><span>Review all components</span><strong>{componentSearch.trim() ? `Applies to ALL ${group.items.length} components, including hidden search results.` : "Apply one decision to every item in this order."}</strong></div><div className="next-classic-review-actions"><button className="btn btn-success btn-xs" type="button" onClick={() => onBulkDecision(group, "Approved")}><ClassicOrderIcon name="check" /> Approve all</button><button className="btn btn-danger btn-xs" type="button" onClick={() => onBulkDecision(group, "Rejected")}><ClassicOrderIcon name="x" /> Reject all</button></div></div> : null}
         <ProgressiveOrderGroups
           groups={groupedItems}
           mode={sortMode}
           query={componentSearch}
+          sourceCount={group.items.length}
+          onClearSearch={() => setComponentSearch("")}
           resetKey={JSON.stringify([group?.key, activeTab, sortMode, componentSearch])}
           renderItem={renderItem}
         />
@@ -505,7 +508,7 @@ export default function OrdersReviewHeavyModals({
           onClose={onCloseDetails}
         />
       ) : null}
-      <ReviewDetailsModal
+      {selected ? <ReviewDetailsModal
         group={selected}
         activeTab={tab}
         busyIds={busyIds}
@@ -516,7 +519,7 @@ export default function OrdersReviewHeavyModals({
         onPasswordAction={onPasswordAction}
         onReason={onReason}
         onExport={onExport}
-      />
+      /> : null}
       <PasswordModal
         state={passwordState}
         busy={passwordBusy}
