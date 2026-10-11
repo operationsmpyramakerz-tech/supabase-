@@ -973,12 +973,29 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
   }
 
   async function completeAction(message, preferredTab = tab) {
-    await refreshOrders();
+    // The mutation is already committed before this helper runs. A temporary
+    // list-refresh/network failure must never turn a successful save into a
+    // visible action error (for example "fetch failed" after Receive Components).
+    //
+    // When the action moves to another tab, changing the tab triggers the
+    // normal list-loading effect, so refreshing the old tab first is redundant.
+    // When we stay on the same tab, refresh best-effort and keep the successful
+    // mutation state even if that follow-up request fails.
+    const nextTab = preferredTab || tab;
     setSelected(null);
     setActionState(null);
-    setTab(preferredTab);
+    setActionError("");
+    setTab(nextTab);
     setNotice(message);
     window.setTimeout(() => setNotice(""), 3500);
+
+    if (nextTab === tab) {
+      try {
+        await refreshOrders();
+      } catch (refreshError) {
+        console.warn("[operations-orders] Saved successfully; list refresh deferred:", refreshError?.message || refreshError);
+      }
+    }
   }
 
   function actionLoadingConfig(action, group) {
