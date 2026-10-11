@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import ClassicOrderIcon from "./ClassicOrderIcon";
 import { createOrderDetailsLoader } from "./orderDetailsLoader";
+import OrderDetailsLoadingOverlay from "./OrderDetailsLoadingOverlay";
 import OrderTypeBadge from "./OrderTypeBadge";
 import OrdersEmptyState, { OrdersListHeader, sortOrderGroups } from "./OrdersEmptyState";
 import { loadTeamMemberPublicProfile } from "../../lib/team-member-public-client";
@@ -463,15 +464,17 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
     });
   }
   async function openReviewDetails(group, { force = false } = {}) {
-    void loadOrdersReviewHeavyModals();
     if (!group?.key) return;
+    const modalReady = loadOrdersReviewHeavyModals();
     const requestId = ++detailRequestIdRef.current;
     setSelectedKey(group.key);
     setDetailError("");
     if (!force && detailGroups.has(group.key)) return;
     setDetailLoadingKey(group.key);
     try {
-      const detail = await detailsLoaderRef.current.get(group, { fresh: force });
+      // Keep the full-size loading sheet until both the review details and
+      // their interactive modal code are available.
+      const [detail] = await Promise.all([detailsLoaderRef.current.get(group, { fresh: force }), modalReady]);
       if (requestId !== detailRequestIdRef.current) return;
       setDetailGroups((current) => {
         const next = new Map(current);
@@ -692,7 +695,8 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
 
     <section className="orders-review-list-surface" id="sv-orders"><OrdersListHeader count={visibleGroups.length} hasMore={pageInfo?.hasMore} busy={listLoading} sortMode={sortMode} onSortChange={setSortMode} /><div className="co-cards" id="sv-list">{visibleGroups.length ? sortedVisibleGroups.map((group) => <OrderReviewCard group={group} activeTab={tab} onOpen={openReviewDetails} onPrefetch={prefetchReviewDetails} onCreator={openCreatorProfile} key={group.key}/>) : listLoading ? <div className="ops-no-data-state" role="status" aria-live="polite"><div className="ops-no-data-state__text">Loading orders…</div></div> : <OrdersEmptyState filtered={tab !== "all" || type !== "all" || !!query.trim()} context={"orders"} onReset={() => { setTab("all"); setType("all"); setQuery(""); }} />}</div>{pageInfo?.hasMore ? <div style={{ display: "flex", justifyContent: "center", padding: "16px 0 4px" }}><button type="button" className="ro-action-btn ro-action-btn--light" disabled={listLoading} onClick={() => fetchReviewPage({ reset: false }).catch((error) => showNotice(error?.message || "Failed to load more orders."))}>{listLoading ? "Loading…" : "Load more orders"}</button></div> : null}</section>
 
-    {(selectedKey || selected || passwordState || rejectionState || editorState || reasonView || creatorState) ? (
+    {selectedKey && !selected && !detailError ? <OrderDetailsLoadingOverlay group={selectedSummary} onCancel={closeReviewDetails} variant="review" /> : null}
+    {(selected || detailError || passwordState || rejectionState || editorState || reasonView || creatorState) ? (
       <OrdersReviewHeavyModals
         selectedKey={selectedKey}
         selected={selected}

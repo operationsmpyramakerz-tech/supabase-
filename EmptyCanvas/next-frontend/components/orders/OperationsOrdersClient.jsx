@@ -935,12 +935,13 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
     // Begin loading the modal code and the data in parallel. The lightweight
     // overlay appears immediately, so a slow Supabase response never looks
     // like an unresponsive card.
-    void loadOperationsOrdersHeavyModals();
+    const modalReady = loadOperationsOrdersHeavyModals();
     setSelected(null);
-    const needsDetails = detailsLoaderRef.current.needsDetails(group);
-    setOpeningGroup(needsDetails && !detailsLoaderRef.current.isReady(group) ? group : null);
+    // Keep the real-size loading sheet on screen until data and modal code
+    // are both ready, preventing a blank frame on slower connections.
+    setOpeningGroup(group);
     try {
-      const detail = await detailsLoaderRef.current.get(group);
+      const [detail] = await Promise.all([detailsLoaderRef.current.get(group), modalReady]);
       if (requestId !== openRequestRef.current) return;
       setOpeningGroup(null);
       setSelected(detail);

@@ -764,12 +764,13 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
     // Begin loading the modal code and the data in parallel. The lightweight
     // overlay appears immediately, so a slow Supabase response never looks
     // like an unresponsive card.
-    void import("./MaintenanceHeavyModals");
+    const modalReady = import("./MaintenanceHeavyModals");
     setSelected(null);
-    const needsDetails = detailsLoaderRef.current.needsDetails(group);
-    setOpeningGroup(needsDetails && !detailsLoaderRef.current.isReady(group) ? group : null);
+    // Keep the real-size loading sheet on screen until data and modal code
+    // are both ready, preventing a blank frame on slower connections.
+    setOpeningGroup(group);
     try {
-      const detail = await detailsLoaderRef.current.get(group);
+      const [detail] = await Promise.all([detailsLoaderRef.current.get(group), modalReady]);
       if (requestId !== openRequestRef.current) return;
       setOpeningGroup(null);
       setSelected(detail);
@@ -1127,7 +1128,7 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
         {pageInfo?.hasMore ? <div style={{ display: "flex", justifyContent: "center", padding: "16px 0 4px" }}><button type="button" className="ro-action-btn ro-action-btn--light" disabled={listLoading} onClick={() => fetchOrdersPage({ reset: false }).catch((error) => { setNotice(error?.message || "Failed to load more maintenance orders."); window.setTimeout(() => setNotice(""), 4000); })}>{listLoading ? "Loading…" : "Load more orders"}</button></div> : null}
       </section>
 
-      <OrderDetailsLoadingOverlay group={openingGroup} onCancel={closeOrderDetails} />
+      <OrderDetailsLoadingOverlay group={openingGroup} onCancel={closeOrderDetails} variant="maintenance" />
       {selected ? <MaintenanceDetailsModal group={selected} busy={busy} onClose={closeOrderDetails} onLog={openLog} onSecondLog={openSecondLog} onDone={(group) => { setActionError(""); setDoneGroup(group); }} onExport={openDownload} onAction={beginAction} /> : null}
       {actionState ? <MaintenanceActionPasswordModal state={actionState} busy={busy} error={actionError} onCancel={() => { setActionState(null); setActionError(""); }} onSubmit={submitAction} /> : null}
       {deleteConfirm ? <MaintenanceDeleteConfirmationModal state={deleteConfirm} busy={busy} onCancel={() => setDeleteConfirm(null)} onConfirm={confirmDelete} /> : null}
