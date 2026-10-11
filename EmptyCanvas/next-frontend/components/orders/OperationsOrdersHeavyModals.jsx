@@ -512,7 +512,7 @@ function Progress({ stage }) {
   );
 }
 
-function OrderModal({ group, tab, busy, onClose, onAction, onExport, editMode, onPatchEditItem, onUpsertEditAddition, onDeleteEditItem, onSaveEdit, onCancelEdit }) {
+function OrderModal({ group, tab, busy, onClose, onAction, onExport, orderOptions = [], editMode, onPatchEditItem, onUpsertEditAddition, onDeleteEditItem, onSaveEdit, onCancelEdit }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const [downloadOpen, setDownloadOpen] = useState(false);
   const [sortMode, setSortMode] = useState("product-tag");
@@ -700,6 +700,22 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, editMode, o
     orderIds: tabItems.map((item) => text(item?.id)).filter(Boolean),
   };
   const exportAction = (options) => onExport({ ...options, sortMode }, exportActionGroup, tab);
+  const combinedOrderChoices = [
+    {
+      key: text(group?.key),
+      label: text(group?.orderIdLabel) || "Order",
+      userName: text(group?.createdByName) || "—",
+      orderIds: exportActionGroup.orderIds,
+      orderType: text(group?.orderType),
+    },
+    ...(Array.isArray(orderOptions) ? orderOptions : []).filter((option) => text(option?.key) !== text(group?.key)),
+  ].filter((option, index, all) =>
+    option?.key
+    && Array.isArray(option?.orderIds)
+    && option.orderIds.length
+    && orderTypeKey(option?.orderType) === orderTypeKey(group?.orderType)
+    && all.findIndex((candidate) => text(candidate?.key) === text(option?.key)) === index
+  );
   const receiveActionGroup = tab === "remaining"
     ? {
         ...group,
@@ -912,6 +928,9 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, editMode, o
           showSignatureOptions={!maintenance}
           showRepeatedComponentOptions={!maintenance}
           defaultRepeatedComponentMode="merge"
+          showCombinedOrderOptions={!maintenance}
+          orderOptions={combinedOrderChoices}
+          currentOrderKey={text(group?.key)}
           onClose={() => setDownloadOpen(false)}
           onDownload={exportAction}
         />
@@ -1788,6 +1807,7 @@ export default function OperationsOrdersHeavyModals({
   onCloseOrder,
   onAction,
   onExport,
+  orderOptions,
   editMode,
   onPatchEditItem,
   onUpsertEditAddition,
@@ -1810,6 +1830,7 @@ export default function OperationsOrdersHeavyModals({
         onClose={onCloseOrder}
         onAction={onAction}
         onExport={onExport}
+        orderOptions={orderOptions}
         editMode={editMode}
         onPatchEditItem={onPatchEditItem}
         onUpsertEditAddition={onUpsertEditAddition}

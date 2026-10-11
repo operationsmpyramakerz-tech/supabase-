@@ -9873,3 +9873,55 @@ html[data-theme="dark"] body.operations-orders-page .next-operations-component-e
   background:rgba(127,29,29,.24);
   color:#fca5a5;
 }
+
+
+/* ===== Order download · multi-order combined export ===== */
+.order-download-combined-orders{overflow:visible}
+.order-combined-select{position:relative;margin-top:10px}
+.order-combined-select__trigger{
+  width:100%;min-height:56px;display:grid;grid-template-columns:38px minmax(0,1fr) 20px;align-items:center;gap:10px;
+  padding:9px 11px;border:1px solid #dde3eb;border-radius:14px;background:#fff;color:#344054;text-align:left;cursor:pointer;
+  transition:border-color .18s ease,box-shadow .18s ease,background .18s ease
+}
+.order-combined-select__trigger:hover,.order-combined-select__trigger.has-value{border-color:#c7d0dc;box-shadow:0 7px 18px rgba(15,23,42,.05)}
+.order-combined-select__trigger.has-value{background:#fbfcff}
+.order-combined-select__trigger-icon{width:36px;height:36px;display:grid;place-items:center;border-radius:11px;background:#f1f5f9;color:#111827}
+.order-combined-select__trigger-icon svg{width:17px;height:17px}
+.order-combined-select__trigger>svg{width:16px;height:16px;color:#667085;justify-self:end}
+.order-combined-select__copy{min-width:0;display:grid;gap:2px}
+.order-combined-select__copy small{font-size:8px;color:#98a2b3;font-weight:900;text-transform:uppercase;letter-spacing:.07em}
+.order-combined-select__copy strong{font-size:11px;color:#202939;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.order-combined-select__menu{
+  position:absolute;z-index:28;left:0;right:0;top:calc(100% + 7px);overflow:hidden;
+  border:1px solid #dce2e9;border-radius:15px;background:#fff;box-shadow:0 20px 50px rgba(15,23,42,.18)
+}
+.order-combined-select__search{display:flex;align-items:center;gap:8px;padding:9px;border-bottom:1px solid #edf0f4;background:#fbfcfe}
+.order-combined-select__search svg{width:15px;height:15px;color:#98a2b3;flex:0 0 auto}
+.order-combined-select__search input{width:100%;min-width:0;border:0;outline:0;background:transparent;color:#101828;font:inherit;font-size:10px;font-weight:700}
+.order-combined-select__search input::placeholder{color:#98a2b3}
+.order-combined-select__options{max-height:255px;overflow:auto;padding:6px}
+.order-combined-select__option{
+  min-height:48px;display:grid;grid-template-columns:18px minmax(0,1fr) 18px;align-items:center;gap:9px;
+  padding:8px 9px;border-radius:11px;color:#344054;cursor:pointer
+}
+.order-combined-select__option:hover,.order-combined-select__option.is-selected{background:#f7f9fb}
+.order-combined-select__option.is-current{background:#fff7ed}
+.order-combined-select__option input{width:15px;height:15px;margin:0;accent-color:#111827}
+.order-combined-select__option input:disabled{opacity:1}
+.order-combined-select__option-copy{min-width:0;display:grid;gap:2px}
+.order-combined-select__option-copy strong{font-size:10px;color:#202939}
+.order-combined-select__option-copy small{font-size:8px;color:#98a2b3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.order-combined-select__option>svg{width:15px;height:15px;color:#16a34a}
+.order-combined-select__empty{padding:18px 12px;color:#98a2b3;text-align:center;font-size:10px;font-weight:750}
+.order-combined-select__note,.order-download-repeat-auto{
+  margin-top:9px;display:flex;align-items:flex-start;gap:8px;padding:9px 10px;border:1px solid #dbeafe;border-radius:11px;background:#f8fbff;color:#475467
+}
+.order-combined-select__note svg,.order-download-repeat-auto>svg{width:15px;height:15px;flex:0 0 15px;color:#2563eb;margin-top:1px}
+.order-combined-select__note span{font-size:9px;line-height:1.45;font-weight:700}
+.order-download-repeat-auto>span{display:grid;gap:2px}
+.order-download-repeat-auto strong{font-size:10px;color:#344054}
+.order-download-repeat-auto small{font-size:8px;line-height:1.4;color:#98a2b3}
+@media(max-width:640px){
+  .order-combined-select__menu{position:fixed;z-index:12110;left:12px;right:12px;top:auto;bottom:16px;max-height:58vh;border-radius:20px}
+  .order-combined-select__options{max-height:calc(58vh - 56px)}
+}

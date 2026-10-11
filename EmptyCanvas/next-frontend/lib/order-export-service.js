@@ -256,9 +256,13 @@ async function buildOrderExportPayload(orderIds = [], account = {}, { repeatedCo
     const total = qty * unit;
     grandQty += qty;
     grandTotal += total;
+    const componentName = text(item?.productName || product?.name) || "Unknown Product";
+    const componentIdentity = text(item?.productId || product?.id);
     rows.push({
+      _componentKey: componentIdentity ? `product:${componentIdentity}` : `name:${normKey(componentName)}`,
+      _productId: componentIdentity || null,
       idCode: text(item?.customizeId || product?.displayId),
-      component: text(item?.productName || product?.name) || "Unknown Product",
+      component: componentName,
       qty,
       receivedQty,
       remainingQty,
@@ -305,6 +309,154 @@ async function buildOrderExportPayload(orderIds = [], account = {}, { repeatedCo
     first,
     productMaps,
   };
+}
+
+
+const COMBINED_ORDER_METRIC_KEYS = new Set(["qty", "receivedQty", "remainingQty", "deliveredQty", "total"]);
+
+function normalizeCombinedOrders(value = []) {
+  const groups = [];
+  const seen = new Set();
+  for (const entry of Array.isArray(value) ? value : []) {
+    const ids = [...new Set((Array.isArray(entry?.orderIds) ? entry.orderIds : []).map((id) => text(id)).filter(Boolean))];
+    if (!ids.length) continue;
+    const signature = ids.slice().sort((a, b) => Number(a) - Number(b)).join(",");
+    if (!signature || seen.has(signature)) continue;
+    seen.add(signature);
+    groups.push({ orderIds: ids });
+  }
+  return groups.slice(0, 20);
+}
+
+function combinedMetricColumnKey(metricKey, orderIndex) {
+  return `combined__${metricKey}__${orderIndex}`;
+}
+
+async function buildCombinedOrderExportPayload(combinedOrders = [], account = {}) {
+  const groups = normalizeCombinedOrders(combinedOrders);
+  if (groups.length < 2) return null;
+
+  const orderPayloads = [];
+  for (const group of groups) {
+    const payload = await buildOrderExportPayload(group.orderIds, account, { repeatedComponentMode: "merge" });
+    orderPayloads.push(payload);
+  }
+
+  const combinedOrderMeta = orderPayloads.map((payload, index) => {
+    const label = text(payload?.orderIdRange) || `Order ${index + 1}`;
+    const userName = text(payload?.teamMember) || "—";
+    return {
+      index,
+      key: `order-${index + 1}`,
+      label,
+      userName,
+      header: userName && userName !== "—" ? `${label} - ${userName}` : label,
+      orderIds: groups[index]?.orderIds || [],
+    };
+  });
+
+  const rowMap = new Map();
+  orderPayloads.forEach((payload, orderIndex) => {
+    for (const sourceRow of Array.isArray(payload?.rows) ? payload.rows : []) {
+      const componentKey = text(sourceRow?._componentKey) || `name:${normKey(sourceRow?.component)}`;
+      if (!componentKey) continue;
+      if (!rowMap.has(componentKey)) {
+        rowMap.set(componentKey, {
+          ...sourceRow,
+          qty: 0,
+          receivedQty: 0,
+          remainingQty: 0,
+          deliveredQty: 0,
+          total: 0,
+          _combinedOrderValues: {},
+        });
+      }
+      const row = rowMap.get(componentKey);
+      if (!row.idCode && sourceRow?.idCode) row.idCode = sourceRow.idCode;
+      if (!row.link && sourceRow?.link) row.link = sourceRow.link;
+      if (!row.productTag && sourceRow?.productTag) row.productTag = sourceRow.productTag;
+      if ((!row.kitTag || row.kitTag === "Unassigned kit") && sourceRow?.kitTag) row.kitTag = sourceRow.kitTag;
+      if ((!row.kitFolderName || row.kitFolderName === "Unfiled Kits") && sourceRow?.kitFolderName) row.kitFolderName = sourceRow.kitFolderName;
+      if ((!Number.isFinite(Number(row.unit)) || Number(row.unit) === 0) && Number.isFinite(Number(sourceRow?.unit))) row.unit = Number(sourceRow.unit);
+
+      const orderValues = row._combinedOrderValues[orderIndex] || {
+        qty: 0,
+        receivedQty: 0,
+        remainingQty: 0,
+        deliveredQty: 0,
+        total: 0,
+      };
+      for (const metricKey of COMBINED_ORDER_METRIC_KEYS) {
+        const numeric = Number(sourceRow?.[metricKey]);
+        if (Number.isFinite(numeric)) orderValues[metricKey] = roundQty(Number(orderValues[metricKey] || 0) + numeric);
+      }
+      row._combinedOrderValues[orderIndex] = orderValues;
+    }
+  });
+
+  const rows = [...rowMap.values()]
+    .map((row) => {
+      const next = { ...row };
+      combinedOrderMeta.forEach((order) => {
+        const values = row._combinedOrderValues?.[order.index] || {};
+        for (const metricKey of COMBINED_ORDER_METRIC_KEYS) {
+          next[combinedMetricColumnKey(metricKey, order.index)] = Number(values?.[metricKey]) || 0;
+        }
+      });
+      return next;
+    })
+    .sort((a, b) => naturalCompare(a?.component, b?.component));
+
+  const teamNames = [...new Set(combinedOrderMeta.map((order) => order.userName).filter((name) => name && name !== "—"))];
+  const firstPayload = orderPayloads[0] || {};
+  const labelSummary = combinedOrderMeta.map((order) => order.label).join(" + ");
+  const createdTimes = orderPayloads.map((payload) => payload?.createdAt).filter(Boolean).map((value) => new Date(value)).filter((value) => !Number.isNaN(value.getTime()));
+
+  return {
+    ...firstPayload,
+    items: orderPayloads.flatMap((payload) => Array.isArray(payload?.items) ? payload.items : []),
+    rows,
+    grandQty: orderPayloads.reduce((sum, payload) => sum + (Number(payload?.grandQty) || 0), 0),
+    grandTotal: orderPayloads.reduce((sum, payload) => sum + (Number(payload?.grandTotal) || 0), 0),
+    createdAt: createdTimes.length ? new Date(Math.min(...createdTimes.map((value) => value.getTime()))) : new Date(),
+    orderIdRange: labelSummary || "Combined orders",
+    teamMember: teamNames.length === 1 ? teamNames[0] : "Multiple users",
+    groupReason: "Combined orders",
+    combinedOrders: combinedOrderMeta,
+    repeatedComponentMode: "merge",
+  };
+}
+
+function selectedCombinedColumnDefs(columns, payload, opts = {}) {
+  const selectedKeys = normalizeOrderExportColumns(columns, opts);
+  const defs = new Map(ORDER_EXPORT_COLUMN_DEFS.map((column) => [column.key, column]));
+  const metricCount = selectedKeys.filter((key) => COMBINED_ORDER_METRIC_KEYS.has(key)).length;
+  const orderMeta = Array.isArray(payload?.combinedOrders) ? payload.combinedOrders : [];
+  const out = [];
+
+  for (const key of selectedKeys) {
+    const base = defs.get(key);
+    if (!base) continue;
+    if (!COMBINED_ORDER_METRIC_KEYS.has(key)) {
+      out.push({ ...base });
+      continue;
+    }
+    orderMeta.forEach((order) => {
+      const header = text(order?.header || order?.label) || "Order";
+      out.push({
+        ...base,
+        key: combinedMetricColumnKey(key, Number(order?.index) || 0),
+        label: metricCount === 1 ? header : `${header}\n${base.label}`,
+        width: Math.max(18, Number(base.width) || 14),
+        ratio: key === "total" ? 0.16 : 0.14,
+        align: "right",
+        numericKind: key === "total" ? "money" : "quantity",
+        combinedMetricKey: key,
+        combinedOrderIndex: Number(order?.index) || 0,
+      });
+    });
+  }
+  return out;
 }
 
 function normalizeOrderExportColumns(columns, { tab = "" } = {}) {
@@ -415,7 +567,11 @@ function cellValue(row = {}, key = "") {
     case "link": return row.link || row.url || row.componentLink || row.href || "";
     case "unit": return row.unit === null || typeof row.unit === "undefined" ? "" : Number(row.unit);
     case "total": return row.total === null || typeof row.total === "undefined" ? "" : Number(row.total);
-    default: return "";
+    default: {
+      const value = row?.[key];
+      if (value === null || typeof value === "undefined") return "";
+      return value;
+    }
   }
 }
 
@@ -461,6 +617,9 @@ async function renderPipedPdf(renderer, payload) {
 
 async function renderDeliveryPdf({ payload, tab, columns, instruction, sortMode, signatureLabels }) {
   const selectedExportColumns = normalizeOrderExportColumns(columns, { tab });
+  const combinedColumnDefs = Array.isArray(payload?.combinedOrders) && payload.combinedOrders.length > 1
+    ? selectedCombinedColumnDefs(columns, payload, { tab })
+    : null;
   const hideCosts = !selectedExportColumns.includes("unit") && !selectedExportColumns.includes("total");
   const exportInstruction = normalizeInstruction(instruction);
   const exportSortMode = normalizeSortMode(sortMode);
@@ -480,6 +639,8 @@ async function renderDeliveryPdf({ payload, tab, columns, instruction, sortMode,
     headerColorKey: payload.groupReason,
     showCosts: !hideCosts,
     exportColumns: selectedExportColumns,
+    exportColumnDefs: combinedColumnDefs,
+    landscape: Boolean(combinedColumnDefs?.length > 5),
     instructionTitle: exportInstruction.title,
     instructionEnglishText: exportInstruction.englishText,
     instructionArabicText: exportInstruction.arabicText,
@@ -491,7 +652,7 @@ async function renderDeliveryPdf({ payload, tab, columns, instruction, sortMode,
   });
   return {
     buffer,
-    fileName: `${payload.receiptView.filePrefix}_${safeExportName(payload.orderIdRange)}.pdf`,
+    fileName: `${payload?.combinedOrders?.length > 1 ? "combined_orders" : payload.receiptView.filePrefix}_${safeExportName(payload.orderIdRange)}.pdf`,
     contentType: "application/pdf",
   };
 }
@@ -771,7 +932,7 @@ async function renderProposalStyleExcel(payload, { selectedColumns = [], exportI
 
   const headerRowIndex = sheet.rowCount + 1;
   const headerRow = sheet.getRow(headerRowIndex);
-  headerRow.height = 20;
+  headerRow.height = excelColumns.some((column) => String(column?.label || "").includes("\n")) ? 32 : 20;
   excelColumns.forEach((column, index) => {
     const cell = headerRow.getCell(index + 1);
     cell.value = column.label || column.header || column.key;
@@ -803,9 +964,9 @@ async function renderProposalStyleExcel(payload, { selectedColumns = [], exportI
       } else if (visualIndex % 2 === 1) {
         cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF9FAFB" } };
       }
-      if (["qty", "receivedQty", "remainingQty", "deliveredQty"].includes(column.key)) cell.numFmt = numFmtFor(cell.value);
-      if (column.key === "unit" || column.key === "total") cell.numFmt = '"£"#,##0.00';
-      if (column.key === "total") cell.font = { bold: true, color: { argb: "FFC2410C" } };
+      if (["qty", "receivedQty", "remainingQty", "deliveredQty"].includes(column.key) || column.numericKind === "quantity") cell.numFmt = numFmtFor(cell.value);
+      if (column.key === "unit" || column.key === "total" || column.numericKind === "money") cell.numFmt = '"£"#,##0.00';
+      if (column.key === "total" || column.numericKind === "money") cell.font = { bold: true, color: { argb: "FFC2410C" } };
       if (column.key === "component" && item?.link && /^https?:\/\//i.test(text(item.link))) {
         cell.value = { text: text(item.component || cell.value || "Component"), hyperlink: text(item.link) };
         cell.font = { color: { argb: "FF2563EB" }, underline: true };
@@ -1015,7 +1176,10 @@ async function renderMaintenanceExcel(payload, { selectedColumns = [], exportIns
 }
 
 async function renderExcel({ payload, tab, columns, instruction, sortMode }) {
-  const selectedColumns = selectedColumnDefs(columns, { tab });
+  const isCombined = Array.isArray(payload?.combinedOrders) && payload.combinedOrders.length > 1;
+  const selectedColumns = isCombined
+    ? selectedCombinedColumnDefs(columns, payload, { tab })
+    : selectedColumnDefs(columns, { tab });
   const exportInstruction = normalizeInstruction(instruction);
   const exportSortMode = normalizeSortMode(sortMode);
   const isMaintenance = orderTypeKey(payload?.first?.orderType) === orderTypeKey("Request Maintenance");
@@ -1024,7 +1188,7 @@ async function renderExcel({ payload, tab, columns, instruction, sortMode }) {
     : await renderProposalStyleExcel(payload, { selectedColumns, exportInstruction, exportSortMode });
   return {
     buffer,
-    fileName: `${isMaintenance ? "maintenance_order" : "order"}_${safeExportName(payload.orderIdRange)}.xlsx`,
+    fileName: `${isCombined ? "combined_orders" : (isMaintenance ? "maintenance_order" : "order")}_${safeExportName(payload.orderIdRange)}.xlsx`,
     contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   };
 }
@@ -1039,6 +1203,7 @@ export async function renderOrderExport({
   sortMode = null,
   signatureLabels = null,
   repeatedComponentMode = "merge",
+  combinedOrders = null,
   template = false,
   sparePartColumns = null,
   checklist = null,
@@ -1054,7 +1219,13 @@ export async function renderOrderExport({
     error.status = 400;
     throw error;
   }
-  const payload = await buildOrderExportPayload(ids, account, { repeatedComponentMode });
+  const allowedIdSet = new Set(ids);
+  const normalizedCombinedOrders = normalizeCombinedOrders(combinedOrders)
+    .map((group) => ({ ...group, orderIds: group.orderIds.filter((id) => allowedIdSet.has(id)) }))
+    .filter((group) => group.orderIds.length);
+  const payload = normalizedCombinedOrders.length > 1
+    ? await buildCombinedOrderExportPayload(normalizedCombinedOrders, account)
+    : await buildOrderExportPayload(ids, account, { repeatedComponentMode });
   const cleanKind = text(kind).toLowerCase();
   if (cleanKind === "maintenance-pdf") return await renderMaintenancePdf({ payload, template, sparePartColumns, checklist });
   if (cleanKind === "excel") return await renderExcel({ payload, tab, columns, instruction, sortMode });
@@ -1070,4 +1241,7 @@ export const __orderExportServiceTest = {
   scaleSourceBreakdown,
   splitRowsBySources,
   placeCombinedRows,
+  normalizeCombinedOrders,
+  combinedMetricColumnKey,
+  selectedCombinedColumnDefs,
 };

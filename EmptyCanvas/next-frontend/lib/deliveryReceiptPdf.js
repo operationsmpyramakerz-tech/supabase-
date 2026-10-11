@@ -253,6 +253,8 @@ async function pipeDeliveryReceiptPDF(
     signatureLabels = null,
     showFooterSignature = true,
     exportColumns = null,
+    exportColumnDefs = null,
+    landscape = false,
     instructionTitle = "",
     instructionEnglishText = "",
     instructionArabicText = "",
@@ -261,7 +263,7 @@ async function pipeDeliveryReceiptPDF(
   stream,
 ) {
   await ensurePdfArabicSupport();
-  const doc = new PDFDocument({ size: "A4", margin: 36, bufferPages: true });
+  const doc = new PDFDocument({ size: "A4", layout: landscape ? "landscape" : "portrait", margin: 36, bufferPages: true });
   const generatedAt = new Date();
   enableArabicPdf(doc);
   doc.pipe(stream);
@@ -594,7 +596,7 @@ async function pipeDeliveryReceiptPDF(
   // ======== Proposal-style component tables ========
   const tableX = mL;
   const tableW = contentW;
-  const headerH = 24;
+  let headerH = 24;
   const cellPadX = 7;
 
   const allColumnDefs = [
@@ -614,17 +616,30 @@ async function pipeDeliveryReceiptPDF(
   const defaultKeys = showCosts
     ? ["idCode", "component", "qty", "unit", "total"]
     : ["idCode", "component", "qty"];
-  const rawExportKeys = Array.isArray(exportColumns)
-    ? exportColumns
-    : String(exportColumns || "").split(",");
-  let selectedKeys = rawExportKeys
-    .map((key) => String(key || "").trim())
-    .filter((key) => defByKey.has(key));
-  if (!selectedKeys.length) selectedKeys = defaultKeys.slice();
-  if (!selectedKeys.includes("component")) selectedKeys.unshift("component");
-  selectedKeys = Array.from(new Set(selectedKeys));
+  const customDefs = (Array.isArray(exportColumnDefs) ? exportColumnDefs : [])
+    .map((column) => ({
+      key: String(column?.key || "").trim(),
+      label: String(column?.label || column?.key || "").trim(),
+      ratio: Number(column?.ratio) > 0 ? Number(column.ratio) : 0.12,
+      align: ["left", "center", "right"].includes(String(column?.align || "").toLowerCase()) ? String(column.align).toLowerCase() : "right",
+      numericKind: String(column?.numericKind || ""),
+    }))
+    .filter((column) => column.key && column.label);
 
-  const selectedDefs = selectedKeys.map((key) => defByKey.get(key)).filter(Boolean);
+  let selectedDefs = customDefs;
+  if (!selectedDefs.length) {
+    const rawExportKeys = Array.isArray(exportColumns)
+      ? exportColumns
+      : String(exportColumns || "").split(",");
+    let selectedKeys = rawExportKeys
+      .map((key) => String(key || "").trim())
+      .filter((key) => defByKey.has(key));
+    if (!selectedKeys.length) selectedKeys = defaultKeys.slice();
+    if (!selectedKeys.includes("component")) selectedKeys.unshift("component");
+    selectedKeys = Array.from(new Set(selectedKeys));
+    selectedDefs = selectedKeys.map((key) => defByKey.get(key)).filter(Boolean);
+  }
+  if (selectedDefs.some((column) => String(column?.label || "").includes("\n"))) headerH = 34;
   const ratioSum = selectedDefs.reduce((sum, col) => sum + Number(col.ratio || 1), 0) || selectedDefs.length || 1;
   let accX = tableX;
   let usedW = 0;
@@ -736,6 +751,13 @@ async function pipeDeliveryReceiptPDF(
       unit: moneyGBP(r.unit),
       total: moneyGBP(r.total),
     };
+    columns.forEach((column) => {
+      if (Object.prototype.hasOwnProperty.call(rowData, column.key)) return;
+      const value = r?.[column.key];
+      if (column.numericKind === "money") rowData[column.key] = moneyGBP(value);
+      else if (column.numericKind === "quantity") rowData[column.key] = String(Number(value) || 0);
+      else rowData[column.key] = String(value ?? "");
+    });
 
     doc.font("Helvetica").fontSize(9);
     const measuredHeights = columns.map((c) => doc.heightOfString(String(rowData[c.key] || ""), {

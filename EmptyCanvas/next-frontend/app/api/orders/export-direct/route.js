@@ -61,6 +61,7 @@ export async function POST(request) {
       sortMode: body?.sortMode,
       signatureLabels: body?.signatureLabels,
       repeatedComponentMode: body?.repeatedComponentMode,
+      combinedOrders: body?.combinedOrders,
       template: body?.template,
       sparePartColumns: body?.sparePartColumns,
       checklist: body?.checklist,

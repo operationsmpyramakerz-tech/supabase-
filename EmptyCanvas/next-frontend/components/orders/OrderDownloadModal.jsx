@@ -236,6 +236,9 @@ export default function OrderDownloadModal({
   showSignatureOptions = true,
   showRepeatedComponentOptions = false,
   defaultRepeatedComponentMode = "merge",
+  showCombinedOrderOptions = false,
+  orderOptions = [],
+  currentOrderKey = "",
   onClose,
   onDownload,
 }) {
@@ -264,11 +267,36 @@ export default function OrderDownloadModal({
     return Array.from(new Set(requested.length ? requested : ["Storekeeper", "Operations", "Delivered to"]));
   }, [defaultSignatureLabels]);
 
+  const normalizedOrderOptions = useMemo(() => {
+    const seen = new Set();
+    return (Array.isArray(orderOptions) ? orderOptions : [])
+      .map((option) => ({
+        key: text(option?.key),
+        label: text(option?.label) || "Order",
+        userName: text(option?.userName) || "—",
+        orderIds: [...new Set((Array.isArray(option?.orderIds) ? option.orderIds : []).map(text).filter(Boolean))],
+      }))
+      .filter((option) => {
+        if (!option.key || !option.orderIds.length || seen.has(option.key)) return false;
+        seen.add(option.key);
+        return true;
+      });
+  }, [orderOptions]);
+
+  const effectiveCurrentOrderKey = useMemo(() => {
+    const requested = text(currentOrderKey);
+    if (requested && normalizedOrderOptions.some((option) => option.key === requested)) return requested;
+    return normalizedOrderOptions[0]?.key || "";
+  }, [currentOrderKey, normalizedOrderOptions]);
+
   const [columns, setColumns] = useState(startingColumns);
   const [signatureLabels, setSignatureLabels] = useState(startingSignatures);
   const [repeatedComponentMode, setRepeatedComponentMode] = useState(
     String(defaultRepeatedComponentMode || "").toLowerCase() === "separate" ? "separate" : "merge",
   );
+  const [selectedOrderKeys, setSelectedOrderKeys] = useState(() => effectiveCurrentOrderKey ? [effectiveCurrentOrderKey] : []);
+  const [orderSelectorOpen, setOrderSelectorOpen] = useState(false);
+  const [orderQuery, setOrderQuery] = useState("");
   const [templates, setTemplates] = useState([]);
   const [templatesLoading, setTemplatesLoading] = useState(false);
   const [selectedInstructionId, setSelectedInstructionId] = useState("");
@@ -278,6 +306,7 @@ export default function OrderDownloadModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const selectorRef = useRef(null);
+  const orderSelectorRef = useRef(null);
 
   const wasOpenRef = useRef(false);
 
@@ -289,6 +318,9 @@ export default function OrderDownloadModal({
     setColumns(startingColumns);
     setSignatureLabels(startingSignatures);
     setRepeatedComponentMode(String(defaultRepeatedComponentMode || "").toLowerCase() === "separate" ? "separate" : "merge");
+    setSelectedOrderKeys(effectiveCurrentOrderKey ? [effectiveCurrentOrderKey] : []);
+    setOrderSelectorOpen(false);
+    setOrderQuery("");
     setTemplates([]);
     setTemplatesLoading(true);
     setSelectedInstructionId("");
@@ -297,7 +329,7 @@ export default function OrderDownloadModal({
     setEditingInstruction(null);
     setBusy(false);
     setError("");
-  }, [open, startingColumns, startingSignatures, defaultRepeatedComponentMode]);
+  }, [open, startingColumns, startingSignatures, defaultRepeatedComponentMode, effectiveCurrentOrderKey]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -352,11 +384,13 @@ export default function OrderDownloadModal({
     const onKey = (event) => {
       if (event.key !== "Escape" || composerOpen) return;
       event.preventDefault();
-      if (instructionOpen) setInstructionOpen(false);
+      if (orderSelectorOpen) setOrderSelectorOpen(false);
+      else if (instructionOpen) setInstructionOpen(false);
       else if (!busy) onClose();
     };
     const onPointerDown = (event) => {
       if (instructionOpen && !selectorRef.current?.contains(event.target)) setInstructionOpen(false);
+      if (orderSelectorOpen && !orderSelectorRef.current?.contains(event.target)) setOrderSelectorOpen(false);
     };
     window.addEventListener("keydown", onKey);
     document.addEventListener("pointerdown", onPointerDown, true);
@@ -364,11 +398,27 @@ export default function OrderDownloadModal({
       window.removeEventListener("keydown", onKey);
       document.removeEventListener("pointerdown", onPointerDown, true);
     };
-  }, [open, instructionOpen, composerOpen, busy, onClose]);
+  }, [open, instructionOpen, orderSelectorOpen, composerOpen, busy, onClose]);
 
   if (!open) return null;
 
   const selectedInstruction = templates.find((item) => item.id === selectedInstructionId) || null;
+  const selectedOrders = normalizedOrderOptions.filter((option) => selectedOrderKeys.includes(option.key));
+  const combinedMode = showCombinedOrderOptions && selectedOrders.length > 1;
+  const visibleOrderOptions = normalizedOrderOptions.filter((option) => {
+    const needle = text(orderQuery).toLowerCase();
+    if (!needle) return true;
+    return `${option.label} ${option.userName}`.toLowerCase().includes(needle);
+  });
+
+  const toggleOrder = (key) => {
+    const cleanKey = text(key);
+    if (!cleanKey || cleanKey === effectiveCurrentOrderKey) return;
+    setSelectedOrderKeys((current) => {
+      if (current.includes(cleanKey)) return current.filter((item) => item !== cleanKey);
+      return [...current, cleanKey];
+    });
+  };
 
   const toggleColumn = (key) => {
     setColumns((current) => {
@@ -393,7 +443,15 @@ export default function OrderDownloadModal({
         kind,
         columns,
         signatureLabels: showSignatureOptions ? signatureLabels : null,
-        repeatedComponentMode: showRepeatedComponentOptions ? repeatedComponentMode : null,
+        repeatedComponentMode: showRepeatedComponentOptions ? (combinedMode ? "merge" : repeatedComponentMode) : null,
+        combinedOrders: showCombinedOrderOptions
+          ? selectedOrders.map((order) => ({
+              key: order.key,
+              label: order.label,
+              userName: order.userName,
+              orderIds: order.orderIds,
+            }))
+          : null,
         instruction: selectedInstruction
           ? {
               title: selectedInstruction.title,
@@ -442,6 +500,57 @@ export default function OrderDownloadModal({
           </div>
         </div>
 
+        {showCombinedOrderOptions && normalizedOrderOptions.length > 1 ? (
+          <div className="order-download-section order-download-combined-orders">
+            <div className="order-download-instructions__heading">
+              <span className="order-download-section__label">Combine orders</span>
+              <small>{selectedOrders.length > 1 ? `${selectedOrders.length} orders selected` : "Add orders to compare in one file"}</small>
+            </div>
+            <div className="order-combined-select" ref={orderSelectorRef}>
+              <button
+                type="button"
+                className={`order-combined-select__trigger ${combinedMode ? "has-value" : ""}`}
+                aria-haspopup="listbox"
+                aria-expanded={orderSelectorOpen}
+                onClick={() => setOrderSelectorOpen((value) => !value)}
+              >
+                <span className="order-combined-select__trigger-icon"><ClassicOrderIcon name="layers" /></span>
+                <span className="order-combined-select__copy">
+                  <small>Orders</small>
+                  <strong>{selectedOrders.length > 1 ? `${selectedOrders.length} orders combined` : `${selectedOrders[0]?.label || "Current order"} only`}</strong>
+                </span>
+                <ClassicOrderIcon name="chevron-down" />
+              </button>
+              {orderSelectorOpen ? (
+                <div className="order-combined-select__menu" role="listbox" aria-label="Select orders to combine">
+                  <label className="order-combined-select__search">
+                    <ClassicOrderIcon name="search" />
+                    <input type="search" value={orderQuery} onChange={(event) => setOrderQuery(event.target.value)} placeholder="Search order or user..." autoFocus />
+                  </label>
+                  <div className="order-combined-select__options">
+                    {visibleOrderOptions.map((option) => {
+                      const checked = selectedOrderKeys.includes(option.key);
+                      const current = option.key === effectiveCurrentOrderKey;
+                      return (
+                        <label className={`order-combined-select__option ${checked ? "is-selected" : ""} ${current ? "is-current" : ""}`} key={option.key}>
+                          <input type="checkbox" checked={checked} disabled={current} onChange={() => toggleOrder(option.key)} />
+                          <span className="order-combined-select__option-copy">
+                            <strong>{option.label}</strong>
+                            <small>{option.userName}{current ? " · Current order" : ""}</small>
+                          </span>
+                          {checked ? <ClassicOrderIcon name="check" /> : null}
+                        </label>
+                      );
+                    })}
+                    {!visibleOrderOptions.length ? <div className="order-combined-select__empty">No matching orders</div> : null}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+            {combinedMode ? <div className="order-combined-select__note"><ClassicOrderIcon name="check-circle" /><span>Matching components will use one row. Selected quantity columns become one column per order.</span></div> : null}
+          </div>
+        ) : null}
+
         <div className="order-download-section order-download-columns">
           <span className="order-download-section__label">Columns</span>
           <div className="order-download-columns__grid">
@@ -458,17 +567,22 @@ export default function OrderDownloadModal({
           <div className="order-download-section order-download-repeated-components">
             <div className="order-download-instructions__heading">
               <span className="order-download-section__label">Repeated components</span>
+              {combinedMode ? <small>Combined exports always merge matching components.</small> : null}
             </div>
-            <div className="order-download-columns__grid order-download-repeat-grid">
-              <label className={`order-download-column-option order-download-repeat-option ${repeatedComponentMode === "merge" ? "is-selected" : ""}`}>
-                <input type="radio" name="repeated-component-mode" checked={repeatedComponentMode === "merge"} onChange={() => setRepeatedComponentMode("merge")} />
-                <span><strong>Combine quantities</strong><small>Add matching component quantities into one row.</small></span>
-              </label>
-              <label className={`order-download-column-option order-download-repeat-option ${repeatedComponentMode === "separate" ? "is-selected" : ""}`}>
-                <input type="radio" name="repeated-component-mode" checked={repeatedComponentMode === "separate"} onChange={() => setRepeatedComponentMode("separate")} />
-                <span><strong>Keep separate</strong><small>Keep repeated components in their original kit/tag rows.</small></span>
-              </label>
-            </div>
+            {combinedMode ? (
+              <div className="order-download-repeat-auto"><ClassicOrderIcon name="layers" /><span><strong>Combined automatically</strong><small>Each component appears once, with each order quantity in its own column.</small></span></div>
+            ) : (
+              <div className="order-download-columns__grid order-download-repeat-grid">
+                <label className={`order-download-column-option order-download-repeat-option ${repeatedComponentMode === "merge" ? "is-selected" : ""}`}>
+                  <input type="radio" name="repeated-component-mode" checked={repeatedComponentMode === "merge"} onChange={() => setRepeatedComponentMode("merge")} />
+                  <span><strong>Combine quantities</strong><small>Add matching component quantities into one row.</small></span>
+                </label>
+                <label className={`order-download-column-option order-download-repeat-option ${repeatedComponentMode === "separate" ? "is-selected" : ""}`}>
+                  <input type="radio" name="repeated-component-mode" checked={repeatedComponentMode === "separate"} onChange={() => setRepeatedComponentMode("separate")} />
+                  <span><strong>Keep separate</strong><small>Keep repeated components in their original kit/tag rows.</small></span>
+                </label>
+              </div>
+            )}
           </div>
         ) : null}
 

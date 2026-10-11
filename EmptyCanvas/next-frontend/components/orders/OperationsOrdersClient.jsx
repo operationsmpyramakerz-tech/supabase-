@@ -849,6 +849,18 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
     });
   }, [tabGroups, type, query, pageInfo]);
 
+  const downloadOrderOptions = useMemo(() => tabGroups.map((group) => {
+    const scopedItems = itemsForOperationsTab(group?.items || [], tab);
+    const scopedIds = scopedItems.flatMap((item) => Array.isArray(item?.orderIds) && item.orderIds.length ? item.orderIds : [item?.id]).map(text).filter(Boolean);
+    return {
+      key: text(group?.key),
+      label: text(group?.orderIdLabel) || "Order",
+      userName: text(group?.createdByName) || "—",
+      orderIds: scopedIds.length ? [...new Set(scopedIds)] : (Array.isArray(group?.orderIds) ? group.orderIds.map(text).filter(Boolean) : []),
+      orderType: text(group?.orderType),
+    };
+  }).filter((option) => option.key && option.orderIds.length), [tabGroups, tab]);
+
   async function fetchOrdersPage({ reset = true, fresh = false } = {}) {
     const requestId = ++listRequestRef.current;
     listAbortRef.current?.abort();
@@ -1286,6 +1298,18 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
 
   async function exportOrder(options, group, selectedTab) {
     const kind = options?.kind === "excel" ? "excel" : "pdf";
+    const requestedCombinedOrders = (Array.isArray(options?.combinedOrders) ? options.combinedOrders : [])
+      .map((order) => ({
+        key: text(order?.key),
+        label: text(order?.label) || "Order",
+        userName: text(order?.userName) || "—",
+        orderIds: [...new Set((Array.isArray(order?.orderIds) ? order.orderIds : []).map(text).filter(Boolean))],
+      }))
+      .filter((order) => order.orderIds.length);
+    const combinedOrders = requestedCombinedOrders.length > 1 ? requestedCombinedOrders : null;
+    const exportOrderIds = combinedOrders
+      ? [...new Set(combinedOrders.flatMap((order) => order.orderIds))]
+      : group.orderIds;
     setBusy(true);
     setActionError("");
     try {
@@ -1295,7 +1319,18 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ scope: "operations", kind: exportKind, orderIds: group.orderIds, tab: selectedTab, columns: options?.columns || [], signatureLabels: options?.signatureLabels || null, instruction: options?.instruction || null, sortMode: options?.sortMode || "product-tag", repeatedComponentMode: options?.repeatedComponentMode || "merge" }),
+        body: JSON.stringify({
+          scope: "operations",
+          kind: exportKind,
+          orderIds: exportOrderIds,
+          combinedOrders,
+          tab: selectedTab,
+          columns: options?.columns || [],
+          signatureLabels: options?.signatureLabels || null,
+          instruction: options?.instruction || null,
+          sortMode: options?.sortMode || "product-tag",
+          repeatedComponentMode: combinedOrders ? "merge" : (options?.repeatedComponentMode || "merge"),
+        }),
       });
       if (response.status === 401) {
         window.location.href = "/login?next=/next/operations-orders";
@@ -1306,7 +1341,10 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
         throw new Error(data?.error || `Failed to export ${kind.toUpperCase()}.`);
       }
       const blob = await response.blob();
-      downloadBlob(blob, `${group.orderIdLabel.replace(/[^a-z0-9_-]+/gi, "-") || "operations-order"}.${kind === "excel" ? "xlsx" : "pdf"}`);
+      const downloadBase = combinedOrders
+        ? `combined-${combinedOrders.map((order) => order.label).join("-")}`
+        : group.orderIdLabel;
+      downloadBlob(blob, `${downloadBase.replace(/[^a-z0-9_-]+/gi, "-") || "operations-order"}.${kind === "excel" ? "xlsx" : "pdf"}`);
       setNotice(`${kind.toUpperCase()} downloaded.`);
       window.setTimeout(() => setNotice(""), 3000);
     } catch (error) {
@@ -1380,6 +1418,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
           onCloseOrder={() => { setSelected(null); setEditMode(null); }}
           onAction={beginAction}
           onExport={exportOrder}
+          orderOptions={downloadOrderOptions}
           editMode={editMode}
           onPatchEditItem={patchOperationsEditItem}
           onUpsertEditAddition={upsertOperationsEditAddition}
