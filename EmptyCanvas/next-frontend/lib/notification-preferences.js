@@ -5,6 +5,7 @@ import { select, supabaseRequest } from "./supabase-rest";
 // These are defaults, not enforced policies. Every member can disable every channel.
 export const NOTIFICATION_CATEGORIES = [
   { id: "orders", label: "Orders", detail: "Requests, approvals and shipping" },
+  { id: "sla", label: "SLA alerts", detail: "Opt-in deadline warnings and overdue reminders" },
   { id: "tasks", label: "Tasks", detail: "Assignments, changes and deadlines" },
   { id: "maintenance", label: "Maintenance", detail: "Technician assignments and work logs" },
   { id: "events", label: "Events", detail: "Team and event updates" },
@@ -17,6 +18,7 @@ export const NOTIFICATION_CATEGORIES = [
 const CHANNELS = ["in_app", "push", "email"];
 const DEFAULT_CHANNELS = {
   orders: { in_app: true, push: true, email: false },
+  sla: { in_app: false, push: false, email: false },
   tasks: { in_app: true, push: true, email: true },
   maintenance: { in_app: true, push: true, email: true },
   events: { in_app: true, push: true, email: false },
@@ -29,6 +31,7 @@ const DEFAULT_CHANNELS = {
 export function defaultNotificationPreferences() {
   return {
     channels: structuredClone(DEFAULT_CHANNELS),
+    sla_alerts: { warning: true, overdue: true, follow_up: false },
     digest: "daily",
     quiet_hours: { enabled: false, start: "21:00", end: "08:00", timezone: "Africa/Cairo" },
   };
@@ -57,8 +60,14 @@ export function normalizeNotificationPreferences(input = {}) {
   }
   const quiet = source.quiet_hours || {};
   const digest = ["off", "daily", "weekly"].includes(source.digest) ? source.digest : defaults.digest;
+  const sourceSla = source.sla_alerts && typeof source.sla_alerts === "object" ? source.sla_alerts : {};
   return {
     channels,
+    sla_alerts: {
+      warning: typeof sourceSla.warning === "boolean" ? sourceSla.warning : true,
+      overdue: typeof sourceSla.overdue === "boolean" ? sourceSla.overdue : true,
+      follow_up: typeof sourceSla.follow_up === "boolean" ? sourceSla.follow_up : false,
+    },
     digest,
     quiet_hours: {
       enabled: typeof quiet.enabled === "boolean" ? quiet.enabled : defaults.quiet_hours.enabled,
@@ -75,6 +84,7 @@ function table() {
 
 export function notificationCategory(type = "") {
   const raw = String(type || "").trim().toLowerCase();
+  if (raw === "sla" || raw === "sla_alert") return "sla";
   if (["order", "orders", "request", "shopping", "purchase"].includes(raw)) return "orders";
   if (["task", "tasks", "deadline"].includes(raw)) return "tasks";
   if (["maintenance", "repair", "technician"].includes(raw)) return "maintenance";

@@ -51,6 +51,7 @@ export function notificationScope(value) {
 
 export function notificationTone(item = {}) {
   const haystack = `${notificationText(item.type)} ${notificationText(item.title)}`.toLowerCase();
+  if (haystack.includes("sla") || haystack.includes("deadline approaching") || haystack.includes("deadline exceeded")) return { key: "sla", label: "SLA" };
   if (haystack.includes("maintenance") || haystack.includes("repair")) return { key: "maintenance", label: "MT" };
   if (haystack.includes("expense") || haystack.includes("cash") || haystack.includes("payment")) return { key: "expense", label: "$" };
   if (haystack.includes("stock") || haystack.includes("inventory")) return { key: "stock", label: "ST" };

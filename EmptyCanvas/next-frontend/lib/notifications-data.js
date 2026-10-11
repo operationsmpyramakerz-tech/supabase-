@@ -272,7 +272,7 @@ async function rowsEditedSince(table, afterIso, { limit = 3000 } = {}) {
   }
 }
 
-async function notificationUsers() {
+export async function notificationUsers() {
   const [members, pages, accessRows] = await Promise.all([
     selectAll(teamMembersTable(), {
       limit: 5000,
@@ -341,7 +341,7 @@ function matchUsersByName(users = [], rawNames = []) {
   return users.filter((user) => wanted.has(canonical(user.name))).map((user) => user.id).filter(Boolean);
 }
 
-function canSeeAnyPage(user, pageNames = []) {
+export function canSeeAnyPage(user, pageNames = []) {
   const allowed = new Set((user?.allowedPages || []).map(canonical).filter(Boolean));
   return pageNames.some((page) => allowed.has(canonical(page)));
 }

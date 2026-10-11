@@ -3,6 +3,7 @@ import { runNotificationsScan } from "../../../../lib/notifications-data";
 import { supabaseRequest } from "../../../../lib/supabase-rest";
 import { dispatchQueuedNotifications } from "../../../../lib/notification-event-worker";
 import { dispatchNotificationDigests } from "../../../../lib/notification-digest";
+import { runSlaNotificationCycle } from "../../../../lib/home-sla-alert-worker";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -53,7 +54,14 @@ export async function GET(request) {
       });
     } catch { /* Phase 5 migration may not yet be installed. */ }
     const scan = await runNotificationsScan({ force: true });
-    return noStore({ ...scan, queue, reminders, digest });
+    // Keep the existing event queue/digest/scan ahead of optional SLA work.
+    let sla;
+    try { sla = await runSlaNotificationCycle(); }
+    catch (error) {
+      console.warn("[notifications] SLA cycle deferred:", error?.message);
+      sla = { installed: true, error: "SLA alerts temporarily unavailable" };
+    }
+    return noStore({ ...scan, queue, reminders, digest, sla });
   } catch (error) {
     console.error("GET /next/api/cron/notifications error:", error?.details || error);
     return noStore({ ok: false, error: error?.message || "Notification scan failed." }, Number(error?.status) || 500);

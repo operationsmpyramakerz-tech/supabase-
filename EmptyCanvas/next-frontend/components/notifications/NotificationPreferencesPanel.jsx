@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 
 const CATEGORIES = [
   { id: "orders", label: "Orders", desc: "Approvals, requests and delivery" },
+  { id: "sla", label: "SLA alerts", desc: "Optional deadline and overdue alerts" },
   { id: "tasks", label: "Tasks", desc: "Assigned work and due dates" },
   { id: "maintenance", label: "Maintenance", desc: "Work logs and technician updates" },
   { id: "events", label: "Events", desc: "Event schedules and teams" },
@@ -21,6 +22,7 @@ const CHANNELS = [
 const STARTING_SETTINGS = {
   channels: {
     orders: { in_app: true, push: true, email: false },
+    sla: { in_app: false, push: false, email: false },
     tasks: { in_app: true, push: true, email: true },
     maintenance: { in_app: true, push: true, email: true },
     events: { in_app: true, push: true, email: false },
@@ -29,6 +31,7 @@ const STARTING_SETTINGS = {
     system: { in_app: true, push: true, email: true },
     other: { in_app: true, push: false, email: false },
   },
+  sla_alerts: { warning: true, overdue: true, follow_up: false },
   digest: "daily",
   quiet_hours: { enabled: false, start: "21:00", end: "08:00", timezone: "Africa/Cairo" },
 };
@@ -126,6 +129,21 @@ export default function NotificationPreferencesPanel() {
               </div>
             ))}
           </div>
+          <div className="erp-notification-preferences__quiet" role="group" aria-label="SLA alert types" style={{ marginBottom: 16 }}>
+            <strong>SLA alert types</strong>
+            <small style={{ display: "block", marginTop: 4 }}>SLA channels above start off. Alerts are sent only for your verified orders and active company SLA policies.</small>
+            {[
+              ["warning", "Approaching the SLA target"],
+              ["overdue", "SLA target exceeded"],
+              ["follow_up", "Daily overdue follow-up (personal escalation)"],
+            ].map(([key, label]) => (
+              <label key={key} className="erp-notification-preferences__quiet-toggle" style={{ marginTop: 12 }}>
+                <span><strong>{label}</strong></span>
+                <input type="checkbox" checked={settings.sla_alerts?.[key] === true}
+                  onChange={(e) => { setSettings(p => ({ ...p, sla_alerts: { ...p.sla_alerts, [key]: e.target.checked } })); setSaved(false); }} />
+              </label>
+            ))}
+          </div>
           <div className="erp-notification-preferences__details">
             <label className="erp-notification-preferences__field">
               <strong>Email digest</strong><small>Choose how often to receive a summary of non-urgent ERP updates.</small>
@@ -151,7 +169,7 @@ export default function NotificationPreferencesPanel() {
             <button type="button" className="erp-notification-preferences__reset" onClick={reset} disabled={busy}>Restore defaults</button>
             <button type="button" className="erp-notification-preferences__save" onClick={save} disabled={busy || !dirty}>{busy ? "Saving…" : "Save preferences"}</button>
           </div>
-          <p className="erp-notification-preferences__footnote">Push requires browser permission and a device subscription. Email testing uses your configured SMTP (Gmail) or Resend account. Automatic event emails and scheduled digests are coming in a later phase.</p>
+          <p className="erp-notification-preferences__footnote">Push requires browser permission and a device subscription. Email testing uses your configured SMTP (Gmail) or Resend account. SLA alerts are opt-in and run on the existing scheduled notification scan; no manager receives them automatically.</p>
         </>
       )}
     </section>

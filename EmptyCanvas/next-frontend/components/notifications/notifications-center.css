@@ -1459,3 +1459,6 @@ html[data-theme="dark"] .next-notifications-filter-select__option.is-selected{
   background:#253750!important;
   color:#fff!important;
 }
+
+/* Phase 7: distinct SLA category, preserving existing icon centering rules. */
+.next-notifications-appfeed .next-notif-icon.is-sla{background:linear-gradient(145deg,#ffedd5,#fdba74)!important;color:#c2410c!important}
