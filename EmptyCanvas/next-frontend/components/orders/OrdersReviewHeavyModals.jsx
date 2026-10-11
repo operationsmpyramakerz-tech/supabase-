@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import ClassicOrderIcon from "./ClassicOrderIcon";
-import { groupOrderItems, OrderGroupHeader, OrderSortButton } from "./OrderGrouping";
+import { groupOrderItems, OrderSortButton } from "./OrderGrouping";
+import ProgressiveOrderGroups from "./ProgressiveOrderGroups";
 import OrderComponentSearch, { matchesOrderComponentSearch } from "./OrderComponentSearch";
 
 const OrderDownloadModal = dynamic(() => import("./OrderDownloadModal"), { ssr: false });
@@ -309,14 +310,13 @@ function ReviewDetailsModal({ group, activeTab, busyIds, onClose, onQuantitySave
         </div>
         <div className="co-modal-meta co-modal-meta--after-actions"><div className="co-meta-row co-meta-row--reason"><span>Reason</span><strong>{group.reason}</strong></div></div>
         {canAct ? <div className="next-review-bulk-actions"><div><span>Review all components</span><strong>Apply one decision to every item in this order.</strong></div><div className="next-classic-review-actions"><button className="btn btn-success btn-xs" type="button" onClick={() => onBulkDecision(group, "Approved")}><ClassicOrderIcon name="check" /> Approve all</button><button className="btn btn-danger btn-xs" type="button" onClick={() => onBulkDecision(group, "Rejected")}><ClassicOrderIcon name="x" /> Reject all</button></div></div> : null}
-        <div className="co-modal-items order-component-groups">
-          {groupedItems.length ? groupedItems.map((section) => (
-            <section className="order-component-group" key={`${section.folderName || "products"}:${section.tag}`}>
-              <OrderGroupHeader group={section} mode={sortMode} />
-              <div className="order-component-group__items">{section.items.map(renderItem)}</div>
-            </section>
-          )) : <div className="order-component-search-empty">{componentSearch.trim() ? "No matching components." : "No items."}</div>}
-        </div>
+        <ProgressiveOrderGroups
+          groups={groupedItems}
+          mode={sortMode}
+          query={componentSearch}
+          resetKey={JSON.stringify([group?.key, activeTab, sortMode, componentSearch])}
+          renderItem={renderItem}
+        />
       </div>
       </div>
       <OrderDownloadModal

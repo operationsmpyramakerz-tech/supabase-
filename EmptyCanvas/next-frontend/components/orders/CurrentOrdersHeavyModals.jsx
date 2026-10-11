@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import ClassicOrderIcon from "./ClassicOrderIcon";
-import { groupOrderItems, OrderGroupHeader, OrderSortButton } from "./OrderGrouping";
+import { groupOrderItems, OrderSortButton } from "./OrderGrouping";
+import ProgressiveOrderGroups from "./ProgressiveOrderGroups";
 import OrderComponentSearch, { matchesOrderComponentSearch } from "./OrderComponentSearch";
 import { DeleteConfirmDialog, DeleteVerificationDialog } from "../shared/SystemDeleteDialogs";
 
@@ -447,14 +448,13 @@ function OrderDetailsModal({ group, tab, busy, onClose, onAction, onReason, onEx
           <div className="co-modal-meta co-modal-meta--after-actions">
             <div className="co-meta-row co-meta-row--reason"><span>Reason</span><strong>{group.reason}</strong></div>
           </div>
-          <div className="co-modal-items order-component-groups">
-            {groupedItems.length ? groupedItems.map((section) => (
-              <section className="order-component-group" key={`${section.folderName || "products"}:${section.tag}`}>
-                <OrderGroupHeader group={section} mode={sortMode} />
-                <div className="order-component-group__items">{section.items.map(renderItem)}</div>
-              </section>
-            )) : <div className="order-component-search-empty">{componentSearch.trim() ? "No matching components." : "No items."}</div>}
-          </div>
+          <ProgressiveOrderGroups
+            groups={groupedItems}
+            mode={sortMode}
+            query={componentSearch}
+            resetKey={JSON.stringify([group?.key, tab, sortMode, componentSearch])}
+            renderItem={renderItem}
+          />
         </div>
         </div>
         <OrderDownloadModal

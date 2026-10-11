@@ -632,3 +632,63 @@ html[data-theme="dark"] .orders-detail-loading-search { background: #050912; bor
 @media (prefers-reduced-motion: reduce) {
   .orders-detail-loading-skeleton, .orders-detail-loading-spinner { animation: none; }
 }
+
+
+/* Phase 5: A lighter, progressive component list inside the existing order sheet. */
+.orders-workspace .order-components-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 10px;
+}
+.orders-workspace .order-components-panel__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  color: #101827;
+  font-size: 12px;
+}
+.orders-workspace .order-components-panel__heading strong { font-size: 13px; font-weight: 850; }
+.orders-workspace .order-components-panel__heading span { color: #7a8494; font-size: 11px; font-weight: 650; }
+.orders-workspace .order-components-panel__more {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 750;
+}
+.orders-workspace .order-components-panel__more-actions { display: flex; flex-wrap: wrap; gap: 7px; }
+.orders-workspace .order-components-panel__more button {
+  min-height: 34px;
+  padding: 7px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 800;
+  transition: background .16s ease;
+}
+.orders-workspace .order-components-panel__load { border: 1px solid #0f172a; background: #0f172a; color: #fff; }
+.orders-workspace .order-components-panel__all { border: 1px solid #dfe3e8; background: #fff; color: #0f172a; }
+.orders-workspace .order-components-panel__load:hover { background: #263347; }
+.orders-workspace .order-components-panel__all:hover { background: #eef1f5; }
+.orders-workspace .order-components-panel__more button:focus-visible { outline: 2px solid #f46b1d; outline-offset: 3px; }
+html[data-theme="dark"] .orders-workspace .order-components-panel__heading { color: #f8fafc; }
+html[data-theme="dark"] .orders-workspace .order-components-panel__heading span { color: #9ca3af; }
+html[data-theme="dark"] .orders-workspace .order-components-panel__more { background: #151b28; color: #aeb6c4; border-color: #303747; }
+html[data-theme="dark"] .orders-workspace .order-components-panel__load { background: #050912; color: #fff; border-color: #394354; }
+html[data-theme="dark"] .orders-workspace .order-components-panel__all { background: #252d39; color: #f8fafc; border-color: #394354; }
+@media (max-width: 640px) {
+  .orders-workspace .order-components-panel { gap: 7px; }
+  .orders-workspace .order-components-panel__more { padding: 9px; }
+  .orders-workspace .order-components-panel__more button { min-height: 36px; }
+}

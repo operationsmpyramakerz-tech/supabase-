@@ -500,6 +500,10 @@ export function MaintenanceDetailsModal({ group, busy, onClose, onLog, onSecondL
               {canDone ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onDone(group)} disabled={busy}><ClassicOrderIcon name="check-circle" />Mark as Delivered</button> : null}
             </div>
 
+            <div className="order-components-panel__heading next-maintenance-components-heading">
+              <strong>Components</strong>
+              <span>{group.items.length} item{group.items.length === 1 ? "" : "s"}</span>
+            </div>
             <div className="co-modal-items next-maintenance-modal-items">
               {[...group.items].sort((a, b) => text(a?.productName).localeCompare(text(b?.productName), undefined, { sensitivity: "base", numeric: true })).map((item, index) => {
                 const productName = text(item?.productName) || "Component";
