@@ -212,3 +212,141 @@ html[data-theme] body.next-classic-shell-active .classic-app-shell > .sidebar.si
     box-shadow: none !important;
   }
 }
+
+
+/* ========================================================================
+   Main / secondary dock selection + Events captions (2026-10-11)
+   Retain the moving orange indicator but make the actual selected mobile
+   link orange as well: a cached Classic white selection must not resurface on
+   Current Orders or when an App Router transition finishes.
+   ======================================================================== */
+
+/* Settled primary links, including Current Orders on phone browsers. */
+html[data-theme] body.next-classic-shell-active .classic-app-shell > .sidebar .sidebar-nav .nav-link.active,
+html[data-theme] body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host .mobile-dock-pages-list .nav-link.active,
+html[data-theme] body.next-classic-shell-active .classic-app-shell > .sidebar:not(.mobile-dock-structured-host) .sidebar-nav > .nav-list > li:not(:first-child) .nav-link.active {
+  background-color: var(--ops-sidebar-active-orange) !important;
+  background-image: none !important;
+  border-color: var(--ops-sidebar-active-orange) !important;
+  color: #fff !important;
+  box-shadow: 0 10px 23px rgba(194, 65, 12, .25) !important;
+}
+html[data-theme] body.next-classic-shell-active .classic-app-shell > .sidebar .sidebar-nav .nav-link.active svg,
+html[data-theme] body.next-classic-shell-active .classic-app-shell > .sidebar .sidebar-nav .nav-link.active svg :is(path, line, polyline, polygon, circle, rect) {
+  color: #fff !important;
+  stroke: #fff !important;
+  visibility: visible !important;
+}
+/* The travelling indicator may temporarily cover the link. Make its cloned
+   SVG white too, including on the previously problematic /orders route. */
+html[data-theme] body.next-classic-shell-active .classic-app-shell > .sidebar .sidebar-active-indicator,
+html[data-theme] body.next-classic-shell-active .classic-app-shell > .sidebar .mobile-dock-pages-clip > .sidebar-active-indicator,
+html[data-theme] body.next-classic-shell-active .classic-app-shell > .sidebar .mobile-dock-home-rail > .sidebar-active-indicator {
+  background: var(--ops-sidebar-active-orange) !important;
+  border-color: var(--ops-sidebar-active-orange) !important;
+}
+html[data-theme] body.next-classic-shell-active .classic-app-shell > .sidebar .sidebar-active-indicator__icon,
+html[data-theme] body.next-classic-shell-active .classic-app-shell > .sidebar .sidebar-active-indicator__icon :is(path, line, polyline, polygon, circle, rect) {
+  color: #fff !important;
+  stroke: #fff !important;
+}
+/* Home has an intentionally transparent outer link and a circular selected
+   SVG; preserve that original geometry while using orange for its circle. */
+@media (max-width: 768px) {
+  html[data-theme] body.next-classic-shell-active .classic-app-shell > .sidebar .mobile-dock-home-rail .nav-link.active,
+  html[data-theme] body.next-classic-shell-active .classic-app-shell > .sidebar:not(.mobile-dock-structured-host) .sidebar-nav > .nav-list > li:first-child .nav-link.active {
+    background: transparent !important;
+    border-color: transparent !important;
+    box-shadow: none !important;
+  }
+  html[data-theme] body.next-classic-shell-active .classic-app-shell > .sidebar .mobile-dock-home-rail .nav-link.active svg,
+  html[data-theme] body.next-classic-shell-active .classic-app-shell > .sidebar:not(.mobile-dock-structured-host) .sidebar-nav > .nav-list > li:first-child .nav-link.active svg {
+    background: var(--ops-sidebar-active-orange) !important;
+    color: #fff !important;
+    stroke: #fff !important;
+  }
+  /* Only the travelling orange tile should be visible while moving. */
+  html[data-theme] body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-animating .mobile-dock-pages-list .nav-link:is(.active, .is-indicator-target),
+  html[data-theme] body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-animating:not(.mobile-dock-structured-host) .sidebar-nav > .nav-list > li:not(:first-child) .nav-link:is(.active, .is-indicator-target) {
+    background: transparent !important;
+    box-shadow: none !important;
+    border-color: transparent !important;
+  }
+}
+
+/* Task Management, Events and Shopping Cart share this second rail. */
+html[data-theme] body .task-management-secondary-sidebar .task-management-secondary-sidebar__link.is-active {
+  background: var(--ops-sidebar-active-orange) !important;
+  border-color: var(--ops-sidebar-active-orange) !important;
+  color: #fff !important;
+  box-shadow: 0 10px 24px rgba(194, 65, 12, .26) !important;
+}
+html[data-theme] body .task-management-secondary-sidebar .task-management-secondary-sidebar__link.is-active svg {
+  background: rgba(255,255,255,.16) !important;
+  color: #fff !important;
+  stroke: #fff !important;
+}
+html[data-theme] body .task-management-secondary-sidebar .task-management-secondary-sidebar__link.is-active svg :is(path, line, polyline, polygon, circle, rect) {
+  stroke: #fff !important;
+}
+/* Opening a secondary rail should not restore the old white parent tile. */
+html[data-theme] body.next-classic-shell-active .classic-app-shell a.nav-link[href="/next/task-management"][aria-expanded="true"],
+html[data-theme] body.next-classic-shell-active .classic-app-shell a.nav-link[href="/next/events"][aria-expanded="true"],
+html[data-theme] body.next-classic-shell-active .classic-app-shell a.nav-link[href="/next/orders/new"][aria-expanded="true"] {
+  background: var(--ops-sidebar-active-orange) !important;
+  border-color: var(--ops-sidebar-active-orange) !important;
+  color: #fff !important;
+  box-shadow: 0 10px 23px rgba(194,65,12,.25) !important;
+}
+html[data-theme] body.next-classic-shell-active .classic-app-shell a.nav-link[aria-expanded="true"] svg,
+html[data-theme] body.next-classic-shell-active .classic-app-shell a.nav-link[aria-expanded="true"] svg :is(path, line, polyline, polygon, circle, rect) {
+  color: #fff !important;
+  stroke: #fff !important;
+}
+
+/* All four Events destinations already have correct full text in the DOM.
+   Re-enable their captions on phones rather than using icon-only tiles. */
+@media (max-width: 768px) {
+  html[data-theme] body .events-secondary-sidebar {
+    min-height: 190px !important;
+    height: 190px !important;
+    padding: 10px 8px 84px !important;
+  }
+  html[data-theme] body .events-secondary-sidebar .events-secondary-sidebar__rail {
+    display: grid !important;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: 4px !important;
+    align-items: stretch !important;
+  }
+  html[data-theme] body .events-secondary-sidebar .events-secondary-sidebar__link {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 5px !important;
+    height: 96px !important;
+    min-height: 96px !important;
+    padding: 6px 1px !important;
+    min-width: 0 !important;
+    text-align: center !important;
+  }
+  html[data-theme] body .events-secondary-sidebar .events-secondary-sidebar__link svg {
+    width: 18px !important;
+    height: 18px !important;
+    padding: 6px !important;
+    margin: 0 auto !important;
+  }
+  html[data-theme] body .events-secondary-sidebar .events-secondary-sidebar__link span {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    color: inherit !important;
+    font-size: 9.5px !important;
+    font-weight: 750 !important;
+    line-height: 1.15 !important;
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    overflow-wrap: anywhere !important;
+  }
+}
