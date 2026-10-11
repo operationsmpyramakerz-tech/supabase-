@@ -125,7 +125,7 @@ export default function AppShell({
     return (
       <>
         {pageStyles.map((href) => <link rel="stylesheet" href={href} key={href} />)}
-        <link rel="stylesheet" href="/next/css/unified-white-workspace.css?v=global-page-title-line-v2" />
+        <link rel="stylesheet" href="/next/css/unified-white-workspace.css?v=sidebar-orange-accent-v1" />
         <link rel="stylesheet" href="/next/css/scrollbar-hidden.css?v=global-hidden-v1" />
         <BodyClassSync className={combinedBodyClass} />
         <ClassicChromeAccessSync account={account} />
@@ -138,7 +138,7 @@ export default function AppShell({
     <>
       <ShellStyleLinks />
       {pageStyles.map((href) => <link rel="stylesheet" href={href} key={href} />)}
-      <link rel="stylesheet" href="/next/css/unified-white-workspace.css?v=global-page-title-line-v2" />
+      <link rel="stylesheet" href="/next/css/unified-white-workspace.css?v=sidebar-orange-accent-v1" />
       <link rel="stylesheet" href="/next/css/scrollbar-hidden.css?v=global-hidden-v1" />
       <BodyClassSync className={combinedBodyClass} />
       <ClassicChromeAccessSync account={account} />

@@ -91,7 +91,7 @@ body.next-classic-shell-active .classic-app-shell .main-header .dash-title::befo
   height:27px!important;
   flex:0 0 4px!important;
   border-radius:999px!important;
-  background:#0b0c10!important;
+  background:#ea580c!important;
   box-shadow:none!important;
 }
 
@@ -131,6 +131,84 @@ html[data-theme="dark"] body.next-classic-shell-active
 
 html[data-theme="dark"] body.next-classic-shell-active
 .classic-app-shell .main-header .dash-title::before{
-  background:#f8fafc!important;
+  background:#ea580c!important;
 }
 
+
+/* ========================================================================
+   Global navigation selection – Pyramakerz orange
+   2026-10-11
+
+   Style ONLY the shared main sidebar and its mobile dock. Keep secondary
+   sidebar links, order status tabs and other buttons untouched.
+   Use a matching travelling indicator so route transitions never briefly
+   switch back to the previous white (or black in dark mode) selected tile.
+   ======================================================================== */
+:root {
+  --ops-sidebar-active-orange: #ea580c;
+  --ops-sidebar-active-text: #fff;
+}
+
+/* Desktop sidebar, mobile pages and the non-structured mobile fallback. */
+html[data-theme] body.next-classic-shell-active .classic-app-shell > .sidebar .sidebar-nav .nav-link.active {
+  background: var(--ops-sidebar-active-orange) !important;
+  border-color: var(--ops-sidebar-active-orange) !important;
+  color: var(--ops-sidebar-active-text) !important;
+  box-shadow: 0 10px 23px rgba(194,65,12,.25) !important;
+}
+html[data-theme] body.next-classic-shell-active .classic-app-shell > .sidebar .sidebar-nav .nav-link.active svg,
+html[data-theme] body.next-classic-shell-active .classic-app-shell > .sidebar .sidebar-nav .nav-link.active svg :is(path, line, polyline, polygon, circle, rect) {
+  color: var(--ops-sidebar-active-text) !important;
+  stroke: var(--ops-sidebar-active-text) !important;
+}
+
+/* Mobile Home's selection surface is its padded circular SVG, not the rail. */
+@media (max-width: 768px) {
+  html[data-theme] body.next-classic-shell-active .classic-app-shell > .sidebar .mobile-dock-home-rail .nav-link.active,
+  html[data-theme] body.next-classic-shell-active .classic-app-shell > .sidebar:not(.mobile-dock-structured-host) .sidebar-nav > .nav-list > li:first-child .nav-link.active {
+    background: transparent !important;
+    border-color: transparent !important;
+    box-shadow: none !important;
+  }
+  html[data-theme] body.next-classic-shell-active .classic-app-shell > .sidebar .mobile-dock-home-rail .nav-link.active svg,
+  html[data-theme] body.next-classic-shell-active .classic-app-shell > .sidebar:not(.mobile-dock-structured-host) .sidebar-nav > .nav-list > li:first-child .nav-link.active svg {
+    background: var(--ops-sidebar-active-orange) !important;
+    color: var(--ops-sidebar-active-text) !important;
+    stroke: var(--ops-sidebar-active-text) !important;
+    box-shadow: 0 9px 21px rgba(194,65,12,.28) !important;
+  }
+}
+
+/* Moving selection tile, including when JS temporarily hosts it inside the
+   mobile home rail or the clipped page dock instead of directly in <aside>. */
+html[data-theme] body.next-classic-shell-active .classic-app-shell > .sidebar .sidebar-active-indicator {
+  background: var(--ops-sidebar-active-orange) !important;
+  border-color: var(--ops-sidebar-active-orange) !important;
+  box-shadow: 0 10px 23px rgba(194,65,12,.26) !important;
+}
+html[data-theme] body.next-classic-shell-active .classic-app-shell > .sidebar .sidebar-active-indicator__icon,
+html[data-theme] body.next-classic-shell-active .classic-app-shell > .sidebar .sidebar-active-indicator__icon :is(path, line, polyline, polygon, circle, rect) {
+  color: var(--ops-sidebar-active-text) !important;
+  stroke: var(--ops-sidebar-active-text) !important;
+}
+
+/* During the travelling animation, only the moving orange tile owns the
+   background; both the original and destination icons remain readable. */
+html[data-theme] body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready .sidebar-nav .nav-link:is(.active, .is-indicator-target) {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  color: var(--ops-sidebar-active-text) !important;
+}
+html[data-theme] body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready .sidebar-nav .nav-link:is(.active, .is-indicator-target) svg,
+html[data-theme] body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready .sidebar-nav .nav-link:is(.active, .is-indicator-target) svg :is(path, line, polyline, polygon, circle, rect) {
+  color: var(--ops-sidebar-active-text) !important;
+  stroke: var(--ops-sidebar-active-text) !important;
+}
+@media (max-width: 768px) {
+  html[data-theme] body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready .mobile-dock-home-rail .nav-link.active svg,
+  html[data-theme] body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready:not(.mobile-dock-structured-host) .sidebar-nav > .nav-list > li:first-child .nav-link.active svg {
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+}
