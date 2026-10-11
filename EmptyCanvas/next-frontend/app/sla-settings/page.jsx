@@ -13,7 +13,7 @@ export default async function SlaSettingsPage() {
     return <main className="standalone-state"><section className="state-card"><h1>SLA settings are restricted</h1><p>Only users with Admin-level Users Center access can change company SLA policies.</p><a href="/next/home">Back to Home</a></section></main>;
   }
   return <AppShell account={gate.account} title="SLA Settings" activePath="/next/home"
-    bodyClass="page-home page-sla-settings" pageStyles={["/next/css/sla-settings.css?v=phase6-1"]}>
+    bodyClass="page-home page-sla-settings" pageStyles={["/next/css/sla-settings.css?v=phase8-1"]}>
     <SlaSettingsClient />
   </AppShell>;
 }

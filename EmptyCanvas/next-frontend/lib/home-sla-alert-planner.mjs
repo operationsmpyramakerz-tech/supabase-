@@ -53,7 +53,7 @@ export function planSlaAlerts(scopes = [], events = [], policies = [], calendarR
         const key = `${workspace}:${orderNumber}:${start}:${kind}:${policy.updated_at || 'base'}`;
         if (!seen.has(key)) {
           seen.add(key);
-          results.push({ key, workspace, orderNumber, kind, startedAt: start, title: kind === 'warning' ? `SLA deadline approaching · Order #${orderNumber}` : `SLA overdue · Order #${orderNumber}`,
+          results.push({ key, workspace, orderNumber, kind, startedAt: start, usedHours: hours, targetHours: target, title: kind === 'warning' ? `SLA deadline approaching · Order #${orderNumber}` : `SLA overdue · Order #${orderNumber}`,
             body: `${stage.label}: ${hours.toFixed(1)} of ${target} ${working ? 'working' : 'calendar'} hours used.`, url: stage.url });
         }
       }

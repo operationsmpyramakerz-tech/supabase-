@@ -7,8 +7,10 @@ import { getNotificationPreferences, allowsChannel, isQuietHour } from './notifi
 import { sendPushToMember } from './push-notifications';
 import { sendNotificationEmail } from './notification-email';
 import { planSlaAlerts } from './home-sla-alert-planner.mjs';
+import { canEscalateSla, escalationKey, hasSupervisorAccess } from './home-sla-escalation.mjs';
 
 const TABLE = 'erp_sla_alert_outbox';
+const ROUTES_TABLE = 'erp_sla_escalation_routes';
 const PAGE = {
   current: ['Current Orders'], review: ['Orders Review'],
   operations: ['Operations Orders', 'Requested Orders'], maintenance: ['Maintenance Orders'],
@@ -72,50 +74,111 @@ async function auditFor(scopes) {
   return events;
 }
 
+async function activeEscalationRoutes() {
+  try {
+    // Missing Phase 8 migration must never block Phase 7 personal alerts.
+    const rows = await select(ROUTES_TABLE, {
+      select: 'owner_id,supervisor_id,workspace,enabled', enabled: 'eq.true', limit: '501',
+    }, { profileName: 'sla.escalation.routes' });
+    // Fail closed if the entire set cannot be inspected.
+    return rows.length > 500 ? [] : rows;
+  } catch (error) {
+    console.warn('[SLA] Optional supervisor routes unavailable:', error?.message);
+    return [];
+  }
+}
+
+async function queueSlaAlert(recipientId, alert, now, ownerId = null) {
+  const isSupervisor = !!ownerId;
+  const stableKey = isSupervisor ? escalationKey(recipientId, ownerId, alert.key) : `${recipientId}:${alert.key}`;
+  const id = crypto.createHash('sha256').update(stableKey).digest('hex');
+  await supabaseRequest(`/${TABLE}?on_conflict=id`, {
+    method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=minimal' },
+    body: {
+      id, recipient_id: recipientId, ...(isSupervisor ? { owner_id: ownerId } : {}),
+      workspace: alert.workspace, order_number: Number(alert.orderNumber), kind: alert.kind,
+      title: isSupervisor ? `Supervisor SLA escalation · Order #${alert.orderNumber}` : alert.title,
+      body: isSupervisor ? `An opted-in team member's order is over its SLA target by at least 24 measured hours. ${alert.body}` : alert.body,
+      url: alert.url, created_at: new Date(now).toISOString(),
+    },
+    profileName: 'sla.scan.enqueue',
+  });
+  // Deduplicated in PostgreSQL even during overlapping Cron invocations.
+}
+
 async function enqueueAlerts(now) {
   const policies = await select('erp_home_sla_policies', {
     select: 'workspace,enabled,target_hours,warning_percent,time_basis,updated_at', limit: '4',
   }, { profileName: 'sla.scan.policies' });
   if (!policies.some(row => row.enabled === true)) return { inspected: 0, queued: 0 };
-  const [calendarRows, preferencesRows, users] = await Promise.all([
+  const [calendarRows, preferencesRows, users, routes] = await Promise.all([
     select('erp_home_sla_calendar', { select: 'enabled,timezone,work_days,work_start,work_end,holidays', id: 'eq.company', limit: '1' }),
     select(process.env.SUPABASE_NOTIFICATION_PREFERENCES_TABLE || 'notification_preferences', {
       select: 'user_id,settings', limit: '1001', order: 'user_id.asc',
     }),
     notificationUsers(),
+    activeEscalationRoutes(),
   ]);
   if (preferencesRows.length > 1000) return { inspected: 0, queued: 0, deferred: 'preference cap reached' };
   const userMap = new Map(users.map(u => [u.id, u]));
-  let queued = 0, inspected = 0;
+  const prefCache = new Map();
+  const getPrefs = async (memberId) => {
+    if (!prefCache.has(memberId)) prefCache.set(memberId, (await getNotificationPreferences(memberId)).settings);
+    return prefCache.get(memberId);
+  };
+  const routesByOwner = new Map();
+  for (const route of routes) {
+    const id = idOf(route.owner_id);
+    if (!routesByOwner.has(id)) routesByOwner.set(id, []);
+    routesByOwner.get(id).push(route);
+  }
+  let queued = 0, inspected = 0, supervisorCandidates = 0;
   for (const pref of preferencesRows) {
     const memberId = idOf(pref.user_id);
     const raw = pref.settings || {};
-    if (!memberId || !raw.channels?.sla || !Object.values(raw.channels.sla).some(v => v === true)) continue;
+    const hasPersonalChannels = Object.values(raw.channels?.sla || {}).some(v => v === true);
+    const wantsShare = raw.sla_alerts?.share_escalation === true;
+    if (!memberId || (!hasPersonalChannels && !wantsShare)) continue;
     const user = userMap.get(memberId);
     if (!user || !Object.values(PAGE).some(aliases => canSeeAnyPage(user, aliases))) continue;
-    const preferences = (await getNotificationPreferences(memberId)).settings;
-    if (!Object.values(preferences.channels.sla).some(Boolean)) continue;
+    const preferences = await getPrefs(memberId);
+    const share = preferences.sla_alerts?.share_escalation === true;
+    const ownChannels = Object.values(preferences.channels.sla || {}).some(Boolean);
+    const relevantRoutes = share ? routesByOwner.get(memberId) || [] : [];
+    if (!ownChannels && !relevantRoutes.length) continue;
     inspected++;
     const orders = await readOwnOrders(memberId);
     if (!orders.length) continue;
     const events = await auditFor(orders);
     if (!events) continue;
-    const alerts = planSlaAlerts(orders, events, policies, calendarRows[0] || null, now, preferences.sla_alerts);
-    for (const alert of alerts) {
-      if (!canSeeAnyPage(user, PAGE[alert.workspace])) continue;
-      const id = crypto.createHash('sha256').update(`${memberId}:${alert.key}`).digest('hex');
-      const result = await supabaseRequest(`/${TABLE}?on_conflict=id`, {
-        method: 'POST', headers: { Prefer: 'resolution=ignore-duplicates,return=minimal' },
-        body: { id, recipient_id: memberId, workspace: alert.workspace, order_number: Number(alert.orderNumber), kind: alert.kind,
-          title: alert.title, body: alert.body, url: alert.url, created_at: new Date(now).toISOString() },
-        profileName: 'sla.scan.enqueue',
-      });
-      // The insert is deduplicated in PostgreSQL even if two Cron invocations overlap.
-      void result;
-      queued++;
+    if (ownChannels) {
+      const alerts = planSlaAlerts(orders, events, policies, calendarRows[0] || null, now, preferences.sla_alerts);
+      for (const alert of alerts) {
+        if (!canSeeAnyPage(user, PAGE[alert.workspace])) continue;
+        await queueSlaAlert(memberId, alert, now);
+        queued++;
+      }
+    }
+    // Shared alert is independent of the owner's personal SLA channels.
+    if (relevantRoutes.length) {
+      const overdue = planSlaAlerts(orders, events, policies, calendarRows[0] || null, now,
+        { warning: false, overdue: true, follow_up: false });
+      for (const route of relevantRoutes) {
+        const recipientId = idOf(route.supervisor_id);
+        const recipient = userMap.get(recipientId);
+        if (!recipient || !hasSupervisorAccess(recipient, route.workspace)) continue;
+        const receiverSettings = await getPrefs(recipientId);
+        for (const alert of overdue) {
+          if (!canSeeAnyPage(user, PAGE[alert.workspace])) continue;
+          if (!canEscalateSla({ alert, ownerId: memberId, recipientId, route, owner: user,
+            recipient, ownerSettings: preferences, recipientSettings: receiverSettings })) continue;
+          await queueSlaAlert(recipientId, alert, now, memberId);
+          queued++; supervisorCandidates++;
+        }
+      }
     }
   }
-  return { inspected, candidates: queued };
+  return { inspected, candidates: queued, supervisorCandidates };
 }
 
 async function patch(item, data) {
@@ -126,11 +189,17 @@ async function patch(item, data) {
 }
 
 async function stillEligible(item, settings) {
-  // A retry may run after delivery, approval, target changes, or an access revoke.
-  const user = (await notificationUsers()).find(u => u.id === idOf(item.recipient_id));
-  if (!user || !canSeeAnyPage(user, PAGE[item.workspace] || [])) return false;
-  const scopes = (await readOwnOrders(idOf(item.recipient_id)))
-    .filter(group => group.orderNumber === idOf(item.order_number));
+  // A retry may run after delivery, access revocation, consent withdrawal,
+  // changed route or policy, completion, or order ownership transfer.
+  const recipientId = idOf(item.recipient_id);
+  const ownerId = idOf(item.owner_id || recipientId);
+  const isSupervisor = !!idOf(item.owner_id);
+  const users = await notificationUsers();
+  const recipient = users.find(u => u.id === recipientId);
+  const owner = users.find(u => u.id === ownerId);
+  if (!recipient || !owner || !canSeeAnyPage(owner, PAGE[item.workspace] || [])) return false;
+  if (isSupervisor ? !hasSupervisorAccess(recipient, item.workspace) : !canSeeAnyPage(recipient, PAGE[item.workspace] || [])) return false;
+  const scopes = (await readOwnOrders(ownerId)).filter(group => group.orderNumber === idOf(item.order_number));
   if (scopes.length !== 1) return false;
   const [events, policies, calendars] = await Promise.all([
     auditFor(scopes),
@@ -139,17 +208,31 @@ async function stillEligible(item, settings) {
     select('erp_home_sla_calendar', { select: 'enabled,timezone,work_days,work_start,work_end,holidays', id: 'eq.company', limit: '1' }),
   ]);
   if (!events || policies.length !== 1) return false;
-  if (item.kind === 'follow_up' && Date.now() - Date.parse(item.created_at) > 24 * 3600000) return false;
+  if (!isSupervisor && item.kind === 'follow_up' && Date.now() - Date.parse(item.created_at) > 24 * 3600000) return false;
+  if (isSupervisor) {
+    if (item.kind !== 'overdue' || settings.sla_alerts?.receive_escalation !== true) return false;
+    const [routes, originatorPreferences] = await Promise.all([
+      select(ROUTES_TABLE, { select: 'owner_id,supervisor_id,workspace,enabled', owner_id: `eq.${ownerId}`,
+        supervisor_id: `eq.${recipientId}`, workspace: `eq.${item.workspace}`, enabled: 'eq.true', limit: '1' }),
+      getNotificationPreferences(ownerId),
+    ]);
+    const alerts = planSlaAlerts(scopes, events, policies, calendars[0] || null, Date.now(),
+      { warning: false, overdue: true, follow_up: false });
+    return alerts.some(alert => canEscalateSla({ alert, ownerId, recipientId, route: routes[0], owner,
+      recipient, ownerSettings: originatorPreferences.settings, recipientSettings: settings }) &&
+      crypto.createHash('sha256').update(escalationKey(recipientId, ownerId, alert.key)).digest('hex') === item.id);
+  }
   const ready = planSlaAlerts(scopes, events, policies, calendars[0] || null, Date.now(), settings.sla_alerts);
   return ready.some(alert => alert.workspace === item.workspace && alert.orderNumber === idOf(item.order_number) &&
-    alert.kind === item.kind && crypto.createHash('sha256').update(`${idOf(item.recipient_id)}:${alert.key}`).digest('hex') === item.id);
+    alert.kind === item.kind && crypto.createHash('sha256').update(`${recipientId}:${alert.key}`).digest('hex') === item.id);
 }
 
 async function deliver(item) {
   const memberId = idOf(item.recipient_id);
   const { settings } = await getNotificationPreferences(memberId);
+  const alertEnabled = item.owner_id ? settings.sla_alerts?.receive_escalation === true : settings.sla_alerts?.[item.kind] === true;
   if (!Object.values(settings.channels.sla || {}).some(Boolean) ||
-      settings.sla_alerts?.[item.kind] !== true || !(await stillEligible(item, settings))) {
+      !alertEnabled || !(await stillEligible(item, settings))) {
     // Stale, completed, unapproved or disabled notifications are discarded.
     await patch(item, { in_app_done: true, push_done: true, email_done: true,
       status: 'delivered', lease_token: null, lease_until: null, delivered_at: new Date().toISOString() });
@@ -158,7 +241,6 @@ async function deliver(item) {
   // Re-check every channel immediately before delivery: user changes apply even
   // to already queued alerts. Late cron runs cannot override a user's decision.
   const allowed = (channel) => allowsChannel(settings, 'sla', channel);
-  const alertEnabled = settings.sla_alerts?.[item.kind] === true;
   const notif = { id: `sla:${item.id}`, type: 'sla', title: item.title, body: item.body, url: item.url,
     ts: Date.parse(item.created_at) || Date.now(), read: false };
   if (!item.in_app_done) {

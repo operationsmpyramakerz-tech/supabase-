@@ -31,7 +31,7 @@ const STARTING_SETTINGS = {
     system: { in_app: true, push: true, email: true },
     other: { in_app: true, push: false, email: false },
   },
-  sla_alerts: { warning: true, overdue: true, follow_up: false },
+  sla_alerts: { warning: true, overdue: true, follow_up: false, share_escalation: false, receive_escalation: false },
   digest: "daily",
   quiet_hours: { enabled: false, start: "21:00", end: "08:00", timezone: "Africa/Cairo" },
 };
@@ -136,6 +136,8 @@ export default function NotificationPreferencesPanel() {
               ["warning", "Approaching the SLA target"],
               ["overdue", "SLA target exceeded"],
               ["follow_up", "Daily overdue follow-up (personal escalation)"],
+              ["share_escalation", "Allow escalation of my overdue orders to a configured supervisor"],
+              ["receive_escalation", "Receive overdue escalation for orders I supervise"],
             ].map(([key, label]) => (
               <label key={key} className="erp-notification-preferences__quiet-toggle" style={{ marginTop: 12 }}>
                 <span><strong>{label}</strong></span>
@@ -169,7 +171,7 @@ export default function NotificationPreferencesPanel() {
             <button type="button" className="erp-notification-preferences__reset" onClick={reset} disabled={busy}>Restore defaults</button>
             <button type="button" className="erp-notification-preferences__save" onClick={save} disabled={busy || !dirty}>{busy ? "Saving…" : "Save preferences"}</button>
           </div>
-          <p className="erp-notification-preferences__footnote">Push requires browser permission and a device subscription. Email testing uses your configured SMTP (Gmail) or Resend account. SLA alerts are opt-in and run on the existing scheduled notification scan; no manager receives them automatically.</p>
+          <p className="erp-notification-preferences__footnote">Push requires browser permission and a device subscription. Email testing uses your configured SMTP (Gmail) or Resend account. SLA alerts run on the scheduled scan. Supervisor escalations require both users to opt in, an Admin-configured route and supervisor-level access. No one receives a forced alert.</p>
         </>
       )}
     </section>

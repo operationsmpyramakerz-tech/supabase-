@@ -31,7 +31,7 @@ const DEFAULT_CHANNELS = {
 export function defaultNotificationPreferences() {
   return {
     channels: structuredClone(DEFAULT_CHANNELS),
-    sla_alerts: { warning: true, overdue: true, follow_up: false },
+    sla_alerts: { warning: true, overdue: true, follow_up: false, share_escalation: false, receive_escalation: false },
     digest: "daily",
     quiet_hours: { enabled: false, start: "21:00", end: "08:00", timezone: "Africa/Cairo" },
   };
@@ -67,6 +67,8 @@ export function normalizeNotificationPreferences(input = {}) {
       warning: typeof sourceSla.warning === "boolean" ? sourceSla.warning : true,
       overdue: typeof sourceSla.overdue === "boolean" ? sourceSla.overdue : true,
       follow_up: typeof sourceSla.follow_up === "boolean" ? sourceSla.follow_up : false,
+      share_escalation: sourceSla.share_escalation === true,
+      receive_escalation: sourceSla.receive_escalation === true,
     },
     digest,
     quiet_hours: {

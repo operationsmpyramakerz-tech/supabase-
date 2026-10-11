@@ -26,6 +26,86 @@ function PolicyCard({ value, onChange, onSave, busy, calendarEnabled }) {
   </section>;
 }
 
+const ROUTE_WORKSPACES = WORKSPACES;
+function EscalationRoutes() {
+  const [users, setUsers] = useState([]);
+  const [routes, setRoutes] = useState([]);
+  const [health, setHealth] = useState(null);
+  const [route, setRoute] = useState({ owner_id: '', supervisor_id: '', workspace: 'current', enabled: false });
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const refresh = useCallback(async () => {
+    setLoading(true); setError('');
+    try {
+      const response = await fetch('/next/api/home/sla-escalations', { cache: 'no-store' });
+      const data = await response.json();
+      if (!response.ok || !data.ok) throw new Error(data.error || 'Unable to load supervisor routes.');
+      setRoutes(data.routes || []); setUsers(data.users || []); setHealth(data.health || null);
+    } catch (e) { setError(e.message); }
+    finally { setLoading(false); }
+  }, []);
+  useEffect(() => { refresh(); }, [refresh]);
+  const ownable = users.filter(u => (u.canOwn || []).includes(route.workspace));
+  const eligible = users.filter(u => u.id !== route.owner_id && (u.canSupervise || []).includes(route.workspace));
+  async function save(next) {
+    setBusy(true); setError(''); setSuccess('');
+    try {
+      const response = await fetch('/next/api/home/sla-escalations', { method: 'PUT',
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(next) });
+      const data = await response.json();
+      if (!response.ok || !data.ok) throw new Error(data.error || 'Unable to save route.');
+      setRoutes(previous => [data.saved, ...previous.filter(x => !(x.owner_id === data.saved.owner_id &&
+        x.supervisor_id === data.saved.supervisor_id && x.workspace === data.saved.workspace))]);
+      setSuccess('Supervisor route saved. Notifications still require both team members to opt in.');
+      setRoute(v => ({ ...v, owner_id: '', supervisor_id: '', enabled: false }));
+    } catch (e) { setError(e.message); }
+    finally { setBusy(false); }
+  }
+  const name = id => users.find(u => u.id === id)?.name || id;
+  return <>
+    <div className="sla-editor-section-head"><div><span>03 / OPTIONAL ESCALATIONS</span><h2>Supervisor routes</h2>
+      <p>Only after 24 measured hours past the SLA. The order owner must allow sharing, and the supervisor must enable receiving and at least one SLA channel in Notification preferences.</p></div></div>
+    <section className="sla-editor-card sla-editor-card--wide sla-routes">
+      {error ? <p role="alert" className="sla-editor-message is-error">{error} <button type="button" onClick={refresh}>Retry</button></p> : null}
+      {success ? <p role="status" className="sla-editor-message">{success}</p> : null}
+      {loading ? <p>Loading supervisor routes…</p> : <>
+        <div className="sla-editor-fields sla-routes__form">
+          <label>Workflow<select value={route.workspace} onChange={e => setRoute({ owner_id: '', supervisor_id: '', workspace: e.target.value, enabled: false })}>
+            {ROUTE_WORKSPACES.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+          </select></label>
+          <label>Order owner<select value={route.owner_id} onChange={e => setRoute(v => ({ ...v, owner_id: e.target.value, supervisor_id: '' }))}>
+            <option value="">Select team member</option>{ownable.map(u => <option value={u.id} key={u.id}>{u.name || u.id}</option>)}
+          </select></label>
+          <label>Supervisor (Admin access)<select value={route.supervisor_id} onChange={e => setRoute(v => ({ ...v, supervisor_id: e.target.value }))}>
+            <option value="">Select supervisor</option>{eligible.map(u => <option value={u.id} key={u.id}>{u.name || u.id}</option>)}
+          </select></label>
+        </div>
+        <div className="sla-routes__actions"><label className="sla-editor-switch"><input type="checkbox" checked={route.enabled}
+          onChange={e => setRoute(v => ({ ...v, enabled: e.target.checked }))}/><span>Enable this route (optional)</span></label>
+          <button type="button" disabled={busy || !route.owner_id || !route.supervisor_id} onClick={() => save(route)}>
+            {busy ? 'Saving…' : 'Save route'}</button></div>
+        {health ? <div className="sla-routes__health" aria-label="Recent SLA delivery health">
+          <strong>Delivery health · latest {health.sampled} SLA queue entries</strong>
+          <div>{[['Delivered', health.delivered], ['Pending', health.pending], ['Processing', health.processing],
+            ['Failed', health.failed], ['Supervisor notices', health.supervisor]].map(([label, value]) =>
+            <span key={label}><b>{value}</b><small>{label}</small></span>)}</div>
+          <small>Sample only, not lifetime totals. A queued notification can be skipped if consent, workflow status, or access changes.</small>
+        </div> : null}
+        <div className="sla-routes__list" aria-label="Existing supervisor routes">
+          {routes.length ? routes.map(x => <div className="sla-routes__item" key={`${x.workspace}:${x.owner_id}:${x.supervisor_id}`}>
+            <div><strong>{name(x.owner_id)} → {name(x.supervisor_id)}</strong>
+              <small>{ROUTE_WORKSPACES.find(([key]) => key === x.workspace)?.[1]} · {x.enabled ? 'Route enabled' : 'Route disabled'}</small></div>
+            <button type="button" disabled={busy} onClick={() => save({ owner_id: x.owner_id, supervisor_id: x.supervisor_id,
+              workspace: x.workspace, enabled: !x.enabled })}>{x.enabled ? 'Disable' : 'Enable'}</button>
+          </div>) : <p className="sla-routes__empty">No supervisor routes configured. No escalation will be sent.</p>}
+        </div>
+      </>}
+    </section>
+  </>;
+}
+
 export default function SlaSettingsClient() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState('');
@@ -70,7 +150,7 @@ export default function SlaSettingsClient() {
   const updatePolicy = (key, next) => setPolicies(previous => ({ ...previous, [key]: next }));
 
   return <main className="sla-editor">
-    <header className="sla-editor-hero"><Link href="/home" className="sla-editor-back">← Home</Link><span>OPERATIONS ANALYTICS</span><h1>SLA management</h1><p>Set optional time targets and the approved company working calendar. These settings affect dashboard reporting only; no notifications, forced channels, or escalations are created.</p></header>
+    <header className="sla-editor-hero"><Link href="/home" className="sla-editor-back">← Home</Link><span>OPERATIONS ANALYTICS</span><h1>SLA management</h1><p>Set optional time targets and the approved company working calendar. SLA policies affect reporting and optional alerts. Supervisor routes are never created or enabled automatically; every notification channel remains under individual control.</p></header>
     {message ? <div role="status" className={`sla-editor-message ${message.error ? 'is-error' : 'is-success'}`}>{message.text}</div> : null}
     {loading ? <div className="sla-editor-loading">Loading saved settings…</div> : <>
       <div className="sla-editor-section-head"><div><span>01 / COMPANY CALENDAR</span><h2>Working days & holidays</h2><p>The calendar starts disabled. The displayed schedule is only a starting example; verify it before enabling.</p></div></div>
@@ -83,6 +163,7 @@ export default function SlaSettingsClient() {
       </section>
       <div className="sla-editor-section-head"><div><span>02 / WORKFLOW TARGETS</span><h2>Policies by workspace</h2><p>Each workflow can have its own approved target, warning threshold and time basis.</p></div></div>
       <div className="sla-editor-policy-grid">{WORKSPACES.map(([key]) => <PolicyCard key={key} value={policies[key] || DEFAULT_POLICY(key)} onChange={updatePolicy} busy={!!busy} calendarEnabled={Boolean(calendar.enabled)} onSave={workspace => save('policy', policies[workspace], workspace)} />)}</div>
+      <EscalationRoutes />
       <p className="sla-editor-note">Only orders with a complete verified lifecycle history are evaluated. A disabled policy never labels orders as overdue. Processing Time metrics elsewhere on Home still use continuous calendar hours.</p>
     </>}
   </main>;

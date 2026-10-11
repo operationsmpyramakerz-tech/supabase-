@@ -314,6 +314,7 @@ export async function notificationUsers() {
   }
 
   const accessByMember = new Map();
+  const adminAccessByMember = new Map();
   for (const access of accessRows || []) {
     if (!bool(valueFor(access, ["is_enabled", "enabled"]), false)) continue;
     const memberId = text(valueFor(access, ["team_member_id", "member_id", "user_id"]));
@@ -323,6 +324,11 @@ export async function notificationUsers() {
     if (!pageName) continue;
     if (!accessByMember.has(memberId)) accessByMember.set(memberId, []);
     accessByMember.get(memberId).push(pageName);
+    // Explicit admin access is required for cross-user supervisor escalation.
+    if (text(valueFor(access, ["access_level", "accessLevel"])).toLowerCase() === "admin") {
+      if (!adminAccessByMember.has(memberId)) adminAccessByMember.set(memberId, []);
+      adminAccessByMember.get(memberId).push(pageName);
+    }
   }
 
   return (members || []).map((row) => {
@@ -331,7 +337,8 @@ export async function notificationUsers() {
     const department = text(valueFor(row, ["department", "Department"]));
     const directAllowed = uniqueStrings(valueFor(row, ["allowed_pages", "Allowed Pages", "allowedPages"]));
     const allowedPages = uniqueStrings([...directAllowed, ...(accessByMember.get(id) || [])]);
-    return { id, name, department, allowedPages };
+    return { id, name, department, allowedPages,
+      adminPages: uniqueStrings(adminAccessByMember.get(id) || []) };
   }).filter((user) => user.id);
 }
 
