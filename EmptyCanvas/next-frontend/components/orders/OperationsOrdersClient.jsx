@@ -1051,6 +1051,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
           statusOptions: Array.isArray(data?.statusOptions) ? data.statusOptions : ["In Progress", "Shipped", "Arrived"],
           changes: {},
           additions: [],
+          deletions: {},
         });
         setActionState(null);
         setActionError("");
@@ -1210,6 +1211,31 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
     });
   }
 
+  function deleteOperationsEditItem(deletion) {
+    const id = text(deletion?.id);
+    if (!id) return;
+    const editKey = text(deletion?.editKey) || id;
+    setEditMode((current) => {
+      if (!current) return current;
+      const sourceSpecific = deletion?.sourceSpecific === true;
+      const changes = { ...(current.changes || {}) };
+
+      Object.keys(changes).forEach((key) => {
+        const entry = changes[key];
+        if (sourceSpecific ? key === editKey : text(entry?.id) === id) delete changes[key];
+      });
+
+      return {
+        ...current,
+        changes,
+        deletions: {
+          ...(current.deletions || {}),
+          [editKey]: { ...deletion, id, editKey, sourceSpecific },
+        },
+      };
+    });
+  }
+
   async function saveOperationsEdit(changes) {
     if (!editMode || !selected) return;
     const itemUpdates = Object.values(changes || {}).filter((entry) => entry && text(entry?.id));
@@ -1224,7 +1250,8 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
         return clean;
       })
       .filter(Boolean);
-    if (!itemUpdates.length && !itemAdds.length) return;
+    const itemDeletes = Object.values(editMode?.deletions || {}).filter((entry) => entry && text(entry?.id));
+    if (!itemUpdates.length && !itemAdds.length && !itemDeletes.length) return;
     setBusy(true);
     setActionError("");
     startActionLoading({ title: "Saving order changes", message: "Updating the selected Operations Orders components…" });
@@ -1235,6 +1262,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
         adminPassword: editMode.password,
         itemUpdates,
         itemAdds,
+        itemDeletes,
       });
       await finishActionLoading("done", "Operations order changes were saved.");
       await refreshOrders();
@@ -1355,6 +1383,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
           editMode={editMode}
           onPatchEditItem={patchOperationsEditItem}
           onUpsertEditAddition={upsertOperationsEditAddition}
+          onDeleteEditItem={deleteOperationsEditItem}
           onSaveEdit={saveOperationsEdit}
           onCancelEdit={cancelOperationsEdit}
           actionState={actionState}

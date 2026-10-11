@@ -9825,3 +9825,51 @@ html[data-theme="dark"] body.next-classic-shell-active.current-orders-page .clas
   background: transparent !important;
   background-color: transparent !important;
 }
+
+
+/* ========================================================================
+   Operations edit component delete button
+   ======================================================================== */
+body.operations-orders-page .next-operations-component-edit-actions{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:10px;
+}
+body.operations-orders-page .next-operations-component-edit-actions .next-operations-component-delete-btn{
+  margin-right:auto;
+  border:1px solid #fecaca;
+  background:#fff1f2;
+  color:#dc2626;
+  box-shadow:none;
+}
+body.operations-orders-page .next-operations-component-edit-actions .next-operations-component-delete-btn:hover{
+  border-color:#fca5a5;
+  background:#fee2e2;
+  color:#b91c1c;
+}
+body.operations-orders-page .next-operations-component-edit-actions .next-operations-component-delete-btn svg{
+  width:17px;
+  height:17px;
+  flex:0 0 17px;
+}
+@media (max-width:720px){
+  body.operations-orders-page .next-operations-component-edit-actions{
+    display:grid;
+    grid-template-columns:1fr 1fr 1.2fr;
+    gap:8px;
+  }
+  body.operations-orders-page .next-operations-component-edit-actions .next-operations-component-delete-btn{
+    margin-right:0;
+  }
+  body.operations-orders-page .next-operations-component-edit-actions .ro-action-btn{
+    width:100%;
+    min-width:0;
+    padding-inline:10px;
+  }
+}
+html[data-theme="dark"] body.operations-orders-page .next-operations-component-edit-actions .next-operations-component-delete-btn{
+  border-color:rgba(248,113,113,.38);
+  background:rgba(127,29,29,.24);
+  color:#fca5a5;
+}

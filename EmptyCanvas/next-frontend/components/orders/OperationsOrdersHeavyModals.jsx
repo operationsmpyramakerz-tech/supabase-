@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import ClassicOrderIcon from "./ClassicOrderIcon";
+import { confirmDelete as confirmDeleteAction } from "../../lib/client-confirm";
 import { groupOrderItems, OrderGroupHeader, OrderSortButton } from "./OrderGrouping";
 import OrderComponentSearch, { matchesOrderComponentSearch } from "./OrderComponentSearch";
 
@@ -511,7 +512,7 @@ function Progress({ stage }) {
   );
 }
 
-function OrderModal({ group, tab, busy, onClose, onAction, onExport, editMode, onPatchEditItem, onUpsertEditAddition, onSaveEdit, onCancelEdit }) {
+function OrderModal({ group, tab, busy, onClose, onAction, onExport, editMode, onPatchEditItem, onUpsertEditAddition, onDeleteEditItem, onSaveEdit, onCancelEdit }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const [downloadOpen, setDownloadOpen] = useState(false);
   const [sortMode, setSortMode] = useState("product-tag");
@@ -579,6 +580,15 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, editMode, o
   const isEditing = Boolean(editMode && editMode.groupKey === group.key);
   const editItemsById = editMode?.itemsById || {};
   const editChanges = editMode?.changes || {};
+  const editDeletions = editMode?.deletions || {};
+  const isEditItemDeleted = (item) => {
+    const id = text(item?.id);
+    const displayKey = text(item?._displayKey) || id;
+    return Boolean(
+      (displayKey && editDeletions[displayKey])
+      || (id && editDeletions[id] && editDeletions[id]?.sourceSpecific !== true)
+    );
+  };
   const applyEditDraft = (item) => {
     const id = text(item?.id);
     const displayKey = text(item?._displayKey) || id;
@@ -671,7 +681,7 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, editMode, o
       })
     : [];
   const tabItems = isEditing ? [...baseTabItems, ...editAdditions] : baseTabItems;
-  const displayTabItems = expandOrderItemsForDisplay(tabItems).map(applyEditDraft);
+  const displayTabItems = expandOrderItemsForDisplay(tabItems).map(applyEditDraft).filter((item) => !isEditItemDeleted(item));
   const searchedDisplayItems = componentSearch.trim()
     ? displayTabItems.filter((item) => matchesOrderComponentSearch(item, componentSearch))
     : displayTabItems;
@@ -846,7 +856,7 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, editMode, o
             <div className="co-modal-actions ro-actions ro-actions--right order-modal-search-actions next-operations-edit-actions">
               <OrderComponentSearch key={`${group.key}:${tab}:edit`} value={componentSearch} onChange={setComponentSearch} disabled={busy} collapseOnToggle />
               <button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancelEdit} disabled={busy}>Cancel</button>
-              <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onSaveEdit(editChanges)} disabled={busy || (!Object.keys(editChanges).length && !(Array.isArray(editMode?.additions) && editMode.additions.length))}>{busy ? "Saving…" : "Save changes"}</button>
+              <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onSaveEdit(editChanges)} disabled={busy || (!Object.keys(editChanges).length && !(Array.isArray(editMode?.additions) && editMode.additions.length) && !Object.keys(editDeletions).length)}>{busy ? "Saving…" : "Save changes"}</button>
             </div>
             <div className="next-operations-edit-mode-note"><ClassicOrderIcon name="info" /><span>Tap any component to edit its product, status and quantities.</span></div>
           </>}
@@ -914,6 +924,10 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, editMode, o
           onApply={(patch) => {
             if (patch?.isNew) onUpsertEditAddition(patch);
             else onPatchEditItem(patch);
+            setEditItemState(null);
+          }}
+          onDelete={(deletion) => {
+            onDeleteEditItem?.(deletion);
             setEditItemState(null);
           }}
         />
@@ -1298,7 +1312,7 @@ function OperationsModernDropdown({
   );
 }
 
-function OperationsComponentEditModal({ state, products = [], statusOptions = [], busy, onCancel, onApply }) {
+function OperationsComponentEditModal({ state, products = [], statusOptions = [], busy, onCancel, onApply, onDelete }) {
   const isAddMode = state?.mode === "add";
   const item = state?.item || null;
   const [form, setForm] = useState(null);
@@ -1488,6 +1502,32 @@ function OperationsComponentEditModal({ state, products = [], statusOptions = []
     });
   }
 
+  async function deleteComponent() {
+    if (isAddMode || !item || busy) return;
+    const confirmed = await confirmDeleteAction({
+      title: "Delete component?",
+      itemType: "component",
+      itemName: text(form?.productName) || "this component",
+      message: `“${text(form?.productName) || "This component"}” will be removed from this order when you save the order changes.`,
+      cancelLabel: "No, keep it.",
+      confirmLabel: "Yes, Delete!",
+    });
+    if (!confirmed) return;
+
+    const source = Array.isArray(item?.sourceBreakdown) ? item.sourceBreakdown[0] : null;
+    const sourceSpecific = Number(item?._displaySourceCount || 0) > 1;
+    onDelete?.({
+      id: text(item?.id),
+      editKey: text(item?._displayKey) || text(item?.id),
+      sourceSpecific,
+      sourceIndex: Number.isInteger(item?._displaySourceIndex) ? item._displaySourceIndex : null,
+      sourceCount: Number.isInteger(item?._displaySourceCount) ? item._displaySourceCount : null,
+      sourceKitId: text(source?.kitId),
+      sourceKitName: text(source?.kitTag || source?.kitName || item?.kitTag),
+      productName: text(form?.productName || item?.productName),
+    });
+  }
+
   const statuses = Array.from(new Set([...(statusOptions || []), form.status].map(text).filter(Boolean)));
   const productOptions = (Array.isArray(products) ? products : []).map((product) => ({
     value: String(product?.id || ""),
@@ -1589,6 +1629,7 @@ function OperationsComponentEditModal({ state, products = [], statusOptions = []
           {validationError ? <div className="co-submodal-error next-operations-component-edit-error" role="alert">{validationError}</div> : null}
         </div>
         <div className="co-submodal-actions next-operations-component-edit-actions">
+          {!isAddMode ? <button type="button" className="ro-action-btn next-operations-component-delete-btn" onClick={deleteComponent} disabled={busy}><ClassicOrderIcon name="trash-2" /><span>Delete</span></button> : null}
           <button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancel} disabled={busy}>Cancel</button>
           <button type="submit" className="ro-action-btn ro-action-btn--dark" disabled={busy || !form.productId || !form.status}>{busy ? "Saving…" : isAddMode ? "Add component" : "Save component"}</button>
         </div>
@@ -1750,6 +1791,7 @@ export default function OperationsOrdersHeavyModals({
   editMode,
   onPatchEditItem,
   onUpsertEditAddition,
+  onDeleteEditItem,
   onSaveEdit,
   onCancelEdit,
   actionState,
@@ -1771,6 +1813,7 @@ export default function OperationsOrdersHeavyModals({
         editMode={editMode}
         onPatchEditItem={onPatchEditItem}
         onUpsertEditAddition={onUpsertEditAddition}
+        onDeleteEditItem={onDeleteEditItem}
         onSaveEdit={onSaveEdit}
         onCancelEdit={onCancelEdit}
       />

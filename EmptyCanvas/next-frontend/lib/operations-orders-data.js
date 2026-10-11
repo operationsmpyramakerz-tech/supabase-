@@ -2254,6 +2254,7 @@ export async function saveOperationsEditDetails({
   adminPassword = "",
   itemUpdates = [],
   itemAdds = [],
+  itemDeletes = [],
   quantities = null,
   unsupportedReceiptEdit = false,
 } = {}) {
@@ -2270,6 +2271,7 @@ export async function saveOperationsEditDetails({
 
   const updates = (Array.isArray(itemUpdates) ? itemUpdates : []).filter((entry) => entry && typeof entry === "object");
   const additions = (Array.isArray(itemAdds) ? itemAdds : []).filter((entry) => entry && typeof entry === "object");
+  const deletions = (Array.isArray(itemDeletes) ? itemDeletes : []).filter((entry) => entry && typeof entry === "object");
   const updatesById = new Map();
   for (const entry of updates) {
     const id = text(entry?.id || entry?.orderId || entry?.order_id);
@@ -2277,7 +2279,14 @@ export async function saveOperationsEditDetails({
     if (!updatesById.has(id)) updatesById.set(id, []);
     updatesById.get(id).push(entry);
   }
-  if (!updatesById.size && !additions.length && !(quantities && typeof quantities === "object")) {
+  const deletionsById = new Map();
+  for (const entry of deletions) {
+    const id = text(entry?.id || entry?.orderId || entry?.order_id);
+    if (!id) continue;
+    if (!deletionsById.has(id)) deletionsById.set(id, []);
+    deletionsById.get(id).push(entry);
+  }
+  if (!updatesById.size && !deletionsById.size && !additions.length && !(quantities && typeof quantities === "object")) {
     throw directOperationsMutationError("No Operations order changes were provided.", 400);
   }
 
@@ -2290,14 +2299,52 @@ export async function saveOperationsEditDetails({
   for (const id of loaded.clean) {
     const beforeRow = loaded.byId.get(id) || null;
     if (!beforeRow) continue;
+
     const updatesForId = updatesById.get(id) || [];
-    const sourceSpecific = updatesForId.filter((entry) => entry?.sourceSpecific === true || Number(entry?.sourceCount || 0) > 1);
-    const splitRows = sourceSpecific.length ? opsEditSplitOrderRow(beforeRow) : null;
+    const deletesForId = deletionsById.get(id) || [];
+    const fullDelete = deletesForId.some((entry) => entry?.sourceSpecific !== true && !(Number(entry?.sourceCount || 0) > 1));
+    if (fullDelete) {
+      plans.push({ id, beforeRow, delete: true });
+      continue;
+    }
+
+    const sourceSpecificUpdates = updatesForId.filter((entry) => entry?.sourceSpecific === true || Number(entry?.sourceCount || 0) > 1);
+    const sourceSpecificDeletes = deletesForId.filter((entry) => entry?.sourceSpecific === true || Number(entry?.sourceCount || 0) > 1);
+    const needsSplit = sourceSpecificUpdates.length || sourceSpecificDeletes.length;
+    const splitRows = needsSplit ? opsEditSplitOrderRow(beforeRow) : null;
+
     if (splitRows && splitRows.length > 1) {
+      const deletedIndexes = new Set();
+      const deletedSourceIds = new Set();
+      const deletedSourceNames = new Set();
+
+      sourceSpecificDeletes.forEach((entry) => {
+        const index = Number(entry?.sourceIndex);
+        if (Number.isInteger(index) && index >= 0) deletedIndexes.add(index);
+        const sourceId = text(entry?.sourceKitId);
+        if (sourceId) deletedSourceIds.add(sourceId);
+        const sourceName = operationsAccessToken(entry?.sourceKitName);
+        if (sourceName) deletedSourceNames.add(sourceName);
+      });
+
+      const activeSplitRows = splitRows.filter((entry, sourceIndex) => {
+        const source = entry?.source || {};
+        const sourceId = text(source?.kitId);
+        const sourceName = operationsAccessToken(source?.kitName);
+        return !deletedIndexes.has(sourceIndex)
+          && !(sourceId && deletedSourceIds.has(sourceId))
+          && !(sourceName && deletedSourceNames.has(sourceName));
+      });
+
+      if (!activeSplitRows.length) {
+        plans.push({ id, beforeRow, delete: true });
+        continue;
+      }
+
       const byIndex = new Map();
       const bySourceId = new Map();
       const bySourceName = new Map();
-      sourceSpecific.forEach((entry) => {
+      sourceSpecificUpdates.forEach((entry) => {
         const index = Number(entry?.sourceIndex);
         if (Number.isInteger(index) && index >= 0) byIndex.set(index, entry);
         const sourceId = text(entry?.sourceKitId);
@@ -2305,14 +2352,20 @@ export async function saveOperationsEditDetails({
         const sourceName = operationsAccessToken(entry?.sourceKitName);
         if (sourceName) bySourceName.set(sourceName, entry);
       });
+
       const quantityOverride = Object.prototype.hasOwnProperty.call(quantityMap, id) ? Number(quantityMap[id]) : null;
       if (quantityOverride !== null && !Number.isFinite(quantityOverride)) throw directOperationsMutationError("Quantity received must be a valid number.", 400);
-      const quantityParts = quantityOverride === null ? null : opsEditSplitQtyBySources(quantityOverride, splitRows.map((entry) => entry.source));
-      const materialized = splitRows.map((entry, sourceIndex) => {
+      const quantityParts = quantityOverride === null ? null : opsEditSplitQtyBySources(quantityOverride, activeSplitRows.map((entry) => entry.source));
+
+      const materialized = activeSplitRows.map((entry, activeIndex) => {
         const source = entry.source || {};
-        const update = bySourceId.get(text(source?.kitId)) || byIndex.get(sourceIndex) || bySourceName.get(operationsAccessToken(source?.kitName)) || null;
+        const originalIndex = splitRows.findIndex((candidate) => candidate === entry);
+        const update = bySourceId.get(text(source?.kitId))
+          || byIndex.get(originalIndex)
+          || bySourceName.get(operationsAccessToken(source?.kitName))
+          || null;
         const patch = opsEditBuildItemPatch(entry.row, update, productMap, source);
-        if (quantityParts) Object.assign(patch, opsEditApplyQuantityMapPatch(entry.row, quantityParts[sourceIndex] ?? 0));
+        if (quantityParts) Object.assign(patch, opsEditApplyQuantityMapPatch(entry.row, quantityParts[activeIndex] ?? 0));
         const finalRow = { ...entry.row, ...patch };
         return {
           finalRow,
@@ -2331,6 +2384,12 @@ export async function saveOperationsEditDetails({
       plans.push({ id, beforeRow, split: true, materialized });
       continue;
     }
+
+    if (sourceSpecificDeletes.length) {
+      plans.push({ id, beforeRow, delete: true });
+      continue;
+    }
+
     const update = updatesForId[updatesForId.length - 1] || null;
     const patch = opsEditBuildItemPatch(beforeRow, update, productMap);
     if (Object.prototype.hasOwnProperty.call(quantityMap, id)) Object.assign(patch, opsEditApplyQuantityMapPatch(beforeRow, quantityMap[id]));
@@ -2356,7 +2415,7 @@ export async function saveOperationsEditDetails({
   });
 
   const plannedFinalRows = [
-    ...plans.flatMap((plan) => plan.split ? plan.materialized.map((entry) => entry.finalRow) : [plan.finalRow]),
+    ...plans.flatMap((plan) => plan.delete ? [] : (plan.split ? plan.materialized.map((entry) => entry.finalRow) : [plan.finalRow])),
     ...additionPlans.map((plan) => plan.finalRow),
   ];
   const stockContext = await opsPrepareStockContext(plannedFinalRows, loaded.rows, products);
@@ -2366,6 +2425,11 @@ export async function saveOperationsEditDetails({
   const updatedRows = [];
   try {
     for (const plan of plans) {
+      if (plan.delete) {
+        mutationStarted = true;
+        await deleteById(tableName(), plan.id);
+        continue;
+      }
       if (plan.split) {
         const insertedRows = [];
         try {

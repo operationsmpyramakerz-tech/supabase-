@@ -110,6 +110,7 @@ export async function POST(request) {
         adminPassword: body?.adminPassword,
         itemUpdates: body?.itemUpdates,
         itemAdds: body?.itemAdds,
+        itemDeletes: body?.itemDeletes,
         quantities: body?.quantities,
         unsupportedReceiptEdit: false,
       });
