@@ -1308,43 +1308,240 @@ export async function markOperationsShipped({
   const incomingReceipt = mergeReceiptNumbers("", receiptNumber);
   const operationsByName = text(account?.username || account?.name);
 
-  const updatedRows = await mapWithConcurrency(loaded.clean, 16, async (id) => {
+  /*
+   * Receive Components used to send one Supabase PATCH per component, up to
+   * 16 requests at the same time. With large orders this could hit the shared
+   * 15s Supabase request budget. Some PATCHes had already committed when one
+   * request timed out, so the UI showed "fetch failed" / "Supabase request
+   * timed out..." even though the quantities were actually saved.
+   *
+   * The new path:
+   *  1) writes the fields shared by every row in ONE PATCH;
+   *  2) sends row-specific quantity/receipt/issue PATCHes only when a stored
+   *     value really needs to change;
+   *  3) uses return=minimal to avoid waiting for large response payloads;
+   *  4) treats PATCHes as idempotent absolute writes and verifies/retries only
+   *     ambiguous rows when Supabase/network returns a timeout/fetch error.
+   *
+   * This keeps the same final database values while dramatically reducing the
+   * number of Supabase requests for Receive Components.
+   */
+
+  const commonPatch = {
+    status: "Shipped",
+    person_received_by_operations: operationsByName || null,
+  };
+
+  const specificById = new Map();
+  const expectedById = new Map();
+
+  const valuesMatch = (actual, expected) => {
+    if (expected === null || typeof expected === "undefined") {
+      return actual === null || typeof actual === "undefined" || text(actual) === "";
+    }
+    if (typeof expected === "number") {
+      const actualNumber = Number(actual);
+      return Number.isFinite(actualNumber) && Math.abs(roundQty(actualNumber) - roundQty(expected)) <= 1e-9;
+    }
+    return text(actual) === text(expected);
+  };
+
+  for (const id of loaded.clean) {
     const row = loaded.byId.get(id) || {};
-    const patch = {
-      status: "Shipped",
-      person_received_by_operations: operationsByName || null,
-    };
-    const mergedReceipt = incomingReceipt ? mergeReceiptNumbers(row.receipt_number ?? row["Receipt Number"] ?? row["Store Receipt Number"], incomingReceipt) : "";
-    if (mergedReceipt) patch.receipt_number = mergedReceipt;
+    const patch = {};
+
+    const currentReceipt = text(row.receipt_number ?? row["Receipt Number"] ?? row["Store Receipt Number"]);
+    const mergedReceipt = incomingReceipt ? mergeReceiptNumbers(currentReceipt, incomingReceipt) : "";
+    if (mergedReceipt && mergedReceipt !== currentReceipt) {
+      patch.receipt_number = mergedReceipt;
+    }
 
     const rowIssue = issues.has(id) ? issues.get(id) : globalIssue;
-    if (rowIssue) patch.issue_description = rowIssue;
+    if (rowIssue && text(row.issue_description ?? row["Issue Description"]) !== rowIssue) {
+      patch.issue_description = rowIssue;
+    }
 
     const base = orderBaseQuantity(row);
     const hasExplicit = quantityMap && Object.prototype.hasOwnProperty.call(quantityMap, id);
     const explicit = hasExplicit ? Number(quantityMap[id]) : null;
+
     if (hasExplicit && Number.isFinite(explicit)) {
       const received = clampQuantityToBase(base, explicit);
-      patch.quantity_received_by_operations = received;
-      patch.quantity_remaining = roundQty(base - received);
+      const remaining = roundQty(base - received);
+      const currentReceivedRaw = rawReceivedQuantity(row);
+      const currentRemainingRaw = rawRemainingQuantity(row);
+
+      if (currentReceivedRaw === null || !valuesMatch(currentReceivedRaw, received)) {
+        patch.quantity_received_by_operations = received;
+      }
+      if (currentRemainingRaw === null || !valuesMatch(currentRemainingRaw, remaining)) {
+        patch.quantity_remaining = remaining;
+      }
     } else {
+      // Preserve the existing mark-shipped behavior for actions that do not
+      // provide an explicit quantity map (for example the technical-visit flow).
       const currentReceived = effectiveReceivedForMutation(row);
       const currentRemaining = rawRemainingQuantity(row);
       const hasMeaningfulReceived = currentReceived !== null && Math.abs(Number(currentReceived) || 0) > 1e-9;
+
       if (!hasMeaningfulReceived) {
-        patch.quantity_received_by_operations = roundQty(base);
-        patch.quantity_remaining = 0;
+        if (rawReceivedQuantity(row) === null || !valuesMatch(rawReceivedQuantity(row), roundQty(base))) {
+          patch.quantity_received_by_operations = roundQty(base);
+        }
+        if (currentRemaining === null || !valuesMatch(currentRemaining, 0)) {
+          patch.quantity_remaining = 0;
+        }
       } else if (currentRemaining === null || Math.abs(Number(currentRemaining) || 0) > 1e-9) {
-        patch.quantity_received_by_operations = roundQty(Number(currentReceived) || 0);
-        patch.quantity_remaining = roundQty(base - (Number(currentReceived) || 0));
+        const received = roundQty(Number(currentReceived) || 0);
+        const remaining = roundQty(base - received);
+        if (rawReceivedQuantity(row) === null || !valuesMatch(rawReceivedQuantity(row), received)) {
+          patch.quantity_received_by_operations = received;
+        }
+        if (currentRemaining === null || !valuesMatch(currentRemaining, remaining)) {
+          patch.quantity_remaining = remaining;
+        }
       }
     }
-    return await updateById(tableName(), id, patch);
+
+    if (Object.keys(patch).length) specificById.set(id, patch);
+    expectedById.set(id, { ...commonPatch, ...patch });
+  }
+
+  const inFilter = (ids = []) =>
+    ids.map((id) => (/^-?\d+(?:\.\d+)?$/.test(String(id)) ? String(id) : `"${String(id).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`)).join(",");
+
+  const patchMany = async (ids, patch, profileName, timeoutMs = 25_000) => {
+    if (!ids?.length || !patch || !Object.keys(patch).length) return;
+    await supabaseRequest(
+      `/${encodeURIComponent(tableName())}?id=in.(${encodeURIComponent(inFilter(ids))})`,
+      {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: patch,
+        timeoutMs,
+        profileName,
+      },
+    );
+  };
+
+  const patchOne = async (id, patch, profileName, timeoutMs = 25_000) => {
+    if (!patch || !Object.keys(patch).length) return;
+    await supabaseRequest(
+      `/${encodeURIComponent(tableName())}?id=eq.${encodeURIComponent(String(id))}`,
+      {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: patch,
+        timeoutMs,
+        profileName,
+      },
+    );
+  };
+
+  const rowMatchesPatch = (row, patch) => {
+    if (!row) return false;
+    return Object.entries(patch || {}).every(([key, expected]) => valuesMatch(row?.[key], expected));
+  };
+
+  const verifyExpectedRows = async () => {
+    const verified = await loadOperationRowsByIds(loaded.clean);
+    if (!verified) return { verified: null, mismatched: loaded.clean.slice() };
+    const mismatched = loaded.clean.filter((id) => !rowMatchesPatch(verified.byId.get(id), expectedById.get(id)));
+    return { verified, mismatched };
+  };
+
+  let firstWriteError = null;
+
+  // One shared PATCH replaces N duplicated status/person PATCHes.
+  try {
+    await patchMany(
+      loaded.clean,
+      commonPatch,
+      "orders.operations.mark-shipped.common",
+      25_000,
+    );
+  } catch (error) {
+    firstWriteError = error;
+  }
+
+  // Only rows whose quantity / receipt / issue actually changed need another
+  // PATCH. Keep concurrency moderate to avoid connection spikes.
+  const specificEntries = Array.from(specificById.entries());
+  const specificResults = await mapWithConcurrency(specificEntries, 6, async ([id, patch]) => {
+    try {
+      await patchOne(id, patch, "orders.operations.mark-shipped.row", 25_000);
+      return { id, ok: true };
+    } catch (error) {
+      if (!firstWriteError) firstWriteError = error;
+      return { id, ok: false, error };
+    }
   });
 
+  const hadSpecificFailure = specificResults.some((entry) => entry?.ok === false);
+
+  // PATCH is an absolute/idempotent write. If the network boundary times out
+  // after Supabase committed it, verify the stored values before reporting an
+  // error. Retry only rows that are actually missing the intended values.
+  if (firstWriteError || hadSpecificFailure) {
+    await new Promise((resolve) => setTimeout(resolve, 180));
+
+    let verification = null;
+    try {
+      verification = await verifyExpectedRows();
+    } catch {
+      verification = { verified: null, mismatched: loaded.clean.slice() };
+    }
+
+    if (verification.mismatched.length) {
+      const retryResults = await mapWithConcurrency(verification.mismatched, 4, async (id) => {
+        try {
+          await patchOne(
+            id,
+            expectedById.get(id),
+            "orders.operations.mark-shipped.retry",
+            15_000,
+          );
+          return { id, ok: true };
+        } catch (error) {
+          return { id, ok: false, error };
+        }
+      });
+
+      if (retryResults.some((entry) => entry?.ok === false)) {
+        try {
+          verification = await verifyExpectedRows();
+        } catch {
+          verification = { verified: null, mismatched: verification.mismatched };
+        }
+      } else {
+        try {
+          verification = await verifyExpectedRows();
+        } catch {
+          // The retry itself succeeded. A verification read failure should not
+          // turn a confirmed PATCH response into a false "fetch failed".
+          verification = { verified: null, mismatched: [] };
+        }
+      }
+    }
+
+    if (verification.mismatched.length) {
+      const source = firstWriteError || specificResults.find((entry) => entry?.error)?.error;
+      throw directOperationsMutationError(
+        source?.message || "Could not confirm the received quantities. Please try again.",
+        Number(source?.status) || 503,
+      );
+    }
+  }
+
   await invalidateLegacyOperationsCaches(account).catch(() => {});
-  const returnedReceipt = updatedRows
-    .map((row) => text(row?.receipt_number ?? row?.["Receipt Number"] ?? row?.["Store Receipt Number"]))
+
+  const returnedReceipt = loaded.clean
+    .map((id) => {
+      const specific = specificById.get(id) || {};
+      if (specific.receipt_number) return text(specific.receipt_number);
+      const row = loaded.byId.get(id) || {};
+      return text(row?.receipt_number ?? row?.["Receipt Number"] ?? row?.["Store Receipt Number"]);
+    })
     .find(Boolean) || incomingReceipt || null;
 
   return {
