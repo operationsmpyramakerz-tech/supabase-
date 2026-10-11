@@ -235,8 +235,9 @@ async function deliver(item) {
       !alertEnabled || !(await stillEligible(item, settings))) {
     // Stale, completed, unapproved or disabled notifications are discarded.
     await patch(item, { in_app_done: true, push_done: true, email_done: true,
-      status: 'delivered', lease_token: null, lease_until: null, delivered_at: new Date().toISOString() });
-    return;
+      status: 'skipped', lease_token: null, lease_until: null,
+      last_error: 'No longer eligible for SLA delivery', delivered_at: null });
+    return 'skipped';
   }
   // Re-check every channel immediately before delivery: user changes apply even
   // to already queued alerts. Late cron runs cannot override a user's decision.
@@ -270,13 +271,14 @@ async function deliver(item) {
   }
   if (pushError) throw pushError;
   await patch(item, { status: 'delivered', lease_token: null, lease_until: null, delivered_at: new Date().toISOString() });
+  return 'delivered';
 }
 
 async function dispatch() {
   const rows = await supabaseRequest('/rpc/claim_erp_sla_alerts', { method: 'POST', body: { p_limit: 6 }, profileName: 'sla.alert.claim' });
   let delivered = 0;
   for (const item of Array.isArray(rows) ? rows : []) {
-    try { await deliver(item); delivered++; }
+    try { if (await deliver(item) === 'delivered') delivered++; }
     catch (error) {
       const attempts = Number(item.attempts || 1);
       await patch(item, { status: attempts >= 5 ? 'failed' : 'pending', lease_token: null, lease_until: null,
@@ -302,6 +304,26 @@ export async function runSlaNotificationCycle() {
     console.warn('[SLA] Candidate scan deferred', error?.message);
     scan = { deferred: 'scan failed' };
   }
-  const deliveries = await dispatch();
-  return { installed: true, ...scan, ...deliveries };
+  let deliveries = { processed: 0, delivered: 0 };
+  let deliveryError = false;
+  try { deliveries = await dispatch(); }
+  catch (error) {
+    deliveryError = true;
+    console.warn('[SLA] Dispatch deferred:', error?.message);
+  }
+  // Best-effort, privacy-safe daily scan marker for an admin-only readiness UI.
+  // Never block personal notifications if Phase 9 SQL is not yet installed.
+  try {
+    await supabaseRequest('/erp_sla_cycle_runs', {
+      method: 'POST', body: {
+        status: deliveryError ? 'failed' : scan.deferred ? 'deferred' : 'ok',
+        inspected: Math.max(0, Number(scan.inspected) || 0),
+        candidates: Math.max(0, Number(scan.candidates) || 0),
+        processed: Math.max(0, Number(deliveries.processed) || 0),
+        delivered: Math.max(0, Number(deliveries.delivered) || 0),
+      }, headers: { Prefer: 'return=minimal' }, profileName: 'sla.cycle.audit',
+    });
+  } catch { /* Optional migration; the worker must keep delivering. */ }
+  return { installed: true, ...scan, ...deliveries,
+    ...(deliveryError ? { error: 'SLA delivery worker temporarily unavailable' } : {}) };
 }

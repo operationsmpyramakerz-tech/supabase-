@@ -89,9 +89,9 @@ function EscalationRoutes() {
         {health ? <div className="sla-routes__health" aria-label="Recent SLA delivery health">
           <strong>Delivery health · latest {health.sampled} SLA queue entries</strong>
           <div>{[['Delivered', health.delivered], ['Pending', health.pending], ['Processing', health.processing],
-            ['Failed', health.failed], ['Supervisor notices', health.supervisor]].map(([label, value]) =>
+            ['Failed', health.failed], ['Skipped', health.skipped || 0], ['Supervisor notices', health.supervisor]].map(([label, value]) =>
             <span key={label}><b>{value}</b><small>{label}</small></span>)}</div>
-          <small>Sample only, not lifetime totals. A queued notification can be skipped if consent, workflow status, or access changes.</small>
+          <small>Sample only, not lifetime totals. Skipped alerts were withdrawn before delivery because status, consent, policy, or access changed.</small>
         </div> : null}
         <div className="sla-routes__list" aria-label="Existing supervisor routes">
           {routes.length ? routes.map(x => <div className="sla-routes__item" key={`${x.workspace}:${x.owner_id}:${x.supervisor_id}`}>
@@ -102,6 +102,44 @@ function EscalationRoutes() {
           </div>) : <p className="sla-routes__empty">No supervisor routes configured. No escalation will be sent.</p>}
         </div>
       </>}
+    </section>
+  </>;
+}
+
+
+/** Read-only diagnostics. Never sends alerts, changes preferences, or runs the cron. */
+function SlaDiagnostics() {
+  const [checking, setChecking] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState('');
+  const check = async () => {
+    setChecking(true); setError('');
+    try {
+      const res = await fetch('/next/api/home/sla-health', { cache: 'no-store' });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Diagnostic check unavailable.');
+      setResult(data);
+    } catch (e) { setError(e.message || 'Could not verify setup.'); }
+    finally { setChecking(false); }
+  };
+  return <>
+    <div className="sla-editor-section-head"><div><span>04 / FINAL CHECK</span><h2>System diagnostics</h2>
+      <p>Check database migrations and Cron configuration without sending a notification or changing any settings.</p></div></div>
+    <section className="sla-editor-card sla-editor-card--wide sla-health-check">
+      <div className="sla-health-check__top"><div><h3>Read-only readiness check</h3>
+        <small>Checks the deployed environment. It does not confirm that scheduled deliveries are running successfully.</small></div>
+        <button type="button" disabled={checking} onClick={check}>{checking ? 'Checking…' : 'Run diagnostics'}</button></div>
+      {error ? <p role="alert" className="sla-editor-message is-error">{error}</p> : null}
+      {result ? <div role="status" aria-live="polite">
+        <p className="sla-health-check__summary">{result.ready ? 'Database prerequisites detected' : 'Action required: review unavailable prerequisites'}</p>
+        <div className="sla-health-check__items">
+          {result.checks.map(item => <div key={item.id} className="sla-health-check__item">
+            <span aria-hidden="true">{item.ok ? '✓' : '!'}</span>
+            <div><strong>{item.label}</strong><small>{item.detail}</small></div>
+          </div>)}
+        </div>
+        <small className="sla-health-check__disclaimer">A successful check cannot verify Vercel scheduled execution, real email/push delivery, RLS across accounts, or historical data completeness.</small>
+      </div> : null}
     </section>
   </>;
 }
@@ -164,6 +202,7 @@ export default function SlaSettingsClient() {
       <div className="sla-editor-section-head"><div><span>02 / WORKFLOW TARGETS</span><h2>Policies by workspace</h2><p>Each workflow can have its own approved target, warning threshold and time basis.</p></div></div>
       <div className="sla-editor-policy-grid">{WORKSPACES.map(([key]) => <PolicyCard key={key} value={policies[key] || DEFAULT_POLICY(key)} onChange={updatePolicy} busy={!!busy} calendarEnabled={Boolean(calendar.enabled)} onSave={workspace => save('policy', policies[workspace], workspace)} />)}</div>
       <EscalationRoutes />
+      <SlaDiagnostics />
       <p className="sla-editor-note">Only orders with a complete verified lifecycle history are evaluated. A disabled policy never labels orders as overdue. Processing Time metrics elsewhere on Home still use continuous calendar hours.</p>
     </>}
   </main>;

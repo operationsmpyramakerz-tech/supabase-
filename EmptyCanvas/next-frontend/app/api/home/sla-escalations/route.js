@@ -28,7 +28,7 @@ export async function GET() {
       select('erp_sla_alert_outbox', { select: 'status,owner_id,created_at', order: 'created_at.desc', limit: '100' }),
     ]);
     if (routes.length > 500 || users.length > 5000) return reply({ ok: false, error: 'Too many records to safely manage. Contact your administrator.' }, 503);
-    const health = { sampled: deliveries.length, pending: 0, processing: 0, delivered: 0, failed: 0, supervisor: 0 };
+    const health = { sampled: deliveries.length, pending: 0, processing: 0, delivered: 0, skipped: 0, failed: 0, supervisor: 0 };
     for (const row of deliveries) {
       if (Object.hasOwn(health, row.status)) health[row.status]++;
       if (row.owner_id) health.supervisor++;

@@ -611,3 +611,16 @@ body.page-home .erp-home-sla__settings{display:inline-flex;align-items:center;ju
 body.page-home .erp-home-sla__settings svg{width:15px;height:15px;flex-shrink:0}
 body.page-home .erp-home-sla__settings:focus-visible{outline:2px solid #ed6c18;outline-offset:3px}
 @media(max-width:730px){body.page-home .erp-home-sla__settings{width:100%}}
+
+/* Phase 9 — read-only system diagnostics */
+.sla-health-check__top{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
+.sla-health-check__top small,.sla-health-check__disclaimer{display:block;margin-top:6px;opacity:.74;line-height:1.5}
+.sla-health-check__top button{border:0;border-radius:12px;background:var(--sla-accent,#ef7e37);color:#111;padding:11px 17px;font:inherit;font-weight:700;cursor:pointer}
+.sla-health-check__top button:disabled{opacity:.5;cursor:wait}
+.sla-health-check__summary{font-weight:700;margin:18px 0 10px}
+.sla-health-check__items{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:9px}
+.sla-health-check__item{display:flex;align-items:center;gap:10px;border:1px solid rgba(140,140,140,.22);border-radius:13px;padding:12px}
+.sla-health-check__item>span{flex:none;display:grid;place-items:center;width:25px;height:25px;border-radius:50%;background:rgba(120,180,120,.16);font-weight:800}
+.sla-health-check__item:has(span:first-child) div{min-width:0}
+.sla-health-check__item strong,.sla-health-check__item small{display:block;line-height:1.35}
+.sla-health-check__item small{opacity:.65;margin-top:3px}
