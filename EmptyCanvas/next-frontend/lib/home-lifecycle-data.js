@@ -45,7 +45,7 @@ export async function loadHomeLifecycleAnalytics(scopes = {}) {
     }
     const policyResult = await policiesPromise;
     const sla = policyResult.state === 'ready'
-      ? buildSlaAnalytics(scopes, events, policyResult.policies)
+      ? buildSlaAnalytics(scopes, events, policyResult.policies, Date.now(), policyResult.calendar)
       : { state: policyResult.state, workspaces: {} };
     return { state: 'ready', workspaces: buildLifecycleAnalytics(scopes, events), sla }; 
   } catch (error) {

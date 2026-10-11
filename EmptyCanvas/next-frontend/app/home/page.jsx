@@ -6,6 +6,7 @@ import { fetchDirectPageBootstrap } from "../../lib/page-bootstrap-direct";
 import { getLegacyAccountGate } from "../../lib/products-auth";
 import { getDirectAccountGateFromSessionContext } from "../../lib/direct-session-account";
 import { loadHomeOverviewDirect } from "../../lib/home-overview-data";
+import { canManageSla } from "../../lib/home-sla-settings";
 
 export const dynamic = "force-dynamic";
 
@@ -128,7 +129,7 @@ export default async function HomePage({ searchParams }) {
       title="Home"
       activePath="/next/home"
       bodyClass="page-home"
-      pageStyles={["/next/css/home.css?v=home-hidden-scrollbar-v3", "/next/css/home-dashboard-v2.css?v=20261011-6-sla-monitor"]}
+      pageStyles={["/next/css/home.css?v=home-hidden-scrollbar-v3", "/next/css/home-dashboard-v2.css?v=20261011-7-sla-calendar"]}
     >
       <DashboardNotice omitted={bootstrapWarnings} />
 
@@ -153,6 +154,7 @@ export default async function HomePage({ searchParams }) {
         showMaintenance={overview.showMaintenance}
         showStock={overview.showStock}
         showExpenses={overview.showExpenses}
+        canManageSla={canManageSla(account)}
       />
 
       <section aria-label="Recent activity and shortcuts" className="home-grid erp-home-details">

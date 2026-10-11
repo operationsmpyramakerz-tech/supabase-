@@ -4,6 +4,7 @@
  * No side-effects, notifications, or historical inference.
  */
 import { auditedOrderTimeline } from './home-lifecycle-analytics.mjs';
+import { normalizeBusinessCalendar, businessHoursBetween } from './home-business-calendar.mjs';
 
 const HOUR_MS = 3_600_000;
 const STAGES = {
@@ -19,10 +20,12 @@ function policyFor(row) {
   const warningPercent = Number(row.warning_percent ?? row.warningPercent ?? 80);
   if (!Number.isFinite(targetHours) || targetHours <= 0 || targetHours > 8760 ||
       !Number.isFinite(warningPercent) || warningPercent < 50 || warningPercent >= 100) return null;
-  return { targetHours, warningPercent };
+  const timeBasis = (row.time_basis ?? row.timeBasis) === 'working' ? 'working' : 'elapsed';
+  return { targetHours, warningPercent, timeBasis };
 }
 
-export function buildSlaAnalytics(scopes = {}, events = [], policies = [], now = Date.now()) {
+export function buildSlaAnalytics(scopes = {}, events = [], policies = [], now = Date.now(), calendarRow = null) {
+  const calendar = normalizeBusinessCalendar(calendarRow);
   const currentTime = Number(now);
   const byOrder = new Map();
   for (const event of Array.isArray(events) ? events : []) {
@@ -35,14 +38,16 @@ export function buildSlaAnalytics(scopes = {}, events = [], policies = [], now =
   for (const [workspace, stage] of Object.entries(STAGES)) {
     const scope = Array.isArray(scopes[workspace]) ? scopes[workspace] : [];
     const policy = policyFor(policyMap.get(workspace));
+    const calendarMissing = Boolean(policy?.timeBasis === 'working' && !calendar);
     const metrics = {
-      ...stage, configured: !!policy, targetHours: policy?.targetHours ?? null,
-      warningPercent: policy?.warningPercent ?? null, eligible: scope.length, audited: 0,
+      ...stage, configured: !!policy && !calendarMissing, calendarMissing, targetHours: policy?.targetHours ?? null,
+      warningPercent: policy?.warningPercent ?? null, timeBasis: policy?.timeBasis ?? 'elapsed',
+      calendarReady: policy?.timeBasis !== 'working' || !!calendar, eligible: scope.length, audited: 0,
       awaitingStart: 0, activeOnTrack: 0, activeWarning: 0, activeOverdue: 0,
       completedOnTime: 0, completedLate: 0, topOverdue: [],
     };
     // Without a policy these values are not meaningful; do not call orders late.
-    if (!policy) { workspaces[workspace] = metrics; continue; }
+    if (!policy || (policy.timeBasis === 'working' && !calendar)) { workspaces[workspace] = metrics; continue; }
     for (const order of scope) {
       const key = String(order.orderNumber ?? '').trim();
       const expected = Number(order.expectedRows);
@@ -55,7 +60,10 @@ export function buildSlaAnalytics(scopes = {}, events = [], policies = [], now =
       if (!Number.isFinite(start) || start > currentTime) { metrics.awaitingStart++; continue; }
       // An inconsistent event sequence is unverified, never counted as compliant.
       if (end !== null && (!Number.isFinite(end) || end < start || end > currentTime)) continue;
-      const elapsedHours = ((end ?? currentTime) - start) / HOUR_MS;
+      const elapsedHours = policy.timeBasis === 'working'
+        ? businessHoursBetween(start, end ?? currentTime, calendar)
+        : ((end ?? currentTime) - start) / HOUR_MS;
+      if (elapsedHours === null || !Number.isFinite(elapsedHours)) continue;
       if (end !== null) {
         if (elapsedHours <= policy.targetHours) metrics.completedOnTime++;
         else metrics.completedLate++;
