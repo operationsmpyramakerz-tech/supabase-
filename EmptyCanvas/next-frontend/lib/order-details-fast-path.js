@@ -183,6 +183,23 @@ export async function loadFastOrderDetailsBundle(ids = [], { timings = null } = 
     const ready = valid ? makeFastOrderReferences(bundle) : null;
     if (timings) {
       timings.bundle = performance.now() - startedAt;
+      // SQL-side measurements separate PostgreSQL work from PostgREST/network
+      // and Vercel cold-connection latency. Never include actual order data.
+      const dbStages = {
+        rows: "bundleDbRows",
+        proposalHeaders: "bundleDbProposalHeaders",
+        productsId: "bundleDbProductsId",
+        productsName: "bundleDbProductsName",
+        kitItems: "bundleDbKitItems",
+        kits: "bundleDbKits",
+        folders: "bundleDbFolders",
+        proposalItems: "bundleDbProposalItems",
+        proposalScanSkipped: "bundleProposalScanSkipped",
+      };
+      for (const [key, target] of Object.entries(dbStages)) {
+        const duration = Number(bundle?.dbTimings?.[key]);
+        if (Number.isFinite(duration) && duration >= 0) timings[target] = duration;
+      }
       if (!valid) timings.bundleInvalid = 1;
       if (ready) {
         timings.bundleProductMiss = ready.missingProductMatches;
