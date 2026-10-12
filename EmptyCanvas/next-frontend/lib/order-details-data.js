@@ -2,6 +2,7 @@ import "server-only";
 
 import { getSupabaseConfig, select } from "./supabase-rest";
 import { getProductsForOrderDetails } from "./products-service";
+import { loadVerifiedOrderBatches } from "./verified-order-batches.mjs";
 import { getProposal, getProposalSourcesForProducts, getKitGroupingReferences, listKitFolders } from "./proposal-kit-service";
 
 function text(value) {
@@ -345,36 +346,14 @@ export async function loadRawOrderRowsByIds(orderIds = []) {
 
   // Each ID identifies exactly one component row. Read all requested IDs in
   // bounded batches instead of silently slicing at 500 or truncating results.
-  const idBatchSize = 100;
-  const rows = [];
-  for (let start = 0; start < ids.length; start += idBatchSize) {
-    const batchIds = ids.slice(start, start + idBatchSize);
-    const batch = await select(ordersTable(), {
-      select: "*",
-      id: inFilter(batchIds),
-      order: "notion_created_time.desc,id.desc",
-      limit: String(batchIds.length),
-    }, { profileName: "orders.details-by-id" });
-    if (!Array.isArray(batch)) {
-      const error = new Error("Unable to retrieve all order components.");
-      error.status = 502;
-      throw error;
-    }
-    rows.push(...batch);
-  }
-
-  const found = new Set(rows.map((row) => text(valueFor(row, ["id", "ID"]))).filter(Boolean));
-  if (ids.some((id) => !found.has(id))) {
-    const error = new Error("One or more order components could not be found. No partial data was returned.");
-    error.status = 404;
-    throw error;
-  }
-  if (found.size !== rows.length) {
-    const error = new Error("Order components changed during loading. Please retry to avoid a duplicated export.");
-    error.status = 409;
-    throw error;
-  }
-  return rows;
+  // Exact completeness checks run on the shared verified-batch helper.
+  // Bounded parallel primary-key reads prevent long serial request chains.
+  return await loadVerifiedOrderBatches(ids, (batchIds) => select(ordersTable(), {
+    select: "*",
+    id: inFilter(batchIds),
+    order: "notion_created_time.desc,id.desc",
+    limit: String(batchIds.length),
+  }, { profileName: "orders.details-by-id" }));
 }
 
 
@@ -730,7 +709,7 @@ async function resolveDirectProposalSources(items = [], { timings = null } = {})
   return rows;
 }
 
-export async function enrichOrderDetailGrouping(items = [], { timings = null } = {}) {
+export async function enrichOrderDetailGrouping(items = [], { timings = null, productsSink = null } = {}) {
   let rows = Array.isArray(items) ? items : [];
   if (!rows.length) return rows;
   // Proposal-source reconstruction and catalog/kit lookups are independent.
@@ -752,13 +731,16 @@ export async function enrichOrderDetailGrouping(items = [], { timings = null } =
     : null;
   const [resolvedRows, productsResult, kitReferences, folders] = await Promise.all([
     measure("proposal", () => resolveDirectProposalSources(rows, { timings })),
-    measure("products", () => getProductsForOrderDetails(rows).catch(() => [])),
-    measure("kits", () => getKitGroupingReferences({ productIds }).catch(() => ({ memberships: [], kits: [] }))),
+    measure("products", () => getProductsForOrderDetails(rows, { allowLargeTargeted: Array.isArray(productsSink) }).catch(() => [])),
+    measure("kits", () => getKitGroupingReferences({ productIds, allowLargeTargeted: Array.isArray(productsSink) }).catch(() => ({ memberships: [], kits: [] }))),
     measure("folders", () => listKitFolders({}).catch(() => [])),
   ]);
   rows = resolvedRows;
 
   const products = Array.isArray(productsResult) ? productsResult : [];
+  // Export consumers reuse the exact product snapshot already loaded here;
+  // do not make another Supabase round trip just to map ID Codes and prices.
+  if (Array.isArray(productsSink)) productsSink.push(...products);
   const memberships = kitReferences?.memberships || [];
   const kits = kitReferences?.kits || [];
   const productByName = new Map();

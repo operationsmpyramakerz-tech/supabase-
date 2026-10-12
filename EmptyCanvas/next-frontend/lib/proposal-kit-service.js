@@ -935,32 +935,37 @@ async function detailKitMembershipRows(productIds = []) {
   for (let i = 0; i < ids.length; i += 60) batches.push(ids.slice(i, i + 60));
   // Offset pagination protects against the server's configured row cap and
   // supports products that belong to many kits. Batches run concurrently.
-  const pages = await Promise.all(batches.map(async (batch) => {
-    const results = [];
-    const inList = postgrestInList(batch);
-    const pageSize = 400;
-    for (let offset = 0; ; offset += pageSize) {
-      const rows = await supabaseRequest(
-        `/${encodeURIComponent(kitItemsTable())}?select=kit_id,product_id&product_id=in.(${encodeURIComponent(inList)})&order=id.asc&limit=${pageSize}&offset=${offset}`,
-        { profileName: "orders.kits.memberships-targeted" },
-      );
-      const page = Array.isArray(rows) ? rows : [];
-      results.push(...page);
-      if (page.length < pageSize) break;
+  const pages = new Array(batches.length);
+  const workers = Array.from({ length: Math.min(3, batches.length) }, async (_, workerIndex) => {
+    for (let index = workerIndex; index < batches.length; index += 3) {
+      const batch = batches[index];
+      const results = [];
+      const inList = postgrestInList(batch);
+      const pageSize = 400;
+      for (let offset = 0; ; offset += pageSize) {
+        const rows = await supabaseRequest(
+          `/${encodeURIComponent(kitItemsTable())}?select=kit_id,product_id&product_id=in.(${encodeURIComponent(inList)})&order=id.asc&limit=${pageSize}&offset=${offset}`,
+          { profileName: "orders.kits.memberships-targeted" },
+        );
+        if (!Array.isArray(rows)) throw new Error("Kit component data could not be retrieved.");
+        results.push(...rows);
+        if (rows.length < pageSize) break;
+      }
+      pages[index] = results;
     }
-    return results;
-  }));
+  });
+  await Promise.all(workers);
   return pages.flat();
 }
 
-export async function getKitGroupingReferences({ productIds = null } = {}) {
+export async function getKitGroupingReferences({ productIds = null, allowLargeTargeted = false } = {}) {
   const ids = Array.isArray(productIds)
     ? [...new Set(productIds.map(text).filter(Boolean))].sort()
     : [];
   // If the complete snapshot is already warm, reusing it is faster than a
   // new REST call. A large order uses the existing full-snapshot path too.
   let snapshot = proposalKitCacheGet("kits:snapshot");
-  if (!snapshot && ids.length && ids.length <= 240) {
+  if (!snapshot && ids.length && (ids.length <= 240 || allowLargeTargeted)) {
     const key = `kits:detail:${ids.join("|")}`;
     try {
       snapshot = await proposalKitCachedRead(key, async () => {

@@ -7,6 +7,7 @@ import maintenanceReceiptPdfModule from "./maintenanceReceiptPdf";
 import { getProductsCatalog } from "./products-service";
 import { loadOperationsOrderDetails } from "./operations-orders-data";
 import { COMBINED_ORDER_METRIC_KEYS, combinedMetricColumnKey, mergeCombinedOrderRows } from "./combined-order-rows.mjs";
+import { mapSelectedCombinedOrderItems } from "./combined-order-groups.mjs";
 
 const { pipeDeliveryReceiptPDF } = deliveryReceiptPdfModule;
 const { pipeMaintenanceReceiptPDF } = maintenanceReceiptPdfModule;
@@ -195,9 +196,7 @@ function splitRowsBySources(rows = [], items = []) {
   return out;
 }
 
-async function buildProductMaps() {
-  const catalog = await getProductsCatalog().catch(() => ({ products: [] }));
-  const products = Array.isArray(catalog?.products) ? catalog.products : [];
+function productMapsFromProducts(products = []) {
   const byName = new Map();
   const byId = new Map();
   for (const product of products) {
@@ -209,15 +208,24 @@ async function buildProductMaps() {
   return { products, byName, byId };
 }
 
-async function buildOrderExportPayload(orderIds = [], account = {}, { repeatedComponentMode = "merge" } = {}) {
-  const items = await loadOperationsOrderDetails(orderIds);
+async function buildProductMaps() {
+  const catalog = await getProductsCatalog().catch(() => ({ products: [] }));
+  return productMapsFromProducts(Array.isArray(catalog?.products) ? catalog.products : []);
+}
+
+async function buildOrderExportPayload(orderIds = [], account = {}, {
+  repeatedComponentMode = "merge",
+  preparedItems = null,
+  preparedProductMaps = null,
+} = {}) {
+  const items = Array.isArray(preparedItems) ? preparedItems : await loadOperationsOrderDetails(orderIds);
   if (!Array.isArray(items) || !items.length) {
     const error = new Error("Orders not found");
     error.status = 404;
     throw error;
   }
 
-  const productMaps = await buildProductMaps();
+  const productMaps = preparedProductMaps || await buildProductMaps();
   const createdTimes = items
     .map((item) => new Date(item?.createdTime || Date.now()))
     .filter((date) => !Number.isNaN(date.getTime()));
@@ -350,13 +358,23 @@ async function buildCombinedOrderExportPayload(combinedOrders = [], account = {}
     }
   }
 
-  const orderPayloads = [];
-  for (const group of groups) {
-    const payload = await buildOrderExportPayload(group.orderIds, account, { repeatedComponentMode: "merge" });
-    orderPayloads.push(payload);
-  }
+  // Fetch and enrich ALL selected rows once. Previously every order caused
+  // another raw DB read, a proposal/kit/folder enrichment, and a product-catalog
+  // lookup, serially. A 21-order download could therefore hit Supabase's 15s
+  // per-request limit during redundant expensive scans.
+  const allIds = groups.flatMap((group) => group.orderIds);
+  const products = [];
+  const allItems = await loadOperationsOrderDetails(allIds, { productsSink: products });
+  const groupedItems = mapSelectedCombinedOrderItems(groups, allItems);
+  const productMaps = productMapsFromProducts(products);
+  const orderPayloads = groupedItems.map((items, index) => buildOrderExportPayload(groups[index].orderIds, account, {
+    repeatedComponentMode: "merge",
+    preparedItems: items,
+    preparedProductMaps: productMaps,
+  }));
+  const resolvedOrderPayloads = await Promise.all(orderPayloads);
 
-  const combinedOrderMeta = orderPayloads.map((payload, index) => {
+  const combinedOrderMeta = resolvedOrderPayloads.map((payload, index) => {
     const label = text(payload?.orderIdRange) || `Order ${index + 1}`;
     const userName = text(payload?.teamMember) || "—";
     return {
@@ -372,19 +390,19 @@ async function buildCombinedOrderExportPayload(combinedOrders = [], account = {}
   // Canonical product identity + per-order conservation checks live in one
   // auditable helper used by Excel and PDF. Different legacy product IDs are
   // never allowed to split the same component into separate rows.
-  const rows = mergeCombinedOrderRows(orderPayloads, combinedOrderMeta);
+  const rows = mergeCombinedOrderRows(resolvedOrderPayloads, combinedOrderMeta);
 
   const teamNames = [...new Set(combinedOrderMeta.map((order) => order.userName).filter((name) => name && name !== "—"))];
-  const firstPayload = orderPayloads[0] || {};
+  const firstPayload = resolvedOrderPayloads[0] || {};
   const labelSummary = combinedOrderMeta.map((order) => order.label).join(" + ");
-  const createdTimes = orderPayloads.map((payload) => payload?.createdAt).filter(Boolean).map((value) => new Date(value)).filter((value) => !Number.isNaN(value.getTime()));
+  const createdTimes = resolvedOrderPayloads.map((payload) => payload?.createdAt).filter(Boolean).map((value) => new Date(value)).filter((value) => !Number.isNaN(value.getTime()));
 
   return {
     ...firstPayload,
-    items: orderPayloads.flatMap((payload) => Array.isArray(payload?.items) ? payload.items : []),
+    items: resolvedOrderPayloads.flatMap((payload) => Array.isArray(payload?.items) ? payload.items : []),
     rows,
-    grandQty: orderPayloads.reduce((sum, payload) => sum + (Number(payload?.grandQty) || 0), 0),
-    grandTotal: orderPayloads.reduce((sum, payload) => sum + (Number(payload?.grandTotal) || 0), 0),
+    grandQty: resolvedOrderPayloads.reduce((sum, payload) => sum + (Number(payload?.grandQty) || 0), 0),
+    grandTotal: resolvedOrderPayloads.reduce((sum, payload) => sum + (Number(payload?.grandTotal) || 0), 0),
     createdAt: createdTimes.length ? new Date(Math.min(...createdTimes.map((value) => value.getTime()))) : new Date(),
     orderIdRange: labelSummary || "Combined orders",
     teamMember: teamNames.length === 1 ? teamNames[0] : "Multiple users",

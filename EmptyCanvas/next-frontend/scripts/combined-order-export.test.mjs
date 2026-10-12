@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { mergeCombinedOrderRows } from "../lib/combined-order-rows.mjs";
+import { mapSelectedCombinedOrderItems } from "../lib/combined-order-groups.mjs";
+import { loadVerifiedOrderBatches } from "../lib/verified-order-batches.mjs";
 
 const motor = "DC Motor - Geared Dual Axis 3:12VDC 600 RPM (Yellow)";
 const orderMeta = [{ label: "ORD-58" }, { label: "ORD-57" }];
@@ -122,4 +124,50 @@ test("conflicting prices for a repeated component WITHIN the same order fail saf
     [component({ unit: 40 }), component({ unit: 45 })],
     [component({ _productId: "different" })],
   ]), /conflicting unit costs/);
+});
+
+
+test("21-order export groups retrieve every selected component exactly once", () => {
+  const groups = Array.from({ length: 21 }, (_, index) => ({
+    orderIds: Array.from({ length: 35 }, (_, part) => String(index * 35 + part + 1)),
+  }));
+  const allItems = groups.flatMap((group) => group.orderIds.map((id) => ({ id, productName: "Motor", quantityRemaining: 4 })));
+  const slices = mapSelectedCombinedOrderItems(groups, allItems);
+  assert.equal(slices.length, 21);
+  assert.equal(slices.flat().length, 735);
+  const rows = mergeCombinedOrderRows(slices.map((items) => ({ rows: [component({ remainingQty: items.length * 4 })] })), groups.map((_, index) => ({ label: `ORD-${index + 1}` })));
+  assert.equal(rows.length, 1);
+  for (let index = 0; index < 21; index++) assert.equal(rows[0][`combined__remainingQty__${index}`], 140);
+});
+
+test("combined export refuses a missing source component", () => {
+  assert.throws(() => mapSelectedCombinedOrderItems([{ orderIds: ["1", "2"] }], [{ id: "1" }]), /missing or duplicated/);
+});
+
+test("combined export refuses duplicated component records", () => {
+  assert.throws(() => mapSelectedCombinedOrderItems([{ orderIds: ["1"] }], [{ id: "1" }, { id: "1" }]), /Duplicate or unidentified/);
+});
+
+
+test("735 Supabase detail records are fetched with bounded concurrency and no truncation", async () => {
+  const ids = Array.from({ length: 735 }, (_, i) => String(i + 1));
+  let active = 0, peak = 0, calls = 0;
+  const rows = await loadVerifiedOrderBatches(ids, async (batch) => {
+    calls++;
+    active++;
+    peak = Math.max(peak, active);
+    await new Promise((resolve) => setTimeout(resolve, 1));
+    active--;
+    return batch.map((id) => ({ id, quantity_remaining: 4 }));
+  });
+  assert.equal(rows.length, 735);
+  assert.equal(new Set(rows.map((row) => row.id)).size, 735);
+  assert.equal(calls, 10);
+  assert.ok(peak <= 3 && peak >= 2);
+});
+
+test("missing, extra and duplicate Supabase records fail closed", async () => {
+  await assert.rejects(() => loadVerifiedOrderBatches(["1", "2"], async () => [{ id: "1" }]), /fully retrieved/);
+  await assert.rejects(() => loadVerifiedOrderBatches(["1", "2"], async () => [{ id: "1" }, { id: "1" }]), /changed during loading/);
+  await assert.rejects(() => loadVerifiedOrderBatches(["1", "2"], async () => [{ id: "1" }, { id: "3" }]), /changed during loading/);
 });

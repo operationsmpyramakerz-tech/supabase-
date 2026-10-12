@@ -415,14 +415,14 @@ export async function getProductsList({ fresh = false } = {}) {
 // Avoid paging the entire products catalog on the first cold request. Older
 // rows (without database product IDs), mismatched IDs, and legacy product
 // schemas still use the existing full-catalog resolver for compatibility.
-export async function getProductsForOrderDetails(items = []) {
+export async function getProductsForOrderDetails(items = [], { allowLargeTargeted = false } = {}) {
   const source = Array.isArray(items) ? items : [];
   if (!source.length) return [];
   const ids = [...new Set(source.map((item) => text(item?.productId)).filter(Boolean))];
   if (source.some((item) => !text(item?.productId))) {
     return getProductsList();
   }
-  if (!ids.length || ids.length > 240) return getProductsList();
+  if (!ids.length || (!allowLargeTargeted && ids.length > 240)) return getProductsList();
 
   // Reuse the canonical snapshot when another page has already fetched it.
   // This avoids extra requests after navigating from Products or Shopping Cart.
@@ -435,15 +435,21 @@ export async function getProductsForOrderDetails(items = []) {
     const { productsTable } = getSupabaseConfig();
     const batches = [];
     for (let i = 0; i < ids.length; i += 60) batches.push(ids.slice(i, i + 60));
-    const pages = await Promise.all(batches.map(async (batch) => {
-      // Quoted PostgREST literals support numeric, UUID and text identifiers.
+    // Limit concurrent requests for unusually large combined exports.
+    const pages = new Array(batches.length);
+    const workers = Array.from({ length: Math.min(3, batches.length) }, async (_, workerIndex) => {
+      for (let index = workerIndex; index < batches.length; index += 3) {
+        const batch = batches[index];
+        // Quoted PostgREST literals support numeric, UUID and text identifiers.
       const inList = batch.map((id) => `"${id.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`).join(",");
-      return await select(productsTable, {
-        select: productProjectionSupported === false ? "*" : PRODUCT_LIST_SELECT,
-        id: `in.(${inList})`,
-        limit: String(batch.length),
-      }, { profileName: "orders.products-targeted" });
-    }));
+        pages[index] = await select(productsTable, {
+          select: productProjectionSupported === false ? "*" : PRODUCT_LIST_SELECT,
+          id: `in.(${inList})`,
+          limit: String(batch.length),
+        }, { profileName: "orders.products-targeted" });
+      }
+    });
+    await Promise.all(workers);
     const products = pages.flat().map(serializeProduct).filter((product) => product.id && product.name)
       .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
     const byId = new Map(products.map((product) => [product.id, product]));
