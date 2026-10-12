@@ -430,7 +430,7 @@ function parseSessionValue(value) {
   try { return JSON.parse(String(value)); } catch { return null; }
 }
 
-async function resolveDirectSessionCookie(cookieValue) {
+async function resolveDirectSessionCookie(cookieValue, { onSessionReady = null, timings = null } = {}) {
   const secret = String(process.env.SESSION_SECRET || "dev-fallback-secret");
   const sid = unsignSessionCookie(cookieValue, secret);
   if (!sid) return { definitive: true, status: 401, session: null, error: "Invalid session cookie.", backend: "" };
@@ -477,6 +477,9 @@ async function resolveDirectSessionCookie(cookieValue) {
     }
   }
 
+  // This is the network portion of the session-store lookup (Redis URL / REST).
+  if (timings) timings.authStore = performance.now() - budgetStartedAt;
+
   if (!sessionValue) {
     if (successfulLookup) {
       return { definitive: true, status: 401, session: null, error: "Session expired or was not found.", backend: "" };
@@ -499,6 +502,14 @@ async function resolveDirectSessionCookie(cookieValue) {
     return { definitive: true, status: 401, session: null, error: "Session expired.", backend: sessionBackend };
   }
 
+  // Only a signed, authenticated, unexpired session reaches here. Start the
+  // independent Supabase account/permissions reads while the mandatory
+  // revocation check runs. The caller never returns access before both pass.
+  if (typeof onSessionReady === "function") {
+    try { onSessionReady(sessionValue, sessionBackend); } catch { /* revocation remains authoritative */ }
+  }
+
+  const revocationStartedAt = performance.now();
   const userId = text(sessionValue.userSupabaseId || sessionValue.userNotionId);
   if (userId) {
     try {
@@ -518,9 +529,11 @@ async function resolveDirectSessionCookie(cookieValue) {
       })) || 0;
       const issuedAt = Number(sessionValue.authIssuedAt || 0);
       if (revokedAt && issuedAt <= revokedAt) {
+        if (timings) timings.authRevocation = performance.now() - revocationStartedAt;
         return { definitive: true, status: 401, session: null, error: "Session invalidated.", backend: sessionBackend };
       }
     } catch (error) {
+      if (timings) timings.authRevocation = performance.now() - revocationStartedAt;
       return {
         definitive: false,
         status: 503,
@@ -531,10 +544,11 @@ async function resolveDirectSessionCookie(cookieValue) {
     }
   }
 
+  if (timings) timings.authRevocation = performance.now() - revocationStartedAt;
   return { definitive: true, status: 200, session: sessionValue, error: "", backend: sessionBackend };
 }
 
-async function readDirectSession() {
+async function readDirectSession(options = {}) {
   const cookieStore = await cookies();
   const cookieName = String(process.env.SESSION_COOKIE_NAME || "op.sid").trim() || "op.sid";
   const cookie = cookieStore.get(cookieName);
@@ -548,7 +562,7 @@ async function readDirectSession() {
   const inflightKey = String(cookie.value);
   if (directSessionInflight.has(inflightKey)) return await directSessionInflight.get(inflightKey);
 
-  const pending = resolveDirectSessionCookie(cookie.value);
+  const pending = resolveDirectSessionCookie(cookie.value, options);
   directSessionInflight.set(inflightKey, pending);
   try {
     return await pending;
@@ -803,10 +817,15 @@ export async function getDirectAccountGateFromSessionContext(context = {}, requi
     // That made dock/sidebar items disappear on Home and reappear after opening a
     // protected page. Keep authOnly fast above, but for any rendered AppShell page
     // refresh member + page access together (the underlying reads are cached).
+    const timedRead = async (key, loader) => {
+      const started = performance.now();
+      try { return await loader(); }
+      finally { if (options?.timings) options.timings[key] = performance.now() - started; }
+    };
     const [memberRow, pages, accessRows] = await Promise.all([
-      readFreshMemberRow(memberId),
-      listAppPages(),
-      listMemberAccess(memberId),
+      timedRead("authMember", () => readFreshMemberRow(memberId)),
+      timedRead("authPages", () => listAppPages()),
+      timedRead("authAccess", () => listMemberAccess(memberId)),
     ]);
     if (!memberRow) return null;
 
@@ -855,8 +874,36 @@ async function getDirectSessionAccountGateInternal(requiredPages = [], options =
   // direct Supabase gate from the signed Redis/Upstash session store.
   if (!redisUrlValue() && !hasRestSessionBackend()) return null;
 
-  const resolved = await readDirectSession();
-  if (!resolved.definitive) return null;
+  const stages = options?.timings;
+  let accessPending = null;
+  let accessPendingStartedAt = 0;
+  const sessionStartedAt = performance.now();
+  const resolved = await readDirectSession({
+    timings: stages,
+    onSessionReady: (sessionValue, backend) => {
+      // The pending session-store read has already verified the cookie signature,
+      // authentication flag, and expiration. Permission reads are independent
+      // of the revocation lookup, so run them concurrently but never grant access
+      // until the revocation result has been checked successfully.
+      const memberId = text(sessionValue?.userSupabaseId);
+      const baseAccount = sessionValue?.accountCache;
+      if (!memberId || !baseAccount || typeof baseAccount !== "object") return;
+      accessPendingStartedAt = performance.now();
+      accessPending = getDirectAccountGateFromSessionContext({
+        memberId,
+        userSupabaseId: memberId,
+        username: sessionValue.username,
+        account: { ...baseAccount },
+        sessionBackend: backend || "",
+      }, requiredPages, options);
+    },
+  });
+  if (stages) stages.authSession = performance.now() - sessionStartedAt;
+  if (!resolved.definitive) {
+    // Any speculative account read is discarded if session verification fails.
+    // This can happen during revocation or while a session store is unavailable.
+    return null;
+  }
   if (resolved.status === 401) {
     return { ok: false, status: 401, error: resolved.error || "Authentication required.", account: null, source: "direct-session" };
   }
@@ -868,13 +915,20 @@ async function getDirectSessionAccountGateInternal(requiredPages = [], options =
     : null;
   if (!memberId || !baseAccount) return null;
 
-  const result = await getDirectAccountGateFromSessionContext({
-    memberId,
-    userSupabaseId: memberId,
-    username: session.username,
-    account: baseAccount,
-    sessionBackend: resolved.backend || "",
-  }, requiredPages, options);
+  const accessStartedAt = performance.now();
+  const result = accessPending
+    ? await accessPending
+    : await getDirectAccountGateFromSessionContext({
+        memberId,
+        userSupabaseId: memberId,
+        username: session.username,
+        account: baseAccount,
+        sessionBackend: resolved.backend || "",
+      }, requiredPages, options);
+  if (stages) {
+    stages.authPermissions = performance.now() - (accessPendingStartedAt || accessStartedAt);
+    stages.authWait = performance.now() - accessStartedAt;
+  }
 
   if (!result) return null;
   return {
