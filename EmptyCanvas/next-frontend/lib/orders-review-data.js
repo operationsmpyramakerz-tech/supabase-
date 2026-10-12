@@ -701,10 +701,14 @@ export const __ordersReviewDataTest = {
   visibleToReviewer,
   groupSearchText,
 };
-export async function loadOrdersReviewDetails({ account, orderIds = [] } = {}) {
+export async function loadOrdersReviewDetails({ account, orderIds = [], timings = null } = {}) {
   if (!isSupabaseConfigured()) return null;
+  const dbStartedAt = performance.now();
   const rows = await loadRawOrderRowsByIds(orderIds);
+  if (timings) timings.db = performance.now() - dbStartedAt;
+  const visibilityStartedAt = performance.now();
   const visible = await reviewerVisibility(account || {});
+  if (timings) timings.visibility = performance.now() - visibilityStartedAt;
   if (!visible.ids.length && !visible.names.length) {
     const error = new Error("No reviewer schools are assigned to this account.");
     error.status = 403;
@@ -724,7 +728,10 @@ export async function loadOrdersReviewDetails({ account, orderIds = [] } = {}) {
     throw error;
   }
 
-  return await enrichOrderDetailGrouping(allowed.map(serializeReviewOrderDetail));
+  const enrichStartedAt = performance.now();
+  const details = await enrichOrderDetailGrouping(allowed.map(serializeReviewOrderDetail));
+  if (timings) timings.enrich = performance.now() - enrichStartedAt;
+  return details;
 }
 
 

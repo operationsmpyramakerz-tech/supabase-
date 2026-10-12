@@ -550,7 +550,7 @@ function OrderCard({ group, activeTab, onOpen, onReason, onCreator, onPrefetch }
       role="button"
       tabIndex={0}
       aria-label={`Open ${group.orderIdLabel}`}
-      onPointerEnter={(event) => { if (event.pointerType === "mouse" || event.pointerType === "pen") onPrefetch(group, true); }} onPointerLeave={() => onPrefetch(null, true)} onTouchStart={() => onPrefetch(group)} onFocus={() => onPrefetch(group)} onClick={() => onOpen(group)}
+      onPointerEnter={(event) => { if (event.pointerType === "mouse" || event.pointerType === "pen") onPrefetch(group, true); }} onPointerLeave={() => onPrefetch(null, true)} onFocus={(event) => { if (event.target === event.currentTarget) onPrefetch(group); }} onClick={() => onOpen(group)}
       onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen(group); } }}
     >
       <div className="co-top">

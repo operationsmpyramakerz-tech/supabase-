@@ -777,11 +777,16 @@ export async function loadOperationsOrdersInitialPage({ limit = PAGE_LIMIT } = {
     await loadOperationsOrdersPage({ tab: "all", type: "all", query: "", cursor: null, limit }),
   );
 }
-export async function loadOperationsOrderDetails(orderIds = []) {
+export async function loadOperationsOrderDetails(orderIds = [], { timings = null } = {}) {
   if (!isSupabaseConfigured()) return null;
+  const dbStartedAt = performance.now();
   const rows = await loadRawOrderRowsByIds(orderIds);
+  if (timings) timings.db = performance.now() - dbStartedAt;
+  const enrichStartedAt = performance.now();
   const serialized = rows.map(serializeOperationsOrderDetail);
-  return await enrichOrderDetailGrouping(serialized);
+  const details = await enrichOrderDetailGrouping(serialized);
+  if (timings) timings.enrich = performance.now() - enrichStartedAt;
+  return details;
 }
 
 

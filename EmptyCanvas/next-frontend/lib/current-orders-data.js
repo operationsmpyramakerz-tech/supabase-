@@ -469,7 +469,7 @@ export async function loadCurrentOrdersInitialPage({ account, limit = PAGE_LIMIT
   );
 }
 
-export async function loadCurrentOrderDetails({ account = {}, orderIds = [] } = {}) {
+export async function loadCurrentOrderDetails({ account = {}, orderIds = [], timings = null } = {}) {
   if (!isSupabaseConfigured()) return null;
   const ids = [...new Set((Array.isArray(orderIds) ? orderIds : [])
     .map((id) => String(id || "").trim())
@@ -477,7 +477,10 @@ export async function loadCurrentOrderDetails({ account = {}, orderIds = [] } = 
     .slice(0, 500);
   if (!ids.length) return [];
 
+  const dbStartedAt = performance.now();
   const rows = await loadRawOrderRowsByIds(ids);
+  if (timings) timings.db = performance.now() - dbStartedAt;
+  const prepareStartedAt = performance.now();
   const visible = (Array.isArray(rows) ? rows : []).filter((row) => ownedByAccount(row, account));
 
   const visibleIds = new Set(visible.map((row) => text(row?.id)).filter(Boolean));
@@ -487,7 +490,9 @@ export async function loadCurrentOrderDetails({ account = {}, orderIds = [] } = 
     throw error;
   }
 
-  return visible.map(serializeOperationsOrderDetail);
+  const details = visible.map(serializeOperationsOrderDetail);
+  if (timings) timings.prepare = performance.now() - prepareStartedAt;
+  return details;
 }
 
 export async function markCurrentOrderReceivedDirect({ account = {}, orderPageId = "" } = {}) {

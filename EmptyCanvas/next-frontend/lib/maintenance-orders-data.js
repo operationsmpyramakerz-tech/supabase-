@@ -496,7 +496,7 @@ async function enrichMaintenanceDetailProducts(items = []) {
   });
 }
 
-export async function loadMaintenanceOrderDetails({ orderIds = [] } = {}) {
+export async function loadMaintenanceOrderDetails({ orderIds = [], timings = null } = {}) {
   if (!isSupabaseConfigured()) return null;
   const ids = [...new Set((Array.isArray(orderIds) ? orderIds : [])
     .map((id) => String(id || "").trim())
@@ -504,7 +504,10 @@ export async function loadMaintenanceOrderDetails({ orderIds = [] } = {}) {
     .slice(0, 500);
   if (!ids.length) return [];
 
+  const dbStartedAt = performance.now();
   const rows = await loadRawOrderRowsByIds(ids);
+  if (timings) timings.db = performance.now() - dbStartedAt;
+  const prepareStartedAt = performance.now();
   const maintenanceRows = (Array.isArray(rows) ? rows : []).filter((row) => {
     const item = serializeOperationsOrderDetail(row);
     return isMaintenanceOrder(item?.orderType);
@@ -517,7 +520,12 @@ export async function loadMaintenanceOrderDetails({ orderIds = [] } = {}) {
     throw error;
   }
 
-  return await enrichMaintenanceDetailProducts(maintenanceRows.map(serializeOperationsOrderDetail));
+  const serialized = maintenanceRows.map(serializeOperationsOrderDetail);
+  if (timings) timings.prepare = performance.now() - prepareStartedAt;
+  const enrichStartedAt = performance.now();
+  const details = await enrichMaintenanceDetailProducts(serialized);
+  if (timings) timings.enrich = performance.now() - enrichStartedAt;
+  return details;
 }
 
 function directMaintenanceMutationError(message, status = 500) {
