@@ -6,6 +6,7 @@ import deliveryReceiptPdfModule from "./deliveryReceiptPdf";
 import maintenanceReceiptPdfModule from "./maintenanceReceiptPdf";
 import { getProductsCatalog } from "./products-service";
 import { loadOperationsOrderDetails } from "./operations-orders-data";
+import { COMBINED_ORDER_METRIC_KEYS, combinedMetricColumnKey, mergeCombinedOrderRows } from "./combined-order-rows.mjs";
 
 const { pipeDeliveryReceiptPDF } = deliveryReceiptPdfModule;
 const { pipeMaintenanceReceiptPDF } = maintenanceReceiptPdfModule;
@@ -312,7 +313,7 @@ async function buildOrderExportPayload(orderIds = [], account = {}, { repeatedCo
 }
 
 
-const COMBINED_ORDER_METRIC_KEYS = new Set(["qty", "receivedQty", "remainingQty", "deliveredQty", "total"]);
+const COMBINED_ORDER_METRIC_KEY_SET = new Set([...COMBINED_ORDER_METRIC_KEYS, "unit"]);
 
 function normalizeCombinedOrders(value = []) {
   const groups = [];
@@ -325,16 +326,29 @@ function normalizeCombinedOrders(value = []) {
     seen.add(signature);
     groups.push({ orderIds: ids });
   }
-  return groups.slice(0, 20);
-}
-
-function combinedMetricColumnKey(metricKey, orderIndex) {
-  return `combined__${metricKey}__${orderIndex}`;
+  if (groups.length > 40) {
+    const error = new Error("Combined orders export stopped: More than 40 order groups were selected.");
+    error.status = 413;
+    throw error;
+  }
+  return groups;
 }
 
 async function buildCombinedOrderExportPayload(combinedOrders = [], account = {}) {
   const groups = normalizeCombinedOrders(combinedOrders);
   if (groups.length < 2) return null;
+
+  const seenOrderIds = new Set();
+  for (const group of groups) {
+    for (const id of group.orderIds) {
+      if (seenOrderIds.has(id)) {
+        const error = new Error("Combined orders export stopped: An order component was selected in more than one order group.");
+        error.status = 422;
+        throw error;
+      }
+      seenOrderIds.add(id);
+    }
+  }
 
   const orderPayloads = [];
   for (const group of groups) {
@@ -355,57 +369,10 @@ async function buildCombinedOrderExportPayload(combinedOrders = [], account = {}
     };
   });
 
-  const rowMap = new Map();
-  orderPayloads.forEach((payload, orderIndex) => {
-    for (const sourceRow of Array.isArray(payload?.rows) ? payload.rows : []) {
-      const componentKey = text(sourceRow?._componentKey) || `name:${normKey(sourceRow?.component)}`;
-      if (!componentKey) continue;
-      if (!rowMap.has(componentKey)) {
-        rowMap.set(componentKey, {
-          ...sourceRow,
-          qty: 0,
-          receivedQty: 0,
-          remainingQty: 0,
-          deliveredQty: 0,
-          total: 0,
-          _combinedOrderValues: {},
-        });
-      }
-      const row = rowMap.get(componentKey);
-      if (!row.idCode && sourceRow?.idCode) row.idCode = sourceRow.idCode;
-      if (!row.link && sourceRow?.link) row.link = sourceRow.link;
-      if (!row.productTag && sourceRow?.productTag) row.productTag = sourceRow.productTag;
-      if ((!row.kitTag || row.kitTag === "Unassigned kit") && sourceRow?.kitTag) row.kitTag = sourceRow.kitTag;
-      if ((!row.kitFolderName || row.kitFolderName === "Unfiled Kits") && sourceRow?.kitFolderName) row.kitFolderName = sourceRow.kitFolderName;
-      if ((!Number.isFinite(Number(row.unit)) || Number(row.unit) === 0) && Number.isFinite(Number(sourceRow?.unit))) row.unit = Number(sourceRow.unit);
-
-      const orderValues = row._combinedOrderValues[orderIndex] || {
-        qty: 0,
-        receivedQty: 0,
-        remainingQty: 0,
-        deliveredQty: 0,
-        total: 0,
-      };
-      for (const metricKey of COMBINED_ORDER_METRIC_KEYS) {
-        const numeric = Number(sourceRow?.[metricKey]);
-        if (Number.isFinite(numeric)) orderValues[metricKey] = roundQty(Number(orderValues[metricKey] || 0) + numeric);
-      }
-      row._combinedOrderValues[orderIndex] = orderValues;
-    }
-  });
-
-  const rows = [...rowMap.values()]
-    .map((row) => {
-      const next = { ...row };
-      combinedOrderMeta.forEach((order) => {
-        const values = row._combinedOrderValues?.[order.index] || {};
-        for (const metricKey of COMBINED_ORDER_METRIC_KEYS) {
-          next[combinedMetricColumnKey(metricKey, order.index)] = Number(values?.[metricKey]) || 0;
-        }
-      });
-      return next;
-    })
-    .sort((a, b) => naturalCompare(a?.component, b?.component));
+  // Canonical product identity + per-order conservation checks live in one
+  // auditable helper used by Excel and PDF. Different legacy product IDs are
+  // never allowed to split the same component into separate rows.
+  const rows = mergeCombinedOrderRows(orderPayloads, combinedOrderMeta);
 
   const teamNames = [...new Set(combinedOrderMeta.map((order) => order.userName).filter((name) => name && name !== "—"))];
   const firstPayload = orderPayloads[0] || {};
@@ -430,14 +397,14 @@ async function buildCombinedOrderExportPayload(combinedOrders = [], account = {}
 function selectedCombinedColumnDefs(columns, payload, opts = {}) {
   const selectedKeys = normalizeOrderExportColumns(columns, opts);
   const defs = new Map(ORDER_EXPORT_COLUMN_DEFS.map((column) => [column.key, column]));
-  const metricCount = selectedKeys.filter((key) => COMBINED_ORDER_METRIC_KEYS.has(key)).length;
+  const metricCount = selectedKeys.filter((key) => COMBINED_ORDER_METRIC_KEY_SET.has(key)).length;
   const orderMeta = Array.isArray(payload?.combinedOrders) ? payload.combinedOrders : [];
   const out = [];
 
   for (const key of selectedKeys) {
     const base = defs.get(key);
     if (!base) continue;
-    if (!COMBINED_ORDER_METRIC_KEYS.has(key)) {
+    if (!COMBINED_ORDER_METRIC_KEY_SET.has(key)) {
       out.push({ ...base });
       continue;
     }
@@ -448,9 +415,9 @@ function selectedCombinedColumnDefs(columns, payload, opts = {}) {
         key: combinedMetricColumnKey(key, Number(order?.index) || 0),
         label: metricCount === 1 ? header : `${header}\n${base.label}`,
         width: Math.max(18, Number(base.width) || 14),
-        ratio: key === "total" ? 0.16 : 0.14,
+        ratio: key === "total" || key === "unit" ? 0.16 : 0.14,
         align: "right",
-        numericKind: key === "total" ? "money" : "quantity",
+        numericKind: key === "total" || key === "unit" ? "money" : "quantity",
         combinedMetricKey: key,
         combinedOrderIndex: Number(order?.index) || 0,
       });
@@ -461,7 +428,7 @@ function selectedCombinedColumnDefs(columns, payload, opts = {}) {
 
 function filterCombinedRowsWithValues(payload, selectedColumns = []) {
   const combinedMetricColumns = (Array.isArray(selectedColumns) ? selectedColumns : [])
-    .filter((column) => column?.combinedMetricKey && text(column?.key));
+    .filter((column) => column?.combinedMetricKey && column.combinedMetricKey !== "unit" && text(column?.key));
   if (!combinedMetricColumns.length || !Array.isArray(payload?.rows)) return payload;
 
   const rows = payload.rows.filter((row) => combinedMetricColumns.some((column) => {
@@ -1227,7 +1194,12 @@ export async function renderOrderExport({
   sparePartColumns = null,
   checklist = null,
 } = {}) {
-  const ids = [...new Set((Array.isArray(orderIds) ? orderIds : []).map((id) => text(id)).filter(Boolean))].slice(0, 500);
+  const ids = [...new Set((Array.isArray(orderIds) ? orderIds : []).map((id) => text(id)).filter(Boolean))];
+  if (ids.length > 5000) {
+    const error = new Error("Order export stopped: More than 5,000 component rows were selected. Split the export into smaller batches.");
+    error.status = 413;
+    throw error;
+  }
   if (!ids.length) {
     const error = new Error("orderIds required");
     error.status = 400;
@@ -1242,6 +1214,14 @@ export async function renderOrderExport({
   const normalizedCombinedOrders = normalizeCombinedOrders(combinedOrders)
     .map((group) => ({ ...group, orderIds: group.orderIds.filter((id) => allowedIdSet.has(id)) }))
     .filter((group) => group.orderIds.length);
+  if (normalizedCombinedOrders.length > 1) {
+    const includedIds = new Set(normalizedCombinedOrders.flatMap((group) => group.orderIds));
+    if (includedIds.size !== ids.length) {
+      const error = new Error("Combined orders export stopped: The selected component IDs do not match the chosen orders.");
+      error.status = 422;
+      throw error;
+    }
+  }
   const payload = normalizedCombinedOrders.length > 1
     ? await buildCombinedOrderExportPayload(normalizedCombinedOrders, account)
     : await buildOrderExportPayload(ids, account, { repeatedComponentMode });

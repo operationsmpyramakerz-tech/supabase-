@@ -332,8 +332,7 @@ function ordersTable() {
 function cleanIds(orderIds = []) {
   return [...new Set((Array.isArray(orderIds) ? orderIds : [])
     .map((id) => String(id || "").trim())
-    .filter((id) => id && /^[A-Za-z0-9_-]+$/.test(id)))]
-    .slice(0, 500);
+    .filter((id) => id && /^[A-Za-z0-9_-]+$/.test(id)))];
 }
 
 function inFilter(ids = []) {
@@ -343,21 +342,41 @@ function inFilter(ids = []) {
 export async function loadRawOrderRowsByIds(orderIds = []) {
   const ids = cleanIds(orderIds);
   if (!ids.length) return [];
-  const rows = await select(ordersTable(), {
-    select: "*",
-    id: inFilter(ids),
-    order: "notion_created_time.desc,id.desc",
-    limit: String(Math.max(500, ids.length)),
-  }, { profileName: "orders.details-by-id" });
-  const safeRows = Array.isArray(rows) ? rows : [];
-  const found = new Set(safeRows.map((row) => text(valueFor(row, ["id", "ID"]))).filter(Boolean));
+
+  // Each ID identifies exactly one component row. Read all requested IDs in
+  // bounded batches instead of silently slicing at 500 or truncating results.
+  const idBatchSize = 100;
+  const rows = [];
+  for (let start = 0; start < ids.length; start += idBatchSize) {
+    const batchIds = ids.slice(start, start + idBatchSize);
+    const batch = await select(ordersTable(), {
+      select: "*",
+      id: inFilter(batchIds),
+      order: "notion_created_time.desc,id.desc",
+      limit: String(batchIds.length),
+    }, { profileName: "orders.details-by-id" });
+    if (!Array.isArray(batch)) {
+      const error = new Error("Unable to retrieve all order components.");
+      error.status = 502;
+      throw error;
+    }
+    rows.push(...batch);
+  }
+
+  const found = new Set(rows.map((row) => text(valueFor(row, ["id", "ID"]))).filter(Boolean));
   if (ids.some((id) => !found.has(id))) {
-    const error = new Error("One or more order components could not be found.");
+    const error = new Error("One or more order components could not be found. No partial data was returned.");
     error.status = 404;
     throw error;
   }
-  return safeRows;
+  if (found.size !== rows.length) {
+    const error = new Error("Order components changed during loading. Please retry to avoid a duplicated export.");
+    error.status = 409;
+    throw error;
+  }
+  return rows;
 }
+
 
 function effectiveOperationsMaintenanceStatus(row = {}, rawStatus = "", orderType = "", svApproval = "") {
   const status = text(rawStatus) || "Pending";
