@@ -56,6 +56,13 @@ export function createOrderDetailsLoader({ endpoint, buildGroups, maxEntries = 1
           parseMs: Math.round(parsedAt - responseReceived),
           ...(buildMs === null ? {} : { groupMs: Math.round(buildMs) }),
           serverTiming: response.headers.get("server-timing") || "unavailable",
+          bundleBytes: (() => {
+            const raw = response.headers.get("x-orders-bundle-bytes");
+            if (raw === null) return null;
+            const count = Number(raw);
+            return Number.isFinite(count) && count >= 0 ? count : null;
+          })(),
+          serverRegion: response.headers.get("x-orders-server-region") || null,
           status: response.status,
         });
       };

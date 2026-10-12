@@ -40,10 +40,16 @@ export async function POST(request) {
       if (Number.isFinite(authStages[name])) parts.push(`${name};dur=${authStages[name].toFixed(1)}`);
     }
     // Opt-in breakdown in DevTools; timings contain durations only, never data.
-    for (const name of ["db", "bundle", "bundleDbRows", "bundleDbProposalHeaders", "bundleDbProductsId", "bundleDbProductsName", "bundleDbKitItems", "bundleDbKits", "bundleDbFolders", "bundleDbProposalItems", "bundleProposalScanSkipped", "fastPath", "bundleInvalid", "bundleError", "bundleErrorStatus", "bundleProductMiss", "bundleKitOrphans", "bundleProposalRecovery", "proposalUnresolved", "proposalRecovered", "proposalFallbackTags", "kitHeaders", "kitItems", "kitFullSnapshot", "kitTargetFailed", "kitTargetStatus", "visibility", "prepare", "enrich", "products"]) {
+    for (const name of ["db", "bundle", "bundleHeaders", "bundleBody", "bundleParse", "bundleDbRows", "bundleDbProposalHeaders", "bundleDbProductsId", "bundleDbProductsName", "bundleDbKitItems", "bundleDbKits", "bundleDbFolders", "bundleDbProposalItems", "bundleProposalScanSkipped", "fastPath", "bundleInvalid", "bundleError", "bundleErrorStatus", "bundleProductMiss", "bundleKitOrphans", "bundleProposalRecovery", "proposalUnresolved", "proposalRecovered", "proposalFallbackTags", "kitHeaders", "kitItems", "kitFullSnapshot", "kitTargetFailed", "kitTargetStatus", "visibility", "prepare", "enrich", "products"]) {
       if (Number.isFinite(stages[name])) parts.push(`${name};dur=${stages[name].toFixed(1)}`);
     }
-    return { "Server-Timing": parts.join(", ") };
+    return {
+      "Server-Timing": parts.join(", "),
+      // Only a byte count and deployment region: no private order content.
+      ...(Number.isFinite(stages.bundlePayloadBytes)
+        ? { "X-Orders-Bundle-Bytes": String(Math.max(0, Math.round(stages.bundlePayloadBytes))) } : {}),
+      ...(process.env.VERCEL_REGION ? { "X-Orders-Server-Region": process.env.VERCEL_REGION } : {}),
+    };
   };
   if (!gate.ok) return noStore({ error: gate.error || "Authentication required." }, { status: gate.status || 503, headers: timing() });
 

@@ -169,6 +169,7 @@ export async function supabaseRequest(pathname, options = {}) {
         };
         if (options.body !== undefined && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
 
+        const networkStartedAt = performance.now();
         const response = await fetch(`${url}/rest/v1${pathname}`, {
           method,
           cache: "no-store",
@@ -177,9 +178,25 @@ export async function supabaseRequest(pathname, options = {}) {
           body: options.body === undefined ? undefined : JSON.stringify(options.body),
         });
 
+        const headersAt = performance.now();
         const raw = await response.text();
+        const bodyAt = performance.now();
         let data = null;
         try { data = raw ? JSON.parse(raw) : null; } catch { data = raw; }
+        const parsedAt = performance.now();
+        // Phase 22: optional per-request transport diagnostics. Callbacks get
+        // aggregate timings and UTF-8 size only; never the response or secrets.
+        if (typeof options.onNetworkTiming === "function") {
+          try {
+            options.onNetworkTiming({
+              headersMs: headersAt - networkStartedAt,
+              bodyMs: bodyAt - headersAt,
+              parseMs: parsedAt - bodyAt,
+              payloadBytes: Buffer.byteLength(raw, "utf8"),
+              // Length is the uncompressed JSON body, not a claim about wire bytes.
+            });
+          } catch { /* diagnostics must never affect order loading */ }
+        }
 
         metricStatus = response.status;
         if (!response.ok) {

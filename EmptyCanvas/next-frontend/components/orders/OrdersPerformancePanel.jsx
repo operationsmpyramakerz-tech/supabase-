@@ -6,6 +6,8 @@ import { ORDERS_PERF_EVENT, ORDERS_PERF_TOGGLE_EVENT, ordersPerfEnabled, setOrde
 import { computeRecentOrderSpeed, MAIN_STAGE_LABELS, parseServerTiming, SQL_STAGE_LABELS } from "./ordersPerfAnalysis";
 
 const round = (value) => (typeof value === "number" && Number.isFinite(value) ? `${Math.round(value)} ms` : "—");
+const readableSize = (bytes) => (typeof bytes === "number" && Number.isFinite(bytes) && bytes >= 0
+  ? `${(bytes / 1024).toFixed(1)} KiB` : "—");
 
 function TimingsRows({ entries, values }) {
   return entries.filter(([key]) => Number.isFinite(values[key])).map(([key, label]) => (
@@ -94,6 +96,9 @@ export default function OrdersPerformancePanel() {
               <summary>Server breakdown</summary>
               <div className="orders-perf-panel__breakdown">
                 <TimingsRows entries={MAIN_STAGE_LABELS} values={server}/>
+                {Number.isFinite(latestFetch?.bundleBytes) && <div className="orders-perf-panel__metric"><span>Bundle JSON size (before compression)</span><strong>{readableSize(latestFetch.bundleBytes)}</strong></div>}
+                {latestFetch?.serverRegion && <div className="orders-perf-panel__metric"><span>Vercel region</span><strong>{latestFetch.serverRegion}</strong></div>}
+                {Number.isFinite(server.bundleHeaders) && <p className="orders-perf-panel__note">Waiting for headers includes the Supabase network connection and remote processing; it is not PostgreSQL query time alone. Body and JSON timings are measured on the Vercel server.</p>}
                 {Number.isFinite(server.fastPath) && <div className="orders-perf-panel__metric"><span>Database fast path</span><strong>{server.fastPath === 1 ? "Active" : "Fallback"}</strong></div>}
                 {sqlStages.length > 0 && <details className="orders-perf-panel__sql">
                   <summary>PostgreSQL query stages ({round(sqlMeasured)})</summary>

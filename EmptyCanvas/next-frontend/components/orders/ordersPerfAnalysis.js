@@ -15,6 +15,9 @@ export const MAIN_STAGE_LABELS = [
   ["auth", "Authentication"],
   ["details", "Details total"],
   ["bundle", "Supabase bundle"],
+  ["bundleHeaders", "Supabase: waiting for headers"],
+  ["bundleBody", "Supabase: reading response"],
+  ["bundleParse", "Supabase: JSON decoding"],
   ["prepare", "Additional preparation"],
   ["proposal", "Legacy proposal"],
 ];

@@ -178,6 +178,12 @@ export async function loadFastOrderDetailsBundle(ids = [], { timings = null } = 
     const bundle = await rpc(RPC_NAME, { p_ids: clean }, {
       profileName: "orders.details-one-call",
       timeoutMs: 9000,
+      onNetworkTiming: timings ? ({ headersMs, bodyMs, parseMs, payloadBytes }) => {
+        timings.bundleHeaders = headersMs;
+        timings.bundleBody = bodyMs;
+        timings.bundleParse = parseMs;
+        timings.bundlePayloadBytes = payloadBytes;
+      } : undefined,
     });
     const valid = validBundle(bundle, clean);
     const ready = valid ? makeFastOrderReferences(bundle) : null;
