@@ -1,3 +1,5 @@
+import { reportOrdersPerformance } from "./orderOpeningPerformance";
+
 // Page-local detail loader: coalesces clicks and intent prefetches, bounds the
 // number of cached orders, and never shares private order payloads globally.
 // Only the full details endpoint is used. Summary rows are never rendered as
@@ -47,7 +49,8 @@ export function createOrderDetailsLoader({ endpoint, buildGroups, maxEntries = 1
       const debug = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("ordersPerf") === "1";
       const reportTiming = (buildMs = null) => {
         if (!debug) return;
-        console.info("[Orders Performance]", {
+        reportOrdersPerformance({
+          kind: "fetch",
           endpoint: endpoint.split("/").slice(-2).join("/"),
           networkMs: Math.round(responseReceived - fetchStarted),
           parseMs: Math.round(parsedAt - responseReceived),

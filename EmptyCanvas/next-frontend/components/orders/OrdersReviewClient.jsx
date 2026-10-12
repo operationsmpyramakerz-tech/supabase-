@@ -4,7 +4,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import ClassicOrderIcon from "./ClassicOrderIcon";
 import { createOrderDetailsLoader } from "./orderDetailsLoader";
+import { loadOrderAndModalWithMetrics, warmOrderModalOnIdle } from "./orderOpeningPerformance";
 import OrderDetailsLoadingOverlay from "./OrderDetailsLoadingOverlay";
+import OrdersPerformancePanel from "./OrdersPerformancePanel";
 import OrderTypeBadge from "./OrderTypeBadge";
 import OrdersEmptyState, { OrdersListHeader, sortOrderGroups } from "./OrdersEmptyState";
 import { loadTeamMemberPublicProfile } from "../../lib/team-member-public-client";
@@ -356,6 +358,13 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
   const listAbortRef = useRef(null);
   const initialFilterKeyRef = useRef("all|all|");
 
+  // Warm the modal code after the list is interactive. Never request an
+  // order's private details merely because its card was rendered or touched.
+  useEffect(() => {
+    if (listLoading || !orders.length) return undefined;
+    return warmOrderModalOnIdle(loadOrdersReviewHeavyModals);
+  }, [listLoading, orders.length]);
+
   useClassicHeaderSearch(query, setQuery, "Search by reason or item...");
 
   useEffect(() => {
@@ -465,7 +474,6 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
   }
   async function openReviewDetails(group, { force = false } = {}) {
     if (!group?.key) return;
-    const modalReady = loadOrdersReviewHeavyModals();
     const requestId = ++detailRequestIdRef.current;
     setSelectedKey(group.key);
     setDetailError("");
@@ -474,7 +482,11 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
     try {
       // Keep the full-size loading sheet until both the review details and
       // their interactive modal code are available.
-      const [detail] = await Promise.all([detailsLoaderRef.current.get(group, { fresh: force }), modalReady]);
+      const detail = await loadOrderAndModalWithMetrics({
+        page: "Review",
+        loadDetails: () => detailsLoaderRef.current.get(group, { fresh: force }),
+        loadModal: loadOrdersReviewHeavyModals,
+      });
       if (requestId !== detailRequestIdRef.current) return;
       setDetailGroups((current) => {
         const next = new Map(current);
@@ -734,5 +746,6 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
         onCloseCreator={() => setCreatorState(null)}
       />
     ) : null}
+    <OrdersPerformancePanel />
   </section>;
 }

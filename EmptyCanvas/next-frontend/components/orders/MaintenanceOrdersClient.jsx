@@ -4,11 +4,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import ClassicOrderIcon from "./ClassicOrderIcon";
 import { createOrderDetailsLoader } from "./orderDetailsLoader";
+import { loadOrderAndModalWithMetrics, warmOrderModalOnIdle } from "./orderOpeningPerformance";
 import OrderDetailsLoadingOverlay from "./OrderDetailsLoadingOverlay";
+import OrdersPerformancePanel from "./OrdersPerformancePanel";
 import OrderTypeBadge from "./OrderTypeBadge";
 import OrdersEmptyState, { OrdersListHeader, sortOrderGroups } from "./OrdersEmptyState";
 import { loadTeamMemberPublicProfile } from "../../lib/team-member-public-client";
 
+const loadMaintenanceOrdersHeavyModals = () => import("./MaintenanceHeavyModals");
 const MaintenanceDetailsModal = dynamic(() => import("./MaintenanceHeavyModals").then((module) => module.MaintenanceDetailsModal), { ssr: false });
 const MaintenanceDownloadModal = dynamic(() => import("./MaintenanceHeavyModals").then((module) => module.MaintenanceDownloadModal), { ssr: false });
 const MaintenanceLogModal = dynamic(() => import("./MaintenanceHeavyModals").then((module) => module.MaintenanceLogModal), { ssr: false });
@@ -629,6 +632,13 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
   const listAbortRef = useRef(null);
   const initialFilterKeyRef = useRef("all|all|");
 
+  // Warm the modal code after the list is interactive. Never request an
+  // order's private details merely because its card was rendered or touched.
+  useEffect(() => {
+    if (listLoading || !orders.length) return undefined;
+    return warmOrderModalOnIdle(loadMaintenanceOrdersHeavyModals);
+  }, [listLoading, orders.length]);
+
   useClassicHeaderSearch(query, setQuery, "Search by issue, product, or user...");
 
   useEffect(() => {
@@ -764,13 +774,16 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
     // Begin loading the modal code and the data in parallel. The lightweight
     // overlay appears immediately, so a slow Supabase response never looks
     // like an unresponsive card.
-    const modalReady = import("./MaintenanceHeavyModals");
     setSelected(null);
     // Keep the real-size loading sheet on screen until data and modal code
     // are both ready, preventing a blank frame on slower connections.
     setOpeningGroup(group);
     try {
-      const [detail] = await Promise.all([detailsLoaderRef.current.get(group), modalReady]);
+      const detail = await loadOrderAndModalWithMetrics({
+        page: "Maintenance",
+        loadDetails: () => detailsLoaderRef.current.get(group),
+        loadModal: loadMaintenanceOrdersHeavyModals,
+      });
       if (requestId !== openRequestRef.current) return;
       setOpeningGroup(null);
       setSelected(detail);
@@ -1136,6 +1149,7 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
       {downloadState ? <MaintenanceDownloadModal state={downloadState} options={options} busy={busy} onClose={() => setDownloadState(null)} onDownload={exportOrder} onChecklistSaved={rememberChecklistItem} onChecklistUpdated={rememberChecklistItem} onChecklistDeleted={forgetChecklistItem} /> : null}
       {doneGroup ? <MarkDoneModal group={doneGroup} busy={busy} error={actionError} onCancel={() => { setDoneGroup(null); setActionError(""); }} onSubmit={markDone} /> : null}
       <CreatorProfilePopover state={creatorState} onClose={() => setCreatorState(null)} />
+      <OrdersPerformancePanel />
     </section>
   );
 }

@@ -5,7 +5,9 @@ import dynamic from "next/dynamic";
 import { navigateWithinApp } from "../../lib/client-navigation";
 import ClassicOrderIcon from "./ClassicOrderIcon";
 import { createOrderDetailsLoader } from "./orderDetailsLoader";
+import { loadOrderAndModalWithMetrics, warmOrderModalOnIdle } from "./orderOpeningPerformance";
 import OrderDetailsLoadingOverlay from "./OrderDetailsLoadingOverlay";
+import OrdersPerformancePanel from "./OrdersPerformancePanel";
 import OrderTypeBadge from "./OrderTypeBadge";
 import OrdersEmptyState, { OrdersListHeader, sortOrderGroups } from "./OrdersEmptyState";
 import CurrentOrderCreatorPopover from "./CurrentOrderCreatorPopover";
@@ -621,6 +623,13 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
   const listAbortRef = useRef(null);
   const initialFilterKeyRef = useRef("all|all|");
 
+  // Warm the modal code after the list is interactive. Never request an
+  // order's private details merely because its card was rendered or touched.
+  useEffect(() => {
+    if (listLoading || !orders.length) return undefined;
+    return warmOrderModalOnIdle(loadCurrentOrdersHeavyModals);
+  }, [listLoading, orders.length]);
+
   useClassicHeaderSearch(query, setQuery, "Search orders by reason...");
 
   useEffect(() => {
@@ -767,13 +776,16 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
     // Begin loading the modal code and the data in parallel. The lightweight
     // overlay appears immediately, so a slow Supabase response never looks
     // like an unresponsive card.
-    const modalReady = loadCurrentOrdersHeavyModals();
     setSelected(null);
     // Keep the real-size loading sheet on screen until data and modal code
     // are both ready, preventing a blank frame on slower connections.
     setOpeningGroup(group);
     try {
-      const [detail] = await Promise.all([detailsLoaderRef.current.get(group), modalReady]);
+      const detail = await loadOrderAndModalWithMetrics({
+        page: "My Orders",
+        loadDetails: () => detailsLoaderRef.current.get(group),
+        loadModal: loadCurrentOrdersHeavyModals,
+      });
       if (requestId !== openRequestRef.current) return;
       setOpeningGroup(null);
       setSelected(detail);
@@ -992,6 +1004,7 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
           onCloseReason={() => setReasonView("")}
         />
       ) : null}
+      <OrdersPerformancePanel />
     </section>
   );
 }
