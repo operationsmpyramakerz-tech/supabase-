@@ -306,7 +306,7 @@ export async function getProductImageSources(productId) {
     imageUrls: productRowImageCandidates(row),
   };
 }
-function serializeProduct(row = {}) {
+export function serializeProduct(row = {}) {
   return {
     id: text(pick(row, ["id", "ID"])),
     name: text(pick(row, ["name", "Name", "product_name", "Product Name", "product", "Product"])) || "Untitled Product",

@@ -709,7 +709,7 @@ async function resolveDirectProposalSources(items = [], { timings = null } = {})
   return rows;
 }
 
-export async function enrichOrderDetailGrouping(items = [], { timings = null, productsSink = null } = {}) {
+export async function enrichOrderDetailGrouping(items = [], { timings = null, productsSink = null, references = null } = {}) {
   let rows = Array.isArray(items) ? items : [];
   if (!rows.length) return rows;
   // Proposal-source reconstruction and catalog/kit lookups are independent.
@@ -729,12 +729,17 @@ export async function enrichOrderDetailGrouping(items = [], { timings = null, pr
   const productIds = rows.every((item) => text(item?.productId))
     ? [...new Set(rows.map((item) => text(item.productId)))]
     : null;
-  const [resolvedRows, productsResult, kitReferences, folders] = await Promise.all([
-    measure("proposal", () => resolveDirectProposalSources(rows, { timings })),
-    measure("products", () => getProductsForOrderDetails(rows, { allowLargeTargeted: Array.isArray(productsSink) }).catch(() => [])),
-    measure("kits", () => getKitGroupingReferences({ productIds, allowLargeTargeted: Array.isArray(productsSink) }).catch(() => ({ memberships: [], kits: [] }))),
-    measure("folders", () => listKitFolders({}).catch(() => [])),
-  ]);
+  // The optional single-RPC bundle supplies the same references as the legacy
+  // four parallel REST paths, without any extra network calls. When the RPC
+  // is unavailable or incomplete, callers simply use the original path.
+  const [resolvedRows, productsResult, kitReferences, folders] = references
+    ? [rows, references.products, references.kitReferences, references.folders]
+    : await Promise.all([
+      measure("proposal", () => resolveDirectProposalSources(rows, { timings })),
+      measure("products", () => getProductsForOrderDetails(rows, { allowLargeTargeted: Array.isArray(productsSink) }).catch(() => [])),
+      measure("kits", () => getKitGroupingReferences({ productIds, allowLargeTargeted: Array.isArray(productsSink) }).catch(() => ({ memberships: [], kits: [] }))),
+      measure("folders", () => listKitFolders({}).catch(() => [])),
+    ]);
   rows = resolvedRows;
 
   const products = Array.isArray(productsResult) ? productsResult : [];

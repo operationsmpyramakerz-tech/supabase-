@@ -2,6 +2,7 @@ import "server-only";
 import { performance } from "node:perf_hooks";
 import { isSupabaseConfigured, select, selectAll, selectById, updateById, updateByIds } from "./supabase-rest";
 import { enrichOrderDetailGrouping, loadRawOrderRowsByIds, serializeReviewOrderDetail } from "./order-details-data";
+import { loadFastOrderDetailsBundle } from "./order-details-fast-path";
 import { consumeOrderSummaryWindows, loadOrderRowsByNumbers, scanOrderNumberCandidates } from "./order-pagination";
 import { applyOrderSearchPlan, canUseOrderSearchText, createOrderSearchPlan, noteOrderSearchTextError } from "./order-search-hotpath";
 import { canUseOrderCandidateRpc, loadOrderCandidateNumbersRpc, noteOrderCandidateRpcError } from "./order-candidate-rpc";
@@ -703,9 +704,10 @@ export const __ordersReviewDataTest = {
 };
 export async function loadOrdersReviewDetails({ account, orderIds = [], timings = null } = {}) {
   if (!isSupabaseConfigured()) return null;
+  const fast = await loadFastOrderDetailsBundle(orderIds, { timings });
   const dbStartedAt = performance.now();
-  const rows = await loadRawOrderRowsByIds(orderIds);
-  if (timings) timings.db = performance.now() - dbStartedAt;
+  const rows = fast?.rows || await loadRawOrderRowsByIds(orderIds);
+  if (timings) timings.db = fast ? timings.bundle : performance.now() - dbStartedAt;
   const visibilityStartedAt = performance.now();
   const visible = await reviewerVisibility(account || {});
   if (timings) timings.visibility = performance.now() - visibilityStartedAt;
@@ -729,8 +731,14 @@ export async function loadOrdersReviewDetails({ account, orderIds = [], timings 
   }
 
   const enrichStartedAt = performance.now();
-  const details = await enrichOrderDetailGrouping(allowed.map(serializeReviewOrderDetail), { timings });
-  if (timings) timings.enrich = performance.now() - enrichStartedAt;
+  const details = await enrichOrderDetailGrouping(allowed.map(serializeReviewOrderDetail), {
+    timings,
+    references: fast?.references || null,
+  });
+  if (timings) {
+    timings.enrich = performance.now() - enrichStartedAt;
+    if (fast) timings.fastPath = 1;
+  }
   return details;
 }
 

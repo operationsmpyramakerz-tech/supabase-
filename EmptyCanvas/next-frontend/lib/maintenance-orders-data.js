@@ -3,6 +3,7 @@ import { performance } from "node:perf_hooks";
 
 import { deleteByIds, isSupabaseConfigured, select, updateById, updateByIds } from "./supabase-rest";
 import { loadRawOrderRowsByIds, serializeOperationsOrderDetail } from "./order-details-data";
+import { loadFastOrderDetailsBundle } from "./order-details-fast-path";
 import { consumeOrderSummaryWindows, loadOrderRowsByNumbers, scanOrderNumberCandidates } from "./order-pagination";
 import { applyOrderSearchPlan, canUseOrderSearchText, createOrderSearchPlan, noteOrderSearchTextError } from "./order-search-hotpath";
 import { canUseOrderCandidateRpc, loadOrderCandidateNumbersRpc, noteOrderCandidateRpcError } from "./order-candidate-rpc";
@@ -413,7 +414,7 @@ export async function loadMaintenanceOrdersInitialPage({ limit = PAGE_LIMIT } = 
   );
 }
 
-async function enrichMaintenanceDetailProducts(items = [], { timings = null } = {}) {
+async function enrichMaintenanceDetailProducts(items = [], { timings = null, knownProducts = null } = {}) {
   const rows = Array.isArray(items) ? items : [];
   if (!rows.length) return rows;
 
@@ -433,7 +434,13 @@ async function enrichMaintenanceDetailProducts(items = [], { timings = null } = 
         ...(Array.isArray(log?.sparePartsReplacedEntries) ? log.sparePartsReplacedEntries : []).map((part) => ({ productId: part?.id, productName: part?.name, productUrl: part?.url })),
       ]),
     ]);
-    products = await getProductsForOrderDetails(referencedProducts);
+    // The live bundle already returned the same current product records.
+    // Reuse them only if EVERY spare part/log product is covered by ID;
+    // otherwise retain the previous complete-catalog compatibility logic.
+    const byKnownId = new Set((knownProducts || []).map((part) => text(part.id)));
+    const allCovered = Array.isArray(knownProducts)
+      && referencedProducts.every((part) => text(part.productId) && byKnownId.has(text(part.productId)));
+    products = allCovered ? knownProducts : await getProductsForOrderDetails(referencedProducts);
   } catch {}
   finally { if (timings) timings.products = performance.now() - productsStartedAt; }
   if (!products.length) return rows;
@@ -517,9 +524,10 @@ export async function loadMaintenanceOrderDetails({ orderIds = [], timings = nul
     .slice(0, 500);
   if (!ids.length) return [];
 
+  const fast = await loadFastOrderDetailsBundle(ids, { timings });
   const dbStartedAt = performance.now();
-  const rows = await loadRawOrderRowsByIds(ids);
-  if (timings) timings.db = performance.now() - dbStartedAt;
+  const rows = fast?.rows || await loadRawOrderRowsByIds(ids);
+  if (timings) timings.db = fast ? timings.bundle : performance.now() - dbStartedAt;
   const prepareStartedAt = performance.now();
   const maintenanceRows = (Array.isArray(rows) ? rows : []).filter((row) => {
     const item = serializeOperationsOrderDetail(row);
@@ -536,8 +544,13 @@ export async function loadMaintenanceOrderDetails({ orderIds = [], timings = nul
   const serialized = maintenanceRows.map(serializeOperationsOrderDetail);
   if (timings) timings.prepare = performance.now() - prepareStartedAt;
   const enrichStartedAt = performance.now();
-  const details = await enrichMaintenanceDetailProducts(serialized, { timings });
-  if (timings) timings.enrich = performance.now() - enrichStartedAt;
+  const details = await enrichMaintenanceDetailProducts(serialized, {
+    timings, knownProducts: fast?.references?.products || null,
+  });
+  if (timings) {
+    timings.enrich = performance.now() - enrichStartedAt;
+    if (fast) timings.fastPath = 1;
+  }
   return details;
 }
 

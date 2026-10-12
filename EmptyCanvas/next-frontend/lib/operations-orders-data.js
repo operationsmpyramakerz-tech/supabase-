@@ -3,6 +3,7 @@ import { performance } from "node:perf_hooks";
 import { deleteById, getSupabaseConfig, insert, isSupabaseConfigured, select, selectAll, supabaseRequest, updateById, updateByIds, uploadStorageObject } from "./supabase-rest";
 import { enrichOrderDetailGrouping, loadRawOrderRowsByIds, serializeOperationsOrderDetail } from "./order-details-data";
 import { getProductsCatalog } from "./products-service";
+import { loadFastOrderDetailsBundle } from "./order-details-fast-path";
 import { listTeamMembersLite } from "./team-members-service";
 import { invalidateStocktakingReadCaches } from "./stocktaking-data";
 import { consumeOrderSummaryWindows, loadOrderRowsByNumbers, scanOrderNumberCandidates } from "./order-pagination";
@@ -779,6 +780,25 @@ export async function loadOperationsOrdersInitialPage({ limit = PAGE_LIMIT } = {
 }
 export async function loadOperationsOrderDetails(orderIds = [], { timings = null, productsSink = null } = {}) {
   if (!isSupabaseConfigured()) return null;
+  // Try a single live PostgreSQL bundle first. It reads all components and
+  // their product/kit/proposal references in one network round trip. No
+  // cross-request snapshot is stored, so mutations remain immediately visible.
+  // The existing exact-ID verified REST loader is the safety fallback.
+  const fast = await loadFastOrderDetailsBundle(orderIds, { timings });
+  if (fast) {
+    const prepareStartedAt = performance.now();
+    const details = await enrichOrderDetailGrouping(
+      fast.rows.map(serializeOperationsOrderDetail),
+      { timings, productsSink, references: fast.references },
+    );
+    if (timings) {
+      timings.prepare = performance.now() - prepareStartedAt;
+      timings.enrich = timings.prepare;
+      timings.fastPath = 1;
+    }
+    return details;
+  }
+
   const dbStartedAt = performance.now();
   const rows = await loadRawOrderRowsByIds(orderIds);
   if (timings) timings.db = performance.now() - dbStartedAt;

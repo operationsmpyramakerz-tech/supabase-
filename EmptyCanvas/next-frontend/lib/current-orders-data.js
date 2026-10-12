@@ -4,6 +4,7 @@ import { performance } from "node:perf_hooks";
 import { deleteByIds, isSupabaseConfigured, select, updateById, updateByIds } from "./supabase-rest";
 import { invalidateLegacyOperationsCaches, serializeOperationsCompactSummaryRow } from "./operations-orders-data";
 import { loadRawOrderRowsByIds, serializeOperationsOrderDetail } from "./order-details-data";
+import { loadFastRawOrderRows } from "./order-details-fast-path";
 import { consumeOrderSummaryWindows, loadOrderRowsByNumbers, scanOrderNumberCandidates } from "./order-pagination";
 import { applyOrderSearchPlan, canUseOrderSearchText, createOrderSearchPlan, noteOrderSearchTextError } from "./order-search-hotpath";
 import { canUseOrderCandidateRpc, loadOrderCandidateNumbersRpc, noteOrderCandidateRpcError } from "./order-candidate-rpc";
@@ -477,9 +478,13 @@ export async function loadCurrentOrderDetails({ account = {}, orderIds = [], tim
     .slice(0, 500);
   if (!ids.length) return [];
 
+  const fastRows = await loadFastRawOrderRows(ids, { timings });
   const dbStartedAt = performance.now();
-  const rows = await loadRawOrderRowsByIds(ids);
-  if (timings) timings.db = performance.now() - dbStartedAt;
+  const rows = fastRows || await loadRawOrderRowsByIds(ids);
+  if (timings) {
+    timings.db = fastRows ? timings.bundle : performance.now() - dbStartedAt;
+    if (fastRows) timings.fastPath = 1;
+  }
   const prepareStartedAt = performance.now();
   const visible = (Array.isArray(rows) ? rows : []).filter((row) => ownedByAccount(row, account));
 
