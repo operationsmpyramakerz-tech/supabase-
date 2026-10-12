@@ -776,7 +776,7 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
 
   async function openOrderDetails(group) {
     if (!group) return;
-    markOrderOpenStarted("My Orders");
+    const attemptId = markOrderOpenStarted("My Orders");
     const requestId = ++openRequestRef.current;
     // Begin loading the modal code and the data in parallel. The lightweight
     // overlay appears immediately, so a slow Supabase response never looks
@@ -788,7 +788,8 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
     try {
       const detail = await loadOrderAndModalWithMetrics({
         page: "My Orders",
-        loadDetails: () => detailsLoaderRef.current.get(group),
+        attemptId,
+        loadDetails: ({ attemptId: measuredAttempt }) => detailsLoaderRef.current.get(group, { attemptId: measuredAttempt }),
         loadModal: loadCurrentOrdersHeavyModals,
       });
       if (requestId !== openRequestRef.current) return;

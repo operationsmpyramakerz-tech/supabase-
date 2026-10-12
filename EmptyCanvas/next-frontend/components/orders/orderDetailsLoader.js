@@ -1,4 +1,4 @@
-import { ordersPerfEnabled, reportOrdersPerformance } from "./orderOpeningPerformance";
+import { ordersPerfEnabled, reportOrdersPerformance } from "./orderOpeningPerformance.js";
 
 // Page-local detail loader: coalesces clicks and intent prefetches, bounds the
 // number of cached orders, and never shares private order payloads globally.
@@ -13,22 +13,30 @@ export function createOrderDetailsLoader({ endpoint, buildGroups, maxEntries = 1
   const keyFor = (group) => String(group?.key || group?.orderIdLabel || (group?.orderIds || []).join("|") || "").trim();
   const needsDetails = (group) => (Array.isArray(group?.items) ? group.items : []).some((item) => Boolean(item?.summaryOnly));
 
-  async function get(group, { fresh = false } = {}) {
+  async function get(group, { fresh = false, attemptId = null } = {}) {
     // A real click takes priority over any delayed hover prefetch.
     cancelPrefetch();
     if (!group) throw new Error("Select an order first.");
-    if (!needsDetails(group)) return group;
+    if (!needsDetails(group)) {
+      if (attemptId !== null) reportOrdersPerformance({ kind: "source", attemptId, source: "already-detailed" });
+      return group;
+    }
     const key = keyFor(group);
     if (!key) throw new Error("Order identifier is missing.");
     const cached = ready.get(key);
     if (!fresh && cached && cached.expiresAt > Date.now()) {
+      if (attemptId !== null) reportOrdersPerformance({ kind: "source", attemptId, source: "cache" });
       // LRU: recently accessed orders stay in the small page-local cache.
       ready.delete(key);
       ready.set(key, cached);
       return cached.value;
     }
     if (cached) ready.delete(key);
-    if (pending.has(key)) return pending.get(key);
+    if (pending.has(key)) {
+      if (attemptId !== null) reportOrdersPerformance({ kind: "source", attemptId, source: "in-flight" });
+      return pending.get(key);
+    }
+    if (attemptId !== null) reportOrdersPerformance({ kind: "source", attemptId, source: "network" });
     const startedEpoch = epoch;
     const promise = (async () => {
       const measure = typeof performance !== "undefined" && typeof performance.now === "function"
@@ -51,6 +59,7 @@ export function createOrderDetailsLoader({ endpoint, buildGroups, maxEntries = 1
         if (!debug) return;
         reportOrdersPerformance({
           kind: "fetch",
+          attemptId,
           endpoint: endpoint.split("/").slice(-2).join("/"),
           networkMs: Math.round(responseReceived - fetchStarted),
           parseMs: Math.round(parsedAt - responseReceived),

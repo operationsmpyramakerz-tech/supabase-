@@ -49,3 +49,17 @@ export function computeRecentOrderSpeed(entries, sampleSize = 5) {
   const median = sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
   return { count: sorted.length, medianMs: median, fastestMs: sorted[0], slowestMs: sorted[sorted.length - 1] };
 }
+
+// A single opening can use a network request, an already pending request, or
+// private page-local cache. Never show the previous opening's API timings
+// alongside a new cache hit: that would make performance debugging misleading.
+export function selectOpeningAttempt(entries) {
+  const events = Array.isArray(entries) ? entries : [];
+  // Entries are newest-first. Prefer the latest *start*: older asynchronous
+  // requests may finish later, but must never become the displayed attempt.
+  const newest = events.find((item) => item?.kind === "start" && item.attemptId != null)
+    ?? events.find((item) => ["open", "paint"].includes(item?.kind) && item.attemptId != null);
+  const attemptId = newest?.attemptId ?? null;
+  const matching = (kind) => events.find((item) => item?.kind === kind && attemptId !== null && item.attemptId === attemptId);
+  return { attemptId, latestPaint: matching("paint"), latestOpen: matching("open"), latestFetch: matching("fetch"), latestSource: matching("source") };
+}

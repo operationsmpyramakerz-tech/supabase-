@@ -480,7 +480,7 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
   }
   async function openReviewDetails(group, { force = false } = {}) {
     if (!group?.key) return;
-    markOrderOpenStarted("Review");
+    const attemptId = markOrderOpenStarted("Review");
     const requestId = ++detailRequestIdRef.current;
     setSelectedKey(group.key);
     setDetailError("");
@@ -491,7 +491,8 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
       // their interactive modal code are available.
       const detail = await loadOrderAndModalWithMetrics({
         page: "Review",
-        loadDetails: () => detailsLoaderRef.current.get(group, { fresh: force }),
+        attemptId,
+        loadDetails: ({ attemptId: measuredAttempt }) => detailsLoaderRef.current.get(group, { fresh: force, attemptId: measuredAttempt }),
         loadModal: loadOrdersReviewHeavyModals,
       });
       if (requestId !== detailRequestIdRef.current) return;

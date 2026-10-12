@@ -4,6 +4,7 @@ const PERF_EVENT = "pyramakerz:orders-performance";
 const PERF_TOGGLE_EVENT = "pyramakerz:orders-performance-toggle";
 const PERF_SESSION_KEY = "pyramakerz:orders-performance-enabled";
 const visibleTimers = new Map();
+let nextOpenAttempt = 0;
 
 const now = () => (typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now());
 
@@ -40,7 +41,12 @@ export const ORDERS_PERF_TOGGLE_EVENT = PERF_TOGGLE_EVENT;
 // Measures click -> first painted order details, not just API + import time.
 // No order IDs, names, products, or response payloads are stored.
 export function markOrderOpenStarted(page) {
-  if (ordersPerfEnabled()) visibleTimers.set(page, now());
+  if (!ordersPerfEnabled()) return null;
+  // Anonymous monotonic attempt ID: never includes an order ID or user data.
+  const attemptId = ++nextOpenAttempt;
+  visibleTimers.set(page, { started: now(), attemptId });
+  reportOrdersPerformance({ kind: "start", page, attemptId });
+  return attemptId;
 }
 
 export function cancelOrderOpenTimer(page) {
@@ -53,10 +59,10 @@ export function reportOrderVisibleAfterPaint(page) {
   let secondFrame = 0;
   firstFrame = window.requestAnimationFrame(() => {
     secondFrame = window.requestAnimationFrame(() => {
-      const started = visibleTimers.get(page);
-      if (started === undefined) return;
+      const timer = visibleTimers.get(page);
+      if (!timer) return;
       visibleTimers.delete(page);
-      reportOrdersPerformance({ kind: "paint", page, visibleMs: Math.round(now() - started) });
+      reportOrdersPerformance({ kind: "paint", page, attemptId: timer.attemptId, visibleMs: Math.round(now() - timer.started) });
     });
   });
   return () => {
@@ -105,13 +111,13 @@ export function warmOrderModalOnIdle(loadModal, { delayMs = 1800 } = {}) {
   };
 }
 
-export async function loadOrderAndModalWithMetrics({ page, loadDetails, loadModal }) {
+export async function loadOrderAndModalWithMetrics({ page, loadDetails, loadModal, attemptId = null }) {
   const start = now();
   let detailsMs = null;
   let modalMs = null;
   let detailReady = false;
   let modalReady = false;
-  const details = Promise.resolve().then(loadDetails).then((value) => {
+  const details = Promise.resolve().then(() => loadDetails({ attemptId })).then((value) => {
     detailReady = true;
     detailsMs = now() - start;
     return value;
@@ -124,13 +130,13 @@ export async function loadOrderAndModalWithMetrics({ page, loadDetails, loadModa
   try {
     const [detail] = await Promise.all([details, modal]);
     reportOrdersPerformance({
-      kind: "open", page, detailsMs: Math.round(detailsMs), modalMs: Math.round(modalMs),
+      kind: "open", page, attemptId, detailsMs: Math.round(detailsMs), modalMs: Math.round(modalMs),
       readyMs: Math.round(now() - start),
     });
     return detail;
   } catch (error) {
     reportOrdersPerformance({
-      kind: "open", page, detailsMs: detailsMs === null ? null : Math.round(detailsMs),
+      kind: "open", page, attemptId, detailsMs: detailsMs === null ? null : Math.round(detailsMs),
       modalMs: modalMs === null ? null : Math.round(modalMs),
       readyMs: Math.round(now() - start), failed: true,
       detailReady, modalReady,

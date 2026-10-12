@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { ORDERS_PERF_EVENT, ORDERS_PERF_TOGGLE_EVENT, ordersPerfEnabled, setOrdersPerfEnabled } from "./orderOpeningPerformance";
-import { computeRecentOrderSpeed, MAIN_STAGE_LABELS, parseServerTiming, SQL_STAGE_LABELS } from "./ordersPerfAnalysis";
+import { computeRecentOrderSpeed, MAIN_STAGE_LABELS, parseServerTiming, selectOpeningAttempt, SQL_STAGE_LABELS } from "./ordersPerfAnalysis";
 
 const round = (value) => (typeof value === "number" && Number.isFinite(value) ? `${Math.round(value)} ms` : "—");
 const readableSize = (bytes) => (typeof bytes === "number" && Number.isFinite(bytes) && bytes >= 0
@@ -29,9 +29,9 @@ export default function OrdersPerformancePanel() {
     sync();
     const handle = (event) => {
       const entry = event.detail;
-      if (!entry || !["open", "fetch", "paint"].includes(entry.kind)) return;
-      // Five complete opens = 15 events; leave room for failures and prefetches.
-      setEntries((current) => [entry, ...current].slice(0, 24));
+      if (!entry || !["start", "open", "fetch", "paint", "source"].includes(entry.kind)) return;
+      // Five opens may emit 25 events; leave room for failures and prefetches.
+      setEntries((current) => [entry, ...current].slice(0, 40));
       setCopyStatus("");
     };
     window.addEventListener(ORDERS_PERF_EVENT, handle);
@@ -44,9 +44,7 @@ export default function OrdersPerformancePanel() {
 
   if (!mounted || !enabled) return null;
 
-  const latestOpen = entries.find((item) => item.kind === "open");
-  const latestFetch = entries.find((item) => item.kind === "fetch");
-  const latestPaint = entries.find((item) => item.kind === "paint");
+  const { latestPaint, latestOpen, latestFetch, latestSource } = selectOpeningAttempt(entries);
   const server = parseServerTiming(latestFetch?.serverTiming);
   const recent = computeRecentOrderSpeed(entries);
   const sqlStages = SQL_STAGE_LABELS.filter(([name]) => Number.isFinite(server[name]));
@@ -85,6 +83,7 @@ export default function OrdersPerformancePanel() {
             {details.map(([label, value]) => (
               <div className="orders-perf-panel__metric" key={label}><span>{label}</span><strong>{value}</strong></div>
             ))}
+            {latestSource && <div className="orders-perf-panel__metric"><span>Detail source</span><strong>{({ network: "API request", cache: "Memory cache", "in-flight": "Reused pending request", "already-detailed": "Already loaded" })[latestSource.source] || "—"}</strong></div>}
             {recent && recent.count > 1 && (
               <div className="orders-perf-panel__summary" aria-label="Recent opening speeds">
                 <span>Median of last {recent.count} opens</span><strong>{round(recent.medianMs)}</strong>
