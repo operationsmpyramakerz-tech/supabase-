@@ -621,11 +621,37 @@ function proposalItemMatchesOrder(item = {}, proposalItem = {}) {
   return Boolean(orderName && proposalName && orderName === proposalName);
 }
 
-async function resolveDirectProposalSources(items = [], { timings = null } = {}) {
+function applyLegacyKitTagFallback(item = {}) {
+  const fallbackKit = text(item?.kitTag);
+  const fallbackQuantity = Math.abs(Number(item?.quantityProgress ?? item?.quantityEditedBySupervisor ?? item?.quantityRequested ?? item?.quantity ?? 0));
+  if (!fallbackKit || !(fallbackQuantity > 0)) return false;
+  item.sourceKits = [{ kitId: "", kitName: fallbackKit, quantity: fallbackQuantity, order: 0 }];
+  return true;
+}
+
+async function resolveDirectProposalSources(items = [], {
+  timings = null, confirmedEmptySourceIds = [], fullProposalLookupIds = [],
+} = {}) {
   const rows = (Array.isArray(items) ? items : []).map((item) => ({ ...item }));
-  const unresolved = rows.filter(needsProposalSourceLookup);
-  if (timings) timings.proposalUnresolved = unresolved.length;
-  if (!unresolved.length) return rows;
+  const knownEmpty = new Set(confirmedEmptySourceIds.map(text));
+  const fullOnly = new Set(fullProposalLookupIds.map(text));
+  const pending = rows.filter(needsProposalSourceLookup);
+  const confirmed = pending.filter((item) => knownEmpty.has(text(item.id)));
+  const unresolved = pending.filter((item) => !knownEmpty.has(text(item.id)));
+  let fallbackTags = 0;
+  // The bundle already proved these pairs have empty source arrays. Retain the
+  // same legacy kitTag fallback without a second database request.
+  for (const item of confirmed) {
+    if (applyLegacyKitTagFallback(item)) fallbackTags += 1;
+  }
+  if (timings) {
+    timings.proposalUnresolved = unresolved.length;
+    timings.proposalConfirmedEmpty = confirmed.length;
+  }
+  if (!unresolved.length) {
+    if (timings) { timings.proposalRecovered = 0; timings.proposalFallbackTags = fallbackTags; }
+    return rows;
+  }
 
   const proposalById = new Map();
   const proposalIdByName = new Map();
@@ -660,7 +686,7 @@ async function resolveDirectProposalSources(items = [], { timings = null } = {})
     const knownName = proposalRows.map(proposalNameFromItem).find(Boolean) || "";
     // Fast path: this order already stores the original proposal ID/name and
     // each component has its product ID. Read only matching source rows.
-    if (hasAllIds && knownName) {
+    if (hasAllIds && knownName && !proposalRows.every((item) => fullOnly.has(text(item.id)))) {
       try {
         const proposalItems = await getProposalSourcesForProducts(proposalId, productIds);
         if (proposalRows.every((item) => proposalItems.some((entry) => proposalItemMatchesOrder(item, entry)))) {
@@ -684,7 +710,6 @@ async function resolveDirectProposalSources(items = [], { timings = null } = {})
   }
 
   let recovered = 0;
-  let fallbackTags = 0;
   for (const item of unresolved) {
     const proposalName = proposalNameFromItem(item);
     const proposalId = proposalIdForItem(item);
@@ -703,12 +728,7 @@ async function resolveDirectProposalSources(items = [], { timings = null } = {})
     // Older order schemas may have kept only the primary kit tag. Keep the
     // order usable instead of blocking the detail screen when the original
     // proposal source row can no longer be reconstructed.
-    const fallbackKit = text(item?.kitTag);
-    const fallbackQuantity = Math.abs(Number(item?.quantityProgress ?? item?.quantityEditedBySupervisor ?? item?.quantityRequested ?? item?.quantity ?? 0));
-    if (fallbackKit && fallbackQuantity > 0) {
-      fallbackTags += 1;
-      item.sourceKits = [{ kitId: "", kitName: fallbackKit, quantity: fallbackQuantity, order: 0 }];
-    }
+    if (applyLegacyKitTagFallback(item)) fallbackTags += 1;
   }
 
   if (timings) {
@@ -744,8 +764,12 @@ export async function enrichOrderDetailGrouping(items = [], {
   // four parallel REST paths, without any extra network calls. When the RPC
   // is unavailable or incomplete, callers simply use the original path.
   const [resolvedRows, productsResult, kitReferences, folders] = references
-    ? [recoverProposalSources
-      ? await measure("proposal", () => resolveDirectProposalSources(rows, { timings }))
+    ? [recoverProposalSources || (references.confirmedEmptySourceIds?.length > 0)
+      ? await measure("proposal", () => resolveDirectProposalSources(rows, {
+        timings,
+        confirmedEmptySourceIds: references.confirmedEmptySourceIds || [],
+        fullProposalLookupIds: references.fullProposalLookupIds || [],
+      }))
       : rows, references.products, references.kitReferences, references.folders]
     : await Promise.all([
       measure("proposal", () => resolveDirectProposalSources(rows, { timings })),

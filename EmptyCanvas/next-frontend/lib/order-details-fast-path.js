@@ -3,6 +3,7 @@ import "server-only";
 import { performance } from "node:perf_hooks";
 import { rpc } from "./supabase-rest";
 import { serializeProduct } from "./products-service";
+import { classifyBundleProposalSources } from "./order-proposal-bundle-resolution";
 
 const RPC_NAME = "erp_order_detail_bundle_v1";
 const canonicalTables = [
@@ -109,6 +110,8 @@ export function makeFastOrderReferences(bundle) {
     if (key && !proposalByName.has(key)) proposalByName.set(key, header);
   }
   let proposalRecovery = false;
+  const confirmedEmptySourceIds = [];
+  const fullProposalLookupIds = [];
   for (const row of rows) {
     let sources = row.source_kits;
     if (typeof sources === "string") {
@@ -124,24 +127,24 @@ export function makeFastOrderReferences(bundle) {
     const proposalId = value(row.source_proposal_id)
       || value(proposalByName.get(canonical(proposalName))?.id);
     if (!proposalId) { proposalRecovery = true; continue; }
-    const match = bundle.proposalItems.find((candidate) =>
-      value(candidate.proposal_id) === proposalId
-      && ((value(row.product_id) && value(candidate.product_id) === value(row.product_id))
-        || (canonical(row.product_name)
-          && canonical(candidate.product_name) === canonical(row.product_name))));
-    if (!match) { proposalRecovery = true; continue; }
-    let candidateSources = match.source_kits;
-    if (typeof candidateSources === "string") {
-      try { candidateSources = JSON.parse(candidateSources); } catch { candidateSources = []; }
+    const sourceMatch = classifyBundleProposalSources(row, proposalId, bundle.proposalItems);
+    if (sourceMatch.kind === "confirmed-empty") {
+      // The live RPC already returned this exact proposal/product row and its
+      // source array is empty. A second REST read cannot fill a blank that is
+      // present in the database. Preserve the legacy stored kit-tag fallback
+      // in enrichOrderDetailGrouping, without repeating the lookup.
+      confirmedEmptySourceIds.push(value(row.id));
+      continue;
     }
-    if (!Array.isArray(candidateSources) || !candidateSources.length) {
-      // Resolve only these historical proposal links via the existing
-      // targeted/fallback resolver. Never discard the product/kit bundle and
-      // start the much slower complete memberships scan again.
+    if (sourceMatch.kind !== "found") {
+      // No matching proposal row, a malformed source or an ambiguous historic
+      // link: use the full-fidelity lookup. The targeted lookup would repeat
+      // the same exact-ID query already included inside the live bundle.
+      fullProposalLookupIds.push(value(row.id));
       proposalRecovery = true;
       continue;
     }
-    row.source_kits = candidateSources;
+    row.source_kits = sourceMatch.sources;
     row.source_proposal_id = proposalId;
     if (!value(row.source_proposal_name) && proposalName) row.source_proposal_name = proposalName;
   }
@@ -151,7 +154,7 @@ export function makeFastOrderReferences(bundle) {
     || value(b.id).localeCompare(value(a.id)));
   return {
     rows,
-    references: { products, kitReferences: { memberships, kits }, folders },
+    references: { products, kitReferences: { memberships, kits }, folders, confirmedEmptySourceIds, fullProposalLookupIds },
     proposalRecovery,
     missingProductMatches,
     orphanKitMemberships,
@@ -179,6 +182,8 @@ export async function loadFastOrderDetailsBundle(ids = [], { timings = null } = 
         timings.bundleProductMiss = ready.missingProductMatches;
         timings.bundleKitOrphans = ready.orphanKitMemberships;
         timings.bundleProposalRecovery = Number(ready.proposalRecovery);
+        timings.bundleProposalEmpty = ready.references.confirmedEmptySourceIds.length;
+        timings.bundleProposalFullOnly = ready.references.fullProposalLookupIds.length;
       }
     }
     return ready;
