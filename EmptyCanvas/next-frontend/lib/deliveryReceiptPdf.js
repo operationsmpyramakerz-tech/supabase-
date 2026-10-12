@@ -754,7 +754,7 @@ async function pipeDeliveryReceiptPDF(
     columns.forEach((column) => {
       if (Object.prototype.hasOwnProperty.call(rowData, column.key)) return;
       const value = r?.[column.key];
-      if (column.numericKind === "money") rowData[column.key] = moneyGBP(value);
+      if (column.numericKind === "money") rowData[column.key] = value == null ? "—" : moneyGBP(value);
       else if (column.numericKind === "quantity") rowData[column.key] = String(Number(value) || 0);
       else rowData[column.key] = String(value ?? "");
     });

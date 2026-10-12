@@ -124,17 +124,22 @@ export function mergeCombinedOrderRows(orderPayloads = [], orderMeta = []) {
       if (productId) byProductId.set(productId, target);
 
       const values = target._combinedOrderValues[orderIndex] || Object.fromEntries(COMBINED_ORDER_METRIC_KEYS.map((metric) => [metric, 0]));
-      // Unit cost is non-additive: it must be displayed PER order rather than
-      // borrowing the first selected order's price for every other order.
+      // One product may be sourced from several kits / legacy order lines at
+      // DIFFERENT unit prices. That is not a quantity error. Keep each source
+      // line's cost, and derive a weighted average only for the unit-price cell.
+      // Never overwrite prices with the first/last line's arbitrary price.
       const unit = numberValue(sourceRow?.unit, "unit", component, label);
-      if (Object.prototype.hasOwnProperty.call(values, "unit") && Math.abs(values.unit - unit) > 1e-6) {
-        throw invalidExport(`"${component}" has conflicting unit costs within ${label}. Check the source order before exporting.`);
-      }
-      values.unit = unit;
+      const sourceMetrics = Object.fromEntries(COMBINED_ORDER_METRIC_KEYS.map((metric) => [
+        metric, numberValue(sourceRow?.[metric], metric, component, label),
+      ]));
+      if (!values._priceSources) values._priceSources = [];
+      values._priceSources.push({
+        unit, qty: sourceMetrics.qty, total: sourceMetrics.total,
+        kitTag: text(sourceRow?.kitTag),
+      });
       for (const metric of COMBINED_ORDER_METRIC_KEYS) {
-        const quantity = numberValue(sourceRow?.[metric], metric, component, label);
-        values[metric] = roundQty(values[metric] + quantity);
-        expected[orderIndex][metric] += quantity;
+        values[metric] = roundQty(values[metric] + sourceMetrics[metric]);
+        expected[orderIndex][metric] += sourceMetrics[metric];
       }
       target._combinedOrderValues[orderIndex] = values;
     }
@@ -144,7 +149,27 @@ export function mergeCombinedOrderRows(orderPayloads = [], orderMeta = []) {
     const out = { ...row };
     orderMeta.forEach((order, orderIndex) => {
       const values = _combinedOrderValues[orderIndex] || {};
-      out[combinedMetricColumnKey("unit", orderIndex)] = values.unit ?? 0;
+      const sources = values._priceSources || [];
+      const distinctPrices = sources.length > 1 && sources.some((source) =>
+        Math.abs(source.unit - sources[0].unit) > 1e-6);
+      const quantity = Number(values.qty || 0);
+      const totalCost = Number(values.total || 0);
+      // A mixed-price row MUST retain the sum of the underlying line totals.
+      // The only price representing that combined row is totalCost / quantity.
+      // With zero net quantity a meaningful average does not exist; leave the
+      // price blank instead of inventing a price or dividing by zero.
+      const unit = !sources.length ? 0
+        : !distinctPrices ? sources[0].unit
+          : Math.abs(quantity) > 1e-9 ? totalCost / quantity : null;
+      if (unit !== null && !Number.isFinite(unit)) {
+        throw invalidExport(`Invalid combined unit cost in ${text(order?.label) || `Order ${orderIndex + 1}`}.`);
+      }
+      out[combinedMetricColumnKey("unit", orderIndex)] = unit;
+      if (distinctPrices) {
+        // Kept for the Excel cell audit note. Each source retains its original
+        // quantity, unit price and cost; no information is discarded.
+        out[combinedMetricColumnKey("unitSources", orderIndex)] = sources;
+      }
       for (const metric of COMBINED_ORDER_METRIC_KEYS) {
         out[combinedMetricColumnKey(metric, orderIndex)] = values[metric] || 0;
       }

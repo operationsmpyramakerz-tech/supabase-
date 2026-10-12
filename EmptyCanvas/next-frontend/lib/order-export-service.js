@@ -431,8 +431,10 @@ function selectedCombinedColumnDefs(columns, payload, opts = {}) {
       out.push({
         ...base,
         key: combinedMetricColumnKey(key, Number(order?.index) || 0),
-        label: metricCount === 1 ? header : `${header}\n${base.label}`,
-        width: Math.max(18, Number(base.width) || 14),
+        label: key === "unit"
+          ? `${header}\nAvg. unit cost`
+          : (metricCount === 1 ? header : `${header}\n${base.label}`),
+        width: Math.max(key === "unit" ? 22 : 18, Number(base.width) || 14),
         ratio: key === "total" || key === "unit" ? 0.16 : 0.14,
         align: "right",
         numericKind: key === "total" || key === "unit" ? "money" : "quantity",
@@ -967,6 +969,21 @@ async function renderProposalStyleExcel(payload, { selectedColumns = [], exportI
       }
       if (["qty", "receivedQty", "remainingQty", "deliveredQty"].includes(column.key) || column.numericKind === "quantity") cell.numFmt = numFmtFor(cell.value);
       if (column.key === "unit" || column.key === "total" || column.numericKind === "money") cell.numFmt = '"£"#,##0.00';
+      if (column.combinedMetricKey === "unit") {
+        const sources = item[combinedMetricColumnKey("unitSources", column.combinedOrderIndex)];
+        if (Array.isArray(sources) && sources.length) {
+          const totalQty = sources.reduce((sum, source) => sum + source.qty, 0);
+          const totalCost = sources.reduce((sum, source) => sum + source.total, 0);
+          cell.note = [
+            "Weighted-average unit cost. Original source prices:",
+            ...sources.map((source) => `${source.kitTag || "Unassigned kit"}: quantity ${source.qty}, unit cost ${source.unit}, line total ${source.total}`),
+            `Combined quantity: ${totalQty}. Combined cost: ${totalCost}.`,
+            "The original line totals are preserved in the total-cost column.",
+          ].join("\n");
+          // Extra precision reduces display rounding for weighted averages.
+          cell.numFmt = '"£"#,##0.0000';
+        }
+      }
       if (column.key === "total" || column.numericKind === "money") cell.font = { bold: true, color: { argb: "FFC2410C" } };
       if (column.key === "component" && item?.link && /^https?:\/\//i.test(text(item.link))) {
         cell.value = { text: text(item.component || cell.value || "Component"), hyperlink: text(item.link) };

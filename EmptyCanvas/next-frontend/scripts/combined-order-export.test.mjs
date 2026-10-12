@@ -119,11 +119,76 @@ test("unit prices belong to their own order, not the first selected order", () =
   assert.equal(rows[0].combined__unit__1, 45);
 });
 
-test("conflicting prices for a repeated component WITHIN the same order fail safely", () => {
-  assert.throws(() => combined([
-    [component({ unit: 40 }), component({ unit: 45 })],
+test("different prices for one product WITHIN ORD-55 preserve every quantity and original cost", () => {
+  const rows = combined([
+    [
+      component({ qty: 2, remainingQty: 2, unit: 40, total: 80, kitTag: "Kit A" }),
+      component({ qty: 3, remainingQty: 3, unit: 45, total: 135, kitTag: "Kit B" }),
+    ],
     [component({ _productId: "different" })],
-  ]), /conflicting unit costs/);
+  ], [{ label: "ORD-55" }, { label: "ORD-57" }]);
+  assert.equal(rows.length, 1);
+  const row = rows[0];
+  assert.equal(row.combined__remainingQty__0, 5);
+  assert.equal(row.combined__qty__0, 5);
+  assert.equal(row.combined__total__0, 215);
+  assert.equal(row.combined__unit__0, 43); // (2 * 40 + 3 * 45) / 5
+  assert.equal(row.combined__remainingQty__1, 4);
+  assert.equal(row.combined__unit__1, 40);
+  assert.deepEqual(row.combined__unitSources__0.map(({ qty, unit, total, kitTag }) => ({ qty, unit, total, kitTag })), [
+    { qty: 2, unit: 40, total: 80, kitTag: "Kit A" },
+    { qty: 3, unit: 45, total: 135, kitTag: "Kit B" },
+  ]);
+});
+
+test("ORD-55 Plastic Propeller mixed prices do not block a remaining-quantity export", () => {
+  const propeller = "Plastic Propeller 4 Blades 56mm";
+  const rows = combined([
+    [
+      component({ component: propeller, idCode: "A100500", _productId: "propeller", qty: 3, remainingQty: 3, unit: 2, total: 6 }),
+      component({ component: propeller, idCode: "A100500", _productId: "propeller", qty: 4, remainingQty: 4, unit: 2.5, total: 10 }),
+    ],
+    [component({ component: propeller, idCode: "A100500", _productId: "propeller-other", qty: 1, remainingQty: 1, unit: 3, total: 3 })],
+  ], [{ label: "ORD-55" }, { label: "ORD-58" }]);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].combined__remainingQty__0, 7);
+  assert.equal(rows[0].combined__remainingQty__1, 1);
+  assert.equal(rows[0].combined__total__0, 16);
+  assert.equal(rows[0].combined__total__1, 3);
+  assert.ok(Math.abs(rows[0].combined__unit__0 - (16 / 7)) < 1e-12);
+});
+
+test("a fractional weighted average preserves exact amounts, not the first source unit cost", () => {
+  const rows = combined([
+    [component({ qty: 2, remainingQty: 2, unit: 0.25, total: 0.50 }), component({ qty: 1, remainingQty: 1, unit: 0.5, total: 0.5 })],
+    [component()],
+  ]);
+  assert.equal(rows[0].combined__qty__0, 3);
+  assert.equal(rows[0].combined__total__0, 1);
+  assert.ok(Math.abs(rows[0].combined__unit__0 - (1 / 3)) < 1e-12);
+});
+
+test("net-zero quantity with two different prices preserves cost and leaves price undefined", () => {
+  const rows = combined([
+    [component({ qty: 1, unit: 5, total: 5 }), component({ qty: -1, unit: 3, total: -3 })],
+    [component()],
+  ]);
+  assert.equal(rows[0].combined__qty__0, 0);
+  assert.equal(rows[0].combined__total__0, 2);
+  assert.equal(rows[0].combined__unit__0, null);
+});
+
+test("21 orders with a mixed-price duplicate preserve all column values", () => {
+  const meta = Array.from({ length: 21 }, (_, i) => ({ label: `ORD-${i + 1}` }));
+  const payloads = meta.map((_, i) => ({ rows: i === 3
+    ? [component({ qty: 2, remainingQty: 2, unit: 40, total: 80 }), component({ qty: 2, remainingQty: 2, unit: 42, total: 84 })]
+    : [component({ _productId: `product-${i}`, qty: 4, remainingQty: 4 })],
+  }));
+  const rows = mergeCombinedOrderRows(payloads, meta);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].combined__unit__3, 41);
+  assert.equal(rows[0].combined__total__3, 164);
+  for (let index = 0; index < 21; index++) assert.equal(rows[0][`combined__remainingQty__${index}`], 4);
 });
 
 
