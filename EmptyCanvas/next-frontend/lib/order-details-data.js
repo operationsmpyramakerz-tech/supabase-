@@ -2,7 +2,7 @@ import "server-only";
 
 import { getSupabaseConfig, select } from "./supabase-rest";
 import { getProductsForOrderDetails } from "./products-service";
-import { getProposal, getKitGroupingReferences, listKitFolders } from "./proposal-kit-service";
+import { getProposal, getProposalSourcesForProducts, getKitGroupingReferences, listKitFolders } from "./proposal-kit-service";
 
 function text(value) {
   if (value === null || typeof value === "undefined") return "";
@@ -623,7 +623,7 @@ function proposalItemMatchesOrder(item = {}, proposalItem = {}) {
   return Boolean(orderName && proposalName && orderName === proposalName);
 }
 
-async function resolveDirectProposalSources(items = []) {
+async function resolveDirectProposalSources(items = [], { timings = null } = {}) {
   const rows = (Array.isArray(items) ? items : []).map((item) => ({ ...item }));
   const unresolved = rows.filter(needsProposalSourceLookup);
   if (!unresolved.length) return rows;
@@ -637,7 +637,9 @@ async function resolveDirectProposalSources(items = []) {
     .filter((item) => !text(item?.sourceProposalId))
     .map(proposalNameFromItem)
     .filter(Boolean))];
+  const namesStartedAt = performance.now();
   await Promise.all(unresolvedNames.map((name) => resolveProposalIdByName(name, proposalIdByName)));
+  if (timings) timings.proposalNames = performance.now() - namesStartedAt;
 
   const proposalIdForItem = (item) => {
     const directId = text(item?.sourceProposalId);
@@ -649,11 +651,38 @@ async function resolveDirectProposalSources(items = []) {
   // A detail payload can serve several components from the same proposal.
   // Load every unique proposal once, in parallel, then reuse it below.
   const proposalIds = [...new Set(unresolved.map(proposalIdForItem).filter(Boolean))];
+  const itemsStartedAt = performance.now();
+  let fallbackDuration = 0;
   await Promise.all(proposalIds.map(async (proposalId) => {
     let detail = null;
-    try { detail = await getProposal(proposalId, {}); } catch {}
+    const proposalRows = unresolved.filter((item) => proposalIdForItem(item) === proposalId);
+    const productIds = [...new Set(proposalRows.map((item) => text(item?.productId)).filter(Boolean))];
+    const hasAllIds = productIds.length > 0 && proposalRows.every((item) => text(item?.productId));
+    const knownName = proposalRows.map(proposalNameFromItem).find(Boolean) || "";
+    // Fast path: this order already stores the original proposal ID/name and
+    // each component has its product ID. Read only matching source rows.
+    if (hasAllIds && knownName) {
+      try {
+        const proposalItems = await getProposalSourcesForProducts(proposalId, productIds);
+        if (proposalRows.every((item) => proposalItems.some((entry) => proposalItemMatchesOrder(item, entry)))) {
+          detail = { proposal: { name: knownName }, items: proposalItems };
+        }
+      } catch {
+        // Missing/deleted products, old schemas and transient query failures
+        // all fall through to the original full-fidelity lookup.
+      }
+    }
+    if (!detail) {
+      const fallbackStartedAt = performance.now();
+      try { detail = await getProposal(proposalId, {}); } catch {}
+      fallbackDuration = Math.max(fallbackDuration, performance.now() - fallbackStartedAt);
+    }
     proposalById.set(proposalId, detail);
   }));
+  if (timings) {
+    timings.proposalItems = performance.now() - itemsStartedAt;
+    timings.proposalFallback = fallbackDuration;
+  }
 
   for (const item of unresolved) {
     const proposalName = proposalNameFromItem(item);
@@ -703,7 +732,7 @@ export async function enrichOrderDetailGrouping(items = [], { timings = null } =
     ? [...new Set(rows.map((item) => text(item.productId)))]
     : null;
   const [resolvedRows, productsResult, kitReferences, folders] = await Promise.all([
-    measure("proposal", () => resolveDirectProposalSources(rows)),
+    measure("proposal", () => resolveDirectProposalSources(rows, { timings })),
     measure("products", () => getProductsForOrderDetails(rows).catch(() => [])),
     measure("kits", () => getKitGroupingReferences({ productIds }).catch(() => ({ memberships: [], kits: [] }))),
     measure("folders", () => listKitFolders({}).catch(() => [])),

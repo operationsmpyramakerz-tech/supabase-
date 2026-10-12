@@ -3,6 +3,7 @@ import {
   deleteById,
   getSupabaseConfig,
   insert,
+  select,
   selectAll,
   selectById,
   supabaseRequest,
@@ -459,6 +460,49 @@ export async function getProposal(id, account) {
     proposal: proposalHeader(row, items.length, account),
     items: items.map(proposalItem),
   };
+}
+
+/**
+ * Lightweight read used by the order details screen. It fetches the matching
+ * product rows from the original proposal without loading the proposal header
+ * and unrelated proposal items. Never cache this read: editing a proposal must
+ * be reflected immediately after the order details client cache expires.
+ *
+ * Callers must fall back to getProposal() when legacy rows have no product ID,
+ * when a required item is missing, or when a customized schema rejects the
+ * compact projection. This preserves historical kit-source reconstruction.
+ */
+export async function getProposalSourcesForProducts(proposalId, productIds = []) {
+  const id = text(proposalId);
+  const ids = [...new Set((Array.isArray(productIds) ? productIds : [])
+    .map(text).filter(Boolean))];
+  if (!id || !ids.length) throw new Error("Proposal product lookup requires a proposal and product IDs.");
+
+  // Keep URLs short and avoid the default PostgREST row cap on larger orders.
+  const batches = [];
+  for (let i = 0; i < ids.length; i += 60) batches.push(ids.slice(i, i + 60));
+  const results = await Promise.all(batches.map(async (batch) => {
+    const rows = await select(proposalItemsTable(), {
+      select: "id,product_id,product_name,quantity,source_kits,created_at,updated_at,proposal_id",
+      proposal_id: `eq.${id}`,
+      product_id: `in.(${postgrestInList(batch)})`,
+      order: "created_at.asc,id.asc",
+      limit: "1000",
+    }, { profileName: "orders.proposal-items-targeted" });
+    if (!Array.isArray(rows) || rows.length >= 1000) {
+      throw new Error("Incomplete targeted proposal response; use compatibility lookup.");
+    }
+    return rows;
+  }));
+  const rows = results.flat();
+  const foundIds = new Set(rows.map((row) => text(row?.product_id)).filter(Boolean));
+  if (ids.some((productId) => !foundIds.has(productId))) {
+    throw new Error("At least one proposal product was not found by ID; use compatibility lookup.");
+  }
+  // Match the legacy getProposal() ordering, including when results came from
+  // multiple concurrent pages.
+  rows.sort((a, b) => (text(a?.created_at).localeCompare(text(b?.created_at)) || text(a?.id).localeCompare(text(b?.id))));
+  return rows.map(proposalItem);
 }
 
 export async function createProposal(name, account) {
