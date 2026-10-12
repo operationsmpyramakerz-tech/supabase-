@@ -473,6 +473,35 @@ export async function getProposal(id, account) {
  * when a required item is missing, or when a customized schema rejects the
  * compact projection. This preserves historical kit-source reconstruction.
  */
+/**
+ * Read-only legacy proposal source lookup for order detail reconstruction.
+ * The regular getProposal() reads the header first and its items second for
+ * its editable-page contract. Order details only require the proposal name
+ * and serialized items, so those independent reads can run concurrently.
+ * Do not cache them across requests: a changed proposal must be observable.
+ */
+export async function getProposalForOrderSources(proposalId) {
+  const id = text(proposalId);
+  if (!id) {
+    const error = new Error("Proposal ID is required.");
+    error.status = 400;
+    throw error;
+  }
+  const [header, rawItems] = await Promise.all([
+    selectById(proposalTable(), id),
+    rowsByForeignKey(proposalItemsTable(), "proposal_id", id),
+  ]);
+  if (!header) {
+    const error = new Error("Proposal not found.");
+    error.status = 404;
+    throw error;
+  }
+  return {
+    proposal: { name: text(header?.name) },
+    items: (Array.isArray(rawItems) ? rawItems : []).map(proposalItem),
+  };
+}
+
 export async function getProposalSourcesForProducts(proposalId, productIds = []) {
   const id = text(proposalId);
   const ids = [...new Set((Array.isArray(productIds) ? productIds : [])

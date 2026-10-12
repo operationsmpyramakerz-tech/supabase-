@@ -3,7 +3,7 @@ import "server-only";
 import { getSupabaseConfig, select } from "./supabase-rest";
 import { getProductsForOrderDetails } from "./products-service";
 import { loadVerifiedOrderBatches } from "./verified-order-batches.mjs";
-import { getProposal, getProposalSourcesForProducts, getKitGroupingReferences, listKitFolders } from "./proposal-kit-service";
+import { getProposalForOrderSources, getProposalSourcesForProducts, getKitGroupingReferences, listKitFolders } from "./proposal-kit-service";
 
 function text(value) {
   if (value === null || typeof value === "undefined") return "";
@@ -624,6 +624,7 @@ function proposalItemMatchesOrder(item = {}, proposalItem = {}) {
 async function resolveDirectProposalSources(items = [], { timings = null } = {}) {
   const rows = (Array.isArray(items) ? items : []).map((item) => ({ ...item }));
   const unresolved = rows.filter(needsProposalSourceLookup);
+  if (timings) timings.proposalUnresolved = unresolved.length;
   if (!unresolved.length) return rows;
 
   const proposalById = new Map();
@@ -672,7 +673,7 @@ async function resolveDirectProposalSources(items = [], { timings = null } = {})
     }
     if (!detail) {
       const fallbackStartedAt = performance.now();
-      try { detail = await getProposal(proposalId, {}); } catch {}
+      try { detail = await getProposalForOrderSources(proposalId); } catch {}
       fallbackDuration = Math.max(fallbackDuration, performance.now() - fallbackStartedAt);
     }
     proposalById.set(proposalId, detail);
@@ -682,6 +683,8 @@ async function resolveDirectProposalSources(items = [], { timings = null } = {})
     timings.proposalFallback = fallbackDuration;
   }
 
+  let recovered = 0;
+  let fallbackTags = 0;
   for (const item of unresolved) {
     const proposalName = proposalNameFromItem(item);
     const proposalId = proposalIdForItem(item);
@@ -690,6 +693,7 @@ async function resolveDirectProposalSources(items = [], { timings = null } = {})
     const match = proposalItems.find((entry) => proposalItemMatchesOrder(item, entry)) || null;
     const resolvedSources = sourceKits(match?.sourceKits || match?.source_kits);
     if (resolvedSources.length) {
+      recovered += 1;
       item.sourceKits = resolvedSources;
       item.sourceProposalId = proposalId || item.sourceProposalId || null;
       item.sourceProposalName = text(detail?.proposal?.name) || proposalName || item.sourceProposalName || null;
@@ -702,10 +706,15 @@ async function resolveDirectProposalSources(items = [], { timings = null } = {})
     const fallbackKit = text(item?.kitTag);
     const fallbackQuantity = Math.abs(Number(item?.quantityProgress ?? item?.quantityEditedBySupervisor ?? item?.quantityRequested ?? item?.quantity ?? 0));
     if (fallbackKit && fallbackQuantity > 0) {
+      fallbackTags += 1;
       item.sourceKits = [{ kitId: "", kitName: fallbackKit, quantity: fallbackQuantity, order: 0 }];
     }
   }
 
+  if (timings) {
+    timings.proposalRecovered = recovered;
+    timings.proposalFallbackTags = fallbackTags;
+  }
   return rows;
 }
 
