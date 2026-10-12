@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import ClassicOrderIcon from "./ClassicOrderIcon";
 import { createOrderDetailsLoader } from "./orderDetailsLoader";
-import { loadOrderAndModalWithMetrics, warmOrderModalOnIdle } from "./orderOpeningPerformance";
+import { cancelOrderOpenTimer, loadOrderAndModalWithMetrics, markOrderOpenStarted, reportOrderVisibleAfterPaint, warmOrderModalOnIdle } from "./orderOpeningPerformance";
 import OrderDetailsLoadingOverlay from "./OrderDetailsLoadingOverlay";
 import OrdersPerformancePanel from "./OrdersPerformancePanel";
 import OrderTypeBadge from "./OrderTypeBadge";
@@ -446,11 +446,17 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
 
   const sortedVisibleGroups = useMemo(() => sortOrderGroups(visibleGroups, sortMode), [visibleGroups, sortMode]);
 
+  useEffect(() => {
+    if (!selected || detailLoadingKey) return undefined;
+    return reportOrderVisibleAfterPaint("Review");
+  }, [selected, detailLoadingKey]);
+
   function showNotice(message) {
     setNotice(message);
     window.setTimeout(() => setNotice(""), 3500);
   }
   function closeReviewDetails() {
+    cancelOrderOpenTimer("Review");
     ++detailRequestIdRef.current;
     setSelectedKey("");
     setDetailLoadingKey("");
@@ -474,6 +480,7 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
   }
   async function openReviewDetails(group, { force = false } = {}) {
     if (!group?.key) return;
+    markOrderOpenStarted("Review");
     const requestId = ++detailRequestIdRef.current;
     setSelectedKey(group.key);
     setDetailError("");
@@ -495,6 +502,7 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
       });
     } catch (error) {
       if (requestId !== detailRequestIdRef.current) return;
+      cancelOrderOpenTimer("Review");
       if (error?.status === 401) { window.location.href = "/login?next=/next/orders-review"; return; }
       setDetailError(error?.message || "Order details could not be loaded.");
     } finally {

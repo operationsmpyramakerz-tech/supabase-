@@ -1,69 +1,88 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ORDERS_PERF_EVENT, ordersPerfEnabled } from "./orderOpeningPerformance";
+import { createPortal } from "react-dom";
+import { ORDERS_PERF_EVENT, ORDERS_PERF_TOGGLE_EVENT, ordersPerfEnabled, setOrdersPerfEnabled } from "./orderOpeningPerformance";
 
 const round = (value) => (typeof value === "number" && Number.isFinite(value) ? `${Math.round(value)} ms` : "—");
 
-// Only displayed with ?ordersPerf=1. Useful on Android devices without DevTools;
-// no order identifiers, usernames or request/response bodies are collected.
+// User-controlled diagnostics; read-only, short lived and anonymous.
 export default function OrdersPerformancePanel() {
+  const [mounted, setMounted] = useState(false);
   const [enabled, setEnabled] = useState(false);
+  const [minimized, setMinimized] = useState(false);
   const [entries, setEntries] = useState([]);
-  const [copied, setCopied] = useState(false);
+  const [copyStatus, setCopyStatus] = useState("");
+
   useEffect(() => {
-    const active = ordersPerfEnabled();
-    setEnabled(active);
-    if (!active) return undefined;
+    setMounted(true);
+    const sync = () => { setEnabled(ordersPerfEnabled()); setCopyStatus(""); };
+    sync();
     const handle = (event) => {
       const entry = event.detail;
-      if (!entry || (entry.kind !== "open" && entry.kind !== "fetch")) return;
-      setEntries((current) => [entry, ...current].slice(0, 5));
-      setCopied(false);
+      if (!entry || !["open", "fetch", "paint"].includes(entry.kind)) return;
+      setEntries((current) => [entry, ...current].slice(0, 12));
+      setCopyStatus("");
     };
     window.addEventListener(ORDERS_PERF_EVENT, handle);
-    return () => window.removeEventListener(ORDERS_PERF_EVENT, handle);
+    window.addEventListener(ORDERS_PERF_TOGGLE_EVENT, sync);
+    return () => {
+      window.removeEventListener(ORDERS_PERF_EVENT, handle);
+      window.removeEventListener(ORDERS_PERF_TOGGLE_EVENT, sync);
+    };
   }, []);
-  if (!enabled) return null;
+
+  if (!mounted || !enabled) return null;
 
   const latestOpen = entries.find((item) => item.kind === "open");
   const latestFetch = entries.find((item) => item.kind === "fetch");
+  const latestPaint = entries.find((item) => item.kind === "paint");
   const details = [
+    ["Click → visible", round(latestPaint?.visibleMs)],
     ["Data + code ready", round(latestOpen?.readyMs)],
-    ["Details", round(latestOpen?.detailsMs)],
+    ["Order details", round(latestOpen?.detailsMs)],
     ["Modal code", round(latestOpen?.modalMs)],
-    ["Last API network", round(latestFetch?.networkMs)],
+    ["API response", round(latestFetch?.networkMs)],
     ["JSON parsing", round(latestFetch?.parseMs)],
     ["Grouping", round(latestFetch?.groupMs)],
   ];
-  return (
-    <aside aria-label="Orders performance diagnostics" style={{
-      position: "fixed", right: 12, bottom: 84, zIndex: 9500, width: "min(278px, calc(100vw - 24px))",
-      maxHeight: "55vh", overflowY: "auto", padding: "12px", borderRadius: 14,
-      background: "#17191e", color: "#fff", boxShadow: "0 8px 32px rgba(0,0,0,.28)",
-      fontSize: 12, lineHeight: 1.4, direction: "ltr",
-    }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", marginBottom: 8 }}>
-        <strong style={{ fontSize: 13 }}>Orders timing</strong>
-        <button type="button" onClick={() => setEntries([])} style={{ background: "transparent", border: 0, color: "#ffa45c", cursor: "pointer" }}>Clear</button>
+  const copyTimings = async () => {
+    try {
+      if (typeof navigator.clipboard?.writeText !== "function") throw new Error("Clipboard unavailable");
+      await navigator.clipboard.writeText(JSON.stringify(entries, null, 2));
+      setCopyStatus("Copied!");
+    } catch {
+      setCopyStatus("Copy not available on this browser");
+    }
+  };
+
+  return createPortal(
+    <aside className={`orders-perf-panel ${minimized ? "is-minimized" : ""}`} aria-label="Orders performance diagnostics">
+      <div className="orders-perf-panel__head">
+        <span className="orders-perf-panel__title">Order speed <span className="orders-perf-panel__live">LIVE</span></span>
+        <div className="orders-perf-panel__head-actions">
+          <button type="button" title={minimized ? "Expand" : "Minimize"} aria-label={minimized ? "Expand timing panel" : "Minimize timing panel"} onClick={() => setMinimized((value) => !value)}>{minimized ? "+" : "−"}</button>
+          <button type="button" title="Hide speed measurements" aria-label="Close timing panel" onClick={() => setOrdersPerfEnabled(false)}>×</button>
+        </div>
       </div>
-      {entries.length ? <>
-        {details.map(([label, value]) => (
-          <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 3 }}>
-            <span style={{ color: "#b7bbc6" }}>{label}</span><strong>{value}</strong>
-          </div>
-        ))}
-        {latestOpen?.failed && <p style={{ color: "#ffb4b4" }}>The most recent opening failed.</p>}
-        {latestFetch?.serverTiming && <details style={{ marginTop: 8 }}><summary>Last fetched server stages</summary>
-          <div style={{ wordBreak: "break-word", marginTop: 5, color: "#b7bbc6" }}>{latestFetch.serverTiming}</div>
-        </details>}
-        <button type="button" onClick={() => {
-          const anonymousMetrics = entries.map((entry) => ({ ...entry }));
-          void navigator.clipboard?.writeText(JSON.stringify(anonymousMetrics, null, 2)).then(() => setCopied(true)).catch(() => {});
-        }} style={{ marginTop: 10, background: "#f97316", color: "#fff", border: 0, borderRadius: 8, padding: "7px 10px", cursor: "pointer", width: "100%" }}>
-          {copied ? "Copied timings" : "Copy timings"}
-        </button>
-      </> : <span style={{ color: "#b7bbc6" }}>Open an order to measure the loading stages.</span>}
-    </aside>
+      {!minimized && (
+        <div className="orders-perf-panel__content">
+          {entries.length ? <>
+            {details.map(([label, value]) => (
+              <div className="orders-perf-panel__metric" key={label}><span>{label}</span><strong>{value}</strong></div>
+            ))}
+            {latestOpen?.failed && <div className="orders-perf-panel__error">Last opening failed.</div>}
+            {latestFetch?.serverTiming && <details className="orders-perf-panel__server"><summary>Server breakdown</summary><div>{latestFetch.serverTiming}</div></details>}
+            <div className="orders-perf-panel__actions">
+              <button type="button" onClick={() => { setEntries([]); setCopyStatus(""); }}>Clear</button>
+              <button type="button" onClick={copyTimings}>Copy timings</button>
+            </div>
+            {copyStatus && <div className="orders-perf-panel__copy" role="status">{copyStatus}</div>}
+          </> : <div className="orders-perf-panel__empty">Now open an order to measure its loading speed.</div>}
+          <div className="orders-perf-panel__hint">Measurements stay on this device. No order details are recorded.</div>
+        </div>
+      )}
+    </aside>,
+    document.body,
   );
 }

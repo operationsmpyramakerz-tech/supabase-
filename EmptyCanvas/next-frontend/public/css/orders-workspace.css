@@ -860,3 +860,58 @@ html[data-theme="dark"] .orders-workspace.next-classic-maintenance-parity .next-
 html[data-theme="dark"] .orders-workspace.next-classic-maintenance-parity .next-maintenance-search-tools .order-component-search__input { color: #fff; }
 
 @media (prefers-reduced-motion: reduce) { .orders-workspace.next-classic-maintenance-parity .next-maintenance-search-tools > .order-component-search { transition: none; } }
+
+/* Phase 12: opt-in performance diagnostics. Small, explicit entry point; the
+   panel is portaled into body to avoid clipping by order scroll containers. */
+body .orders-workspace .orders-workspace-perf-toggle {
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  min-width: 34px; min-height: 34px; padding: 0 9px;
+  border-radius: 11px; border: 1px solid var(--ow-border);
+  background: var(--ow-surface); color: var(--ow-muted);
+  font: inherit; font-size: 11px; font-weight: 750; cursor: pointer;
+}
+body .orders-workspace .orders-workspace-perf-toggle svg { width: 16px; height: 16px; }
+body .orders-workspace .orders-workspace-perf-toggle.is-active {
+  color: #c04c0c; border-color: #fed7aa; background: #fff4e9;
+}
+body .orders-workspace .orders-workspace-perf-toggle:focus-visible {
+  outline: 2px solid #ea580c; outline-offset: 2px;
+}
+.orders-perf-panel {
+  position: fixed; z-index: 99999; right: 12px;
+  bottom: calc(184px + env(safe-area-inset-bottom, 0px));
+  width: min(300px, calc(100vw - 24px)); max-height: min(60vh, 480px);
+  border-radius: 18px; overflow-y: auto; overscroll-behavior: contain;
+  background: #141a28; color: #fff; direction: ltr;
+  box-shadow: 0 15px 45px rgba(0,0,0,.28);
+  border: 1px solid rgba(255,255,255,.14);
+  font: 12px/1.5 system-ui, -apple-system, sans-serif;
+}
+.orders-perf-panel.is-minimized { width: min(225px, calc(100vw - 24px)); }
+.orders-perf-panel__head { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 11px 12px; }
+.orders-perf-panel__title { font-weight: 800; font-size: 13px; }
+.orders-perf-panel__live { font-size: 9px; color: #fed7aa; margin-left: 4px; }
+.orders-perf-panel__head-actions { display: flex; gap: 5px; }
+.orders-perf-panel__head-actions button { background: rgba(255,255,255,.12); color: #fff; border: 0; border-radius: 9px; min-width: 30px; min-height: 30px; font-size: 19px; cursor: pointer; }
+.orders-perf-panel__content { padding: 0 12px 12px; }
+.orders-perf-panel__metric { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 3px 0; }
+.orders-perf-panel__metric span { color: #b9c0cb; }
+.orders-perf-panel__metric strong { font-variant-numeric: tabular-nums; }
+.orders-perf-panel__error { color: #fca5a5; padding: 6px 0; }
+.orders-perf-panel__server { margin-top: 7px; color: #d7dde7; }
+.orders-perf-panel__server summary { cursor: pointer; font-weight: 700; }
+.orders-perf-panel__server div { word-break: break-word; padding: 6px 0; }
+.orders-perf-panel__actions { display: flex; gap: 8px; margin-top: 10px; }
+.orders-perf-panel__actions button { flex: 1; background: #f97316; color: #fff; border: 0; border-radius: 9px; padding: 9px; font-weight: 700; cursor: pointer; }
+.orders-perf-panel__actions button:first-child { flex: 0 0 auto; background: #31394b; }
+.orders-perf-panel__copy { margin-top: 5px; color: #fed7aa; }
+.orders-perf-panel__empty { color: #cbd5e1; padding: 6px 0; }
+.orders-perf-panel__hint { border-top: 1px solid rgba(255,255,255,.12); color: #9daabe; font-size: 10px; margin-top: 10px; padding-top: 8px; }
+@media (max-width: 420px) {
+  body .orders-workspace .orders-workspace-perf-toggle { padding: 0 8px; }
+  body .orders-workspace .orders-workspace-perf-toggle span { display: none; }
+  body .orders-workspace .orders-workspace-list-head__tools { gap: 5px; }
+}
+@media (max-height: 580px) {
+  .orders-perf-panel { bottom: calc(74px + env(safe-area-inset-bottom, 0px)); max-height: 50vh; }
+}

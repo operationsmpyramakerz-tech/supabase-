@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import ClassicOrderIcon from "./ClassicOrderIcon";
 import { createOrderDetailsLoader } from "./orderDetailsLoader";
-import { loadOrderAndModalWithMetrics, warmOrderModalOnIdle } from "./orderOpeningPerformance";
+import { cancelOrderOpenTimer, loadOrderAndModalWithMetrics, markOrderOpenStarted, reportOrderVisibleAfterPaint, warmOrderModalOnIdle } from "./orderOpeningPerformance";
 import OrderDetailsLoadingOverlay from "./OrderDetailsLoadingOverlay";
 import OrdersPerformancePanel from "./OrdersPerformancePanel";
 import OrderTypeBadge from "./OrderTypeBadge";
@@ -779,6 +779,10 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
     buildGroups,
   });
   const [openingGroup, setOpeningGroup] = useState(null);
+  useEffect(() => {
+    if (!selected) return undefined;
+    return reportOrderVisibleAfterPaint("Operations");
+  }, [selected]);
   const openRequestRef = useRef(0);
   const listRequestRef = useRef(0);
   const listAbortRef = useRef(null);
@@ -940,6 +944,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
 
   async function openOrderDetails(group) {
     if (!group) return;
+    markOrderOpenStarted("Operations");
     const requestId = ++openRequestRef.current;
     // Begin loading the modal code and the data in parallel. The lightweight
     // overlay appears immediately, so a slow Supabase response never looks
@@ -959,6 +964,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
       setSelected(detail);
     } catch (error) {
       if (requestId !== openRequestRef.current) return;
+      cancelOrderOpenTimer("Operations");
       setOpeningGroup(null);
       if (error?.status === 401) { window.location.href = "/login?next=/next/operations-orders"; return; }
       setNotice(error?.message || "Failed to load order details.");
@@ -967,6 +973,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
   }
 
   function closeOrderDetails() {
+    cancelOrderOpenTimer("Operations");
     ++openRequestRef.current; // prevent a late response from reopening a closed dialog
     setOpeningGroup(null);
     setSelected(null);

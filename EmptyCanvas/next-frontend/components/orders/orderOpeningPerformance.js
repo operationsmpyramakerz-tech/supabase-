@@ -1,11 +1,68 @@
 // Client-only helpers shared by the four order screens.
 // Warming the modal downloads *code only*; never prefetches private order data.
 const PERF_EVENT = "pyramakerz:orders-performance";
+const PERF_TOGGLE_EVENT = "pyramakerz:orders-performance-toggle";
+const PERF_SESSION_KEY = "pyramakerz:orders-performance-enabled";
+const visibleTimers = new Map();
 
 const now = () => (typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now());
 
+// The URL parameter remains supported, but a one-tap toggle is more reliable
+// on mobile and survives client-side navigation between order screens.
 export function ordersPerfEnabled() {
-  return typeof window !== "undefined" && new URLSearchParams(window.location.search).get("ordersPerf") === "1";
+  if (typeof window === "undefined") return false;
+  try {
+    if (new URLSearchParams(window.location.search).get("ordersPerf") === "1") return true;
+    return window.sessionStorage.getItem(PERF_SESSION_KEY) === "1";
+  } catch {
+    return new URLSearchParams(window.location.search).get("ordersPerf") === "1";
+  }
+}
+
+export function setOrdersPerfEnabled(active) {
+  if (typeof window === "undefined") return;
+  const enabled = Boolean(active);
+  try {
+    if (enabled) window.sessionStorage.setItem(PERF_SESSION_KEY, "1");
+    else window.sessionStorage.removeItem(PERF_SESSION_KEY);
+  } catch { /* private browsing may disable storage */ }
+  const url = new URL(window.location.href);
+  if (enabled) url.searchParams.set("ordersPerf", "1");
+  else url.searchParams.delete("ordersPerf");
+  // Retain tab/type/query/hash; do not navigate or refresh the order list.
+  window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  if (!enabled) visibleTimers.clear();
+  window.dispatchEvent(new CustomEvent(PERF_TOGGLE_EVENT, { detail: { enabled } }));
+}
+
+export const ORDERS_PERF_TOGGLE_EVENT = PERF_TOGGLE_EVENT;
+
+// Measures click -> first painted order details, not just API + import time.
+// No order IDs, names, products, or response payloads are stored.
+export function markOrderOpenStarted(page) {
+  if (ordersPerfEnabled()) visibleTimers.set(page, now());
+}
+
+export function cancelOrderOpenTimer(page) {
+  visibleTimers.delete(page);
+}
+
+export function reportOrderVisibleAfterPaint(page) {
+  if (!ordersPerfEnabled() || !visibleTimers.has(page) || typeof window === "undefined") return () => {};
+  let firstFrame = 0;
+  let secondFrame = 0;
+  firstFrame = window.requestAnimationFrame(() => {
+    secondFrame = window.requestAnimationFrame(() => {
+      const started = visibleTimers.get(page);
+      if (started === undefined) return;
+      visibleTimers.delete(page);
+      reportOrdersPerformance({ kind: "paint", page, visibleMs: Math.round(now() - started) });
+    });
+  });
+  return () => {
+    window.cancelAnimationFrame(firstFrame);
+    window.cancelAnimationFrame(secondFrame);
+  };
 }
 
 export function reportOrdersPerformance(record) {

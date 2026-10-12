@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { ORDERS_PERF_TOGGLE_EVENT, ordersPerfEnabled, setOrdersPerfEnabled } from "./orderOpeningPerformance";
 import ClassicOrderIcon from "./ClassicOrderIcon";
 
 /** Sort only the fetched groups. Pagination and server-side status filters stay unchanged. */
@@ -27,6 +29,13 @@ export function sortOrderGroups(groups, mode = "latest") {
 
 /** Only the number of currently fetched groups is known, not the DB total. */
 export function OrdersListHeader({ count = 0, hasMore = false, busy = false, sortMode = "latest", onSortChange }) {
+  const [timingsOpen, setTimingsOpen] = useState(false);
+  useEffect(() => {
+    setTimingsOpen(ordersPerfEnabled());
+    const sync = () => setTimingsOpen(ordersPerfEnabled());
+    window.addEventListener(ORDERS_PERF_TOGGLE_EVENT, sync);
+    return () => window.removeEventListener(ORDERS_PERF_TOGGLE_EVENT, sync);
+  }, []);
   return (
     <div className="orders-workspace-list-head" aria-live="polite">
       <span className="orders-workspace-list-head__title">Orders</span>
@@ -34,6 +43,14 @@ export function OrdersListHeader({ count = 0, hasMore = false, busy = false, sor
         <span className="orders-workspace-list-head__count">
           {busy ? "Updating…" : `${count} ${hasMore ? "loaded" : "shown"}`}
         </span>
+        <button
+          type="button"
+          className={`orders-workspace-perf-toggle ${timingsOpen ? "is-active" : ""}`}
+          aria-label={timingsOpen ? "Hide order speed measurements" : "Show order speed measurements"}
+          aria-pressed={timingsOpen}
+          title={timingsOpen ? "Hide performance measurements" : "Measure order opening speed"}
+          onClick={() => setOrdersPerfEnabled(!timingsOpen)}
+        ><ClassicOrderIcon name="activity"/><span>Speed</span></button>
         {typeof onSortChange === "function" ? (
           <label className="orders-workspace-sort" title={hasMore ? "Sort currently loaded orders" : "Sort orders"}>
             <ClassicOrderIcon name="sort-desc" />
