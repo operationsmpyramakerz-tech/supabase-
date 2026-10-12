@@ -4,7 +4,7 @@ import { performance } from "node:perf_hooks";
 import { rpc } from "./supabase-rest";
 import { serializeProduct } from "./products-service";
 import { classifyBundleProposalSources } from "./order-proposal-bundle-resolution";
-import { unpackCompactBundle } from "./orders-bundle-transport";
+import { unpackCompactBundle, summarizeBundleTransportHeaders } from "./orders-bundle-transport";
 
 const RPC_NAME = "erp_order_detail_bundle_v1";
 const COMPACT_RPC_NAME = "erp_order_detail_bundle_compact_v1";
@@ -181,11 +181,17 @@ export async function loadFastOrderDetailsBundle(ids = [], { timings = null } = 
     // Phase 23: prefer a lossless column-packed transport to avoid repeating
     // dozens of JSON field names across hundreds of components. The v1 RPC
     // remains the unmodified, full-fidelity fallback.
-    const networkTiming = timings ? ({ headersMs, bodyMs, parseMs, payloadBytes }) => {
+    const networkTiming = timings ? ({ headersMs, bodyMs, parseMs, payloadBytes, contentEncoding, contentLength }) => {
       timings.bundleHeaders = headersMs;
       timings.bundleBody = bodyMs;
       timings.bundleParse = parseMs;
       timings.bundlePayloadBytes = payloadBytes;
+      // Content-Length may describe a compressed upstream entity or may be
+      // missing entirely; don't conflate it with decoded JSON bytes.
+      const transport = summarizeBundleTransportHeaders({ contentEncoding, contentLength });
+      timings.bundleEncoding = transport.encoding;
+      if (transport.declaredBytes !== null) timings.bundleDeclaredBytes = transport.declaredBytes;
+      else delete timings.bundleDeclaredBytes;
     } : undefined;
     const requestOptions = {
       profileName: "orders.details-one-call", timeoutMs: 9000,

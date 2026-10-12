@@ -194,6 +194,11 @@ export async function supabaseRequest(pathname, options = {}) {
               parseMs: parsedAt - bodyAt,
               payloadBytes: Buffer.byteLength(raw, "utf8"),
               // Length is the uncompressed JSON body, not a claim about wire bytes.
+              // Content-Length, when supplied by the upstream, describes the
+              // HTTP entity (which may be compressed). Node's fetch can
+              // transparently decompress the response before response.text().
+              contentEncoding: String(response.headers.get("content-encoding") || "").toLowerCase(),
+              contentLength: response.headers.get("content-length"),
             });
           } catch { /* diagnostics must never affect order loading */ }
         }

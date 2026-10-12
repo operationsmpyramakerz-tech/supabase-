@@ -36,3 +36,15 @@ export function unpackCompactBundle(payload) {
   }
   return restored;
 }
+
+// Transport metadata only; upstream HTTP headers may not include a content
+// length. Never treat decoded JSON size as wire bytes or assume compression.
+export function summarizeBundleTransportHeaders({ contentEncoding = "", contentLength = null } = {}) {
+  const rawEncoding = String(contentEncoding || "").trim().toLowerCase();
+  const encoding = ["gzip", "br", "deflate", "identity"].includes(rawEncoding)
+    ? rawEncoding : (rawEncoding ? "other" : "not specified");
+  const rawLength = String(contentLength ?? "").trim();
+  const asNumber = /^\d+$/.test(rawLength) ? Number(rawLength) : NaN;
+  const declaredBytes = Number.isSafeInteger(asNumber) ? asNumber : null;
+  return { encoding, declaredBytes };
+}

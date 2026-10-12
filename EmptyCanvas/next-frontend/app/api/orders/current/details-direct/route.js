@@ -48,6 +48,10 @@ export async function POST(request) {
       // Only a byte count and deployment region: no private order content.
       ...(Number.isFinite(stages.bundlePayloadBytes)
         ? { "X-Orders-Bundle-Bytes": String(Math.max(0, Math.round(stages.bundlePayloadBytes))) } : {}),
+      ...(Number.isFinite(stages.bundleDeclaredBytes)
+        ? { "X-Orders-Bundle-Declared-Bytes": String(Math.max(0, Math.round(stages.bundleDeclaredBytes))) } : {}),
+      ...(stages.bundleEncoding
+        ? { "X-Orders-Bundle-Encoding": stages.bundleEncoding } : {}),
       ...(process.env.VERCEL_REGION ? { "X-Orders-Server-Region": process.env.VERCEL_REGION } : {}),
     };
   };

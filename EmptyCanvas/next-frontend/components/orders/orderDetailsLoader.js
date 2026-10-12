@@ -63,6 +63,13 @@ export function createOrderDetailsLoader({ endpoint, buildGroups, maxEntries = 1
             return Number.isFinite(count) && count >= 0 ? count : null;
           })(),
           serverRegion: response.headers.get("x-orders-server-region") || null,
+          bundleEncoding: response.headers.get("x-orders-bundle-encoding") || null,
+          bundleDeclaredBytes: (() => {
+            const raw = response.headers.get("x-orders-bundle-declared-bytes");
+            if (raw === null || !/^\d+$/.test(raw)) return null;
+            const count = Number(raw);
+            return Number.isSafeInteger(count) ? count : null;
+          })(),
           status: response.status,
         });
       };

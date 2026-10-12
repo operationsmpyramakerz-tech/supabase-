@@ -97,6 +97,9 @@ export default function OrdersPerformancePanel() {
               <div className="orders-perf-panel__breakdown">
                 <TimingsRows entries={MAIN_STAGE_LABELS} values={server}/>
                 {Number.isFinite(latestFetch?.bundleBytes) && <div className="orders-perf-panel__metric"><span>Bundle JSON size (before compression)</span><strong>{readableSize(latestFetch.bundleBytes)}</strong></div>}
+                {latestFetch?.bundleEncoding && <div className="orders-perf-panel__metric"><span>Supabase response encoding</span><strong>{latestFetch.bundleEncoding}</strong></div>}
+                {Number.isFinite(latestFetch?.bundleDeclaredBytes) && <div className="orders-perf-panel__metric"><span>Upstream Content-Length</span><strong>{readableSize(latestFetch.bundleDeclaredBytes)}</strong></div>}
+                {Number.isFinite(latestFetch?.bundleDeclaredBytes) && Number.isFinite(latestFetch?.bundleBytes) && latestFetch.bundleDeclaredBytes < latestFetch.bundleBytes && <p className="orders-perf-panel__note">Content-Length is smaller than the decoded JSON, consistent with compressed transfer. It is an upstream header, not a measured network byte count.</p>}
                 {latestFetch?.serverRegion && <div className="orders-perf-panel__metric"><span>Vercel region</span><strong>{latestFetch.serverRegion}</strong></div>}
                 {Number.isFinite(server.bundleHeaders) && <p className="orders-perf-panel__note">Waiting for headers includes the Supabase network connection and remote processing; it is not PostgreSQL query time alone. Body and JSON timings are measured on the Vercel server.</p>}
                 {Number.isFinite(server.bundleCompact) && <div className="orders-perf-panel__metric"><span>Compact bundle transport</span><strong>{server.bundleCompact === 1 ? "Active" : "Legacy"}</strong></div>}

@@ -5,7 +5,7 @@ import vm from "node:vm";
 // Evaluate the pure decoder without loading Next's server-only dependencies.
 const source = readFileSync(new URL("../lib/orders-bundle-transport.js", import.meta.url), "utf8")
   .replace("export const BUNDLE_SECTIONS", "const BUNDLE_SECTIONS")
-  .replace("export function unpackCompactBundle", "function unpackCompactBundle");
+  .replaceAll("export function ", "function ");
 const ctx = vm.createContext({});
 vm.runInContext(`${source}\nthis.decode = unpackCompactBundle; this.keys = BUNDLE_SECTIONS`, ctx);
 const unpack = (bundle) => JSON.parse(JSON.stringify(ctx.decode(bundle)));
