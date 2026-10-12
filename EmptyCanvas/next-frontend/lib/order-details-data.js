@@ -1,7 +1,7 @@
 import "server-only";
 
 import { getSupabaseConfig, select } from "./supabase-rest";
-import { getProductsList } from "./products-service";
+import { getProductsForOrderDetails } from "./products-service";
 import { getProposal, getKitGroupingReferences, listKitFolders } from "./proposal-kit-service";
 
 function text(value) {
@@ -704,7 +704,7 @@ export async function enrichOrderDetailGrouping(items = [], { timings = null } =
     : null;
   const [resolvedRows, productsResult, kitReferences, folders] = await Promise.all([
     measure("proposal", () => resolveDirectProposalSources(rows)),
-    measure("products", () => getProductsList().catch(() => [])),
+    measure("products", () => getProductsForOrderDetails(rows).catch(() => [])),
     measure("kits", () => getKitGroupingReferences({ productIds }).catch(() => ({ memberships: [], kits: [] }))),
     measure("folders", () => listKitFolders({}).catch(() => [])),
   ]);

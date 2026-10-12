@@ -7,7 +7,7 @@ import { consumeOrderSummaryWindows, loadOrderRowsByNumbers, scanOrderNumberCand
 import { applyOrderSearchPlan, canUseOrderSearchText, createOrderSearchPlan, noteOrderSearchTextError } from "./order-search-hotpath";
 import { canUseOrderCandidateRpc, loadOrderCandidateNumbersRpc, noteOrderCandidateRpcError } from "./order-candidate-rpc";
 import { measurePerformance, recordPerformanceSample } from "./performance-profiler";
-import { getProductsCatalog, getProductsList } from "./products-service";
+import { getProductsCatalog, getProductsList, getProductsForOrderDetails } from "./products-service";
 import { invalidateLegacyOperationsCaches, markOperationsArrived } from "./operations-orders-data";
 import { directPageMutationAccess, verifyPageAdminPasswordDirect } from "./order-action-auth";
 import { listMaintenanceChecklistItems } from "./maintenance-checklist-data";
@@ -422,7 +422,18 @@ async function enrichMaintenanceDetailProducts(items = [], { timings = null } = 
   try {
     // Order details require individual product metadata, not the independent
     // tags/units dropdown catalogs used by editing forms.
-    products = await getProductsList();
+    // Include spare parts and historical logs in the targeted product lookup.
+    // If any entry lacks an ID, the resolver uses the legacy full catalog.
+    const referencedProducts = rows.flatMap((item) => [
+      { productId: item?.productId, productName: item?.productName, productUrl: item?.productUrl },
+      ...(Array.isArray(item?.sparePartsNeededEntries) ? item.sparePartsNeededEntries : []).map((part) => ({ productId: part?.id, productName: part?.name, productUrl: part?.url })),
+      ...(Array.isArray(item?.sparePartsReplacedEntries) ? item.sparePartsReplacedEntries : []).map((part) => ({ productId: part?.id, productName: part?.name, productUrl: part?.url })),
+      ...(Array.isArray(item?.maintenanceLogs) ? item.maintenanceLogs : []).flatMap((log) => [
+        ...(Array.isArray(log?.sparePartsNeededEntries) ? log.sparePartsNeededEntries : []).map((part) => ({ productId: part?.id, productName: part?.name, productUrl: part?.url })),
+        ...(Array.isArray(log?.sparePartsReplacedEntries) ? log.sparePartsReplacedEntries : []).map((part) => ({ productId: part?.id, productName: part?.name, productUrl: part?.url })),
+      ]),
+    ]);
+    products = await getProductsForOrderDetails(referencedProducts);
   } catch {}
   finally { if (timings) timings.products = performance.now() - productsStartedAt; }
   if (!products.length) return rows;
