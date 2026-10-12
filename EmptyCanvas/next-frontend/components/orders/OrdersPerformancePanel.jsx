@@ -3,10 +3,17 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { ORDERS_PERF_EVENT, ORDERS_PERF_TOGGLE_EVENT, ordersPerfEnabled, setOrdersPerfEnabled } from "./orderOpeningPerformance";
+import { computeRecentOrderSpeed, MAIN_STAGE_LABELS, parseServerTiming, SQL_STAGE_LABELS } from "./ordersPerfAnalysis";
 
 const round = (value) => (typeof value === "number" && Number.isFinite(value) ? `${Math.round(value)} ms` : "—");
 
-// User-controlled diagnostics; read-only, short lived and anonymous.
+function TimingsRows({ entries, values }) {
+  return entries.filter(([key]) => Number.isFinite(values[key])).map(([key, label]) => (
+    <div className="orders-perf-panel__metric" key={key}><span>{label}</span><strong>{round(values[key])}</strong></div>
+  ));
+}
+
+// User-controlled diagnostics. All history is ephemeral and anonymous.
 export default function OrdersPerformancePanel() {
   const [mounted, setMounted] = useState(false);
   const [enabled, setEnabled] = useState(false);
@@ -21,7 +28,8 @@ export default function OrdersPerformancePanel() {
     const handle = (event) => {
       const entry = event.detail;
       if (!entry || !["open", "fetch", "paint"].includes(entry.kind)) return;
-      setEntries((current) => [entry, ...current].slice(0, 12));
+      // Five complete opens = 15 events; leave room for failures and prefetches.
+      setEntries((current) => [entry, ...current].slice(0, 24));
       setCopyStatus("");
     };
     window.addEventListener(ORDERS_PERF_EVENT, handle);
@@ -37,6 +45,10 @@ export default function OrdersPerformancePanel() {
   const latestOpen = entries.find((item) => item.kind === "open");
   const latestFetch = entries.find((item) => item.kind === "fetch");
   const latestPaint = entries.find((item) => item.kind === "paint");
+  const server = parseServerTiming(latestFetch?.serverTiming);
+  const recent = computeRecentOrderSpeed(entries);
+  const sqlStages = SQL_STAGE_LABELS.filter(([name]) => Number.isFinite(server[name]));
+  const sqlMeasured = sqlStages.reduce((total, [name]) => total + server[name], 0);
   const details = [
     ["Click → visible", round(latestPaint?.visibleMs)],
     ["Data + code ready", round(latestOpen?.readyMs)],
@@ -71,8 +83,27 @@ export default function OrdersPerformancePanel() {
             {details.map(([label, value]) => (
               <div className="orders-perf-panel__metric" key={label}><span>{label}</span><strong>{value}</strong></div>
             ))}
+            {recent && recent.count > 1 && (
+              <div className="orders-perf-panel__summary" aria-label="Recent opening speeds">
+                <span>Median of last {recent.count} opens</span><strong>{round(recent.medianMs)}</strong>
+                <small>Fastest {round(recent.fastestMs)} · Slowest {round(recent.slowestMs)}</small>
+              </div>
+            )}
             {latestOpen?.failed && <div className="orders-perf-panel__error">Last opening failed.</div>}
-            {latestFetch?.serverTiming && <details className="orders-perf-panel__server"><summary>Server breakdown</summary><div>{latestFetch.serverTiming}</div></details>}
+            {latestFetch?.serverTiming && <details className="orders-perf-panel__server">
+              <summary>Server breakdown</summary>
+              <div className="orders-perf-panel__breakdown">
+                <TimingsRows entries={MAIN_STAGE_LABELS} values={server}/>
+                {Number.isFinite(server.fastPath) && <div className="orders-perf-panel__metric"><span>Database fast path</span><strong>{server.fastPath === 1 ? "Active" : "Fallback"}</strong></div>}
+                {sqlStages.length > 0 && <details className="orders-perf-panel__sql">
+                  <summary>PostgreSQL query stages ({round(sqlMeasured)})</summary>
+                  <TimingsRows entries={SQL_STAGE_LABELS} values={server}/>
+                  {Number.isFinite(server.bundle) && <p className="orders-perf-panel__note">Bundle time includes database access, response transfer and other work. SQL stages are a subset, not additional time.</p>}
+                </details>}
+                {Number.isFinite(server.bundleProposalScanSkipped) && <div className="orders-perf-panel__metric"><span>Proposal scan</span><strong>{server.bundleProposalScanSkipped === 1 ? "Skipped" : "Required"}</strong></div>}
+                <details className="orders-perf-panel__raw"><summary>Raw timings</summary><code>{latestFetch.serverTiming}</code></details>
+              </div>
+            </details>}
             <div className="orders-perf-panel__actions">
               <button type="button" onClick={() => { setEntries([]); setCopyStatus(""); }}>Clear</button>
               <button type="button" onClick={copyTimings}>Copy timings</button>

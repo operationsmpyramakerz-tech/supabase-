@@ -915,3 +915,24 @@ body .orders-workspace .orders-workspace-perf-toggle:focus-visible {
 @media (max-height: 580px) {
   .orders-perf-panel { bottom: calc(74px + env(safe-area-inset-bottom, 0px)); max-height: 50vh; }
 }
+
+/* Phase 21: readable, expandable per-stage diagnostics for mobile. */
+.orders-perf-panel__summary {
+  display: grid; grid-template-columns: 1fr auto; gap: 2px 9px;
+  margin: 7px 0; padding: 8px 9px; border-radius: 10px;
+  background: rgba(255,255,255,.07); font-variant-numeric: tabular-nums;
+}
+.orders-perf-panel__summary span { color: #e2e8f0; }
+.orders-perf-panel__summary small { color: #b9c0cb; grid-column: 1 / -1; }
+.orders-perf-panel__server .orders-perf-panel__breakdown {
+  padding: 8px 0 3px; word-break: normal;
+}
+.orders-perf-panel__sql { margin: 6px 0; padding: 5px 7px; border-radius: 8px; background: rgba(255,255,255,.055); }
+.orders-perf-panel__sql summary, .orders-perf-panel__raw summary { cursor: pointer; font-weight: 650; }
+.orders-perf-panel__note { margin: 5px 0 2px; color: #b9c0cb; font-size: 10px; }
+.orders-perf-panel__raw { margin-top: 6px; }
+.orders-perf-panel__raw code { display: block; overflow-wrap: anywhere; font-size: 10px; color: #b9c0cb; }
+.orders-perf-panel__server .orders-perf-panel__metric { padding: 2px 0; }
+.orders-perf-panel__server .orders-perf-panel__sql,
+.orders-perf-panel__server .orders-perf-panel__raw { word-break: normal; }
+.orders-perf-panel__server .orders-perf-panel__raw code { white-space: normal; }

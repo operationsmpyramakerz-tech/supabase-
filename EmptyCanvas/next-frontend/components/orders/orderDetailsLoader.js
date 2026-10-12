@@ -1,4 +1,4 @@
-import { reportOrdersPerformance } from "./orderOpeningPerformance";
+import { ordersPerfEnabled, reportOrdersPerformance } from "./orderOpeningPerformance";
 
 // Page-local detail loader: coalesces clicks and intent prefetches, bounds the
 // number of cached orders, and never shares private order payloads globally.
@@ -46,7 +46,7 @@ export function createOrderDetailsLoader({ endpoint, buildGroups, maxEntries = 1
       const parsedAt = measure();
       // Opt-in diagnostics: add ?ordersPerf=1 to the orders page URL.
       // No order IDs, school names or private payloads are written to the console.
-      const debug = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("ordersPerf") === "1";
+      const debug = ordersPerfEnabled();
       const reportTiming = (buildMs = null) => {
         if (!debug) return;
         reportOrdersPerformance({
