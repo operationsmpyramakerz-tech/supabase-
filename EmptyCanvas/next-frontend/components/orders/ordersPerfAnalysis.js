@@ -18,6 +18,8 @@ export const MAIN_STAGE_LABELS = [
   ["bundleHeaders", "Supabase: waiting for headers"],
   ["bundleBody", "Supabase: reading response"],
   ["bundleParse", "Supabase: JSON decoding"],
+  ["bundleUnpack", "Unpack compact bundle"],
+  ["bundleDbPack", "PostgreSQL column packing"],
   ["prepare", "Additional preparation"],
   ["proposal", "Legacy proposal"],
 ];

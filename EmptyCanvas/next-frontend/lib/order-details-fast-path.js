@@ -4,8 +4,11 @@ import { performance } from "node:perf_hooks";
 import { rpc } from "./supabase-rest";
 import { serializeProduct } from "./products-service";
 import { classifyBundleProposalSources } from "./order-proposal-bundle-resolution";
+import { unpackCompactBundle } from "./orders-bundle-transport";
 
 const RPC_NAME = "erp_order_detail_bundle_v1";
+const COMPACT_RPC_NAME = "erp_order_detail_bundle_compact_v1";
+let compactUnavailableUntil = 0;
 const canonicalTables = [
   ["SUPABASE_ORDERS_TABLE", "orders"],
   ["SUPABASE_PRODUCTS_TABLE", "products"],
@@ -175,16 +178,43 @@ export async function loadFastOrderDetailsBundle(ids = [], { timings = null } = 
   try {
     // The RPC is a single *live* read. It never returns another user's
     // privately cached details. The route has already checked user access.
-    const bundle = await rpc(RPC_NAME, { p_ids: clean }, {
-      profileName: "orders.details-one-call",
-      timeoutMs: 9000,
-      onNetworkTiming: timings ? ({ headersMs, bodyMs, parseMs, payloadBytes }) => {
-        timings.bundleHeaders = headersMs;
-        timings.bundleBody = bodyMs;
-        timings.bundleParse = parseMs;
-        timings.bundlePayloadBytes = payloadBytes;
-      } : undefined,
-    });
+    // Phase 23: prefer a lossless column-packed transport to avoid repeating
+    // dozens of JSON field names across hundreds of components. The v1 RPC
+    // remains the unmodified, full-fidelity fallback.
+    const networkTiming = timings ? ({ headersMs, bodyMs, parseMs, payloadBytes }) => {
+      timings.bundleHeaders = headersMs;
+      timings.bundleBody = bodyMs;
+      timings.bundleParse = parseMs;
+      timings.bundlePayloadBytes = payloadBytes;
+    } : undefined;
+    const requestOptions = {
+      profileName: "orders.details-one-call", timeoutMs: 9000,
+      onNetworkTiming: networkTiming,
+    };
+    let bundle = null;
+    if (process.env.ORDERS_COMPACT_BUNDLE_ENABLED !== "false"
+        && Date.now() >= compactUnavailableUntil) {
+      try {
+        const compact = await rpc(COMPACT_RPC_NAME, { p_ids: clean }, requestOptions);
+        const unpackStarted = performance.now();
+        const decoded = unpackCompactBundle(compact);
+        if (!validBundle(decoded, clean)) throw new Error("Incomplete compact order bundle");
+        bundle = decoded;
+        if (timings) {
+          timings.bundleCompact = 1;
+          timings.bundleUnpack = performance.now() - unpackStarted;
+        }
+      } catch (error) {
+        // A missing / incompatible migration must never prevent users from
+        // opening orders. Cool down this optional RPC, and use the proven v1.
+        compactUnavailableUntil = Date.now() + 60_000;
+        if (timings) timings.bundleCompactFallback = 1;
+      }
+    }
+    if (!bundle) {
+      bundle = await rpc(RPC_NAME, { p_ids: clean }, requestOptions);
+      if (timings) timings.bundleCompact = 0;
+    }
     const valid = validBundle(bundle, clean);
     const ready = valid ? makeFastOrderReferences(bundle) : null;
     if (timings) {
@@ -201,6 +231,7 @@ export async function loadFastOrderDetailsBundle(ids = [], { timings = null } = 
         folders: "bundleDbFolders",
         proposalItems: "bundleDbProposalItems",
         proposalScanSkipped: "bundleProposalScanSkipped",
+        transportPack: "bundleDbPack",
       };
       for (const [key, target] of Object.entries(dbStages)) {
         const duration = Number(bundle?.dbTimings?.[key]);

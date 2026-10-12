@@ -99,6 +99,8 @@ export default function OrdersPerformancePanel() {
                 {Number.isFinite(latestFetch?.bundleBytes) && <div className="orders-perf-panel__metric"><span>Bundle JSON size (before compression)</span><strong>{readableSize(latestFetch.bundleBytes)}</strong></div>}
                 {latestFetch?.serverRegion && <div className="orders-perf-panel__metric"><span>Vercel region</span><strong>{latestFetch.serverRegion}</strong></div>}
                 {Number.isFinite(server.bundleHeaders) && <p className="orders-perf-panel__note">Waiting for headers includes the Supabase network connection and remote processing; it is not PostgreSQL query time alone. Body and JSON timings are measured on the Vercel server.</p>}
+                {Number.isFinite(server.bundleCompact) && <div className="orders-perf-panel__metric"><span>Compact bundle transport</span><strong>{server.bundleCompact === 1 ? "Active" : "Legacy"}</strong></div>}
+                {Number.isFinite(server.bundleCompactFallback) && server.bundleCompactFallback === 1 && <p className="orders-perf-panel__note">Compact format unavailable or incompatible; reverted safely to the original full-data RPC.</p>}
                 {Number.isFinite(server.fastPath) && <div className="orders-perf-panel__metric"><span>Database fast path</span><strong>{server.fastPath === 1 ? "Active" : "Fallback"}</strong></div>}
                 {sqlStages.length > 0 && <details className="orders-perf-panel__sql">
                   <summary>PostgreSQL query stages ({round(sqlMeasured)})</summary>
