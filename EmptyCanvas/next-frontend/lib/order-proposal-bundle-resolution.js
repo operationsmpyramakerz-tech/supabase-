@@ -19,7 +19,7 @@ function parseSources(value) {
  * "unknown" deliberately preserves the legacy lookup (missing proposal,
  * product renamed, malformed sources, etc.).
  */
-export function classifyBundleProposalSources(row = {}, proposalId = "", proposalItems = []) {
+export function classifyBundleProposalSources(row = {}, proposalId = "", proposalItems = [], { complete = false } = {}) {
   const id = asText(proposalId);
   if (!id || !Array.isArray(proposalItems)) return { kind: "unknown" };
   const productId = asText(row.product_id);
@@ -28,7 +28,11 @@ export function classifyBundleProposalSources(row = {}, proposalId = "", proposa
     asText(candidate?.proposal_id) === id
     && ((productId && asText(candidate?.product_id) === productId)
       || (productName && canonical(candidate?.product_name) === productName)));
-  if (!matches.length) return { kind: "unknown" };
+  // The original Phase 14 bundle fetched only ID/name-targeted items. An
+  // absent match there was inconclusive. Phase 19's complete live per-proposal
+  // snapshot proves that a second read of the SAME proposal cannot recover
+  // this component. Keep the legacy lookup on older SQL (complete=false).
+  if (!matches.length) return complete ? { kind: "confirmed-empty", reason: "no-match" } : { kind: "unknown" };
 
   let definitelyEmpty = true;
   for (const match of matches) {

@@ -112,6 +112,7 @@ export function makeFastOrderReferences(bundle) {
   let proposalRecovery = false;
   const confirmedEmptySourceIds = [];
   const fullProposalLookupIds = [];
+  let unmatchedCompleteProposalRows = 0;
   for (const row of rows) {
     let sources = row.source_kits;
     if (typeof sources === "string") {
@@ -127,12 +128,15 @@ export function makeFastOrderReferences(bundle) {
     const proposalId = value(row.source_proposal_id)
       || value(proposalByName.get(canonical(proposalName))?.id);
     if (!proposalId) { proposalRecovery = true; continue; }
-    const sourceMatch = classifyBundleProposalSources(row, proposalId, bundle.proposalItems);
+    const sourceMatch = classifyBundleProposalSources(row, proposalId, bundle.proposalItems, {
+      complete: bundle.proposalItemsComplete === true,
+    });
     if (sourceMatch.kind === "confirmed-empty") {
-      // The live RPC already returned this exact proposal/product row and its
-      // source array is empty. A second REST read cannot fill a blank that is
-      // present in the database. Preserve the legacy stored kit-tag fallback
-      // in enrichOrderDetailGrouping, without repeating the lookup.
+      // The live RPC either proved the exact match has an empty source array,
+      // or (Phase 19 only) supplied the WHOLE original proposal and confirmed
+      // there is no matching product at all. The legacy full read cannot find
+      // new sources in either case. Preserve the stored kit-tag fallback.
+      if (sourceMatch.reason === "no-match") unmatchedCompleteProposalRows++;
       confirmedEmptySourceIds.push(value(row.id));
       continue;
     }
@@ -158,6 +162,8 @@ export function makeFastOrderReferences(bundle) {
     proposalRecovery,
     missingProductMatches,
     orphanKitMemberships,
+    unmatchedCompleteProposalRows,
+    completeProposalSnapshot: bundle.proposalItemsComplete === true,
   };
 }
 
@@ -184,6 +190,8 @@ export async function loadFastOrderDetailsBundle(ids = [], { timings = null } = 
         timings.bundleProposalRecovery = Number(ready.proposalRecovery);
         timings.bundleProposalEmpty = ready.references.confirmedEmptySourceIds.length;
         timings.bundleProposalFullOnly = ready.references.fullProposalLookupIds.length;
+        timings.bundleProposalNoMatch = ready.unmatchedCompleteProposalRows;
+        timings.bundleProposalComplete = Number(ready.completeProposalSnapshot);
       }
     }
     return ready;
