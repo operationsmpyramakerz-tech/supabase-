@@ -880,8 +880,59 @@ export async function listKitMembership({ fresh = false } = {}) {
   return kitMembershipsFromSnapshot(await kitListSnapshot({ fresh }));
 }
 
-export async function getKitGroupingReferences() {
-  const snapshot = await kitListSnapshot();
+// An order normally contains only a small subset of all product IDs. Fetch
+// membership rows for those products instead of paging through the entire
+// kit_items table on the first uncached order opening. The full snapshot is
+// still used for legacy rows without product IDs and by the Kits pages.
+async function detailKitMembershipRows(productIds = []) {
+  const ids = [...new Set(productIds.map(text).filter(Boolean))];
+  if (!ids.length) return [];
+  const batches = [];
+  for (let i = 0; i < ids.length; i += 60) batches.push(ids.slice(i, i + 60));
+  // Offset pagination protects against the server's configured row cap and
+  // supports products that belong to many kits. Batches run concurrently.
+  const pages = await Promise.all(batches.map(async (batch) => {
+    const results = [];
+    const inList = postgrestInList(batch);
+    const pageSize = 400;
+    for (let offset = 0; ; offset += pageSize) {
+      const rows = await supabaseRequest(
+        `/${encodeURIComponent(kitItemsTable())}?select=kit_id,product_id&product_id=in.(${encodeURIComponent(inList)})&order=id.asc&limit=${pageSize}&offset=${offset}`,
+        { profileName: "orders.kits.memberships-targeted" },
+      );
+      const page = Array.isArray(rows) ? rows : [];
+      results.push(...page);
+      if (page.length < pageSize) break;
+    }
+    return results;
+  }));
+  return pages.flat();
+}
+
+export async function getKitGroupingReferences({ productIds = null } = {}) {
+  const ids = Array.isArray(productIds)
+    ? [...new Set(productIds.map(text).filter(Boolean))].sort()
+    : [];
+  // If the complete snapshot is already warm, reusing it is faster than a
+  // new REST call. A large order uses the existing full-snapshot path too.
+  let snapshot = proposalKitCacheGet("kits:snapshot");
+  if (!snapshot && ids.length && ids.length <= 240) {
+    const key = `kits:detail:${ids.join("|")}`;
+    try {
+      snapshot = await proposalKitCachedRead(key, async () => {
+        const [headers, items] = await Promise.all([
+          kitHeaderRowsCompact(),
+          detailKitMembershipRows(ids),
+        ]);
+        return { headers, items };
+      }, { ttlMs: 20_000 });
+    } catch {
+      // Legacy databases without the expected product_id projection keep the
+      // previous working behavior, rather than losing Kits membership labels.
+      snapshot = await kitListSnapshot();
+    }
+  }
+  if (!snapshot) snapshot = await kitListSnapshot();
   return {
     memberships: kitMembershipsFromSnapshot(snapshot),
     kits: snapshot.headers.map((row) => ({

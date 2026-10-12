@@ -682,7 +682,7 @@ async function resolveDirectProposalSources(items = []) {
   return rows;
 }
 
-export async function enrichOrderDetailGrouping(items = []) {
+export async function enrichOrderDetailGrouping(items = [], { timings = null } = {}) {
   let rows = Array.isArray(items) ? items : [];
   if (!rows.length) return rows;
   // Proposal-source reconstruction and catalog/kit lookups are independent.
@@ -691,11 +691,22 @@ export async function enrichOrderDetailGrouping(items = []) {
   // needed here. Kit header names and memberships come from one snapshot;
   // loading the full Kits page list would otherwise perform an unnecessary
   // item-count scan on the first order open.
+  const measure = async (name, load) => {
+    const start = performance.now();
+    try { return await load(); }
+    finally { if (timings) timings[name] = performance.now() - start; }
+  };
+  // Only use the targeted Kits query when every saved component has a product
+  // ID. Legacy orders without those IDs still need the complete memberships
+  // snapshot to match products by their names/URLs.
+  const productIds = rows.every((item) => text(item?.productId))
+    ? [...new Set(rows.map((item) => text(item.productId)))]
+    : null;
   const [resolvedRows, productsResult, kitReferences, folders] = await Promise.all([
-    resolveDirectProposalSources(rows),
-    getProductsList().catch(() => []),
-    getKitGroupingReferences().catch(() => ({ memberships: [], kits: [] })),
-    listKitFolders({}).catch(() => []),
+    measure("proposal", () => resolveDirectProposalSources(rows)),
+    measure("products", () => getProductsList().catch(() => [])),
+    measure("kits", () => getKitGroupingReferences({ productIds }).catch(() => ({ memberships: [], kits: [] }))),
+    measure("folders", () => listKitFolders({}).catch(() => [])),
   ]);
   rows = resolvedRows;
 
@@ -730,7 +741,8 @@ export async function enrichOrderDetailGrouping(items = []) {
     membershipsByProduct.set(productId, list);
   }
 
-  return rows.map((item) => {
+  const groupingStartedAt = performance.now();
+  const enriched = rows.map((item) => {
     const product = productByName.get(normKey(item?.productName)) || productByUrl.get(text(item?.productUrl).toLowerCase()) || null;
     const productId = text(item?.productId || product?.id) || null;
     const productTags = Array.isArray(product?.tags) ? product.tags.map(text).filter(Boolean) : [];
@@ -778,6 +790,8 @@ export async function enrichOrderDetailGrouping(items = []) {
       sourceBreakdown,
     };
   });
+  if (timings) timings.grouping = performance.now() - groupingStartedAt;
+  return enriched;
 }
 
 export const __orderDetailsDataTest = {

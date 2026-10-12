@@ -413,16 +413,18 @@ export async function loadMaintenanceOrdersInitialPage({ limit = PAGE_LIMIT } = 
   );
 }
 
-async function enrichMaintenanceDetailProducts(items = []) {
+async function enrichMaintenanceDetailProducts(items = [], { timings = null } = {}) {
   const rows = Array.isArray(items) ? items : [];
   if (!rows.length) return rows;
 
   let products = [];
+  const productsStartedAt = performance.now();
   try {
     // Order details require individual product metadata, not the independent
     // tags/units dropdown catalogs used by editing forms.
     products = await getProductsList();
   } catch {}
+  finally { if (timings) timings.products = performance.now() - productsStartedAt; }
   if (!products.length) return rows;
 
   const byId = new Map();
@@ -523,7 +525,7 @@ export async function loadMaintenanceOrderDetails({ orderIds = [], timings = nul
   const serialized = maintenanceRows.map(serializeOperationsOrderDetail);
   if (timings) timings.prepare = performance.now() - prepareStartedAt;
   const enrichStartedAt = performance.now();
-  const details = await enrichMaintenanceDetailProducts(serialized);
+  const details = await enrichMaintenanceDetailProducts(serialized, { timings });
   if (timings) timings.enrich = performance.now() - enrichStartedAt;
   return details;
 }

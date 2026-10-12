@@ -784,7 +784,7 @@ export async function loadOperationsOrderDetails(orderIds = [], { timings = null
   if (timings) timings.db = performance.now() - dbStartedAt;
   const enrichStartedAt = performance.now();
   const serialized = rows.map(serializeOperationsOrderDetail);
-  const details = await enrichOrderDetailGrouping(serialized);
+  const details = await enrichOrderDetailGrouping(serialized, { timings });
   if (timings) timings.enrich = performance.now() - enrichStartedAt;
   return details;
 }
