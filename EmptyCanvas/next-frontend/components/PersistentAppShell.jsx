@@ -25,14 +25,14 @@ function routePerformanceStyles(localPath) {
   if (["/orders", "/orders-review", "/operations-orders"].includes(localPath)) {
     return [
       "/next/css/orders-performance.css?v=current-orders-pure-white-v6",
-      "/next/css/order-mobile-performance.css?v=floating-order-type-icon-v3",
+      "/next/css/order-mobile-performance.css?v=floating-order-type-desktop-v4",
       "/next/css/orders-workspace.css?v=orders-workspace-v7-speed-measurements",
     ];
   }
   if (localPath === "/maintenance-orders") {
     return [
       "/next/css/maintenance-orders.css?v=maintenance-log-footer-lift-v12",
-      "/next/css/order-mobile-performance.css?v=floating-order-type-icon-v3",
+      "/next/css/order-mobile-performance.css?v=floating-order-type-desktop-v4",
       "/next/css/orders-workspace.css?v=orders-workspace-v7-speed-measurements",
     ];
   }

@@ -283,6 +283,48 @@
 }
 
 /* ========================================================================
+   Desktop/tablet order details — show the floating order-type icon
+   2026-10-12
+
+   Classic detail dialogs scroll themselves (overflow:auto), which clips the
+   badge positioned 75% above the card. Mobile already scrolls a dedicated
+   content region; do the same on desktop for the four order pages. Limit the
+   rule to dialogs with this badge so other modals remain unchanged.
+   Reserve room above the centered dialog for the entire floating badge.
+   ===================================================================== */
+@media (min-width: 769px) {
+  body.order-modal-fit-screen :is(.next-classic-orders-parity, .next-classic-maintenance-parity)
+  .co-modal-dialog:has(> .co-modal-type-badge) {
+    display: flex !important;
+    flex-direction: column !important;
+    max-height: min(88dvh, calc(100dvh - 112px)) !important;
+    overflow: visible !important;
+  }
+
+  body.order-modal-fit-screen :is(.next-classic-orders-parity, .next-classic-maintenance-parity)
+  .co-modal-dialog:has(> .co-modal-type-badge) > .co-modal-header {
+    flex: 0 0 auto;
+  }
+
+  body.order-modal-fit-screen :is(.next-classic-orders-parity, .next-classic-maintenance-parity)
+  .co-modal-dialog:has(> .co-modal-type-badge) > .co-modal-scroll-region {
+    display: block;
+    flex: 0 1 auto;
+    min-width: 0;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: none;
+  }
+
+  body.order-modal-fit-screen :is(.next-classic-orders-parity, .next-classic-maintenance-parity)
+  .co-modal-dialog:has(> .co-modal-type-badge) > .co-modal-scroll-region::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* ========================================================================
    Order details — floating order-type badge
    2026-10-06
    Mirrors the Shopping Cart floating type icon. The badge is centered on the
