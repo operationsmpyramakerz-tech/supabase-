@@ -734,6 +734,7 @@ export async function loadOrdersReviewDetails({ account, orderIds = [], timings 
   const details = await enrichOrderDetailGrouping(allowed.map(serializeReviewOrderDetail), {
     timings,
     references: fast?.references || null,
+    recoverProposalSources: Boolean(fast?.proposalRecovery),
   });
   if (timings) {
     timings.enrich = performance.now() - enrichStartedAt;

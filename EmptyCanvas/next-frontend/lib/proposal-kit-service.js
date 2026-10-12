@@ -1,4 +1,5 @@
 import "server-only";
+import { performance } from "node:perf_hooks";
 import {
   deleteById,
   getSupabaseConfig,
@@ -958,30 +959,39 @@ async function detailKitMembershipRows(productIds = []) {
   return pages.flat();
 }
 
-export async function getKitGroupingReferences({ productIds = null, allowLargeTargeted = false } = {}) {
+export async function getKitGroupingReferences({ productIds = null, allowLargeTargeted = false, timings = null } = {}) {
   const ids = Array.isArray(productIds)
     ? [...new Set(productIds.map(text).filter(Boolean))].sort()
     : [];
   // If the complete snapshot is already warm, reusing it is faster than a
   // new REST call. A large order uses the existing full-snapshot path too.
   let snapshot = proposalKitCacheGet("kits:snapshot");
+  const kitTiming = async (name, loader) => {
+    const startedAt = performance.now();
+    try { return await loader(); }
+    finally { if (timings) timings[name] = performance.now() - startedAt; }
+  };
   if (!snapshot && ids.length && (ids.length <= 240 || allowLargeTargeted)) {
     const key = `kits:detail:${ids.join("|")}`;
     try {
       snapshot = await proposalKitCachedRead(key, async () => {
         const [headers, items] = await Promise.all([
-          kitHeaderRowsCompact(),
-          detailKitMembershipRows(ids),
+          kitTiming("kitHeaders", () => kitHeaderRowsCompact()),
+          kitTiming("kitItems", () => detailKitMembershipRows(ids)),
         ]);
         return { headers, items };
       }, { ttlMs: 20_000 });
-    } catch {
+    } catch (error) {
       // Legacy databases without the expected product_id projection keep the
       // previous working behavior, rather than losing Kits membership labels.
-      snapshot = await kitListSnapshot();
+      if (timings) {
+        timings.kitTargetFailed = 1;
+        timings.kitTargetStatus = Number(error?.status) || 0;
+      }
+      snapshot = await kitTiming("kitFullSnapshot", () => kitListSnapshot());
     }
   }
-  if (!snapshot) snapshot = await kitListSnapshot();
+  if (!snapshot) snapshot = await kitTiming("kitFullSnapshot", () => kitListSnapshot());
   return {
     memberships: kitMembershipsFromSnapshot(snapshot),
     kits: snapshot.headers.map((row) => ({

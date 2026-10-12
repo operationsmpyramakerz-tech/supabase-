@@ -36,7 +36,7 @@ export async function POST(request) {
   const timing = (detailsMs = 0, stages = {}) => {
     const parts = [`auth;dur=${authMs.toFixed(1)}`, `details;dur=${detailsMs.toFixed(1)}`];
     // Opt-in breakdown in DevTools; timings contain durations only, never data.
-    for (const name of ["db", "bundle", "fastPath", "visibility", "prepare", "enrich", "proposal", "proposalNames", "proposalItems", "proposalFallback", "products", "kits", "folders", "grouping"]) {
+    for (const name of ["db", "bundle", "fastPath", "bundleInvalid", "bundleError", "bundleErrorStatus", "bundleProductMiss", "bundleKitOrphans", "bundleProposalRecovery", "kitHeaders", "kitItems", "kitFullSnapshot", "kitTargetFailed", "kitTargetStatus", "visibility", "prepare", "enrich", "proposal", "proposalNames", "proposalItems", "proposalFallback", "products", "kits", "folders", "grouping"]) {
       if (Number.isFinite(stages[name])) parts.push(`${name};dur=${stages[name].toFixed(1)}`);
     }
     return { "Server-Timing": parts.join(", ") };

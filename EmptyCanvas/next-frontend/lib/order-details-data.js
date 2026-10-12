@@ -709,7 +709,9 @@ async function resolveDirectProposalSources(items = [], { timings = null } = {})
   return rows;
 }
 
-export async function enrichOrderDetailGrouping(items = [], { timings = null, productsSink = null, references = null } = {}) {
+export async function enrichOrderDetailGrouping(items = [], {
+  timings = null, productsSink = null, references = null, recoverProposalSources = false,
+} = {}) {
   let rows = Array.isArray(items) ? items : [];
   if (!rows.length) return rows;
   // Proposal-source reconstruction and catalog/kit lookups are independent.
@@ -733,11 +735,13 @@ export async function enrichOrderDetailGrouping(items = [], { timings = null, pr
   // four parallel REST paths, without any extra network calls. When the RPC
   // is unavailable or incomplete, callers simply use the original path.
   const [resolvedRows, productsResult, kitReferences, folders] = references
-    ? [rows, references.products, references.kitReferences, references.folders]
+    ? [recoverProposalSources
+      ? await measure("proposal", () => resolveDirectProposalSources(rows, { timings }))
+      : rows, references.products, references.kitReferences, references.folders]
     : await Promise.all([
       measure("proposal", () => resolveDirectProposalSources(rows, { timings })),
       measure("products", () => getProductsForOrderDetails(rows, { allowLargeTargeted: Array.isArray(productsSink) }).catch(() => [])),
-      measure("kits", () => getKitGroupingReferences({ productIds, allowLargeTargeted: Array.isArray(productsSink) }).catch(() => ({ memberships: [], kits: [] }))),
+      measure("kits", () => getKitGroupingReferences({ productIds, allowLargeTargeted: Array.isArray(productsSink), timings }).catch(() => ({ memberships: [], kits: [] }))),
       measure("folders", () => listKitFolders({}).catch(() => [])),
     ]);
   rows = resolvedRows;

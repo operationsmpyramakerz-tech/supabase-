@@ -58,29 +58,34 @@ export function makeFastOrderReferences(bundle) {
     }
   }
 
-  // Historical rows can contain only a product name, or a repurposed ID.
-  // Allow a verified name/URL match, but never silently attach an unrelated
-  // product just because its ID happens to exist in the current catalog.
+  // Names/URLs on historical order rows may differ from the current catalog,
+  // and a product may have been deleted. Do NOT reject the complete bundle for
+  // that reason: the legacy enrich path already uses exact stored product name
+  // or URL for metadata, and keeps the original row if no match exists.
+  // In particular, never use a mismatched ID to replace the saved product.
+  let missingProductMatches = 0;
   for (const row of rows) {
     const name = canonical(row.product_name);
     const url = value(row.product_url).toLowerCase();
     const current = productById.get(value(row.product_id));
-    const candidate = (name && productByName.get(name)) || (url && productByUrl.get(url));
-    const idMatches = current && ((!name && !url)
+    const matchingById = current && ((!name && !url)
       || (name && name === canonical(current.name))
       || (url && url === value(current.url).toLowerCase()));
-    if (!idMatches && !candidate) return null;
+    if (!matchingById && !(name && productByName.has(name))
+        && !(url && productByUrl.has(url))) missingProductMatches++;
   }
 
   const kitById = new Map(bundle.kits.map((kit) => [value(kit.id), kit]));
   const folderById = new Map(bundle.folders.map((folder) => [value(folder.id), folder]));
   const membershipsByProduct = new Map();
+  let orphanKitMemberships = 0;
   for (const item of bundle.kitItems) {
     const productId = value(item.product_id);
     const kitId = value(item.kit_id);
     const kit = kitById.get(kitId);
-    if (!productId || !kitId || !kit) return null;
-    if (value(kit.folder_id) && !folderById.has(value(kit.folder_id))) return null;
+    // The original membership snapshot ignores an orphan membership; a
+    // deleted folder is presented as "Unfiled Kits" by the normal grouping.
+    if (!productId || !kitId || !kit) { orphanKitMemberships++; continue; }
     if (!membershipsByProduct.has(productId)) membershipsByProduct.set(productId, new Map());
     membershipsByProduct.get(productId).set(kitId, value(kit.name) || "Untitled kit");
   }
@@ -103,6 +108,7 @@ export function makeFastOrderReferences(bundle) {
     const key = canonical(header.name);
     if (key && !proposalByName.has(key)) proposalByName.set(key, header);
   }
+  let proposalRecovery = false;
   for (const row of rows) {
     let sources = row.source_kits;
     if (typeof sources === "string") {
@@ -117,21 +123,23 @@ export function makeFastOrderReferences(bundle) {
     const proposalName = value(row.source_proposal_name) || value(nameFromIssue);
     const proposalId = value(row.source_proposal_id)
       || value(proposalByName.get(canonical(proposalName))?.id);
-    if (!proposalId) return null;
+    if (!proposalId) { proposalRecovery = true; continue; }
     const match = bundle.proposalItems.find((candidate) =>
       value(candidate.proposal_id) === proposalId
       && ((value(row.product_id) && value(candidate.product_id) === value(row.product_id))
         || (canonical(row.product_name)
           && canonical(candidate.product_name) === canonical(row.product_name))));
-    if (!match) return null;
+    if (!match) { proposalRecovery = true; continue; }
     let candidateSources = match.source_kits;
     if (typeof candidateSources === "string") {
       try { candidateSources = JSON.parse(candidateSources); } catch { candidateSources = []; }
     }
     if (!Array.isArray(candidateSources) || !candidateSources.length) {
-      // Some historical proposals have no source kits. The legacy path
-      // preserves its best-effort kit-tag fallback.
-      return null;
+      // Resolve only these historical proposal links via the existing
+      // targeted/fallback resolver. Never discard the product/kit bundle and
+      // start the much slower complete memberships scan again.
+      proposalRecovery = true;
+      continue;
     }
     row.source_kits = candidateSources;
     row.source_proposal_id = proposalId;
@@ -141,7 +149,13 @@ export function makeFastOrderReferences(bundle) {
   // Same deterministic ordering as the original sorted REST detail list.
   rows.sort((a, b) => value(b.notion_created_time).localeCompare(value(a.notion_created_time))
     || value(b.id).localeCompare(value(a.id)));
-  return { rows, references: { products, kitReferences: { memberships, kits }, folders } };
+  return {
+    rows,
+    references: { products, kitReferences: { memberships, kits }, folders },
+    proposalRecovery,
+    missingProductMatches,
+    orphanKitMemberships,
+  };
 }
 
 export async function loadFastOrderDetailsBundle(ids = [], { timings = null } = {}) {
@@ -156,11 +170,24 @@ export async function loadFastOrderDetailsBundle(ids = [], { timings = null } = 
       profileName: "orders.details-one-call",
       timeoutMs: 9000,
     });
-    const ready = validBundle(bundle, clean) ? makeFastOrderReferences(bundle) : null;
-    if (timings) timings.bundle = performance.now() - startedAt;
+    const valid = validBundle(bundle, clean);
+    const ready = valid ? makeFastOrderReferences(bundle) : null;
+    if (timings) {
+      timings.bundle = performance.now() - startedAt;
+      if (!valid) timings.bundleInvalid = 1;
+      if (ready) {
+        timings.bundleProductMiss = ready.missingProductMatches;
+        timings.bundleKitOrphans = ready.orphanKitMemberships;
+        timings.bundleProposalRecovery = Number(ready.proposalRecovery);
+      }
+    }
     return ready;
   } catch (error) {
-    if (timings) timings.bundle = performance.now() - startedAt;
+    if (timings) {
+      timings.bundle = performance.now() - startedAt;
+      timings.bundleError = 1;
+      timings.bundleErrorStatus = Number(error?.status) || 0;
+    }
     const message = [error?.message, error?.details?.code].filter(Boolean).join(" ");
     if (/PGRST202|42883|could not find the function|schema cache/i.test(message)) {
       unavailableUntil = Date.now() + 60_000;

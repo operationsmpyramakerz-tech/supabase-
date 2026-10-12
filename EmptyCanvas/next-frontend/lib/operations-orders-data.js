@@ -789,7 +789,7 @@ export async function loadOperationsOrderDetails(orderIds = [], { timings = null
     const prepareStartedAt = performance.now();
     const details = await enrichOrderDetailGrouping(
       fast.rows.map(serializeOperationsOrderDetail),
-      { timings, productsSink, references: fast.references },
+      { timings, productsSink, references: fast.references, recoverProposalSources: fast.proposalRecovery },
     );
     if (timings) {
       timings.prepare = performance.now() - prepareStartedAt;
