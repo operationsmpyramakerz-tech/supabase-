@@ -1322,6 +1322,12 @@ export async function markOperationsShipped({
   if (loaded.clean.some((id) => !loaded.byId.has(id))) {
     throw directOperationsMutationError("Order not found", 404);
   }
+  if (loaded.rows.some((row) => statusIndex(row?.status ?? row?.Status) >= 4)) {
+    throw directOperationsMutationError("A delivered or archived order cannot be received again. Refresh the order.", 409);
+  }
+  if (loaded.rows.some((row) => decision(row) === "rejected")) {
+    throw directOperationsMutationError("Rejected components must be reviewed before receiving them.", 409);
+  }
 
   const quantityMap = quantities && typeof quantities === "object" && !Array.isArray(quantities) ? quantities : null;
   const globalIssue = text(issueDescription);
@@ -2192,14 +2198,50 @@ export async function markOperationsArrived({
   orderReceiptDataUrls = [],
   orderReceiptFilenames = [],
   receiptNumbers = [],
+  maintenanceOnly = false,
 } = {}) {
-  const access = ensureOperationsMutationAccess(account || {});
+  // Maintenance-only editors may deliver maintenance orders, but this must
+  // never grant access to a product/withdrawal order. Check both permission
+  // and every stored order type before doing any upload or database write.
+  const access = maintenanceOnly
+    ? directPageMutationAccess(account || {}, ["Maintenance Orders", "Operations Orders", "Requested Orders"])
+    : ensureOperationsMutationAccess(account || {});
   if (access === null) return null;
+  if (access === false) throw directOperationsMutationError("Edit access is required to deliver this order.", 403);
 
   const loaded = await loadOperationRowsByIds(orderIds);
   if (!loaded) return null;
   if (loaded.clean.some((id) => !loaded.byId.has(id))) throw directOperationsMutationError("Orders not found", 404);
+  const serializedRows = loaded.rows.map((row) => serializeOperationsOrderDetail(row || {}));
+  const maintenanceBatch = serializedRows.every((item) =>
+    text(item?.orderType).toLowerCase().replace(/[^a-z0-9]/g, "") === "requestmaintenance"
+  );
+  if (maintenanceOnly && !maintenanceBatch) {
+    throw directOperationsMutationError("Maintenance access cannot deliver other order types.", 403);
+  }
+  // Maintenance lists can be "In progress" based on a saved maintenance log
+  // even if the raw order status is not yet Shipped. Require an actual log in
+  // this case; for ordinary orders, the raw status must be Shipped.
+  const hasMaintenanceLog = (item) => Boolean(
+    item?.maintenanceLogged || (Array.isArray(item?.maintenanceLogs) && item.maintenanceLogs.length)
+    || text(item?.serialNumber) || text(item?.resolutionMethod)
+    || text(item?.actualIssueDescription) || text(item?.repairAction)
+  );
+  if (loaded.rows.some((row) => statusIndex(row?.status ?? row?.Status) >= 4)
+    || (!maintenanceBatch && loaded.rows.some((row) => statusIndex(row?.status ?? row?.Status) !== 3))
+    || (maintenanceBatch && !serializedRows.some(hasMaintenanceLog))) {
+    throw directOperationsMutationError("This order is not ready for delivery, or was already delivered. Refresh and try again.", 409);
+  }
 
+  const receiptEntries = splitReceiptNumbers(receiptNumbers);
+  if (maintenanceBatch && receiptEntries.some((number) => !/^\d+$/.test(number))) {
+    throw directOperationsMutationError("Store receipt numbers must contain digits only.", 400);
+  }
+  if (maintenanceBatch && serializedRows.some((item) =>
+    Array.isArray(item?.sparePartsReplacedEntries) && item.sparePartsReplacedEntries.length > 0
+  ) && !receiptEntries.length) {
+    throw directOperationsMutationError("Store receipt number is required when maintenance spare parts were replaced.", 400);
+  }
   const uploadInputs = opsReceiptUploadInput(orderReceiptDataUrls, orderReceiptFilenames);
   const receiptText = mergeReceiptNumbers("", receiptNumbers);
   const firstRow = loaded.rows[0] || {};

@@ -772,6 +772,20 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
     return fetchOrdersPage({ reset: true, fresh: true });
   }
 
+  // Once Supabase confirms a write, a temporary summary-list failure must
+  // not be reported as a failed save (which could prompt a duplicate Log or
+  // repeated delivery). Clear detail cache and refresh on a best-effort basis.
+  async function refreshAfterCommittedMaintenanceAction() {
+    detailsLoaderRef.current.clear();
+    try {
+      await refreshOrders();
+      return true;
+    } catch (error) {
+      console.warn("[maintenance-orders] Action saved, list refresh pending:", error?.message || error);
+      return false;
+    }
+  }
+
   async function openOrderDetails(group) {
     if (!group) return;
     const attemptId = markOrderOpenStarted("Maintenance");
@@ -869,10 +883,10 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
         return;
       }
 
-      await refreshOrders();
+      const refreshed = await refreshAfterCommittedMaintenanceAction();
       setActionState(null);
       setSelected(null);
-      setNotice("Maintenance order moved to Archive.");
+      setNotice(refreshed ? "Maintenance order moved to Archive." : "Archived successfully. Refresh the list to see the latest status.");
       window.setTimeout(() => setNotice(""), 3500);
     } catch (error) {
       setActionError(error?.message || "The action could not be completed.");
@@ -887,10 +901,10 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
     setBusy(true);
     try {
       await runProtectedAction("delete", group, password);
-      await refreshOrders();
+      const refreshed = await refreshAfterCommittedMaintenanceAction();
       setDeleteConfirm(null);
       setSelected(null);
-      setNotice("Maintenance order deleted successfully.");
+      setNotice(refreshed ? "Maintenance order deleted successfully." : "Deleted successfully. Refresh the list to see the latest status.");
       window.setTimeout(() => setNotice(""), 3500);
     } catch (error) {
       setDeleteConfirm(null);
@@ -1011,12 +1025,12 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
         replaceExisting: isEditMode,
         appendLog: isSecondMode,
       });
-      await refreshOrders();
+      const refreshed = await refreshAfterCommittedMaintenanceAction();
       setLogGroup(null);
       setLogMode("create");
       setSelected(null);
       if (!isEditMode) setTab("in-progress");
-      setNotice(isEditMode ? "Maintenance log updated." : isSecondMode ? "Second maintenance log saved." : "Maintenance log saved.");
+      setNotice(!refreshed ? "Maintenance log saved. Refresh the list to see the latest details." : isEditMode ? "Maintenance log updated." : isSecondMode ? "Second maintenance log saved." : "Maintenance log saved.");
       window.setTimeout(() => setNotice(""), 4000);
     } catch (error) {
       setActionError(error?.message || "Failed to save maintenance log.");
@@ -1052,11 +1066,11 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
         orderReceiptFilenames: payload.files.map((file, index) => text(file?.name) || `maintenance-report-${index + 1}.jpg`),
         receiptNumbers,
       });
-      await refreshOrders();
+      const refreshed = await refreshAfterCommittedMaintenanceAction();
       setDoneGroup(null);
       setSelected(null);
       setTab("done");
-      setNotice("Marked as delivered.");
+      setNotice(refreshed ? "Marked as delivered." : "Delivered successfully. Refresh the list to see the latest status.");
       window.setTimeout(() => setNotice(""), 4500);
     } catch (error) {
       setActionError(error?.message || "Failed to mark as delivered.");

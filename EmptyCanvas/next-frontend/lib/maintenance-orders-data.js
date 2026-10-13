@@ -888,6 +888,19 @@ export async function logMaintenanceDirect({
       log.serialNumberText || log.resolutionMethodText || log.actualIssueDescriptionText || log.repairActionText
       || needed.length || replaced.length || log.checklist.length
     );
+    // Serial number is fixed when making a second log; it does not count as
+    // new maintenance work. Reject empty append/replace payloads instead of
+    // silently creating a duplicate or erasing the previous latest log.
+    const hasNewWork = Boolean(
+      log.resolutionMethodText || log.actualIssueDescriptionText || log.repairActionText
+      || needed.length || replaced.length || log.checklist.length
+    );
+    if (appendLog && !hasNewWork) {
+      throw directMaintenanceMutationError("A second maintenance log needs new repair details; the serial number alone is not enough.", 400);
+    }
+    if (replaceExisting && !hasContent) {
+      throw directMaintenanceMutationError("An empty maintenance log cannot replace the existing log.", 400);
+    }
 
     const existingHistory = (Array.isArray(previousItem?.maintenanceLogs) ? previousItem.maintenanceLogs : []).map((entry) => ({
       serialNumber: text(entry?.serialNumber) || null,
@@ -901,6 +914,9 @@ export async function logMaintenanceDirect({
       technicianName: text(entry?.technicianName) || null,
     }));
 
+    if (appendLog && existingHistory.length === 0) {
+      throw directMaintenanceMutationError("Save the first maintenance log before adding a second one.", 409);
+    }
     if (appendLog && existingHistory.length >= 2) {
       throw directMaintenanceMutationError("This order already has a second maintenance log.", 409);
     }
@@ -974,21 +990,35 @@ export async function logMaintenanceDirect({
     };
   };
 
+  // Preflight all selected components before the first PATCH. Previously a
+  // second-log conflict on a later row could leave earlier rows saved.
+  const planned = ids.map((id) => {
+    const built = buildPatch(logById.get(id) || fallbackLog, beforeById.get(id) || {});
+    const detailKeys = ["serial_number", "resolution_method", "actual_issue_description", "repair_action", "spare_parts_replaced"];
+    const hasDetailsForRow = replaceExisting || appendLog || detailKeys.some((key) => text(built.patch?.[key]));
+    hasAnyDetails = hasAnyDetails || hasDetailsForRow;
+    return { id, built, hasDetailsForRow };
+  });
+  if (!hasAnyDetails && !moveToArrived && !moveToShipping && !replaceExisting && !appendLog) {
+    throw directMaintenanceMutationError("No maintenance details were provided.", 400);
+  }
+  if ((appendLog || replaceExisting) && planned.some(({ id }) => !logById.has(id))) {
+    throw directMaintenanceMutationError("Maintenance details are required for every selected component when editing or adding a second log.", 400);
+  }
   try {
-    for (const id of ids) {
-      const built = buildPatch(logById.get(id) || fallbackLog, beforeById.get(id) || {});
-      const detailKeys = ["serial_number", "resolution_method", "actual_issue_description", "repair_action", "spare_parts_replaced"];
-      const hasDetailsForRow = replaceExisting || appendLog || detailKeys.some((key) => text(built.patch?.[key]));
-      hasAnyDetails = hasAnyDetails || hasDetailsForRow;
+    for (const { id, built, hasDetailsForRow } of planned) {
       if (!hasDetailsForRow && !moveToArrived && !moveToShipping) continue;
       const requiredColumns = built.patch?.serial_number ? ["serial_number"] : [];
+      // The metadata column contains the complete first/second log history.
+      // Never drop it via the legacy optional-column fallback and report a
+      // successful save that actually lost the log.
+      if (Object.prototype.hasOwnProperty.call(built.patch, "spare_parts_replaced")) {
+        requiredColumns.push("spare_parts_replaced");
+      }
       const updated = await updateMaintenanceRowSafe(id, built.patch, requiredColumns);
       mutationStarted = true;
       updatedRows.push(updated || { ...(rows.find((row) => text(row?.id) === id) || {}), ...built.patch });
       responseById.set(id, built.response);
-    }
-    if (!hasAnyDetails && !moveToArrived && !moveToShipping && !replaceExisting && !appendLog) {
-      throw directMaintenanceMutationError("No maintenance details were provided.", 400);
     }
     await invalidateLegacyOperationsCaches(account).catch(() => {});
     const items = await enrichMaintenanceDetailProducts(updatedRows.map((row) => {
@@ -1040,6 +1070,7 @@ export async function markMaintenanceArrivedDirect({
       orderReceiptDataUrls,
       orderReceiptFilenames,
       receiptNumbers,
+      maintenanceOnly: true,
     });
   } catch (error) {
     if (error?.code === "DIRECT_OPERATIONS_MUTATION_FAILED") {
