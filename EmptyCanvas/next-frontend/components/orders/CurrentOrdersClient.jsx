@@ -869,9 +869,15 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
         return;
       }
 
-      await refreshOrders();
+      // The mutation already succeeded. A failed list refresh must not prompt
+      // a second archive/restore request (or report a false save error).
       setActionState(null);
       setSelected(null);
+      try {
+        await refreshOrders();
+      } catch (refreshError) {
+        console.warn("[my-orders] Saved; list refresh deferred:", refreshError?.message || refreshError);
+      }
       setNotice(action === "archive" ? "Order moved to Archive." : "Order restored from Archive.");
       window.setTimeout(() => setNotice(""), 3500);
     } catch (error) {
@@ -887,9 +893,13 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
     setBusy(true);
     try {
       await runProtectedAction("delete", group, password);
-      await refreshOrders();
       setDeleteConfirm(null);
       setSelected(null);
+      try {
+        await refreshOrders();
+      } catch (refreshError) {
+        console.warn("[my-orders] Deleted; list refresh deferred:", refreshError?.message || refreshError);
+      }
       setNotice("Order deleted successfully.");
       window.setTimeout(() => setNotice(""), 3500);
     } catch (error) {

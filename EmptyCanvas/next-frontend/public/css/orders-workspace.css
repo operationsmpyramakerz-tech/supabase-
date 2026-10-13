@@ -415,6 +415,18 @@ body .orders-workspace .orders-workspace-current-creator__details b { font-size:
 @media (min-width: 769px) {
   body .orders-workspace.orders-workspace .co-cards { grid-template-columns: repeat(auto-fill, minmax(min(100%, 345px), 1fr)) !important; padding-bottom: 36px !important; }
 }
+/* Phase 29: the desktop order list uses an auto-fill grid. Without spanning
+   every track, its empty state ends up stuck in the first (left) column.
+   This affects desktop only: keep the existing full-width mobile design. */
+@media (min-width: 769px) {
+  body .orders-workspace.orders-workspace .co-cards > .orders-workspace-empty {
+    grid-column: 1 / -1 !important;
+    justify-self: center !important;
+    width: min(100%, 440px) !important;
+    max-width: 440px !important;
+    box-sizing: border-box !important;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   body .orders-workspace.orders-workspace .co-cards .co-card,
   body .orders-workspace.orders-workspace .orders-toolbar .tab-portfolio { transition: none !important; }

@@ -2366,6 +2366,15 @@ export async function saveOperationsEditDetails({
   if (!updatesById.size && !deletionsById.size && !additions.length && !(quantities && typeof quantities === "object")) {
     throw directOperationsMutationError("No Operations order changes were provided.", 400);
   }
+  // An edited component must still belong to this order. Reject stale edits
+  // before *any* database write, rather than silently claiming success for an
+  // unknown row or a row removed by another user.
+  const knownIds = new Set(loaded.clean);
+  for (const id of [...updatesById.keys(), ...deletionsById.keys(), ...Object.keys(quantities || {})]) {
+    if (!knownIds.has(id)) {
+      throw directOperationsMutationError("The selected component no longer belongs to this order. Refresh and try again.", 409);
+    }
+  }
 
   const catalog = await getProductsCatalog({ fresh: true });
   const products = Array.isArray(catalog?.products) ? catalog.products : [];
@@ -2404,13 +2413,24 @@ export async function saveOperationsEditDetails({
         if (sourceName) deletedSourceNames.add(sourceName);
       });
 
+      const matchSource = (change, source, sourceIndex) => {
+        const specifiedId = text(change?.sourceKitId);
+        const specifiedName = operationsAccessToken(change?.sourceKitName);
+        const index = Number(change?.sourceIndex);
+        if (specifiedId) return specifiedId === text(source?.kitId);
+        if (Number.isInteger(index) && index >= 0) return index === sourceIndex;
+        return Boolean(specifiedName && specifiedName === operationsAccessToken(source?.kitName));
+      };
+      // Never apply a source-specific operation to a different Kit just because
+      // another editor changed the order's source_kits between opening and Save.
+      for (const change of [...sourceSpecificDeletes, ...sourceSpecificUpdates]) {
+        if (!splitRows.some((entry, index) => matchSource(change, entry?.source, index))) {
+          throw directOperationsMutationError("This Kit source has changed. Refresh the order before saving.", 409);
+        }
+      }
       const activeSplitRows = splitRows.filter((entry, sourceIndex) => {
         const source = entry?.source || {};
-        const sourceId = text(source?.kitId);
-        const sourceName = operationsAccessToken(source?.kitName);
-        return !deletedIndexes.has(sourceIndex)
-          && !(sourceId && deletedSourceIds.has(sourceId))
-          && !(sourceName && deletedSourceNames.has(sourceName));
+        return !sourceSpecificDeletes.some((change) => matchSource(change, source, sourceIndex));
       });
 
       if (!activeSplitRows.length) {
@@ -2462,9 +2482,10 @@ export async function saveOperationsEditDetails({
       continue;
     }
 
-    if (sourceSpecificDeletes.length) {
-      plans.push({ id, beforeRow, delete: true });
-      continue;
+    if (sourceSpecificDeletes.length || sourceSpecificUpdates.length) {
+      // A source-specific deletion is NOT permission to delete the entire
+      // component if its source list was changed/removed in the meantime.
+      throw directOperationsMutationError("Kit source details have changed. Refresh the order before editing this component.", 409);
     }
 
     const update = updatesForId[updatesForId.length - 1] || null;

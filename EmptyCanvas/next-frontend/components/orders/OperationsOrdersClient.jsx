@@ -1305,9 +1305,15 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
         itemDeletes,
       });
       await finishActionLoading("done", "Operations order changes were saved.");
-      await refreshOrders();
+      // Save is committed at this point. Treat list refresh as best-effort so
+      // a temporary network error cannot make the operator repeat the edit.
       setEditMode(null);
       setSelected(null);
+      try {
+        await refreshOrders();
+      } catch (refreshError) {
+        console.warn("[operations-orders] Edit saved; list refresh deferred:", refreshError?.message || refreshError);
+      }
       setNotice("Operations order changes saved.");
       window.setTimeout(() => setNotice(""), 3500);
     } catch (error) {

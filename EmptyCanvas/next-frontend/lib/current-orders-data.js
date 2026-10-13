@@ -568,8 +568,19 @@ export async function performCurrentOrdersProtectedAction({
   if (!Array.isArray(rows) || rows.length !== ids.length) throw directCurrentMutationError("Orders not found", 404);
 
   if (cleanAction === "archive" || cleanAction === "unarchive") {
+    const allArchived = rows.every((row) => statusIndex(row?.status) === 5);
+    const anyArchived = rows.some((row) => statusIndex(row?.status) === 5);
+    if (cleanAction === "archive" && anyArchived) {
+      throw directCurrentMutationError("This order is already archived, or its components have mixed archive states. Refresh the list.", 409);
+    }
+    if (cleanAction === "unarchive" && !allArchived) {
+      throw directCurrentMutationError("Only fully archived orders can be restored. Refresh the list.", 409);
+    }
     const status = cleanAction === "archive" ? "Archive" : "In progress";
-    await updateByIds(tableName(), ids, { status });
+    const changed = await updateByIds(tableName(), ids, { status });
+    if (!Array.isArray(changed) || changed.length !== ids.length) {
+      throw directCurrentMutationError("Only part of this order was updated. Refresh the list and review its status.", 409);
+    }
     await invalidateLegacyOperationsCaches(account).catch(() => {});
     return {
       success: true,
