@@ -896,6 +896,58 @@ export async function updateOrdersReviewApproval({ account, id, decision, reject
   };
 }
 
+// Review an entire order using ONE database PATCH. The previous client loop
+// issued one request per component and could leave large orders half-reviewed
+// when a later request failed. Validate every ID and reviewer's access first.
+export async function updateOrdersReviewBulkApproval({ account, orderIds = [], decision, rejectedReason = "" } = {}) {
+  const access = ensureReviewMutationAccess(account || {});
+  if (access === null) return null;
+
+  const supplied = Array.isArray(orderIds) ? orderIds : [];
+  const ids = cleanReviewActionIds(supplied);
+  if (!ids.length || supplied.length > 500 || supplied.some((id) => !/^\d+$/.test(text(id)))) {
+    throw directMutationError("Select between 1 and 500 valid order components.", 400);
+  }
+  const normalized = norm(decision) === "approved" ? "Approved" : norm(decision) === "rejected" ? "Rejected" : "";
+  if (!normalized) throw directMutationError("Invalid review decision.", 400);
+  const reason = text(rejectedReason);
+  if (normalized === "Rejected" && !reason) throw directMutationError("Rejected reason is required.", 400);
+
+  const rows = await allowedReviewRows(account || {}, ids);
+  if (!rows) return null;
+  if (rows.some((row) => /^created from proposal:/i.test(text(valueFor(row, ["issue_description", "Issue Description"]))))) {
+    throw directMutationError("Proposal-generated components cannot be reviewed here.", 403);
+  }
+  if (rows.some((row) => /archive/i.test(text(valueFor(row, ["status", "Status"]))))) {
+    throw directMutationError("Restore the archived order before reviewing it.", 409);
+  }
+
+  // Preserve the existing single-component rule: an already-approved component
+  // is not reset from Shipped/Arrived back to In progress by Approve all.
+  const changeIds = rows.filter((row) => normalized === "Rejected" || norm(valueFor(row, ["sv_approval", "S.V Approval", "SV Approval"])) !== "approved")
+    .map((row) => text(valueFor(row, ["id", "ID"])));
+  if (changeIds.length) {
+    const updated = await updateByIds(tableName(), changeIds, {
+      sv_approval: normalized,
+      rejected_reason: normalized === "Rejected" ? reason : null,
+      status: "In progress",
+    });
+    if (!Array.isArray(updated) || updated.length !== changeIds.length) {
+      throw directMutationError("Some components could not be confirmed. Refresh the order before retrying.", 503);
+    }
+    await invalidateLegacyReviewCaches(account).catch(() => {});
+  }
+  return {
+    ok: true,
+    decision: normalized,
+    changedIds: changeIds,
+    total: ids.length,
+    changed: changeIds.length,
+    status: "In progress",
+    source: "supabase-direct",
+  };
+}
+
 export async function updateOrdersReviewQuantity({ account, id, value } = {}) {
   const access = ensureReviewMutationAccess(account || {});
   if (access === null) return null;
@@ -903,7 +955,9 @@ export async function updateOrdersReviewQuantity({ account, id, value } = {}) {
   const cleanId = text(id);
   const numericValue = Number(value);
   if (!cleanId) throw directMutationError("Missing id", 400);
-  if (!Number.isFinite(numericValue)) throw directMutationError("Invalid quantity", 400);
+  if (value === null || value === undefined || text(value) === "" || !Number.isFinite(numericValue)) {
+    throw directMutationError("Enter a valid quantity.", 400);
+  }
 
   const row = await allowedReviewRow(account, cleanId);
   if (!row) return null;
@@ -915,6 +969,7 @@ export async function updateOrdersReviewQuantity({ account, id, value } = {}) {
   const isWithdrawalQuantity = orderTypeKey(orderTypeName) === orderTypeKey("Withdraw Products")
     || Number(requested) < 0
     || Number(progressRaw) < 0;
+  if (!isWithdrawalQuantity && numericValue < 0) throw directMutationError("Quantity cannot be negative for a product request.", 400);
   const signedValue = isWithdrawalQuantity ? -Math.abs(numericValue) : numericValue;
   const newVal = roundOrderQty(signedValue);
   const editedVal = Number.isFinite(requested) && roundOrderQty(newVal) === roundOrderQty(requested) ? null : newVal;
@@ -927,6 +982,9 @@ export async function updateOrdersReviewQuantity({ account, id, value } = {}) {
     "quantity_received",
   ]));
   const received = Number.isFinite(Number(receivedRaw)) ? Number(receivedRaw) : 0;
+  if (Math.abs(newVal) + 1e-9 < Math.abs(received)) {
+    throw directMutationError("Quantity cannot be below the amount already received by operations.", 409);
+  }
   const nextRemaining = roundOrderQty(newVal - received);
 
   await updateById(tableName(), cleanId, {

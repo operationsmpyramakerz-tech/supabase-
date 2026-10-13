@@ -1388,7 +1388,17 @@ export async function markOperationsShipped({
 
     const base = orderBaseQuantity(row);
     const hasExplicit = quantityMap && Object.prototype.hasOwnProperty.call(quantityMap, id);
-    const explicit = hasExplicit ? Number(quantityMap[id]) : null;
+    const providedValue = hasExplicit ? quantityMap[id] : null;
+    const explicit = hasExplicit ? Number(providedValue) : null;
+    if (quantityMap && Object.keys(quantityMap).length && !hasExplicit) {
+      throw directOperationsMutationError("Received quantities must include every selected component.", 400);
+    }
+    if (hasExplicit && (providedValue === null || text(providedValue) === "" || !Number.isFinite(explicit))) {
+      throw directOperationsMutationError("Invalid received quantity for a component.", 400);
+    }
+    if (hasExplicit && Math.abs(explicit - clampQuantityToBase(base, explicit)) > 1e-9) {
+      throw directOperationsMutationError("Received quantity exceeds the requested amount.", 400);
+    }
 
     if (hasExplicit && Number.isFinite(explicit)) {
       const received = clampQuantityToBase(base, explicit);

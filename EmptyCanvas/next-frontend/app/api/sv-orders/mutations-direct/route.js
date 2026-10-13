@@ -4,6 +4,7 @@ import { directPageMutationAccess } from "../../../../lib/order-action-auth";
 import {
   performOrdersReviewProtectedAction,
   updateOrdersReviewApproval,
+  updateOrdersReviewBulkApproval,
   updateOrdersReviewQuantity,
 } from "../../../../lib/orders-review-data";
 
@@ -39,7 +40,7 @@ function directErrorResponse(error) {
 export async function POST(request) {
   const body = await request.json().catch(() => ({}));
   const action = actionKey(body?.action);
-  if (!["approval", "quantity", "archive", "unarchive", "verify-edit", "update-approval"].includes(action)) {
+  if (!["approval", "bulk-approval", "quantity", "archive", "unarchive", "verify-edit", "update-approval"].includes(action)) {
     return noStore({ error: "Unsupported Orders Review action." }, { status: 400 });
   }
 
@@ -62,6 +63,13 @@ export async function POST(request) {
       result = await updateOrdersReviewApproval({
         account: gate.account,
         id: body?.id,
+        decision: body?.decision,
+        rejectedReason: body?.rejectedReason,
+      });
+    } else if (action === "bulk-approval") {
+      result = await updateOrdersReviewBulkApproval({
+        account: gate.account,
+        orderIds: body?.orderIds,
         decision: body?.decision,
         rejectedReason: body?.rejectedReason,
       });

@@ -159,7 +159,7 @@ function ProgressTrack({ value }) {
 function QuantityEditor({ item, busy, onSave, onCancel }) {
   const [value, setValue] = useState(formatQuantity(effectiveQuantity(item)));
   useEffect(() => setValue(formatQuantity(effectiveQuantity(item))), [item?.id, item?.quantityEdited, item?.quantity]);
-  return <form className="next-classic-qty-editor" onSubmit={(event) => { event.preventDefault(); onSave(item, value); onCancel(); }}>
+  return <form className="next-classic-qty-editor" onSubmit={async (event) => { event.preventDefault(); try { if (await onSave(item, value) === true) onCancel(); } catch { /* Keep the editor open when saving fails. */ } }}>
     <input className="sv-qty-input" type="number" step="any" value={value} onChange={(event) => setValue(event.target.value)} disabled={busy} aria-label={`Quantity for ${text(item?.productName) || "component"}`} />
     <div className="sv-qty-actions"><button type="button" className="sv-qty-btn" onClick={onCancel}>×</button><button type="submit" className="ro-action-btn ro-action-btn--dark" disabled={busy || !text(value)}>Save</button></div>
   </form>;
@@ -310,7 +310,7 @@ function ReviewDetailsModal({ group, activeTab, busyIds, onClose, onQuantitySave
           <OrderSortButton value={sortMode} onChange={setSortMode} />
         </div>
         <div className="co-modal-meta co-modal-meta--after-actions"><div className="co-meta-row co-meta-row--reason"><span>Reason</span><strong>{group.reason}</strong></div></div>
-        {canAct ? <div className="next-review-bulk-actions"><div><span>Review all components</span><strong>{componentSearch.trim() ? `Applies to ALL ${group.items.length} components, including hidden search results.` : "Apply one decision to every item in this order."}</strong></div><div className="next-classic-review-actions"><button className="btn btn-success btn-xs" type="button" onClick={() => onBulkDecision(group, "Approved")}><ClassicOrderIcon name="check" /> Approve all</button><button className="btn btn-danger btn-xs" type="button" onClick={() => onBulkDecision(group, "Rejected")}><ClassicOrderIcon name="x" /> Reject all</button></div></div> : null}
+        {canAct ? <div className="next-review-bulk-actions"><div><span>Review all components</span><strong>{componentSearch.trim() ? `Applies to ALL ${group.items.length} components, including hidden search results.` : "Apply one decision to every item in this order."}</strong></div><div className="next-classic-review-actions"><button className="btn btn-success btn-xs" type="button" disabled={group.items.some((item) => busyIds.has(text(item?.id)))} onClick={() => onBulkDecision(group, "Approved")}><ClassicOrderIcon name="check" /> Approve all</button><button className="btn btn-danger btn-xs" type="button" disabled={group.items.some((item) => busyIds.has(text(item?.id)))} onClick={() => onBulkDecision(group, "Rejected")}><ClassicOrderIcon name="x" /> Reject all</button></div></div> : null}
         <ProgressiveOrderGroups
           groups={groupedItems}
           mode={sortMode}

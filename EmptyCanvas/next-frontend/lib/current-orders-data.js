@@ -501,6 +501,9 @@ export async function loadCurrentOrderDetails({ account = {}, orderIds = [], tim
 }
 
 export async function markCurrentOrderReceivedDirect({ account = {}, orderPageId = "" } = {}) {
+  const access = directPageMutationAccess(account, "Current Orders");
+  if (access === null) return null;
+  if (!access) throw directCurrentMutationError("Edit access is required for this action.", 403);
   if (!isSupabaseConfigured()) return null;
   const id = text(orderPageId);
   if (!id) throw directCurrentMutationError("Missing orderPageId", 400);

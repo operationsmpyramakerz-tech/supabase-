@@ -590,9 +590,49 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
     submitBulkDecision(group, decision, "").catch((error) => showNotice(error?.message || "Bulk decision could not be saved."));
   }
   async function submitBulkDecision(group, decision, rejectedReason) {
-    for (const item of group?.items || []) {
-      if (normalizeApproval(item?.approval ?? item?.svApproval ?? item?.sv_approval) === normalizeApproval(decision) && decision !== "Rejected") continue;
-      await updateDecision(item, decision, rejectedReason);
+    const items = Array.isArray(group?.items) ? group.items : [];
+    const ids = [...new Set(items.map((item) => text(item?.id)).filter(Boolean))];
+    if (!ids.length) throw new Error("This order has no components to review.");
+    // Lock every component during the single server transaction. A failed
+    // request leaves local decisions untouched (no partially optimistic UI).
+    setBusyIds((current) => new Set([...current, ...ids]));
+    try {
+      const response = await fetch(`${DIRECT_API_BASE}/sv-orders/mutations-direct`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "bulk-approval", orderIds: ids, decision, rejectedReason }),
+      });
+      const data = await readJson(response);
+      if (!response.ok || data?.ok === false) throw new Error(data?.error || "Could not save the entire review.");
+      const changed = new Set((data?.changedIds || []).map(text));
+      const normalized = normalizeApproval(decision);
+      if (changed.size) {
+        const patch = (item) => changed.has(text(item?.id))
+          ? { ...item, approval: normalized, svApproval: normalized,
+              rejectedReason: normalized === "Rejected" ? text(rejectedReason) : "", status: data?.status || item?.status }
+          : item;
+        setDetailGroups((current) => {
+          const next = new Map(current);
+          for (const [key, detailed] of current.entries()) {
+            if (!(detailed?.items || []).some((item) => changed.has(text(item?.id)))) continue;
+            const rebuilt = buildGroups(detailed.items.map(patch))[0];
+            if (rebuilt) next.set(key, { ...rebuilt, key });
+          }
+          return next;
+        });
+        setOrders((current) => current.map((row) => {
+          if (row?._summaryCard && groupKey(row, 0) === group.key) {
+            return { ...row, approval: normalized, _groupApproval: lower(normalized),
+              status: changed.size === ids.length ? (data?.status || row?.status) : row?.status };
+          }
+          return patch(row);
+        }));
+      }
+      detailsLoaderRef.current.clear();
+      showNotice(`${data?.changed ?? changed.size} component${(data?.changed ?? changed.size) === 1 ? "" : "s"} ${normalized.toLowerCase()} together.`);
+    } finally {
+      setBusyIds((current) => { const next = new Set(current); ids.forEach((id) => next.delete(id)); return next; });
     }
   }
   async function submitRejection(reason) {
@@ -605,7 +645,7 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
   }
   async function saveQuantity(item, value) {
     const id = text(item?.id); const number = Number(value);
-    if (!id || !Number.isFinite(number)) return;
+    if (!id || text(value) === "" || !Number.isFinite(number)) { showNotice("Enter a valid quantity."); return false; }
     setBusyIds((current) => new Set(current).add(id));
     try {
       const response = await fetch(`${DIRECT_API_BASE}/sv-orders/mutations-direct`, { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ action: "quantity", id, value: number }) });
@@ -615,7 +655,8 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
       setOrders((current) => current.map((row) => text(row?.id) === id ? { ...row, quantityEdited } : row));
       patchDetailItem(id, { quantityEdited });
       showNotice("Quantity updated.");
-    } catch (error) { showNotice(error?.message || "Quantity could not be updated."); } finally { setBusyIds((current) => { const next = new Set(current); next.delete(id); return next; }); }
+      return true;
+    } catch (error) { showNotice(error?.message || "Quantity could not be updated."); return false; } finally { setBusyIds((current) => { const next = new Set(current); next.delete(id); return next; }); }
   }
   function beginPasswordAction(action, group) { setPasswordError(""); setPasswordState({ action, group }); }
   async function submitPasswordAction(password) {
