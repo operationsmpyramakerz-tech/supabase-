@@ -439,30 +439,10 @@ body.persistent-app-shell .classic-app-shell > .main-content > main.next-classic
 
 
 /* ========================================================================
-   Active sidebar selection — inset dark outline (2026-10-16, main-46)
-   Orange is the outside surface. The dark 2px frame sits 3px *inside* it;
-   unlike an outline, it never changes the nav item size or dock spacing.
-   Target only primary sidebar selection, not secondary flyouts.
+   Mobile Home selected icon — rounded square (2026-10-16, main-47)
+   Keep the square orange selection, including during indicator motion,
+   without the removed black inset outline.
    ======================================================================== */
-html[data-theme] body.next-classic-shell-active
-  .classic-app-shell > .sidebar .sidebar-nav .nav-link:is(.active, [aria-expanded="true"]) {
-  position: relative;
-}
-
-html[data-theme] body.next-classic-shell-active
-  .classic-app-shell > .sidebar .sidebar-nav .nav-link:is(.active, [aria-expanded="true"])::after {
-  content: "";
-  position: absolute;
-  inset: 3px;
-  border: 2px solid #0b0c10;
-  border-radius: 12px;
-  pointer-events: none;
-  z-index: 2;
-}
-
-/* On mobile Home, the orange surface is the padded SVG. Make it a
-   rounded square like the other dock items (not a circle), and draw the
-   frame just 3px inside that surface without changing its 2px thickness. */
 @media (max-width: 768px) {
   html[data-theme] body.next-classic-shell-active
     .classic-app-shell > .sidebar .mobile-dock-home-rail .nav-link.active svg,
@@ -472,9 +452,7 @@ html[data-theme] body.next-classic-shell-active
     border-radius: 17px !important;
   }
 
-  /* Dark-mode parity: retain the existing orange selected background (the
-     older dark-mode stylesheet otherwise forces Home to black). The moving
-     indicator keeps its own transparent-background rule while it is ready. */
+  /* Keep the orange Home surface in dark mode while the indicator is idle. */
   html[data-theme] body.next-classic-shell-active
     .classic-app-shell > .sidebar.mobile-dock-structured-host:not(.sidebar-active-indicator-ready)
     .mobile-dock-home-rail .nav-link.active svg {
@@ -482,41 +460,4 @@ html[data-theme] body.next-classic-shell-active
     color: var(--ops-sidebar-active-text) !important;
     stroke: var(--ops-sidebar-active-text) !important;
   }
-
-  html[data-theme] body.next-classic-shell-active
-    .classic-app-shell > .sidebar .mobile-dock-home-rail .nav-link.active::after,
-  html[data-theme] body.next-classic-shell-active
-    .classic-app-shell > .sidebar:not(.mobile-dock-structured-host)
-    .sidebar-nav > .nav-list > li:first-child .nav-link.active::after {
-    inset: auto;
-    left: 50%;
-    top: 50%;
-    width: 40px;
-    height: 40px;
-    transform: translate(-50%, -50%);
-    box-sizing: border-box;
-    border-radius: 13px;
-  }
-}
-
-/* When a click starts the travelling tile, it owns the orange surface and
-   the frame. Avoid leaving a floating dark frame on the previous link. */
-html[data-theme] body.next-classic-shell-active
-  .classic-app-shell > .sidebar.sidebar-active-indicator-ready
-  .sidebar-nav .nav-link:is(.active, .is-indicator-target)::after {
-  content: none;
-}
-
-/* JS temporarily moves this indicator into mobile rail/clip containers.
-   Decorating the element itself works in every host and follows its motion. */
-html[data-theme] body.next-classic-shell-active
-  .classic-app-shell > .sidebar .sidebar-active-indicator::after {
-  content: "";
-  position: absolute;
-  inset: 3px;
-  border: 2px solid #0b0c10;
-  border-radius: 12px;
-  box-sizing: border-box;
-  pointer-events: none;
-  z-index: 3;
 }
