@@ -106,10 +106,18 @@ export function mergeCombinedOrderRows(orderPayloads = [], orderMeta = []) {
           total: 0,
           _combinedOrderValues: {},
           _codes: new Set(),
+          _sourceKitGroups: new Set(),
+          _sourceFolderGroups: new Set(),
         };
         combinedRows.push(target);
       }
       if (code) target._codes.add(code);
+      // A single merged component can belong to different kits/folders in
+      // different orders. Never silently label it with the first order's kit.
+      const sourceKit = text(sourceRow?.kitTag) || "Unassigned kit";
+      const sourceFolder = text(sourceRow?.kitFolderName) || "Unfiled Kits";
+      target._sourceKitGroups.add(`${sourceFolder.toLowerCase()}|${sourceKit.toLowerCase()}`);
+      target._sourceFolderGroups.add(sourceFolder);
       if (!text(target.idCode) && text(sourceRow?.idCode)) target.idCode = sourceRow.idCode;
       if (!text(target.link) && text(sourceRow?.link)) target.link = sourceRow.link;
       if ((!text(target.productTag) || target.productTag === "Uncategorized") && text(sourceRow?.productTag)) target.productTag = sourceRow.productTag;
@@ -145,8 +153,13 @@ export function mergeCombinedOrderRows(orderPayloads = [], orderMeta = []) {
     }
   });
 
-  const result = combinedRows.map(({ _codes, _combinedOrderValues, ...row }) => {
+  const result = combinedRows.map(({ _codes, _combinedOrderValues, _sourceKitGroups, _sourceFolderGroups, ...row }) => {
     const out = { ...row };
+    if (_sourceKitGroups.size > 1 || text(out.kitTag) === "Multiple Kits") {
+      out.kitTag = "Multiple Kits";
+      out.kitFolderName = _sourceFolderGroups.size === 1 && !(_sourceFolderGroups.has("Multiple Folders"))
+        ? [..._sourceFolderGroups][0] : "Multiple Folders";
+    }
     orderMeta.forEach((order, orderIndex) => {
       const values = _combinedOrderValues[orderIndex] || {};
       const sources = values._priceSources || [];

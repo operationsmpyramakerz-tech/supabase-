@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import ClassicOrderIcon from "./ClassicOrderIcon";
+import { withSingleOrderSourceAttribution } from "../../lib/order-kit-attribution.mjs";
 import { createOrderDetailsLoader } from "./orderDetailsLoader";
 import { cancelOrderOpenTimer, loadOrderAndModalWithMetrics, markOrderOpenStarted, reportOrderVisibleAfterPaint, warmOrderModalOnIdle } from "./orderOpeningPerformance";
 import OrderDetailsLoadingOverlay from "./OrderDetailsLoadingOverlay";
@@ -413,7 +414,7 @@ function expandOrderItemsForDisplay(items = []) {
     const breakdown = (Array.isArray(item?.sourceBreakdown) ? item.sourceBreakdown : [])
       .filter((source) => Math.abs(finite(source?.quantity)) > 1e-9);
     if (breakdown.length <= 1) {
-      out.push(item);
+      out.push(breakdown.length === 1 ? withSingleOrderSourceAttribution(item) : item);
       continue;
     }
 

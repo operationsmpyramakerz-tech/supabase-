@@ -4,6 +4,7 @@ import { getSupabaseConfig, select } from "./supabase-rest";
 import { getProductsForOrderDetails } from "./products-service";
 import { loadVerifiedOrderBatches } from "./verified-order-batches.mjs";
 import { getProposalForOrderSources, getProposalSourcesForProducts, getKitGroupingReferences, listKitFolders } from "./proposal-kit-service";
+import { resolveOrderKitAttribution } from "./order-kit-attribution.mjs";
 
 function text(value) {
   if (value === null || typeof value === "undefined") return "";
@@ -820,10 +821,6 @@ export async function enrichOrderDetailGrouping(items = [], {
     const productTags = Array.isArray(product?.tags) ? product.tags.map(text).filter(Boolean) : [];
     const productTag = text(item?.productTag) || productTags[0] || "Uncategorized";
     const itemMemberships = productId ? (membershipsByProduct.get(productId) || []) : [];
-    const primaryMembership = itemMemberships[0] || null;
-    const kitTag = text(item?.kitTag) || primaryMembership?.kitName || "Unassigned kit";
-    const kitFolderName = text(item?.kitFolderName) || primaryMembership?.folderName || "Unfiled Kits";
-
     let sources = Array.isArray(item?.sourceKits) ? item.sourceKits : [];
     const targetQuantity = Math.abs(Number(item?.quantityProgress ?? item?.quantityEditedBySupervisor ?? item?.quantityRequested ?? item?.quantity ?? 0))
       || sources.reduce((sum, source) => sum + Number(source?.quantity || 0), 0);
@@ -836,16 +833,13 @@ export async function enrichOrderDetailGrouping(items = [], {
       else if (matching.length === 1 && targetQuantity <= Number(matching[0]?.quantity || 0)) sources = matching;
     }
     sources = scaleSourceBreakdown(sources, targetQuantity);
-    const sourceBreakdown = sources.map((source) => {
-      const kitId = text(source?.kitId);
-      const membership = itemMemberships.find((entry) => text(entry?.kitId) === kitId);
-      return {
-        kitId: kitId || null,
-        kitTag: text(source?.kitName) || "Direct components",
-        kitFolderName: text(membership?.folderName) || (kitId ? "Unfiled Kits" : "Untracked / Direct"),
-        quantity: Math.max(0, Number(source?.quantity) || 0),
-        order: Number.isFinite(Number(source?.order)) ? Number(source.order) : 0,
-      };
+    const { sourceBreakdown, kitTag, kitFolderName } = resolveOrderKitAttribution({
+      sources,
+      memberships: itemMemberships,
+      kitById,
+      folderNameById,
+      storedKitTag: item?.kitTag,
+      storedFolderName: item?.kitFolderName,
     });
 
     return {

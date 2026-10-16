@@ -8,6 +8,7 @@ import { getProductsCatalog } from "./products-service";
 import { loadOperationsOrderDetails } from "./operations-orders-data";
 import { COMBINED_ORDER_METRIC_KEYS, combinedMetricColumnKey, mergeCombinedOrderRows } from "./combined-order-rows.mjs";
 import { mapSelectedCombinedOrderItems } from "./combined-order-groups.mjs";
+import { combinedOrderKitAttribution } from "./order-kit-attribution.mjs";
 
 const { pipeDeliveryReceiptPDF } = deliveryReceiptPdfModule;
 const { pipeMaintenanceReceiptPDF } = maintenanceReceiptPdfModule;
@@ -123,23 +124,16 @@ function scaleSourceBreakdown(sourceRows = [], targetQuantity = 0) {
     .map(({ _fraction, _index, ...source }) => source);
 }
 
-function preferredCombinedSource(item = {}) {
-  const sources = Array.isArray(item?.sourceBreakdown) ? item.sourceBreakdown.filter(Boolean) : [];
-  if (!sources.length) return null;
-  const genericFolder = sources.find((source) => normKey(source?.kitFolderName || source?.folderName) === normKey("Generic Kits"));
-  if (genericFolder) return genericFolder;
-  return sources.find((source) => /\bgeneric\b/i.test(text(source?.kitTag || source?.kitName))) || null;
-}
-
 function placeCombinedRows(rows = [], items = []) {
   return (Array.isArray(rows) ? rows : []).map((row, index) => {
-    const source = preferredCombinedSource((Array.isArray(items) ? items : [])[index] || {});
-    if (!source) return row;
+    const sources = (Array.isArray(items) ? items : [])[index]?.sourceBreakdown || [];
+    const resolved = combinedOrderKitAttribution(sources);
+    if (!resolved) return row;
     return {
       ...row,
-      kitTag: text(source?.kitTag || source?.kitName) || row?.kitTag || "Unassigned kit",
-      kitFolderName: text(source?.kitFolderName || source?.folderName) || row?.kitFolderName || "Unfiled Kits",
-      _sourceKitId: text(source?.kitId) || null,
+      kitTag: resolved.kitTag,
+      kitFolderName: resolved.kitFolderName,
+      _sourceKitId: resolved.kitId,
     };
   });
 }
