@@ -2546,3 +2546,705 @@ html[data-theme="dark"] body.page-account .profile-settings-file-icon{
     font-size: 1rem;
   }
 }
+
+/* ========================================================================
+   User Profile — Edit field / Security bottom sheet (2026-10-16)
+   The account editor uses account-edit-* classes in AccountDialogs.jsx. These
+   rules were missing from the original stylesheet, leaving controls unstyled
+   on both desktop and mobile. Scope them to the edit dialog only so image
+   upload, account summary and other modals keep their current appearance.
+   ======================================================================== */
+body.page-account .ex-modal.account-edit-field-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 1000050;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, .52);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  overscroll-behavior: contain;
+}
+
+body.page-account .account-edit-field-modal,
+body.page-account .account-edit-field-modal * {
+  box-sizing: border-box;
+}
+
+body.page-account .ex-modal-box.account-edit-field-modal {
+  --profile-edit-ink: #101828;
+  --profile-edit-muted: #7b8595;
+  --profile-edit-border: #e5e8ef;
+  --profile-edit-orange: #e56b21;
+  width: min(100%, 510px);
+  max-width: 510px;
+  max-height: min(92dvh, 790px);
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--profile-edit-ink);
+  background: #fff;
+  border: 1px solid #eef0f3;
+  border-radius: 26px;
+  box-shadow: 0 24px 76px rgba(15, 23, 42, .22);
+  font-family: inherit;
+  line-height: 1.45;
+  isolation: isolate;
+}
+
+body.page-account .account-edit-field-modal :is(button, input) {
+  font: inherit;
+}
+
+body.page-account .account-edit-field-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 13px;
+  flex: 0 0 auto;
+  padding: 25px 26px 20px;
+  background: #fff;
+  border-bottom: 1px solid #f0f1f4;
+}
+
+body.page-account .account-edit-field-headcopy {
+  min-width: 0;
+  display: flex;
+  flex: 1 1 auto;
+  align-items: flex-start;
+  gap: 13px;
+}
+
+body.page-account .account-edit-field-headcopy > div {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+body.page-account .account-edit-field-icon {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  color: #d6631f;
+  background: #fff2e9;
+}
+
+body.page-account .account-edit-field-icon svg,
+body.page-account .account-edit-security-icon svg {
+  display: block;
+}
+
+body.page-account .account-edit-field-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+body.page-account .account-edit-field-modal .ex-modal-title {
+  margin: 0;
+  padding: 0;
+  color: #111827;
+  font-size: clamp(18px, 2.2vw, 22px);
+  font-weight: 800;
+  line-height: 1.25;
+  letter-spacing: -.025em;
+}
+
+body.page-account .account-edit-field-headcopy p {
+  margin: 7px 0 0;
+  color: var(--profile-edit-muted);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+body.page-account .account-edit-dirty-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 3px 8px;
+  color: #9a4b12;
+  background: #fff2df;
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+body.page-account .account-edit-field-modal .account-edit-field-close {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  flex: 0 0 36px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  margin: 0;
+  border: 1px solid #e8ebf0;
+  border-radius: 11px;
+  background: #f7f8fa;
+  color: #566174;
+  cursor: pointer;
+  box-shadow: none;
+}
+
+body.page-account .account-edit-field-close:hover {
+  background: #edf0f4;
+  color: #111827;
+}
+
+body.page-account .account-edit-field-body {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 23px 26px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  scrollbar-width: none;
+}
+
+body.page-account .account-edit-field-body::-webkit-scrollbar {
+  display: none;
+}
+
+body.page-account .account-edit-control-group {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 0;
+}
+
+body.page-account .account-edit-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  margin-bottom: 9px;
+}
+
+body.page-account .account-edit-label-row label {
+  min-width: 0;
+  margin: 0;
+  color: #293241;
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.4;
+}
+
+body.page-account .account-edit-required {
+  margin-left: 2px;
+  color: #e3651c;
+}
+
+body.page-account .account-edit-count {
+  flex: 0 0 auto;
+  color: #97a0ae;
+  font-size: 11px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+body.page-account .account-edit-input-shell {
+  width: 100%;
+  min-width: 0;
+  position: relative;
+  display: flex;
+  align-items: center;
+  border: 1.5px solid #dfe3ea;
+  background: #fff;
+  border-radius: 13px;
+  transition: border-color .16s ease, box-shadow .16s ease;
+}
+
+body.page-account .account-edit-input-shell:focus-within {
+  border-color: var(--profile-edit-orange);
+  box-shadow: 0 0 0 3px rgba(229, 107, 33, .11);
+}
+
+body.page-account .account-edit-input-shell.is-invalid {
+  border-color: #d92d20;
+  box-shadow: 0 0 0 3px rgba(217, 45, 32, .08);
+}
+
+body.page-account .account-edit-input-shell .ex-input.account-edit-input {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  height: 48px;
+  min-height: 48px;
+  padding: 12px 14px;
+  margin: 0;
+  border: 0;
+  outline: 0;
+  border-radius: 12px;
+  box-shadow: none;
+  background: transparent;
+  color: #101828;
+  font-size: 14px;
+  font-weight: 550;
+  line-height: 22px;
+}
+
+body.page-account .account-edit-input-shell .ex-input.account-edit-input:focus,
+body.page-account .account-edit-input-shell .ex-input.account-edit-input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+body.page-account .account-edit-input-shell .ex-input.account-edit-input::placeholder {
+  color: #a0a8b5;
+  opacity: 1;
+}
+
+body.page-account .account-edit-input-shell:is(.account-edit-input-shell--password, .account-edit-password-shell) .account-edit-input {
+  padding-right: 52px;
+}
+
+body.page-account .account-edit-input-shell > .toggle-password {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  margin: 0;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #8b95a4;
+  cursor: pointer;
+}
+
+body.page-account .account-edit-input-shell > .toggle-password:hover {
+  color: #334155;
+  background: #f3f4f6;
+}
+
+body.page-account .account-edit-input-shell > .toggle-password:active {
+  transform: translateY(-50%) scale(.96);
+}
+
+body.page-account .account-edit-input-shell > .toggle-password svg {
+  display: block;
+  width: 19px;
+  height: 19px;
+}
+
+body.page-account .account-edit-support-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  margin-top: 9px;
+}
+
+body.page-account .account-edit-helper {
+  flex: 1 1 175px;
+  min-width: 0;
+  color: #8691a1;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.55;
+}
+
+body.page-account .account-edit-valid {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #15803d;
+  font-size: 11px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+body.page-account .account-edit-security-card {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  padding: 17px;
+  border: 1px solid #e9edf2;
+  border-radius: 16px;
+  background: #f8f9fb;
+}
+
+body.page-account .account-edit-security-copy {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+body.page-account .account-edit-security-icon {
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: #e9edf2;
+  color: #5f6e81;
+}
+
+body.page-account .account-edit-security-copy > div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 3px;
+}
+
+body.page-account .account-edit-security-copy strong {
+  color: #293241;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+body.page-account .account-edit-security-copy > div > span {
+  color: #8390a0;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.6;
+}
+
+body.page-account .account-edit-security-card .account-edit-input-shell {
+  background: #fff;
+  border-color: #e0e5eb;
+}
+
+body.page-account .account-edit-inline-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 8px;
+  color: #b42318;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.5;
+}
+
+body.page-account .account-edit-inline-error svg,
+body.page-account .account-edit-server-error svg {
+  flex: 0 0 auto;
+}
+
+body.page-account .account-edit-server-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 13px;
+  border: 1px solid #fecaca;
+  border-radius: 12px;
+  background: #fef2f2;
+  color: #b42318;
+}
+
+body.page-account .account-edit-server-error > div,
+body.page-account .account-edit-discard > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+body.page-account .account-edit-server-error strong,
+body.page-account .account-edit-discard strong {
+  font-size: 12px;
+  font-weight: 800;
+}
+
+body.page-account .account-edit-server-error span,
+body.page-account .account-edit-discard span {
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+body.page-account .account-edit-discard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #fed7aa;
+  border-radius: 12px;
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+body.page-account .account-edit-discard-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+body.page-account .account-edit-discard-actions button {
+  padding: 8px 11px;
+  border: 1px solid #fed7aa;
+  border-radius: 9px;
+  background: #fff;
+  color: #92400e;
+  font-size: 11px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+body.page-account .account-edit-discard-actions button.is-danger {
+  border-color: #fecaca;
+  color: #b42318;
+}
+
+body.page-account .account-edit-field-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+  padding: 17px 26px calc(17px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid #f0f1f4;
+  background: #fff;
+}
+
+body.page-account .account-edit-field-actions > button {
+  min-width: 125px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin: 0;
+  padding: 10px 17px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: background-color .16s ease, opacity .16s ease;
+}
+
+body.page-account .account-edit-field-actions .account-edit-cancel {
+  color: #485468;
+  border-color: #e1e6ec;
+  background: #f6f7f9;
+}
+
+body.page-account .account-edit-field-actions .account-edit-cancel:hover {
+  background: #eceff3;
+}
+
+body.page-account .account-edit-field-actions .account-edit-save {
+  color: #fff;
+  background: #e56b21;
+  border-color: #e56b21;
+}
+
+body.page-account .account-edit-field-actions .account-edit-save:hover:not(:disabled) {
+  background: #c65314;
+  border-color: #c65314;
+}
+
+body.page-account .account-edit-field-actions > button:disabled,
+body.page-account .account-edit-field-close:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+body.page-account .account-edit-field-actions .account-edit-save:disabled {
+  color: #9ca3af;
+  background: #f1f2f4;
+  border-color: #f1f2f4;
+  opacity: 1;
+}
+
+body.page-account .account-edit-field-modal button:focus-visible {
+  outline: 3px solid rgba(229, 107, 33, .27);
+  outline-offset: 2px;
+}
+
+body.page-account .account-edit-spinner {
+  width: 15px;
+  height: 15px;
+  border: 2px solid rgba(255,255,255,.35);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: accountEditSpin .7s linear infinite;
+}
+
+@keyframes accountEditSpin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 768px) {
+  body.page-account .ex-modal.account-edit-field-layer {
+    align-items: flex-end;
+    justify-content: center;
+    padding: 0;
+  }
+
+  body.page-account .ex-modal-box.account-edit-field-modal {
+    width: 100%;
+    max-width: none;
+    max-height: min(90dvh, 790px);
+    margin: 0;
+    border-radius: 24px 24px 0 0;
+    border-bottom: 0;
+    box-shadow: 0 -15px 56px rgba(15, 23, 42, .17);
+  }
+
+  body.page-account .account-edit-field-modal::before {
+    content: "";
+    flex: 0 0 auto;
+    width: 38px;
+    height: 4px;
+    display: block;
+    margin: 9px auto 0;
+    border-radius: 999px;
+    background: #d8dde5;
+  }
+
+  body.page-account .account-edit-field-head {
+    padding: 16px 20px 17px;
+  }
+
+  body.page-account .account-edit-field-body {
+    padding: 19px 20px 23px;
+    gap: 17px;
+  }
+
+  body.page-account .account-edit-field-actions {
+    padding: 13px 20px calc(16px + env(safe-area-inset-bottom, 0px));
+  }
+
+  body.page-account .account-edit-field-actions > button {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 46px;
+  }
+}
+
+@media (max-width: 390px) {
+  body.page-account .account-edit-field-head {
+    gap: 8px;
+    padding-inline: 16px;
+  }
+
+  body.page-account .account-edit-field-headcopy {
+    gap: 10px;
+  }
+
+  body.page-account .account-edit-field-icon {
+    width: 38px;
+    height: 38px;
+    flex-basis: 38px;
+    border-radius: 12px;
+  }
+
+  body.page-account .account-edit-field-headcopy p {
+    font-size: 11px;
+  }
+
+  body.page-account .account-edit-field-body {
+    padding-inline: 16px;
+  }
+
+  body.page-account .account-edit-field-actions {
+    padding-inline: 16px;
+  }
+}
+
+/* The profile edit dialog must remain readable with the app's dark theme. */
+html[data-theme="dark"] body.page-account .ex-modal-box.account-edit-field-modal {
+  --profile-edit-ink: #f8fafc;
+  --profile-edit-muted: #9aa4b2;
+  --profile-edit-border: #303b4a;
+  color: #f8fafc;
+  background: #11161f;
+  border-color: #293241;
+}
+
+html[data-theme="dark"] body.page-account .account-edit-field-head,
+html[data-theme="dark"] body.page-account .account-edit-field-actions {
+  background: #11161f;
+  border-color: #2b3544;
+}
+
+html[data-theme="dark"] body.page-account .account-edit-field-modal :is(.ex-modal-title, .account-edit-label-row label, .account-edit-security-copy strong) {
+  color: #f8fafc;
+}
+
+html[data-theme="dark"] body.page-account .account-edit-field-modal :is(.account-edit-field-headcopy p, .account-edit-helper, .account-edit-security-copy > div > span) {
+  color: #98a2b3;
+}
+
+html[data-theme="dark"] body.page-account .account-edit-field-icon,
+html[data-theme="dark"] body.page-account .account-edit-dirty-badge {
+  background: #35241d;
+  color: #ffae71;
+}
+
+html[data-theme="dark"] body.page-account .account-edit-field-modal .account-edit-field-close,
+html[data-theme="dark"] body.page-account .account-edit-security-icon {
+  background: #252c38;
+  border-color: #344052;
+  color: #d7dee8;
+}
+
+html[data-theme="dark"] body.page-account .account-edit-security-card {
+  background: #191f29;
+  border-color: #303b4a;
+}
+
+html[data-theme="dark"] body.page-account .account-edit-input-shell,
+html[data-theme="dark"] body.page-account .account-edit-security-card .account-edit-input-shell {
+  background: #11161f;
+  border-color: #3a4656;
+}
+
+html[data-theme="dark"] body.page-account .account-edit-input-shell:focus-within {
+  border-color: #e56b21;
+}
+
+html[data-theme="dark"] body.page-account .account-edit-input-shell .ex-input.account-edit-input {
+  color: #f8fafc;
+  background: transparent;
+}
+
+html[data-theme="dark"] body.page-account .account-edit-field-actions .account-edit-cancel,
+html[data-theme="dark"] body.page-account .account-edit-field-actions .account-edit-save:disabled {
+  color: #cbd5e1;
+  background: #252d39;
+  border-color: #374354;
+}
+
+html[data-theme="dark"] body.page-account .account-edit-discard {
+  background: #34291e;
+  border-color: #75502f;
+  color: #ffcca2;
+}
+
+html[data-theme="dark"] body.page-account .account-edit-discard-actions button {
+  background: #252c38;
+  border-color: #75502f;
+  color: #ffcca2;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.page-account .account-edit-spinner { animation-duration: 2s; }
+  body.page-account .account-edit-input-shell,
+  body.page-account .account-edit-field-actions > button { transition: none; }
+}

@@ -8,7 +8,7 @@ export default function ClassicAccountLoading() {
   return (
     <>
       <ShellStyleLinks />
-      <link rel="stylesheet" href="/next/css/account-classic-inline.css?v=nav-20261016" precedence="erp-detail" />
+      <link rel="stylesheet" href="/next/css/account-classic-inline.css?v=profile-edit-20261016" precedence="erp-detail" />
       <link rel="stylesheet" href="/next/css/notification-preferences.css?v=1" precedence="erp-detail" />
       <BodyClassSync className="page-account next-classic-shell-active" />
 

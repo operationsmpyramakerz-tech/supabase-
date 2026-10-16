@@ -33,7 +33,7 @@ export default async function AccountPage() {
       eyebrow="Profile, security and personal workspace"
       activePath="/next/account"
       bodyClass="page-account"
-      pageStyles={["/next/css/account-classic-inline.css?v=nav-20261016", "/next/css/notification-preferences.css?v=1"]}
+      pageStyles={["/next/css/account-classic-inline.css?v=profile-edit-20261016", "/next/css/notification-preferences.css?v=1"]}
     >
       <AccountClient initialAccount={gate.account} />
     </AppShell>
