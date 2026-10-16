@@ -129,7 +129,7 @@ export default function AppShell({
     return (
       <>
         {pageStyles.map((href) => <link rel="stylesheet" href={href} key={href} precedence="erp-detail" />)}
-        <link rel="stylesheet" href="/next/css/unified-white-workspace.css?v=sidebar-inner-ring-main46-v1" precedence="erp-workspace" />
+        <link rel="stylesheet" href="/next/css/unified-white-workspace.css?v=sidebar-inner-ring-main47-v2" precedence="erp-workspace" />
         <link rel="stylesheet" href="/next/css/scrollbar-hidden.css?v=global-hidden-v1" precedence="erp-workspace" />
         <BodyClassSync className={combinedBodyClass} />
         <ClassicChromeAccessSync account={account} />
@@ -142,7 +142,7 @@ export default function AppShell({
     <>
       <ShellStyleLinks />
       {pageStyles.map((href) => <link rel="stylesheet" href={href} key={href} precedence="erp-performance" />)}
-      <link rel="stylesheet" href="/next/css/unified-white-workspace.css?v=sidebar-inner-ring-main46-v1" precedence="erp-workspace" />
+      <link rel="stylesheet" href="/next/css/unified-white-workspace.css?v=sidebar-inner-ring-main47-v2" precedence="erp-workspace" />
       <link rel="stylesheet" href="/next/css/scrollbar-hidden.css?v=global-hidden-v1" precedence="erp-workspace" />
       <BodyClassSync className={combinedBodyClass} />
       <ClassicChromeAccessSync account={account} />

@@ -725,8 +725,8 @@ export function ClassicSidebarActiveIndicator({ activePath = "" }) {
       let targetRect = link.getBoundingClientRect();
       let radius = window.getComputedStyle(link).borderRadius || "16px";
 
-      // On the mobile dock Home uses a circular white surface behind the icon,
-      // while page items use the rounded-square active surface. Measure the
+      // On the mobile dock Home uses the padded SVG's rounded-square surface,
+      // while page items use the rounded-square active link. Measure the
       // exact visual surface rather than the much wider Home link container.
       if (isMobile()) {
         const href = String(link.getAttribute("href") || "");
@@ -734,7 +734,7 @@ export function ClassicSidebarActiveIndicator({ activePath = "" }) {
           const icon = link.querySelector("svg");
           if (icon instanceof SVGElement) {
             targetRect = icon.getBoundingClientRect();
-            radius = "999px";
+            radius = window.getComputedStyle(icon).borderRadius || "17px";
           }
         } else {
           // Inactive mobile page links are slightly smaller than the active

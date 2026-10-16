@@ -440,7 +440,7 @@ body.persistent-app-shell .classic-app-shell > .main-content > main.next-classic
 
 /* ========================================================================
    Active sidebar selection — inset dark outline (2026-10-16, main-46)
-   Orange is the outside surface. The dark 2px frame sits 5px *inside* it;
+   Orange is the outside surface. The dark 2px frame sits 3px *inside* it;
    unlike an outline, it never changes the nav item size or dock spacing.
    Target only primary sidebar selection, not secondary flyouts.
    ======================================================================== */
@@ -453,16 +453,36 @@ html[data-theme] body.next-classic-shell-active
   .classic-app-shell > .sidebar .sidebar-nav .nav-link:is(.active, [aria-expanded="true"])::after {
   content: "";
   position: absolute;
-  inset: 5px;
+  inset: 3px;
   border: 2px solid #0b0c10;
-  border-radius: 10px;
+  border-radius: 12px;
   pointer-events: none;
   z-index: 2;
 }
 
-/* Home uses a padded, round SVG inside a wider mobile rail: align the
-   rounded-rectangle frame to that orange SVG, not to the wide <a> box. */
+/* On mobile Home, the orange surface is the padded SVG. Make it a
+   rounded square like the other dock items (not a circle), and draw the
+   frame just 3px inside that surface without changing its 2px thickness. */
 @media (max-width: 768px) {
+  html[data-theme] body.next-classic-shell-active
+    .classic-app-shell > .sidebar .mobile-dock-home-rail .nav-link.active svg,
+  html[data-theme] body.next-classic-shell-active
+    .classic-app-shell > .sidebar:not(.mobile-dock-structured-host)
+    .sidebar-nav > .nav-list > li:first-child .nav-link.active svg {
+    border-radius: 17px !important;
+  }
+
+  /* Dark-mode parity: retain the existing orange selected background (the
+     older dark-mode stylesheet otherwise forces Home to black). The moving
+     indicator keeps its own transparent-background rule while it is ready. */
+  html[data-theme] body.next-classic-shell-active
+    .classic-app-shell > .sidebar.mobile-dock-structured-host:not(.sidebar-active-indicator-ready)
+    .mobile-dock-home-rail .nav-link.active svg {
+    background: var(--ops-sidebar-active-orange) !important;
+    color: var(--ops-sidebar-active-text) !important;
+    stroke: var(--ops-sidebar-active-text) !important;
+  }
+
   html[data-theme] body.next-classic-shell-active
     .classic-app-shell > .sidebar .mobile-dock-home-rail .nav-link.active::after,
   html[data-theme] body.next-classic-shell-active
@@ -471,11 +491,11 @@ html[data-theme] body.next-classic-shell-active
     inset: auto;
     left: 50%;
     top: 50%;
-    width: 34px;
-    height: 34px;
+    width: 40px;
+    height: 40px;
     transform: translate(-50%, -50%);
     box-sizing: border-box;
-    border-radius: 11px;
+    border-radius: 13px;
   }
 }
 
@@ -493,9 +513,9 @@ html[data-theme] body.next-classic-shell-active
   .classic-app-shell > .sidebar .sidebar-active-indicator::after {
   content: "";
   position: absolute;
-  inset: 5px;
+  inset: 3px;
   border: 2px solid #0b0c10;
-  border-radius: 10px;
+  border-radius: 12px;
   box-sizing: border-box;
   pointer-events: none;
   z-index: 3;
