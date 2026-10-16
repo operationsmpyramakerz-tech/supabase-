@@ -603,7 +603,7 @@ export default function TaskManagementClient({ view, initialMeta, initialTickets
 
   return (
     <section className="task-management-page next-task-classic-parity">
-      <link rel="stylesheet" href="/next/css/task-management-next-parity.css?v=workflow-builder-v11-delete-connection" />
+      <link rel="stylesheet" href="/next/css/task-management-next-parity.css?v=classic-parity-v3-workflow" precedence="erp-detail" />
       <BodyClassSync className="task-management-page" />
       <Toast toast={toast} onClose={() => setToast(null)} />
       <header className="main-header tm-page-header next-task-classic-header">

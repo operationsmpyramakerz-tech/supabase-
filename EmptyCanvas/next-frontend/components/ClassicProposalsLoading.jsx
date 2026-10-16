@@ -11,8 +11,8 @@ export default function ClassicProposalsLoading({ title = "Proposals", kits = fa
   return (
     <>
       <ShellStyleLinks />
-      <link rel="stylesheet" href="/next/css/products.css?v=products-manual-image-v1" />
-      <link rel="stylesheet" href="/next/css/proposals.css?v=b2b-addname-transparent-pdf-v1" />
+      <link rel="stylesheet" href="/next/css/products.css?v=products-manual-image-v1"  precedence="erp-detail" />
+      <link rel="stylesheet" href="/next/css/proposals.css?v=b2b-addname-transparent-pdf-v1"  precedence="erp-detail" />
       <BodyClassSync className={bodyClass} />
 
       <div className="app-container classic-app-shell next-classic-proposals-loading" aria-label={`Loading ${title}`}>

@@ -8,7 +8,8 @@ export default function LoadingHome() {
   return (
     <>
       <ShellStyleLinks />
-      <link rel="stylesheet" href="/next/css/home.css?v=home-expenses-dark-card-v1" />
+      <link rel="stylesheet" href="/next/css/home.css?v=nav-20261016" precedence="erp-detail" />
+      <link rel="stylesheet" href="/next/css/home-dashboard-v2.css?v=20261011-9-sla-audit" precedence="erp-detail" />
       <BodyClassSync className="page-home next-classic-shell-active" />
 
       <div className="app-container classic-app-shell next-classic-home-loading" aria-label="Loading dashboard">

@@ -8,7 +8,7 @@ export default function ClassicTaskManagementLoading() {
   return (
     <>
       <ShellStyleLinks />
-      <link rel="stylesheet" href="/next/css/task-management.css?v=next-stage-2j" />
+      <link rel="stylesheet" href="/next/css/task-management.css?v=task-management-stable-status-frame-v24" precedence="erp-detail" />
       <BodyClassSync className="task-management-page next-classic-shell-active" />
       <div className="app-container classic-app-shell next-classic-task-loading" aria-label="Loading Task Management">
         <ClassicStableLoadingSidebar activeIndex={14} />

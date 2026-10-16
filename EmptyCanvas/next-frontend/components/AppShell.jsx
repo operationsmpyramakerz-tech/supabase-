@@ -121,12 +121,16 @@ export default function AppShell({
   // remain in place so the migration does not require moving/deleting routes;
   // inside the persistent shell they only apply page-specific styles/classes
   // and refresh the chrome account/title metadata.
+  // React 19 stylesheet precedence hoists CSS into <head> and keeps page
+  // content behind its loading boundary until the styles are ready.
+  // Preserve the original cascade order: shell -> route performance ->
+  // workspace adjustments -> actual page styles.
   if (persistentShell?.persistent) {
     return (
       <>
-        {pageStyles.map((href) => <link rel="stylesheet" href={href} key={href} />)}
-        <link rel="stylesheet" href="/next/css/unified-white-workspace.css?v=shopping-cart-two-line-labels-v3" />
-        <link rel="stylesheet" href="/next/css/scrollbar-hidden.css?v=global-hidden-v1" />
+        {pageStyles.map((href) => <link rel="stylesheet" href={href} key={href} precedence="erp-detail" />)}
+        <link rel="stylesheet" href="/next/css/unified-white-workspace.css?v=nav-loading-shell-v1" precedence="erp-workspace" />
+        <link rel="stylesheet" href="/next/css/scrollbar-hidden.css?v=global-hidden-v1" precedence="erp-workspace" />
         <BodyClassSync className={combinedBodyClass} />
         <ClassicChromeAccessSync account={account} />
         {children}
@@ -137,9 +141,9 @@ export default function AppShell({
   return (
     <>
       <ShellStyleLinks />
-      {pageStyles.map((href) => <link rel="stylesheet" href={href} key={href} />)}
-      <link rel="stylesheet" href="/next/css/unified-white-workspace.css?v=shopping-cart-two-line-labels-v3" />
-      <link rel="stylesheet" href="/next/css/scrollbar-hidden.css?v=global-hidden-v1" />
+      {pageStyles.map((href) => <link rel="stylesheet" href={href} key={href} precedence="erp-performance" />)}
+      <link rel="stylesheet" href="/next/css/unified-white-workspace.css?v=nav-loading-shell-v1" precedence="erp-workspace" />
+      <link rel="stylesheet" href="/next/css/scrollbar-hidden.css?v=global-hidden-v1" precedence="erp-workspace" />
       <BodyClassSync className={combinedBodyClass} />
       <ClassicChromeAccessSync account={account} />
       <ClassicSidebarBootstrap />

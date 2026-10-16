@@ -8,7 +8,7 @@ export default function ClassicKpisLoading() {
   return (
     <>
       <ShellStyleLinks />
-      <link rel="stylesheet" href="/next/css/kpis.css?v=next-stage-2l-kpis" />
+      <link rel="stylesheet" href="/next/css/kpis.css?v=next-stage-2l-kpis"  precedence="erp-detail" />
       <BodyClassSync className="kpis-page next-classic-shell-active" />
       <div className="app-container classic-app-shell next-classic-kpis-loading" aria-label="Loading KPIs">
         <ClassicStableLoadingSidebar activeIndex={15} />

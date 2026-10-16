@@ -8,7 +8,7 @@ export default function ClassicInventoryLoading({ title, bodyClass, activeIndex,
   return (
     <>
       <ShellStyleLinks />
-      {products ? <link rel="stylesheet" href="/next/css/products.css?v=products-manual-image-v1" /> : null}
+      {products ? <link rel="stylesheet" href="/next/css/products.css?v=products-manual-image-v1"  precedence="erp-detail" /> : null}
       <BodyClassSync className={`${bodyClass} next-classic-shell-active`} />
 
       <div className="app-container classic-app-shell next-classic-inventory-loading" aria-label={`Loading ${title}`}>

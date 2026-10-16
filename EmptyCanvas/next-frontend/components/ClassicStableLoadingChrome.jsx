@@ -197,7 +197,7 @@ export function ClassicStableLoadingShell({
   return (
     <>
       <ShellStyleLinks />
-      {pageStyles.map((href) => <link rel="stylesheet" href={href} key={href} />)}
+      {pageStyles.map((href) => <link rel="stylesheet" href={href} key={href}  precedence="erp-detail" />)}
       <BodyClassSync className={classes} />
       <div className="app-container classic-app-shell next-classic-stable-loading" aria-label={ariaLabel}>
         <ClassicStableLoadingSidebar activeIndex={activeIndex} />

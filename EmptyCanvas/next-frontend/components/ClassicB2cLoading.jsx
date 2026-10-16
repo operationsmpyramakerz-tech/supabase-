@@ -11,7 +11,7 @@ export default function ClassicB2cLoading({ mode = "library" }) {
   return (
     <>
       <ShellStyleLinks />
-      <link rel="stylesheet" href="/next/css/b2c.css?v=b2c-formula-calculator-v2" />
+      <link rel="stylesheet" href="/next/css/b2c.css?v=b2c-formula-calculator-v2"  precedence="erp-detail" />
       <BodyClassSync className={bodyClass} />
       <div className="app-container classic-app-shell next-classic-b2c-loading" aria-label={table ? "Loading B2C table" : forms ? "Loading B2C Forms" : "Loading B2C Database"}>
         <ClassicStableLoadingSidebar activeIndex={8} />

@@ -8,7 +8,7 @@ export default function ClassicUsersCenterLoading() {
   return (
     <>
       <ShellStyleLinks />
-      <link rel="stylesheet" href="/next/css/user-access.css?v=next-stage-2m-users-center" />
+      <link rel="stylesheet" href="/next/css/user-access.css?v=nav-20261016" precedence="erp-detail" />
       <BodyClassSync className="user-access-page next-classic-shell-active" />
       <div className="app-container classic-app-shell next-classic-users-loading" aria-label="Loading Users Center">
         <ClassicStableLoadingSidebar activeIndex={16} />

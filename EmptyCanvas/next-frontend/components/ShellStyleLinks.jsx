@@ -18,5 +18,5 @@ export default function ShellStyleLinks() {
   // second time on every App Router navigation.
   if (persistentShell?.persistent) return null;
 
-  return <>{SHELL_STYLES.map((href) => <link rel="stylesheet" href={href} key={href} />)}</>;
+  return <>{SHELL_STYLES.map((href) => <link rel="stylesheet" href={href} key={href} precedence="erp-shell" />)}</>;
 }

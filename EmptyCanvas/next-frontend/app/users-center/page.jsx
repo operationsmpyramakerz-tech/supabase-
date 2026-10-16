@@ -61,7 +61,7 @@ export default async function UsersCenterPage() {
       eyebrow="Manage team access and member records"
       activePath="/next/users-center"
       bodyClass="user-access-page"
-      pageStyles={["/next/css/user-access.css?v=next-stage-2q-graphite-people-folders"]}
+      pageStyles={["/next/css/user-access.css?v=nav-20261016"]}
     >
       <UsersCenterClient
         initialDirectory={directory}

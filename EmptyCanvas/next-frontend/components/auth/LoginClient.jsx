@@ -227,7 +227,7 @@ export default function LoginClient({ requestedNext = "/next/home", backendAvail
 
   return (
     <>
-      <link rel="stylesheet" href="/next/css/login.css?v=concept-2-pulse-settle-v1" />
+      <link rel="stylesheet" href="/next/css/login.css?v=concept-2-pulse-settle-v1" precedence="erp-detail" />
       <div className="login-container">
         <div className="login-card" aria-live="polite">
           <div className="login-header">

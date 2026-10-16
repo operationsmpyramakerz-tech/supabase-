@@ -12,8 +12,8 @@ export default function ClassicExpensesLoading({ users = false }) {
   return (
     <>
       <ShellStyleLinks />
-      {!users ? <link rel="stylesheet" href="/next/css/expenses-redesign.css?v=expenses-dashboard-v4" /> : null}
-      <link rel="stylesheet" href={users ? "/next/css/expenses-users-classic-inline.css?v=stage2f" : "/next/css/expenses-classic-inline.css?v=stage2f"} />
+      {!users ? <link rel="stylesheet" href="/next/css/expenses-redesign.css?v=nav-20261016"  precedence="erp-detail" /> : null}
+      <link rel="stylesheet" href={users ? "/next/css/expenses-users-classic-inline.css?v=stage2f" : "/next/css/expenses-classic-inline.css?v=stage2f"}  precedence="erp-detail" />
       <BodyClassSync className={`${bodyClass} next-classic-shell-active`} />
 
       <div className="app-container classic-app-shell next-classic-expenses-loading" aria-label={`Loading ${title}`}>

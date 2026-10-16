@@ -46,7 +46,7 @@ export default async function BackupPage() {
       eyebrow="Backup, restore and database control"
       activePath="/next/backup"
       bodyClass="page-backup"
-      pageStyles={["/next/css/backup.css?v=database-original-folders-v1"]}
+      pageStyles={["/next/css/backup.css?v=database-page-folders-v1"]}
     >
       <BackupClient initialTables={backupCatalog()} />
     </AppShell>

@@ -9,7 +9,7 @@ export default function ClassicEventsLoading({ mode = "requests" }) {
   return (
     <>
       <ShellStyleLinks />
-      <link rel="stylesheet" href="/next/css/events.css?v=next-stage-2k-events" />
+      <link rel="stylesheet" href="/next/css/events.css?v=nav-20261016" precedence="erp-detail" />
       <BodyClassSync className="events-page next-classic-shell-active" />
       <div className="app-container classic-app-shell next-classic-events-loading" aria-label={`Loading ${title}`}>
         <ClassicStableLoadingSidebar activeIndex={5} />

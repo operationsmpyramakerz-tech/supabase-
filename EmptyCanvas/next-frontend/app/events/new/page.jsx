@@ -54,7 +54,7 @@ export default async function NewEventRequestPage({ searchParams }) {
         eyebrow="Event planning and execution brief"
         activePath="/next/events/new"
         bodyClass="events-page events-new-page"
-        pageStyles={["/next/css/events.css?v=event-request-component-picker-v5"]}
+        pageStyles={["/next/css/events.css?v=nav-20261016"]}
       >
         <main className="standalone-state">
           <section className="state-card">
@@ -75,7 +75,7 @@ export default async function NewEventRequestPage({ searchParams }) {
       eyebrow="Event planning and execution brief"
       activePath="/next/events/new"
       bodyClass="events-page events-new-page"
-      pageStyles={["/next/css/events.css?v=event-request-component-picker-v5"]}
+      pageStyles={["/next/css/events.css?v=nav-20261016"]}
     >
       <EventRequestFormClient
         account={pageData.account}

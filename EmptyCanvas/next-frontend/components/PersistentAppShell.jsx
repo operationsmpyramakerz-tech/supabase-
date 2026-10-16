@@ -64,13 +64,26 @@ function routePerformanceStyles(localPath) {
     return ["/next/css/expenses-performance.css?v=css-phase2"];
   }
   if (localPath === "/b2c" || localPath.startsWith("/b2c/")) {
-    return ["/next/css/b2c-performance.css?v=css-phase2"];
+    return [
+      "/next/css/b2c-performance.css?v=css-phase2",
+      ...(localPath.startsWith("/b2c/database/")
+        ? ["/next/css/b2c.css?v=b2c-formula-calculator-v2"] : []),
+    ];
   }
   if (localPath === "/home") {
     return ["/next/css/home-performance.css?v=css-phase3"];
   }
+  if (localPath.startsWith("/backup/")) {
+    return ["/next/css/backup.css?v=database-page-folders-v1"];
+  }
   if (localPath === "/task-management" || localPath.startsWith("/task-management/")) {
-    return ["/next/css/task-management-performance.css?v=css-phase3"];
+    return [
+      "/next/css/task-management-performance.css?v=css-phase3",
+      ...(localPath.startsWith("/task-management/") ? [
+        "/next/css/task-management.css?v=task-management-stable-status-frame-v24",
+        "/next/css/task-management-next-parity.css?v=classic-parity-v3-workflow",
+      ] : []),
+    ];
   }
   if (localPath === "/events" || localPath.startsWith("/events/")
     || localPath === "/events-calendar" || localPath.startsWith("/events-calendar/")

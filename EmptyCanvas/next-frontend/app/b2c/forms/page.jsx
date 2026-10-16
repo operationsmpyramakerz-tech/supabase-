@@ -103,7 +103,7 @@ export default async function B2cFormsPage({ searchParams }) {
       eyebrow="B2C customer entry"
       activePath="/next/b2c/forms"
       bodyClass="b2c-page b2c-form-page"
-      pageStyles={["/next/css/b2c.css?v=b2c-form-builder-controls-v1"]}
+      pageStyles={["/next/css/b2c.css?v=b2c-formula-calculator-v2"]}
     >
       <B2cFormsClient
         account={pageData.account}

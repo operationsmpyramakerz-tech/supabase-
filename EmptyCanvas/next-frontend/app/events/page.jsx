@@ -39,7 +39,7 @@ export default async function EventsPage() {
   }
 
   return (
-    <AppShell account={pageData.account} title="Events" eyebrow="Event execution requests" activePath="/next/events" bodyClass="events-page events-requests-page" pageStyles={["/next/css/events.css?v=next-stage-2k-events"]}>
+    <AppShell account={pageData.account} title="Events" eyebrow="Event execution requests" activePath="/next/events" bodyClass="events-page events-requests-page" pageStyles={["/next/css/events.css?v=nav-20261016"]}>
       <EventsClient
         account={pageData.account}
         initialEvents={Array.isArray(pageData.events) ? pageData.events : []}

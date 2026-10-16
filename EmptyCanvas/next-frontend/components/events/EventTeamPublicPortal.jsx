@@ -209,7 +209,7 @@ export default function EventTeamPublicPortal({ role }) {
 
   return (
     <main className="event-team-public-page">
-      <link rel="stylesheet" href="/next/css/event-team-public.css?v=public-team-portal-v1" />
+      <link rel="stylesheet" href="/next/css/event-team-public.css?v=public-team-portal-v1" precedence="erp-detail" />
       <div className="event-team-public-orb event-team-public-orb--one" aria-hidden="true" />
       <div className="event-team-public-orb event-team-public-orb--two" aria-hidden="true" />
 

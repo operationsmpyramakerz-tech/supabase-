@@ -405,3 +405,34 @@ html[data-theme] body.next-classic-shell-active .classic-app-shell a.nav-link[ar
     text-align: center !important;
   }
 }
+
+/* Navigation stability (2026-10-16).
+   RootLayout now keeps the real sidebar/header mounted during App Router
+   transitions. The existing loading.jsx fallbacks still render a legacy
+   Classic shell around their skeletons. Flatten ONLY those nested loading
+   shells, otherwise the sidebar, header and page padding appear twice as
+   each destination streams in. This applies to light and dark themes. */
+body.persistent-app-shell .classic-app-shell > .main-content > main.next-classic-page-content > .classic-app-shell[class*="-loading"] {
+  display: contents !important;
+}
+body.persistent-app-shell .classic-app-shell > .main-content > main.next-classic-page-content > .classic-app-shell[class*="-loading"] > .sidebar,
+body.persistent-app-shell .classic-app-shell > .main-content > main.next-classic-page-content > .classic-app-shell[class*="-loading"] > .main-content > .main-header {
+  display: none !important;
+}
+body.persistent-app-shell .classic-app-shell > .main-content > main.next-classic-page-content > .classic-app-shell[class*="-loading"] > .main-content {
+  display: contents !important;
+}
+body.persistent-app-shell .classic-app-shell > .main-content > main.next-classic-page-content > .classic-app-shell[class*="-loading"] > .main-content > main.next-classic-page-content {
+  display: block !important;
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  height: auto !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+  background: transparent !important;
+}

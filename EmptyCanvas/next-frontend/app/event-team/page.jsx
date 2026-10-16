@@ -53,7 +53,7 @@ export default async function EventTeamPage() {
       eyebrow="Event workforce"
       activePath="/next/event-team"
       bodyClass="events-page event-team-page"
-      pageStyles={["/next/css/events.css?v=event-team-v1", "/next/css/event-team.css?v=event-team-public-portal-v3"]}
+      pageStyles={["/next/css/events.css?v=nav-20261016", "/next/css/event-team.css?v=event-team-public-portal-v3"]}
     >
       <EventTeamClient
         account={gate.account}
