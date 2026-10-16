@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { beginAuthRouteTransition, finishAuthRouteTransition } from "../../lib/auth-route-transition";
 
 const MODES = Object.freeze({ LOGIN: "login", RECOVERY: "recovery", SIGNUP: "signup" });
 const ALLOWED_PAGES_COOKIE = "ops_ui_allowed_pages_v1";
@@ -77,6 +78,9 @@ export default function LoginClient({ requestedNext = "/next/home", backendAvail
     body.classList.toggle("auth-signup-mode", mode === MODES.SIGNUP);
     body.classList.toggle("auth-recovery-mode", mode === MODES.RECOVERY);
     body.classList.toggle("login-inline-success-active", loginSuccess);
+    // After logout, keep the cover in place until the login UI has hydrated
+    // and has its final body classes (rather than flashing the generic layout).
+    finishAuthRouteTransition();
     return () => {
       body.classList.remove("next-classic-login-active", "auth-signup-mode", "auth-recovery-mode", "login-success-active", "login-inline-success-active");
     };
@@ -143,7 +147,10 @@ export default function LoginClient({ requestedNext = "/next/home", backendAvail
       // Match the current Classic login: keep the user on the card long enough
       // for the pulse transition to finish before opening the requested page.
       const remaining = Math.max(0, 1950 - (Date.now() - transitionStartedAt));
-      window.setTimeout(() => window.location.replace(destination), remaining);
+      window.setTimeout(() => {
+        beginAuthRouteTransition(destination);
+        window.location.replace(destination);
+      }, remaining);
     } catch (error) {
       console.error("Next login error:", error);
       showError("Network error. Please check your connection and try again.");

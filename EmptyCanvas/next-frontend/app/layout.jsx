@@ -84,6 +84,13 @@ export default async function RootLayout({ children }) {
   };
   const themeBootstrap = `(function(){try{var key=${JSON.stringify(THEME_COOKIE)};var fallback=${JSON.stringify(theme)};var apply=function(value){var next=value==='dark'?'dark':'light';var root=document.documentElement;root.dataset.theme=next;root.classList.toggle('ops-theme-dark',next==='dark');root.style.colorScheme=next;var meta=document.getElementById('ops-theme-color');if(meta){meta.setAttribute('content',next==='dark'?'#080b11':'#ffffff');}return next;};var stored=localStorage.getItem(key);apply(stored==='dark'||stored==='light'?stored:fallback);window.addEventListener('storage',function(event){if(event&&event.key===key){apply(event.newValue);}});}catch(e){}})();`;
 
+  // Only for login/logout document navigations: restore the transition cover
+  // before the new document can paint its loading UI. Expire stale transitions
+  // so an interrupted navigation can never leave an invisible app indefinitely.
+  const authTransitionBootstrap = `(function(){try{var key="ops.auth.navigation.v1";var item=JSON.parse(sessionStorage.getItem(key)||"null");var age=item?Date.now()-item.started:Infinity;if(item&&typeof item.started==="number"&&age>=0&&age<20000){document.documentElement.classList.add("ops-auth-route-pending");setTimeout(function(){document.documentElement.classList.remove("ops-auth-route-pending");try{sessionStorage.removeItem(key);}catch(e){}},20000-age);}else{sessionStorage.removeItem(key);}}catch(e){}})();`;
+  const authTransitionCss = `html.ops-auth-route-pending body{overflow:hidden!important}html.ops-auth-route-pending body::before{content:""!important;position:fixed!important;inset:0!important;display:block!important;background:#fff!important;z-index:2147483646!important;pointer-events:all!important;opacity:1!important;transform:none!important}html.ops-auth-route-pending body::after{content:""!important;position:fixed!important;top:calc(50% - 22px)!important;left:calc(50% - 22px)!important;width:44px!important;height:44px!important;display:block!important;box-sizing:border-box!important;border:4px solid #f3e6dc!important;border-top-color:#eb6a20!important;border-radius:50%!important;background:none!important;z-index:2147483647!important;pointer-events:all!important;animation:ops-auth-loading-spin .8s linear infinite!important}@keyframes ops-auth-loading-spin{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){html.ops-auth-route-pending body::after{animation-duration:2s!important}}`;
+
+
   return (
     <html
       lang="en"
@@ -96,6 +103,8 @@ export default async function RootLayout({ children }) {
         <meta name="color-scheme" content="light dark" />
         <meta id="ops-theme-color" name="theme-color" content={theme === "dark" ? "#080b11" : "#ffffff"} />
         <link rel="stylesheet" href="/next/css/dark-mode.css?v=theme-v2-white-nav" precedence="erp-theme" />
+        <style dangerouslySetInnerHTML={{ __html: authTransitionCss }} />
+        <script dangerouslySetInnerHTML={{ __html: authTransitionBootstrap }} />
         <script dangerouslySetInnerHTML={{ __html: themeBootstrap }} />
       </head>
       <body>

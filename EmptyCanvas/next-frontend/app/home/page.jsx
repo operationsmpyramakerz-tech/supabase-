@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import AppShell from "../../components/AppShell";
+import AuthTransitionReady from "../../components/AuthTransitionReady";
 import { DashboardNotice, QuickActionsCard, RecentOrdersCard, ScopeCard } from "../../components/home/DashboardCards";
 import HomeOverviewClient from "../../components/home/HomeOverviewClient";
 import { fetchDirectPageBootstrap } from "../../lib/page-bootstrap-direct";
@@ -33,6 +34,7 @@ function quickActions(account) {
 function HomeUnavailable({ message }) {
   return (
     <main className="standalone-state">
+      <AuthTransitionReady />
       <section className="state-card">
         <span className="status-dot warning" />
         <h1>The new Home could not load</h1>

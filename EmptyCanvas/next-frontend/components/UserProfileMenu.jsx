@@ -1,5 +1,7 @@
 "use client";
 
+import { beginAuthRouteTransition } from "../lib/auth-route-transition";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
@@ -340,7 +342,10 @@ export default function UserProfileMenu({ account }) {
       localStorage.removeItem("username");
       localStorage.removeItem(CHROME_CACHE_KEY);
     } catch {}
-    window.location.href = "/login";
+    // Cross the authentication boundary with a full reload but do not expose
+    // an unstyled/intermediate login screen while the new session is checked.
+    beginAuthRouteTransition("/next/login");
+    window.location.replace("/next/login");
   }
 
   const panel = renderPanel ? (

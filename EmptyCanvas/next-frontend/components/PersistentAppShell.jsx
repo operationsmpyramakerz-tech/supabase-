@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import AppShell from "./AppShell";
+import { finishAuthRouteTransition } from "../lib/auth-route-transition";
 import { PersistentShellProvider } from "./PersistentShellContext";
 
 function localPathname(value) {
@@ -204,6 +205,10 @@ export default function PersistentAppShell({ initialAccount = null, children }) 
       title: String(config?.title || "").trim(),
       activePath: String(config?.activePath || "").trim(),
     };
+    // A child AppShell registers only after its real page has committed; the
+    // loading.jsx skeleton never registers. Release the login cover here so
+    // users do not see the intermediate Home loading placeholders.
+    finishAuthRouteTransition();
     setRegistered((previous) => {
       if (previous?.path === nextValue.path
         && previous?.account === nextValue.account
