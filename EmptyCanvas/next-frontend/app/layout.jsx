@@ -90,13 +90,97 @@ export default async function RootLayout({ children }) {
   const authTransitionBootstrap = `(function(){try{var key="ops.auth.navigation.v1";var item=JSON.parse(sessionStorage.getItem(key)||"null");var age=item?Date.now()-item.started:Infinity;if(item&&typeof item.started==="number"&&age>=0&&age<20000){document.documentElement.classList.add("ops-auth-route-pending");setTimeout(function(){document.documentElement.classList.remove("ops-auth-route-pending");try{sessionStorage.removeItem(key);}catch(e){}},20000-age);}else{sessionStorage.removeItem(key);}}catch(e){}})();`;
   const authTransitionCss = `html.ops-auth-route-pending body{overflow:hidden!important}html.ops-auth-route-pending body::before{content:""!important;position:fixed!important;inset:0!important;display:block!important;background:#fff!important;z-index:2147483646!important;pointer-events:all!important;opacity:1!important;transform:none!important}html.ops-auth-route-pending body::after{content:""!important;position:fixed!important;top:calc(50% - 22px)!important;left:calc(50% - 22px)!important;width:44px!important;height:44px!important;display:block!important;box-sizing:border-box!important;border:4px solid #f3e6dc!important;border-top-color:#eb6a20!important;border-radius:50%!important;background:none!important;z-index:2147483647!important;pointer-events:all!important;animation:ops-auth-loading-spin .8s linear infinite!important}@keyframes ops-auth-loading-spin{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){html.ops-auth-route-pending body::after{animation-duration:2s!important}}`;
 
-  // An installed PWA's native splash can disappear before Next.js has hydrated
-  // the authenticated shell and before route-specific stylesheets are ready.
-  // Apply this minimal cover in the *server HTML*, not in a React effect: it
-  // prevents the first, unstyled frame (large SVGs / stacked dashboard cards).
-  // Release only after the actual page AppShell commits and its CSS has loaded.
-  const coldStartCss = `html.ops-cold-start-pending:not(.ops-auth-route-pending) body{overflow:hidden!important}html.ops-cold-start-pending:not(.ops-auth-route-pending) body::before{content:""!important;position:fixed!important;inset:0!important;display:block!important;background:#fff!important;z-index:2147483644!important;pointer-events:all!important;opacity:1!important;transform:none!important}html.ops-cold-start-pending:not(.ops-auth-route-pending) body::after{content:""!important;position:fixed!important;left:50%!important;top:50%!important;width:112px!important;height:112px!important;display:block!important;background:url(/icons/icon-192.png) center/contain no-repeat!important;z-index:2147483645!important;pointer-events:all!important;transform:translate(-50%,-50%)!important;animation:none!important}`;
-  const coldStartBootstrap = `(function(){var root=document.documentElement;var active='ops-cold-start-pending';var pathname=location.pathname.replace(/\/+$/,'')||'/';if(!pathname.startsWith('/next/')||/^\/next\/(login|pwa-start|pwa-offline|app-install)(\/|$)/.test(pathname)){root.classList.remove(active);return;}var closed=false;var watchdog=setTimeout(remove,15000);function remove(){if(closed)return;closed=true;clearTimeout(watchdog);root.classList.remove(active);try{delete window.__opsFinishColdStart;}catch(e){}}function ready(){if(closed)return;var links=Array.from(document.querySelectorAll('link[rel="stylesheet"]'));var waits=links.filter(function(link){return !link.disabled&&link.media!=='not all'&&!link.sheet;}).map(function(link){return new Promise(function(resolve){var timeout=setTimeout(resolve,5000);function settled(){clearTimeout(timeout);resolve();}link.addEventListener('load',settled,{once:true});link.addEventListener('error',settled,{once:true});if(link.sheet)settled();});});Promise.all(waits).then(function(){if(closed)return;requestAnimationFrame(function(){requestAnimationFrame(remove);});});}window.__opsFinishColdStart=function(){if(closed)return;if(document.readyState==='complete')ready();else window.addEventListener('load',ready,{once:true});};})();`;
+  // The PWA can expose a first unstyled frame before the route CSS has been
+  // applied. Cover that *briefly*, but never couple the release to Home data,
+  // full window.load (images can stall it), or a successful React hydration.
+  // A CSS-only expiry is essential: a stale/offline JS chunk must not trap the
+  // user behind the company logo forever.
+  const coldStartCss = `
+    html.ops-cold-start-pending:not([data-ops-cold-start-released]):not(.ops-auth-route-pending) body::before,
+    html.ops-cold-start-pending:not([data-ops-cold-start-released]):not(.ops-auth-route-pending) body::after {
+      content:"" !important;
+      display:block !important;
+      position:fixed !important;
+      pointer-events:all;
+      opacity:1;
+      visibility:visible;
+      animation:ops-cold-cover-expire 0s linear 7s forwards !important;
+    }
+    html.ops-cold-start-pending:not([data-ops-cold-start-released]):not(.ops-auth-route-pending) body::before {
+      inset:0 !important;
+      z-index:2147483644 !important;
+      background:#fff !important;
+      transform:none !important;
+    }
+    html.ops-cold-start-pending:not([data-ops-cold-start-released]):not(.ops-auth-route-pending) body::after {
+      left:50% !important;
+      top:50% !important;
+      width:112px !important;
+      height:112px !important;
+      z-index:2147483645 !important;
+      background:url(/icons/icon-192.png) center/contain no-repeat !important;
+      transform:translate(-50%,-50%) !important;
+    }
+    @keyframes ops-cold-cover-expire {
+      to { opacity:0; visibility:hidden; pointer-events:none; }
+    }
+  `;
+  const coldStartBootstrap = String.raw`(function(){
+    var root=document.documentElement;
+    var active='ops-cold-start-pending';
+    var released='data-ops-cold-start-released';
+    var pathname=location.pathname.replace(/\/+$/,'')||'/';
+    var closed=false, signalReceived=false, tick=null, deadline=null;
+    function finish(){
+      if(closed)return;
+      closed=true;
+      // Mark the release independently of the SSR class. React / streamed
+      // HTML may re-apply the original class during hydration.
+      root.setAttribute(released,'');
+      root.classList.remove(active);
+      if(tick!==null)clearTimeout(tick);
+      if(deadline!==null)clearTimeout(deadline);
+      document.removeEventListener('DOMContentLoaded',check);
+      window.removeEventListener('load',check);
+      try{delete window.__opsFinishColdStart;}catch(e){}
+    }
+    if(!pathname.startsWith('/next/')||/^\/next\/(login|pwa-start|pwa-offline|app-install)(\/|$)/.test(pathname)){
+      finish();
+      return;
+    }
+    function stylesReady(){
+      // Don't expose an unstyled AppShell. React may insert more styles after
+      // DOMContentLoaded, so require the classic shell's own stylesheet.
+      var shell=document.querySelector('link[rel="stylesheet"][href*="/next/css/style.css"]');
+      if(!shell || !shell.sheet)return false;
+      var links=document.querySelectorAll('link[rel="stylesheet"]');
+      for(var i=0;i<links.length;i++){
+        var link=links[i];
+        if(!link.disabled&&link.media!=='not all'&&!link.sheet)return false;
+      }
+      return true;
+    }
+    function check(){
+      if(closed)return;
+      var hasShell=Boolean(document.querySelector('.classic-app-shell .next-classic-page-content'));
+      if(stylesReady()&&(signalReceived||hasShell)){
+        requestAnimationFrame(function(){requestAnimationFrame(finish);});
+      }
+    }
+    function poll(){
+      if(closed)return;
+      check();
+      if(!closed)tick=setTimeout(poll,125);
+    }
+    // A real page registers after it commits, but the styled loading route is
+    // enough to reveal while data is still pending. Neither path must wait for
+    // the window 'load' event or for Home's API calls to finish.
+    window.__opsFinishColdStart=function(){signalReceived=true;check();};
+    document.addEventListener('DOMContentLoaded',check);
+    window.addEventListener('load',check);
+    deadline=setTimeout(finish,6500);
+    poll();
+  })();`;
 
 
 
