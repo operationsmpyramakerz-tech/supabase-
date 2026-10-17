@@ -71,9 +71,6 @@ function routePerformanceStyles(localPath) {
         ? ["/next/css/b2c.css?v=b2c-formula-calculator-v2"] : []),
     ];
   }
-  if (localPath === "/home") {
-    return ["/next/css/home-performance.css?v=css-phase3"];
-  }
   if (localPath.startsWith("/backup/")) {
     return ["/next/css/backup.css?v=database-page-folders-v1"];
   }

@@ -405,3 +405,64 @@ button[aria-label^="Close"]:not([class*="backdrop"]) > span:only-child {
 .co-submodal-close > i {
   display: none !important;
 }
+
+/* Home streaming fallback: match the real dashboard footprint during hard
+   refresh and cold start; keep these styles in the root CSS bundle. */
+.next-home-dashboard-loading { min-width: 0; width: 100%; }
+.next-home-dashboard-loading .next-home-loading-analysis,
+.next-home-dashboard-loading .next-home-loading-icon,
+.next-home-dashboard-loading .next-home-loading-arrow,
+.next-home-dashboard-loading .next-home-loading-number,
+.next-home-dashboard-loading .next-home-loading-value,
+.next-home-dashboard-loading .next-home-loading-count,
+.next-home-dashboard-loading .next-home-loading-insight {
+  display: block;
+  background: #eef0f4;
+  border-radius: 9px;
+  flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+}
+.next-home-dashboard-loading .next-home-loading-analysis { width: 72px; height: 44px; border-radius: 13px; }
+.next-home-dashboard-loading .next-home-loading-icon { width: 35px; height: 35px; border-radius: 11px; background: #fff1e8; }
+.next-home-dashboard-loading .next-home-loading-icon--1 { background: #efeafe; }
+.next-home-dashboard-loading .next-home-loading-icon--2 { background: #e7f6f0; }
+.next-home-dashboard-loading .next-home-loading-icon--3 { background: #eaf1ff; }
+.next-home-dashboard-loading .next-home-loading-arrow { width: 15px; height: 15px; }
+.next-home-dashboard-loading .next-home-loading-number { width: 66px; height: 36px; margin: 8px 0; }
+.next-home-dashboard-loading .next-home-loading-value { width: 86px; height: 14px; margin: 0 0 12px; }
+.next-home-dashboard-loading .erp-home-tile > .erp-home-distribution { margin-top: auto; background: #eef0f4; }
+.next-home-dashboard-loading .next-home-loading-count { width: 22px; height: 25px; border-radius: 6px; }
+.next-home-dashboard-loading .next-home-loading-backlog { padding: 20px 22px; border: 1px solid #e9edf2; border-radius: 20px; background: #fff; }
+.next-home-dashboard-loading .next-home-loading-backlog > h2 { font-size: 22px; margin: 10px 0 22px; }
+.next-home-dashboard-loading .next-home-loading-insights { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 10px; }
+.next-home-dashboard-loading .next-home-loading-insight { min-height: 100px; border-radius: 12px; }
+@media (max-width: 750px) {
+  .next-home-dashboard-loading .erp-home-tiles { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .next-home-dashboard-loading .erp-home-focus { display: block; }
+  .next-home-dashboard-loading .erp-home-focus__head { margin-bottom: 14px; }
+  .next-home-dashboard-loading .erp-home-focus__items { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .next-home-dashboard-loading .next-home-loading-insights { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .next-home-dashboard-loading .next-home-loading-number::after,
+  .next-home-dashboard-loading .next-home-loading-value::after,
+  .next-home-dashboard-loading .next-home-loading-count::after,
+  .next-home-dashboard-loading .next-home-loading-insight::after {
+    content: ""; position: absolute; inset: 0; transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,.75), transparent);
+    animation: nextClassicShimmer 1.35s infinite;
+  }
+}
+
+/* Keep the Home loading placeholders neutral in dark mode too. */
+html[data-theme="dark"] .next-home-dashboard-loading .next-home-loading-analysis,
+html[data-theme="dark"] .next-home-dashboard-loading .next-home-loading-arrow,
+html[data-theme="dark"] .next-home-dashboard-loading .next-home-loading-number,
+html[data-theme="dark"] .next-home-dashboard-loading .next-home-loading-value,
+html[data-theme="dark"] .next-home-dashboard-loading .next-home-loading-count,
+html[data-theme="dark"] .next-home-dashboard-loading .next-home-loading-insight { background: #252c39; }
+html[data-theme="dark"] .next-home-dashboard-loading .next-home-loading-backlog {
+  background: var(--eh-bg, #121822);
+  border-color: var(--eh-border, #353d4d);
+}

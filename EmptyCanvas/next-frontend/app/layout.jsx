@@ -149,21 +149,46 @@ export default async function RootLayout({ children }) {
       return;
     }
     function stylesReady(){
-      // Don't expose an unstyled AppShell. React may insert more styles after
-      // DOMContentLoaded, so require the classic shell's own stylesheet.
-      var shell=document.querySelector('link[rel="stylesheet"][href*="/next/css/style.css"]');
-      if(!shell || !shell.sheet)return false;
+      // CSS is now declared in the server-rendered layout, not a late client
+      // component. Wait for the actual route styles before revealing it.
+      var required=[
+        '/next/css/style.css',
+        '/next/css/ui-redesign.css',
+        '/next/css/page-canvas-fix.css',
+        '/next/css/classic-parity.css'
+      ];
+      if(/^\/next\/home(\/|$)/.test(pathname)){
+        required.push('/next/css/home-performance.css');
+        required.push('/next/css/home.css');
+        required.push('/next/css/home-dashboard-v2.css');
+      }
       var links=document.querySelectorAll('link[rel="stylesheet"]');
-      for(var i=0;i<links.length;i++){
-        var link=links[i];
-        if(!link.disabled&&link.media!=='not all'&&!link.sheet)return false;
+      for(var r=0;r<required.length;r++){
+        var found=false;
+        for(var i=0;i<links.length;i++){
+          var link=links[i];
+          if((link.getAttribute('href')||'').indexOf(required[r])===-1)continue;
+          found=true;
+          if(!link.sheet)return false;
+        }
+        if(!found)return false;
+      }
+      for(var j=0;j<links.length;j++){
+        var candidate=links[j];
+        if(!candidate.disabled&&candidate.media!=='not all'&&!candidate.sheet)return false;
       }
       return true;
     }
     function check(){
       if(closed)return;
       var hasShell=Boolean(document.querySelector('.classic-app-shell .next-classic-page-content'));
-      if(stylesReady()&&(signalReceived||hasShell)){
+      // Root classes come from React layout effects. On the very first paint,
+      // revealing before those effects run shows nested fallback chrome at
+      // the wrong dimensions, even when the stylesheets have loaded.
+      var bodyReady=Boolean(document.body&&document.body.classList.contains('persistent-app-shell'));
+      var homeReady=!/^\/next\/home(\/|$)/.test(pathname)
+        ||Boolean(document.body&&document.body.classList.contains('page-home'));
+      if(stylesReady()&&bodyReady&&homeReady&&(signalReceived||hasShell)){
         requestAnimationFrame(function(){requestAnimationFrame(finish);});
       }
     }
@@ -195,6 +220,13 @@ export default async function RootLayout({ children }) {
       <head>
         <meta name="color-scheme" content="light dark" />
         <meta id="ops-theme-color" name="theme-color" content={theme === "dark" ? "#080b11" : "#ffffff"} />
+        {/* The Classic shell must have its CSS in the initial HTML head.
+            Previously these links came only from client-rendered AppShell,
+            allowing the PWA/Hard Refresh to paint the raw shell first. */}
+        <link rel="stylesheet" href="/next/css/style.css?v=boot-main51-v1" precedence="erp-shell" />
+        <link rel="stylesheet" href="/next/css/ui-redesign.css?v=boot-main51-v1" precedence="erp-shell" />
+        <link rel="stylesheet" href="/next/css/page-canvas-fix.css?v=boot-main51-v1" precedence="erp-shell" />
+        <link rel="stylesheet" href="/next/css/classic-parity.css?v=boot-main51-v1" precedence="erp-shell" />
         <link rel="stylesheet" href="/next/css/dark-mode.css?v=theme-v2-white-nav" precedence="erp-theme" />
         <style dangerouslySetInnerHTML={{ __html: coldStartCss }} />
         <style dangerouslySetInnerHTML={{ __html: authTransitionCss }} />

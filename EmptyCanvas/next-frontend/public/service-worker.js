@@ -1,7 +1,7 @@
 // Operations Hub PWA Service Worker
 // Phase 46: served directly by the Next deployment; no legacy static host required.
 // Bump this value whenever we change static assets so old deployments don't stay cached.
-const CACHE_NAME = "ops-cache-next-pwa-v24";
+const CACHE_NAME = "ops-cache-next-pwa-v25";
 
 const PRECACHE_URLS = [
   "/offline-fallback.html",
@@ -96,6 +96,14 @@ self.addEventListener("fetch", (event) => {
     url.pathname === "/manifest.json";
 
   if (!isStatic) return;
+
+  // Legacy CSS names are not content-hashed. Serving cached styles before the
+  // current HTML can cause a flash of mismatched/un-styled markup after deploy.
+  // Next's hashed /_next/static/ assets retain stale-while-revalidate caching.
+  if (req.destination === "style" && url.pathname.startsWith("/css/")) {
+    event.respondWith(networkFirstStatic(req));
+    return;
+  }
 
   // Shared runtime behavior changes frequently and must not wait for a second
   // page load before the new deployment is used.
