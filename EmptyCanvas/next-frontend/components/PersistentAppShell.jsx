@@ -209,6 +209,9 @@ export default function PersistentAppShell({ initialAccount = null, children }) 
     // loading.jsx skeleton never registers. Release the login cover here so
     // users do not see the intermediate Home loading placeholders.
     finishAuthRouteTransition();
+    // Only the real page (never loading.jsx) registers here. Keep the PWA
+    // cold-start cover until its initial styles and committed layout are ready.
+    window.__opsFinishColdStart?.();
     setRegistered((previous) => {
       if (previous?.path === nextValue.path
         && previous?.account === nextValue.account

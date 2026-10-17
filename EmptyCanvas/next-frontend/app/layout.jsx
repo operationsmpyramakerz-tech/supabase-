@@ -90,12 +90,21 @@ export default async function RootLayout({ children }) {
   const authTransitionBootstrap = `(function(){try{var key="ops.auth.navigation.v1";var item=JSON.parse(sessionStorage.getItem(key)||"null");var age=item?Date.now()-item.started:Infinity;if(item&&typeof item.started==="number"&&age>=0&&age<20000){document.documentElement.classList.add("ops-auth-route-pending");setTimeout(function(){document.documentElement.classList.remove("ops-auth-route-pending");try{sessionStorage.removeItem(key);}catch(e){}},20000-age);}else{sessionStorage.removeItem(key);}}catch(e){}})();`;
   const authTransitionCss = `html.ops-auth-route-pending body{overflow:hidden!important}html.ops-auth-route-pending body::before{content:""!important;position:fixed!important;inset:0!important;display:block!important;background:#fff!important;z-index:2147483646!important;pointer-events:all!important;opacity:1!important;transform:none!important}html.ops-auth-route-pending body::after{content:""!important;position:fixed!important;top:calc(50% - 22px)!important;left:calc(50% - 22px)!important;width:44px!important;height:44px!important;display:block!important;box-sizing:border-box!important;border:4px solid #f3e6dc!important;border-top-color:#eb6a20!important;border-radius:50%!important;background:none!important;z-index:2147483647!important;pointer-events:all!important;animation:ops-auth-loading-spin .8s linear infinite!important}@keyframes ops-auth-loading-spin{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){html.ops-auth-route-pending body::after{animation-duration:2s!important}}`;
 
+  // An installed PWA's native splash can disappear before Next.js has hydrated
+  // the authenticated shell and before route-specific stylesheets are ready.
+  // Apply this minimal cover in the *server HTML*, not in a React effect: it
+  // prevents the first, unstyled frame (large SVGs / stacked dashboard cards).
+  // Release only after the actual page AppShell commits and its CSS has loaded.
+  const coldStartCss = `html.ops-cold-start-pending:not(.ops-auth-route-pending) body{overflow:hidden!important}html.ops-cold-start-pending:not(.ops-auth-route-pending) body::before{content:""!important;position:fixed!important;inset:0!important;display:block!important;background:#fff!important;z-index:2147483644!important;pointer-events:all!important;opacity:1!important;transform:none!important}html.ops-cold-start-pending:not(.ops-auth-route-pending) body::after{content:""!important;position:fixed!important;left:50%!important;top:50%!important;width:112px!important;height:112px!important;display:block!important;background:url(/icons/icon-192.png) center/contain no-repeat!important;z-index:2147483645!important;pointer-events:all!important;transform:translate(-50%,-50%)!important;animation:none!important}`;
+  const coldStartBootstrap = `(function(){var root=document.documentElement;var active='ops-cold-start-pending';var pathname=location.pathname.replace(/\/+$/,'')||'/';if(!pathname.startsWith('/next/')||/^\/next\/(login|pwa-start|pwa-offline|app-install)(\/|$)/.test(pathname)){root.classList.remove(active);return;}var closed=false;var watchdog=setTimeout(remove,15000);function remove(){if(closed)return;closed=true;clearTimeout(watchdog);root.classList.remove(active);try{delete window.__opsFinishColdStart;}catch(e){}}function ready(){if(closed)return;var links=Array.from(document.querySelectorAll('link[rel="stylesheet"]'));var waits=links.filter(function(link){return !link.disabled&&link.media!=='not all'&&!link.sheet;}).map(function(link){return new Promise(function(resolve){var timeout=setTimeout(resolve,5000);function settled(){clearTimeout(timeout);resolve();}link.addEventListener('load',settled,{once:true});link.addEventListener('error',settled,{once:true});if(link.sheet)settled();});});Promise.all(waits).then(function(){if(closed)return;requestAnimationFrame(function(){requestAnimationFrame(remove);});});}window.__opsFinishColdStart=function(){if(closed)return;if(document.readyState==='complete')ready();else window.addEventListener('load',ready,{once:true});};})();`;
+
+
 
   return (
     <html
       lang="en"
       data-theme={theme}
-      className={rootClasses || undefined}
+      className={[rootClasses, "ops-cold-start-pending"].filter(Boolean).join(" ")}
       style={Object.keys(rootStyle).length ? rootStyle : undefined}
       suppressHydrationWarning
     >
@@ -103,7 +112,9 @@ export default async function RootLayout({ children }) {
         <meta name="color-scheme" content="light dark" />
         <meta id="ops-theme-color" name="theme-color" content={theme === "dark" ? "#080b11" : "#ffffff"} />
         <link rel="stylesheet" href="/next/css/dark-mode.css?v=theme-v2-white-nav" precedence="erp-theme" />
+        <style dangerouslySetInnerHTML={{ __html: coldStartCss }} />
         <style dangerouslySetInnerHTML={{ __html: authTransitionCss }} />
+        <script dangerouslySetInnerHTML={{ __html: coldStartBootstrap }} />
         <script dangerouslySetInnerHTML={{ __html: authTransitionBootstrap }} />
         <script dangerouslySetInnerHTML={{ __html: themeBootstrap }} />
       </head>
