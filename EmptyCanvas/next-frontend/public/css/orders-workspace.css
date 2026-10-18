@@ -859,6 +859,31 @@ html[data-theme="dark"] .orders-workspace .order-components-panel__all { backgro
   .orders-workspace .co-modal-dialog .co-modal-body > .co-modal-actions.order-detail-workflow-actions { display: grid !important; grid-template-columns: minmax(0,1fr) !important; }
   .orders-workspace .co-modal-dialog .order-detail-workflow-actions > .ro-action-btn { width: 100% !important; }
   .orders-workspace .order-components-panel__heading { gap: 6px 9px; }
+
+  /* My Orders: Search | Download | Sort on one compact mobile row.
+     Expanding Search temporarily uses that same row for the input, so
+     none of the action buttons wraps under the toolbar. */
+  body.current-orders-page .orders-workspace .co-modal-dialog .co-modal-body > .co-modal-actions.order-detail-toolkit.order-modal-search-actions {
+    grid-template-columns: 40px minmax(0, 1fr) minmax(0, 1fr) !important;
+    align-items: center !important;
+  }
+  body.current-orders-page .orders-workspace .co-modal-dialog .order-detail-toolkit.order-modal-search-actions > .order-component-search {
+    grid-column: auto !important;
+    justify-self: start !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+  }
+  body.current-orders-page .orders-workspace .co-modal-dialog .co-modal-body > .co-modal-actions.order-detail-toolkit.order-modal-search-actions:has(> .order-component-search.is-expanded) {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+  body.current-orders-page .orders-workspace .co-modal-dialog .order-detail-toolkit.order-modal-search-actions:has(> .order-component-search.is-expanded) > .order-component-search {
+    grid-column: 1 / -1 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  body.current-orders-page .orders-workspace .co-modal-dialog .order-detail-toolkit.order-modal-search-actions:has(> .order-component-search.is-expanded) > :is(.ro-action-btn, .order-sort-menu-wrap) {
+    display: none !important;
+  }
 }
 html[data-theme="dark"] .orders-workspace .co-modal-dialog .co-modal-body > .co-modal-actions.order-detail-toolkit {
   background: #111722 !important;
