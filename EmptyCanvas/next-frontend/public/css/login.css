@@ -1438,3 +1438,39 @@ body.next-classic-login-active .error-message { animation: classicLoginShake .6s
     animation: none !important;
   }
 }
+
+
+/* =========================================================
+   v56 — Restore the original login artwork after shell CSS
+   ---------------------------------------------------------
+   The shared ui-redesign.css forces body background-image:none
+   and style.css paints .login-container white. Login is a
+   standalone route, so restore its own background at a higher
+   specificity without changing any authenticated page.
+   :has() also covers app/login/loading.jsx before hydration.
+   ========================================================= */
+html[data-theme] body:has(.login-container),
+html[data-theme] body.next-classic-login-active {
+  background-color: #f8fafc !important;
+  background-image: url('/next/images/login-background-desktop.png'),
+    linear-gradient(135deg, #F5F3F0 0%, #E5E7EB 100%) !important;
+  background-position: center center !important;
+  background-size: cover !important;
+  background-repeat: no-repeat !important;
+  background-attachment: fixed !important;
+}
+
+/* Remove the opaque white layer that was hiding the body artwork. */
+html[data-theme] body:has(.login-container) .login-container,
+html[data-theme] body.next-classic-login-active .login-container {
+  background: transparent !important;
+}
+
+@media (max-width: 768px), (orientation: portrait) {
+  html[data-theme] body:has(.login-container),
+  html[data-theme] body.next-classic-login-active {
+    background-image: url('/next/images/login-background-mobile.png'),
+      linear-gradient(135deg, #F5F3F0 0%, #E5E7EB 100%) !important;
+    background-attachment: scroll !important;
+  }
+}

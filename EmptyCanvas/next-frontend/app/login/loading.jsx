@@ -1,7 +1,7 @@
 export default function LoginLoading() {
   return (
     <>
-      <link rel="stylesheet" href="/next/css/login.css?v=concept-2-pulse-settle-v1" precedence="erp-detail" />
+      <link rel="stylesheet" href="/next/css/login.css?v=login-background-v56" precedence="erp-detail" />
       <div className="login-container" aria-label="Loading sign in">
         <div className="login-card next-classic-login-loading-card">
           <div className="login-header">
