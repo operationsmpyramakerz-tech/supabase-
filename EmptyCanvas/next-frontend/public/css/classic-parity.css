@@ -9925,3 +9925,32 @@ html[data-theme="dark"] body.operations-orders-page .next-operations-component-e
   .order-combined-select__menu{position:fixed;z-index:12110;left:12px;right:12px;top:auto;bottom:16px;max-height:58vh;border-radius:20px}
   .order-combined-select__options{max-height:calc(58vh - 56px)}
 }
+
+/* All order detail modals (including maintenance): rounded-SQUARE Search.
+   Excludes the global header search and other non-order search fields. */
+.next-classic-orders-parity .order-detail-toolkit .order-component-search {
+  border-radius: 12px !important;
+}
+.next-classic-orders-parity .order-detail-toolkit .order-component-search__toggle {
+  border-radius: 11px !important;
+}
+/* Sort popup lives in document.body so it cannot be clipped by modal scrolling.
+   Restore normal popup layout on mobile: don't anchor it to bottom:18px. */
+.order-sort-portal-scope {
+  position: fixed;
+  z-index: 16000;
+  box-sizing: border-box;
+  overflow: visible;
+}
+.order-sort-portal-scope .order-sort-menu {
+  position: relative !important;
+  inset: auto !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  margin: 0;
+  box-sizing: border-box;
+  overscroll-behavior: contain;
+}
