@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { navigateWithinApp } from "../../lib/client-navigation";
 
 const TYPE_META = {
@@ -322,12 +323,36 @@ export function OrderSubmissionBar({ submission, onDone, onUndo }) {
 }
 
 
+// Position the desktop dropdown in viewport space, outside the modal scroll area.
+// Prefer opening below; flip above when the bottom of the screen is too close.
+function getDesktopPanelPosition(root) {
+  if (!root || typeof window === "undefined") return null;
+  const rect = root.getBoundingClientRect();
+  const edge = 14;
+  const gap = 8;
+  const availableBelow = Math.max(0, window.innerHeight - rect.bottom - gap - edge);
+  const availableAbove = Math.max(0, rect.top - gap - edge);
+  const openAbove = availableBelow < 260 && availableAbove > availableBelow;
+  const available = openAbove ? availableAbove : availableBelow;
+  const panelHeight = Math.max(85, Math.min(356, available));
+  const width = Math.max(120, Math.min(rect.width, window.innerWidth - edge * 2));
+  const left = Math.max(edge, Math.min(rect.left, window.innerWidth - width - edge));
+  return {
+    top: Math.round(openAbove ? rect.top - gap - panelHeight : rect.bottom + gap),
+    left: Math.round(left),
+    width: Math.round(width),
+    maxHeight: Math.round(panelHeight),
+  };
+}
+
 function ProductCombobox({ products, value, onChange, disabled = false }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [viewport, setViewport] = useState({ top: 0, height: 0, mobile: false });
   const rootRef = useRef(null);
+  const panelRef = useRef(null);
   const searchInputRef = useRef(null);
+  const [desktopPanelStyle, setDesktopPanelStyle] = useState(null);
   const selected = products.find((product) => product.id === value) || null;
   const needle = text(query).toLowerCase();
   const filtered = useMemo(() => {
@@ -341,14 +366,18 @@ function ProductCombobox({ products, value, onChange, disabled = false }) {
 
     const updateViewport = () => {
       const vv = window.visualViewport;
+      const mobile = window.matchMedia?.("(max-width: 760px)")?.matches ?? window.innerWidth <= 760;
       setViewport({
         top: Math.max(0, Math.round(vv?.offsetTop || 0)),
         height: Math.max(240, Math.round(vv?.height || window.innerHeight || 640)),
-        mobile: window.matchMedia?.("(max-width: 760px)")?.matches ?? window.innerWidth <= 760,
+        mobile,
       });
+      // The desktop list lives beside the modal (in a portal), not inside its
+      // scrollable body. Match its fixed position to the trigger on every scroll.
+      setDesktopPanelStyle(mobile ? null : getDesktopPanelPosition(rootRef.current));
     };
     const close = (event) => {
-      if (!rootRef.current?.contains(event.target)) setOpen(false);
+      if (!rootRef.current?.contains(event.target) && !panelRef.current?.contains(event.target)) setOpen(false);
     };
     const escape = (event) => {
       if (event.key === "Escape") setOpen(false);
@@ -358,6 +387,7 @@ function ProductCombobox({ products, value, onChange, disabled = false }) {
     window.visualViewport?.addEventListener("resize", updateViewport);
     window.visualViewport?.addEventListener("scroll", updateViewport);
     window.addEventListener("resize", updateViewport);
+    document.addEventListener("scroll", updateViewport, true);
     document.addEventListener("mousedown", close);
     document.addEventListener("keydown", escape);
 
@@ -374,6 +404,7 @@ function ProductCombobox({ products, value, onChange, disabled = false }) {
       window.visualViewport?.removeEventListener("resize", updateViewport);
       window.visualViewport?.removeEventListener("scroll", updateViewport);
       window.removeEventListener("resize", updateViewport);
+      document.removeEventListener("scroll", updateViewport, true);
       document.removeEventListener("mousedown", close);
       document.removeEventListener("keydown", escape);
     };
@@ -399,9 +430,70 @@ function ProductCombobox({ products, value, onChange, disabled = false }) {
       height: Math.max(240, Math.round(vv?.height || window.innerHeight || 640)),
       mobile: window.matchMedia?.("(max-width: 760px)")?.matches ?? window.innerWidth <= 760,
     });
+    setDesktopPanelStyle(
+      (window.matchMedia?.("(max-width: 760px)")?.matches ?? window.innerWidth <= 760)
+        ? null
+        : getDesktopPanelPosition(rootRef.current)
+    );
     setQuery("");
     setOpen(true);
   };
+
+  // Mount above the modal's overflow-y:auto content on desktop. Keeping it
+  // inline would clip the dropdown behind the modal's fixed action footer.
+  const portalTarget = open && !viewport.mobile
+    ? rootRef.current?.closest(".classic-cart-picker-overlay")
+    : null;
+
+  const optionsPanel = (
+    <div
+      ref={panelRef}
+      className={`classic-cart-combobox-panel ${portalTarget ? "classic-cart-combobox-panel--floating" : ""}`}
+      style={portalTarget ? (desktopPanelStyle || { visibility: "hidden" }) : mobilePanelStyle}
+      role="listbox"
+      aria-label="Products"
+    >
+      <div className="classic-cart-combobox-sheet-head">
+        <span className="classic-cart-combobox-sheet-handle" aria-hidden="true" />
+        <div>
+          <small>Component library</small>
+          <strong>Select component</strong>
+        </div>
+        <button type="button" onClick={() => setOpen(false)} aria-label="Close component selector"><CartSvgIcon name="x" size={18}/></button>
+      </div>
+      <label className="classic-cart-combobox-search">
+        <CartSvgIcon name="search" size={18}/>
+        <input ref={searchInputRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search components..." autoComplete="off" inputMode="search" />
+        <span>{filtered.length}</span>
+      </label>
+      <div className="classic-cart-combobox-list">
+        {filtered.map((product) => {
+          const active = product.id === value;
+          return (
+            <button
+              type="button"
+              className={`classic-cart-combobox-option ${active ? "is-selected" : ""}`}
+              key={product.id}
+              onClick={() => { onChange(product.id); setOpen(false); setQuery(""); }}
+              role="option"
+              aria-selected={active}
+            >
+              <span className="classic-cart-combobox-option-media">
+                {product.imageUrl ? <img src={product.imageUrl} alt="" /> : <CartSvgIcon name="package" size={18}/>} 
+              </span>
+              <span className="classic-cart-combobox-option-copy">
+                <strong>{product.name}</strong>
+                <small>{[product.displayId || "No ID", product.unit || "Unit"].join(" · ")}</small>
+              </span>
+              <span className="classic-cart-combobox-option-price">{formatMoney(product.unitPrice)}</span>
+              {active ? <span className="classic-cart-combobox-option-check"><CartSvgIcon name="check" size={16}/></span> : null}
+            </button>
+          );
+        })}
+        {!filtered.length ? <div className="classic-cart-combobox-empty">No components match “{query}”.</div> : null}
+      </div>
+    </div>
+  );
 
   return (
     <div className={`classic-cart-combobox ${open ? "is-open" : ""}`} ref={rootRef}>
@@ -425,47 +517,7 @@ function ProductCombobox({ products, value, onChange, disabled = false }) {
       {open ? (
         <>
           <button className="classic-cart-combobox-backdrop" type="button" aria-label="Close component selector" onClick={() => setOpen(false)} />
-          <div className="classic-cart-combobox-panel" style={mobilePanelStyle} role="listbox" aria-label="Products">
-            <div className="classic-cart-combobox-sheet-head">
-              <span className="classic-cart-combobox-sheet-handle" aria-hidden="true" />
-              <div>
-                <small>Component library</small>
-                <strong>Select component</strong>
-              </div>
-              <button type="button" onClick={() => setOpen(false)} aria-label="Close component selector"><CartSvgIcon name="x" size={18}/></button>
-            </div>
-            <label className="classic-cart-combobox-search">
-              <CartSvgIcon name="search" size={18}/>
-              <input ref={searchInputRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search components..." autoComplete="off" inputMode="search" />
-              <span>{filtered.length}</span>
-            </label>
-            <div className="classic-cart-combobox-list">
-              {filtered.map((product) => {
-                const active = product.id === value;
-                return (
-                  <button
-                    type="button"
-                    className={`classic-cart-combobox-option ${active ? "is-selected" : ""}`}
-                    key={product.id}
-                    onClick={() => { onChange(product.id); setOpen(false); setQuery(""); }}
-                    role="option"
-                    aria-selected={active}
-                  >
-                    <span className="classic-cart-combobox-option-media">
-                      {product.imageUrl ? <img src={product.imageUrl} alt="" /> : <CartSvgIcon name="package" size={18}/>} 
-                    </span>
-                    <span className="classic-cart-combobox-option-copy">
-                      <strong>{product.name}</strong>
-                      <small>{[product.displayId || "No ID", product.unit || "Unit"].join(" · ")}</small>
-                    </span>
-                    <span className="classic-cart-combobox-option-price">{formatMoney(product.unitPrice)}</span>
-                    {active ? <span className="classic-cart-combobox-option-check"><CartSvgIcon name="check" size={16}/></span> : null}
-                  </button>
-                );
-              })}
-              {!filtered.length ? <div className="classic-cart-combobox-empty">No components match “{query}”.</div> : null}
-            </div>
-          </div>
+          {portalTarget ? createPortal(optionsPanel, portalTarget) : optionsPanel}
         </>
       ) : null}
     </div>
