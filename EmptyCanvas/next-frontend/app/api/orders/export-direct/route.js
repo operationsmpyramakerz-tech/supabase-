@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getLegacyAccountGate } from "../../../../lib/products-auth";
+import { featureGate } from "../../../../lib/feature-permissions-server";
 import { renderOrderExport } from "../../../../lib/order-export-service";
 import { loadCurrentOrderDetails } from "../../../../lib/current-orders-data";
 import { loadOrdersReviewDetails } from "../../../../lib/orders-review-data";
@@ -46,7 +47,8 @@ async function verifyScopedOrderAccess(scope, account, orderIds) {
 export async function POST(request) {
   const body = await request.json().catch(() => ({}));
   const scope = text(body?.scope || "operations").toLowerCase();
-  const gate = await getLegacyAccountGate(requiredPages(scope));
+  const preliminaryGate = await getLegacyAccountGate(requiredPages(scope));
+  const gate = scope === "operations" ? featureGate(preliminaryGate, "orders.operations.export") : preliminaryGate;
   if (!gate.ok) return jsonError(gate.error || "Authentication required.", gate.status || 503);
 
   try {

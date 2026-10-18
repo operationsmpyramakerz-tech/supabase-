@@ -514,7 +514,8 @@ function Progress({ stage }) {
   );
 }
 
-function OrderModal({ group, tab, busy, onClose, onAction, onExport, orderOptions = [], editMode, onPatchEditItem, onUpsertEditAddition, onDeleteEditItem, onSaveEdit, onCancelEdit }) {
+function OrderModal({ group, tab, busy, onClose, onAction, onExport, orderOptions = [], editMode, onPatchEditItem, onUpsertEditAddition, onDeleteEditItem, onSaveEdit, onCancelEdit, permissions = {} }) {
+  const permitted = (key) => permissions[key] !== false;
   const [moreOpen, setMoreOpen] = useState(false);
   const [downloadOpen, setDownloadOpen] = useState(false);
   const [sortMode, setSortMode] = useState("product-tag");
@@ -803,7 +804,7 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, orderOption
       <div className="co-item-right">
         {!maintenance ? <div className="co-item-total">{tab === "remaining" ? "Qty remaining:" : "Qty:"} {qtyMarkup}</div> : null}
         {!maintenance ? <span className="co-item-status" style={{ "--tag-bg": vars.bg, "--tag-fg": vars.fg, "--tag-border": vars.bd }}>{state.label}</span> : null}
-        {!isEditing && canRejectComponents && itemId ? <button className="btn btn-danger btn-xs req-ops-reject" type="button" title="Reject component" disabled={busy} onClick={(event) => { event.stopPropagation(); onAction("reject", { ...group, orderIds: [itemId], actionScope: "component", actionItemName: itemName }); }}><ClassicOrderIcon name="x" /> Reject</button> : null}
+        {!isEditing && canRejectComponents && permitted("approve") && itemId ? <button className="btn btn-danger btn-xs req-ops-reject" type="button" title="Reject component" disabled={busy} onClick={(event) => { event.stopPropagation(); onAction("reject", { ...group, orderIds: [itemId], actionScope: "component", actionItemName: itemName }); }}><ClassicOrderIcon name="x" /> Reject</button> : null}
       </div>
     </div>;
   };
@@ -812,7 +813,7 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, orderOption
     <div className="co-modal-overlay is-open" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget && !isEditing) onClose(); }}>
       <div className="co-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="operations-order-title">
         <span className="co-modal-type-badge" style={{ "--co-order-type-accent": type.accent, "--co-order-type-accent-dark": type.accentDark }} aria-hidden="true"><ClassicOrderIcon name={type.icon} /></span>
-        {!isEditing ? <div className="co-modal-more" ref={moreRef}>
+        {!isEditing && permitted("edit") ? <div className="co-modal-more" ref={moreRef}>
           <button type="button" className="co-modal-more-btn" aria-label="Order actions" aria-haspopup="menu" aria-expanded={moreOpen} onClick={() => setMoreOpen((value) => !value)}>
             <span className="co-modal-more-dots" aria-hidden="true">⋮</span>
           </button>
@@ -866,17 +867,17 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, orderOption
 
           {!isEditing ? <div className="co-modal-actions ro-actions ro-actions--right order-modal-search-actions order-detail-toolkit">
             <OrderComponentSearch key={`${group.key}:${tab}`} value={componentSearch} onChange={setComponentSearch} disabled={busy} collapseOnToggle />
-            {showDownload ? <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => setDownloadOpen(true)} disabled={busy}><ClassicOrderIcon name="download" /><span>Download</span></button> : null}
+            {showDownload && permitted("export") ? <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => setDownloadOpen(true)} disabled={busy}><ClassicOrderIcon name="download" /><span>Download</span></button> : null}
             <OrderSortButton value={sortMode} onChange={setSortMode} />
           </div> : null}
-          {!isEditing && (canReceive || canDeliver || canCreateWithdrawal || canCreateDelivery || (maintenance && tab === "approved" && group.stage === 2 && !archived)) ? (
+          {!isEditing && ((canReceive && permitted("ship")) || (canDeliver && permitted("receive")) || (canCreateWithdrawal && permitted("withdrawal")) || (canCreateDelivery && permitted("delivery")) || (maintenance && tab === "approved" && group.stage === 2 && !archived)) ? (
           <div className="co-modal-actions ro-actions order-detail-workflow-actions">
-            {canReceive ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction("receive", receiveActionGroup)} disabled={busy}><ClassicOrderIcon name="truck" />Received by operations</button> : null}
+            {canReceive && permitted("ship") ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction("receive", receiveActionGroup)} disabled={busy}><ClassicOrderIcon name="truck" />Received by operations</button> : null}
             {maintenance && tab === "approved" && group.stage === 2 && !archived ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction("technical-visit", group)} disabled={busy}><ClassicOrderIcon name="tool" />Request Technical Visit</button> : null}
             {maintenance && tab === "approved" && group.stage === 2 && !archived ? <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => onAction("maintenance-log", group)} disabled={busy}><ClassicOrderIcon name="clipboard" />Log Maintenance</button> : null}
-            {canDeliver ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction(maintenance ? "maintenance-deliver" : "deliver", group)} disabled={busy}><ClassicOrderIcon name="check-circle" />Mark as Delivered</button> : null}
-            {canCreateWithdrawal ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction("withdrawal", group)} disabled={busy}><ClassicOrderIcon name="repeat" />Create Withdrawal</button> : null}
-            {canCreateDelivery ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction("delivery", group)} disabled={busy}><ClassicOrderIcon name="package" />Create Delivery</button> : null}
+            {canDeliver && permitted("receive") ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction(maintenance ? "maintenance-deliver" : "deliver", group)} disabled={busy}><ClassicOrderIcon name="check-circle" />Mark as Delivered</button> : null}
+            {canCreateWithdrawal && permitted("withdrawal") ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction("withdrawal", group)} disabled={busy}><ClassicOrderIcon name="repeat" />Create Withdrawal</button> : null}
+            {canCreateDelivery && permitted("delivery") ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction("delivery", group)} disabled={busy}><ClassicOrderIcon name="package" />Create Delivery</button> : null}
           </div>) : null}
           {isEditing ? <>
             <div className="co-modal-actions ro-actions ro-actions--right order-modal-search-actions next-operations-edit-actions order-detail-toolkit">
@@ -1825,6 +1826,7 @@ export default function OperationsOrdersHeavyModals({
   onDeleteEditItem,
   onSaveEdit,
   onCancelEdit,
+  permissions = {},
   actionState,
   actionError,
   maintenanceOptions,
@@ -1848,6 +1850,7 @@ export default function OperationsOrdersHeavyModals({
         onDeleteEditItem={onDeleteEditItem}
         onSaveEdit={onSaveEdit}
         onCancelEdit={onCancelEdit}
+        permissions={permissions}
       /> : null}
       <RejectModal state={actionState?.action === "reject" ? actionState : null} busy={busy} error={actionError} onCancel={onCancelAction} onSubmit={onSubmitAction} />
       <EditPasswordModal state={actionState?.action === "edit" ? actionState : null} busy={busy} error={actionError} onCancel={onCancelAction} onSubmit={onSubmitAction} />

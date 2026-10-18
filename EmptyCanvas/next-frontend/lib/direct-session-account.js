@@ -5,6 +5,8 @@ import { performance } from "node:perf_hooks";
 import { cookies } from "next/headers";
 import { select, selectAll, selectById } from "./supabase-rest";
 import { recordPerformanceSample } from "./performance-profiler";
+import { loadMemberFeatureAccess, invalidateFeaturePermissionCache } from "./feature-permissions-server";
+import { featureAllowed } from "./feature-permissions-registry";
 
 const SESSION_LOOKUP_TIMEOUT_MS = 3500;
 const APP_PAGES_CACHE_TTL_MS = 60_000;
@@ -822,20 +824,31 @@ export async function getDirectAccountGateFromSessionContext(context = {}, requi
       try { return await loader(); }
       finally { if (options?.timings) options.timings[key] = performance.now() - started; }
     };
-    const [memberRow, pages, accessRows] = await Promise.all([
+    const [memberRow, pages, accessRows, featureAccess] = await Promise.all([
       timedRead("authMember", () => readFreshMemberRow(memberId)),
       timedRead("authPages", () => listAppPages()),
       timedRead("authAccess", () => listMemberAccess(memberId)),
+      timedRead("authFeatures", () => loadMemberFeatureAccess(memberId)),
     ]);
     if (!memberRow) return null;
 
     const freshBaseAccount = accountFromFreshMember(baseAccount, memberRow, session);
     const freshPageAccess = directPageAccessRows(pages, accessRows);
     const isAdmin = builtInAdmin(freshBaseAccount, session);
-    if (!isAdmin && !freshPageAccess.length && Array.isArray(baseAccount?.pageAccess?.pages) && baseAccount.pageAccess.pages.length) {
-      return null;
-    }
+    // An empty current grant matrix is a legitimate revocation. Never fall
+    // back to the signed-in account's stale page list after that change.
 
+    const isAdvanced = featureAccess.mode === "enforced";
+    const visiblePilotPage = (value) => {
+      if (!isAdvanced) return true;
+      const aliases = pageAliases(value);
+      if (aliases.includes("products")) return featureAllowed({ featureAccess }, "products.view", { legacyAllowed: false });
+      if (aliases.some((name) => ["requestedorders", "operationsorders", "operationsrequestedorders"].includes(name))) {
+        return featureAllowed({ featureAccess }, "orders.operations.view", { legacyAllowed: false });
+      }
+      return true;
+    };
+    const visiblePageAccess = freshPageAccess.filter(row => [row.pageName, row.pageKey, row.routePath].every(visiblePilotPage));
     const configuredPageAliases = pages.flatMap((page) => {
       const pageName = legacyPageName(page);
       return [
@@ -849,17 +862,19 @@ export async function getDirectAccountGateFromSessionContext(context = {}, requi
       ? expandUiAliases([
           ...(Array.isArray(baseAccount.allowedPages) ? baseAccount.allowedPages : []),
           ...configuredPageAliases,
-        ])
+        ].filter(visiblePilotPage))
       : expandUiAliases(
-          freshPageAccess.flatMap((row) => [row.pageName, ...(Array.isArray(row.aliases) ? row.aliases : [])]).filter(Boolean),
+          visiblePageAccess.flatMap((row) => [row.pageName, ...(Array.isArray(row.aliases) ? row.aliases : [])]).filter(Boolean),
         );
+    const visibleAllowedPages = allowedPages.filter(visiblePilotPage);
     const account = {
       ...freshBaseAccount,
       id: memberId,
       userSupabaseId: memberId,
       teamMemberId: memberId,
-      allowedPages,
-      pageAccess: { pages: freshPageAccess },
+      allowedPages: visibleAllowedPages,
+      pageAccess: { pages: visiblePageAccess },
+      featureAccess,
     };
 
     return { ...gateFromAccount(account, session, requestedPages), source: "session-context", memberId, sessionBackend };
@@ -972,12 +987,14 @@ export function clearDirectSessionAccountCaches(memberId = "") {
     memberAccessInflight.delete(id);
     memberRowCache.delete(id);
     memberRowInflight.delete(id);
+    invalidateFeaturePermissionCache(id);
     return;
   }
   memberAccessCache.clear();
   memberAccessInflight.clear();
   memberRowCache.clear();
   memberRowInflight.clear();
+  invalidateFeaturePermissionCache();
 }
 
 export async function setDirectUserAuthRevokedAt(memberId = "", timestamp = Date.now()) {

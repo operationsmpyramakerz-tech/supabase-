@@ -3750,3 +3750,22 @@ html[data-theme="dark"] body.user-access-page .ua-folder.ua-folder--add {
   border-color: #59606b !important;
   background: linear-gradient(145deg, #1b1f25 0%, #101217 58%, #080a0d 100%) !important;
 }
+
+/* Phase 2: compact, mobile-first feature permission rows. */
+.ua-feature-access-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.ua-feature-access-row .ua-page-access-name strong {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.ua-feature-access-row .ua-page-access-name small {
+  overflow-wrap: anywhere;
+}
+.ua-feature-access-row .ua-page-access-enable {
+  justify-content: flex-end;
+}
+@media (max-width: 720px) {
+  .ua-feature-access-row { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+  .ua-feature-access-row .ua-page-access-enable::before { display: none; }
+}

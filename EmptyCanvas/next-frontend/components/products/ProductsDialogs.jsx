@@ -69,7 +69,7 @@ function ClassicIcon({ name }) {
   return <svg {...common}>{paths[name] || paths.box}</svg>;
 }
 
-export function ProductModal({ product, activeTag, tags, units, onClose, onSaved, onUnitAdded }) {
+export function ProductModal({ product, activeTag, tags, units, onClose, onSaved, onUnitAdded, canAddUnit = true, canUploadImage = true }) {
   const isEdit = !!product?.id;
   const lockTag = !isEdit && activeTag !== "__all__";
   const [form, setForm] = useState(() => ({
@@ -206,9 +206,9 @@ export function ProductModal({ product, activeTag, tags, units, onClose, onSaved
             <div className="products-modern-select__menu" hidden={openSelect !== "unit"}>
               <button type="button" className={`products-modern-select__option ${!form.unit ? "is-selected" : ""}`} onClick={() => { update("unit", ""); setOpenSelect(""); }}><span>No unit</span>{!form.unit ? <ClassicIcon name="check" /> : null}</button>
               {units.map((unit) => <button type="button" className={`products-modern-select__option ${form.unit === unit ? "is-selected" : ""}`} onClick={() => { update("unit", unit); setOpenSelect(""); }} key={unit}><span>{unit}</span>{form.unit === unit ? <ClassicIcon name="check" /> : null}</button>)}
-              <button type="button" className="products-modern-select__option products-modern-select__option--add" onClick={() => { setShowUnitInput(true); setOpenSelect(""); }}><span><ClassicIcon name="plus-circle" /> Add new unit</span></button>
+              {canAddUnit ? <button type="button" className="products-modern-select__option products-modern-select__option--add" onClick={() => { setShowUnitInput(true); setOpenSelect(""); }}><span><ClassicIcon name="plus-circle" /> Add new unit</span></button> : null}
             </div>
-            <div className="products-unit-add" hidden={!showUnitInput}><input value={newUnit} onChange={(event) => setNewUnit(event.target.value)} placeholder="Example: Box" /><button type="button" onClick={addUnit} disabled={busy || !text(newUnit)}><ClassicIcon name="plus" /><span>Add</span></button></div>
+            {canAddUnit ? <div className="products-unit-add" hidden={!showUnitInput}><input value={newUnit} onChange={(event) => setNewUnit(event.target.value)} placeholder="Example: Box" /><button type="button" onClick={addUnit} disabled={busy || !text(newUnit)}><ClassicIcon name="plus" /><span>Add</span></button></div> : null}
           </div>
 
           {!lockTag ? (
@@ -230,7 +230,7 @@ export function ProductModal({ product, activeTag, tags, units, onClose, onSaved
 
           <div className="products-field products-field--wide">
             <span>Product Image</span>
-            {!image.previewUrl ? (
+            {!image.previewUrl ? (canUploadImage ? (
               <div className="products-upload-field">
                 <input ref={fileRef} className="products-upload-field__input" type="file" accept="image/png,image/jpeg,image/webp" onChange={chooseImage} />
                 <button type="button" className="products-upload-field__picker" onClick={() => fileRef.current?.click()} disabled={busy || imageBusy}>
@@ -238,14 +238,14 @@ export function ProductModal({ product, activeTag, tags, units, onClose, onSaved
                   <span className="products-upload-field__copy"><b>{imageBusy ? "Preparing image…" : "Choose product image"}</b><small>PNG, JPG or WEBP · maximum 10 MB</small></span>
                   <span className="products-upload-field__action">Browse</span>
                 </button>
-              </div>
+              </div> ) : <small>Image changes are not allowed.</small>
             ) : (
               <div className="products-upload-file">
                 <span className="products-upload-file__thumb"><img src={image.previewUrl} alt="Product preview" /></span>
                 <span className="products-upload-file__info"><b>{image.name || "Product image"}</b><small>{image.size ? `${image.type} · ${fileSize(image.size)}` : "Saved image"}</small></span>
                 <button type="button" className="products-upload-file__open" onClick={() => window.open(image.previewUrl, "_blank", "noopener,noreferrer")} aria-label="Open image"><ClassicIcon name="eye" /></button>
-                <button type="button" className="products-upload-file__remove" onClick={removeImage} disabled={busy} aria-label="Remove image">×</button>
-                <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" onChange={chooseImage} hidden />
+                {canUploadImage ? <button type="button" className="products-upload-file__remove" onClick={removeImage} disabled={busy} aria-label="Remove image">×</button> : null}
+                {canUploadImage ? <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" onChange={chooseImage} hidden /> : null}
               </div>
             )}
           </div>

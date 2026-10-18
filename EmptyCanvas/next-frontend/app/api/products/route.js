@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDirectAccountGate } from "../../../lib/products-auth";
+import { featureGate } from "../../../lib/feature-permissions-server";
 import { createProduct, deleteProduct, getProduct, getProductsCatalog, updateProduct } from "../../../lib/products-service";
 import { measurePerformance } from "../../../lib/performance-profiler";
 
@@ -17,7 +18,7 @@ function errorResponse(error, fallback) {
 }
 
 async function GETImpl(request) {
-  const gate = await getDirectAccountGate(["Products", "Proposals"]);
+  const gate = featureGate(await getDirectAccountGate(["Products", "Proposals"]), "products.view");
   if (!gate.ok) return gateResponse(gate);
 
   try {
@@ -49,11 +50,14 @@ async function GETImpl(request) {
 }
 
 export async function POST(request) {
-  const gate = await getDirectAccountGate("Products");
+  const gate = featureGate(await getDirectAccountGate("Products"), "products.create");
   if (!gate.ok) return gateResponse(gate);
 
   try {
     const body = await request.json().catch(() => ({}));
+    if ((body?.imageUrl || body?.removeImage) && !featureGate(gate, "products.image_upload").ok) {
+      return gateResponse(featureGate(gate, "products.image_upload"));
+    }
     const product = await createProduct(body);
     return NextResponse.json({ ok: true, source: "supabase-next", product }, {
       status: 201,
@@ -70,7 +74,7 @@ export async function GET(request) {
 }
 
 export async function PATCH(request) {
-  const gate = await getDirectAccountGate("Products");
+  const gate = featureGate(await getDirectAccountGate("Products"), "products.edit");
   if (!gate.ok) return gateResponse(gate);
 
   try {
@@ -92,6 +96,9 @@ export async function PATCH(request) {
     }
 
     const body = await request.json().catch(() => ({}));
+    if ((body?.imageUrl || body?.removeImage) && !featureGate(gate, "products.image_upload").ok) {
+      return gateResponse(featureGate(gate, "products.image_upload"));
+    }
     const product = await updateProduct(id, body);
     return NextResponse.json(
       { ok: true, source: "supabase-next", product },
@@ -104,7 +111,7 @@ export async function PATCH(request) {
 }
 
 export async function DELETE(request) {
-  const gate = await getDirectAccountGate("Products");
+  const gate = featureGate(await getDirectAccountGate("Products"), "products.delete");
   if (!gate.ok) return gateResponse(gate);
 
   try {

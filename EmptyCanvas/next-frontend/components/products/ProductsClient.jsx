@@ -129,7 +129,7 @@ function Toast({ toast, onClose }) {
   );
 }
 
-function ProductCard({ product, menuOpen, onMenu, onEdit, onDelete, onImage }) {
+function ProductCard({ product, menuOpen, onMenu, onEdit, onDelete, onImage, canEdit = true, canDelete = true }) {
   const proxyImageUrl = product.id ? `/next/api/products/image?id=${encodeURIComponent(product.id)}` : "";
   const primaryImageUrl = product.imageUrl || proxyImageUrl;
   const [imagePreviewUrl, setImagePreviewUrl] = useState(primaryImageUrl);
@@ -162,13 +162,13 @@ function ProductCard({ product, menuOpen, onMenu, onEdit, onDelete, onImage }) {
       <div className="product-card__content">
         <div className="product-card__headline">
           <h4 title={product.name}>{product.name}</h4>
-          <div className="product-card__menu-wrap" onClick={(event) => event.stopPropagation()}>
+          {(canEdit || canDelete) ? <div className="product-card__menu-wrap" onClick={(event) => event.stopPropagation()}>
             <button type="button" className="product-card__menu-btn" onClick={() => onMenu(product.id)} aria-label="Product actions" aria-expanded={menuOpen}><ClassicIcon name="more" /></button>
             <div className="product-card__menu" hidden={!menuOpen}>
-              <button type="button" onClick={() => onEdit(product)}><ClassicIcon name="edit" /><span>Edit</span></button>
-              <button type="button" className="is-danger" onClick={() => onDelete(product)}><ClassicIcon name="trash" /><span>Delete</span></button>
+              {canEdit ? <button type="button" onClick={() => onEdit(product)}><ClassicIcon name="edit" /><span>Edit</span></button> : null}
+              {canDelete ? <button type="button" className="is-danger" onClick={() => onDelete(product)}><ClassicIcon name="trash" /><span>Delete</span></button> : null}
             </div>
-          </div>
+          </div> : null}
         </div>
         <div className="product-card__details"><span className="product-card__code">{product.displayId || "No ID"}</span></div>
         <div className="product-card__bottom">
@@ -180,7 +180,8 @@ function ProductCard({ product, menuOpen, onMenu, onEdit, onDelete, onImage }) {
   );
 }
 
-export default function ProductsClient({ initialCatalog = {}, bootstrapWarnings = [] }) {
+export default function ProductsClient({ initialCatalog = {}, bootstrapWarnings = [], permissions = {} }) {
+  const permitted = { create: true, edit: true, delete: true, tags: true, units: true, imageUpload: true, ...permissions };
   const [products, setProducts] = useState(() => (Array.isArray(initialCatalog?.products) ? initialCatalog.products : []).map(normalizeProduct));
   const [tagCatalog, setTagCatalog] = useState(() => mergeUnique(initialCatalog?.tagsCatalog || []));
   const [unitCatalog, setUnitCatalog] = useState(() => mergeUnique([...(initialCatalog?.unitsCatalog || []), ...DEFAULT_UNITS]));
@@ -338,9 +339,9 @@ export default function ProductsClient({ initialCatalog = {}, bootstrapWarnings 
             <span className="products-tag-filter-btn__chevron"><ClassicIcon name="chevron" /></span>
           </button>
           <div className="products-tags" hidden={!filterOpen}>
-            <button type="button" className="products-tag-option products-tag-option--add" onPointerEnter={preloadProductsDialogs} onFocus={preloadProductsDialogs} onClick={() => { preloadProductsDialogs(); setFilterOpen(false); setTagModal({ mode: "create", tag: "" }); }}>
+            {permitted.tags ? <button type="button" className="products-tag-option products-tag-option--add" onPointerEnter={preloadProductsDialogs} onFocus={preloadProductsDialogs} onClick={() => { preloadProductsDialogs(); setFilterOpen(false); setTagModal({ mode: "create", tag: "" }); }}>
               <span className="products-tag-option__icon"><ClassicIcon name="plus-circle" /></span><span><strong>Add New Tag</strong><small>Create a new product group</small></span><ClassicIcon name="plus" />
-            </button>
+            </button> : null}
             <button type="button" className={`products-tag-option ${activeTag === "__all__" ? "is-active" : ""}`} onClick={() => { setActiveTag("__all__"); setFilterOpen(false); }}>
               <span className="products-tag-option__icon"><ClassicIcon name="layers" /></span><span><strong>All Products</strong><small>{products.length.toLocaleString("en-EG")} products</small></span>{activeTag === "__all__" ? <ClassicIcon name="check" /> : null}
             </button>
@@ -357,24 +358,24 @@ export default function ProductsClient({ initialCatalog = {}, bootstrapWarnings 
             <header className="products-group__head">
               <div className="products-group__title"><span className="products-group__icon"><ClassicIcon name="layers" /></span><div><h3 title={group.tag}>{group.tag}</h3></div></div>
               <div className="products-group__metrics">
-                <button type="button" className="products-group-add-product" onPointerEnter={preloadProductsDialogs} onFocus={preloadProductsDialogs} onClick={() => { preloadProductsDialogs(); setModal({ product: null, tag: group.tag }); }}><ClassicIcon name="plus-circle" /><span>Add Product</span></button>
-                <div className="products-group-menu-wrap" onClick={(event) => event.stopPropagation()}>
+                {permitted.create ? <button type="button" className="products-group-add-product" onPointerEnter={preloadProductsDialogs} onFocus={preloadProductsDialogs} onClick={() => { preloadProductsDialogs(); setModal({ product: null, tag: group.tag }); }}><ClassicIcon name="plus-circle" /><span>Add Product</span></button> : null}
+                {permitted.tags && lower(group.tag) !== "uncategorized" ? <div className="products-group-menu-wrap" onClick={(event) => event.stopPropagation()}>
                   <button type="button" className="products-group-menu-btn" onClick={() => setGroupMenu((value) => value === group.tag ? "" : group.tag)} aria-label="Tag actions" aria-expanded={groupMenu === group.tag}><ClassicIcon name="more" /></button>
                   <div className="products-group-menu" hidden={groupMenu !== group.tag}>
                     <button type="button" onClick={() => { preloadProductsDialogs(); setGroupMenu(""); setTagModal({ mode: "edit", tag: group.tag }); }}><ClassicIcon name="edit" /><span>Edit Tag</span></button>
                     {lower(group.tag) !== "uncategorized" ? <button type="button" className="is-danger" onClick={() => deleteTag(group.tag)}><ClassicIcon name="trash" /><span>Delete Tag</span></button> : null}
                   </div>
-                </div>
+                </div> : null}
               </div>
             </header>
             <div className={`products-grid ${group.items.length ? "" : "is-empty"}`}>
-              {group.items.length ? group.items.map((product) => <ProductCard product={product} menuOpen={productMenu === product.id} onMenu={(id) => setProductMenu((value) => value === id ? "" : id)} onEdit={(item) => { preloadProductsDialogs(); setProductMenu(""); setModal({ product: item, tag: firstTag(item) }); }} onDelete={deleteProduct} onImage={(url, name) => { preloadProductsDialogs(); setImageViewer({ url, name }); }} key={product.id} />) : <div className="products-group-empty"><span className="products-group-empty__icon"><ClassicIcon name="package" /></span><div><strong>No products in this tag yet</strong><small>Use Add Product to create the first product in this group.</small></div></div>}
+              {group.items.length ? group.items.map((product) => <ProductCard product={product} menuOpen={productMenu === product.id} onMenu={(id) => setProductMenu((value) => value === id ? "" : id)} onEdit={(item) => { preloadProductsDialogs(); setProductMenu(""); setModal({ product: item, tag: firstTag(item) }); }} onDelete={deleteProduct} canEdit={permitted.edit} canDelete={permitted.delete} onImage={(url, name) => { preloadProductsDialogs(); setImageViewer({ url, name }); }} key={product.id} />) : <div className="products-group-empty"><span className="products-group-empty__icon"><ClassicIcon name="package" /></span><div><strong>No products in this tag yet</strong>{permitted.create ? <small>Use Add Product to create the first product in this group.</small> : null}</div></div>}
             </div>
           </section>
         ))}
       </section>
 
-      {modal ? <ProductModal product={modal.product} activeTag={modal.tag || activeTag} tags={tags} units={unitCatalog} onClose={() => setModal(null)} onSaved={productSaved} onUnitAdded={(unit) => setUnitCatalog((current) => mergeUnique([...current, unit]))} /> : null}
+      {modal ? <ProductModal product={modal.product} activeTag={modal.tag || activeTag} tags={tags} units={unitCatalog} canAddUnit={permitted.units} canUploadImage={permitted.imageUpload} onClose={() => setModal(null)} onSaved={productSaved} onUnitAdded={(unit) => setUnitCatalog((current) => mergeUnique([...current, unit]))} /> : null}
       {tagModal ? <TagModal mode={tagModal.mode} tag={tagModal.tag} onClose={() => setTagModal(null)} onSaved={tagSaved} /> : null}
       {imageViewer ? <ProductImageViewer image={imageViewer} onClose={() => setImageViewer(null)} /> : null}
       <Toast toast={toast} onClose={() => setToast(null)} />

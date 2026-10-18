@@ -756,7 +756,7 @@ async function fileToOptimizedDataUrl(file) {
 }
 
 
-export default function OperationsOrdersClient({ initialOrders = [], initialPageInfo = null, bootstrapWarnings = [] }) {
+export default function OperationsOrdersClient({ initialOrders = [], initialPageInfo = null, bootstrapWarnings = [], permissions = {} }) {
   const [orders, setOrders] = useState(Array.isArray(initialOrders) ? initialOrders : []);
   const [pageInfo, setPageInfo] = useState(initialPageInfo || { hasMore: false, nextCursor: null, limit: 36 });
   const [listLoading, setListLoading] = useState(false);
@@ -1455,6 +1455,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
           onCloseOrder={closeOrderDetails}
           onAction={beginAction}
           onExport={exportOrder}
+          permissions={permissions}
           orderOptions={downloadOrderOptions}
           editMode={editMode}
           onPatchEditItem={patchOperationsEditItem}

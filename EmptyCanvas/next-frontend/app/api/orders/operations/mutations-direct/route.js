@@ -2,6 +2,7 @@ import { NextResponse, after } from "next/server";
 import { dispatchQueuedNotifications } from "../../../../../lib/notification-event-worker";
 import { getDirectAccountGate } from "../../../../../lib/products-auth";
 import { directPageMutationAccess } from "../../../../../lib/order-action-auth";
+import { featureGate } from "../../../../../lib/feature-permissions-server";
 import {
   createOperationsRepeatOrder,
   markOperationsArrived,
@@ -51,6 +52,24 @@ export async function POST(request) {
   const gate = await getDirectAccountGate(["Requested Orders", "Operations Orders"]);
   if (!gate.ok) {
     return noStore({ error: gate.error || "Authentication required." }, { status: gate.status || 503 });
+  }
+
+  const actionPermission = {
+    approval: "orders.operations.approve",
+    "mark-shipped": "orders.operations.ship",
+    "mark-arrived": "orders.operations.receive",
+    "create-withdrawal": "orders.operations.withdrawal",
+    "create-delivery": "orders.operations.delivery",
+    "edit-init": "orders.operations.edit",
+    "edit-save": "orders.operations.edit",
+    archive: "orders.operations.edit",
+    unarchive: "orders.operations.edit",
+  }[action];
+  // Keep the existing page Edit check and all business-specific protections.
+  // Advanced permission grants are an additional requirement, not a bypass.
+  const permission = featureGate(gate, actionPermission);
+  if (!permission.ok) {
+    return noStore({ error: permission.error }, { status: permission.status || 403 });
   }
 
   const mutationAccess = directPageMutationAccess(gate.account, ["Requested Orders", "Operations Orders"]);

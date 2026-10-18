@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 
 import { getDirectAccountGate } from "../../../../lib/products-auth";
+import { featureGate, replaceMemberFeatureAccess } from "../../../../lib/feature-permissions-server";
+import { selectById } from "../../../../lib/supabase-rest";
 import { verifyUsersCenterAuthorizationToken } from "../../../../lib/users-center-action-auth";
 import {
   approveSignupRequest,
@@ -35,6 +37,34 @@ export async function POST(request) {
     verifyUsersCenterAuthorizationToken(body?.authorizationToken, gate.account || {});
     const action = text(body?.action).toLowerCase();
     const reviewedBy = text(gate.account?.username || gate.account?.name) || "Admin";
+    const actionPermissions = {
+      "department-create": "users.department_create",
+      "department-update": "users.department_edit",
+      "department-delete": "users.department_delete",
+      "member-move": "users.member_move",
+      "member-create": "users.member_create",
+      "member-update": "users.member_edit",
+      "member-delete": "users.member_delete",
+      "page-access-save": "users.page_access_manage",
+      "feature-access-save": "users.feature_access_manage",
+      "sv-access-save": "users.sv_access_manage",
+      "signup-approve": "users.signup_approve",
+      "signup-reject": "users.signup_reject",
+      "stocktaking-column-create": "users.stock_column_create",
+    };
+    if (actionPermissions[action]) {
+      const actionGate = featureGate(gate, actionPermissions[action]);
+      if (!actionGate.ok) return json({ ok: false, error: actionGate.error }, actionGate.status || 403);
+    }
+
+    if (action === "feature-access-save") {
+      const targetId = text(body?.memberId);
+      if (!targetId) return json({ ok: false, error: "Missing member ID." }, 400);
+      const target = await selectById(text(process.env.SUPABASE_TEAM_MEMBERS_TABLE) || "team_members", targetId);
+      if (!target) return json({ ok: false, error: "Team member was not found." }, 404);
+      const result = await replaceMemberFeatureAccess(targetId, body?.grants, { enabled: body?.enabled === true });
+      return json({ ok: true, ...result, source: "supabase-next" });
+    }
 
     if (action === "department-create") {
       const department = await createDepartment(body?.name);

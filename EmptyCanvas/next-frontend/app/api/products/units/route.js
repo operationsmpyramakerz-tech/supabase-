@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDirectAccountGate } from "../../../../lib/products-auth";
+import { featureGate } from "../../../../lib/feature-permissions-server";
 import { createProductUnit, listProductUnits } from "../../../../lib/products-service";
 
 export const dynamic = "force-dynamic";
@@ -28,7 +29,7 @@ export async function GET() {
 }
 
 export async function POST(request) {
-  const gate = await getDirectAccountGate("Products");
+  const gate = featureGate(await getDirectAccountGate("Products"), "products.unit_create");
   if (!gate.ok) return gateResponse(gate);
   try {
     const body = await request.json().catch(() => ({}));

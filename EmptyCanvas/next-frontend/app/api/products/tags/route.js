@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDirectAccountGate } from "../../../../lib/products-auth";
+import { featureGate } from "../../../../lib/feature-permissions-server";
 import {
   createProductTag,
   deleteProductTag,
@@ -33,7 +34,7 @@ export async function GET() {
 }
 
 export async function POST(request) {
-  const gate = await getDirectAccountGate("Products");
+  const gate = featureGate(await getDirectAccountGate("Products"), "products.tag_manage");
   if (!gate.ok) return gateResponse(gate);
   try {
     const body = await request.json().catch(() => ({}));
@@ -48,7 +49,7 @@ export async function POST(request) {
 }
 
 export async function PATCH(request) {
-  const gate = await getDirectAccountGate("Products");
+  const gate = featureGate(await getDirectAccountGate("Products"), "products.tag_manage");
   if (!gate.ok) return gateResponse(gate);
   try {
     const body = await request.json().catch(() => ({}));
@@ -62,7 +63,7 @@ export async function PATCH(request) {
 }
 
 export async function DELETE(request) {
-  const gate = await getDirectAccountGate("Products");
+  const gate = featureGate(await getDirectAccountGate("Products"), "products.tag_manage");
   if (!gate.ok) return gateResponse(gate);
   try {
     const body = await request.json().catch(() => ({}));
