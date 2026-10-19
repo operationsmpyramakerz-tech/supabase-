@@ -691,6 +691,60 @@ function mergedQuantity(current, incoming, logic = "add") {
   return a + b;
 }
 
+/** Remove just one source kit from a saved proposal, atomically via PostgreSQL RPC. */
+export async function removeProposalSourceKit(body = {}, account = {}) {
+  const proposalId = text(body?.proposalId);
+  const kitId = text(body?.kitId);
+  const expectedComponents = Number(body?.expectedComponents);
+  const expectedQuantity = Number(body?.expectedQuantity);
+  if (!proposalId || !kitId || !Number.isSafeInteger(expectedComponents) || expectedComponents < 1 ||
+      !Number.isSafeInteger(expectedQuantity) || expectedQuantity < 1) {
+    const error = new Error("Valid proposal, source kit, and expected component quantities are required.");
+    error.status = 400;
+    throw error;
+  }
+  if (proposalTable() !== "product_proposals" || proposalItemsTable() !== "product_proposal_items") {
+    const error = new Error("Manage Kits needs its SQL RPC updated for the custom proposal table names.");
+    error.status = 503;
+    throw error;
+  }
+  // The function is only callable by service_role; never expose the Supabase key to clients.
+  if (!(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_KEY)) {
+    const error = new Error("Manage Kits requires a server-side Supabase service role key.");
+    error.status = 503;
+    throw error;
+  }
+  const parent = await selectById(proposalTable(), proposalId);
+  if (!parent) {
+    const error = new Error("Proposal not found.");
+    error.status = 404;
+    throw error;
+  }
+  await requireOwnerOrAdmin(parent, account, body?.adminPassword);
+  let outcome;
+  try {
+    outcome = await supabaseRequest("/rpc/erp_remove_proposal_source_kit", {
+      method: "POST",
+      body: {
+        p_proposal_id: proposalId,
+        p_kit_id: kitId,
+        p_expected_components: expectedComponents,
+        p_expected_quantity: expectedQuantity,
+      },
+      timeoutMs: 60000,
+    });
+  } catch (error) {
+    if (error?.status === 404 || error?.details?.code === "PGRST202") {
+      const setupError = new Error("Manage Kits database function is not installed. Run supabase_proposal_remove_source_kit.sql in Supabase SQL Editor first.");
+      setupError.status = 503;
+      throw setupError;
+    }
+    throw error;
+  }
+  invalidateProposalKitReadCaches("proposals");
+  return { ...(await getProposal(proposalId, account)), removed: outcome };
+}
+
 export async function addProposalProduct(proposalId, body, account) {
   const parent = await selectById(proposalTable(), proposalId);
   if (!parent) {

@@ -5,12 +5,14 @@ import dynamic from "next/dynamic";
 import SaveProgressModal, { useSaveProgress } from "../SaveProgressModal";
 import ActionLoadingModal, { useActionLoading } from "../ActionLoadingModal";
 import { confirmDelete } from "../../lib/client-confirm";
+import { removeSourceKitFromDraft } from "../../lib/proposal-source-kit-management.mjs";
 
 const NameModal = dynamic(() => import("./ProposalDialogs").then((module) => module.NameModal), { ssr: false });
 const PasswordModal = dynamic(() => import("./ProposalDialogs").then((module) => module.PasswordModal), { ssr: false });
 const AddItemsModal = dynamic(() => import("./ProposalDialogs").then((module) => module.AddItemsModal), { ssr: false });
 const ProposalDownloadModal = dynamic(() => import("./ProposalDialogs").then((module) => module.ProposalDownloadModal), { ssr: false });
 const MakeOrderModal = dynamic(() => import("./ProposalDialogs").then((module) => module.MakeOrderModal), { ssr: false });
+const ProposalSourceKitsModal = dynamic(() => import("./ProposalSourceKitsModal"), { ssr: false });
 
 const EXPORT_COLUMNS = [
   ["idCode", "ID Code"],
@@ -30,6 +32,7 @@ const COMBINE_LOGICS = [
 const PROPOSAL_ICON_PATHS = {
   download: [<path key="p1" d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />, <polyline key="p2" points="7 10 12 15 17 10" />, <line key="l" x1="12" y1="15" x2="12" y2="3" />],
   shoppingBag: [<path key="p1" d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z" />, <line key="l" x1="3" y1="6" x2="21" y2="6" />, <path key="p2" d="M16 10a4 4 0 0 1-8 0" />],
+  folder: [<path key="p" d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />],
   archive: [<polyline key="p1" points="21 8 21 21 3 21 3 8" />, <rect key="r" x="1" y="3" width="22" height="5" rx="1" />, <line key="l" x1="10" y1="12" x2="14" y2="12" />],
   edit: [<path key="p1" d="M12 20h9" />, <path key="p2" d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />],
   copy: [<rect key="r" x="9" y="9" width="13" height="13" rx="2" ry="2" />, <path key="p" d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />],
@@ -364,6 +367,7 @@ export default function ProposalsClient({
   const [passwordRequest, setPasswordRequest] = useState(null);
   const [addDialog, setAddDialog] = useState(false);
   const [makeOrderOpen, setMakeOrderOpen] = useState(false);
+  const [sourceKitManagerOpen, setSourceKitManagerOpen] = useState(false);
   const [folderMenu, setFolderMenu] = useState("");
   const folderLongPressTimerRef = useRef(null);
   const folderLongPressStartRef = useRef(null);
@@ -729,6 +733,7 @@ export default function ProposalsClient({
     setDraftErrors({ name: "", items: "" });
     setAddDialog(false);
     setMakeOrderOpen(false);
+    setSourceKitManagerOpen(false);
   };
 
   const startCreateProposal = async () => {
@@ -1106,6 +1111,54 @@ export default function ProposalsClient({
     }
   };
 
+  const removeWholeSourceKit = async (kit) => {
+    if (!(detailEdit || activeDetail?.proposal?.canEdit) || !kit?.id || !kit.canRemove || busy) return;
+    const proposal = activeDetail?.proposal;
+    const confirmed = await confirmDelete({
+      itemName: kit.name,
+      itemType: "source kit",
+      title: "Remove source kit?",
+      message: `Remove “${kit.name}” from this proposal? ${kit.components} component${kit.components === 1 ? "" : "s"} will be adjusted, subtracting ${formatNumber(kit.totalQuantity)} total units. Shared components will keep quantities belonging to other kits. The original saved kit will not be deleted.`,
+      confirmLabel: "Remove Kit",
+    });
+    if (!confirmed) return;
+    if (createMode) {
+      try {
+        // Calculate the entire next draft before committing any state change.
+        const nextItems = removeSourceKitFromDraft(activeDetail?.items || [], kit.id);
+        setActiveDetail((current) => current ? { ...current, items: nextItems } : current);
+        notify(`“${kit.name}” removed from the draft.`);
+      } catch (error) {
+        notify(error?.message || "The kit could not be removed.", "error");
+      }
+      return;
+    }
+    const adminPassword = editAdminPassword || await protectedPassword(proposal, "Enter the Admin password to remove a source kit from this proposal.");
+    if (adminPassword === null) return;
+    if (adminPassword && !editAdminPassword) setEditAdminPassword(adminPassword);
+    setBusy(true);
+    startActionLoading({ title: "Removing source kit", message: `Recalculating quantities for “${kit.name}”…` });
+    try {
+      const pendingName = editName;
+      const result = await requestJson("/next/api/products/proposals/remove-source-kit", {
+        method: "POST",
+        body: JSON.stringify({
+          proposalId: proposal.id, kitId: kit.id, expectedComponents: kit.components,
+          expectedQuantity: kit.totalQuantity, adminPassword,
+        }),
+      });
+      syncDetail(result);
+      setEditName(pendingName);
+      notify(`“${kit.name}” removed. Remaining quantities have been updated.`);
+      await finishActionLoading("done", `Source kit “${kit.name}” removed successfully.`);
+    } catch (error) {
+      await finishActionLoading("failed", error?.message || "Could not remove source kit.");
+      notify(error?.message || "Could not remove source kit.", "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const updateQuantity = async (row, value) => {
     const quantity = Math.max(1, Math.round(number(value) || 1));
     if (quantity === row.quantity) return;
@@ -1331,7 +1384,7 @@ export default function ProposalsClient({
       <main className="products-shell proposals-shell next-proposals-classic-parity">
         <Toast toast={toast} onClose={() => setToast(null)} />
         <SaveProgressModal state={saveProgress} />
-        <ActionLoadingModal state={actionLoading} />
+        <ActionLoadingModal state={actionLoading} zIndex={13000} />
         {downloadMenuOpen ? (
           <ProposalDownloadModal
             columns={exportColumns}
@@ -1340,6 +1393,17 @@ export default function ProposalsClient({
             onToggleColumn={toggleExportColumn}
             onDownload={downloadSingle}
             onClose={() => setDownloadMenuOpen(false)}
+          />
+        ) : null}
+        {sourceKitManagerOpen && activeDetail ? (
+          <ProposalSourceKitsModal
+            items={activeDetail.items || []}
+            kits={kits}
+            folders={kitFolders}
+            editable={detailEdit || Boolean(proposal?.canEdit)}
+            busy={busy}
+            onClose={() => setSourceKitManagerOpen(false)}
+            onRemove={removeWholeSourceKit}
           />
         ) : null}
         {makeOrderOpen && proposal ? (
@@ -1368,6 +1432,7 @@ export default function ProposalsClient({
                         <button type="button" className="products-back-btn" onClick={backToProposals} aria-label="Back to proposals">←</button>
                         <span>Create New Proposal</span>
                       </div>
+                      <button type="button" className="products-btn proposal-manage-kits-btn" onClick={() => setSourceKitManagerOpen(true)}><ProposalIcon name="folder" /><span>Manage Kits</span></button>
                     </header>
                   ) : (
                     <header className="products-proposal-detail__head proposal-detail-head--compact">
@@ -1378,6 +1443,9 @@ export default function ProposalsClient({
                             <ProposalIcon name="download" /><span>Download</span><ProposalIcon name="chevronDown" size={15} />
                           </button>
                         </div>
+                        <button type="button" className="products-btn proposal-manage-kits-btn" onClick={() => { setSourceKitManagerOpen(true); setSortMenuOpen(false); setDownloadMenuOpen(false); }}>
+                          <ProposalIcon name="folder" /><span>Manage Kits</span>
+                        </button>
                         <div className="proposal-sort-menu-wrap">
                           <button type="button" className="products-btn proposal-sort-btn" onClick={() => { setSortMenuOpen((open) => !open); setDownloadMenuOpen(false); }}>
                             <ProposalIcon name="sort" /><span>Sort</span><ProposalIcon name="chevronDown" size={15} />
