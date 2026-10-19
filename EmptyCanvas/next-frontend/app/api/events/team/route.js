@@ -16,6 +16,7 @@ import { listEvents } from "../../../../lib/events-data";
 import { directPageMutationAccess } from "../../../../lib/order-action-auth";
 import { getDirectAccountGate } from "../../../../lib/products-auth";
 import { featureGate } from "../../../../lib/feature-permissions-server";
+import { eventCalendarList } from "../../../../lib/events-read-policy";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -56,7 +57,7 @@ export async function GET() {
       listEventTeamAttendance(),
       listEvents({ includeArchived: true }),
     ]);
-    return json({ ok: true, members, attendance, events, source: "supabase-next" });
+    return json({ ok: true, members, attendance, events: eventCalendarList(events), source: "supabase-next" });
   } catch (error) {
     console.error("[events-team] list failed:", error?.details || error?.message || error);
     return json({ ok: false, members: [], attendance: [], events: [], error: eventTeamDataError(error) }, { status: Number(error?.status) || 502 });

@@ -520,6 +520,7 @@ function FeatureAccessModal({ member, onClose, protect }) {
     { key: "orders.shopping", label: "Shopping Cart", optIn: true },
     { key: "tasks", label: "Task Management", optIn: true },
     { key: "events.requests", label: "Event Requests", optIn: true },
+    { key: "events.calendar", label: "Event Calendar", optIn: true },
     { key: "events.components", label: "Event Components", optIn: true },
     { key: "events.team", label: "Event Team", optIn: true },
   ];
@@ -541,6 +542,7 @@ function FeatureAccessModal({ member, onClose, protect }) {
           "orders.shopping": stored.some(item => item.key === "orders.shopping.view"),
           tasks: stored.some(item => item.key === "tasks.view"),
           "events.requests": stored.some(item => item.key === "events.requests.view"),
+          "events.calendar": stored.some(item => item.key === "events.calendar.view"),
           "events.components": stored.some(item => item.key === "events.components.view"),
           "events.team": stored.some(item => item.key === "events.team.view"),
         });

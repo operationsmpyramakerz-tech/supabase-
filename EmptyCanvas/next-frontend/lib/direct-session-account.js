@@ -7,6 +7,7 @@ import { select, selectAll, selectById } from "./supabase-rest";
 import { recordPerformanceSample } from "./performance-profiler";
 import { loadMemberFeatureAccess, invalidateFeaturePermissionCache } from "./feature-permissions-server";
 import { featureAllowed, MY_ORDERS_ENFORCEMENT_MARKER } from "./feature-permissions-registry";
+import { matchEventPageAccess } from "./events-page-match";
 
 const SESSION_LOOKUP_TIMEOUT_MS = 3500;
 const APP_PAGES_CACHE_TTL_MS = 60_000;
@@ -747,6 +748,8 @@ function builtInAdmin(account = {}, session = {}) {
 }
 
 function rowMatchesRequiredPage(row = {}, requiredPage = "") {
+  const exactEventMatch = matchEventPageAccess(row, requiredPage);
+  if (exactEventMatch !== null) return exactEventMatch;
   const wanted = new Set(pageAliases(requiredPage));
   const candidates = [row.pageName, row.pageKey, row.routePath, ...(Array.isArray(row.aliases) ? row.aliases : [])]
     .flatMap((value) => pageAliases(value));
@@ -861,6 +864,7 @@ export async function getDirectAccountGateFromSessionContext(context = {}, requi
       if (aliases.some((name) => ["taskmanagement", "mytasks", "delegatedtasks", "alltasks", "departmenttickets"].includes(name))) {
         return featureAllowed({ featureAccess }, "tasks.view");
       }
+      if (aliases.includes("eventcalendar") || aliases.includes("eventscalendar")) return featureAllowed({ featureAccess }, "events.calendar.view");
       if (aliases.includes("eventrequests")) return featureAllowed({ featureAccess }, "events.requests.view");
       if (aliases.includes("eventcomponents")) return featureAllowed({ featureAccess }, "events.components.view");
       if (aliases.includes("eventteam")) return featureAllowed({ featureAccess }, "events.team.view");

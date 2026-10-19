@@ -3,6 +3,7 @@ import { listEvents, eventsDataError } from "../../../lib/events-data";
 import { getDirectAccountGate } from "../../../lib/products-auth";
 import { featureAllowed } from "../../../lib/feature-permissions-registry";
 import { measurePerformance } from "../../../lib/performance-profiler";
+import { eventCalendarList } from "../../../lib/events-read-policy";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -15,12 +16,16 @@ function json(payload, init = {}) {
 }
 
 async function GETImpl(request) {
-  const gate = await getDirectAccountGate(["Event Calendar", "Event Requests"]);
-  if (!gate.ok) return json({ ok: false, error: gate.error || "Authentication required." }, { status: gate.status || 503 });
-  if (!featureAllowed(gate.account, "events.requests.view") && !featureAllowed(gate.account, "events.calendar.view"))
-    return json({ ok: false, error: "Event viewing access denied." }, { status: 403 });
-
   const url = new URL(request.url);
+  // Calendar-only users must request a safe projection explicitly. The normal
+  // request list never accepts Calendar permission as an alternative.
+  const calendar = url.searchParams.get("view") === "calendar";
+  const requiredPage = calendar ? "Event Calendar" : "Event Requests";
+  const permissionKey = calendar ? "events.calendar.view" : "events.requests.view";
+  const gate = await getDirectAccountGate([requiredPage]);
+  if (!gate.ok) return json({ ok: false, error: gate.error || "Authentication required." }, { status: gate.status || 503 });
+  if (!featureAllowed(gate.account, permissionKey))
+    return json({ ok: false, error: `Permission ${permissionKey} is not allowed.` }, { status: 403 });
   const includeArchived = url.searchParams.get("includeArchived") === "1";
   const status = url.searchParams.get("status") || "all";
   const search = url.searchParams.get("search") || "";
@@ -28,7 +33,7 @@ async function GETImpl(request) {
 
   try {
     const events = await listEvents({ includeArchived, status, search, force });
-    return json({ ok: true, events, source: "supabase-next" });
+    return json({ ok: true, events: calendar ? eventCalendarList(events) : events, source: "supabase-next" });
   } catch (error) {
     console.error("[events] direct list failed:", error?.details || error?.message || error);
     return json({ ok: false, events: [], error: eventsDataError(error) }, { status: error?.status || 502 });

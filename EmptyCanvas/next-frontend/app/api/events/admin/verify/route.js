@@ -4,6 +4,7 @@ import { eventWorkflowTransition } from "../../../../../lib/events-data";
 import { issueEventsAuthorizationToken, EVENTS_AUTHORIZATION_TTL_MS } from "../../../../../lib/events-action-auth";
 import { directPageMutationAccess, verifyPageAdminPasswordDirect, verifySharedAdminPasswordDirect } from "../../../../../lib/order-action-auth";
 import { getDirectAccountGate } from "../../../../../lib/products-auth";
+import { featureGate } from "../../../../../lib/feature-permissions-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,6 +41,19 @@ export async function POST(request) {
   const gate = await getDirectAccountGate([requiredPage]);
   if (!gate.ok) return json({ ok: false, error: gate.error || "Authentication required." }, { status: gate.status || 503 });
 
+  // Issuing a short-lived admin token is itself privileged. Check the same
+  // action key as mutations-direct *before* verifying a password or minting it.
+  const action = requestAction(body?.action);
+  if (intent === "request_action" && !action) return json({ ok: false, error: "Unsupported Event Requests action." }, { status: 400 });
+  const permissionKey = intent === "create" ? "events.components.create"
+    : intent === "edit" ? "events.components.edit"
+    : intent === "governorate_rates" ? "events.requests.governorate_rates"
+    : intent === "request_workflow" ? "events.requests.workflow"
+    : action === "edit" ? "events.requests.edit" : "events.requests.cancel";
+  for (const key of [requiredPage === "Event Components" ? "events.components.view" : "events.requests.view", permissionKey]) {
+    const guarded = featureGate(gate, key);
+    if (!guarded.ok) return json({ ok: false, error: guarded.error }, { status: guarded.status || 403 });
+  }
   const mutationAccess = directPageMutationAccess(gate.account || {}, [requiredPage]);
   if (mutationAccess !== true) {
     return json({ ok: false, error: `${requiredPage} Edit or Admin access is required.` }, { status: mutationAccess === null ? 503 : 403 });

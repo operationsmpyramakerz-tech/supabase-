@@ -61,7 +61,7 @@ async function renderEventPdf(event) {
 }
 
 export async function GET(request) {
-  const gate = await getDirectAccountGate(["Event Calendar", "Event Requests"]);
+  const gate = await getDirectAccountGate(["Event Requests"]);
   if (!gate.ok) return jsonError(gate.error || "Authentication required.", gate.status || 503);
   if (!featureAllowed(gate.account, "events.requests.view") || !featureAllowed(gate.account, "events.requests.pdf"))
     return jsonError("Permission events.requests.pdf is not allowed.", 403);

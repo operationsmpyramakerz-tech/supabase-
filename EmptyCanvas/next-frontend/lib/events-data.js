@@ -1,6 +1,8 @@
 import "server-only";
 
 import { getDirectAccountGate } from "./products-auth";
+import { featureAllowed } from "./feature-permissions-registry";
+import { eventCalendarList } from "./events-read-policy";
 import { deleteById, insert, select, selectAll, selectById, updateById, uploadStorageObject } from "./supabase-rest";
 
 const EVENT_LIST_CACHE_TTL_MS = 1_500;
@@ -1220,21 +1222,22 @@ export function hasEventRequestsAdminAccess(account = {}) {
 
 export async function loadDirectEventsPageData({ mode = "events", editId = "" } = {}) {
   const config = {
-    events: { pages: ["Event Requests", "Event Calendar"] },
-    calendar: { pages: ["Event Calendar"] },
-    components: { pages: ["Event Components"] },
-    new: { pages: ["Event Requests"] },
+    events: { pages: ["Event Requests"], permission: "events.requests.view" },
+    calendar: { pages: ["Event Calendar"], permission: "events.calendar.view" },
+    components: { pages: ["Event Components"], permission: "events.components.view" },
+    new: { pages: ["Event Requests"], permission: "events.requests.view" },
   }[mode];
   if (!config) return null;
 
   const gate = await getDirectAccountGate(config.pages);
   if (!gate) return null;
   if (!gate.ok) return { ok: false, status: gate.status, error: gate.error, account: gate.account || null, source: "direct-session" };
+  if (!featureAllowed(gate.account, config.permission)) return { ok: false, status: 403, error: `Permission ${config.permission} is not allowed.`, account: gate.account, source: "direct-session" };
 
   try {
     if (mode === "events" || mode === "calendar") {
       const events = await listEvents();
-      return { ok: true, status: 200, account: gate.account, events, warnings: [], source: "supabase-next" };
+      return { ok: true, status: 200, account: gate.account, events: mode === "calendar" ? eventCalendarList(events) : events, warnings: [], source: "supabase-next" };
     }
 
     if (mode === "components") {

@@ -966,6 +966,7 @@ export function featureAllowed(account, key, { legacyAllowed = true, scopes = ["
   const moduleMarker = key.startsWith("orders.maintenance.") ? "orders.maintenance.view"
     : key.startsWith("orders.shopping.") ? "orders.shopping.view"
     : key.startsWith("tasks.") ? "tasks.view"
+    : key.startsWith("events.calendar.") ? "events.calendar.view"
     : key.startsWith("events.requests.") ? "events.requests.view"
     : key.startsWith("events.components.") ? "events.components.view"
     : key.startsWith("events.team.") ? "events.team.view" : null;
@@ -976,7 +977,7 @@ export function featureAllowed(account, key, { legacyAllowed = true, scopes = ["
   return grant?.allowed === true && scopes.includes(grant.scope || "all");
 }
 
-export const PILOT_FEATURE_MODULES = Object.freeze(["products", "orders.operations", "orders.my", "orders.maintenance", "orders.shopping", "tasks", "events.requests", "events.components", "events.team"]);
+export const PILOT_FEATURE_MODULES = Object.freeze(["products", "orders.operations", "orders.my", "orders.maintenance", "orders.shopping", "tasks", "events.requests", "events.calendar", "events.components", "events.team"]);
 
 // Permissions with both server-side enforcement and UI controls in Phase 2A.
 // Do not show toggles for unprotected actions; that would imply false security.
@@ -997,6 +998,7 @@ export const ACTIVE_PILOT_FEATURE_KEYS = Object.freeze([
   "tasks.workflow_delete", "tasks.workflow_archive", "tasks.assignment_archive",
   "tasks.assignment_delete", "tasks.assignment_work", "tasks.section_work",
   "tasks.section_edit", "tasks.attachment_upload",
+  "events.calendar.view",
   "events.requests.view", "events.requests.create", "events.requests.edit",
   "events.requests.workflow", "events.requests.cancel", "events.requests.archive",
   "events.requests.create_type", "events.requests.governorate_rates", "events.requests.pdf",

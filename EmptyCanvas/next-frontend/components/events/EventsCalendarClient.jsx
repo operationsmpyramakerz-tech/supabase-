@@ -194,22 +194,23 @@ function DetailsModal({ event, canOpenRequests, canExport = true, onClose }) {
             <div className="events-detail-grid next-events-detail-grid">
               <DetailItem label="Type" value={typeLabel(event)} />
               <DetailItem label="Organization" value={event.organizationName} />
-              <DetailItem label="Expected attendees" value={event.expectedAttendees ? String(event.expectedAttendees) : "—"} />
-              <DetailItem label="Requested by" value={event.requesterName} />
+              {canOpenRequests ? <DetailItem label="Expected attendees" value={event.expectedAttendees ? String(event.expectedAttendees) : "—"} /> : null}
+              {canOpenRequests ? <DetailItem label="Requested by" value={event.requesterName} /> : null}
             </div>
           </section>
 
           <section className="events-detail-block next-events-detail-section">
             <h3>Venue</h3>
             <div className="events-detail-grid next-events-detail-grid">
-              <DetailItem label="Venue" value={event.venueName} />
+              {canOpenRequests ? <DetailItem label="Venue" value={event.venueName} /> : null}
               <DetailItem label="Governorate" value={event.governorate} />
-              <DetailItem label="Setup time" value={event.venueSetupTime} />
-              <DetailItem label="Utilities" value={utilities} />
+              {canOpenRequests ? <DetailItem label="Setup time" value={event.venueSetupTime} /> : null}
+              {canOpenRequests ? <DetailItem label="Utilities" value={utilities} /> : null}
             </div>
-            {mapUrl ? <a className="next-events-map-link" href={mapUrl} target="_blank" rel="noreferrer">Open map location ↗</a> : null}
+            {canOpenRequests && mapUrl ? <a className="next-events-map-link" href={mapUrl} target="_blank" rel="noreferrer">Open map location ↗</a> : null}
           </section>
 
+          {canOpenRequests ? <>
           <section className="events-detail-block next-events-detail-section">
             <h3>Contact</h3>
             <div className="events-detail-grid next-events-detail-grid">
@@ -239,6 +240,7 @@ function DetailsModal({ event, canOpenRequests, canExport = true, onClose }) {
             <h3>Notes</h3>
             <p>{text(event.venueNotes) || "No venue notes were added."}</p>
           </section>
+          </> : null}
         </div>
 
         <footer className="events-modal__actions next-events-modal-actions">
@@ -257,7 +259,7 @@ export default function EventsCalendarClient({ account, initialEvents = [], boot
   const access = useMemo(() => allowedSet(account), [account]);
   const canCreate = access.has("event requests") && featureAllowed(account, "events.requests.view") && featureAllowed(account, "events.requests.create");
   const canOpenRequests = access.has("event requests") && featureAllowed(account, "events.requests.view");
-  const canExport = featureAllowed(account, "events.requests.view") && featureAllowed(account, "events.requests.pdf");
+  const canExport = canOpenRequests && featureAllowed(account, "events.requests.pdf");
   const [events, setEvents] = useState(Array.isArray(initialEvents) ? initialEvents : []);
   const [month, setMonth] = useState(() => startOfMonth(new Date()));
   const [selectedKey, setSelectedKey] = useState(() => dateKey(new Date()));
@@ -346,7 +348,7 @@ export default function EventsCalendarClient({ account, initialEvents = [], boot
     if (!event?.id) return;
     setActiveEvent(event);
     try {
-      const body = await requestJson(`/next/api/events/${encodeURIComponent(event.id)}?_ts=${Date.now()}`);
+      const body = await requestJson(`/next/api/events/${encodeURIComponent(event.id)}?${canOpenRequests ? "" : "view=calendar&"}_ts=${Date.now()}`);
       if (body?.event) setActiveEvent(body.event);
     } catch {
       // Keep the compact summary visible if the detail request is temporarily
