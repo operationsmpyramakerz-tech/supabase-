@@ -50,9 +50,9 @@ const makeOps = (rows, { maintenanceAllowed = true, operationsAllowed = true } =
 };
 
 const maintRow = (id, status = 'In progress', logs = [{ repairAction: 'Fixed', loggedAt: '2026-10-01' }]) => ({
-  id, order_type: 'Request Maintenance', status, maintenanceLogs: logs,
+  id, order_type: 'Request Maintenance', status, order_receipt: null, maintenanceLogs: logs,
 });
-const productRow = (id, status = 'Shipped') => ({ id, order_type: 'Request Products', status });
+const productRow = (id, status = 'Shipped') => ({ id, order_type: 'Request Products', status, order_receipt: null });
 
 test('maintenance-only editor can deliver logged in-progress maintenance (without Operations edit)', async () => {
   const { run, calls } = makeOps([maintRow(1)], { operationsAllowed: false });

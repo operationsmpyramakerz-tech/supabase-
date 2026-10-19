@@ -1966,7 +1966,9 @@ function opsStockFindKey(keys = [], aliases = []) {
 
 function opsStockQuantityColumn(keys = [], schoolName = "") {
   const base = opsStockColumnKey(schoolName);
-  const candidates = [schoolName, base, base && !base.endsWith("_done") ? `${base}_done` : "", base && base.endsWith("_done") ? base.replace(/_done$/, "") : "", base && !base.endsWith("_2nd_term") ? `${base}_2nd_term` : "", "total_quantity", "all_schools_stock", "all_done", "all_2nd_term", "quantity", "stock"].filter(Boolean);
+  // Do not send one school's order quantities to a generic or another
+  // school's stock column when the requester's own column is missing.
+  const candidates = [schoolName, base, base && !base.endsWith("_done") ? `${base}_done` : "", base && base.endsWith("_done") ? base.replace(/_done$/, "") : "", base && !base.endsWith("_2nd_term") ? `${base}_2nd_term` : ""].filter(Boolean);
   const direct = opsStockFindKey(keys, candidates);
   if (direct) return direct;
   if (!base) return "";
@@ -2037,19 +2039,54 @@ async function opsPrepareStockContext(plannedFinalRows = [], rowsBefore = [], pr
     opsSelectAllPaged(opsStockTableName(), { order: "id.asc" }),
     listTeamMembersLite({ fresh: true }),
   ]);
-  if (!stockRows.length) return null;
-  const keys = [...new Set(stockRows.flatMap((row) => Object.keys(row || {})))];
+  // A new/empty Stocktaking table contains no rows to inspect. Use the
+  // PostgREST schema for its column names instead of silently declining the
+  // delivery action. Never infer that a column exists from an empty result.
+  let keys = [...new Set(stockRows.flatMap((row) => Object.keys(row || {})))];
+  if (!keys.length) {
+    try {
+      const openApi = await supabaseRequest("/", {
+        headers: { Accept: "application/openapi+json" },
+        profileName: "orders.operations.stocktaking-schema",
+      });
+      const schemas = openApi?.definitions || openApi?.components?.schemas || {};
+      const match = Object.entries(schemas).find(([name]) =>
+        opsStockCanonical(name.replace(/^public[._-]/i, "")) === opsStockCanonical(opsStockTableName()));
+      keys = Object.keys(match?.[1]?.properties || match?.[1]?.items?.properties || {});
+    } catch {
+      // Some self-hosted PostgREST installations disable OpenAPI. The error
+      // below explains the missing schema without making any modifications.
+    }
+  }
+  if (!keys.length) {
+    throw directOperationsMutationError(
+      "Cannot read the Stocktaking schema. Verify the Stocktaking table and Supabase access before delivering this order.", 503,
+    );
+  }
   const sourceOrderColumn = opsStockFindKey(keys, ["source_order_id", "Source Order ID", "source_order", "Source Order", "order_row_id", "Order Row ID"]);
-  if (!sourceOrderColumn) return null;
+  if (!sourceOrderColumn) {
+    throw directOperationsMutationError(
+      "Stocktaking is missing source_order_id. Run supabase_operations_delivery_stocktaking.sql in Supabase SQL Editor before marking this order delivered.", 409,
+    );
+  }
 
   const quantityColumnBySchool = new Map();
   for (const row of relevantAfter) {
     const member = opsResolveOwnerMember(row, members);
     const school = text(member?.stocktakingColumn);
-    if (!school) return null;
+    if (!member || !school) {
+      const requestedBy = text(operationsValueFor(row, ["team_member_name", "Teams Members", "team_member_id", "Team Member ID"])) || "the order requester";
+      throw directOperationsMutationError(
+        `Cannot sync Stocktaking: ${requestedBy} has no matching Team Member / School (Stocktaking) assignment. Configure it in Users Center first.`, 409,
+      );
+    }
     if (!quantityColumnBySchool.has(school)) {
       const quantityColumn = opsStockQuantityColumn(keys, school);
-      if (!quantityColumn) return null;
+      if (!quantityColumn) {
+        throw directOperationsMutationError(
+          `Stocktaking quantity column for ${school} was not found. Check the requester's Stocktaking assignment and school column.`, 409,
+        );
+      }
       quantityColumnBySchool.set(school, quantityColumn);
     }
   }
@@ -2098,7 +2135,7 @@ function opsBuildStockRow(orderRow = {}, context = {}) {
   const rawOrderId = Number(operationsValueFor(orderRow, ["id", "ID"]));
   const rawOrderNumber = Number(serialized?.orderIdNumber ?? operationsValueFor(orderRow, ["order_number", "Order Number", "Order - ID", "Order ID"]));
   const sourceOrderColumn = context.sourceOrderColumn;
-  const sourceOrderNumberColumn = opsStockFindKey(keys, ["source_order_number", "Source Order Number", "order_number", "Order Number"]) || "source_order_number";
+  const sourceOrderNumberColumn = opsStockFindKey(keys, ["source_order_number", "Source Order Number", "order_number", "Order Number"]);
   const productTagColumn = opsStockFindKey(keys, ["product_tag", "Product Tag", "component_tag", "Component Tag"]) || "product_tag";
   const kitTagColumn = opsStockFindKey(keys, ["kit_tag", "Kit Tag", "source_kit", "Source Kit", "kit_name", "Kit Name"]) || "kit_tag";
   const orderTypeColumn = opsStockFindKey(keys, ["order_type", "Order Type"]) || "order_type";
@@ -2128,14 +2165,14 @@ function opsBuildStockRow(orderRow = {}, context = {}) {
   if (text(product?.displayId)) row[idCodeColumn] = text(product.displayId);
   if (text(serialized?.customizeId)) row[customizeIdColumn] = text(serialized.customizeId);
   if (Number.isFinite(rawOrderId)) row[sourceOrderColumn] = Math.trunc(rawOrderId);
-  if (Number.isFinite(rawOrderNumber)) row[sourceOrderNumberColumn] = Math.trunc(rawOrderNumber);
+  if (sourceOrderNumberColumn && Number.isFinite(rawOrderNumber)) row[sourceOrderNumberColumn] = Math.trunc(rawOrderNumber);
   setExisting(["team_member_name", "Team Member", "requester", "Requester", "created_by", "Created By"], text(serialized?.createdByName), "team_member_name");
   setExisting(["school", "School", "stocktaking_column", "Stocktaking Column"], school, "school");
   setExisting(["created_at", "Created at", "created_time", "Created time", "notion_created_time"], new Date().toISOString(), "");
   row[quantityColumn] = quantity;
   return {
     row,
-    required: [quantityColumn, Number.isFinite(rawOrderId) ? sourceOrderColumn : "", Number.isFinite(rawOrderNumber) ? sourceOrderNumberColumn : ""].filter(Boolean),
+    required: [quantityColumn, Number.isFinite(rawOrderId) ? sourceOrderColumn : "", sourceOrderNumberColumn && Number.isFinite(rawOrderNumber) ? sourceOrderNumberColumn : ""].filter(Boolean),
   };
 }
 
@@ -2207,11 +2244,11 @@ export async function markOperationsArrived({
   const access = maintenanceOnly
     ? directPageMutationAccess(account || {}, ["Maintenance Orders", "Operations Orders", "Requested Orders"])
     : ensureOperationsMutationAccess(account || {});
-  if (access === null) return null;
+  if (access === null) throw directOperationsMutationError("Page access could not be verified. Please sign in again or contact the administrator.", 503);
   if (access === false) throw directOperationsMutationError("Edit access is required to deliver this order.", 403);
 
   const loaded = await loadOperationRowsByIds(orderIds);
-  if (!loaded) return null;
+  if (!loaded) throw directOperationsMutationError("The order IDs or direct Supabase connection are unavailable. Refresh the order and try again.", 503);
   if (loaded.clean.some((id) => !loaded.byId.has(id))) throw directOperationsMutationError("Orders not found", 404);
   const serializedRows = loaded.rows.map((row) => serializeOperationsOrderDetail(row || {}));
   const maintenanceBatch = serializedRows.every((item) =>
@@ -2252,9 +2289,21 @@ export async function markOperationsArrived({
   const uploadInputs = opsReceiptUploadInput(orderReceiptDataUrls, orderReceiptFilenames);
   const receiptText = mergeReceiptNumbers("", receiptNumbers);
   const firstRow = loaded.rows[0] || {};
-  if (!opsHasColumn(firstRow, ["status", "Status"])) return null;
-  if (!opsHasColumn(firstRow, ["order_receipt", "Order Receipt", "delivery_receipt", "Delivery Receipt", "receipt_photos", "Receipt Photos"])) return null;
-  if (receiptText && !opsHasColumn(firstRow, ["receipt_number", "Receipt Number", "Store Receipt Number"])) return null;
+  if (!Object.prototype.hasOwnProperty.call(firstRow, "status")) {
+    throw directOperationsMutationError("Orders table is missing the status column required for delivery.", 409);
+  }
+  // Updates use the canonical snake_case column names. Do not accept a
+  // similarly named legacy column that this mutation never actually writes.
+  if (!Object.prototype.hasOwnProperty.call(firstRow, "order_receipt")) {
+    throw directOperationsMutationError(
+      "Orders table is missing order_receipt. Run supabase_operations_delivery_stocktaking.sql in Supabase SQL Editor before delivering this order.", 409,
+    );
+  }
+  if (receiptText && !Object.prototype.hasOwnProperty.call(firstRow, "receipt_number")) {
+    throw directOperationsMutationError(
+      "Orders table is missing receipt_number. Run supabase_operations_delivery_stocktaking.sql in Supabase SQL Editor before delivering this order.", 409,
+    );
+  }
 
   const plannedRows = loaded.rows.map((row) => ({ ...row, status: "Arrived" }));
   const needsStocktaking = plannedRows.some((row) => {
@@ -2267,11 +2316,20 @@ export async function markOperationsArrived({
     const catalog = await getProductsCatalog({ fresh: true });
     products = Array.isArray(catalog?.products) ? catalog.products : [];
     stockContext = await opsPrepareStockContext(plannedRows, loaded.rows, products);
-    if (!stockContext) return null;
+    if (!stockContext) throw directOperationsMutationError("Stocktaking prerequisites could not be verified; delivery was not started.", 503);
+    // Validate every Stocktaking record before uploading any receipts or
+    // changing an order status. For example an order with zero received
+    // quantity must not be marked delivered and then fail halfway through sync.
+    for (const row of plannedRows) {
+      const serialized = serializeOperationsOrderDetail(row || {});
+      if (opsSupportedStockOrderType(serialized?.orderType)) opsBuildStockRow(row, stockContext);
+    }
   }
 
   const cfg = getSupabaseConfig();
-  if (!text(cfg?.storageBucket)) return null;
+  if (!text(cfg?.storageBucket)) {
+    throw directOperationsMutationError("Supabase Storage bucket is not configured for receipt photos.", 503);
+  }
 
   let mutationStarted = false;
   try {
