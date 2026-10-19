@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import EventIcon from "./EventIcon";
+import { featureAllowed } from "../../lib/feature-permissions-registry";
 
 const EventTeamMemberDialog = dynamic(() => import("./EventTeamDialogs").then((module) => module.EventTeamMemberDialog), { ssr: false });
 const EventTeamDeleteDialog = dynamic(() => import("./EventTeamDialogs").then((module) => module.EventTeamDeleteDialog), { ssr: false });
@@ -68,6 +69,9 @@ export default function EventTeamClient({ account, initialMembers = [], bootstra
   const [toast, setToast] = useState(bootstrapError ? { type: "error", title: "Event Team", message: bootstrapError } : null);
   const accessLevel = useMemo(() => pageAccessLevel(account), [account]);
   const canEdit = ["edit", "admin"].includes(accessLevel);
+  const canCreateMember = canEdit && featureAllowed(account, "events.team.member_create");
+  const canUpdateMember = canEdit && featureAllowed(account, "events.team.member_edit");
+  const canDeleteMember = canEdit && featureAllowed(account, "events.team.member_delete");
 
   useEffect(() => {
     const input = document.querySelector(".classic-app-shell .main-header .searchbar input");
@@ -131,19 +135,19 @@ export default function EventTeamClient({ account, initialMembers = [], bootstra
   }
 
   function openAdd() {
-    if (!requireEdit()) return;
+    if (!canCreateMember || !requireEdit()) return;
     preloadEventTeamDialogs();
     setMemberDialog({ role: tab, member: null });
   }
 
   function openMemberEdit(member) {
-    if (!requireEdit()) return;
+    if (!canUpdateMember || !requireEdit()) return;
     preloadEventTeamDialogs();
     setMemberDialog({ role: member?.role || tab, member });
   }
 
   function deleteMember(member) {
-    if (!requireEdit()) return;
+    if (!canDeleteMember || !requireEdit()) return;
     preloadEventTeamDialogs();
     setDeleteTarget(member);
   }
@@ -190,7 +194,7 @@ export default function EventTeamClient({ account, initialMembers = [], bootstra
           <EventIcon name="external-link" />
           <span>Public link</span>
         </button>
-        <button
+        {canCreateMember ? <button
           type="button"
           className="event-team-add"
           onMouseEnter={preloadEventTeamDialogs}
@@ -200,7 +204,7 @@ export default function EventTeamClient({ account, initialMembers = [], bootstra
         >
           <EventIcon name="plus-circle" />
           <span>Add new</span>
-        </button>
+        </button> : null}
       </section>
 
       <section className="event-team-panel">
@@ -241,10 +245,8 @@ export default function EventTeamClient({ account, initialMembers = [], bootstra
                   </td>
                   <td data-label="Status"><span className={`event-team-status${member.isActive === false ? " is-inactive" : ""}`}>{member.isActive === false ? "Inactive" : "Active"}</span></td>
                   <td className="event-team-actions" data-label="Actions">
-                    {canEdit ? <>
-                      <button type="button" onMouseEnter={preloadEventTeamDialogs} onFocus={preloadEventTeamDialogs} onClick={() => openMemberEdit(member)} aria-label="Edit"><EventIcon name="edit-3" /></button>
-                      <button type="button" className="is-danger" onMouseEnter={preloadEventTeamDialogs} onFocus={preloadEventTeamDialogs} onClick={() => deleteMember(member)} aria-label="Delete"><EventIcon name="trash-2" /></button>
-                    </> : null}
+                    {canUpdateMember ? <button type="button" onMouseEnter={preloadEventTeamDialogs} onFocus={preloadEventTeamDialogs} onClick={() => openMemberEdit(member)} aria-label="Edit"><EventIcon name="edit-3" /></button> : null}
+                    {canDeleteMember ? <button type="button" className="is-danger" onMouseEnter={preloadEventTeamDialogs} onFocus={preloadEventTeamDialogs} onClick={() => deleteMember(member)} aria-label="Delete"><EventIcon name="trash-2" /></button> : null}
                   </td>
                 </tr>
               ))}
@@ -258,6 +260,7 @@ export default function EventTeamClient({ account, initialMembers = [], bootstra
         <EventTeamMemberDialog
           member={memberDialog.member}
           role={memberDialog.role}
+          canUploadPhoto={featureAllowed(account, "events.team.photo_upload")}
           onClose={() => setMemberDialog(null)}
           onSaved={handleSaved}
         />

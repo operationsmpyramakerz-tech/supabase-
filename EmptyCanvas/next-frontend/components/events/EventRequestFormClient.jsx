@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { navigateWithinApp } from "../../lib/client-navigation";
 import EventIcon from "./EventIcon";
+import { featureAllowed } from "../../lib/feature-permissions-registry";
 
 const STANDARD_EVENT_TYPES = [
   { code: "tech_day", label: "Tech Day", isCustom: false },
@@ -690,6 +691,7 @@ export default function EventRequestFormClient({
   }
 
   async function saveCustomType() {
+    if (!featureAllowed(account, "events.requests.create_type")) return;
     const label = text(customTypeName);
     if (!label) return notify("info", "Event Type", "Enter a name for the new event type.");
     setSavingType(true);
@@ -946,7 +948,7 @@ export default function EventRequestFormClient({
                   ariaLabel="Event type"
                   variant="event-type"
                 />
-                {!viewOnly ? <button type="button" className={customTypeOpen ? "is-active" : ""} onClick={() => setCustomTypeOpen((current) => !current)}><EventIcon name="plus-circle" /><span>Add Type</span></button> : null}
+                {!viewOnly && featureAllowed(account, "events.requests.create_type") ? <button type="button" className={customTypeOpen ? "is-active" : ""} onClick={() => setCustomTypeOpen((current) => !current)}><EventIcon name="plus-circle" /><span>Add Type</span></button> : null}
               </div>
             </Field>
             {customTypeOpen ? (
@@ -1025,7 +1027,7 @@ export default function EventRequestFormClient({
             <Field label="Governorate / Area" required>
               <div className="next-event-governorate-control">
                 <ModernSelect value={form.governorate} onChange={(value) => updateField("governorate", value)} options={rates.filter((rate) => rate?.isActive !== false && text(rate.areaName)).map((rate) => ({ value: rate.areaName, label: rate.areaName }))} placeholder="Select governorate" searchable disabled={viewOnly} ariaLabel="Governorate or area" />
-                {!viewOnly ? <button type="button" onClick={openRateEditor}>Edit rates</button> : null}
+                {!viewOnly && featureAllowed(account, "events.requests.governorate_rates") ? <button type="button" onClick={openRateEditor}>Edit rates</button> : null}
               </div>
             </Field>
             <Field label="Google Maps / Location URL" required wide><input type="url" value={form.locationUrl} onChange={(event) => updateField("locationUrl", event.target.value)} maxLength={1000} placeholder="https://maps.app.goo.gl/..." disabled={viewOnly} /><small className={form.locationUrl && !isGoogleMapsUrl(form.locationUrl) ? "is-error" : ""}>{form.locationUrl && !isGoogleMapsUrl(form.locationUrl) ? "Paste a valid Google Maps link." : "Use the exact Google Maps venue link."}</small></Field>

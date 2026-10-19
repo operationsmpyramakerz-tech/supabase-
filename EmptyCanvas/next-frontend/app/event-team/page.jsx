@@ -3,6 +3,7 @@ import AppShell from "../../components/AppShell";
 import EventTeamClient from "../../components/events/EventTeamClient";
 import { loadEventTeamPageData, eventTeamDataError } from "../../lib/event-team-data";
 import { getDirectAccountGate } from "../../lib/products-auth";
+import { featureAllowed } from "../../lib/feature-permissions-registry";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +13,7 @@ export default async function EventTeamPage() {
   const gate = await getDirectAccountGate(EVENT_ACCESS_PAGES).catch(() => null);
 
   if (gate?.status === 401) redirect("/login?next=/next/event-team");
-  if (gate?.status === 403) {
+  if (gate?.status === 403 || (gate?.ok && !featureAllowed(gate.account, "events.team.view"))) {
     return (
       <main className="standalone-state">
         <section className="state-card">

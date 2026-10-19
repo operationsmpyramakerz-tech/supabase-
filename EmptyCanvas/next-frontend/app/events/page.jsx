@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import AppShell from "../../components/AppShell";
 import EventsClient from "../../components/events/EventsClient";
 import { loadDirectEventsPageData } from "../../lib/events-data";
+import { featureAllowed } from "../../lib/feature-permissions-registry";
 
 export const dynamic = "force-dynamic";
 
@@ -9,7 +10,7 @@ export default async function EventsPage() {
   const pageData = await loadDirectEventsPageData({ mode: "events" }).catch(() => null);
 
   if (pageData?.status === 401) redirect("/login?next=/next/events");
-  if (pageData?.status === 403) {
+  if (pageData?.status === 403 || (pageData?.ok && !featureAllowed(pageData.account, "events.requests.view"))) {
     return (
       <main className="standalone-state">
         <section className="state-card">

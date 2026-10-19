@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { featureAllowed } from "../../lib/feature-permissions-registry";
 
 const PAGES = Object.freeze([
   {
@@ -78,10 +79,10 @@ function toNextClientRoute(value) {
   return raw;
 }
 
-export default function TaskManagementSidebarFlyout({ allowedPages = [], activePath = "" }) {
+export default function TaskManagementSidebarFlyout({ allowedPages = [], account = {}, activePath = "" }) {
   const router = useRouter();
   useEffect(() => {
-    const pages = allowedTaskPages(allowedPages);
+    const pages = featureAllowed(account, "tasks.view") ? allowedTaskPages(allowedPages) : [];
     const parent = document.querySelector('.classic-app-shell a.nav-link[href="/next/task-management"]');
     if (!(parent instanceof HTMLAnchorElement)) return undefined;
 
@@ -218,7 +219,7 @@ export default function TaskManagementSidebarFlyout({ allowedPages = [], activeP
       closePanel();
       panel.remove();
     };
-  }, [allowedPages, activePath, router]);
+  }, [allowedPages, activePath, router, account]);
 
   return null;
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getEvent, eventsDataError } from "../../../../lib/events-data";
 import { getDirectAccountGate } from "../../../../lib/products-auth";
+import { featureAllowed } from "../../../../lib/feature-permissions-registry";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -15,6 +16,8 @@ function json(payload, init = {}) {
 export async function GET(_request, { params }) {
   const gate = await getDirectAccountGate(["Event Calendar", "Event Requests"]);
   if (!gate.ok) return json({ ok: false, error: gate.error || "Authentication required." }, { status: gate.status || 503 });
+  if (!featureAllowed(gate.account, "events.requests.view") && !featureAllowed(gate.account, "events.calendar.view"))
+    return json({ ok: false, error: "Event viewing access denied." }, { status: 403 });
 
   const resolved = await params;
   const id = String(resolved?.id || "").trim();

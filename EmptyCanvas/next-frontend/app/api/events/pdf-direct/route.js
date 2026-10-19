@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import eventRequestPdfModule from "../../../../lib/eventRequestPdf";
 import { getEvent, eventsDataError } from "../../../../lib/events-data";
 import { getDirectAccountGate } from "../../../../lib/products-auth";
+import { featureAllowed } from "../../../../lib/feature-permissions-registry";
 
 const { pipeEventRequestPDF } = eventRequestPdfModule;
 
@@ -62,6 +63,8 @@ async function renderEventPdf(event) {
 export async function GET(request) {
   const gate = await getDirectAccountGate(["Event Calendar", "Event Requests"]);
   if (!gate.ok) return jsonError(gate.error || "Authentication required.", gate.status || 503);
+  if (!featureAllowed(gate.account, "events.requests.view") || !featureAllowed(gate.account, "events.requests.pdf"))
+    return jsonError("Permission events.requests.pdf is not allowed.", 403);
 
   const url = new URL(request.url);
   const id = text(url.searchParams.get("id"));

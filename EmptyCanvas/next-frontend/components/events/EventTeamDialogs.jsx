@@ -88,14 +88,14 @@ function Modal({ children, onClose, label }) {
   );
 }
 
-export function EventTeamMemberDialog({ member = null, role = "instructor", onClose, onSaved }) {
+export function EventTeamMemberDialog({ member = null, role = "instructor", canUploadPhoto = true, onClose, onSaved }) {
   const [memberForm, setMemberForm] = useState(() => memberToForm(member, role));
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState("");
   const idInputRef = useRef(null);
 
   async function uploadIdPhoto(file) {
-    if (!file) return;
+    if (!file || !canUploadPhoto) return;
     if (!String(file.type || "").toLowerCase().startsWith("image/")) {
       setFormError("ID must be uploaded as an image.");
       return;
@@ -179,7 +179,7 @@ export function EventTeamMemberDialog({ member = null, role = "instructor", onCl
           <label><span>Station</span><input value={memberForm.station} onChange={(event) => setMemberForm((current) => ({ ...current, station: event.target.value }))} placeholder="e.g. 3D Printer" /></label>
           <label><span>InstaPay</span><input inputMode="tel" value={memberForm.instapay} onChange={(event) => setMemberForm((current) => ({ ...current, instapay: event.target.value }))} placeholder="InstaPay number" /></label>
           <label><span>Wallet</span><input inputMode="tel" value={memberForm.wallet} onChange={(event) => setMemberForm((current) => ({ ...current, wallet: event.target.value }))} placeholder="Wallet number" /></label>
-          <label className="event-team-field--wide"><span>ID image</span><div className="event-team-id-upload"><input ref={idInputRef} type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) uploadIdPhoto(file); }} /><button type="button" onClick={() => idInputRef.current?.click()} disabled={busy}><EventIcon name="image" /> {memberForm.idPhotoUrl ? "Replace ID" : "Upload ID"}</button>{memberForm.idPhotoUrl ? <a href={memberForm.idPhotoUrl} target="_blank" rel="noreferrer"><img src={memberForm.idPhotoUrl} alt="ID preview" /></a> : <span>No ID uploaded</span>}</div></label>
+          <label className="event-team-field--wide"><span>ID image</span><div className="event-team-id-upload"><input ref={idInputRef} type="file" disabled={!canUploadPhoto} accept="image/png,image/jpeg,image/webp" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) uploadIdPhoto(file); }} />{canUploadPhoto ? <button type="button" onClick={() => idInputRef.current?.click()} disabled={busy}><EventIcon name="image" /> {memberForm.idPhotoUrl ? "Replace ID" : "Upload ID"}</button> : null}{memberForm.idPhotoUrl ? <a href={memberForm.idPhotoUrl} target="_blank" rel="noreferrer"><img src={memberForm.idPhotoUrl} alt="ID preview" /></a> : <span>No ID uploaded</span>}</div></label>
           <label className="event-team-field--wide"><span>Notes</span><textarea rows="3" value={memberForm.notes} onChange={(event) => setMemberForm((current) => ({ ...current, notes: event.target.value }))} placeholder="Optional notes" /></label>
           <label className="event-team-toggle event-team-field--wide"><input type="checkbox" checked={memberForm.isActive} onChange={(event) => setMemberForm((current) => ({ ...current, isActive: event.target.checked }))} /><span>Active team member</span></label>
         </div>

@@ -126,7 +126,7 @@ function ItemList({ items, component = false, empty }) {
   );
 }
 
-export function EventsDetailsModal({ event, busy, onClose, onDownload, onWorkflow, onRequestAction, canRequestActions }) {
+export function EventsDetailsModal({ event, busy, onClose, onDownload, onWorkflow, onRequestAction, canRequestActions, canEdit=canRequestActions, canCancel=canRequestActions, canWorkflow=canRequestActions, canExport=true }) {
   if (!event) return null;
   const mapUrl = safeUrl(event.locationUrl);
   const utilities = [event.requiresPower && "Power points", event.requiresInternet && "Internet", event.requiresSoundSystem && "Sound system"].filter(Boolean).join(" · ") || "No special utilities selected";
@@ -225,12 +225,12 @@ export function EventsDetailsModal({ event, busy, onClose, onDownload, onWorkflo
 
         <footer className="events-modal__actions next-events-modal-actions">
           <div>
-            {canRequestActions ? <button type="button" className="events-secondary-btn secondary" disabled={busy} onClick={() => onRequestAction("edit")}>Edit</button> : null}
-            {canRequestActions && status !== "cancelled" ? <button type="button" className="danger" disabled={busy} onClick={() => onRequestAction("cancel")}>Cancel request</button> : null}
+            {canEdit ? <button type="button" className="events-secondary-btn secondary" disabled={busy} onClick={() => onRequestAction("edit")}>Edit</button> : null}
+            {canCancel && status !== "cancelled" ? <button type="button" className="danger" disabled={busy} onClick={() => onRequestAction("cancel")}>Cancel request</button> : null}
           </div>
           <div>
-            <button type="button" className="events-secondary-btn secondary" onClick={onDownload}>Download PDF</button>
-            {workflow && canRequestActions ? <button type="button" className="events-primary-btn primary" disabled={busy} onClick={() => onWorkflow(workflow.targetStatus)}>{workflow.label}</button> : null}
+            {canExport?<button type="button" className="events-secondary-btn secondary" onClick={onDownload}>Download PDF</button>:null}
+            {workflow && canWorkflow ? <button type="button" className="events-primary-btn primary" disabled={busy} onClick={() => onWorkflow(workflow.targetStatus)}>{workflow.label}</button> : null}
           </div>
         </footer>
       </section>

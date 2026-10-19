@@ -856,6 +856,18 @@ export async function getDirectAccountGateFromSessionContext(context = {}, requi
       if (aliases.some((name) => ["requestedorders", "operationsorders", "operationsrequestedorders"].includes(name))) {
         return featureAllowed({ featureAccess }, "orders.operations.view", { legacyAllowed: false });
       }
+      // Phase 2D view grants must also hide legacy sidebar aliases. Each module
+      // remains legacy until the admin explicitly stores its .view marker.
+      if (aliases.some((name) => ["taskmanagement", "mytasks", "delegatedtasks", "alltasks", "departmenttickets"].includes(name))) {
+        return featureAllowed({ featureAccess }, "tasks.view");
+      }
+      if (aliases.includes("eventrequests")) return featureAllowed({ featureAccess }, "events.requests.view");
+      if (aliases.includes("eventcomponents")) return featureAllowed({ featureAccess }, "events.components.view");
+      if (aliases.includes("eventteam")) return featureAllowed({ featureAccess }, "events.team.view");
+      if (aliases.includes("events") || aliases.includes("eventspage")) {
+        return ["events.requests.view", "events.calendar.view", "events.components.view", "events.team.view"]
+          .some(key => featureAllowed({ featureAccess }, key));
+      }
       return true;
     };
     const visiblePageAccess = freshPageAccess.filter(row => [row.pageName, row.pageKey, row.routePath].every(visiblePilotPage));

@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { featureAllowed } from "../../lib/feature-permissions-registry";
 
 const PAGES = Object.freeze([
   {
@@ -96,10 +97,11 @@ function toNextClientRoute(value) {
   return raw;
 }
 
-export default function EventsSidebarFlyout({ allowedPages = [], activePath = "" }) {
+export default function EventsSidebarFlyout({ allowedPages = [], account = {}, activePath = "" }) {
   const router = useRouter();
   useEffect(() => {
-    const pages = allowedEventPages(allowedPages);
+    const modules = { calendar: "events.calendar.view", requests: "events.requests.view", components: "events.components.view", team: "events.team.view" };
+    const pages = allowedEventPages(allowedPages).filter(page => featureAllowed(account, modules[page.key]));
     const parent = document.querySelector('.classic-app-shell a.nav-link[href="/next/events"]');
     if (!(parent instanceof HTMLAnchorElement)) return undefined;
 
@@ -234,7 +236,7 @@ export default function EventsSidebarFlyout({ allowedPages = [], activePath = ""
       closePanel();
       panel.remove();
     };
-  }, [allowedPages, activePath, router]);
+  }, [allowedPages, activePath, router, account]);
 
   return null;
 }

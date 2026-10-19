@@ -3,6 +3,7 @@ import AppShell from "../../../components/AppShell";
 import TaskManagementClient from "../../../components/task-management/TaskManagementClient";
 import { loadDirectTaskManagementPageData } from "../../../lib/task-management-data";
 import { fetchLegacyJson } from "../../../lib/legacy-api";
+import { featureAllowed } from "../../../lib/feature-permissions-registry";
 
 export const dynamic = "force-dynamic";
 
@@ -69,6 +70,18 @@ export default async function TaskManagementViewPage({ params }) {
   if (pageData?.status === 403) return forbidden(config);
 
   if (!pageData?.ok) {
+    // Never use the legacy bootstrap as a permission fallback when the new
+    // feature profiles might be in force. A temporary grant-store failure must
+    // not reveal data through an older unguarded endpoint.
+    if (process.env.ERP_ADVANCED_PERMISSIONS_ENABLED === "1") {
+      return (
+        <main className="standalone-state"><section className="state-card">
+          <h1>Task Management is temporarily unavailable</h1>
+          <p>The direct permissions service could not verify your access. Please retry shortly.</p>
+          <a className="primary-button" href={currentPath}>Try again</a>
+        </section></main>
+      );
+    }
     const response = await fetchLegacyJson(`/api/page-bootstrap?scope=task-management&view=${encodeURIComponent(config.key)}`, { timeoutMs: 45000 });
     if (response.status === 401) redirect(`/login?next=${encodeURIComponent(currentPath)}`);
     if (response.status === 403) return forbidden(config);
@@ -120,7 +133,7 @@ export default async function TaskManagementViewPage({ params }) {
           viewSlug={resolvedParams.view}
           initialMeta={pageData.meta || { ok: true, view: config.key, departments: [], currentUser: {}, accessLevel: "view" }}
           initialTickets={Array.isArray(pageData.tickets) ? pageData.tickets : []}
-          availableViews={allowedViews(pageData.account)}
+          availableViews={featureAllowed(pageData.account, "tasks.view") ? allowedViews(pageData.account) : []}
           bootstrapWarnings={pageData.warnings || []}
         />
       </AppShell>

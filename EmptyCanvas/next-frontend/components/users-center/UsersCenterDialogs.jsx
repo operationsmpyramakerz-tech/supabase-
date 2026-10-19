@@ -518,6 +518,10 @@ function FeatureAccessModal({ member, onClose, protect }) {
     { key: "orders.my", label: "My Orders", optIn: true },
     { key: "orders.maintenance", label: "Maintenance Orders", optIn: true },
     { key: "orders.shopping", label: "Shopping Cart", optIn: true },
+    { key: "tasks", label: "Task Management", optIn: true },
+    { key: "events.requests", label: "Event Requests", optIn: true },
+    { key: "events.components", label: "Event Components", optIn: true },
+    { key: "events.team", label: "Event Team", optIn: true },
   ];
   useEffect(() => {
     let mounted = true;
@@ -535,6 +539,10 @@ function FeatureAccessModal({ member, onClose, protect }) {
           "orders.my": stored.some(item => item.key === MY_ORDERS_ENFORCEMENT_MARKER && item.allowed === true),
           "orders.maintenance": stored.some(item => item.key === "orders.maintenance.view"),
           "orders.shopping": stored.some(item => item.key === "orders.shopping.view"),
+          tasks: stored.some(item => item.key === "tasks.view"),
+          "events.requests": stored.some(item => item.key === "events.requests.view"),
+          "events.components": stored.some(item => item.key === "events.components.view"),
+          "events.team": stored.some(item => item.key === "events.team.view"),
         });
         setUnmanagedGrants(stored.filter(item => !ACTIVE_PILOT_FEATURE_KEYS.includes(item.key) && item.key !== MY_ORDERS_ENFORCEMENT_MARKER));
       } catch (e) { if (mounted) setError(e.message); }

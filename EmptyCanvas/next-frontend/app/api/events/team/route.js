@@ -15,6 +15,7 @@ import {
 import { listEvents } from "../../../../lib/events-data";
 import { directPageMutationAccess } from "../../../../lib/order-action-auth";
 import { getDirectAccountGate } from "../../../../lib/products-auth";
+import { featureGate } from "../../../../lib/feature-permissions-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,6 +23,15 @@ export const revalidate = 0;
 export const maxDuration = 60;
 
 const EVENT_ACCESS_PAGES = ["Event Requests", "Event Calendar", "Event Components"];
+const ACTION_PERMISSION = Object.freeze({
+  "create-member": "events.team.member_create",
+  "update-member": "events.team.member_edit",
+  "delete-member": "events.team.member_delete",
+  "create-attendance": "events.team.attendance_manage",
+  "update-attendance": "events.team.attendance_manage",
+  "delete-attendance": "events.team.attendance_manage",
+  "upload-id": "events.team.photo_upload",
+});
 
 function json(payload, init = {}) {
   return NextResponse.json(payload, {
@@ -37,6 +47,8 @@ function text(value) {
 export async function GET() {
   const gate = await getDirectAccountGate(EVENT_ACCESS_PAGES);
   if (!gate.ok) return json({ ok: false, error: gate.error || "Authentication required." }, { status: gate.status || 503 });
+  const viewGate = featureGate(gate, "events.team.view");
+  if (!viewGate.ok) return json({ ok: false, error: viewGate.error }, { status: viewGate.status || 403 });
 
   try {
     const [members, attendance, events] = await Promise.all([
@@ -56,7 +68,14 @@ export async function POST(request) {
   const action = text(body?.action).toLowerCase();
   const gate = await getDirectAccountGate(EVENT_ACCESS_PAGES);
   if (!gate.ok) return json({ ok: false, error: gate.error || "Authentication required." }, { status: gate.status || 503 });
+  const viewGate = featureGate(gate, "events.team.view");
+  if (!viewGate.ok) return json({ ok: false, error: viewGate.error }, { status: viewGate.status || 403 });
 
+  const required = ACTION_PERMISSION[action];
+  if (required) {
+    const permission = featureGate(gate, required);
+    if (!permission.ok) return json({ ok: false, error: permission.error }, { status: permission.status || 403 });
+  }
   const mutationAccess = directPageMutationAccess(gate.account || {}, EVENT_ACCESS_PAGES);
   if (mutationAccess !== true) {
     return json({ ok: false, error: "Events Edit or Admin access is required." }, { status: mutationAccess === null ? 503 : 403 });

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { navigateWithinApp } from "../../lib/client-navigation";
 import EventIcon from "./EventIcon";
+import { featureAllowed } from "../../lib/feature-permissions-registry";
 
 const STATUS_LABELS = {
   submitted: "Submitted",
@@ -163,7 +164,7 @@ function DetailList({ items, empty }) {
   );
 }
 
-function DetailsModal({ event, canOpenRequests, onClose }) {
+function DetailsModal({ event, canOpenRequests, canExport = true, onClose }) {
   useEffect(() => {
     if (!event) return undefined;
     const onKey = (keyEvent) => { if (keyEvent.key === "Escape") onClose(); };
@@ -242,7 +243,7 @@ function DetailsModal({ event, canOpenRequests, onClose }) {
 
         <footer className="events-modal__actions next-events-modal-actions">
           <div>
-            <a className="events-secondary-btn secondary-button" href={`/next/api/events/pdf-direct?id=${encodeURIComponent(event.id)}`} target="_blank" rel="noreferrer">Download PDF</a>
+            {canExport ? <a className="events-secondary-btn secondary-button" href={`/next/api/events/pdf-direct?id=${encodeURIComponent(event.id)}`} target="_blank" rel="noreferrer">Download PDF</a> : null}
             {canOpenRequests ? <a className="events-secondary-btn secondary-button" href="/next/events">Open Event Requests</a> : null}
           </div>
           <button type="button" className="events-primary-btn primary-button" onClick={onClose}>Close</button>
@@ -254,8 +255,9 @@ function DetailsModal({ event, canOpenRequests, onClose }) {
 
 export default function EventsCalendarClient({ account, initialEvents = [], bootstrapWarnings = [] }) {
   const access = useMemo(() => allowedSet(account), [account]);
-  const canCreate = access.has("event requests");
-  const canOpenRequests = access.has("event requests");
+  const canCreate = access.has("event requests") && featureAllowed(account, "events.requests.view") && featureAllowed(account, "events.requests.create");
+  const canOpenRequests = access.has("event requests") && featureAllowed(account, "events.requests.view");
+  const canExport = featureAllowed(account, "events.requests.view") && featureAllowed(account, "events.requests.pdf");
   const [events, setEvents] = useState(Array.isArray(initialEvents) ? initialEvents : []);
   const [month, setMonth] = useState(() => startOfMonth(new Date()));
   const [selectedKey, setSelectedKey] = useState(() => dateKey(new Date()));
@@ -575,7 +577,7 @@ export default function EventsCalendarClient({ account, initialEvents = [], boot
         </div>
       </section>
 
-      <DetailsModal event={activeEvent} canOpenRequests={canOpenRequests} onClose={() => setActiveEvent(null)} />
+      <DetailsModal event={activeEvent} canOpenRequests={canOpenRequests} canExport={canExport} onClose={() => setActiveEvent(null)} />
     </section>
   );
 }

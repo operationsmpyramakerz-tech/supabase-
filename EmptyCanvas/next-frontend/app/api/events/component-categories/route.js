@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { listEventComponentCategories, eventsDataError } from "../../../../lib/events-data";
 import { getDirectAccountGate } from "../../../../lib/products-auth";
+import { featureAllowed } from "../../../../lib/feature-permissions-registry";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -12,6 +13,8 @@ function json(payload, init = {}) {
 export async function GET(request) {
   const gate = await getDirectAccountGate(["Event Requests", "Event Components"]);
   if (!gate.ok) return json({ ok: false, error: gate.error || "Authentication required." }, { status: gate.status || 503 });
+  if (!featureAllowed(gate.account, "events.requests.view") && !featureAllowed(gate.account, "events.components.view"))
+    return json({ ok: false, error: "Event catalog access denied." }, { status: 403 });
   const url = new URL(request.url);
   const force = url.searchParams.has("_ts") || url.searchParams.get("_fresh") === "1";
   try {

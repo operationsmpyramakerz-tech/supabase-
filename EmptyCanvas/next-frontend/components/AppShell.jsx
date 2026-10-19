@@ -9,6 +9,7 @@ import NotificationsBell from "./notifications/NotificationsBell";
 import UserProfileMenu from "./UserProfileMenu";
 import HeaderSearch from "./HeaderSearch";
 import { MODULE_LINKS, CLASSIC_MAIN_LINKS, canSeeNavigationLink } from "../lib/navigation-config";
+import { featureAllowed } from "../lib/feature-permissions-registry";
 import {
   BodyClassSync,
   ClassicChromeAccessSync,
@@ -104,7 +105,12 @@ export default function AppShell({
 }) {
   const persistentShell = usePersistentShellContext();
   const allowedPages = Array.isArray(account?.allowedPages) ? account.allowedPages : [];
-  const classicLinks = CLASSIC_MAIN_LINKS.filter((link) => canSeeNavigationLink(link, allowedPages));
+  const classicLinks = CLASSIC_MAIN_LINKS.filter((link) => {
+    if (!canSeeNavigationLink(link, allowedPages)) return false;
+    if (link.href === "/next/task-management") return featureAllowed(account, "tasks.view");
+    if (link.href === "/next/events") return ["events.calendar.view", "events.requests.view", "events.components.view", "events.team.view"].some(key => featureAllowed(account, key));
+    return true;
+  });
   const combinedBodyClass = [bodyClass, "next-classic-shell-active"].filter(Boolean).join(" ");
   const pageMainClass = [
     "container-full-width",
@@ -152,8 +158,8 @@ export default function AppShell({
       <ClassicMobileDockQuickOpen />
       <ClassicSidebarViewportKeeper />
       <ClassicSidebarActiveIndicator activePath={activePath} />
-      <TaskManagementSidebarFlyout allowedPages={allowedPages} activePath={activePath} />
-      <EventsSidebarFlyout allowedPages={allowedPages} activePath={activePath} />
+      <TaskManagementSidebarFlyout allowedPages={allowedPages} account={account} activePath={activePath} />
+      <EventsSidebarFlyout allowedPages={allowedPages} account={account} activePath={activePath} />
       <ShoppingCartSidebarFlyout allowedPages={allowedPages} activePath={activePath} />
 
       <div className="app-container classic-app-shell">

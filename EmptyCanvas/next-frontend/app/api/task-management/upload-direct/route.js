@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 
 import { directTaskManagementContext } from "../../../../lib/task-management-data";
+import { featureGate } from "../../../../lib/feature-permissions-server";
 import { uploadStorageObject } from "../../../../lib/supabase-rest";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +23,8 @@ export async function POST(request) {
   const view = text(body?.view || url.searchParams.get("view")).toLowerCase();
   const context = await directTaskManagementContext(view);
   if (!context?.ok) return json({ ok: false, error: context?.error || "Task Management access denied." }, context?.status || 503);
+  const uploadGate = featureGate(context, "tasks.attachment_upload");
+  if (!uploadGate.ok) return json({ ok: false, error: uploadGate.error }, uploadGate.status || 403);
 
   try {
     const dataUrl = text(body?.dataUrl || body?.data);

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getLegacyAccountGate } from "../../lib/products-auth";
+import { featureAllowed } from "../../lib/feature-permissions-registry";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +24,7 @@ function allowedTokens(values = []) {
 export default async function TaskManagementIndexPage() {
   const gate = await getLegacyAccountGate([]);
   if (gate.status === 401 || gate.status === 403) redirect("/login?next=/next/task-management");
-  if (!gate.ok || !gate.account) redirect("/home");
+  if (!gate.ok || !gate.account || !featureAllowed(gate.account, "tasks.view")) redirect("/home");
 
   const allowed = allowedTokens(gate.account.allowedPages);
   const broad = allowed.has("task management") || allowed.has("taskmanagement") || allowed.has("department tickets") || allowed.has("/task-management") || allowed.has("task-management");

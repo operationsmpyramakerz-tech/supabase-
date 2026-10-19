@@ -1,4 +1,5 @@
 import "server-only";
+import { featureGate } from "./feature-permissions-server";
 
 import { getDirectAccountGate } from "./products-auth";
 import { select, selectById } from "./supabase-rest";
@@ -574,7 +575,7 @@ export async function directTaskManagementContext(view) {
   const gate = await getDirectAccountGate([config.pageName]);
   if (!gate?.ok) return { ok: false, status: gate?.status || 503, error: gate?.error || "Task Management authentication is unavailable.", account: gate?.account || null, source: "next-account-gate" };
   const access = taskViewAccess(gate.account, view);
-  return {
+  return featureGate({
     ok: true,
     status: 200,
     view,
@@ -583,7 +584,7 @@ export async function directTaskManagementContext(view) {
     accessLevel: access.accessLevel,
     isPageAdmin: access.isPageAdmin,
     source: "next-account-gate",
-  };
+  }, "tasks.view");
 }
 
 export function taskManagementCurrentMember(context = {}) {

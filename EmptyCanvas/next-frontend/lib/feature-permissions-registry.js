@@ -964,7 +964,11 @@ export function featureAllowed(account, key, { legacyAllowed = true, scopes = ["
     return grant?.allowed === true && scopes.includes(grant.scope || "all");
   }
   const moduleMarker = key.startsWith("orders.maintenance.") ? "orders.maintenance.view"
-    : key.startsWith("orders.shopping.") ? "orders.shopping.view" : null;
+    : key.startsWith("orders.shopping.") ? "orders.shopping.view"
+    : key.startsWith("tasks.") ? "tasks.view"
+    : key.startsWith("events.requests.") ? "events.requests.view"
+    : key.startsWith("events.components.") ? "events.components.view"
+    : key.startsWith("events.team.") ? "events.team.view" : null;
   // Module migrations are opt-in. Persist even a denied .view marker so
   // new grants never silently remove rights from previously enabled users.
   if (!pilot && (!moduleMarker || !Object.hasOwn(state.grants || {}, moduleMarker))) return !!legacyAllowed;
@@ -972,7 +976,7 @@ export function featureAllowed(account, key, { legacyAllowed = true, scopes = ["
   return grant?.allowed === true && scopes.includes(grant.scope || "all");
 }
 
-export const PILOT_FEATURE_MODULES = Object.freeze(["products", "orders.operations", "orders.my", "orders.maintenance", "orders.shopping"]);
+export const PILOT_FEATURE_MODULES = Object.freeze(["products", "orders.operations", "orders.my", "orders.maintenance", "orders.shopping", "tasks", "events.requests", "events.components", "events.team"]);
 
 // Permissions with both server-side enforcement and UI controls in Phase 2A.
 // Do not show toggles for unprotected actions; that would imply false security.
@@ -988,4 +992,16 @@ export const ACTIVE_PILOT_FEATURE_KEYS = Object.freeze([
   "orders.maintenance.mark_arrived", "orders.maintenance.edit", "orders.maintenance.archive",
   "orders.maintenance.delete", "orders.maintenance.checklist_manage", "orders.maintenance.export",
   "orders.shopping.view", "orders.shopping.submit", "orders.shopping.edit_submit", "orders.shopping.undo",
+  "tasks.view", "tasks.project_create", "tasks.project_edit", "tasks.project_archive",
+  "tasks.project_delete", "tasks.mark_delivered", "tasks.workflow_save",
+  "tasks.workflow_delete", "tasks.workflow_archive", "tasks.assignment_archive",
+  "tasks.assignment_delete", "tasks.assignment_work", "tasks.section_work",
+  "tasks.section_edit", "tasks.attachment_upload",
+  "events.requests.view", "events.requests.create", "events.requests.edit",
+  "events.requests.workflow", "events.requests.cancel", "events.requests.archive",
+  "events.requests.create_type", "events.requests.governorate_rates", "events.requests.pdf",
+  "events.components.view", "events.components.create", "events.components.edit",
+  "events.components.delete", "events.components.upload",
+  "events.team.view", "events.team.member_create", "events.team.member_edit",
+  "events.team.member_delete", "events.team.attendance_manage", "events.team.photo_upload",
 ]);

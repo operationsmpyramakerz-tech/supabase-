@@ -117,7 +117,7 @@ function ModernDropdown({ value, options = [], onChange, disabled = false, ariaL
   );
 }
 
-export function ComponentFormModal({ mode, form, categories, busy, error, onChange, onAssets, onRemovePhoto, onRemoveAttachment, onClose, onSubmit }) {
+export function ComponentFormModal({ mode, form, categories, busy, error, onChange, onAssets, canUpload = true, onRemovePhoto, onRemoveAttachment, onClose, onSubmit }) {
   if (!mode) return null;
   const external = form.ownershipType === "external_rental";
   const unitCost = Math.max(0, number(form.operatingCost)) + (external ? Math.max(0, number(form.rentalCost)) : 0);
@@ -212,7 +212,7 @@ export function ComponentFormModal({ mode, form, categories, busy, error, onChan
               <span>Photos & files</span>
               {assetCount ? <b>{photos.length} photo{photos.length === 1 ? "" : "s"} · {attachments.length} file{attachments.length === 1 ? "" : "s"}</b> : null}
             </div>
-            <label className="next-event-component-photo-dropzone">
+            {canUpload ? <label className="next-event-component-photo-dropzone">
               <span className="next-event-component-photo-dropzone__icon"><EventIcon name="paperclip" /></span>
               <strong>{assetCount ? "Add more photos or files" : "Choose photos or files"}</strong>
               <span className="next-event-component-photo-dropzone__action">Browse</span>
@@ -223,7 +223,7 @@ export function ComponentFormModal({ mode, form, categories, busy, error, onChan
                 onChange={onAssets}
                 hidden
               />
-            </label>
+            </label> : null}
             {assetCount ? (
               <div className="next-event-component-photo-grid">
                 {photos.map((photo, photoIndex) => (

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import AppShell from "../../../components/AppShell";
 import EventRequestFormClient from "../../../components/events/EventRequestFormClient";
 import { loadDirectEventsPageData } from "../../../lib/events-data";
+import { featureAllowed } from "../../../lib/feature-permissions-registry";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,7 @@ export default async function NewEventRequestPage({ searchParams }) {
   const pageData = await loadDirectEventsPageData({ mode: "new", editId }).catch(() => null);
 
   if (pageData?.status === 401) redirect(`/login?next=${encodeURIComponent(currentPath)}`);
-  if (pageData?.status === 403) {
+  if (pageData?.status === 403 || (pageData?.ok && (!featureAllowed(pageData.account, "events.requests.view") || !featureAllowed(pageData.account, editId ? "events.requests.edit" : "events.requests.create")))) {
     return (
       <main className="standalone-state">
         <section className="state-card">
@@ -83,7 +84,7 @@ export default async function NewEventRequestPage({ searchParams }) {
         initialComponents={Array.isArray(pageData.components) ? pageData.components : []}
         initialEvents={Array.isArray(pageData.events) ? pageData.events : []}
         initialRates={Array.isArray(pageData.rates) ? pageData.rates : []}
-        initialCanEditRates={!!pageData.canEditRates}
+        initialCanEditRates={!!pageData.canEditRates && featureAllowed(pageData.account, "events.requests.governorate_rates")}
         initialEvent={pageData.event || null}
         initialStartDate={startDate}
         bootstrapWarnings={pageData.warnings || []}

@@ -21,6 +21,7 @@ import {
 import { verifyEventsAuthorizationToken } from "../../../../lib/events-action-auth";
 import { directPageMutationAccess } from "../../../../lib/order-action-auth";
 import { getDirectAccountGate } from "../../../../lib/products-auth";
+import { featureGate } from "../../../../lib/feature-permissions-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -58,12 +59,35 @@ function requireToken(body, account, scope, claims = {}) {
   return verifyEventsAuthorizationToken(body?.authorizationToken || body?.adminToken || "", account || {}, scope, claims);
 }
 
+const ACTION_PERMISSION = Object.freeze({
+  "create-event": "events.requests.create",
+  "update-event": "events.requests.edit",
+  "workflow-transition": "events.requests.workflow",
+  "request-action": "events.requests.cancel",
+  "archive-event": "events.requests.archive",
+  "create-type": "events.requests.create_type",
+  "save-governorate-rates": "events.requests.governorate_rates",
+  "create-component": "events.components.create",
+  "update-component": "events.components.edit",
+  "delete-component": "events.components.delete",
+  "upload-photo": "events.components.upload",
+  "upload-file": "events.components.upload",
+});
+
 export async function POST(request) {
   const body = await request.json().catch(() => ({}));
   const action = text(body?.action).toLowerCase();
   const page = actionPage(action);
   const gate = await getDirectAccountGate([page]);
   if (!gate.ok) return json({ ok: false, error: gate.error || "Authentication required." }, { status: gate.status || 503 });
+  // Enforce the corresponding module's view grant before permitting writes.
+  const guarded = featureGate(gate, page === "Event Components" ? "events.components.view" : "events.requests.view");
+  if (!guarded.ok) return json({ ok: false, error: guarded.error }, { status: guarded.status || 403 });
+  const required = ACTION_PERMISSION[action];
+  if (required) {
+    const permission = featureGate(gate, required);
+    if (!permission.ok) return json({ ok: false, error: permission.error }, { status: permission.status || 403 });
+  }
 
   const mutationAccess = directPageMutationAccess(gate.account || {}, [page]);
   if (mutationAccess !== true) {

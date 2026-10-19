@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import EventIcon from "./EventIcon";
+import { featureAllowed } from "../../lib/feature-permissions-registry";
 
 const ComponentFormModal = dynamic(() => import("./EventComponentsDialogs").then((module) => module.ComponentFormModal), { ssr: false });
 const AuthorizationModal = dynamic(() => import("./EventComponentsDialogs").then((module) => module.AuthorizationModal), { ssr: false });
@@ -345,7 +346,10 @@ export default function EventComponentsClient({ account, initialComponents, init
 
   const accessLevel = useMemo(() => pageAccessLevel(account), [account]);
   const canEdit = ["edit", "admin"].includes(accessLevel);
-  const canDelete = accessLevel === "admin";
+  const canDelete = accessLevel === "admin" && featureAllowed(account, "events.components.delete");
+  const canCreate = canEdit && featureAllowed(account, "events.components.create");
+  const canUpdate = canEdit && featureAllowed(account, "events.components.edit");
+  const canUpload = canEdit && featureAllowed(account, "events.components.upload");
 
   const categoryMap = useMemo(() => new Map(categories.map((item) => [item.code, item.label])), [categories]);
 
@@ -409,7 +413,7 @@ export default function EventComponentsClient({ account, initialComponents, init
 
   function requestForm(intent, component = null) {
     void import("./EventComponentsDialogs");
-    if (!canEdit) {
+    if (!canEdit || (intent === "create" ? !canCreate : !canUpdate)) {
       setToast({ type: "info", title: "View-only access", message: "Your Event Components permission does not allow catalogue changes." });
       return;
     }
@@ -453,6 +457,7 @@ export default function EventComponentsClient({ account, initialComponents, init
   }
 
   async function handleAssets(event) {
+    if (!canUpload) return;
     const files = Array.from(event.target.files || []);
     event.target.value = "";
     if (!files.length) return;
@@ -723,12 +728,12 @@ export default function EventComponentsClient({ account, initialComponents, init
         </div>
 
         <div className="events-component-cards" aria-live="polite">
-          {canEdit ? <AddNewComponentCard onClick={() => requestForm("create")} /> : null}
+          {canCreate ? <AddNewComponentCard onClick={() => requestForm("create")} /> : null}
           {filtered.map((component) => (
             <ComponentCard
               component={component}
               categoryLabel={categoryMap.get(text(component?.category)) || "Other"}
-              canEdit={canEdit}
+              canEdit={canUpdate}
               canDelete={canDelete}
               onEdit={(item) => requestForm("edit", item)}
               onDelete={(item) => { void import("./EventComponentsDialogs"); setDeleteTarget(item); }}
@@ -749,7 +754,8 @@ export default function EventComponentsClient({ account, initialComponents, init
         busy={formBusy}
         error={formError}
         onChange={patchForm}
-        onAssets={handleAssets}
+        onAssets={canUpload ? handleAssets : null}
+        canUpload={canUpload}
         onRemovePhoto={removeFormPhoto}
         onRemoveAttachment={removeFormAttachment}
         onClose={() => { if (!formBusy) { setFormMode(""); setAuthorizationToken(""); setFormError(""); } }}

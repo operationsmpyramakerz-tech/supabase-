@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { listEvents, eventsDataError } from "../../../lib/events-data";
 import { getDirectAccountGate } from "../../../lib/products-auth";
+import { featureAllowed } from "../../../lib/feature-permissions-registry";
 import { measurePerformance } from "../../../lib/performance-profiler";
 
 export const dynamic = "force-dynamic";
@@ -16,6 +17,8 @@ function json(payload, init = {}) {
 async function GETImpl(request) {
   const gate = await getDirectAccountGate(["Event Calendar", "Event Requests"]);
   if (!gate.ok) return json({ ok: false, error: gate.error || "Authentication required." }, { status: gate.status || 503 });
+  if (!featureAllowed(gate.account, "events.requests.view") && !featureAllowed(gate.account, "events.calendar.view"))
+    return json({ ok: false, error: "Event viewing access denied." }, { status: 403 });
 
   const url = new URL(request.url);
   const includeArchived = url.searchParams.get("includeArchived") === "1";

@@ -2,6 +2,7 @@ import { NextResponse, after } from "next/server";
 import { dispatchQueuedNotifications } from "../../../../lib/notification-event-worker";
 
 import { directTaskManagementContext } from "../../../../lib/task-management-data";
+import { featureGate } from "../../../../lib/feature-permissions-server";
 import {
   archiveTaskManagementAssignment,
   archiveTaskManagementPeopleWorkflow,
@@ -34,12 +35,34 @@ function json(payload, status = 200) {
   return NextResponse.json(payload, { status, headers: { "Cache-Control": "private, no-store" } });
 }
 
+// Keep action mapping next to the endpoint; unknown actions are never granted.
+const ACTION_PERMISSION = Object.freeze({
+  "ticket-create": "tasks.project_create",
+  "ticket-update": "tasks.project_edit",
+  "ticket-archive": "tasks.project_archive",
+  "ticket-delete": "tasks.project_delete",
+  "ticket-mark-delivered": "tasks.mark_delivered",
+  "people-workflow-save": "tasks.workflow_save",
+  "people-workflow-delete": "tasks.workflow_delete",
+  "people-workflow-archive": "tasks.workflow_archive",
+  "assignment-archive": "tasks.assignment_archive",
+  "assignment-delete": "tasks.assignment_delete",
+  "assignment-work": "tasks.assignment_work",
+  "section-work": "tasks.section_work",
+  "section-update": "tasks.section_edit",
+});
+
 export async function POST(request) {
   const body = await request.json().catch(() => ({}));
   const action = text(body?.action).toLowerCase();
   const view = text(body?.view).toLowerCase();
   const context = await directTaskManagementContext(view);
   if (!context?.ok) return json({ ok: false, error: context?.error || "Task Management access denied." }, context?.status || 503);
+  const required = ACTION_PERMISSION[action];
+  if (required) {
+    const authorized = featureGate(context, required);
+    if (!authorized.ok) return json({ ok: false, error: authorized.error }, authorized.status || 403);
+  }
 
   try {
     if (action === "ticket-create") {
