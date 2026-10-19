@@ -534,10 +534,10 @@ function templateReportFileName(group) {
   return `maintenance-template-${safe}.pdf`;
 }
 
-function MaintenanceCard({ group, onOpen, onCreator, onPrefetch }) {
+function MaintenanceCard({ group, onOpen, onCreator, onPrefetch, canOpen = true }) {
   const vars = MAINTENANCE_STATUS_COLORS[group.state.key] || MAINTENANCE_STATUS_COLORS["not-started"];
   return (
-    <article className="co-card next-maintenance-order-card" role="button" tabIndex={0} aria-label={`Open ${group.orderIdLabel}`} onPointerEnter={(event) => { if (event.pointerType === "mouse" || event.pointerType === "pen") onPrefetch(group, true); }} onPointerLeave={() => onPrefetch(null, true)} onFocus={(event) => { if (event.target === event.currentTarget) onPrefetch(group); }} onClick={() => onOpen(group)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen(group); } }}>
+    <article className="co-card next-maintenance-order-card" role={canOpen ? "button" : undefined} tabIndex={canOpen ? 0 : undefined} aria-label={canOpen ? `Open ${group.orderIdLabel}` : group.orderIdLabel} onPointerEnter={(event) => { if (event.pointerType === "mouse" || event.pointerType === "pen") onPrefetch(group, true); }} onPointerLeave={() => onPrefetch(null, true)} onFocus={(event) => { if (event.target === event.currentTarget) onPrefetch(group); }} onClick={() => onOpen(group)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen(group); } }}>
       <div className="co-top">
         <div className="co-main">
           <OrderTypeBadge type={group.orderType || "Request Maintenance"} color={undefined} />
@@ -599,7 +599,7 @@ async function fileToOptimizedDataUrl(file) {
 }
 
 
-export default function MaintenanceOrdersClient({ initialOrders = [], initialOptions = {}, initialPageInfo = null, bootstrapWarnings = [] }) {
+export default function MaintenanceOrdersClient({ initialOrders = [], initialOptions = {}, initialPageInfo = null, bootstrapWarnings = [], permissions = {} }) {
   const [orders, setOrders] = useState(Array.isArray(initialOrders) ? initialOrders : []);
   const [pageInfo, setPageInfo] = useState(initialPageInfo || { hasMore: false, nextCursor: null, limit: 36 });
   const [listLoading, setListLoading] = useState(false);
@@ -787,6 +787,7 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
   }
 
   async function openOrderDetails(group) {
+    if (permissions.details === false) return;
     if (!group) return;
     const attemptId = markOrderOpenStarted("Maintenance");
     const requestId = ++openRequestRef.current;
@@ -1159,16 +1160,16 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
 
       <section className="next-maintenance-orders-list-surface">
         <OrdersListHeader count={visibleGroups.length} hasMore={pageInfo?.hasMore} busy={listLoading} sortMode={sortMode} onSortChange={setSortMode} />
-        <div className="co-cards" id="requested-list">{visibleGroups.length ? sortedVisibleGroups.map((group) => <MaintenanceCard group={group} onOpen={openOrderDetails} onPrefetch={prefetchOrderDetails} onCreator={openCreatorProfile} key={group.key} />) : listLoading ? <div className="ops-no-data-state" role="status" aria-live="polite"><div className="ops-no-data-state__text">Loading maintenance orders…</div></div> : <OrdersEmptyState filtered={tab !== "all" || type !== "all" || !!query.trim()} context={"orders"} onReset={() => { setTab("all"); setType("all"); setQuery(""); }} />}</div>
+        <div className="co-cards" id="requested-list">{visibleGroups.length ? sortedVisibleGroups.map((group) => <MaintenanceCard canOpen={permissions.details !== false} group={group} onOpen={permissions.details === false ? () => {} : openOrderDetails} onPrefetch={permissions.details === false ? () => {} : prefetchOrderDetails} onCreator={openCreatorProfile} key={group.key} />) : listLoading ? <div className="ops-no-data-state" role="status" aria-live="polite"><div className="ops-no-data-state__text">Loading maintenance orders…</div></div> : <OrdersEmptyState filtered={tab !== "all" || type !== "all" || !!query.trim()} context={"orders"} onReset={() => { setTab("all"); setType("all"); setQuery(""); }} />}</div>
         {pageInfo?.hasMore ? <div style={{ display: "flex", justifyContent: "center", padding: "16px 0 4px" }}><button type="button" className="ro-action-btn ro-action-btn--light" disabled={listLoading} onClick={() => fetchOrdersPage({ reset: false }).catch((error) => { setNotice(error?.message || "Failed to load more maintenance orders."); window.setTimeout(() => setNotice(""), 4000); })}>{listLoading ? "Loading…" : "Load more orders"}</button></div> : null}
       </section>
 
       <OrderDetailsLoadingOverlay group={openingGroup} onCancel={closeOrderDetails} variant="maintenance" />
-      {selected ? <MaintenanceDetailsModal group={selected} busy={busy} onClose={closeOrderDetails} onLog={openLog} onSecondLog={openSecondLog} onDone={(group) => { setActionError(""); setDoneGroup(group); }} onExport={openDownload} onAction={beginAction} /> : null}
+      {selected ? <MaintenanceDetailsModal group={selected} permissions={permissions} busy={busy} onClose={closeOrderDetails} onLog={openLog} onSecondLog={openSecondLog} onDone={(group) => { setActionError(""); setDoneGroup(group); }} onExport={openDownload} onAction={beginAction} /> : null}
       {actionState ? <MaintenanceActionPasswordModal state={actionState} busy={busy} error={actionError} onCancel={() => { setActionState(null); setActionError(""); }} onSubmit={submitAction} /> : null}
       {deleteConfirm ? <MaintenanceDeleteConfirmationModal state={deleteConfirm} busy={busy} onCancel={() => setDeleteConfirm(null)} onConfirm={confirmDelete} /> : null}
-      {logGroup ? <MaintenanceLogModal group={logGroup} mode={logMode} options={options} busy={busy} error={actionError} onCancel={() => { setLogGroup(null); setLogMode("create"); setActionError(""); }} onSubmit={saveLog} onChecklistSaved={rememberChecklistItem} onChecklistUpdated={rememberChecklistItem} onChecklistDeleted={forgetChecklistItem} /> : null}
-      {downloadState ? <MaintenanceDownloadModal state={downloadState} options={options} busy={busy} onClose={() => setDownloadState(null)} onDownload={exportOrder} onChecklistSaved={rememberChecklistItem} onChecklistUpdated={rememberChecklistItem} onChecklistDeleted={forgetChecklistItem} /> : null}
+      {logGroup ? <MaintenanceLogModal canManageChecklist={permissions.checklist_manage !== false} group={logGroup} mode={logMode} options={options} busy={busy} error={actionError} onCancel={() => { setLogGroup(null); setLogMode("create"); setActionError(""); }} onSubmit={saveLog} onChecklistSaved={rememberChecklistItem} onChecklistUpdated={rememberChecklistItem} onChecklistDeleted={forgetChecklistItem} /> : null}
+      {downloadState ? <MaintenanceDownloadModal canManageChecklist={permissions.checklist_manage !== false} state={downloadState} options={options} busy={busy} onClose={() => setDownloadState(null)} onDownload={exportOrder} onChecklistSaved={rememberChecklistItem} onChecklistUpdated={rememberChecklistItem} onChecklistDeleted={forgetChecklistItem} /> : null}
       {doneGroup ? <MarkDoneModal group={doneGroup} busy={busy} error={actionError} onCancel={() => { setDoneGroup(null); setActionError(""); }} onSubmit={markDone} /> : null}
       <CreatorProfilePopover state={creatorState} onClose={() => setCreatorState(null)} />
       <OrdersPerformancePanel />

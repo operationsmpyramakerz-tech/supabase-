@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import AppShell from "../../components/AppShell";
 import MaintenanceOrdersClient from "../../components/orders/MaintenanceOrdersClient";
 import { getLegacyAccountGate } from "../../lib/products-auth";
+import { featureGate } from "../../lib/feature-permissions-server";
+import { featureAllowed } from "../../lib/feature-permissions-registry";
 import { loadMaintenanceOrdersInitialPage } from "../../lib/maintenance-orders-data";
 
 export const dynamic = "force-dynamic";
@@ -27,7 +29,7 @@ export default async function MaintenanceOrdersPage() {
   // them together so navigation pays the slower of the two waits instead of
   // adding the Upstash/account-gate latency on top of the Supabase order read.
   const [gate, directResult] = await Promise.all([
-    getLegacyAccountGate(["Maintenance Orders"]),
+    getLegacyAccountGate(["Maintenance Orders"]).then(gate => featureGate(gate, "orders.maintenance.view")),
     loadMaintenanceOrdersInitialPage()
       .then((payload) => ({ payload, error: null }))
       .catch((error) => ({ payload: null, error })),
@@ -60,6 +62,7 @@ export default async function MaintenanceOrdersPage() {
       activePath="/next/maintenance-orders"
     >
       <MaintenanceOrdersClient
+        permissions={Object.fromEntries(["view", "details", "log", "mark_arrived", "edit", "archive", "delete", "checklist_manage", "export"].map(action => [action, featureAllowed(gate.account, `orders.maintenance.${action}`)]))}
         initialOrders={Array.isArray(orders) ? orders : []}
         initialOptions={{}}
         initialPageInfo={pageInfo}

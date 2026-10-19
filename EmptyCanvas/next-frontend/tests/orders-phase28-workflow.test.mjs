@@ -25,6 +25,7 @@ const makeOps = (rows, { maintenanceAllowed = true, operationsAllowed = true } =
     text, calls,
     directPageMutationAccess: (_account, pages) => maintenanceAllowed && pages.includes('Maintenance Orders'),
     ensureOperationsMutationAccess: () => operationsAllowed ? true : (() => { throw makeError('Forbidden', 403); })(),
+    featureAllowed: (account, key) => account?.featureAccess?.mode !== "enforced" || account?.featureAccess?.grants?.[key]?.allowed === true,
     directOperationsMutationError: makeError,
     loadOperationRowsByIds: async (ids) => ({ clean: ids.map(text), rows, byId: new Map(rows.map(r => [text(r.id), r])) }),
     serializeOperationsOrderDetail: row => ({ ...row, orderType: row.order_type, maintenanceLogs: row.maintenanceLogs || [], sparePartsReplacedEntries: row.sparePartsReplacedEntries || [] }),

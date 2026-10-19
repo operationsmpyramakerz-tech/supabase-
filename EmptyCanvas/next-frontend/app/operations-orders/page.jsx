@@ -74,6 +74,8 @@ export default async function OperationsOrdersPage() {
           ["delivery", "orders.operations.delivery"],
           ["edit", "orders.operations.edit"],
           ["export", "orders.operations.export"],
+          ["maintenance_log", "orders.maintenance.log"],
+          ["maintenance_arrive", "orders.maintenance.mark_arrived"],
         ].map(([name, key]) => [name, featureAllowed(gate.account, key) && (name === "export" || editPage)]))}
       />
     </AppShell>

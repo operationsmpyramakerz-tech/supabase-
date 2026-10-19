@@ -203,6 +203,11 @@ export const FEATURE_DEFINITIONS = Object.freeze(
     "label": "Edit checklist"
   },
   {
+    "module": "orders.maintenance",
+    "key": "orders.maintenance.export",
+    "label": "Download maintenance reports/templates"
+  },
+  {
     "module": "orders.shopping",
     "key": "orders.shopping.view",
     "label": "Open Shopping Cart"
@@ -936,7 +941,12 @@ export const FEATURE_DEFINITIONS = Object.freeze(
 );
 
 const knownKeys = new Set(FEATURE_DEFINITIONS.map((entry) => entry.key));
-export function isKnownFeature(key) { return knownKeys.has(String(key || "")); }
+// Explicit opt-in for My Orders; existing Phase 2A advanced profiles remain intact.
+export const MY_ORDERS_ENFORCEMENT_MARKER = "orders.my.__enforced";
+export function isKnownFeature(key) {
+  const clean = String(key || "");
+  return knownKeys.has(clean) || clean === MY_ORDERS_ENFORCEMENT_MARKER;
+}
 
 // Legacy accounts remain in their original page-access mode until an admin
 // explicitly activates their feature profile. Active profiles are deny-by-default.
@@ -944,21 +954,38 @@ export function featureAllowed(account, key, { legacyAllowed = true, scopes = ["
   if (!isKnownFeature(key)) return false;
   // The other modules remain on their previous authorization model until
   // their UI + backend entry points have been audited and switched together.
-  if (!(key.startsWith("products.") || key.startsWith("orders.operations."))) return !!legacyAllowed;
   const state = account?.featureAccess;
   if (state?.mode !== "enforced") return !!legacyAllowed;
+  const pilot = key.startsWith("products.") || key.startsWith("orders.operations.");
+  if (key === MY_ORDERS_ENFORCEMENT_MARKER) return state.grants?.[key]?.allowed === true;
+  if (key.startsWith("orders.my.")) {
+    if (state.grants?.[MY_ORDERS_ENFORCEMENT_MARKER]?.allowed !== true) return !!legacyAllowed;
+    const grant = state.grants?.[key];
+    return grant?.allowed === true && scopes.includes(grant.scope || "all");
+  }
+  const moduleMarker = key.startsWith("orders.maintenance.") ? "orders.maintenance.view"
+    : key.startsWith("orders.shopping.") ? "orders.shopping.view" : null;
+  // Module migrations are opt-in. Persist even a denied .view marker so
+  // new grants never silently remove rights from previously enabled users.
+  if (!pilot && (!moduleMarker || !Object.hasOwn(state.grants || {}, moduleMarker))) return !!legacyAllowed;
   const grant = state?.grants?.[key];
   return grant?.allowed === true && scopes.includes(grant.scope || "all");
 }
 
-export const PILOT_FEATURE_MODULES = Object.freeze(["products", "orders.operations"]);
+export const PILOT_FEATURE_MODULES = Object.freeze(["products", "orders.operations", "orders.my", "orders.maintenance", "orders.shopping"]);
 
 // Permissions with both server-side enforcement and UI controls in Phase 2A.
 // Do not show toggles for unprotected actions; that would imply false security.
 export const ACTIVE_PILOT_FEATURE_KEYS = Object.freeze([
+  "orders.my.view", "orders.my.edit", "orders.my.archive",
+  "orders.my.unarchive", "orders.my.delete", "orders.my.export",
   "products.view", "products.create", "products.edit", "products.delete",
   "products.tag_manage", "products.unit_create", "products.image_upload",
   "orders.operations.view", "orders.operations.approve", "orders.operations.ship",
   "orders.operations.receive", "orders.operations.withdrawal",
   "orders.operations.delivery", "orders.operations.edit", "orders.operations.export",
+  "orders.maintenance.view", "orders.maintenance.details", "orders.maintenance.log",
+  "orders.maintenance.mark_arrived", "orders.maintenance.edit", "orders.maintenance.archive",
+  "orders.maintenance.delete", "orders.maintenance.checklist_manage", "orders.maintenance.export",
+  "orders.shopping.view", "orders.shopping.submit", "orders.shopping.edit_submit", "orders.shopping.undo",
 ]);

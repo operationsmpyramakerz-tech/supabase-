@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getLegacyAccountGate } from "../../../../../lib/products-auth";
+import { featureGate } from "../../../../../lib/feature-permissions-server";
 import { undoShoppingCartOrderDirect } from "../../../../../lib/shopping-cart-order-service";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +18,7 @@ function noStore(payload, init = {}) {
 
 export async function POST(request) {
   const body = await request.json().catch(() => ({}));
-  const gate = await getLegacyAccountGate(["Create New Order"]);
+  const gate = featureGate(await getLegacyAccountGate(["Create New Order"]), "orders.shopping.undo");
   if (!gate.ok) {
     return noStore({ error: gate.error || "Authentication required." }, { status: gate.status || 503 });
   }

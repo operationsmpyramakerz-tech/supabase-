@@ -12,6 +12,7 @@ import { canUseOrderCandidateRpc, loadOrderCandidateNumbersRpc, noteOrderCandida
 import { canUseOrderCardSummaryRpc, canUseOrderSummaryRpc, loadOrderCardSummariesRpc, loadOrderSummaryRowsRpc, noteOrderCardSummaryRpcError, noteOrderSummaryRpcError } from "./order-summary-rpc";
 import { measurePerformance, recordPerformanceSample } from "./performance-profiler";
 import { directPageMutationAccess } from "./order-action-auth";
+import { featureAllowed } from "./feature-permissions-registry";
 
 const PAGE_LIMIT = 36;
 const PAGE_MAX = 80;
@@ -2216,6 +2217,12 @@ export async function markOperationsArrived({
   const maintenanceBatch = serializedRows.every((item) =>
     text(item?.orderType).toLowerCase().replace(/[^a-z0-9]/g, "") === "requestmaintenance"
   );
+  // This service is also invoked by the generic Operations Orders endpoint.
+  // Re-check the persisted order type here so that using that endpoint cannot
+  // bypass the maintenance-specific delivery grant.
+  if (maintenanceBatch && !featureAllowed(account, "orders.maintenance.mark_arrived")) {
+    throw directOperationsMutationError("Permission orders.maintenance.mark_arrived is not allowed.", 403);
+  }
   if (maintenanceOnly && !maintenanceBatch) {
     throw directOperationsMutationError("Maintenance access cannot deliver other order types.", 403);
   }

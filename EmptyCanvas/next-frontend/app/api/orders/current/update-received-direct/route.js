@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDirectAccountGate } from "../../../../../lib/products-auth";
+import { featureGate } from "../../../../../lib/feature-permissions-server";
 import { markCurrentOrderReceivedDirect } from "../../../../../lib/current-orders-data";
 
 export const dynamic = "force-dynamic";
@@ -10,6 +11,10 @@ export async function POST(request) {
   if (!gate.ok) {
     return NextResponse.json({ success: false, error: gate.error || "Authentication required." }, { status: gate.status || 503 });
   }
+  // No separate UI control is exposed for this legacy endpoint in the pilot;
+  // it still requires the My Orders Edit grant, not Page View alone.
+  const permission = featureGate(gate, "orders.my.edit");
+  if (!permission.ok) return NextResponse.json({ success: false, error: permission.error }, { status: permission.status || 403 });
   try {
     const body = await request.json().catch(() => ({}));
     const result = await markCurrentOrderReceivedDirect({ account: gate.account, orderPageId: body?.orderPageId });

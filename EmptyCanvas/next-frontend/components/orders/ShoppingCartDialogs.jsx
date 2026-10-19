@@ -308,7 +308,7 @@ export function OrderSubmissionBar({ submission, onDone, onUndo }) {
         <strong>{submission.nextStep || "Waiting for approval"}</strong>
         <small>{submission.orderId || "Order created"} <b>·</b> {meta.label}</small>
       </span>
-      <button
+      {typeof onUndo === "function" ? <button
         className="classic-cart-order-confirmation-undo"
         type="button"
         disabled={undoing || exploding}
@@ -317,7 +317,7 @@ export function OrderSubmissionBar({ submission, onDone, onUndo }) {
         aria-label={`Undo ${submission.orderId || "order"}`}
       >
         Undo
-      </button>
+      </button> : null}
     </div>
   );
 }

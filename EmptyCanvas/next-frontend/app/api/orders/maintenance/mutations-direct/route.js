@@ -1,6 +1,7 @@
 import { NextResponse, after } from "next/server";
 import { dispatchQueuedNotifications } from "../../../../../lib/notification-event-worker";
 import { getDirectAccountGate } from "../../../../../lib/products-auth";
+import { featureGate } from "../../../../../lib/feature-permissions-server";
 import {
   logMaintenanceDirect,
   markMaintenanceArrivedDirect,
@@ -44,7 +45,14 @@ export async function POST(request) {
     return noStore({ error: "Unsupported Maintenance Orders action." }, { status: 400 });
   }
 
-  const gate = await getDirectAccountGate(["Maintenance Orders", "Operations Orders", "Requested Orders"]);
+  const permissionByAction = {
+    "archive": "orders.maintenance.archive",
+    "delete": "orders.maintenance.delete",
+    "edit-init": "orders.maintenance.edit",
+    "log-maintenance": body?.replaceExisting === true ? "orders.maintenance.edit" : "orders.maintenance.log",
+    "mark-arrived": "orders.maintenance.mark_arrived",
+  };
+  const gate = featureGate(await getDirectAccountGate(["Maintenance Orders", "Operations Orders", "Requested Orders"]), permissionByAction[action]);
   if (!gate.ok) {
     return noStore({ error: gate.error || "Authentication required." }, { status: gate.status || 503 });
   }

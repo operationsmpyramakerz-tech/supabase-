@@ -4,6 +4,7 @@ import { featureGate } from "../../../../lib/feature-permissions-server";
 import { renderOrderExport } from "../../../../lib/order-export-service";
 import { loadCurrentOrderDetails } from "../../../../lib/current-orders-data";
 import { loadOrdersReviewDetails } from "../../../../lib/orders-review-data";
+import { loadMaintenanceOrderDetails } from "../../../../lib/maintenance-orders-data";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,8 +19,8 @@ function requiredPages(scope = "") {
   const key = text(scope).toLowerCase();
   if (key === "current") return ["Current Orders"];
   if (key === "review") return ["Orders Review"];
-  if (key === "maintenance") return ["Maintenance Orders", "Requested Orders", "Operations Orders"];
-  return ["Requested Orders", "Operations Orders", "Maintenance Orders"];
+  if (key === "maintenance") return ["Maintenance Orders"];
+  return ["Requested Orders", "Operations Orders"];
 }
 
 function jsonError(message, status = 500) {
@@ -41,14 +42,20 @@ async function verifyScopedOrderAccess(scope, account, orderIds) {
   }
   if (scope === "review") {
     await loadOrdersReviewDetails({ account, orderIds });
+    return;
   }
+  if (scope === "maintenance") await loadMaintenanceOrderDetails({ orderIds });
 }
 
 export async function POST(request) {
   const body = await request.json().catch(() => ({}));
   const scope = text(body?.scope || "operations").toLowerCase();
+  if (!["current", "review", "maintenance", "operations"].includes(scope)) {
+    return jsonError("Unsupported export scope.", 400);
+  }
   const preliminaryGate = await getLegacyAccountGate(requiredPages(scope));
-  const gate = scope === "operations" ? featureGate(preliminaryGate, "orders.operations.export") : preliminaryGate;
+  const exportPermissions = { operations: "orders.operations.export", maintenance: "orders.maintenance.export", current: "orders.my.export" };
+  const gate = exportPermissions[scope] ? featureGate(preliminaryGate, exportPermissions[scope]) : preliminaryGate;
   if (!gate.ok) return jsonError(gate.error || "Authentication required.", gate.status || 503);
 
   try {

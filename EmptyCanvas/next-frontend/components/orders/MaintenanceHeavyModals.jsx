@@ -238,7 +238,7 @@ async function deleteMaintenanceChecklistItem(id) {
   return data;
 }
 
-function MaintenanceChecklistOption({ item, checked, disabled, onToggle, onUpdated, onDeleted, onError }) {
+function MaintenanceChecklistOption({ item, checked, disabled, onToggle, onUpdated, onDeleted, onError, canManage = true }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(item?.text || "");
   const [working, setWorking] = useState(false);
@@ -299,7 +299,7 @@ function MaintenanceChecklistOption({ item, checked, disabled, onToggle, onUpdat
       <span>{item.text}</span>
     </label>}
 
-    <div className="next-maintenance-checklist-option__actions">
+    {canManage ? <div className="next-maintenance-checklist-option__actions">
       {editing ? <>
         <button type="button" className="next-maintenance-checklist-icon-btn next-maintenance-checklist-icon-btn--save" onClick={saveEdit} disabled={locked || !text(draft)} aria-label="Save checklist item" title="Save"><ClassicOrderIcon name="check" /></button>
         <button type="button" className="next-maintenance-checklist-icon-btn" onClick={() => { setDraft(item.text); setEditing(false); }} disabled={locked} aria-label="Cancel checklist edit" title="Cancel"><ClassicOrderIcon name="x" /></button>
@@ -307,7 +307,7 @@ function MaintenanceChecklistOption({ item, checked, disabled, onToggle, onUpdat
         <button type="button" className="next-maintenance-checklist-icon-btn" onClick={() => { setDraft(item.text); setEditing(true); }} disabled={locked || !item?.id} aria-label="Edit checklist item" title="Edit"><ClassicOrderIcon name="edit-2" /></button>
         <button type="button" className="next-maintenance-checklist-icon-btn next-maintenance-checklist-icon-btn--danger" onClick={async () => { const confirmed = await confirmDeleteAction({ title: "Delete checklist item?", itemType: "checklist item", itemName: item.text, message: `“${item.text}” will be permanently removed from the maintenance checklist.` }); if (confirmed) confirmRemove(); }} disabled={locked || !item?.id} aria-label="Delete checklist item" title="Delete"><ClassicOrderIcon name="trash-2" /></button>
       </>}
-    </div>
+    </div> : null}
   </div>;
 }
 
@@ -418,7 +418,7 @@ function maintenanceLogLabel(index) {
   return `Log ${index + 1}`;
 }
 
-export function MaintenanceDetailsModal({ group, busy, onClose, onLog, onSecondLog, onDone, onExport, onAction }) {
+export function MaintenanceDetailsModal({ group, busy, onClose, onLog, onSecondLog, onDone, onExport, onAction, permissions = {} }) {
   const [photosOpen, setPhotosOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [componentSearch, setComponentSearch] = useState("");
@@ -479,16 +479,16 @@ export function MaintenanceDetailsModal({ group, busy, onClose, onLog, onSecondL
       <div className="co-modal-overlay is-open" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
         <div className="co-modal-dialog next-maintenance-details-dialog" role="dialog" aria-modal="true" aria-label={`${group.orderIdLabel} maintenance details`}>
           <span className="co-modal-type-badge" style={{ "--co-order-type-accent": "#f2b705", "--co-order-type-accent-dark": "#a16207" }} aria-hidden="true"><ClassicOrderIcon name="tool" /></span>
-          <div className="co-modal-more" ref={moreRef}>
+          {(permissions.edit !== false || permissions.archive !== false || permissions.delete !== false) ? <div className="co-modal-more" ref={moreRef}>
             <button type="button" className="co-modal-more-btn" aria-label="Order actions" aria-haspopup="menu" aria-expanded={moreOpen} onClick={() => setMoreOpen((value) => !value)}>
               <span className="co-modal-more-dots" aria-hidden="true">⋮</span>
             </button>
             {moreOpen ? <div className="co-modal-more-panel" role="menu" aria-label="Order actions">
-              <button type="button" className="co-modal-more-item" role="menuitem" onClick={() => menuAction("edit")}><ClassicOrderIcon name="edit-2" /><span>Edit</span></button>
-              <button type="button" className="co-modal-more-item" role="menuitem" onClick={() => menuAction("archive")}><ClassicOrderIcon name="archive" /><span>Archive</span></button>
-              <button type="button" className="co-modal-more-item co-modal-more-item--danger" role="menuitem" onClick={() => menuAction("delete")}><ClassicOrderIcon name="trash-2" /><span>Delete</span></button>
+              {permissions.edit !== false ? <button type="button" className="co-modal-more-item" role="menuitem" onClick={() => menuAction("edit")}><ClassicOrderIcon name="edit-2" /><span>Edit</span></button> : null}
+              {permissions.archive !== false ? <button type="button" className="co-modal-more-item" role="menuitem" onClick={() => menuAction("archive")}><ClassicOrderIcon name="archive" /><span>Archive</span></button> : null}
+              {permissions.delete !== false ? <button type="button" className="co-modal-more-item co-modal-more-item--danger" role="menuitem" onClick={() => menuAction("delete")}><ClassicOrderIcon name="trash-2" /><span>Delete</span></button> : null}
             </div> : null}
-          </div>
+          </div> : null}
           <button type="button" className="co-modal-close" onClick={onClose} aria-label="Close order details" />
           <div className="co-modal-header"><div className="co-modal-head-left"><div className="co-modal-status">Request Maintenance</div></div></div>
           <div className="co-modal-scroll-region">
@@ -505,11 +505,11 @@ export function MaintenanceDetailsModal({ group, busy, onClose, onLog, onSecondL
             </div> : null}
 
             <div className="co-modal-actions ro-actions ro-actions--right next-maintenance-modal-actions order-detail-workflow-actions">
-              {canTemplate ? <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => onExport(group, { template: true })} disabled={busy}><ClassicOrderIcon name="download" />Download Template</button> : null}
-              {canDownload ? <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => onExport(group)} disabled={busy}><ClassicOrderIcon name="download" />Download</button> : null}
-              {canLog ? <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => onLog(group)} disabled={busy}><ClassicOrderIcon name="clipboard" />Log Maintenance</button> : null}
-              {canSecondLog ? <button type="button" className="ro-action-btn ro-action-btn--light next-maintenance-second-log-btn" onClick={() => onSecondLog(group)} disabled={busy}><ClassicOrderIcon name="clipboard" />Make Second Log</button> : null}
-              {canDone ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onDone(group)} disabled={busy}><ClassicOrderIcon name="check-circle" />Mark as Delivered</button> : null}
+              {canTemplate && permissions.export !== false ? <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => onExport(group, { template: true })} disabled={busy}><ClassicOrderIcon name="download" />Download Template</button> : null}
+              {canDownload && permissions.export !== false ? <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => onExport(group)} disabled={busy}><ClassicOrderIcon name="download" />Download</button> : null}
+              {canLog && permissions.log !== false ? <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => onLog(group)} disabled={busy}><ClassicOrderIcon name="clipboard" />Log Maintenance</button> : null}
+              {canSecondLog && permissions.log !== false ? <button type="button" className="ro-action-btn ro-action-btn--light next-maintenance-second-log-btn" onClick={() => onSecondLog(group)} disabled={busy}><ClassicOrderIcon name="clipboard" />Make Second Log</button> : null}
+              {canDone && permissions.mark_arrived !== false ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onDone(group)} disabled={busy}><ClassicOrderIcon name="check-circle" />Mark as Delivered</button> : null}
             </div>
 
             <div className="co-modal-actions ro-actions order-detail-toolkit next-maintenance-search-tools">
@@ -619,7 +619,7 @@ export function MaintenanceDetailsModal({ group, busy, onClose, onLog, onSecondL
   );
 }
 
-export function MaintenanceDownloadModal({ state, options, busy, onClose, onDownload, onChecklistSaved, onChecklistUpdated, onChecklistDeleted }) {
+export function MaintenanceDownloadModal({ state, options, busy, onClose, onDownload, onChecklistSaved, onChecklistUpdated, onChecklistDeleted, canManageChecklist = true }) {
   const group = state?.group || null;
   const template = Boolean(state?.template);
   const [columns, setColumns] = useState(MAINTENANCE_SPARE_EXPORT_COLUMNS.map(([key]) => key));
@@ -728,15 +728,16 @@ export function MaintenanceDownloadModal({ state, options, busy, onClose, onDown
             checked={selectedChecklist.includes(item.text)}
             disabled={busy || savingChecklist}
             onToggle={() => toggleChecklist(item.text)}
+            canManage={canManageChecklist}
             onUpdated={handleChecklistUpdated}
             onDeleted={handleChecklistDeleted}
             onError={setError}
           />) : <div className="next-maintenance-checklist-empty">No saved checklist items yet.</div>}
         </div>
-        <div className="next-maintenance-checklist-add">
+        {canManageChecklist ? <div className="next-maintenance-checklist-add">
           <input type="text" value={newChecklist} onChange={(event) => setNewChecklist(event.target.value)} placeholder="Add checklist text..." disabled={busy || savingChecklist} />
           <button type="button" className="order-download-btn order-download-btn--light" onClick={addChecklist} disabled={busy || savingChecklist || !text(newChecklist)}>+ Add</button>
-        </div>
+        </div> : null}
       </div>
 
       {error ? <div className="order-download-error" role="alert">{error}</div> : null}
@@ -802,7 +803,7 @@ function emptyLogForItem(item, mode = "create") {
   };
 }
 
-export function MaintenanceLogModal({ group, mode = "create", options, busy, error, onCancel, onSubmit, onChecklistSaved, onChecklistUpdated, onChecklistDeleted }) {
+export function MaintenanceLogModal({ group, mode = "create", options, busy, error, onCancel, onSubmit, onChecklistSaved, onChecklistUpdated, onChecklistDeleted, canManageChecklist = true }) {
   const [logs, setLogs] = useState([]);
   const [newChecklistText, setNewChecklistText] = useState({});
   const [checklistSaving, setChecklistSaving] = useState(false);
@@ -995,15 +996,16 @@ export function MaintenanceLogModal({ group, mode = "create", options, busy, err
                       checked={normalizeMaintenanceChecklist(entry.checklist).includes(item.text)}
                       disabled={busy || checklistSaving}
                       onToggle={() => toggleChecklist(logIndex, item.text)}
+                      canManage={canManageChecklist}
                       onUpdated={handleChecklistUpdated}
                       onDeleted={handleChecklistDeleted}
                       onError={setChecklistError}
                     />) : <div className="next-maintenance-checklist-empty">No saved checklist items yet.</div>}
                   </div>
-                  <div className="next-maintenance-checklist-add">
+                  {canManageChecklist ? <div className="next-maintenance-checklist-add">
                     <input className="co-submodal-input" type="text" value={newChecklistText[logIndex] || ""} onChange={(event) => setNewChecklistText((current) => ({ ...current, [logIndex]: event.target.value }))} placeholder="Add checklist text..." disabled={busy || checklistSaving} />
                     <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => addChecklistItem(logIndex)} disabled={busy || checklistSaving || !text(newChecklistText[logIndex])}>+ Add</button>
-                  </div>
+                  </div> : null}
                 </div>
               </div>
             </section>)}

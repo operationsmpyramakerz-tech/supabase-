@@ -595,7 +595,7 @@ function ProgressTrack({ value }) {
 }
 
 
-export default function CurrentOrdersClient({ initialOrders = [], initialPageInfo = null, bootstrapWarnings = [] }) {
+export default function CurrentOrdersClient({ initialOrders = [], initialPageInfo = null, bootstrapWarnings = [], permissions = null }) {
   const [creatorPreview, setCreatorPreview] = useState(null);
   const [orders, setOrders] = useState(Array.isArray(initialOrders) ? initialOrders : []);
   const [pageInfo, setPageInfo] = useState(initialPageInfo || { hasMore: false, nextCursor: null, limit: 36 });
@@ -818,6 +818,7 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
   }
 
   function beginAction(action, group) {
+    if (permissions?.[action] === false) return;
     setActionError("");
     setActionState({ action, group });
   }
@@ -1011,6 +1012,7 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
           onAction={beginAction}
           onReason={setReasonView}
           onExport={exportOrder}
+          permissions={permissions}
           actionState={actionState}
           actionError={actionError}
           onCancelAction={() => { if (!busy) { setActionState(null); setActionError(""); } }}

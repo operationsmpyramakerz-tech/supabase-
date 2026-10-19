@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getLegacyAccountGate } from "../../../../../lib/products-auth";
+import { featureGate } from "../../../../../lib/feature-permissions-server";
 import { loadCurrentOrdersPage } from "../../../../../lib/current-orders-data";
 import { measurePerformance } from "../../../../../lib/performance-profiler";
 
@@ -18,7 +19,7 @@ function noStore(payload, init = {}) {
 
 async function GETImpl(request) {
   const url = new URL(request.url);
-  const gate = await getLegacyAccountGate(["Current Orders"]);
+  const gate = featureGate(await getLegacyAccountGate(["Current Orders"]), "orders.my.view");
   if (!gate.ok) {
     return noStore({ error: gate.error || "Authentication required." }, { status: gate.status || 503 });
   }

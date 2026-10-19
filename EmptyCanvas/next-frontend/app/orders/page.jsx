@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import AppShell from "../../components/AppShell";
 import CurrentOrdersClient from "../../components/orders/CurrentOrdersClient";
 import { getLegacyAccountGate } from "../../lib/products-auth";
+import { featureGate } from "../../lib/feature-permissions-server";
+import { featureAllowed } from "../../lib/feature-permissions-registry";
 import { getDirectAccountGateFromSessionContext } from "../../lib/direct-session-account";
 import { loadCurrentOrdersInitialPage } from "../../lib/current-orders-data";
 
@@ -47,6 +49,8 @@ export default async function CurrentOrdersPage() {
   if (gate.status === 403) {
     return <UnavailableState forbidden message="Your account does not have access to the My Orders page." />;
   }
+  const featureViewGate = featureGate(gate, "orders.my.view");
+  if (!featureViewGate.ok && featureViewGate.status === 403) return <UnavailableState forbidden message="Your account does not have permission to view My Orders." />;
   if (!gate.ok || !gate.account) {
     return <UnavailableState message={gate.error || "The account service is temporarily unavailable."} />;
   }
@@ -73,6 +77,11 @@ export default async function CurrentOrdersPage() {
         initialOrders={Array.isArray(orders) ? orders : []}
         initialPageInfo={pageInfo}
         bootstrapWarnings={[]}
+        permissions={Object.fromEntries([
+          ["edit", "orders.my.edit"], ["archive", "orders.my.archive"],
+          ["unarchive", "orders.my.unarchive"], ["delete", "orders.my.delete"],
+          ["export", "orders.my.export"],
+        ].map(([action, key]) => [action, featureAllowed(gate.account, key)]))}
       />
     </AppShell>
   );

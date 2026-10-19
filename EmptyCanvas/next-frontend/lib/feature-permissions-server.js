@@ -104,8 +104,15 @@ export async function replaceMemberFeatureAccess(memberId, rows, { enabled = tru
   return { enabled: enabled === true, version: Number(result?.[0]?.version || 0), grants };
 }
 
+export function getFeaturePermissionSetupStatus() {
+  if (process.env.ERP_ADVANCED_PERMISSIONS_ENABLED !== "1") return { available: false, reason: "server_flag_disabled" };
+  if (!(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_KEY)) return { available: false, reason: "missing_service_credential" };
+  return { available: true, reason: "ready" };
+}
+
 export async function getMemberFeatureAccessForAdmin(memberId) {
-  if (process.env.ERP_ADVANCED_PERMISSIONS_ENABLED !== "1") return { available: false, enabled: false, grants: [] };
+  const setup = getFeaturePermissionSetupStatus();
+  if (!setup.available) return { ...setup, enabled: false, grants: [] };
   requireServerCredential();
   const id = clean(memberId);
   if (!id) { const error = new Error("Missing member ID."); error.status = 400; throw error; }

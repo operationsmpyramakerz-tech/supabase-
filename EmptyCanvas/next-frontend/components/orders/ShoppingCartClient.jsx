@@ -572,6 +572,7 @@ function SlideToSubmit({ onSubmit, disabled = false, label = "Slide to submit" }
 }
 
 export default function ShoppingCartClient({
+  permissions = {},
   initialOrderTypes = [],
   initialComponents = [],
   initialDraft = {},
@@ -929,7 +930,9 @@ export default function ShoppingCartClient({
     await persistDraft([]);
   };
 
+  const canSubmit = editMode ? permissions.edit_submit !== false : permissions.submit !== false;
   const checkout = async () => {
+    if (!canSubmit) return false;
     const cartMissing = !cart.length;
     const reasonMissing = !maintenance && !text(reason);
     if (cartMissing || reasonMissing) {
@@ -1150,11 +1153,11 @@ export default function ShoppingCartClient({
             </div>
           ) : null}
 
-          <SlideToSubmit
+          {canSubmit ? <SlideToSubmit
             label="Slide to submit"
             disabled={busy || loadingDraft}
             onSubmit={checkout}
-          />
+          /> : null}
         </aside>
       </div>
 
@@ -1182,7 +1185,7 @@ export default function ShoppingCartClient({
           key={submittedOrder.key}
           submission={submittedOrder}
           onDone={setSubmittedOrder}
-          onUndo={undoSubmittedOrder}
+          onUndo={permissions.undo === false ? null : undoSubmittedOrder}
         />
       ) : null}
       <Toast notice={notice} onClose={() => setNotice(null)} />

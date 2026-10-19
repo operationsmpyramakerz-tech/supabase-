@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDirectAccountGate } from "../../../../lib/products-auth";
 import { directPageMutationAccess } from "../../../../lib/order-action-auth";
+import { featureGate } from "../../../../lib/feature-permissions-server";
 import {
   createMaintenanceChecklistItem,
   deleteMaintenanceChecklistItem,
@@ -56,7 +57,7 @@ export async function GET() {
 
 export async function POST(request) {
   const body = await request.json().catch(() => ({}));
-  const gate = await accountGate();
+  const gate = featureGate(await accountGate(), "orders.maintenance.checklist_manage");
   if (!gate.ok) return noStore({ error: gate.error || "Authentication required." }, { status: gate.status || 503 });
 
   const access = writeAccess(gate.account);
@@ -77,7 +78,7 @@ export async function POST(request) {
 
 export async function PATCH(request) {
   const body = await request.json().catch(() => ({}));
-  const gate = await accountGate();
+  const gate = featureGate(await accountGate(), "orders.maintenance.checklist_manage");
   if (!gate.ok) return noStore({ error: gate.error || "Authentication required." }, { status: gate.status || 503 });
 
   const access = writeAccess(gate.account);
@@ -98,7 +99,7 @@ export async function PATCH(request) {
 
 export async function DELETE(request) {
   const body = await request.json().catch(() => ({}));
-  const gate = await accountGate();
+  const gate = featureGate(await accountGate(), "orders.maintenance.checklist_manage");
   if (!gate.ok) return noStore({ error: gate.error || "Authentication required." }, { status: gate.status || 503 });
 
   const access = writeAccess(gate.account);

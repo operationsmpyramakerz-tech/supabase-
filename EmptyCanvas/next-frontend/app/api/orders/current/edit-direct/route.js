@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDirectAccountGate } from "../../../../../lib/products-auth";
+import { featureGate } from "../../../../../lib/feature-permissions-server";
 import { initializeCurrentOrderEditDirect } from "../../../../../lib/shopping-cart-order-service";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +22,9 @@ export async function POST(request) {
   if (!gate.ok) {
     return noStore({ error: gate.error || "Authentication required." }, { status: gate.status || 503 });
   }
+
+  const permission = featureGate(gate, "orders.my.edit");
+  if (!permission.ok) return noStore({ error: permission.error }, { status: permission.status || 403 });
 
   try {
     const result = await initializeCurrentOrderEditDirect({

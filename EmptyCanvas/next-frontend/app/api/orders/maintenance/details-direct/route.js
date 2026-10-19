@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { performance } from "node:perf_hooks";
 import { getLegacyAccountGate } from "../../../../../lib/products-auth";
+import { featureGate } from "../../../../../lib/feature-permissions-server";
 import { loadMaintenanceOrderDetails } from "../../../../../lib/maintenance-orders-data";
 
 export const dynamic = "force-dynamic";
@@ -30,7 +31,7 @@ export async function POST(request) {
 
   const authStartedAt = performance.now();
   const authStages = {};
-  const gate = await getLegacyAccountGate(["Maintenance Orders"], { timings: authStages });
+  const gate = featureGate(await getLegacyAccountGate(["Maintenance Orders"], { timings: authStages }), "orders.maintenance.details");
   const authMs = performance.now() - authStartedAt;
   // Expose stage timings to browser DevTools without sending order payloads
   // into logs or affecting private/no-store response semantics.

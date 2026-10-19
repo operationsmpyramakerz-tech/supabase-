@@ -6,7 +6,7 @@ import { cookies } from "next/headers";
 import { select, selectAll, selectById } from "./supabase-rest";
 import { recordPerformanceSample } from "./performance-profiler";
 import { loadMemberFeatureAccess, invalidateFeaturePermissionCache } from "./feature-permissions-server";
-import { featureAllowed } from "./feature-permissions-registry";
+import { featureAllowed, MY_ORDERS_ENFORCEMENT_MARKER } from "./feature-permissions-registry";
 
 const SESSION_LOOKUP_TIMEOUT_MS = 3500;
 const APP_PAGES_CACHE_TTL_MS = 60_000;
@@ -842,6 +842,16 @@ export async function getDirectAccountGateFromSessionContext(context = {}, requi
     const visiblePilotPage = (value) => {
       if (!isAdvanced) return true;
       const aliases = pageAliases(value);
+      if (aliases.includes("maintenanceorders") || aliases.includes("maintenance")) {
+        return featureAllowed({ featureAccess }, "orders.maintenance.view");
+      }
+      if (aliases.includes("createneworder") || aliases.includes("shoppingcart")) {
+        return featureAllowed({ featureAccess }, "orders.shopping.view");
+      }
+      if (aliases.some((name) => ["currentorders", "myorders", "orders"].includes(name))) {
+        if (featureAccess.grants?.[MY_ORDERS_ENFORCEMENT_MARKER]?.allowed !== true) return true;
+        return featureAllowed({ featureAccess }, "orders.my.view", { legacyAllowed: false });
+      }
       if (aliases.includes("products")) return featureAllowed({ featureAccess }, "products.view", { legacyAllowed: false });
       if (aliases.some((name) => ["requestedorders", "operationsorders", "operationsrequestedorders"].includes(name))) {
         return featureAllowed({ featureAccess }, "orders.operations.view", { legacyAllowed: false });

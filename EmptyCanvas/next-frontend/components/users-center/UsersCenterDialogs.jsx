@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import ActionLoadingModal, { useActionLoading } from "../ActionLoadingModal";
 import { DeleteConfirmDialog, DeleteVerificationDialog } from "../shared/SystemDeleteDialogs";
 import { cacheUsersCenterAuthorization, currentUsersCenterAuthorizationToken, requestJson, usersCenterMutation } from "./usersCenterClientShared";
-import { FEATURE_DEFINITIONS, ACTIVE_PILOT_FEATURE_KEYS } from "../../lib/feature-permissions-registry";
+import { FEATURE_DEFINITIONS, ACTIVE_PILOT_FEATURE_KEYS, MY_ORDERS_ENFORCEMENT_MARKER } from "../../lib/feature-permissions-registry";
 
 function text(value) { return String(value ?? "").trim(); }
 function lower(value) { return text(value).toLowerCase(); }
@@ -504,13 +504,21 @@ function PageAccessRow({ row, onChange, subpage = false }) {
 // every route. Do not expose switches that would give a false sense of security.
 function FeatureAccessModal({ member, onClose, protect }) {
   const [available, setAvailable] = useState(false);
+  const [setupReason, setSetupReason] = useState("");
   const [active, setActive] = useState(false);
   const [grants, setGrants] = useState({});
   const [unmanagedGrants, setUnmanagedGrants] = useState([]);
+  const [enabledModules, setEnabledModules] = useState({ products: true, "orders.operations": true });
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const modules = [{ key: "products", label: "Products" }, { key: "orders.operations", label: "Operations Orders" }];
+  const modules = [
+    { key: "products", label: "Products" },
+    { key: "orders.operations", label: "Operations Orders" },
+    { key: "orders.my", label: "My Orders", optIn: true },
+    { key: "orders.maintenance", label: "Maintenance Orders", optIn: true },
+    { key: "orders.shopping", label: "Shopping Cart", optIn: true },
+  ];
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -518,16 +526,25 @@ function FeatureAccessModal({ member, onClose, protect }) {
         const result = await requestJson(`/next/api/users-center/feature-access?id=${encodeURIComponent(member.id)}`);
         if (!mounted) return;
         setAvailable(result.available === true);
+        setSetupReason(result.reason || "");
         setActive(result.enabled === true);
-        setGrants(Object.fromEntries((result.grants || []).filter(item => ACTIVE_PILOT_FEATURE_KEYS.includes(item.key)).map(item => [item.key, item.allowed === true && item.scope === "all"])));
-        setUnmanagedGrants((result.grants || []).filter(item => !ACTIVE_PILOT_FEATURE_KEYS.includes(item.key)));
+        const stored = result.grants || [];
+        setGrants(Object.fromEntries(stored.filter(item => ACTIVE_PILOT_FEATURE_KEYS.includes(item.key)).map(item => [item.key, item.allowed === true && item.scope === "all"])));
+        setEnabledModules({
+          products: true, "orders.operations": true,
+          "orders.my": stored.some(item => item.key === MY_ORDERS_ENFORCEMENT_MARKER && item.allowed === true),
+          "orders.maintenance": stored.some(item => item.key === "orders.maintenance.view"),
+          "orders.shopping": stored.some(item => item.key === "orders.shopping.view"),
+        });
+        setUnmanagedGrants(stored.filter(item => !ACTIVE_PILOT_FEATURE_KEYS.includes(item.key) && item.key !== MY_ORDERS_ENFORCEMENT_MARKER));
       } catch (e) { if (mounted) setError(e.message); }
       finally { if (mounted) setLoading(false); }
     })();
     return () => { mounted = false; };
   }, [member.id]);
   const shown = FEATURE_DEFINITIONS.filter(item => ACTIVE_PILOT_FEATURE_KEYS.includes(item.key));
-  const checkedCount = shown.filter(item => grants[item.key] === true).length;
+  const activeFeatures = shown.filter(item => enabledModules[item.module]);
+  const checkedCount = activeFeatures.filter(item => grants[item.key] === true).length;
   function save() {
     if (busy || loading || !available) return;
     protect({ title: "Save advanced feature access", message: active
@@ -537,7 +554,15 @@ function FeatureAccessModal({ member, onClose, protect }) {
       try {
         await usersCenterMutation("feature-access-save", {
           memberId: member.id, enabled: active,
-          grants: [...unmanagedGrants, ...shown.filter(item => grants[item.key] === true).map(item => ({ key: item.key, allowed: true, scope: "all" }))],
+          grants: [
+            ...unmanagedGrants,
+            ...(enabledModules["orders.my"] ? [{ key: MY_ORDERS_ENFORCEMENT_MARKER, allowed: true, scope: "all" }] : []),
+            ...activeFeatures.filter(item => grants[item.key] === true).map(item => ({ key: item.key, allowed: true, scope: "all" })),
+            // Persist a denied view marker for opt-in modules. An absent marker
+            // intentionally means 'not migrated' and preserves legacy access.
+            ...modules.filter(module => module.optIn && module.key !== "orders.my" && enabledModules[module.key] && grants[`${module.key}.view`] !== true)
+              .map(module => ({ key: `${module.key}.view`, allowed: false, scope: "all" })),
+          ],
         });
         onClose();
       } catch (e) { setError(e.message); }
@@ -547,13 +572,27 @@ function FeatureAccessModal({ member, onClose, protect }) {
   return <Modal title="Advanced Permissions" subtitle={`Control exact features for ${member.name}.`} onClose={onClose} modalClass="ua-modal--page-access" compact icon="shield" closeDisabled={busy} bodyClass="ua-page-access-body" zIndex={10040} footer={<><button type="button" className="ua-btn ua-btn--light" onClick={onClose} disabled={busy}>Cancel</button><button type="button" className="ua-btn ua-btn--dark" onClick={save} disabled={busy || loading || !available}><UAIcon name="save"/><span>{busy ? "Saving..." : "Save Features"}</span></button></>}>
     <div style={{ padding: "12px 14px" }}>
       {loading ? <p>Loading feature permissions...</p> : null}
-      {!loading && !available ? <p>Advanced permissions are not installed or enabled on the server. Apply the Phase 2 SQL and configure ERP_ADVANCED_PERMISSIONS_ENABLED=1.</p> : null}
+      {!loading && !available ? <div className="ua-feature-setup-notice" role="status">
+        <strong>Advanced Permissions is not ready</strong>
+        {setupReason === "server_flag_disabled" ? <p>Enable <code>ERP_ADVANCED_PERMISSIONS_ENABLED=1</code> on the <strong>Next.js server</strong>, then restart or redeploy. SQL alone is not enough.</p>
+        : setupReason === "missing_service_credential" ? <p>The Next.js server needs a private <code>SUPABASE_SERVICE_ROLE_KEY</code> or another supported service credential. Never expose it to browser code.</p>
+        : <p>Check the Supabase tables, application server settings, and any error below.</p>}
+      </div> : null}
       {available ? <>
         <div className="ua-page-access-row ua-feature-access-row"><div className="ua-page-access-name"><strong>Use Advanced Permissions</strong><small>ON: deny all unselected pilot actions. OFF: keep legacy page rules.</small></div><div className="ua-page-access-enable"><label className="ua-switch"><input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)}/><span/></label></div></div>
         {active ? <>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, margin: "12px 0" }}><strong>{checkedCount} of {shown.length} allowed</strong><div style={{ display: "flex", gap: 8 }}><button type="button" className="ua-mini-btn" onClick={() => setGrants(Object.fromEntries(shown.map(item => [item.key, true])))}>Select All</button><button type="button" className="ua-mini-btn" onClick={() => setGrants({})}>Clear</button></div></div>
-          {modules.map(module => <section className="ua-page-access-group" key={module.key}><div className="ua-page-access-group__heading"><UAIcon name="shield"/><span>{module.label}</span></div><div className="ua-page-access-group__rows">{shown.filter(item => item.module === module.key).map(item => <div className="ua-page-access-row ua-feature-access-row" key={item.key}><div className="ua-page-access-name"><strong>{item.label}</strong><small>{item.key}</small></div><div className="ua-page-access-enable"><label className="ua-switch" title={item.label}><input type="checkbox" checked={grants[item.key] === true} onChange={e => setGrants(current => ({ ...current, [item.key]: e.target.checked }))}/><span/></label></div></div>)}</div></section>)}
-          <small>Scope is All for the pilot (the legacy Page Access level must also allow Edit on Operations Orders). Own / Team / Assigned enforcement will be enabled in later modules. Save Page Access separately: opening a page still requires that page to be enabled.</small>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, margin: "12px 0" }}><strong>{checkedCount} of {activeFeatures.length} allowed</strong><div style={{ display: "flex", gap: 8 }}><button type="button" className="ua-mini-btn" onClick={() => setGrants(current => ({ ...current, ...Object.fromEntries(activeFeatures.map(item => [item.key, true])) }))}>Select All</button><button type="button" className="ua-mini-btn" onClick={() => setGrants(current => ({ ...current, ...Object.fromEntries(activeFeatures.map(item => [item.key, false])) }))}>Clear</button></div></div>
+          {modules.map(module => <section className="ua-page-access-group" key={module.key}>
+            <div className="ua-page-access-group__heading" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+              <span><UAIcon name="shield"/>{module.label}</span>
+              {module.optIn ? <label className="ua-switch" title={`Enable detailed ${module.label} permissions`}>
+                <input type="checkbox" checked={!!enabledModules[module.key]} onChange={e => setEnabledModules(current => ({ ...current, [module.key]: e.target.checked }))}/><span/>
+              </label> : null}
+            </div>
+            {module.optIn && !enabledModules[module.key] ? <p style={{ margin: "12px 14px" }}>Uses existing Page Access until you enable detailed permissions for this module.</p> : null}
+            {enabledModules[module.key] ? <div className="ua-page-access-group__rows">{shown.filter(item => item.module === module.key).map(item => <div className="ua-page-access-row ua-feature-access-row" key={item.key}><div className="ua-page-access-name"><strong>{item.label}</strong><small>{item.key}</small></div><div className="ua-page-access-enable"><label className="ua-switch" title={item.label}><input type="checkbox" checked={grants[item.key] === true} onChange={e => setGrants(current => ({ ...current, [item.key]: e.target.checked }))}/><span/></label></div></div>)}</div> : null}
+          </section>)}
+          <small>New Maintenance Orders and Shopping Cart modules are optional per user. Enable a module, then grant only the features needed. A disabled View permission hides its page. Existing Page Access and any required admin password still apply. Scope is All during the pilot.</small>
         </> : <p>Legacy page permissions will apply to this account. No feature grants will be enforced.</p>}
       </> : null}
       {error ? <p className="ua-form-error">{error}</p> : null}
@@ -573,7 +612,7 @@ function PageAccessModal({ member, draftRows, onDraftRows, onClose, onSaved, pro
   const eventRows = rows.map((row, index) => ({ row, index })).filter(({ row }) => inSet(row, events)); const taskRows = rows.map((row, index) => ({ row, index })).filter(({ row }) => inSet(row, tasks)); const b2cRows = rows.map((row, index) => ({ row, index })).filter(({ row }) => inSet(row, b2c));
   const firstEvent = eventRows[0]?.index; const firstTask = taskRows[0]?.index; const firstB2c = b2cRows[0]?.index;
   const markup = []; rows.forEach((row, index) => { if (index === firstEvent) markup.push(<section className="ua-page-access-group ua-page-access-group--events" key="events-group"><div className="ua-page-access-group__heading"><UAIcon name="calendar"/><span>Events</span><small>Sub-pages</small></div><div className="ua-page-access-group__rows">{eventRows.map(({ row: child, index: childIndex }) => <PageAccessRow key={child.pageId || child.pageKey} row={child} subpage onChange={(values) => patch(childIndex, values)}/>)}</div></section>); if (index === firstTask) markup.push(<section className="ua-page-access-group ua-page-access-group--task-management" key="task-group"><div className="ua-page-access-group__heading"><UAIcon name="branch"/><span>Task Management</span><small>Sub-pages</small></div><div className="ua-page-access-group__rows">{taskRows.map(({ row: child, index: childIndex }) => <PageAccessRow key={child.pageId || child.pageKey} row={child} subpage onChange={(values) => patch(childIndex, values)}/>)}</div></section>); if (index === firstB2c) markup.push(<section className="ua-page-access-group ua-page-access-group--b2c" key="b2c-group"><div className="ua-page-access-group__heading"><UAIcon name="users"/><span>B2C</span><small>Sub-pages</small></div><div className="ua-page-access-group__rows">{b2cRows.map(({ row: child, index: childIndex }) => <PageAccessRow key={child.pageId || child.pageKey} row={child} subpage onChange={(values) => patch(childIndex, values)}/>)}</div></section>); if (!inSet(row, events) && !inSet(row, tasks) && !inSet(row, b2c)) markup.push(<PageAccessRow key={row.pageId || row.pageKey} row={row} onChange={(values) => patch(index, values)}/>); });
-  return <><Modal title="Page Access" subtitle={`Configure page access for ${isCreate ? "new team member" : member?.name || "this team member"}.`} onClose={onClose} modalClass="ua-modal--page-access" compact icon="shield" closeDisabled={busy} bodyClass="ua-page-access-body" zIndex={10020} footer={<><button type="button" className="ua-btn ua-btn--light" onClick={onClose} disabled={busy}>Cancel</button><button type="button" className="ua-btn ua-btn--dark" onClick={save} disabled={busy || loading}><UAIcon name="save"/><span>{busy ? "Saving..." : "Save Access"}</span></button></>}>{!isCreate ? <div style={{ padding: "12px 16px" }}><button type="button" className="ua-mini-btn" onClick={() => setAdvancedOpen(true)} disabled={busy || loading}><UAIcon name="shield"/> Advanced Feature Permissions</button><small style={{ display: "block", marginTop: 6 }}>Save page access first, then configure permissions for individual actions.</small></div> : null}<div className="ua-page-access-head"><div>Page name</div><div>Access type</div><div>Enable</div></div><div className="ua-page-access-list">{loading ? <div className="ua-page-access-loading"><span/> Loading pages...</div> : markup}</div>{error ? <div className="ua-form-error ua-page-access-error">{error}</div> : null}</Modal>{advancedOpen && !isCreate ? <FeatureAccessModal member={member} onClose={() => setAdvancedOpen(false)} protect={protect}/> : null}</>;
+  return <><Modal title="Page Access" subtitle={`Configure page access for ${isCreate ? "new team member" : member?.name || "this team member"}.`} onClose={onClose} modalClass="ua-modal--page-access" compact icon="shield" closeDisabled={busy} bodyClass="ua-page-access-body" zIndex={10020} footer={<><button type="button" className="ua-btn ua-btn--light" onClick={onClose} disabled={busy}>Cancel</button><button type="button" className="ua-btn ua-btn--dark" onClick={save} disabled={busy || loading}><UAIcon name="save"/><span>{busy ? "Saving..." : "Save Access"}</span></button></>}>{!isCreate ? <div className="ua-advanced-access-cta"><button type="button" className="ua-advanced-access-cta__button" onClick={() => setAdvancedOpen(true)} disabled={busy || loading}><span className="ua-advanced-access-cta__icon"><UAIcon name="shield"/></span><span className="ua-advanced-access-cta__copy"><strong>Advanced Feature Permissions</strong><small>Control individual actions, such as Edit, Delete and Export.</small></span><UAIcon name="chevron"/></button><small className="ua-advanced-access-cta__hint">Save any Page Access changes before configuring features.</small></div> : null}<div className="ua-page-access-head"><div>Page name</div><div>Access type</div><div>Enable</div></div><div className="ua-page-access-list">{loading ? <div className="ua-page-access-loading"><span/> Loading pages...</div> : markup}</div>{error ? <div className="ua-form-error ua-page-access-error">{error}</div> : null}</Modal>{advancedOpen && !isCreate ? <FeatureAccessModal member={member} onClose={() => setAdvancedOpen(false)} protect={protect}/> : null}</>;
 }
 
 function SvAccessModal({ member, allMembers, draftRows, onDraftRows, onClose, onSaved, protect }) {

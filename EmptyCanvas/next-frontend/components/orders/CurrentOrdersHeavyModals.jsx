@@ -285,7 +285,7 @@ function ProgressTrack({ value }) {
   );
 }
 
-function OrderDetailsModal({ group, tab, busy, onClose, onAction, onReason, onExport }) {
+function OrderDetailsModal({ group, tab, busy, onClose, onAction, onReason, onExport, permissions }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const [sortMode, setSortMode] = useState("product-tag");
   const [downloadOpen, setDownloadOpen] = useState(false);
@@ -324,6 +324,8 @@ function OrderDetailsModal({ group, tab, busy, onClose, onAction, onReason, onEx
   useEffect(() => { setMoreOpen(false); setDownloadOpen(false); setSortMode("product-tag"); setComponentSearch(""); }, [group?.key, tab]);
 
   const archived = group.status === "archive";
+  const may = (action) => permissions?.[action] !== false;
+  const hasMenuAction = archived ? (may("unarchive") || may("delete")) : (may("edit") || may("archive") || may("delete"));
   const maintenance = isMaintenanceOrder(group.orderType);
   const headerTitle = orderTypeHeaderTitle(group.orderType, group.orderTypeColor, statusLabel(group.status));
   const typeMeta = orderTypeMeta(group.orderType, group.orderTypeColor);
@@ -390,17 +392,17 @@ function OrderDetailsModal({ group, tab, busy, onClose, onAction, onReason, onEx
     <div className="co-modal-overlay is-open" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <div className="co-modal-dialog" role="dialog" aria-modal="true" aria-label={`${group.orderIdLabel} details`}>
         <span className="co-modal-type-badge" style={{ "--co-order-type-accent": typeMeta.accent, "--co-order-type-accent-dark": typeMeta.accentDark }} aria-hidden="true"><ClassicOrderIcon name={typeMeta.icon} /></span>
-        <div className="co-modal-more" ref={moreRef}>
+        {hasMenuAction ? <div className="co-modal-more" ref={moreRef}>
           <button type="button" className="co-modal-more-btn" aria-label="Order actions" aria-haspopup="menu" aria-expanded={moreOpen} onClick={() => setMoreOpen((state) => !state)}><span className="co-modal-more-dots" aria-hidden="true">⋮</span></button>
           {moreOpen ? (
             <div className="co-modal-more-panel" role="menu" aria-label="Order actions">
-              {!archived ? <button type="button" className="co-modal-more-item" onClick={() => menuAction("edit")}><ClassicOrderIcon name="edit-2" /><span>Edit</span></button> : null}
-              {!archived ? <button type="button" className="co-modal-more-item" onClick={() => menuAction("archive")}><ClassicOrderIcon name="archive" /><span>Archive</span></button> : null}
-              {archived ? <button type="button" className="co-modal-more-item" onClick={() => menuAction("unarchive")}><ClassicOrderIcon name="rotate-ccw" /><span>UnArchive</span></button> : null}
-              <button type="button" className="co-modal-more-item co-modal-more-item--danger" onClick={() => menuAction("delete")}><ClassicOrderIcon name="trash-2" /><span>Delete</span></button>
+              {!archived && may("edit") ? <button type="button" className="co-modal-more-item" onClick={() => menuAction("edit")}><ClassicOrderIcon name="edit-2" /><span>Edit</span></button> : null}
+              {!archived && may("archive") ? <button type="button" className="co-modal-more-item" onClick={() => menuAction("archive")}><ClassicOrderIcon name="archive" /><span>Archive</span></button> : null}
+              {archived && may("unarchive") ? <button type="button" className="co-modal-more-item" onClick={() => menuAction("unarchive")}><ClassicOrderIcon name="rotate-ccw" /><span>UnArchive</span></button> : null}
+              {may("delete") ? <button type="button" className="co-modal-more-item co-modal-more-item--danger" onClick={() => menuAction("delete")}><ClassicOrderIcon name="trash-2" /><span>Delete</span></button> : null}
             </div>
           ) : null}
-        </div>
+        </div> : null}
         <button type="button" className="co-modal-close" onClick={onClose} aria-label="Close order details" />
 
         <div className="co-modal-header"><div className="co-modal-head-left"><div className="co-modal-status">{headerTitle}</div><div className="co-modal-status-sub" hidden /></div></div>
@@ -445,7 +447,7 @@ function OrderDetailsModal({ group, tab, busy, onClose, onAction, onReason, onEx
           ) : null}
           <div className="co-modal-actions ro-actions ro-actions--right order-group-sort-actions order-modal-search-actions order-detail-toolkit">
             <OrderComponentSearch key={`${group.key}:${tab}`} value={componentSearch} onChange={setComponentSearch} disabled={busy} />
-            <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => setDownloadOpen(true)} disabled={busy}><ClassicOrderIcon name="download" /><span>Download</span></button>
+            {may("export") ? <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => setDownloadOpen(true)} disabled={busy}><ClassicOrderIcon name="download" /><span>Download</span></button> : null}
             <OrderSortButton value={sortMode} onChange={setSortMode} />
           </div>
           <div className="co-modal-meta co-modal-meta--after-actions">
@@ -462,7 +464,7 @@ function OrderDetailsModal({ group, tab, busy, onClose, onAction, onReason, onEx
           />
         </div>
         </div>
-        <OrderDownloadModal
+        {may("export") ? <OrderDownloadModal
           open={downloadOpen}
           title={`Download ${group.orderIdLabel}`}
           defaultSignatureLabels={orderTypeKey(group.orderType) === "withdrawproducts" ? ["Received From", "Operations", "Storekeeper"] : ["Storekeeper", "Operations", "Delivered to"]}
@@ -471,7 +473,7 @@ function OrderDetailsModal({ group, tab, busy, onClose, onAction, onReason, onEx
           defaultRepeatedComponentMode="merge"
           onClose={() => setDownloadOpen(false)}
           onDownload={(options) => onExport({ ...options, sortMode }, { ...group, items: tabItems, orderIds: tabItems.map((item) => text(item?.id)).filter(Boolean) })}
-        />
+        /> : null}
       </div>
     </div>
   );
@@ -547,6 +549,7 @@ export default function CurrentOrdersHeavyModals({
   onAction,
   onReason,
   onExport,
+  permissions,
   actionState,
   actionError,
   onCancelAction,
@@ -567,6 +570,7 @@ export default function CurrentOrdersHeavyModals({
         onAction={onAction}
         onReason={onReason}
         onExport={onExport}
+        permissions={permissions}
       /> : null}
       <PasswordModal
         state={actionState}
