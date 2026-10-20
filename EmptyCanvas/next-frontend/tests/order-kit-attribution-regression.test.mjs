@@ -70,18 +70,18 @@ test('one-source order display uses its source theme even when the item metadata
   assert.equal(item.quantity, 7);
 });
 
-test('multi-kit rows remain correctly attributed individually, and merged exports never invent one source', () => {
+test('multi-kit rows retain every true source kit name rather than a generic placeholder', () => {
   const sources = [
     { kitId: 'kit-theme-two-g5', kitTag: 'G5', kitFolderName: 'Theme two', quantity: 7 },
     { kitId: 'kit-theme-one-g3', kitTag: 'G3', kitFolderName: 'Theme one', quantity: 3 },
   ];
   const result = combinedOrderKitAttribution(sources);
-  assert.equal(result.kitTag, 'Multiple Kits');
+  assert.equal(result.kitTag, 'G3 - G5');
   assert.equal(result.kitFolderName, 'Multiple Folders');
   assert.equal(sources.reduce((sum, source) => sum + source.quantity, 0), 10);
 });
 
-test('combined export preserves quantities and marks different order source folders as mixed', () => {
+test('combined export preserves quantities, displays real kit names and marks different order source folders as mixed', () => {
   const make = (qty, kitTag, kitFolderName) => ({ rows: [{
     component: 'Sensor - DHT11', idCode: 'A100024', qty, receivedQty: 0,
     remainingQty: qty, deliveredQty: 0, total: qty * 45, unit: 45,
@@ -91,7 +91,7 @@ test('combined export preserves quantities and marks different order source fold
     make(7, 'G5', 'Theme two'), make(3, 'G3', 'Theme one'),
   ], [{ label: 'ORD-35' }, { label: 'ORD-40' }]);
   assert.equal(result.length, 1);
-  assert.equal(result[0].kitTag, 'Multiple Kits');
+  assert.equal(result[0].kitTag, 'G3 - G5');
   assert.equal(result[0].kitFolderName, 'Multiple Folders');
   assert.equal(result[0][combinedMetricColumnKey('qty', 0)], 7);
   assert.equal(result[0][combinedMetricColumnKey('qty', 1)], 3);

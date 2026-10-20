@@ -83,7 +83,7 @@ export function withSingleOrderSourceAttribution(item = {}) {
   };
 }
 
-/** A merged export cannot truthfully label multiple source kits as one. */
+/** A merged export includes every contributing source kit by its actual name. */
 export function combinedOrderKitAttribution(sources = []) {
   const list = (Array.isArray(sources) ? sources : []).filter((source) => Number(source?.quantity) > 0);
   if (!list.length) return null;
@@ -93,9 +93,14 @@ export function combinedOrderKitAttribution(sources = []) {
     kitFolderName: text(list[0]?.kitFolderName || list[0]?.folderName) || "Unfiled Kits",
     kitId: text(list[0]?.kitId) || null,
   };
+  const names = new Map();
+  for (const source of list) {
+    const name = text(source?.kitTag || source?.kitName) || "Unassigned kit";
+    if (!names.has(key(name))) names.set(key(name), name);
+  }
   const folders = [...new Set(list.map((source) => text(source?.kitFolderName || source?.folderName) || "Unfiled Kits"))];
   return {
-    kitTag: "Multiple Kits",
+    kitTag: [...names.values()].sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" })).join(" - "),
     kitFolderName: folders.length === 1 ? folders[0] : "Multiple Folders",
     kitId: null,
   };

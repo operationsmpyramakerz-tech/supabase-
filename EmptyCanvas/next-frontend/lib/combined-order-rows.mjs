@@ -54,11 +54,34 @@ function productIdOf(row) {
   return key.startsWith("product:") ? key.slice(8) : "";
 }
 
+function indexedCandidates(index, key, componentName) {
+  if (!key) return [];
+  // Legacy product IDs and display codes are not guaranteed unique. A row with
+  // a real product name must never inherit another component's identity solely
+  // because its code/ID was reused (e.g. both propellers have A100177).
+  return [...(index.get(key) || [])].filter((candidate) =>
+    !componentName || !candidate._nameKey || candidate._nameKey === componentName);
+}
+
+function addToIndex(index, key, target) {
+  if (!key) return;
+  if (!index.has(key)) index.set(key, new Set());
+  index.get(key).add(target);
+}
+
+function kitNamesOf(row) {
+  const raw = text(row?.kitTag) || "Unassigned kit";
+  // A single source order may already describe several kits ("G2 - G3").
+  // Split the display separator so kits shared by multiple orders are only
+  // printed once. Do not split a single-word hyphenated kit name ("G2-A").
+  return raw.split(/\s+-\s+/).map(text).filter(Boolean);
+}
+
 /**
  * @param {Array<{rows: object[]}>} orderPayloads An entry per selected order.
  * @param {Array<{label?: string}>} orderMeta Must use the same order as payloads.
  * @returns {object[]} One component row with one column per order/metric.
- * @throws When two different product codes share a name, or totals cannot reconcile.
+ * @throws When a name genuinely maps to different codes, or totals cannot reconcile.
  */
 export function mergeCombinedOrderRows(orderPayloads = [], orderMeta = []) {
   if (!Array.isArray(orderPayloads) || !Array.isArray(orderMeta) || orderPayloads.length !== orderMeta.length) {
@@ -83,10 +106,13 @@ export function mergeCombinedOrderRows(orderPayloads = [], orderMeta = []) {
         throw invalidExport(`Cannot identify a component in ${label}.`);
       }
 
+      // Prefer exact normalized component names. Fallback IDs/codes may be
+      // reused across DIFFERENT physical products; use them only when the
+      // candidate has no conflicting reliable name.
       const matches = new Set([
         reliableName ? byName.get(reliableName) : undefined,
-        code ? byCode.get(code) : undefined,
-        productId ? byProductId.get(productId) : undefined,
+        ...indexedCandidates(byCode, code, reliableName),
+        ...indexedCandidates(byProductId, productId, reliableName),
       ].filter(Boolean));
       if (matches.size > 1) {
         throw invalidExport(`Conflicting product identities for "${component}" in ${label}. Check the product name and ID Code in the source orders.`);
@@ -104,20 +130,25 @@ export function mergeCombinedOrderRows(orderPayloads = [], orderMeta = []) {
           remainingQty: 0,
           deliveredQty: 0,
           total: 0,
+          _nameKey: reliableName,
           _combinedOrderValues: {},
           _codes: new Set(),
           _sourceKitGroups: new Set(),
           _sourceFolderGroups: new Set(),
+          _kitNames: new Map(),
         };
         combinedRows.push(target);
       }
       if (code) target._codes.add(code);
-      // A single merged component can belong to different kits/folders in
-      // different orders. Never silently label it with the first order's kit.
-      const sourceKit = text(sourceRow?.kitTag) || "Unassigned kit";
+      if (reliableName && !target._nameKey) target._nameKey = reliableName;
+
       const sourceFolder = text(sourceRow?.kitFolderName) || "Unfiled Kits";
-      target._sourceKitGroups.add(`${sourceFolder.toLowerCase()}|${sourceKit.toLowerCase()}`);
       target._sourceFolderGroups.add(sourceFolder);
+      for (const sourceKit of kitNamesOf(sourceRow)) {
+        const key = sourceKit.toLocaleLowerCase();
+        if (!target._kitNames.has(key)) target._kitNames.set(key, sourceKit);
+        target._sourceKitGroups.add(`${sourceFolder.toLowerCase()}|${key}`);
+      }
       if (!text(target.idCode) && text(sourceRow?.idCode)) target.idCode = sourceRow.idCode;
       if (!text(target.link) && text(sourceRow?.link)) target.link = sourceRow.link;
       if ((!text(target.productTag) || target.productTag === "Uncategorized") && text(sourceRow?.productTag)) target.productTag = sourceRow.productTag;
@@ -125,17 +156,15 @@ export function mergeCombinedOrderRows(orderPayloads = [], orderMeta = []) {
       if ((!text(target.kitFolderName) || target.kitFolderName === "Unfiled Kits") && text(sourceRow?.kitFolderName)) target.kitFolderName = sourceRow.kitFolderName;
       if ((!Number.isFinite(Number(target.unit)) || Number(target.unit) === 0) && Number.isFinite(Number(sourceRow?.unit))) target.unit = Number(sourceRow.unit);
 
-      // Register all known aliases so names matching across different legacy IDs
-      // (or codes matching after product names change) still land on ONE row.
+      // Register all known aliases, without assuming a code/ID is unique.
       if (reliableName) byName.set(reliableName, target);
-      if (code) byCode.set(code, target);
-      if (productId) byProductId.set(productId, target);
+      addToIndex(byCode, code, target);
+      addToIndex(byProductId, productId, target);
 
       const values = target._combinedOrderValues[orderIndex] || Object.fromEntries(COMBINED_ORDER_METRIC_KEYS.map((metric) => [metric, 0]));
       // One product may be sourced from several kits / legacy order lines at
-      // DIFFERENT unit prices. That is not a quantity error. Keep each source
-      // line's cost, and derive a weighted average only for the unit-price cell.
-      // Never overwrite prices with the first/last line's arbitrary price.
+      // DIFFERENT unit prices. Keep each source line's cost and derive only
+      // the weighted-average unit price for a combined cell.
       const unit = numberValue(sourceRow?.unit, "unit", component, label);
       const sourceMetrics = Object.fromEntries(COMBINED_ORDER_METRIC_KEYS.map((metric) => [
         metric, numberValue(sourceRow?.[metric], metric, component, label),
@@ -153,10 +182,15 @@ export function mergeCombinedOrderRows(orderPayloads = [], orderMeta = []) {
     }
   });
 
-  const result = combinedRows.map(({ _codes, _combinedOrderValues, _sourceKitGroups, _sourceFolderGroups, ...row }) => {
+  const result = combinedRows.map(({ _nameKey, _codes, _combinedOrderValues, _sourceKitGroups, _sourceFolderGroups, _kitNames, ...row }) => {
     const out = { ...row };
-    if (_sourceKitGroups.size > 1 || text(out.kitTag) === "Multiple Kits") {
-      out.kitTag = "Multiple Kits";
+    const names = [..._kitNames.values()];
+    // The source kits are real names, not a placeholder like "Multiple Kits".
+    const meaningful = names.filter((name) => name.toLowerCase() !== "multiple kits");
+    out.kitTag = meaningful.length
+      ? meaningful.sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" })).join(" - ")
+      : "Unassigned kit";
+    if (_sourceKitGroups.size > 1) {
       out.kitFolderName = _sourceFolderGroups.size === 1 && !(_sourceFolderGroups.has("Multiple Folders"))
         ? [..._sourceFolderGroups][0] : "Multiple Folders";
     }
@@ -167,10 +201,6 @@ export function mergeCombinedOrderRows(orderPayloads = [], orderMeta = []) {
         Math.abs(source.unit - sources[0].unit) > 1e-6);
       const quantity = Number(values.qty || 0);
       const totalCost = Number(values.total || 0);
-      // A mixed-price row MUST retain the sum of the underlying line totals.
-      // The only price representing that combined row is totalCost / quantity.
-      // With zero net quantity a meaningful average does not exist; leave the
-      // price blank instead of inventing a price or dividing by zero.
       const unit = !sources.length ? 0
         : !distinctPrices ? sources[0].unit
           : Math.abs(quantity) > 1e-9 ? totalCost / quantity : null;
@@ -178,11 +208,7 @@ export function mergeCombinedOrderRows(orderPayloads = [], orderMeta = []) {
         throw invalidExport(`Invalid combined unit cost in ${text(order?.label) || `Order ${orderIndex + 1}`}.`);
       }
       out[combinedMetricColumnKey("unit", orderIndex)] = unit;
-      if (distinctPrices) {
-        // Kept for the Excel cell audit note. Each source retains its original
-        // quantity, unit price and cost; no information is discarded.
-        out[combinedMetricColumnKey("unitSources", orderIndex)] = sources;
-      }
+      if (distinctPrices) out[combinedMetricColumnKey("unitSources", orderIndex)] = sources;
       for (const metric of COMBINED_ORDER_METRIC_KEYS) {
         out[combinedMetricColumnKey(metric, orderIndex)] = values[metric] || 0;
       }
