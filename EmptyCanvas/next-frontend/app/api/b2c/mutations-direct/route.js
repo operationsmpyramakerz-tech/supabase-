@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { featureGate } from "../../../../lib/feature-permissions-server";
 
 import {
   b2cErrorMessage,
@@ -31,12 +32,25 @@ function requiredPages(action) {
   return ["Customer Database"];
 }
 
+export const B2C_ACTION_PERMISSIONS = Object.freeze({
+  "database-create": "b2c.database.create", "database-update": "b2c.database.edit",
+  "database-copy": "b2c.database.copy", "database-delete": "b2c.database.delete",
+  "fields-save": "b2c.database.fields", "record-update": "b2c.database.record_edit",
+  "record-delete": "b2c.database.record_delete", "form-create": "b2c.forms.create",
+  "form-update": "b2c.forms.edit", "form-builder-save": "b2c.forms.builder",
+  "form-submit": "b2c.forms.submit",
+});
+
 export async function POST(request) {
   const body = await request.json().catch(() => ({}));
   const action = text(body?.action).toLowerCase();
   const context = await directB2cContext(requiredPages(action), { mutation: true }).catch(() => null);
   if (!context) return json({ ok: false, error: "Direct B2C access is unavailable." }, 503);
   if (!context.ok) return json({ ok: false, error: context.error || "B2C access denied." }, context.status || 403);
+  const permissionKey = B2C_ACTION_PERMISSIONS[action];
+  if (!permissionKey) return json({ ok: false, error: "Unknown B2C action." }, 400);
+  const actionGate = featureGate(context, permissionKey);
+  if (!actionGate.ok) return json({ ok: false, error: actionGate.error }, actionGate.status || 403);
 
   try {
     if (action === "database-create") {

@@ -4,7 +4,7 @@ import { b2cDatabasesPayload, b2cErrorMessage, directB2cContext } from "../../..
 export const dynamic = "force-dynamic";
 
 export async function GET(request) {
-  const context = await directB2cContext(["Customer Database", "Customer Form", "B2C"]).catch(() => null);
+  const context = await directB2cContext(["Customer Database", "Customer Form", "B2C"], { feature: "b2c.database.view" }).catch(() => null);
   if (!context) return NextResponse.json({ ok: false, error: "Direct B2C access is unavailable." }, { status: 503 });
   if (!context.ok) return NextResponse.json({ ok: false, error: context.error }, { status: context.status || 403 });
   try {

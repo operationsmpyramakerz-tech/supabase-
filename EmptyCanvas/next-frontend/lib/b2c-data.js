@@ -2,6 +2,7 @@ import "server-only";
 
 import B2CFormulaEngine from "./b2c-formula-engine";
 import { getDirectAccountGate } from "./products-auth";
+import { featureGate } from "./feature-permissions-server";
 import { deleteById, insert, select, selectById, supabaseRequest, updateById } from "./supabase-rest";
 
 const LIST_CACHE_TTL_MS = 3_000;
@@ -415,8 +416,9 @@ function attachFormulaValues(record, fields = []) {
   }
 }
 
-export async function directB2cContext(requiredPages = ["Customer Database", "Customer Form", "B2C"], { mutation = false } = {}) {
-  const gate = await getDirectAccountGate(requiredPages);
+export async function directB2cContext(requiredPages = ["Customer Database", "Customer Form", "B2C"], { mutation = false, feature = "" } = {}) {
+  const originalGate = await getDirectAccountGate(requiredPages);
+  const gate = feature && originalGate?.ok ? featureGate(originalGate, feature) : originalGate;
   if (!gate) return null;
   if (!gate.ok) {
     return {
@@ -1027,7 +1029,7 @@ export async function b2cLegacyFieldsPayload({ force = false } = {}) {
 
 
 export async function loadDirectB2cDatabasePageData() {
-  const context = await directB2cContext(["Customer Database", "B2C"]);
+  const context = await directB2cContext(["Customer Database", "B2C"], { feature: "b2c.database.view" });
   if (!context) return null;
   if (!context.ok) return context;
   try {
@@ -1045,7 +1047,7 @@ export async function loadDirectB2cDatabasePageData() {
 }
 
 export async function loadDirectB2cFormsPageData({ formId = "" } = {}) {
-  const context = await directB2cContext(["Customer Database", "Customer Form", "B2C"]);
+  const context = await directB2cContext(["Customer Database", "Customer Form", "B2C"], { feature: "b2c.forms.view" });
   if (!context) return null;
   if (!context.ok) return context;
   try {
@@ -1069,7 +1071,7 @@ export async function loadDirectB2cFormsPageData({ formId = "" } = {}) {
 }
 
 export async function loadDirectB2cTablePageData(databaseId) {
-  const context = await directB2cContext(["Customer Database", "B2C"]);
+  const context = await directB2cContext(["Customer Database", "B2C"], { feature: "b2c.database.view" });
   if (!context) return null;
   if (!context.ok) return context;
   try {

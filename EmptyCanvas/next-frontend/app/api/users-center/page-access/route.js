@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDirectAccountGate } from "../../../../lib/products-auth";
+import { featureGate } from "../../../../lib/feature-permissions-server";
 import { usersCenterPageAccess } from "../../../../lib/users-center-data";
 
 export const dynamic = "force-dynamic";
@@ -8,7 +9,7 @@ export const revalidate = 0;
 const ACCESS_PAGES = ["Users Center", "User Access & Data", "User Access", "Team Members"];
 
 export async function GET(request) {
-  const gate = await getDirectAccountGate(ACCESS_PAGES);
+  const gate = featureGate(featureGate(await getDirectAccountGate(ACCESS_PAGES), "users.view"), "users.page_access_manage");
   if (!gate.ok) {
     return NextResponse.json({ ok: false, pages: [], error: gate.error || "Access denied." }, { status: gate.status || 503 });
   }

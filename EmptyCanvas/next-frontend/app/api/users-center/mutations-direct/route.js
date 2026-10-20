@@ -29,7 +29,7 @@ function text(value) { return String(value ?? "").trim(); }
 function json(payload, status = 200) { return NextResponse.json(payload, { status, headers: { "Cache-Control": "no-store" } }); }
 
 export async function POST(request) {
-  const gate = await getDirectAccountGate(ACCESS_PAGES);
+  const gate = featureGate(await getDirectAccountGate(ACCESS_PAGES), "users.view");
   if (!gate.ok) return json({ ok: false, error: gate.error || "Access denied." }, gate.status || 503);
 
   try {
@@ -83,7 +83,21 @@ export async function POST(request) {
       return json({ ok: true, member: result.member, message: `${result.member?.name || "Team member"} moved to ${result.departmentName}.`, source: "supabase-next" });
     }
     if (action === "member-create") {
-      const member = await createMember({ fields: body?.fields || {}, pageAccess: body?.pageAccess || [], svAccess: body?.svAccess || [], grantedBy: reviewedBy });
+      // Creating an account must never implicitly grant Page Access or
+      // Orders Supervision privileges the creator does not possess.
+      if ((body?.pageAccess != null && !Array.isArray(body.pageAccess)) || (body?.svAccess != null && !Array.isArray(body.svAccess)))
+        return json({ ok: false, error: "Invalid member access settings." }, 400);
+      const requestedPages = Array.isArray(body?.pageAccess) ? body.pageAccess : [];
+      const requestedSupervision = Array.isArray(body?.svAccess) ? body.svAccess : [];
+      if (requestedPages.length) {
+        const pageGate = featureGate(gate, "users.page_access_manage");
+        if (!pageGate.ok) return json({ ok: false, error: pageGate.error }, pageGate.status || 403);
+      }
+      if (requestedSupervision.length) {
+        const svGate = featureGate(gate, "users.sv_access_manage");
+        if (!svGate.ok) return json({ ok: false, error: svGate.error }, svGate.status || 403);
+      }
+      const member = await createMember({ fields: body?.fields || {}, pageAccess: requestedPages, svAccess: requestedSupervision, grantedBy: reviewedBy });
       return json({ ok: true, member, source: "supabase-next" });
     }
     if (action === "member-update") {

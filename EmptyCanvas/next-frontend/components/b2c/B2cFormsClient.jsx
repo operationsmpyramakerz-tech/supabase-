@@ -1,5 +1,7 @@
 "use client";
 
+import { featureAllowed } from "../../lib/feature-permissions-registry";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 
@@ -225,9 +227,11 @@ export default function B2cFormsClient({ account, initialPayload, initialSelecte
   const initialized = useRef(false);
   const formRef = useRef(null);
   const allowed = useMemo(() => accessSet(account), [account]);
-  const canSubmit = useMemo(() => hasAnyAccess(allowed, FORM_ACCESS_ALIASES), [allowed]);
-  const canUseDatabase = useMemo(() => hasAnyAccess(allowed, DATABASE_ACCESS_ALIASES), [allowed]);
-  const canManage = canSubmit || canUseDatabase;
+  const canSubmit = hasAnyAccess(allowed, FORM_ACCESS_ALIASES) && featureAllowed(account, "b2c.forms.submit");
+  const canUseDatabase = hasAnyAccess(allowed, DATABASE_ACCESS_ALIASES) && featureAllowed(account, "b2c.database.view");
+  const canCreate = featureAllowed(account, "b2c.forms.create");
+  const canEdit = featureAllowed(account, "b2c.forms.edit");
+  const canBuilder = featureAllowed(account, "b2c.forms.builder");
 
   useEffect(() => {
     const input = document.querySelector(".classic-app-shell .main-header .searchbar input");
@@ -442,7 +446,7 @@ export default function B2cFormsClient({ account, initialPayload, initialSelecte
               <div className="b2c-top-actions">
                 {canUseDatabase ? <a className="b2c-secondary-btn" href="/next/b2c/database"><Icon name="database" /><span>Database</span></a> : null}
                 <button className="b2c-secondary-btn b2c-compact-btn" type="button" onClick={() => refreshLibrary().catch(() => {})} disabled={busy === "refresh"}><Icon name="refresh" />{busy === "refresh" ? "Refreshing…" : "Refresh"}</button>
-                {canManage ? <button className="b2c-primary-btn" type="button" onPointerEnter={preloadB2cFormDialogs} onFocus={preloadB2cFormDialogs} onClick={() => { preloadB2cFormDialogs(); setDialog("new"); }}><Icon name="plus" /><span>New Form</span></button> : null}
+                {canCreate ? <button className="b2c-primary-btn" type="button" onPointerEnter={preloadB2cFormDialogs} onFocus={preloadB2cFormDialogs} onClick={() => { preloadB2cFormDialogs(); setDialog("new"); }}><Icon name="plus" /><span>New Form</span></button> : null}
               </div>
             </div>
 
@@ -463,7 +467,7 @@ export default function B2cFormsClient({ account, initialPayload, initialSelecte
                     <span className="b2c-form-card__fields">{formatNumber(form.fieldCount)} field{form.fieldCount === 1 ? "" : "s"}</span>
                     <div className="b2c-form-card__actions">
                       <button type="button" onClick={() => openForm(form.id).catch(() => {})} disabled={busy === `open:${form.id}`}><Icon name="play" size={14} />{busy === `open:${form.id}` ? "Opening…" : canSubmit ? "Open" : "Preview"}</button>
-                      {canManage ? <button type="button" title="Edit form" aria-label={`Edit ${form.name}`} onPointerEnter={preloadB2cFormDialogs} onFocus={preloadB2cFormDialogs} onClick={() => { preloadB2cFormDialogs(); openForm(form.id, { openBuilder: true }).catch(() => {}); }}><Icon name="sliders" size={14} /></button> : null}
+                      {canBuilder ? <button type="button" title="Edit form" aria-label={`Edit ${form.name}`} onPointerEnter={preloadB2cFormDialogs} onFocus={preloadB2cFormDialogs} onClick={() => { preloadB2cFormDialogs(); openForm(form.id, { openBuilder: true }).catch(() => {}); }}><Icon name="sliders" size={14} /></button> : null}
                     </div>
                   </div>
                 </article>
@@ -485,8 +489,8 @@ export default function B2cFormsClient({ account, initialPayload, initialSelecte
               </div>
               <div className="b2c-top-actions">
                 {canUseDatabase && activeForm.databaseId ? <a className="b2c-secondary-btn b2c-compact-btn" href={`/next/b2c/database/${encodeURIComponent(activeForm.databaseId)}`}><Icon name="database" /> Open Table</a> : null}
-                {canManage ? <button className="b2c-secondary-btn b2c-compact-btn" type="button" onPointerEnter={preloadB2cFormDialogs} onFocus={preloadB2cFormDialogs} onClick={() => { preloadB2cFormDialogs(); setDialog("details"); }}>Edit Details</button> : null}
-                {canManage ? <button className="b2c-secondary-btn" type="button" onPointerEnter={preloadB2cFormDialogs} onFocus={preloadB2cFormDialogs} onClick={() => { preloadB2cFormDialogs(); setDialog("builder"); }}><Icon name="sliders" /><span>Edit Form</span></button> : null}
+                {canEdit ? <button className="b2c-secondary-btn b2c-compact-btn" type="button" onPointerEnter={preloadB2cFormDialogs} onFocus={preloadB2cFormDialogs} onClick={() => { preloadB2cFormDialogs(); setDialog("details"); }}>Edit Details</button> : null}
+                {canBuilder ? <button className="b2c-secondary-btn" type="button" onPointerEnter={preloadB2cFormDialogs} onFocus={preloadB2cFormDialogs} onClick={() => { preloadB2cFormDialogs(); setDialog("builder"); }}><Icon name="sliders" /><span>Edit Form</span></button> : null}
               </div>
             </div>
 
@@ -508,7 +512,7 @@ export default function B2cFormsClient({ account, initialPayload, initialSelecte
               {submitError ? <div className="b2c-form-error">{submitError}</div> : null}
               <div className="b2c-customer-form__actions">
                 <button type="button" className="b2c-secondary-btn" onClick={clearForm} disabled={busy === "submit"}><Icon name="rotate" /><span>Clear Form</span></button>
-                <button type="submit" className="b2c-primary-btn" disabled={busy === "submit" || !canSubmit || !fields.length}><Icon name="save" /><span>{busy === "submit" ? (uploadState ? "Uploading…" : "Saving…") : "Save Record"}</span></button>
+                {canSubmit ? <button type="submit" className="b2c-primary-btn" disabled={busy === "submit" || !fields.length}><Icon name="save" /><span>{busy === "submit" ? (uploadState ? "Uploading…" : "Saving…") : "Save Record"}</span></button> : null}
               </div>
             </form>
           </section>

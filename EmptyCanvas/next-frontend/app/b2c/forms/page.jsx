@@ -45,6 +45,12 @@ export default async function B2cFormsPage({ searchParams }) {
     );
   }
 
+  // Do not fall back to the legacy bootstrap when authentication or feature
+  // permissions could not be verified. Permission-service failures fail closed.
+  if (!pageData || pageData.status === 503) {
+    return <main className="standalone-state"><section className="state-card"><span className="status-dot warning"/><h1>B2C authorization is temporarily unavailable</h1><p>Permissions could not be verified. Please refresh or contact the administrator.</p><a className="primary-button" href="/next/home">Return to Home</a></section></main>;
+  }
+
   if (!pageData?.ok) {
     const query = new URLSearchParams({ scope: "b2c-forms" });
     if (requestedFormId) query.set("form", requestedFormId);

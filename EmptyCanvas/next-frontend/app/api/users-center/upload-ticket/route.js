@@ -2,6 +2,8 @@ import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 
 import { getDirectAccountGate } from "../../../../lib/products-auth";
+import { featureGate } from "../../../../lib/feature-permissions-server";
+import { featureAllowed } from "../../../../lib/feature-permissions-registry";
 import { createSignedUploadUrl } from "../../../../lib/supabase-rest";
 import { verifyUsersCenterAuthorizationToken } from "../../../../lib/users-center-action-auth";
 
@@ -17,8 +19,10 @@ function json(payload, status = 200) { return NextResponse.json(payload, { statu
 function safeName(value) { return (text(value) || "upload.bin").replace(/[^a-z0-9._-]/gi, "_"); }
 
 export async function POST(request) {
-  const gate = await getDirectAccountGate(ACCESS_PAGES);
+  const gate = featureGate(await getDirectAccountGate(ACCESS_PAGES), "users.view");
   if (!gate.ok) return json({ ok: false, error: gate.error || "Access denied." }, gate.status || 503);
+  if (!featureAllowed(gate.account, "users.member_create") && !featureAllowed(gate.account, "users.member_edit"))
+    return json({ ok: false, error: "Permission to upload team member photos is not allowed." }, 403);
 
   try {
     const body = await request.json().catch(() => ({}));

@@ -249,7 +249,7 @@ async function uploadUserFile(file, kind) {
   return { ok: true, url: ticket.upload.publicUrl || ticket.url, name: originalName, mime: blob.type || file.type || "application/octet-stream" };
 }
 
-function SignupRequestsModal({ departments, positions = [], onClose, onChanged, notify }) {
+function SignupRequestsModal({ departments, positions = [], onClose, onChanged, notify, canApprove = true, canReject = true }) {
   const [status, setStatus] = useState("pending"); const [requests, setRequests] = useState([]); const [loading, setLoading] = useState(true); const [error, setError] = useState(""); const [approve, setApprove] = useState(null); const [rejecting, setRejecting] = useState(null); const [form, setForm] = useState({ department: "", position: "" }); const [busy, setBusy] = useState(false);
   async function load(nextStatus = status) { setLoading(true); setError(""); try { const body = await requestJson(`/next/api/users-center/signup-requests?status=${encodeURIComponent(nextStatus)}&fresh=1&_=${Date.now()}`); setRequests(body.requests || []); } catch (err) { setRequests([]); setError(err.message); } finally { setLoading(false); } }
   useEffect(() => { load("pending"); }, []);
@@ -263,7 +263,7 @@ function SignupRequestsModal({ departments, positions = [], onClose, onChanged, 
       {error && !approve && !rejecting ? <div className="ua-form-error">{error}</div> : null}
       {loading ? <div className="ua-loading-inline"><span/> Loading requests...</div> : null}
       {!loading && !requests.length ? <div className="ua-signup-empty"><UAIcon name={status === "rejected" ? "xCircle" : "checkCircle"}/><strong>No {status} requests</strong><span>No sign up requests found in this status.</span></div> : null}
-      {!loading ? requests.map((request) => { const currentStatus = lower(request.status || status || "pending"); const details = [request.email, request.phone, formatDate(request.createdAt)].filter(Boolean).join(" • "); const review = [request.department, request.position, formatDate(request.reviewedAt)].filter(Boolean).join(" • "); return <article className={`ua-signup-request-card ua-signup-request-card--${currentStatus}`} key={request.id}><div className="ua-signup-request-main"><div className="ua-signup-request-avatar"><UAIcon name="user"/></div><div className="ua-signup-request-text"><strong title={request.username || "Unnamed"}>{request.username || "Unnamed"}</strong><span>Employee code: {request.employeeCode || "-"}</span><small>{details}</small>{review ? <small className="ua-signup-request-review">{review}</small> : null}</div></div>{currentStatus === "pending" ? <div className="ua-signup-request-actions"><button type="button" className="ua-btn ua-btn--approve" onClick={() => beginApprove(request)}><UAIcon name="check"/><span>Approve</span></button><button type="button" className="ua-btn ua-btn--reject" onClick={() => { setError(""); setRejecting(request); }}><UAIcon name="close"/><span>Reject</span></button></div> : <div className={`ua-signup-request-status ua-signup-request-status--${currentStatus}`}><UAIcon name={currentStatus === "approved" ? "checkCircle" : "xCircle"}/><span>{currentStatus === "approved" ? "Approved" : "Rejected"}</span></div>}</article>; }) : null}
+      {!loading ? requests.map((request) => { const currentStatus = lower(request.status || status || "pending"); const details = [request.email, request.phone, formatDate(request.createdAt)].filter(Boolean).join(" • "); const review = [request.department, request.position, formatDate(request.reviewedAt)].filter(Boolean).join(" • "); return <article className={`ua-signup-request-card ua-signup-request-card--${currentStatus}`} key={request.id}><div className="ua-signup-request-main"><div className="ua-signup-request-avatar"><UAIcon name="user"/></div><div className="ua-signup-request-text"><strong title={request.username || "Unnamed"}>{request.username || "Unnamed"}</strong><span>Employee code: {request.employeeCode || "-"}</span><small>{details}</small>{review ? <small className="ua-signup-request-review">{review}</small> : null}</div></div>{currentStatus === "pending" ? <div className="ua-signup-request-actions">{canApprove ? <button type="button" className="ua-btn ua-btn--approve" onClick={() => beginApprove(request)}><UAIcon name="check"/><span>Approve</span></button> : null}{canReject ? <button type="button" className="ua-btn ua-btn--reject" onClick={() => { setError(""); setRejecting(request); }}><UAIcon name="close"/><span>Reject</span></button> : null}</div> : <div className={`ua-signup-request-status ua-signup-request-status--${currentStatus}`}><UAIcon name={currentStatus === "approved" ? "checkCircle" : "xCircle"}/><span>{currentStatus === "approved" ? "Approved" : "Rejected"}</span></div>}</article>; }) : null}
     </Modal>
     {approve ? <Modal title="Approve request" subtitle={`${approve.username || "User"} • ${approve.employeeCode || "No code"}`} onClose={() => setApprove(null)} modalClass="ua-modal--small" compact icon="checkCircle" closeDisabled={busy} bodyClass="ua-modal__body--compact" zIndex={10040} footer={<><button type="button" className="ua-btn ua-btn--light" onClick={() => setApprove(null)} disabled={busy}>Cancel</button><button type="submit" form="ua-next-signup-approve" className="ua-btn ua-btn--dark" disabled={busy}><UAIcon name="signup"/><span>{busy ? "Approving..." : "Approve"}</span></button></>}><form id="ua-next-signup-approve" onSubmit={approveSubmit}><div className="ua-form-field ua-form-field--wide ua-form-field--modern-select"><span>Department</span><ModernSelect value={form.department} onChange={(department) => setForm((current) => ({ ...current, department }))} options={availableDepartments} placeholder="Choose department" disabled={busy}/></div><label className="ua-form-field ua-form-field--wide"><span>Position</span><input type="text" list="ua-next-signup-position-options" placeholder="Example: Operations Team Leader" value={form.position} disabled={busy} onChange={(event) => setForm((current) => ({ ...current, position: event.target.value }))}/><datalist id="ua-next-signup-position-options">{positions.map((position) => <option value={position} key={position}/>)}</datalist></label>{error ? <div className="ua-form-error ua-form-field--wide">{error}</div> : null}</form></Modal> : null}
     {rejecting ? <Modal title="Reject sign up request?" subtitle={`Reject ${rejecting.username || "this user"} sign up request?`} onClose={() => setRejecting(null)} modalClass="ua-modal--small ua-confirm-modal" compact icon="alert" dangerIcon closeDisabled={busy} zIndex={10040} footer={<><button type="button" className="ua-btn ua-btn--light" onClick={() => setRejecting(null)} disabled={busy}>Cancel</button><button type="button" className="ua-btn ua-btn--danger" onClick={rejectConfirmed} disabled={busy}><UAIcon name="close"/><span>{busy ? "Working..." : "Reject"}</span></button></>}>{error ? <div className="ua-form-error">{error}</div> : null}</Modal> : null}
@@ -404,7 +404,7 @@ function memberHasPage(member, rows, pageName) {
   return allowed.some((item) => pageToken(item) === pageToken(pageName));
 }
 
-function MemberForm({ member, selectedDepartment, editableFields, departments, pageAccessRows, svRows, onOpenPageAccess, onOpenSvAccess, onClose, onSaved, notify }) {
+function MemberForm({ member, selectedDepartment, editableFields, departments, pageAccessRows, svRows, onOpenPageAccess, onOpenSvAccess, onOpenFeatureAccess, onClose, onSaved, notify, access = {} }) {
   const schema = useMemo(() => orderEditableFieldsForForm(editableFields.length ? editableFields : [
     { name: "Profile picture", type: "ua_profile_upload" }, { name: "Employee Code", type: "text" }, { name: "Name", type: "title", required: true }, { name: "Password", type: "rich_text" }, { name: "Phone", type: "phone_number" }, { name: "Email", type: "email" }, { name: "Department", type: "select" }, { name: "Position", type: "text" }, { name: "Files & media", type: "ua_file_links" }, { name: "S.V Schools", type: "ua_sv_access_manager" }, { name: "Allowed Pages", type: "ua_page_access_manager" }, { name: "School", type: "school_select" },
   ]), [editableFields]);
@@ -470,8 +470,17 @@ function MemberForm({ member, selectedDepartment, editableFields, departments, p
   }
   function renderField(field) {
     const key = fieldKey(field.name); const value = values[field.name] ?? ""; const type = field.type || "rich_text";
-    if (type === "ua_page_access_manager" || key === "allowedpages") return <PageAccessManager key={field.name} summary={accessSummaryText(pageAccessRows, member)} onOpen={onOpenPageAccess}/>;
-    if (type === "ua_sv_access_manager" || key === "svschools") return <SvAccessManager key={field.name} summary={svSummaryText(svRows, member)} onOpen={onOpenSvAccess} hidden={!hasOrdersReview}/>;
+    if (type === "ua_page_access_manager" || key === "allowedpages") {
+      if (access.pageAccess) return <PageAccessManager key={field.name} summary={accessSummaryText(pageAccessRows, member)} onOpen={onOpenPageAccess}/>;
+      if (access.featureAccess && member?.id) return <div key={field.name} className="ua-form-field ua-form-field--wide ua-sv-access-field">
+        <span>Advanced Feature Permissions</span>
+        <div className="ua-page-access-card ua-sv-access-card"><div><strong>Feature Access</strong><small>Configure this user's allowed actions individually.</small></div>
+          <button type="button" className="ua-page-access-open" onClick={onOpenFeatureAccess}><UAIcon name="shield"/><span>Manage Features</span></button>
+        </div>
+      </div>;
+      return null;
+    }
+    if (type === "ua_sv_access_manager" || key === "svschools") return access.svAccess ? <SvAccessManager key={field.name} summary={svSummaryText(svRows, member)} onOpen={onOpenSvAccess} hidden={!hasOrdersReview}/> : null;
     if (type === "school_select" || key === "school") { if (hasStocktaking) return <AutoStocktakingField key={field.name} value={autoStocktakingColumn}/>; return hasSchoolPages ? <SchoolField key={field.name} field={field} value={value} onChange={(next) => setField(field.name, next)} notify={notify}/> : null; }
     if (type === "ua_profile_upload" || key === "profilepicture") return <ProfileUploadField key={field.name} field={field} value={value} onChange={(next) => setField(field.name, next)} notify={notify}/>;
     if (type === "ua_file_links" || key === "filesmedia" || type === "files") return <FileLinksField key={field.name} field={field} value={value} onChange={(next) => setField(field.name, next)} notify={notify}/>;
@@ -529,6 +538,9 @@ function FeatureAccessModal({ member, onClose, protect }) {
     { key: "stocktaking", label: "Stocktaking", optIn: true },
     { key: "expenses", label: "Expenses", optIn: true },
     { key: "expenses.users", label: "Expenses by Users", optIn: true },
+    { key: "users", label: "Users Center", optIn: true },
+    { key: "b2c.database", label: "B2C Database", optIn: true },
+    { key: "b2c.forms", label: "B2C Forms", optIn: true },
   ];
   useEffect(() => {
     let mounted = true;
@@ -557,6 +569,9 @@ function FeatureAccessModal({ member, onClose, protect }) {
           stocktaking: stored.some(item => item.key === "stocktaking.view"),
           expenses: stored.some(item => item.key === "expenses.view"),
           "expenses.users": stored.some(item => item.key === "expenses.users.view"),
+          users: stored.some(item => item.key === "users.view"),
+          "b2c.database": stored.some(item => item.key === "b2c.database.view"),
+          "b2c.forms": stored.some(item => item.key === "b2c.forms.view"),
         });
         setUnmanagedGrants(stored.filter(item => !ACTIVE_PILOT_FEATURE_KEYS.includes(item.key) && item.key !== MY_ORDERS_ENFORCEMENT_MARKER));
       } catch (e) { if (mounted) setError(e.message); }
@@ -622,7 +637,7 @@ function FeatureAccessModal({ member, onClose, protect }) {
   </Modal>;
 }
 
-function PageAccessModal({ member, draftRows, onDraftRows, onClose, onSaved, protect }) {
+function PageAccessModal({ member, draftRows, onDraftRows, onClose, onSaved, protect, allowAdvanced = true }) {
   const [rows, setRows] = useState([]); const [loading, setLoading] = useState(true); const [busy, setBusy] = useState(false); const [error, setError] = useState(""); const [advancedOpen, setAdvancedOpen] = useState(false); const isCreate = !member;
   useEffect(() => { let active = true; (async () => { try { if (draftRows?.length) { if (active) setRows(normalizeAccessRows(draftRows)); return; } const body = isCreate
         ? await requestJson("/next/api/users-center/pages")
@@ -634,7 +649,7 @@ function PageAccessModal({ member, draftRows, onDraftRows, onClose, onSaved, pro
   const eventRows = rows.map((row, index) => ({ row, index })).filter(({ row }) => inSet(row, events)); const taskRows = rows.map((row, index) => ({ row, index })).filter(({ row }) => inSet(row, tasks)); const b2cRows = rows.map((row, index) => ({ row, index })).filter(({ row }) => inSet(row, b2c));
   const firstEvent = eventRows[0]?.index; const firstTask = taskRows[0]?.index; const firstB2c = b2cRows[0]?.index;
   const markup = []; rows.forEach((row, index) => { if (index === firstEvent) markup.push(<section className="ua-page-access-group ua-page-access-group--events" key="events-group"><div className="ua-page-access-group__heading"><UAIcon name="calendar"/><span>Events</span><small>Sub-pages</small></div><div className="ua-page-access-group__rows">{eventRows.map(({ row: child, index: childIndex }) => <PageAccessRow key={child.pageId || child.pageKey} row={child} subpage onChange={(values) => patch(childIndex, values)}/>)}</div></section>); if (index === firstTask) markup.push(<section className="ua-page-access-group ua-page-access-group--task-management" key="task-group"><div className="ua-page-access-group__heading"><UAIcon name="branch"/><span>Task Management</span><small>Sub-pages</small></div><div className="ua-page-access-group__rows">{taskRows.map(({ row: child, index: childIndex }) => <PageAccessRow key={child.pageId || child.pageKey} row={child} subpage onChange={(values) => patch(childIndex, values)}/>)}</div></section>); if (index === firstB2c) markup.push(<section className="ua-page-access-group ua-page-access-group--b2c" key="b2c-group"><div className="ua-page-access-group__heading"><UAIcon name="users"/><span>B2C</span><small>Sub-pages</small></div><div className="ua-page-access-group__rows">{b2cRows.map(({ row: child, index: childIndex }) => <PageAccessRow key={child.pageId || child.pageKey} row={child} subpage onChange={(values) => patch(childIndex, values)}/>)}</div></section>); if (!inSet(row, events) && !inSet(row, tasks) && !inSet(row, b2c)) markup.push(<PageAccessRow key={row.pageId || row.pageKey} row={row} onChange={(values) => patch(index, values)}/>); });
-  return <><Modal title="Page Access" subtitle={`Configure page access for ${isCreate ? "new team member" : member?.name || "this team member"}.`} onClose={onClose} modalClass="ua-modal--page-access" compact icon="shield" closeDisabled={busy} bodyClass="ua-page-access-body" zIndex={10020} footer={<><button type="button" className="ua-btn ua-btn--light" onClick={onClose} disabled={busy}>Cancel</button><button type="button" className="ua-btn ua-btn--dark" onClick={save} disabled={busy || loading}><UAIcon name="save"/><span>{busy ? "Saving..." : "Save Access"}</span></button></>}>{!isCreate ? <div className="ua-advanced-access-cta"><button type="button" className="ua-advanced-access-cta__button" onClick={() => setAdvancedOpen(true)} disabled={busy || loading}><span className="ua-advanced-access-cta__icon"><UAIcon name="shield"/></span><span className="ua-advanced-access-cta__copy"><strong>Advanced Feature Permissions</strong><small>Control individual actions, such as Edit, Delete and Export.</small></span><UAIcon name="chevron"/></button><small className="ua-advanced-access-cta__hint">Save any Page Access changes before configuring features.</small></div> : null}<div className="ua-page-access-head"><div>Page name</div><div>Access type</div><div>Enable</div></div><div className="ua-page-access-list">{loading ? <div className="ua-page-access-loading"><span/> Loading pages...</div> : markup}</div>{error ? <div className="ua-form-error ua-page-access-error">{error}</div> : null}</Modal>{advancedOpen && !isCreate ? <FeatureAccessModal member={member} onClose={() => setAdvancedOpen(false)} protect={protect}/> : null}</>;
+  return <><Modal title="Page Access" subtitle={`Configure page access for ${isCreate ? "new team member" : member?.name || "this team member"}.`} onClose={onClose} modalClass="ua-modal--page-access" compact icon="shield" closeDisabled={busy} bodyClass="ua-page-access-body" zIndex={10020} footer={<><button type="button" className="ua-btn ua-btn--light" onClick={onClose} disabled={busy}>Cancel</button><button type="button" className="ua-btn ua-btn--dark" onClick={save} disabled={busy || loading}><UAIcon name="save"/><span>{busy ? "Saving..." : "Save Access"}</span></button></>}>{!isCreate && allowAdvanced ? <div className="ua-advanced-access-cta"><button type="button" className="ua-advanced-access-cta__button" onClick={() => setAdvancedOpen(true)} disabled={busy || loading}><span className="ua-advanced-access-cta__icon"><UAIcon name="shield"/></span><span className="ua-advanced-access-cta__copy"><strong>Advanced Feature Permissions</strong><small>Control individual actions, such as Edit, Delete and Export.</small></span><UAIcon name="chevron"/></button><small className="ua-advanced-access-cta__hint">Save any Page Access changes before configuring features.</small></div> : null}<div className="ua-page-access-head"><div>Page name</div><div>Access type</div><div>Enable</div></div><div className="ua-page-access-list">{loading ? <div className="ua-page-access-loading"><span/> Loading pages...</div> : markup}</div>{error ? <div className="ua-form-error ua-page-access-error">{error}</div> : null}</Modal>{advancedOpen && !isCreate ? <FeatureAccessModal member={member} onClose={() => setAdvancedOpen(false)} protect={protect}/> : null}</>;
 }
 
 function SvAccessModal({ member, allMembers, draftRows, onDraftRows, onClose, onSaved, protect }) {
@@ -648,6 +663,7 @@ function SvAccessModal({ member, allMembers, draftRows, onDraftRows, onClose, on
 }
 
 export default function UsersCenterDialogs({
+  access = {},
   passwordAction, onPasswordClose, onPasswordVerified,
   confirm, onConfirmClose,
   departmentForm, onDepartmentFormClose, onDepartmentSaved,
@@ -657,14 +673,16 @@ export default function UsersCenterDialogs({
   svAccessOpen, allMembers, setSvRows, onSvAccessClose, onSvAccessSaved,
   signupOpen, positions, onSignupClose, onSignupChanged,
 }) {
+  const [featureAccessOpen, setFeatureAccessOpen] = useState(false);
   return <>
     {passwordAction ? <PasswordModal action={passwordAction} onClose={onPasswordClose} onVerified={onPasswordVerified}/> : null}
     {confirm ? <ConfirmModal value={confirm} onClose={onConfirmClose}/> : null}
     {departmentForm ? <DepartmentForm department={departmentForm.department} onClose={onDepartmentFormClose} onSaved={onDepartmentSaved}/> : null}
-    {memberForm ? <MemberForm member={memberForm.member} selectedDepartment={selectedDepartment} editableFields={editableFields} departments={departments} pageAccessRows={pageAccessRows} svRows={svRows} notify={notify} onOpenPageAccess={onOpenPageAccess} onOpenSvAccess={onOpenSvAccess} onClose={onMemberFormClose} onSaved={onMemberSaved}/> : null}
+    {memberForm ? <MemberForm member={memberForm.member} selectedDepartment={selectedDepartment} editableFields={editableFields} departments={departments} pageAccessRows={pageAccessRows} svRows={svRows} notify={notify} access={access} onOpenPageAccess={onOpenPageAccess} onOpenSvAccess={onOpenSvAccess} onOpenFeatureAccess={() => setFeatureAccessOpen(true)} onClose={onMemberFormClose} onSaved={onMemberSaved}/> : null}
     {moveMember ? <MoveMemberModal member={moveMember} departments={departments} onClose={onMoveMemberClose} onSaved={onMoveMemberSaved}/> : null}
-    {pageAccessOpen && memberForm ? <PageAccessModal member={memberForm.member} draftRows={pageAccessRows} onDraftRows={setPageAccessRows} onClose={onPageAccessClose} protect={protect} onSaved={onPageAccessSaved}/> : null}
+    {pageAccessOpen && memberForm ? <PageAccessModal member={memberForm.member} draftRows={pageAccessRows} onDraftRows={setPageAccessRows} onClose={onPageAccessClose} protect={protect} allowAdvanced={access.featureAccess} onSaved={onPageAccessSaved}/> : null}
+    {featureAccessOpen && memberForm?.member && access.featureAccess ? <FeatureAccessModal member={memberForm.member} onClose={() => setFeatureAccessOpen(false)} protect={protect}/> : null}
     {svAccessOpen && memberForm ? <SvAccessModal member={memberForm.member} allMembers={allMembers} draftRows={svRows} onDraftRows={setSvRows} onClose={onSvAccessClose} protect={protect} onSaved={onSvAccessSaved}/> : null}
-    {signupOpen ? <SignupRequestsModal departments={departments} positions={positions} onClose={onSignupClose} notify={notify} onChanged={onSignupChanged}/> : null}
+    {signupOpen ? <SignupRequestsModal departments={departments} positions={positions} canApprove={access.signupApprove} canReject={access.signupReject} onClose={onSignupClose} notify={notify} onChanged={onSignupChanged}/> : null}
   </>;
 }

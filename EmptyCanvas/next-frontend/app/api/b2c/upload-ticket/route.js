@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 
 import { directB2cContext } from "../../../../lib/b2c-data";
+import { featureAllowed } from "../../../../lib/feature-permissions-registry";
 import { createSignedUploadUrl } from "../../../../lib/supabase-rest";
 
 export const dynamic = "force-dynamic";
@@ -25,6 +26,8 @@ export async function POST(request) {
   const context = await directB2cContext(["Customer Database", "Customer Form", "B2C"], { mutation: true }).catch(() => null);
   if (!context) return json({ ok: false, error: "Direct B2C access is unavailable." }, 503);
   if (!context.ok) return json({ ok: false, error: context.error || "B2C access denied." }, context.status || 403);
+  if (!featureAllowed(context.account, "b2c.forms.submit") && !featureAllowed(context.account, "b2c.database.record_edit"))
+    return json({ ok: false, error: "Permission to upload customer files is not allowed." }, 403);
 
   try {
     const body = await request.json().catch(() => ({}));

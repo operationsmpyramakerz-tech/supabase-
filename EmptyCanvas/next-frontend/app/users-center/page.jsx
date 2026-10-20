@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import AppShell from "../../components/AppShell";
 import UsersCenterClient from "../../components/users-center/UsersCenterClient";
 import { getDirectAccountGate } from "../../lib/products-auth";
+import { featureGate } from "../../lib/feature-permissions-server";
+import { featureAllowed } from "../../lib/feature-permissions-registry";
 import { usersCenterDirectory, usersCenterSignupRequests } from "../../lib/users-center-data";
 
 export const dynamic = "force-dynamic";
@@ -27,7 +29,7 @@ function UnavailableState({ message, forbidden = false }) {
 
 
 export default async function UsersCenterPage() {
-  const gate = await getDirectAccountGate(ACCESS_PAGES);
+  const gate = featureGate(await getDirectAccountGate(ACCESS_PAGES), "users.view");
 
   if (gate.status === 401) redirect("/login?next=/next/users-center");
   if (gate.status === 403) {
@@ -39,7 +41,8 @@ export default async function UsersCenterPage() {
 
   const [directoryResult, signupResult] = await Promise.allSettled([
     usersCenterDirectory(),
-    usersCenterSignupRequests({ status: "pending" }),
+    featureAllowed(gate.account, "users.signup_approve") || featureAllowed(gate.account, "users.signup_reject")
+      ? usersCenterSignupRequests({ status: "pending" }) : Promise.resolve({ ok: true, requests: [] }),
   ]);
 
   if (directoryResult.status !== "fulfilled") {
@@ -64,6 +67,7 @@ export default async function UsersCenterPage() {
       pageStyles={["/next/css/user-access.css?v=nav-20261016"]}
     >
       <UsersCenterClient
+        account={gate.account}
         initialDirectory={directory}
         initialSignupRequests={signup}
         bootstrapWarnings={warnings}

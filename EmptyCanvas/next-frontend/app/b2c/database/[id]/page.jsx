@@ -46,6 +46,12 @@ export default async function B2cTableWorkspacePage({ params }) {
     );
   }
 
+  // Do not fall back to the legacy bootstrap when authentication or feature
+  // permissions could not be verified. Permission-service failures fail closed.
+  if (!pageData || pageData.status === 503) {
+    return <main className="standalone-state"><section className="state-card"><span className="status-dot warning"/><h1>B2C authorization is temporarily unavailable</h1><p>Permissions could not be verified. Please refresh or contact the administrator.</p><a className="primary-button" href="/next/home">Return to Home</a></section></main>;
+  }
+
   if (!pageData?.ok) {
     const response = await fetchLegacyJson(`/api/page-bootstrap?scope=b2c-table&id=${encodedId}`, { timeoutMs: 55000 });
     if (response.status === 401) redirect(`/login?next=/next/b2c/database/${encodedId}`);
@@ -127,6 +133,7 @@ export default async function B2cTableWorkspacePage({ params }) {
     >
       <B2cTableWorkspaceClient
         databaseId={databaseId}
+        account={pageData.account}
         initialPayload={tablePayload}
         bootstrapWarnings={pageData.warnings || []}
       />

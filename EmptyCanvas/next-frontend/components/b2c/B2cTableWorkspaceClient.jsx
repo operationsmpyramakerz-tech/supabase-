@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { featureAllowed } from "../../lib/feature-permissions-registry";
 import dynamic from "next/dynamic";
 
 const RecordEditor = dynamic(() => import("./B2cTableWorkspaceDialogs").then((module) => module.RecordEditor), { ssr: false });
@@ -135,7 +136,12 @@ function CellValue({ value, field, record }) {
   return <span title={String(value)}>{String(value)}</span>;
 }
 
-export default function B2cTableWorkspaceClient({ databaseId, initialPayload, bootstrapWarnings = [] }) {
+export default function B2cTableWorkspaceClient({ databaseId, account, initialPayload, bootstrapWarnings = [] }) {
+  const canOpenForms = featureAllowed(account, "b2c.forms.view");
+  const canExport = featureAllowed(account, "b2c.database.export");
+  const canFields = featureAllowed(account, "b2c.database.fields");
+  const canEditRecord = featureAllowed(account, "b2c.database.record_edit");
+  const canDeleteRecord = featureAllowed(account, "b2c.database.record_delete");
   const [database, setDatabase] = useState(initialPayload?.database || null);
   const [fields, setFields] = useState(() => (Array.isArray(initialPayload?.fields) ? initialPayload.fields : []).map(normalizeField));
   const [records, setRecords] = useState(() => (Array.isArray(initialPayload?.records) ? initialPayload.records : []).map(normalizeRecord));
@@ -246,10 +252,10 @@ export default function B2cTableWorkspaceClient({ databaseId, initialPayload, bo
         <div className="b2c-table-view-head b2c-table-view-head--compact">
           <a className="b2c-back-to-library" href="/next/b2c/database"><span aria-hidden="true">←</span><span>All Databases</span></a>
           <div className="b2c-top-actions">
-            <a className="b2c-secondary-btn" href={formHref}>Open Linked Form</a>
+            {canOpenForms ? <a className="b2c-secondary-btn" href={formHref}>Open Linked Form</a> : null}
             <button type="button" className="b2c-secondary-btn" onClick={() => refresh()} disabled={busy === "refresh"}>{busy === "refresh" ? "Refreshing…" : "Refresh"}</button>
-            <a className="b2c-secondary-btn" href={exportHref}>Download Excel</a>
-            <button type="button" className="b2c-primary-btn" onMouseEnter={preloadSchemaDialogs} onFocus={preloadSchemaDialogs} onClick={() => { preloadSchemaDialogs(); setSchemaOpen(true); }}>Configure Table</button>
+            {canExport ? <a className="b2c-secondary-btn" href={exportHref}>Download Excel</a> : null}
+            {canFields ? <button type="button" className="b2c-primary-btn" onMouseEnter={preloadSchemaDialogs} onFocus={preloadSchemaDialogs} onClick={() => { preloadSchemaDialogs(); setSchemaOpen(true); }}>Configure Table</button> : null}
           </div>
         </div>
 
@@ -272,11 +278,11 @@ export default function B2cTableWorkspaceClient({ databaseId, initialPayload, bo
           </div>
           <div className="b2c-table-scroll b2c-table-scroll--wide">
             <table className="b2c-customer-table b2c-customer-table--wide">
-              <thead><tr><th>Record ID</th>{fields.map((field) => <th key={field.id || field.key}>{field.label}</th>)}<th>Submitted by</th><th>Created</th><th aria-label="Actions" /></tr></thead>
+              <thead><tr><th>Record ID</th>{fields.map((field) => <th key={field.id || field.key}>{field.label}</th>)}<th>Submitted by</th><th>Created</th>{(canEditRecord || canDeleteRecord) ? <th aria-label="Actions" /> : null}</tr></thead>
               <tbody>
                 {!fields.length ? <tr><td colSpan={5} className="b2c-table-empty">This table has no properties yet. Select <strong>Configure Table</strong> to build its schema.</td></tr> : null}
                 {fields.length && !visibleRecords.length ? <tr><td colSpan={fields.length + 4} className="b2c-table-empty">{query ? "No records match this search." : "No records yet. Open the linked form to create the first record."}</td></tr> : null}
-                {visibleRecords.map((record) => <tr key={record.id}><td><span className="b2c-customer-code">{record.customerCode}</span></td>{fields.map((field) => <td key={`${record.id}-${field.id || field.key}`}><CellValue value={record.values?.[field.key]} field={field} record={record} /></td>)}<td>{record.createdByName}</td><td className="b2c-cell-muted">{formatDate(record.createdAt, true)}</td><td><div className="b2c-table-actions"><button type="button" className="b2c-icon-btn" title="Edit record" onMouseEnter={preloadRecordDialogs} onFocus={preloadRecordDialogs} onClick={() => { preloadRecordDialogs(); setEditor(record); }}>Edit</button><button type="button" className="b2c-icon-btn b2c-icon-btn--danger" title="Delete record" onMouseEnter={preloadRecordDialogs} onFocus={preloadRecordDialogs} onClick={() => { preloadRecordDialogs(); setDeleteTarget(record); }}>Delete</button></div></td></tr>)}
+                {visibleRecords.map((record) => <tr key={record.id}><td><span className="b2c-customer-code">{record.customerCode}</span></td>{fields.map((field) => <td key={`${record.id}-${field.id || field.key}`}><CellValue value={record.values?.[field.key]} field={field} record={record} /></td>)}<td>{record.createdByName}</td><td className="b2c-cell-muted">{formatDate(record.createdAt, true)}</td>{(canEditRecord || canDeleteRecord) ? <td><div className="b2c-table-actions">{canEditRecord ? <button type="button" className="b2c-icon-btn" title="Edit record" onMouseEnter={preloadRecordDialogs} onFocus={preloadRecordDialogs} onClick={() => { preloadRecordDialogs(); setEditor(record); }}>Edit</button> : null}{canDeleteRecord ? <button type="button" className="b2c-icon-btn b2c-icon-btn--danger" title="Delete record" onMouseEnter={preloadRecordDialogs} onFocus={preloadRecordDialogs} onClick={() => { preloadRecordDialogs(); setDeleteTarget(record); }}>Delete</button> : null}</div></td> : null}</tr>)}
               </tbody>
             </table>
           </div>
@@ -284,9 +290,9 @@ export default function B2cTableWorkspaceClient({ databaseId, initialPayload, bo
         </section>
       </section>
 
-      {editor ? <RecordEditor record={editor} fields={fields} busy={busy === "record"} onClose={() => setEditor(null)} onSave={saveRecord} /> : null}
-      {deleteTarget ? <DeleteRecordModal record={deleteTarget} busy={busy === "delete-record"} onClose={() => setDeleteTarget(null)} onConfirm={deleteRecord} /> : null}
-      {schemaOpen ? <SchemaBuilder fields={fields} records={records} busy={busy === "schema"} onClose={() => setSchemaOpen(false)} onSave={saveSchema} /> : null}
+      {canEditRecord && editor ? <RecordEditor record={editor} fields={fields} busy={busy === "record"} onClose={() => setEditor(null)} onSave={saveRecord} /> : null}
+      {canDeleteRecord && deleteTarget ? <DeleteRecordModal record={deleteTarget} busy={busy === "delete-record"} onClose={() => setDeleteTarget(null)} onConfirm={deleteRecord} /> : null}
+      {canFields && schemaOpen ? <SchemaBuilder fields={fields} records={records} busy={busy === "schema"} onClose={() => setSchemaOpen(false)} onSave={saveSchema} /> : null}
     </main>
   );
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDirectAccountGate } from "../../../../lib/products-auth";
+import { featureGate } from "../../../../lib/feature-permissions-server";
 import { usersCenterDirectory } from "../../../../lib/users-center-data";
 import { measurePerformance } from "../../../../lib/performance-profiler";
 
@@ -9,7 +10,7 @@ export const revalidate = 0;
 const ACCESS_PAGES = ["Users Center", "User Access & Data", "User Access", "Team Members"];
 
 async function GETImpl(request) {
-  const gate = await getDirectAccountGate(ACCESS_PAGES);
+  const gate = featureGate(await getDirectAccountGate(ACCESS_PAGES), "users.view");
   if (!gate.ok) {
     return NextResponse.json({ ok: false, error: gate.error || "Access denied." }, { status: gate.status || 503 });
   }

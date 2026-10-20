@@ -29,7 +29,7 @@ function cellValue(record, field) {
 }
 
 export async function GET(request) {
-  const context = await directB2cContext(["Customer Database"]).catch(() => null);
+  const context = await directB2cContext(["Customer Database"], { feature: "b2c.database.export" }).catch(() => null);
   if (!context) return NextResponse.json({ ok: false, error: "Direct B2C access is unavailable." }, { status: 503 });
   if (!context.ok) return NextResponse.json({ ok: false, error: context.error }, { status: context.status || 403 });
 

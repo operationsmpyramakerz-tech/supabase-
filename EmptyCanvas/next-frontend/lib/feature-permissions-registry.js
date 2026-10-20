@@ -975,23 +975,33 @@ export function featureAllowed(account, key, { legacyAllowed = true, scopes = ["
     : key.startsWith("orders.review.") ? "orders.review.view"
     : key.startsWith("stocktaking.") ? "stocktaking.view"
     : key.startsWith("expenses.users.") ? "expenses.users.view"
-    : key.startsWith("expenses.") ? "expenses.view" : null;
+    : key.startsWith("expenses.") ? "expenses.view"
+    : key.startsWith("users.") ? "users.view"
+    : key.startsWith("b2c.database.") ? "b2c.database.view"
+    : key.startsWith("b2c.forms.") ? "b2c.forms.view" : null;
   // Module migrations are opt-in. Persist even a denied .view marker so
   // new grants never silently remove rights from previously enabled users.
   if (!pilot && (!moduleMarker || !Object.hasOwn(state.grants || {}, moduleMarker))) return !!legacyAllowed;
   // Newly migrated modules require View *and* the action grant. A hidden
   // page must not permit direct mutations through an independently checked API.
-  if ((key.startsWith("kits.") || key.startsWith("proposals.") || key.startsWith("orders.review.") || key.startsWith("stocktaking.") || key.startsWith("expenses."))
+  if ((key.startsWith("kits.") || key.startsWith("proposals.") || key.startsWith("orders.review.") || key.startsWith("stocktaking.") || key.startsWith("expenses.") || key.startsWith("users.") || key.startsWith("b2c.database.") || key.startsWith("b2c.forms."))
       && key !== moduleMarker && state.grants?.[moduleMarker]?.allowed !== true) return false;
   const grant = state?.grants?.[key];
   return grant?.allowed === true && scopes.includes(grant.scope || "all");
 }
 
-export const PILOT_FEATURE_MODULES = Object.freeze(["products", "orders.operations", "orders.my", "orders.maintenance", "orders.shopping", "tasks", "events.requests", "events.calendar", "events.components", "events.team", "kits", "proposals", "orders.review", "stocktaking", "expenses", "expenses.users"]);
+export const PILOT_FEATURE_MODULES = Object.freeze(["products", "orders.operations", "orders.my", "orders.maintenance", "orders.shopping", "tasks", "events.requests", "events.calendar", "events.components", "events.team", "kits", "proposals", "orders.review", "stocktaking", "expenses", "expenses.users", "users", "b2c.database", "b2c.forms"]);
 
 // Permissions with both server-side enforcement and UI controls in Phase 2A.
 // Do not show toggles for unprotected actions; that would imply false security.
 export const ACTIVE_PILOT_FEATURE_KEYS = Object.freeze([
+  "users.view", "users.member_create", "users.member_edit", "users.member_delete", "users.member_move",
+  "users.department_create", "users.department_edit", "users.department_delete",
+  "users.page_access_manage", "users.feature_access_manage", "users.sv_access_manage",
+  "users.signup_approve", "users.signup_reject", "users.stock_column_create",
+  "b2c.database.view", "b2c.database.create", "b2c.database.edit", "b2c.database.copy", "b2c.database.delete",
+  "b2c.database.fields", "b2c.database.record_edit", "b2c.database.record_delete", "b2c.database.export",
+  "b2c.forms.view", "b2c.forms.create", "b2c.forms.edit", "b2c.forms.builder", "b2c.forms.submit",
   "stocktaking.view", "stocktaking.export", "stocktaking.add_row", "stocktaking.edit_rows",
   "stocktaking.start_inventory", "stocktaking.update_inventory", "stocktaking.authorize_column", "stocktaking.upload_receipt",
   "expenses.view", "expenses.cash_in", "expenses.cash_out", "expenses.settle", "expenses.export", "expenses.screenshot",
