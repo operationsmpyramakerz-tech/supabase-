@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDirectAccountGate } from "../../../../lib/products-auth";
+import { featureGate } from "../../../../lib/feature-permissions-server";
 import { canAccessStocktakingColumn, stocktakingAccessLevel } from "../../../../lib/stocktaking-data";
 import { renderStocktakingExport } from "../../../../lib/stocktaking-export-service";
 
@@ -18,7 +19,7 @@ function contentDisposition(fileName = "stocktaking") {
 }
 
 async function handle(request) {
-  const gate = await getDirectAccountGate(["Stocktaking"]);
+  const gate = featureGate(await getDirectAccountGate(["Stocktaking"]), "stocktaking.export");
   if (!gate.ok) {
     return NextResponse.json({ ok: false, error: gate.error || "Authentication required." }, { status: gate.status || 503 });
   }

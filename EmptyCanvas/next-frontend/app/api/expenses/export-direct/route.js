@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getDirectAccountGate } from "../../../../lib/products-auth";
+import { featureGate } from "../../../../lib/feature-permissions-server";
 import { renderExpenseExport } from "../../../../lib/expense-export-service";
+import { expensesForAccount, expensesForMemberId } from "../../../../lib/expenses-data";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,7 +22,7 @@ function requiredPages(scope = "") {
   const key = text(scope).toLowerCase();
   if (key === "current" || key === "expenses") return ["Expenses"];
   if (key === "users" || key === "expenses-users") return ["Expenses Users"];
-  return ["Expenses", "Expenses Users"];
+  return null;
 }
 
 function requestOrigin(request) {
@@ -45,15 +47,31 @@ export async function POST(request) {
   const scope = text(body?.scope || url.searchParams.get("scope")).toLowerCase();
   if (!["pdf", "excel", "xlsx"].includes(kind)) return jsonError("Unsupported expense export type.", 400);
 
-  const gate = await getDirectAccountGate(requiredPages(scope));
+  const pages = requiredPages(scope);
+  if (!pages) return jsonError("Unsupported expense export scope.", 400);
+  const gate = featureGate(await getDirectAccountGate(pages),
+    pages[0] === "Expenses Users" ? "expenses.users.export" : "expenses.export");
   if (!gate.ok) return jsonError(gate.error || "Authentication required.", gate.status || 503);
 
   try {
+    const isUsersExport = pages[0] === "Expenses Users";
+    const memberId = text(body?.userId);
+    if (isUsersExport && !memberId) return jsonError("A user ID is required to export team expenses.", 400);
+    const authorized = isUsersExport
+      ? await expensesForMemberId(memberId)
+      : await expensesForAccount(gate.account || {});
+    const safeRows = Array.isArray(authorized?.items) ? authorized.items : [];
+    const rowsById = new Map(safeRows.map(row => [text(row.id), row]));
+    const requested = Array.isArray(body?.items) ? body.items : [];
+    if (requested.length > 5000) return jsonError("Too many expense rows.", 400);
+    const unknown = requested.some(row => !text(row?.id) || !rowsById.has(text(row.id)));
+    if (unknown) return jsonError("One or more expense rows are not available for this account.", 403);
+    const selected = requested.map(row => rowsById.get(text(row.id)));
     const result = await renderExpenseExport({
       kind,
       userName: body?.userName,
       userId: body?.userId,
-      items: body?.items,
+      items: selected,
       dateFrom: body?.dateFrom,
       dateTo: body?.dateTo,
       baseUrl: requestOrigin(request),

@@ -1,6 +1,7 @@
 import { NextResponse, after } from "next/server";
 import { dispatchQueuedNotifications } from "../../../../lib/notification-event-worker";
 import { getDirectAccountGate } from "../../../../lib/products-auth";
+import { featureGate } from "../../../../lib/feature-permissions-server";
 import { directPageMutationAccess, verifyPageAdminPasswordDirect } from "../../../../lib/order-action-auth";
 import {
   createExpenseCashIn,
@@ -50,7 +51,11 @@ export async function POST(request) {
   }
 
   const pageName = pageForAction(action);
-  const gate = await getDirectAccountGate([pageName]);
+  const actionPermissions = {
+    "cash-in": "expenses.cash_in", "cash-out": "expenses.cash_out", "settle": "expenses.settle",
+    "admin-update": "expenses.users.edit", "admin-delete": "expenses.users.delete",
+  };
+  const gate = featureGate(await getDirectAccountGate([pageName]), actionPermissions[action]);
   if (!gate.ok) {
     return noStore({ success: false, error: gate.error || "Authentication required." }, { status: gate.status || 503 });
   }

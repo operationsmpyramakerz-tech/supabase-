@@ -972,23 +972,30 @@ export function featureAllowed(account, key, { legacyAllowed = true, scopes = ["
     : key.startsWith("events.team.") ? "events.team.view"
     : key.startsWith("kits.") ? "kits.view"
     : key.startsWith("proposals.") ? "proposals.view"
-    : key.startsWith("orders.review.") ? "orders.review.view" : null;
+    : key.startsWith("orders.review.") ? "orders.review.view"
+    : key.startsWith("stocktaking.") ? "stocktaking.view"
+    : key.startsWith("expenses.users.") ? "expenses.users.view"
+    : key.startsWith("expenses.") ? "expenses.view" : null;
   // Module migrations are opt-in. Persist even a denied .view marker so
   // new grants never silently remove rights from previously enabled users.
   if (!pilot && (!moduleMarker || !Object.hasOwn(state.grants || {}, moduleMarker))) return !!legacyAllowed;
   // Newly migrated modules require View *and* the action grant. A hidden
   // page must not permit direct mutations through an independently checked API.
-  if ((key.startsWith("kits.") || key.startsWith("proposals.") || key.startsWith("orders.review."))
+  if ((key.startsWith("kits.") || key.startsWith("proposals.") || key.startsWith("orders.review.") || key.startsWith("stocktaking.") || key.startsWith("expenses."))
       && key !== moduleMarker && state.grants?.[moduleMarker]?.allowed !== true) return false;
   const grant = state?.grants?.[key];
   return grant?.allowed === true && scopes.includes(grant.scope || "all");
 }
 
-export const PILOT_FEATURE_MODULES = Object.freeze(["products", "orders.operations", "orders.my", "orders.maintenance", "orders.shopping", "tasks", "events.requests", "events.calendar", "events.components", "events.team", "kits", "proposals", "orders.review"]);
+export const PILOT_FEATURE_MODULES = Object.freeze(["products", "orders.operations", "orders.my", "orders.maintenance", "orders.shopping", "tasks", "events.requests", "events.calendar", "events.components", "events.team", "kits", "proposals", "orders.review", "stocktaking", "expenses", "expenses.users"]);
 
 // Permissions with both server-side enforcement and UI controls in Phase 2A.
 // Do not show toggles for unprotected actions; that would imply false security.
 export const ACTIVE_PILOT_FEATURE_KEYS = Object.freeze([
+  "stocktaking.view", "stocktaking.export", "stocktaking.add_row", "stocktaking.edit_rows",
+  "stocktaking.start_inventory", "stocktaking.update_inventory", "stocktaking.authorize_column", "stocktaking.upload_receipt",
+  "expenses.view", "expenses.cash_in", "expenses.cash_out", "expenses.settle", "expenses.export", "expenses.screenshot",
+  "expenses.users.view", "expenses.users.edit", "expenses.users.delete", "expenses.users.export",
   "kits.view", "kits.create", "kits.edit", "kits.delete", "kits.copy", "kits.item_add", "kits.item_edit", "kits.item_delete", "kits.folder_create", "kits.folder_manage", "kits.send_stock", "proposals.view", "proposals.create", "proposals.edit", "proposals.delete", "proposals.copy", "proposals.item_add", "proposals.item_edit", "proposals.item_delete", "proposals.combine", "proposals.make_order", "proposals.send_stock", "proposals.receipt_upload", "orders.review.view", "orders.review.view_details", "orders.review.approve", "orders.review.bulk_approve", "orders.review.quantity", "orders.review.archive", "orders.review.unarchive", "orders.review.update_approval",
   "orders.my.view", "orders.my.edit", "orders.my.archive",
   "orders.my.unarchive", "orders.my.delete", "orders.my.export",

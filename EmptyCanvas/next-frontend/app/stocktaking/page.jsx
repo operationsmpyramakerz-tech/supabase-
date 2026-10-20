@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import AppShell from "../../components/AppShell";
 import StocktakingClient from "../../components/stocktaking/StocktakingClient";
 import { getDirectAccountGate } from "../../lib/products-auth";
+import { featureGate } from "../../lib/feature-permissions-server";
 import { listStocktakingFolders } from "../../lib/stocktaking-data";
 
 export const dynamic = "force-dynamic";
@@ -24,7 +25,7 @@ function UnavailableState({ message, forbidden = false }) {
 }
 
 export default async function StocktakingPage() {
-  const gate = await getDirectAccountGate(["Stocktaking"]);
+  const gate = featureGate(await getDirectAccountGate(["Stocktaking"]), "stocktaking.view");
 
   if (gate.status === 401) redirect("/login?next=/next/stocktaking");
   if (!gate.ok && gate.status === 403) {
@@ -49,7 +50,7 @@ export default async function StocktakingPage() {
       activePath="/next/stocktaking"
       bodyClass="stocktaking-page"
     >
-      <StocktakingClient initialColumns={columns} />
+      <StocktakingClient account={gate.account} initialColumns={columns} />
     </AppShell>
   );
 }

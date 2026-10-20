@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
+import { featureAllowed } from "../../lib/feature-permissions-registry";
 
 const StocktakingDialogs = dynamic(() => import("./StocktakingDialogs"), { ssr: false });
 
@@ -398,7 +399,7 @@ function StockReceiptUploadPicker({ files = [], disabled = false, onChange, onEr
   );
 }
 
-export default function StocktakingClient({ initialStock = [], initialColumns = [] }) {
+export default function StocktakingClient({ account, initialStock = [], initialColumns = [] }) {
   const fallbackColumn = useMemo(() => {
     const first = (Array.isArray(initialStock) ? initialStock : []).find((item) => text(item?.quantityColumn));
     const key = text(first?.quantityColumn);
@@ -420,6 +421,13 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
     return fallbackColumn ? [fallbackColumn] : [];
   }, [initialColumns, fallbackColumn]);
 
+  const can = (action) => featureAllowed(account, `stocktaking.${action}`);
+  const canEditRow = can("edit_rows") && can("authorize_column");
+  const canAddRow = can("add_row") && can("authorize_column");
+  const canEditColumn = canEditRow || canAddRow;
+  const canStartInventory = can("start_inventory");
+  const canUpdateInventory = can("update_inventory");
+  const canUploadReceipt = can("upload_receipt");
   const [search, setSearch] = useState("");
   const [exportOpen, setExportOpen] = useState(false);
   const [activeColumn, setActiveColumn] = useState(null);
@@ -1041,7 +1049,7 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
   const kitTagGroups = useMemo(() => groupRows(filteredRows, "component", "kit"), [filteredRows]);
   const receiptGroups = useMemo(() => groupRowsByReceipt(filteredRows), [filteredRows]);
   const orderGroups = useMemo(() => groupRowsByOrderNumber(filteredRows), [filteredRows]);
-  const tableColumnCount = 5 + (inventorySession?.inventoryColumn ? 1 : 0) + (inventorySession?.defectedColumn ? 1 : 0);
+  const tableColumnCount = 4 + (canEditColumn ? 1 : 0) + (inventorySession?.inventoryColumn ? 1 : 0) + (inventorySession?.defectedColumn ? 1 : 0);
 
   const toneForTag = (name) => TAG_TONES[tagToneMap.get(lower(name)) || "default"] || TAG_TONES.default;
 
@@ -1106,16 +1114,16 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
         </td>
         {inventorySession?.inventoryColumn ? (
           <td className={`stocktaking-data-inventory ${row.inventory !== null && Number(row.inventory) !== Number(row.quantity) ? "is-mismatch" : ""}`}>
-            <input type="number" min="0" step="1" inputMode="numeric" value={row.inventory ?? ""} onChange={(event) => saveInventoryCell(row, "inventory", event.target.value)} placeholder="—" disabled={isEditing} />
+            {canUpdateInventory ? <input type="number" min="0" step="1" inputMode="numeric" value={row.inventory ?? ""} onChange={(event) => saveInventoryCell(row, "inventory", event.target.value)} placeholder="—" disabled={isEditing} /> : <span>{row.inventory ?? "—"}</span>}
           </td>
         ) : null}
         {inventorySession?.defectedColumn ? (
           <td className="stocktaking-data-inventory">
-            <input type="number" min="0" step="1" inputMode="numeric" value={row.defected ?? ""} onChange={(event) => saveInventoryCell(row, "defected", event.target.value)} placeholder="—" disabled={isEditing} />
+            {canUpdateInventory ? <input type="number" min="0" step="1" inputMode="numeric" value={row.defected ?? ""} onChange={(event) => saveInventoryCell(row, "defected", event.target.value)} placeholder="—" disabled={isEditing} /> : <span>{row.defected ?? "—"}</span>}
           </td>
         ) : null}
-        <td className="stocktaking-row-edit-cell">
-          {isEditing ? (
+        {canEditColumn ? <td className="stocktaking-row-edit-cell">
+          {canEditRow && isEditing ? (
             <div className="stocktaking-row-edit-actions">
               <button
                 type="button"
@@ -1138,7 +1146,7 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
                 <Icon name="x" />
               </button>
             </div>
-          ) : (
+          ) : canEditRow ? (
             <button
               type="button"
               className="is-edit is-icon-only"
@@ -1149,8 +1157,8 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
             >
               <Icon name="edit" />
             </button>
-          )}
-        </td>
+          ) : null}
+        </td> : null}
       </tr>
     );
   };
@@ -1207,10 +1215,10 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
               <div><span>STOCKTAKING</span><h2>{activeColumn.label}</h2></div>
             </div>
             <div className="stocktaking-folder-actions">
-              <button className={`btn stocktaking-make-inventory-btn ${inventorySession ? "is-active" : ""}`} type="button" onClick={() => inventorySession ? setInventoryFinishOpen(true) : setInventorySetupOpen(true)} disabled={loading || Boolean(error) || Boolean(editRowId) || newRowOpen}>
+              {(inventorySession ? canUpdateInventory : canStartInventory) ? <button className={`btn stocktaking-make-inventory-btn ${inventorySession ? "is-active" : ""}`} type="button" onClick={() => inventorySession ? setInventoryFinishOpen(true) : setInventorySetupOpen(true)} disabled={loading || Boolean(error) || Boolean(editRowId) || newRowOpen}>
                 <span>{inventorySession ? "Finish inventory" : "Make inventory"}</span>
-              </button>
-              <button className="btn b2b-download-primary" type="button" onClick={() => { setExportOpen(true); setSortMenuOpen(false); }} disabled={loading || Boolean(error)}><Icon name="download" /><span>Download</span></button>
+              </button> : null}
+              {can("export") ? <button className="btn b2b-download-primary" type="button" onClick={() => { setExportOpen(true); setSortMenuOpen(false); }} disabled={loading || Boolean(error)}><Icon name="download" /><span>Download</span></button> : null}
               <div className="stocktaking-sort-menu-wrap" ref={sortMenuRef}>
                 <button className="btn stocktaking-sort-btn" type="button" onClick={() => { setSortMenuOpen((open) => !open); setExportOpen(false); }} disabled={loading || Boolean(error)} aria-expanded={sortMenuOpen}>
                   <Icon name="sort" /><span>Sort</span><Icon name="chevron" />
@@ -1257,7 +1265,7 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
                       <th className="stocktaking-data-photos">Receipt photos</th>
                       {inventorySession?.inventoryColumn ? <th className="stocktaking-data-inventory">Inventory{inventorySession.date ? ` (${inventorySession.date})` : ""}</th> : null}
                       {inventorySession?.defectedColumn ? <th className="stocktaking-data-inventory">Defecated{inventorySession.date ? ` (${inventorySession.date})` : ""}</th> : null}
-                      <th className="stocktaking-row-edit-head">Edit</th>
+                      {canEditColumn ? <th className="stocktaking-row-edit-head">Edit</th> : null}
                     </tr>
                   </thead>
                   <tbody>
@@ -1304,7 +1312,7 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
                     )}
                   </tbody>
                   <tfoot>
-                    {newRowOpen ? (
+                    {newRowOpen && canAddRow ? (
                       <tr className="stocktaking-new-row-editor">
                         <td className="stocktaking-data-component">
                           <div className="stocktaking-new-row-component-stack">
@@ -1320,17 +1328,17 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
                         </td>
                         <td className="stocktaking-data-qty"><input className="stocktaking-edit-qty-input" type="number" step="1" inputMode="numeric" value={newRowDraft.quantity} onChange={(event) => setNewRowDraft((current) => ({ ...current, quantity: event.target.value }))} disabled={editBusy} /></td>
                         <td className="stocktaking-data-receipt"><input className="stocktaking-new-row-input" type="text" value={newRowDraft.receiptNumber} onChange={(event) => setNewRowDraft((current) => ({ ...current, receiptNumber: event.target.value }))} placeholder="Receipt no." /></td>
-                        <td className="stocktaking-data-photos"><StockReceiptUploadPicker files={newRowReceiptFiles} disabled={editBusy} onChange={setNewRowReceiptFiles} onError={setEditError} /></td>
+                        <td className="stocktaking-data-photos">{canUploadReceipt ? <StockReceiptUploadPicker files={newRowReceiptFiles} disabled={editBusy} onChange={setNewRowReceiptFiles} onError={setEditError} /> : <span className="stocktaking-no-photo">—</span>}</td>
                         {inventorySession?.inventoryColumn ? <td className="stocktaking-data-inventory"><span className="stocktaking-no-photo">—</span></td> : null}
                         {inventorySession?.defectedColumn ? <td className="stocktaking-data-inventory"><span className="stocktaking-no-photo">—</span></td> : null}
-                        <td className="stocktaking-row-edit-cell">
+                        {canAddRow ? <td className="stocktaking-row-edit-cell">
                           <div className="stocktaking-row-edit-actions">
                             <button type="button" className="is-save is-icon-only" onClick={saveNewStockRow} disabled={editBusy || productsLoading} aria-label={editBusy ? "Saving new row" : "Save new row"} title={editBusy ? "Saving..." : "Save"}><Icon name="save" /></button>
                             <button type="button" className="is-cancel is-icon-only" onClick={cancelNewRow} disabled={editBusy} aria-label="Cancel new row" title="Cancel"><Icon name="x" /></button>
                           </div>
-                        </td>
+                        </td> : null}
                       </tr>
-                    ) : (
+                    ) : canAddRow ? (
                       <tr className="stocktaking-new-row-button-row">
                         <td colSpan={tableColumnCount}>
                           <button type="button" className="stocktaking-new-row-btn" onClick={() => requestEditAccess(editAdminPassword, { target: { type: "new" } })} disabled={editBusy || productsLoading || Boolean(editRowId)}>
@@ -1338,7 +1346,7 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
                           </button>
                         </td>
                       </tr>
-                    )}
+                    ) : null}
                   </tfoot>
                 </table>
                 {!filteredRows.length && !newRowOpen ? <div className="empty-block empty-block--no-data stocktaking-empty-under-table">Sorry, No data available</div> : null}

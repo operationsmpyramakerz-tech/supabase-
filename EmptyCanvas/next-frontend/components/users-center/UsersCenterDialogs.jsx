@@ -526,6 +526,9 @@ function FeatureAccessModal({ member, onClose, protect }) {
     { key: "kits", label: "Kits", optIn: true },
     { key: "proposals", label: "Proposals", optIn: true },
     { key: "orders.review", label: "Orders Review", optIn: true },
+    { key: "stocktaking", label: "Stocktaking", optIn: true },
+    { key: "expenses", label: "Expenses", optIn: true },
+    { key: "expenses.users", label: "Expenses by Users", optIn: true },
   ];
   useEffect(() => {
     let mounted = true;
@@ -551,6 +554,9 @@ function FeatureAccessModal({ member, onClose, protect }) {
           kits: stored.some(item => item.key === "kits.view"),
           proposals: stored.some(item => item.key === "proposals.view"),
           "orders.review": stored.some(item => item.key === "orders.review.view"),
+          stocktaking: stored.some(item => item.key === "stocktaking.view"),
+          expenses: stored.some(item => item.key === "expenses.view"),
+          "expenses.users": stored.some(item => item.key === "expenses.users.view"),
         });
         setUnmanagedGrants(stored.filter(item => !ACTIVE_PILOT_FEATURE_KEYS.includes(item.key) && item.key !== MY_ORDERS_ENFORCEMENT_MARKER));
       } catch (e) { if (mounted) setError(e.message); }
@@ -608,7 +614,7 @@ function FeatureAccessModal({ member, onClose, protect }) {
             {module.optIn && !enabledModules[module.key] ? <p style={{ margin: "12px 14px" }}>Uses existing Page Access until you enable detailed permissions for this module.</p> : null}
             {enabledModules[module.key] ? <div className="ua-page-access-group__rows">{shown.filter(item => item.module === module.key).map(item => <div className="ua-page-access-row ua-feature-access-row" key={item.key}><div className="ua-page-access-name"><strong>{item.label}</strong><small>{item.key}</small></div><div className="ua-page-access-enable"><label className="ua-switch" title={item.label}><input type="checkbox" checked={grants[item.key] === true} onChange={e => setGrants(current => ({ ...current, [item.key]: e.target.checked }))}/><span/></label></div></div>)}</div> : null}
           </section>)}
-          <small>New Maintenance Orders and Shopping Cart modules are optional per user. Enable a module, then grant only the features needed. A disabled View permission hides its page. Existing Page Access and any required admin password still apply. Scope is All during the pilot.</small>
+          <small>Optional modules remain on legacy Page Access until enabled for this user. Enable a module, then grant only the features needed. A disabled View permission hides its page. Existing Page Access and any required admin password still apply. Scope is All during the pilot.</small>
         </> : <p>Legacy page permissions will apply to this account. No feature grants will be enforced.</p>}
       </> : null}
       {error ? <p className="ua-form-error">{error}</p> : null}

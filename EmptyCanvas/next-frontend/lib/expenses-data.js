@@ -1,4 +1,5 @@
 import "server-only";
+import { featureAllowed } from "./feature-permissions-registry";
 import { performance } from "node:perf_hooks";
 import { deleteById, deleteStorageObjects, getSupabaseConfig, insert, rpc, select, selectAll, selectById, storagePublicUrl, updateById, uploadStorageObject } from "./supabase-rest";
 import { listTeamMembersLite } from "./team-members-service";
@@ -517,7 +518,14 @@ export async function expensesForAccount(account = {}) {
     ok = true;
     return {
       success: true,
-      items: rows.map(serializeExpense),
+      // Feature-denied receipt URLs must not be serialized into the browser
+      // payload, even if the screenshot button itself is hidden.
+      items: rows.map((row) => {
+        const item = serializeExpense(row);
+        return featureAllowed(account, "expenses.screenshot")
+          ? item
+          : { ...item, screenshots: [], screenshotUrl: "", screenshotName: "" };
+      }),
       lastSettledAt: info.lastSettledAt,
       lastSettledDate: info.lastSettledDate,
       source: "supabase-next-compact",

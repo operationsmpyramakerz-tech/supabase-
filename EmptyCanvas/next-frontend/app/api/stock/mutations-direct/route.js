@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDirectAccountGate } from "../../../../lib/products-auth";
+import { featureGate } from "../../../../lib/feature-permissions-server";
 import {
   addStocktakingRow,
   authorizeStocktakingEdit,
@@ -32,7 +33,7 @@ function noStore(payload, init = {}) {
 }
 
 export async function POST(request) {
-  const gate = await getDirectAccountGate(["Stocktaking"]);
+  const gate = featureGate(await getDirectAccountGate(["Stocktaking"]), "stocktaking.view");
   if (!gate.ok) {
     return noStore({ ok: false, error: gate.error || "Authentication required." }, { status: gate.status || 503 });
   }
@@ -41,6 +42,20 @@ export async function POST(request) {
   const action = actionKey(body?.action);
   if (!["edit-access", "add-row", "update-rows", "inventory-start", "inventory-value"].includes(action)) {
     return noStore({ ok: false, error: "Unsupported Stocktaking action." }, { status: 400 });
+  }
+
+  const permissionByAction = {
+    "edit-access": "stocktaking.authorize_column",
+    "add-row": "stocktaking.add_row",
+    "update-rows": "stocktaking.edit_rows",
+    "inventory-start": "stocktaking.start_inventory",
+    "inventory-value": "stocktaking.update_inventory",
+  };
+  const actionGate = featureGate(gate, permissionByAction[action]);
+  if (!actionGate.ok) return noStore({ ok: false, error: actionGate.error || "Permission denied." }, { status: actionGate.status || 403 });
+  if (["add-row", "update-rows"].includes(action)) {
+    const columnGate = featureGate(gate, "stocktaking.authorize_column");
+    if (!columnGate.ok) return noStore({ ok: false, error: columnGate.error || "Permission denied." }, { status: columnGate.status || 403 });
   }
 
   try {

@@ -3,6 +3,7 @@ import AppShell from "../../../components/AppShell";
 import OrderReceiptViewerClient from "../../../components/orders/OrderReceiptViewerClient";
 import { loadOrderReceiptViewerItems } from "../../../lib/order-receipts-data";
 import { getLegacyAccountGate } from "../../../lib/products-auth";
+import { featureAllowed } from "../../../lib/feature-permissions-registry";
 
 export const dynamic = "force-dynamic";
 
@@ -55,6 +56,12 @@ export default async function OrderReceiptViewerPage({ searchParams }) {
     );
   }
 
+  // A legacy page grant alone must not expose receipt data when the
+  // corresponding advanced module has explicitly disabled View.
+  if (!featureAllowed(gate.account, "expenses.view") && !featureAllowed(gate.account, "expenses.users.view")) {
+    return <main className="standalone-state"><section className="state-card"><h1>Order receipts are not available</h1><p>Expense viewing is disabled for this account.</p><a className="primary-button" href="/next/home">Return Home</a></section></main>;
+  }
+
   let payload = null;
   const warnings = [];
   try {
@@ -74,8 +81,8 @@ export default async function OrderReceiptViewerPage({ searchParams }) {
 
   const account = gate.account;
   const allowed = new Set((Array.isArray(account.allowedPages) ? account.allowedPages : []).map(normalize));
-  const canExpenses = allowed.has("expenses");
-  const canExpensesUsers = allowed.has("expenses users");
+  const canExpenses = allowed.has("expenses") && featureAllowed(account, "expenses.view");
+  const canExpensesUsers = allowed.has("expenses users") && featureAllowed(account, "expenses.users.view");
   const activePath = canExpenses ? "/next/expenses" : canExpensesUsers ? "/next/expenses/users" : "/next/home";
 
   return (

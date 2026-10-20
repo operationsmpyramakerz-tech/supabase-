@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { getDirectAccountGate } from "../../../../lib/products-auth";
+import { featureGate } from "../../../../lib/feature-permissions-server";
 import { listStocktakingFolders } from "../../../../lib/stocktaking-data";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request) {
-  const gate = await getDirectAccountGate(["Stocktaking"]);
+  const gate = featureGate(await getDirectAccountGate(["Stocktaking"]), "stocktaking.view");
   if (!gate.ok) {
     return NextResponse.json({ ok: false, columns: [], error: gate.error || "Access denied." }, { status: gate.status || 503 });
   }

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { getDirectAccountGate } from "../../../../lib/products-auth";
+import { featureGate } from "../../../../lib/feature-permissions-server";
 import { uploadStorageObject } from "../../../../lib/supabase-rest";
 
 export const runtime = "nodejs";
@@ -47,7 +48,7 @@ function cleanFilename(value = "") {
 }
 
 export async function POST(request) {
-  const gate = await getDirectAccountGate(["Stocktaking"]);
+  const gate = featureGate(await getDirectAccountGate(["Stocktaking"]), "stocktaking.upload_receipt");
   if (!gate.ok) {
     return noStore({ ok: false, error: gate.error || "Authentication required." }, { status: gate.status || 503 });
   }

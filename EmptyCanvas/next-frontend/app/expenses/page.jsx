@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import AppShell from "../../components/AppShell";
 import ExpensesClient from "../../components/expenses/ExpensesClient";
 import { getDirectAccountGate } from "../../lib/products-auth";
+import { featureGate } from "../../lib/feature-permissions-server";
 import { expensesForAccount } from "../../lib/expenses-data";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +26,7 @@ function UnavailableState({ message, forbidden = false }) {
 
 
 export default async function ExpensesPage() {
-  const gate = await getDirectAccountGate(["Expenses"]);
+  const gate = featureGate(await getDirectAccountGate(["Expenses"]), "expenses.view");
 
   if (gate.status === 401) redirect("/login?next=/next/expenses");
   if (gate.status === 403) {

@@ -1,4 +1,5 @@
 "use client";
+import { featureAllowed } from "../../lib/feature-permissions-registry";
 
 import { useState } from "react";
 import dynamic from "next/dynamic";
@@ -45,7 +46,7 @@ function Toast({ toast, onClose }) {
   return <div className={`next-expense-users-toast is-${toast.type || "info"}`}><div><strong>{toast.title}</strong>{toast.message ? <span>{toast.message}</span> : null}</div><button type="button" onClick={onClose}>×</button></div>;
 }
 
-export default function ExpensesUsersClient({ initialUsersPayload, bootstrapWarnings = [] }) {
+export default function ExpensesUsersClient({ account, initialUsersPayload, bootstrapWarnings = [] }) {
   const [users, setUsers] = useState(Array.isArray(initialUsersPayload?.users) ? initialUsersPayload.users : []);
   const [selectedUser, setSelectedUser] = useState(null);
   const [activeUserKey, setActiveUserKey] = useState("");
@@ -82,7 +83,7 @@ export default function ExpensesUsersClient({ initialUsersPayload, bootstrapWarn
         }) : <div className="users-empty"><div className="expenses-empty">Sorry, No data available</div></div>}
       </div>
     </main>
-    {selectedUser ? <UserExpensesModal user={selectedUser} onClose={() => setSelectedUser(null)} onUsersRefresh={refresh} notify={notify} /> : null}
+    {selectedUser ? <UserExpensesModal permissions={{ edit: featureAllowed(account, "expenses.users.edit"), delete: featureAllowed(account, "expenses.users.delete"), export: featureAllowed(account, "expenses.users.export") }} user={selectedUser} onClose={() => setSelectedUser(null)} onUsersRefresh={refresh} notify={notify} /> : null}
     <Toast toast={toast} onClose={() => setToast(null)} />
   </>;
 }

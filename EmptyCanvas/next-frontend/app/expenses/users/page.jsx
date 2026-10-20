@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import AppShell from "../../../components/AppShell";
 import ExpensesUsersClient from "../../../components/expenses/ExpensesUsersClient";
 import { getDirectAccountGate } from "../../../lib/products-auth";
+import { featureGate } from "../../../lib/feature-permissions-server";
 import { expenseUsersSummary } from "../../../lib/expenses-data";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +26,7 @@ function UnavailableState({ message, forbidden = false }) {
 
 
 export default async function ExpensesUsersPage() {
-  const gate = await getDirectAccountGate(["Expenses Users"]);
+  const gate = featureGate(await getDirectAccountGate(["Expenses Users"]), "expenses.users.view");
 
   if (gate.status === 401) redirect("/login?next=/next/expenses/users");
   if (gate.status === 403) {
@@ -56,6 +57,7 @@ export default async function ExpensesUsersPage() {
       pageStyles={["/next/css/expenses-users-classic-inline.css?v=stage2f"]}
     >
       <ExpensesUsersClient
+        account={gate.account}
         initialUsersPayload={usersPayload || { success: true, users: [] }}
         bootstrapWarnings={[]}
       />
