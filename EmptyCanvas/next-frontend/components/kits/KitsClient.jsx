@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import SaveProgressModal, { useSaveProgress } from "../SaveProgressModal";
 import ActionLoadingModal, { useActionLoading } from "../ActionLoadingModal";
 import { confirmDelete } from "../../lib/client-confirm";
+import { featureAllowed } from "../../lib/feature-permissions-registry";
 
 const KitDownloadModal = dynamic(() => import("./KitDialogs").then((module) => module.KitDownloadModal), { ssr: false });
 const SendKitToStockModal = dynamic(() => import("./KitDialogs").then((module) => module.SendKitToStockModal), { ssr: false });
@@ -238,6 +239,9 @@ function Toast({ toast, onClose }) {
 }
 
 export default function KitsClient({ account, initialCatalog, initialKits, initialFolders, bootstrapWarnings = [] }) {
+  const can = (action) => featureAllowed(account, `kits.${action}`);
+  // Creation must be able to save its components as well as its header.
+  const canCreate = can("create") && can("item_add");
   const [products, setProducts] = useState(() => (Array.isArray(initialCatalog?.products) ? initialCatalog.products : []).map(normalizeProduct));
   const [kits, setKits] = useState(() => (Array.isArray(initialKits?.kits) ? initialKits.kits : []).map(normalizeKit));
   const [folders, setFolders] = useState(() => (Array.isArray(initialFolders?.folders) ? initialFolders.folders : []).map(normalizeFolder));
@@ -1080,12 +1084,12 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
     const menuOpen = folderMenu === menuKey;
     return (
       <article className={`products-proposal-folder kit-library-kit ${menuOpen ? "is-menu-open" : ""}`} key={kit.id}>
-        {menuOpen ? (
+        {menuOpen && (can("edit") || can("copy") || can("delete") || can("item_add") || can("item_edit") || can("item_delete")) ? (
           <div className="proposal-folder-menu" onClick={(event) => event.stopPropagation()}>
-            <button type="button" onClick={() => { setFolderMenu(""); enterEditKit(kit); }}><FeatherIcon name="edit" /><span>Edit</span></button>
-            <button type="button" onClick={() => { setFolderMenu(""); startMoveKit(kit); }}><FeatherIcon name="move" /><span>Move</span></button>
-            <button type="button" onClick={() => { setFolderMenu(""); setNameDialog({ mode: "copy", kit, value: `${kit.name} copy` }); }}><FeatherIcon name="copy" /><span>Make a copy</span></button>
-            <button type="button" className="is-danger" onClick={() => { setFolderMenu(""); deleteKit(kit); }}><FeatherIcon name="trash" /><span>Delete</span></button>
+            {can("edit") || can("item_add") || can("item_edit") || can("item_delete") ? <button type="button" onClick={() => { setFolderMenu(""); enterEditKit(kit); }}><FeatherIcon name="edit" /><span>Edit</span></button> : null}
+            {can("edit") ? <button type="button" onClick={() => { setFolderMenu(""); startMoveKit(kit); }}><FeatherIcon name="move" /><span>Move</span></button> : null}
+            {can("copy") ? <button type="button" onClick={() => { setFolderMenu(""); setNameDialog({ mode: "copy", kit, value: `${kit.name} copy` }); }}><FeatherIcon name="copy" /><span>Make a copy</span></button> : null}
+            {can("delete") ? <button type="button" className="is-danger" onClick={() => { setFolderMenu(""); deleteKit(kit); }}><FeatherIcon name="trash" /><span>Delete</span></button> : null}
           </div>
         ) : null}
         <button
@@ -1140,7 +1144,7 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
       <div className="kit-component-card__metrics">
         <div className="kit-component-card__metric kit-component-card__metric--qty">
           <span>Qty</span>
-          {detailEdit ? (
+          {detailEdit && (createMode || can("item_edit")) ? (
             <input
               className="proposal-item-qty kit-component-card__qty-input"
               type="number"
@@ -1174,7 +1178,7 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
             <FeatherIcon name="minus" /><span>No link</span>
           </span>
         )}
-        {detailEdit ? (
+        {detailEdit && (createMode || can("item_delete")) ? (
           <button type="button" className="kit-component-card__action kit-component-card__action--remove" onClick={() => removeItem(row)} aria-label={`Delete ${row.name}`} title="Delete">
             <FeatherIcon name="trash" /><span>Remove</span>
           </button>
@@ -1189,10 +1193,10 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
     const kitCount = folderKitCounts.get(folder.id) || 0;
     return (
       <article className={`products-proposal-folder kit-library-folder ${menuOpen ? "is-menu-open" : ""}`} key={folder.id}>
-        {menuOpen ? (
+        {menuOpen && can("folder_manage") ? (
           <div className="proposal-folder-menu" onClick={(event) => event.stopPropagation()}>
-            <button type="button" onClick={() => { setFolderMenu(""); renameFolder(folder); }}><FeatherIcon name="edit" /><span>Rename</span></button>
-            <button type="button" className="is-danger" onClick={() => { setFolderMenu(""); deleteFolder(folder); }}><FeatherIcon name="trash" /><span>Delete folder</span></button>
+            {can("folder_manage") ? <button type="button" onClick={() => { setFolderMenu(""); renameFolder(folder); }}><FeatherIcon name="edit" /><span>Rename</span></button> : null}
+            {can("folder_manage") ? <button type="button" className="is-danger" onClick={() => { setFolderMenu(""); deleteFolder(folder); }}><FeatherIcon name="trash" /><span>Delete folder</span></button> : null}
           </div>
         ) : null}
         <button
@@ -1285,9 +1289,9 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
                             </div>
                           ) : null}
                         </div>
-                        <button type="button" className="products-btn products-btn--dark proposal-send-stock-btn" onClick={openSendToStock} disabled={!enrichedRows.length}>
+                        {can("send_stock") ? <button type="button" className="products-btn products-btn--dark proposal-send-stock-btn" onClick={openSendToStock} disabled={!enrichedRows.length}>
                           <FeatherIcon name="archive" /><span>Send to stock</span>
-                        </button>
+                        </button> : null}
                       </div>
                     </header>
                   )}
@@ -1307,6 +1311,7 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
                           <input
                             type="text"
                             value={editName}
+                            disabled={!createMode && !can("edit")}
                             onChange={(event) => {
                               setEditName(event.target.value);
                               if (text(event.target.value)) setDraftErrors((current) => ({ ...current, name: "" }));
@@ -1318,7 +1323,7 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
                         <div className="direct-create-inline-error direct-create-inline-error--name kit-create-inline-error kit-create-inline-error--name" aria-live="polite">{draftErrors.name}</div>
                       </div>
 
-                      <div className="products-proposal-tools proposals-one-tool">
+                      {(createMode || can("item_add")) ? <div className="products-proposal-tools proposals-one-tool">
                         <div className={`products-proposal-tool-card ${productPickerOpen ? "has-open-select" : ""}`}>
                           <div className="products-proposal-tool-title"><FeatherIcon name="plusCircle" /><span>Add kit component</span></div>
                           <div className="products-proposal-control-grid">
@@ -1370,7 +1375,7 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
                             <button type="button" className="products-btn products-btn--dark" onClick={addSelectedProduct} disabled={busy}><FeatherIcon name="plus" /><span>Add</span></button>
                           </div>
                         </div>
-                      </div>
+                      </div> : null}
                       <div className="direct-create-inline-error direct-create-inline-error--items kit-create-inline-error kit-create-inline-error--items" aria-live="polite">{draftErrors.items}</div>
                     </>
                   ) : (
@@ -1432,9 +1437,9 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
                   {detailEdit ? (
                     <div className={`kit-create-save-footer direct-create-save-footer ${createMode ? "direct-create-save-footer--create" : "direct-create-save-footer--edit"}`}>
                       <button type="button" className="products-btn products-btn--light direct-create-cancel-btn" onClick={backToKits} disabled={busy}>Cancel</button>
-                      <button type="button" className="products-btn products-btn--dark kit-create-save-btn direct-create-save-btn" onClick={saveKit} disabled={busy}>
+                      {(createMode || can("edit")) ? <button type="button" className="products-btn products-btn--dark kit-create-save-btn direct-create-save-btn" onClick={saveKit} disabled={busy}>
                         <FeatherIcon name="save" /><span>{busy ? "Saving…" : createMode ? "Save" : "Save Changes"}</span>
-                      </button>
+                      </button> : null}
                     </div>
                   ) : null}
                 </>
@@ -1473,13 +1478,13 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
       <div className="proposals-floating-actions kit-library-actions">
         {activeFolder ? (
           <>
-            <button type="button" className="products-btn products-btn--light proposal-classic-combine-btn next-kit-combine-btn" onClick={() => setCombineOpen(true)} disabled={kits.length < 2}><FeatherIcon name="merge" /><span>Combined Kits</span></button>
-            <button type="button" className="products-add-btn proposals-create-btn" onClick={startCreateKit}><FeatherIcon name="briefcase" /><span>Create New Kit</span></button>
+            {canCreate ? <button type="button" className="products-btn products-btn--light proposal-classic-combine-btn next-kit-combine-btn" onClick={() => setCombineOpen(true)} disabled={kits.length < 2}><FeatherIcon name="merge" /><span>Combined Kits</span></button> : null}
+            {canCreate ? <button type="button" className="products-add-btn proposals-create-btn" onClick={startCreateKit}><FeatherIcon name="briefcase" /><span>Create New Kit</span></button> : null}
           </>
         ) : (
           <>
-            <button type="button" className="products-add-btn proposals-create-btn" onClick={startCreateKit}><FeatherIcon name="briefcase" /><span>Create New Kit</span></button>
-            <button type="button" className="products-add-btn proposals-create-btn kit-create-folder-btn" onClick={() => setFolderDialog({ mode: "create", value: "" })}><FeatherIcon name="folderPlus" /><span>Create Folder</span></button>
+            {canCreate ? <button type="button" className="products-add-btn proposals-create-btn" onClick={startCreateKit}><FeatherIcon name="briefcase" /><span>Create New Kit</span></button> : null}
+            {can("folder_create") ? <button type="button" className="products-add-btn proposals-create-btn kit-create-folder-btn" onClick={() => setFolderDialog({ mode: "create", value: "" })}><FeatherIcon name="folderPlus" /><span>Create Folder</span></button> : null}
           </>
         )}
       </div>

@@ -2,6 +2,8 @@ import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 
 import { getDirectAccountGate } from "../../../../../lib/products-auth";
+import { featureGate } from "../../../../../lib/feature-permissions-server";
+import { featureAllowed } from "../../../../../lib/feature-permissions-registry";
 import { getSupabaseConfig, uploadStorageObject } from "../../../../../lib/supabase-rest";
 
 export const dynamic = "force-dynamic";
@@ -47,7 +49,11 @@ function cleanFilename(value = "receipt.jpg") {
 }
 
 export async function POST(request) {
-  const gate = await getDirectAccountGate(["Proposals", "Kits", "Products"]);
+  const originalGate = await getDirectAccountGate(["Proposals", "Kits", "Products"]);
+  // Receipts are also uploaded by Send Kit to Stock. Allow that operation
+  // independently of a user's Proposals feature profile.
+  const gate = originalGate.ok && featureAllowed(originalGate.account, "kits.send_stock")
+    ? originalGate : featureGate(originalGate, "proposals.receipt_upload");
   if (!gate.ok) return json({ ok: false, error: gate.error || "Access denied." }, gate.status || 503);
 
   try {

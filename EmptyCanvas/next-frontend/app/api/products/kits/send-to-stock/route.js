@@ -5,7 +5,7 @@ import { errorResponse, gateResponse, kitGate, requestBody } from "../../../../.
 export const dynamic = "force-dynamic";
 
 export async function POST(request) {
-  const gate = await kitGate();
+  const gate = await kitGate("send_stock");
   if (!gate.ok) return gateResponse(gate);
   try {
     const url = new URL(request.url);

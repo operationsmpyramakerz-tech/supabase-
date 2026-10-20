@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { featureGate } from "../../lib/feature-permissions-server";
 import AppShell from "../../components/AppShell";
 import ProposalsClient from "../../components/proposals/ProposalsClient";
 import { getDirectAccountGate } from "../../lib/products-auth";
@@ -10,7 +11,7 @@ export const dynamic = "force-dynamic";
 export default async function ProposalsPage() {
   // Run the permission gate and read-only page data in parallel. Ownership
   // flags still use the resolved account, and nothing is rendered on a failed gate.
-  const gatePromise = getDirectAccountGate(["Proposals", "Products"]);
+  const gatePromise = getDirectAccountGate(["Proposals", "Products"]).then(gate => featureGate(gate, "proposals.view"));
   const accountPromise = gatePromise.then((result) => result?.account || {}).catch(() => ({}));
   const dataPromise = Promise.allSettled([
     getProductsCatalog(),

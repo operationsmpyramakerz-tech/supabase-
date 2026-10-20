@@ -5,7 +5,7 @@ import { errorResponse, gateResponse, proposalGate, requestBody } from "../../..
 export const dynamic = "force-dynamic";
 
 export async function POST(request) {
-  const gate = await proposalGate();
+  const gate = await proposalGate("combine");
   if (!gate.ok) return gateResponse(gate);
   try {
     const result = await saveCombinedProposal(await requestBody(request), gate.account);

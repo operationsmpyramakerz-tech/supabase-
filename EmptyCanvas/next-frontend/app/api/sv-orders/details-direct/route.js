@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { performance } from "node:perf_hooks";
 import { getLegacyAccountGate } from "../../../../lib/products-auth";
+import { featureGate } from "../../../../lib/feature-permissions-server";
 import { loadOrdersReviewDetails } from "../../../../lib/orders-review-data";
 
 export const dynamic = "force-dynamic";
@@ -56,6 +57,9 @@ export async function POST(request) {
     };
   };
   if (!gate.ok) return noStore({ error: gate.error || "Authentication required." }, { status: gate.status || 503, headers: timing() });
+
+  const permissionGate = featureGate(gate, "orders.review.view_details");
+  if (!permissionGate.ok) return noStore({ error: permissionGate.error }, { status: permissionGate.status, headers: timing() });
 
   const detailsStartedAt = performance.now();
   const stages = {};

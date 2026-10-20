@@ -199,7 +199,7 @@ function ReviewDetailsLoadState({ group, loading, error, onRetry, onClose }) {
   </div>;
 }
 
-function ReviewDetailsModal({ group, activeTab, busyIds, onClose, onQuantitySave, onDecision, onBulkDecision, onPasswordAction, onReason, onExport }) {
+function ReviewDetailsModal({ group, activeTab, busyIds, onClose, onQuantitySave, onDecision, onBulkDecision, onPasswordAction, onReason, onExport, permissions = {} }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const [editingQty, setEditingQty] = useState("");
   const [sortMode, setSortMode] = useState("product-tag");
@@ -242,9 +242,9 @@ function ReviewDetailsModal({ group, activeTab, busyIds, onClose, onQuantitySave
   const archived = group.archived;
   const approval = group.approval;
   const canAct = !archived && approval === "not-started" && activeTab === "not-started";
-  const showEdit = !archived && (approval === "approved" || approval === "rejected" || activeTab === "approved" || activeTab === "rejected");
-  const showArchive = !archived && ["not-started", "approved", "rejected"].includes(activeTab);
-  const showUnarchive = archived || activeTab === "archive";
+  const showEdit = permissions.update_approval && !archived && (approval === "approved" || approval === "rejected" || activeTab === "approved" || activeTab === "rejected");
+  const showArchive = permissions.archive && !archived && ["not-started", "approved", "rejected"].includes(activeTab);
+  const showUnarchive = permissions.unarchive && (archived || activeTab === "archive");
   const maintenance = isMaintenanceOrder(group.orderType);
   const headerTitle = orderTypeHeaderTitle(group.orderType, group.orderTypeColor, statusLabel(approval));
   const typeMeta = orderTypeMeta(group.orderType, group.orderTypeColor);
@@ -274,7 +274,7 @@ function ReviewDetailsModal({ group, activeTab, busyIds, onClose, onQuantitySave
       <div className="co-item-right">
         {!maintenance ? <div className="co-item-total">Qty: {showEdited ? <span className="sv-qty-diff"><span className="sv-qty-old">{formatQuantity(qtyRequested)}</span><strong className="sv-qty-new">{formatQuantity(qtyEdited)}</strong></span> : <strong>{formatQuantity(qtyRequested)}</strong>}</div> : null}
         {!maintenance ? <ApprovalPill approval={itemApproval} className="co-item-status" reason={itemReason} onReason={onReason} /> : null}
-        {canAct && !maintenance ? <div className="next-review-item-actions"><button className="next-review-action-btn next-review-action-btn--edit" type="button" disabled={itemBusy} onClick={() => setEditingQty((current) => current === text(item?.id) ? "" : text(item?.id))}><ClassicOrderIcon name="edit-2" /><span>Edit qty</span></button><button className="next-review-action-btn next-review-action-btn--reject" type="button" disabled={itemBusy} onClick={() => onDecision(item, "Rejected")}><ClassicOrderIcon name="x" /><span>Reject</span></button><button className="next-review-action-btn next-review-action-btn--approve" type="button" disabled={itemBusy} onClick={() => onDecision(item, "Approved")}><ClassicOrderIcon name="check" /><span>Approve</span></button></div> : null}
+        {canAct && !maintenance && (permissions.quantity || permissions.approve) ? <div className="next-review-item-actions">{permissions.quantity ? <button className="next-review-action-btn next-review-action-btn--edit" type="button" disabled={itemBusy} onClick={() => setEditingQty((current) => current === text(item?.id) ? "" : text(item?.id))}><ClassicOrderIcon name="edit-2" /><span>Edit qty</span></button> : null}{permissions.approve ? <button className="next-review-action-btn next-review-action-btn--reject" type="button" disabled={itemBusy} onClick={() => onDecision(item, "Rejected")}><ClassicOrderIcon name="x" /><span>Reject</span></button> : null}{permissions.approve ? <button className="next-review-action-btn next-review-action-btn--approve" type="button" disabled={itemBusy} onClick={() => onDecision(item, "Approved")}><ClassicOrderIcon name="check" /><span>Approve</span></button> : null}</div> : null}
         {editingQty === text(item?.id) ? <QuantityEditor item={item} busy={itemBusy} onSave={onQuantitySave} onCancel={() => setEditingQty("")} /> : null}
       </div>
     </div>;
@@ -310,7 +310,7 @@ function ReviewDetailsModal({ group, activeTab, busyIds, onClose, onQuantitySave
           <OrderSortButton value={sortMode} onChange={setSortMode} />
         </div>
         <div className="co-modal-meta co-modal-meta--after-actions"><div className="co-meta-row co-meta-row--reason"><span>Reason</span><strong>{group.reason}</strong></div></div>
-        {canAct ? <div className="next-review-bulk-actions"><div><span>Review all components</span><strong>{componentSearch.trim() ? `Applies to ALL ${group.items.length} components, including hidden search results.` : "Apply one decision to every item in this order."}</strong></div><div className="next-classic-review-actions"><button className="btn btn-success btn-xs" type="button" disabled={group.items.some((item) => busyIds.has(text(item?.id)))} onClick={() => onBulkDecision(group, "Approved")}><ClassicOrderIcon name="check" /> Approve all</button><button className="btn btn-danger btn-xs" type="button" disabled={group.items.some((item) => busyIds.has(text(item?.id)))} onClick={() => onBulkDecision(group, "Rejected")}><ClassicOrderIcon name="x" /> Reject all</button></div></div> : null}
+        {canAct && permissions.bulk_approve ? <div className="next-review-bulk-actions"><div><span>Review all components</span><strong>{componentSearch.trim() ? `Applies to ALL ${group.items.length} components, including hidden search results.` : "Apply one decision to every item in this order."}</strong></div><div className="next-classic-review-actions"><button className="btn btn-success btn-xs" type="button" disabled={group.items.some((item) => busyIds.has(text(item?.id)))} onClick={() => onBulkDecision(group, "Approved")}><ClassicOrderIcon name="check" /> Approve all</button><button className="btn btn-danger btn-xs" type="button" disabled={group.items.some((item) => busyIds.has(text(item?.id)))} onClick={() => onBulkDecision(group, "Rejected")}><ClassicOrderIcon name="x" /> Reject all</button></div></div> : null}
         <ProgressiveOrderGroups
           groups={groupedItems}
           mode={sortMode}
@@ -471,6 +471,7 @@ export default function OrdersReviewHeavyModals({
   onCloseDetails,
   tab,
   busyIds,
+  permissions = {},
   onQuantitySave,
   onDecision,
   onBulkDecision,
@@ -512,6 +513,7 @@ export default function OrdersReviewHeavyModals({
         group={selected}
         activeTab={tab}
         busyIds={busyIds}
+        permissions={permissions}
         onClose={onCloseDetails}
         onQuantitySave={onQuantitySave}
         onDecision={onDecision}

@@ -20,7 +20,7 @@ export async function GET(request) {
 }
 
 export async function POST(request) {
-  const gate = await kitGate();
+  const gate = await kitGate("folder_create");
   if (!gate.ok) return gateResponse(gate);
   try {
     const body = await requestBody(request);

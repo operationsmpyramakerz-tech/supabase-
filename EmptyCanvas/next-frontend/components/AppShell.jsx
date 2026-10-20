@@ -107,6 +107,9 @@ export default function AppShell({
   const allowedPages = Array.isArray(account?.allowedPages) ? account.allowedPages : [];
   const classicLinks = CLASSIC_MAIN_LINKS.filter((link) => {
     if (!canSeeNavigationLink(link, allowedPages)) return false;
+    if (link.href === "/next/kits") return featureAllowed(account, "kits.view");
+    if (link.href === "/next/proposals") return featureAllowed(account, "proposals.view");
+    if (link.href === "/next/orders-review") return featureAllowed(account, "orders.review.view");
     if (link.href === "/next/task-management") return featureAllowed(account, "tasks.view");
     if (link.href === "/next/events") return ["events.calendar.view", "events.requests.view", "events.components.view", "events.team.view"].some(key => featureAllowed(account, key));
     return true;

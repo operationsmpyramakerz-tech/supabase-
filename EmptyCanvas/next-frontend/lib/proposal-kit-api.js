@@ -1,13 +1,14 @@
 import "server-only";
 import { NextResponse } from "next/server";
 import { getDirectAccountGate } from "./products-auth";
+import { featureGate } from "./feature-permissions-server";
 
-export async function proposalGate() {
-  return await getDirectAccountGate(["Proposals", "Products"]);
+export async function proposalGate(feature = "view") {
+  return featureGate(await getDirectAccountGate(["Proposals", "Products"]), `proposals.${feature}`);
 }
 
-export async function kitGate() {
-  return await getDirectAccountGate(["Kits", "Proposals", "Products"]);
+export async function kitGate(feature = "view") {
+  return featureGate(await getDirectAccountGate(["Kits", "Proposals", "Products"]), `kits.${feature}`);
 }
 
 // Read-only kit access is also required by Shopping Cart. A user should be able

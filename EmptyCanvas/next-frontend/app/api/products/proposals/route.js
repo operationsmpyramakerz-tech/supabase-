@@ -5,7 +5,7 @@ import { errorResponse, gateResponse, proposalGate, requestBody } from "../../..
 export const dynamic = "force-dynamic";
 
 export async function GET(request) {
-  const gate = await proposalGate();
+  const gate = await proposalGate("view");
   if (!gate.ok) return gateResponse(gate);
   try {
     const url = new URL(request.url);
@@ -15,7 +15,7 @@ export async function GET(request) {
 }
 
 export async function POST(request) {
-  const gate = await proposalGate();
+  const gate = await proposalGate("create");
   if (!gate.ok) return gateResponse(gate);
   try {
     const body = await requestBody(request);

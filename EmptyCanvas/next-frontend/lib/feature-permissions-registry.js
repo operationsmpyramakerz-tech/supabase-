@@ -969,19 +969,27 @@ export function featureAllowed(account, key, { legacyAllowed = true, scopes = ["
     : key.startsWith("events.calendar.") ? "events.calendar.view"
     : key.startsWith("events.requests.") ? "events.requests.view"
     : key.startsWith("events.components.") ? "events.components.view"
-    : key.startsWith("events.team.") ? "events.team.view" : null;
+    : key.startsWith("events.team.") ? "events.team.view"
+    : key.startsWith("kits.") ? "kits.view"
+    : key.startsWith("proposals.") ? "proposals.view"
+    : key.startsWith("orders.review.") ? "orders.review.view" : null;
   // Module migrations are opt-in. Persist even a denied .view marker so
   // new grants never silently remove rights from previously enabled users.
   if (!pilot && (!moduleMarker || !Object.hasOwn(state.grants || {}, moduleMarker))) return !!legacyAllowed;
+  // Newly migrated modules require View *and* the action grant. A hidden
+  // page must not permit direct mutations through an independently checked API.
+  if ((key.startsWith("kits.") || key.startsWith("proposals.") || key.startsWith("orders.review."))
+      && key !== moduleMarker && state.grants?.[moduleMarker]?.allowed !== true) return false;
   const grant = state?.grants?.[key];
   return grant?.allowed === true && scopes.includes(grant.scope || "all");
 }
 
-export const PILOT_FEATURE_MODULES = Object.freeze(["products", "orders.operations", "orders.my", "orders.maintenance", "orders.shopping", "tasks", "events.requests", "events.calendar", "events.components", "events.team"]);
+export const PILOT_FEATURE_MODULES = Object.freeze(["products", "orders.operations", "orders.my", "orders.maintenance", "orders.shopping", "tasks", "events.requests", "events.calendar", "events.components", "events.team", "kits", "proposals", "orders.review"]);
 
 // Permissions with both server-side enforcement and UI controls in Phase 2A.
 // Do not show toggles for unprotected actions; that would imply false security.
 export const ACTIVE_PILOT_FEATURE_KEYS = Object.freeze([
+  "kits.view", "kits.create", "kits.edit", "kits.delete", "kits.copy", "kits.item_add", "kits.item_edit", "kits.item_delete", "kits.folder_create", "kits.folder_manage", "kits.send_stock", "proposals.view", "proposals.create", "proposals.edit", "proposals.delete", "proposals.copy", "proposals.item_add", "proposals.item_edit", "proposals.item_delete", "proposals.combine", "proposals.make_order", "proposals.send_stock", "proposals.receipt_upload", "orders.review.view", "orders.review.view_details", "orders.review.approve", "orders.review.bulk_approve", "orders.review.quantity", "orders.review.archive", "orders.review.unarchive", "orders.review.update_approval",
   "orders.my.view", "orders.my.edit", "orders.my.archive",
   "orders.my.unarchive", "orders.my.delete", "orders.my.export",
   "products.view", "products.create", "products.edit", "products.delete",

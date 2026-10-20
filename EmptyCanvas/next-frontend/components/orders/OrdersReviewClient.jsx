@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { featureAllowed } from "../../lib/feature-permissions-registry";
 import dynamic from "next/dynamic";
 import ClassicOrderIcon from "./ClassicOrderIcon";
 import { createOrderDetailsLoader } from "./orderDetailsLoader";
@@ -289,11 +290,11 @@ function ApprovalPill({ approval, className = "co-status-btn", reason = "", onRe
   return <span className={className} style={style}>{statusLabel(key)}</span>;
 }
 
-function OrderReviewCard({ group, activeTab, onOpen, onPrefetch, onCreator }) {
+function OrderReviewCard({ group, activeTab, onOpen, onPrefetch, onCreator, canOpen = true }) {
   const state = group.archived ? "archive" : group.approval;
   const mixed = activeTab === "all" && !group.archived && group.approval === "mixed";
   return (
-    <article className="co-card next-review-order-card" role="button" tabIndex={0} aria-label={`Open ${group.orderIdLabel}`} onPointerEnter={(event) => { if (event.pointerType === "mouse" || event.pointerType === "pen") onPrefetch(group, true); }} onPointerLeave={() => onPrefetch(null, true)} onFocus={(event) => { if (event.target === event.currentTarget) onPrefetch(group); }} onClick={() => onOpen(group)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen(group); } }}>
+    <article className="co-card next-review-order-card" role={canOpen ? "button" : undefined} tabIndex={canOpen ? 0 : undefined} aria-label={canOpen ? `Open ${group.orderIdLabel}` : group.orderIdLabel} onPointerEnter={(event) => { if (canOpen && (event.pointerType === "mouse" || event.pointerType === "pen")) onPrefetch(group, true); }} onPointerLeave={() => { if (canOpen) onPrefetch(null, true); }} onFocus={(event) => { if (canOpen && event.target === event.currentTarget) onPrefetch(group); }} onClick={() => { if (canOpen) onOpen(group); }} onKeyDown={(event) => { if (canOpen && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); onOpen(group); } }}>
       <div className="co-top">
         <div className="co-main">
           <OrderTypeBadge type={group.orderType} color={group.orderTypeColor} />
@@ -304,9 +305,9 @@ function OrderReviewCard({ group, activeTab, onOpen, onPrefetch, onCreator }) {
         </div>
         <div className="next-review-card-head-actions">
           <div className="next-review-card-status">{mixed ? <MixedStatusPill /> : <ApprovalPill approval={state} />}</div>
-          <button className="co-creator-btn next-review-creator-btn" type="button" aria-label={`Created by ${group.createdByName || "Creator"}`} title={`Created by ${group.createdByName || "Creator"}`} onClick={(event) => { event.preventDefault(); event.stopPropagation(); onCreator(event.currentTarget, group); }}>
+          {canOpen ? <button className="co-creator-btn next-review-creator-btn" type="button" aria-label={`Created by ${group.createdByName || "Creator"}`} title={`Created by ${group.createdByName || "Creator"}`} onClick={(event) => { event.preventDefault(); event.stopPropagation(); onCreator(event.currentTarget, group); }}>
             <span className="next-review-creator-icon"><ClassicOrderIcon name="user" /></span>
-          </button>
+          </button> : null}
         </div>
       </div>
     </article>
@@ -322,7 +323,9 @@ function ProgressTrack({ value }) {
   })}</div>;
 }
 
-export default function OrdersReviewClient({ initialOrders = [], initialPageInfo = null, bootstrapWarnings = [] }) {
+export default function OrdersReviewClient({ initialOrders = [], initialPageInfo = null, bootstrapWarnings = [], account }) {
+  const canReview = (action) => featureAllowed(account, `orders.review.${action}`);
+  const permissions = Object.fromEntries(["view_details", "approve", "bulk_approve", "quantity", "archive", "unarchive", "update_approval"].map(action => [action, canReview(action)]));
   const [orders, setOrders] = useState(Array.isArray(initialOrders) ? initialOrders : []);
   const [pageInfo, setPageInfo] = useState(initialPageInfo || { hasMore: false, nextCursor: null, limit: 36 });
   const [listLoading, setListLoading] = useState(false);
@@ -479,7 +482,7 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
     });
   }
   async function openReviewDetails(group, { force = false } = {}) {
-    if (!group?.key) return;
+    if (!canReview("view_details") || !group?.key) return;
     const attemptId = markOrderOpenStarted("Review");
     const requestId = ++detailRequestIdRef.current;
     setSelectedKey(group.key);
@@ -755,7 +758,7 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
       </div>
     </div>
 
-    <section className="orders-review-list-surface" id="sv-orders"><OrdersListHeader count={visibleGroups.length} hasMore={pageInfo?.hasMore} busy={listLoading} sortMode={sortMode} onSortChange={setSortMode} /><div className="co-cards" id="sv-list">{visibleGroups.length ? sortedVisibleGroups.map((group) => <OrderReviewCard group={group} activeTab={tab} onOpen={openReviewDetails} onPrefetch={prefetchReviewDetails} onCreator={openCreatorProfile} key={group.key}/>) : listLoading ? <div className="ops-no-data-state" role="status" aria-live="polite"><div className="ops-no-data-state__text">Loading orders…</div></div> : <OrdersEmptyState filtered={tab !== "all" || type !== "all" || !!query.trim()} context={"orders"} onReset={() => { setTab("all"); setType("all"); setQuery(""); }} />}</div>{pageInfo?.hasMore ? <div style={{ display: "flex", justifyContent: "center", padding: "16px 0 4px" }}><button type="button" className="ro-action-btn ro-action-btn--light" disabled={listLoading} onClick={() => fetchReviewPage({ reset: false }).catch((error) => showNotice(error?.message || "Failed to load more orders."))}>{listLoading ? "Loading…" : "Load more orders"}</button></div> : null}</section>
+    <section className="orders-review-list-surface" id="sv-orders"><OrdersListHeader count={visibleGroups.length} hasMore={pageInfo?.hasMore} busy={listLoading} sortMode={sortMode} onSortChange={setSortMode} /><div className="co-cards" id="sv-list">{visibleGroups.length ? sortedVisibleGroups.map((group) => <OrderReviewCard group={group} activeTab={tab} onOpen={openReviewDetails} onPrefetch={prefetchReviewDetails} onCreator={openCreatorProfile} canOpen={permissions.view_details} key={group.key}/>) : listLoading ? <div className="ops-no-data-state" role="status" aria-live="polite"><div className="ops-no-data-state__text">Loading orders…</div></div> : <OrdersEmptyState filtered={tab !== "all" || type !== "all" || !!query.trim()} context={"orders"} onReset={() => { setTab("all"); setType("all"); setQuery(""); }} />}</div>{pageInfo?.hasMore ? <div style={{ display: "flex", justifyContent: "center", padding: "16px 0 4px" }}><button type="button" className="ro-action-btn ro-action-btn--light" disabled={listLoading} onClick={() => fetchReviewPage({ reset: false }).catch((error) => showNotice(error?.message || "Failed to load more orders."))}>{listLoading ? "Loading…" : "Load more orders"}</button></div> : null}</section>
 
     {selectedKey && !selected && !detailError ? <OrderDetailsLoadingOverlay group={selectedSummary} onCancel={closeReviewDetails} variant="review" /> : null}
     {(selected || detailError || passwordState || rejectionState || editorState || reasonView || creatorState) ? (
@@ -769,6 +772,7 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
         onCloseDetails={closeReviewDetails}
         tab={tab}
         busyIds={busyIds}
+        permissions={permissions}
         onQuantitySave={saveQuantity}
         onDecision={beginDecision}
         onBulkDecision={beginBulkDecision}

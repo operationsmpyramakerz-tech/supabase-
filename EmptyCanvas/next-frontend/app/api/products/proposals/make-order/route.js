@@ -7,7 +7,7 @@ import { createOrderFromProposalDirect } from "../../../../../lib/shopping-cart-
 export const dynamic = "force-dynamic";
 
 export async function POST(request) {
-  const gate = await proposalGate();
+  const gate = await proposalGate("make_order");
   if (!gate.ok) return gateResponse(gate);
   try {
     const url = new URL(request.url);

@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { featureGate } from "../../lib/feature-permissions-server";
 import AppShell from "../../components/AppShell";
 import OrdersReviewClient from "../../components/orders/OrdersReviewClient";
 import { getLegacyAccountGate } from "../../lib/products-auth";
@@ -35,7 +36,7 @@ export default async function OrdersReviewPage() {
   }
 
   const [gate, directResult] = await Promise.all([
-    getDirectAccountGateFromSessionContext(sessionGate, ["Orders Review"]),
+    getDirectAccountGateFromSessionContext(sessionGate, ["Orders Review"]).then(gate => featureGate(gate, "orders.review.view")),
     loadOrdersReviewInitialPage({ account: sessionGate.account })
       .then((payload) => ({ payload, error: null }))
       .catch((error) => ({ payload: null, error })),
@@ -73,6 +74,7 @@ export default async function OrdersReviewPage() {
         initialOrders={orders}
         initialPageInfo={pageInfo}
         bootstrapWarnings={[]}
+        account={gate.account}
       />
     </AppShell>
   );

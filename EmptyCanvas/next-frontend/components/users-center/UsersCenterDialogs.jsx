@@ -523,6 +523,9 @@ function FeatureAccessModal({ member, onClose, protect }) {
     { key: "events.calendar", label: "Event Calendar", optIn: true },
     { key: "events.components", label: "Event Components", optIn: true },
     { key: "events.team", label: "Event Team", optIn: true },
+    { key: "kits", label: "Kits", optIn: true },
+    { key: "proposals", label: "Proposals", optIn: true },
+    { key: "orders.review", label: "Orders Review", optIn: true },
   ];
   useEffect(() => {
     let mounted = true;
@@ -545,6 +548,9 @@ function FeatureAccessModal({ member, onClose, protect }) {
           "events.calendar": stored.some(item => item.key === "events.calendar.view"),
           "events.components": stored.some(item => item.key === "events.components.view"),
           "events.team": stored.some(item => item.key === "events.team.view"),
+          kits: stored.some(item => item.key === "kits.view"),
+          proposals: stored.some(item => item.key === "proposals.view"),
+          "orders.review": stored.some(item => item.key === "orders.review.view"),
         });
         setUnmanagedGrants(stored.filter(item => !ACTIVE_PILOT_FEATURE_KEYS.includes(item.key) && item.key !== MY_ORDERS_ENFORCEMENT_MARKER));
       } catch (e) { if (mounted) setError(e.message); }

@@ -5,7 +5,7 @@ import { errorResponse, gateResponse, proposalGate, requestBody } from "../../..
 export const dynamic = "force-dynamic";
 
 export async function POST(request) {
-  const gate = await proposalGate();
+  const gate = await proposalGate("item_add");
   if (!gate.ok) return gateResponse(gate);
   try {
     const url = new URL(request.url);

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDirectAccountGate } from "../../../../lib/products-auth";
 import { directPageMutationAccess } from "../../../../lib/order-action-auth";
+import { featureGate } from "../../../../lib/feature-permissions-server";
 import {
   performOrdersReviewProtectedAction,
   updateOrdersReviewApproval,
@@ -48,6 +49,14 @@ export async function POST(request) {
   if (!gate.ok) {
     return noStore({ error: gate.error || "Authentication required." }, { status: gate.status || 503 });
   }
+
+  const actionPermissions = {
+    approval: "approve", "bulk-approval": "bulk_approve", quantity: "quantity",
+    archive: "archive", unarchive: "unarchive", "verify-edit": "update_approval",
+    "update-approval": "update_approval",
+  };
+  const permissionGate = featureGate(gate, `orders.review.${actionPermissions[action]}`);
+  if (!permissionGate.ok) return noStore({ error: permissionGate.error }, { status: permissionGate.status });
 
   const mutationAccess = directPageMutationAccess(gate.account, "Orders Review");
   if (mutationAccess === false) {

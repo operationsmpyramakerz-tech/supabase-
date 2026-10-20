@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import SaveProgressModal, { useSaveProgress } from "../SaveProgressModal";
 import ActionLoadingModal, { useActionLoading } from "../ActionLoadingModal";
 import { confirmDelete } from "../../lib/client-confirm";
+import { featureAllowed } from "../../lib/feature-permissions-registry";
 import { removeSourceKitFromDraft } from "../../lib/proposal-source-kit-management.mjs";
 
 const NameModal = dynamic(() => import("./ProposalDialogs").then((module) => module.NameModal), { ssr: false });
@@ -338,6 +339,7 @@ export default function ProposalsClient({
   initialKits,
   initialKitFolders,
 }) {
+  const can = (action) => featureAllowed(account, `proposals.${action}`);
   const [products, setProducts] = useState(() => (Array.isArray(initialCatalog?.products) ? initialCatalog.products : []).map(normalizeProduct));
   const [proposals, setProposals] = useState(() => (Array.isArray(initialProposals?.proposals) ? initialProposals.proposals : []).map(normalizeProposal));
   const [kits, setKits] = useState(() => (Array.isArray(initialKits?.kits) ? initialKits.kits : []).map(normalizeKit));
@@ -1335,7 +1337,7 @@ export default function ProposalsClient({
         <div className="kit-component-card__metrics proposal-component-card__metrics">
           <div className="kit-component-card__metric kit-component-card__metric--qty">
             <span>{sourceQuantities.length ? "Total Qty" : "Qty"}</span>
-            {detailEdit ? (
+            {detailEdit && (createMode || can("item_edit")) ? (
               <input
                 className="proposal-item-qty kit-component-card__qty-input"
                 type="number"
@@ -1368,7 +1370,7 @@ export default function ProposalsClient({
               <span aria-hidden="true">—</span><span>No link</span>
             </span>
           )}
-          {detailEdit ? (
+          {detailEdit && (createMode || can("item_delete")) ? (
             <button type="button" className="kit-component-card__action kit-component-card__action--remove" onClick={() => removeItem(row)} aria-label={`Remove ${row.name}`}>
               <span aria-hidden="true">×</span><span>Remove</span>
             </button>
@@ -1432,7 +1434,7 @@ export default function ProposalsClient({
                         <button type="button" className="products-back-btn" onClick={backToProposals} aria-label="Back to proposals">←</button>
                         <span>Create New Proposal</span>
                       </div>
-                      <button type="button" className="products-btn proposal-manage-kits-btn" onClick={() => setSourceKitManagerOpen(true)}><ProposalIcon name="folder" /><span>Manage Kits</span></button>
+                      {(createMode || can("item_delete")) ? <button type="button" className="products-btn proposal-manage-kits-btn" onClick={() => setSourceKitManagerOpen(true)}><ProposalIcon name="folder" /><span>Manage Kits</span></button> : null}
                     </header>
                   ) : (
                     <header className="products-proposal-detail__head proposal-detail-head--compact">
@@ -1443,9 +1445,9 @@ export default function ProposalsClient({
                             <ProposalIcon name="download" /><span>Download</span><ProposalIcon name="chevronDown" size={15} />
                           </button>
                         </div>
-                        <button type="button" className="products-btn proposal-manage-kits-btn" onClick={() => { setSourceKitManagerOpen(true); setSortMenuOpen(false); setDownloadMenuOpen(false); }}>
+                        {can("item_delete") ? <button type="button" className="products-btn proposal-manage-kits-btn" onClick={() => { setSourceKitManagerOpen(true); setSortMenuOpen(false); setDownloadMenuOpen(false); }}>
                           <ProposalIcon name="folder" /><span>Manage Kits</span>
-                        </button>
+                        </button> : null}
                         <div className="proposal-sort-menu-wrap">
                           <button type="button" className="products-btn proposal-sort-btn" onClick={() => { setSortMenuOpen((open) => !open); setDownloadMenuOpen(false); }}>
                             <ProposalIcon name="sort" /><span>Sort</span><ProposalIcon name="chevronDown" size={15} />
@@ -1463,7 +1465,7 @@ export default function ProposalsClient({
                             </div>
                           ) : null}
                         </div>
-                        <button type="button" className="products-btn products-btn--dark proposal-make-order-btn" onClick={openMakeOrder} disabled={!enrichedRows.length}><ProposalIcon name="shoppingBag" /><span>Make order</span></button>
+                        {can("make_order") ? <button type="button" className="products-btn products-btn--dark proposal-make-order-btn" onClick={openMakeOrder} disabled={!enrichedRows.length}><ProposalIcon name="shoppingBag" /><span>Make order</span></button> : null}
                       </div>
                     </header>
                   )}
@@ -1489,6 +1491,7 @@ export default function ProposalsClient({
                           <span>Proposal name <em>*</em></span>
                           <input
                             value={editName}
+                            disabled={!createMode && !can("edit")}
                             onChange={(event) => {
                               setEditName(event.target.value);
                               setDraftErrors((current) => ({ ...current, name: "" }));
@@ -1502,12 +1505,12 @@ export default function ProposalsClient({
 
                       <div className="products-proposal-tools proposals-one-tool">
                         <div className="products-proposal-tool-card proposal-add-components-tool-card">
-                          <button type="button" className="products-proposal-tool-title proposal-add-components-launch" onClick={() => setAddDialog(true)}>
+                          {(createMode || can("item_add")) ? <button type="button" className="products-proposal-tool-title proposal-add-components-launch" onClick={() => setAddDialog(true)}>
                             <span aria-hidden="true">＋</span><span>Add proposal components</span>
-                          </button>
+                          </button> : null}
                           {!createMode ? (
                             <div className="proposal-classic-inline-actions proposal-classic-inline-actions--delete-only">
-                              <button type="button" className="products-btn next-proposals-classic-danger" onClick={() => deleteProposal(proposal)}>Delete Proposal</button>
+                              {can("delete") ? <button type="button" className="products-btn next-proposals-classic-danger" onClick={() => deleteProposal(proposal)}>Delete Proposal</button> : null}
                             </div>
                           ) : null}
                         </div>
@@ -1573,9 +1576,9 @@ export default function ProposalsClient({
                   {detailEdit ? (
                     <div className={`direct-create-save-footer proposal-create-save-footer ${createMode ? "direct-create-save-footer--create" : "direct-create-save-footer--edit"}`}>
                       <button type="button" className="products-btn products-btn--light direct-create-cancel-btn" onClick={backToProposals} disabled={busy}>Cancel</button>
-                      <button type="button" className="products-btn products-btn--dark direct-create-save-btn" onClick={saveProposal} disabled={busy}>
+                      {(createMode || can("edit")) ? <button type="button" className="products-btn products-btn--dark direct-create-save-btn" onClick={saveProposal} disabled={busy}>
                         <span>{busy ? "Saving…" : createMode ? "Save" : "Save Changes"}</span>
-                      </button>
+                      </button> : null}
                     </div>
                   ) : null}
 
@@ -1585,7 +1588,7 @@ export default function ProposalsClient({
           </section>
         </section>
 
-        {addDialog && proposal ? <AddItemsModal proposal={proposal} products={products} kits={kits} kitFolders={kitFolders} tags={tags} busy={busy} onClose={() => setAddDialog(false)} onSubmit={submitAdd} /> : null}
+        {addDialog && proposal && (createMode || can("item_add")) ? <AddItemsModal proposal={proposal} products={products} kits={kits} kitFolders={kitFolders} tags={tags} busy={busy} onClose={() => setAddDialog(false)} onSubmit={submitAdd} /> : null}
 
         {nameDialog ? <NameModal key={`${nameDialog.mode}-${nameDialog.proposal?.id || "new"}`} dialog={nameDialog} busy={busy} onClose={() => setNameDialog(null)} onSubmit={submitNameDialog} /> : null}
         {passwordRequest ? <PasswordModal request={passwordRequest} busy={busy} onClose={closePassword} onVerified={verifyPassword} /> : null}
@@ -1598,8 +1601,8 @@ export default function ProposalsClient({
       <Toast toast={toast} onClose={() => setToast(null)} />
 
       <div className="proposals-floating-actions">
-        <button type="button" className="products-btn products-btn--light proposal-classic-combine-btn" onClick={() => setCombineOpen(true)} disabled={proposals.length < 2}>Combine Proposals</button>
-        <button type="button" className="products-add-btn proposals-create-btn" onClick={startCreateProposal}><span aria-hidden="true">＋</span><span>Create New Proposal</span></button>
+        {can("combine") ? <button type="button" className="products-btn products-btn--light proposal-classic-combine-btn" onClick={() => setCombineOpen(true)} disabled={proposals.length < 2}>Combine Proposals</button> : null}
+        {can("create") ? <button type="button" className="products-add-btn proposals-create-btn" onClick={startCreateProposal}><span aria-hidden="true">＋</span><span>Create New Proposal</span></button> : null}
       </div>
 
 
@@ -1612,11 +1615,11 @@ export default function ProposalsClient({
                   const menuOpen = folderMenu === proposal.id;
                   return (
                   <article className={`products-proposal-folder ${menuOpen ? "is-menu-open" : ""}`} key={proposal.id}>
-                    {menuOpen ? (
+                    {menuOpen && (can("edit") || can("copy") || can("delete") || can("item_add") || can("item_edit") || can("item_delete")) ? (
                       <div className="proposal-folder-menu" onClick={(event) => event.stopPropagation()}>
-                        <button type="button" onClick={() => enterEditProposal(proposal)}><ProposalIcon name="edit" /><span>Edit</span></button>
-                        <button type="button" onClick={() => { setFolderMenu(""); setNameDialog({ mode: "copy", proposal, value: `${proposal.name} Copy` }); }}><ProposalIcon name="copy" /><span>Make a copy</span></button>
-                        <button type="button" className="is-danger" onClick={() => { setFolderMenu(""); deleteProposal(proposal); }}><ProposalIcon name="trash" /><span>Delete</span></button>
+                        {(can("edit") || can("item_add") || can("item_edit") || can("item_delete")) ? <button type="button" onClick={() => enterEditProposal(proposal)}><ProposalIcon name="edit" /><span>Edit</span></button> : null}
+                        {can("copy") ? <button type="button" onClick={() => { setFolderMenu(""); setNameDialog({ mode: "copy", proposal, value: `${proposal.name} Copy` }); }}><ProposalIcon name="copy" /><span>Make a copy</span></button> : null}
+                        {can("delete") ? <button type="button" className="is-danger" onClick={() => { setFolderMenu(""); deleteProposal(proposal); }}><ProposalIcon name="trash" /><span>Delete</span></button> : null}
                       </div>
                     ) : null}
                     <button

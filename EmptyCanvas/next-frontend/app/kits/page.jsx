@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { featureGate } from "../../lib/feature-permissions-server";
 import AppShell from "../../components/AppShell";
 import KitsClient from "../../components/kits/KitsClient";
 import { getDirectAccountGate } from "../../lib/products-auth";
@@ -10,7 +11,7 @@ export const dynamic = "force-dynamic";
 export default async function KitsPage() {
   // Start authentication and the read-only Supabase queries together. The data
   // promise is not consumed/rendered until the permission gate succeeds.
-  const gatePromise = getDirectAccountGate(["Kits", "Proposals", "Products"]);
+  const gatePromise = getDirectAccountGate(["Kits", "Proposals", "Products"]).then(gate => featureGate(gate, "kits.view"));
   const accountPromise = gatePromise.then((result) => result?.account || {}).catch(() => ({}));
   const dataPromise = Promise.allSettled([
     getProductsCatalog(),
