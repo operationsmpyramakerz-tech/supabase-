@@ -3,6 +3,7 @@ import { dispatchQueuedNotifications } from "../../../../lib/notification-event-
 
 import { directTaskManagementContext } from "../../../../lib/task-management-data";
 import { featureGate } from "../../../../lib/feature-permissions-server";
+import { assertTaskActionScope } from "../../../../lib/task-data-scope";
 import {
   archiveTaskManagementAssignment,
   archiveTaskManagementPeopleWorkflow,
@@ -65,6 +66,10 @@ export async function POST(request) {
   }
 
   try {
+    if (required || action === "people-workflow-get") {
+      // Validate the actual database owner/assignee before any mutation.
+      await assertTaskActionScope(context, required || "tasks.view", action, body);
+    }
     if (action === "ticket-create") {
       const ticket = await createTaskManagementTicket(context, body);
       return json({ ok: true, ticket, source: "supabase-next" }, 201);

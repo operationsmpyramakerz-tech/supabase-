@@ -9,6 +9,7 @@ import UserProfileMenu from "../UserProfileMenu";
 import ClassicTaskSelect from "./ClassicTaskSelect";
 import { loadTeamMemberPublicProfile } from "../../lib/team-member-public-client";
 import { featureAllowed } from "../../lib/feature-permissions-registry";
+import { taskCardAllows } from "../../lib/task-data-scope.mjs";
 
 const ClassicTaskWorkflowDetails = dynamic(() => import("./ClassicTaskWorkflowDetails"), { ssr: false });
 const TaskManagementDialogs = dynamic(() => import("./TaskManagementDialogs"), { ssr: false });
@@ -487,6 +488,7 @@ export default function TaskManagementClient({ view, initialMeta, initialTickets
   }, [filterOpen]);
   const copy = VIEW_COPY[view] || VIEW_COPY.my;
   const can = (key) => featureAllowed(account, `tasks.${key}`);
+  const canOnTicket = (key, ticket, options = {}) => can(key) && taskCardAllows(meta?.scopePolicy, key, ticket, options);
   const canCreate = view === "delegated" && can("project_create");
   const isPageAdmin = !!meta.isPageAdmin;
 
@@ -508,7 +510,7 @@ export default function TaskManagementClient({ view, initialMeta, initialTickets
       setSelectedTicket((current) => {
         if (!current) return current;
         const summary = nextTickets.find((item) => text(item.id) === text(current.id));
-        if (!summary) return current;
+        if (!summary) return null;
         return {
           ...current,
           ...summary,
@@ -520,6 +522,9 @@ export default function TaskManagementClient({ view, initialMeta, initialTickets
       setMeta(metaResult || meta);
       return nextTickets;
     } catch (error) {
+      // With row-level scope, do not leave a previously authorized list on
+      // screen after membership or permission changes invalidate the refresh.
+      if (meta?.scopePolicy) { setTickets([]); setSelectedTicket(null); }
       notify("error", "Refresh failed", error?.message || "Task Management could not refresh.");
       return [];
     } finally { if (!silent) setBusy(false); }
@@ -549,7 +554,8 @@ export default function TaskManagementClient({ view, initialMeta, initialTickets
       setSelectedTicket(result?.ticket || ticket);
     } catch (error) {
       notify("error", "Project details could not load", error?.message || "The selected project could not be opened.");
-      setSelectedTicket(ticket);
+      // Do not reopen stale project details when the scoped API denied access.
+      if (!meta?.scopePolicy) setSelectedTicket(ticket);
     }
   };
 
@@ -574,7 +580,7 @@ export default function TaskManagementClient({ view, initialMeta, initialTickets
     } catch (error) { notify("error", "Delete failed", error?.message || "The project could not be deleted."); }
   };
   const requestAction = (action, ticket) => {
-    if (!can(action === "edit" ? "project_edit" : action === "archive" ? "project_archive" : "project_delete")) return;
+    if (!canOnTicket(action === "edit" ? "project_edit" : action === "archive" ? "project_archive" : "project_delete", ticket)) return;
     if (isPageAdmin) {
       if (action === "edit") setEditor(editorFromTicket(ticket));
       else if (action === "archive" || action === "delete") setConfirmAction({ type: action, ticket, password: "" });
@@ -646,7 +652,7 @@ export default function TaskManagementClient({ view, initialMeta, initialTickets
           </section>
         </div>
       </main>
-      {selectedTicket ? <TaskPortal><ClassicTaskWorkflowDetails ticket={selectedTicket} view={view} meta={meta} onClose={() => setSelectedTicket(null)} onEdit={can("project_edit") ? (ticket) => requestAction("edit", ticket) : null} onRefresh={() => refresh({ silent: true })} onWork={can("assignment_work") || can("section_work") ? setWorkTarget : null} onTeamWorkflow={can("workflow_save") ? setTeamSection : null} onArchive={can("project_archive") ? (ticket) => requestAction("archive", ticket) : null} onDelete={can("project_delete") ? (ticket) => requestAction("delete", ticket) : null} onDelivered={can("mark_delivered") ? delivered : null} featurePermissions={Object.fromEntries(["workflow_save", "assignment_work", "section_work", "assignment_archive", "assignment_delete"].map(key => [key, can(key)]))} notify={notify} /></TaskPortal> : null}
+      {selectedTicket ? <TaskPortal><ClassicTaskWorkflowDetails ticket={selectedTicket} view={view} meta={meta} onClose={() => setSelectedTicket(null)} onEdit={canOnTicket("project_edit", selectedTicket) ? (ticket) => requestAction("edit", ticket) : null} onRefresh={() => refresh({ silent: true })} onWork={canOnTicket("assignment_work", selectedTicket, { personalWork: true }) || canOnTicket("section_work", selectedTicket, { personalWork: true }) || canOnTicket("section_work", selectedTicket) ? setWorkTarget : null} onTeamWorkflow={canOnTicket("workflow_save", selectedTicket) ? setTeamSection : null} onArchive={canOnTicket("project_archive", selectedTicket) ? (ticket) => requestAction("archive", ticket) : null} onDelete={canOnTicket("project_delete", selectedTicket) ? (ticket) => requestAction("delete", ticket) : null} onDelivered={canOnTicket("mark_delivered", selectedTicket) ? delivered : null} featurePermissions={Object.fromEntries(["workflow_save", "assignment_work", "section_work", "assignment_archive", "assignment_delete"].map(key => [key, canOnTicket(key, selectedTicket, { personalWork: key.startsWith("assignment_") || key === "section_work" }) || (key === "section_work" && canOnTicket(key, selectedTicket))]))} notify={notify} /></TaskPortal> : null}
       {(editor || workTarget || teamSection || adminAction || confirmAction || rejectedReason) ? <TaskPortal><TaskManagementDialogs
         editor={editor}
         meta={meta}

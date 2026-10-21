@@ -33,7 +33,8 @@ export async function GET(request, { params }) {
     }
     if (context && !context.ok) return json({ ok: false, error: context.error || "Task Management is not available." }, { status: context.status || 403 });
   } catch (error) {
-    if (Number(error?.status) === 403) return json({ ok: false, error: error.message }, { status: 403 });
+    if (process.env.ERP_ADVANCED_PERMISSIONS_ENABLED === "1" || Number(error?.status) === 403)
+      return json({ ok: false, error: taskManagementDataError(error) }, { status: Number(error?.status) || 503 });
     console.warn("[task-management] direct detail failed; using Legacy fallback:", error?.message || error);
   }
 

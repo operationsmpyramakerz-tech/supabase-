@@ -1,5 +1,7 @@
 import "server-only";
 import { featureGate } from "./feature-permissions-server";
+import { resolveTaskScope, scopedTaskAssignments, taskTicketVisible, scopedTaskTicket, taskUiScopePolicy } from "./task-data-scope";
+import { taskScopeFor } from "./task-data-scope.mjs";
 
 import { getDirectAccountGate } from "./products-auth";
 import { select, selectById } from "./supabase-rest";
@@ -482,12 +484,16 @@ async function loadSummaryTickets(context = {}) {
   let tickets = ticketRows.map((row) => serializeTicket(row, sectionsByTicket.get(ticketId(row)) || [], [], { summary: true }));
   tickets = tickets.filter((ticket) => belongsToView(ticket, member, context.view));
 
+  const scoped = await resolveTaskScope(context.account, "tasks.view");
+  const scopedAssignments = await visibleTaskAssignments(context, scoped);
   if (needsAssignments) {
-    const assignedSectionIds = new Set(assignmentRows.map((row) => text(valueFor(row, ["section_id", "sectionId"]))).filter(Boolean));
+    const assignedSectionIds = new Set([...assignmentRows, ...scopedAssignments].map((row) => text(valueFor(row, ["section_id", "sectionId"]))).filter(Boolean));
     tickets = tickets.filter((ticket) => ticket.sections.some((section) => assignedSectionIds.has(text(section.id))));
   }
-
-  return tickets.map((ticket) => ({ ...ticket, ...viewerProgress(ticket, member, context, assignmentRows) }));
+  tickets = tickets.filter((ticket) => taskTicketVisible(ticket, scoped, scopedAssignments));
+  return tickets.map((ticket) => scoped.scope === null
+    ? ({ ...ticket, ...viewerProgress(ticket, member, context, assignmentRows) })
+    : scopedTaskTicket({ ...ticket, ...viewerProgress(ticket, member, context, assignmentRows) }, scopedAssignments));
 }
 
 export async function loadRawTaskManagementTicket(id) {
@@ -506,23 +512,38 @@ async function loadDetailTicket(id, context = {}) {
   const ticket = await loadRawTaskManagementTicket(id);
   if (!ticket) return null;
   const member = currentMember(context);
-  if (!belongsToView(ticket, member, context.view)) {
+  const scoped = await resolveTaskScope(context.account, "tasks.view");
+  const scopedAssignments = await visibleTaskAssignments(context, scoped);
+  if (!belongsToView(ticket, member, context.view) || !taskTicketVisible(ticket, scoped, scopedAssignments)) {
     const error = new Error("This ticket is not available in the selected Task Management view.");
     error.status = 403;
     throw error;
   }
   const assignmentRows = context.view === "my" && !canManageDepartment(context) ? await assignmentsForMember(member) : [];
-  return {
+  const visible = {
     ...ticketForViewer(ticket, member, context),
     ...viewerProgress(ticket, member, context, assignmentRows),
   };
+  return scoped.scope === null ? visible : scopedTaskTicket(visible, scopedAssignments);
 }
 
 function cacheKey(context = {}) {
-  return [context.view, context.memberId || "", context.accessLevel || "view", context.isPageAdmin ? "admin" : "user"].join(":");
+  return [context.view, context.memberId || "", context.accessLevel || "view", context.isPageAdmin ? "admin" : "user", context.account?.featureAccess?.version || "legacy"].join(":");
+}
+// A manager/team link can change independently from the feature grant version.
+// Never return cached data for an opted-in scoped user.
+function scopedContext(context = {}) { return taskScopeFor(context.account, "tasks.view") !== null; }
+
+async function visibleTaskAssignments(context, viewScope) {
+  if (viewScope.scope !== "all") return await scopedTaskAssignments(viewScope);
+  const policy = await taskUiScopePolicy(context.account);
+  const candidate = Object.keys(policy?.scopes || {}).find(key => policy.scopes[key] === "team")
+    || Object.keys(policy?.scopes || {}).find(key => policy.scopes[key] === "own");
+  return candidate ? await scopedTaskAssignments(await resolveTaskScope(context.account, `tasks.${candidate}`)) : [];
 }
 
 export async function listTaskManagementTickets(context = {}, { force = false } = {}) {
+  if (scopedContext(context)) force = true;
   const key = cacheKey(context);
   const now = Date.now();
   if (!force && listCache.get(key)?.expiresAt > now) return listCache.get(key).value;
@@ -540,6 +561,7 @@ export async function listTaskManagementTickets(context = {}, { force = false } 
 }
 
 export async function getTaskManagementTicket(id, context = {}, { force = false } = {}) {
+  if (scopedContext(context)) force = true;
   const key = `${cacheKey(context)}:${text(id)}`;
   const now = Date.now();
   if (!force && detailCache.get(key)?.expiresAt > now) return detailCache.get(key).value;
@@ -566,6 +588,7 @@ export async function taskManagementMeta(context = {}, { force = false } = {}) {
     departments,
     accessLevel: context.accessLevel || "view",
     isPageAdmin: !!context.isPageAdmin,
+    scopePolicy: await taskUiScopePolicy(context.account),
   };
 }
 
