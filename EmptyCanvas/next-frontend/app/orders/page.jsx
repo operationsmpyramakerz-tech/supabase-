@@ -6,6 +6,7 @@ import { featureGate } from "../../lib/feature-permissions-server";
 import { featureAllowed } from "../../lib/feature-permissions-registry";
 import { getDirectAccountGateFromSessionContext } from "../../lib/direct-session-account";
 import { loadCurrentOrdersInitialPage } from "../../lib/current-orders-data";
+import { orderUiScopePolicy } from "../../lib/order-data-scope";
 
 export const dynamic = "force-dynamic";
 
@@ -36,12 +37,7 @@ export default async function CurrentOrdersPage() {
     return <UnavailableState message={sessionGate.error || "The account service is temporarily unavailable."} />;
   }
 
-  const [gate, directResult] = await Promise.all([
-    getDirectAccountGateFromSessionContext(sessionGate, ["Current Orders"]),
-    loadCurrentOrdersInitialPage({ account: sessionGate.account })
-      .then((payload) => ({ payload, error: null }))
-      .catch((error) => ({ payload: null, error })),
-  ]);
+  const gate = await getDirectAccountGateFromSessionContext(sessionGate, ["Current Orders"]);
 
   if (!gate) {
     return <UnavailableState message="The account permission service is temporarily unavailable." />;
@@ -55,11 +51,18 @@ export default async function CurrentOrdersPage() {
     return <UnavailableState message={gate.error || "The account service is temporarily unavailable."} />;
   }
 
+  const directResult = await loadCurrentOrdersInitialPage({ account: gate.account })
+    .then((payload) => ({ payload, error: null }))
+    .catch((error) => ({ payload: null, error }));
   const ordersPayload = directResult?.payload;
   if (!ordersPayload) {
     return <UnavailableState message={directResult?.error?.message || "My Orders direct Supabase data is unavailable."} />;
   }
 
+  const scopePolicy = await orderUiScopePolicy(gate.account, {
+    edit: "orders.my.edit", archive: "orders.my.archive", unarchive: "orders.my.unarchive",
+    delete: "orders.my.delete", export: "orders.my.export",
+  });
   const orders = Array.isArray(ordersPayload)
     ? ordersPayload
     : (Array.isArray(ordersPayload?.items) ? ordersPayload.items : []);
@@ -76,6 +79,7 @@ export default async function CurrentOrdersPage() {
       <CurrentOrdersClient
         initialOrders={Array.isArray(orders) ? orders : []}
         initialPageInfo={pageInfo}
+        scopePolicy={scopePolicy}
         bootstrapWarnings={[]}
         permissions={Object.fromEntries([
           ["edit", "orders.my.edit"], ["archive", "orders.my.archive"],

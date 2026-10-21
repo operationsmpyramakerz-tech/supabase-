@@ -6,6 +6,7 @@ import { featureAllowed } from "../../lib/feature-permissions-registry";
 import { featureGate } from "../../lib/feature-permissions-server";
 import { directPageMutationAccess } from "../../lib/order-action-auth";
 import { loadOperationsOrdersInitialPage } from "../../lib/operations-orders-data";
+import { orderUiScopePolicy } from "../../lib/order-data-scope";
 
 export const dynamic = "force-dynamic";
 
@@ -28,14 +29,7 @@ function UnavailableState({ message, forbidden = false }) {
 export default async function OperationsOrdersPage() {
   // Phase 18 cutover: keep both authentication and order reads on the Next
   // migration path. The order data itself no longer uses Express bootstrap.
-  const [initialGate, directResult] = await Promise.all([
-    getLegacyAccountGate(["Requested Orders", "Operations Orders"]),
-    loadOperationsOrdersInitialPage()
-      .then((payload) => ({ payload, error: null }))
-      .catch((error) => ({ payload: null, error })),
-  ]);
-
-  const gate = featureGate(initialGate, "orders.operations.view");
+  const gate = featureGate(await getLegacyAccountGate(["Requested Orders", "Operations Orders"]), "orders.operations.view");
   if (gate.status === 401) redirect("/login?next=/next/operations-orders");
   if (gate.status === 403) {
     return <UnavailableState forbidden message="Your account does not have access to Operations Orders." />;
@@ -43,10 +37,19 @@ export default async function OperationsOrdersPage() {
   if (!gate.ok || !gate.account) {
     return <UnavailableState message={gate.error || "The account service is temporarily unavailable."} />;
   }
+  const directResult = await loadOperationsOrdersInitialPage({ account: gate.account })
+    .then((payload) => ({ payload, error: null }))
+    .catch((error) => ({ payload: null, error }));
   if (!directResult?.payload) {
     return <UnavailableState message={directResult?.error?.message || "Operations Orders direct Supabase data is unavailable."} />;
   }
 
+  const scopePolicy = await orderUiScopePolicy(gate.account, {
+    approve: "orders.operations.approve", ship: "orders.operations.ship",
+    receive: "orders.operations.receive", withdrawal: "orders.operations.withdrawal",
+    delivery: "orders.operations.delivery", edit: "orders.operations.edit",
+    export: "orders.operations.export",
+  });
   const editPage = directPageMutationAccess(gate.account, ["Requested Orders", "Operations Orders"]) === true;
   const ordersPayload = directResult.payload;
   const orders = Array.isArray(ordersPayload)
@@ -65,6 +68,7 @@ export default async function OperationsOrdersPage() {
       <OperationsOrdersClient
         initialOrders={Array.isArray(orders) ? orders : []}
         initialPageInfo={pageInfo}
+        scopePolicy={scopePolicy}
         bootstrapWarnings={[]}
         permissions={Object.fromEntries([
           ["approve", "orders.operations.approve"],

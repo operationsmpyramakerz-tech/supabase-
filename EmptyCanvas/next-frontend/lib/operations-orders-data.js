@@ -13,6 +13,7 @@ import { canUseOrderCardSummaryRpc, canUseOrderSummaryRpc, loadOrderCardSummarie
 import { measurePerformance, recordPerformanceSample } from "./performance-profiler";
 import { directPageMutationAccess } from "./order-action-auth";
 import { featureAllowed } from "./feature-permissions-registry";
+import { resolveOrderScope, visibleOrderRow } from "./order-data-scope";
 
 const PAGE_LIMIT = 36;
 const PAGE_MAX = 80;
@@ -546,6 +547,7 @@ function operationsCardSummaryItem(row = {}, tab = "all") {
     rejectedReason: null,
     createdTime: dateValue(row?.createdTime) || new Date().toISOString(),
     createdById: text(row?.teamMemberId) || text(row?.teamMemberName) || null,
+    _scopeOwnerId: text(row?.teamMemberId),
     createdByName: text(row?.teamMemberName) || null,
     svApproval: cleanTab === "rejected" ? "Rejected" : cleanTab === "approved" ? "Approved" : null,
     summaryOnly: true,
@@ -560,8 +562,10 @@ function operationsCardSummaryItem(row = {}, tab = "all") {
   };
 }
 
-async function rowsByNumbers(numbers = [], signal = null, includeLocalSearchFields = false, { tab = "all" } = {}) {
-  if (!includeLocalSearchFields && canUseOrderCardSummaryRpc()) {
+async function rowsByNumbers(numbers = [], signal = null, includeLocalSearchFields = false, { tab = "all", scoped = false } = {}) {
+  // Card-summary RPC may aggregate mixed owners into one card. Never trust it
+  // for row-scoped lists: fetch component owners before filtering groups.
+  if (!scoped && !includeLocalSearchFields && canUseOrderCardSummaryRpc()) {
     try {
       const rows = await loadOrderCardSummariesRpc({
         numbers,
@@ -601,16 +605,23 @@ async function rowsByNumbers(numbers = [], signal = null, includeLocalSearchFiel
   });
 }
 
-function groupRows(rows = [], includeLocalSearchFields = false) {
+function groupRows(rows = [], includeLocalSearchFields = false, resolved = null) {
   const startedAt = performance.now();
   const groups = new Map();
+  const blocked = new Set();
   for (const row of rows) {
+    const orderNumber = Number(row?._summaryCard ? row.orderIdNumber : row.order_number);
+    if (resolved && !visibleOrderRow(row, resolved)) {
+      if (Number.isFinite(orderNumber)) blocked.add(orderNumber);
+      continue;
+    }
     const item = row?._summaryCard ? row : serializeOperationsCompactSummaryRow(row, { includeSearchText: includeLocalSearchFields });
     const orderNumber = Number(item.orderIdNumber);
     if (!Number.isFinite(orderNumber)) continue;
     if (!groups.has(orderNumber)) groups.set(orderNumber, []);
     groups.get(orderNumber).push(item);
   }
+  for (const number of blocked) groups.delete(number);
   recordPerformanceSample({
     category: "orders-summary",
     name: "orders.operations.summary-transform",
@@ -648,6 +659,7 @@ function compactOperationsSummaryItem(item = {}) {
 }
 
 export async function loadOperationsOrdersPage({
+  account = {},
   tab = "all",
   type = "all",
   query = "",
@@ -656,6 +668,7 @@ export async function loadOperationsOrdersPage({
   signal = null,
 } = {}) {
   if (!isSupabaseConfigured()) return null;
+  const resolved = await resolveOrderScope(account, "orders.operations.view");
   const safeLimit = pageLimit(limit);
   const outputGroups = [];
   let nextCursor = pageCursor(cursor);
@@ -725,11 +738,11 @@ export async function loadOperationsOrdersPage({
     const windowResult = await consumeOrderSummaryWindows({
       numbers: candidates.numbers,
       remainingGroups: safeLimit - outputGroups.length,
-      loadRows: (numbers, loadSignal) => rowsByNumbers(numbers, loadSignal, localSearchFallback, { tab }),
+      loadRows: (numbers, loadSignal) => rowsByNumbers(numbers, loadSignal, localSearchFallback, { tab, scoped: !!resolved }),
       profileName: "orders.operations.summary-window",
       signal,
       consumeRows: ({ numbers, rows }) => {
-        const groups = groupRows(rows, localSearchFallback);
+        const groups = groupRows(rows, localSearchFallback, resolved);
         let processedCandidates = 0;
         let matchedGroups = 0;
 
@@ -774,9 +787,9 @@ export async function loadOperationsOrdersPage({
   };
 }
 
-export async function loadOperationsOrdersInitialPage({ limit = PAGE_LIMIT } = {}) {
+export async function loadOperationsOrdersInitialPage({ account = {}, limit = PAGE_LIMIT } = {}) {
   return await measurePerformance("page-data", "orders.operations.initial", async () =>
-    await loadOperationsOrdersPage({ tab: "all", type: "all", query: "", cursor: null, limit }),
+    await loadOperationsOrdersPage({ account, tab: "all", type: "all", query: "", cursor: null, limit }),
   );
 }
 export async function loadOperationsOrderDetails(orderIds = [], { timings = null, productsSink = null } = {}) {

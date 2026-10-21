@@ -5,6 +5,7 @@ import { renderOrderExport } from "../../../../lib/order-export-service";
 import { loadCurrentOrderDetails } from "../../../../lib/current-orders-data";
 import { loadOrdersReviewDetails } from "../../../../lib/orders-review-data";
 import { loadMaintenanceOrderDetails } from "../../../../lib/maintenance-orders-data";
+import { assertOrderIdsInScope } from "../../../../lib/order-data-scope";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -59,6 +60,9 @@ export async function POST(request) {
   if (!gate.ok) return jsonError(gate.error || "Authentication required.", gate.status || 503);
 
   try {
+    if (scope === "current" || scope === "operations") {
+      await assertOrderIdsInScope(gate.account, scope === "current" ? "orders.my.export" : "orders.operations.export", body?.orderIds);
+    }
     await verifyScopedOrderAccess(scope, gate.account || {}, body?.orderIds);
     const result = await renderOrderExport({
       account: gate.account || {},

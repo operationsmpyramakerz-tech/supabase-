@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getLegacyAccountGate } from "../../../../lib/products-auth";
+import { featureGate } from "../../../../lib/feature-permissions-server";
 import { loadOrderTracking } from "../../../../lib/order-tracking-data";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +20,7 @@ export async function GET(request) {
   const groupId = String(new URL(request.url).searchParams.get("groupId") || "").trim();
   if (!groupId) return noStore({ error: "Missing or invalid groupId." }, { status: 400 });
 
-  const gate = await getLegacyAccountGate(["Current Orders"]);
+  const gate = featureGate(await getLegacyAccountGate(["Current Orders"]), "orders.my.view");
   if (!gate.ok) return noStore({ error: gate.error || "Authentication required." }, { status: gate.status || 503 });
 
   try {

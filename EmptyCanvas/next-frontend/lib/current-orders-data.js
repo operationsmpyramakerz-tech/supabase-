@@ -10,6 +10,7 @@ import { applyOrderSearchPlan, canUseOrderSearchText, createOrderSearchPlan, not
 import { canUseOrderCandidateRpc, loadOrderCandidateNumbersRpc, noteOrderCandidateRpcError } from "./order-candidate-rpc";
 import { measurePerformance, recordPerformanceSample } from "./performance-profiler";
 import { directPageMutationAccess, verifyPageAdminPasswordDirect } from "./order-action-auth";
+import { resolveOrderScope, visibleOrderRow } from "./order-data-scope";
 
 const PAGE_LIMIT = 36;
 const PAGE_MAX = 80;
@@ -233,7 +234,12 @@ function memberCandidateNames(account = {}) {
   ].map((value) => String(value || "").trim()).filter((value) => value.length >= 2)));
 }
 
-function memberClauses(account = {}) {
+function memberClauses(account = {}, resolved = null) {
+  if (resolved?.scope === "all") return [];
+  if (resolved?.scope === "own" || resolved?.scope === "team") {
+    if (resolved.visibleIds.length > 60) return []; // Filter after read for large teams.
+    return resolved.visibleIds.map(id => `team_member_id.eq.${id.replace(/[^0-9A-Za-z_-]/g, "")}`).filter(v => !v.endsWith("eq."));
+  }
   const clauses = [];
   const memberId = String(accountMemberId(account) || "")
     .trim()
@@ -253,10 +259,10 @@ function memberClauses(account = {}) {
   ];
 }
 
-function logicalParams({ account = {}, query = "", type = "all", searchMode = "fast" } = {}) {
+function logicalParams({ account = {}, resolved = null, query = "", type = "all", searchMode = "fast" } = {}) {
   const params = {};
   const logicGroups = [];
-  const member = memberClauses(account);
+  const member = memberClauses(account, resolved);
   if (member.length) logicGroups.push(member);
 
   applyOrderSearchPlan({ params, logicGroups, plan: searchLogic(query), mode: searchMode });
@@ -312,12 +318,18 @@ async function rowsByNumbers(numbers = [], signal = null, includeLocalSearchFiel
   });
 }
 
-function groupRows(rows = [], account = {}, includeLocalSearchFields = false) {
+function groupRows(rows = [], account = {}, includeLocalSearchFields = false, resolved = null) {
   const startedAt = performance.now();
   const groups = new Map();
+  const blocked = new Set();
   for (const row of rows) {
-    // Use immutable creator identity when available; names can change.
-    if (!ownedByAccount(row, account)) continue;
+    const number = Number(row?.order_number);
+    if (resolved?.scope !== null && resolved && !visibleOrderRow(row, resolved)) {
+      if (Number.isFinite(number)) blocked.add(number);
+      continue;
+    }
+    // Preserve exact legacy visibility unless row-level scope was enabled.
+    if (!resolved && !ownedByAccount(row, account)) continue;
     const item = serializeOperationsCompactSummaryRow(row, {
       includeSearchText: includeLocalSearchFields,
       includeCreatedById: true,
@@ -327,6 +339,7 @@ function groupRows(rows = [], account = {}, includeLocalSearchFields = false) {
     if (!groups.has(orderNumber)) groups.set(orderNumber, []);
     groups.get(orderNumber).push(item);
   }
+  for (const number of blocked) groups.delete(number);
   recordPerformanceSample({
     category: "orders-summary",
     name: "orders.current.summary-transform",
@@ -348,6 +361,7 @@ export async function loadCurrentOrdersPage({
   if (!isSupabaseConfigured()) return null;
   const username = accountUsername(account);
   if (!username && !accountMemberId(account)) return null;
+  const resolved = await resolveOrderScope(account, "orders.my.view");
 
   const safeLimit = pageLimit(limit);
   const outputGroups = [];
@@ -360,7 +374,7 @@ export async function loadCurrentOrdersPage({
     const searchPlan = searchLogic(query);
     const hasTextSearch = Boolean(searchPlan?.clean && !Number.isFinite(searchPlan?.orderNumber));
     const fastSearch = hasTextSearch && canUseOrderSearchText();
-    const filters = logicalParams({ account, query, type, searchMode: fastSearch ? "fast" : "legacy" });
+    const filters = logicalParams({ account, resolved, query, type, searchMode: fastSearch ? "fast" : "legacy" });
     let candidates;
     let localSearchFallback = false;
     try {
@@ -369,7 +383,7 @@ export async function loadCurrentOrdersPage({
         scanGroups: Math.max(safeLimit * 2, 72),
         filters,
         searchMode: hasTextSearch ? (fastSearch ? "fast" : "legacy") : "",
-        rpcOptions: !searchPlan ? {
+        rpcOptions: !searchPlan && !resolved ? {
           context: "current",
           memberId: account?.teamMemberId || account?.userSupabaseId || "",
           memberNames: memberCandidateNames(account),
@@ -384,7 +398,7 @@ export async function loadCurrentOrdersPage({
           candidates = await candidateNumbers({
             cursor: nextCursor,
             scanGroups: Math.max(safeLimit * 2, 72),
-            filters: logicalParams({ account, query, type, searchMode: "legacy" }),
+            filters: logicalParams({ account, resolved, query, type, searchMode: "legacy" }),
             searchMode: "legacy",
             signal,
           });
@@ -421,7 +435,7 @@ export async function loadCurrentOrdersPage({
       profileName: "orders.current.summary-window",
       signal,
       consumeRows: ({ numbers, rows }) => {
-        const groups = groupRows(rows, account, localSearchFallback);
+        const groups = groupRows(rows, account, localSearchFallback, resolved);
         let processedCandidates = 0;
         let matchedGroups = 0;
 
@@ -486,7 +500,9 @@ export async function loadCurrentOrderDetails({ account = {}, orderIds = [], tim
     if (fastRows) timings.fastPath = 1;
   }
   const prepareStartedAt = performance.now();
-  const visible = (Array.isArray(rows) ? rows : []).filter((row) => ownedByAccount(row, account));
+  const resolved = await resolveOrderScope(account, "orders.my.view");
+  const visible = (Array.isArray(rows) ? rows : []).filter((row) => resolved
+    ? visibleOrderRow(row, resolved) : ownedByAccount(row, account));
 
   const visibleIds = new Set(visible.map((row) => text(row?.id)).filter(Boolean));
   if (ids.some((id) => !visibleIds.has(id))) {
@@ -512,6 +528,10 @@ export async function markCurrentOrderReceivedDirect({ account = {}, orderPageId
   const rows = await loadRawOrderRowsByIds([id]);
   if (!Array.isArray(rows) || !rows.length) throw directCurrentMutationError("Order not found", 404);
 
+  const receiveScope = await resolveOrderScope(account, "orders.my.edit");
+  if (receiveScope && rows.some(row => !visibleOrderRow(row, receiveScope))) {
+    throw directCurrentMutationError("Order is outside your permitted data scope.", 403);
+  }
   // Preserve the legacy endpoint semantics: Current Orders page access is the
   // authorization boundary for marking a row Received. Do not add an owner-only
   // restriction here because supervisors historically used this endpoint too.
@@ -566,6 +586,14 @@ export async function performCurrentOrdersProtectedAction({
     throw error;
   }
   if (!Array.isArray(rows) || rows.length !== ids.length) throw directCurrentMutationError("Orders not found", 404);
+  // Legacy actions run unchanged; scoped profiles require a second, explicit
+  // row-level authorization after loading the selected components.
+  if (account?.featureAccess?.grants?.["orders.my.__scoped"]?.allowed === true) {
+    const actionScope = await resolveOrderScope(account, `orders.my.${cleanAction}`);
+    if (actionScope && rows.some(row => !visibleOrderRow(row, actionScope))) {
+      throw directCurrentMutationError("Order is outside your permitted data scope.", 403);
+    }
+  }
 
   if (cleanAction === "archive" || cleanAction === "unarchive") {
     const allArchived = rows.every((row) => statusIndex(row?.status) === 5);

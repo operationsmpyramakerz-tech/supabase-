@@ -3,6 +3,7 @@ import { dispatchQueuedNotifications } from "../../../../../lib/notification-eve
 import { getDirectAccountGate } from "../../../../../lib/products-auth";
 import { directPageMutationAccess } from "../../../../../lib/order-action-auth";
 import { featureGate } from "../../../../../lib/feature-permissions-server";
+import { assertOrderIdsInScope } from "../../../../../lib/order-data-scope";
 import {
   createOperationsRepeatOrder,
   markOperationsArrived,
@@ -81,6 +82,9 @@ export async function POST(request) {
   }
 
   try {
+    // Require EVERY requested component to be in scope, including edit-init,
+    // repeat-order creation and archive actions.
+    await assertOrderIdsInScope(gate.account, actionPermission, body?.ids ?? body?.orderIds);
     let result = null;
     if (action === "approval") {
       result = await updateOperationsApproval({

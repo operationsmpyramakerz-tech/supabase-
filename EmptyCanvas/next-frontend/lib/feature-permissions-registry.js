@@ -943,6 +943,12 @@ export const FEATURE_DEFINITIONS = Object.freeze(
 const knownKeys = new Set(FEATURE_DEFINITIONS.map((entry) => entry.key));
 // Explicit opt-in for My Orders; existing Phase 2A advanced profiles remain intact.
 export const MY_ORDERS_ENFORCEMENT_MARKER = "orders.my.__enforced";
+// Separate explicit opt-in: existing all-scope grants must NOT broaden My Orders
+// or narrow Operations Orders simply because another module was activated.
+export const ORDER_SCOPE_MARKERS = Object.freeze({
+  "orders.my": "orders.my.__scoped",
+  "orders.operations": "orders.operations.__scoped",
+});
 // Legacy opt-out markers for the original two Phase 2A modules. A newly
 // enabled Expenses/Tasks/etc. profile must not silently migrate these too.
 export const PHASE2A_LEGACY_MARKERS = Object.freeze({
@@ -951,7 +957,7 @@ export const PHASE2A_LEGACY_MARKERS = Object.freeze({
 });
 export function isKnownFeature(key) {
   const clean = String(key || "");
-  return knownKeys.has(clean) || clean === MY_ORDERS_ENFORCEMENT_MARKER || Object.values(PHASE2A_LEGACY_MARKERS).includes(clean);
+  return knownKeys.has(clean) || clean === MY_ORDERS_ENFORCEMENT_MARKER || Object.values(PHASE2A_LEGACY_MARKERS).includes(clean) || Object.values(ORDER_SCOPE_MARKERS).includes(clean);
 }
 
 // Legacy accounts remain in their original page-access mode until an admin
@@ -964,6 +970,8 @@ export function featureAllowed(account, key, { legacyAllowed = true, scopes = ["
   // Expenses by Users is now a scoped module. These four actions accept
   // Own/Team/All, but the API still enforces the selected record scope.
   if (key.startsWith("expenses.users.")) scopes = ["own", "team", "all"];
+  if ((key.startsWith("orders.my.") && state?.grants?.[ORDER_SCOPE_MARKERS["orders.my"]]?.allowed === true)
+    || (key.startsWith("orders.operations.") && state?.grants?.[ORDER_SCOPE_MARKERS["orders.operations"]]?.allowed === true)) scopes = ["own", "team", "all"];
   if (state?.mode !== "enforced") return !!legacyAllowed;
   // Explicitly opting out of an original pilot module restores ONLY its prior
   // page rules. The existing page-access gate still runs on every endpoint.

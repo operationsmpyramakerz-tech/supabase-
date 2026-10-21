@@ -16,6 +16,7 @@ import { listTeamMembersLite } from "./team-members-service";
 import { loadRawOrderRowsByIds } from "./order-details-data";
 import { directPageMutationAccess, verifyPageAdminPasswordDirect } from "./order-action-auth";
 import { invalidateLegacyOperationsCaches } from "./operations-orders-data";
+import { resolveOrderScope, visibleOrderRow } from "./order-data-scope";
 
 const EDIT_TOKEN_TTL_MS = 30 * 60 * 1000;
 const UNDO_TOKEN_TTL_MS = 30 * 1000;
@@ -271,8 +272,9 @@ async function verifyOwnedRows(ids = [], account = {}) {
   const byId = new Map(rows.map((row) => [text(row?.id), row]));
   const ordered = ids.map((id) => byId.get(id)).filter(Boolean);
   if (ordered.length !== ids.length) throw directError("Orders not found.", 404);
-  if (ordered.some((row) => !rowOwnedByAccount(row, account))) {
-    throw directError("This order does not belong to the current account.", 403);
+  const scoped = await resolveOrderScope(account, "orders.my.edit");
+  if (ordered.some(row => scoped ? !visibleOrderRow(row, scoped) : !rowOwnedByAccount(row, account))) {
+    throw directError("Order is outside your permitted edit scope.", 403);
   }
   return ordered;
 }

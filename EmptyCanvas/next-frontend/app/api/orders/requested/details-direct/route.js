@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { performance } from "node:perf_hooks";
 import { getLegacyAccountGate } from "../../../../../lib/products-auth";
+import { featureGate } from "../../../../../lib/feature-permissions-server";
+import { assertOrderIdsInScope } from "../../../../../lib/order-data-scope";
 import { loadOperationsOrderDetails } from "../../../../../lib/operations-orders-data";
 
 export const dynamic = "force-dynamic";
@@ -30,7 +32,7 @@ export async function POST(request) {
 
   const authStartedAt = performance.now();
   const authStages = {};
-  const gate = await getLegacyAccountGate(["Requested Orders", "Operations Orders"], { timings: authStages });
+  const gate = featureGate(await getLegacyAccountGate(["Requested Orders", "Operations Orders"], { timings: authStages }), "orders.operations.view");
   const authMs = performance.now() - authStartedAt;
   // Expose stage timings to browser DevTools without sending order payloads
   // into logs or affecting private/no-store response semantics.
@@ -60,6 +62,7 @@ export async function POST(request) {
   const detailsStartedAt = performance.now();
   const stages = {};
   try {
+    await assertOrderIdsInScope(gate.account, "orders.operations.view", orderIds);
     const items = await loadOperationsOrderDetails(orderIds, { timings: stages });
     if (Array.isArray(items)) return noStore(items, { headers: timing(performance.now() - detailsStartedAt, stages) });
     return noStore({ error: "Operations Orders direct Supabase data is unavailable." }, { status: 503, headers: timing(performance.now() - detailsStartedAt, stages) });

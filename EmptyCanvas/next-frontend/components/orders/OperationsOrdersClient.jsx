@@ -1,5 +1,7 @@
 "use client";
 
+import { orderCardAllows } from "../../lib/order-data-scope.mjs";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import ClassicOrderIcon from "./ClassicOrderIcon";
@@ -756,7 +758,7 @@ async function fileToOptimizedDataUrl(file) {
 }
 
 
-export default function OperationsOrdersClient({ initialOrders = [], initialPageInfo = null, bootstrapWarnings = [], permissions = {} }) {
+export default function OperationsOrdersClient({ initialOrders = [], initialPageInfo = null, bootstrapWarnings = [], permissions = {}, scopePolicy = null }) {
   const [orders, setOrders] = useState(Array.isArray(initialOrders) ? initialOrders : []);
   const [pageInfo, setPageInfo] = useState(initialPageInfo || { hasMore: false, nextCursor: null, limit: 36 });
   const [listLoading, setListLoading] = useState(false);
@@ -988,6 +990,9 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
   }
 
   async function beginAction(action, group) {
+    const permissionAction = ({ reject: "approve", "technical-visit": "ship", deliver: "receive",
+      "maintenance-deliver": "receive", archive: "edit", unarchive: "edit" })[action] || action;
+    if (permissions?.[permissionAction] === false || !orderCardAllows(scopePolicy, permissionAction, group)) return;
     setActionError("");
     if (action === "maintenance-log") {
       try {
@@ -1455,7 +1460,8 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
           onCloseOrder={closeOrderDetails}
           onAction={beginAction}
           onExport={exportOrder}
-          permissions={permissions}
+          permissions={selected ? Object.fromEntries(Object.entries(permissions || {}).map(([action, permitted]) =>
+            [action, permitted && orderCardAllows(scopePolicy, action, selected)])) : permissions}
           orderOptions={downloadOrderOptions}
           editMode={editMode}
           onPatchEditItem={patchOperationsEditItem}

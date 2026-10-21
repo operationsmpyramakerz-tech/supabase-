@@ -11,6 +11,7 @@ import OrdersPerformancePanel from "./OrdersPerformancePanel";
 import OrderTypeBadge from "./OrderTypeBadge";
 import OrdersEmptyState, { OrdersListHeader, sortOrderGroups } from "./OrdersEmptyState";
 import CurrentOrderCreatorPopover from "./CurrentOrderCreatorPopover";
+import { orderCardAllows } from "../../lib/order-data-scope.mjs";
 
 const loadCurrentOrdersHeavyModals = () => import("./CurrentOrdersHeavyModals");
 const CurrentOrdersHeavyModals = dynamic(loadCurrentOrdersHeavyModals, { ssr: false });
@@ -595,7 +596,7 @@ function ProgressTrack({ value }) {
 }
 
 
-export default function CurrentOrdersClient({ initialOrders = [], initialPageInfo = null, bootstrapWarnings = [], permissions = null }) {
+export default function CurrentOrdersClient({ initialOrders = [], initialPageInfo = null, bootstrapWarnings = [], permissions = null, scopePolicy = null }) {
   const [creatorPreview, setCreatorPreview] = useState(null);
   const [orders, setOrders] = useState(Array.isArray(initialOrders) ? initialOrders : []);
   const [pageInfo, setPageInfo] = useState(initialPageInfo || { hasMore: false, nextCursor: null, limit: 36 });
@@ -818,7 +819,7 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
   }
 
   function beginAction(action, group) {
-    if (permissions?.[action] === false) return;
+    if (permissions?.[action] === false || !orderCardAllows(scopePolicy, action, group)) return;
     setActionError("");
     setActionState({ action, group });
   }
@@ -1012,7 +1013,8 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
           onAction={beginAction}
           onReason={setReasonView}
           onExport={exportOrder}
-          permissions={permissions}
+          permissions={selected ? Object.fromEntries(Object.entries(permissions || {}).map(([action, permitted]) =>
+            [action, permitted && orderCardAllows(scopePolicy, action, selected)])) : permissions}
           actionState={actionState}
           actionError={actionError}
           onCancelAction={() => { if (!busy) { setActionState(null); setActionError(""); } }}

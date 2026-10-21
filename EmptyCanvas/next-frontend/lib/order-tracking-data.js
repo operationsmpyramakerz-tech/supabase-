@@ -3,6 +3,7 @@ import "server-only";
 import { isSupabaseConfigured, select, selectById } from "./supabase-rest";
 import { serializeOperationsOrderDetail } from "./order-details-data";
 import { getProductsList } from "./products-service";
+import { resolveOrderScope, visibleOrderRow } from "./order-data-scope";
 
 function text(value) {
   return String(value ?? "").trim();
@@ -87,7 +88,7 @@ function visibleRow(row = {}, account = {}) {
   return memberMatches(item?.createdByName, accountUsername(account));
 }
 
-async function rowsByOrderNumber(orderNumber, account) {
+async function rowsByOrderNumber(orderNumber, account, resolved = null) {
   const params = {
     order_number: `eq.${Number(orderNumber)}`,
     order: "notion_created_time.desc,id.desc",
@@ -109,6 +110,14 @@ async function rowsByOrderNumber(orderNumber, account) {
       ...params,
       select: "*",
     }, { profileName: "orders.tracking.rows-fallback" });
+  }
+  if (resolved) {
+    if (rows.some(row => !visibleOrderRow(row, resolved))) {
+      const error = new Error("Order is outside your permitted tracking scope.");
+      error.status = 403;
+      throw error;
+    }
+    return rows;
   }
   return rows.filter((row) => visibleRow(row, account));
 }
@@ -159,6 +168,7 @@ async function enrichProducts(items = []) {
 
 export async function loadOrderTracking({ account = {}, groupId = "" } = {}) {
   if (!isSupabaseConfigured()) return null;
+  const resolved = await resolveOrderScope(account, "orders.my.view");
 
   const cleanRef = text(groupId);
   if (!cleanRef) {
@@ -178,7 +188,7 @@ export async function loadOrderTracking({ account = {}, groupId = "" } = {}) {
   if (!Number.isFinite(targetOrderNumber)) {
     try {
       const row = await rowById(cleanRef);
-      if (row && visibleRow(row, account)) {
+      if (row && (resolved ? visibleOrderRow(row, resolved) : visibleRow(row, account))) {
         baseRow = row;
         const item = serializeOperationsOrderDetail(row);
         if (Number.isFinite(Number(item?.orderIdNumber))) targetOrderNumber = Number(item.orderIdNumber);
@@ -195,7 +205,7 @@ export async function loadOrderTracking({ account = {}, groupId = "" } = {}) {
   }
 
   if (Number.isFinite(targetOrderNumber)) {
-    groupRows = await rowsByOrderNumber(targetOrderNumber, account);
+    groupRows = await rowsByOrderNumber(targetOrderNumber, account, resolved);
     if (!baseRow) baseRow = groupRows[0] || null;
   }
 
