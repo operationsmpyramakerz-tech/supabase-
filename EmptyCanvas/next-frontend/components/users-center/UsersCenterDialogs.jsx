@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import ActionLoadingModal, { useActionLoading } from "../ActionLoadingModal";
 import { DeleteConfirmDialog, DeleteVerificationDialog } from "../shared/SystemDeleteDialogs";
 import { cacheUsersCenterAuthorization, currentUsersCenterAuthorizationToken, requestJson, usersCenterMutation } from "./usersCenterClientShared";
-import { FEATURE_DEFINITIONS, ACTIVE_PILOT_FEATURE_KEYS, MY_ORDERS_ENFORCEMENT_MARKER } from "../../lib/feature-permissions-registry";
+import { FEATURE_DEFINITIONS, ACTIVE_PILOT_FEATURE_KEYS, MY_ORDERS_ENFORCEMENT_MARKER, PHASE2A_LEGACY_MARKERS } from "../../lib/feature-permissions-registry";
 
 function text(value) { return String(value ?? "").trim(); }
 function lower(value) { return text(value).toLowerCase(); }
@@ -518,13 +518,13 @@ function FeatureAccessModal({ member, onClose, protect }) {
   const [grants, setGrants] = useState({});
   const [grantScopes, setGrantScopes] = useState({});
   const [unmanagedGrants, setUnmanagedGrants] = useState([]);
-  const [enabledModules, setEnabledModules] = useState({ products: true, "orders.operations": true });
+  const [enabledModules, setEnabledModules] = useState({ products: false, "orders.operations": false });
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const modules = [
-    { key: "products", label: "Products" },
-    { key: "orders.operations", label: "Operations Orders" },
+    { key: "products", label: "Products", optIn: true },
+    { key: "orders.operations", label: "Operations Orders", optIn: true },
     { key: "orders.my", label: "My Orders", optIn: true },
     { key: "orders.maintenance", label: "Maintenance Orders", optIn: true },
     { key: "orders.shopping", label: "Shopping Cart", optIn: true },
@@ -561,7 +561,13 @@ function FeatureAccessModal({ member, onClose, protect }) {
         setGrants(Object.fromEntries(stored.filter(item => ACTIVE_PILOT_FEATURE_KEYS.includes(item.key)).map(item => [item.key, item.allowed === true])));
         setGrantScopes(Object.fromEntries(stored.filter(item => ACTIVE_PILOT_FEATURE_KEYS.includes(item.key)).map(item => [item.key, item.scope || "all"])));
         setEnabledModules({
-          products: true, "orders.operations": true,
+          // Previously enabled Phase 2A profiles keep their enforced restrictions
+          // until an admin explicitly switches a module back to legacy. Fresh
+          // advanced profiles start with these unrelated modules opt-out.
+          products: !stored.some(item => item.key === PHASE2A_LEGACY_MARKERS.products && item.allowed === true)
+            && (result.enabled === true || stored.some(item => item.key.startsWith("products.") && item.key !== PHASE2A_LEGACY_MARKERS.products)),
+          "orders.operations": !stored.some(item => item.key === PHASE2A_LEGACY_MARKERS["orders.operations"] && item.allowed === true)
+            && (result.enabled === true || stored.some(item => item.key.startsWith("orders.operations.") && item.key !== PHASE2A_LEGACY_MARKERS["orders.operations"])),
           "orders.my": stored.some(item => item.key === MY_ORDERS_ENFORCEMENT_MARKER && item.allowed === true),
           "orders.maintenance": stored.some(item => item.key === "orders.maintenance.view"),
           "orders.shopping": stored.some(item => item.key === "orders.shopping.view"),
@@ -585,7 +591,9 @@ function FeatureAccessModal({ member, onClose, protect }) {
           sla: stored.some(item => item.key === "sla.view"),
           home: stored.some(item => item.key === "home.view"),
         });
-        setUnmanagedGrants(stored.filter(item => !ACTIVE_PILOT_FEATURE_KEYS.includes(item.key) && item.key !== MY_ORDERS_ENFORCEMENT_MARKER));
+        setUnmanagedGrants(stored.filter(item => !ACTIVE_PILOT_FEATURE_KEYS.includes(item.key)
+          && item.key !== MY_ORDERS_ENFORCEMENT_MARKER
+          && !Object.values(PHASE2A_LEGACY_MARKERS).includes(item.key)));
       } catch (e) { if (mounted) setError(e.message); }
       finally { if (mounted) setLoading(false); }
     })();
@@ -605,6 +613,9 @@ function FeatureAccessModal({ member, onClose, protect }) {
           memberId: member.id, enabled: active,
           grants: [
             ...unmanagedGrants,
+            ...Object.entries(PHASE2A_LEGACY_MARKERS)
+              .filter(([module]) => !enabledModules[module])
+              .map(([, key]) => ({ key, allowed: true, scope: "all" })),
             ...(enabledModules["orders.my"] ? [{ key: MY_ORDERS_ENFORCEMENT_MARKER, allowed: true, scope: "all" }] : []),
             ...activeFeatures.filter(item => grants[item.key] === true).map(item => ({ key: item.key, allowed: true, scope: grantScopes[item.key] || "all" })),
             // Persist a denied view marker for opt-in modules. An absent marker
@@ -641,7 +652,7 @@ function FeatureAccessModal({ member, onClose, protect }) {
             {module.optIn && !enabledModules[module.key] ? <p style={{ margin: "12px 14px" }}>Uses existing Page Access until you enable detailed permissions for this module.</p> : null}
             {enabledModules[module.key] ? <div className="ua-page-access-group__rows">{shown.filter(item => item.module === module.key).map(item => <div className="ua-page-access-row ua-feature-access-row" key={item.key}><div className="ua-page-access-name"><strong>{item.label}</strong><small>{item.key}</small></div><div className="ua-page-access-enable">{(item.key === "home.analysis" || item.key.startsWith("expenses.users.")) && grants[item.key] === true ? <select aria-label={item.key === "home.analysis" ? "Home analysis data scope" : `${item.label} data scope`} className="ua-feature-scope-select" value={grantScopes[item.key] || "all"} onChange={e => setGrantScopes(current => ({ ...current, [item.key]: e.target.value }))}><option value="own">Own</option><option value="team">Team</option><option value="all">All</option></select> : null}<label className="ua-switch" title={item.label}><input type="checkbox" checked={grants[item.key] === true} onChange={e => setGrants(current => ({ ...current, [item.key]: e.target.checked }))}/><span/></label></div></div>)}</div> : null}
           </section>)}
-          <small>Optional modules remain on legacy Page Access until enabled for this user. Enable a module, then grant only the features needed. A disabled View permission hides its page. Existing Page Access and any required admin password still apply. Home Analysis and Expenses by Users support Own / Team / All. Other permissions retain their saved scope; row-level enforcement is not enabled for them yet.</small>
+          <small>Optional modules remain on legacy Page Access until enabled for this user. Enable a module, then grant only the features needed. A disabled View permission hides its page. Products and Operations Orders now have separate opt-in switches; turn them off to keep existing Page Access while enabling Expenses by Users. For an already-enabled profile, review those switches and save once. Existing Page Access and any required admin password still apply. Home Analysis and Expenses by Users support Own / Team / All. Other permissions retain their saved scope; row-level enforcement is not enabled for them yet.</small>
         </> : <p>Legacy page permissions will apply to this account. No feature grants will be enforced.</p>}
       </> : null}
       {error ? <p className="ua-form-error">{error}</p> : null}

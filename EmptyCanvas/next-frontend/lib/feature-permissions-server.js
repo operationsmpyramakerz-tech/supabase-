@@ -2,6 +2,7 @@ import "server-only";
 
 import { rpc, select } from "./supabase-rest";
 import { isKnownFeature, featureAllowed } from "./feature-permissions-registry";
+import { buildSerializableFeatureGrants } from "./feature-grants-transfer.mjs";
 
 const profilesTable = "erp_member_feature_profiles";
 const grantsTable = "erp_member_feature_grants";
@@ -43,14 +44,7 @@ export async function loadMemberFeatureAccess(memberId) {
     team_member_id: `eq.${id}`,
     limit: "1000",
   }, { profileName: "auth.feature-grants" });
-  const grants = Object.create(null);
-  for (const row of rows || []) {
-    if (!isKnownFeature(row.permission_key)) continue;
-    grants[row.permission_key] = {
-      allowed: row.is_allowed === true,
-      scope: clean(row.data_scope) || "all",
-    };
-  }
+  const grants = buildSerializableFeatureGrants(rows, isKnownFeature);
   const result = { mode: "enforced", version, grants };
   for (const key of grantCache.keys()) if (key.startsWith(`${id}:`)) grantCache.delete(key);
   grantCache.set(cacheKey, result);

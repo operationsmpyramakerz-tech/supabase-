@@ -943,9 +943,15 @@ export const FEATURE_DEFINITIONS = Object.freeze(
 const knownKeys = new Set(FEATURE_DEFINITIONS.map((entry) => entry.key));
 // Explicit opt-in for My Orders; existing Phase 2A advanced profiles remain intact.
 export const MY_ORDERS_ENFORCEMENT_MARKER = "orders.my.__enforced";
+// Legacy opt-out markers for the original two Phase 2A modules. A newly
+// enabled Expenses/Tasks/etc. profile must not silently migrate these too.
+export const PHASE2A_LEGACY_MARKERS = Object.freeze({
+  products: "products.__legacy",
+  "orders.operations": "orders.operations.__legacy",
+});
 export function isKnownFeature(key) {
   const clean = String(key || "");
-  return knownKeys.has(clean) || clean === MY_ORDERS_ENFORCEMENT_MARKER;
+  return knownKeys.has(clean) || clean === MY_ORDERS_ENFORCEMENT_MARKER || Object.values(PHASE2A_LEGACY_MARKERS).includes(clean);
 }
 
 // Legacy accounts remain in their original page-access mode until an admin
@@ -959,6 +965,10 @@ export function featureAllowed(account, key, { legacyAllowed = true, scopes = ["
   // Own/Team/All, but the API still enforces the selected record scope.
   if (key.startsWith("expenses.users.")) scopes = ["own", "team", "all"];
   if (state?.mode !== "enforced") return !!legacyAllowed;
+  // Explicitly opting out of an original pilot module restores ONLY its prior
+  // page rules. The existing page-access gate still runs on every endpoint.
+  if (key.startsWith("products.") && state.grants?.[PHASE2A_LEGACY_MARKERS.products]?.allowed === true) return !!legacyAllowed;
+  if (key.startsWith("orders.operations.") && state.grants?.[PHASE2A_LEGACY_MARKERS["orders.operations"]]?.allowed === true) return !!legacyAllowed;
   const pilot = key.startsWith("products.") || key.startsWith("orders.operations.");
   if (key === MY_ORDERS_ENFORCEMENT_MARKER) return state.grants?.[key]?.allowed === true;
   if (key.startsWith("orders.my.")) {
