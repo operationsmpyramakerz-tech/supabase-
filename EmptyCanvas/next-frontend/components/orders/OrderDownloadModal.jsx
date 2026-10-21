@@ -92,9 +92,12 @@ async function instructionApi(options = {}) {
 async function loadTemplatesFromDatabase() {
   const payload = await instructionApi();
   const source = Array.isArray(payload) ? payload : payload?.items;
-  return (Array.isArray(source) ? source : [])
-    .map(normalizeTemplate)
-    .filter((item) => item.id && item.title && (item.englishText || item.arabicText));
+  return {
+    items: (Array.isArray(source) ? source : [])
+      .map(normalizeTemplate)
+      .filter((item) => item.id && item.title && (item.englishText || item.arabicText)),
+    canManage: payload?.canManage === true,
+  };
 }
 
 async function createTemplateInDatabase(template) {
@@ -299,6 +302,7 @@ export default function OrderDownloadModal({
   const [orderQuery, setOrderQuery] = useState("");
   const [templates, setTemplates] = useState([]);
   const [templatesLoading, setTemplatesLoading] = useState(false);
+  const [canManageInstructions, setCanManageInstructions] = useState(false);
   const [selectedInstructionId, setSelectedInstructionId] = useState("");
   const [instructionOpen, setInstructionOpen] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
@@ -322,6 +326,7 @@ export default function OrderDownloadModal({
     setOrderSelectorOpen(false);
     setOrderQuery("");
     setTemplates([]);
+    setCanManageInstructions(false);
     setTemplatesLoading(true);
     setSelectedInstructionId("");
     setInstructionOpen(false);
@@ -337,10 +342,11 @@ export default function OrderDownloadModal({
 
     (async () => {
       try {
-        let databaseTemplates = await loadTemplatesFromDatabase();
+        const permissionResult = await loadTemplatesFromDatabase();
+        let databaseTemplates = permissionResult.items;
         const legacyTemplates = loadLegacyTemplates();
 
-        if (legacyTemplates.length) {
+        if (permissionResult.canManage && legacyTemplates.length) {
           const existing = new Set(databaseTemplates.map(templateFingerprint));
           const missingLegacy = legacyTemplates.filter((item) => !existing.has(templateFingerprint(item)));
           let migratedAll = true;
@@ -364,11 +370,13 @@ export default function OrderDownloadModal({
 
         if (!cancelled) {
           setTemplates(databaseTemplates);
+          setCanManageInstructions(permissionResult.canManage);
           setError("");
         }
       } catch (loadError) {
         if (!cancelled) {
           setTemplates([]);
+          setCanManageInstructions(false);
           setError(loadError?.message || "Saved instructions could not be loaded.");
         }
       } finally {
@@ -470,6 +478,7 @@ export default function OrderDownloadModal({
   };
 
   const saveInstruction = async (template) => {
+    if (!canManageInstructions) throw new Error("You do not have permission to edit shared instructions.");
     const saved = template?.id
       ? await updateTemplateInDatabase(template)
       : await createTemplateInDatabase(template);
@@ -642,11 +651,11 @@ export default function OrderDownloadModal({
                     {selectedInstructionId === template.id ? <ClassicOrderIcon name="check" /> : null}
                   </button>
                 ))}
-                <div className="order-instruction-select__divider" />
-                <button type="button" className="order-instruction-select__add" onClick={() => { setInstructionOpen(false); setEditingInstruction(null); setComposerOpen(true); }}>
+                {canManageInstructions ? <div className="order-instruction-select__divider" /> : null}
+                {canManageInstructions ? <button type="button" className="order-instruction-select__add" onClick={() => { setInstructionOpen(false); setEditingInstruction(null); setComposerOpen(true); }}>
                   <span className="order-instruction-select__add-icon">+</span>
                   <span><strong>Add new Instructions</strong><small>Save English and Arabic text separately</small></span>
-                </button>
+                </button> : null}
               </div>
             ) : null}
           </div>
@@ -654,7 +663,7 @@ export default function OrderDownloadModal({
             <div className="order-download-instruction-preview">
               <div className="order-download-instruction-preview__head">
                 <strong>{selectedInstruction.title}</strong>
-                <button
+                {canManageInstructions ? <button
                   type="button"
                   className="order-download-instruction-edit"
                   aria-label="Edit selected instructions"
@@ -662,7 +671,7 @@ export default function OrderDownloadModal({
                   onClick={() => { setInstructionOpen(false); setEditingInstruction(selectedInstruction); setComposerOpen(true); }}
                 >
                   <ClassicOrderIcon name="edit-2" />
-                </button>
+                </button> : null}
               </div>
               {selectedInstruction.englishText ? <p dir="ltr">{selectedInstruction.englishText}</p> : null}
               {selectedInstruction.arabicText ? <p dir="rtl" lang="ar">{selectedInstruction.arabicText}</p> : null}
@@ -677,7 +686,7 @@ export default function OrderDownloadModal({
           <button type="button" className="order-download-btn order-download-btn--dark" disabled={busy} onClick={() => runDownload("excel")}><ClassicOrderIcon name="grid" /><span>{busy ? "Preparing…" : "Download Excel"}</span></button>
         </div>
       </div>
-      {composerOpen ? <InstructionComposer initialTemplate={editingInstruction} onClose={() => { setComposerOpen(false); setEditingInstruction(null); }} onSave={saveInstruction} /> : null}
+      {composerOpen && canManageInstructions ? <InstructionComposer initialTemplate={editingInstruction} onClose={() => { setComposerOpen(false); setEditingInstruction(null); }} onSave={saveInstruction} /> : null}
     </div>
   );
 }

@@ -34,7 +34,7 @@ test('Enabled profiles deny ungranted actions; a grant is per operation', () => 
 test('Denied grants, bad scopes and unknown keys do not authorize actions', () => {
   assert.equal(featureAllowed(account({ 'products.delete': { allowed: false, scope: 'all' } }), 'products.delete'), false);
   assert.equal(featureAllowed(account({ 'products.delete': { allowed: true, scope: 'own' } }), 'products.delete'), false);
-  assert.equal(featureAllowed(account({ 'products.delete': { allowed: true, scope: 'own' } }), 'products.delete', { scopes: ['own'] }), true);
+  assert.equal(featureAllowed(account({ 'products.view': { allowed: true, scope: 'all' }, 'products.delete': { allowed: true, scope: 'own' } }), 'products.delete', { scopes: ['own'] }), true);
   assert.equal(isKnownFeature('somewhere.unknown'), false);
   assert.equal(featureAllowed(account({ 'somewhere.unknown': { allowed: true } }), 'somewhere.unknown'), false);
 });

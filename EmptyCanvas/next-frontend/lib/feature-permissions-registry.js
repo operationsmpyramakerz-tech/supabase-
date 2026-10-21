@@ -984,10 +984,24 @@ export function featureAllowed(account, key, { legacyAllowed = true, scopes = ["
   // page rules. The existing page-access gate still runs on every endpoint.
   if (key.startsWith("products.") && state.grants?.[PHASE2A_LEGACY_MARKERS.products]?.allowed === true) return !!legacyAllowed;
   if (key.startsWith("orders.operations.") && state.grants?.[PHASE2A_LEGACY_MARKERS["orders.operations"]]?.allowed === true) return !!legacyAllowed;
+  // Order documents are a legacy shared service. Grant overrides must still
+  // be respected even though this module has no View migration toggle yet.
+  // An absent grant keeps the previous page-level behaviour.
+  if (key.startsWith("orders.documents.")) {
+    const documentGrant = state.grants?.[key];
+    return !documentGrant ? !!legacyAllowed
+      : documentGrant.allowed === true && scopes.includes(documentGrant.scope || "all");
+  }
+  // View is a prerequisite for every action within the two original pilot
+  // modules. Their explicit legacy opt-out above keeps its old behaviour.
+  const pilotViewKey = key.startsWith("products.") ? "products.view"
+    : key.startsWith("orders.operations.") ? "orders.operations.view" : null;
+  if (pilotViewKey && key !== pilotViewKey && state.grants?.[pilotViewKey]?.allowed !== true) return false;
   const pilot = key.startsWith("products.") || key.startsWith("orders.operations.");
   if (key === MY_ORDERS_ENFORCEMENT_MARKER) return state.grants?.[key]?.allowed === true;
   if (key.startsWith("orders.my.")) {
     if (state.grants?.[MY_ORDERS_ENFORCEMENT_MARKER]?.allowed !== true) return !!legacyAllowed;
+    if (key !== "orders.my.view" && state.grants?.["orders.my.view"]?.allowed !== true) return false;
     const grant = state.grants?.[key];
     return grant?.allowed === true && scopes.includes(grant.scope || "all");
   }
@@ -1017,7 +1031,7 @@ export function featureAllowed(account, key, { legacyAllowed = true, scopes = ["
   if (!pilot && (!moduleMarker || !Object.hasOwn(state.grants || {}, moduleMarker))) return !!legacyAllowed;
   // Newly migrated modules require View *and* the action grant. A hidden
   // page must not permit direct mutations through an independently checked API.
-  if ((key.startsWith("kits.") || key.startsWith("proposals.") || key.startsWith("orders.review.") || key.startsWith("stocktaking.") || key.startsWith("expenses.") || key.startsWith("users.") || key.startsWith("b2c.database.") || key.startsWith("b2c.forms.") || key.startsWith("backup.") || key.startsWith("history.") || key.startsWith("kpis.") || key.startsWith("sla.") || key.startsWith("home.") || key.startsWith("orders.maintenance."))
+  if ((key.startsWith("kits.") || key.startsWith("proposals.") || key.startsWith("orders.review.") || key.startsWith("stocktaking.") || key.startsWith("expenses.") || key.startsWith("users.") || key.startsWith("b2c.database.") || key.startsWith("b2c.forms.") || key.startsWith("backup.") || key.startsWith("history.") || key.startsWith("kpis.") || key.startsWith("sla.") || key.startsWith("home.") || key.startsWith("orders.maintenance.") || key.startsWith("orders.shopping.") || key.startsWith("tasks.") || key.startsWith("events.calendar.") || key.startsWith("events.requests.") || key.startsWith("events.components.") || key.startsWith("events.team."))
       && key !== moduleMarker && state.grants?.[moduleMarker]?.allowed !== true) return false;
   const grant = state?.grants?.[key];
   return grant?.allowed === true && scopes.includes(grant.scope || "all");

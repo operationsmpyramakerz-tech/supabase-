@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getLegacyAccountGate } from "../../../../lib/products-auth";
+import { ORDER_PAGES, canManageSharedOrderInstructions } from "../../../../lib/order-instructions-access";
 import {
   createOrderDownloadInstruction,
   listOrderDownloadInstructions,
@@ -20,7 +21,7 @@ function noStore(payload, init = {}) {
 }
 
 async function gate() {
-  return await getLegacyAccountGate([]);
+  return await getLegacyAccountGate(ORDER_PAGES);
 }
 
 function failure(error, fallback) {
@@ -37,7 +38,7 @@ export async function GET() {
   try {
     const items = await listOrderDownloadInstructions();
     if (!Array.isArray(items)) return noStore({ error: "Saved instructions storage is unavailable." }, { status: 503 });
-    return noStore({ items });
+    return noStore({ items, canManage: canManageSharedOrderInstructions(access.account) });
   } catch (error) {
     return failure(error, "Failed to load saved instructions.");
   }
@@ -46,6 +47,7 @@ export async function GET() {
 export async function POST(request) {
   const access = await gate();
   if (!access.ok) return noStore({ error: access.error || "Authentication required." }, { status: access.status || 503 });
+  if (!canManageSharedOrderInstructions(access.account)) return noStore({ error: "Editing saved instructions is not permitted." }, { status: 403 });
 
   try {
     const body = await request.json().catch(() => ({}));
@@ -60,6 +62,7 @@ export async function POST(request) {
 export async function PATCH(request) {
   const access = await gate();
   if (!access.ok) return noStore({ error: access.error || "Authentication required." }, { status: access.status || 503 });
+  if (!canManageSharedOrderInstructions(access.account)) return noStore({ error: "Editing saved instructions is not permitted." }, { status: 403 });
 
   try {
     const body = await request.json().catch(() => ({}));
