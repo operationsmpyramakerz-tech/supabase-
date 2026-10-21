@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getLegacyAccountGate } from "../../../../lib/products-auth";
+import { featureAllowed } from "../../../../lib/feature-permissions-registry";
 import { expensesForMemberId } from "../../../../lib/expenses-data";
 
 export const dynamic = "force-dynamic";
@@ -26,6 +27,11 @@ export async function GET(request) {
 
   const userId = String(new URL(request.url).searchParams.get("userId") || "").trim();
   if (!userId) return noStore({ items: [], error: "Missing user id." }, { status: 400 });
+  // A user may view their own expenses. Viewing another member requires
+  // the detailed Expenses by Users permission when that module is opted in.
+  if (userId !== String(gate.memberId || "") && !featureAllowed(gate.account, "expenses.users.view")) {
+    return noStore({ items: [], error: "User expenses access denied." }, { status: 403 });
+  }
 
   try {
     const payload = await expensesForMemberId(userId);

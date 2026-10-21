@@ -10,7 +10,7 @@ const DAYS = [['Sun', 0], ['Mon', 1], ['Tue', 2], ['Wed', 3], ['Thu', 4], ['Fri'
 const DEFAULT_CALENDAR = { enabled: false, timezone: 'Africa/Cairo', work_days: [0, 1, 2, 3, 4], work_start: '09:00', work_end: '17:00', holidays: [] };
 const DEFAULT_POLICY = (workspace) => ({ workspace, enabled: false, target_hours: '', warning_percent: 80, time_basis: 'elapsed' });
 
-function PolicyCard({ value, onChange, onSave, busy, calendarEnabled }) {
+function PolicyCard({ value, onChange, onSave, busy, calendarEnabled, canEdit = true }) {
   const update = (patch) => onChange(value.workspace, { ...value, ...patch });
   const isWorking = value.time_basis === 'working';
   return <section className="sla-editor-card">
@@ -22,7 +22,7 @@ function PolicyCard({ value, onChange, onSave, busy, calendarEnabled }) {
       <label>Time calculation<select value={value.time_basis || 'elapsed'} onChange={e => update({ time_basis: e.target.value })}><option value="elapsed">Continuous calendar hours</option><option value="working">Approved working hours only</option></select></label>
     </div>
     {isWorking && !calendarEnabled ? <p className="sla-editor-warning">Enable and save the company calendar before enabling this working-hours policy. Without it the dashboard will not judge compliance.</p> : null}
-    <div className="sla-editor-card__footer"><small>Nothing changes until you save this workflow.</small><button type="button" disabled={busy} onClick={() => onSave(value.workspace)}>Save policy</button></div>
+    <div className="sla-editor-card__footer"><small>Nothing changes until you save this workflow.</small>{canEdit ? <button type="button" disabled={busy} onClick={() => onSave(value.workspace)}>Save policy</button> : null}</div>
   </section>;
 }
 
@@ -144,7 +144,7 @@ function SlaDiagnostics() {
   </>;
 }
 
-export default function SlaSettingsClient() {
+export default function SlaSettingsClient({ canEdit = true }) {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState('');
   const [policies, setPolicies] = useState({});
@@ -170,6 +170,7 @@ export default function SlaSettingsClient() {
   useEffect(() => { load(); }, [load]);
 
   const save = async (type, data, key) => {
+    if (!canEdit) return;
     setBusy(key); setMessage(null);
     try {
       const res = await fetch('/next/api/home/sla-settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type, data }) });
@@ -191,18 +192,21 @@ export default function SlaSettingsClient() {
     <header className="sla-editor-hero"><Link href="/home" className="sla-editor-back">← Home</Link><span>OPERATIONS ANALYTICS</span><h1>SLA management</h1><p>Set optional time targets and the approved company working calendar. SLA policies affect reporting and optional alerts. Supervisor routes are never created or enabled automatically; every notification channel remains under individual control.</p></header>
     {message ? <div role="status" className={`sla-editor-message ${message.error ? 'is-error' : 'is-success'}`}>{message.text}</div> : null}
     {loading ? <div className="sla-editor-loading">Loading saved settings…</div> : <>
+      {!canEdit ? <p className="sla-editor-note">Read-only access: changes to SLA policies and calendars are not permitted.</p> : null}
+      <fieldset disabled={!canEdit} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
       <div className="sla-editor-section-head"><div><span>01 / COMPANY CALENDAR</span><h2>Working days & holidays</h2><p>The calendar starts disabled. The displayed schedule is only a starting example; verify it before enabling.</p></div></div>
       <section className="sla-editor-card sla-editor-card--wide">
         <div className="sla-editor-card__head"><h3>Company working calendar</h3><label className="sla-editor-switch"><input type="checkbox" checked={Boolean(calendar.enabled)} onChange={e => setCalendar(c => ({ ...c, enabled: e.target.checked }))}/><span>{calendar.enabled ? 'Enabled' : 'Disabled'}</span></label></div>
         <div className="sla-editor-fields"><label>Timezone<select value={calendar.timezone} onChange={e => setCalendar(c => ({ ...c, timezone: e.target.value }))}><option value="Africa/Cairo">Cairo (Egypt)</option><option value="Asia/Riyadh">Riyadh</option><option value="Asia/Dubai">Dubai</option><option value="UTC">UTC</option></select></label><label>From<input type="time" value={calendar.work_start} onChange={e => setCalendar(c => ({ ...c, work_start: e.target.value }))}/></label><label>To<input type="time" value={calendar.work_end} onChange={e => setCalendar(c => ({ ...c, work_end: e.target.value }))}/></label></div>
         <div className="sla-editor-subsection"><strong>Working days</strong><div className="sla-editor-days">{DAYS.map(([name, number]) => <label key={number} className={calendar.work_days.includes(number) ? 'is-active' : ''}><input type="checkbox" checked={calendar.work_days.includes(number)} onChange={e => setCalendar(c => ({ ...c, work_days: e.target.checked ? [...c.work_days, number] : c.work_days.filter(x => x !== number) }))}/>{name}</label>)}</div></div>
         <label className="sla-editor-holidays">Holidays (one YYYY-MM-DD date per line)<textarea rows={4} value={holidaysText} onChange={e => setHolidaysText(e.target.value)} placeholder="2026-01-07"/><small>Days listed here are excluded completely. Holidays are not fetched automatically; maintain this list explicitly.</small></label>
-        <div className="sla-editor-card__footer"><small>The calendar affects only policies switched to working hours.</small><button type="button" disabled={!!busy} onClick={saveCalendar}>{busy === 'calendar' ? 'Saving…' : 'Save calendar'}</button></div>
+        <div className="sla-editor-card__footer"><small>The calendar affects only policies switched to working hours.</small>{canEdit ? <button type="button" disabled={!!busy} onClick={saveCalendar}>{busy === 'calendar' ? 'Saving…' : 'Save calendar'}</button> : null}</div>
       </section>
       <div className="sla-editor-section-head"><div><span>02 / WORKFLOW TARGETS</span><h2>Policies by workspace</h2><p>Each workflow can have its own approved target, warning threshold and time basis.</p></div></div>
-      <div className="sla-editor-policy-grid">{WORKSPACES.map(([key]) => <PolicyCard key={key} value={policies[key] || DEFAULT_POLICY(key)} onChange={updatePolicy} busy={!!busy} calendarEnabled={Boolean(calendar.enabled)} onSave={workspace => save('policy', policies[workspace], workspace)} />)}</div>
-      <EscalationRoutes />
-      <SlaDiagnostics />
+      <div className="sla-editor-policy-grid">{WORKSPACES.map(([key]) => <PolicyCard key={key} canEdit={canEdit} value={policies[key] || DEFAULT_POLICY(key)} onChange={updatePolicy} busy={!!busy} calendarEnabled={Boolean(calendar.enabled)} onSave={workspace => save('policy', policies[workspace], workspace)} />)}</div>
+      </fieldset>
+      {canEdit ? <EscalationRoutes /> : null}
+      {canEdit ? <SlaDiagnostics /> : null}
       <p className="sla-editor-note">Only orders with a complete verified lifecycle history are evaluated. A disabled policy never labels orders as overdue. Processing Time metrics elsewhere on Home still use continuous calendar hours.</p>
     </>}
   </main>;

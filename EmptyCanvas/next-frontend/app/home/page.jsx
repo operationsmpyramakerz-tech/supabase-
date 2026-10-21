@@ -7,7 +7,7 @@ import { fetchDirectPageBootstrap } from "../../lib/page-bootstrap-direct";
 import { getLegacyAccountGate } from "../../lib/products-auth";
 import { getDirectAccountGateFromSessionContext } from "../../lib/direct-session-account";
 import { loadHomeOverviewDirect } from "../../lib/home-overview-data";
-import { canManageSla } from "../../lib/home-sla-settings";
+import { canViewSla } from "../../lib/home-sla-settings";
 
 export const dynamic = "force-dynamic";
 
@@ -155,7 +155,7 @@ export default async function HomePage({ searchParams }) {
         showMaintenance={overview.showMaintenance}
         showStock={overview.showStock}
         showExpenses={overview.showExpenses}
-        canManageSla={canManageSla(account)}
+        canManageSla={canViewSla(account)}
       />
 
       <section aria-label="Recent activity and shortcuts" className="home-grid erp-home-details">

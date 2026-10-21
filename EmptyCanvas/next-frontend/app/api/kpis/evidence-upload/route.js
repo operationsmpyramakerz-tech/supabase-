@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { directKpisContext } from "../../../../lib/kpis-data";
+import { featureAllowed } from "../../../../lib/feature-permissions-registry";
 import { createSignedUploadUrl } from "../../../../lib/supabase-rest";
 
 export const dynamic = "force-dynamic";
@@ -18,6 +19,7 @@ function safeName(value) {
 export async function POST(request) {
   const context = await directKpisContext().catch(() => null);
   if (!context?.ok) return json({ ok: false, error: context?.error || "KPI access denied." }, context?.status || 503);
+  if (!featureAllowed(context.account, "kpis.evidence_upload") || !featureAllowed(context.account, "kpis.scores_edit")) return json({ ok: false, error: "KPI evidence upload access denied." }, 403);
   try {
     const body = await request.json().catch(() => ({}));
     const size = Number(body?.size || 0);

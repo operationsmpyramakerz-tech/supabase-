@@ -1,11 +1,18 @@
 import 'server-only';
 import { select, supabaseRequest } from './supabase-rest';
 import { directPageAccessLevel } from './order-action-auth';
+import { featureAllowed } from './feature-permissions-registry';
 
 const ADMIN_PAGES = ['Users Center', 'User Access & Data', 'User Access', 'Team Members'];
 export const SLA_WORKSPACES = ['current', 'review', 'operations', 'maintenance'];
+function slaAdvanced(account) {
+  return account?.featureAccess?.mode === 'enforced' && Object.hasOwn(account?.featureAccess?.grants || {}, 'sla.view');
+}
+export function canViewSla(account) {
+  return slaAdvanced(account) ? featureAllowed(account, 'sla.view') : directPageAccessLevel(account || {}, ADMIN_PAGES) === 'admin';
+}
 export function canManageSla(account) {
-  return directPageAccessLevel(account || {}, ADMIN_PAGES) === 'admin';
+  return slaAdvanced(account) ? featureAllowed(account, 'sla.manage') : directPageAccessLevel(account || {}, ADMIN_PAGES) === 'admin';
 }
 
 export async function readSlaSettings() {

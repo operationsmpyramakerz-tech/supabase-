@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getDirectAccountGate } from '../../../../lib/products-auth';
-import { canManageSla, SLA_WORKSPACES } from '../../../../lib/home-sla-settings';
+import { canViewSla, canManageSla, SLA_WORKSPACES } from '../../../../lib/home-sla-settings';
 import { notificationUsers, canSeeAnyPage } from '../../../../lib/notifications-data';
 import { hasSupervisorAccess, SLA_ESCALATION_PAGES } from '../../../../lib/home-sla-escalation.mjs';
 import { select, supabaseRequest } from '../../../../lib/supabase-rest';
@@ -10,10 +10,10 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 const TABLE = 'erp_sla_escalation_routes';
 const reply = (body, status = 200) => NextResponse.json(body, { status, headers: { 'Cache-Control': 'private, no-store' } });
-async function adminGate() {
+async function adminGate(permission = 'view') {
   const gate = await getDirectAccountGate([]);
   if (!gate.ok) throw Object.assign(new Error(gate.error || 'Authentication required'), { status: gate.status || 401 });
-  if (!canManageSla(gate.account)) throw Object.assign(new Error('Admin access required'), { status: 403 });
+  if (!(permission === 'manage' ? canManageSla(gate.account) : canViewSla(gate.account))) throw Object.assign(new Error('SLA permission denied'), { status: 403 });
 }
 function errorReply(error) {
   const status = [400, 401, 403, 413].includes(Number(error?.status)) ? Number(error.status) : 503;
@@ -21,7 +21,7 @@ function errorReply(error) {
 }
 export async function GET() {
   try {
-    await adminGate();
+    await adminGate('manage');
     const [routes, users, deliveries] = await Promise.all([
       select(TABLE, { select: 'owner_id,supervisor_id,workspace,enabled,updated_at', limit: '501', order: 'updated_at.desc' }),
       notificationUsers(),
@@ -40,7 +40,7 @@ export async function GET() {
 }
 export async function PUT(request) {
   try {
-    await adminGate();
+    await adminGate('manage');
     const origin = request.headers.get('origin');
     if (origin && origin !== new URL(request.url).origin) return reply({ ok: false, error: 'Origin mismatch.' }, 403);
     const raw = await request.text();

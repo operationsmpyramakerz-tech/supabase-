@@ -220,7 +220,7 @@ function ScoreCard({ summary }) {
 }
 
 
-export default function KpisClient({ initialMeta, initialReviews, initialGraph, bootstrapWarnings = [] }) {
+export default function KpisClient({ initialMeta, initialReviews, initialGraph, bootstrapWarnings = [], permissions = {}, advanced = false }) {
   const [meta, setMeta] = useState(initialMeta || {});
   const [reviews, setReviews] = useState(Array.isArray(initialReviews?.reviews) ? initialReviews.reviews : []);
   const [graphPoints, setGraphPoints] = useState(Array.isArray(initialGraph?.points) ? initialGraph.points : []);
@@ -273,8 +273,8 @@ export default function KpisClient({ initialMeta, initialReviews, initialGraph, 
     : (graphPointByMonth.get(activeGraphMonth) || graphPoints[graphPoints.length - 1] || null);
   const visibleStandards = useMemo(() => (meta.standards || []).filter((standard) => (!standardFilters.department || lower(standard.department) === lower(standardFilters.department)) && (!standardFilters.position || lower(standard.rolePosition) === lower(standardFilters.position))), [meta.standards, standardFilters]);
 
-  const openStandard = () => rank(accessLevel) >= rank("admin") ? setModal({ type: "standard", password: "" }) : setModal({ type: "password", kind: "standard" });
-  const openReviewCreator = () => rank(accessLevel) >= rank("edit") ? setModal({ type: "create-review", password: "" }) : setModal({ type: "password", kind: "review" });
+  const openStandard = () => permissions.standard_manage && rank(accessLevel) >= rank("admin") ? setModal({ type: "standard", password: "" }) : setModal({ type: "password", kind: "standard" });
+  const openReviewCreator = () => permissions.review_create && rank(accessLevel) >= rank("edit") ? setModal({ type: "create-review", password: "" }) : setModal({ type: "password", kind: "review" });
   const onStandardSaved = async (body, duplicateBefore) => {
     setModal(null);
     await refreshMeta();
@@ -315,7 +315,7 @@ export default function KpisClient({ initialMeta, initialReviews, initialGraph, 
       <Toast value={toast} onClose={() => setToast(null)} />
       <section className="kpis-hero">
         <div><span className="kpis-kicker">Performance management</span></div>
-        <div className="kpis-hero-actions"><button className="kpis-btn kpis-btn--ghost" type="button" onClick={openReviewCreator}><Icon name="edit-3"/><span>Create review</span></button><button className="kpis-btn kpis-btn--primary" type="button" onClick={openStandard}><Icon name="plus"/><span>Create KPI standard</span></button></div>
+        <div className="kpis-hero-actions">{permissions.review_create ? <button className="kpis-btn kpis-btn--ghost" type="button" onClick={openReviewCreator}><Icon name="edit-3"/><span>Create review</span></button> : null}{permissions.standard_manage ? <button className="kpis-btn kpis-btn--primary" type="button" onClick={openStandard}><Icon name="plus"/><span>Create KPI standard</span></button> : null}</div>
       </section>
 
       <section className="kpis-grid">
@@ -328,10 +328,10 @@ export default function KpisClient({ initialMeta, initialReviews, initialGraph, 
 
       <section className="kpis-layout">
         <article className="kpis-card">
-          <div className="kpis-card-head kpis-card-head--wrap"><div><span className="kpis-card-label">Monthly reviews</span><h2>Employee KPI reviews</h2></div><div className="kpis-filters"><button className="kpis-btn kpis-btn--ghost kpis-filter-btn" type="button" onClick={() => setModal({ type: "review-filters" })}><Icon name="sliders"/><span>Filter by</span></button><button className="kpis-btn kpis-btn--dark kpis-report-btn" type="button" onClick={downloadReport}><Icon name="download"/><span>Download Report</span></button></div></div>
+          <div className="kpis-card-head kpis-card-head--wrap"><div><span className="kpis-card-label">Monthly reviews</span><h2>Employee KPI reviews</h2></div><div className="kpis-filters"><button className="kpis-btn kpis-btn--ghost kpis-filter-btn" type="button" onClick={() => setModal({ type: "review-filters" })}><Icon name="sliders"/><span>Filter by</span></button>{permissions.report ? <button className="kpis-btn kpis-btn--dark kpis-report-btn" type="button" onClick={downloadReport}><Icon name="download"/><span>Download Report</span></button> : null}</div></div>
           <div className="kpis-filter-summary">{filterSummary.length ? filterSummary.map((chip) => <span key={chip}>{chip}</span>) : "No filters applied"}</div>
           <div className="kpis-review-tabs" role="tablist" aria-label="KPI review tabs">{[["all", "All"], ["mine", "My KPIs"], ["created", "Created by me"]].map(([value, label]) => <button type="button" key={value} className={`kpis-review-tab ${reviewTab === value ? "is-active" : ""}`} onClick={() => changeReviewTab(value)}>{label}</button>)}</div>
-          <div className="kpis-table-wrap"><table className="kpis-table"><thead><tr><th>Employee</th><th>Department</th><th>Month</th><th>Score</th></tr></thead><tbody>{reviews.length ? reviews.map((review) => <tr className="kpis-review-row" key={review.reviewId} tabIndex="0" onClick={() => setModal({ type: "review", reviewId: review.reviewId, readOnly: true })} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setModal({ type: "review", reviewId: review.reviewId, readOnly: true }); } }}><td><strong>{review.teamMemberName || "—"}</strong></td><td>{review.department || "—"}</td><td>{fmtMonth(review.reviewMonth)}</td><td><div className="kpis-score-actions"><span className="kpis-score-pill"><strong>{review.reviewId ? `${number(review.finalPercentage).toFixed(1)}%` : "—"}</strong><em>{review.performanceRating || "—"}</em></span>{reviewTab === "created" && rank(accessLevel) >= rank("admin") && review.reviewId ? <button className="kpis-review-edit-btn" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); setModal({ type: "review", reviewId: review.reviewId, readOnly: false }); }}><Icon name="edit-3"/><span>Edit</span></button> : null}</div></td></tr>) : <tr><td colSpan="4">No KPI reviews found.</td></tr>}</tbody></table></div>
+          <div className="kpis-table-wrap"><table className="kpis-table"><thead><tr><th>Employee</th><th>Department</th><th>Month</th><th>Score</th></tr></thead><tbody>{reviews.length ? reviews.map((review) => <tr className="kpis-review-row" key={review.reviewId} tabIndex="0" onClick={() => setModal({ type: "review", reviewId: review.reviewId, readOnly: true })} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setModal({ type: "review", reviewId: review.reviewId, readOnly: true }); } }}><td><strong>{review.teamMemberName || "—"}</strong></td><td>{review.department || "—"}</td><td>{fmtMonth(review.reviewMonth)}</td><td><div className="kpis-score-actions"><span className="kpis-score-pill"><strong>{review.reviewId ? `${number(review.finalPercentage).toFixed(1)}%` : "—"}</strong><em>{review.performanceRating || "—"}</em></span>{reviewTab === "created" && permissions.scores_edit && (rank(accessLevel) >= rank("admin") || advanced) && review.reviewId ? <button className="kpis-review-edit-btn" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); setModal({ type: "review", reviewId: review.reviewId, readOnly: false }); }}><Icon name="edit-3"/><span>Edit</span></button> : null}</div></td></tr>) : <tr><td colSpan="4">No KPI reviews found.</td></tr>}</tbody></table></div>
         </article>
 
         <article className="kpis-card">
@@ -341,11 +341,11 @@ export default function KpisClient({ initialMeta, initialReviews, initialGraph, 
         </article>
       </section>
 
-      {modal?.type === "password" ? <AdminPasswordDialog kind={modal.kind} onClose={() => setModal(null)} onVerified={(password) => setModal({ type: modal.kind === "standard" ? "standard" : "create-review", password })} /> : null}
-      {modal?.type === "standard" ? <StandardForm meta={meta} adminPassword={modal.password || ""} onClose={() => setModal(null)} onSaved={onStandardSaved} notify={notify} /> : null}
-      {modal?.type === "create-review" ? <ReviewCreate meta={meta} adminPassword={modal.password || ""} onClose={() => setModal(null)} onCreated={onReviewCreated} notify={notify} /> : null}
+      {modal?.type === "password" && (modal.kind === "standard" ? permissions.standard_manage : permissions.review_create) ? <AdminPasswordDialog kind={modal.kind} onClose={() => setModal(null)} onVerified={(password) => setModal({ type: modal.kind === "standard" ? "standard" : "create-review", password })} /> : null}
+      {modal?.type === "standard" && permissions.standard_manage ? <StandardForm meta={meta} adminPassword={modal.password || ""} onClose={() => setModal(null)} onSaved={onStandardSaved} notify={notify} /> : null}
+      {modal?.type === "create-review" && permissions.review_create ? <ReviewCreate meta={meta} adminPassword={modal.password || ""} onClose={() => setModal(null)} onCreated={onReviewCreated} notify={notify} /> : null}
       {modal?.type === "standard-detail" ? <StandardDetail standardId={modal.standardId} meta={meta} onClose={() => setModal(null)} /> : null}
-      {modal?.type === "review" ? <ReviewDetail reviewId={modal.reviewId} readOnly={modal.readOnly} adminPassword={modal.adminPassword || ""} onClose={() => setModal(null)} onSaved={onReviewSaved} notify={notify} /> : null}
+      {modal?.type === "review" ? <ReviewDetail reviewId={modal.reviewId} readOnly={modal.readOnly || !permissions.scores_edit} canUploadEvidence={permissions.evidence_upload && permissions.scores_edit} adminPassword={modal.adminPassword || ""} onClose={() => setModal(null)} onSaved={onReviewSaved} notify={notify} /> : null}
       {modal?.type === "review-filters" ? <ReviewFilters meta={meta} value={reviewFilters} onChange={setReviewFilters} onApply={async (filters) => { setModal(null); try { await refreshReviews({ filters }); } catch (err) { notify(err.message, "error"); } }} onClear={async () => { const cleared = { teamMemberId: "", department: "", position: "", month: "", standardId: "", sectionOrder: "", sectionLabel: "" }; setReviewFilters(cleared); setModal(null); try { await refreshReviews({ filters: cleared }); } catch (err) { notify(err.message, "error"); } }} onClose={() => setModal(null)} notify={notify} /> : null}
       {modal?.type === "standard-filters" ? <StandardFilters meta={meta} value={standardFilters} onChange={setStandardFilters} onApply={() => setModal(null)} onClear={() => { setStandardFilters({ department: "", position: "" }); setModal(null); }} onClose={() => setModal(null)} /> : null}
     </section>

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { directKpisContext } from "../../../../lib/kpis-data";
+import { featureAllowed } from "../../../../lib/feature-permissions-registry";
 import { createKpiReview, kpiMutationError, saveKpiStandard, updateKpiReviewScores } from "../../../../lib/kpis-mutations";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +18,10 @@ export async function POST(request) {
   try {
     const body = await request.json().catch(() => ({}));
     const action = String(body?.action || "").trim().toLowerCase();
+    const permissions = { save_standard: "kpis.standard_manage", create_review: "kpis.review_create", update_scores: "kpis.scores_edit" };
+    const feature = permissions[action];
+    if (!feature) return json({ ok: false, error: "Unsupported KPI mutation action." }, 400);
+    if (!featureAllowed(context.account, feature)) return json({ ok: false, error: `Permission ${feature} is not allowed.` }, 403);
     let result;
     if (action === "save_standard") result = await saveKpiStandard(context, body);
     else if (action === "create_review") result = await createKpiReview(context, body);

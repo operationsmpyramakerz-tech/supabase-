@@ -288,7 +288,16 @@ export async function updateKpiReviewScores(context, body = {}) {
   if (!reviewId) { const error = new Error("KPI review id is required."); error.status = 400; throw error; }
   const current = await rawReview(reviewId);
   if (!canSeeReview(context, current)) await requirePasswordOrLevel(context, body.adminPassword || body.password, "admin");
-  for (const row of (Array.isArray(body.scores) ? body.scores : [])) {
+  const inputScores = Array.isArray(body.scores) ? body.scores : [];
+  if (inputScores.length > 1000) { const error = new Error("Too many KPI score updates."); error.status = 400; throw error; }
+  const scoreIds = inputScores.map(row => text(row?.scoreId || row?.score_id)).filter(Boolean);
+  if (new Set(scoreIds).size !== scoreIds.length) { const error = new Error("Duplicate KPI score id."); error.status = 400; throw error; }
+  if (scoreIds.length) {
+    const owned = await select(KPI_SCORES_TABLE, { select: "id", review_id: `eq.${reviewId}`, limit: "1000" });
+    const allowed = new Set((owned || []).map(row => text(row.id)));
+    if (scoreIds.some(id => !allowed.has(id))) { const error = new Error("The score does not belong to this KPI review."); error.status = 403; throw error; }
+  }
+  for (const row of inputScores) {
     const scoreId = text(row.scoreId || row.score_id);
     if (!scoreId) continue;
     const value = row.score ?? row.actualPercent ?? row.actual_percent;

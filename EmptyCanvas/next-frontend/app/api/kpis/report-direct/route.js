@@ -1,6 +1,7 @@
 import PDFDocument from "pdfkit";
 
 import { directKpisContext, kpiErrorMessage, kpisReviews } from "../../../../lib/kpis-data";
+import { featureAllowed } from "../../../../lib/feature-permissions-registry";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -24,6 +25,7 @@ function collectPdf(doc) {
 export async function GET(request) {
   const context = await directKpisContext().catch(() => null);
   if (!context?.ok) return Response.json({ ok: false, error: context?.error || "KPI access denied." }, { status: context?.status || 503 });
+  if (!featureAllowed(context.account, "kpis.report")) return Response.json({ ok: false, error: "KPI report access denied." }, { status: 403 });
   try {
     const url = new URL(request.url);
     const query = Object.fromEntries(url.searchParams.entries());

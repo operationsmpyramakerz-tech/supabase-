@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getDirectAccountGate } from '../../../../lib/products-auth';
-import { canManageSla, readSlaSettings, saveSlaSetting } from '../../../../lib/home-sla-settings';
+import { canViewSla, canManageSla, readSlaSettings, saveSlaSetting } from '../../../../lib/home-sla-settings';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -9,10 +9,10 @@ export const runtime = 'nodejs';
 function reply(body, status = 200) {
   return NextResponse.json(body, { status, headers: { 'Cache-Control': 'no-store' } });
 }
-async function authorize() {
+async function authorize(permission = "view") {
   const gate = await getDirectAccountGate([]);
   if (!gate.ok) throw Object.assign(new Error(gate.error || 'Authentication required.'), { status: gate.status || 401 });
-  if (!canManageSla(gate.account)) throw Object.assign(new Error('Admin access required.'), { status: 403 });
+  if (!(permission === 'manage' ? canManageSla(gate.account) : canViewSla(gate.account))) throw Object.assign(new Error('SLA permission denied.'), { status: 403 });
 }
 function errorReply(error) {
   const status = [400, 401, 403, 413].includes(Number(error?.status)) ? Number(error.status) : 503;
@@ -24,7 +24,7 @@ export async function GET() {
 }
 export async function PUT(request) {
   try {
-    await authorize();
+    await authorize('manage');
     const origin = request.headers.get('origin');
     if (origin && origin !== new URL(request.url).origin) return reply({ ok: false, error: 'Origin mismatch.' }, 403);
     const content = await request.text();

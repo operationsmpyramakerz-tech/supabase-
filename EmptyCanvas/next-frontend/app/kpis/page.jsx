@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import AppShell from "../../components/AppShell";
 import KpisClient from "../../components/kpis/KpisClient";
 import { loadDirectKpisPageData } from "../../lib/kpis-data";
+import { featureAllowed } from "../../lib/feature-permissions-registry";
 import { fetchDirectPageBootstrap } from "../../lib/page-bootstrap-direct";
 
 export const dynamic = "force-dynamic";
@@ -92,6 +93,8 @@ export default async function KpisPage() {
       pageStyles={["/next/css/kpis.css?v=next-stage-2l-kpis"]}
     >
       <KpisClient
+        permissions={Object.fromEntries(["standard_manage", "review_create", "scores_edit", "evidence_upload", "report"].map(key => [key, featureAllowed(pageData.account, `kpis.${key}`)]))}
+        advanced={pageData.account?.featureAccess?.mode === "enforced" && Object.hasOwn(pageData.account.featureAccess.grants || {}, "kpis.view")}
         initialMeta={pageData.meta || { ok: true, users: [], standards: [], departments: [], positions: [], positionsByDepartment: {}, currentUser: null, accessLevel: "view" }}
         initialReviews={pageData.reviews || { ok: true, reviews: [] }}
         initialGraph={pageData.graph || { ok: true, points: [] }}

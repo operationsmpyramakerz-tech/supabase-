@@ -543,6 +543,8 @@ function FeatureAccessModal({ member, onClose, protect }) {
     { key: "b2c.forms", label: "B2C Forms", optIn: true },
     { key: "backup", label: "Database Backup", optIn: true },
     { key: "history", label: "System History", optIn: true },
+    { key: "kpis", label: "KPIs", optIn: true },
+    { key: "sla", label: "SLA Settings", optIn: true },
   ];
   useEffect(() => {
     let mounted = true;
@@ -576,6 +578,8 @@ function FeatureAccessModal({ member, onClose, protect }) {
           "b2c.forms": stored.some(item => item.key === "b2c.forms.view"),
           backup: stored.some(item => item.key === "backup.view"),
           history: stored.some(item => item.key === "history.view"),
+          kpis: stored.some(item => item.key === "kpis.view"),
+          sla: stored.some(item => item.key === "sla.view"),
         });
         setUnmanagedGrants(stored.filter(item => !ACTIVE_PILOT_FEATURE_KEYS.includes(item.key) && item.key !== MY_ORDERS_ENFORCEMENT_MARKER));
       } catch (e) { if (mounted) setError(e.message); }

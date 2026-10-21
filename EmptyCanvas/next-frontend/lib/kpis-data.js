@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getDirectAccountGate } from "./products-auth";
+import { featureGate } from "./feature-permissions-server";
 import { select, selectAll } from "./supabase-rest";
 import { listTeamMembersLite } from "./team-members-service";
 
@@ -363,7 +364,7 @@ function contextKey(context = {}) {
 }
 
 export async function directKpisContext() {
-  const gate = await getDirectAccountGate(["KPIs"]);
+  const gate = featureGate(await getDirectAccountGate(["KPIs"]), "kpis.view");
   if (!gate) return null;
   if (!gate.ok) return { ok: false, status: gate.status, error: gate.error, account: gate.account || null, source: "direct-session" };
   return {
