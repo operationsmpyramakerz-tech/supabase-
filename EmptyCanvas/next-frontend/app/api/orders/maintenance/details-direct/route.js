@@ -3,6 +3,7 @@ import { performance } from "node:perf_hooks";
 import { getLegacyAccountGate } from "../../../../../lib/products-auth";
 import { featureGate } from "../../../../../lib/feature-permissions-server";
 import { loadMaintenanceOrderDetails } from "../../../../../lib/maintenance-orders-data";
+import { assertOrderIdsInScope } from "../../../../../lib/order-data-scope";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -61,6 +62,7 @@ export async function POST(request) {
   const detailsStartedAt = performance.now();
   const stages = {};
   try {
+    await assertOrderIdsInScope(gate.account, "orders.maintenance.details", orderIds);
     const items = await loadMaintenanceOrderDetails({ orderIds, timings: stages });
     if (Array.isArray(items)) return noStore(items, { headers: timing(performance.now() - detailsStartedAt, stages) });
     return noStore({ error: "Maintenance Orders direct Supabase data is unavailable." }, { status: 503, headers: timing(performance.now() - detailsStartedAt, stages) });

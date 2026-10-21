@@ -12,6 +12,7 @@ import { getProductsCatalog, getProductsList, getProductsForOrderDetails } from 
 import { invalidateLegacyOperationsCaches, markOperationsArrived } from "./operations-orders-data";
 import { directPageMutationAccess, verifyPageAdminPasswordDirect } from "./order-action-auth";
 import { listMaintenanceChecklistItems } from "./maintenance-checklist-data";
+import { resolveOrderScope, visibleOrderRow } from "./order-data-scope";
 
 const PAGE_LIMIT = 36;
 const PAGE_MAX = 80;
@@ -204,6 +205,8 @@ function serializeMaintenanceSummaryRow(row = {}, { includeSearchText = false } 
     createdTime: dateValue(row.notion_created_time ?? row.created_time ?? row.created_at ?? row["Created time"]) || new Date().toISOString(),
     createdById,
     createdByName,
+    // UI scope checks must never use the legacy name fallback as an owner ID.
+    scopeOwnerId: text(row.team_member_id),
     maintenanceLogged,
     summaryOnly: true,
     source: "supabase",
@@ -270,16 +273,25 @@ async function rowsByNumbers(numbers = [], signal = null, includeLocalSearchFiel
   });
 }
 
-function groupRows(rows = [], includeLocalSearchFields = false) {
+function groupRows(rows = [], includeLocalSearchFields = false, resolvedScope = null) {
   const startedAt = performance.now();
   const groups = new Map();
+  const rawGroups = new Map();
   for (const row of rows) {
     if (!isMaintenanceOrder(row?.order_type ?? row?.["Order Type"])) continue;
     const item = serializeMaintenanceSummaryRow(row, { includeSearchText: includeLocalSearchFields });
     const orderNumber = Number(item?.orderIdNumber);
     if (!Number.isFinite(orderNumber)) continue;
-    if (!groups.has(orderNumber)) groups.set(orderNumber, []);
+    if (!groups.has(orderNumber)) { groups.set(orderNumber, []); rawGroups.set(orderNumber, []); }
     groups.get(orderNumber).push(item);
+    rawGroups.get(orderNumber).push(row);
+  }
+  // Never expose a partial maintenance order if its components have mixed owners.
+  // Verify the authoritative member IDs from the database rows before serializing.
+  if (resolvedScope?.scope !== null && resolvedScope?.scope !== "all") {
+    for (const [number, originals] of rawGroups) {
+      if (!originals.every(row => visibleOrderRow(row, resolvedScope))) groups.delete(number);
+    }
   }
   recordPerformanceSample({
     category: "orders-summary",
@@ -291,6 +303,7 @@ function groupRows(rows = [], includeLocalSearchFields = false) {
 }
 
 export async function loadMaintenanceOrdersPage({
+  account = null,
   tab = "all",
   query = "",
   cursor = null,
@@ -298,6 +311,7 @@ export async function loadMaintenanceOrdersPage({
   signal = null,
 } = {}) {
   if (!isSupabaseConfigured()) return null;
+  const resolvedScope = account ? await resolveOrderScope(account, "orders.maintenance.view") : null;
 
   const safeLimit = pageLimit(limit);
   const outputGroups = [];
@@ -366,7 +380,7 @@ export async function loadMaintenanceOrdersPage({
       profileName: "orders.maintenance.summary-window",
       signal,
       consumeRows: ({ numbers, rows }) => {
-        const groups = groupRows(rows, localSearchFallback);
+        const groups = groupRows(rows, localSearchFallback, resolvedScope);
         let processedCandidates = 0;
         let matchedGroups = 0;
 
@@ -408,9 +422,9 @@ export async function loadMaintenanceOrdersPage({
   };
 }
 
-export async function loadMaintenanceOrdersInitialPage({ limit = PAGE_LIMIT } = {}) {
+export async function loadMaintenanceOrdersInitialPage({ account = null, limit = PAGE_LIMIT } = {}) {
   return await measurePerformance("page-data", "orders.maintenance.initial", async () =>
-    await loadMaintenanceOrdersPage({ tab: "all", query: "", cursor: null, limit }),
+    await loadMaintenanceOrdersPage({ account, tab: "all", query: "", cursor: null, limit }),
   );
 }
 
@@ -541,7 +555,9 @@ export async function loadMaintenanceOrderDetails({ orderIds = [], timings = nul
     throw error;
   }
 
-  const serialized = maintenanceRows.map(serializeOperationsOrderDetail);
+  const serialized = maintenanceRows.map(row => ({
+    ...serializeOperationsOrderDetail(row), scopeOwnerId: text(row.team_member_id),
+  }));
   if (timings) timings.prepare = performance.now() - prepareStartedAt;
   const enrichStartedAt = performance.now();
   const details = await enrichMaintenanceDetailProducts(serialized, {

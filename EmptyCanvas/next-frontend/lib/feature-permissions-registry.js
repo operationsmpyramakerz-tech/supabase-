@@ -950,6 +950,7 @@ export const MY_ORDERS_ENFORCEMENT_MARKER = "orders.my.__enforced";
 export const ORDER_SCOPE_MARKERS = Object.freeze({
   "orders.my": "orders.my.__scoped",
   "orders.operations": "orders.operations.__scoped",
+  "orders.maintenance": "orders.maintenance.__scoped",
 });
 // Legacy opt-out markers for the original two Phase 2A modules. A newly
 // enabled Expenses/Tasks/etc. profile must not silently migrate these too.
@@ -974,7 +975,8 @@ export function featureAllowed(account, key, { legacyAllowed = true, scopes = ["
   if (key.startsWith("expenses.users.")) scopes = ["own", "team", "all"];
   if (key.startsWith("tasks.") && state?.grants?.[TASK_SCOPE_MARKER]?.allowed === true) scopes = ["own", "team", "all"];
   if ((key.startsWith("orders.my.") && state?.grants?.[ORDER_SCOPE_MARKERS["orders.my"]]?.allowed === true)
-    || (key.startsWith("orders.operations.") && state?.grants?.[ORDER_SCOPE_MARKERS["orders.operations"]]?.allowed === true)) scopes = ["own", "team", "all"];
+    || (key.startsWith("orders.operations.") && state?.grants?.[ORDER_SCOPE_MARKERS["orders.operations"]]?.allowed === true)
+    || (key.startsWith("orders.maintenance.") && state?.grants?.[ORDER_SCOPE_MARKERS["orders.maintenance"]]?.allowed === true)) scopes = ["own", "team", "all"];
   if (state?.mode !== "enforced") return !!legacyAllowed;
   // Explicitly opting out of an original pilot module restores ONLY its prior
   // page rules. The existing page-access gate still runs on every endpoint.
@@ -1013,7 +1015,7 @@ export function featureAllowed(account, key, { legacyAllowed = true, scopes = ["
   if (!pilot && (!moduleMarker || !Object.hasOwn(state.grants || {}, moduleMarker))) return !!legacyAllowed;
   // Newly migrated modules require View *and* the action grant. A hidden
   // page must not permit direct mutations through an independently checked API.
-  if ((key.startsWith("kits.") || key.startsWith("proposals.") || key.startsWith("orders.review.") || key.startsWith("stocktaking.") || key.startsWith("expenses.") || key.startsWith("users.") || key.startsWith("b2c.database.") || key.startsWith("b2c.forms.") || key.startsWith("backup.") || key.startsWith("history.") || key.startsWith("kpis.") || key.startsWith("sla.") || key.startsWith("home."))
+  if ((key.startsWith("kits.") || key.startsWith("proposals.") || key.startsWith("orders.review.") || key.startsWith("stocktaking.") || key.startsWith("expenses.") || key.startsWith("users.") || key.startsWith("b2c.database.") || key.startsWith("b2c.forms.") || key.startsWith("backup.") || key.startsWith("history.") || key.startsWith("kpis.") || key.startsWith("sla.") || key.startsWith("home.") || key.startsWith("orders.maintenance."))
       && key !== moduleMarker && state.grants?.[moduleMarker]?.allowed !== true) return false;
   const grant = state?.grants?.[key];
   return grant?.allowed === true && scopes.includes(grant.scope || "all");

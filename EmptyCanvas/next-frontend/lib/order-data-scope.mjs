@@ -3,12 +3,13 @@
 export const ORDER_SCOPE_MARKERS = Object.freeze({
   "orders.my": "orders.my.__scoped",
   "orders.operations": "orders.operations.__scoped",
+  "orders.maintenance": "orders.maintenance.__scoped",
 });
 const rank = { own: 0, team: 1, all: 2 };
 const clean = (value) => String(value ?? "").trim();
 
 export function orderScopeFor(account = {}, key = "") {
-  const module = key.startsWith("orders.my.") ? "orders.my" : key.startsWith("orders.operations.") ? "orders.operations" : "";
+  const module = key.startsWith("orders.my.") ? "orders.my" : key.startsWith("orders.operations.") ? "orders.operations" : key.startsWith("orders.maintenance.") ? "orders.maintenance" : "";
   if (!module) return null;
   const state = account?.featureAccess;
   if (state?.mode !== "enforced" || state.grants?.[ORDER_SCOPE_MARKERS[module]]?.allowed !== true) return null;

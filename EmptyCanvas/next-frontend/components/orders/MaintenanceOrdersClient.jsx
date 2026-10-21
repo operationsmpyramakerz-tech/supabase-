@@ -10,6 +10,7 @@ import OrdersPerformancePanel from "./OrdersPerformancePanel";
 import OrderTypeBadge from "./OrderTypeBadge";
 import OrdersEmptyState, { OrdersListHeader, sortOrderGroups } from "./OrdersEmptyState";
 import { loadTeamMemberPublicProfile } from "../../lib/team-member-public-client";
+import { orderCardAllows } from "../../lib/order-data-scope.mjs";
 
 const loadMaintenanceOrdersHeavyModals = () => import("./MaintenanceHeavyModals");
 const MaintenanceDetailsModal = dynamic(() => import("./MaintenanceHeavyModals").then((module) => module.MaintenanceDetailsModal), { ssr: false });
@@ -599,7 +600,7 @@ async function fileToOptimizedDataUrl(file) {
 }
 
 
-export default function MaintenanceOrdersClient({ initialOrders = [], initialOptions = {}, initialPageInfo = null, bootstrapWarnings = [], permissions = {} }) {
+export default function MaintenanceOrdersClient({ initialOrders = [], initialOptions = {}, initialPageInfo = null, bootstrapWarnings = [], permissions = {}, scopePolicy = null }) {
   const [orders, setOrders] = useState(Array.isArray(initialOrders) ? initialOrders : []);
   const [pageInfo, setPageInfo] = useState(initialPageInfo || { hasMore: false, nextCursor: null, limit: 36 });
   const [listLoading, setListLoading] = useState(false);
@@ -709,6 +710,14 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
   }, [groups, tab, type, query, pageInfo]);
 
   const sortedVisibleGroups = useMemo(() => sortOrderGroups(visibleGroups, sortMode), [visibleGroups, sortMode]);
+  // Scoped permissions use only authoritative member IDs, never a creator's
+  // display name that may happen to match another member's ID.
+  const maintenanceCardAllows = (action, group) => orderCardAllows(scopePolicy, action,
+    !scopePolicy || !group?.items ? group : {
+      ...group, items: group.items.map(item => ({ ...item, createdById: item.scopeOwnerId ?? "" })),
+    });
+  const groupPermissions = (group) => Object.fromEntries(Object.entries(permissions).map(([action, allowed]) =>
+    [action, allowed && maintenanceCardAllows(action, group)]));
 
   async function fetchOrdersPage({ reset = true, fresh = false } = {}) {
     const requestId = ++listRequestRef.current;
@@ -787,7 +796,7 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
   }
 
   async function openOrderDetails(group) {
-    if (permissions.details === false) return;
+    if (permissions.details === false || !maintenanceCardAllows("details", group)) return;
     if (!group) return;
     const attemptId = markOrderOpenStarted("Maintenance");
     const requestId = ++openRequestRef.current;
@@ -826,11 +835,13 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
   }
 
   function prefetchOrderDetails(group, hover = false) {
+    if (group && !maintenanceCardAllows("details", group)) return;
     if (!group) { detailsLoaderRef.current.cancelPrefetch(); return; }
     detailsLoaderRef.current.prefetch(group, { defer: hover });
   }
 
   function beginAction(action, group) {
+    if (permissions[action] === false || !maintenanceCardAllows(action, group)) return;
     setActionError("");
     setActionState({ action, group });
   }
@@ -957,6 +968,7 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
   }
 
   async function openDownload(group, exportOptions = {}) {
+    if (permissions.export === false || !maintenanceCardAllows("export", group)) return;
     setActionError("");
     try {
       await ensureOptions();
@@ -968,6 +980,7 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
   }
 
   async function openLog(group) {
+    if (permissions.log === false || !maintenanceCardAllows("log", group)) return;
     setActionError("");
     try {
       await ensureOptions();
@@ -980,6 +993,7 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
   }
 
   async function openSecondLog(group) {
+    if (permissions.log === false || !maintenanceCardAllows("log", group)) return;
     setActionError("");
     try {
       await ensureOptions();
@@ -992,6 +1006,7 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
   }
 
   async function saveLog(perItemLogs) {
+    if (!logGroup || !maintenanceCardAllows(logMode === "edit" ? "edit" : "log", logGroup)) return;
     const isEditMode = logMode === "edit";
     const isSecondMode = logMode === "second";
     const hasSelectedSparePart = (list) => Array.isArray(list) && list.some((part) => text(part?.id) || text(part?.name));
@@ -1041,6 +1056,7 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
   }
 
   async function markDone(payload) {
+    if (!doneGroup || permissions.mark_arrived === false || !maintenanceCardAllows("mark_arrived", doneGroup)) return;
     if (!payload?.files?.length) {
       setActionError("Please upload at least one signed report image.");
       return;
@@ -1160,17 +1176,17 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
 
       <section className="next-maintenance-orders-list-surface">
         <OrdersListHeader count={visibleGroups.length} hasMore={pageInfo?.hasMore} busy={listLoading} sortMode={sortMode} onSortChange={setSortMode} />
-        <div className="co-cards" id="requested-list">{visibleGroups.length ? sortedVisibleGroups.map((group) => <MaintenanceCard canOpen={permissions.details !== false} group={group} onOpen={permissions.details === false ? () => {} : openOrderDetails} onPrefetch={permissions.details === false ? () => {} : prefetchOrderDetails} onCreator={openCreatorProfile} key={group.key} />) : listLoading ? <div className="ops-no-data-state" role="status" aria-live="polite"><div className="ops-no-data-state__text">Loading maintenance orders…</div></div> : <OrdersEmptyState filtered={tab !== "all" || type !== "all" || !!query.trim()} context={"orders"} onReset={() => { setTab("all"); setType("all"); setQuery(""); }} />}</div>
+        <div className="co-cards" id="requested-list">{visibleGroups.length ? sortedVisibleGroups.map((group) => <MaintenanceCard canOpen={groupPermissions(group).details !== false} group={group} onOpen={groupPermissions(group).details === false ? () => {} : openOrderDetails} onPrefetch={groupPermissions(group).details === false ? () => {} : prefetchOrderDetails} onCreator={openCreatorProfile} key={group.key} />) : listLoading ? <div className="ops-no-data-state" role="status" aria-live="polite"><div className="ops-no-data-state__text">Loading maintenance orders…</div></div> : <OrdersEmptyState filtered={tab !== "all" || type !== "all" || !!query.trim()} context={"orders"} onReset={() => { setTab("all"); setType("all"); setQuery(""); }} />}</div>
         {pageInfo?.hasMore ? <div style={{ display: "flex", justifyContent: "center", padding: "16px 0 4px" }}><button type="button" className="ro-action-btn ro-action-btn--light" disabled={listLoading} onClick={() => fetchOrdersPage({ reset: false }).catch((error) => { setNotice(error?.message || "Failed to load more maintenance orders."); window.setTimeout(() => setNotice(""), 4000); })}>{listLoading ? "Loading…" : "Load more orders"}</button></div> : null}
       </section>
 
       <OrderDetailsLoadingOverlay group={openingGroup} onCancel={closeOrderDetails} variant="maintenance" />
-      {selected ? <MaintenanceDetailsModal group={selected} permissions={permissions} busy={busy} onClose={closeOrderDetails} onLog={openLog} onSecondLog={openSecondLog} onDone={(group) => { setActionError(""); setDoneGroup(group); }} onExport={openDownload} onAction={beginAction} /> : null}
+      {selected ? <MaintenanceDetailsModal group={selected} permissions={groupPermissions(selected)} busy={busy} onClose={closeOrderDetails} onLog={openLog} onSecondLog={openSecondLog} onDone={(group) => { setActionError(""); setDoneGroup(group); }} onExport={openDownload} onAction={beginAction} /> : null}
       {actionState ? <MaintenanceActionPasswordModal state={actionState} busy={busy} error={actionError} onCancel={() => { setActionState(null); setActionError(""); }} onSubmit={submitAction} /> : null}
       {deleteConfirm ? <MaintenanceDeleteConfirmationModal state={deleteConfirm} busy={busy} onCancel={() => setDeleteConfirm(null)} onConfirm={confirmDelete} /> : null}
-      {logGroup ? <MaintenanceLogModal canManageChecklist={permissions.checklist_manage !== false} group={logGroup} mode={logMode} options={options} busy={busy} error={actionError} onCancel={() => { setLogGroup(null); setLogMode("create"); setActionError(""); }} onSubmit={saveLog} onChecklistSaved={rememberChecklistItem} onChecklistUpdated={rememberChecklistItem} onChecklistDeleted={forgetChecklistItem} /> : null}
-      {downloadState ? <MaintenanceDownloadModal canManageChecklist={permissions.checklist_manage !== false} state={downloadState} options={options} busy={busy} onClose={() => setDownloadState(null)} onDownload={exportOrder} onChecklistSaved={rememberChecklistItem} onChecklistUpdated={rememberChecklistItem} onChecklistDeleted={forgetChecklistItem} /> : null}
-      {doneGroup ? <MarkDoneModal group={doneGroup} busy={busy} error={actionError} onCancel={() => { setDoneGroup(null); setActionError(""); }} onSubmit={markDone} /> : null}
+      {logGroup && groupPermissions(logGroup)[logMode === "edit" ? "edit" : "log"] !== false ? <MaintenanceLogModal canManageChecklist={permissions.checklist_manage !== false} group={logGroup} mode={logMode} options={options} busy={busy} error={actionError} onCancel={() => { setLogGroup(null); setLogMode("create"); setActionError(""); }} onSubmit={saveLog} onChecklistSaved={rememberChecklistItem} onChecklistUpdated={rememberChecklistItem} onChecklistDeleted={forgetChecklistItem} /> : null}
+      {downloadState && groupPermissions(downloadState?.group || downloadState).export !== false ? <MaintenanceDownloadModal canManageChecklist={permissions.checklist_manage !== false} state={downloadState} options={options} busy={busy} onClose={() => setDownloadState(null)} onDownload={exportOrder} onChecklistSaved={rememberChecklistItem} onChecklistUpdated={rememberChecklistItem} onChecklistDeleted={forgetChecklistItem} /> : null}
+      {doneGroup && groupPermissions(doneGroup).mark_arrived !== false ? <MarkDoneModal group={doneGroup} busy={busy} error={actionError} onCancel={() => { setDoneGroup(null); setActionError(""); }} onSubmit={markDone} /> : null}
       <CreatorProfilePopover state={creatorState} onClose={() => setCreatorState(null)} />
       <OrdersPerformancePanel />
     </section>

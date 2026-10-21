@@ -45,7 +45,10 @@ async function verifyScopedOrderAccess(scope, account, orderIds) {
     await loadOrdersReviewDetails({ account, orderIds });
     return;
   }
-  if (scope === "maintenance") await loadMaintenanceOrderDetails({ orderIds });
+  if (scope === "maintenance") {
+    await assertOrderIdsInScope(account, "orders.maintenance.export", orderIds);
+    await loadMaintenanceOrderDetails({ orderIds });
+  }
 }
 
 export async function POST(request) {

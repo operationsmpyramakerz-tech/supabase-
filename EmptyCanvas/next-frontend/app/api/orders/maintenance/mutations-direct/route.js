@@ -2,6 +2,7 @@ import { NextResponse, after } from "next/server";
 import { dispatchQueuedNotifications } from "../../../../../lib/notification-event-worker";
 import { getDirectAccountGate } from "../../../../../lib/products-auth";
 import { featureGate } from "../../../../../lib/feature-permissions-server";
+import { assertOrderIdsInScope } from "../../../../../lib/order-data-scope";
 import {
   logMaintenanceDirect,
   markMaintenanceArrivedDirect,
@@ -58,6 +59,7 @@ export async function POST(request) {
   }
 
   try {
+    await assertOrderIdsInScope(gate.account, permissionByAction[action], body?.orderIds);
     let result = null;
     if (["archive", "delete", "edit-init"].includes(action)) {
       result = await performMaintenanceOrdersProtectedAction({

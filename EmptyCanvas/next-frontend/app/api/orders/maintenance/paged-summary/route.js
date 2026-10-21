@@ -26,6 +26,7 @@ async function GETImpl(request) {
 
   try {
     const payload = await loadMaintenanceOrdersPage({
+      account: gate.account,
       tab: url.searchParams.get("tab") || "all",
       query: url.searchParams.get("q") || url.searchParams.get("search") || "",
       cursor: url.searchParams.get("cursor"),

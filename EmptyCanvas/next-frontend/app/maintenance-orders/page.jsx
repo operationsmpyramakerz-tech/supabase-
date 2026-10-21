@@ -5,6 +5,7 @@ import { getLegacyAccountGate } from "../../lib/products-auth";
 import { featureGate } from "../../lib/feature-permissions-server";
 import { featureAllowed } from "../../lib/feature-permissions-registry";
 import { loadMaintenanceOrdersInitialPage } from "../../lib/maintenance-orders-data";
+import { orderUiScopePolicy } from "../../lib/order-data-scope";
 
 export const dynamic = "force-dynamic";
 
@@ -25,16 +26,7 @@ function UnavailableState({ message, forbidden = false }) {
 }
 
 export default async function MaintenanceOrdersPage() {
-  // Auth and the first maintenance summary page are independent reads. Start
-  // them together so navigation pays the slower of the two waits instead of
-  // adding the Upstash/account-gate latency on top of the Supabase order read.
-  const [gate, directResult] = await Promise.all([
-    getLegacyAccountGate(["Maintenance Orders"]).then(gate => featureGate(gate, "orders.maintenance.view")),
-    loadMaintenanceOrdersInitialPage()
-      .then((payload) => ({ payload, error: null }))
-      .catch((error) => ({ payload: null, error })),
-  ]);
-
+  const gate = featureGate(await getLegacyAccountGate(["Maintenance Orders"]), "orders.maintenance.view");
   if (gate.status === 401) redirect("/login?next=/next/maintenance-orders");
   if (gate.status === 403) {
     return <UnavailableState forbidden message="Your account does not have access to Maintenance Orders." />;
@@ -43,6 +35,16 @@ export default async function MaintenanceOrdersPage() {
     return <UnavailableState message={gate.error || "The account service is temporarily unavailable."} />;
   }
 
+  const directResult = await loadMaintenanceOrdersInitialPage({ account: gate.account })
+    .then((payload) => ({ payload, error: null }))
+    .catch((error) => ({ payload: null, error }));
+  const scopePolicy = await orderUiScopePolicy(gate.account, {
+    details: "orders.maintenance.details", log: "orders.maintenance.log",
+    mark_arrived: "orders.maintenance.mark_arrived", edit: "orders.maintenance.edit",
+    archive: "orders.maintenance.archive", delete: "orders.maintenance.delete",
+    export: "orders.maintenance.export",
+  }).catch(error => ({ error: error?.message || "Unable to verify maintenance permissions." }));
+  if (scopePolicy?.error) return <UnavailableState message={scopePolicy.error} />;
   if (!directResult?.payload) {
     return <UnavailableState message={directResult?.error?.message || "Maintenance Orders direct Supabase data is unavailable."} />;
   }
@@ -63,6 +65,7 @@ export default async function MaintenanceOrdersPage() {
     >
       <MaintenanceOrdersClient
         permissions={Object.fromEntries(["view", "details", "log", "mark_arrived", "edit", "archive", "delete", "checklist_manage", "export"].map(action => [action, featureAllowed(gate.account, `orders.maintenance.${action}`)]))}
+        scopePolicy={scopePolicy}
         initialOrders={Array.isArray(orders) ? orders : []}
         initialOptions={{}}
         initialPageInfo={pageInfo}
