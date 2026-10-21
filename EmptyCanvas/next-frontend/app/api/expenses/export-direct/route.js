@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getDirectAccountGate } from "../../../../lib/products-auth";
 import { featureGate } from "../../../../lib/feature-permissions-server";
 import { renderExpenseExport } from "../../../../lib/expense-export-service";
+import { resolveExpenseUserAccess, scopeExpenseDetail } from "../../../../lib/expenses-users-scope";
 import { expensesForAccount, expensesForMemberId } from "../../../../lib/expenses-data";
 
 export const runtime = "nodejs";
@@ -58,7 +59,10 @@ export async function POST(request) {
     const memberId = text(body?.userId);
     if (isUsersExport && !memberId) return jsonError("A user ID is required to export team expenses.", 400);
     const authorized = isUsersExport
-      ? await expensesForMemberId(memberId)
+      ? await (async () => {
+          const lookupId = await resolveExpenseUserAccess(gate.account, "expenses.users.export", memberId);
+          return await scopeExpenseDetail(gate.account, "expenses.users.export", memberId, await expensesForMemberId(lookupId));
+        })()
       : await expensesForAccount(gate.account || {});
     const safeRows = Array.isArray(authorized?.items) ? authorized.items : [];
     const rowsById = new Map(safeRows.map(row => [text(row.id), row]));

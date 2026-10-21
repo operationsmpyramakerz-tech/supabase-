@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { assertExpenseRecordAccess } from "../../../../lib/expenses-users-scope";
 import { expenseScreenshotForId } from "../../../../lib/expenses-data";
 import { expensesForAccount } from "../../../../lib/expenses-data";
 import { getDirectAccountGate } from "../../../../lib/products-auth";
@@ -28,6 +29,7 @@ export async function GET(request) {
   }
 
   try {
+    if (teamGate.ok) await assertExpenseRecordAccess(teamGate.account, "expenses.users.view", expenseId);
     const screenshot = await expenseScreenshotForId(expenseId, index);
     const response = NextResponse.redirect(screenshot.url, 307);
     response.headers.set("Cache-Control", "no-store");

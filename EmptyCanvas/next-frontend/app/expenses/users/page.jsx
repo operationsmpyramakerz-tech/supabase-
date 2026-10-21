@@ -3,6 +3,7 @@ import AppShell from "../../../components/AppShell";
 import ExpensesUsersClient from "../../../components/expenses/ExpensesUsersClient";
 import { getDirectAccountGate } from "../../../lib/products-auth";
 import { featureGate } from "../../../lib/feature-permissions-server";
+import { scopeExpenseUsersSummary } from "../../../lib/expenses-users-scope";
 import { expenseUsersSummary } from "../../../lib/expenses-data";
 import { ownCarRatePerKm } from "../../../lib/own-car-expense.mjs";
 
@@ -41,7 +42,7 @@ export default async function ExpensesUsersPage() {
   try {
     usersPayload = {
       success: true,
-      users: await expenseUsersSummary(),
+      users: await scopeExpenseUsersSummary(gate.account, await expenseUsersSummary()),
       source: "supabase-next",
     };
   } catch (directError) {

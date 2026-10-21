@@ -3,6 +3,7 @@ import { getLegacyAccountGate } from "../../../../lib/products-auth";
 import { featureAllowed } from "../../../../lib/feature-permissions-registry";
 import { homeFinanceAllowed, canHomeAccessOtherExpenses } from "../../../../lib/home-analysis-permissions";
 import { resolveHomeSelection } from "../../../../lib/home-team-scopes";
+import { resolveExpenseUserAccess, scopeExpenseDetail } from "../../../../lib/expenses-users-scope";
 import { expensesForMemberId } from "../../../../lib/expenses-data";
 
 export const dynamic = "force-dynamic";
@@ -41,8 +42,14 @@ export async function GET(request) {
   }
 
   try {
-    const payload = await expensesForMemberId(userId);
-    return noStore({ ...payload, source: "supabase-next" });
+    const crossMember = userId !== String(gate.memberId || "");
+    const lookup = crossMember
+      ? await resolveExpenseUserAccess(gate.account, "expenses.users.view", userId)
+      : userId;
+    const payload = await expensesForMemberId(lookup);
+    return noStore({ ...(crossMember
+      ? await scopeExpenseDetail(gate.account, "expenses.users.view", userId, payload)
+      : payload), source: "supabase-next" });
   } catch (error) {
     return noStore(
       { items: [], error: error?.message || "Failed to load user expenses." },

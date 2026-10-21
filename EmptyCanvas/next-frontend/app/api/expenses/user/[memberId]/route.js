@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDirectAccountGate } from "../../../../../lib/products-auth";
 import { featureGate } from "../../../../../lib/feature-permissions-server";
+import { resolveExpenseUserAccess, scopeExpenseDetail } from "../../../../../lib/expenses-users-scope";
 import { expensesForMemberId } from "../../../../../lib/expenses-data";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +18,9 @@ export async function GET(_request, { params }) {
 
   try {
     const { memberId } = await params;
-    return NextResponse.json(await expensesForMemberId(memberId), {
+    const lookupId = await resolveExpenseUserAccess(gate.account, "expenses.users.view", memberId);
+    const payload = await expensesForMemberId(lookupId);
+    return NextResponse.json(await scopeExpenseDetail(gate.account, "expenses.users.view", memberId, payload), {
       headers: { "Cache-Control": "no-store" },
     });
   } catch (error) {

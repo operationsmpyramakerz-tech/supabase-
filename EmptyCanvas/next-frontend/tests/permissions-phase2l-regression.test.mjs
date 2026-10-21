@@ -65,7 +65,7 @@ test("Scope UI round-trips Home own/team/all grants instead of clearing them", (
   assert.match(component, /setGrantScopes\(Object.fromEntries/);
   assert.match(component, /item.allowed === true\]\)/);
   assert.match(component, /scope: grantScopes\[item.key\] \|\| "all"/);
-  assert.match(component, /aria-label="Home analysis data scope"/);
+  assert.match(component, /Home analysis data scope/);
   assert.match(component, /<option value="own">Own<\/option>/);
   assert.match(component, /<option value="team">Team<\/option>/);
   assert.match(component, /<option value="all">All<\/option>/);

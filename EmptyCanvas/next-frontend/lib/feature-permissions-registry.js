@@ -955,6 +955,9 @@ export function featureAllowed(account, key, { legacyAllowed = true, scopes = ["
   // The other modules remain on their previous authorization model until
   // their UI + backend entry points have been audited and switched together.
   const state = account?.featureAccess;
+  // Expenses by Users is now a scoped module. These four actions accept
+  // Own/Team/All, but the API still enforces the selected record scope.
+  if (key.startsWith("expenses.users.")) scopes = ["own", "team", "all"];
   if (state?.mode !== "enforced") return !!legacyAllowed;
   const pilot = key.startsWith("products.") || key.startsWith("orders.operations.");
   if (key === MY_ORDERS_ENFORCEMENT_MARKER) return state.grants?.[key]?.allowed === true;

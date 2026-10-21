@@ -1,6 +1,7 @@
 import { NextResponse, after } from "next/server";
 import { dispatchQueuedNotifications } from "../../../../lib/notification-event-worker";
 import { getDirectAccountGate } from "../../../../lib/products-auth";
+import { assertExpenseRecordAccess } from "../../../../lib/expenses-users-scope";
 import { featureGate } from "../../../../lib/feature-permissions-server";
 import { directPageMutationAccess, verifyPageAdminPasswordDirect } from "../../../../lib/order-action-auth";
 import {
@@ -77,6 +78,9 @@ export async function POST(request) {
     } else if (action === "settle") {
       result = await settleExpenseAccount(gate.account || {}, body?.payload || body);
     } else {
+      // Password checks supplement scope checks; they do not authorize
+      // editing/deleting another employee's ledger.
+      await assertExpenseRecordAccess(gate.account, actionPermissions[action], body?.expenseId);
       const adminPassword = text(body?.adminPassword);
       if (!adminPassword) {
         return noStore({ success: false, error: "Admin password is required." }, { status: 400 });
