@@ -4,6 +4,7 @@ import ExpensesUsersClient from "../../../components/expenses/ExpensesUsersClien
 import { getDirectAccountGate } from "../../../lib/products-auth";
 import { featureGate } from "../../../lib/feature-permissions-server";
 import { expenseUsersSummary } from "../../../lib/expenses-data";
+import { ownCarRatePerKm } from "../../../lib/own-car-expense.mjs";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -59,6 +60,7 @@ export default async function ExpensesUsersPage() {
       <ExpensesUsersClient
         account={gate.account}
         initialUsersPayload={usersPayload || { success: true, users: [] }}
+        ownCarRate={ownCarRatePerKm()}
         bootstrapWarnings={[]}
       />
     </AppShell>

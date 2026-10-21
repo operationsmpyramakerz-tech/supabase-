@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { DeleteConfirmDialog, DeleteVerificationDialog } from "../shared/SystemDeleteDialogs";
+import { DEFAULT_OWN_CAR_RATE_EGP_PER_KM, ownCarCostForKilometers } from "../../lib/own-car-expense.mjs";
 
 const SETTLEMENT_KEY = "settledmyaccount";
 
@@ -123,9 +124,7 @@ function userRoute(item) {
 function userAmount(item) {
   const cashIn = number(item?.cashIn);
   const cashOut = number(item?.cashOut);
-  const kilometer = number(item?.kilometer);
   if (cashIn > 0) return { text: `+£${formatExpenseNumber(cashIn)}`, tone: "is-positive" };
-  if (isOwnCar(item) && kilometer > 0 && !cashOut) return { text: `${formatExpenseNumber(kilometer)} km`, tone: "is-neutral" };
   return { text: `-£${formatExpenseNumber(cashOut)}`, tone: cashOut > 0 ? "is-negative" : "is-neutral" };
 }
 
@@ -224,9 +223,6 @@ function groupUserExpenses(items, sortType = "newest") {
 
 function groupTotal(group) {
   const cashNet = number(group?.totalCashIn) - number(group?.totalCashOut);
-  const kilometer = number(group?.totalKilometer);
-  const hasCash = Math.abs(number(group?.totalCashIn)) > 1e-9 || Math.abs(number(group?.totalCashOut)) > 1e-9;
-  if (!hasCash && kilometer > 0) return { text: `${formatExpenseNumber(kilometer)} km`, tone: "is-neutral" };
   if (cashNet > 0) return { text: `+£${formatExpenseNumber(cashNet)}`, tone: "is-positive" };
   if (cashNet < 0) return { text: `-£${formatExpenseNumber(Math.abs(cashNet))}`, tone: "is-negative" };
   return { text: "£0", tone: "is-neutral" };
@@ -369,7 +365,7 @@ function AdminPasswordModal({ mode, count = 1, onClose, onContinue }) {
   return <ExpenseActionModal title="Edit expense" subtitle="Enter the Admin password to edit this expense." onClose={onClose} actions={<><button type="button" className="expense-user-action-btn expense-user-action-btn--muted" onClick={onClose}>Cancel</button><button type="button" className="expense-user-action-btn expense-user-action-btn--primary" onClick={() => onContinue(password.trim())}>Continue</button></>}><div className="expense-user-action-field"><label>Admin password</label><input type="password" autoFocus autoComplete="current-password" placeholder="Enter Admin password" value={password} onChange={(event) => setPassword(event.target.value)} /></div></ExpenseActionModal>;
 }
 
-function EditExpenseModal({ item, adminPassword, onClose, onSaved, notify }) {
+function EditExpenseModal({ item, adminPassword, ownCarRate = DEFAULT_OWN_CAR_RATE_EGP_PER_KM, onClose, onSaved, notify }) {
   const [form, setForm] = useState({
     date: toLocalDateKey(item?.date || item?.createdTime || ""),
     fundsType: text(item?.fundsType), cashIn: number(item?.cashIn), cashOut: number(item?.cashOut),
@@ -379,8 +375,11 @@ function EditExpenseModal({ item, adminPassword, onClose, onSaved, notify }) {
   });
   const [files, setFiles] = useState([]);
   const [busy, setBusy] = useState(false);
+  const ownCar = isOwnCar(form);
+  const ownCarCost = ownCarCostForKilometers(form.kilometer, ownCarRate);
   const update = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.value }));
   const save = async () => {
+    if (ownCar && ownCarCost <= 0) return notify("Edit failed", "Enter a valid distance for Own car.", "error");
     setBusy(true);
     try {
       const screenshots = [];
@@ -404,7 +403,7 @@ function EditExpenseModal({ item, adminPassword, onClose, onSaved, notify }) {
     finally { setBusy(false); }
   };
 
-  return <ExpenseActionModal title="Edit Expense" subtitle="Update this expense, then save the changes." onClose={onClose} actions={<><button type="button" className="expense-user-action-btn expense-user-action-btn--muted" onClick={onClose} disabled={busy}>Cancel</button><button type="button" className="expense-user-action-btn expense-user-action-btn--primary" onClick={save} disabled={busy}>{busy ? "Saving..." : "Save changes"}</button></>}><div className="expense-user-action-grid"><div className="expense-user-action-field"><label>Date</label><input type="date" value={form.date} onChange={update("date")} /></div><div className="expense-user-action-field"><label>Funds Type</label><input value={form.fundsType} onChange={update("fundsType")} /></div><div className="expense-user-action-field"><label>Cash In</label><input type="number" step="0.01" value={form.cashIn} onChange={update("cashIn")} /></div><div className="expense-user-action-field"><label>Cash Out</label><input type="number" step="0.01" value={form.cashOut} onChange={update("cashOut")} /></div><div className="expense-user-action-field"><label>From</label><input value={form.from} onChange={update("from")} /></div><div className="expense-user-action-field"><label>To</label><input value={form.to} onChange={update("to")} /></div><div className="expense-user-action-field"><label>Kilometer</label><input type="number" step="0.01" value={form.kilometer} onChange={update("kilometer")} /></div><div className="expense-user-action-field"><label>Cash In From</label><input value={form.cashInFrom} onChange={update("cashInFrom")} /></div><div className="expense-user-action-field is-wide"><label>Reason</label><textarea value={form.reason} onChange={update("reason")} /></div><div className="expense-user-action-field is-wide"><label>Receipt URLs</label><textarea placeholder="One URL per line" value={form.screenshotUrls} onChange={update("screenshotUrls")} /></div><div className="expense-user-action-field is-wide"><label>Add receipt image</label><input type="file" accept="image/*" multiple onChange={(event) => setFiles(Array.from(event.target.files || []))} /><div className="expense-user-action-note">Images are compressed in the browser before uploading.</div></div></div></ExpenseActionModal>;
+  return <ExpenseActionModal title="Edit Expense" subtitle="Update this expense, then save the changes." onClose={onClose} actions={<><button type="button" className="expense-user-action-btn expense-user-action-btn--muted" onClick={onClose} disabled={busy}>Cancel</button><button type="button" className="expense-user-action-btn expense-user-action-btn--primary" onClick={save} disabled={busy}>{busy ? "Saving..." : "Save changes"}</button></>}><div className="expense-user-action-grid"><div className="expense-user-action-field"><label>Date</label><input type="date" value={form.date} onChange={update("date")} /></div><div className="expense-user-action-field"><label>Funds Type</label><input value={form.fundsType} onChange={update("fundsType")} /></div><div className="expense-user-action-field"><label>Cash In</label><input type="number" step="0.01" value={form.cashIn} onChange={update("cashIn")} /></div><div className="expense-user-action-field"><label>{ownCar ? `Cash Out (auto: £${ownCarRate}/km)` : "Cash Out"}</label><input type="number" step="0.01" value={ownCar ? ownCarCost : form.cashOut} onChange={update("cashOut")} disabled={ownCar} /></div><div className="expense-user-action-field"><label>From</label><input value={form.from} onChange={update("from")} /></div><div className="expense-user-action-field"><label>To</label><input value={form.to} onChange={update("to")} /></div><div className="expense-user-action-field"><label>Kilometer</label><input type="number" step="0.01" value={form.kilometer} onChange={update("kilometer")} /></div><div className="expense-user-action-field"><label>Cash In From</label><input value={form.cashInFrom} onChange={update("cashInFrom")} /></div><div className="expense-user-action-field is-wide"><label>Reason</label><textarea value={form.reason} onChange={update("reason")} /></div><div className="expense-user-action-field is-wide"><label>Receipt URLs</label><textarea placeholder="One URL per line" value={form.screenshotUrls} onChange={update("screenshotUrls")} /></div><div className="expense-user-action-field is-wide"><label>Add receipt image</label><input type="file" accept="image/*" multiple onChange={(event) => setFiles(Array.from(event.target.files || []))} /><div className="expense-user-action-note">Images are compressed in the browser before uploading.</div></div></div></ExpenseActionModal>;
 }
 
 function DeleteConfirmationModal({ count, onClose, onConfirm, busy }) {
@@ -449,7 +448,7 @@ function UserExpenseTicket({ group, onReceipt, onEdit, onDelete, menuKey, setMen
   return <article className="expense-ticket"><div className="expense-ticket__top"><div className={`expense-ticket__header-row${hasOrders ? " expense-ticket__header-row--with-order" : ""}`}><div className="expense-ticket__meta"><span className="expense-ticket__date">{formatExpenseGroupDate(group?.date)}</span></div>{(ids.length || hasOrders || !hideReason) ? <div className="expense-ticket__header-side">{(ids.length && (onEdit || onDelete)) ? <div className={`expense-ticket__actions${menuKey === group.key ? " is-open" : ""}`}><button type="button" className="expense-ticket__more" onClick={() => setMenuKey(menuKey === group.key ? "" : group.key)} aria-label="Expense actions">⋯</button><div className="expense-ticket__menu">{onEdit ? <button type="button" className="expense-ticket__menu-item" onClick={() => { setMenuKey(""); onEdit(primary); }}><UserClassicIcon name="edit" size={15}/><span>Edit</span></button> : null}{onDelete ? <button type="button" className="expense-ticket__menu-item expense-ticket__menu-item--danger" onClick={() => { setMenuKey(""); onDelete(ids); }}><UserClassicIcon name="trash" size={15}/><span>Delete</span></button> : null}</div></div> : null}{hasOrders ? <UserExpenseOrderActions orders={group.orders}/> : !hideReason ? <div className="expense-ticket__reason">{reasonText}</div> : null}</div> : null}</div>{hasOrders && !hideReason ? <div className="expense-ticket__reason expense-ticket__reason--block">{reasonText}</div> : null}<div className="expense-ticket__header-divider" aria-hidden="true" /></div><div className="expense-ticket__legs">{rows.map((item, index) => { const route = userRoute(item); const amount = userAmount(item); const typeLabel = number(item?.cashIn) > 0 ? "Cash In" : text(item?.fundsType) || "Cash Out"; return <div className="expense-ticket__route" key={text(item?.id) || index}><div className="expense-ticket__route-frame"><div className="expense-ticket__route-shot"><UserExpenseShot item={item} onReceipt={onReceipt}/></div><div className="expense-ticket__route-body"><div className="expense-ticket__route-top"><div className="expense-ticket__route-title" dir="auto" title={typeLabel}>{typeLabel}</div><div className={`expense-ticket__route-amount ${amount.tone}`} title={amount.text}>{amount.text}</div></div><div className="expense-ticket__route-sub"><span className="expense-ticket__route-endpoint expense-ticket__route-endpoint--from" dir="auto" title={route.from}>{route.from}</span><span className="expense-ticket__route-arrow" aria-hidden="true"><UserClassicIcon name="arrow" size={16}/></span><span className="expense-ticket__route-endpoint expense-ticket__route-endpoint--to" dir="auto" title={route.to}>{route.to}</span></div></div></div></div>; })}</div><div className="expense-ticket__separator" aria-hidden="true" /><div className="expense-ticket__footer"><span className="expense-ticket__footer-label">Total</span><span className={`expense-ticket__footer-value ${total.tone}`}>{total.text}</span></div></article>;
 }
 
-export function UserExpensesModal({ user, permissions = {}, onClose, onUsersRefresh, notify }) {
+export function UserExpensesModal({ user, ownCarRate = DEFAULT_OWN_CAR_RATE_EGP_PER_KM, permissions = {}, onClose, onUsersRefresh, notify }) {
   const [payload, setPayload] = useState(null);
   const [loading, setLoading] = useState(true);
   const [sort, setSort] = useState("newest");
@@ -557,7 +556,7 @@ export function UserExpensesModal({ user, permissions = {}, onClose, onUsersRefr
     </div>
     {receiptItem ? <ReceiptViewer item={receiptItem} onClose={() => setReceiptItem(null)} /> : null}
     {action?.type === "password" ? <AdminPasswordModal mode={action.mode} count={action.ids?.length || 1} onClose={() => setAction(null)} onContinue={continueWithPassword} /> : null}
-    {action?.type === "edit" ? <EditExpenseModal item={action.item} adminPassword={action.password} onClose={() => setAction(null)} onSaved={refreshAfterMutation} notify={notify} /> : null}
+    {action?.type === "edit" ? <EditExpenseModal item={action.item} ownCarRate={ownCarRate} adminPassword={action.password} onClose={() => setAction(null)} onSaved={refreshAfterMutation} notify={notify} /> : null}
     {action?.type === "delete-confirm" ? <DeleteConfirmationModal count={action.ids?.length || 1} busy={deleteBusy} onClose={() => setAction(null)} onConfirm={deleteGroup} /> : null}
   </>;
 }

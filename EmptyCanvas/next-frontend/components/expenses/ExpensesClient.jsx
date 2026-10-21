@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { featureAllowed } from "../../lib/feature-permissions-registry";
+import { DEFAULT_OWN_CAR_RATE_EGP_PER_KM } from "../../lib/own-car-expense.mjs";
 
 const ExpensesDialogs = dynamic(() => import("./ExpensesDialogs"), { ssr: false });
 
@@ -179,7 +180,6 @@ function TransactionCard({ item, onScreenshots }) {
   const route = routeEndpoints(item);
   const shots = screenshotsFor(item);
   const orders = Array.isArray(item?.orders) ? item.orders : [];
-  const ownCar = typeKey(item?.fundsType) === "owncar";
   return (
     <article className={`expense-transaction ${value > 0 ? "is-in" : value < 0 ? "is-out" : "is-neutral"}`}>
       <div className="expense-transaction__icon">{value > 0 ? "↙" : value < 0 ? "↗" : "✓"}</div>
@@ -193,7 +193,7 @@ function TransactionCard({ item, onScreenshots }) {
           return <span className="expense-order-link-group" key={`${order?.key || order?.label}-${index}`}>{href ? <a href={href} target="_blank" rel="noreferrer">{label}</a> : <span>{label}</span>}{receiptHref ? <a className="receipt-link" href={receiptHref} target="_blank" rel="noreferrer">Receipts</a> : null}</span>;
         })}</div> : null}
       </div>
-      <div className="expense-transaction__amount"><strong>{ownCar && !value ? `${number(item?.kilometer)} km` : money(value, { signed: true })}</strong>{shots.length && onScreenshots ? <button type="button" onClick={() => onScreenshots(item)}>Receipt {shots.length > 1 ? `(${shots.length})` : ""}</button> : <span>No receipt</span>}</div>
+      <div className="expense-transaction__amount"><strong>{money(value, { signed: true })}</strong>{shots.length && onScreenshots ? <button type="button" onClick={() => onScreenshots(item)}>Receipt {shots.length > 1 ? `(${shots.length})` : ""}</button> : <span>No receipt</span>}</div>
     </article>
   );
 }
@@ -273,13 +273,11 @@ function expenseAmount(item) {
   const cashIn = number(item?.cashIn);
   const cashOut = number(item?.cashOut);
   if (cashIn > 0) return { text: `+${money(cashIn)}`, tone: "is-positive" };
-  if (typeKey(item?.fundsType) === "owncar" && number(item?.kilometer) > 0 && !cashOut) return { text: `${number(item.kilometer)} km`, tone: "is-neutral" };
   if (cashOut > 0) return { text: `-${money(cashOut)}`, tone: "is-negative" };
   return { text: money(0), tone: "is-neutral" };
 }
 
 function groupAmount(group) {
-  if (!group.cashIn && !group.cashOut && group.kilometers > 0) return { text: `${group.kilometers} km`, tone: "is-neutral" };
   if (group.total > 0) return { text: `+${money(group.total)}`, tone: "is-positive" };
   if (group.total < 0) return { text: `-${money(Math.abs(group.total))}`, tone: "is-negative" };
   return { text: money(0), tone: "is-neutral" };
@@ -409,6 +407,7 @@ export default function ExpensesClient({ account, initialPayload = {}, initialTy
   const can = (action) => featureAllowed(account, `expenses.${action}`);
   const [toast, setToast] = useState(null);
   const [expenseTypeOptions, setExpenseTypeOptions] = useState(() => Array.isArray(initialTypes) ? initialTypes : []);
+  const [ownCarRate, setOwnCarRate] = useState(() => number(initialPayload?.ownCarRate) || DEFAULT_OWN_CAR_RATE_EGP_PER_KM);
   const [cashInPeople, setCashInPeople] = useState(() => Array.isArray(cashInFromOptions) ? cashInFromOptions : []);
   const [expenseOrderOptions, setExpenseOrderOptions] = useState(() => Array.isArray(orderOptions) ? orderOptions : []);
   const supportLoadedRef = useRef({
@@ -464,6 +463,7 @@ export default function ExpensesClient({ account, initialPayload = {}, initialTy
     setItems(sortTransactions(body?.items));
     setLastSettledAt(body?.lastSettledAt || null);
     setLastSettledDate(body?.lastSettledDate || null);
+    if (number(body?.ownCarRate) > 0) setOwnCarRate(number(body.ownCarRate));
   };
 
   const ensureSupportOptions = async (kind) => {
@@ -474,6 +474,7 @@ export default function ExpensesClient({ account, initialPayload = {}, initialTy
       if (kind === "types") {
         const body = await requestJson("/next/api/expenses/types");
         setExpenseTypeOptions(Array.isArray(body?.options) ? body.options : []);
+        if (number(body?.ownCarRate) > 0) setOwnCarRate(number(body.ownCarRate));
       } else if (kind === "cashInPeople") {
         const body = await requestJson("/next/api/expenses/cash-in-from/options");
         setCashInPeople(Array.isArray(body?.options) ? body.options : []);
@@ -538,7 +539,7 @@ export default function ExpensesClient({ account, initialPayload = {}, initialTy
     return items.filter((item) => {
       if (filter === "recent" && now - transactionTime(item) > sevenDays) return false;
       if (filter === "cash-in" && number(item?.cashIn) <= 0) return false;
-      if (filter === "cash-out" && number(item?.cashOut) <= 0 && !(typeKey(item?.fundsType) === "owncar" && number(item?.kilometer) > 0)) return false;
+      if (filter === "cash-out" && number(item?.cashOut) <= 0) return false;
       const orderSearch = (Array.isArray(item?.orders) ? item.orders : []).map((order) => [order?.orderId, order?.orderType, order?.label].join(" ")).join(" ");
       if (query && !lower([displayReason(item), item?.fundsType, item?.from, item?.to, item?.receiptNumber, item?.ordersRaw, orderSearch].join(" ")).includes(query)) return false;
       return true;
@@ -589,6 +590,7 @@ export default function ExpensesClient({ account, initialPayload = {}, initialTy
           items={items}
           cashInPeople={cashInPeople}
           fundsTypes={fundsTypes}
+          ownCarRate={ownCarRate}
           orderOptions={expenseOrderOptions}
           screenshotTransaction={screenshotTransaction}
           onClose={() => setModal("")}

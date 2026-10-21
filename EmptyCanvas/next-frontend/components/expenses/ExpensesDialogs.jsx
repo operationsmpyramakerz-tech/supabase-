@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { DEFAULT_OWN_CAR_RATE_EGP_PER_KM, ownCarCostForKilometers } from "../../lib/own-car-expense.mjs";
 
 const CASH_IN_TYPES = ["Cash Payment", "Online Transfer"];
 const SCREENSHOT_REQUIRED_KEYS = new Set(["owncar", "swvl", "gobus", "bybus", "train", "indrive", "uber", "uper", "didi"]);
@@ -421,7 +422,7 @@ function CashInModal({ options, onClose, onSaved, notify }) {
   );
 }
 
-function CashOutModal({ fundsTypes, orderOptions, onClose, onSaved, notify }) {
+function CashOutModal({ fundsTypes, orderOptions, ownCarRate = DEFAULT_OWN_CAR_RATE_EGP_PER_KM, onClose, onSaved, notify }) {
   const [scopeId, setScopeId] = useState("");
   const [date, setDate] = useState("");
   const [manualReason, setManualReason] = useState("");
@@ -458,6 +459,9 @@ function CashOutModal({ fundsTypes, orderOptions, onClose, onSaved, notify }) {
   const addDraft = async () => {
     if (!date || !form.fundsType) return notify("Date and funds type are required.", "error");
     if (!isOwnCar && number(form.amount) <= 0) return notify("Cash out amount is required.", "error");
+    if (isOwnCar && (!text(form.kilometer) || number(form.kilometer) <= 0 || ownCarCostForKilometers(form.kilometer, ownCarRate) <= 0)) {
+      return notify("Enter a valid distance greater than zero.", "error");
+    }
     if (screenshotRequired && !files.length) return notify(isOwnCar ? "A Google Maps screenshot is required for Own car." : "Screenshot is required for this funds type.", "error");
     setBusy(true);
     try {
@@ -545,8 +549,12 @@ function CashOutModal({ fundsTypes, orderOptions, onClose, onSaved, notify }) {
         <input className="ex-input ex-input--compact" value={form.to} onChange={update("to")}/>
 
         {isOwnCar ? <>
-          <ClassicFieldLabel icon="navigation">Kilometer <span className="opt-tag">(Optional)</span></ClassicFieldLabel>
-          <input type="number" min="0" step="0.1" className="ex-input" value={form.kilometer} onChange={update("kilometer")}/>
+          <ClassicFieldLabel icon="navigation">Kilometers <span className="req-text">(Required)</span></ClassicFieldLabel>
+          <input type="number" min="0.01" step="any" className="ex-input" value={form.kilometer} onChange={update("kilometer")}/>
+          <p className="expense-own-car-preview" role="status">
+            <span>{money(ownCarRate)} / km</span>
+            <strong>Calculated cost: {money(ownCarCostForKilometers(form.kilometer, ownCarRate))}</strong>
+          </p>
         </> : <>
           <ClassicFieldLabel icon="minus-circle">Cash out <span className="req-text">(Required)</span></ClassicFieldLabel>
           <input type="number" min="0" step="0.01" className="ex-input" value={form.amount} onChange={update("amount")}/>
@@ -603,7 +611,7 @@ function CashOutModal({ fundsTypes, orderOptions, onClose, onSaved, notify }) {
         <div className="expense-drafts__header"><span className="expense-drafts__title">Added expenses</span><span className="expense-drafts__count">{drafts.length}</span></div>
         <div className="expense-drafts__list">{drafts.map((draft) => <div className="expense-draft-card" key={draft.id}>
           <div className="expense-draft-card__main"><div className="expense-draft-card__title">{draft.fundsType}</div><div className="expense-draft-card__meta">{[draft.reason, [draft.from, draft.to].filter(Boolean).join(draft.from && draft.to ? " → " : " ")].filter(Boolean).join(" • ") || "Ready to save"}</div></div>
-          <div className="expense-draft-card__value">{typeKey(draft.fundsType) === "owncar" ? `${number(draft.kilometer)} km` : money(draft.amount)}</div>
+          <div className="expense-draft-card__value">{typeKey(draft.fundsType) === "owncar" ? money(ownCarCostForKilometers(draft.kilometer, ownCarRate)) : money(draft.amount)}</div>
           <button type="button" className="expense-draft-card__remove" onClick={() => setDrafts((current) => current.filter((item) => item.id !== draft.id))} aria-label="Remove expense">×</button>
         </div>)}</div>
       </div> : null}
@@ -752,13 +760,13 @@ function ScreenshotModal({ transaction, onClose }) {
 
 
 export default function ExpensesDialogs({
-  modal = "", account, items = [], cashInPeople = [], fundsTypes = [], orderOptions = [],
+  modal = "", account, items = [], cashInPeople = [], fundsTypes = [], ownCarRate = DEFAULT_OWN_CAR_RATE_EGP_PER_KM, orderOptions = [],
   screenshotTransaction = null, onClose, onSaved, notify, onCloseScreenshot,
 }) {
   return (
     <>
       {modal === "cash-in" ? <CashInModal options={cashInPeople} onClose={onClose} onSaved={onSaved} notify={notify} /> : null}
-      {modal === "cash-out" ? <CashOutModal fundsTypes={fundsTypes} orderOptions={orderOptions} onClose={onClose} onSaved={onSaved} notify={notify} /> : null}
+      {modal === "cash-out" ? <CashOutModal fundsTypes={fundsTypes} orderOptions={orderOptions} ownCarRate={ownCarRate} onClose={onClose} onSaved={onSaved} notify={notify} /> : null}
       {modal === "settle" ? <SettleModal onClose={onClose} onSaved={onSaved} notify={notify} /> : null}
       {modal === "export" ? <ExportModal account={account} items={items} onClose={onClose} notify={notify} /> : null}
       {screenshotTransaction ? <ScreenshotModal transaction={screenshotTransaction} onClose={onCloseScreenshot} /> : null}

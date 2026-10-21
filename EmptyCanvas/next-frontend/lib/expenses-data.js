@@ -4,6 +4,7 @@ import { performance } from "node:perf_hooks";
 import { deleteById, deleteStorageObjects, getSupabaseConfig, insert, rpc, select, selectAll, selectById, storagePublicUrl, updateById, uploadStorageObject } from "./supabase-rest";
 import { listTeamMembersLite } from "./team-members-service";
 import { recordPerformanceSample } from "./performance-profiler";
+import { ownCarCostForKilometers, ownCarRatePerKm } from "./own-car-expense.mjs";
 
 function text(value) {
   if (value === null || typeof value === "undefined") return "";
@@ -528,6 +529,7 @@ export async function expensesForAccount(account = {}) {
       }),
       lastSettledAt: info.lastSettledAt,
       lastSettledDate: info.lastSettledDate,
+      ownCarRate: ownCarRatePerKm(),
       source: "supabase-next-compact",
     };
   } finally {
@@ -995,8 +997,15 @@ export async function createExpenseCashOut(account = {}, payload = {}) {
   if (screenshotRequired.has(fundsTypeKey) && !hasScreenshot) {
     throw expenseError(fundsTypeKey === "owncar" ? "A Google Maps screenshot is required for Own car" : "Screenshot is required for this funds type", 400);
   }
+  const isOwnCar = fundsTypeKey === "owncar";
   const amount = Number(payload.amount);
-  if (fundsTypeKey !== "owncar" && (!Number.isFinite(amount) || amount <= 0)) throw expenseError("Cash out amount is required.", 400);
+  if (!isOwnCar && (!Number.isFinite(amount) || amount <= 0)) throw expenseError("Cash out amount is required.", 400);
+  const kilometers = Number(payload.kilometer);
+  if (isOwnCar && (payload.kilometer === "" || payload.kilometer === null || payload.kilometer === undefined || !Number.isFinite(kilometers) || kilometers <= 0)) {
+    throw expenseError("Enter a valid distance greater than zero for Own car.", 400);
+  }
+  const cashOutAmount = isOwnCar ? ownCarCostForKilometers(kilometers, ownCarRatePerKm()) : amount;
+  if (isOwnCar && cashOutAmount <= 0) throw expenseError("Distance is too small to calculate an expense.", 400);
 
   const reason = text(payload.reason) || [
     text(payload.orderLabel),
@@ -1016,9 +1025,9 @@ export async function createExpenseCashOut(account = {}, payload = {}) {
     funds_type: fundsType,
     from_location: text(payload.from),
     to_location: text(payload.to),
-    cash_out: fundsTypeKey === "owncar" ? 0 : amount,
+    cash_out: cashOutAmount,
     cash_in: null,
-    kilometer: fundsTypeKey === "owncar" ? number(payload.kilometer, 0) : null,
+    kilometer: isOwnCar ? kilometers : null,
     screenshot,
     orders_names: text(payload.orderLabel || payload.orderDisplayId) || null,
     orders_raw: Array.isArray(payload.orderIds) ? payload.orderIds.map(text).filter(Boolean).join(",") : (text(payload.orderId) || null),
@@ -1112,6 +1121,10 @@ export async function updateExpenseForAdmin(expenseId, payload = {}) {
     unique.push({ name: text(shot?.name) || "Receipt", url });
   }
 
+  if (expenseFundsTypeKey(payload.fundsType) === "owncar" && (!Number.isFinite(Number(payload.kilometer)) || Number(payload.kilometer) <= 0 || !ownCarCostForKilometers(payload.kilometer, ownCarRatePerKm()))) {
+    throw expenseError("Enter a valid distance greater than zero for Own car.", 400);
+  }
+
   const patch = {
     reason: text(payload.reason) || null,
     expense_date: text(payload.date) || null,
@@ -1119,7 +1132,10 @@ export async function updateExpenseForAdmin(expenseId, payload = {}) {
     from_location: text(payload.from) || null,
     to_location: text(payload.to) || null,
     cash_in: number(payload.cashIn, 0),
-    cash_out: number(payload.cashOut, 0),
+    // Own car is always derived from the distance, including admin edits.
+    cash_out: expenseFundsTypeKey(payload.fundsType) === "owncar"
+      ? ownCarCostForKilometers(payload.kilometer, ownCarRatePerKm())
+      : number(payload.cashOut, 0),
     kilometer: number(payload.kilometer, 0),
     cash_in_from: text(payload.cashInFrom) || null,
     screenshot: expenseScreenshotField(unique),
