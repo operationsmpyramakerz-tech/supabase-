@@ -610,9 +610,9 @@ function groupRows(rows = [], includeLocalSearchFields = false, resolved = null)
   const groups = new Map();
   const blocked = new Set();
   for (const row of rows) {
-    const orderNumber = Number(row?._summaryCard ? row.orderIdNumber : row.order_number);
+    const rowOrderNumber = Number(row?._summaryCard ? row.orderIdNumber : row.order_number);
     if (resolved && !visibleOrderRow(row, resolved)) {
-      if (Number.isFinite(orderNumber)) blocked.add(orderNumber);
+      if (Number.isFinite(rowOrderNumber)) blocked.add(rowOrderNumber);
       continue;
     }
     const item = row?._summaryCard ? row : serializeOperationsCompactSummaryRow(row, { includeSearchText: includeLocalSearchFields });
