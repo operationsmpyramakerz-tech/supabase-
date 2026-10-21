@@ -517,7 +517,7 @@ function GlobalSelect({ value, options, open, onToggle, onChoose }) {
   );
 }
 
-function GlobalAnalysisControl({ users = [], usersReady = false, selectedUser = "all", selectedDuration = "all", canSelectUsers = true }) {
+function GlobalAnalysisControl({ users = [], usersReady = false, selectedUser = "all", selectedDuration = "all", canSelectUsers = true, allowAllUsers = true }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -562,9 +562,9 @@ function GlobalAnalysisControl({ users = [], usersReady = false, selectedUser = 
   };
 
   const userOptions = useMemo(() => [
-    { value: "all", label: usersLoading ? "Loading users…" : "All users" },
+    ...(allowAllUsers ? [{ value: "all", label: usersLoading ? "Loading users…" : "All users" }] : []),
     ...availableUsers.map((user) => ({ value: String(user.id), label: user.name || user.username || String(user.id) })),
-  ], [availableUsers, usersLoading]);
+  ], [availableUsers, usersLoading, allowAllUsers]);
   const durationOptions = [
     { value: "all", label: "All time" },
     { value: "week", label: "Last week" },
@@ -718,6 +718,7 @@ function StockCard({ tagSummaries = {}, tags = [] }) {
 
 export default function HomeOverviewClient({
   analysisUsers = [],
+  allowAllAnalysisUsers = true,
   analysisUsersReady = false,
   canSelectAnalysisUsers = true,
   selectedUser = "all",
@@ -755,7 +756,7 @@ export default function HomeOverviewClient({
           <h2>Workspace overview</h2>
           <p>Order counts, values and progress in one place.</p>
         </div>
-        <GlobalAnalysisControl users={analysisUsers} usersReady={analysisUsersReady} canSelectUsers={canSelectAnalysisUsers} selectedUser={selectedUser} selectedDuration={selectedDuration} />
+        <GlobalAnalysisControl users={analysisUsers} usersReady={analysisUsersReady} canSelectUsers={canSelectAnalysisUsers} allowAllUsers={allowAllAnalysisUsers} selectedUser={selectedUser} selectedDuration={selectedDuration} />
       </div>
 
       {available.length ? (

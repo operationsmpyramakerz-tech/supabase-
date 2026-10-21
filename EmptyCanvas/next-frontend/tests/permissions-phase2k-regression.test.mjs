@@ -30,15 +30,15 @@ test('Home View grant is prerequisite for all Home actions', () => {
 
 test('View-only Home always resolves to own member and denies direct user URL', () => {
   const account=grants({'home.view':true});
-  assert.deepEqual(policy.homeSelection(account,'all'), {allowed:true,userId:'mine',canSelectUsers:false});
-  assert.deepEqual(policy.homeSelection(account,'mine'), {allowed:true,userId:'mine',canSelectUsers:false});
+  assert.deepEqual(policy.homeSelection(account,'all'), {allowed:true,userId:'mine',canSelectUsers:false,analysisScope:'own'});
+  assert.deepEqual(policy.homeSelection(account,'mine'), {allowed:true,userId:'mine',canSelectUsers:false,analysisScope:'own'});
   assert.equal(policy.homeSelection(account,'other').status,403);
   assert.equal(policy.homeFinanceAllowed(account),false);
 });
 
 test('Team Analysis grant allows team filter without automatically granting finance', () => {
   const account=grants({'home.view':true,'home.analysis':true});
-  assert.deepEqual(policy.homeSelection(account,'other'),{allowed:true,userId:'other',canSelectUsers:true});
+  assert.deepEqual(policy.homeSelection(account,'other'),{allowed:true,userId:'other',canSelectUsers:true,analysisScope:'all'});
   assert.equal(policy.homeFinanceAllowed(account),false);
 });
 
@@ -55,14 +55,14 @@ test('Home requests apply fresh gate and reject forbidden user selectors before 
   const data=read('lib/home-overview-data.js');
   assert.ok(page.indexOf('const freshGate = await getDirectAccountGateFromSessionContext')<page.indexOf('await loadHomeOverviewDirect({ account, requestedUserId'));
   assert.match(bootstrap,/if \(!selection.allowed\) return failure\(selection.status \|\| 403/);
-  assert.match(data,/const selection = homeSelection\(account, requestedUserId\);/);
+  assert.match(data,/const selection = await resolveHomeSelection\(account, requestedUserId\);/);
   assert.match(data,/!differentMember \|\| canHomeAccessOtherExpenses\(account\)/);
 });
 
 test('Home API endpoints refuse cross-user data without server-side grants',()=>{
-  assert.match(read('app/api/home/analysis-users/route.js'),/homeTeamAnalysisAllowed\(gate.account\)/);
-  assert.match(read('app/api/home/analysis-user-expenses/route.js'),/!homeTeamAnalysisAllowed\(gate.account\) \|\| !canHomeAccessOtherExpenses\(gate.account\)/);
-  assert.match(read('app/api/home/stocktaking-user/route.js'),/userId !== String\(gate.memberId \|\| ""\) && !homeTeamAnalysisAllowed\(gate.account\)/);
+  assert.match(read('app/api/home/analysis-users/route.js'),/resolveHomeSelection\(gate.account\)/);
+  assert.match(read('app/api/home/analysis-user-expenses/route.js'),/!targetSelection.allowed \|\| \(userId !== String\(gate.memberId \|\| ""\) && !canHomeAccessOtherExpenses\(gate.account\)\)/);
+  assert.match(read('app/api/home/stocktaking-user/route.js'),/resolveHomeSelection\(gate.account, userId\)/);
   assert.doesNotMatch(read('components/home/HomeOverviewClient.jsx'), /sessionStorage\.getItem\("erp-home-analysis-users-v1"\)/);
   assert.match(read('components/AppShell.jsx'), /link.href === "\/next\/home"\) return featureAllowed\(account, "home.view"\)/);
 });

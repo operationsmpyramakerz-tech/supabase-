@@ -2,7 +2,7 @@ import "server-only";
 
 import { getDirectAccountGate } from "./products-auth";
 import { loadHomeOverviewDirect } from "./home-overview-data";
-import { homeSelection } from "./home-analysis-permissions";
+import { resolveHomeSelection } from "./home-team-scopes";
 import { notificationsForMember } from "./notifications-data";
 import { loadDirectKpisPageData } from "./kpis-data";
 import { loadDirectTaskManagementPageData } from "./task-management-data";
@@ -69,7 +69,7 @@ export async function fetchDirectPageBootstrap(pathname) {
       const gate = await getDirectAccountGate([]);
       if (!gate.ok) return failure(gate.status || 503, gate.error || "Authentication required.");
       const requestedUserId = text(url.searchParams.get("analysisUser")) || "all";
-      const selection = homeSelection(gate.account, requestedUserId);
+      const selection = await resolveHomeSelection(gate.account, requestedUserId);
       if (!selection.allowed) return failure(selection.status || 403, selection.reason || "Home access denied.");
       const duration = normalizeDuration(url.searchParams.get("analysisDuration"));
       const overview = await loadHomeOverviewDirect({ account: gate.account, requestedUserId, duration });

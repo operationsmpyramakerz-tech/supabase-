@@ -516,6 +516,7 @@ function FeatureAccessModal({ member, onClose, protect }) {
   const [setupReason, setSetupReason] = useState("");
   const [active, setActive] = useState(false);
   const [grants, setGrants] = useState({});
+  const [grantScopes, setGrantScopes] = useState({});
   const [unmanagedGrants, setUnmanagedGrants] = useState([]);
   const [enabledModules, setEnabledModules] = useState({ products: true, "orders.operations": true });
   const [busy, setBusy] = useState(false);
@@ -557,7 +558,8 @@ function FeatureAccessModal({ member, onClose, protect }) {
         setSetupReason(result.reason || "");
         setActive(result.enabled === true);
         const stored = result.grants || [];
-        setGrants(Object.fromEntries(stored.filter(item => ACTIVE_PILOT_FEATURE_KEYS.includes(item.key)).map(item => [item.key, item.allowed === true && item.scope === "all"])));
+        setGrants(Object.fromEntries(stored.filter(item => ACTIVE_PILOT_FEATURE_KEYS.includes(item.key)).map(item => [item.key, item.allowed === true])));
+        setGrantScopes(Object.fromEntries(stored.filter(item => ACTIVE_PILOT_FEATURE_KEYS.includes(item.key)).map(item => [item.key, item.scope || "all"])));
         setEnabledModules({
           products: true, "orders.operations": true,
           "orders.my": stored.some(item => item.key === MY_ORDERS_ENFORCEMENT_MARKER && item.allowed === true),
@@ -604,7 +606,7 @@ function FeatureAccessModal({ member, onClose, protect }) {
           grants: [
             ...unmanagedGrants,
             ...(enabledModules["orders.my"] ? [{ key: MY_ORDERS_ENFORCEMENT_MARKER, allowed: true, scope: "all" }] : []),
-            ...activeFeatures.filter(item => grants[item.key] === true).map(item => ({ key: item.key, allowed: true, scope: "all" })),
+            ...activeFeatures.filter(item => grants[item.key] === true).map(item => ({ key: item.key, allowed: true, scope: grantScopes[item.key] || "all" })),
             // Persist a denied view marker for opt-in modules. An absent marker
             // intentionally means 'not migrated' and preserves legacy access.
             ...modules.filter(module => module.optIn && module.key !== "orders.my" && enabledModules[module.key] && grants[`${module.key}.view`] !== true)
@@ -637,9 +639,9 @@ function FeatureAccessModal({ member, onClose, protect }) {
               </label> : null}
             </div>
             {module.optIn && !enabledModules[module.key] ? <p style={{ margin: "12px 14px" }}>Uses existing Page Access until you enable detailed permissions for this module.</p> : null}
-            {enabledModules[module.key] ? <div className="ua-page-access-group__rows">{shown.filter(item => item.module === module.key).map(item => <div className="ua-page-access-row ua-feature-access-row" key={item.key}><div className="ua-page-access-name"><strong>{item.label}</strong><small>{item.key}</small></div><div className="ua-page-access-enable"><label className="ua-switch" title={item.label}><input type="checkbox" checked={grants[item.key] === true} onChange={e => setGrants(current => ({ ...current, [item.key]: e.target.checked }))}/><span/></label></div></div>)}</div> : null}
+            {enabledModules[module.key] ? <div className="ua-page-access-group__rows">{shown.filter(item => item.module === module.key).map(item => <div className="ua-page-access-row ua-feature-access-row" key={item.key}><div className="ua-page-access-name"><strong>{item.label}</strong><small>{item.key}</small></div><div className="ua-page-access-enable">{item.key === "home.analysis" && grants[item.key] === true ? <select aria-label="Home analysis data scope" className="ua-feature-scope-select" value={grantScopes[item.key] || "all"} onChange={e => setGrantScopes(current => ({ ...current, [item.key]: e.target.value }))}><option value="own">Own</option><option value="team">Team</option><option value="all">All</option></select> : null}<label className="ua-switch" title={item.label}><input type="checkbox" checked={grants[item.key] === true} onChange={e => setGrants(current => ({ ...current, [item.key]: e.target.checked }))}/><span/></label></div></div>)}</div> : null}
           </section>)}
-          <small>Optional modules remain on legacy Page Access until enabled for this user. Enable a module, then grant only the features needed. A disabled View permission hides its page. Existing Page Access and any required admin password still apply. Scope is All during the pilot.</small>
+          <small>Optional modules remain on legacy Page Access until enabled for this user. Enable a module, then grant only the features needed. A disabled View permission hides its page. Existing Page Access and any required admin password still apply. Home Analysis supports Own / Team / All. Other permissions retain their saved scope; row-level enforcement is not yet enabled outside Home.</small>
         </> : <p>Legacy page permissions will apply to this account. No feature grants will be enforced.</p>}
       </> : null}
       {error ? <p className="ua-form-error">{error}</p> : null}

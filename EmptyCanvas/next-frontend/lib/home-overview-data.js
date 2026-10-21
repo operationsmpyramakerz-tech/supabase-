@@ -11,7 +11,8 @@ import { stocktakingForAccount } from "./stocktaking-data";
 import { expensesForAccount } from "./expenses-data";
 import { listTeamMembersLite } from "./team-members-service";
 import { featureAllowed } from "./feature-permissions-registry";
-import { homeSelection, homeFinanceAllowed, canHomeAccessOtherExpenses, accountMemberId } from "./home-analysis-permissions";
+import { homeFinanceAllowed, canHomeAccessOtherExpenses, accountMemberId } from "./home-analysis-permissions";
+import { resolveHomeSelection } from "./home-team-scopes";
 import { getReviewerVisibility as reviewerVisibility } from "./reviewer-visibility-service";
 import { measurePerformance, recordPerformanceSample } from "./performance-profiler";
 import {
@@ -932,7 +933,7 @@ async function loadHomeOverviewDirectImpl({
   duration = "all",
 } = {}) {
   if (!isSupabaseConfigured()) return null;
-  const selection = homeSelection(account, requestedUserId);
+  const selection = await resolveHomeSelection(account, requestedUserId);
   if (!selection.allowed) {
     const error = new Error(selection.reason || "Home access denied.");
     error.status = selection.status || 403;
@@ -1096,6 +1097,7 @@ async function loadHomeOverviewDirectImpl({
     showStock,
     showExpenses,
     canSelectAnalysisUsers: selection.canSelectUsers,
+    analysisScope: selection.analysisScope,
     source: overviewSource,
   };
 }

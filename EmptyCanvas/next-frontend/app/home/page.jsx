@@ -8,7 +8,7 @@ import { getLegacyAccountGate } from "../../lib/products-auth";
 import { getDirectAccountGateFromSessionContext } from "../../lib/direct-session-account";
 import { loadHomeOverviewDirect } from "../../lib/home-overview-data";
 import { canViewSla } from "../../lib/home-sla-settings";
-import { homeSelection } from "../../lib/home-analysis-permissions";
+import { resolveHomeSelection } from "../../lib/home-team-scopes";
 import { featureAllowed } from "../../lib/feature-permissions-registry";
 
 export const dynamic = "force-dynamic";
@@ -94,7 +94,7 @@ export default async function HomePage({ searchParams }) {
     } else {
       gate = freshGate;
       account = freshGate.account;
-      const selection = homeSelection(account, requestedUserId);
+      const selection = await resolveHomeSelection(account, requestedUserId);
       if (!selection.allowed) return <HomeUnavailable message={selection.reason} />;
       try {
         overview = await loadHomeOverviewDirect({ account, requestedUserId, duration });
@@ -146,6 +146,7 @@ export default async function HomePage({ searchParams }) {
         analysisUsers={selectedAnalysisUsers}
         analysisUsersReady={false}
         canSelectAnalysisUsers={overview.canSelectAnalysisUsers !== false}
+        allowAllAnalysisUsers={overview.analysisScope === "all"}
         selectedUser={overview.selectedUserId || requestedUserId}
         selectedDuration={overview.selectedDuration || duration}
         currentMatrix={overview.currentMatrix}

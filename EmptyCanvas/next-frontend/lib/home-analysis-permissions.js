@@ -12,8 +12,23 @@ export function homeViewAllowed(account = {}) {
   return featureAllowed(account, "home.view");
 }
 
+// Data-scope pilot: only Home's user selector uses row-level Own / Team / All.
+// A saved scope is not a blanket authorization for any other module.
+export function homeAnalysisScope(account = {}) {
+  if (!homeViewAllowed(account)) return "none";
+  const state = account?.featureAccess;
+  // The Home module must be opted in; otherwise preserve the existing legacy policy.
+  if (state?.mode !== "enforced" || !Object.hasOwn(state.grants || {}, "home.view")) {
+    return featureAllowed(account, "home.analysis") ? "all" : "own";
+  }
+  if (state.grants?.["home.view"]?.allowed !== true) return "none";
+  const grant = state.grants?.["home.analysis"];
+  if (grant?.allowed !== true) return "own";
+  return ["own", "team", "all"].includes(grant.scope) ? grant.scope : "own";
+}
+
 export function homeTeamAnalysisAllowed(account = {}) {
-  return featureAllowed(account, "home.analysis");
+  return ["team", "all"].includes(homeAnalysisScope(account));
 }
 
 export function homeFinanceAllowed(account = {}) {
@@ -24,15 +39,22 @@ export function accountMemberId(account = {}) {
   return clean(account.teamMemberId || account.userSupabaseId || account.id);
 }
 
-export function homeSelection(account = {}, requested = "all") {
+// Pure, fail-closed check. A team membership list may only come from the server;
+// callers that do not supply it can only authorize the member's own data.
+export function homeSelection(account = {}, requested = "all", { teamIds = [] } = {}) {
   if (!homeViewAllowed(account)) return { allowed: false, status: 403, reason: "Home access denied." };
-  const id = clean(requested) || "all";
-  if (homeTeamAnalysisAllowed(account)) return { allowed: true, userId: id, canSelectUsers: true };
+  const scope = homeAnalysisScope(account);
+  const requestedId = clean(requested) || "all";
+  if (scope === "all") return { allowed: true, userId: requestedId, canSelectUsers: true, analysisScope: scope };
   const self = accountMemberId(account);
   if (!self) return { allowed: false, status: 503, reason: "Unable to verify Home analysis member." };
-  if (id !== "all" && id !== self) return { allowed: false, status: 403, reason: "Team analysis access denied." };
-  // A default Home navigation is own-scope, never all-team, for view-only users.
-  return { allowed: true, userId: self, canSelectUsers: false };
+  if (requestedId === "all" || requestedId === self) {
+    return { allowed: true, userId: self, canSelectUsers: scope === "team", analysisScope: scope };
+  }
+  if (scope === "team" && Array.isArray(teamIds) && teamIds.includes(requestedId)) {
+    return { allowed: true, userId: requestedId, canSelectUsers: true, analysisScope: scope };
+  }
+  return { allowed: false, status: 403, reason: "This member is outside your Home analysis scope." };
 }
 
 function canonical(value) {

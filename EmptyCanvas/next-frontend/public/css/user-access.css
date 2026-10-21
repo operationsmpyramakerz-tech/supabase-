@@ -3828,3 +3828,22 @@ html[data-theme="dark"] body.user-access-page .ua-folder.ua-folder--add {
 .ua-feature-module-activation strong { font-size: 13px; }
 .ua-feature-module-activation small { font-size: 11px; line-height: 1.4; color: #7b8494; }
 .ua-feature-module-activation .ua-switch { flex: 0 0 auto; }
+
+/* Phase 2L: scope picker is intentionally shown only for Home Analysis. */
+.ua-feature-scope-select {
+  min-width: 79px;
+  max-width: 102px;
+  padding: 7px 8px;
+  border: 1px solid #dbe0e6;
+  border-radius: 9px;
+  background: #fff;
+  color: #262b34;
+  font: inherit;
+  font-size: 12px;
+}
+.ua-feature-access-row .ua-page-access-enable {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 9px;
+}

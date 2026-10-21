@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { getLegacyAccountGate } from "../../../../lib/products-auth";
 import { listHomeAnalysisUsers } from "../../../../lib/home-overview-data";
 import { featureAllowed } from "../../../../lib/feature-permissions-registry";
-import { homeSelection, homeTeamAnalysisAllowed } from "../../../../lib/home-analysis-permissions";
+import { homeTeamAnalysisAllowed } from "../../../../lib/home-analysis-permissions";
+import { resolveHomeSelection, scopeHomeUsers } from "../../../../lib/home-team-scopes";
 import { resolveStocktakingQuantityColumnForLabel } from "../../../../lib/stocktaking-data";
 
 export const dynamic = "force-dynamic";
@@ -27,12 +28,13 @@ export async function GET() {
     );
   }
 
-  if (!homeSelection(gate.account).allowed || !homeTeamAnalysisAllowed(gate.account) || !featureAllowed(gate.account, "stocktaking.view")) {
+  const selection = await resolveHomeSelection(gate.account);
+  if (!selection.allowed || !homeTeamAnalysisAllowed(gate.account) || !featureAllowed(gate.account, "stocktaking.view")) {
     return noStore({ error: "Home stocktaking access denied." }, { status: 403 });
   }
 
   try {
-    const baseUsers = await listHomeAnalysisUsers();
+    const baseUsers = await scopeHomeUsers(gate.account, await listHomeAnalysisUsers());
     const users = await Promise.all(baseUsers.map(async (user) => {
       const stocktakingColumn = String(user?.stocktakingColumn || "").trim();
       const resolvedColumn = stocktakingColumn

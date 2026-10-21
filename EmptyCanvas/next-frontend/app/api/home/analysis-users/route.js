@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { getLegacyAccountGate } from "../../../../lib/products-auth";
 import { listHomeAnalysisUsers } from "../../../../lib/home-overview-data";
-import { homeSelection, homeTeamAnalysisAllowed } from "../../../../lib/home-analysis-permissions";
+import { homeTeamAnalysisAllowed } from "../../../../lib/home-analysis-permissions";
+import { resolveHomeSelection, scopeHomeUsers } from "../../../../lib/home-team-scopes";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -25,12 +26,13 @@ export async function GET() {
     );
   }
 
-  if (!homeSelection(gate.account).allowed || !homeTeamAnalysisAllowed(gate.account)) {
+  const selection = await resolveHomeSelection(gate.account);
+  if (!selection.allowed || !homeTeamAnalysisAllowed(gate.account)) {
     return noStore({ users: [], error: "Home team analysis access denied." }, { status: 403 });
   }
 
   try {
-    const users = await listHomeAnalysisUsers();
+    const users = await scopeHomeUsers(gate.account, await listHomeAnalysisUsers());
     return noStore({ users, source: "supabase-next" });
   } catch (error) {
     return noStore(
