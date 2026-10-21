@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { findBackupTable } from "../../../../lib/backup-data";
 import { verifyPageAdminPasswordDirect } from "../../../../lib/order-action-auth";
 import { getDirectAccountGate } from "../../../../lib/products-auth";
+import { featureGate } from "../../../../lib/feature-permissions-server";
 import { createSignedUploadUrl } from "../../../../lib/supabase-rest";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +20,8 @@ function safeName(value) { return (text(value) || "backup.csv").replace(/[^a-z0-
 export async function POST(request) {
   const gate = await getDirectAccountGate(["Backup"]);
   if (!gate.ok) return json({ ok: false, error: gate.error || "Backup access denied." }, gate.status || 503);
+  const permitted = featureGate(gate, "backup.import");
+  if (!permitted.ok) return json({ ok: false, error: permitted.error }, permitted.status);
 
   try {
     const body = await request.json().catch(() => ({}));

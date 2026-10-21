@@ -855,6 +855,8 @@ export async function getDirectAccountGateFromSessionContext(context = {}, requi
         if (featureAccess.grants?.[MY_ORDERS_ENFORCEMENT_MARKER]?.allowed !== true) return true;
         return featureAllowed({ featureAccess }, "orders.my.view", { legacyAllowed: false });
       }
+      if (aliases.some(name => ["backup", "backups", "database", "systemdatabase", "systembackup", "databackup"].includes(name))) return featureAllowed({ featureAccess }, "backup.view");
+      if (aliases.some(name => ["history", "systemhistory", "audithistory", "auditlog", "systemaudit"].includes(name))) return featureAllowed({ featureAccess }, "history.view");
       if (aliases.includes("products")) return featureAllowed({ featureAccess }, "products.view", { legacyAllowed: false });
       if (aliases.some((name) => ["requestedorders", "operationsorders", "operationsrequestedorders"].includes(name))) {
         return featureAllowed({ featureAccess }, "orders.operations.view", { legacyAllowed: false });

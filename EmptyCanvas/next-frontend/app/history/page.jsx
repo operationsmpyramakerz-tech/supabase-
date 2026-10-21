@@ -3,6 +3,8 @@ import AppShell from "../../components/AppShell";
 import HistoryClient from "../../components/history/HistoryClient";
 import { historyList } from "../../lib/history-data";
 import { getDirectAccountGate } from "../../lib/products-auth";
+import { featureGate } from "../../lib/feature-permissions-server";
+import { featureAllowed } from "../../lib/feature-permissions-registry";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -24,7 +26,7 @@ function UnavailableState({ message, forbidden = false }) {
 }
 
 export default async function HistoryPage() {
-  const gate = await getDirectAccountGate(["History"]);
+  const gate = featureGate(await getDirectAccountGate(["History"]), "history.view");
 
   if (gate.status === 401) redirect("/login?next=/next/history");
   if (gate.status === 403) {
@@ -53,6 +55,7 @@ export default async function HistoryPage() {
       <HistoryClient
         initialRows={Array.isArray(historyPayload?.rows) ? historyPayload.rows : []}
         bootstrapWarnings={warnings}
+        canClear={featureAllowed(gate.account, "history.clear")}
       />
     </AppShell>
   );

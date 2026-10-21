@@ -151,7 +151,7 @@ function Toast({ toast, onClose }) {
   );
 }
 
-export default function HistoryClient({ initialRows, bootstrapWarnings = [] }) {
+export default function HistoryClient({ initialRows, bootstrapWarnings = [], canClear = true }) {
   const [rows, setRows] = useState(Array.isArray(initialRows) ? initialRows : []);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState("");
@@ -348,9 +348,9 @@ export default function HistoryClient({ initialRows, bootstrapWarnings = [] }) {
               <HistoryIcon name="filter"/><span>Filter by</span>{hasFilters ? <b aria-label="Filters active">•</b> : null}
             </button>
             <strong className="next-history-count-badge">{filtered.length} record{filtered.length === 1 ? "" : "s"}</strong>
-            <button type="button" className="next-history-delete-button" onMouseEnter={preloadHistoryDialogs} onFocus={preloadHistoryDialogs} onClick={() => { preloadHistoryDialogs(); setShowClear(true); }} aria-label="Delete all history" title="Delete all history">
+            {canClear ? <button type="button" className="next-history-delete-button" onMouseEnter={preloadHistoryDialogs} onFocus={preloadHistoryDialogs} onClick={() => { preloadHistoryDialogs(); setShowClear(true); }} aria-label="Delete all history" title="Delete all history">
               <HistoryIcon name="trash"/>
-            </button>
+            </button> : null}
           </div>
           {bootstrapWarnings.length ? <div className="next-history-bootstrap-warning">{bootstrapWarnings.length} bootstrap warning{bootstrapWarnings.length === 1 ? "" : "s"}</div> : null}
         </header>

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { historyList } from "../../../lib/history-data";
 import { getDirectAccountGate } from "../../../lib/products-auth";
+import { featureGate } from "../../../lib/feature-permissions-server";
 import { directPageAccessLevel, verifyPageAdminPasswordDirect } from "../../../lib/order-action-auth";
 import { supabaseRequest } from "../../../lib/supabase-rest";
 
@@ -20,6 +21,8 @@ function response(payload, init = {}) {
 export async function GET(request) {
   const gate = await getDirectAccountGate(["History"]);
   if (!gate.ok) return response({ ok: false, error: gate.error || "Authentication required." }, { status: gate.status || 503 });
+  const permitted = featureGate(gate, "history.view");
+  if (!permitted.ok) return response({ ok: false, error: permitted.error }, { status: permitted.status });
 
   const url = new URL(request.url);
   const limit = url.searchParams.get("limit") || "1000";
@@ -37,6 +40,8 @@ export async function GET(request) {
 export async function DELETE(request) {
   const gate = await getDirectAccountGate(["History"]);
   if (!gate.ok) return response({ ok: false, error: gate.error || "Authentication required." }, { status: gate.status || 503 });
+  const permitted = featureGate(gate, "history.clear");
+  if (!permitted.ok) return response({ ok: false, error: permitted.error }, { status: permitted.status });
 
   try {
     const body = await request.json().catch(() => ({}));

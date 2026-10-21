@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { historyDetail } from "../../../../lib/history-data";
-import { getLegacyAccountGate } from "../../../../lib/products-auth";
+import { getDirectAccountGate } from "../../../../lib/products-auth";
+import { featureGate } from "../../../../lib/feature-permissions-server";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -16,8 +17,10 @@ function response(payload, init = {}) {
 }
 
 export async function GET(_request, { params }) {
-  const gate = await getLegacyAccountGate(["History"]);
+  const gate = await getDirectAccountGate(["History"]);
   if (!gate.ok) return response({ ok: false, error: gate.error || "Authentication required." }, { status: gate.status || 503 });
+  const permitted = featureGate(gate, "history.view");
+  if (!permitted.ok) return response({ ok: false, error: permitted.error }, { status: permitted.status });
 
   try {
     const resolved = await params;

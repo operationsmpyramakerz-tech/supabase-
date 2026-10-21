@@ -112,6 +112,8 @@ export default function AppShell({
     if (link.href === "/next/stocktaking") return featureAllowed(account, "stocktaking.view");
     if (link.href === "/next/expenses") return featureAllowed(account, "expenses.view");
     if (link.href === "/next/expenses/users") return featureAllowed(account, "expenses.users.view");
+    if (link.href === "/next/backup") return featureAllowed(account, "backup.view");
+    if (link.href === "/next/history") return featureAllowed(account, "history.view");
     if (link.href === "/next/kits") return featureAllowed(account, "kits.view");
     if (link.href === "/next/proposals") return featureAllowed(account, "proposals.view");
     if (link.href === "/next/orders-review") return featureAllowed(account, "orders.review.view");

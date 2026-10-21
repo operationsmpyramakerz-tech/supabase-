@@ -2,7 +2,9 @@ import { redirect } from "next/navigation";
 import AppShell from "../../../components/AppShell";
 import BackupTableClient from "../../../components/backup/BackupTableClient";
 import { findBackupTable, loadBackupTableRows } from "../../../lib/backup-data";
-import { getLegacyAccountGate } from "../../../lib/products-auth";
+import { getDirectAccountGate } from "../../../lib/products-auth";
+import { featureGate } from "../../../lib/feature-permissions-server";
+import { featureAllowed } from "../../../lib/feature-permissions-registry";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +16,7 @@ export default async function BackupTablePage({ params, searchParams }) {
 
   const rawBackFolder = String(resolvedSearchParams?.folder || "").trim();
   const backFolder = /^[a-z0-9-]+$/i.test(rawBackFolder) ? rawBackFolder : "";
-  const gate = await getLegacyAccountGate(["Backup"]);
+  const gate = featureGate(featureGate(await getDirectAccountGate(["Backup"]), "backup.view"), "backup.row_read");
 
   if (!gate.ok && gate.status === 401) redirect(`/login?next=/next/backup/${encodeURIComponent(tableKey)}`);
   if (!gate.ok && gate.status === 403) {
@@ -33,7 +35,8 @@ export default async function BackupTablePage({ params, searchParams }) {
 
   let initialPayload = null;
   try {
-    initialPayload = await loadBackupTableRows(tableKey, { limit: 50, offset: 0, account: gate.account });
+    const payload = await loadBackupTableRows(tableKey, { limit: 50, offset: 0, account: gate.account });
+    initialPayload = { ...payload, canEdit: Boolean(payload.canEdit) && featureAllowed(gate.account, "backup.row_edit"), canCreate: Boolean(payload.canEdit) && featureAllowed(gate.account, "backup.row_create") };
   } catch (error) {
     console.warn("[backup] server preload for table rows failed; client fallback will retry:", error?.message || error);
   }

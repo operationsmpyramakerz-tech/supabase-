@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { backupCatalog } from "../../../../lib/backup-data";
 import { getDirectAccountGate } from "../../../../lib/products-auth";
+import { featureGate } from "../../../../lib/feature-permissions-server";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -19,6 +20,8 @@ export async function GET() {
     return noStore({ ok: false, error: gate.error || "Authentication required." }, { status: gate.status || 503 });
   }
 
+  const permitted = featureGate(gate, "backup.view");
+  if (!permitted.ok) return noStore({ ok: false, error: permitted.error }, { status: permitted.status });
   try {
     return noStore({ ok: true, source: "supabase-next", tables: backupCatalog() });
   } catch (error) {

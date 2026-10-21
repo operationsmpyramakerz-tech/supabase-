@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { deleteAllBackupData, deleteBackupTableData, importBackupCsv, importBackupCsvUpload } from "../../../../lib/backup-direct";
 import { getDirectAccountGate } from "../../../../lib/products-auth";
+import { featureGate } from "../../../../lib/feature-permissions-server";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -19,6 +20,11 @@ export async function POST(request) {
   try {
     const body = await request.json().catch(() => ({}));
     const action = String(body?.action || "").trim().toLowerCase();
+    const permissions = { import: "backup.import", "delete-table": "backup.delete_table", "delete-all": "backup.delete_all" };
+    const permissionKey = permissions[action];
+    if (!permissionKey) return json({ ok: false, error: "Unsupported Backup action." }, 400);
+    const permitted = featureGate(gate, permissionKey);
+    if (!permitted.ok) return json({ ok: false, error: permitted.error }, permitted.status);
     if (action === "import") {
       const uploadPath = String(body?.uploadPath || body?.path || "").trim();
       if (uploadPath) return json(await importBackupCsvUpload(context, body?.key, uploadPath, body?.adminPassword || body?.password));

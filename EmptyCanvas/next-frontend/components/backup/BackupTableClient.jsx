@@ -76,6 +76,7 @@ export default function BackupTableClient({ tableKey, initialTable, initialPaylo
   const [columns, setColumns] = useState(Array.isArray(initialPayload?.columns) ? initialPayload.columns : []);
   const [rows, setRows] = useState(Array.isArray(initialPayload?.rows) ? initialPayload.rows : []);
   const [canEdit, setCanEdit] = useState(Boolean(initialPayload?.canEdit));
+  const [canCreate, setCanCreate] = useState(Boolean(initialPayload?.canCreate ?? initialPayload?.canEdit));
   const [offset, setOffset] = useState(Number(initialPayload?.offset || 0));
   const [hasMore, setHasMore] = useState(Boolean(initialPayload?.hasMore));
   const [loading, setLoading] = useState(!hasInitialPayload);
@@ -110,6 +111,7 @@ export default function BackupTableClient({ tableKey, initialTable, initialPaylo
       setColumns(Array.isArray(body?.columns) ? body.columns : []);
       setRows(Array.isArray(body?.rows) ? body.rows : []);
       setCanEdit(Boolean(body?.canEdit));
+      setCanCreate(Boolean(body?.canCreate ?? body?.canEdit));
       setOffset(Number(body?.offset || 0));
       setHasMore(Boolean(body?.hasMore));
     } catch (err) {
@@ -125,6 +127,7 @@ export default function BackupTableClient({ tableKey, initialTable, initialPaylo
       setColumns(Array.isArray(initialPayload.columns) ? initialPayload.columns : []);
       setRows(Array.isArray(initialPayload.rows) ? initialPayload.rows : []);
       setCanEdit(Boolean(initialPayload.canEdit));
+      setCanCreate(Boolean(initialPayload.canCreate ?? initialPayload.canEdit));
       setOffset(Number(initialPayload.offset || 0));
       setHasMore(Boolean(initialPayload.hasMore));
       setError("");
@@ -192,7 +195,7 @@ export default function BackupTableClient({ tableKey, initialTable, initialPaylo
   }
 
   function openNewRow() {
-    if (!canEdit || saving || creating || editRow) return;
+    if (!canCreate || saving || creating || editRow) return;
     const next = {};
     visibleColumns.forEach((column) => { next[column.name] = ""; });
     setNewDraft(next);
@@ -209,7 +212,7 @@ export default function BackupTableClient({ tableKey, initialTable, initialPaylo
   }
 
   async function saveNewRow() {
-    if (!canEdit || creating || !newRowOpen) return;
+    if (!canCreate || creating || !newRowOpen) return;
     setCreating(true);
     setCreateError("");
     try {
@@ -297,7 +300,7 @@ export default function BackupTableClient({ tableKey, initialTable, initialPaylo
                 <tr>
                   <th className="backup-data-row-number">#</th>
                   {visibleColumns.map((column) => <th key={column.name} title={columnType(column)}>{column.name}</th>)}
-                  {canEdit ? <th className="backup-data-edit-head">Edit</th> : null}
+                  {canEdit || canCreate ? <th className="backup-data-edit-head">Actions</th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -334,12 +337,12 @@ export default function BackupTableClient({ tableKey, initialTable, initialPaylo
                             </button>
                           )}
                         </td>
-                      ) : null}
+                      ) : canCreate ? <td className="backup-data-edit-cell" /> : null}
                     </tr>
                   );
                 })}
               </tbody>
-              {canEdit ? (
+              {canCreate ? (
                 <tfoot>
                   {newRowOpen ? (
                     <tr className="backup-new-row-editor">

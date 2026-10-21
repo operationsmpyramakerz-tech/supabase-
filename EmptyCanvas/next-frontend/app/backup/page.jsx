@@ -2,12 +2,13 @@ import { redirect } from "next/navigation";
 import AppShell from "../../components/AppShell";
 import BackupClient from "../../components/backup/BackupClient";
 import { backupCatalog } from "../../lib/backup-data";
-import { getLegacyAccountGate } from "../../lib/products-auth";
+import { getDirectAccountGate } from "../../lib/products-auth";
+import { featureGate } from "../../lib/feature-permissions-server";
 
 export const dynamic = "force-dynamic";
 
 export default async function BackupPage() {
-  const gate = await getLegacyAccountGate(["Backup"]);
+  const gate = featureGate(await getDirectAccountGate(["Backup"]), "backup.view");
 
   if (!gate.ok && gate.status === 401) redirect("/login?next=/next/backup");
   if (!gate.ok && gate.status === 403) {
@@ -48,7 +49,7 @@ export default async function BackupPage() {
       bodyClass="page-backup"
       pageStyles={["/next/css/backup.css?v=database-page-folders-v1"]}
     >
-      <BackupClient initialTables={backupCatalog()} />
+      <BackupClient initialTables={backupCatalog()} account={gate.account} />
     </AppShell>
   );
 }

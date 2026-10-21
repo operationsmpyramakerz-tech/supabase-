@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
+import { featureAllowed } from "../../lib/feature-permissions-registry";
 
 const BackupDialogs = dynamic(() => import("./BackupDialogs"), { ssr: false });
 const BackupToast = dynamic(() => import("./BackupDialogs").then((module) => module.BackupToast), { ssr: false });
@@ -70,7 +71,14 @@ function buildDatabasePageGroups(tables = []) {
   return groups;
 }
 
-export default function BackupClient({ initialTables = [] }) {
+export default function BackupClient({ initialTables = [], account = null }) {
+  const can = (action) => featureAllowed(account, `backup.${action}`);
+  const canExport = can("export");
+  const canImport = can("import");
+  const canDeleteTable = can("delete_table") && canExport;
+  const canDeleteAll = can("delete_all") && canExport;
+  const canReadRows = can("row_read");
+  const hasTableActions = canExport || canImport || canDeleteTable;
   const router = useRouter();
   const [tables, setTables] = useState(() => Array.isArray(initialTables) ? initialTables : []);
   const [dialog, setDialog] = useState(null);
@@ -135,6 +143,7 @@ export default function BackupClient({ initialTables = [] }) {
   }
 
   function startFolderLongPress(event, itemKey) {
+    if (!hasTableActions) return;
     if (event.pointerType === "mouse" && event.button !== 0) return;
     cancelFolderLongPress();
     suppressFolderClickRef.current = false;
@@ -155,6 +164,7 @@ export default function BackupClient({ initialTables = [] }) {
   }
 
   function openFolderActionsFromKeyboard(event, itemKey) {
+    if (!hasTableActions) return;
     if ((event.shiftKey && event.key === "F10") || event.key === "ContextMenu") {
       event.preventDefault();
       cancelFolderLongPress();
@@ -262,12 +272,12 @@ export default function BackupClient({ initialTables = [] }) {
             <h2>Database</h2>
           </div>
           <div className="backup-hero-actions">
-            <a className="backup-export-all-btn" href="/next/api/backup/export-direct?scope=all" download>
+            {canExport ? <a className="backup-export-all-btn" href="/next/api/backup/export-direct?scope=all" download>
               <FeatherIcon name="download-cloud" /><span>Export all data</span>
-            </a>
-            <button type="button" className="backup-delete-all-btn" onMouseEnter={preloadBackupDialogs} onFocus={preloadBackupDialogs} onClick={() => openDeleteModal({ key: "__all__", pageName: "all system data", tableName: "all database tables", isAll: true })}>
+            </a> : null}
+            {canDeleteAll ? <button type="button" className="backup-delete-all-btn" onMouseEnter={preloadBackupDialogs} onFocus={preloadBackupDialogs} onClick={() => openDeleteModal({ key: "__all__", pageName: "all system data", tableName: "all database tables", isAll: true })}>
               <FeatherIcon name="trash-2" /><span>Delete all data</span>
-            </button>
+            </button> : null}
           </div>
         </section>
 
@@ -322,17 +332,17 @@ export default function BackupClient({ initialTables = [] }) {
               const menuOpen = folderMenu === item.key;
               return (
                 <article className={`backup-folder-card ${menuOpen ? "is-menu-open" : ""}`} key={item.key || item.tableName}>
-                  {menuOpen ? (
+                  {menuOpen && hasTableActions ? (
                     <div className="backup-folder-menu" onClick={(event) => event.stopPropagation()}>
-                      <a href={`/next/api/backup/export-direct?key=${encodeURIComponent(item.key)}`} download onClick={() => setFolderMenu("")}>
+                      {canExport ? <a href={`/next/api/backup/export-direct?key=${encodeURIComponent(item.key)}`} download onClick={() => setFolderMenu("")}>
                         <FeatherIcon name="download" /><span>Export</span>
-                      </a>
-                      <button type="button" onMouseEnter={preloadBackupDialogs} onFocus={preloadBackupDialogs} onClick={() => { setFolderMenu(""); openImportModal(item); }}>
+                      </a> : null}
+                      {canImport ? <button type="button" onMouseEnter={preloadBackupDialogs} onFocus={preloadBackupDialogs} onClick={() => { setFolderMenu(""); openImportModal(item); }}>
                         <FeatherIcon name="upload" /><span>Import</span>
-                      </button>
-                        <button type="button" className="is-danger" onMouseEnter={preloadBackupDialogs} onFocus={preloadBackupDialogs} onClick={() => { setFolderMenu(""); openDeleteModal(item); }}>
+                      </button> : null}
+                        {canDeleteTable ? <button type="button" className="is-danger" onMouseEnter={preloadBackupDialogs} onFocus={preloadBackupDialogs} onClick={() => { setFolderMenu(""); openDeleteModal(item); }}>
                         <FeatherIcon name="trash-2" /><span>Delete</span>
-                      </button>
+                      </button> : null}
                   </div>
                   ) : null}
                   <button
@@ -344,10 +354,12 @@ export default function BackupClient({ initialTables = [] }) {
                     onPointerCancel={cancelFolderLongPress}
                     onPointerLeave={cancelFolderLongPress}
                     onContextMenu={(event) => {
-                      event.preventDefault();
-                      cancelFolderLongPress();
-                      suppressFolderClickRef.current = true;
-                      setFolderMenu(item.key);
+                      if (hasTableActions) {
+                        event.preventDefault();
+                        cancelFolderLongPress();
+                        suppressFolderClickRef.current = true;
+                        setFolderMenu(item.key);
+                      }
                     }}
                     onKeyDown={(event) => openFolderActionsFromKeyboard(event, item.key)}
                     onClick={() => {
@@ -355,11 +367,11 @@ export default function BackupClient({ initialTables = [] }) {
                         suppressFolderClickRef.current = false;
                         return;
                       }
-                      router.push(`/backup/${encodeURIComponent(item.key)}?folder=${encodeURIComponent(activePage.key)}`);
+                      if (canReadRows) router.push(`/backup/${encodeURIComponent(item.key)}?folder=${encodeURIComponent(activePage.key)}`);
                     }}
-                    aria-label={`Open ${item.pageName || item.tableName}. Press and hold for actions.`}
-                    aria-haspopup="menu"
-                    aria-expanded={menuOpen}
+                    aria-label={canReadRows ? `Open ${item.pageName || item.tableName}. Press and hold for actions.` : `${item.pageName || item.tableName} (no row access)`}
+                    aria-haspopup={hasTableActions ? "menu" : undefined}
+                    aria-expanded={hasTableActions ? menuOpen : undefined}
                   >
                     <span className="backup-folder-figure" aria-hidden="true">
                       <span className="backup-folder-paper backup-folder-paper--left" />
