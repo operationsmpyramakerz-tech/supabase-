@@ -4,6 +4,7 @@ import { getDirectAccountGate } from "../../../lib/products-auth";
 import { featureAllowed } from "../../../lib/feature-permissions-registry";
 import { measurePerformance } from "../../../lib/performance-profiler";
 import { eventCalendarList } from "../../../lib/events-read-policy";
+import { scopedEventRequestList } from "../../../lib/event-request-scope";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -33,7 +34,7 @@ async function GETImpl(request) {
 
   try {
     const events = await listEvents({ includeArchived, status, search, force });
-    return json({ ok: true, events: calendar ? eventCalendarList(events) : events, source: "supabase-next" });
+    return json({ ok: true, events: calendar ? eventCalendarList(events) : await scopedEventRequestList(gate.account, events), source: "supabase-next" });
   } catch (error) {
     console.error("[events] direct list failed:", error?.details || error?.message || error);
     return json({ ok: false, events: [], error: eventsDataError(error) }, { status: error?.status || 502 });

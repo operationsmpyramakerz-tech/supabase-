@@ -1,5 +1,7 @@
 "use client";
 
+import { EVENT_REQUEST_SCOPE_MARKER } from "../../lib/event-request-scope.mjs";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import ActionLoadingModal, { useActionLoading } from "../ActionLoadingModal";
@@ -510,6 +512,11 @@ function PageAccessRow({ row, onChange, subpage = false }) {
   return <div className={`ua-page-access-row ${row.isEnabled ? "" : "is-disabled"}${subpage ? " ua-page-access-row--subpage" : ""}`}><div className="ua-page-access-name"><strong>{subpage ? <span className="ua-page-access-branch" aria-hidden="true"/> : null}{row.pageName}</strong><small>{row.moduleName}{row.routePath ? ` • ${row.routePath}` : ""}</small></div><div><ModernSelect compact value={accessLevelLabel(row.accessLevel)} onChange={(label) => onChange({ accessLevel: lower(label) })} options={["View", "Edit", "Admin"]} placeholder="Select access" ariaLabel={`Access type for ${row.pageName}`}/></div><div className="ua-page-access-enable"><label className="ua-switch" title={`Enable ${row.pageName}`}><input type="checkbox" checked={!!row.isEnabled} onChange={(event) => onChange({ isEnabled: event.target.checked })}/><span/></label></div></div>;
 }
 
+const EVENT_REQUEST_ROW_KEYS = new Set([
+  "events.requests.view", "events.requests.edit", "events.requests.workflow",
+  "events.requests.cancel", "events.requests.archive", "events.requests.pdf",
+]);
+
 // Pilot modules only: other keys are registered but not yet protected across
 // every route. Do not expose switches that would give a false sense of security.
 function FeatureAccessModal({ member, onClose, protect }) {
@@ -595,11 +602,13 @@ function FeatureAccessModal({ member, onClose, protect }) {
         });
         setScopedOrders({ ...Object.fromEntries(Object.entries(ORDER_SCOPE_MARKERS).map(([module, marker]) =>
           [module, stored.some(item => item.key === marker && item.allowed === true)])),
-          tasks: stored.some(item => item.key === TASK_SCOPE_MARKER && item.allowed === true) });
+          tasks: stored.some(item => item.key === TASK_SCOPE_MARKER && item.allowed === true),
+          "events.requests": stored.some(item => item.key === EVENT_REQUEST_SCOPE_MARKER && item.allowed === true) });
         setUnmanagedGrants(stored.filter(item => !ACTIVE_PILOT_FEATURE_KEYS.includes(item.key)
           && item.key !== MY_ORDERS_ENFORCEMENT_MARKER
           && !Object.values(ORDER_SCOPE_MARKERS).includes(item.key)
           && item.key !== TASK_SCOPE_MARKER
+          && item.key !== EVENT_REQUEST_SCOPE_MARKER
           && !Object.values(PHASE2A_LEGACY_MARKERS).includes(item.key)));
       } catch (e) { if (mounted) setError(e.message); }
       finally { if (mounted) setLoading(false); }
@@ -624,11 +633,11 @@ function FeatureAccessModal({ member, onClose, protect }) {
               .filter(([module]) => !enabledModules[module])
               .map(([, key]) => ({ key, allowed: true, scope: "all" })),
             ...(enabledModules["orders.my"] ? [{ key: MY_ORDERS_ENFORCEMENT_MARKER, allowed: true, scope: "all" }] : []),
-            ...Object.entries({ ...ORDER_SCOPE_MARKERS, tasks: TASK_SCOPE_MARKER }).filter(([module]) => enabledModules[module] && scopedOrders[module])
+            ...Object.entries({ ...ORDER_SCOPE_MARKERS, tasks: TASK_SCOPE_MARKER, "events.requests": EVENT_REQUEST_SCOPE_MARKER }).filter(([module]) => enabledModules[module] && scopedOrders[module])
               .map(([, key]) => ({ key, allowed: true, scope: "all" })),
             ...activeFeatures.filter(item => grants[item.key] === true).map(item => ({ key: item.key, allowed: true, scope: grantScopes[item.key] || "all" }))
-              .map(grant => ({ ...grant, scope: Object.keys({ ...ORDER_SCOPE_MARKERS, tasks: TASK_SCOPE_MARKER }).some(module =>
-                grant.key.startsWith(`${module}.`) && !scopedOrders[module]) ? "all" : grant.scope })),
+              .map(grant => ({ ...grant, scope: Object.keys({ ...ORDER_SCOPE_MARKERS, tasks: TASK_SCOPE_MARKER, "events.requests": EVENT_REQUEST_SCOPE_MARKER }).some(module =>
+                grant.key.startsWith(`${module}.`) && !scopedOrders[module]) || (grant.key.startsWith("events.requests.") && !EVENT_REQUEST_ROW_KEYS.has(grant.key)) ? "all" : grant.scope })),
             // Persist a denied view marker for opt-in modules. An absent marker
             // intentionally means 'not migrated' and preserves legacy access.
             ...modules.filter(module => module.optIn && module.key !== "orders.my" && enabledModules[module.key] && grants[`${module.key}.view`] !== true)
@@ -661,8 +670,8 @@ function FeatureAccessModal({ member, onClose, protect }) {
               </label> : null}
             </div>
             {module.optIn && !enabledModules[module.key] ? <p style={{ margin: "12px 14px" }}>Uses existing Page Access until you enable detailed permissions for this module.</p> : null}
-            {enabledModules[module.key] && (ORDER_SCOPE_MARKERS[module.key] || module.key === "tasks") ? <label className="ua-page-access-row ua-feature-access-row" style={{ cursor: "pointer" }}><span className="ua-page-access-name"><strong>Enable row-level Own / Team / All</strong><small>Explicit opt-in. Off preserves the existing visibility rules for this module.</small></span><span className="ua-page-access-enable"><input type="checkbox" checked={!!scopedOrders[module.key]} onChange={e => setScopedOrders(prev => ({ ...prev, [module.key]: e.target.checked }))}/></span></label> : null}
-            {enabledModules[module.key] ? <div className="ua-page-access-group__rows">{shown.filter(item => item.module === module.key).map(item => <div className="ua-page-access-row ua-feature-access-row" key={item.key}><div className="ua-page-access-name"><strong>{item.label}</strong><small>{item.key}</small></div><div className="ua-page-access-enable">{((item.key === "home.analysis" || item.key.startsWith("expenses.users.")) || ((ORDER_SCOPE_MARKERS[item.module] || item.module === "tasks") && scopedOrders[item.module])) && grants[item.key] === true ? <select aria-label={item.key === "home.analysis" ? "Home analysis data scope" : `${item.label} data scope`} className="ua-feature-scope-select" value={grantScopes[item.key] || "all"} onChange={e => setGrantScopes(current => ({ ...current, [item.key]: e.target.value }))}><option value="own">Own</option><option value="team">Team</option><option value="all">All</option></select> : null}<label className="ua-switch" title={item.label}><input type="checkbox" checked={grants[item.key] === true} onChange={e => setGrants(current => ({ ...current, [item.key]: e.target.checked }))}/><span/></label></div></div>)}</div> : null}
+            {enabledModules[module.key] && (ORDER_SCOPE_MARKERS[module.key] || module.key === "tasks" || module.key === "events.requests") ? <label className="ua-page-access-row ua-feature-access-row" style={{ cursor: "pointer" }}><span className="ua-page-access-name"><strong>Enable row-level Own / Team / All</strong><small>Explicit opt-in. Off preserves the existing visibility rules for this module.</small></span><span className="ua-page-access-enable"><input type="checkbox" checked={!!scopedOrders[module.key]} onChange={e => setScopedOrders(prev => ({ ...prev, [module.key]: e.target.checked }))}/></span></label> : null}
+            {enabledModules[module.key] ? <div className="ua-page-access-group__rows">{shown.filter(item => item.module === module.key).map(item => <div className="ua-page-access-row ua-feature-access-row" key={item.key}><div className="ua-page-access-name"><strong>{item.label}</strong><small>{item.key}</small></div><div className="ua-page-access-enable">{((item.key === "home.analysis" || item.key.startsWith("expenses.users.")) || ((ORDER_SCOPE_MARKERS[item.module] || item.module === "tasks" || EVENT_REQUEST_ROW_KEYS.has(item.key)) && scopedOrders[item.module])) && grants[item.key] === true ? <select aria-label={item.key === "home.analysis" ? "Home analysis data scope" : `${item.label} data scope`} className="ua-feature-scope-select" value={grantScopes[item.key] || "all"} onChange={e => setGrantScopes(current => ({ ...current, [item.key]: e.target.value }))}><option value="own">Own</option><option value="team">Team</option><option value="all">All</option></select> : null}<label className="ua-switch" title={item.label}><input type="checkbox" checked={grants[item.key] === true} onChange={e => setGrants(current => ({ ...current, [item.key]: e.target.checked }))}/><span/></label></div></div>)}</div> : null}
           </section>)}
           <small>Optional modules remain on legacy Page Access until enabled for this user. Enable a module, then grant only the features needed. A disabled View permission hides its page. Products and Operations Orders now have separate opt-in switches; turn them off to keep existing Page Access while enabling Expenses by Users. For an already-enabled profile, review those switches and save once. Existing Page Access and any required admin password still apply. Home Analysis and Expenses by Users support Own / Team / All. My Orders, Operations Orders and Maintenance Orders support the same scopes only after enabling their separate row-level scope switch. Other permissions retain their saved scope without row-level enforcement.</small>
         </> : <p>Legacy page permissions will apply to this account. No feature grants will be enforced.</p>}

@@ -5,6 +5,7 @@ import { issueEventsAuthorizationToken, EVENTS_AUTHORIZATION_TTL_MS } from "../.
 import { directPageMutationAccess, verifyPageAdminPasswordDirect, verifySharedAdminPasswordDirect } from "../../../../../lib/order-action-auth";
 import { getDirectAccountGate } from "../../../../../lib/products-auth";
 import { featureGate } from "../../../../../lib/feature-permissions-server";
+import { assertEventRequestScope } from "../../../../../lib/event-request-scope";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -54,6 +55,18 @@ export async function POST(request) {
     const guarded = featureGate(gate, key);
     if (!guarded.ok) return json({ ok: false, error: guarded.error }, { status: guarded.status || 403 });
   }
+  // Check row ownership BEFORE processing the Admin password, not just when
+  // minting the token. Password knowledge does not grant out-of-scope access.
+  if (intent === "request_workflow" || intent === "request_action") {
+    const eventId = uuid(body?.eventId || body?.event_id);
+    if (!eventId) return json({ ok: false, error: "Invalid event ID." }, { status: 400 });
+    try {
+      await assertEventRequestScope(gate.account,
+        intent === "request_workflow" ? "events.requests.workflow" : action === "edit" ? "events.requests.edit" : "events.requests.cancel", eventId);
+    } catch (error) {
+      return json({ ok: false, error: error?.message || "Data scope verification failed." }, { status: Number(error?.status) || 503 });
+    }
+  }
   const mutationAccess = directPageMutationAccess(gate.account || {}, [requiredPage]);
   if (mutationAccess !== true) {
     return json({ ok: false, error: `${requiredPage} Edit or Admin access is required.` }, { status: mutationAccess === null ? 503 : 403 });
@@ -77,6 +90,7 @@ export async function POST(request) {
       const eventId = uuid(body?.eventId || body?.event_id);
       const transition = eventWorkflowTransition(body?.targetStatus || body?.target_status);
       if (!eventId || !transition) return json({ ok: false, error: "Choose a valid event request workflow action." }, { status: 400 });
+      await assertEventRequestScope(gate.account, "events.requests.workflow", eventId);
       return json({
         ok: true,
         intent,
@@ -92,6 +106,7 @@ export async function POST(request) {
       const eventId = uuid(body?.eventId || body?.event_id);
       const action = requestAction(body?.action);
       if (!eventId || !action) return json({ ok: false, error: "Choose a valid event request action." }, { status: 400 });
+      await assertEventRequestScope(gate.account, action === "edit" ? "events.requests.edit" : "events.requests.cancel", eventId);
       return json({
         ok: true,
         intent,

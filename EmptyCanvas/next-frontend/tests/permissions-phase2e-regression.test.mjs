@@ -55,7 +55,7 @@ test("Event list/detail APIs require the named page; calendar responses are proj
     assert.ok(route.includes('calendar ? "events.calendar.view" : "events.requests.view"'));
     assert.ok(route.includes('calendar ? eventCalendar'));
   }
-  assert.ok(source("../lib/events-data.js").includes('events: mode === "calendar" ? eventCalendarList(events) : events'));
+  assert.ok(source("../lib/events-data.js").includes('events: mode === "calendar" ? eventCalendarList(events) : await scopedEventRequestList(gate.account, events)'));
   assert.ok(source("../components/events/EventsCalendarClient.jsx").includes('"view=calendar&"'));
   const pdf = source("../app/api/events/pdf-direct/route.js");
   assert.ok(pdf.includes('getDirectAccountGate(["Event Requests"])'));

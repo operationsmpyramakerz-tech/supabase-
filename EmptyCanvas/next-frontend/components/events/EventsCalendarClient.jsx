@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { navigateWithinApp } from "../../lib/client-navigation";
 import EventIcon from "./EventIcon";
 import { featureAllowed } from "../../lib/feature-permissions-registry";
+import { eventRequestScopeFor } from "../../lib/event-request-scope.mjs";
 
 const STATUS_LABELS = {
   submitted: "Submitted",
@@ -258,8 +259,10 @@ function DetailsModal({ event, canOpenRequests, canExport = true, onClose }) {
 export default function EventsCalendarClient({ account, initialEvents = [], bootstrapWarnings = [] }) {
   const access = useMemo(() => allowedSet(account), [account]);
   const canCreate = access.has("event requests") && featureAllowed(account, "events.requests.view") && featureAllowed(account, "events.requests.create");
-  const canOpenRequests = access.has("event requests") && featureAllowed(account, "events.requests.view");
-  const canExport = canOpenRequests && featureAllowed(account, "events.requests.pdf");
+  const canOpenRequests = access.has("event requests") && featureAllowed(account, "events.requests.view")
+    && !["own", "team", "none"].includes(eventRequestScopeFor(account, "events.requests.view"));
+  const canExport = canOpenRequests && featureAllowed(account, "events.requests.pdf")
+    && !["own", "team", "none"].includes(eventRequestScopeFor(account, "events.requests.pdf"));
   const [events, setEvents] = useState(Array.isArray(initialEvents) ? initialEvents : []);
   const [month, setMonth] = useState(() => startOfMonth(new Date()));
   const [selectedKey, setSelectedKey] = useState(() => dateKey(new Date()));

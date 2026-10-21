@@ -22,6 +22,7 @@ import { verifyEventsAuthorizationToken } from "../../../../lib/events-action-au
 import { directPageMutationAccess } from "../../../../lib/order-action-auth";
 import { getDirectAccountGate } from "../../../../lib/products-auth";
 import { featureGate } from "../../../../lib/feature-permissions-server";
+import { assertEventRequestScope } from "../../../../lib/event-request-scope";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -103,6 +104,7 @@ export async function POST(request) {
     if (action === "update-event") {
       const eventId = uuid(body?.eventId || body?.id);
       if (!eventId) return json({ ok: false, error: "Invalid event ID." }, { status: 400 });
+      await assertEventRequestScope(gate.account, "events.requests.edit", eventId);
       if (!hasEventRequestsAdminAccess(gate.account || {})) {
         requireToken(body, gate.account, "events-request-action", { eventId, action: "edit" });
       }
@@ -115,6 +117,7 @@ export async function POST(request) {
       const eventId = uuid(body?.eventId || body?.id);
       const transition = eventWorkflowTransition(body?.targetStatus || body?.target_status);
       if (!eventId || !transition) return json({ ok: false, error: "Invalid event request workflow action." }, { status: 400 });
+      await assertEventRequestScope(gate.account, "events.requests.workflow", eventId);
       requireToken(body, gate.account, "events-request-workflow", { eventId, targetStatus: transition.to });
       const result = await transitionEventRequest(eventId, transition.to);
       dispatchEventAlerts();
@@ -125,6 +128,7 @@ export async function POST(request) {
       const eventId = uuid(body?.eventId || body?.id);
       const requestAction = text(body?.requestAction || body?.eventAction || body?.requestedAction).toLowerCase();
       if (!eventId || requestAction !== "cancel") return json({ ok: false, error: "Invalid event request action." }, { status: 400 });
+      await assertEventRequestScope(gate.account, "events.requests.cancel", eventId);
       requireToken(body, gate.account, "events-request-action", { eventId, action: "cancel" });
       const event = await cancelEventRequest(eventId);
       dispatchEventAlerts();
@@ -135,6 +139,7 @@ export async function POST(request) {
       if (!hasEventRequestsAdminAccess(gate.account || {})) {
         return json({ ok: false, error: "Event Requests Admin access is required to archive event requests." }, { status: 403 });
       }
+      await assertEventRequestScope(gate.account, "events.requests.archive", body?.eventId || body?.id);
       const event = await archiveEventRequest(body?.eventId || body?.id);
       return json({ ok: true, event, source: "supabase-next" });
     }

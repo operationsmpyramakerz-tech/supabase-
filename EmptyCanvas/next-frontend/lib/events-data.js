@@ -3,6 +3,7 @@ import "server-only";
 import { getDirectAccountGate } from "./products-auth";
 import { featureAllowed } from "./feature-permissions-registry";
 import { eventCalendarList } from "./events-read-policy";
+import { scopedEventRequestList, assertEventRequestScope, eventRequestUiScopePolicy } from "./event-request-scope";
 import { deleteById, insert, select, selectAll, selectById, updateById, uploadStorageObject } from "./supabase-rest";
 
 const EVENT_LIST_CACHE_TTL_MS = 1_500;
@@ -1237,7 +1238,9 @@ export async function loadDirectEventsPageData({ mode = "events", editId = "" } 
   try {
     if (mode === "events" || mode === "calendar") {
       const events = await listEvents();
-      return { ok: true, status: 200, account: gate.account, events: mode === "calendar" ? eventCalendarList(events) : events, warnings: [], source: "supabase-next" };
+      return { ok: true, status: 200, account: gate.account, events: mode === "calendar" ? eventCalendarList(events) : await scopedEventRequestList(gate.account, events),
+        eventScopePolicy: mode === "events" ? await eventRequestUiScopePolicy(gate.account) : null,
+        warnings: [], source: "supabase-next" };
     }
 
     if (mode === "components") {
@@ -1255,13 +1258,14 @@ export async function loadDirectEventsPageData({ mode = "events", editId = "" } 
       listGovernorateRates(),
       editId ? getEvent(editId) : Promise.resolve(null),
     ]);
+    if (editId && event) await assertEventRequestScope(gate.account, "events.requests.edit", event);
     return {
       ok: true,
       status: 200,
       account: gate.account,
       types,
       components,
-      events,
+      events: await scopedEventRequestList(gate.account, events),
       rates,
       canEditRates: hasEventRequestsAdminAccess(gate.account),
       event,

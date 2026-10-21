@@ -4,6 +4,7 @@ import eventRequestPdfModule from "../../../../lib/eventRequestPdf";
 import { getEvent, eventsDataError } from "../../../../lib/events-data";
 import { getDirectAccountGate } from "../../../../lib/products-auth";
 import { featureAllowed } from "../../../../lib/feature-permissions-registry";
+import { assertEventRequestScope } from "../../../../lib/event-request-scope";
 
 const { pipeEventRequestPDF } = eventRequestPdfModule;
 
@@ -73,6 +74,7 @@ export async function GET(request) {
   try {
     const event = await getEvent(id);
     if (!event) return jsonError("Event request was not found.", 404);
+    await assertEventRequestScope(gate.account, "events.requests.pdf", event);
 
     const buffer = await renderEventPdf(event);
     const fileName = `event_request_${safeFilePart(event.eventCode || event.eventName)}.pdf`;

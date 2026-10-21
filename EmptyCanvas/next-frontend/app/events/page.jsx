@@ -44,6 +44,7 @@ export default async function EventsPage() {
       <EventsClient
         account={pageData.account}
         initialEvents={Array.isArray(pageData.events) ? pageData.events : []}
+        eventScopePolicy={pageData.eventScopePolicy || null}
         bootstrapWarnings={pageData.warnings || []}
       />
     </AppShell>

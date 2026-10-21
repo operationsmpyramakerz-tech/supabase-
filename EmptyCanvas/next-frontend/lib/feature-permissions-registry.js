@@ -942,6 +942,7 @@ export const FEATURE_DEFINITIONS = Object.freeze(
 
 export const TASK_SCOPE_MARKER = "tasks.__scoped";
 
+export const EVENT_REQUEST_SCOPE_MARKER = "events.requests.__scoped";
 const knownKeys = new Set(FEATURE_DEFINITIONS.map((entry) => entry.key));
 // Explicit opt-in for My Orders; existing Phase 2A advanced profiles remain intact.
 export const MY_ORDERS_ENFORCEMENT_MARKER = "orders.my.__enforced";
@@ -960,7 +961,7 @@ export const PHASE2A_LEGACY_MARKERS = Object.freeze({
 });
 export function isKnownFeature(key) {
   const clean = String(key || "");
-  return knownKeys.has(clean) || clean === MY_ORDERS_ENFORCEMENT_MARKER || Object.values(PHASE2A_LEGACY_MARKERS).includes(clean) || Object.values(ORDER_SCOPE_MARKERS).includes(clean) || clean === TASK_SCOPE_MARKER;
+  return knownKeys.has(clean) || clean === MY_ORDERS_ENFORCEMENT_MARKER || Object.values(PHASE2A_LEGACY_MARKERS).includes(clean) || Object.values(ORDER_SCOPE_MARKERS).includes(clean) || clean === TASK_SCOPE_MARKER || clean === EVENT_REQUEST_SCOPE_MARKER;
 }
 
 // Legacy accounts remain in their original page-access mode until an admin
@@ -974,6 +975,7 @@ export function featureAllowed(account, key, { legacyAllowed = true, scopes = ["
   // Own/Team/All, but the API still enforces the selected record scope.
   if (key.startsWith("expenses.users.")) scopes = ["own", "team", "all"];
   if (key.startsWith("tasks.") && state?.grants?.[TASK_SCOPE_MARKER]?.allowed === true) scopes = ["own", "team", "all"];
+  if (["events.requests.view", "events.requests.edit", "events.requests.workflow", "events.requests.cancel", "events.requests.archive", "events.requests.pdf"].includes(key) && state?.grants?.[EVENT_REQUEST_SCOPE_MARKER]?.allowed === true) scopes = ["own", "team", "all"];
   if ((key.startsWith("orders.my.") && state?.grants?.[ORDER_SCOPE_MARKERS["orders.my"]]?.allowed === true)
     || (key.startsWith("orders.operations.") && state?.grants?.[ORDER_SCOPE_MARKERS["orders.operations"]]?.allowed === true)
     || (key.startsWith("orders.maintenance.") && state?.grants?.[ORDER_SCOPE_MARKERS["orders.maintenance"]]?.allowed === true)) scopes = ["own", "team", "all"];

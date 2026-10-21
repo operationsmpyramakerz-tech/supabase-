@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { navigateWithinApp } from "../../lib/client-navigation";
 import EventIcon from "./EventIcon";
 import { featureAllowed } from "../../lib/feature-permissions-registry";
+import { eventRequestCardAllowed } from "../../lib/event-request-scope.mjs";
 
 
 const loadEventsDialogs = () => import("./EventsDialogs");
@@ -151,7 +152,7 @@ function StatusPill({ status }) {
   return <span className={`events-status events-status--${key} next-events-status next-events-status--${key}`}>{STATUS_LABELS[key]}</span>;
 }
 
-export default function EventsClient({ account, initialEvents = [] }) {
+export default function EventsClient({ account, initialEvents = [], eventScopePolicy = null }) {
   const permissions = useMemo(() => allowedSet(account), [account]);
   const canRequestActions = permissions.has("event requests");
   const canEvent = (key) => featureAllowed(account, `events.requests.${key}`);
@@ -483,10 +484,10 @@ export default function EventsClient({ account, initialEvents = [] }) {
           event={activeEvent}
           busy={busy}
           canRequestActions={canRequestActions}
-          canEdit={canRequestActions && canEvent("edit")}
-          canCancel={canRequestActions && canEvent("cancel")}
-          canWorkflow={canRequestActions && canEvent("workflow")}
-          canExport={canEvent("pdf")}
+          canEdit={canRequestActions && canEvent("edit") && eventRequestCardAllowed(eventScopePolicy,"edit",activeEvent)}
+          canCancel={canRequestActions && canEvent("cancel") && eventRequestCardAllowed(eventScopePolicy,"cancel",activeEvent)}
+          canWorkflow={canRequestActions && canEvent("workflow") && eventRequestCardAllowed(eventScopePolicy,"workflow",activeEvent)}
+          canExport={canEvent("pdf") && eventRequestCardAllowed(eventScopePolicy,"pdf",activeEvent)}
           onClose={() => setActiveEvent(null)}
           onDownload={() => { if (activeEvent?.id) window.location.href = `/next/api/events/pdf-direct?id=${encodeURIComponent(activeEvent.id)}`; }}
           onWorkflow={(targetStatus) => requestAuthorization("workflow", targetStatus)}
