@@ -10,6 +10,8 @@ import { serializeOperationsSummaryRow } from "./operations-orders-data";
 import { stocktakingForAccount } from "./stocktaking-data";
 import { expensesForAccount } from "./expenses-data";
 import { listTeamMembersLite } from "./team-members-service";
+import { featureAllowed } from "./feature-permissions-registry";
+import { homeSelection, homeFinanceAllowed, canHomeAccessOtherExpenses, accountMemberId } from "./home-analysis-permissions";
 import { getReviewerVisibility as reviewerVisibility } from "./reviewer-visibility-service";
 import { measurePerformance, recordPerformanceSample } from "./performance-profiler";
 import {
@@ -930,20 +932,30 @@ async function loadHomeOverviewDirectImpl({
   duration = "all",
 } = {}) {
   if (!isSupabaseConfigured()) return null;
+  const selection = homeSelection(account, requestedUserId);
+  if (!selection.allowed) {
+    const error = new Error(selection.reason || "Home access denied.");
+    error.status = selection.status || 403;
+    throw error;
+  }
 
   const selectedDuration = ["all", "week", "month", "year"].includes(String(duration || "").toLowerCase())
     ? String(duration).toLowerCase()
     : "all";
 
-  const showCurrent = hasAccess(account, ["Current Orders", "/orders"]);
-  const showReview = hasAccess(account, ["Orders Review", "/orders-review"]);
-  const showOperations = hasAccess(account, ["Requested Orders", "Operations Orders", "/operations-orders"]);
-  const showMaintenance = hasAccess(account, ["Maintenance Orders", "/maintenance-orders"]);
-  const showStock = hasAccess(account, ["Stocktaking", "/stocktaking"]);
-  const showExpenses = hasAccess(account, ["Expenses", "/expenses"]);
+  const showCurrent = hasAccess(account, ["Current Orders", "/orders"]) && featureAllowed(account, "orders.my.view");
+  const showReview = hasAccess(account, ["Orders Review", "/orders-review"]) && featureAllowed(account, "orders.review.view");
+  const showOperations = hasAccess(account, ["Requested Orders", "Operations Orders", "/operations-orders"]) && featureAllowed(account, "orders.operations.view");
+  const showMaintenance = hasAccess(account, ["Maintenance Orders", "/maintenance-orders"]) && featureAllowed(account, "orders.maintenance.view");
+  const showStock = hasAccess(account, ["Stocktaking", "/stocktaking"]) && featureAllowed(account, "stocktaking.view");
+  const identity = accountMemberId(account);
+  const differentMember = selection.userId !== "all" && selection.userId !== identity;
+  const showExpenses = hasAccess(account, ["Expenses", "/expenses"])
+    && featureAllowed(account, "expenses.view") && homeFinanceAllowed(account)
+    && (!differentMember || canHomeAccessOtherExpenses(account));
   const needsOrderOverview = showCurrent || showReview || showOperations || showMaintenance;
 
-  const selectedUser = await resolveSelectedUser(requestedUserId);
+  const selectedUser = await resolveSelectedUser(selection.userId);
   const stockPromise = showStock
     ? loadHomeStockAnalysis(account, selectedUser)
     : Promise.resolve({ ...stockTagAnalysis([]), source: "not-requested" });
@@ -1083,6 +1095,7 @@ async function loadHomeOverviewDirectImpl({
     showMaintenance,
     showStock,
     showExpenses,
+    canSelectAnalysisUsers: selection.canSelectUsers,
     source: overviewSource,
   };
 }

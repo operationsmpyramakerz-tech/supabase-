@@ -517,7 +517,7 @@ function GlobalSelect({ value, options, open, onToggle, onChoose }) {
   );
 }
 
-function GlobalAnalysisControl({ users = [], usersReady = false, selectedUser = "all", selectedDuration = "all" }) {
+function GlobalAnalysisControl({ users = [], usersReady = false, selectedUser = "all", selectedDuration = "all", canSelectUsers = true }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -539,33 +539,20 @@ function GlobalAnalysisControl({ users = [], usersReady = false, selectedUser = 
       setAvailableUsers(users);
       if (usersReady) {
         setUsersLoaded(true);
-        try {
-          window.sessionStorage.setItem("erp-home-analysis-users-v1", JSON.stringify(users));
-        } catch {}
         return;
       }
     }
 
-    try {
-      const cached = JSON.parse(window.sessionStorage.getItem("erp-home-analysis-users-v1") || "[]");
-      if (Array.isArray(cached) && cached.length) {
-        setAvailableUsers(cached);
-        setUsersLoaded(true);
-      }
-    } catch {}
   }, [users, usersReady]);
 
   const loadUsers = async () => {
-    if (usersLoaded || usersLoading) return;
+    if (!canSelectUsers || usersLoaded || usersLoading) return;
     setUsersLoading(true);
     try {
       const response = await fetch("/next/api/home/analysis-users", { credentials: "same-origin", cache: "no-store" });
       const payload = response.ok ? await response.json().catch(() => ({})) : {};
       const loadedUsers = Array.isArray(payload?.users) ? payload.users : [];
       setAvailableUsers(loadedUsers);
-      try {
-        window.sessionStorage.setItem("erp-home-analysis-users-v1", JSON.stringify(loadedUsers));
-      } catch {}
     } catch {
       setAvailableUsers([]);
     } finally {
@@ -608,7 +595,7 @@ function GlobalAnalysisControl({ users = [], usersReady = false, selectedUser = 
           event.stopPropagation();
           setOpen((value) => {
             const next = !value;
-            if (next) void loadUsers();
+            if (next && canSelectUsers) void loadUsers();
             return next;
           });
           setOpenSelect("");
@@ -619,7 +606,7 @@ function GlobalAnalysisControl({ users = [], usersReady = false, selectedUser = 
         <Icon name="chevron-down" />
       </button>
       <div className="home-global-analysis__menu next-home-global-analysis__menu" hidden={!open}>
-        <div className="home-global-analysis__field">
+        {canSelectUsers ? <div className="home-global-analysis__field">
           <span>Users</span>
           <GlobalSelect
             value={selectedUser}
@@ -628,7 +615,7 @@ function GlobalAnalysisControl({ users = [], usersReady = false, selectedUser = 
             onToggle={() => setOpenSelect((value) => value === "user" ? "" : "user")}
             onChoose={(value) => applyQuery("analysisUser", value)}
           />
-        </div>
+        </div> : null}
         <div className="home-global-analysis__field">
           <span>Duration</span>
           <GlobalSelect
@@ -732,6 +719,7 @@ function StockCard({ tagSummaries = {}, tags = [] }) {
 export default function HomeOverviewClient({
   analysisUsers = [],
   analysisUsersReady = false,
+  canSelectAnalysisUsers = true,
   selectedUser = "all",
   selectedDuration = "all",
   currentMatrix,
@@ -767,7 +755,7 @@ export default function HomeOverviewClient({
           <h2>Workspace overview</h2>
           <p>Order counts, values and progress in one place.</p>
         </div>
-        <GlobalAnalysisControl users={analysisUsers} usersReady={analysisUsersReady} selectedUser={selectedUser} selectedDuration={selectedDuration} />
+        <GlobalAnalysisControl users={analysisUsers} usersReady={analysisUsersReady} canSelectUsers={canSelectAnalysisUsers} selectedUser={selectedUser} selectedDuration={selectedDuration} />
       </div>
 
       {available.length ? (

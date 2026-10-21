@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getLegacyAccountGate } from "../../../../lib/products-auth";
 import { listHomeAnalysisUsers } from "../../../../lib/home-overview-data";
+import { featureAllowed } from "../../../../lib/feature-permissions-registry";
+import { homeSelection, homeTeamAnalysisAllowed } from "../../../../lib/home-analysis-permissions";
 import {
   resolveStocktakingQuantityColumnForLabel,
   stocktakingForAccount,
@@ -30,6 +32,10 @@ export async function GET(request) {
 
   const userId = String(new URL(request.url).searchParams.get("userId") || "").trim();
   if (!userId) return noStore({ user: null, items: [], error: "Missing user id." }, { status: 400 });
+  if (!homeSelection(gate.account).allowed || !featureAllowed(gate.account, "stocktaking.view")
+      || (userId !== String(gate.memberId || "") && !homeTeamAnalysisAllowed(gate.account))) {
+    return noStore({ user: null, items: [], error: "Home stocktaking analysis access denied." }, { status: 403 });
+  }
 
   try {
     const users = await listHomeAnalysisUsers();

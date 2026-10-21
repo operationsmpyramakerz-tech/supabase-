@@ -8,6 +8,8 @@ import { getLegacyAccountGate } from "../../lib/products-auth";
 import { getDirectAccountGateFromSessionContext } from "../../lib/direct-session-account";
 import { loadHomeOverviewDirect } from "../../lib/home-overview-data";
 import { canViewSla } from "../../lib/home-sla-settings";
+import { homeSelection } from "../../lib/home-analysis-permissions";
+import { featureAllowed } from "../../lib/feature-permissions-registry";
 
 export const dynamic = "force-dynamic";
 
@@ -83,32 +85,37 @@ export default async function HomePage({ searchParams }) {
   let bootstrapWarnings = [];
 
   if (account) {
-    const [freshGate, overviewResult] = await Promise.all([
-      getDirectAccountGateFromSessionContext(sessionGate, []),
-      loadHomeOverviewDirect({
-        account,
-        requestedUserId,
-        duration,
-      }).catch(() => null),
-    ]);
-    if (freshGate) {
-      gate = freshGate;
-      account = freshGate.ok ? freshGate.account : null;
-    } else {
-      gate = { ...sessionGate, ok: false, status: 503, error: "The account profile service is temporarily unavailable." };
+    // Always check the fresh feature matrix BEFORE any financial/order query.
+    // Never authorize analytics from an older signed session snapshot.
+    const freshGate = await getDirectAccountGateFromSessionContext(sessionGate, []);
+    if (!freshGate?.ok) {
+      gate = freshGate || { ok: false, status: 503, error: "The account profile service is temporarily unavailable." };
       account = null;
+    } else {
+      gate = freshGate;
+      account = freshGate.account;
+      const selection = homeSelection(account, requestedUserId);
+      if (!selection.allowed) return <HomeUnavailable message={selection.reason} />;
+      try {
+        overview = await loadHomeOverviewDirect({ account, requestedUserId, duration });
+      } catch (error) {
+        // Authorization failures must never fall through to older dashboard loaders.
+        if (Number(error?.status) === 403) return <HomeUnavailable message="Home analysis access denied." />;
+      }
     }
-    overview = overviewResult;
+  }
+  if (!gate.ok) {
+    if (gate.status === 401) redirect("/login?next=/next/home");
+    return <HomeUnavailable message={gate.error || "Home authorization is unavailable."} />;
   }
 
   // Compatibility fallback only. The normal Home path never waits for the
   // legacy page-bootstrap bundle; it is kept here so a customized/older
   // Supabase schema cannot make the dashboard unavailable.
-  if (!account || !overview) {
+  if (account && !overview) {
     const fallback = await legacyHomeBootstrap(requestedUserId, duration);
-    if (fallback.status === 401 || fallback.status === 403) {
-      redirect("/login?next=/next/home");
-    }
+    if (fallback.status === 401) redirect("/login?next=/next/home");
+    if (fallback.status === 403) return <HomeUnavailable message="Home access denied." />;
 
     if (fallback.ok && fallback.data?.ok) {
       const resources = resourceMap(fallback.data);
@@ -122,6 +129,7 @@ export default async function HomePage({ searchParams }) {
     }
   }
 
+  if (!account || !featureAllowed(account, "home.view")) return <HomeUnavailable message="Home access denied." />;
   const actions = quickActions(account);
   const selectedAnalysisUsers = overview.selectedUser ? [overview.selectedUser] : [];
 
@@ -137,6 +145,7 @@ export default async function HomePage({ searchParams }) {
       <HomeOverviewClient
         analysisUsers={selectedAnalysisUsers}
         analysisUsersReady={false}
+        canSelectAnalysisUsers={overview.canSelectAnalysisUsers !== false}
         selectedUser={overview.selectedUserId || requestedUserId}
         selectedDuration={overview.selectedDuration || duration}
         currentMatrix={overview.currentMatrix}

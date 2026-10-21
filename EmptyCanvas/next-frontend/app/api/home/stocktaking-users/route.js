@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getLegacyAccountGate } from "../../../../lib/products-auth";
 import { listHomeAnalysisUsers } from "../../../../lib/home-overview-data";
+import { featureAllowed } from "../../../../lib/feature-permissions-registry";
+import { homeSelection, homeTeamAnalysisAllowed } from "../../../../lib/home-analysis-permissions";
 import { resolveStocktakingQuantityColumnForLabel } from "../../../../lib/stocktaking-data";
 
 export const dynamic = "force-dynamic";
@@ -23,6 +25,10 @@ export async function GET() {
       { users: [], error: gate.error || "Access denied." },
       { status: gate.status || 503 },
     );
+  }
+
+  if (!homeSelection(gate.account).allowed || !homeTeamAnalysisAllowed(gate.account) || !featureAllowed(gate.account, "stocktaking.view")) {
+    return noStore({ error: "Home stocktaking access denied." }, { status: 403 });
   }
 
   try {

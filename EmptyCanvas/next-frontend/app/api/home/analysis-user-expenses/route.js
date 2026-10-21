@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getLegacyAccountGate } from "../../../../lib/products-auth";
 import { featureAllowed } from "../../../../lib/feature-permissions-registry";
+import { homeSelection, homeTeamAnalysisAllowed, homeFinanceAllowed, canHomeAccessOtherExpenses } from "../../../../lib/home-analysis-permissions";
 import { expensesForMemberId } from "../../../../lib/expenses-data";
 
 export const dynamic = "force-dynamic";
@@ -25,11 +26,14 @@ export async function GET(request) {
     );
   }
 
+  if (!homeSelection(gate.account).allowed || !homeFinanceAllowed(gate.account) || !featureAllowed(gate.account, "expenses.view")) {
+    return noStore({ items: [], error: "Financial analysis access denied." }, { status: 403 });
+  }
   const userId = String(new URL(request.url).searchParams.get("userId") || "").trim();
   if (!userId) return noStore({ items: [], error: "Missing user id." }, { status: 400 });
   // A user may view their own expenses. Viewing another member requires
   // the detailed Expenses by Users permission when that module is opted in.
-  if (userId !== String(gate.memberId || "") && !featureAllowed(gate.account, "expenses.users.view")) {
+  if (userId !== String(gate.memberId || "") && (!homeTeamAnalysisAllowed(gate.account) || !canHomeAccessOtherExpenses(gate.account))) {
     return noStore({ items: [], error: "User expenses access denied." }, { status: 403 });
   }
 
