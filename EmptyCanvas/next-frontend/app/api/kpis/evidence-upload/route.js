@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 
 import { directKpisContext } from "../../../../lib/kpis-data";
 import { featureAllowed } from "../../../../lib/feature-permissions-registry";
-import { createSignedUploadUrl } from "../../../../lib/supabase-rest";
+import { assertPrivateStorageBucket, createSignedUploadUrl, getSupabaseConfig } from "../../../../lib/supabase-rest";
+import { resolveUploadBucket } from "../../../../lib/private-upload-policy.mjs";
 import { createFileReference, fileUrl } from "../../../../lib/storage-direct";
 
 export const dynamic = "force-dynamic";
@@ -29,10 +30,12 @@ export async function POST(request) {
     const originalName = text(body?.filename || body?.name || "evidence-file");
     const filename = safeName(originalName);
     const objectPath = `kpi-evidence/${Date.now()}-${Math.random().toString(16).slice(2)}-${filename}`;
-    const ticket = await createSignedUploadUrl(objectPath);
+    const selected = resolveUploadBucket("kpi-evidence", getSupabaseConfig().storageBucket);
+    if (selected.privateMode) await assertPrivateStorageBucket(selected.bucket);
+    const ticket = await createSignedUploadUrl(objectPath, { bucketName: selected.bucket });
     const protectedMode = process.env.ERP_STORAGE_KPI_RECORD_AUTH_ENABLED === "1";
     const reference = protectedMode ? createFileReference({
-      bucket: ticket.bucket, path: ticket.path, name: originalName, type: text(body?.mime) || "application/octet-stream", size, scope: "kpi-evidence",
+      bucket: ticket.bucket, path: ticket.path, name: originalName, type: text(body?.mime) || "application/octet-stream", size, scope: "kpi-evidence", recordAuthRequired: selected.privateMode,
     }) : "";
     return json({
       ok: true,

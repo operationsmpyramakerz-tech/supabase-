@@ -376,6 +376,41 @@ export function storagePublicUrl(objectPath, bucketName = null) {
   return `${url}/storage/v1/object/public/${encodeURIComponent(bucket)}/${encodeStoragePath(key)}`;
 }
 
+// Refuse to send confidential files to a misconfigured public bucket.
+// The service-role request is made on the server; never expose its key.
+const verifiedPrivateBuckets = new Map();
+export async function assertPrivateStorageBucket(bucketName) {
+  const bucket = String(bucketName || "").trim();
+  if (!bucket) {
+    const error = new Error("Private Storage bucket is not configured.");
+    error.status = 503;
+    throw error;
+  }
+  const now = Date.now();
+  if (Number(verifiedPrivateBuckets.get(bucket) || 0) > now) return;
+  const { url, key } = ensureConfigured();
+  let response;
+  try {
+    response = await fetch(`${url}/storage/v1/bucket/${encodeURIComponent(bucket)}`, {
+      cache: "no-store",
+      headers: { apikey: key, Authorization: `Bearer ${key}` },
+      signal: AbortSignal.timeout(8000),
+    });
+  } catch {
+    const error = new Error("Private Storage bucket verification is unavailable.");
+    error.status = 503;
+    throw error;
+  }
+  const metadata = await response.json().catch(() => null);
+  if (!response.ok || !metadata || metadata.public !== false || String(metadata.id || metadata.name || "") !== bucket) {
+    verifiedPrivateBuckets.delete(bucket);
+    const error = new Error("Private Storage bucket is missing, inaccessible, or publicly readable. Refusing upload.");
+    error.status = 503;
+    throw error;
+  }
+  verifiedPrivateBuckets.set(bucket, now + 30_000);
+}
+
 export async function createSignedUploadUrl(objectPath, { bucketName = null } = {}) {
   const { url, key, storageBucket } = ensureConfigured();
   const bucket = String(bucketName || storageBucket || "").trim();

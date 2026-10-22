@@ -3,7 +3,9 @@ import { NextResponse } from "next/server";
 
 import { directTaskManagementContext } from "../../../../lib/task-management-data";
 import { featureGate } from "../../../../lib/feature-permissions-server";
-import { uploadStorageObject } from "../../../../lib/supabase-rest";
+import { assertPrivateStorageBucket, getSupabaseConfig, uploadStorageObject } from "../../../../lib/supabase-rest";
+import { resolveUploadBucket } from "../../../../lib/private-upload-policy.mjs";
+import { createFileReference, fileUrl } from "../../../../lib/storage-direct";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -37,11 +39,18 @@ export async function POST(request) {
     if (bytes.length > 10 * 1024 * 1024) return json({ ok: false, error: "The attachment must be 10 MB or less." }, 413);
     const cleanName = filename.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "attachment";
     const objectPath = `task-management/attachments/${Date.now()}-${crypto.randomUUID()}-${cleanName}`;
-    const uploaded = await uploadStorageObject(objectPath, bytes, { contentType: mimeHint || match[1] || "application/octet-stream", upsert: false });
-    if (!uploaded?.publicUrl) throw new Error("Supabase Storage did not return an attachment URL.");
+    const selected = resolveUploadBucket("task-management", getSupabaseConfig().storageBucket);
+    if (selected.privateMode) await assertPrivateStorageBucket(selected.bucket);
+    const contentType = mimeHint || match[1] || "application/octet-stream";
+    const uploaded = await uploadStorageObject(objectPath, bytes, { contentType, upsert: false, bucketName: selected.bucket });
+    if (!uploaded?.path) throw new Error("Supabase Storage did not confirm the attachment upload.");
+    const reference = selected.privateMode ? createFileReference({
+      bucket: selected.bucket, path: objectPath, name: filename, type: contentType,
+      size: bytes.length, scope: "task-management", recordAuthRequired: true,
+    }) : "";
     return json({
       ok: true,
-      file: { name: filename, url: uploaded.publicUrl, type: mimeHint || match[1] || "application/octet-stream", size: bytes.length },
+      file: { name: filename, url: selected.privateMode ? fileUrl(reference, filename) : uploaded.publicUrl, type: contentType, size: bytes.length },
       source: "supabase-next",
     }, 201);
   } catch (error) {

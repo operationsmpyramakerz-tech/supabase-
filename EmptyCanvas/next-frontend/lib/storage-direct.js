@@ -5,7 +5,9 @@ import crypto from "node:crypto";
 import { directPageAccessLevel } from "./order-action-auth";
 import { featureAllowed } from "./feature-permissions-registry";
 import { storageFeatureAllowed } from "./storage-feature-policy.mjs";
+import { resolveUploadBucket } from "./private-upload-policy.mjs";
 import {
+  assertPrivateStorageBucket,
   createSignedDownloadUrl,
   createSignedUploadUrl,
   deleteStorageObjects,
@@ -159,7 +161,7 @@ export function objectPathFor(policy, cleanName) {
   return `${policy.prefix}/${year}/${month}/${Date.now()}-${random}-${cleanName}`;
 }
 
-export function createFileReference({ bucket, path, name, type, size, scope }) {
+export function createFileReference({ bucket, path, name, type, size, scope, recordAuthRequired = false }) {
   const payload = {
     v: FILE_REF_VERSION,
     kind: "file",
@@ -169,6 +171,7 @@ export function createFileReference({ bucket, path, name, type, size, scope }) {
     type: safeText(type || "application/octet-stream", 180) || "application/octet-stream",
     size: Math.max(0, Number(size) || 0),
     scope: safeText(scope, 80),
+    ...(recordAuthRequired ? { recordAuthRequired: true } : {}),
   };
   if (!payload.bucket || !payload.path || !payload.scope) {
     throw storageError("Incomplete storage file reference.", "DIRECT_STORAGE_REFERENCE_INVALID", 500);
@@ -176,7 +179,7 @@ export function createFileReference({ bucket, path, name, type, size, scope }) {
   return signPayload(payload);
 }
 export function verifyFileReference(reference) { return verifyPayload(reference, "file"); }
-export function createUploadReference({ bucket, path, name, type, size, maxSize, scope, owner, expiresInSeconds = DEFAULT_UPLOAD_TTL_SECONDS }) {
+export function createUploadReference({ bucket, path, name, type, size, maxSize, scope, owner, recordAuthRequired = false, expiresInSeconds = DEFAULT_UPLOAD_TTL_SECONDS }) {
   const ttl = Math.max(60, Math.min(30 * 60, Number(expiresInSeconds) || DEFAULT_UPLOAD_TTL_SECONDS));
   const payload = {
     v: UPLOAD_REF_VERSION,
@@ -189,6 +192,7 @@ export function createUploadReference({ bucket, path, name, type, size, maxSize,
     maxSize: Math.max(1, Number(maxSize) || Number(size) || 1),
     scope: safeText(scope, 80),
     owner: safeText(owner, 300),
+    ...(recordAuthRequired ? { recordAuthRequired: true } : {}),
     exp: Date.now() + ttl * 1000,
   };
   if (!payload.bucket || !payload.path || !payload.scope || !payload.owner) {
@@ -307,12 +311,14 @@ export async function prepareUploadTicket(account = {}, input = {}) {
   if (size > policy.maxSize) throw storageError(`The selected file must be ${Math.round(policy.maxSize / 1024 / 1024)} MB or less.`, "DIRECT_STORAGE_FILE_TOO_LARGE", 413);
 
   const cfg = getSupabaseConfig();
-  const bucket = String(cfg?.storageBucket || "").trim();
+  const selected = resolveUploadBucket(scope, cfg?.storageBucket || "");
+  const bucket = selected.bucket;
   if (!isSupabaseConfigured() || !bucket) throw storageError("Supabase Storage is not configured for direct uploads.", "SUPABASE_STORAGE_NOT_CONFIGURED", 503);
 
+  if (selected.privateMode) await assertPrivateStorageBucket(bucket);
   const objectPath = objectPathFor(policy, clean);
   const uploadTicket = await createSignedUploadUrl(objectPath, { bucketName: bucket });
-  const uploadRef = createUploadReference({ bucket, path: objectPath, name: original, type, size, maxSize: policy.maxSize, scope, owner });
+  const uploadRef = createUploadReference({ bucket, path: objectPath, name: original, type, size, maxSize: policy.maxSize, scope, owner, recordAuthRequired: selected.privateMode });
   diagnostics.uploadTicketsCreated += 1;
   return {
     ok: true,
@@ -332,7 +338,7 @@ export async function completeUpload(account = {}, reference = "") {
   const owner = storageOwner(account);
   if (!owner || owner !== String(payload.owner || "")) throw storageError("This upload ticket belongs to another session.", "DIRECT_STORAGE_OWNER_MISMATCH", 403);
   const verified = await verifyCompletedUpload(payload);
-  const fileReference = createFileReference(verified);
+  const fileReference = createFileReference({ ...verified, recordAuthRequired: payload.recordAuthRequired === true });
   return {
     ok: true,
     direct: true,

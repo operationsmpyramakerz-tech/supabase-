@@ -37,9 +37,12 @@ export async function GET(request) {
     // Gradual, explicit rollout after the SQL function has been installed.
     // A valid signed reference is NOT proof of permission on its parent task.
     const reference = url.searchParams.get("reference") || "";
-    const taskRecordAuth = payload.scope === "task-management" && process.env.ERP_STORAGE_TASK_RECORD_AUTH_ENABLED === "1";
-    const b2cRecordAuth = payload.scope === "b2c" && process.env.ERP_STORAGE_B2C_RECORD_AUTH_ENABLED === "1";
-    const kpiRecordAuth = payload.scope === "kpi-evidence" && process.env.ERP_STORAGE_KPI_RECORD_AUTH_ENABLED === "1";
+    // Private file references remain record-bound even if the upload switch
+    // is subsequently disabled; never silently downgrade their authorization.
+    const bound = payload.recordAuthRequired === true;
+    const taskRecordAuth = payload.scope === "task-management" && (bound || process.env.ERP_STORAGE_TASK_RECORD_AUTH_ENABLED === "1");
+    const b2cRecordAuth = payload.scope === "b2c" && (bound || process.env.ERP_STORAGE_B2C_RECORD_AUTH_ENABLED === "1");
+    const kpiRecordAuth = payload.scope === "kpi-evidence" && (bound || process.env.ERP_STORAGE_KPI_RECORD_AUTH_ENABLED === "1");
     if (taskRecordAuth) await assertTaskStorageRecordAccess(reference);
     if (b2cRecordAuth) await assertB2cStorageRecordAccess(reference);
     if (kpiRecordAuth) await assertKpiStorageRecordAccess(reference);

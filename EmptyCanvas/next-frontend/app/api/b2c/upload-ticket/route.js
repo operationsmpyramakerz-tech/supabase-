@@ -3,7 +3,8 @@ import { NextResponse } from "next/server";
 
 import { directB2cContext } from "../../../../lib/b2c-data";
 import { featureAllowed } from "../../../../lib/feature-permissions-registry";
-import { createSignedUploadUrl } from "../../../../lib/supabase-rest";
+import { assertPrivateStorageBucket, createSignedUploadUrl, getSupabaseConfig } from "../../../../lib/supabase-rest";
+import { resolveUploadBucket } from "../../../../lib/private-upload-policy.mjs";
 import { createFileReference, fileUrl } from "../../../../lib/storage-direct";
 
 export const dynamic = "force-dynamic";
@@ -39,10 +40,12 @@ export async function POST(request) {
     if (size > MAX_BYTES) return json({ ok: false, error: "Each file must be 10 MB or less." }, 413);
 
     const objectPath = `b2c/customer-files/${Date.now()}-${crypto.randomUUID()}-${safeName(filename)}`;
-    const ticket = await createSignedUploadUrl(objectPath);
+    const selected = resolveUploadBucket("b2c", getSupabaseConfig().storageBucket);
+    if (selected.privateMode) await assertPrivateStorageBucket(selected.bucket);
+    const ticket = await createSignedUploadUrl(objectPath, { bucketName: selected.bucket });
     const protectedMode = process.env.ERP_STORAGE_B2C_RECORD_AUTH_ENABLED === "1";
     const reference = protectedMode ? createFileReference({
-      bucket: ticket.bucket, path: ticket.path, name: filename, type: mime, size, scope: "b2c",
+      bucket: ticket.bucket, path: ticket.path, name: filename, type: mime, size, scope: "b2c", recordAuthRequired: selected.privateMode,
     }) : "";
     const customerFileUrl = protectedMode ? fileUrl(reference, filename) : ticket.publicUrl;
     return json({
