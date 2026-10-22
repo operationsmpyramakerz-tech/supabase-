@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDirectAccountGate } from "../../../../lib/products-auth";
+import { featureGate } from "../../../../lib/feature-permissions-server";
+import { validateProductExportParams } from "../../../../lib/export-access-policy.mjs";
 import { renderProposalKitExport } from "../../../../lib/proposal-kit-export-service";
 
 export const runtime = "nodejs";
@@ -9,12 +11,6 @@ export const maxDuration = 60;
 
 function text(value) {
   return String(value ?? "").trim();
-}
-
-function requiredPages(scope = "proposal") {
-  const clean = text(scope).toLowerCase();
-  if (clean === "kit") return ["Kits", "Proposals", "Products"];
-  return ["Proposals", "Products"];
 }
 
 function boolParam(value) {
@@ -28,11 +24,23 @@ function safeDisposition(fileName = "products-export") {
 
 export async function GET(request) {
   const url = new URL(request.url);
-  const scope = text(url.searchParams.get("scope") || "proposal").toLowerCase();
-  const gate = await getDirectAccountGate(requiredPages(scope));
+  // Reject unsupported scopes before any DB read: do not let a forged
+  // `scope` fall through to the Proposal exporter.
+  let exportRequest;
+  try {
+    exportRequest = validateProductExportParams(url.searchParams);
+  } catch (error) {
+    return NextResponse.json({ ok: false, error: error.message }, { status: 400, headers: { "Cache-Control": "private, no-store" } });
+  }
+  const { scope, kind, policy } = exportRequest;
+  let gate = await getDirectAccountGate(policy.pages);
+  for (const permission of policy.permissions) {
+    if (!gate.ok) break;
+    gate = featureGate(gate, permission);
+  }
   if (!gate.ok) {
     return NextResponse.json(
-      { ok: false, error: gate.error || "Authentication required." },
+      { ok: false, error: gate.error || "Access denied." },
       { status: gate.status || 503, headers: { "Cache-Control": "private, no-store" } },
     );
   }
@@ -43,7 +51,7 @@ export async function GET(request) {
       scope,
       id: url.searchParams.get("id") || "",
       proposalIds: url.searchParams.get("proposalIds") || url.searchParams.get("ids") || "",
-      kind: url.searchParams.get("kind") || "pdf",
+      kind,
       columns: url.searchParams.get("columns") || null,
       groupBy: url.searchParams.get("groupBy") || url.searchParams.get("sortBy") || "component-tag",
       repeatedComponents: url.searchParams.get("repeatedComponents") || url.searchParams.get("repeatedComponentMode") || "separate",

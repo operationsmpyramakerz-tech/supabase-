@@ -58,7 +58,7 @@ export async function POST(request) {
     return jsonError("Unsupported export scope.", 400);
   }
   const preliminaryGate = await getLegacyAccountGate(requiredPages(scope));
-  const exportPermissions = { operations: "orders.operations.export", maintenance: "orders.maintenance.export", current: "orders.my.export" };
+  const exportPermissions = { operations: "orders.operations.export", maintenance: "orders.maintenance.export", current: "orders.my.export", review: "orders.review.view_details" };
   const gate = exportPermissions[scope] ? featureGate(preliminaryGate, exportPermissions[scope]) : preliminaryGate;
   if (!gate.ok) return jsonError(gate.error || "Authentication required.", gate.status || 503);
 
