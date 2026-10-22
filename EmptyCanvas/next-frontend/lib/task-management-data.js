@@ -399,6 +399,8 @@ function sectionForViewer(section = {}, member = {}, view = "", manager = false)
     rejectionReason: status === "rejected" ? text(section.rejectionReason, 4000) : "",
     workLink: "",
     workFile: null,
+    // Both the primary file and multi-file list must be concealed.
+    workFiles: [],
     completedByName: "",
   };
 }

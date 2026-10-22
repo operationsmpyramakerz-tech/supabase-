@@ -83,7 +83,8 @@ function errorWithStatus(message, status = 400, code = "") {
 function attachment(value = {}) {
   if (!value || typeof value !== "object") return null;
   const url = text(value.url || value.attachmentUrl || value.attachment_url, 4000);
-  const protectedStorage = /^\/api\/storage\/file\/[A-Za-z0-9._~-]+(?:[?&].*)?$/i.test(url);
+  const protectedStorage = /^\/api\/storage\/file\/[A-Za-z0-9._~-]+(?:[?&].*)?$/i.test(url)
+    || /^\/next\/api\/storage\/file-direct\?reference=[A-Za-z0-9._%~-]+/i.test(url);
   if (!url || (!/^https?:\/\//i.test(url) && !protectedStorage)) return null;
   return {
     name: text(value.name || value.filename || value.attachmentName || value.attachment_name, 500) || "Attachment",
@@ -359,9 +360,13 @@ function canEditAssignmentWork(context, assignment = {}, currentUser = {}) {
 }
 
 function assignmentForViewer(assignment = {}, currentUser = {}, revealAll = false, published = false) {
-  const own = sameAssignmentMember(assignment, currentUser);
+  // A coincidentally matching display name is not proof of file ownership.
+  // Legacy assignments without a trusted assignee ID need manager or
+  // published visibility; never reveal unpublished work by name alone.
+  const own = !!(text(assignment.assigneeId) && text(currentUser.id)
+    && text(assignment.assigneeId) === text(currentUser.id));
   if (revealAll || own || published) return { ...assignment };
-  return { ...assignment, workReport: "", rejectionReason: "", workLink: "", workFile: null };
+  return { ...assignment, workReport: "", rejectionReason: "", workLink: "", workFile: null, workFiles: [] };
 }
 
 function workflowForViewer(workflow = {}, currentUser = {}, options = {}) {

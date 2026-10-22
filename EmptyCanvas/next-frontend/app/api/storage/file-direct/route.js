@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getDirectAccountGate } from "../../../../lib/products-auth";
+import { assertTaskStorageRecordAccess } from "../../../../lib/storage-task-record-access";
 import {
   canUseStorage,
   markFileRedirect,
@@ -32,7 +33,16 @@ export async function GET(request) {
   if (!access.ok) return textResponse(access.error, access.status);
 
   try {
+    // Gradual, explicit rollout after the SQL function has been installed.
+    // A valid signed reference is NOT proof of permission on its parent task.
+    const taskRecordAuth = payload.scope === "task-management" && process.env.ERP_STORAGE_TASK_RECORD_AUTH_ENABLED === "1";
+    if (taskRecordAuth) {
+      await assertTaskStorageRecordAccess(url.searchParams.get("reference") || "");
+    }
     const redirectUrl = await signedDownloadUrl(payload, {
+      // Short lifetime plus no shared download cache in record-bound mode.
+      expiresIn: taskRecordAuth ? 60 : undefined,
+      cache: !taskRecordAuth,
       download: ["1", "true", "yes"].includes(String(url.searchParams.get("download") || "").toLowerCase()),
     });
     markFileRedirect();

@@ -220,11 +220,11 @@ function pruneSignedDownloadCache(now = Date.now()) {
     oldest.forEach(([key]) => signedDownloadCache.delete(key));
   }
 }
-export async function signedDownloadUrl(payload, { download = false, expiresIn = DEFAULT_DOWNLOAD_TTL_SECONDS } = {}) {
+export async function signedDownloadUrl(payload, { download = false, expiresIn = DEFAULT_DOWNLOAD_TTL_SECONDS, cache = true } = {}) {
   const ttl = Math.max(30, Math.min(900, Number(expiresIn) || DEFAULT_DOWNLOAD_TTL_SECONDS));
   const cacheKey = `${payload.bucket}:${payload.path}:${download ? "download" : "inline"}:${payload.name || ""}`;
   const now = Date.now();
-  const cached = signedDownloadCache.get(cacheKey);
+  const cached = cache ? signedDownloadCache.get(cacheKey) : null;
   if (cached?.url && Number(cached.expiresAt || 0) > now + 30_000) {
     diagnostics.signedUrlCacheHits += 1;
     return cached.url;
@@ -232,8 +232,10 @@ export async function signedDownloadUrl(payload, { download = false, expiresIn =
   diagnostics.signedUrlCacheMisses += 1;
   const signed = await createSignedDownloadUrl(payload.path, { bucketName: payload.bucket, expiresIn: ttl });
   const url = download ? appendDownloadParameter(signed.signedUrl, payload.name) : signed.signedUrl;
-  signedDownloadCache.set(cacheKey, { url, createdAt: now, expiresAt: now + ttl * 1000 });
-  pruneSignedDownloadCache(now);
+  if (cache) {
+    signedDownloadCache.set(cacheKey, { url, createdAt: now, expiresAt: now + ttl * 1000 });
+    pruneSignedDownloadCache(now);
+  }
   return url;
 }
 function parseObjectSize(response) {
