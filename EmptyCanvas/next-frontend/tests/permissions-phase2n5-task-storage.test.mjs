@@ -52,8 +52,8 @@ test("Phase 2N5: download is gated by Task record check before issuing short-liv
   const signIdx = route.indexOf("await signedDownloadUrl");
   assert.ok(gateIdx > 0 && gateIdx < signIdx);
   assert.match(route, /ERP_STORAGE_TASK_RECORD_AUTH_ENABLED/);
-  assert.match(route, /expiresIn: taskRecordAuth \? 60/);
-  assert.match(route, /cache: !taskRecordAuth/);
+  assert.match(route, /expiresIn: recordAuth \? 60/);
+  assert.match(route, /cache: !recordAuth/);
   assert.match(source("../lib/storage-task-record-access.js"), /getTaskManagementTicket\(ticketId, context, \{ force: true \}\)/);
   assert.match(source("../lib/storage-task-record-access.js"), /getTaskManagementPeopleWorkflow\(context, sectionId\)/);
 });

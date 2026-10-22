@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { directB2cContext } from "../../../../lib/b2c-data";
 import { featureAllowed } from "../../../../lib/feature-permissions-registry";
 import { createSignedUploadUrl } from "../../../../lib/supabase-rest";
+import { createFileReference, fileUrl } from "../../../../lib/storage-direct";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -39,13 +40,18 @@ export async function POST(request) {
 
     const objectPath = `b2c/customer-files/${Date.now()}-${crypto.randomUUID()}-${safeName(filename)}`;
     const ticket = await createSignedUploadUrl(objectPath);
+    const protectedMode = process.env.ERP_STORAGE_B2C_RECORD_AUTH_ENABLED === "1";
+    const reference = protectedMode ? createFileReference({
+      bucket: ticket.bucket, path: ticket.path, name: filename, type: mime, size, scope: "b2c",
+    }) : "";
+    const customerFileUrl = protectedMode ? fileUrl(reference, filename) : ticket.publicUrl;
     return json({
       ok: true,
-      file: { name: filename, url: ticket.publicUrl, type: mime, size },
+      file: { name: filename, url: customerFileUrl, type: mime, size },
       upload: {
         method: "PUT",
         signedUrl: ticket.signedUrl,
-        publicUrl: ticket.publicUrl,
+        ...(protectedMode ? {} : { publicUrl: ticket.publicUrl }),
         headers: { "x-upsert": "false" },
         bucket: ticket.bucket,
         path: ticket.path,
