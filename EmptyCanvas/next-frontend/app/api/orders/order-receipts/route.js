@@ -16,11 +16,10 @@ export async function GET(request) {
   }
   const url = new URL(request.url);
   const ids = String(url.searchParams.get("ids") || "").trim();
-  const fresh = url.searchParams.get("_fresh") === "1";
   try {
-    const payload = await loadOrderReceiptViewerItems(ids, { fresh });
+    const payload = await loadOrderReceiptViewerItems(ids, { account: gate.account });
     return NextResponse.json(payload, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
-    return NextResponse.json({ ok: false, error: error?.message || "Failed to load order receipts." }, { status: Number(error?.status) || 500 });
+    return NextResponse.json({ ok: false, error: error?.message || "Failed to load order receipts." }, { status: Number(error?.status) || 500, headers: { "Cache-Control": "private, no-store" } });
   }
 }

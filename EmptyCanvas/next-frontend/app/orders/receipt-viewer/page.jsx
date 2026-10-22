@@ -65,7 +65,7 @@ export default async function OrderReceiptViewerPage({ searchParams }) {
   let payload = null;
   const warnings = [];
   try {
-    payload = await loadOrderReceiptViewerItems(ids);
+    payload = await loadOrderReceiptViewerItems(ids, { account: gate.account });
   } catch (error) {
     return (
       <main className="standalone-state">

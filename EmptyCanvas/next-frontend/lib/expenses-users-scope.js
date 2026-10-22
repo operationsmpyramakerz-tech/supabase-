@@ -165,3 +165,19 @@ export async function scopeExpenseDetail(account, key, requestedId, payload) {
     }),
   };
 }
+
+// Receipt authorization reuses exactly the same canonical owner resolution as
+// the Expenses by Users Data Scope. The caller must ALSO verify that an expense
+// has an exact order relation; checking employee ownership alone is not enough.
+export async function expenseReceiptRowChecker(account, { own = false, users = false } = {}) {
+  const usersScope = users ? expensesUsersActionScope(account, "expenses.users.view") : "none";
+  const unrestricted = users && (usersScope === "all" || usersScope === "legacy");
+  if (unrestricted) return () => true;
+  const ownIndex = own ? await permittedDirectory(account, "own") : null;
+  const usersIndex = users && ["own", "team"].includes(usersScope)
+    ? await permittedDirectory(account, usersScope) : null;
+  return row => Boolean(
+    (ownIndex && ownIndex.visible.has(ownerOfExpenseRow(ownIndex, row))) ||
+    (usersIndex && usersIndex.visible.has(ownerOfExpenseRow(usersIndex, row)))
+  );
+}

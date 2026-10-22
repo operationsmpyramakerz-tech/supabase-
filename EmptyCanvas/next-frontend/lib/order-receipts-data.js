@@ -1,9 +1,7 @@
 import "server-only";
 import { getSupabaseConfig, select, selectById, storagePublicUrl } from "./supabase-rest";
+import { assertReceiptSourcesAccessible } from "./order-receipt-access";
 
-const RECEIPT_CACHE_TTL_MS = 20_000;
-const receiptCache = new Map();
-const receiptInflight = new Map();
 
 function text(value) {
   return String(value ?? "").trim();
@@ -299,9 +297,14 @@ async function rowsForReference(reference) {
   throw error;
 }
 
-async function loadDirect(rawIds) {
+async function loadDirect(rawIds, account) {
   const ids = normalizeIds(rawIds);
-  if (!ids.length) {
+  if (!account) {
+    const error = new Error("Order receipts require an authenticated account.");
+    error.status = 401;
+    throw error;
+  }
+  if (!ids.length || ids.length > 50 || ids.some(id => id.length > 160)) {
     const error = new Error("Missing order ids");
     error.status = 400;
     throw error;
@@ -317,6 +320,8 @@ async function loadDirect(rawIds) {
     })));
     rowsBySource.push(...batch);
   }
+  // Authorization must precede extraction of URLs, for every requested ID.
+  await assertReceiptSourcesAccessible(account, rowsBySource);
   for (const { sourceId, rows } of rowsBySource) {
     for (const row of rows) {
       const entries = normalizeEntries(orderReceiptRaw(row), "Order receipt");
@@ -330,20 +335,8 @@ async function loadDirect(rawIds) {
   return { ok: true, source: "supabase-next", items, ids, count: items.length };
 }
 
-export async function loadOrderReceiptViewerItems(rawIds, { fresh = false } = {}) {
-  const ids = normalizeIds(rawIds);
-  const key = ids.join(",");
-  if (!key) return await loadDirect(rawIds);
-  const cached = receiptCache.get(key);
-  if (!fresh && cached && cached.expiresAt > Date.now()) return cached.value;
-  if (!fresh && receiptInflight.has(key)) return await receiptInflight.get(key);
-  const pending = loadDirect(key);
-  if (!fresh) receiptInflight.set(key, pending);
-  try {
-    const payload = await pending;
-    receiptCache.set(key, { value: payload, expiresAt: Date.now() + RECEIPT_CACHE_TTL_MS });
-    return payload;
-  } finally {
-    receiptInflight.delete(key);
-  }
+export async function loadOrderReceiptViewerItems(rawIds, { account } = {}) {
+  // Do not share results between users or cache grants after revocation.
+  // Each request resolves its own account's current expense access.
+  return loadDirect(rawIds, account);
 }
