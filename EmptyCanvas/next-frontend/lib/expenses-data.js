@@ -1,5 +1,6 @@
 import "server-only";
 import { featureAllowed } from "./feature-permissions-registry";
+import { assertExpenseOrderReferences } from "./expense-order-access";
 import { performance } from "node:perf_hooks";
 import { deleteById, deleteStorageObjects, getSupabaseConfig, insert, rpc, select, selectAll, selectById, storagePublicUrl, updateById, uploadStorageObject } from "./supabase-rest";
 import { listTeamMembersLite } from "./team-members-service";
@@ -1007,6 +1008,9 @@ export async function createExpenseCashOut(account = {}, payload = {}) {
   const cashOutAmount = isOwnCar ? ownCarCostForKilometers(kilometers, ownCarRatePerKm()) : amount;
   if (isOwnCar && cashOutAmount <= 0) throw expenseError("Distance is too small to calculate an expense.", 400);
 
+  // Never accept browser-supplied order relations without checking the active
+  // Own/Team/All policy. This runs before uploading receipts or inserting rows.
+  const verifiedOrder = await assertExpenseOrderReferences(account, payload);
   const reason = text(payload.reason) || [
     text(payload.orderLabel),
     !text(payload.orderLabel) ? text(payload.orderDisplayId) : "",
@@ -1029,7 +1033,7 @@ export async function createExpenseCashOut(account = {}, payload = {}) {
     cash_in: null,
     kilometer: isOwnCar ? kilometers : null,
     screenshot,
-    orders_names: text(payload.orderLabel || payload.orderDisplayId) || null,
+    orders_names: verifiedOrder ? verifiedOrder.orderLabel : (text(payload.orderLabel || payload.orderDisplayId) || null),
     orders_raw: Array.isArray(payload.orderIds) ? payload.orderIds.map(text).filter(Boolean).join(",") : (text(payload.orderId) || null),
   }));
   invalidateExpenseDataCaches();

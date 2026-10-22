@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getDirectAccountGate } from "../../../../../lib/products-auth";
 import { featureGate } from "../../../../../lib/feature-permissions-server";
 import { expenseOrderOptions } from "../../../../../lib/expenses-data";
+import { scopeExpenseOrderOptions } from "../../../../../lib/expense-order-access";
 
 export const dynamic = "force-dynamic";
 
@@ -18,9 +19,9 @@ export async function GET() {
     return NextResponse.json({
       success: true,
       source: "supabase-next",
-      options: await expenseOrderOptions(),
+      options: await scopeExpenseOrderOptions(gate.account, await expenseOrderOptions()),
     }, {
-      headers: { "Cache-Control": "private, max-age=30" },
+      headers: { "Cache-Control": "private, no-store" },
     });
   } catch (error) {
     console.error("[next expense order options]", error?.details || error);

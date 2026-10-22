@@ -3,6 +3,8 @@ import "server-only";
 import crypto from "node:crypto";
 
 import { directPageAccessLevel } from "./order-action-auth";
+import { featureAllowed } from "./feature-permissions-registry";
+import { storageFeatureAllowed } from "./storage-feature-policy.mjs";
 import {
   createSignedDownloadUrl,
   createSignedUploadUrl,
@@ -125,10 +127,19 @@ export function payloadMatchesPolicy(payload, policy) {
   const prefix = String(policy?.prefix || "").replace(/^\/+|\/+$/g, "");
   return Boolean(prefix && (pathValue === prefix || pathValue.startsWith(`${prefix}/`)));
 }
+// Direct signed storage references are not an exception to Advanced Permissions.
+// Keep legacy page checks for non-migrated users; require the relevant feature
+// grants when a module has been migrated.
+function hasStorageFeature(account, policy, write) {
+  return storageFeatureAllowed(policy?.prefix, write, key => featureAllowed(account, key));
+}
 export function canUseStorage(account = {}, policy, { write = false } = {}) {
   const level = directPageAccessLevel(account, policy?.pages || []);
   if (level === null) return { ok: false, status: 503, code: "ACCESS_CONTEXT_UNAVAILABLE", error: "Storage access could not be verified." };
   if (!level) return { ok: false, status: 403, code: "ACCESS_DENIED", error: "You are not authorized to access files on this page." };
+  if (!hasStorageFeature(account, policy, write)) {
+    return { ok: false, status: 403, code: "FEATURE_ACCESS_DENIED", error: "This file action is not permitted by your feature access." };
+  }
   if (write && level === "view") {
     return { ok: false, status: 403, code: "VIEW_ONLY_ACCESS", error: "View-only access: you are not authorized to upload files on this page." };
   }
