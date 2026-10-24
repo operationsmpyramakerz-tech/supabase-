@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDirectAccountGate } from "../../../../lib/products-auth";
+import { featureGate } from "../../../../lib/feature-permissions-server";
+import { fetchProductImageResource } from "../../../../lib/secure-product-image-fetch.mjs";
 import { getProductImageSources } from "../../../../lib/products-service";
 import { getSupabaseConfig } from "../../../../lib/supabase-rest";
 
@@ -7,6 +9,7 @@ export const dynamic = "force-dynamic";
 
 const MAX_IMAGE_BYTES = 12 * 1024 * 1024;
 const FETCH_TIMEOUT_MS = 8000;
+const SAFE_RASTER_MIMES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif", "image/avif"]);
 
 function text(value) {
   return String(value ?? "").trim();
@@ -71,33 +74,19 @@ function imageCandidatesFromHtml(html, pageUrl) {
   return unique(found);
 }
 
-function supabaseAuthHeaders(url) {
-  const { url: supabaseUrl, key } = getSupabaseConfig();
-  if (!supabaseUrl || !key || !text(url).startsWith(`${supabaseUrl.replace(/\/+$/, "")}/storage/v1/`)) return {};
-  return { apikey: key, Authorization: `Bearer ${key}` };
-}
-
-async function fetchWithTimeout(url, options = {}) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  try {
-    return await fetch(url, { ...options, signal: controller.signal, cache: "no-store", redirect: "follow" });
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
 function sniffImageType(buffer, fallbackUrl = "") {
   if (!buffer?.length) return "";
   if (buffer.length >= 12 && buffer.toString("ascii", 0, 4) === "RIFF" && buffer.toString("ascii", 8, 12) === "WEBP") return "image/webp";
   if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return "image/jpeg";
   if (buffer.length >= 8 && buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return "image/png";
+  if (buffer.length >= 12 && buffer.toString("ascii", 4, 8) === "ftyp" && ["avif", "avis"].includes(buffer.toString("ascii", 8, 12))) return "image/avif";
   if (buffer.length >= 6) {
     const signature = buffer.toString("ascii", 0, 6);
     if (signature === "GIF87a" || signature === "GIF89a") return "image/gif";
   }
   const extension = text(fallbackUrl).split(/[?#]/)[0].toLowerCase();
   if (extension.endsWith(".webp")) return "image/webp";
+  if (extension.endsWith(".avif")) return "image/avif";
   if (/\.(jpe?g)$/i.test(extension)) return "image/jpeg";
   if (extension.endsWith(".png")) return "image/png";
   if (extension.endsWith(".gif")) return "image/gif";
@@ -109,56 +98,43 @@ async function fetchImage(url, { referer = "" } = {}) {
     const match = url.match(/^data:(image\/[a-z0-9.+-]+);base64,(.+)$/i);
     if (!match) return null;
     const body = Buffer.from(match[2], "base64");
-    if (!body.length || body.length > MAX_IMAGE_BYTES) return null;
-    return { body, contentType: match[1] };
+    if (!body.length || body.length > MAX_IMAGE_BYTES || !SAFE_RASTER_MIMES.has(match[1].toLowerCase())) return null;
+    return { body, contentType: match[1].toLowerCase() };
   }
-  if (!/^https?:\/\//i.test(url)) return null;
-
-  const headers = {
-    "User-Agent": "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/126 Safari/537.36",
-    Accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
-    ...(referer ? { Referer: referer } : {}),
-    ...supabaseAuthHeaders(url),
-  };
-  let response;
-  try {
-    response = await fetchWithTimeout(url, { headers });
-  } catch {
-    return null;
-  }
-  if (!response.ok) return null;
-
-  const declaredLength = Number(response.headers.get("content-length") || 0);
-  if (declaredLength > MAX_IMAGE_BYTES) return null;
-  const buffer = Buffer.from(await response.arrayBuffer());
-  if (!buffer.length || buffer.length > MAX_IMAGE_BYTES) return null;
-
-  const responseType = text(response.headers.get("content-type")).split(";")[0].toLowerCase();
-  const contentType = responseType.startsWith("image/") ? responseType : sniffImageType(buffer, response.url || url);
-  if (!contentType) return null;
-  return { body: buffer, contentType };
+  const { url: supabaseUrl, key } = getSupabaseConfig();
+  const response = await fetchProductImageResource(url, {
+    supabaseUrl,
+    maxBytes: MAX_IMAGE_BYTES,
+    timeoutMs: FETCH_TIMEOUT_MS,
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/126 Safari/537.36",
+      Accept: "image/avif,image/webp,image/apng,image/*;q=0.8",
+      ...(referer ? { Referer: referer } : {}),
+      ...(key ? { apikey: key, Authorization: `Bearer ${key}` } : {}),
+    },
+  });
+  if (!response?.body?.length) return null;
+  const responseType = text(response.headers["content-type"]).split(";")[0].toLowerCase();
+  const contentType = responseType.startsWith("image/") ? responseType : sniffImageType(response.body, response.url || url);
+  // Never proxy active SVG documents under the app origin.
+  if (!SAFE_RASTER_MIMES.has(contentType)) return null;
+  return { body: response.body, contentType };
 }
 
 async function fetchPageImageCandidates(pageUrl) {
-  if (!/^https?:\/\//i.test(text(pageUrl))) return [];
-  let response;
-  try {
-    response = await fetchWithTimeout(pageUrl, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/126 Safari/537.36",
-        Accept: "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9",
-      },
-    });
-  } catch {
-    return [];
-  }
-  if (!response.ok) return [];
-
-  const contentType = text(response.headers.get("content-type")).toLowerCase();
+  const { url: supabaseUrl } = getSupabaseConfig();
+  const response = await fetchProductImageResource(pageUrl, {
+    supabaseUrl, maxBytes: 1_500_000, timeoutMs: FETCH_TIMEOUT_MS,
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/126 Safari/537.36",
+      Accept: "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8",
+      "Accept-Language": "en-US,en;q=0.9",
+    },
+  });
+  if (!response) return [];
+  const contentType = text(response.headers["content-type"]).toLowerCase();
   if (contentType.startsWith("image/")) return [response.url || pageUrl];
-  const html = await response.text().catch(() => "");
-  return imageCandidatesFromHtml(html, response.url || pageUrl);
+  return imageCandidatesFromHtml(response.body.toString("utf8"), response.url || pageUrl);
 }
 
 function noImage() {
@@ -169,8 +145,8 @@ function noImage() {
 }
 
 export async function GET(request) {
-  const gate = await getDirectAccountGate("Products");
-  if (!gate.ok) return noImage();
+  const gate = featureGate(await getDirectAccountGate("Products"), "products.view");
+  if (!gate.ok) return new NextResponse(null, { status: gate.status || 403, headers: { "Cache-Control": "private, no-store" } });
 
   try {
     const id = text(new URL(request.url).searchParams.get("id"));
