@@ -3888,3 +3888,49 @@ html[data-theme="dark"] body.user-access-page .ua-folder.ua-folder--add {
   .ua-feature-bulk strong { flex-basis: 100%; }
   .ua-team-scope-item { padding: 9px; }
 }
+
+/* Phase 2O2 — explicit effective state, review and compact module navigation. */
+.ua-feature-overview { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:9px; margin:12px 0; }
+.ua-feature-overview > div { min-width:0; display:grid; gap:5px; padding:13px 12px; background:#f7f8fa; border:1px solid #e5e8ee; border-radius:13px; }
+.ua-feature-overview strong { font-size:14px; font-weight:800; color:#242b35; overflow-wrap:anywhere; }
+.ua-feature-overview small { font-size:11px; color:#737e8c; line-height:1.35; }
+.ua-feature-warning { padding:12px; margin:10px 0; background:#fff6ed; color:#9d481b; border:1px solid #f1c49e; border-radius:12px; font-size:12px; line-height:1.5; overflow-wrap:anywhere; }
+.ua-feature-toolbar { grid-template-columns:minmax(0,1fr) minmax(120px,170px) minmax(120px,170px); }
+.ua-feature-bulk-hint { margin:-7px 0 14px; font-size:11px; color:#697483; line-height:1.45; }
+.ua-feature-module-heading { display:flex !important; align-items:center; justify-content:space-between; gap:10px; min-width:0; }
+.ua-feature-module-heading .ua-switch { flex:0 0 auto; }
+.ua-feature-module-toggle { display:flex; align-items:center; gap:8px; flex:1; min-width:0; border:0; padding:3px 0; background:transparent; color:inherit; font:inherit; cursor:pointer; text-align:left; }
+.ua-feature-module-toggle > svg { width:16px; height:16px; flex:0 0 16px; transition:transform .2s ease; }
+.ua-feature-module-toggle[aria-expanded="false"] > svg { transform:rotate(-90deg); }
+.ua-feature-module-toggle > small { margin-left:auto; font-size:11px; white-space:nowrap; opacity:.75; }
+.ua-feature-status { display:inline-flex; align-items:center; border:1px solid #dce2e8; border-radius:99px; padding:4px 8px; color:#657181; background:#f6f8fa; font-size:10px; font-weight:800; line-height:1.2; white-space:nowrap; }
+.ua-feature-status--advanced { color:#236346; background:#e9f8ef; border-color:#bfe5ce; }
+.ua-feature-status--blocked { color:#a64026; background:#fff0e9; border-color:#f2c1af; }
+.ua-feature-status--changed { color:#9b4b17; background:#fff2e6; border-color:#efc09d; }
+.ua-feature-review { margin-top:16px; padding:13px 14px; border:1px solid #e2e6ed; border-radius:15px; background:#f9fafb; }
+.ua-feature-review-head { display:flex; align-items:center; flex-wrap:wrap; gap:9px; margin-bottom:8px; }
+.ua-feature-review-head > strong { font-size:13px; margin-right:auto; }
+.ua-feature-review ul { padding-inline-start:18px; margin:7px 0; display:grid; gap:5px; font-size:12px; }
+.ua-feature-review small, .ua-feature-review p { color:#677483; font-size:11px; line-height:1.5; }
+.ua-feature-review p { color:#9d481b; }
+@media (max-width:760px) {
+  .ua-feature-toolbar { grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
+  .ua-feature-search-field { grid-column:1/-1; }
+  .ua-feature-overview { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .ua-feature-overview > div:first-child { grid-column:1/-1; }
+  .ua-feature-module-toggle { flex-wrap:wrap; gap:6px; font-size:12px; }
+  .ua-feature-module-toggle > small { margin-left:0; }
+}
+@media (max-width:380px) {
+  .ua-feature-status { font-size:9px; }
+  .ua-feature-toolbar { grid-template-columns:1fr; }
+  .ua-feature-search-field { grid-column:auto; }
+}
+html[data-theme="dark"] .ua-feature-overview > div, html[data-theme="dark"] .ua-feature-review { background:#1f242b; border-color:#3b424b; }
+html[data-theme="dark"] .ua-feature-overview strong { color:#f1f3f6; }
+html[data-theme="dark"] .ua-feature-module-toggle { color:inherit; }
+
+.ua-team-scope-actions { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin:-7px 0 12px; }
+.ua-team-scope-actions > span { margin-right:auto; font-size:11px; color:#737e8c; }
+
+.ua-feature-count-note { display:block; margin:-5px 0 6px; font-size:10px; color:#687584; line-height:1.4; }
