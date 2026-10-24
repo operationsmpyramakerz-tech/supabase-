@@ -210,7 +210,7 @@ function PasswordModal({ action, onClose, onVerified }) {
   async function submit(event) { event.preventDefault(); await verifyPassword(password); }
   const isDelete = /^delete\b/i.test(text(action?.title));
   if (isDelete) return <DeleteVerificationDialog title={action?.title || "Delete item"} password={password} onPasswordChange={setPassword} busy={busy} error={error} onCancel={onClose} onSubmit={verifyPassword} />;
-  return <Modal title="Admin Verification" onClose={onClose} modalClass="ua-modal--small" compact icon="lock" closeDisabled={busy} bodyClass="ua-modal__body--compact" zIndex={10060} footer={<><button type="button" className="ua-btn ua-btn--light" onClick={onClose} disabled={busy}>Cancel</button><button type="submit" form="ua-next-admin-password-form" className="ua-btn ua-btn--dark" disabled={busy}><UAIcon name="unlock"/><span>{busy ? "Checking..." : "Continue"}</span></button></>}>
+  return <Modal title="Admin Verification" onClose={onClose} modalClass="ua-modal--small" compact icon="lock" closeDisabled={busy} bodyClass="ua-modal__body--compact" zIndex={10090} footer={<><button type="button" className="ua-btn ua-btn--light" onClick={onClose} disabled={busy}>Cancel</button><button type="submit" form="ua-next-admin-password-form" className="ua-btn ua-btn--dark" disabled={busy}><UAIcon name="unlock"/><span>{busy ? "Checking..." : "Continue"}</span></button></>}>
     <form id="ua-next-admin-password-form" onSubmit={submit}><label className="ua-form-field ua-form-field--wide"><span>Admin Password</span><input autoFocus type="password" autoComplete="current-password" placeholder="Enter Admin password" value={password} onChange={(event) => setPassword(event.target.value)}/></label><div className="ua-form-error">{error}</div></form>
   </Modal>;
 }
@@ -517,6 +517,62 @@ const EVENT_REQUEST_ROW_KEYS = new Set([
   "events.requests.cancel", "events.requests.archive", "events.requests.pdf",
 ]);
 
+// Scope links affect Home, Expenses, Orders, Tasks and Events immediately.
+// Editing them is a privileged operation, separate from changing page grants.
+function TeamScopeModal({ member, protect, onClose }) {
+  const [members, setMembers] = useState([]);
+  const [selected, setSelected] = useState([]);
+  const [initial, setInitial] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [query, setQuery] = useState("");
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      try {
+        const response = await requestJson(`/next/api/users-center/team-scope?id=${encodeURIComponent(member.id)}`);
+        if (!live) return;
+        setMembers(response.members || []);
+        setSelected(response.visibleIds || []);
+        setInitial(response.visibleIds || []);
+      } catch (e) { if (live) { setError(e.message); setLoadFailed(true); } }
+      finally { if (live) setLoading(false); }
+    })();
+    return () => { live = false; };
+  }, [member.id]);
+  const queryText = lower(query);
+  const filtered = members.filter(item => [item.name, item.department, item.position].some(value => lower(value).includes(queryText)));
+  const picked = new Set(selected);
+  const changes = [...new Set([...selected, ...initial])].some(id => picked.has(id) !== initial.includes(id));
+  function toggle(id) {
+    setSelected(current => current.includes(id) ? current.filter(value => value !== id) : [...current, id]);
+  }
+  function save() {
+    if (busy || loading || loadFailed || !changes) return;
+    protect({ title: "Update team visibility", message: `Save ${selected.length} direct team member(s) for ${member.name}? These links affect Own / Team / All immediately.` }, async () => {
+      setBusy(true); setError("");
+      try {
+        await usersCenterMutation("team-scope-save", { memberId: member.id, visibleMemberIds: selected, expectedVisibleIds: initial });
+        onClose();
+      } catch (e) { setError(e.message); }
+      finally { setBusy(false); }
+    });
+  }
+  return <Modal title="Team Visibility" subtitle={`Choose whose records ${member.name} can access under Team scope.`} onClose={onClose} modalClass="ua-modal--page-access" compact icon="users" closeDisabled={busy} bodyClass="ua-page-access-body" zIndex={10060}
+    footer={<><button className="ua-btn ua-btn--light" type="button" disabled={busy} onClick={onClose}>Cancel</button><button className="ua-btn ua-btn--dark" type="button" disabled={busy || loading || loadFailed || !changes} onClick={save}><UAIcon name="save"/><span>{busy ? "Saving..." : "Save Team"}</span></button></>}>
+    <div className="ua-team-scope-panel">
+      <p className="ua-team-scope-notice">Only explicitly selected members are included. Sharing a department does not grant Team access. This changes every module using Team scope.</p>
+      <div className="ua-team-scope-toolbar"><label htmlFor="ua-team-scope-search">Find a team member</label><input id="ua-team-scope-search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search name, department or position..." disabled={loading || busy}/><strong>{selected.length} selected</strong></div>
+      {loading ? <p>Loading team members...</p> : null}
+      {!loading && !loadFailed && <div className="ua-team-scope-list">{filtered.map(item => <label key={item.id} className="ua-team-scope-item"><span className="ua-team-scope-avatar">{initials(item.name)}</span><span className="ua-team-scope-item-copy"><strong>{item.name}</strong><small>{[item.department, item.position].filter(Boolean).join(" • ") || "Team member"}</small></span><input type="checkbox" checked={picked.has(item.id)} onChange={() => toggle(item.id)} disabled={busy}/></label>)}{!filtered.length && <p className="ua-empty">No matching team members.</p>}</div>}
+      {error ? <div className="ua-form-error" role="alert">{error} <button type="button" onClick={onClose}>Close</button></div> : null}
+      {!loading && !loadFailed ? <small className="ua-team-scope-notice">{changes ? "Unsaved changes — Save Team to apply them." : "No unsaved changes."} The manager always retains Own access without needing a self-link.</small> : null}
+    </div>
+  </Modal>;
+}
+
 // Pilot modules only: other keys are registered but not yet protected across
 // every route. Do not expose switches that would give a false sense of security.
 function FeatureAccessModal({ member, onClose, protect }) {
@@ -526,6 +582,9 @@ function FeatureAccessModal({ member, onClose, protect }) {
   const [grants, setGrants] = useState({});
   const [grantScopes, setGrantScopes] = useState({});
   const [unmanagedGrants, setUnmanagedGrants] = useState([]);
+  const [teamScopeOpen, setTeamScopeOpen] = useState(false);
+  const [featureQuery, setFeatureQuery] = useState("");
+  const [moduleFilter, setModuleFilter] = useState("all");
   const [scopedOrders, setScopedOrders] = useState({ "orders.my": false, "orders.operations": false, tasks: false });
   const [enabledModules, setEnabledModules] = useState({ products: false, "orders.operations": false });
   const [busy, setBusy] = useState(false);
@@ -618,6 +677,12 @@ function FeatureAccessModal({ member, onClose, protect }) {
   const shown = FEATURE_DEFINITIONS.filter(item => ACTIVE_PILOT_FEATURE_KEYS.includes(item.key));
   const activeFeatures = shown.filter(item => enabledModules[item.module]);
   const checkedCount = activeFeatures.filter(item => grants[item.key] === true).length;
+  const searchText = lower(featureQuery);
+  const visibleModules = modules.filter(module => (moduleFilter === "all" || module.key === moduleFilter)
+    && (!searchText || lower(module.label).includes(searchText) || shown.some(item => item.module === module.key && lower(`${item.label} ${item.key}`).includes(searchText))));
+  const visibleFeatures = activeFeatures.filter(item => visibleModules.some(module => module.key === item.module)
+    && (!searchText || lower(modules.find(module => module.key === item.module)?.label).includes(searchText) || lower(`${item.label} ${item.key}`).includes(searchText)));
+
   function save() {
     if (busy || loading || !available) return;
     protect({ title: "Save advanced feature access", message: active
@@ -649,7 +714,7 @@ function FeatureAccessModal({ member, onClose, protect }) {
       finally { setBusy(false); }
     });
   }
-  return <Modal title="Advanced Permissions" subtitle={`Control exact features for ${member.name}.`} onClose={onClose} modalClass="ua-modal--page-access" compact icon="shield" closeDisabled={busy} bodyClass="ua-page-access-body" zIndex={10040} footer={<><button type="button" className="ua-btn ua-btn--light" onClick={onClose} disabled={busy}>Cancel</button><button type="button" className="ua-btn ua-btn--dark" onClick={save} disabled={busy || loading || !available}><UAIcon name="save"/><span>{busy ? "Saving..." : "Save Features"}</span></button></>}>
+  return <><Modal title="Advanced Permissions" subtitle={`Control exact features for ${member.name}.`} onClose={onClose} modalClass="ua-modal--page-access" compact icon="shield" closeDisabled={busy} bodyClass="ua-page-access-body" zIndex={10040} footer={<><button type="button" className="ua-btn ua-btn--light" onClick={onClose} disabled={busy}>Cancel</button><button type="button" className="ua-btn ua-btn--dark" onClick={save} disabled={busy || loading || !available}><UAIcon name="save"/><span>{busy ? "Saving..." : "Save Features"}</span></button></>}>
     <div style={{ padding: "12px 14px" }}>
       {loading ? <p>Loading feature permissions...</p> : null}
       {!loading && !available ? <div className="ua-feature-setup-notice" role="status">
@@ -660,9 +725,15 @@ function FeatureAccessModal({ member, onClose, protect }) {
       </div> : null}
       {available ? <>
         <div className="ua-page-access-row ua-feature-access-row"><div className="ua-page-access-name"><strong>Use Advanced Permissions</strong><small>ON: deny all unselected pilot actions. OFF: keep legacy page rules.</small></div><div className="ua-page-access-enable"><label className="ua-switch"><input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)}/><span/></label></div></div>
+        <button type="button" className="ua-team-scope-open" onClick={() => setTeamScopeOpen(true)}><UAIcon name="users"/><span><strong>Manage Team Visibility</strong><small>Set explicit reporting links for Own / Team / All.</small></span><UAIcon name="chevron"/></button>
         {active ? <>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, margin: "12px 0" }}><strong>{checkedCount} of {activeFeatures.length} allowed</strong><div style={{ display: "flex", gap: 8 }}><button type="button" className="ua-mini-btn" onClick={() => setGrants(current => ({ ...current, ...Object.fromEntries(activeFeatures.map(item => [item.key, true])) }))}>Select All</button><button type="button" className="ua-mini-btn" onClick={() => setGrants(current => ({ ...current, ...Object.fromEntries(activeFeatures.map(item => [item.key, false])) }))}>Clear</button></div></div>
-          {modules.map(module => <section className="ua-page-access-group" key={module.key}>
+          <div className="ua-feature-toolbar">
+            <label className="ua-feature-search-field"><span>Search permissions</span><input value={featureQuery} onChange={e => setFeatureQuery(e.target.value)} placeholder="Search actions, modules or keys..."/></label>
+            <label className="ua-feature-filter-field"><span>Module</span><select value={moduleFilter} onChange={e => setModuleFilter(e.target.value)}><option value="all">All modules</option>{modules.map(module => <option key={module.key} value={module.key}>{module.label}</option>)}</select></label>
+          </div>
+          <div className="ua-feature-bulk"><strong>{checkedCount} of {activeFeatures.length} allowed</strong><span>{visibleFeatures.length} visible features</span><button type="button" className="ua-mini-btn" disabled={!visibleFeatures.length} onClick={() => setGrants(current => ({ ...current, ...Object.fromEntries(visibleFeatures.map(item => [item.key, true])) }))}>Allow Visible</button><button type="button" className="ua-mini-btn" disabled={!visibleFeatures.length} onClick={() => setGrants(current => ({ ...current, ...Object.fromEntries(visibleFeatures.map(item => [item.key, false])) }))}>Deny Visible</button></div>
+          {!visibleModules.length ? <div className="ua-empty">No matching permissions.</div> : null}
+          {visibleModules.map(module => <section className="ua-page-access-group" key={module.key}>
             <div className="ua-page-access-group__heading" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
               <span><UAIcon name="shield"/>{module.label}</span>
               {module.optIn ? <label className="ua-switch" title={`Enable detailed ${module.label} permissions`}>
@@ -671,14 +742,14 @@ function FeatureAccessModal({ member, onClose, protect }) {
             </div>
             {module.optIn && !enabledModules[module.key] ? <p style={{ margin: "12px 14px" }}>Uses existing Page Access until you enable detailed permissions for this module.</p> : null}
             {enabledModules[module.key] && (ORDER_SCOPE_MARKERS[module.key] || module.key === "tasks" || module.key === "events.requests") ? <label className="ua-page-access-row ua-feature-access-row" style={{ cursor: "pointer" }}><span className="ua-page-access-name"><strong>Enable row-level Own / Team / All</strong><small>Explicit opt-in. Off preserves the existing visibility rules for this module.</small></span><span className="ua-page-access-enable"><input type="checkbox" checked={!!scopedOrders[module.key]} onChange={e => setScopedOrders(prev => ({ ...prev, [module.key]: e.target.checked }))}/></span></label> : null}
-            {enabledModules[module.key] ? <div className="ua-page-access-group__rows">{shown.filter(item => item.module === module.key).map(item => <div className="ua-page-access-row ua-feature-access-row" key={item.key}><div className="ua-page-access-name"><strong>{item.label}</strong><small>{item.key}</small></div><div className="ua-page-access-enable">{((item.key === "home.analysis" || item.key.startsWith("expenses.users.")) || ((ORDER_SCOPE_MARKERS[item.module] || item.module === "tasks" || EVENT_REQUEST_ROW_KEYS.has(item.key)) && scopedOrders[item.module])) && grants[item.key] === true ? <select aria-label={item.key === "home.analysis" ? "Home analysis data scope" : `${item.label} data scope`} className="ua-feature-scope-select" value={grantScopes[item.key] || "all"} onChange={e => setGrantScopes(current => ({ ...current, [item.key]: e.target.value }))}><option value="own">Own</option><option value="team">Team</option><option value="all">All</option></select> : null}<label className="ua-switch" title={item.label}><input type="checkbox" checked={grants[item.key] === true} onChange={e => setGrants(current => ({ ...current, [item.key]: e.target.checked }))}/><span/></label></div></div>)}</div> : null}
+            {enabledModules[module.key] ? <div className="ua-page-access-group__rows">{shown.filter(item => item.module === module.key && (!searchText || lower(module.label).includes(searchText) || lower(`${item.label} ${item.key}`).includes(searchText))).map(item => <div className="ua-page-access-row ua-feature-access-row" key={item.key}><div className="ua-page-access-name"><strong>{item.label}</strong><small>{item.key}</small></div><div className="ua-page-access-enable">{((item.key === "home.analysis" || item.key.startsWith("expenses.users.")) || ((ORDER_SCOPE_MARKERS[item.module] || item.module === "tasks" || EVENT_REQUEST_ROW_KEYS.has(item.key)) && scopedOrders[item.module])) && grants[item.key] === true ? <select aria-label={item.key === "home.analysis" ? "Home analysis data scope" : `${item.label} data scope`} className="ua-feature-scope-select" value={grantScopes[item.key] || "all"} onChange={e => setGrantScopes(current => ({ ...current, [item.key]: e.target.value }))}><option value="own">Own</option><option value="team">Team</option><option value="all">All</option></select> : null}<label className="ua-switch" title={item.label}><input type="checkbox" checked={grants[item.key] === true} onChange={e => setGrants(current => ({ ...current, [item.key]: e.target.checked }))}/><span/></label></div></div>)}</div> : null}
           </section>)}
           <small>Optional modules remain on legacy Page Access until enabled for this user. Enable a module, then grant only the features needed. A disabled View permission hides its page. Products and Operations Orders now have separate opt-in switches; turn them off to keep existing Page Access while enabling Expenses by Users. For an already-enabled profile, review those switches and save once. Existing Page Access and any required admin password still apply. Home Analysis and Expenses by Users support Own / Team / All. My Orders, Operations Orders and Maintenance Orders support the same scopes only after enabling their separate row-level scope switch. Other permissions retain their saved scope without row-level enforcement.</small>
         </> : <p>Legacy page permissions will apply to this account. No feature grants will be enforced.</p>}
       </> : null}
       {error ? <p className="ua-form-error">{error}</p> : null}
     </div>
-  </Modal>;
+  </Modal>{teamScopeOpen ? <TeamScopeModal member={member} protect={protect} onClose={() => setTeamScopeOpen(false)}/> : null}</>;
 }
 
 function PageAccessModal({ member, draftRows, onDraftRows, onClose, onSaved, protect, allowAdvanced = true }) {

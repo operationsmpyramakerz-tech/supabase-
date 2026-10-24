@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 
 import { getDirectAccountGate } from "../../../../lib/products-auth";
 import { featureGate, replaceMemberFeatureAccess } from "../../../../lib/feature-permissions-server";
-import { selectById } from "../../../../lib/supabase-rest";
+import { rpc, selectById } from "../../../../lib/supabase-rest";
+import { normalizeTeamLinks } from "../../../../lib/team-scope-management.mjs";
 import { verifyUsersCenterAuthorizationToken } from "../../../../lib/users-center-action-auth";
 import {
   approveSignupRequest,
@@ -47,6 +48,7 @@ export async function POST(request) {
       "member-delete": "users.member_delete",
       "page-access-save": "users.page_access_manage",
       "feature-access-save": "users.feature_access_manage",
+      "team-scope-save": "users.feature_access_manage",
       "sv-access-save": "users.sv_access_manage",
       "signup-approve": "users.signup_approve",
       "signup-reject": "users.signup_reject",
@@ -55,6 +57,22 @@ export async function POST(request) {
     if (actionPermissions[action]) {
       const actionGate = featureGate(gate, actionPermissions[action]);
       if (!actionGate.ok) return json({ ok: false, error: actionGate.error }, actionGate.status || 403);
+    }
+
+    if (action === "team-scope-save") {
+      const targetId = text(body?.memberId);
+      // Ensure the target is still present. The RPC checks every selected
+      // member atomically and rejects stale or unauthorized identifiers.
+      const selectedIds = normalizeTeamLinks(targetId, body?.visibleMemberIds);
+      const expectedIds = normalizeTeamLinks(targetId, body?.expectedVisibleIds);
+      const target = await selectById(text(process.env.SUPABASE_TEAM_MEMBERS_TABLE) || "team_members", targetId, { select: "id" });
+      if (!target) return json({ ok: false, error: "Team member was not found." }, 404);
+      const result = await rpc("erp_replace_member_scope_team_links", {
+        p_manager_member_id: targetId,
+        p_visible_member_ids: selectedIds,
+        p_expected_visible_member_ids: expectedIds,
+      }, { profileName: "users-center.team-scope-save" });
+      return json({ ok: true, visibleIds: Array.isArray(result) ? result : selectedIds, message: "Team visibility updated." });
     }
 
     if (action === "feature-access-save") {
