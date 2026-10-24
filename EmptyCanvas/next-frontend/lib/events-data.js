@@ -1,4 +1,5 @@
 import "server-only";
+import { isTrustedLegacyAdmin } from "./admin-identity-policy.mjs";
 
 import { getDirectAccountGate } from "./products-auth";
 import { featureAllowed } from "./feature-permissions-registry";
@@ -1192,9 +1193,7 @@ export async function saveGovernorateRates(body = {}, account = {}) {
 }
 
 export function hasEventComponentsAdminAccess(account = {}) {
-  const name = token(account?.name || account?.username);
-  const position = token(account?.position);
-  if (name === "admin" || position.includes("admin")) return true;
+  if (isTrustedLegacyAdmin(account)) return true;
   const rows = Array.isArray(account?.pageAccess?.pages) ? account.pageAccess.pages : [];
   return rows.some((row) => {
     const candidates = [row?.pageName, row?.pageKey, row?.routePath, ...(Array.isArray(row?.aliases) ? row.aliases : [])].map(token).filter(Boolean);
@@ -1208,9 +1207,7 @@ function token(value) {
 }
 
 export function hasEventRequestsAdminAccess(account = {}) {
-  const name = token(account?.name || account?.username);
-  const position = token(account?.position);
-  if (name === "admin" || position.includes("admin")) return true;
+  if (isTrustedLegacyAdmin(account)) return true;
   const rows = Array.isArray(account?.pageAccess?.pages) ? account.pageAccess.pages : [];
   return rows.some((row) => {
     const candidates = [row?.pageName, row?.pageKey, row?.routePath, ...(Array.isArray(row?.aliases) ? row.aliases : [])]

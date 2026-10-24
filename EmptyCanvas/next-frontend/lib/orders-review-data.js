@@ -1,4 +1,5 @@
 import "server-only";
+import { isTrustedLegacyAdmin } from "./admin-identity-policy.mjs";
 import { performance } from "node:perf_hooks";
 import { isSupabaseConfigured, select, selectAll, selectById, updateById, updateByIds } from "./supabase-rest";
 import { enrichOrderDetailGrouping, loadRawOrderRowsByIds, serializeReviewOrderDetail } from "./order-details-data";
@@ -1008,9 +1009,7 @@ function reviewAccessToken(value) {
 }
 
 function hasOrdersReviewAdminAccess(account = {}) {
-  const name = reviewAccessToken(account?.name || account?.username);
-  const position = reviewAccessToken(account?.position);
-  if (name === "admin" || position.includes("admin")) return true;
+  if (isTrustedLegacyAdmin(account)) return true;
 
   const wanted = new Set(["ordersreview", "svorders", "supervisionorders"]);
   const pages = Array.isArray(account?.pageAccess?.pages) ? account.pageAccess.pages : [];
@@ -1038,7 +1037,6 @@ async function directAdminPasswordResult(account = {}, password = "") {
   let candidates = [];
   const attempts = [
     { select: "*", name: "ilike.admin", limit: "10" },
-    { select: "*", position: "ilike.*admin*", limit: "20" },
   ];
   let hadSuccessfulLookup = false;
   for (const params of attempts) {
@@ -1065,9 +1063,11 @@ async function directAdminPasswordResult(account = {}, password = "") {
   }
   if (!hadSuccessfulLookup) return null;
 
-  const adminRow = candidates.find((row) => reviewAccessToken(valueFor(row, ["name", "Name"])) === "admin")
-    || candidates.find((row) => reviewAccessToken(valueFor(row, ["position", "Position"])).includes("admin"))
-    || candidates.find((row) => reviewAccessToken(valueFor(row, ["name", "Name"])).includes("admin"));
+  // An editable position/title is never a source of Admin credentials.
+  const adminRow = candidates.find((row) => isTrustedLegacyAdmin({
+    name: valueFor(row, ["name", "Name"]),
+    id: valueFor(row, ["id", "ID"]),
+  }));
   if (!adminRow) return null; // Legacy may still have the Admin user in Notion.
 
   const stored = text(valueFor(adminRow, ["password", "Password"]));

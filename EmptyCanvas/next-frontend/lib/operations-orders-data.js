@@ -1,4 +1,5 @@
 import "server-only";
+import { isTrustedLegacyAdmin } from "./admin-identity-policy.mjs";
 import { performance } from "node:perf_hooks";
 import { deleteById, getSupabaseConfig, insert, isSupabaseConfigured, select, selectAll, supabaseRequest, updateById, updateByIds, uploadStorageObject } from "./supabase-rest";
 import { enrichOrderDetailGrouping, loadRawOrderRowsByIds, serializeOperationsOrderDetail } from "./order-details-data";
@@ -860,9 +861,7 @@ function operationsValueFor(row = {}, aliases = []) {
 }
 
 function hasOperationsAdminAccess(account = {}) {
-  const name = operationsAccessToken(account?.name || account?.username);
-  const position = operationsAccessToken(account?.position);
-  if (name === "admin" || position.includes("admin")) return true;
+  if (isTrustedLegacyAdmin(account)) return true;
 
   const wanted = new Set(["operationsorders", "requestedorders", "operationsrequestedorders", "schoolsrequestedorders"]);
   const pages = Array.isArray(account?.pageAccess?.pages) ? account.pageAccess.pages : [];
@@ -890,7 +889,6 @@ async function directOperationsAdminPasswordResult(account = {}, password = "") 
   let hadSuccessfulLookup = false;
   const attempts = [
     { select: "*", name: "ilike.admin", limit: "10" },
-    { select: "*", position: "ilike.*admin*", limit: "20" },
   ];
   for (const params of attempts) {
     try {
@@ -915,9 +913,11 @@ async function directOperationsAdminPasswordResult(account = {}, password = "") 
   }
   if (!hadSuccessfulLookup) return null;
 
-  const adminRow = candidates.find((row) => operationsAccessToken(operationsValueFor(row, ["name", "Name"])) === "admin")
-    || candidates.find((row) => operationsAccessToken(operationsValueFor(row, ["position", "Position"])).includes("admin"))
-    || candidates.find((row) => operationsAccessToken(operationsValueFor(row, ["name", "Name"])).includes("admin"));
+  // An editable position/title is never a source of Admin credentials.
+  const adminRow = candidates.find((row) => isTrustedLegacyAdmin({
+    name: operationsValueFor(row, ["name", "Name"]),
+    id: operationsValueFor(row, ["id", "ID"]),
+  }));
   if (!adminRow) return null;
 
   const stored = text(operationsValueFor(adminRow, ["password", "Password"]));

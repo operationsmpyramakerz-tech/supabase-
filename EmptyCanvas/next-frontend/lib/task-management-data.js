@@ -1,4 +1,5 @@
 import "server-only";
+import { isTrustedLegacyAdmin } from "./admin-identity-policy.mjs";
 import { featureGate } from "./feature-permissions-server";
 import { resolveTaskScope, scopedTaskAssignments, taskTicketVisible, scopedTaskTicket, taskUiScopePolicy } from "./task-data-scope";
 import { taskScopeFor } from "./task-data-scope.mjs";
@@ -352,7 +353,7 @@ function belongsToView(ticket = {}, member = {}, view = "") {
 }
 
 function builtInAdmin(account = {}) {
-  return normalize(account.name || account.username) === "admin" || normalize(account.position).includes("admin");
+  return isTrustedLegacyAdmin(account);
 }
 
 function accessRowMatches(row = {}, tokens = []) {

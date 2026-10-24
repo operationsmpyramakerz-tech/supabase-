@@ -1,4 +1,7 @@
 import { NextResponse } from "next/server";
+import { isReservedAdminName } from "../../../../lib/admin-identity-policy.mjs";
+import { featureAllowed } from "../../../../lib/feature-permissions-registry";
+import { directPageAccessLevel } from "../../../../lib/order-action-auth";
 
 import { getDirectAccountGate } from "../../../../lib/products-auth";
 import { featureGate, replaceMemberFeatureAccess } from "../../../../lib/feature-permissions-server";
@@ -100,6 +103,19 @@ export async function POST(request) {
       const result = await moveMember(body?.memberId, body?.departmentId || body?.department);
       return json({ ok: true, member: result.member, message: `${result.member?.name || "Team member"} moved to ${result.departmentName}.`, source: "supabase-next" });
     }
+    // Built-in Admin identity is privileged on legacy routes. Granting the
+    // reserved name must require explicit access-management authority; ordinary
+    // member Create/Edit permissions alone do not suffice.
+    const reservedAdminRequested = ["member-create", "member-update"].includes(action)
+      ? Object.entries(body?.fields && typeof body.fields === "object" ? body.fields : {})
+          .some(([key, value]) => ["name", "fullname", "username"].includes(String(key).replace(/[^a-z0-9]/gi, "").toLowerCase()) && isReservedAdminName(value))
+      : false;
+    if (reservedAdminRequested) {
+      const accessManager = directPageAccessLevel(gate.account, ["Users Center"]) === "admin"
+        || featureAllowed(gate.account, "users.feature_access_manage", { legacyAllowed: false });
+      if (!accessManager) return json({ ok: false, error: "Only access administrators may assign the reserved Admin identity." }, 403);
+    }
+
     if (action === "member-create") {
       // Creating an account must never implicitly grant Page Access or
       // Orders Supervision privileges the creator does not possess.

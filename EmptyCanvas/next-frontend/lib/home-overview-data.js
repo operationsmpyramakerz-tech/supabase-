@@ -1,4 +1,5 @@
 import "server-only";
+import { isTrustedLegacyAdmin } from "./admin-identity-policy.mjs";
 
 import { performance } from "node:perf_hooks";
 import { buildWorkspaceTrend } from "./home-trend-analytics.mjs";
@@ -301,9 +302,7 @@ function allowedSet(account = {}) {
 }
 
 function accountIsAdmin(account = {}) {
-  const name = canonical(account.name || account.username);
-  const position = canonical(account.position);
-  return name === "admin" || position.includes("admin");
+  return isTrustedLegacyAdmin(account);
 }
 
 function hasAccess(account = {}, aliases = []) {

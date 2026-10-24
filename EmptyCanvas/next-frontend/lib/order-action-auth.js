@@ -1,4 +1,5 @@
 import "server-only";
+import { isTrustedLegacyAdmin } from "./admin-identity-policy.mjs";
 
 import { isSupabaseConfigured, select, selectAll } from "./supabase-rest";
 
@@ -54,9 +55,7 @@ function rowMatchesPage(row = {}, pageName = "") {
 }
 
 function builtInAdmin(account = {}) {
-  const name = token(account?.name || account?.username);
-  const position = token(account?.position);
-  return name === "admin" || position.includes("admin");
+  return isTrustedLegacyAdmin(account);
 }
 
 export function directPageAccessLevel(account = {}, pageNameOrNames = []) {
@@ -94,7 +93,6 @@ async function adminPasswordFromSupabase() {
   let hadSuccessfulLookup = false;
   const attempts = [
     { select: "*", name: "ilike.admin", limit: "10" },
-    { select: "*", position: "ilike.*admin*", limit: "20" },
   ];
 
   for (const params of attempts) {
@@ -119,9 +117,11 @@ async function adminPasswordFromSupabase() {
   }
   if (!hadSuccessfulLookup) return { supported: false, password: "" };
 
-  const adminRow = candidates.find((row) => token(valueFor(row, ["name", "Name"])) === "admin")
-    || candidates.find((row) => token(valueFor(row, ["position", "Position"])).includes("admin"))
-    || candidates.find((row) => token(valueFor(row, ["name", "Name"])).includes("admin"));
+  // An editable position/title is never a source of Admin credentials.
+  const adminRow = candidates.find((row) => isTrustedLegacyAdmin({
+    name: valueFor(row, ["name", "Name"]),
+    id: valueFor(row, ["id", "ID"]),
+  }));
   if (!adminRow) return { supported: false, password: "" };
 
   const password = text(valueFor(adminRow, ["password", "Password"]));

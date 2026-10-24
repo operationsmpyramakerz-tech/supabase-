@@ -1,4 +1,5 @@
 import "server-only";
+import { isReservedAdminName } from "./admin-identity-policy.mjs";
 
 import {
   deleteById,
@@ -323,6 +324,7 @@ export async function deleteMember(memberIdValue = "") {
 export async function approveSignupRequest(requestIdValue = "", { department = "", position = "", reviewedBy = "Admin" } = {}) {
   const requestId = text(requestIdValue); const cleanDepartment = cleanDepartmentName(department); const cleanPosition = text(position).replace(/\s+/g, " "); if (!requestId) throw httpError("Missing sign up request ID.", 400); if (!cleanDepartment) throw httpError("Department is required.", 400); if (!cleanPosition) throw httpError("Position is required.", 400);
   const requestRow = await selectById(signupRequestsTable(), requestId); if (!requestRow) throw httpError("Sign up request was not found.", 404); const request = serializeSignupRequest(requestRow, true); if (token(request.status) !== "pending") throw httpError(`This request is already ${request.status}.`, 409);
+  if (isReservedAdminName(request.username)) throw httpError("The reserved Admin identity cannot be created through signup approval.", 403);
   const rows = await teamRows(); if (await duplicateAccount(request, rows)) throw httpError("A team member with this username, email, or employee code already exists.", 409);
   const writeRow = buildSignupMemberRow(requestRow, { department: cleanDepartment, position: cleanPosition }, rows); const created = await insert(teamMembersTable(), writeRow); const createdId = memberId(created || {});
   const updated = await updateById(signupRequestsTable(), requestId, { status: "approved", department: cleanDepartment, position: cleanPosition, reviewed_by: text(reviewedBy) || "Admin", reviewed_at: new Date().toISOString(), approved_team_member_id: createdId || null });

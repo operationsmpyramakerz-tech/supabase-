@@ -1,4 +1,5 @@
 import "server-only";
+import { isTrustedLegacyAdmin } from "./admin-identity-policy.mjs";
 
 import crypto from "node:crypto";
 import { performance } from "node:perf_hooks";
@@ -742,9 +743,7 @@ function accountFromFreshMember(baseAccount = {}, row = {}, session = {}) {
 }
 
 function builtInAdmin(account = {}, session = {}) {
-  const name = token(account.name || session.username);
-  const position = token(account.position);
-  return name === "admin" || position.includes("admin");
+  return isTrustedLegacyAdmin(account, { sessionUsername: session.username });
 }
 
 function rowMatchesRequiredPage(row = {}, requiredPage = "") {

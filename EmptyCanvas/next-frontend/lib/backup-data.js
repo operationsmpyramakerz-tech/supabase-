@@ -1,4 +1,5 @@
 import "server-only";
+import { isTrustedLegacyAdmin } from "./admin-identity-policy.mjs";
 
 import { supabaseRequest } from "./supabase-rest";
 
@@ -175,7 +176,7 @@ function token(value) {
 }
 
 function builtInAdmin(account = {}) {
-  return token(account.name || account.username) === "admin" || token(account.position).includes("admin");
+  return isTrustedLegacyAdmin(account);
 }
 
 function backupAccessLevel(account = {}) {

@@ -1,4 +1,5 @@
 import "server-only";
+import { isTrustedLegacyAdmin } from "./admin-identity-policy.mjs";
 
 import B2CFormulaEngine from "./b2c-formula-engine";
 import { getDirectAccountGate } from "./products-auth";
@@ -372,9 +373,7 @@ function b2cPageAliases(value) {
 }
 
 function directB2cAccessLevel(account = {}, requiredPages = []) {
-  const name = accessToken(account?.name || account?.username);
-  const position = accessToken(account?.position);
-  if (name === "admin" || position.includes("admin")) return "admin";
+  if (isTrustedLegacyAdmin(account)) return "admin";
 
   const requested = (Array.isArray(requiredPages) ? requiredPages : [requiredPages]).map(text).filter(Boolean);
   const wanted = requested.map(b2cPageAliases);

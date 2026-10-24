@@ -1,4 +1,5 @@
 import "server-only";
+import { isTrustedLegacyAdmin } from "./admin-identity-policy.mjs";
 
 import { getDirectAccountGate } from "./products-auth";
 import { featureGate } from "./feature-permissions-server";
@@ -196,7 +197,7 @@ function sections(items = []) {
 }
 
 function builtInAdmin(account = {}) {
-  return normalize(account.name || account.username) === "admin" || normalize(account.position).includes("admin");
+  return isTrustedLegacyAdmin(account);
 }
 
 function accessLevel(account = {}) {

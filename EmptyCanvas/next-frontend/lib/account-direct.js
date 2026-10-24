@@ -1,4 +1,5 @@
 import "server-only";
+import { isReservedAdminName } from "./admin-identity-policy.mjs";
 
 import crypto from "node:crypto";
 import {
@@ -162,6 +163,12 @@ export async function updateAccountDirect(account = {}, body = {}) {
   setPatch("Department", body?.department);
   setPatch("Position", body?.position);
   setPatch("Employee Code", body?.employeeCode);
+  // A profile name is editable, but must not become the reserved legacy
+  // Admin identity; otherwise the page-access gate could grant global access.
+  if (typeof body?.name !== "undefined" && isReservedAdminName(body.name)
+      && !isReservedAdminName(text(row?.[accountFieldKey(row, "Name")]) || account.name)) {
+    throw httpError("The Admin account name is reserved.", 403);
+  }
   setPatch("Name", body?.name, { required: true });
 
   if (typeof body?.password !== "undefined") {
