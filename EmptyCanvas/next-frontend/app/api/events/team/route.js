@@ -109,7 +109,7 @@ export async function POST(request) {
     }
     if (action === "upload-id") {
       const uploaded = await uploadEventTeamIdPhoto({ dataUrl: body?.dataUrl, fileName: body?.fileName });
-      return json({ ok: true, ...uploaded, source: "supabase-next" }, { status: 201 });
+      return json({ ok: true, url: uploaded.url, source: "supabase-next" }, { status: 201 });
     }
     return json({ ok: false, error: "Unsupported Event Team action." }, { status: 400 });
   } catch (error) {

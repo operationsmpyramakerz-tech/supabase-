@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getDirectAccountGate } from "../../../../lib/products-auth";
 import { featureGate } from "../../../../lib/feature-permissions-server";
 import { uploadStorageObject } from "../../../../lib/supabase-rest";
+import { parseStrictImageDataUrl } from "../../../../lib/strict-upload-image.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,29 +20,6 @@ function noStore(payload, init = {}) {
   });
 }
 
-function parseDataUrl(value = "") {
-  const raw = String(value || "");
-  const match = raw.match(/^data:([^;,]+);base64,(.+)$/s);
-  if (!match) {
-    const error = new Error("Receipt image data is invalid.");
-    error.status = 400;
-    throw error;
-  }
-  const mime = String(match[1] || "application/octet-stream").trim().toLowerCase();
-  let buffer;
-  try {
-    buffer = Buffer.from(match[2], "base64");
-  } catch {
-    buffer = null;
-  }
-  if (!buffer?.length) {
-    const error = new Error("Receipt image data is invalid.");
-    error.status = 400;
-    throw error;
-  }
-  return { mime, buffer };
-}
-
 function cleanFilename(value = "") {
   const raw = String(value || "receipt.jpg").trim() || "receipt.jpg";
   return { original: raw, safe: raw.replace(/[^a-z0-9._-]/gi, "_").slice(-120) || "receipt.jpg" };
@@ -56,8 +34,8 @@ export async function POST(request) {
   try {
     const body = await request.json().catch(() => ({}));
     if (!body?.dataUrl) return noStore({ ok: false, error: "Receipt image data is required." }, { status: 400 });
-    const { mime, buffer } = parseDataUrl(body.dataUrl);
-    if (!/^image\//i.test(mime)) return noStore({ ok: false, error: "Receipt upload must be an image." }, { status: 400 });
+    // Reject SVG and non-image payloads even if the MIME header says image/*.
+    const { mime, buffer } = parseStrictImageDataUrl(body.dataUrl, { label: "Receipt image", maxBytes: 8 * 1024 * 1024 });
     if (buffer.length > 8 * 1024 * 1024) return noStore({ ok: false, error: "Receipt image is too large. Maximum size is 8 MB." }, { status: 413 });
 
     const filename = cleanFilename(body?.filename);

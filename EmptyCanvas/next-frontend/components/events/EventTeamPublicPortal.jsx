@@ -18,7 +18,8 @@ const EMPTY_SIGNUP = Object.freeze({
   instapay: "",
   wallet: "",
   station: "",
-  idPhotoUrl: "",
+  idPhotoDataUrl: "",
+  idPhotoFileName: "",
   password: "",
   confirmPassword: "",
 });
@@ -117,14 +118,10 @@ export default function EventTeamPublicPortal({ role }) {
     try {
       const { compressImage } = await import("./EventComponentAssetProcessing");
       const prepared = await compressImage(file);
-      const payload = await requestJson("/next/api/events/team/public", {
-        method: "POST",
-        body: JSON.stringify({ action: "upload-id", dataUrl: prepared.dataUrl, fileName: prepared.fileName || file.name }),
-      });
-      setSignup((current) => ({ ...current, idPhotoUrl: text(payload?.url) }));
-      setMessage({ type: "success", text: "ID photo uploaded." });
+      setSignup((current) => ({ ...current, idPhotoDataUrl: prepared.dataUrl, idPhotoFileName: prepared.fileName || file.name }));
+      setMessage({ type: "success", text: "ID photo prepared. It will be uploaded when you create your profile." });
     } catch (error) {
-      setMessage({ type: "error", text: error?.message || "Could not upload the ID photo." });
+      setMessage({ type: "error", text: error?.message || "Could not prepare the ID photo." });
     } finally {
       setUploading(false);
     }
@@ -151,6 +148,8 @@ export default function EventTeamPublicPortal({ role }) {
         }),
       });
       setProfile(payload?.profile || null);
+      // Drop the locally held ID image and signup password after registration.
+      setSignup({ ...EMPTY_SIGNUP });
       setStatus("profile");
     } catch (error) {
       if (error?.code === "ALREADY_REGISTERED" || error?.status === 409) {
@@ -331,8 +330,8 @@ export default function EventTeamPublicPortal({ role }) {
                   <input ref={idPhotoRef} className="event-team-public-file-input" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) uploadIdPhoto(file); }} />
                   <button type="button" className="event-team-public-upload" onClick={() => idPhotoRef.current?.click()} disabled={uploading || busy}>
                     <EventIcon name="image" />
-                    <span>{uploading ? "Uploading..." : signup.idPhotoUrl ? "Replace ID photo" : "Upload ID photo"}</span>
-                    {signup.idPhotoUrl ? <b>Uploaded</b> : null}
+                    <span>{uploading ? "Preparing..." : signup.idPhotoDataUrl ? "Replace ID photo" : "Choose ID photo"}</span>
+                    {signup.idPhotoDataUrl ? <b>Ready</b> : null}
                   </button>
                 </div>
 

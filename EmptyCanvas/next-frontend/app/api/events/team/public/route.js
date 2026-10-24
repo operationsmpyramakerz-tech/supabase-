@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
+import { PUBLIC_TEAM_MAX_BODY_BYTES } from "../../../../../lib/event-team-public-image-policy.mjs";
 
-import { uploadEventTeamIdPhoto } from "../../../../../lib/event-team-data";
 import {
   createPublicEventTeamSession,
   eventTeamPublicAuthError,
@@ -59,8 +59,40 @@ export async function GET(request) {
   }
 }
 
+async function readBoundedJson(request) {
+  if (Number(request.headers.get("content-length") || 0) > PUBLIC_TEAM_MAX_BODY_BYTES) {
+    const error = new Error("The request is too large.");
+    error.status = 413;
+    throw error;
+  }
+  if (!request.body) return {};
+  const reader = request.body.getReader();
+  const chunks = [];
+  let bytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      bytes += value.byteLength;
+      if (bytes > PUBLIC_TEAM_MAX_BODY_BYTES) {
+        await reader.cancel().catch(() => {});
+        const error = new Error("The request is too large.");
+        error.status = 413;
+        throw error;
+      }
+      chunks.push(Buffer.from(value));
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  try { return JSON.parse(Buffer.concat(chunks).toString("utf8")); }
+  catch { return {}; }
+}
+
 export async function POST(request) {
-  const body = await request.json().catch(() => ({}));
+  let body;
+  try { body = await readBoundedJson(request); }
+  catch (error) { return json({ ok: false, error: error?.message || "Invalid request." }, { status: error?.status || 400 }); }
   const action = String(body?.action || "").trim().toLowerCase();
 
   try {
@@ -80,10 +112,6 @@ export async function POST(request) {
       return clearSession(json({ ok: true, authenticated: false }));
     }
 
-    if (action === "upload-id") {
-      const uploaded = await uploadEventTeamIdPhoto({ dataUrl: body?.dataUrl, fileName: body?.fileName });
-      return json({ ok: true, ...uploaded }, { status: 201 });
-    }
 
     return json({ ok: false, error: "Unsupported public Event Team action." }, { status: 400 });
   } catch (error) {

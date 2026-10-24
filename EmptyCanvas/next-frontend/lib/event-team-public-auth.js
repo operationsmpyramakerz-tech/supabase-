@@ -8,8 +8,9 @@ import {
   timingSafeEqual,
 } from "node:crypto";
 
-import { insert, select, selectById, updateById } from "./supabase-rest";
-import { createEventTeamMember, deleteEventTeamMember } from "./event-team-data";
+import { deleteStorageObjects, insert, select, selectById, updateById } from "./supabase-rest";
+import { createEventTeamMember, deleteEventTeamMember, uploadEventTeamIdPhoto } from "./event-team-data";
+import { publicTeamUploadIsWithinLimit } from "./event-team-public-image-policy.mjs";
 
 const PUBLIC_ROLES = new Set(["instructor", "usher", "organizer"]);
 const SESSION_COOKIE = "event_team_public_session_v1";
@@ -181,12 +182,25 @@ export async function registerPublicEventTeamMember(body = {}) {
   const name = text(body?.name, 180);
   if (!name) throw publicError("Full name is required.");
 
-  const password = String(body?.password ?? "");
+  // Validate credentials and reject user-provided image URLs before any
+  // storage write. A public signup must not attach arbitrary external URLs.
+  if (text(body?.idPhotoUrl || body?.id_photo_url, 2000)) {
+    throw publicError("Please refresh the registration form and choose your ID photo again.", 400, "PHOTO_URL_NOT_ALLOWED");
+  }
+  const encodedPassword = passwordHash(body?.password);
+  const imageData = String(body?.idPhotoDataUrl || "");
+  if (imageData && !publicTeamUploadIsWithinLimit(imageData)) {
+    throw publicError("The ID photo is too large. Please choose a smaller image.", 413, "PHOTO_TOO_LARGE");
+  }
   const existing = await accountByNationalId(nationalId);
   if (existing) throw publicError("This ID number is already registered. Sign in to view your data.", 409, "ALREADY_REGISTERED");
 
   let member = null;
+  let uploaded = null;
   try {
+    if (imageData) {
+      uploaded = await uploadEventTeamIdPhoto({ dataUrl: imageData, fileName: body?.idPhotoFileName || "id-photo.webp" });
+    }
     member = await createEventTeamMember({
       role,
       name,
@@ -197,7 +211,7 @@ export async function registerPublicEventTeamMember(body = {}) {
       instapay: body?.instapay,
       wallet: body?.wallet,
       station: role === "instructor" ? body?.station : "",
-      idPhotoUrl: body?.idPhotoUrl,
+      idPhotoUrl: uploaded?.url || "",
       notes: "",
       isActive: true,
     }, {});
@@ -205,7 +219,7 @@ export async function registerPublicEventTeamMember(body = {}) {
     const account = await insert(publicAccountTable(), {
       member_id: member.id,
       national_id: nationalId,
-      password_hash: passwordHash(password),
+      password_hash: encodedPassword,
       last_login_at: new Date().toISOString(),
     });
 
@@ -217,6 +231,10 @@ export async function registerPublicEventTeamMember(body = {}) {
   } catch (error) {
     if (member?.id) {
       await deleteEventTeamMember(member.id).catch(() => null);
+    }
+    // Do not leave an orphan public document if account creation fails.
+    if (uploaded?.objectPath) {
+      await deleteStorageObjects([uploaded.objectPath]).catch(() => null);
     }
     if (duplicateError(error?.message)) {
       throw publicError("This ID number is already registered. Sign in to view your data.", 409, "ALREADY_REGISTERED");

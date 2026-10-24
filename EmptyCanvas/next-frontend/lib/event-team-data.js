@@ -1,6 +1,7 @@
 import "server-only";
 
 import { deleteById, insert, select, selectById, updateById, uploadStorageObject } from "./supabase-rest";
+import { parseEventTeamIdImage } from "./event-team-public-image-policy.mjs";
 
 const TEAM_ROLES = new Set(["instructor", "usher", "organizer"]);
 const ATTENDANCE_STATUSES = new Set(["planned", "present", "late", "absent", "excused"]);
@@ -289,17 +290,6 @@ export async function deleteEventTeamAttendance(id) {
   return serializeAttendance(row);
 }
 
-function parseDataUrl(value = "") {
-  const raw = String(value || "");
-  const match = raw.match(/^data:([^;,]+);base64,(.+)$/i);
-  if (!match) {
-    const error = new Error("Invalid image data.");
-    error.status = 400;
-    throw error;
-  }
-  return { mime: match[1].toLowerCase(), buffer: Buffer.from(match[2], "base64") };
-}
-
 function cleanFilename(value = "") {
   const raw = text(value, 180) || "id-photo";
   return raw
@@ -311,7 +301,7 @@ function cleanFilename(value = "") {
 }
 
 export async function uploadEventTeamIdPhoto({ dataUrl = "", fileName = "" } = {}) {
-  const { mime, buffer } = parseDataUrl(dataUrl);
+  const { mime, buffer } = parseEventTeamIdImage(dataUrl);
   if (!/^image\/(png|jpeg|webp)$/i.test(mime)) {
     const error = new Error("ID photos must be PNG, JPG, or WEBP images.");
     error.status = 400;
@@ -326,7 +316,7 @@ export async function uploadEventTeamIdPhoto({ dataUrl = "", fileName = "" } = {
   const objectPath = `events/team/ids/${Date.now()}-${Math.random().toString(16).slice(2)}-${safeName}`;
   const uploaded = await uploadStorageObject(objectPath, buffer, { contentType: mime, upsert: false });
   if (!uploaded?.publicUrl) throw new Error("Supabase Storage did not return a public ID photo URL.");
-  return { url: uploaded.publicUrl };
+  return { url: uploaded.publicUrl, objectPath };
 }
 
 export function eventTeamDataError(error) {
