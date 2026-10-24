@@ -6,6 +6,7 @@ import { deleteById, deleteStorageObjects, getSupabaseConfig, insert, rpc, selec
 import { listTeamMembersLite } from "./team-members-service";
 import { recordPerformanceSample } from "./performance-profiler";
 import { ownCarCostForKilometers, ownCarRatePerKm } from "./own-car-expense.mjs";
+import { parseStrictImageDataUrl } from "./strict-upload-image.mjs";
 
 function text(value) {
   if (value === null || typeof value === "undefined") return "";
@@ -858,15 +859,15 @@ function cleanStorageObjectPath(filenameHint = "upload.bin") {
 }
 
 async function uploadExpenseDataUrl(dataUrl, filenameHint = "receipt.jpg") {
-  const match = String(dataUrl || "").match(/^data:(.+?);base64,(.+)$/);
-  if (!match) throw expenseError("Invalid receipt image payload.", 400);
-  const contentType = text(match[1]) || "application/octet-stream";
-  const buffer = Buffer.from(match[2], "base64");
-  if (!buffer.length) throw expenseError("The receipt image is empty.", 400);
-  if (buffer.length > 15 * 1024 * 1024) throw expenseError("The receipt image is too large.", 413);
-  const uploaded = await uploadStorageObject(cleanStorageObjectPath(filenameHint), buffer, {
+  const { mime: contentType, buffer } = parseStrictImageDataUrl(dataUrl, {
+    label: "Receipt image", maxBytes: 15 * 1024 * 1024,
+  });
+  // Storage paths must use the validated content type, not a client-supplied extension.
+  const extension = contentType === "image/png" ? "png" : contentType === "image/webp" ? "webp" : "jpg";
+  const baseName = cleanStorageObjectPath(filenameHint).replace(/\.[^.\/]+$/, "");
+  const uploaded = await uploadStorageObject(`${baseName}.${extension}`, buffer, {
     contentType,
-    upsert: true,
+    upsert: false,
   });
   if (!uploaded?.publicUrl) throw expenseError("Receipt upload did not return a public URL.", 502);
   return uploaded.publicUrl;

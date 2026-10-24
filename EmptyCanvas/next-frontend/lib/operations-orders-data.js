@@ -1,4 +1,5 @@
 import "server-only";
+import { parseStrictImageDataUrl } from "./strict-upload-image.mjs";
 import { isTrustedLegacyAdmin } from "./admin-identity-policy.mjs";
 import { performance } from "node:perf_hooks";
 import { deleteById, getSupabaseConfig, insert, isSupabaseConfigured, select, selectAll, supabaseRequest, updateById, updateByIds, uploadStorageObject } from "./supabase-rest";
@@ -2224,18 +2225,14 @@ function opsReceiptUploadInput(dataUrls = [], filenames = []) {
   const names = (Array.isArray(filenames) ? filenames : [filenames]).map(text).filter(Boolean);
   if (!urls.length) throw directOperationsMutationError("Receipt photos are required.", 400);
   return urls.map((dataUrl, index) => {
-    const match = String(dataUrl || "").match(/^data:([^;,]+);base64,(.+)$/i);
-    if (!match || !/^image\//i.test(String(match?.[1] || ""))) throw directOperationsMutationError("Invalid receipt photo.", 400);
-    let buffer;
-    try { buffer = Buffer.from(match[2], "base64"); } catch { buffer = null; }
-    if (!buffer || !buffer.length) throw directOperationsMutationError("Invalid receipt photo.", 400);
-    if (buffer.length > 12 * 1024 * 1024) throw directOperationsMutationError("Each receipt photo must not exceed 12 MB.", 413);
+    const { mime: contentType, buffer } = parseStrictImageDataUrl(dataUrl, {
+      label: "Receipt photo", maxBytes: 12 * 1024 * 1024,
+    });
     const fallbackName = `delivery-receipt-${index + 1}.jpg`;
     const rawName = text(names[index] || names[0] || fallbackName) || fallbackName;
     const cleanName = rawName.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 120) || fallbackName;
-    const extMatch = cleanName.match(/\.([a-zA-Z0-9]+)$/);
-    const safeExt = text(extMatch?.[1]).toLowerCase() || (/png/i.test(match[1]) ? "png" : /webp/i.test(match[1]) ? "webp" : "jpg");
-    return { buffer, contentType: text(match[1]) || "image/jpeg", cleanName, safeExt };
+    const safeExt = contentType === "image/png" ? "png" : contentType === "image/webp" ? "webp" : "jpg";
+    return { buffer, contentType, cleanName, safeExt };
   });
 }
 

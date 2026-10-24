@@ -1,4 +1,5 @@
 import "server-only";
+import { parseStrictImageDataUrl } from "./strict-upload-image.mjs";
 import {
   createSignedUploadUrl,
   deleteById,
@@ -577,22 +578,13 @@ function storageObjectName(originalName = "product-image") {
 }
 
 async function uploadProductImage(dataUrl, originalName) {
-  const match = text(dataUrl).match(/^data:(image\/[a-z0-9.+-]+);base64,(.+)$/i);
-  if (!match) {
-    const error = new Error("Invalid product image.");
-    error.status = 400;
-    throw error;
-  }
-
-  const buffer = Buffer.from(match[2], "base64");
-  if (buffer.length > 10 * 1024 * 1024) {
-    const error = new Error("Product image must not exceed 10 MB.");
-    error.status = 400;
-    throw error;
-  }
-
-  const uploaded = await uploadStorageObject(storageObjectName(originalName), buffer, {
-    contentType: match[1],
+  const { mime, buffer } = parseStrictImageDataUrl(dataUrl, {
+    label: "Product image", maxBytes: 10 * 1024 * 1024,
+  });
+  const extension = mime === "image/png" ? "png" : mime === "image/webp" ? "webp" : "jpg";
+  const basename = text(originalName || "product-image").replace(/\.[^.]+$/, "") || "product-image";
+  const uploaded = await uploadStorageObject(storageObjectName(`${basename}.${extension}`), buffer, {
+    contentType: mime,
     bucketName: getProductsStorageBucket(),
     upsert: false,
   });
@@ -623,7 +615,9 @@ export async function createProductImageUploadTicket({ filename, mime, size } = 
     throw error;
   }
 
-  const ticket = await createSignedUploadUrl(storageObjectName(filename || "product-image.webp"), {
+  const extension = cleanMime === "image/png" ? "png" : cleanMime === "image/webp" ? "webp" : "jpg";
+  const basename = text(filename || "product-image").replace(/\.[^.]+$/, "") || "product-image";
+  const ticket = await createSignedUploadUrl(storageObjectName(`${basename}.${extension}`), {
     bucketName: getProductsStorageBucket(),
   });
   if (!ticket?.signedUrl || !ticket?.publicUrl) {

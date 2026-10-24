@@ -5,6 +5,7 @@ import { getDirectAccountGate } from "../../../../../lib/products-auth";
 import { featureGate } from "../../../../../lib/feature-permissions-server";
 import { featureAllowed } from "../../../../../lib/feature-permissions-registry";
 import { getSupabaseConfig, uploadStorageObject } from "../../../../../lib/supabase-rest";
+import { parseStrictImageDataUrl } from "../../../../../lib/strict-upload-image.mjs";
 
 export const dynamic = "force-dynamic";
 
@@ -13,33 +14,6 @@ function json(payload, status = 200) {
     status,
     headers: { "Cache-Control": "no-store" },
   });
-}
-
-function parseImageDataUrl(value = "") {
-  const match = String(value || "").match(/^data:([^;,]+);base64,([a-z0-9+/=\r\n]+)$/i);
-  if (!match) {
-    const error = new Error("Receipt image data is invalid.");
-    error.status = 400;
-    throw error;
-  }
-  const mime = String(match[1] || "").trim().toLowerCase();
-  if (!mime.startsWith("image/")) {
-    const error = new Error("Receipt upload must be an image.");
-    error.status = 400;
-    throw error;
-  }
-  const buffer = Buffer.from(match[2].replace(/\s+/g, ""), "base64");
-  if (!buffer.length) {
-    const error = new Error("Receipt image data is invalid.");
-    error.status = 400;
-    throw error;
-  }
-  if (buffer.length > 8 * 1024 * 1024) {
-    const error = new Error("Receipt image is too large. Maximum size is 8 MB.");
-    error.status = 413;
-    throw error;
-  }
-  return { mime, buffer };
 }
 
 function cleanFilename(value = "receipt.jpg") {
@@ -65,13 +39,15 @@ export async function POST(request) {
       return json({ ok: false, error: "Supabase Storage is not configured for receipt uploads." }, 500);
     }
 
-    const { mime, buffer } = parseImageDataUrl(body.dataUrl);
+    const { mime, buffer } = parseStrictImageDataUrl(body.dataUrl, { label: "Receipt image", maxBytes: 8 * 1024 * 1024 });
     const originalName = String(body?.filename || "receipt.jpg").trim() || "receipt.jpg";
-    const objectName = `proposal-receipts/${Date.now()}-${crypto.randomBytes(6).toString("hex")}-${cleanFilename(originalName)}`;
+    const cleanName = cleanFilename(originalName).replace(/\.[^.]+$/, "") || "receipt";
+    const extension = mime === "image/png" ? "png" : mime === "image/webp" ? "webp" : "jpg";
+    const objectName = `proposal-receipts/${Date.now()}-${crypto.randomBytes(6).toString("hex")}-${cleanName}.${extension}`;
     const uploaded = await uploadStorageObject(objectName, buffer, {
       contentType: mime,
       bucketName: storageBucket,
-      upsert: true,
+      upsert: false,
     });
     if (!uploaded?.publicUrl) {
       const error = new Error("Supabase Storage did not return a public receipt URL.");
