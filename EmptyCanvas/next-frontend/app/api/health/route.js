@@ -1,4 +1,6 @@
 import { getSupabaseConfig, isSupabaseConfigured } from "../../../lib/supabase-rest";
+import { getDirectAccountGate } from "../../../lib/products-auth";
+import { isTrustedLegacyAdmin } from "../../../lib/admin-identity-policy.mjs";
 
 export const dynamic = "force-dynamic";
 
@@ -40,7 +42,20 @@ async function getStorageBucketDiagnostics(config) {
   }
 }
 
-export async function GET() {
+export async function GET(request) {
+  // Liveness probes are public, but must not disclose infrastructure settings,
+  // private bucket names, PostgREST errors or configured service features.
+  const details = new URL(request.url).searchParams.get("details") === "1";
+  if (!details) {
+    return Response.json({ ok: true, status: "ready" }, { headers: { "Cache-Control": "no-store" } });
+  }
+  const gate = await getDirectAccountGate([]);
+  if (!gate?.ok || !isTrustedLegacyAdmin(gate.account || {})) {
+    return Response.json({ ok: false, error: "Diagnostics access denied." }, {
+      status: gate?.ok ? 403 : (gate?.status === 401 ? 401 : 403),
+      headers: { "Cache-Control": "no-store" },
+    });
+  }
   const config = getSupabaseConfig();
   const storage = await getStorageBucketDiagnostics(config);
   return Response.json({

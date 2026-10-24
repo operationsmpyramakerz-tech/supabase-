@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { getLegacyAccountGate } from "../../../../lib/products-auth";
+import { featureAllowed } from "../../../../lib/feature-permissions-registry";
+import { canClearPerformanceTelemetry } from "../../../../lib/performance-diagnostics-policy.mjs";
 import { clearPerformanceSamples, getPerformanceSnapshot } from "../../../../lib/performance-profiler";
 import { clearPersistentPerformanceSamples, loadPersistentPerformanceSnapshot } from "../../../../lib/persistent-performance-profiler";
 
@@ -71,6 +73,10 @@ export async function DELETE() {
   const gate = await performanceGate();
   if (!gate.ok) {
     return noStore({ error: gate.error || "Performance diagnostics access is not allowed." }, { status: gate.status || 403 });
+  }
+  // Reading telemetry does not grant authority to erase audit/performance history.
+  if (!canClearPerformanceTelemetry(gate.account, featureAllowed)) {
+    return noStore({ error: "Performance data removal requires administrative permission." }, { status: 403 });
   }
 
   const localRemoved = clearPerformanceSamples();
