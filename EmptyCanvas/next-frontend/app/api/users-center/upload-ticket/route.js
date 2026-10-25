@@ -29,12 +29,13 @@ export async function POST(request) {
     verifyUsersCenterAuthorizationToken(body?.authorizationToken, gate.account || {});
     const size = Math.max(0, Number(body?.size) || 0);
     const mime = text(body?.mime || "application/octet-stream");
-    const kind = text(body?.kind || "file").toLowerCase().replace(/[^a-z0-9_-]/g, "-") || "file";
+    const kind = text(body?.kind || "").toLowerCase();
+    if (!["profile-picture", "files-media"].includes(kind)) return json({ ok: false, error: "Unsupported Users Center upload category." }, 400);
     const filename = text(body?.filename) || "upload.bin";
 
     if (!size) return json({ ok: false, error: "File data is required." }, 400);
     if (size > MAX_BYTES) return json({ ok: false, error: "File is too large. Maximum size is 12MB." }, 413);
-    if (kind.includes("profile") && !/^image\//i.test(mime)) return json({ ok: false, error: "Profile picture must be an image." }, 400);
+    if (kind === "profile-picture" && !["image/jpeg", "image/png", "image/webp"].includes(mime.toLowerCase())) return json({ ok: false, error: "Profile pictures must be PNG, JPEG or WEBP." }, 400);
 
     const objectPath = `team-members/${kind}/${Date.now()}-${crypto.randomUUID().slice(0, 8)}-${safeName(filename)}`;
     const ticket = await createSignedUploadUrl(objectPath);
@@ -47,7 +48,7 @@ export async function POST(request) {
         method: "PUT",
         signedUrl: ticket.signedUrl,
         publicUrl: ticket.publicUrl,
-        headers: { "x-upsert": "false" },
+        headers: { "x-upsert": "false", "Content-Type": mime },
         cacheControl: "3600",
         bucket: ticket.bucket,
         path: ticket.path,

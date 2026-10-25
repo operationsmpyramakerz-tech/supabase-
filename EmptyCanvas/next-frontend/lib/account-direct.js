@@ -1,9 +1,11 @@
 import "server-only";
 import { isReservedAdminName } from "./admin-identity-policy.mjs";
+import { issueAccountImageTicket, verifyAccountImageTicket, rasterExtension, validateRasterBytes } from "./account-image-ticket.mjs";
 
 import crypto from "node:crypto";
 import {
   createSignedUploadUrl,
+  createSignedDownloadUrl,
   deleteStorageObjects,
   getSupabaseConfig,
   selectById,
@@ -239,7 +241,8 @@ export async function prepareAccountImageUpload(account = {}, input = {}) {
   const { id, row } = await verifyAccountPassword(account, input?.currentPassword);
   const mime = text(input?.mime || input?.type);
   const size = Math.max(0, Number(input?.size) || 0);
-  if (!/^image\//i.test(mime)) throw httpError("Only image uploads are allowed.", 400);
+  const extension = rasterExtension(mime);
+  if (!extension) throw httpError("Only PNG, JPEG and WEBP profile pictures are allowed.", 400);
   if (!size) throw httpError("Image data is required.", 400);
   if (size > MAX_IMAGE_BYTES) throw httpError("Image is too large. Maximum size is 10MB.", 413);
 
@@ -248,7 +251,7 @@ export async function prepareAccountImageUpload(account = {}, input = {}) {
     throw httpError("Profile picture field is not configured.", 400);
   }
 
-  const filename = safeFilename(input?.filename || "profile-picture.webp");
+  const filename = `${safeFilename(input?.filename || "profile-picture").replace(/\.[^.]+$/, "")}.${extension}`;
   const objectPath = `team-members/${imageFolder(kind)}/${id}/${Date.now()}-${crypto.randomUUID()}-${filename}`;
   const ticket = await createSignedUploadUrl(objectPath);
 
@@ -256,6 +259,7 @@ export async function prepareAccountImageUpload(account = {}, input = {}) {
     ok: true,
     kind,
     path: ticket.path,
+    uploadRef: issueAccountImageTicket({ memberId: id, kind, path: ticket.path, mime, size }),
     publicUrl: ticket.publicUrl,
     upload: {
       method: "PUT",
@@ -269,10 +273,51 @@ export async function prepareAccountImageUpload(account = {}, input = {}) {
   };
 }
 
+// The signed upload URL is a write capability, not evidence of successful
+// upload. Re-read a small byte range after it completes; never trust a path
+// or MIME supplied by the browser on the finalize request.
+async function verifyUploadedAccountRaster(path, payload) {
+  const signed = await createSignedDownloadUrl(path, { expiresIn: 60 });
+  const response = await fetch(signed.signedUrl, {
+    method: "GET", cache: "no-store", headers: { Range: "bytes=0-63", "Accept-Encoding": "identity" },
+  });
+  if (!response.ok || !response.body) {
+    try { await response.body?.cancel?.(); } catch {}
+    throw httpError("The uploaded profile picture could not be verified.", 409);
+  }
+  const range = response.headers.get("content-range") || "";
+  const match = range.match(/\/(\d+)$/);
+  const objectSize = match ? Number(match[1]) : (response.status === 200 ? Number(response.headers.get("content-length")) : NaN);
+  if (!Number.isSafeInteger(objectSize) || objectSize !== payload.size) {
+    try { await response.body.cancel(); } catch {}
+    throw httpError("Uploaded image size does not match the issued ticket.", 409);
+  }
+  const contentType = String(response.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+  if (contentType && contentType !== "application/octet-stream" && contentType !== payload.mime) {
+    try { await response.body.cancel(); } catch {}
+    throw httpError("Uploaded image type does not match the issued ticket.", 409);
+  }
+  const reader = response.body.getReader();
+  let prefix = Buffer.alloc(0);
+  try {
+    while (prefix.length < 16) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      prefix = Buffer.concat([prefix, Buffer.from(value || [])]);
+      if (prefix.length > 64 * 1024) break;
+    }
+  } finally {
+    try { await reader.cancel(); } catch {}
+  }
+  validateRasterBytes(prefix, payload.mime);
+}
+
 export async function finalizeAccountImage(account = {}, input = {}) {
   const kind = normalizeImageKind(input?.kind);
   const { id, row } = await verifyAccountPassword(account, input?.currentPassword);
   const path = ownedImagePath(input?.path, kind, id);
+  const ticket = verifyAccountImageTicket(input?.uploadRef, { memberId: id, kind, path });
+  await verifyUploadedAccountRaster(path, ticket);
   const key = imageColumnKey(row, kind);
   if (!key) throw httpError("Profile picture field is not configured.", 400);
 

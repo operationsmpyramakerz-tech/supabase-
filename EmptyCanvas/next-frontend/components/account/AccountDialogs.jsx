@@ -538,7 +538,7 @@ export function ImageUploadModal({ imageRequest, onClose, onSaved }) {
 
       const result = await requestJson("/next/api/account/image-direct", {
         method: "POST",
-        body: JSON.stringify({ kind, path: ticket.path || ticket?.upload?.path, currentPassword }),
+        body: JSON.stringify({ kind, path: ticket.path || ticket?.upload?.path, uploadRef: ticket.uploadRef, currentPassword }),
       }, { redirectOn401: false });
       onSaved("profile", safeUrl(result.photoUrl));
       onClose();

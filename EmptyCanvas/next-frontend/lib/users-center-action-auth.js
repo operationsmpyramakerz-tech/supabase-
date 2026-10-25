@@ -22,11 +22,15 @@ function accountUsername(account = {}) {
 }
 
 function currentIdentity(account = {}) {
-  return identityKey(accountUsername(account)) || accountMemberId(account);
+  // The user-facing display name can change and is not a unique account identifier.
+  return accountMemberId(account);
 }
 
 function signingSecret() {
-  return String(process.env.SESSION_SECRET || "dev-fallback-secret");
+  // Never mint admin authorization tokens with a public, guessable default.
+  const value = String(process.env.SESSION_SECRET || process.env.STORAGE_LINK_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || "").trim();
+  if (!value) throw authError("Admin authorization signing is not configured on the server.", 503);
+  return value;
 }
 
 function base64urlJson(payload = {}) {
