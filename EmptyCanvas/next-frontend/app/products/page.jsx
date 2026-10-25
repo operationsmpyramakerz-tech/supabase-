@@ -74,6 +74,7 @@ export default async function ProductsPage() {
         initialCatalog={catalog}
         permissions={{
           create: featureAllowed(gate.account, "products.create"),
+          export: featureAllowed(gate.account, "products.export"),
           edit: featureAllowed(gate.account, "products.edit"),
           delete: featureAllowed(gate.account, "products.delete"),
           tags: featureAllowed(gate.account, "products.tag_manage"),

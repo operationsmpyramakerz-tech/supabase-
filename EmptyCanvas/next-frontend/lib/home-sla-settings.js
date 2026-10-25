@@ -12,7 +12,12 @@ export function canViewSla(account) {
   return slaAdvanced(account) ? featureAllowed(account, 'sla.view') : directPageAccessLevel(account || {}, ADMIN_PAGES) === 'admin';
 }
 export function canManageSla(account) {
-  return slaAdvanced(account) ? featureAllowed(account, 'sla.manage') : directPageAccessLevel(account || {}, ADMIN_PAGES) === 'admin';
+  const previousAccess = slaAdvanced(account)
+    ? featureAllowed(account, 'sla.manage')
+    : directPageAccessLevel(account || {}, ADMIN_PAGES) === 'admin';
+  // Preserve the older SLA admin prerequisite even if the new Home toggle is
+  // enabled. A new allow never upgrades a View-only user to SLA administrator.
+  return previousAccess && featureAllowed(account, 'home.sla_manage');
 }
 
 export async function readSlaSettings() {

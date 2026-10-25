@@ -9,8 +9,13 @@ const ORDER_PAGES = ["Current Orders", "Orders Review", "Requested Orders", "Ope
 // not sufficient to change them; require edit-level page access as well as any
 // explicitly configured feature restriction. View-only users may still select
 // existing templates when exporting orders they can access.
+export function canDownloadSharedOrderInstructions(account = {}) {
+  return featureAllowed(account, "orders.documents.download_instructions");
+}
+
 export function canManageSharedOrderInstructions(account = {}) {
   return directPageMutationAccess(account, ORDER_PAGES) === true
+    && canDownloadSharedOrderInstructions(account)
     && featureAllowed(account, "orders.documents.manage_instructions");
 }
 

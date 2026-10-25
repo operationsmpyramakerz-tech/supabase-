@@ -6,6 +6,7 @@ import { loadCurrentOrderDetails } from "../../../../lib/current-orders-data";
 import { loadOrdersReviewDetails } from "../../../../lib/orders-review-data";
 import { loadMaintenanceOrderDetails } from "../../../../lib/maintenance-orders-data";
 import { assertOrderIdsInScope } from "../../../../lib/order-data-scope";
+import { canDownloadSharedOrderInstructions } from "../../../../lib/order-instructions-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -61,6 +62,13 @@ export async function POST(request) {
   const exportPermissions = { operations: "orders.operations.export", maintenance: "orders.maintenance.export", current: "orders.my.export", review: "orders.review.view_details" };
   const gate = exportPermissions[scope] ? featureGate(preliminaryGate, exportPermissions[scope]) : preliminaryGate;
   if (!gate.ok) return jsonError(gate.error || "Authentication required.", gate.status || 503);
+  // An independently denied instruction-export right must not be bypassed by
+  // POSTing an arbitrary instructions payload to the generic order exporter.
+  const suppliedInstructions = body?.instruction;
+  if (suppliedInstructions && (typeof suppliedInstructions !== "object" || Object.values(suppliedInstructions).some(value => Boolean(text(value))))
+      && !canDownloadSharedOrderInstructions(gate.account)) {
+    return jsonError("Downloading order instructions is not permitted.", 403);
+  }
 
   try {
     if (scope === "current" || scope === "operations") {

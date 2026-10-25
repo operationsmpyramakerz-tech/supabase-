@@ -83,7 +83,7 @@ export default function ExpensesUsersClient({ account, initialUsersPayload, ownC
         }) : <div className="users-empty"><div className="expenses-empty">Sorry, No data available</div></div>}
       </div>
     </main>
-    {selectedUser ? <UserExpensesModal permissions={{ edit: featureAllowed(account, "expenses.users.edit"), delete: featureAllowed(account, "expenses.users.delete"), export: featureAllowed(account, "expenses.users.export") }} user={selectedUser} ownCarRate={ownCarRate} onClose={() => setSelectedUser(null)} onUsersRefresh={refresh} notify={notify} /> : null}
+    {selectedUser ? <UserExpensesModal permissions={{ edit: featureAllowed(account, "expenses.users.edit"), delete: featureAllowed(account, "expenses.users.delete"), export: featureAllowed(account, "expenses.users.export"), viewOrderReceipts: featureAllowed(account, "orders.documents.view_receipts") }} user={selectedUser} ownCarRate={ownCarRate} onClose={() => setSelectedUser(null)} onUsersRefresh={refresh} notify={notify} /> : null}
     <Toast toast={toast} onClose={() => setToast(null)} />
   </>;
 }

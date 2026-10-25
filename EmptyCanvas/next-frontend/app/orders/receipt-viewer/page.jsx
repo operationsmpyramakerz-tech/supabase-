@@ -62,6 +62,10 @@ export default async function OrderReceiptViewerPage({ searchParams }) {
     return <main className="standalone-state"><section className="state-card"><h1>Order receipts are not available</h1><p>Expense viewing is disabled for this account.</p><a className="primary-button" href="/next/home">Return Home</a></section></main>;
   }
 
+  if (!featureAllowed(gate.account, "orders.documents.view_receipts")) {
+    return <main className="standalone-state"><section className="state-card"><h1>Order receipts are not available</h1><p>Viewing order receipts is disabled for this account.</p><a className="primary-button" href="/next/home">Return Home</a></section></main>;
+  }
+
   let payload = null;
   const warnings = [];
   try {

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getLegacyAccountGate } from "../../../../lib/products-auth";
-import { ORDER_PAGES, canManageSharedOrderInstructions } from "../../../../lib/order-instructions-access";
+import { ORDER_PAGES, canManageSharedOrderInstructions, canDownloadSharedOrderInstructions } from "../../../../lib/order-instructions-access";
 import {
   createOrderDownloadInstruction,
   listOrderDownloadInstructions,
@@ -34,6 +34,7 @@ function failure(error, fallback) {
 export async function GET() {
   const access = await gate();
   if (!access.ok) return noStore({ error: access.error || "Authentication required." }, { status: access.status || 503 });
+  if (!canDownloadSharedOrderInstructions(access.account)) return noStore({ error: "Downloading order instructions is not permitted." }, { status: 403 });
 
   try {
     const items = await listOrderDownloadInstructions();

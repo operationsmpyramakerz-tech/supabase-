@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { performance } from "node:perf_hooks";
 import { getLegacyAccountGate } from "../../../../lib/products-auth";
 import { featureGate } from "../../../../lib/feature-permissions-server";
+import { featureAllowed } from "../../../../lib/feature-permissions-registry";
+import { hideOrderReceiptFiles } from "../../../../lib/order-receipt-visibility.mjs";
 import { loadOrdersReviewDetails } from "../../../../lib/orders-review-data";
 
 export const dynamic = "force-dynamic";
@@ -65,7 +67,7 @@ export async function POST(request) {
   const stages = {};
   try {
     const items = await loadOrdersReviewDetails({ account: gate.account, orderIds, timings: stages });
-    if (Array.isArray(items)) return noStore(items, { headers: timing(performance.now() - detailsStartedAt, stages) });
+    if (Array.isArray(items)) return noStore(hideOrderReceiptFiles(items, featureAllowed(gate.account, "orders.documents.view_receipts")), { headers: timing(performance.now() - detailsStartedAt, stages) });
     return noStore({ error: "Orders Review direct Supabase data is unavailable." }, { status: 503, headers: timing(performance.now() - detailsStartedAt, stages) });
   } catch (error) {
     return noStore(

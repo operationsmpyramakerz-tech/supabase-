@@ -7,7 +7,7 @@ import { fetchDirectPageBootstrap } from "../../lib/page-bootstrap-direct";
 import { getLegacyAccountGate } from "../../lib/products-auth";
 import { getDirectAccountGateFromSessionContext } from "../../lib/direct-session-account";
 import { loadHomeOverviewDirect } from "../../lib/home-overview-data";
-import { canViewSla } from "../../lib/home-sla-settings";
+import { canManageSla } from "../../lib/home-sla-settings";
 import { resolveHomeSelection } from "../../lib/home-team-scopes";
 import { featureAllowed } from "../../lib/feature-permissions-registry";
 
@@ -165,7 +165,8 @@ export default async function HomePage({ searchParams }) {
         showMaintenance={overview.showMaintenance}
         showStock={overview.showStock}
         showExpenses={overview.showExpenses}
-        canManageSla={canViewSla(account)}
+        canViewSlaMetrics={featureAllowed(account, "home.sla_view")}
+        canManageSla={canManageSla(account)}
       />
 
       <section aria-label="Recent activity and shortcuts" className="home-grid erp-home-details">

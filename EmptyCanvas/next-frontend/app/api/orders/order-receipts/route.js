@@ -14,6 +14,9 @@ export async function GET(request) {
   if (!featureAllowed(gate.account, "expenses.view") && !featureAllowed(gate.account, "expenses.users.view")) {
     return NextResponse.json({ ok: false, error: "Expense receipt access denied." }, { status: 403, headers: { "Cache-Control": "private, no-store" } });
   }
+  if (!featureAllowed(gate.account, "orders.documents.view_receipts")) {
+    return NextResponse.json({ ok: false, error: "Order receipt viewing is not permitted." }, { status: 403, headers: { "Cache-Control": "private, no-store" } });
+  }
   const url = new URL(request.url);
   const ids = String(url.searchParams.get("ids") || "").trim();
   try {

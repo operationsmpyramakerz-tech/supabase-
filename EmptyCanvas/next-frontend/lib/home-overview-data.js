@@ -1074,7 +1074,7 @@ async function loadHomeOverviewDirectImpl({
   if (showOperations) visibleLifecycleScopes.operations = lifecycleScopes.operations || [];
   if (showMaintenance) visibleLifecycleScopes.maintenance = lifecycleScopes.maintenance || [];
   const lifecycleAnalysis = needsOrderOverview
-    ? await loadHomeLifecycleAnalytics(visibleLifecycleScopes)
+    ? await loadHomeLifecycleAnalytics(visibleLifecycleScopes, { includeSla: featureAllowed(account, "home.sla_view") })
     : { state: "ready", workspaces: {} };
 
   return {

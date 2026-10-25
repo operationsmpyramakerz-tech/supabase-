@@ -740,6 +740,7 @@ export default function HomeOverviewClient({
   showStock,
   showExpenses,
   canManageSla = false,
+  canViewSlaMetrics = true,
 }) {
   const available = [
     showCurrent ? { definition: DASHBOARD_WORKSPACES[0], matrix: currentMatrix } : null,
@@ -767,7 +768,7 @@ export default function HomeOverviewClient({
           <FocusQueue workspaces={available} trendAnalysis={trendAnalysis} />
           <BacklogHealth workspaces={available} backlogAnalysis={backlogAnalysis} selectedDuration={selectedDuration} />
           <ProcessingTimeInsights workspaces={available} lifecycleAnalysis={lifecycleAnalysis} />
-          <SlaMonitoring workspaces={available} lifecycleAnalysis={lifecycleAnalysis} canManageSla={canManageSla} />
+          {canViewSlaMetrics ? <SlaMonitoring workspaces={available} lifecycleAnalysis={lifecycleAnalysis} canManageSla={canManageSla} /> : null}
           <TrendInsights workspaces={available} trendAnalysis={trendAnalysis} />
           <div className="erp-home-dashboard__section-heading">
             <div><span>DETAILED ANALYSIS</span><h2>Order breakdown</h2></div>

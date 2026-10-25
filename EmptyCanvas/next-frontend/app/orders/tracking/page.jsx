@@ -4,6 +4,8 @@ import OrderTrackingClient from "../../../components/orders/OrderTrackingClient"
 import { getLegacyAccountGate } from "../../../lib/products-auth";
 import { getDirectAccountGateFromSessionContext } from "../../../lib/direct-session-account";
 import { featureGate } from "../../../lib/feature-permissions-server";
+import { featureAllowed } from "../../../lib/feature-permissions-registry";
+import { hideOrderReceiptFiles } from "../../../lib/order-receipt-visibility.mjs";
 import { loadOrderTracking } from "../../../lib/order-tracking-data";
 
 export const dynamic = "force-dynamic";
@@ -126,7 +128,7 @@ export default async function OrderTrackingPage({ searchParams }) {
       activePath="/next/orders"
     >
       <OrderTrackingClient
-        initialTracking={tracking}
+        initialTracking={{ ...tracking, items: hideOrderReceiptFiles(tracking.items, featureAllowed(gate.account, "orders.documents.view_receipts")) }}
         groupId={groupId}
         bootstrapWarnings={[]}
       />

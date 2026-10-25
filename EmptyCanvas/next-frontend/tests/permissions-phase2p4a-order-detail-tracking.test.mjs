@@ -104,7 +104,7 @@ test('2P4A admin editor initializes new switches from saved predecessor grants w
 
 test('2P4A disabling a new toggle persists an explicit deny instead of silently restoring inherited access', () => {
   const dialog = read('components/users-center/UsersCenterDialogs.jsx');
-  assert.ok(dialog.includes('Object.hasOwn(OPTIONAL_FEATURE_FALLBACKS, item.key) && grants[item.key] !== true'));
+  assert.ok(dialog.includes('(Object.hasOwn(OPTIONAL_FEATURE_FALLBACKS, item.key) || LEGACY_DEFAULT_FEATURE_KEYS.includes(item.key)) && grants[item.key] !== true'));
   assert.ok(dialog.includes('.map(item => ({ key: item.key, allowed: false, scope: "all" }))'));
   assert.ok(dialog.includes('!Object.hasOwn(savedScopes, key) && savedGrants[predecessor] === true'));
   // Opting a module out prevents saving any of its new or old action grants.

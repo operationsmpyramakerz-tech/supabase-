@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { performance } from "node:perf_hooks";
 import { getLegacyAccountGate } from "../../../../../lib/products-auth";
 import { featureGate } from "../../../../../lib/feature-permissions-server";
+import { featureAllowed } from "../../../../../lib/feature-permissions-registry";
+import { hideOrderReceiptFiles } from "../../../../../lib/order-receipt-visibility.mjs";
 import { loadMaintenanceOrderDetails } from "../../../../../lib/maintenance-orders-data";
 import { assertOrderIdsInScope } from "../../../../../lib/order-data-scope";
 
@@ -64,7 +66,7 @@ export async function POST(request) {
   try {
     await assertOrderIdsInScope(gate.account, "orders.maintenance.details", orderIds);
     const items = await loadMaintenanceOrderDetails({ orderIds, timings: stages });
-    if (Array.isArray(items)) return noStore(items, { headers: timing(performance.now() - detailsStartedAt, stages) });
+    if (Array.isArray(items)) return noStore(hideOrderReceiptFiles(items, featureAllowed(gate.account, "orders.documents.view_receipts")), { headers: timing(performance.now() - detailsStartedAt, stages) });
     return noStore({ error: "Maintenance Orders direct Supabase data is unavailable." }, { status: 503, headers: timing(performance.now() - detailsStartedAt, stages) });
   } catch (error) {
     return noStore(

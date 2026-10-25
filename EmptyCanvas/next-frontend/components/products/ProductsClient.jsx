@@ -102,6 +102,7 @@ function ClassicIcon({ name }) {
   const paths = {
     filter: <><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></>,
     tag: <><path d="M20.59 13.41L11 3H4v7l9.59 9.59a2 2 0 0 0 2.82 0l4.18-4.18a2 2 0 0 0 0-2.82z" /><line x1="7" y1="7" x2="7.01" y2="7" /></>,
+    download: <><path d="M12 3v12m-5-5 5 5 5-5"/><path d="M4 17v4h16v-4"/></>,
     plus: <><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></>,
     "plus-circle": <><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="16" /><line x1="8" y1="12" x2="16" y2="12" /></>,
     check: <polyline points="20 6 9 17 4 12" />,
@@ -181,7 +182,7 @@ function ProductCard({ product, menuOpen, onMenu, onEdit, onDelete, onImage, can
 }
 
 export default function ProductsClient({ initialCatalog = {}, bootstrapWarnings = [], permissions = {} }) {
-  const permitted = { create: true, edit: true, delete: true, tags: true, units: true, imageUpload: true, ...permissions };
+  const permitted = { create: true, edit: true, delete: true, tags: true, units: true, imageUpload: true, export: true, ...permissions };
   const [products, setProducts] = useState(() => (Array.isArray(initialCatalog?.products) ? initialCatalog.products : []).map(normalizeProduct));
   const [tagCatalog, setTagCatalog] = useState(() => mergeUnique(initialCatalog?.tagsCatalog || []));
   const [unitCatalog, setUnitCatalog] = useState(() => mergeUnique([...(initialCatalog?.unitsCatalog || []), ...DEFAULT_UNITS]));
@@ -331,6 +332,7 @@ export default function ProductsClient({ initialCatalog = {}, bootstrapWarnings 
       {bootstrapWarnings.length ? <div className="dashboard-notice" role="status"><strong>Some catalogue data may be temporarily unavailable.</strong><span>The loaded catalogue remains available while the missing resource recovers.</span></div> : null}
 
       <section className="products-filter-panel" aria-label="Product tag filter">
+        {permitted.export ? <a className="products-group-add-product" href="/next/api/products/catalog-export" download="products-catalog.csv" style={{ marginInlineEnd: 12, textDecoration: "none" }}><ClassicIcon name="download" /><span>Export CSV</span></a> : null}
         <div className="products-tag-filter-wrap" ref={filterRef} onClick={(event) => event.stopPropagation()}>
           <button type="button" className="products-tag-filter-btn" aria-expanded={filterOpen} onClick={() => setFilterOpen((value) => !value)}>
             <span className="products-tag-filter-btn__icon"><ClassicIcon name="filter" /></span>

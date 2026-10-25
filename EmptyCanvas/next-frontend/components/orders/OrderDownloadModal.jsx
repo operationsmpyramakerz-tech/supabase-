@@ -84,7 +84,9 @@ async function instructionApi(options = {}) {
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(payload?.error || payload?.message || "Saved instructions request failed.");
+    const error = new Error(payload?.error || payload?.message || "Saved instructions request failed.");
+    error.status = response.status;
+    throw error;
   }
   return payload;
 }
@@ -303,6 +305,7 @@ export default function OrderDownloadModal({
   const [templates, setTemplates] = useState([]);
   const [templatesLoading, setTemplatesLoading] = useState(false);
   const [canManageInstructions, setCanManageInstructions] = useState(false);
+  const [canDownloadInstructions, setCanDownloadInstructions] = useState(true);
   const [selectedInstructionId, setSelectedInstructionId] = useState("");
   const [instructionOpen, setInstructionOpen] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
@@ -327,6 +330,7 @@ export default function OrderDownloadModal({
     setOrderQuery("");
     setTemplates([]);
     setCanManageInstructions(false);
+    setCanDownloadInstructions(true);
     setTemplatesLoading(true);
     setSelectedInstructionId("");
     setInstructionOpen(false);
@@ -371,13 +375,15 @@ export default function OrderDownloadModal({
         if (!cancelled) {
           setTemplates(databaseTemplates);
           setCanManageInstructions(permissionResult.canManage);
+          setCanDownloadInstructions(true);
           setError("");
         }
       } catch (loadError) {
         if (!cancelled) {
           setTemplates([]);
           setCanManageInstructions(false);
-          setError(loadError?.message || "Saved instructions could not be loaded.");
+          setCanDownloadInstructions(loadError?.status !== 403);
+          setError(loadError?.status === 403 ? "" : (loadError?.message || "Saved instructions could not be loaded."));
         }
       } finally {
         if (!cancelled) setTemplatesLoading(false);
@@ -611,7 +617,7 @@ export default function OrderDownloadModal({
           </div>
         ) : null}
 
-        <div className="order-download-section order-download-instructions">
+        {canDownloadInstructions ? <div className="order-download-section order-download-instructions">
           <div className="order-download-instructions__heading">
             <span className="order-download-section__label">Instructions</span>
           </div>
@@ -677,7 +683,7 @@ export default function OrderDownloadModal({
               {selectedInstruction.arabicText ? <p dir="rtl" lang="ar">{selectedInstruction.arabicText}</p> : null}
             </div>
           ) : null}
-        </div>
+        </div> : null}
 
         {error ? <div className="order-download-error" role="alert">{error}</div> : null}
 

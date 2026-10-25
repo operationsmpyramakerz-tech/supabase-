@@ -8,7 +8,7 @@ import ActionLoadingModal, { useActionLoading } from "../ActionLoadingModal";
 import { DeleteConfirmDialog, DeleteVerificationDialog } from "../shared/SystemDeleteDialogs";
 import { cacheUsersCenterAuthorization, currentUsersCenterAuthorizationToken, requestJson, usersCenterMutation } from "./usersCenterClientShared";
 import { TASK_SCOPE_MARKER } from "../../lib/task-data-scope.mjs";
-import { FEATURE_DEFINITIONS, ACTIVE_PILOT_FEATURE_KEYS, OPTIONAL_FEATURE_FALLBACKS, MY_ORDERS_ENFORCEMENT_MARKER, PHASE2A_LEGACY_MARKERS, ORDER_SCOPE_MARKERS } from "../../lib/feature-permissions-registry";
+import { FEATURE_DEFINITIONS, ACTIVE_PILOT_FEATURE_KEYS, OPTIONAL_FEATURE_FALLBACKS, LEGACY_DEFAULT_FEATURE_KEYS, MY_ORDERS_ENFORCEMENT_MARKER, PHASE2A_LEGACY_MARKERS, ORDER_SCOPE_MARKERS } from "../../lib/feature-permissions-registry";
 import { permissionDraft, permissionDraftChanges, modulePermissionStatus } from "../../lib/feature-permissions-ui.mjs";
 
 function text(value) { return String(value ?? "").trim(); }
@@ -612,6 +612,7 @@ function FeatureAccessModal({ member, onClose, protect }) {
     { key: "orders.my", label: "My Orders", optIn: true },
     { key: "orders.maintenance", label: "Maintenance Orders", optIn: true },
     { key: "orders.shopping", label: "Shopping Cart", optIn: true },
+    { key: "orders.documents", label: "Order Documents", optIn: false },
     { key: "tasks", label: "Task Management", optIn: true },
     { key: "events.requests", label: "Event Requests", optIn: true },
     { key: "events.calendar", label: "Event Calendar", optIn: true },
@@ -649,6 +650,11 @@ function FeatureAccessModal({ member, onClose, protect }) {
         for (const [key, predecessor] of Object.entries(OPTIONAL_FEATURE_FALLBACKS)) {
           if (!Object.hasOwn(savedGrants, key) && savedGrants[predecessor] === true) savedGrants[key] = true;
         }
+        // Shared document endpoints were always controlled by Page Access.
+        // Show their effective legacy value unless the admin has saved a deny.
+        for (const key of LEGACY_DEFAULT_FEATURE_KEYS) {
+          if (!Object.hasOwn(savedGrants, key)) savedGrants[key] = true;
+        }
         setGrants(savedGrants);
         const savedScopes = Object.fromEntries(stored.filter(item => ACTIVE_PILOT_FEATURE_KEYS.includes(item.key)).map(item => [item.key, item.scope || "all"]));
         for (const [key, predecessor] of Object.entries(OPTIONAL_FEATURE_FALLBACKS)) {
@@ -666,6 +672,7 @@ function FeatureAccessModal({ member, onClose, protect }) {
           "orders.my": stored.some(item => item.key === MY_ORDERS_ENFORCEMENT_MARKER && item.allowed === true),
           "orders.maintenance": stored.some(item => item.key === "orders.maintenance.view"),
           "orders.shopping": stored.some(item => item.key === "orders.shopping.view"),
+          "orders.documents": true,
           tasks: stored.some(item => item.key === "tasks.view"),
           "events.requests": stored.some(item => item.key === "events.requests.view"),
           "events.calendar": stored.some(item => item.key === "events.calendar.view"),
@@ -758,7 +765,7 @@ function FeatureAccessModal({ member, onClose, protect }) {
             // Unlike older implicit-deny actions, Phase 2P4A keys use a
             // compatibility fallback when the grant is absent. A deliberate
             // OFF switch therefore MUST be persisted as an explicit deny.
-            ...activeFeatures.filter(item => Object.hasOwn(OPTIONAL_FEATURE_FALLBACKS, item.key) && grants[item.key] !== true)
+            ...activeFeatures.filter(item => (Object.hasOwn(OPTIONAL_FEATURE_FALLBACKS, item.key) || LEGACY_DEFAULT_FEATURE_KEYS.includes(item.key)) && grants[item.key] !== true)
               .map(item => ({ key: item.key, allowed: false, scope: "all" })),
             // Persist a denied view marker for opt-in modules. An absent marker
             // intentionally means 'not migrated' and preserves legacy access.

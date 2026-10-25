@@ -11,7 +11,7 @@ const PAGE_SIZE = 1000;
 const MAX_EVENTS_PER_CHUNK = 20000;
 
 /** Read audit events for ONLY the order numbers visible to the signed-in Home. */
-export async function loadHomeLifecycleAnalytics(scopes = {}) {
+export async function loadHomeLifecycleAnalytics(scopes = {}, { includeSla = true } = {}) {
   const ordered = [...new Set(Object.values(scopes).flatMap((scope) =>
     Array.isArray(scope) ? scope.map((order) => String(order.orderNumber)) : []))]
     .filter((number) => /^[1-9]\d*$/.test(number));
@@ -22,7 +22,7 @@ export async function loadHomeLifecycleAnalytics(scopes = {}) {
   try {
     // SLA and processing-time metrics share the same access-scoped audit events.
     // Policies remain disabled until explicitly configured in Supabase.
-    const policiesPromise = loadHomeSlaPolicies();
+    const policiesPromise = includeSla ? loadHomeSlaPolicies() : Promise.resolve(null);
     const events = [];
     for (let i = 0; i < ordered.length; i += CHUNK_SIZE) {
       const numbers = ordered.slice(i, i + CHUNK_SIZE);
@@ -44,10 +44,12 @@ export async function loadHomeLifecycleAnalytics(scopes = {}) {
       }
     }
     const policyResult = await policiesPromise;
-    const sla = policyResult.state === 'ready'
-      ? buildSlaAnalytics(scopes, events, policyResult.policies, Date.now(), policyResult.calendar)
-      : { state: policyResult.state, workspaces: {} };
-    return { state: 'ready', workspaces: buildLifecycleAnalytics(scopes, events), sla }; 
+    const sla = includeSla
+      ? (policyResult.state === 'ready'
+        ? buildSlaAnalytics(scopes, events, policyResult.policies, Date.now(), policyResult.calendar)
+        : { state: policyResult.state, workspaces: {} })
+      : null;
+    return { state: 'ready', workspaces: buildLifecycleAnalytics(scopes, events), ...(includeSla ? { sla } : {}) }; 
   } catch (error) {
     const body = [error?.message, error?.details?.message, error?.details?.code].filter(Boolean).join(' ').toLowerCase();
     const missing = /does not exist|could not find|schema cache|pgrst205|42p01/.test(body);

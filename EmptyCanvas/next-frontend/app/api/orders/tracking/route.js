@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getLegacyAccountGate } from "../../../../lib/products-auth";
 import { featureGate } from "../../../../lib/feature-permissions-server";
+import { featureAllowed } from "../../../../lib/feature-permissions-registry";
+import { hideOrderReceiptFiles } from "../../../../lib/order-receipt-visibility.mjs";
 import { loadOrderTracking } from "../../../../lib/order-tracking-data";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +27,7 @@ export async function GET(request) {
 
   try {
     const tracking = await loadOrderTracking({ account: gate.account, groupId });
-    if (tracking) return noStore(tracking);
+    if (tracking) return noStore({ ...tracking, items: hideOrderReceiptFiles(tracking.items, featureAllowed(gate.account, "orders.documents.view_receipts")) });
     return noStore({ error: "Order tracking direct Supabase data is unavailable." }, { status: 503 });
   } catch (error) {
     return noStore(

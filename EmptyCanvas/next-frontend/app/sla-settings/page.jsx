@@ -10,7 +10,7 @@ export default async function SlaSettingsPage() {
   const gate = await getDirectAccountGate([]);
   if (gate.status === 401) redirect('/login?next=/next/sla-settings');
   if (!gate.ok || !canViewSla(gate.account)) {
-    return <main className="standalone-state"><section className="state-card"><h1>SLA settings are restricted</h1><p>Only users with Admin-level Users Center access can change company SLA policies.</p><a href="/next/home">Back to Home</a></section></main>;
+    return <main className="standalone-state"><section className="state-card"><h1>SLA settings are restricted</h1><p>Your account does not have access to SLA settings. Contact an administrator to review your permissions.</p><a href="/next/home">Back to Home</a></section></main>;
   }
   return <AppShell account={gate.account} title="SLA Settings" activePath="/next/home"
     bodyClass="page-home page-sla-settings" pageStyles={["/next/css/sla-settings.css?v=phase8-1"]}>
