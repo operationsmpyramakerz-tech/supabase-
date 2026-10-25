@@ -10,6 +10,7 @@ import {
   getSupabaseConfig,
   selectById,
   storagePublicUrl,
+  uploadStorageObject,
   updateById,
 } from "./supabase-rest";
 import { clearDirectSessionAccountCaches } from "./direct-session-account";
@@ -329,6 +330,48 @@ export async function finalizeAccountImage(account = {}, input = {}) {
   clearAccountCaches(id);
 
   return { ok: true, success: true, photoUrl: publicUrl, source: "supabase-next", row: updated || null };
+}
+
+// The profile editor uploads its cropped image through our own API. This
+// avoids the extra browser -> signed URL -> read-back roundtrip that can stall
+// on some Supabase Storage proxies. Authentication, byte validation and DB
+// ownership checks all take place on the server before the picture is saved.
+export async function uploadAccountImageDirect(account = {}, input = {}) {
+  const kind = normalizeImageKind(input?.kind);
+  const { id, row } = await verifyAccountPassword(account, input?.currentPassword);
+  const mime = text(input?.mime).toLowerCase();
+  const extension = rasterExtension(mime);
+  if (!extension) throw httpError("Only PNG, JPEG and WEBP profile pictures are allowed.", 400);
+
+  const bytes = input?.bytes;
+  if (!Buffer.isBuffer(bytes) || !bytes.length) throw httpError("Image data is required.", 400);
+  if (bytes.length > MAX_IMAGE_BYTES) throw httpError("Image is too large. Maximum size is 10MB.", 413);
+  validateRasterBytes(bytes.subarray(0, 16), mime);
+
+  const key = imageColumnKey(row, kind);
+  if (!key) throw httpError("Profile picture field is not configured.", 400);
+
+  const filename = safeFilename(input?.filename || `profile.${extension}`).replace(/\.[^.]+$/, "");
+  const path = `team-members/${imageFolder(kind)}/${id}/${Date.now()}-${crypto.randomUUID()}-${filename}.${extension}`;
+  const uploaded = await uploadStorageObject(path, bytes, { contentType: mime, upsert: false });
+  const publicUrl = uploaded.publicUrl || storagePublicUrl(path);
+  if (!publicUrl) {
+    await deleteStorageObjects([path]).catch(() => {});
+    throw httpError("Supabase Storage public URL is unavailable.", 503);
+  }
+
+  let updated;
+  try {
+    updated = await updateById(teamMembersTable(), id, { [key]: publicUrl });
+    if (!updated) throw httpError("The profile picture could not be saved to your account.", 503);
+  } catch (error) {
+    await deleteStorageObjects([path]).catch(() => {});
+    throw error;
+  }
+
+  await deleteOldOwnedImage(row, key, path);
+  clearAccountCaches(id);
+  return { ok: true, success: true, photoUrl: publicUrl, source: "supabase-next", row: updated };
 }
 
 export async function removeAccountImage(account = {}, kindValue = "") {

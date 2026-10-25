@@ -108,7 +108,7 @@ async function requestJson(url, options = {}, { redirectOn401 = true } = {}) {
     cache: "no-store",
     ...options,
     headers: {
-      ...(options.body ? { "Content-Type": "application/json" } : {}),
+      ...(options.body && !(options.body instanceof FormData) ? { "Content-Type": "application/json" } : {}),
       ...(options.headers || {}),
     },
   });
@@ -500,11 +500,6 @@ export function ImageUploadModal({ imageRequest, onClose, onSaved }) {
     setBusy(true);
     setError("");
     try {
-      await requestJson("/next/api/account/verify-password", {
-        method: "POST",
-        body: JSON.stringify({ currentPassword }),
-      }, { redirectOn401: false });
-
       const viewport = cropViewportRef.current?.getBoundingClientRect();
       const dataUrl = await croppedImageDataUrl(
         imageRequest.file,
@@ -516,34 +511,30 @@ export function ImageUploadModal({ imageRequest, onClose, onSaved }) {
       if (!blob.size) throw new Error("The prepared image is empty.");
       if (blob.size > 10 * 1024 * 1024) throw new Error("Image is too large. Maximum size is 10MB.");
 
-      const ticket = await requestJson("/next/api/account/image-upload-ticket", {
-        method: "POST",
-        body: JSON.stringify({
-          kind,
-          filename: imageRequest.file.name,
-          mime: blob.type || "image/webp",
-          size: blob.size,
-          currentPassword,
-        }),
-      }, { redirectOn401: false });
-
-      const uploadResponse = await fetch(ticket?.upload?.signedUrl || "", {
-        method: ticket?.upload?.method || "PUT",
-        headers: ticket?.upload?.headers || {},
-        body: blob,
-      });
-      if (!uploadResponse.ok) {
-        throw new Error(`Image upload failed with status ${uploadResponse.status}.`);
+      // Send the cropped bytes straight to the account API. The server checks
+      // the password, validates the real raster bytes and saves the DB field
+      // in this same request (no separate signed download verification).
+      const form = new FormData();
+      form.append("kind", kind);
+      form.append("currentPassword", currentPassword);
+      form.append("image", blob, blob.type === "image/jpeg" ? "profile.jpg" : "profile.webp");
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), 60000);
+      let result;
+      try {
+        result = await requestJson("/next/api/account/image-direct", {
+          method: "POST",
+          body: form,
+          signal: controller.signal,
+        }, { redirectOn401: false });
+      } finally {
+        window.clearTimeout(timeout);
       }
-
-      const result = await requestJson("/next/api/account/image-direct", {
-        method: "POST",
-        body: JSON.stringify({ kind, path: ticket.path || ticket?.upload?.path, uploadRef: ticket.uploadRef, currentPassword }),
-      }, { redirectOn401: false });
       onSaved("profile", safeUrl(result.photoUrl));
       onClose();
     } catch (uploadError) {
       if (uploadError?.status === 401) triggerInvalidPassword();
+      else if (uploadError?.name === "AbortError") setError("The upload timed out. Check your profile picture before trying again.");
       else setError(uploadError?.message || "The image could not be uploaded.");
     } finally {
       setBusy(false);

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { finalizeAccountImage, removeAccountImage } from "../../../../lib/account-direct";
+import { finalizeAccountImage, removeAccountImage, uploadAccountImageDirect } from "../../../../lib/account-direct";
 import { getDirectAccountGate } from "../../../../lib/products-auth";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +22,26 @@ export async function POST(request) {
   }
 
   try {
+    // Multipart is the preferred upload path: a single save operation. Keep
+    // the signed-ticket JSON finalizer for older client versions.
+    if (String(request.headers.get("content-type") || "").toLowerCase().includes("multipart/form-data")) {
+      const form = await request.formData();
+      const file = form.get("image");
+      if (!file || typeof file.arrayBuffer !== "function") {
+        return json({ ok: false, error: "A profile picture is required." }, 400);
+      }
+      if (!file.size || file.size > 10 * 1024 * 1024) {
+        return json({ ok: false, error: "Image must be between 1 byte and 10MB." }, 413);
+      }
+      const body = {
+        kind: form.get("kind"),
+        currentPassword: form.get("currentPassword"),
+        filename: file.name,
+        mime: file.type,
+        bytes: Buffer.from(await file.arrayBuffer()),
+      };
+      return json(await uploadAccountImageDirect(accountGate.account, body));
+    }
     const body = await request.json().catch(() => ({}));
     return json(await finalizeAccountImage(accountGate.account, body));
   } catch (error) {
