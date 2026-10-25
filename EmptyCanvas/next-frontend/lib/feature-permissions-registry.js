@@ -195,7 +195,7 @@ export const FEATURE_DEFINITIONS = Object.freeze(
   {
     "module": "orders.maintenance",
     "key": "orders.maintenance.checklist_view",
-    "label": "Read checklist"
+    "label": "View saved checklist options"
   },
   {
     "module": "orders.maintenance",
@@ -940,13 +940,16 @@ export const FEATURE_DEFINITIONS = Object.freeze(
 ]
 );
 
-// Phase 2P4A: new controls inherit the previously enforced permission until
+// Phase 2P4A/B: new controls inherit the previously enforced permission until
 // an administrator explicitly saves the new action. Avoid revoking existing
 // users' access simply because a release adds a more granular permission.
 export const OPTIONAL_FEATURE_FALLBACKS = Object.freeze({
   "orders.my.view_details": "orders.my.view",
   "orders.operations.details": "orders.operations.view",
   "orders.tracking.view": "orders.my.view",
+  "orders.my.update_received": "orders.my.edit",
+  "orders.operations.upload_receipt": "orders.operations.receive",
+  "orders.maintenance.checklist_view": "orders.maintenance.view",
 });
 
 export const TASK_SCOPE_MARKER = "tasks.__scoped";
@@ -1060,8 +1063,8 @@ export function featureAllowed(account, key, { legacyAllowed = true, scopes = ["
 
 export const PILOT_FEATURE_MODULES = Object.freeze(["products", "orders.operations", "orders.my", "orders.maintenance", "orders.shopping", "tasks", "events.requests", "events.calendar", "events.components", "events.team", "kits", "proposals", "orders.review", "stocktaking", "expenses", "expenses.users", "users", "b2c.database", "b2c.forms", "backup", "history", "kpis", "sla", "home"]);
 
-// Permissions with both server-side enforcement and UI controls in Phase 2A.
-// Do not show toggles for unprotected actions; that would imply false security.
+// Permissions with audited server-side gates and corresponding administrator controls.
+// Do not expose unprotected actions; that would imply false security.
 export const ACTIVE_PILOT_FEATURE_KEYS = Object.freeze([
   "home.view", "home.analysis", "home.financial_analysis",
   "kpis.view", "kpis.standard_manage", "kpis.review_create", "kpis.scores_edit", "kpis.evidence_upload", "kpis.report",
@@ -1081,15 +1084,15 @@ export const ACTIVE_PILOT_FEATURE_KEYS = Object.freeze([
   "expenses.users.view", "expenses.users.edit", "expenses.users.delete", "expenses.users.export",
   "kits.view", "kits.create", "kits.edit", "kits.delete", "kits.copy", "kits.item_add", "kits.item_edit", "kits.item_delete", "kits.folder_create", "kits.folder_manage", "kits.send_stock", "proposals.view", "proposals.create", "proposals.edit", "proposals.delete", "proposals.copy", "proposals.item_add", "proposals.item_edit", "proposals.item_delete", "proposals.combine", "proposals.make_order", "proposals.send_stock", "proposals.receipt_upload", "orders.review.view", "orders.review.view_details", "orders.review.approve", "orders.review.bulk_approve", "orders.review.quantity", "orders.review.archive", "orders.review.unarchive", "orders.review.update_approval",
   "orders.my.view", "orders.my.view_details", "orders.tracking.view", "orders.my.edit", "orders.my.archive",
-  "orders.my.unarchive", "orders.my.delete", "orders.my.export",
+  "orders.my.unarchive", "orders.my.delete", "orders.my.export", "orders.my.update_received",
   "products.view", "products.create", "products.edit", "products.delete",
   "products.tag_manage", "products.unit_create", "products.image_upload",
   "orders.operations.view", "orders.operations.details", "orders.operations.approve", "orders.operations.ship",
   "orders.operations.receive", "orders.operations.withdrawal",
-  "orders.operations.delivery", "orders.operations.edit", "orders.operations.export",
+  "orders.operations.delivery", "orders.operations.edit", "orders.operations.export", "orders.operations.upload_receipt",
   "orders.maintenance.view", "orders.maintenance.details", "orders.maintenance.log",
   "orders.maintenance.mark_arrived", "orders.maintenance.edit", "orders.maintenance.archive",
-  "orders.maintenance.delete", "orders.maintenance.checklist_manage", "orders.maintenance.export",
+  "orders.maintenance.delete", "orders.maintenance.checklist_view", "orders.maintenance.checklist_manage", "orders.maintenance.export",
   "orders.shopping.view", "orders.shopping.submit", "orders.shopping.edit_submit", "orders.shopping.undo",
   "tasks.view", "tasks.project_create", "tasks.project_edit", "tasks.project_archive",
   "tasks.project_delete", "tasks.mark_delivered", "tasks.workflow_save",

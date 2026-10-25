@@ -11,9 +11,9 @@ export async function POST(request) {
   if (!gate.ok) {
     return NextResponse.json({ success: false, error: gate.error || "Authentication required." }, { status: gate.status || 503 });
   }
-  // No separate UI control is exposed for this legacy endpoint in the pilot;
-  // it still requires the My Orders Edit grant, not Page View alone.
-  const permission = featureGate(gate, "orders.my.edit");
+  // Dedicated permission; previously granted Edit users retain access until
+  // an administrator explicitly configures Update Received.
+  const permission = featureGate(gate, "orders.my.update_received");
   if (!permission.ok) return NextResponse.json({ success: false, error: permission.error }, { status: permission.status || 403 });
   try {
     const body = await request.json().catch(() => ({}));

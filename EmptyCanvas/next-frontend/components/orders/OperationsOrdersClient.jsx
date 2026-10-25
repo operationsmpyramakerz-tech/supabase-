@@ -994,6 +994,8 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
     const permissionAction = ({ reject: "approve", "technical-visit": "ship", deliver: "receive",
       "maintenance-deliver": "receive", archive: "edit", unarchive: "edit" })[action] || action;
     if (permissions?.[permissionAction] === false || !orderCardAllows(scopePolicy, permissionAction, group)) return;
+    if (["deliver", "maintenance-deliver"].includes(action)
+      && (permissions?.upload_receipt === false || !orderCardAllows(scopePolicy, "upload_receipt", group))) return;
     setActionError("");
     if (action === "maintenance-log") {
       try {

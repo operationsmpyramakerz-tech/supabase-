@@ -30,7 +30,7 @@ test('My Orders routes independently check operations before writes', () => {
   assert.ok(submit.includes('if (body?.editMode === true)'));
   assert.ok(submit.includes('featureGate(gate, "orders.my.edit")'));
   const received = file('../app/api/orders/current/update-received-direct/route.js');
-  assert.ok(received.includes('featureGate(gate, "orders.my.edit")'));
+  assert.ok(received.includes('featureGate(gate, "orders.my.update_received")'));
 });
 
 test('My Orders client hides unauthorized destructive menu items and download', () => {

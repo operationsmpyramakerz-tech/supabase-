@@ -739,11 +739,11 @@ function maintenanceWorkflowAccess(account = {}) {
   return directPageMutationAccess(account, ["Maintenance Orders", "Operations Orders", "Requested Orders"]);
 }
 
-export async function loadMaintenanceFormOptionsDirect() {
+export async function loadMaintenanceFormOptionsDirect({ includeChecklist = true } = {}) {
   if (!isSupabaseConfigured()) return null;
   const [catalog, checklistItems, existingResolutionRows] = await Promise.all([
     getProductsCatalog().catch(() => null),
-    listMaintenanceChecklistItems().catch(() => []),
+    includeChecklist ? listMaintenanceChecklistItems().catch(() => []) : Promise.resolve([]),
     select(tableName(), {
       select: "resolution_method",
       resolution_method: "not.is.null",

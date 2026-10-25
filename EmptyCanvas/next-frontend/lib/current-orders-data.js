@@ -528,7 +528,7 @@ export async function markCurrentOrderReceivedDirect({ account = {}, orderPageId
   const rows = await loadRawOrderRowsByIds([id]);
   if (!Array.isArray(rows) || !rows.length) throw directCurrentMutationError("Order not found", 404);
 
-  const receiveScope = await resolveOrderScope(account, "orders.my.edit");
+  const receiveScope = await resolveOrderScope(account, "orders.my.update_received");
   if (receiveScope && rows.some(row => !visibleOrderRow(row, receiveScope))) {
     throw directCurrentMutationError("Order is outside your permitted data scope.", 403);
   }

@@ -72,6 +72,14 @@ export async function POST(request) {
   if (!permission.ok) {
     return noStore({ error: permission.error }, { status: permission.status || 403 });
   }
+  // mark-arrived uploads receipt images as part of the same mutation. A
+  // separate Upload Receipt denial must not be bypassed by Receive access.
+  if (action === "mark-arrived") {
+    const receiptPermission = featureGate(gate, "orders.operations.upload_receipt");
+    if (!receiptPermission.ok) {
+      return noStore({ error: receiptPermission.error }, { status: receiptPermission.status || 403 });
+    }
+  }
 
   const mutationAccess = directPageMutationAccess(gate.account, ["Requested Orders", "Operations Orders"]);
   if (mutationAccess === false) {
@@ -85,6 +93,9 @@ export async function POST(request) {
     // Require EVERY requested component to be in scope, including edit-init,
     // repeat-order creation and archive actions.
     await assertOrderIdsInScope(gate.account, actionPermission, body?.ids ?? body?.orderIds);
+    if (action === "mark-arrived") {
+      await assertOrderIdsInScope(gate.account, "orders.operations.upload_receipt", body?.orderIds);
+    }
     let result = null;
     if (action === "approval") {
       result = await updateOperationsApproval({

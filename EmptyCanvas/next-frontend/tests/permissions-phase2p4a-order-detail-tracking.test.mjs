@@ -15,7 +15,7 @@ test('2P4A adds only keys with complete UI and endpoint protection', () => {
     assert.ok(registry.isKnownFeature(key));
   }
   assert.equal(registry.FEATURE_DEFINITIONS.find(item => item.key === 'orders.tracking.view')?.module, 'orders.my');
-  assert.deepEqual({ ...registry.OPTIONAL_FEATURE_FALLBACKS }, {
+  assert.deepEqual(Object.fromEntries(Object.entries(registry.OPTIONAL_FEATURE_FALLBACKS).filter(([key]) => ['orders.my.view_details','orders.operations.details','orders.tracking.view'].includes(key))), {
     'orders.my.view_details': 'orders.my.view',
     'orders.operations.details': 'orders.operations.view',
     'orders.tracking.view': 'orders.my.view',

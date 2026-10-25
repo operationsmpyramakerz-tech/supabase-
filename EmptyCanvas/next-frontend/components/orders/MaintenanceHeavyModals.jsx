@@ -619,7 +619,7 @@ export function MaintenanceDetailsModal({ group, busy, onClose, onLog, onSecondL
   );
 }
 
-export function MaintenanceDownloadModal({ state, options, busy, onClose, onDownload, onChecklistSaved, onChecklistUpdated, onChecklistDeleted, canManageChecklist = true }) {
+export function MaintenanceDownloadModal({ state, options, busy, onClose, onDownload, onChecklistSaved, onChecklistUpdated, onChecklistDeleted, canReadChecklist = true, canManageChecklist = true }) {
   const group = state?.group || null;
   const template = Boolean(state?.template);
   const [columns, setColumns] = useState(MAINTENANCE_SPARE_EXPORT_COLUMNS.map(([key]) => key));
@@ -696,7 +696,7 @@ export function MaintenanceDownloadModal({ state, options, busy, onClose, onDown
     const ok = await onDownload(group, {
       template,
       sparePartColumns: columns,
-      checklist: selectedChecklist,
+      checklist: canReadChecklist ? selectedChecklist : [],
     });
     if (ok !== false) onClose();
   }
@@ -719,7 +719,7 @@ export function MaintenanceDownloadModal({ state, options, busy, onClose, onDown
         </div>
       </div>
 
-      <div className="order-download-section next-maintenance-download-checklist">
+      {canReadChecklist ? <div className="order-download-section next-maintenance-download-checklist">
         <div className="order-download-instructions__heading"><span className="order-download-section__label">Checklist</span></div>
         <div className="next-maintenance-checklist-options next-maintenance-checklist-options--download">
           {checklistItems.length ? checklistItems.map((item) => <MaintenanceChecklistOption
@@ -738,7 +738,7 @@ export function MaintenanceDownloadModal({ state, options, busy, onClose, onDown
           <input type="text" value={newChecklist} onChange={(event) => setNewChecklist(event.target.value)} placeholder="Add checklist text..." disabled={busy || savingChecklist} />
           <button type="button" className="order-download-btn order-download-btn--light" onClick={addChecklist} disabled={busy || savingChecklist || !text(newChecklist)}>+ Add</button>
         </div> : null}
-      </div>
+      </div> : null}
 
       {error ? <div className="order-download-error" role="alert">{error}</div> : null}
       <div className="order-download-actions">
@@ -803,7 +803,7 @@ function emptyLogForItem(item, mode = "create") {
   };
 }
 
-export function MaintenanceLogModal({ group, mode = "create", options, busy, error, onCancel, onSubmit, onChecklistSaved, onChecklistUpdated, onChecklistDeleted, canManageChecklist = true }) {
+export function MaintenanceLogModal({ group, mode = "create", options, busy, error, onCancel, onSubmit, onChecklistSaved, onChecklistUpdated, onChecklistDeleted, canReadChecklist = true, canManageChecklist = true }) {
   const [logs, setLogs] = useState([]);
   const [newChecklistText, setNewChecklistText] = useState({});
   const [checklistSaving, setChecklistSaving] = useState(false);
@@ -987,7 +987,7 @@ export function MaintenanceLogModal({ group, mode = "create", options, busy, err
                 <label className="co-submodal-field"><span className="co-submodal-label">Repair Action</span><textarea className="co-submodal-textarea" dir="auto" value={entry.repairAction} onChange={(event) => patchLog(logIndex, { repairAction: event.target.value })} disabled={busy} rows={4} placeholder="Write the repair action" /></label>
                 {renderSpareBlock(entry, logIndex, "sparePartsNeeded", "Spare parts needed", "Components that need to be replaced")}
                 {renderSpareBlock(entry, logIndex, "sparePartsReplaced", "Spare parts replaced", "Components that were actually replaced")}
-                <div className="co-submodal-field req-maintenance-log-card__spares next-maintenance-checklist-frame">
+                {canReadChecklist ? <div className="co-submodal-field req-maintenance-log-card__spares next-maintenance-checklist-frame">
                   <div className="req-maintenance-spare-head next-maintenance-spare-frame__head"><span className="co-submodal-label">Maintenance Checklist</span><small>Select saved text items or add a new one.</small></div>
                   <div className="next-maintenance-checklist-options">
                     {checklistItems.length ? checklistItems.map((item) => <MaintenanceChecklistOption
@@ -1006,7 +1006,7 @@ export function MaintenanceLogModal({ group, mode = "create", options, busy, err
                     <input className="co-submodal-input" type="text" value={newChecklistText[logIndex] || ""} onChange={(event) => setNewChecklistText((current) => ({ ...current, [logIndex]: event.target.value }))} placeholder="Add checklist text..." disabled={busy || checklistSaving} />
                     <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => addChecklistItem(logIndex)} disabled={busy || checklistSaving || !text(newChecklistText[logIndex])}>+ Add</button>
                   </div> : null}
-                </div>
+                </div> : null}
               </div>
             </section>)}
           </div>

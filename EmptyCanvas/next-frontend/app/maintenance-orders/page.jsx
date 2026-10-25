@@ -64,7 +64,7 @@ export default async function MaintenanceOrdersPage() {
       activePath="/next/maintenance-orders"
     >
       <MaintenanceOrdersClient
-        permissions={Object.fromEntries(["view", "details", "log", "mark_arrived", "edit", "archive", "delete", "checklist_manage", "export"].map(action => [action, featureAllowed(gate.account, `orders.maintenance.${action}`)]))}
+        permissions={Object.fromEntries(["view", "details", "log", "mark_arrived", "edit", "archive", "delete", "checklist_view", "checklist_manage", "export"].map(action => [action, featureAllowed(gate.account, `orders.maintenance.${action}`)]))}
         scopePolicy={scopePolicy}
         initialOrders={Array.isArray(orders) ? orders : []}
         initialOptions={{}}

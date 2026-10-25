@@ -43,8 +43,8 @@ function directUnavailable(message = "The direct maintenance checklist service i
 }
 
 export async function GET() {
-  const gate = await accountGate();
-  if (!gate.ok) return noStore({ error: gate.error || "Authentication required." }, { status: gate.status || 503 });
+  const gate = featureGate(await accountGate(), "orders.maintenance.checklist_view");
+  if (!gate.ok) return noStore({ error: gate.error || "Checklist access denied." }, { status: gate.status || 403 });
   try {
     const items = await listMaintenanceChecklistItems();
     if (items !== null) return noStore({ items });
@@ -59,6 +59,8 @@ export async function POST(request) {
   const body = await request.json().catch(() => ({}));
   const gate = featureGate(await accountGate(), "orders.maintenance.checklist_manage");
   if (!gate.ok) return noStore({ error: gate.error || "Authentication required." }, { status: gate.status || 503 });
+  const readGate = featureGate(gate, "orders.maintenance.checklist_view");
+  if (!readGate.ok) return noStore({ error: readGate.error || "Checklist access denied." }, { status: readGate.status || 403 });
 
   const access = writeAccess(gate.account);
   if (access === false) return noStore({ error: "Edit access is required for this action." }, { status: 403 });
@@ -80,6 +82,8 @@ export async function PATCH(request) {
   const body = await request.json().catch(() => ({}));
   const gate = featureGate(await accountGate(), "orders.maintenance.checklist_manage");
   if (!gate.ok) return noStore({ error: gate.error || "Authentication required." }, { status: gate.status || 503 });
+  const readGate = featureGate(gate, "orders.maintenance.checklist_view");
+  if (!readGate.ok) return noStore({ error: readGate.error || "Checklist access denied." }, { status: readGate.status || 403 });
 
   const access = writeAccess(gate.account);
   if (access === false) return noStore({ error: "Edit access is required for this action." }, { status: 403 });
@@ -101,6 +105,8 @@ export async function DELETE(request) {
   const body = await request.json().catch(() => ({}));
   const gate = featureGate(await accountGate(), "orders.maintenance.checklist_manage");
   if (!gate.ok) return noStore({ error: gate.error || "Authentication required." }, { status: gate.status || 503 });
+  const readGate = featureGate(gate, "orders.maintenance.checklist_view");
+  if (!readGate.ok) return noStore({ error: readGate.error || "Checklist access denied." }, { status: readGate.status || 403 });
 
   const access = writeAccess(gate.account);
   if (access === false) return noStore({ error: "Edit access is required for this action." }, { status: 403 });

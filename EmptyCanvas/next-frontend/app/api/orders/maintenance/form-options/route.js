@@ -27,7 +27,8 @@ export async function GET() {
   }
 
   try {
-    const result = await loadMaintenanceFormOptionsDirect();
+    const includeChecklist = featureAllowed(gate.account, "orders.maintenance.checklist_view");
+    const result = await loadMaintenanceFormOptionsDirect({ includeChecklist });
     if (result) return noStore(result);
     return noStore({ error: "Maintenance form options direct Supabase data is unavailable." }, { status: 503 });
   } catch (error) {
