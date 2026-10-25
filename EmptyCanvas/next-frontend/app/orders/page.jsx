@@ -60,7 +60,7 @@ export default async function CurrentOrdersPage() {
   }
 
   const scopePolicy = await orderUiScopePolicy(gate.account, {
-    edit: "orders.my.edit", archive: "orders.my.archive", unarchive: "orders.my.unarchive",
+    details: "orders.my.view_details", edit: "orders.my.edit", archive: "orders.my.archive", unarchive: "orders.my.unarchive",
     delete: "orders.my.delete", export: "orders.my.export",
   });
   const orders = Array.isArray(ordersPayload)
@@ -82,7 +82,7 @@ export default async function CurrentOrdersPage() {
         scopePolicy={scopePolicy}
         bootstrapWarnings={[]}
         permissions={Object.fromEntries([
-          ["edit", "orders.my.edit"], ["archive", "orders.my.archive"],
+          ["view_details", "orders.my.view_details"], ["edit", "orders.my.edit"], ["archive", "orders.my.archive"],
           ["unarchive", "orders.my.unarchive"], ["delete", "orders.my.delete"],
           ["export", "orders.my.export"],
         ].map(([action, key]) => [action, featureAllowed(gate.account, key)]))}

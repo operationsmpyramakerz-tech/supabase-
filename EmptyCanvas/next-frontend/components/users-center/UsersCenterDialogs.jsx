@@ -8,7 +8,7 @@ import ActionLoadingModal, { useActionLoading } from "../ActionLoadingModal";
 import { DeleteConfirmDialog, DeleteVerificationDialog } from "../shared/SystemDeleteDialogs";
 import { cacheUsersCenterAuthorization, currentUsersCenterAuthorizationToken, requestJson, usersCenterMutation } from "./usersCenterClientShared";
 import { TASK_SCOPE_MARKER } from "../../lib/task-data-scope.mjs";
-import { FEATURE_DEFINITIONS, ACTIVE_PILOT_FEATURE_KEYS, MY_ORDERS_ENFORCEMENT_MARKER, PHASE2A_LEGACY_MARKERS, ORDER_SCOPE_MARKERS } from "../../lib/feature-permissions-registry";
+import { FEATURE_DEFINITIONS, ACTIVE_PILOT_FEATURE_KEYS, OPTIONAL_FEATURE_FALLBACKS, MY_ORDERS_ENFORCEMENT_MARKER, PHASE2A_LEGACY_MARKERS, ORDER_SCOPE_MARKERS } from "../../lib/feature-permissions-registry";
 import { permissionDraft, permissionDraftChanges, modulePermissionStatus } from "../../lib/feature-permissions-ui.mjs";
 
 function text(value) { return String(value ?? "").trim(); }
@@ -642,8 +642,19 @@ function FeatureAccessModal({ member, onClose, protect }) {
         setSetupReason(result.reason || "");
         setActive(result.enabled === true);
         const stored = result.grants || [];
-        setGrants(Object.fromEntries(stored.filter(item => ACTIVE_PILOT_FEATURE_KEYS.includes(item.key)).map(item => [item.key, item.allowed === true])));
-        setGrantScopes(Object.fromEntries(stored.filter(item => ACTIVE_PILOT_FEATURE_KEYS.includes(item.key)).map(item => [item.key, item.scope || "all"])));
+        const savedGrants = Object.fromEntries(stored.filter(item => ACTIVE_PILOT_FEATURE_KEYS.includes(item.key)).map(item => [item.key, item.allowed === true]));
+        // An existing profile inherits each newly activated control from the
+        // previously guarded action. Show its *effective* value in the editor
+        // and persist it explicitly at the next save; never surprise-revoke.
+        for (const [key, predecessor] of Object.entries(OPTIONAL_FEATURE_FALLBACKS)) {
+          if (!Object.hasOwn(savedGrants, key) && savedGrants[predecessor] === true) savedGrants[key] = true;
+        }
+        setGrants(savedGrants);
+        const savedScopes = Object.fromEntries(stored.filter(item => ACTIVE_PILOT_FEATURE_KEYS.includes(item.key)).map(item => [item.key, item.scope || "all"]));
+        for (const [key, predecessor] of Object.entries(OPTIONAL_FEATURE_FALLBACKS)) {
+          if (!Object.hasOwn(savedScopes, key) && savedGrants[predecessor] === true) savedScopes[key] = key === "orders.tracking.view" ? "all" : (savedScopes[predecessor] || "all");
+        }
+        setGrantScopes(Object.fromEntries(Object.entries(savedScopes)));
         setEnabledModules({
           // Previously enabled Phase 2A profiles keep their enforced restrictions
           // until an admin explicitly switches a module back to legacy. Fresh
@@ -743,7 +754,12 @@ function FeatureAccessModal({ member, onClose, protect }) {
               .map(([, key]) => ({ key, allowed: true, scope: "all" })),
             ...activeFeatures.filter(item => grants[item.key] === true).map(item => ({ key: item.key, allowed: true, scope: grantScopes[item.key] || "all" }))
               .map(grant => ({ ...grant, scope: Object.keys({ ...ORDER_SCOPE_MARKERS, tasks: TASK_SCOPE_MARKER, "events.requests": EVENT_REQUEST_SCOPE_MARKER }).some(module =>
-                grant.key.startsWith(`${module}.`) && !scopedOrders[module]) || (grant.key.startsWith("events.requests.") && !EVENT_REQUEST_ROW_KEYS.has(grant.key)) ? "all" : grant.scope })),
+                grant.key.startsWith(`${module}.`) && !scopedOrders[module]) || (grant.key.startsWith("events.requests.") && !EVENT_REQUEST_ROW_KEYS.has(grant.key)) || grant.key === "orders.tracking.view" ? "all" : grant.scope })),
+            // Unlike older implicit-deny actions, Phase 2P4A keys use a
+            // compatibility fallback when the grant is absent. A deliberate
+            // OFF switch therefore MUST be persisted as an explicit deny.
+            ...activeFeatures.filter(item => Object.hasOwn(OPTIONAL_FEATURE_FALLBACKS, item.key) && grants[item.key] !== true)
+              .map(item => ({ key: item.key, allowed: false, scope: "all" })),
             // Persist a denied view marker for opt-in modules. An absent marker
             // intentionally means 'not migrated' and preserves legacy access.
             ...modules.filter(module => module.optIn && module.key !== "orders.my" && enabledModules[module.key] && grants[`${module.key}.view`] !== true)
@@ -793,7 +809,7 @@ function FeatureAccessModal({ member, onClose, protect }) {
             {(searchText || expandedModules[module.key] !== false) ? <>
             {module.optIn && !enabledModules[module.key] ? <p style={{ margin: "12px 14px" }}>Uses existing Page Access until you enable detailed permissions for this module.</p> : null}
             {enabledModules[module.key] && (ORDER_SCOPE_MARKERS[module.key] || module.key === "tasks" || module.key === "events.requests") ? <label className="ua-page-access-row ua-feature-access-row" style={{ cursor: "pointer" }}><span className="ua-page-access-name"><strong>Enable row-level Own / Team / All</strong><small>Explicit opt-in. Off preserves the existing visibility rules for this module.</small></span><span className="ua-page-access-enable"><input type="checkbox" checked={!!scopedOrders[module.key]} onChange={e => setScopedOrders(prev => ({ ...prev, [module.key]: e.target.checked }))}/></span></label> : null}
-            {enabledModules[module.key] ? <div className="ua-page-access-group__rows">{shown.filter(item => item.module === module.key && (!searchText || lower(module.label).includes(searchText) || lower(`${item.label} ${item.key}`).includes(searchText))).map(item => <div className="ua-page-access-row ua-feature-access-row" key={item.key}><div className="ua-page-access-name"><strong>{item.label}</strong><small>{item.key}</small></div><div className="ua-page-access-enable">{((item.key === "home.analysis" || item.key.startsWith("expenses.users.")) || ((ORDER_SCOPE_MARKERS[item.module] || item.module === "tasks" || EVENT_REQUEST_ROW_KEYS.has(item.key)) && scopedOrders[item.module])) && grants[item.key] === true ? <select aria-label={item.key === "home.analysis" ? "Home analysis data scope" : `${item.label} data scope`} className="ua-feature-scope-select" value={grantScopes[item.key] || "all"} onChange={e => setGrantScopes(current => ({ ...current, [item.key]: e.target.value }))}><option value="own">Own</option><option value="team">Team</option><option value="all">All</option></select> : null}<label className="ua-switch" title={item.label}><input type="checkbox" checked={grants[item.key] === true} onChange={e => setGrants(current => ({ ...current, [item.key]: e.target.checked }))}/><span/></label></div></div>)}</div> : null}
+            {enabledModules[module.key] ? <div className="ua-page-access-group__rows">{shown.filter(item => item.module === module.key && (!searchText || lower(module.label).includes(searchText) || lower(`${item.label} ${item.key}`).includes(searchText))).map(item => <div className="ua-page-access-row ua-feature-access-row" key={item.key}><div className="ua-page-access-name"><strong>{item.label}</strong><small>{item.key}</small></div><div className="ua-page-access-enable">{((item.key === "home.analysis" || item.key.startsWith("expenses.users.")) || ((ORDER_SCOPE_MARKERS[item.module] || item.module === "tasks" || EVENT_REQUEST_ROW_KEYS.has(item.key)) && scopedOrders[item.module] && item.key !== "orders.tracking.view")) && grants[item.key] === true ? <select aria-label={item.key === "home.analysis" ? "Home analysis data scope" : `${item.label} data scope`} className="ua-feature-scope-select" value={grantScopes[item.key] || "all"} onChange={e => setGrantScopes(current => ({ ...current, [item.key]: e.target.value }))}><option value="own">Own</option><option value="team">Team</option><option value="all">All</option></select> : null}<label className="ua-switch" title={item.label}><input type="checkbox" checked={grants[item.key] === true} onChange={e => setGrants(current => ({ ...current, [item.key]: e.target.checked }))}/><span/></label></div></div>)}</div> : null}
             </> : null}
           </section>)}
           <small>Optional modules remain on legacy Page Access until enabled for this user. Enable a module, then grant only the features needed. A disabled View permission hides its page. Products and Operations Orders now have separate opt-in switches; turn them off to keep existing Page Access while enabling Expenses by Users. For an already-enabled profile, review those switches and save once. Existing Page Access and any required admin password still apply. Home Analysis and Expenses by Users support Own / Team / All. My Orders, Operations Orders and Maintenance Orders support the same scopes only after enabling their separate row-level scope switch. Other permissions retain their saved scope without row-level enforcement.</small>

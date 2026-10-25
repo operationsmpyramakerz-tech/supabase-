@@ -32,7 +32,7 @@ export async function POST(request) {
 
   const authStartedAt = performance.now();
   const authStages = {};
-  const gate = featureGate(await getLegacyAccountGate(["Requested Orders", "Operations Orders"], { timings: authStages }), "orders.operations.view");
+  const gate = featureGate(featureGate(await getLegacyAccountGate(["Requested Orders", "Operations Orders"], { timings: authStages }), "orders.operations.view"), "orders.operations.details");
   const authMs = performance.now() - authStartedAt;
   // Expose stage timings to browser DevTools without sending order payloads
   // into logs or affecting private/no-store response semantics.
@@ -62,7 +62,7 @@ export async function POST(request) {
   const detailsStartedAt = performance.now();
   const stages = {};
   try {
-    await assertOrderIdsInScope(gate.account, "orders.operations.view", orderIds);
+    await assertOrderIdsInScope(gate.account, "orders.operations.details", orderIds);
     const items = await loadOperationsOrderDetails(orderIds, { timings: stages });
     if (Array.isArray(items)) return noStore(items, { headers: timing(performance.now() - detailsStartedAt, stages) });
     return noStore({ error: "Operations Orders direct Supabase data is unavailable." }, { status: 503, headers: timing(performance.now() - detailsStartedAt, stages) });

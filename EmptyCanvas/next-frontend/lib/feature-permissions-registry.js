@@ -228,7 +228,7 @@ export const FEATURE_DEFINITIONS = Object.freeze(
     "label": "Undo order submission"
   },
   {
-    "module": "orders.tracking",
+    "module": "orders.my",
     "key": "orders.tracking.view",
     "label": "View order tracking"
   },
@@ -940,6 +940,15 @@ export const FEATURE_DEFINITIONS = Object.freeze(
 ]
 );
 
+// Phase 2P4A: new controls inherit the previously enforced permission until
+// an administrator explicitly saves the new action. Avoid revoking existing
+// users' access simply because a release adds a more granular permission.
+export const OPTIONAL_FEATURE_FALLBACKS = Object.freeze({
+  "orders.my.view_details": "orders.my.view",
+  "orders.operations.details": "orders.operations.view",
+  "orders.tracking.view": "orders.my.view",
+});
+
 export const TASK_SCOPE_MARKER = "tasks.__scoped";
 
 export const EVENT_REQUEST_SCOPE_MARKER = "events.requests.__scoped";
@@ -971,6 +980,10 @@ export function featureAllowed(account, key, { legacyAllowed = true, scopes = ["
   // The other modules remain on their previous authorization model until
   // their UI + backend entry points have been audited and switched together.
   const state = account?.featureAccess;
+  if (state?.mode === "enforced" && Object.hasOwn(OPTIONAL_FEATURE_FALLBACKS, key)
+    && !Object.hasOwn(state.grants || {}, key)) {
+    return featureAllowed(account, OPTIONAL_FEATURE_FALLBACKS[key], { legacyAllowed, scopes });
+  }
   // Expenses by Users is now a scoped module. These four actions accept
   // Own/Team/All, but the API still enforces the selected record scope.
   if (key.startsWith("expenses.users.")) scopes = ["own", "team", "all"];
@@ -980,6 +993,14 @@ export function featureAllowed(account, key, { legacyAllowed = true, scopes = ["
     || (key.startsWith("orders.operations.") && state?.grants?.[ORDER_SCOPE_MARKERS["orders.operations"]]?.allowed === true)
     || (key.startsWith("orders.maintenance.") && state?.grants?.[ORDER_SCOPE_MARKERS["orders.maintenance"]]?.allowed === true)) scopes = ["own", "team", "all"];
   if (state?.mode !== "enforced") return !!legacyAllowed;
+  // Tracking belongs to My Orders, including its module-level View gate.
+  // A dedicated tracking deny must never be bypassed by a My Orders View grant.
+  if (key === "orders.tracking.view") {
+    if (state.grants?.[MY_ORDERS_ENFORCEMENT_MARKER]?.allowed !== true) return !!legacyAllowed;
+    return featureAllowed(account, "orders.my.view", { legacyAllowed, scopes })
+      && state.grants?.[key]?.allowed === true
+      && scopes.includes(state.grants[key].scope || "all");
+  }
   // Explicitly opting out of an original pilot module restores ONLY its prior
   // page rules. The existing page-access gate still runs on every endpoint.
   if (key.startsWith("products.") && state.grants?.[PHASE2A_LEGACY_MARKERS.products]?.allowed === true) return !!legacyAllowed;
@@ -1059,11 +1080,11 @@ export const ACTIVE_PILOT_FEATURE_KEYS = Object.freeze([
   "expenses.view", "expenses.cash_in", "expenses.cash_out", "expenses.settle", "expenses.export", "expenses.screenshot",
   "expenses.users.view", "expenses.users.edit", "expenses.users.delete", "expenses.users.export",
   "kits.view", "kits.create", "kits.edit", "kits.delete", "kits.copy", "kits.item_add", "kits.item_edit", "kits.item_delete", "kits.folder_create", "kits.folder_manage", "kits.send_stock", "proposals.view", "proposals.create", "proposals.edit", "proposals.delete", "proposals.copy", "proposals.item_add", "proposals.item_edit", "proposals.item_delete", "proposals.combine", "proposals.make_order", "proposals.send_stock", "proposals.receipt_upload", "orders.review.view", "orders.review.view_details", "orders.review.approve", "orders.review.bulk_approve", "orders.review.quantity", "orders.review.archive", "orders.review.unarchive", "orders.review.update_approval",
-  "orders.my.view", "orders.my.edit", "orders.my.archive",
+  "orders.my.view", "orders.my.view_details", "orders.tracking.view", "orders.my.edit", "orders.my.archive",
   "orders.my.unarchive", "orders.my.delete", "orders.my.export",
   "products.view", "products.create", "products.edit", "products.delete",
   "products.tag_manage", "products.unit_create", "products.image_upload",
-  "orders.operations.view", "orders.operations.approve", "orders.operations.ship",
+  "orders.operations.view", "orders.operations.details", "orders.operations.approve", "orders.operations.ship",
   "orders.operations.receive", "orders.operations.withdrawal",
   "orders.operations.delivery", "orders.operations.edit", "orders.operations.export",
   "orders.maintenance.view", "orders.maintenance.details", "orders.maintenance.log",

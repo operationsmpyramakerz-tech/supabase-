@@ -45,7 +45,7 @@ export default async function OperationsOrdersPage() {
   }
 
   const scopePolicy = await orderUiScopePolicy(gate.account, {
-    approve: "orders.operations.approve", ship: "orders.operations.ship",
+    details: "orders.operations.details", approve: "orders.operations.approve", ship: "orders.operations.ship",
     receive: "orders.operations.receive", withdrawal: "orders.operations.withdrawal",
     delivery: "orders.operations.delivery", edit: "orders.operations.edit",
     export: "orders.operations.export",
@@ -71,6 +71,7 @@ export default async function OperationsOrdersPage() {
         scopePolicy={scopePolicy}
         bootstrapWarnings={[]}
         permissions={Object.fromEntries([
+          ["details", "orders.operations.details"],
           ["approve", "orders.operations.approve"],
           ["ship", "orders.operations.ship"],
           ["receive", "orders.operations.receive"],
@@ -80,7 +81,7 @@ export default async function OperationsOrdersPage() {
           ["export", "orders.operations.export"],
           ["maintenance_log", "orders.maintenance.log"],
           ["maintenance_arrive", "orders.maintenance.mark_arrived"],
-        ].map(([name, key]) => [name, featureAllowed(gate.account, key) && (name === "export" || editPage)]))}
+        ].map(([name, key]) => [name, featureAllowed(gate.account, key) && (["details", "export"].includes(name) || editPage)]))}
       />
     </AppShell>
   );

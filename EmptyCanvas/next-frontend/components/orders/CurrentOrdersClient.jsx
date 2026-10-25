@@ -541,7 +541,7 @@ function StatusPill({ status, className = "co-status-btn", reason = "", onReason
   return <span className={className} style={style}>{statusLabel(status)}</span>;
 }
 
-function OrderCard({ group, activeTab, onOpen, onReason, onCreator, onPrefetch }) {
+function OrderCard({ group, activeTab, onOpen, onReason, onCreator, onPrefetch, canOpen = true }) {
   const reasons = [...new Set(group.items.map(rejectedReason).filter(Boolean))].join("\n");
   const mixed = activeTab === "all" && group.stage === 2 && hasMixedApprovedRejected(group.items);
   const displayStatus = activeTab === "remaining" ? "remaining" : activeTab === "shipped" ? "shipped" : group.status;
@@ -550,11 +550,11 @@ function OrderCard({ group, activeTab, onOpen, onReason, onCreator, onPrefetch }
   return (
     <article
       className="co-card next-current-order-card"
-      role="button"
-      tabIndex={0}
-      aria-label={`Open ${group.orderIdLabel}`}
-      onPointerEnter={(event) => { if (event.pointerType === "mouse" || event.pointerType === "pen") onPrefetch(group, true); }} onPointerLeave={() => onPrefetch(null, true)} onFocus={(event) => { if (event.target === event.currentTarget) onPrefetch(group); }} onClick={() => onOpen(group)}
-      onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen(group); } }}
+      role={canOpen ? "button" : undefined}
+      tabIndex={canOpen ? 0 : undefined}
+      aria-label={canOpen ? `Open ${group.orderIdLabel}` : group.orderIdLabel}
+      onPointerEnter={(event) => { if (canOpen && (event.pointerType === "mouse" || event.pointerType === "pen")) onPrefetch(group, true); }} onPointerLeave={() => { if (canOpen) onPrefetch(null, true); }} onFocus={(event) => { if (canOpen && event.target === event.currentTarget) onPrefetch(group); }} onClick={() => { if (canOpen) onOpen(group); }}
+      onKeyDown={(event) => { if (canOpen && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); onOpen(group); } }}
     >
       <div className="co-top">
         <div className="co-main">
@@ -776,7 +776,7 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
   }
 
   async function openOrderDetails(group) {
-    if (!group) return;
+    if (!group || permissions?.view_details === false || !orderCardAllows(scopePolicy, "details", group)) return;
     const attemptId = markOrderOpenStarted("My Orders");
     const requestId = ++openRequestRef.current;
     // Begin loading the modal code and the data in parallel. The lightweight
@@ -814,6 +814,7 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
   }
 
   function prefetchOrderDetails(group, hover = false) {
+    if (permissions?.view_details === false || (group && !orderCardAllows(scopePolicy, "details", group))) return;
     if (!group) { detailsLoaderRef.current.cancelPrefetch(); return; }
     detailsLoaderRef.current.prefetch(group, { defer: hover });
   }
@@ -979,7 +980,7 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
       <section className="card" id="current-orders">
         <OrdersListHeader count={visibleGroups.length} hasMore={pageInfo?.hasMore} busy={listLoading} sortMode={sortMode} onSortChange={setSortMode} />
         <div className="co-cards" id="orders-list">
-          {visibleGroups.length ? sortedVisibleGroups.map((group) => <OrderCard group={group} activeTab={tab} onOpen={openOrderDetails} onPrefetch={prefetchOrderDetails} onReason={(reason) => { void loadCurrentOrdersHeavyModals(); setReasonView(reason); }} onCreator={(anchor, selectedGroup) => { const bounds = anchor.getBoundingClientRect(); setCreatorPreview({ id: selectedGroup.createdById, name: selectedGroup.createdByName, left: Math.max(12, Math.min(bounds.right - 320, window.innerWidth - 332)), top: bounds.bottom + 8, above: bounds.top }); }} key={group.key} />) : listLoading ? (
+          {visibleGroups.length ? sortedVisibleGroups.map((group) => <OrderCard group={group} canOpen={permissions?.view_details !== false && orderCardAllows(scopePolicy, "details", group)} activeTab={tab} onOpen={openOrderDetails} onPrefetch={prefetchOrderDetails} onReason={(reason) => { void loadCurrentOrdersHeavyModals(); setReasonView(reason); }} onCreator={(anchor, selectedGroup) => { const bounds = anchor.getBoundingClientRect(); setCreatorPreview({ id: selectedGroup.createdById, name: selectedGroup.createdByName, left: Math.max(12, Math.min(bounds.right - 320, window.innerWidth - 332)), top: bounds.bottom + 8, above: bounds.top }); }} key={group.key} />) : listLoading ? (
             <div className="ops-no-data-state" role="status" aria-live="polite"><div className="ops-no-data-state__text">Loading orders…</div></div>
           ) : (
             <OrdersEmptyState filtered={tab !== "all" || type !== "all" || !!query.trim()} context={"my-orders"} onReset={() => { setTab("all"); setType("all"); setQuery(""); }} />

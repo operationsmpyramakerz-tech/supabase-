@@ -14,7 +14,11 @@ export function orderScopeFor(account = {}, key = "") {
   const state = account?.featureAccess;
   if (state?.mode !== "enforced" || state.grants?.[ORDER_SCOPE_MARKERS[module]]?.allowed !== true) return null;
   const view = state.grants?.[`${module}.view`];
-  const grant = state.grants?.[key];
+  // Prior Phase 2P4A profiles may not yet contain the new, more granular
+  // details grant. Inherit the same row scope as View until configured.
+  const fallback = key === "orders.my.view_details" ? "orders.my.view"
+    : key === "orders.operations.details" ? "orders.operations.view" : "";
+  const grant = state.grants?.[key] ?? (fallback ? state.grants?.[fallback] : undefined);
   if (view?.allowed !== true || grant?.allowed !== true) return "none";
   const a = clean(view.scope || "all");
   const b = clean(grant.scope || "all");

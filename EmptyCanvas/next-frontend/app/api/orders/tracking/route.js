@@ -20,7 +20,7 @@ export async function GET(request) {
   const groupId = String(new URL(request.url).searchParams.get("groupId") || "").trim();
   if (!groupId) return noStore({ error: "Missing or invalid groupId." }, { status: 400 });
 
-  const gate = featureGate(await getLegacyAccountGate(["Current Orders"]), "orders.my.view");
+  const gate = featureGate(featureGate(await getLegacyAccountGate(["Current Orders"]), "orders.my.view"), "orders.tracking.view");
   if (!gate.ok) return noStore({ error: gate.error || "Authentication required." }, { status: gate.status || 503 });
 
   try {

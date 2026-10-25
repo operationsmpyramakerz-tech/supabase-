@@ -3,6 +3,7 @@ import AppShell from "../../../components/AppShell";
 import OrderTrackingClient from "../../../components/orders/OrderTrackingClient";
 import { getLegacyAccountGate } from "../../../lib/products-auth";
 import { getDirectAccountGateFromSessionContext } from "../../../lib/direct-session-account";
+import { featureGate } from "../../../lib/feature-permissions-server";
 import { loadOrderTracking } from "../../../lib/order-tracking-data";
 
 export const dynamic = "force-dynamic";
@@ -53,12 +54,10 @@ export default async function OrderTrackingPage({ searchParams }) {
     );
   }
 
-  const [gate, trackingResult] = await Promise.all([
-    getDirectAccountGateFromSessionContext(sessionGate, ["Current Orders"]),
-    loadOrderTracking({ account: sessionGate.account, groupId })
-      .then((tracking) => ({ tracking, error: null }))
-      .catch((error) => ({ tracking: null, error })),
-  ]);
+  // Do not fetch tracking records before the freshly verified page + feature
+  // grants have completed. A revoked account must not load private data.
+  const rawGate = await getDirectAccountGateFromSessionContext(sessionGate, ["Current Orders"]);
+  const gate = rawGate ? featureGate(featureGate(rawGate, "orders.my.view"), "orders.tracking.view") : null;
 
   if (!gate) {
     return (
@@ -89,6 +88,9 @@ export default async function OrderTrackingPage({ searchParams }) {
     );
   }
 
+  const trackingResult = await loadOrderTracking({ account: gate.account, groupId })
+    .then((tracking) => ({ tracking, error: null }))
+    .catch((error) => ({ tracking: null, error }));
   const tracking = trackingResult?.tracking || null;
   const failure = trackingResult?.error || null;
 

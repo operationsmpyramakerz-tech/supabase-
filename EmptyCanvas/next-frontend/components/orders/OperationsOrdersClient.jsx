@@ -694,9 +694,9 @@ function downloadBlob(blob, filename) {
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function OperationsOrderCard({ group, tab, onOpen, onCreator, onPrefetch }) {
+function OperationsOrderCard({ group, tab, onOpen, onCreator, onPrefetch, canOpen = true }) {
   return (
-    <article className="co-card next-operations-order-card" role="button" tabIndex={0} aria-label={`Open ${group.orderIdLabel}`} onPointerEnter={(event) => { if (event.pointerType === "mouse" || event.pointerType === "pen") onPrefetch(group, true); }} onPointerLeave={() => onPrefetch(null, true)} onFocus={(event) => { if (event.target === event.currentTarget) onPrefetch(group); }} onClick={() => onOpen(group)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen(group); } }}>
+    <article className="co-card next-operations-order-card" role={canOpen ? "button" : undefined} tabIndex={canOpen ? 0 : undefined} aria-label={canOpen ? `Open ${group.orderIdLabel}` : group.orderIdLabel} onPointerEnter={(event) => { if (canOpen && (event.pointerType === "mouse" || event.pointerType === "pen")) onPrefetch(group, true); }} onPointerLeave={() => { if (canOpen) onPrefetch(null, true); }} onFocus={(event) => { if (canOpen && event.target === event.currentTarget) onPrefetch(group); }} onClick={() => { if (canOpen) onOpen(group); }} onKeyDown={(event) => { if (canOpen && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); onOpen(group); } }}>
       <div className="co-top">
         <div className="co-main">
           <OrderTypeBadge type={group.orderType} color={group.orderTypeColor} />
@@ -946,7 +946,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
   }
 
   async function openOrderDetails(group) {
-    if (!group) return;
+    if (!group || permissions?.details === false || !orderCardAllows(scopePolicy, "details", group)) return;
     const attemptId = markOrderOpenStarted("Operations");
     const requestId = ++openRequestRef.current;
     // Begin loading the modal code and the data in parallel. The lightweight
@@ -985,6 +985,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
   }
 
   function prefetchOrderDetails(group, hover = false) {
+    if (permissions?.details === false || (group && !orderCardAllows(scopePolicy, "details", group))) return;
     if (!group) { detailsLoaderRef.current.cancelPrefetch(); return; }
     detailsLoaderRef.current.prefetch(group, { defer: hover });
   }
@@ -1446,7 +1447,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
       <section className="operations-orders-list-surface" id="operations-orders-list">
         <OrdersListHeader count={visibleGroups.length} hasMore={pageInfo?.hasMore} busy={listLoading} sortMode={sortMode} onSortChange={setSortMode} />
         <div className="co-cards" id="requested-list">
-          {visibleGroups.length ? sortedVisibleGroups.map((group) => <OperationsOrderCard group={group} tab={tab} onOpen={openOrderDetails} onPrefetch={prefetchOrderDetails} onCreator={openCreatorProfile} key={group.key} />) : listLoading ? <div className="ops-no-data-state" role="status" aria-live="polite"><div className="ops-no-data-state__text">Loading orders…</div></div> : <OrdersEmptyState filtered={tab !== "all" || type !== "all" || !!query.trim()} context={"orders"} onReset={() => { setTab("all"); setType("all"); setQuery(""); }} />}
+          {visibleGroups.length ? sortedVisibleGroups.map((group) => <OperationsOrderCard group={group} canOpen={permissions?.details !== false && orderCardAllows(scopePolicy, "details", group)} tab={tab} onOpen={openOrderDetails} onPrefetch={prefetchOrderDetails} onCreator={openCreatorProfile} key={group.key} />) : listLoading ? <div className="ops-no-data-state" role="status" aria-live="polite"><div className="ops-no-data-state__text">Loading orders…</div></div> : <OrdersEmptyState filtered={tab !== "all" || type !== "all" || !!query.trim()} context={"orders"} onReset={() => { setTab("all"); setType("all"); setQuery(""); }} />}
         </div>
         {pageInfo?.hasMore ? <div style={{ display: "flex", justifyContent: "center", padding: "16px 0 4px" }}><button type="button" className="ro-action-btn ro-action-btn--light" disabled={listLoading} onClick={() => fetchOrdersPage({ reset: false }).catch((error) => { setNotice(error?.message || "Failed to load more orders."); window.setTimeout(() => setNotice(""), 4000); })}>{listLoading ? "Loading…" : "Load more orders"}</button></div> : null}
       </section>
