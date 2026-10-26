@@ -4,8 +4,7 @@ import AppShell from "../../components/AppShell";
 import NotificationsClient from "../../components/notifications/NotificationsClient";
 import { fetchDirectPageBootstrap } from "../../lib/page-bootstrap-direct";
 import { notificationsForMember } from "../../lib/notifications-data";
-import { getLegacyAccountGate } from "../../lib/products-auth";
-import { getDirectAccountGateFromSessionContext } from "../../lib/direct-session-account";
+import { getDirectAccountGate } from "../../lib/products-auth";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -42,31 +41,19 @@ function UnavailableState({ message }) {
 }
 
 export default async function NotificationsPage() {
-  // Resolve fresh permissions *before* reading private notifications. The
-  // auth-only signed session lacks the current permission grant matrix.
-  const sessionGate = await getLegacyAccountGate([], { authOnly: true });
-  if (sessionGate.status === 401) redirect("/login?next=/next/notifications");
-
-  let gate = sessionGate;
-  let account = sessionGate.ok ? sessionGate.account : null;
+  // A single verified account gate includes the current permission matrix.
+  // Never query personal notifications from an auth-only session snapshot.
+  const gate = await getDirectAccountGate([]);
+  if (gate.status === 401) redirect("/login?next=/next/notifications");
+  if (gate.status === 403) return <UnavailableState message={gate.error || "Notifications access denied."} />;
+  let account = gate.ok ? gate.account : null;
   let notifications = null;
   const warnings = [];
-
-  if (sessionGate.ok && sessionGate.account && sessionGate.memberId) {
-    const freshGate = await getDirectAccountGateFromSessionContext(sessionGate, []).catch(() => null);
-    if (freshGate) {
-      gate = freshGate;
-      account = freshGate.ok ? freshGate.account : null;
-    } else {
-      gate = { ...sessionGate, ok: false, status: 503, error: "The account profile service is temporarily unavailable." };
-      account = null;
-    }
-    if (gate.ok && account && !featureAllowed(account, "notifications.view")) {
+  if (account) {
+    if (!featureAllowed(account, "notifications.view")) {
       return <UnavailableState message="Permission notifications.view is not allowed." />;
     }
-    notifications = account && gate.ok
-      ? await notificationsForMember(gate.memberId, { limit: 80 }).catch(() => null)
-      : null;
+    notifications = await notificationsForMember(gate.memberId, { limit: 80 }).catch(() => null);
   }
 
   // Deep recovery only. The normal route no longer depends on page-bootstrap.

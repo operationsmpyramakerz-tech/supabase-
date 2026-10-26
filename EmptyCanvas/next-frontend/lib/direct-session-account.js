@@ -826,13 +826,44 @@ export async function getDirectAccountGateFromSessionContext(context = {}, requi
       try { return await loader(); }
       finally { if (options?.timings) options.timings[key] = performance.now() - started; }
     };
-    const [memberRow, pages, accessRows, featureAccess] = await Promise.all([
-      timedRead("authMember", () => readFreshMemberRow(memberId)),
-      timedRead("authPages", () => listAppPages()),
-      timedRead("authAccess", () => listMemberAccess(memberId)),
-      timedRead("authFeatures", () => loadMemberFeatureAccess(memberId)),
-    ]);
-    if (!memberRow) return null;
+    // A signed-in session is not proof of current access. Each dependency must
+    // resolve successfully; never fall back to cached permission snapshots.
+    // Tag each result so a failed Supabase read cannot disappear into a null gate.
+    const reads = [
+      ["MEMBER", () => readFreshMemberRow(memberId), "authMember"],
+      ["PAGES", () => listAppPages(), "authPages"],
+      ["PAGE_ACCESS", () => listMemberAccess(memberId), "authAccess"],
+      ["FEATURE_GRANTS", () => loadMemberFeatureAccess(memberId), "authFeatures"],
+    ];
+    const settled = await Promise.allSettled(reads.map(([, loader, timing]) => timedRead(timing, loader)));
+    const failures = settled.flatMap((outcome, i) => outcome.status === "rejected"
+      ? [{ stage: reads[i][0], error: outcome.reason }]
+      : []);
+    if (failures.length) {
+      for (const { stage, error } of failures) {
+        console.error("[erp-auth] Fresh account read failed", {
+          stage,
+          status: Number(error?.status) || 503,
+          code: String(error?.code || "READ_FAILED"),
+          message: String(error?.message || "Unknown Supabase read error").slice(0, 350),
+        });
+      }
+      const stage = failures[0].stage;
+      return {
+        ok: false, status: 503, account: null, memberId, sessionBackend,
+        error: `Unable to verify account access (${stage}). Please contact the administrator if this continues.`,
+        diagnosticCode: `AUTH_${stage}_UNAVAILABLE`,
+      };
+    }
+    const [memberRow, pages, accessRows, featureAccess] = settled.map((entry) => entry.value);
+    if (!memberRow) {
+      console.error("[erp-auth] Signed-in member has no matching current team_members record");
+      return {
+        ok: false, status: 503, account: null, memberId, sessionBackend,
+        error: "Account record could not be verified (MEMBER_NOT_FOUND). Please contact the administrator.",
+        diagnosticCode: "AUTH_MEMBER_NOT_FOUND",
+      };
+    }
 
     const freshBaseAccount = accountFromFreshMember(baseAccount, memberRow, session);
     const freshPageAccess = directPageAccessRows(pages, accessRows);
@@ -907,8 +938,18 @@ export async function getDirectAccountGateFromSessionContext(context = {}, requi
     };
 
     return { ...gateFromAccount(account, session, requestedPages), source: "session-context", memberId, sessionBackend };
-  } catch {
-    return null;
+  } catch (error) {
+    // Fail closed and record the reason only on the server.
+    console.error("[erp-auth] Fresh account authorization error", {
+      code: String(error?.code || "AUTH_GATE_FAILED"),
+      status: Number(error?.status) || 503,
+      message: String(error?.message || "Unknown account authorization error").slice(0, 350),
+    });
+    return {
+      ok: false, status: 503, account: null, memberId, sessionBackend,
+      error: "Unable to verify current account permissions (AUTH_GATE_FAILED). Please retry or contact the administrator.",
+      diagnosticCode: "AUTH_GATE_FAILED",
+    };
   }
 }
 

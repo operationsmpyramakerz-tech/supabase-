@@ -4,8 +4,7 @@ import AuthTransitionReady from "../../components/AuthTransitionReady";
 import { DashboardNotice, QuickActionsCard, RecentOrdersCard, ScopeCard } from "../../components/home/DashboardCards";
 import HomeOverviewClient from "../../components/home/HomeOverviewClient";
 import { fetchDirectPageBootstrap } from "../../lib/page-bootstrap-direct";
-import { getLegacyAccountGate } from "../../lib/products-auth";
-import { getDirectAccountGateFromSessionContext } from "../../lib/direct-session-account";
+import { getDirectAccountGate } from "../../lib/products-auth";
 import { loadHomeOverviewDirect } from "../../lib/home-overview-data";
 import { canManageSla } from "../../lib/home-sla-settings";
 import { resolveHomeSelection } from "../../lib/home-team-scopes";
@@ -29,7 +28,7 @@ function quickActions(account) {
   if (hasAccess(account, ["Requested Orders", "Operations Orders", "/orders/requested"])) actions.push({ href: "/next/operations-orders", icon: "users", title: "Operations orders", sub: "Review schools requested orders" });
   if (hasAccess(account, ["Stocktaking", "/stocktaking"])) actions.push({ href: "/next/stocktaking", icon: "archive", title: "Stocktaking", sub: "View your school inventory" });
   if (hasAccess(account, ["Expenses", "/expenses"])) actions.push({ href: "/next/expenses", icon: "dollar-sign", title: "Expenses", sub: "Your cash in/out records" });
-  actions.push({ href: "/next/account", icon: "user", title: "Account", sub: "Profile & permissions" });
+  if (featureAllowed(account, "account.view")) actions.push({ href: "/next/account", icon: "user", title: "Account", sub: "Profile & permissions" });
   return actions;
 }
 
@@ -71,42 +70,25 @@ export default async function HomePage({ searchParams }) {
   const requestedDuration = text(Array.isArray(params?.analysisDuration) ? params.analysisDuration[0] : params?.analysisDuration) || "all";
   const duration = ["all", "week", "month", "year"].includes(requestedDuration) ? requestedDuration : "all";
 
-  // Phase 51 performance: verify the signed session first, then refresh the
-  // lightweight member profile while the dashboard datasets are loading. Home
-  // does not need a fresh permission matrix here; its allowedPages snapshot is
-  // already part of the authenticated session and matches the previous gate.
-  const sessionGate = await getLegacyAccountGate([], { authOnly: true });
-
-  if (sessionGate.status === 401) redirect("/login?next=/next/home");
-
-  let gate = sessionGate;
-  let account = sessionGate.ok ? sessionGate.account : null;
+  // Resolve the signed session, member record and current grants in one verified
+  // gate. The former authOnly -> context-refresh chain hid underlying failures
+  // as a generic Home error and duplicated authentication work.
+  const gate = await getDirectAccountGate([]);
+  if (gate.status === 401) redirect("/login?next=/next/home");
+  if (!gate.ok || !gate.account) {
+    return <HomeUnavailable message={gate.error || "Home authorization is unavailable."} />;
+  }
+  const account = gate.account;
+  if (!featureAllowed(account, "home.view")) return <HomeUnavailable message="Home access denied." />;
   let overview = null;
   let bootstrapWarnings = [];
-
-  if (account) {
-    // Always check the fresh feature matrix BEFORE any financial/order query.
-    // Never authorize analytics from an older signed session snapshot.
-    const freshGate = await getDirectAccountGateFromSessionContext(sessionGate, []);
-    if (!freshGate?.ok) {
-      gate = freshGate || { ok: false, status: 503, error: "The account profile service is temporarily unavailable." };
-      account = null;
-    } else {
-      gate = freshGate;
-      account = freshGate.account;
-      const selection = await resolveHomeSelection(account, requestedUserId);
-      if (!selection.allowed) return <HomeUnavailable message={selection.reason} />;
-      try {
-        overview = await loadHomeOverviewDirect({ account, requestedUserId, duration });
-      } catch (error) {
-        // Authorization failures must never fall through to older dashboard loaders.
-        if (Number(error?.status) === 403) return <HomeUnavailable message="Home analysis access denied." />;
-      }
-    }
-  }
-  if (!gate.ok) {
-    if (gate.status === 401) redirect("/login?next=/next/home");
-    return <HomeUnavailable message={gate.error || "Home authorization is unavailable."} />;
+  const selection = await resolveHomeSelection(account, requestedUserId);
+  if (!selection.allowed) return <HomeUnavailable message={selection.reason} />;
+  try {
+    overview = await loadHomeOverviewDirect({ account, requestedUserId, duration });
+  } catch (error) {
+    // Authorization failures never fall through to older dashboard loaders.
+    if (Number(error?.status) === 403) return <HomeUnavailable message="Home analysis access denied." />;
   }
 
   // Compatibility fallback only. The normal Home path never waits for the
@@ -119,17 +101,15 @@ export default async function HomePage({ searchParams }) {
 
     if (fallback.ok && fallback.data?.ok) {
       const resources = resourceMap(fallback.data);
-      if (!account) account = getResource(resources, "/api/account", null);
       if (!overview) overview = getResource(resources, "/api/home/overview", null);
       bootstrapWarnings = fallback.data.omitted || [];
     }
 
-    if (!account || !overview) {
+    if (!overview) {
       return <HomeUnavailable message={fallback.error || fallback.data?.error || gate.error || "The current ERP API is temporarily unavailable."} />;
     }
   }
 
-  if (!account || !featureAllowed(account, "home.view")) return <HomeUnavailable message="Home access denied." />;
   const actions = quickActions(account);
   const selectedAnalysisUsers = overview.selectedUser ? [overview.selectedUser] : [];
 
