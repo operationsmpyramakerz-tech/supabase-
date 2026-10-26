@@ -11,6 +11,7 @@ import { canUseOrderCandidateRpc, loadOrderCandidateNumbersRpc, noteOrderCandida
 import { measurePerformance, recordPerformanceSample } from "./performance-profiler";
 import { directPageMutationAccess, verifyPageAdminPasswordDirect } from "./order-action-auth";
 import { resolveOrderScope, visibleOrderRow } from "./order-data-scope";
+import { isCompleteOrderSelection } from "./order-action-selection.mjs";
 
 const PAGE_LIMIT = 36;
 const PAGE_MAX = 80;
@@ -549,7 +550,7 @@ function directCurrentMutationError(message, status = 500) {
 
 function cleanCurrentActionIds(value = []) {
   const source = Array.isArray(value) ? value : [value];
-  return [...new Set(source.map((id) => text(id)).filter(Boolean))].slice(0, 500);
+  return [...new Set(source.map((id) => text(id)).filter(Boolean))];
 }
 
 export async function performCurrentOrdersProtectedAction({
@@ -568,7 +569,7 @@ export async function performCurrentOrdersProtectedAction({
   if (!mutationAccess) throw directCurrentMutationError("Edit access is required for this action.", 403);
 
   const ids = cleanCurrentActionIds(orderIds);
-  if (!ids.length) throw directCurrentMutationError("orderIds required", 400);
+  if (!ids.length || ids.length > 1000) throw directCurrentMutationError("Invalid order component count", 400);
   // Legacy Notion ids remain on the compatibility path until the final cleanup.
   if (!ids.every((id) => /^\d+$/.test(id)) || !isSupabaseConfigured()) return null;
 
@@ -586,6 +587,20 @@ export async function performCurrentOrdersProtectedAction({
     throw error;
   }
   if (!Array.isArray(rows) || rows.length !== ids.length) throw directCurrentMutationError("Orders not found", 404);
+  // All archive, restore and delete actions are order-wide. Reject caller
+  // supplied subsets before performing ANY write, including on legacy grants.
+  const numbers = [...new Set(rows.map(row => text(row?.order_number)))];
+  if (numbers.length !== 1 || !/^\d+$/.test(numbers[0] || "")) {
+    throw directCurrentMutationError("Order number could not be verified. Refresh the order.", 409);
+  }
+  const savedRows = await select(tableName(), {
+    select: "id,order_number",
+    order_number: `eq.${numbers[0]}`,
+    limit: "1001",
+  });
+  if (!isCompleteOrderSelection(ids, rows, savedRows)) {
+    throw directCurrentMutationError("Order components have changed. Refresh and select the complete order.", 409);
+  }
   // Legacy actions run unchanged; scoped profiles require a second, explicit
   // row-level authorization after loading the selected components.
   if (account?.featureAccess?.grants?.["orders.my.__scoped"]?.allowed === true) {
@@ -619,6 +634,9 @@ export async function performCurrentOrdersProtectedAction({
   }
 
   const deleted = await deleteByIds(tableName(), ids);
+  if (!Array.isArray(deleted) || deleted.length !== ids.length) {
+    throw directCurrentMutationError("Deletion was not fully confirmed. Refresh the orders list.", 409);
+  }
   await invalidateLegacyOperationsCaches(account).catch(() => {});
   return {
     success: true,

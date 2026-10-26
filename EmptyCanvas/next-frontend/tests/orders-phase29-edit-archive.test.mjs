@@ -4,6 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import { isCompleteOrderSelection } from '../lib/order-action-selection.mjs';
 
 function excerpt(file, start, end) {
   const source = fs.readFileSync(new URL(file, import.meta.url), 'utf8');
@@ -15,7 +16,8 @@ function excerpt(file, start, end) {
 const error = (message, status) => Object.assign(new Error(message), { status });
 const text = value => String(value ?? '').trim();
 
-function currentHarness(rows, { changedRows = null } = {}) {
+function currentHarness(rows, { changedRows = null, savedRows = null } = {}) {
+  rows = rows.map(row => ({ order_number: 117, ...row }));
   const calls = { updates: 0, deletes: 0 };
   const sandbox = {
     text,
@@ -30,6 +32,8 @@ function currentHarness(rows, { changedRows = null } = {}) {
     },
     deleteByIds: async (_table, ids) => { calls.deletes++; return ids.map(id => ({ id })); },
     tableName: () => 'orders',
+    select: async () => (savedRows ?? rows).map(row => ({ id: row.id, order_number: row.order_number })),
+    isCompleteOrderSelection,
     invalidateLegacyOperationsCaches: async () => {},
     directCurrentMutationError: error,
     statusIndex: value => /archiv/i.test(value) ? 5 : 2,
@@ -58,6 +62,14 @@ test('Current Orders archive/restore updates exactly the selected components', a
   const restore = currentHarness([{ id: '1', status: 'Archive' }, { id: '2', status: 'Archive' }]);
   const restored = await restore.run({ action: 'unarchive', orderIds: ['1', '2'], adminPassword: 'p' });
   assert.equal(restored.status, 'In progress');
+});
+
+test('Current Orders rejects deleting only part of an existing order', async () => {
+  const { run, calls } = currentHarness([{ id: '1', status: 'Shipped' }], {
+    savedRows: [{ id: '1', order_number: 117 }, { id: '2', order_number: 117 }],
+  });
+  await assert.rejects(run({ action: 'delete', orderIds: ['1'], adminPassword: 'p' }), { status: 409 });
+  assert.equal(calls.deletes, 0);
 });
 
 test('Current Orders reports partial updates instead of false success', async () => {

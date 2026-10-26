@@ -1698,7 +1698,7 @@ export async function performOperationsProtectedAction({
       order_number: `eq.${numbers[0]}`,
       limit: "1001",
     });
-    if (!Array.isArray(allRows) || allRows.length >= 1001) {
+    if (!Array.isArray(allRows) || allRows.length >= 1000) {
       throw directOperationsMutationError("Cannot verify every component of this order.", 409);
     }
     const savedIds = new Set(allRows.map((row) => text(row?.id)));
