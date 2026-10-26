@@ -6,6 +6,7 @@ import { featureGate } from "../../../../lib/feature-permissions-server";
 import { assertPrivateStorageBucket, getSupabaseConfig, uploadStorageObject } from "../../../../lib/supabase-rest";
 import { resolveUploadBucket } from "../../../../lib/private-upload-policy.mjs";
 import { createFileReference, fileUrl } from "../../../../lib/storage-direct";
+import { parseDirectAttachmentDataUrl } from "../../../../lib/direct-attachment-upload-policy.mjs";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -29,19 +30,19 @@ export async function POST(request) {
   if (!uploadGate.ok) return json({ ok: false, error: uploadGate.error }, uploadGate.status || 403);
 
   try {
-    const dataUrl = text(body?.dataUrl || body?.data);
+    const dataUrl = body?.dataUrl || body?.data;
     const filename = text(body?.filename || body?.name, 500) || "attachment";
     const mimeHint = text(body?.mime || body?.type, 180);
-    const match = dataUrl.match(/^data:([^;,]+)?;base64,([\s\S]+)$/i);
-    if (!match) return json({ ok: false, error: "Choose a valid attachment first." }, 400);
-    const bytes = Buffer.from(match[2], "base64");
-    if (!bytes.length) return json({ ok: false, error: "The selected attachment is empty." }, 400);
-    if (bytes.length > 10 * 1024 * 1024) return json({ ok: false, error: "The attachment must be 10 MB or less." }, 413);
+    // Validate the encoded length and alphabet BEFORE allocating the decoded
+    // Buffer. Node's permissive Base64 decoder must not silently accept junk.
+    const { bytes, contentType } = parseDirectAttachmentDataUrl(dataUrl, {
+      maxBytes: 10 * 1024 * 1024,
+      mimeHint,
+    });
     const cleanName = filename.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "attachment";
     const objectPath = `task-management/attachments/${Date.now()}-${crypto.randomUUID()}-${cleanName}`;
     const selected = resolveUploadBucket("task-management", getSupabaseConfig().storageBucket);
     if (selected.privateMode) await assertPrivateStorageBucket(selected.bucket);
-    const contentType = mimeHint || match[1] || "application/octet-stream";
     const uploaded = await uploadStorageObject(objectPath, bytes, { contentType, upsert: false, bucketName: selected.bucket });
     if (!uploaded?.path) throw new Error("Supabase Storage did not confirm the attachment upload.");
     const reference = selected.privateMode ? createFileReference({

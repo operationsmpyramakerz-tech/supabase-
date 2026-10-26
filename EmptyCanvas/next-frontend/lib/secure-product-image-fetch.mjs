@@ -88,14 +88,13 @@ export async function fetchProductImageResource(raw, {
     const target = await resolveProductImageTarget(current, { supabaseUrl, lookup });
     if (!target) return null;
     const { url, addresses } = target;
-    // Only forward the configured Supabase credential to its trusted Storage
-    // endpoint; redirects must never inherit the authorization header.
-    const passAuth = target.trustedStorage;
+    // This endpoint accepts image URLs stored in product records. It MUST NOT
+    // attach the app's Supabase service-role credentials to those URLs, even
+    // when the target happens to be the configured Storage origin. Public and
+    // already-signed image URLs are fetched without elevated privileges.
     const safeHeaders = { ...headers };
-    if (!passAuth) {
-      delete safeHeaders.apikey;
-      delete safeHeaders.Authorization;
-      delete safeHeaders.authorization;
+    for (const key of Object.keys(safeHeaders)) {
+      if (/^(authorization|apikey|proxy-authorization|cookie)$/i.test(key)) delete safeHeaders[key];
     }
     const requestOptions = {
       protocol: url.protocol, hostname: url.hostname.replace(/^\[|\]$/g, ""), port: url.port || undefined,

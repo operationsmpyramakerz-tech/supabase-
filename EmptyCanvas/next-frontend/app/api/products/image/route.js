@@ -101,7 +101,7 @@ async function fetchImage(url, { referer = "" } = {}) {
     if (!body.length || body.length > MAX_IMAGE_BYTES || !SAFE_RASTER_MIMES.has(match[1].toLowerCase())) return null;
     return { body, contentType: match[1].toLowerCase() };
   }
-  const { url: supabaseUrl, key } = getSupabaseConfig();
+  const { url: supabaseUrl } = getSupabaseConfig();
   const response = await fetchProductImageResource(url, {
     supabaseUrl,
     maxBytes: MAX_IMAGE_BYTES,
@@ -110,7 +110,6 @@ async function fetchImage(url, { referer = "" } = {}) {
       "User-Agent": "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/126 Safari/537.36",
       Accept: "image/avif,image/webp,image/apng,image/*;q=0.8",
       ...(referer ? { Referer: referer } : {}),
-      ...(key ? { apikey: key, Authorization: `Bearer ${key}` } : {}),
     },
   });
   if (!response?.body?.length) return null;

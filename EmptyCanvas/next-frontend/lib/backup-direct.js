@@ -1,4 +1,5 @@
 import "server-only";
+import { escapeBackupCsvCell } from "./backup-csv-security.mjs";
 
 import { backupCatalog, backupCanEdit, findBackupTable } from "./backup-data";
 import { verifyPageAdminPasswordDirect } from "./order-action-auth";
@@ -236,14 +237,7 @@ export async function updateBackupRow(context = {}, key = "", originalRow = null
 }
 
 function csvCell(value) {
-  if (value === null || typeof value === "undefined") return "";
-  let output = "";
-  if (typeof value === "object") {
-    try { output = JSON.stringify(value); } catch { output = String(value); }
-  } else output = String(value);
-  if (/^[=+\-@]/.test(output)) output = `'${output}`;
-  if (/[",\n\r]/.test(output)) return `"${output.replace(/"/g, '""')}"`;
-  return output;
+  return escapeBackupCsvCell(value);
 }
 
 function rowsToCsv(rows = [], preferredColumns = []) {
