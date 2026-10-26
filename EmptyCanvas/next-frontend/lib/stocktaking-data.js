@@ -1,5 +1,6 @@
 import "server-only";
 import { isTrustedLegacyAdmin } from "./admin-identity-policy.mjs";
+import { assertSessionColumnOwner, assertWritableSessionColumn } from "./stocktaking-session-access.mjs";
 import { getProductsCatalog } from "./products-service";
 import { listTeamMembersLite } from "./team-members-service";
 import { getReviewerVisibility } from "./reviewer-visibility-service";
@@ -690,6 +691,12 @@ export async function listStocktakingFolders({ fresh = false, account = null } =
 }
 
 export async function stocktakingForColumn(column, { inventoryColumn = "", defectedColumn = "", fresh = false } = {}) {
+  // Verify session ownership outside the projection fallback's catch block.
+  // A rejected cross-folder session must not be retried with a full-table read.
+  if (text(inventoryColumn) || text(defectedColumn)) {
+    const owner = await stocktakingOwnerForColumn(column, { fresh });
+    assertSessionColumnOwner({ inventoryColumn, defectedColumn, ownerName: owner.name });
+  }
   let rows = null;
   let quantityColumn = "";
   let inventory = "";
@@ -1104,6 +1111,10 @@ export async function updateStocktakingInventoryValue(account = {}, payload = {}
   const keys = await loadStockSchemaKeys({ fresh: true });
   const column = keys.find((key) => key === requestedColumn) || findKey(keys, [requestedColumn]);
   if (!column || !isInventoryMetaColumn(column)) throw stocktakingMutationError("The selected inventory column is invalid.", 400);
+  // Checking the target school alone does not authorize mutation of another
+  // user's globally stored Inventory/Defected session column.
+  const owner = await stocktakingOwnerForColumn(stockColumn, { fresh: true });
+  assertWritableSessionColumn({ sessionColumn: column, ownerName: owner.name });
   const raw = payload?.value;
   const value = raw === null || typeof raw === "undefined" || raw === "" ? null : Number(raw);
   if (value !== null && (!Number.isFinite(value) || value < 0)) {
