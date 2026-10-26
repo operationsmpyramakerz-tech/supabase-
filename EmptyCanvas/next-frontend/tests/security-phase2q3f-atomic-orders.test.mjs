@@ -50,6 +50,15 @@ test('2Q3F: DB performs all checks and mutations in the SAME transaction, under 
   assert.ok(sql.indexOf('LOCK TABLE') < sql.indexOf('SELECT count(*)') && sql.indexOf('SELECT count(*)') < sql.indexOf("IF p_action = 'delete'"));
 });
 
+test('2Q3F: shipped verification SQL is read-only and confirms function privileges', () => {
+  const sql = file('../sql/ERP_Phase2Q3F_Verify_Installation.sql');
+  assert.match(sql, /to_regprocedure\(/i);
+  assert.match(sql, /has_function_privilege\('service_role'/i);
+  assert.match(sql, /has_function_privilege\('anon'/i);
+  assert.match(sql, /has_function_privilege\('authenticated'/i);
+  assert.doesNotMatch(sql, /\b(?:INSERT|UPDATE|DELETE|ALTER|DROP|GRANT|REVOKE|TRUNCATE|CREATE)\s+(?:INTO|FROM|TABLE|FUNCTION|ON|ROLE|OR|SCHEMA)\b/i);
+});
+
 test('2Q3F: both order APIs use opt-in atomic path and never fall back when it fails', () => {
   for (const modulePath of ['../lib/current-orders-data.js', '../lib/operations-orders-data.js']) {
     const source = file(modulePath);
