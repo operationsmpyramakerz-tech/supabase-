@@ -16,13 +16,13 @@ const keys = [
   'products.export',
 ];
 
-test('2P4C registers all six new active controls (187 total known)', () => {
-  assert.equal(registry.FEATURE_DEFINITIONS.length, 187);
+test('2P4C registers all six new active controls (188 total known)', () => {
+  assert.equal(registry.FEATURE_DEFINITIONS.length, 188);
   for (const key of keys) {
     assert.ok(registry.isKnownFeature(key), key);
     assert.ok(registry.ACTIVE_PILOT_FEATURE_KEYS.includes(key), key);
   }
-  assert.equal(registry.ACTIVE_PILOT_FEATURE_KEYS.length, 187); // Updated by Phase 2P4D.
+  assert.equal(registry.ACTIVE_PILOT_FEATURE_KEYS.length, 188); // Updated by Phase 2P4D.
 });
 
 test('2P4C missing grants preserve previous functionality, explicit deny is authoritative', () => {

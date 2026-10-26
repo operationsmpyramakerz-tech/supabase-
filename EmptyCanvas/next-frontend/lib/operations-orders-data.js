@@ -2,7 +2,7 @@ import "server-only";
 import { parseStrictImageDataUrl } from "./strict-upload-image.mjs";
 import { isTrustedLegacyAdmin } from "./admin-identity-policy.mjs";
 import { performance } from "node:perf_hooks";
-import { deleteById, getSupabaseConfig, insert, isSupabaseConfigured, select, selectAll, supabaseRequest, updateById, updateByIds, uploadStorageObject } from "./supabase-rest";
+import { deleteById, deleteByIds, getSupabaseConfig, insert, isSupabaseConfigured, select, selectAll, supabaseRequest, updateById, updateByIds, uploadStorageObject } from "./supabase-rest";
 import { enrichOrderDetailGrouping, loadRawOrderRowsByIds, serializeOperationsOrderDetail } from "./order-details-data";
 import { getProductsCatalog } from "./products-service";
 import { loadFastOrderDetailsBundle } from "./order-details-fast-path";
@@ -1657,7 +1657,7 @@ export async function performOperationsProtectedAction({
   if (access === null) return null;
 
   const cleanAction = text(action).toLowerCase().replace(/[_\s]+/g, "-");
-  if (!["archive", "unarchive", "edit-init"].includes(cleanAction)) {
+  if (!["archive", "unarchive", "delete", "edit-init"].includes(cleanAction)) {
     throw directOperationsMutationError("Unsupported protected action", 400);
   }
 
@@ -1683,6 +1683,34 @@ export async function performOperationsProtectedAction({
     await updateByIds(tableName(), loaded.clean, { status: "In progress" });
     await invalidateLegacyOperationsCaches(account).catch(() => {});
     return { success: true, status: "In progress", statusColor: "yellow", source: "supabase-direct" };
+  }
+
+  if (cleanAction === "delete") {
+    // Every row of the saved order must be included. Never permit callers to
+    // delete only a subset of an order by submitting a shortened ID list.
+    const numbers = [...new Set(loaded.rows.map((row) => text(row?.order_number)))];
+    if (numbers.length !== 1 || !numbers[0] || !/^\d+$/.test(numbers[0])) {
+      throw directOperationsMutationError("Order number could not be verified. Refresh the order before deleting.", 409);
+    }
+    const allRows = await select(tableName(), {
+      select: "id,order_number",
+      order_number: `eq.${numbers[0]}`,
+      limit: "1001",
+    });
+    if (!Array.isArray(allRows) || allRows.length >= 1001) {
+      throw directOperationsMutationError("Cannot verify every component of this order.", 409);
+    }
+    const savedIds = new Set(allRows.map((row) => text(row?.id)));
+    if (savedIds.size !== loaded.clean.length || loaded.clean.some((id) => !savedIds.has(id))) {
+      throw directOperationsMutationError("Order components have changed. Refresh and select the complete order before deleting.", 409);
+    }
+    const deleted = await deleteByIds(tableName(), loaded.clean);
+    if (!Array.isArray(deleted) || deleted.length !== loaded.clean.length) {
+      // A mutation may already have committed. Do not retry it automatically.
+      throw directOperationsMutationError("Deletion was not fully confirmed. Refresh the orders list.", 409);
+    }
+    await invalidateLegacyOperationsCaches(account).catch(() => {});
+    return { success: true, deleted: deleted.length, source: "supabase-direct" };
   }
 
   const catalog = await getProductsCatalog();

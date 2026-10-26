@@ -149,6 +149,11 @@ export const FEATURE_DEFINITIONS = Object.freeze(
   },
   {
     "module": "orders.operations",
+    "key": "orders.operations.delete",
+    "label": "Delete operations order"
+  },
+  {
+    "module": "orders.operations",
     "key": "orders.operations.export",
     "label": "Export / combine orders"
   },
@@ -1011,6 +1016,18 @@ export function featureAllowed(account, key, { legacyAllowed = true, scopes = ["
   if ((key.startsWith("orders.my.") && state?.grants?.[ORDER_SCOPE_MARKERS["orders.my"]]?.allowed === true)
     || (key.startsWith("orders.operations.") && state?.grants?.[ORDER_SCOPE_MARKERS["orders.operations"]]?.allowed === true)
     || (key.startsWith("orders.maintenance.") && state?.grants?.[ORDER_SCOPE_MARKERS["orders.maintenance"]]?.allowed === true)) scopes = ["own", "team", "all"];
+  // Permanent deletion is a NEW destructive capability: never inherit it from
+  // legacy Edit, the module opt-out switch, or missing profile grants.
+  // Only an explicitly allowed advanced grant enables it.
+  if (key === "orders.operations.delete") {
+    const grant = state?.grants?.[key];
+    const view = state?.grants?.["orders.operations.view"];
+    return state?.mode === "enforced"
+      && grant?.allowed === true
+      && view?.allowed === true
+      && scopes.includes(grant.scope || "all")
+      && scopes.includes(view.scope || "all");
+  }
   if (state?.mode !== "enforced") return !!legacyAllowed;
   // Tracking belongs to My Orders, including its module-level View gate.
   // A dedicated tracking deny must never be bypassed by a My Orders View grant.
@@ -1124,7 +1141,7 @@ export const ACTIVE_PILOT_FEATURE_KEYS = Object.freeze([
   "products.tag_manage", "products.unit_create", "products.image_upload",
   "orders.operations.view", "orders.operations.details", "orders.operations.approve", "orders.operations.ship",
   "orders.operations.receive", "orders.operations.withdrawal",
-  "orders.operations.delivery", "orders.operations.edit", "orders.operations.export", "orders.operations.upload_receipt",
+  "orders.operations.delivery", "orders.operations.edit", "orders.operations.delete", "orders.operations.export", "orders.operations.upload_receipt",
   "orders.maintenance.view", "orders.maintenance.details", "orders.maintenance.log",
   "orders.maintenance.mark_arrived", "orders.maintenance.edit", "orders.maintenance.archive",
   "orders.maintenance.delete", "orders.maintenance.checklist_view", "orders.maintenance.checklist_manage", "orders.maintenance.export",

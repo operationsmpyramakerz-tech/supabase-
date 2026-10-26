@@ -48,6 +48,7 @@ export default async function OperationsOrdersPage() {
     details: "orders.operations.details", approve: "orders.operations.approve", ship: "orders.operations.ship",
     receive: "orders.operations.receive", withdrawal: "orders.operations.withdrawal",
     delivery: "orders.operations.delivery", edit: "orders.operations.edit",
+    delete: "orders.operations.delete",
     upload_receipt: "orders.operations.upload_receipt", export: "orders.operations.export",
   });
   const editPage = directPageMutationAccess(gate.account, ["Requested Orders", "Operations Orders"]) === true;
@@ -78,6 +79,7 @@ export default async function OperationsOrdersPage() {
           ["withdrawal", "orders.operations.withdrawal"],
           ["delivery", "orders.operations.delivery"],
           ["edit", "orders.operations.edit"],
+          ["delete", "orders.operations.delete"],
           ["upload_receipt", "orders.operations.upload_receipt"],
           ["export", "orders.operations.export"],
           ["maintenance_log", "orders.maintenance.log"],

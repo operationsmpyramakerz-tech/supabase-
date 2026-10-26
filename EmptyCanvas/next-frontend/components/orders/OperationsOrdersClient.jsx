@@ -769,6 +769,8 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
   const [selected, setSelected] = useState(null);
   const [actionState, setActionState] = useState(null);
   const [actionError, setActionError] = useState("");
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [deleteError, setDeleteError] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [editMode, setEditMode] = useState(null);
@@ -982,6 +984,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
     setOpeningGroup(null);
     setSelected(null);
     setEditMode(null);
+    setDeleteConfirm(null);
   }
 
   function prefetchOrderDetails(group, hover = false) {
@@ -992,11 +995,12 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
 
   async function beginAction(action, group) {
     const permissionAction = ({ reject: "approve", "technical-visit": "ship", deliver: "receive",
-      "maintenance-deliver": "receive", archive: "edit", unarchive: "edit" })[action] || action;
+      "maintenance-deliver": "receive", archive: "edit", unarchive: "edit", delete: "delete" })[action] || action;
     if (permissions?.[permissionAction] === false || !orderCardAllows(scopePolicy, permissionAction, group)) return;
     if (["deliver", "maintenance-deliver"].includes(action)
       && (permissions?.upload_receipt === false || !orderCardAllows(scopePolicy, "upload_receipt", group))) return;
     setActionError("");
+    setDeleteError("");
     if (action === "maintenance-log") {
       try {
         let options = maintenanceOptions;
@@ -1059,6 +1063,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
       deliver: { title: "Marking order delivered", message: "Uploading receipt photos and syncing Stocktaking…" },
       archive: { title: "Archiving order", message: "Moving the order to Archive…" },
       unarchive: { title: "Restoring order", message: "Restoring the order to the active workflow…" },
+      delete: { title: "Deleting order", message: "Permanently deleting every component of this order…" },
       withdrawal: { title: "Creating withdrawal order", message: "Creating the withdrawal order…" },
       delivery: { title: "Creating delivery order", message: "Creating the delivery order…" },
     };
@@ -1068,6 +1073,13 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
   async function submitAction(payload) {
     if (!actionState) return;
     const { action, group } = actionState;
+    if (action === "delete") {
+      if (!text(payload)) { setActionError("Admin password is required."); return; }
+      setActionState(null);
+      setDeleteConfirm({ group, password: text(payload) });
+      setDeleteError("");
+      return;
+    }
     const loadingConfig = action === "edit" ? null : actionLoadingConfig(action, group);
     let loadingStarted = false;
     let loadingSuccessMessage = "Completed successfully.";
@@ -1222,6 +1234,34 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
       const message = error?.message || "The action could not be completed.";
       if (loadingStarted) await finishActionLoading("failed", message);
       setActionError(message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirmDeleteOrder() {
+    if (!deleteConfirm?.group || busy) return;
+    const { group, password } = deleteConfirm;
+    if (permissions?.delete === false || !orderCardAllows(scopePolicy, "delete", group)) {
+      setDeleteError("Delete access is not allowed for this order.");
+      return;
+    }
+    setBusy(true);
+    setDeleteError("");
+    startActionLoading(actionLoadingConfig("delete", group));
+    try {
+      await postJson(`${DIRECT_API_BASE}/orders/operations/mutations-direct`, {
+        action: "delete", orderIds: group.orderIds, adminPassword: password,
+      });
+      // Deletion committed: do not retry if the list refresh fails.
+      setDeleteConfirm(null);
+      detailsLoaderRef.current?.clear?.();
+      await completeAction("Order deleted successfully.", tab);
+      await finishActionLoading("done", "Order permanently deleted.");
+    } catch (error) {
+      const message = error?.message || "Could not delete the order.";
+      setDeleteError(message);
+      await finishActionLoading("failed", message);
     } finally {
       setBusy(false);
     }
@@ -1455,7 +1495,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
       </section>
 
       <OrderDetailsLoadingOverlay group={openingGroup} onCancel={closeOrderDetails} />
-      {(selected || actionState) ? (
+      {(selected || actionState || deleteConfirm) ? (
         <OperationsOrdersHeavyModals
           selected={selected}
           tab={tab}
@@ -1477,6 +1517,10 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
           maintenanceOptions={maintenanceOptions}
           onCancelAction={() => setActionState(null)}
           onSubmitAction={submitAction}
+          deleteConfirm={deleteConfirm}
+          deleteError={deleteError}
+          onCancelDelete={() => { if (!busy) { setDeleteConfirm(null); setDeleteError(""); } }}
+          onConfirmDelete={confirmDeleteOrder}
         />
       ) : null}
       <CreatorProfilePopover state={creatorState} onClose={() => setCreatorState(null)} />

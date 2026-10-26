@@ -46,7 +46,7 @@ function directErrorResponse(error) {
 export async function POST(request) {
   const body = await request.json().catch(() => ({}));
   const action = actionKey(body?.action);
-  if (!["approval", "mark-shipped", "mark-arrived", "archive", "unarchive", "edit-init", "edit-save", "create-withdrawal", "create-delivery"].includes(action)) {
+  if (!["approval", "mark-shipped", "mark-arrived", "archive", "unarchive", "delete", "edit-init", "edit-save", "create-withdrawal", "create-delivery"].includes(action)) {
     return noStore({ error: "Unsupported Operations Orders action." }, { status: 400 });
   }
 
@@ -63,6 +63,7 @@ export async function POST(request) {
     "create-delivery": "orders.operations.delivery",
     "edit-init": "orders.operations.edit",
     "edit-save": "orders.operations.edit",
+    delete: "orders.operations.delete",
     archive: "orders.operations.edit",
     unarchive: "orders.operations.edit",
   }[action];
