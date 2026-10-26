@@ -52,15 +52,17 @@ test('v111 delete route verifies feature, legacy edit access, component scope an
   assert.ok(service.indexOf('directOperationsAdminPasswordResult(account || {}, adminPassword)') < service.indexOf('if (cleanAction === "delete")'));
 });
 
-test('v111 server rejects partial order ID payloads before DB deletion', () => {
+test('v111/2Q3D server rejects partial order ID payloads before DB deletion', async () => {
   const service = read('lib/operations-orders-data.js');
-  const deleteBranch = service.slice(service.indexOf('  if (cleanAction === "delete") {'));
-  assert.ok(deleteBranch.includes('select(tableName(), {'));
-  assert.ok(deleteBranch.includes('order_number: `eq.${numbers[0]}`'));
-  assert.ok(deleteBranch.indexOf('const savedIds = new Set') < deleteBranch.indexOf('await deleteByIds('));
-  assert.ok(deleteBranch.includes('savedIds.size !== loaded.clean.length'));
-  assert.ok(deleteBranch.includes('loaded.clean.some((id) => !savedIds.has(id))'));
-  assert.ok(deleteBranch.includes('deleted.length !== loaded.clean.length'));
+  const guardAt = service.indexOf('validateWholeOperationsOrder(loaded.clean, loaded.rows, allRows)');
+  const deleteAt = service.indexOf('await deleteByIds(tableName(), loaded.clean)');
+  assert.ok(guardAt > 0 && guardAt < deleteAt);
+  assert.ok(service.includes('order_number: `eq.${orderNumbers[0]}`'));
+  assert.ok(service.includes('deleted.length !== loaded.clean.length'));
+  const { validateWholeOperationsOrder } = await import('../lib/operations-whole-order-policy.mjs');
+  const row = (id) => ({ id, order_number: 123 });
+  assert.equal(validateWholeOperationsOrder(['1'], [row(1)], [row(1), row(2)]).ok, false);
+  assert.equal(validateWholeOperationsOrder(['1', '2'], [row(1), row(2)], [row(1), row(2)]).ok, true);
 });
 
 test('v111 order modal shows Delete separately from Edit in active and archived orders', () => {

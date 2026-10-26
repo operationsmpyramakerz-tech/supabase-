@@ -44,8 +44,9 @@ test("2Q3 operational delete still has independent feature and full order protec
   const data = read("lib/operations-orders-data.js");
   assert.ok(route.includes('delete: "orders.operations.delete"'));
   assert.ok(route.includes('await assertOrderIdsInScope(gate.account, actionPermission'));
-  const destructive = data.slice(data.indexOf('  if (cleanAction === "delete") {'));
-  assert.ok(destructive.includes('savedIds.size !== loaded.clean.length'));
+  const destructive = data.slice(data.indexOf('export async function performOperationsProtectedAction'));
+  assert.ok(destructive.includes('validateWholeOperationsOrder(loaded.clean, loaded.rows, allRows)'));
+  assert.ok(destructive.indexOf('validateWholeOperationsOrder(loaded.clean, loaded.rows, allRows)') < destructive.indexOf('await deleteByIds(tableName(), loaded.clean)'));
   assert.ok(destructive.includes('deleted.length !== loaded.clean.length'));
 });
 

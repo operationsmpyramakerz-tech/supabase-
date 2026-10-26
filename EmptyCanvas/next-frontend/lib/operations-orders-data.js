@@ -1,5 +1,6 @@
 import "server-only";
 import { operationsHasOutstandingQuantity, operationsMatchesTab } from "./operations-remaining-status.mjs";
+import { validateWholeOperationsOrder } from "./operations-whole-order-policy.mjs";
 import { parseStrictImageDataUrl } from "./strict-upload-image.mjs";
 import { isTrustedLegacyAdmin } from "./admin-identity-policy.mjs";
 import { performance } from "node:perf_hooks";
@@ -929,7 +930,11 @@ async function directOperationsAdminPasswordResult(account = {}, password = "") 
 
 function cleanOperationsActionIds(value = []) {
   const source = Array.isArray(value) ? value : [value];
-  return [...new Set(source.map((id) => text(id)).filter(Boolean))].slice(0, 1000);
+  const clean = [...new Set(source.map((id) => text(id)).filter(Boolean))];
+  // Never silently drop a submitted tail of IDs: that turns a request for
+  // several orders into a mutation of only the first 1,000 components.
+  if (clean.length > 1000) throw directOperationsMutationError("Too many order components in one action.", 400);
+  return clean;
 }
 
 async function loadOperationRowsByIds(ids = []) {
@@ -1674,44 +1679,48 @@ export async function performOperationsProtectedAction({
     if (!passwordOk) throw directOperationsMutationError("Invalid admin password", 401);
   }
 
-  if (cleanAction === "archive") {
-    await updateByIds(tableName(), loaded.clean, { status: "Archive" });
-    await invalidateLegacyOperationsCaches(account).catch(() => {});
-    return { success: true, status: "Archive", statusColor: "purple", source: "supabase-direct" };
-  }
-
-  if (cleanAction === "unarchive") {
-    await updateByIds(tableName(), loaded.clean, { status: "In progress" });
-    await invalidateLegacyOperationsCaches(account).catch(() => {});
-    return { success: true, status: "In progress", statusColor: "yellow", source: "supabase-direct" };
-  }
-
-  if (cleanAction === "delete") {
-    // Every row of the saved order must be included. Never permit callers to
-    // delete only a subset of an order by submitting a shortened ID list.
-    const numbers = [...new Set(loaded.rows.map((row) => text(row?.order_number)))];
-    if (numbers.length !== 1 || !numbers[0] || !/^\d+$/.test(numbers[0])) {
-      throw directOperationsMutationError("Order number could not be verified. Refresh the order before deleting.", 409);
+  if (["archive", "unarchive", "delete"].includes(cleanAction)) {
+    // Archive, restore and delete all operate on an ORDER, not on arbitrary
+    // component IDs. Enforce that the request contains exactly one complete
+    // saved order. Validation must run even for legacy (unscoped) accounts.
+    const orderNumbers = [...new Set(loaded.rows.map(row => text(row?.order_number)))];
+    if (orderNumbers.length !== 1 || !/^\d+$/.test(orderNumbers[0] || "")) {
+      throw directOperationsMutationError("Order number could not be verified. Refresh the order before continuing.", 409);
     }
     const allRows = await select(tableName(), {
       select: "id,order_number",
-      order_number: `eq.${numbers[0]}`,
+      order_number: `eq.${orderNumbers[0]}`,
       limit: "1001",
     });
-    if (!Array.isArray(allRows) || allRows.length >= 1000) {
-      throw directOperationsMutationError("Cannot verify every component of this order.", 409);
+    const verdict = validateWholeOperationsOrder(loaded.clean, loaded.rows, allRows);
+    if (!verdict.ok) {
+      throw directOperationsMutationError("Order components have changed or could not be fully verified. Refresh the order before continuing.", 409);
     }
-    const savedIds = new Set(allRows.map((row) => text(row?.id)));
-    if (savedIds.size !== loaded.clean.length || loaded.clean.some((id) => !savedIds.has(id))) {
-      throw directOperationsMutationError("Order components have changed. Refresh and select the complete order before deleting.", 409);
+
+    if (cleanAction === "delete") {
+      const deleted = await deleteByIds(tableName(), loaded.clean);
+      if (!Array.isArray(deleted) || deleted.length !== loaded.clean.length) {
+        // The mutation may have committed partially; never retry automatically.
+        throw directOperationsMutationError("Deletion was not fully confirmed. Refresh the orders list.", 409);
+      }
+      await invalidateLegacyOperationsCaches(account).catch(() => {});
+      return { success: true, deleted: deleted.length, source: "supabase-direct" };
     }
-    const deleted = await deleteByIds(tableName(), loaded.clean);
-    if (!Array.isArray(deleted) || deleted.length !== loaded.clean.length) {
-      // A mutation may already have committed. Do not retry it automatically.
-      throw directOperationsMutationError("Deletion was not fully confirmed. Refresh the orders list.", 409);
+
+    const nextStatus = cleanAction === "archive" ? "Archive" : "In progress";
+    const changed = await updateByIds(tableName(), loaded.clean, { status: nextStatus });
+    if (!Array.isArray(changed) || changed.length !== loaded.clean.length) {
+      // A concurrent edit/delete can change the selected set after the read.
+      // Fail closed rather than reporting that an order was fully archived.
+      throw directOperationsMutationError("The order update was not fully confirmed. Refresh the orders list.", 409);
     }
     await invalidateLegacyOperationsCaches(account).catch(() => {});
-    return { success: true, deleted: deleted.length, source: "supabase-direct" };
+    return {
+      success: true,
+      status: nextStatus,
+      statusColor: cleanAction === "archive" ? "purple" : "yellow",
+      source: "supabase-direct",
+    };
   }
 
   const catalog = await getProductsCatalog();
