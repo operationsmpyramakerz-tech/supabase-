@@ -1,5 +1,6 @@
 "use client";
 
+import { operationsHasOutstandingQuantity, operationsMatchesTab } from "../../lib/operations-remaining-status.mjs";
 import { orderCardAllows } from "../../lib/order-data-scope.mjs";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -329,6 +330,7 @@ function buildGroups(rows) {
 
     let state = "under-supervision";
     if (stage >= 5) state = "archive";
+    else if (operationsHasOutstandingQuantity({ stage, hasRemaining, maintenance: isMaintenance(group.orderType) })) state = "remaining";
     else if (stage >= 4) state = "delivered";
     else if (stage >= 3) state = hasRemaining && !isMaintenance(group.orderType) ? "remaining" : "received";
     else if (hasRejected) state = "rejected";
@@ -357,14 +359,7 @@ function buildGroups(rows) {
 }
 
 function groupMatchesTab(group, tab) {
-  if (tab === "all") return group.stage < 5;
-  if (tab === "archive") return group.stage >= 5;
-  if (tab === "delivered") return group.stage === 4;
-  if (tab === "remaining") return group.stage === 3 && !isMaintenance(group.orderType) && group.hasRemaining;
-  if (tab === "received") return group.stage === 3 && (isMaintenance(group.orderType) || group.hasReceived);
-  if (tab === "approved") return group.stage === 2 && group.hasApproved;
-  if (tab === "rejected") return group.stage === 2 && group.hasRejected;
-  return false;
+  return operationsMatchesTab({ ...group, maintenance: isMaintenance(group.orderType) }, tab);
 }
 
 
@@ -462,6 +457,7 @@ function groupSearchText(group) {
 
 function statusLabel(group) {
   if (group.stage >= 5) return "Archive";
+  if (operationsHasOutstandingQuantity({ stage: group.stage, hasRemaining: group.hasRemaining, maintenance: isMaintenance(group.orderType) })) return "Remaining";
   if (group.stage >= 4) return "Delivered";
   if (group.stage >= 3) return group.hasRemaining && !isMaintenance(group.orderType) ? "Remaining" : "Shipping";
   if (group.hasRejected && group.hasApproved) return "Mixed review";
@@ -472,6 +468,7 @@ function statusLabel(group) {
 
 function statusClass(group) {
   if (group.stage >= 5) return "status-archive";
+  if (operationsHasOutstandingQuantity({ stage: group.stage, hasRemaining: group.hasRemaining, maintenance: isMaintenance(group.orderType) })) return "status-remaining";
   if (group.stage >= 4) return "status-arrived";
   if (group.stage >= 3) return group.hasRemaining && !isMaintenance(group.orderType) ? "status-remaining" : "status-shipped";
   if (group.hasRejected && group.hasApproved) return "status-mixed";

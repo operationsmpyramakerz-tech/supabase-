@@ -1,4 +1,5 @@
 import "server-only";
+import { operationsHasOutstandingQuantity, operationsMatchesTab } from "./operations-remaining-status.mjs";
 import { parseStrictImageDataUrl } from "./strict-upload-image.mjs";
 import { isTrustedLegacyAdmin } from "./admin-identity-policy.mjs";
 import { performance } from "node:perf_hooks";
@@ -394,11 +395,9 @@ function groupMatchesTab(items = [], tab = "all") {
     return items.some((item) => statusIndex(item?.status) === 2 && decision(item) === cleanTab);
   }
   const meta = groupMeta(items);
-  if (cleanTab === "all") return meta.stage < 5;
-  if (cleanTab === "archive") return meta.stage >= 5;
-  if (cleanTab === "delivered") return meta.stage === 4;
-  if (cleanTab === "remaining") return meta.stage === 3 && !meta.maintenance && meta.hasRemaining;
-  if (cleanTab === "received") return meta.stage === 3 && (meta.maintenance || meta.hasReceived);
+  if (["all", "archive", "delivered", "remaining", "received"].includes(cleanTab)) {
+    return operationsMatchesTab(meta, cleanTab);
+  }
   return true;
 }
 
@@ -457,7 +456,9 @@ function statusLogic(tab = "all") {
   if (cleanTab === "archive") return ["status.ilike.*archive*"];
   if (cleanTab === "delivered") return ["status.ilike.*arrived*", "status.ilike.*delivered*", "status.ilike.*received*"];
   if (cleanTab === "remaining") {
-    return ["status.ilike.*shipped*", "status.ilike.*shipping*", "status.ilike.*prepared*", "status.ilike.*delivering*"];
+    // Partial deliveries retain a persisted Arrived status for stocktaking and
+    // receipt history. Do not exclude them before evaluating quantity_remaining.
+    return ["status.ilike.*shipped*", "status.ilike.*shipping*", "status.ilike.*prepared*", "status.ilike.*delivering*", "status.ilike.*arrived*", "status.ilike.*delivered*", "status.ilike.*received*"];
   }
   // Maintenance logs created by the older client can legitimately be stored as
   // "In progress" while they are already in the Shipping step. Keep this
@@ -485,7 +486,7 @@ function logicalParams({ query = "", tab = "all", type = "all", searchMode = "fa
 
 async function candidateNumbers({ cursor = null, scanGroups = 90, filters = {}, searchMode = "", rpcOptions = null, signal = null } = {}) {
   const suffix = searchMode ? `.search-${searchMode}` : "";
-  if (rpcOptions && canUseOrderCandidateRpc()) {
+  if (rpcOptions && rpcOptions.tab !== "remaining" && canUseOrderCandidateRpc()) {
     try {
       return await loadOrderCandidateNumbersRpc({
         ...rpcOptions,
@@ -567,7 +568,7 @@ function operationsCardSummaryItem(row = {}, tab = "all") {
 async function rowsByNumbers(numbers = [], signal = null, includeLocalSearchFields = false, { tab = "all", scoped = false } = {}) {
   // Card-summary RPC may aggregate mixed owners into one card. Never trust it
   // for row-scoped lists: fetch component owners before filtering groups.
-  if (!scoped && !includeLocalSearchFields && canUseOrderCardSummaryRpc()) {
+  if (tab !== "remaining" && !scoped && !includeLocalSearchFields && canUseOrderCardSummaryRpc()) {
     try {
       const rows = await loadOrderCardSummariesRpc({
         numbers,
