@@ -4,6 +4,7 @@ import { featureGate } from "../../../../lib/feature-permissions-server";
 import { renderExpenseExport } from "../../../../lib/expense-export-service";
 import { resolveExpenseUserAccess, scopeExpenseDetail } from "../../../../lib/expenses-users-scope";
 import { expensesForAccount, expensesForMemberId } from "../../../../lib/expenses-data";
+import { selectAuthorizedExpenseExportRows, authorizedExpenseExportIdentity } from "../../../../lib/expense-export-input-policy.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -58,23 +59,23 @@ export async function POST(request) {
     const isUsersExport = pages[0] === "Expenses Users";
     const memberId = text(body?.userId);
     if (isUsersExport && !memberId) return jsonError("A user ID is required to export team expenses.", 400);
+    // Resolve the canonical team identity on the server. Do not trust the
+    // report title, employee ID, or row values supplied by the browser.
+    const lookupId = isUsersExport
+      ? await resolveExpenseUserAccess(gate.account, "expenses.users.export", memberId)
+      : "";
     const authorized = isUsersExport
-      ? await (async () => {
-          const lookupId = await resolveExpenseUserAccess(gate.account, "expenses.users.export", memberId);
-          return await scopeExpenseDetail(gate.account, "expenses.users.export", memberId, await expensesForMemberId(lookupId));
-        })()
+      ? await scopeExpenseDetail(gate.account, "expenses.users.export", memberId, await expensesForMemberId(lookupId))
       : await expensesForAccount(gate.account || {});
-    const safeRows = Array.isArray(authorized?.items) ? authorized.items : [];
-    const rowsById = new Map(safeRows.map(row => [text(row.id), row]));
-    const requested = Array.isArray(body?.items) ? body.items : [];
-    if (requested.length > 5000) return jsonError("Too many expense rows.", 400);
-    const unknown = requested.some(row => !text(row?.id) || !rowsById.has(text(row.id)));
-    if (unknown) return jsonError("One or more expense rows are not available for this account.", 403);
-    const selected = requested.map(row => rowsById.get(text(row.id)));
+    const selection = selectAuthorizedExpenseExportRows(body?.items, authorized?.items);
+    if (!selection.ok) return jsonError(selection.error, selection.status);
+    const selected = selection.rows;
+    const identity = authorizedExpenseExportIdentity(selected, {
+      account: gate.account, lookupId, usersExport: isUsersExport,
+    });
     const result = await renderExpenseExport({
       kind,
-      userName: body?.userName,
-      userId: body?.userId,
+      ...identity,
       items: selected,
       dateFrom: body?.dateFrom,
       dateTo: body?.dateTo,

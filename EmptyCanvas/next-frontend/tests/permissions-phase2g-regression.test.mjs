@@ -66,6 +66,7 @@ test('Expenses screenshot checks session + owner; reports use authoritative expe
   const exportRoute=src('../app/api/expenses/export-direct/route.js');
   assert.ok(exportRoute.includes('Unsupported expense export scope'));
   assert.ok(exportRoute.includes('expenses.users.export') && exportRoute.includes('expenses.export'));
-  assert.ok(exportRoute.includes('rowsById.get(text(row.id))'));
+  assert.ok(exportRoute.includes('selectAuthorizedExpenseExportRows(body?.items, authorized?.items)'));
+  assert.ok(exportRoute.includes('authorizedExpenseExportIdentity(selected')); 
   assert.ok(exportRoute.includes('items: selected,'));
 });
