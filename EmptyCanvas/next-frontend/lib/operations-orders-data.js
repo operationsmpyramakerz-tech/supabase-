@@ -1,6 +1,7 @@
 import "server-only";
 import { operationsHasOutstandingQuantity, operationsMatchesTab } from "./operations-remaining-status.mjs";
 import { validateWholeOperationsOrder } from "./operations-whole-order-policy.mjs";
+import { performAtomicOrderAction, useAtomicOrderActions } from "./order-atomic-actions";
 import { parseStrictImageDataUrl } from "./strict-upload-image.mjs";
 import { isTrustedLegacyAdmin } from "./admin-identity-policy.mjs";
 import { performance } from "node:perf_hooks";
@@ -1695,6 +1696,32 @@ export async function performOperationsProtectedAction({
     const verdict = validateWholeOperationsOrder(loaded.clean, loaded.rows, allRows);
     if (!verdict.ok) {
       throw directOperationsMutationError("Order components have changed or could not be fully verified. Refresh the order before continuing.", 409);
+    }
+
+    // Opt-in SQL transaction: repeat the complete-order/snapshot checks under a
+    // database write lock before changing anything. Never silently fall back
+    // to separate writes if the RPC is enabled but unavailable.
+    if (useAtomicOrderActions()) {
+      let atomic;
+      try {
+        atomic = await performAtomicOrderAction({
+          action: cleanAction,
+          ids: loaded.clean,
+          rows: loaded.rows,
+          orderNumber: orderNumbers[0],
+          tableName: tableName(),
+        });
+      } catch (error) {
+        throw directOperationsMutationError(error?.message || "Atomic order action failed.", error?.status || 503);
+      }
+      await invalidateLegacyOperationsCaches(account).catch(() => {});
+      if (cleanAction === "delete") return { success: true, deleted: atomic.affected, source: "supabase-atomic" };
+      const nextStatus = cleanAction === "archive" ? "Archive" : "In progress";
+      return {
+        success: true, status: nextStatus,
+        statusColor: cleanAction === "archive" ? "purple" : "yellow",
+        source: "supabase-atomic",
+      };
     }
 
     if (cleanAction === "delete") {

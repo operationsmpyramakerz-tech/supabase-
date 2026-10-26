@@ -28,6 +28,19 @@ export function deploymentSecurityPreflight(env = process.env, { production = tr
   if (!hasServiceCredential) {
     warnings.push("No Supabase service credential detected; confirm that server-side RLS operations are available.");
   }
+  const atomicFlag = String(env.ERP_ATOMIC_ORDER_MUTATIONS || "").trim().toLowerCase();
+  if (atomicFlag && !["enabled", "disabled"].includes(atomicFlag)) {
+    errors.push("ERP_ATOMIC_ORDER_MUTATIONS must be 'enabled' or 'disabled' (or unset).");
+  }
+  if (atomicFlag === "enabled") {
+    if (!hasServiceCredential) errors.push("Atomic order mutations require a Supabase server service credential.");
+    if (String(env.SUPABASE_ORDERS_TABLE || "orders").trim() !== "orders") {
+      errors.push("Atomic order mutations require SUPABASE_ORDERS_TABLE=orders (public.orders).");
+    }
+    warnings.push("Atomic order actions enabled: confirm the 2Q3F SQL migration is installed and tested in Staging.");
+  } else if (atomicFlag !== "enabled") {
+    warnings.push("Atomic order actions are not enabled. Archive/Unarchive/Delete still use separate Supabase requests.");
+  }
   if (!defined("UPSTASH_REDIS_URL") && !defined("REDIS_URL") && !(defined("UPSTASH_REDIS_REST_URL") && defined("UPSTASH_REDIS_REST_TOKEN"))) {
     errors.push("Session store is not configured (Redis URL or Upstash REST URL and token required).");
   }

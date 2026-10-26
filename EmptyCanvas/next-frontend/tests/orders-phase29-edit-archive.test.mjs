@@ -16,11 +16,17 @@ function excerpt(file, start, end) {
 const error = (message, status) => Object.assign(new Error(message), { status });
 const text = value => String(value ?? '').trim();
 
-function currentHarness(rows, { changedRows = null, savedRows = null } = {}) {
+function currentHarness(rows, { changedRows = null, savedRows = null, atomic = false, atomicError = null } = {}) {
   rows = rows.map(row => ({ order_number: 117, ...row }));
-  const calls = { updates: 0, deletes: 0 };
+  const calls = { updates: 0, deletes: 0, atomics: 0 };
   const sandbox = {
     text,
+    useAtomicOrderActions: () => atomic,
+    performAtomicOrderAction: async ({ action, ids }) => {
+      calls.atomics++;
+      if (atomicError) throw atomicError;
+      return { ok: true, action, affected: ids.length };
+    },
     directPageMutationAccess: () => true,
     cleanCurrentActionIds: ids => ids.map(text),
     isSupabaseConfigured: () => true,
@@ -62,6 +68,23 @@ test('Current Orders archive/restore updates exactly the selected components', a
   const restore = currentHarness([{ id: '1', status: 'Archive' }, { id: '2', status: 'Archive' }]);
   const restored = await restore.run({ action: 'unarchive', orderIds: ['1', '2'], adminPassword: 'p' });
   assert.equal(restored.status, 'In progress');
+});
+
+test('Current Orders uses the atomic RPC, with NO fallback mutations when enabled', async () => {
+  const arch = currentHarness([{ id: '1', status: 'Shipped' }], { atomic: true });
+  const result = await arch.run({ action: 'archive', orderIds: ['1'], adminPassword: 'p' });
+  assert.equal(result.source, 'supabase-atomic');
+  assert.equal(arch.calls.atomics, 1);
+  assert.equal(arch.calls.updates, 0);
+  const del = currentHarness([{ id: '1', status: 'Shipped' }], { atomic: true });
+  assert.equal((await del.run({ action: 'delete', orderIds: ['1'], adminPassword: 'p' })).deleted, 1);
+  assert.equal(del.calls.atomics, 1);
+  assert.equal(del.calls.deletes, 0);
+  const unavailable = currentHarness([{ id: '1', status: 'Shipped' }], {
+    atomic: true, atomicError: Object.assign(new Error('Missing RPC'), { status: 503 }),
+  });
+  await assert.rejects(unavailable.run({ action: 'delete', orderIds: ['1'], adminPassword: 'p' }), { status: 503 });
+  assert.equal(unavailable.calls.deletes, 0);
 });
 
 test('Current Orders rejects deleting only part of an existing order', async () => {

@@ -1,4 +1,5 @@
 import "server-only";
+import { performAtomicOrderAction, useAtomicOrderActions } from "./order-atomic-actions";
 import { performance } from "node:perf_hooks";
 
 import { deleteByIds, isSupabaseConfigured, select, updateById, updateByIds } from "./supabase-rest";
@@ -620,6 +621,21 @@ export async function performCurrentOrdersProtectedAction({
       throw directCurrentMutationError("Only fully archived orders can be restored. Refresh the list.", 409);
     }
     const status = cleanAction === "archive" ? "Archive" : "In progress";
+    if (useAtomicOrderActions()) {
+      let atomic;
+      try {
+        atomic = await performAtomicOrderAction({
+          action: cleanAction, ids, rows, orderNumber: numbers[0], tableName: tableName(),
+        });
+      } catch (error) {
+        throw directCurrentMutationError(error?.message || "Atomic order action failed.", error?.status || 503);
+      }
+      await invalidateLegacyOperationsCaches(account).catch(() => {});
+      return {
+        success: true, status, statusColor: cleanAction === "archive" ? "purple" : "yellow",
+        source: "supabase-atomic",
+      };
+    }
     const changed = await updateByIds(tableName(), ids, { status });
     if (!Array.isArray(changed) || changed.length !== ids.length) {
       throw directCurrentMutationError("Only part of this order was updated. Refresh the list and review its status.", 409);
@@ -631,6 +647,19 @@ export async function performCurrentOrdersProtectedAction({
       statusColor: cleanAction === "archive" ? "purple" : "yellow",
       source: "supabase-direct",
     };
+  }
+
+  if (useAtomicOrderActions()) {
+    let atomic;
+    try {
+      atomic = await performAtomicOrderAction({
+        action: cleanAction, ids, rows, orderNumber: numbers[0], tableName: tableName(),
+      });
+    } catch (error) {
+      throw directCurrentMutationError(error?.message || "Atomic order action failed.", error?.status || 503);
+    }
+    await invalidateLegacyOperationsCaches(account).catch(() => {});
+    return { success: true, deleted: atomic.affected, source: "supabase-atomic" };
   }
 
   const deleted = await deleteByIds(tableName(), ids);
