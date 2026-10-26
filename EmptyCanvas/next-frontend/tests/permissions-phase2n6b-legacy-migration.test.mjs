@@ -41,6 +41,17 @@ test("deduplicates objects but retains exact parent record associations", () => 
   assert.equal([...found.values()][0].associations.length, 2);
 });
 
+test('audit retains multiple legacy URLs to the same storage object for complete reference cutover', () => {
+  const first = 'https://example.supabase.co/storage/v1/object/public/operations-files/b2c/customer-files/x.jpg';
+  const second = `${first}?download=1`;
+  const matches = extractLegacyPublicUrls(JSON.stringify({ files: [{ url: first }, { url: second }] }), { ...config, scope: 'b2c' });
+  assert.equal(matches.length, 2);
+  const map = new Map();
+  for (const match of matches) mergeAuditHit(map, match, { table: 'b2c_customers', recordId: '123', field: 'data', oldUrl: match.oldUrl });
+  assert.equal(map.size, 1);
+  assert.equal([...map.values()][0].associations.length, 2);
+});
+
 test("proposed protected references use the application's HMAC layout and remain record-bound", () => {
   const url = signedPrivateReference({ bucket: "erp-private-files", path: "kpi-evidence/a.pdf", name: "a.pdf", type: "application/pdf", size: 99, scope: "kpi-evidence", secret: "local-test-secret" });
   const reference = new URL(url, "https://erp.example").searchParams.get("reference");

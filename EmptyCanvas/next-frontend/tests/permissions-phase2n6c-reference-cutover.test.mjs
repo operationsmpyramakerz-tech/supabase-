@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { signedPrivateReference } from '../lib/legacy-storage-migration-policy.mjs';
 import {
-  approvedAssociation, approvedField, rewriteFieldReference,
+  approvedAssociation, approvedField, legacyUrlMatchesObject, rewriteFieldReference,
   rewriteAllAssociations, validateProtectedUrl, validateCutoverPlan,
   REFERENCE_PLAN_FORMAT, REFERENCE_PLAN_VERSION,
 } from '../lib/legacy-storage-reference-policy.mjs';
@@ -49,17 +49,36 @@ test('signed protected reference must match the verified private object and the 
 });
 
 test('plan rejects unsafe fields, duplicate operations, missing checksums and unapproved associations', () => {
-  const item = { scope: 'task-management', sourcePath: 'task-management/attachments/x', sourceBucket: 'operations-files' };
+  const item = { scope: 'task-management', sourcePath: 'task-management/attachments/x.pdf', sourceBucket: 'operations-files' };
   assert.equal(approvedAssociation(item, { table: 'department_ticket_sections', field: 'attachment_url', recordId: 'abc-1', oldUrl }), true);
   assert.equal(approvedAssociation(item, { table: 'department_ticket_sections', field: 'ticket_id', recordId: 'abc-1', oldUrl }), false);
   assert.equal(approvedField('kpi_employee_scores', 'score'), false);
-  const obj = { state: 'verified-copy', sourceBucket: 'operations-files', destinationBucket: 'erp-private-files', scope: 'kpi-evidence', sourcePath: 'kpi-evidence/one.pdf', destinationPath: 'kpi-evidence/one.pdf', sha256: crypto.createHash('sha256').update('file').digest('hex'), proposedProtectedUrl: protectedUrl, associations: [{ table: 'kpi_employee_scores', recordId: '12', field: 'evidence_text', oldUrl }] };
-  const op = { table: 'kpi_employee_scores', recordId: '12', field: 'evidence_text', before: oldUrl, after: protectedUrl, links: [{ oldUrl, protectedUrl }] };
+  const kpiOldUrl = 'https://example.supabase.co/storage/v1/object/public/operations-files/kpi-evidence/one.pdf';
+  const obj = { state: 'verified-copy', sourceBucket: 'operations-files', destinationBucket: 'erp-private-files', scope: 'kpi-evidence', sourcePath: 'kpi-evidence/one.pdf', destinationPath: 'kpi-evidence/one.pdf', sha256: crypto.createHash('sha256').update('file').digest('hex'), proposedProtectedUrl: protectedUrl, associations: [{ table: 'kpi_employee_scores', recordId: '12', field: 'evidence_text', oldUrl: kpiOldUrl }] };
+  const op = { table: 'kpi_employee_scores', recordId: '12', field: 'evidence_text', before: kpiOldUrl, after: protectedUrl, links: [{ oldUrl: kpiOldUrl, protectedUrl }] };
   const plan = { format: REFERENCE_PLAN_FORMAT, version: REFERENCE_PLAN_VERSION, stage: 'planned', sourceBucket: 'operations-files', destinationBucket: 'erp-private-files', objects: [obj], operations: [op] };
   assert.equal(validateCutoverPlan(plan), plan);
   assert.throws(() => validateCutoverPlan({ ...plan, operations: [op, op] }), /Duplicate/);
   assert.throws(() => validateCutoverPlan({ ...plan, objects: [{ ...obj, sha256: 'bad' }] }), /Unverified/);
   assert.throws(() => validateCutoverPlan({ ...plan, operations: [{ ...op, links: [{ oldUrl, protectedUrl: 'tampered' }] }] }), /does not match/);
+  assert.throws(() => validateCutoverPlan({ ...plan, operations: [{ ...op, after: 'tampered metadata' }] }), /beyond the approved file references/);
+  assert.throws(() => validateCutoverPlan({ ...plan, operations: [{ ...op, before: 'tampered metadata', after: protectedUrl }] }), /Stale or unsupported/);
+  assert.throws(() => validateCutoverPlan({ ...plan, objects: [{ ...obj, associations: [{ ...obj.associations[0], oldUrl: oldUrl }] }] }), /Unapproved association/);
+  assert.throws(() => validateCutoverPlan({ ...plan, objects: [obj, obj] }), /Duplicate copied object/);
+  assert.throws(() => validateCutoverPlan(plan, 'https://other.supabase.co'), /Unapproved association/);
+  const b2cUrl = 'https://example.supabase.co/storage/v1/object/public/operations-files/b2c/customer-files/one.pdf';
+  const b2cObject = { ...obj, scope: 'b2c', sourcePath: 'b2c/customer-files/one.pdf', destinationPath: 'b2c/customer-files/one.pdf', associations: [{ table: 'b2c_customers', recordId: '12', field: 'data', oldUrl: b2cUrl }] };
+  const b2cOperation = { table: 'b2c_customers', recordId: '12', field: 'data', before: { url: b2cUrl, qty: 21 }, after: { url: protectedUrl, qty: 1000 }, links: [{ oldUrl: b2cUrl, protectedUrl }] };
+  assert.throws(() => validateCutoverPlan({ ...plan, objects: [b2cObject], operations: [b2cOperation] }), /beyond the approved file references/);
+});
+
+test('legacy associations cannot re-target unrelated or foreign public storage URLs', () => {
+  const item = { scope: 'task-management', sourceBucket: 'operations-files', sourcePath: 'task-management/attachments/x.pdf' };
+  assert.equal(legacyUrlMatchesObject(item, oldUrl, 'https://example.supabase.co'), true);
+  assert.equal(legacyUrlMatchesObject(item, oldUrl.replace('x.pdf', 'y.pdf'), 'https://example.supabase.co'), false);
+  assert.equal(legacyUrlMatchesObject(item, oldUrl.replace('example.supabase.co', 'fake.supabase.co'), 'https://example.supabase.co'), false);
+  assert.equal(legacyUrlMatchesObject(item, oldUrl.replace('/public/', '/authenticated/'), 'https://example.supabase.co'), false);
+  assert.equal(legacyUrlMatchesObject(item, oldUrl.replace('operations-files', 'other-bucket'), 'https://example.supabase.co'), false);
 });
 
 test('CLI refuses apply without explicit execution and never deletes public files', () => {

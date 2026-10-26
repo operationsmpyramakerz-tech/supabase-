@@ -112,7 +112,7 @@ async function readCopiedManifest(location, cfg) {
     if (item.state !== 'verified-copy' || item.sourceBucket !== cfg.source || item.destinationBucket !== cfg.destination ||
       item.sourcePath !== item.destinationPath || !/^[0-9a-f]{64}$/.test(item.sha256 || '') ||
       !Array.isArray(item.associations) || !item.associations.length ||
-      item.associations.some(link => !approvedAssociation(item, link)) ||
+      item.associations.some(link => !approvedAssociation(item, link, cfg.url)) ||
       !MIGRATION_SOURCES.some(src => src.scope === item.scope)) fail('Manifest contains an unverified object or an unknown record association.');
     validateProtectedUrl(item, cfg.secret, cfg.destination);
   }
@@ -172,14 +172,14 @@ async function createPlan(cfg, options) {
       ({ scope, sourceBucket, sourcePath, destinationBucket, destinationPath, sha256, state, associations, proposedProtectedUrl })),
     operations,
     caution: 'PRIVATE/CONFIDENTIAL. No database rows changed. Apply only after independent review. No public objects are deleted.',
-  });
+  }, cfg.url);
   await privateWrite(options.out, plan, { initial: true });
   console.log(`Prepared ${operations.length} compare-and-swap updates for ${manifest.objects.length} verified copies. No writes to database.`);
 }
 
 async function readPlan(cfg, location) {
   const bytes = await fs.readFile(location);
-  const plan = validateCutoverPlan(JSON.parse(bytes.toString('utf8')));
+  const plan = validateCutoverPlan(JSON.parse(bytes.toString('utf8')), cfg.url);
   if (plan.sourceBucket !== cfg.source || plan.destinationBucket !== cfg.destination) fail('Plan buckets differ from environment.');
   for (const item of plan.objects) validateProtectedUrl(item, cfg.secret, cfg.destination);
   return { plan, digest: hash(bytes) };

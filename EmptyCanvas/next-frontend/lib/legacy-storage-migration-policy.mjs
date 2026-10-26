@@ -49,7 +49,11 @@ export function extractLegacyPublicUrls(value, { supabaseUrl, bucket, scope } = 
     if (!path.startsWith(`${source.prefix}/`)) continue;
     urls.push({ oldUrl: raw, sourceBucket: expectedBucket, sourcePath: path, scope });
   }
-  return [...new Map(urls.map(item => [`${item.sourceBucket}\0${item.sourcePath}`, item])).values()];
+  // One object can have several URL spellings in the same database cell
+  // (encoded filenames, download queries, etc.). Keep every distinct *URL*
+  // for an exact reference cutover; mergeAuditHit will deduplicate the actual
+  // object while preserving all of its associations.
+  return [...new Map(urls.map(item => [item.oldUrl, item])).values()];
 }
 
 export function migrationObjectKey(item) {

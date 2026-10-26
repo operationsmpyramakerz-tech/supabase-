@@ -12,11 +12,31 @@ export function approvedField(table, field) {
     !['ticket_id', 'section_id', 'database_id', 'review_id'].includes(field));
 }
 
-export function approvedAssociation(item, association) {
+/**
+ * An association must point to the exact public bucket/object being copied.
+ * The host can optionally be pinned to the configured Supabase instance, so
+ * a foreign or forged URL cannot be substituted in a cutover manifest.
+ */
+export function legacyUrlMatchesObject(item, oldUrl, expectedOrigin = '') {
+  if (typeof oldUrl !== 'string' || !oldUrl || !item?.sourceBucket || !safeStoragePath(item?.sourcePath)) return false;
+  try {
+    const url = new URL(oldUrl);
+    if (url.protocol !== 'https:' || url.username || url.password || url.hash) return false;
+    if (expectedOrigin && url.origin !== new URL(expectedOrigin).origin) return false;
+    const marker = '/storage/v1/object/public/';
+    if (!url.pathname.startsWith(marker)) return false;
+    const rest = url.pathname.slice(marker.length).split('/');
+    const bucket = decodeURIComponent(rest.shift() || '');
+    const objectPath = rest.map(part => decodeURIComponent(part)).join('/');
+    return bucket === item.sourceBucket && objectPath === item.sourcePath && safeStoragePath(objectPath);
+  } catch { return false; }
+}
+
+export function approvedAssociation(item, association, expectedOrigin = '') {
   const source = MIGRATION_SOURCES.find(row => row.table === association?.table && row.scope === item?.scope);
   return !!(source && approvedField(association.table, association.field) &&
     item.sourcePath?.startsWith(`${source.prefix}/`) && safeStoragePath(item.sourcePath) &&
-    typeof association.oldUrl === 'string' && association.oldUrl.length > 0 &&
+    legacyUrlMatchesObject(item, association.oldUrl, expectedOrigin) &&
     /^[A-Za-z0-9_-]{1,128}$/.test(String(association.recordId || '')));
 }
 
@@ -91,12 +111,13 @@ export function rewriteAllAssociations(table, field, original, links) {
 
 export function sameValue(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
 
-export function validateCutoverPlan(plan) {
+export function validateCutoverPlan(plan, expectedOrigin = '') {
   if (plan?.format !== REFERENCE_PLAN_FORMAT || plan.version !== REFERENCE_PLAN_VERSION ||
       plan.stage !== 'planned' || !Array.isArray(plan.operations) || !Array.isArray(plan.objects) ||
       !plan.sourceBucket || !plan.destinationBucket || plan.sourceBucket === plan.destinationBucket ||
       plan.operations.length > 50000 || plan.objects.length > 50000) throw new Error('Invalid cutover plan.');
   const expectedLinks = new Set();
+  const objectKeys = new Set();
   for (const item of plan.objects) {
     if (item.state !== 'verified-copy' || item.sourceBucket !== plan.sourceBucket ||
       item.destinationBucket !== plan.destinationBucket || item.sourcePath !== item.destinationPath ||
@@ -104,8 +125,11 @@ export function validateCutoverPlan(plan) {
       typeof item.proposedProtectedUrl !== 'string' || !Array.isArray(item.associations) || !item.associations.length) {
       throw new Error('Unverified object in cutover plan.');
     }
+    const objectKey = `${item.scope}\0${item.sourceBucket}\0${item.sourcePath}`;
+    if (objectKeys.has(objectKey)) throw new Error('Duplicate copied object in cutover plan.');
+    objectKeys.add(objectKey);
     for (const assoc of item.associations) {
-      if (!approvedAssociation(item, assoc)) throw new Error('Unapproved association in cutover plan.');
+      if (!approvedAssociation(item, assoc, expectedOrigin)) throw new Error('Unapproved association in cutover plan.');
       expectedLinks.add(JSON.stringify([assoc.table, String(assoc.recordId), assoc.field, assoc.oldUrl, item.proposedProtectedUrl]));
     }
   }
@@ -123,6 +147,11 @@ export function validateCutoverPlan(plan) {
       actualLinks.add(linkKey);
       if (!expectedLinks.has(linkKey)) throw new Error('Cutover reference does not match a copied object association.');
     }
+    // Plans are human-reviewable files, not trusted data. Even with a valid
+    // HMAC file reference, a modified plan must never replace unrelated JSON
+    // fields, text, quantities or document metadata via service-role CAS.
+    const expectedAfter = rewriteAllAssociations(op.table, op.field, op.before, op.links);
+    if (!sameValue(expectedAfter, op.after)) throw new Error('Cutover plan changes fields beyond the approved file references.');
   }
   if (actualLinks.size !== expectedLinks.size) throw new Error('Cutover plan does not include every copied object association.');
   return plan;

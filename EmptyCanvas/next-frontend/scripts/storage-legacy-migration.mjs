@@ -16,6 +16,7 @@ import {
   MIGRATION_SOURCES, encodedStoragePath, extractLegacyPublicUrls,
   mergeAuditHit, safeStoragePath, signedPrivateReference,
 } from "../lib/legacy-storage-migration-policy.mjs";
+import { approvedAssociation } from "../lib/legacy-storage-reference-policy.mjs";
 
 const VERSION = 1;
 const PAGE_SIZE = 250;
@@ -74,9 +75,9 @@ async function request(config, resource, { method = "GET", body, headers = {}, b
   });
   if (response.status === 404 && notFoundOk) return null;
   if (!response.ok) {
-    const reason = await response.text().catch(() => "");
-    // Never write authorization headers, signed URLs, or raw database values to logs.
-    throw new Error(`${method} Storage/REST request failed: ${response.status} ${reason.slice(0, 160).replace(/[\r\n]/g, " ")}`);
+    // Supabase error bodies may contain private filenames, record values,
+    // signed URLs or even proxy details. Do not include them in logs.
+    throw new Error(`${method} Storage/REST request failed (HTTP ${response.status}). Check server-side diagnostics.`);
   }
   if (binary) {
     const length = Number(response.headers.get("content-length") || 0);
@@ -104,14 +105,15 @@ async function atomicPrivateJson(file, value) {
   await fs.chmod(full, 0o600);
 }
 
-async function readManifest(location, sourceBucket) {
+async function readManifest(location, sourceBucket, supabaseUrl) {
   const doc = JSON.parse(await fs.readFile(location, "utf8"));
   if (doc?.format !== "pyramakerz-storage-migration" || doc?.version !== VERSION || !Array.isArray(doc.objects)) cliError("Unknown manifest format.");
   if (doc.sourceBucket !== sourceBucket) cliError("Manifest source bucket does not match current configuration.");
   if (doc.objects.length > 50000) cliError("Manifest exceeds safe object count.");
   for (const row of doc.objects) {
     const scope = MIGRATION_SOURCES.find(s => s.scope === row.scope);
-    if (!scope || row.sourceBucket !== sourceBucket || !safeStoragePath(row.sourcePath) || !row.sourcePath.startsWith(`${scope.prefix}/`)) {
+    if (!scope || row.sourceBucket !== sourceBucket || !safeStoragePath(row.sourcePath) || !row.sourcePath.startsWith(`${scope.prefix}/`) ||
+        !Array.isArray(row.associations) || !row.associations.length || row.associations.some(link => !approvedAssociation(row, link, supabaseUrl))) {
       cliError("Manifest contains a path outside the allowed scope.");
     }
   }
@@ -161,7 +163,7 @@ function objectUrl(bucket, objectPath, authenticated = true) {
 }
 
 async function copy(config, options) {
-  const original = await readManifest(options.manifest, config.source);
+  const original = await readManifest(options.manifest, config.source, config.url);
   if (!original.objects.length) cliError("Manifest is empty. No objects to migrate.");
   await checkedPrivateBucket(config);
   const secret = String(process.env.STORAGE_LINK_SECRET || process.env.SESSION_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
@@ -204,7 +206,7 @@ async function copy(config, options) {
 }
 
 async function verify(config, options) {
-  const manifest = await readManifest(options.manifest, config.source);
+  const manifest = await readManifest(options.manifest, config.source, config.url);
   await checkedPrivateBucket(config);
   if (manifest.destinationBucket !== config.destination || manifest.stage !== "copied-unlinked") cliError("Expected a copied-unlinked manifest for the configured private bucket.");
   for (const [index, item] of manifest.objects.entries()) {
