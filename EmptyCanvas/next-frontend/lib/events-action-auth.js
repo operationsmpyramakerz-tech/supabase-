@@ -1,6 +1,7 @@
 import "server-only";
 
 import crypto from "node:crypto";
+import { sessionSigningSecret } from "./session-signing-secret.mjs";
 
 const EVENTS_AUTH_TTL_MS = 5 * 60 * 1000;
 
@@ -25,7 +26,7 @@ function currentIdentity(account = {}) {
 }
 
 function signingSecret() {
-  return String(process.env.SESSION_SECRET || "dev-fallback-secret");
+  return sessionSigningSecret();
 }
 
 function base64urlJson(payload = {}) {

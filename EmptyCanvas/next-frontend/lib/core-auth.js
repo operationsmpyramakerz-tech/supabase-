@@ -1,6 +1,7 @@
 import "server-only";
 
 import crypto from "node:crypto";
+import { sessionSigningSecret } from "./session-signing-secret.mjs";
 import { createClient } from "redis";
 import { insert, select, selectAll } from "./supabase-rest";
 import { sendPasswordRecoveryEmail } from "./users-center-email";
@@ -55,7 +56,7 @@ function urlValue(value) {
 function teamMembersTable() { return text(process.env.SUPABASE_TEAM_MEMBERS_TABLE) || "team_members"; }
 function signupRequestsTable() { return text(process.env.SUPABASE_SIGNUP_REQUESTS_TABLE) || "team_member_signup_requests"; }
 function cookieName() { return text(process.env.SESSION_COOKIE_NAME) || "op.sid"; }
-function sessionSecret() { return String(process.env.SESSION_SECRET || "dev-fallback-secret"); }
+function sessionSecret() { return sessionSigningSecret(); }
 function redisUrl() { return text(process.env.UPSTASH_REDIS_URL || process.env.REDIS_URL); }
 function restUrl() { return text(process.env.UPSTASH_REDIS_REST_URL).replace(/\/+$/, ""); }
 function restToken() { return text(process.env.UPSTASH_REDIS_REST_TOKEN); }

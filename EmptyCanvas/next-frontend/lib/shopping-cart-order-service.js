@@ -1,6 +1,7 @@
 import "server-only";
 
 import crypto from "node:crypto";
+import { sessionSigningSecret } from "./session-signing-secret.mjs";
 
 import {
   deleteByIds,
@@ -112,7 +113,7 @@ function directError(message, status = 500, mutationStarted = false) {
 }
 
 function signingSecret() {
-  return String(process.env.SESSION_SECRET || "dev-fallback-secret");
+  return sessionSigningSecret();
 }
 
 function base64urlJson(payload = {}) {

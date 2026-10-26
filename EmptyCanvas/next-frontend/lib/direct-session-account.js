@@ -2,6 +2,7 @@ import "server-only";
 import { isTrustedLegacyAdmin } from "./admin-identity-policy.mjs";
 
 import crypto from "node:crypto";
+import { sessionSigningSecret } from "./session-signing-secret.mjs";
 import { performance } from "node:perf_hooks";
 import { cookies } from "next/headers";
 import { select, selectAll, selectById } from "./supabase-rest";
@@ -435,7 +436,7 @@ function parseSessionValue(value) {
 }
 
 async function resolveDirectSessionCookie(cookieValue, { onSessionReady = null, timings = null } = {}) {
-  const secret = String(process.env.SESSION_SECRET || "dev-fallback-secret");
+  const secret = sessionSigningSecret();
   const sid = unsignSessionCookie(cookieValue, secret);
   if (!sid) return { definitive: true, status: 401, session: null, error: "Invalid session cookie.", backend: "" };
 
