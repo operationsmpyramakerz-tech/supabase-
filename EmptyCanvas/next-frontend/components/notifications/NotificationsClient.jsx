@@ -361,7 +361,7 @@ function DeliveryHistory() {
   );
 }
 
-export default function NotificationsClient({ initialItems = [], initialUnreadCount = 0, source = "", bootstrapWarnings = [] }) {
+export default function NotificationsClient({ initialItems = [], initialUnreadCount = 0, source = "", bootstrapWarnings = [], canManageRead = true, canManagePreferences = true }) {
   const [items, setItems] = useState(Array.isArray(initialItems) ? initialItems : []);
   const [unreadCount, setUnreadCount] = useState(Number(initialUnreadCount) || 0);
   const [scope, setScope] = useState("all");
@@ -494,6 +494,7 @@ export default function NotificationsClient({ initialItems = [], initialUnreadCo
   }
 
   async function markRead(item) {
+    if (!canManageRead) return;
     const id = notificationText(item?.id);
     if (!id || item?.read) return;
     setItems((current) => current.map((row) => String(row?.id) === id ? { ...row, read: true } : row));
@@ -510,6 +511,7 @@ export default function NotificationsClient({ initialItems = [], initialUnreadCo
   }
 
   async function markGroupRead(group) {
+    if (!canManageRead) return;
     const ids = (group?.items || []).filter(item => !item.read).map(item => String(item.id));
     if (!ids.length) return;
     const toRead = new Set(ids);
@@ -528,6 +530,7 @@ export default function NotificationsClient({ initialItems = [], initialUnreadCo
   }
 
   async function markAllRead() {
+    if (!canManageRead) return;
     if (!unreadCount) return;
     const previous = items;
     const previousCount = unreadCount;
@@ -564,7 +567,7 @@ export default function NotificationsClient({ initialItems = [], initialUnreadCo
           ))}
         </nav>
         <div className="next-notifications-controls__actions">
-          <button type="button" className="next-notifications-mark-read" onClick={markAllRead} disabled={!unreadCount} title="Mark all notifications as read">Mark all read</button>
+          {canManageRead ? <button type="button" className="next-notifications-mark-read" onClick={markAllRead} disabled={!unreadCount} title="Mark all notifications as read">Mark all read</button> : null}
           <button type="button" className={`next-notifications-filter-button${activeAdvancedFilters ? " has-active" : ""}`} onClick={() => setFilterOpen(true)} aria-label="Sort and filter notifications" title="Sort and filter notifications">
             <FilterGlyph />
             {activeAdvancedFilters ? <b>{activeAdvancedFilters}</b> : null}
@@ -602,7 +605,7 @@ export default function NotificationsClient({ initialItems = [], initialUnreadCo
                       <div className="next-notifications-row__meta">
                         <span>{notificationText(first.type) || "General"}</span>
                         {multiple ? <button type="button" aria-expanded={expanded} onClick={() => setOpenGroups(prev => expanded ? prev.filter(id => id !== group.id) : [...prev, group.id])}>{group.items.length} updates</button> : null}
-                        {unread ? <button type="button" onClick={() => multiple ? markGroupRead(group) : markRead(first)}>{multiple ? "Mark group read" : "Mark read"}</button> : null}
+                        {unread && canManageRead ? <button type="button" onClick={() => multiple ? markGroupRead(group) : markRead(first)}>{multiple ? "Mark group read" : "Mark read"}</button> : null}
                       </div>
                       {multiple && expanded ? (
                         <div className="next-notifications-group-children">
@@ -688,10 +691,10 @@ export default function NotificationsClient({ initialItems = [], initialUnreadCo
       <details className="next-notifications-device next-notifications-settings-card">
         <summary><span>Notification settings</span><small>Push · Preferences · Test tools</small></summary>
         <div className="next-notifications-device__body">
-          <PushSettings />
+          {canManagePreferences ? <PushSettings /> : null}
           <div className="next-notifications-device__links">
             <button type="button" onClick={sendTest} disabled={testing}>{testing ? "Testing…" : "Send test notification"}</button>
-            <a href="/next/account">Notification preferences ↗</a>
+            {canManagePreferences ? <a href="/next/account">Notification preferences ↗</a> : null}
           </div>
         </div>
       </details>

@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { featureAllowed } from "../../lib/feature-permissions-registry";
 import AppShell from "../../components/AppShell";
 import NotificationsClient from "../../components/notifications/NotificationsClient";
 import { fetchDirectPageBootstrap } from "../../lib/page-bootstrap-direct";
@@ -41,9 +42,8 @@ function UnavailableState({ message }) {
 }
 
 export default async function NotificationsPage() {
-  // Phase 52 performance: validate only the signed session first. Once the
-  // member id is known, refresh the account/profile and read notifications in
-  // parallel instead of serializing two independent Supabase reads.
+  // Resolve fresh permissions *before* reading private notifications. The
+  // auth-only signed session lacks the current permission grant matrix.
   const sessionGate = await getLegacyAccountGate([], { authOnly: true });
   if (sessionGate.status === 401) redirect("/login?next=/next/notifications");
 
@@ -53,10 +53,7 @@ export default async function NotificationsPage() {
   const warnings = [];
 
   if (sessionGate.ok && sessionGate.account && sessionGate.memberId) {
-    const [freshGate, notificationPayload] = await Promise.all([
-      getDirectAccountGateFromSessionContext(sessionGate, []).catch(() => null),
-      notificationsForMember(sessionGate.memberId, { limit: 80 }).catch(() => null),
-    ]);
+    const freshGate = await getDirectAccountGateFromSessionContext(sessionGate, []).catch(() => null);
     if (freshGate) {
       gate = freshGate;
       account = freshGate.ok ? freshGate.account : null;
@@ -64,13 +61,18 @@ export default async function NotificationsPage() {
       gate = { ...sessionGate, ok: false, status: 503, error: "The account profile service is temporarily unavailable." };
       account = null;
     }
-    notifications = notificationPayload;
+    if (gate.ok && account && !featureAllowed(account, "notifications.view")) {
+      return <UnavailableState message="Permission notifications.view is not allowed." />;
+    }
+    notifications = account && gate.ok
+      ? await notificationsForMember(gate.memberId, { limit: 80 }).catch(() => null)
+      : null;
   }
 
   // Deep recovery only. The normal route no longer depends on page-bootstrap.
   if (!gate.ok || !account || !notifications) {
     const response = await fetchDirectPageBootstrap("/api/page-bootstrap?scope=notifications");
-    if (response.status === 401 || response.status === 403) redirect("/login?next=/next/notifications");
+    if (response.status === 401) redirect("/login?next=/next/notifications");
     if (!response.ok || !response.data?.ok) {
       return <UnavailableState message={response.error || response.data?.error || gate.error || "The current ERP API is temporarily unavailable."} />;
     }
@@ -82,6 +84,7 @@ export default async function NotificationsPage() {
   }
 
   if (!account) redirect("/login?next=/next/notifications");
+  if (!featureAllowed(account, "notifications.view")) return <UnavailableState message="Permission notifications.view is not allowed." />;
 
   return (
     <AppShell
@@ -95,6 +98,8 @@ export default async function NotificationsPage() {
         initialUnreadCount={Number(notifications?.unreadCount) || 0}
         source={String(notifications?.source || "")}
         bootstrapWarnings={warnings}
+        canManageRead={featureAllowed(account, "notifications.read_manage")}
+        canManagePreferences={featureAllowed(account, "notifications.preferences") && featureAllowed(account, "account.view")}
       />
     </AppShell>
   );

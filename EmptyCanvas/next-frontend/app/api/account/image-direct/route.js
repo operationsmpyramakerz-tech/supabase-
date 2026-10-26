@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { finalizeAccountImage, removeAccountImage, uploadAccountImageDirect } from "../../../../lib/account-direct";
+import { featureAllowed } from "../../../../lib/feature-permissions-registry";
 import { getDirectAccountGate } from "../../../../lib/products-auth";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +20,10 @@ export async function POST(request) {
   const accountGate = await gate();
   if (!accountGate.ok || !accountGate.account) {
     return json({ ok: false, error: accountGate.error || "Authentication required." }, accountGate.status || 503);
+  }
+
+  if (!featureAllowed(accountGate.account, "account.view") || !featureAllowed(accountGate.account, "account.avatar")) {
+    return json({ ok: false, error: "Permission account.avatar is not allowed." }, 403);
   }
 
   try {
@@ -54,6 +59,10 @@ export async function DELETE(request) {
   const accountGate = await gate();
   if (!accountGate.ok || !accountGate.account) {
     return json({ ok: false, error: accountGate.error || "Authentication required." }, accountGate.status || 503);
+  }
+
+  if (!featureAllowed(accountGate.account, "account.view") || !featureAllowed(accountGate.account, "account.avatar")) {
+    return json({ ok: false, error: "Permission account.avatar is not allowed." }, 403);
   }
 
   try {

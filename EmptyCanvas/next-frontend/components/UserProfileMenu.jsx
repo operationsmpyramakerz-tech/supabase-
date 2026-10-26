@@ -1,5 +1,6 @@
 "use client";
 
+import { featureAllowed } from "../lib/feature-permissions-registry";
 import { beginAuthRouteTransition } from "../lib/auth-route-transition";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -370,9 +371,11 @@ export default function UserProfileMenu({ account }) {
 
         <div className="user-menu-sep user-menu-sep--tight" role="separator" />
 
-        <button type="button" className="user-menu-item" role="menuitem" onClick={() => navigate("/next/account")}>
-          <span className="umi-ico"><MenuIcon name="user" /></span><span className="umi-label">User Profile</span>
-        </button>
+        {featureAllowed(account, "account.view") ? (
+          <button type="button" className="user-menu-item" role="menuitem" onClick={() => navigate("/next/account")}>
+            <span className="umi-ico"><MenuIcon name="user" /></span><span className="umi-label">User Profile</span>
+          </button>
+        ) : null}
 
         {canSeeHistory ? (
           <button type="button" className="user-menu-item" role="menuitem" onClick={() => navigate("/next/history")}>

@@ -22,7 +22,7 @@ test('2P4C registers all six new active controls (187 total known)', () => {
     assert.ok(registry.isKnownFeature(key), key);
     assert.ok(registry.ACTIVE_PILOT_FEATURE_KEYS.includes(key), key);
   }
-  assert.equal(registry.ACTIVE_PILOT_FEATURE_KEYS.length, 180);
+  assert.equal(registry.ACTIVE_PILOT_FEATURE_KEYS.length, 187); // Updated by Phase 2P4D.
 });
 
 test('2P4C missing grants preserve previous functionality, explicit deny is authoritative', () => {

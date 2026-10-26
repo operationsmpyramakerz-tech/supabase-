@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getDirectAccountGate } from "../../../../lib/products-auth";
+import { notificationActionGate } from "../../../../lib/personal-notification-gate";
 import {
   defaultNotificationPreferences,
   getNotificationPreferences,
@@ -16,7 +16,7 @@ function reply(payload, status = 200) {
 }
 
 async function session() {
-  const gate = await getDirectAccountGate([], { authOnly: true });
+  const gate = await notificationActionGate("notifications.preferences");
   if (!gate.ok || !gate.memberId) throw Object.assign(new Error(gate.error || "Authentication required."), { status: gate.status || 401 });
   return gate.memberId;
 }
@@ -28,7 +28,7 @@ export async function GET() {
     return reply({ success: true, ...data, categories: NOTIFICATION_CATEGORIES });
   } catch (error) {
     console.error("GET notification preferences:", error?.message || error);
-    return reply({ success: false, error: error?.status === 401 ? error.message : "Notification preferences are unavailable. Run the Supabase migration if necessary.", defaults: defaultNotificationPreferences() }, Number(error?.status) || 503);
+    return reply({ success: false, error: [401, 403].includes(Number(error?.status)) ? error.message : "Notification preferences are unavailable. Run the Supabase migration if necessary.", defaults: defaultNotificationPreferences() }, Number(error?.status) || 503);
   }
 }
 
@@ -43,6 +43,6 @@ export async function PUT(request) {
     return reply({ success: true, ...saved });
   } catch (error) {
     console.error("PUT notification preferences:", error?.message || error);
-    return reply({ success: false, error: Number(error?.status) === 401 ? error.message : "Could not save preferences. Check the Supabase migration and permissions." }, Number(error?.status) || 503);
+    return reply({ success: false, error: [401, 403].includes(Number(error?.status)) ? error.message : "Could not save preferences. Check the Supabase migration and permissions." }, Number(error?.status) || 503);
   }
 }

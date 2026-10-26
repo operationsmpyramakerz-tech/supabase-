@@ -962,6 +962,10 @@ export const LEGACY_DEFAULT_FEATURE_KEYS = Object.freeze([
   "orders.documents.view_receipts",
   "orders.documents.download_instructions",
   "orders.documents.manage_instructions",
+  // Existing accounts and notification users keep their established access
+  // until the administrator explicitly records a grant or deny.
+  "notifications.view", "notifications.read_manage", "notifications.preferences",
+  "account.view", "account.edit", "account.avatar", "account.password",
 ]);
 
 export const TASK_SCOPE_MARKER = "tasks.__scoped";
@@ -1028,6 +1032,16 @@ export function featureAllowed(account, key, { legacyAllowed = true, scopes = ["
     return !documentGrant ? !!legacyAllowed
       : documentGrant.allowed === true && scopes.includes(documentGrant.scope || "all");
   }
+  // Personal modules have never had an opt-in migration switch. All missing
+  // grants keep legacy behavior, but a saved OFF is authoritative. An explicit
+  // View denial also blocks sub-actions (even when their grant is ON).
+  if (key.startsWith("notifications.") || key.startsWith("account.")) {
+    const viewKey = key.startsWith("notifications.") ? "notifications.view" : "account.view";
+    if (key !== viewKey && state.grants?.[viewKey]?.allowed === false) return false;
+    const personalGrant = state.grants?.[key];
+    return !personalGrant ? !!legacyAllowed
+      : personalGrant.allowed === true && scopes.includes(personalGrant.scope || "all");
+  }
   // SLA widgets/settings can be assigned before an existing Home profile is
   // migrated. Explicit grants and denies must still be authoritative even
   // when the Home module has no saved view marker yet.
@@ -1082,7 +1096,7 @@ export function featureAllowed(account, key, { legacyAllowed = true, scopes = ["
   return grant?.allowed === true && scopes.includes(grant.scope || "all");
 }
 
-export const PILOT_FEATURE_MODULES = Object.freeze(["products", "orders.operations", "orders.my", "orders.maintenance", "orders.shopping", "tasks", "events.requests", "events.calendar", "events.components", "events.team", "kits", "proposals", "orders.review", "stocktaking", "expenses", "expenses.users", "users", "b2c.database", "b2c.forms", "backup", "history", "kpis", "sla", "home"]);
+export const PILOT_FEATURE_MODULES = Object.freeze(["products", "orders.operations", "orders.my", "orders.maintenance", "orders.shopping", "tasks", "events.requests", "events.calendar", "events.components", "events.team", "kits", "proposals", "orders.review", "stocktaking", "expenses", "expenses.users", "users", "b2c.database", "b2c.forms", "backup", "history", "kpis", "sla", "home", "notifications", "account"]);
 
 // Permissions with audited server-side gates and corresponding administrator controls.
 // Do not expose unprotected actions; that would imply false security.
@@ -1129,4 +1143,6 @@ export const ACTIVE_PILOT_FEATURE_KEYS = Object.freeze([
   "events.components.delete", "events.components.upload",
   "events.team.view", "events.team.member_create", "events.team.member_edit",
   "events.team.member_delete", "events.team.attendance_manage", "events.team.photo_upload",
+  "notifications.view", "notifications.read_manage", "notifications.preferences",
+  "account.view", "account.edit", "account.avatar", "account.password",
 ]);

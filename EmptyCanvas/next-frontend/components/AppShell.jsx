@@ -107,6 +107,8 @@ export default function AppShell({
   const allowedPages = Array.isArray(account?.allowedPages) ? account.allowedPages : [];
   const classicLinks = CLASSIC_MAIN_LINKS.filter((link) => {
     if (!canSeeNavigationLink(link, allowedPages)) return false;
+    if (link.href === "/next/notifications") return featureAllowed(account, "notifications.view");
+    if (link.href === "/next/account") return featureAllowed(account, "account.view");
     if (link.href === "/next/home") return featureAllowed(account, "home.view");
     if (link.href === "/next/kpis") return featureAllowed(account, "kpis.view");
     if (link.href === "/next/users-center") return featureAllowed(account, "users.view");
@@ -213,7 +215,7 @@ export default function AppShell({
               </div>
               <div className="right topbar-right">
                 <HeaderSearch title={title} />
-                <NotificationsBell classic />
+                {featureAllowed(account, "notifications.view") ? <NotificationsBell classic canManageRead={featureAllowed(account, "notifications.read_manage")} /> : null}
                 <UserProfileMenu account={account} />
               </div>
             </div>

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getDirectAccountGate } from "../../../../lib/products-auth";
+import { notificationActionGate } from "../../../../lib/personal-notification-gate";
 import { markNotificationsReadForMember } from "../../../../lib/notifications-data";
 
 export const dynamic = "force-dynamic";
@@ -11,8 +11,8 @@ function reply(payload, status = 200) {
 }
 
 export async function POST(request) {
-  const gate = await getDirectAccountGate([], { authOnly: true });
-  if (!gate.ok || !gate.memberId) return reply({ success: false, error: "Authentication required" }, 401);
+  const gate = await notificationActionGate("notifications.read_manage");
+  if (!gate.ok || !gate.memberId) return reply({ success: false, error: gate.error || "Authentication required" }, gate.status || 401);
   const body = await request.json().catch(() => ({}));
   try {
     return reply(await markNotificationsReadForMember(gate.memberId, body?.ids));

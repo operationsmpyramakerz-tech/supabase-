@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import AppShell from "../../components/AppShell";
 import AccountClient from "../../components/account/AccountClient";
+import { featureAllowed } from "../../lib/feature-permissions-registry";
 import { getDirectAccountGate } from "../../lib/products-auth";
 
 export const dynamic = "force-dynamic";
@@ -24,6 +25,10 @@ export default async function AccountPage() {
         </section>
       </main>
     );
+  }
+
+  if (!featureAllowed(gate.account, "account.view")) {
+    return <main className="standalone-state"><section className="state-card"><h1>Profile access denied</h1><p>You do not have permission to view your profile.</p><a className="secondary-button" href="/next/home">Return to Home</a></section></main>;
   }
 
   return (

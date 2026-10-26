@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { prepareAccountImageUpload } from "../../../../lib/account-direct";
+import { featureAllowed } from "../../../../lib/feature-permissions-registry";
 import { getDirectAccountGate } from "../../../../lib/products-auth";
 
 export const dynamic = "force-dynamic";
@@ -15,6 +16,10 @@ export async function POST(request) {
   const gate = await getDirectAccountGate([]);
   if (!gate.ok || !gate.account) {
     return json({ ok: false, error: gate.error || "Authentication required." }, gate.status || 503);
+  }
+
+  if (!featureAllowed(gate.account, "account.view") || !featureAllowed(gate.account, "account.avatar")) {
+    return json({ ok: false, error: "Permission account.avatar is not allowed." }, 403);
   }
 
   try {

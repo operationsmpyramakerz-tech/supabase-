@@ -1,5 +1,6 @@
 import "server-only";
 
+import { featureAllowed } from "./feature-permissions-registry";
 import { getDirectAccountGate } from "./products-auth";
 import { loadHomeOverviewDirect } from "./home-overview-data";
 import { resolveHomeSelection } from "./home-team-scopes";
@@ -82,6 +83,7 @@ export async function fetchDirectPageBootstrap(pathname) {
     if (scope === "notifications") {
       const gate = await getDirectAccountGate([]);
       if (!gate.ok) return failure(gate.status || 503, gate.error || "Authentication required.");
+      if (!featureAllowed(gate.account, "notifications.view")) return failure(403, "Permission notifications.view is not allowed.");
       const payload = await notificationsForMember(gate.memberId, { limit: 80 });
       return result(200, pageBundle(scope, [
         resource("/api/account", gate.account, 15_000),

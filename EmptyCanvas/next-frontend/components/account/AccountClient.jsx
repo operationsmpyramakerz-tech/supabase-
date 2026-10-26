@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
+import { featureAllowed } from "../../lib/feature-permissions-registry";
 
 const EditFieldModal = dynamic(() => import("./AccountDialogs").then((module) => module.EditFieldModal), { ssr: false });
 const NotificationPreferencesPanel = dynamic(() => import("../notifications/NotificationPreferencesPanel"), { ssr: false });
@@ -292,6 +293,10 @@ export default function AccountClient({ initialAccount }) {
   const [theme, setTheme] = useState("light");
   const [showNotificationPreferences, setShowNotificationPreferences] = useState(false);
   const profileInputRef = useRef(null);
+  const canEditProfile = featureAllowed(initialAccount, "account.edit");
+  const canEditAvatar = featureAllowed(initialAccount, "account.avatar");
+  const canChangePassword = featureAllowed(initialAccount, "account.password");
+  const canChangeNotificationSettings = featureAllowed(initialAccount, "notifications.preferences");
 
   useEffect(() => {
     const syncTheme = () => setTheme(currentTheme());
@@ -339,7 +344,7 @@ export default function AccountClient({ initialAccount }) {
   }
 
   function selectImage(kind, file) {
-    if (!file) return;
+    if (!canEditAvatar || !file) return;
     const isImage = lower(file.type).startsWith("image/") || /\.(png|jpe?g|webp|gif|bmp|avif|svg)$/i.test(file.name || "");
     if (!isImage) return showToast("error", "Invalid file", "Only image files can be used for the account profile.");
     if (file.size > 10 * 1024 * 1024) return showToast("error", "Image too large", "Please choose an image up to 10 MB.");
@@ -347,6 +352,7 @@ export default function AccountClient({ initialAccount }) {
   }
 
   async function removeImage() {
+    if (!canEditAvatar) return;
     setBusyAction("remove-profile");
     try {
       await requestJson("/next/api/account/image-direct?kind=profile", { method: "DELETE" });
@@ -374,14 +380,14 @@ export default function AccountClient({ initialAccount }) {
         <div className="account-panel account-panel--profile profile-settings-page">
           <section className="profile-settings-summary" aria-label="Profile summary">
             <div className="profile-settings-avatar-wrap">
-              <button className="profile-settings-avatar" type="button" aria-label="Change profile picture" onClick={() => profileInputRef.current?.click()}>
+              <button className="profile-settings-avatar" type="button" aria-label="Change profile picture" disabled={!canEditAvatar} onClick={() => canEditAvatar && profileInputRef.current?.click()}>
                 {account.photoUrl ? <img src={account.photoUrl} width="84" height="84" alt={`${displayName} profile picture`} /> : <span>{initials(displayName)}</span>}
               </button>
-              <button className="profile-settings-avatar-edit" type="button" aria-label="Edit profile picture" onClick={() => profileInputRef.current?.click()} disabled={busyAction === "remove-profile"}>
+              <button className="profile-settings-avatar-edit" type="button" aria-label="Edit profile picture" onClick={() => canEditAvatar && profileInputRef.current?.click()} disabled={!canEditAvatar || busyAction === "remove-profile"}>
                 <Icon name="camera" size={15} />
               </button>
-              {account.photoUrl ? (
-                <button className="profile-settings-avatar-remove" type="button" aria-label="Remove profile picture" onClick={() => setRemoveRequest("profile")} disabled={busyAction === "remove-profile"}>
+              {account.photoUrl && canEditAvatar ? (
+                <button className="profile-settings-avatar-remove" type="button" aria-label="Remove profile picture" onClick={() => setRemoveRequest("profile")} disabled={!canEditAvatar || busyAction === "remove-profile"}>
                   <Icon name="x" size={14} />
                 </button>
               ) : null}
@@ -397,7 +403,7 @@ export default function AccountClient({ initialAccount }) {
           <section className="profile-settings-section" aria-labelledby="profile-account-heading">
             <h3 id="profile-account-heading">Account</h3>
             <div className="profile-settings-list">
-              {FIELD_META.map((field) => {
+              {FIELD_META.filter((field) => field.key === "password" ? canChangePassword : canEditProfile).map((field) => {
                 const iconName = { name: "user", department: "building", position: "briefcase", phone: "phone", email: "mail", employeeCode: "hash", password: "lock" }[field.key] || "user";
                 const display = fieldDisplay(account, field);
                 return (
@@ -434,15 +440,15 @@ export default function AccountClient({ initialAccount }) {
                   <span><Icon name={theme === "dark" ? "moon" : "sun"} size={14} /></span>
                 </button>
               </div>
-              <button className="profile-settings-row" type="button" aria-expanded={showNotificationPreferences} onClick={() => setShowNotificationPreferences((value) => !value)}>
+              {canChangeNotificationSettings ? <button className="profile-settings-row" type="button" aria-expanded={showNotificationPreferences} onClick={() => setShowNotificationPreferences((value) => !value)}>
                 <span className="profile-settings-row-icon" aria-hidden="true"><Icon name="alert" size={19} /></span>
                 <span className="profile-settings-row-copy">
                   <strong>Notifications</strong>
                   <small>Customize In-App, Push and Email notifications</small>
                 </span>
                 <span className="profile-settings-chevron" aria-hidden="true"><Icon name="chevron" size={18} /></span>
-              </button>
-              {showNotificationPreferences ? <NotificationPreferencesPanel /> : null}
+              </button> : null}
+              {canChangeNotificationSettings && showNotificationPreferences ? <NotificationPreferencesPanel /> : null}
               <button className="profile-settings-row" type="button" onClick={() => document.getElementById("profile-files-media")?.scrollIntoView({ behavior: "smooth", block: "start" })}>
                 <span className="profile-settings-row-icon" aria-hidden="true"><Icon name="paperclip" size={19} /></span>
                 <span className="profile-settings-row-copy">

@@ -47,7 +47,7 @@ function triggerBackgroundNotificationScan() {
   return backgroundScanInflight;
 }
 
-export default function NotificationsBell({ classic = false }) {
+export default function NotificationsBell({ classic = false, canManageRead = true }) {
   const router = useRouter();
   const [items, setItems] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -175,6 +175,7 @@ export default function NotificationsBell({ classic = false }) {
   }, [classic, open]);
 
   async function markRead(item) {
+    if (!canManageRead) return;
     const id = notificationText(item?.id);
     if (!id || item?.read) return;
     mutationEpochRef.current += 1;
@@ -194,6 +195,7 @@ export default function NotificationsBell({ classic = false }) {
   }
 
   async function markAllRead() {
+    if (!canManageRead) return;
     if (!unreadCount) return;
     mutationEpochRef.current += 1;
     const previous = items;
@@ -241,7 +243,7 @@ export default function NotificationsBell({ classic = false }) {
           <div className="notif-center-card">
             <div className="notif-center-head">
               <div className="notif-center-title">Notifications</div>
-              <button type="button" className="notif-center-markall" onClick={markAllRead} disabled={!unreadCount}>Mark all read</button>
+              {canManageRead ? <button type="button" className="notif-center-markall" onClick={markAllRead} disabled={!unreadCount}>Mark all read</button> : null}
             </div>
 
             <div className="notif-center-tabs" role="tablist" aria-label="Notification filters">
@@ -328,7 +330,7 @@ export default function NotificationsBell({ classic = false }) {
         <section className="next-notif-bell__panel" aria-label="Notifications preview">
           <header>
             <div><strong>Notifications</strong><span>{unreadCount ? `${unreadCount} unread` : "All caught up"}</span></div>
-            <button type="button" onClick={markAllRead} disabled={!unreadCount}>Mark all read</button>
+            {canManageRead ? <button type="button" onClick={markAllRead} disabled={!unreadCount}>Mark all read</button> : null}
           </header>
 
           <div className="next-notif-bell__list">
