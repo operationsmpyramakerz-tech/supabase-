@@ -238,3 +238,10 @@
  .pr-report-columns {grid-template-columns:1fr;}.pr-report-followup {grid-template-columns:1fr;}
  .pr-report-exports>div:last-child .pr-secondary {flex:1;}.pr-report-quantities {grid-template-columns:repeat(2,minmax(0,1fr));}
  .pr-report-controls .pr-field {min-width:150px;}.pr-report-actions {justify-content:flex-end;}}
+/* Phase 7: central project Kit carton allocation */
+.pr-pool .pr-pool-create{display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) auto;align-items:end;gap:10px;margin:14px 0;}
+.pr-pool .pr-field select{width:100%;padding:12px;border:1px solid var(--border,#e0e0e4);border-radius:12px;background:var(--surface,#fff);color:inherit;font:inherit;}
+.pr-pool .pr-delivery-line{gap:16px;}
+.pr-pool .pr-qty-summary{margin:14px 0;}
+.pr-pool .pr-carton-pills{margin:12px 0;}
+@media(max-width:800px){.pr-pool .pr-pool-create{grid-template-columns:1fr;}.pr-pool .pr-delivery-fields{grid-template-columns:1fr;}}

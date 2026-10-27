@@ -13,7 +13,7 @@ function downloadCsv(rows, filename) {
 const emptyTransport={carrier:"",trackingReference:"",notes:""};
 
 export default function PackingDelivery({schoolId,schoolName,proposalName,request,allowed,stageStatuses=[],onClose}) {
-  const [data,setData]=useState({shipments:[],lines:[],components:[]});
+  const [data,setData]=useState({shipments:[],lines:[],components:[],projectAllocationShipmentIds:[]});
   const [loaded,setLoaded]=useState(false);
   const [error,setError]=useState("");
   const [notice,setNotice]=useState("");
@@ -29,6 +29,7 @@ export default function PackingDelivery({schoolId,schoolName,proposalName,reques
   const [deliveryNotes,setDeliveryNotes]=useState("");
   const [query,setQuery]=useState("");
   const shipment=data.shipments.find(s=>s.id===cartonId);
+  const projectLinked=Array.isArray(data.projectAllocationShipmentIds)&&data.projectAllocationShipmentIds.includes(cartonId);
   const lines=useMemo(()=>data.lines.filter(l=>l.shipment_id===cartonId),[data.lines,cartonId]);
   const lineByComponent=useMemo(()=>new Map(lines.map(l=>[l.component_id,l])),[lines]);
   const packedByComponent=useMemo(()=>{
@@ -51,7 +52,7 @@ export default function PackingDelivery({schoolId,schoolName,proposalName,reques
   const canPack=allowed&&preparingComplete&&!packingLocked;
   async function refresh(nextId="") {
     const json=await request(`/shipments?schoolId=${encodeURIComponent(schoolId)}`);
-    const next={shipments:json.shipments||[],lines:json.lines||[],components:json.components||[]};
+    const next={shipments:json.shipments||[],lines:json.lines||[],components:json.components||[],projectAllocationShipmentIds:json.projectAllocationShipmentIds||[]};
     setData(next);setLoaded(true);
     setCartonId(current=>{
       const value=nextId||current;
@@ -63,7 +64,7 @@ export default function PackingDelivery({schoolId,schoolName,proposalName,reques
     let active=true;
     request(`/shipments?schoolId=${encodeURIComponent(schoolId)}`).then(json=>{
       if(!active)return;
-      const next={shipments:json.shipments||[],lines:json.lines||[],components:json.components||[]};
+      const next={shipments:json.shipments||[],lines:json.lines||[],components:json.components||[],projectAllocationShipmentIds:json.projectAllocationShipmentIds||[]};
       setData(next);setCartonId(next.shipments.find(s=>s.status!=="cancelled")?.id||"");setLoaded(true);
     }).catch(err=>{if(active){setError(err.message);setLoaded(true);}});
     return()=>{active=false;};
@@ -127,7 +128,7 @@ export default function PackingDelivery({schoolId,schoolName,proposalName,reques
     downloadCsv(rows,`school-delivery-reconciliation-${schoolId}.csv`);
   }
   return <div className="pr-delivery">
-    <div className="pr-manifest-title"><div><h3>Packing & Delivery</h3><p>{schoolName} · {proposalName} · One carton record per labelled box / dispatch unit</p></div><button className="pr-secondary" onClick={onClose}>Close</button></div>
+    <div className="pr-manifest-title"><div><h3>Packing & Delivery</h3><p>{schoolName} · {proposalName} · School delivery batches (including allocations from shared project cartons)</p></div><button className="pr-secondary" onClick={onClose}>Close</button></div>
     {error&&<div className="pr-alert" role="alert">{error}</div>}
     {notice&&<div className="pr-manifest-success" role="status">{notice}</div>}
     {!loaded?<p className="pr-muted">Loading cartons…</p>:!data.components.length?<div className="pr-manifest-empty"><h3>Capture Proposal components first</h3><p>Open Components & QC and capture the school BOM before creating packing records.</p></div>:<>
@@ -138,14 +139,17 @@ export default function PackingDelivery({schoolId,schoolName,proposalName,reques
       {canPack&&<div className="pr-delivery-create"><label className="pr-field">New carton / packing label<input maxLength={100} placeholder="30J-S01-BOX01" value={cartonLabel} onChange={e=>setCartonLabel(e.target.value)}/></label><button className="pr-primary" disabled={busy||cartonLabel.trim().length<2} onClick={create}>Add carton</button></div>}
       <div className="pr-carton-pills">{data.shipments.filter(s=>s.status!=="cancelled").map(s=><button type="button" key={s.id} className={`pr-carton-pill ${cartonId===s.id?"selected":""}`} onClick={()=>setCartonId(s.id)}><strong>{s.carton_label}</strong><small>{s.status}</small></button>)}</div>
       {!data.shipments.some(s=>s.status!=="cancelled")?<p className="pr-muted">No cartons yet. Create a carton to begin packing.</p>:shipment&&<div className="pr-carton-detail">
-        <div className="pr-delivery-toolbar"><div><h4>{shipment.carton_label}</h4><p className="pr-muted">{shipment.status.toUpperCase()} · {lines.length} component lines · {lines.reduce((a,l)=>a+num(l.packed_qty),0)} packed units</p></div><div className="pr-carton-actions"><button className="pr-secondary" onClick={exportPacking}>Packing list CSV</button>{canPack&&shipment.status==="draft"&&<button className="pr-secondary" disabled={busy} onClick={cancelCarton}>Cancel carton</button>}</div></div>
+        <div className="pr-delivery-toolbar"><div><h4>{shipment.carton_label}</h4><p className="pr-muted">{shipment.status.toUpperCase()} · {lines.length} component lines · {lines.reduce((a,l)=>a+num(l.packed_qty),0)} packed units</p></div><div className="pr-carton-actions"><button className="pr-secondary" onClick={exportPacking}>Packing list CSV</button>{canPack&&!projectLinked&&shipment.status==="draft"&&<button className="pr-secondary" disabled={busy} onClick={cancelCarton}>Cancel carton</button>}</div></div>
         {shipment.status==="draft"&&<>
+          {projectLinked&&<p className="pr-hint">This batch was allocated from a central Project Kit Carton. Edit or reverse its quantities only in Project Kit Cartons before dispatch. The school can still dispatch and record signed receipt here.</p>}
+          {!projectLinked&&<>
           <label className="pr-search pr-delivery-search"><input placeholder="Find component / kit" aria-label="Find packing component" value={query} onChange={e=>setQuery(e.target.value)}/></label>
           <div className="pr-delivery-lines">{components.map(c=>{const line=lineByComponent.get(c.id);const allocated=packedByComponent.get(c.id)||0;const available=Math.max(0,num(c.prepared_qty)-allocated+num(line?.packed_qty));return <div className="pr-delivery-line" key={c.id}>
             <div><strong>{c.product_name}</strong><small>{kitNames(c.source_kits)||"Proposal item"}</small><small>Required {c.planned_qty} · Prepared {c.prepared_qty} · Available for this carton {available}</small></div>
             <div className="pr-line-input"><input aria-label={`Packed ${c.product_name}`} type="number" min="0" max={available} step="1" disabled={!canPack||busy} value={packingDraft[c.id]??String(line?.packed_qty||0)} onChange={e=>setPackingDraft(prev=>({...prev,[c.id]:e.target.value}))}/>{canPack&&<button className="pr-secondary" disabled={busy} onClick={()=>savePacked(c)}>Save</button>}</div>
           </div>;})}{!components.length&&<p className="pr-muted">No matching components.</p>}</div>
           {packingLocked?<p className="pr-hint">Packing is completed. Reopen Packing (and subsequent completed stages) before editing cartons.</p>:<p className="pr-muted">Save each packed component. Enter zero to remove the component from a draft carton. Packed counts cannot exceed prepared units across all cartons.</p>}
+          </>}
           {allowed&&<div className="pr-delivery-action"><h4>Dispatch details</h4><div className="pr-delivery-fields"><label className="pr-field">Transport provider / vehicle<input maxLength={160} value={draftTransport.carrier} onChange={e=>setDraftTransport(v=>({...v,carrier:e.target.value}))} placeholder="Company vehicle / carrier"/></label><label className="pr-field">Waybill / tracking (optional)<input maxLength={160} value={draftTransport.trackingReference} onChange={e=>setDraftTransport(v=>({...v,trackingReference:e.target.value}))}/></label></div><label className="pr-field">Transport notes<textarea rows={2} maxLength={1000} value={draftTransport.notes} onChange={e=>setDraftTransport(v=>({...v,notes:e.target.value}))}/></label><button className="pr-primary" disabled={busy||!packingComplete||!draftTransport.carrier.trim()||!lines.length} onClick={dispatch}>Mark Dispatched</button>{!packingComplete&&<p className="pr-hint">Complete stage 4 (Packing & Dispatch) before dispatching any carton.</p>}</div>}
         </>}
         {shipment.status==="dispatched"&&<div className="pr-delivery-action"><h4>School signed receipt</h4><p className="pr-muted">Transport: {shipment.carrier} {shipment.tracking_reference?`· ${shipment.tracking_reference}`:""}. Enter the actual quantity the school received for every component.</p><div className="pr-delivery-lines">{lines.map(l=>{const c=data.components.find(x=>x.id===l.component_id);return <div className="pr-delivery-line" key={l.component_id}><div><strong>{c?.product_name||"Component"}</strong><small>Packed {l.packed_qty}</small></div><div className="pr-line-input"><input type="number" min="0" max={l.packed_qty} step="1" disabled={!allowed||busy} aria-label={`Received ${c?.product_name||"component"}`} value={receiptDraft[l.component_id]??String(l.packed_qty)} onChange={e=>setReceiptDraft(v=>({...v,[l.component_id]:e.target.value}))}/></div></div>;})}</div>
