@@ -54,7 +54,7 @@ test('legacy school carton quantity changes and cancellation are guarded for poo
   assert.match(sql,/trg_erp_prep_guard_pool_shipment/);
   assert.match(sql,/NEW\.status='cancelled'/);
   assert.match(schoolDelivery,/projectLinked&&<p/);
-  assert.match(schoolDelivery,/!projectLinked&&<>/);
+  assert.match(schoolDelivery,/!projectLinked&&!replacementLinked&&<>/);
   assert.match(baseShipmentService,/projectAllocationShipmentIds/);
 });
 test('reversal only allowed on undispatched school batch and removes shipment packing lines',()=>{

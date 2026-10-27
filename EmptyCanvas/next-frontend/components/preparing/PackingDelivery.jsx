@@ -13,7 +13,7 @@ function downloadCsv(rows, filename) {
 const emptyTransport={carrier:"",trackingReference:"",notes:""};
 
 export default function PackingDelivery({schoolId,schoolName,proposalName,request,allowed,stageStatuses=[],onClose}) {
-  const [data,setData]=useState({shipments:[],lines:[],components:[],projectAllocationShipmentIds:[]});
+  const [data,setData]=useState({shipments:[],lines:[],components:[],returns:[],projectAllocationShipmentIds:[],replacementShipmentIds:[]});
   const [loaded,setLoaded]=useState(false);
   const [error,setError]=useState("");
   const [notice,setNotice]=useState("");
@@ -30,20 +30,25 @@ export default function PackingDelivery({schoolId,schoolName,proposalName,reques
   const [query,setQuery]=useState("");
   const shipment=data.shipments.find(s=>s.id===cartonId);
   const projectLinked=Array.isArray(data.projectAllocationShipmentIds)&&data.projectAllocationShipmentIds.includes(cartonId);
+  const replacementLinked=Array.isArray(data.replacementShipmentIds)&&data.replacementShipmentIds.includes(cartonId);
+  const activeBatchIds=useMemo(()=>new Set(data.shipments.filter(s=>s.status!=="cancelled").map(s=>s.id)),[data.shipments]);
   const lines=useMemo(()=>data.lines.filter(l=>l.shipment_id===cartonId),[data.lines,cartonId]);
   const lineByComponent=useMemo(()=>new Map(lines.map(l=>[l.component_id,l])),[lines]);
   const packedByComponent=useMemo(()=>{
-    const totals=new Map();for(const l of data.lines)totals.set(l.component_id,(totals.get(l.component_id)||0)+num(l.packed_qty));return totals;
-  },[data.lines]);
+    const totals=new Map();for(const l of data.lines)if(activeBatchIds.has(l.shipment_id))totals.set(l.component_id,(totals.get(l.component_id)||0)+num(l.packed_qty));return totals;
+  },[data.lines,activeBatchIds]);
+  const returnedByComponent=useMemo(()=>{const totals=new Map();for(const r of data.returns)totals.set(r.component_id,(totals.get(r.component_id)||0)+num(r.quantity));return totals;},[data.returns]);
   const receivedByComponent=useMemo(()=>{
-    const totals=new Map();for(const l of data.lines)totals.set(l.component_id,(totals.get(l.component_id)||0)+num(l.received_qty));return totals;
-  },[data.lines]);
+    const totals=new Map();for(const l of data.lines)if(activeBatchIds.has(l.shipment_id))totals.set(l.component_id,(totals.get(l.component_id)||0)+num(l.received_qty));return totals;
+  },[data.lines,activeBatchIds]);
   const summary=useMemo(()=>{
     const required=data.components.reduce((a,c)=>a+num(c.planned_qty),0);
-    const packed=data.lines.reduce((a,l)=>a+num(l.packed_qty),0);
-    const delivered=data.lines.reduce((a,l)=>a+num(l.received_qty),0);
-    return {required,packed,delivered,packingGap:Math.max(0,required-packed),deliveryGap:Math.max(0,required-delivered)};
-  },[data.components,data.lines]);
+    const packed=data.lines.filter(l=>activeBatchIds.has(l.shipment_id)).reduce((a,l)=>a+num(l.packed_qty),0);
+    const gross=data.lines.filter(l=>activeBatchIds.has(l.shipment_id)).reduce((a,l)=>a+num(l.received_qty),0);
+    const returned=data.returns.reduce((a,r)=>a+num(r.quantity),0);
+    const delivered=gross-returned;
+    return {required,packed,gross,returned,delivered,packingGap:Math.max(0,required-packed),deliveryGap:Math.max(0,required-delivered)};
+  },[data.components,data.lines,data.returns,activeBatchIds]);
   const components=data.components.filter(c=>`${c.product_name} ${kitNames(c.source_kits)}`.toLowerCase().includes(query.trim().toLowerCase()));
   const statusOf=k=>stageStatuses.find(s=>s.stage_key===k)?.status || "not_started";
   const preparingComplete=statusOf("preparing")==="completed";
@@ -52,7 +57,7 @@ export default function PackingDelivery({schoolId,schoolName,proposalName,reques
   const canPack=allowed&&preparingComplete&&!packingLocked;
   async function refresh(nextId="") {
     const json=await request(`/shipments?schoolId=${encodeURIComponent(schoolId)}`);
-    const next={shipments:json.shipments||[],lines:json.lines||[],components:json.components||[],projectAllocationShipmentIds:json.projectAllocationShipmentIds||[]};
+    const next={shipments:json.shipments||[],lines:json.lines||[],components:json.components||[],projectAllocationShipmentIds:json.projectAllocationShipmentIds||[],returns:json.returns||[],replacementShipmentIds:json.replacementShipmentIds||[]};
     setData(next);setLoaded(true);
     setCartonId(current=>{
       const value=nextId||current;
@@ -64,7 +69,7 @@ export default function PackingDelivery({schoolId,schoolName,proposalName,reques
     let active=true;
     request(`/shipments?schoolId=${encodeURIComponent(schoolId)}`).then(json=>{
       if(!active)return;
-      const next={shipments:json.shipments||[],lines:json.lines||[],components:json.components||[],projectAllocationShipmentIds:json.projectAllocationShipmentIds||[]};
+      const next={shipments:json.shipments||[],lines:json.lines||[],components:json.components||[],projectAllocationShipmentIds:json.projectAllocationShipmentIds||[],returns:json.returns||[],replacementShipmentIds:json.replacementShipmentIds||[]};
       setData(next);setCartonId(next.shipments.find(s=>s.status!=="cancelled")?.id||"");setLoaded(true);
     }).catch(err=>{if(active){setError(err.message);setLoaded(true);}});
     return()=>{active=false;};
@@ -122,9 +127,9 @@ export default function PackingDelivery({schoolId,schoolName,proposalName,reques
     downloadCsv(rows,`carton-${(shipment?.carton_label||"packing").replace(/[^\w-]/g,"_")}.csv`);
   }
   function exportReconciliation() {
-    const rows=[["School",schoolName],["Proposal",proposalName],[],["Component","Source kits","Required","Prepared","Packed","School received","Packing gap","Delivery gap"]];
-    for(const c of data.components){const packed=packedByComponent.get(c.id)||0;const received=receivedByComponent.get(c.id)||0;
-      rows.push([c.product_name,kitNames(c.source_kits),c.planned_qty,c.prepared_qty,packed,received,Math.max(0,c.planned_qty-packed),Math.max(0,c.planned_qty-received)]);}
+    const rows=[["School",schoolName],["Proposal",proposalName],[],["Component","Source kits","Required","Prepared","Packed","Gross school receipt","Returned","Net school receipt","Packing gap","Delivery gap"]];
+    for(const c of data.components){const packed=packedByComponent.get(c.id)||0;const gross=receivedByComponent.get(c.id)||0;const returned=returnedByComponent.get(c.id)||0;const net=gross-returned;
+      rows.push([c.product_name,kitNames(c.source_kits),c.planned_qty,c.prepared_qty,packed,gross,returned,net,Math.max(0,c.planned_qty-packed),Math.max(0,c.planned_qty-net)]);}
     downloadCsv(rows,`school-delivery-reconciliation-${schoolId}.csv`);
   }
   return <div className="pr-delivery">
@@ -132,17 +137,18 @@ export default function PackingDelivery({schoolId,schoolName,proposalName,reques
     {error&&<div className="pr-alert" role="alert">{error}</div>}
     {notice&&<div className="pr-manifest-success" role="status">{notice}</div>}
     {!loaded?<p className="pr-muted">Loading cartons…</p>:!data.components.length?<div className="pr-manifest-empty"><h3>Capture Proposal components first</h3><p>Open Components & QC and capture the school BOM before creating packing records.</p></div>:<>
-      <div className="pr-qty-summary pr-delivery-totals">{[["Required",summary.required],["Prepared",data.components.reduce((a,c)=>a+num(c.prepared_qty),0)],["Packed",summary.packed],["School received",summary.delivered],["To pack",summary.packingGap],["Receipt gap",summary.deliveryGap]].map(([label,value])=><div key={label}><small>{label}</small><strong>{value}</strong></div>)}</div>
+      <div className="pr-qty-summary pr-delivery-totals">{[["Required",summary.required],["Prepared",data.components.reduce((a,c)=>a+num(c.prepared_qty),0)],["Packed",summary.packed],["Gross received",summary.gross],["Returned",summary.returned],["Net school received",summary.delivered],["To pack",summary.packingGap],["Receipt gap",summary.deliveryGap]].map(([label,value])=><div key={label}><small>{label}</small><strong>{value}</strong></div>)}</div>
       <p className="pr-muted">Create carton labels while Packing is open. Complete the Packing stage when all required units are allocated, then dispatch each carton. Finally record signed school receipt and reconcile quantities before Delivery Handover.</p>
       <div className="pr-delivery-toolbar"><h4>Cartons / shipments ({data.shipments.filter(s=>s.status!=="cancelled").length})</h4><button className="pr-secondary" onClick={exportReconciliation}>Export reconciliation CSV</button></div>
       {!preparingComplete&&<p className="pr-hint">Complete Sorting & Preparing (stage 3) before making carton lists. This freezes component quantities and avoids packing figures changing during preparation.</p>}
       {canPack&&<div className="pr-delivery-create"><label className="pr-field">New carton / packing label<input maxLength={100} placeholder="30J-S01-BOX01" value={cartonLabel} onChange={e=>setCartonLabel(e.target.value)}/></label><button className="pr-primary" disabled={busy||cartonLabel.trim().length<2} onClick={create}>Add carton</button></div>}
       <div className="pr-carton-pills">{data.shipments.filter(s=>s.status!=="cancelled").map(s=><button type="button" key={s.id} className={`pr-carton-pill ${cartonId===s.id?"selected":""}`} onClick={()=>setCartonId(s.id)}><strong>{s.carton_label}</strong><small>{s.status}</small></button>)}</div>
       {!data.shipments.some(s=>s.status!=="cancelled")?<p className="pr-muted">No cartons yet. Create a carton to begin packing.</p>:shipment&&<div className="pr-carton-detail">
-        <div className="pr-delivery-toolbar"><div><h4>{shipment.carton_label}</h4><p className="pr-muted">{shipment.status.toUpperCase()} · {lines.length} component lines · {lines.reduce((a,l)=>a+num(l.packed_qty),0)} packed units</p></div><div className="pr-carton-actions"><button className="pr-secondary" onClick={exportPacking}>Packing list CSV</button>{canPack&&!projectLinked&&shipment.status==="draft"&&<button className="pr-secondary" disabled={busy} onClick={cancelCarton}>Cancel carton</button>}</div></div>
+        <div className="pr-delivery-toolbar"><div><h4>{shipment.carton_label}</h4><p className="pr-muted">{shipment.status.toUpperCase()} · {lines.length} component lines · {lines.reduce((a,l)=>a+num(l.packed_qty),0)} packed units</p></div><div className="pr-carton-actions"><button className="pr-secondary" onClick={exportPacking}>Packing list CSV</button>{canPack&&!projectLinked&&!replacementLinked&&shipment.status==="draft"&&<button className="pr-secondary" disabled={busy} onClick={cancelCarton}>Cancel carton</button>}</div></div>
         {shipment.status==="draft"&&<>
           {projectLinked&&<p className="pr-hint">This batch was allocated from a central Project Kit Carton. Edit or reverse its quantities only in Project Kit Cartons before dispatch. The school can still dispatch and record signed receipt here.</p>}
-          {!projectLinked&&<>
+          {replacementLinked&&<p className="pr-hint">Controlled replacement batch: quantities are locked here. Cancel draft in Returns & Replacements, or dispatch and record the signed school receipt below.</p>}
+          {!projectLinked&&!replacementLinked&&<>
           <label className="pr-search pr-delivery-search"><input placeholder="Find component / kit" aria-label="Find packing component" value={query} onChange={e=>setQuery(e.target.value)}/></label>
           <div className="pr-delivery-lines">{components.map(c=>{const line=lineByComponent.get(c.id);const allocated=packedByComponent.get(c.id)||0;const available=Math.max(0,num(c.prepared_qty)-allocated+num(line?.packed_qty));return <div className="pr-delivery-line" key={c.id}>
             <div><strong>{c.product_name}</strong><small>{kitNames(c.source_kits)||"Proposal item"}</small><small>Required {c.planned_qty} · Prepared {c.prepared_qty} · Available for this carton {available}</small></div>
@@ -155,11 +161,11 @@ export default function PackingDelivery({schoolId,schoolName,proposalName,reques
         {shipment.status==="dispatched"&&<div className="pr-delivery-action"><h4>School signed receipt</h4><p className="pr-muted">Transport: {shipment.carrier} {shipment.tracking_reference?`· ${shipment.tracking_reference}`:""}. Enter the actual quantity the school received for every component.</p><div className="pr-delivery-lines">{lines.map(l=>{const c=data.components.find(x=>x.id===l.component_id);return <div className="pr-delivery-line" key={l.component_id}><div><strong>{c?.product_name||"Component"}</strong><small>Packed {l.packed_qty}</small></div><div className="pr-line-input"><input type="number" min="0" max={l.packed_qty} step="1" disabled={!allowed||busy} aria-label={`Received ${c?.product_name||"component"}`} value={receiptDraft[l.component_id]??String(l.packed_qty)} onChange={e=>setReceiptDraft(v=>({...v,[l.component_id]:e.target.value}))}/></div></div>;})}</div>
           <div className="pr-delivery-fields"><label className="pr-field">School recipient name<input maxLength={160} disabled={!allowed} value={recipient} onChange={e=>setRecipient(e.target.value)}/></label><label className="pr-field">Signed handover / receipt reference<input maxLength={160} disabled={!allowed} value={receiptReference} onChange={e=>setReceiptReference(e.target.value)}/></label></div><label className="pr-field">Signed document URL (optional HTTPS link)<input type="url" maxLength={2048} disabled={!allowed} placeholder="https://…" value={receiptUrl} onChange={e=>setReceiptUrl(e.target.value)}/></label><label className="pr-field">Delivery notes / discrepancies<textarea maxLength={1000} rows={3} disabled={!allowed} value={deliveryNotes} onChange={e=>setDeliveryNotes(e.target.value)}/></label>
           {allowed&&<button className="pr-primary" disabled={busy||!recipient.trim()||!receiptReference.trim()} onClick={confirmReceipt}>Confirm School Receipt</button>}
-          <p className="pr-hint">Confirm against the actual signed paper. This receipt is permanent; any discrepancy blocks Delivery Handover. Direct file uploads and replacement shipments are not supported yet.</p>
+          <p className="pr-hint">Confirm against the actual signed paper. This receipt is permanent; any discrepancy blocks Delivery Handover. Direct uploads are not available. For short receipts or physical returns, use Returns & Replacements in the school folder.</p>
         </div>}
         {shipment.status==="delivered"&&<div className="pr-delivery-closed"><strong>Received by: {shipment.recipient_name}</strong><span>Receipt: {shipment.receipt_reference}</span><span>Received: {lines.reduce((a,l)=>a+num(l.received_qty),0)} / {lines.reduce((a,l)=>a+num(l.packed_qty),0)} units</span>{shipment.receipt_url&&<a href={shipment.receipt_url} rel="noopener noreferrer" target="_blank">View receipt evidence</a>}{shipment.delivery_notes&&<p>{shipment.delivery_notes}</p>}</div>}
       </div>}
-      {summary.deliveryGap>0&&data.shipments.some(s=>s.status==="delivered")&&<p className="pr-hint">There are {summary.deliveryGap} required units not recorded as received by the school. Delivery Handover cannot be completed until quantities are reconciled.</p>}
+      {summary.deliveryGap>0&&data.shipments.some(s=>s.status==="delivered")&&<p className="pr-hint">There are {summary.deliveryGap} net accepted units outstanding after documented returns. Delivery Handover cannot be completed until quantities are reconciled.</p>}
       <p className="pr-muted">School delivery records do not debit warehouse inventory. Delivery receipts must be signed physically; optional evidence can be referenced by HTTPS link. All updates are checked and audited on the server.</p>
     </>}
   </div>;

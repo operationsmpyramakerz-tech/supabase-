@@ -26,10 +26,11 @@ export function cairoDate(now = new Date()) {
 
 export function buildPreparingProjectReport({ project, schools = [], progress = [], components = [],
   shipments = [], shipmentLines = [], issues = [], checkpoints = [], acceptances = [],
-  closingChecks = [], approvals = [], today = cairoDate() } = {}) {
+  closingChecks = [], approvals = [], returns = [], today = cairoDate() } = {}) {
   const byStage = buckets(progress), byComponents = buckets(components), byShipment = buckets(shipments);
   const byLines = buckets(shipmentLines), byIssues = buckets(issues), byCheckpoints = buckets(checkpoints);
   const byAcceptance = buckets(acceptances), byClosing = buckets(closingChecks), byApproval = buckets(approvals);
+  const byReturns = buckets(returns);
   const rows = arr(schools).map(school => {
     const id = school.id;
     const stageRecords = find(byStage, id);
@@ -45,6 +46,9 @@ export function buildPreparingProjectReport({ project, schools = [], progress = 
     const activeShipments = currentShipments.filter(row => row.status !== "cancelled");
     const shipmentById = new Map(activeShipments.map(row => [row.id, row]));
     const lines = find(byLines, id).filter(row => shipmentById.has(row.shipment_id));
+    const schoolReturns = find(byReturns, id);
+    const returnedQty = schoolReturns.reduce((sum,row)=>sum+number(row.quantity),0);
+    const grossSignedQty = lines.reduce((sum,row)=>sum+(shipmentById.get(row.shipment_id)?.status === "delivered" ? number(row.received_qty) : 0),0);
     const currentCheckpoints = find(byCheckpoints, id);
     const currentClosing = find(byClosing, id);
     const acceptance = find(byAcceptance, id)[0];
@@ -62,7 +66,9 @@ export function buildPreparingProjectReport({ project, schools = [], progress = 
       missing: currentComponents.reduce((sum, row) => sum + Math.max(0, number(row.planned_qty) - number(row.received_qty)), 0),
       usableShortage: currentComponents.reduce((sum, row) => sum + Math.max(0, number(row.planned_qty) - number(row.received_qty) + number(row.damaged_qty)), 0),
       packed: lines.reduce((sum, row) => sum + number(row.packed_qty), 0),
-      delivered: lines.reduce((sum, row) => sum + (shipmentById.get(row.shipment_id)?.status === "delivered" ? number(row.received_qty) : 0), 0),
+      grossDelivered: grossSignedQty,
+      returned: returnedQty,
+      delivered: grossSignedQty-returnedQty,
     } : null;
     const latestDelivery = signed.map(row => row.delivered_at).filter(Boolean).sort().at(-1) || null;
     const current = closed ? "final_closing" : activeStage.key;
@@ -93,7 +99,7 @@ export function buildPreparingProjectReport({ project, schools = [], progress = 
       latestDelivery, anomalies,
     };
   });
-  const initial = { planned: 0, received: 0, prepared: 0, damaged: 0, missing: 0, usableShortage: 0, packed: 0, delivered: 0 };
+  const initial = { planned: 0, received: 0, prepared: 0, damaged: 0, missing: 0, usableShortage: 0, packed: 0, grossDelivered: 0, returned: 0, delivered: 0 };
   const quantityTotals = rows.reduce((sum, row) => {
     for (const key of Object.keys(initial)) sum[key] += row.quantities?.[key] || 0;
     return sum;
@@ -128,13 +134,13 @@ export function csvRows(headings, rows) { return "\uFEFF" + [headings, ...rows].
 
 export function internalPreparingCSV(report) {
   const cols = ["School", "Source Proposal", "Status", "Current Stage", "Completed Stages", "Progress %", "Delivery Handover Completed",
-    "Planned Qty", "Received Qty", "Damaged Qty", "Usable Shortage", "Prepared Qty", "Packed Qty", "School Received Qty",
+    "Planned Qty", "Received Qty", "Damaged Qty", "Usable Shortage", "Prepared Qty", "Packed Qty", "Gross Signed School Qty", "Physical Returns", "Net Accepted School Qty",
     "No BOM Snapshot", "Shipment Count", "Signed Cartons", "Last Delivery", "Open Issues", "Overdue Issues", "Next Issue Deadline",
     "Technical Acceptance", "Closing Checks Verified", "Final Closed", "Data Warnings"];
   return csvRows(cols, report.schools.map(row => [row.name, row.proposal, row.phase, row.stageTitle, `${row.completedStages}/${row.totalStages}`,
     row.progressPercent, row.delivered ? "Yes" : "No", row.quantities?.planned ?? "N/A", row.quantities?.received ?? "N/A",
     row.quantities?.damaged ?? "N/A", row.quantities?.usableShortage ?? "N/A", row.quantities?.prepared ?? "N/A",
-    row.quantities?.packed ?? "N/A", row.quantities?.delivered ?? "N/A", row.hasManifest ? "No" : "Yes",
+    row.quantities?.packed ?? "N/A", row.quantities?.grossDelivered ?? "N/A", row.quantities?.returned ?? "N/A", row.quantities?.delivered ?? "N/A", row.hasManifest ? "No" : "Yes",
     row.shipments.total, row.shipments.signed, row.latestDelivery || "", row.openIssues, row.overdueIssues,
     row.nextIssueDeadline || "", row.technicalAccepted ? "Yes" : "No", `${row.verifiedClosing}/${row.closingTotal}`,
     row.closed ? "Yes" : "No", row.anomalies.join("; ") ]));

@@ -45,6 +45,7 @@ export async function preparingProjectReport(projectId) {
     ["acceptances", "erp_preparing_technical_acceptance", "school_id,confirmation_reference", "school_id.asc"],
     ["closingChecks", "erp_preparing_closing_checks", "school_id,check_key,status", "school_id.asc,check_key.asc"],
     ["approvals", "erp_preparing_closing_approval", "school_id,status", "school_id.asc"],
+    ["returns", "erp_preparing_delivery_returns", "school_id,component_id,quantity", "school_id.asc,component_id.asc"],
   ];
   const output = Object.fromEntries(datasets.map(([key]) => [key, []]));
   // Independent READ queries (no writes). Keep request fan-out bounded for large projects.
