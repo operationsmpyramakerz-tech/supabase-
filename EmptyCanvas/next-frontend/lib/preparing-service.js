@@ -234,3 +234,72 @@ export async function receivePreparingShipment(body,account) {
     p_expected_updated_at:version,p_member_id:actor,
   },{profileName:"preparing.school-receipt"});
 }
+
+// Phase 4 — Operations follows installation/testing; execution remains with technical teams.
+import { TECHNICAL_CHECKPOINTS, TECHNICAL_STATES, ISSUE_STATES, ISSUE_SEVERITIES } from "./preparing-technical";
+const TECHNICAL_CHECKLIST = "erp_preparing_technical_checklist";
+const TECHNICAL_ISSUES = "erp_preparing_technical_issues";
+const TECHNICAL_ACCEPTANCES = "erp_preparing_technical_acceptance";
+function technicalText(value,label,max){ const out=clean(value);if(out.length>max)fail(`${label} cannot exceed ${max} characters.`);return out; }
+function technicalDate(value){const s=clean(value);if(!s)return null;if(!/^\d{4}-\d{2}-\d{2}$/.test(s)||Number.isNaN(Date.parse(`${s}T12:00:00Z`))||new Date(`${s}T12:00:00Z`).toISOString().slice(0,10)!==s)fail("Enter a valid date (YYYY-MM-DD).");return s;}
+function technicalEvidence(value){const s=technicalText(value,"Evidence URL",2048);if(s && !/^https:\/\/[^\s]+$/i.test(s))fail("Evidence must be a valid HTTPS URL.");return s;}
+function technicalVersion(value){const s=clean(value);if(!s)return null;if(!Number.isFinite(Date.parse(s)))fail("Invalid record version. Refresh and retry.",409);return s;}
+export async function preparingTechnical(schoolId){
+  serviceOnly();const school=await requireSchool(schoolId);
+  const [checkpoints,issues,acceptances]=await Promise.all([
+    select(TECHNICAL_CHECKLIST,{select:"*",school_id:`eq.${school.id}`,limit:"20"},{profileName:"preparing.technical-checkpoints"}),
+    select(TECHNICAL_ISSUES,{select:"*",school_id:`eq.${school.id}`,order:"created_at.desc",limit:"250"},{profileName:"preparing.technical-issues"}),
+    select(TECHNICAL_ACCEPTANCES,{select:"*",school_id:`eq.${school.id}`,limit:"1"},{profileName:"preparing.technical-acceptance"}),
+  ]);
+  return {checkpoints:checkpoints||[],issues:issues||[],acceptance:acceptances?.[0]||null};
+}
+export async function updateTechnicalCheckpoint(body,account){
+  serviceOnly();const actor=identity(account);const schoolId=uuid(body?.schoolId);await requireSchool(schoolId);
+  const key=clean(body?.milestoneKey),status=clean(body?.status);
+  if(!TECHNICAL_CHECKPOINTS.some(row=>row.key===key)||!TECHNICAL_STATES.includes(status))fail("Invalid technical checkpoint or status.");
+  if(status==="completed"&&!technicalText(body?.ownerName,"Technical owner",160))fail("Assign the technical owner before completing a checkpoint.");
+  return rpc("erp_preparing_save_technical_checkpoint",{
+    p_school_id:schoolId,p_key:key,p_status:status,
+    p_owner:technicalText(body?.ownerName,"Technical owner",160),p_due_date:technicalDate(body?.dueDate),
+    p_notes:technicalText(body?.notes,"Notes",1500),p_evidence_url:technicalEvidence(body?.evidenceUrl),
+    p_expected_updated_at:technicalVersion(body?.expectedUpdatedAt),p_member_id:actor,
+  },{profileName:"preparing.technical-checkpoint"});
+}
+export async function createTechnicalIssue(body,account){
+  serviceOnly();const actor=identity(account);const schoolId=uuid(body?.schoolId);await requireSchool(schoolId);
+  const title=technicalText(body?.title,"Issue title",180),severity=clean(body?.severity);
+  if(title.length<3||!ISSUE_SEVERITIES.includes(severity))fail("Provide an issue title and valid severity.");
+  return rpc("erp_preparing_create_technical_issue",{
+    p_school_id:schoolId,p_title:title,p_description:technicalText(body?.description,"Description",2000),
+    p_severity:severity,p_owner:technicalText(body?.ownerName,"Technical owner",160),p_due_date:technicalDate(body?.dueDate),
+    p_member_id:actor,
+  },{profileName:"preparing.technical-issue-create"});
+}
+export async function updateTechnicalIssue(body,account){
+  serviceOnly();const actor=identity(account);const schoolId=uuid(body?.schoolId);await requireSchool(schoolId);
+  const status=clean(body?.status),severity=clean(body?.severity);
+  if(!ISSUE_STATES.includes(status)||!ISSUE_SEVERITIES.includes(severity))fail("Invalid issue status or severity.");
+  const title=technicalText(body?.title,"Issue title",180);
+  const resolution=technicalText(body?.resolutionNotes,"Resolution",2000);
+  if(title.length<3||(status==="resolved"&&resolution.length<3))fail("Issue title and documented resolution are required.");
+  return rpc("erp_preparing_update_technical_issue",{
+    p_school_id:schoolId,p_issue_id:uuid(body?.issueId),p_title:title,
+    p_description:technicalText(body?.description,"Description",2000),p_severity:severity,p_status:status,
+    p_owner:technicalText(body?.ownerName,"Technical owner",160),p_due_date:technicalDate(body?.dueDate),
+    p_resolution_notes:resolution,p_evidence_url:technicalEvidence(body?.evidenceUrl),
+    p_expected_updated_at:technicalVersion(body?.expectedUpdatedAt),p_member_id:actor,
+  },{profileName:"preparing.technical-issue-update"});
+}
+export async function recordTechnicalAcceptance(body,account){
+  serviceOnly();const actor=identity(account);const schoolId=uuid(body?.schoolId);await requireSchool(schoolId);
+  const name=technicalText(body?.technicianName,"Technical sign-off owner",160);
+  const ref=technicalText(body?.confirmationReference,"Technical acceptance reference",160);
+  if(name.length<2||ref.length<2)fail("Record the responsible technical person and actual acceptance reference.");
+  const date=technicalDate(body?.confirmedOn);
+  if(!date)fail("Technical acceptance date is required.");
+  return rpc("erp_preparing_record_technical_acceptance",{
+    p_school_id:schoolId,p_technician_name:name,p_reference:ref,p_confirmed_on:date,
+    p_evidence_url:technicalEvidence(body?.evidenceUrl),p_notes:technicalText(body?.notes,"Notes",1000),
+    p_expected_updated_at:technicalVersion(body?.expectedUpdatedAt),p_member_id:actor,
+  },{profileName:"preparing.technical-acceptance"});
+}

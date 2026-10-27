@@ -128,3 +128,30 @@
 @media (max-width:670px){ .pr-delivery-create {align-items:stretch;flex-direction:column;}.pr-delivery-fields {grid-template-columns:1fr;}.pr-delivery-line {align-items:flex-start;flex-direction:column;}.pr-line-input {width:100%;justify-content:flex-end;}.pr-qty-summary.pr-delivery-totals {grid-template-columns:repeat(3,minmax(0,1fr));}.pr-delivery-action .pr-primary {align-self:stretch;} }
 
 .pr-carton-actions {display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+
+/* Phase 4 — technical team performs work; Operations owns follow-up and escalation. */
+.pr-technical-entry {background:#f7f7ff;border-color:#e3e3fa;}
+.pr-technical {display:flex;flex-direction:column;gap:16px;}
+.pr-technical-summary {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;}
+.pr-technical-summary>div {border:1px solid var(--pr-border);border-radius:13px;display:flex;flex-direction:column;gap:9px;padding:13px;background:#fff;}
+.pr-technical-summary small {font-size:10px;color:var(--pr-muted);}
+.pr-technical-summary strong {font-size:20px;overflow-wrap:anywhere;}
+.pr-technical-tabs {display:flex;gap:8px;overflow:auto;scrollbar-width:none;padding:3px 0 7px;}
+.pr-technical-tabs::-webkit-scrollbar {display:none;}
+.pr-technical-tabs button {flex:0 0 auto;background:#f8f9fb;color:var(--pr-muted);border:1px solid var(--pr-border);border-radius:11px;padding:11px 13px;font-size:11px;font-weight:650;}
+.pr-technical-tabs button.active {background:#fff5e9;color:#a95715;border-color:#ebac6f;}
+.pr-technical-checkpoints {display:flex;flex-direction:column;gap:12px;}
+.pr-technical-item {border:1px solid var(--pr-border);background:#fff;border-radius:13px;padding:15px;display:flex;flex-direction:column;gap:11px;min-width:0;}
+.pr-technical-item-head {display:flex;align-items:flex-start;justify-content:space-between;gap:12px;}
+.pr-technical-item-head>div {display:flex;flex-direction:column;gap:5px;min-width:0;}
+.pr-technical-item-head strong {font-size:13px;overflow-wrap:anywhere;}
+.pr-technical-item-head small {font-size:11px;line-height:1.6;color:var(--pr-muted);}
+.pr-technical-meta {display:flex;gap:8px 16px;flex-wrap:wrap;font-size:10px;color:var(--pr-muted);}
+.pr-technical-late {color:#b34124;font-weight:750;}
+.pr-technical-note {font-size:11px;color:var(--pr-ink);line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere;margin:0;}
+.pr-technical-edit {align-self:flex-end;font-size:11px;}
+.pr-technical-form {border:1px solid #ebedf0;border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:13px;background:#fafbfc;}
+.pr-technical-grid {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px;}
+.pr-technical-form .pr-field input,.pr-technical-form .pr-field select,.pr-technical-form .pr-field textarea {width:100%;min-width:0;}
+.pr-technical .pr-link {font-size:11px;text-align:left;align-self:flex-start;}
+@media(max-width:670px) {.pr-technical-summary {grid-template-columns:repeat(2,minmax(0,1fr));}.pr-technical-grid {grid-template-columns:1fr;}.pr-technical-item-head {flex-direction:column;}.pr-technical-form {padding:12px;}}
