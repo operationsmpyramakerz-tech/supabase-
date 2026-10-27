@@ -289,7 +289,7 @@ BEGIN
       THEN RAISE EXCEPTION 'Resolve all technical issues before approving Testing.'; END IF;
       IF NOT EXISTS(SELECT 1 FROM public.erp_preparing_technical_acceptance WHERE school_id=p_school_id
         AND btrim(technician_name)<>'' AND btrim(confirmation_reference)<>'')
-      THEN RAISE EXCEPTION 'Record the technical team's acceptance reference first.'; END IF;
+      THEN RAISE EXCEPTION 'Record the technical team''s acceptance reference first.'; END IF;
     ELSIF current_position=9 THEN
       RAISE EXCEPTION 'Final School Closing is reserved for the documented Closing workflow in Phase 5.';
     END IF;
