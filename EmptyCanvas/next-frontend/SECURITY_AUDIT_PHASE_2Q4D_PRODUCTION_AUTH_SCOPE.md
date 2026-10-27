@@ -60,3 +60,36 @@ Output is only check names, HTTP codes, and sanitized reasons. A given account m
 ## What is NOT validated
 
 This audit does **not** test other 188 permissions, fine-grained details access, write access, image/receipt URLs, revocation propagation, live Atomic Orders behavior, SQL permissions, or all Production API endpoints. It cannot prove object-level authorization for direct detail endpoints, which currently use read-only POST, because this phase explicitly never makes POST requests against Production. It does not run automatically during deployment. The 2Q3F transactional mutation feature must remain **disabled** until safely validated. The live Storage migration and final production audit are still open.
+
+## v208 hardening and safe preparation (2Q4D.1)
+
+Before entering any session credentials, check available options:
+
+```bash
+npm run security:production-auth-scope -- --help
+```
+
+After setting the consent, verified **existing** order numbers and Production URL,
+validate these nonsecret inputs without supplying any cookies or making requests:
+
+```bash
+npm run security:production-auth-scope -- --check-config
+```
+
+This preparation does **not** demonstrate that Own / Team / All enforcement
+works. It only proves the config passes local validation. Do **not** run the
+full authenticated matrix unless four distinct existing authorized sessions and
+three appropriate reference orders are genuinely available. Never create
+sessions or change employee grants solely for the test.
+
+The authenticated probe now sends cookies **only** to the reviewed exact
+`https://operation.propyramakerz.com/next` destination, even when both
+caller-supplied hostname settings match a different host. Redirects remain
+blocked. Production domain changes require reviewing this pin in source code
+before another authenticated run. The probe also stops processing response
+bodies over 2 MB, including when Content-Length is missing, to avoid processing
+unbounded JSON from the live service. Oversized or malformed responses produce
+`BLOCKED`, never a false PASS.
+
+This change updates **only local audit tools/tests/docs**; no ERP runtime routes,
+Production permissions, SQL, records, or environment variables are changed.

@@ -1,6 +1,11 @@
 // Phase 2Q4D: opt-in, authenticated production scope verification using ONLY
 // GET routes. Does not access write APIs or print/store credentials or rows.
 const CONSENT = "I_CONFIRM_AUTHENTICATED_PRODUCTION_GET_ONLY";
+// This tool sends live session cookies. Never derive the destination solely
+// from operator-provided env values (both could point at the same wrong host).
+// Any legitimate production host move requires a reviewed code change.
+const TRUSTED_PRODUCTION_URL = "https://operation.propyramakerz.com/next";
+const MAX_JSON_BYTES = 2_000_000;
 const ROLES = Object.freeze(["DENIED", "OWN", "TEAM", "ALL"]);
 const FIXTURES = Object.freeze(["OWN", "TEAM", "OUTSIDE"]);
 const clean = (v) => String(v ?? "").trim();
@@ -19,6 +24,9 @@ export function parseProductionAuthScopeConfig(env = {}) {
   const hostname = clean(env.ERP_PROD_SCOPE_EXPECTED_HOSTNAME).toLowerCase();
   if (!hostname || !/^[a-z0-9.-]+$/.test(hostname) || hostname !== url.hostname.toLowerCase()) {
     throw new Error("Expected hostname must match the production URL exactly.");
+  }
+  if (`${url.origin}${url.pathname.replace(/\/+$/, "")}` !== TRUSTED_PRODUCTION_URL) {
+    throw new Error("Authenticated cookies can only be sent to the reviewed ERP Production URL.");
   }
   const orders = {};
   for (const fixture of FIXTURES) {
@@ -64,6 +72,50 @@ function totals(checks) {
   };
 }
 
+// Fetch response bodies with a strict post-decompression byte ceiling. A
+// Content-Length header may be omitted or inaccurate, so enforce the bound
+// while reading as well. No response data is logged or persisted.
+async function boundedJsonResponse(response) {
+  const lengthHeader = response?.headers?.get?.("content-length");
+  const length = lengthHeader === null || lengthHeader === undefined ? NaN : Number(lengthHeader);
+  if (Number.isFinite(length) && length > MAX_JSON_BYTES) {
+    await response?.body?.cancel?.().catch(() => {});
+    return null;
+  }
+  if (!response?.body || typeof response.body.getReader !== "function") {
+    // For test/mocked responses only; actual Node fetch provides a stream.
+    return typeof response?.json === "function" ? await response.json().catch(() => null) : null;
+  }
+  const reader = response.body.getReader();
+  let received = 0;
+  const chunks = [];
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      const bytes = value?.byteLength || 0;
+      received += bytes;
+      if (received > MAX_JSON_BYTES) {
+        await reader.cancel().catch(() => {});
+        return null;
+      }
+      chunks.push(value);
+    }
+  } catch {
+    return null;
+  } finally {
+    reader.releaseLock();
+  }
+  const buffer = new Uint8Array(received);
+  let offset = 0;
+  for (const chunk of chunks) {
+    buffer.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  try { return JSON.parse(new TextDecoder().decode(buffer)); }
+  catch { return null; }
+}
+
 async function requestJson(config, path, cookie, fetchImpl, timeoutMs) {
   // Every request is a fixed GET against the exact previously confirmed host.
   // Never follow redirects, forward cookies or add credentials to a URL.
@@ -80,9 +132,7 @@ async function requestJson(config, path, cookie, fetchImpl, timeoutMs) {
     const status = Number(response?.status);
     if (!Number.isInteger(status)) return { status: null, data: null };
     if (status !== 200) return { status, data: null };
-    const size = Number(response?.headers?.get?.("content-length"));
-    if (Number.isFinite(size) && size > 2_000_000) return { status, data: null };
-    const data = await response.json().catch(() => null);
+    const data = await boundedJsonResponse(response);
     return { status, data };
   } catch {
     return { status: null, data: null };
