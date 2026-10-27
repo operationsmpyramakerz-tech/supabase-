@@ -464,6 +464,7 @@ function pageAliases(page = {}) {
     stocktaking: ["Stocktaking"],
     products: ["Products"],
     proposals: ["Proposals"],
+    "projects-preparing": ["Projects Preparing"],
     "product-proposals": ["Proposals"],
     kits: ["Kits"],
     "product-kits": ["Kits"],

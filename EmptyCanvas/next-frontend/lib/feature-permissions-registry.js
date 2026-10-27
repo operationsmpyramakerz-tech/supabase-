@@ -2,6 +2,10 @@
 // automatically enforce it. Only explicitly guarded routes/features are active.
 export const FEATURE_DEFINITIONS = Object.freeze(
 [
+  { "module": "preparing", "key": "preparing.view", "label": "View preparing projects" },
+  { "module": "preparing", "key": "preparing.create", "label": "Create preparing project folders" },
+  { "module": "preparing", "key": "preparing.manage", "label": "Edit projects and assign beneficiaries" },
+  { "module": "preparing", "key": "preparing.stage_update", "label": "Update preparing stage status and notes" },
   {
     "module": "home",
     "key": "home.view",
@@ -1081,7 +1085,8 @@ export function featureAllowed(account, key, { legacyAllowed = true, scopes = ["
     const grant = state.grants?.[key];
     return grant?.allowed === true && scopes.includes(grant.scope || "all");
   }
-  const moduleMarker = key.startsWith("orders.maintenance.") ? "orders.maintenance.view"
+  const moduleMarker = key.startsWith("preparing.") ? "preparing.view"
+    : key.startsWith("orders.maintenance.") ? "orders.maintenance.view"
     : key.startsWith("orders.shopping.") ? "orders.shopping.view"
     : key.startsWith("tasks.") ? "tasks.view"
     : key.startsWith("events.calendar.") ? "events.calendar.view"
@@ -1104,6 +1109,11 @@ export function featureAllowed(account, key, { legacyAllowed = true, scopes = ["
     : key.startsWith("home.") ? "home.view" : null;
   // Module migrations are opt-in. Persist even a denied .view marker so
   // new grants never silently remove rights from previously enabled users.
+  if (key.startsWith("preparing.")) {
+    if (state.grants?.["preparing.view"]?.allowed !== true) return false;
+    const grant = state.grants?.[key];
+    return grant?.allowed === true && scopes.includes(grant.scope || "all");
+  }
   if (!pilot && (!moduleMarker || !Object.hasOwn(state.grants || {}, moduleMarker))) return !!legacyAllowed;
   // Newly migrated modules require View *and* the action grant. A hidden
   // page must not permit direct mutations through an independently checked API.
@@ -1113,11 +1123,12 @@ export function featureAllowed(account, key, { legacyAllowed = true, scopes = ["
   return grant?.allowed === true && scopes.includes(grant.scope || "all");
 }
 
-export const PILOT_FEATURE_MODULES = Object.freeze(["products", "orders.operations", "orders.my", "orders.maintenance", "orders.shopping", "tasks", "events.requests", "events.calendar", "events.components", "events.team", "kits", "proposals", "orders.review", "stocktaking", "expenses", "expenses.users", "users", "b2c.database", "b2c.forms", "backup", "history", "kpis", "sla", "home", "notifications", "account"]);
+export const PILOT_FEATURE_MODULES = Object.freeze(["products", "orders.operations", "orders.my", "orders.maintenance", "orders.shopping", "tasks", "events.requests", "events.calendar", "events.components", "events.team", "kits", "proposals", "preparing", "orders.review", "stocktaking", "expenses", "expenses.users", "users", "b2c.database", "b2c.forms", "backup", "history", "kpis", "sla", "home", "notifications", "account"]);
 
 // Permissions with audited server-side gates and corresponding administrator controls.
 // Do not expose unprotected actions; that would imply false security.
 export const ACTIVE_PILOT_FEATURE_KEYS = Object.freeze([
+  "preparing.view", "preparing.create", "preparing.manage", "preparing.stage_update",
   "home.view", "home.analysis", "home.financial_analysis", "home.sla_view", "home.sla_manage",
   "kpis.view", "kpis.standard_manage", "kpis.review_create", "kpis.scores_edit", "kpis.evidence_upload", "kpis.report",
   "sla.view", "sla.manage",

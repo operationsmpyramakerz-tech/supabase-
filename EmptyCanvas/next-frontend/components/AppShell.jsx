@@ -120,6 +120,7 @@ export default function AppShell({
     if (link.href === "/next/history") return featureAllowed(account, "history.view");
     if (link.href === "/next/kits") return featureAllowed(account, "kits.view");
     if (link.href === "/next/proposals") return featureAllowed(account, "proposals.view");
+    if (link.href === "/next/projects-preparing") return featureAllowed(account, "preparing.view");
     if (link.href === "/next/orders-review") return featureAllowed(account, "orders.review.view");
     if (link.href === "/next/task-management") return featureAllowed(account, "tasks.view");
     if (link.href === "/next/events") return ["events.calendar.view", "events.requests.view", "events.components.view", "events.team.view"].some(key => featureAllowed(account, key));

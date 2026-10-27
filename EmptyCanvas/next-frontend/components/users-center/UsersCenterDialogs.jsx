@@ -622,6 +622,7 @@ function FeatureAccessModal({ member, onClose, protect }) {
     { key: "events.team", label: "Event Team", optIn: true },
     { key: "kits", label: "Kits", optIn: true },
     { key: "proposals", label: "Proposals", optIn: true },
+    { key: "preparing", label: "Projects Preparing", optIn: true },
     { key: "orders.review", label: "Orders Review", optIn: true },
     { key: "stocktaking", label: "Stocktaking", optIn: true },
     { key: "expenses", label: "Expenses", optIn: true },

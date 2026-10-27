@@ -109,6 +109,7 @@ function routeDefaults(localPath) {
     "/products": { title: "Products", activePath: "/next/products" },
     "/kits": { title: "Kits", activePath: "/next/kits" },
     "/proposals": { title: "Proposals", activePath: "/next/proposals" },
+    "/projects-preparing": { title: "Projects Preparing", activePath: "/next/projects-preparing" },
     "/expenses": { title: "Expenses", activePath: "/next/expenses" },
     "/expenses/users": { title: "Expenses by User", activePath: "/next/expenses/users" },
     "/kpis": { title: "KPIs", activePath: "/next/kpis" },

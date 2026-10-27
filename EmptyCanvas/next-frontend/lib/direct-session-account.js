@@ -126,6 +126,7 @@ function pageAliases(value = "") {
     backup: ["backup", "backups", "database", "systemdatabase", "systembackup"],
     kpis: ["kpis", "kpi"],
     proposals: ["proposals", "productproposals"],
+    projectspreparing: ["projectspreparing", "preparing"],
     kits: ["kits", "productkits"],
     events: ["events", "eventcalendar", "eventrequests", "eventcomponents", "eventteam"],
     eventcalendar: ["eventcalendar", "eventscalendar", "events"],
@@ -152,6 +153,7 @@ const LEGACY_PAGE_KEY_NAMES = Object.freeze({
   stocktaking: "Stocktaking",
   products: "Products",
   proposals: "Proposals",
+  "projects-preparing": "Projects Preparing",
   "product-proposals": "Proposals",
   kits: "Kits",
   "product-kits": "Kits",
@@ -207,6 +209,7 @@ function expandUiAliases(values = []) {
   if (set.has("Requested Orders")) add("Schools Requested Orders", "Operations Orders");
   if (set.has("Products")) add("Product", "Components", "/products");
   if (set.has("Proposals")) add("Saved Quotations", "/proposals");
+  if (set.has("Projects Preparing")) add("/projects-preparing");
   if (set.has("Kits")) add("Product Kits", "Saved Kits", "/kits");
   if (set.has("Task Management")) add("All Tasks", "My Tasks", "Delegated Tasks", "/task-management", "/task-management/all-tasks", "/task-management/my-tasks", "/task-management/delegated-tasks");
   if (set.has("All Tasks")) add("/task-management/all-tasks");
