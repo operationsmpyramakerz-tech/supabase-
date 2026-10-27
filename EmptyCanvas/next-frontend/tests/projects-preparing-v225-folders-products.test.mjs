@@ -28,9 +28,11 @@ test('no destructive folder actions are added without API support', () => {
   const folderArea = preparing.split('<div className="pr-folders"')[1].split('        {project && !projectSchools.length')[0];
   assert.doesNotMatch(folderArea, /Delete Project|Make a copy|Copy Project|delete_project/);
 });
-test('visual folder dimensions and accessibility work on tablet and phone', () => {
+test('Proposals exact compact folder dimensions and accessibility work on tablet and phone', () => {
   assert.match(css, /\.pr-root \.pr-folder-card \{/);
-  assert.match(css, /width:218px;\s*height:204px/);
+  assert.match(css, /\.pr-root--index \.pr-folder-card \{[\s\S]*?width:154px; height:144px; min-height:144px;/);
+  assert.match(css, /\.pr-root--index \.pr-folder-card \{[\s\S]*?border:5px solid #101217/);
+  assert.match(css, /\.pr-root--index \.pr-folders \{[\s\S]*?minmax\(154px,154px\)/);
   assert.match(css, /\.pr-root \.pr-folder-main::before/);
   assert.match(css, /\.pr-root \.pr-folder-paper/);
   assert.match(css, /\.pr-folder-menu-trigger:focus-visible/);
@@ -55,5 +57,17 @@ test('changed JSX parses and CSS version is refreshed', () => {
     const source = ts.createSourceFile(file, read(file), ts.ScriptTarget.Latest, true, ts.ScriptKind.JSX);
     assert.deepEqual(source.parseDiagnostics.map(d => d.messageText), [], file);
   }
-  assert.match(read('app/projects-preparing/page.jsx'), /projects-preparing\.css\?v=225/);
+  assert.match(read('app/projects-preparing/page.jsx'), /projects-preparing\.css\?v=226/);
+});
+
+// v226: actual filtering controls replace oversized, noninteractive stats on the index.
+test('compact first-page project tabs filter source data with keyboard-safe buttons', () => {
+  assert.match(preparing, /projectFilter, setProjectFilter/);
+  assert.match(preparing, /role="group" aria-label="Filter project folders"/);
+  assert.match(preparing, /aria-pressed=\{projectFilter === tab.key\}/);
+  assert.match(preparing, /projectFilter === "delivered"/);
+  assert.match(preparing, /projectFilter === "closed"/);
+  assert.match(preparing, /className="pr-search pr-index-search"/);
+  assert.match(css, /\.pr-root--index \.pr-project-tab\.is-active/);
+  assert.match(css, /\.pr-root--index \.pr-create-project/);
 });

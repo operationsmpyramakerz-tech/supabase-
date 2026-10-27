@@ -462,3 +462,175 @@
   .pr-root .pr-folder-foot-date {display:none;}
 }
 @media(prefers-reduced-motion:reduce){.pr-root .pr-folder-card,.pr-root .pr-folder-menu-trigger {transition:none;}}
+
+/* v226 - First Projects screen. The folder measurements/art match the FINAL
+   effective Proposals folder rules (154x144, 5px frame), not earlier overrides. */
+.pr-root--index .pr-header {
+  align-items:center; margin-bottom:22px; gap:18px;
+}
+.pr-root--index .pr-headline h1 {
+  font-size:clamp(21px,2.1vw,28px); font-weight:850;
+  color:#101828; letter-spacing:-.04em;
+}
+.pr-root--index .pr-top-actions {gap:10px;}
+.pr-root--index .pr-create-project {
+  min-height:50px; padding:0 23px; border:0; border-radius:17px;
+  background:#0e1423; color:#fff; font-size:13px!important;
+  font-weight:850; box-shadow:0 13px 26px rgba(14,20,35,.17);
+  transition:transform .18s ease, box-shadow .18s ease, background .18s ease;
+}
+.pr-root--index .pr-create-project:hover:not(:disabled) {
+  background:#1d293b; transform:translateY(-2px);
+  box-shadow:0 17px 30px rgba(14,20,35,.22);
+}
+.pr-root--index .pr-top-actions>.pr-icon {
+  height:49px; width:49px; min-width:49px; padding:0;
+  border-radius:16px; background:#fff; color:#344054;
+  border:1px solid #e9ebef; box-shadow:0 5px 15px rgba(15,23,42,.04);
+}
+.pr-root--index .pr-top-actions>.pr-icon:hover:not(:disabled) {
+  border-color:#fed7aa; background:#fff8f2;
+}
+.pr-root--index .pr-index-controls {
+  display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap;
+  gap:14px; margin:0 0 24px;
+}
+.pr-root--index .pr-project-tabs {
+  display:inline-flex; align-items:center; flex-wrap:wrap; gap:4px; padding:5px;
+  border:1px solid #eaecf0; border-radius:17px; background:#f6f7f9;
+}
+.pr-root--index .pr-project-tab {
+  display:flex; justify-content:center; align-items:center; gap:9px;
+  min-height:39px; padding:0 14px; border:0; border-radius:12px;
+  background:transparent; color:#667085; font-size:12px;
+  font-weight:780; line-height:1; transition:color .16s ease,background .16s ease,box-shadow .16s ease;
+}
+.pr-root--index .pr-project-tab:hover:not(.is-active) {background:#fff; color:#344054;}
+.pr-root--index .pr-project-tab.is-active {
+  background:#111827; color:#fff; box-shadow:0 5px 13px rgba(17,24,39,.15);
+}
+.pr-root--index .pr-tab-count {
+  min-width:21px; height:21px; padding:0 6px; display:grid; place-items:center;
+  border-radius:8px; color:#475467; background:#e7e9ee; font-size:11px; font-weight:850;
+}
+.pr-root--index .pr-project-tab.is-active .pr-tab-count {
+  color:#111827; background:#ffb36f;
+}
+.pr-root--index .pr-index-search {
+  min-height:48px; height:48px; width:min(100%,275px); max-width:275px;
+  border-radius:15px; border-color:#eaecf0; color:#8b95a5;
+  box-shadow:0 4px 12px rgba(15,23,42,.025); padding:0 15px;
+}
+.pr-root--index .pr-index-search:focus-within {
+  border-color:#fb923c; box-shadow:0 0 0 3px rgba(249,115,22,.09);
+}
+.pr-root--index .pr-index-search input {font-size:12px; font-weight:650;}
+.pr-root--index .pr-section-bar {margin:0 0 14px;}
+.pr-root--index .pr-section-bar h2 {font-size:16px;font-weight:850;color:#111827;letter-spacing:-.025em;}
+.pr-root--index .pr-visible-count {
+  font-size:11px; color:#7b8495; font-weight:800; border:1px solid #edf0f3;
+  border-radius:999px; padding:7px 11px; background:#fff;
+}
+
+/* Literal sizing from proposals.css: 154px wide, 144px high, 5px black frame.
+   Scope to index so schools and all sub-workflows remain unaffected. */
+.pr-root--index .pr-folders {
+  grid-template-columns:repeat(auto-fill,minmax(154px,154px));
+  gap:18px 16px; padding:0 0 28px; align-items:start; justify-items:start;
+}
+.pr-root--index .pr-folder-card {
+  width:154px; height:144px; min-height:144px;
+  border:5px solid #101217; border-radius:20px;
+  background:radial-gradient(circle at 23% 5%,rgba(255,255,255,.42) 0 14%,transparent 36%),
+    radial-gradient(circle at 82% 0%,rgba(255,255,255,.18) 0 11%,transparent 32%),
+    linear-gradient(135deg,#ff8a1f 0%,#f97316 46%,#e45512 100%);
+  box-shadow:0 14px 26px rgba(15,23,42,.12);
+}
+.pr-root--index .pr-folder-card:hover,
+.pr-root--index .pr-folder-card:focus-within {
+  transform:translateY(-2px); box-shadow:0 20px 34px rgba(15,23,42,.16);
+}
+.pr-root--index .pr-folder-main {
+  inset:0; width:100%; height:100%; border-radius:15px; overflow:hidden;
+}
+.pr-root--index .pr-folder-main::before {
+  height:86px; border-radius:0 0 15px 15px;
+  background:#272727; box-shadow:inset 0 1px 0 rgba(255,255,255,.07);
+}
+.pr-root--index .pr-folder-main::after {
+  top:43px;left:0;width:130px;height:28px;
+  border-radius:0 13px 0 0;
+  clip-path:polygon(0 0,83px 0,130px 100%,100% 100%,0 100%);
+  background:#272727;
+}
+.pr-root--index .pr-folder-figure {
+  top:16px; width:118px; height:68px;
+}
+.pr-root--index .pr-folder-paper {
+  top:0; width:50px; height:54px; border-radius:7px;
+  border:1px solid rgba(15,23,42,.05);
+  background:linear-gradient(180deg,#fff,#fafafa);
+  box-shadow:0 14px 24px rgba(15,23,42,.16);
+}
+.pr-root--index .pr-folder-paper::before {
+  left:8px;right:8px;top:10px;height:3px;
+  box-shadow:0 10px 0 rgba(203,213,225,.42),0 20px 0 rgba(203,213,225,.32);
+}
+.pr-root--index .pr-folder-paper.left {left:9px;transform:rotate(-6deg);}
+.pr-root--index .pr-folder-paper.middle {left:34px;top:-4px;transform:rotate(1deg);}
+.pr-root--index .pr-folder-paper.right {right:9px;transform:rotate(7deg);}
+.pr-root--index .pr-folder-copy {top:70px;left:11px;right:31px;}
+.pr-root--index .pr-folder-copy strong {
+  font-size:.72rem; line-height:1.03; margin-bottom:3px; letter-spacing:-.015em;
+  font-weight:900;
+}
+.pr-root--index .pr-folder-copy em {font-size:.55rem;line-height:1.05;}
+.pr-root--index .pr-folder-foot {
+  left:11px;right:7px;bottom:10px;gap:4px;font-size:.58rem;line-height:1;
+}
+.pr-root--index .pr-folder-foot svg {width:10px;height:10px;}
+.pr-root--index .pr-folder-menu-trigger {
+  top:64px;right:7px;width:17px;height:17px;min-width:17px;min-height:17px;
+  border-radius:50%;background:rgba(255,255,255,.10);opacity:0;
+  transition:opacity .15s ease,background .15s ease;
+}
+.pr-root--index .pr-folder-menu-trigger svg {width:12px;height:12px;}
+.pr-root--index .pr-folder-card:hover .pr-folder-menu-trigger,
+.pr-root--index .pr-folder-menu-trigger:focus-visible,
+.pr-root--index .pr-folder-menu-trigger[aria-expanded="true"] {opacity:1;}
+.pr-root--index .pr-folder-menu {top:89px;right:6px;}
+@media(hover:none) {
+  .pr-root--index .pr-folder-menu-trigger {opacity:.9;}
+}
+@media(max-width:670px) {
+  .pr-root--index .pr-header {flex-direction:row;align-items:center;flex-wrap:wrap;}
+  .pr-root--index .pr-index-controls {align-items:stretch;gap:11px;}
+  .pr-root--index .pr-project-tabs {display:flex;width:100%;overflow-x:auto;flex-wrap:nowrap;scrollbar-width:none;}
+  .pr-root--index .pr-project-tabs::-webkit-scrollbar {display:none;}
+  .pr-root--index .pr-project-tab {flex:0 0 auto;padding:0 11px;}
+  .pr-root--index .pr-index-search {max-width:100%;width:100%;}
+  .pr-root--index .pr-folders {grid-template-columns:repeat(auto-fill,minmax(154px,154px));gap:16px 14px;}
+  .pr-root--index .pr-folder-card {width:154px;height:144px;min-height:144px;border-radius:20px;}
+  .pr-root--index .pr-folder-main {border-radius:15px;}
+  .pr-root--index .pr-folder-main::before {height:86px;border-radius:0 0 15px 15px;}
+  .pr-root--index .pr-folder-main::after {top:43px;width:130px;height:28px;clip-path:polygon(0 0,83px 0,130px 100%,100% 100%,0 100%);}
+  .pr-root--index .pr-folder-figure {top:16px;transform:translateX(-50%) scale(1);}
+  .pr-root--index .pr-folder-copy {top:70px;left:11px;right:31px;}
+  .pr-root--index .pr-folder-copy strong {font-size:.72rem;}
+  .pr-root--index .pr-folder-copy em {font-size:.55rem;}
+  .pr-root--index .pr-folder-foot {left:11px;right:7px;bottom:10px;font-size:.58rem;}
+  .pr-root--index .pr-folder-menu-trigger {top:64px;right:7px;}
+  .pr-root--index .pr-folder-menu {top:89px;right:6px;}
+}
+@media(max-width:430px) {
+  .pr-root--index .pr-header {align-items:flex-start;}
+  .pr-root--index .pr-create-project {min-height:43px;padding:0 14px;}
+  .pr-root--index .pr-top-actions>.pr-icon {height:43px;width:43px;min-width:43px;}
+}
+@media(prefers-reduced-motion:reduce) {
+  .pr-root--index .pr-project-tab,
+  .pr-root--index .pr-create-project {transition:none;}
+}
+@media(max-width:670px) {
+  .pr-root--index .pr-visible-count {align-self:flex-start;}
+}

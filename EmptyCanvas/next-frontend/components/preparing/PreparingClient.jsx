@@ -21,6 +21,7 @@ function Ico({ name, size = 20 }) {
   const paths = {
     folder: <><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10H3z"/><path d="M3 12h18"/></>,
     plus: <path d="M12 5v14M5 12h14"/>,
+    more: <><circle cx="5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.4" fill="currentColor" stroke="none"/></>,
     back: <path d="M20 12H4m7-7-7 7 7 7"/>,
     check: <path d="m4 12 5 5L20 6"/>,
     close: <path d="M18 6 6 18M6 6l12 12"/>,
@@ -57,6 +58,7 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
   const [schoolId, setSchoolId] = useState("");
   const [sheet, setSheet] = useState("");
   const [query, setQuery] = useState("");
+  const [projectFilter, setProjectFilter] = useState("all");
   const [projectName, setProjectName] = useState("");
   const [projectDescription, setProjectDescription] = useState("");
   const [selectedMembers, setSelectedMembers] = useState([]);
@@ -194,22 +196,44 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
     const used = new Set(projectSchools.map(row => clean(row.beneficiary_id)));
     return !used.has(member.id) && `${member.name} ${member.school}`.toLowerCase().includes(memberQuery.toLowerCase());
   });
-  const projectFiltered = projects.filter(row => `${row.name} ${row.description}`.toLowerCase().includes(query.toLowerCase()));
+  const projectTabs = [
+    { key: "all", label: "All Projects", count: totals.projects },
+    { key: "active", label: "Active", count: projects.filter(row => { const summary=projectSummaries.get(row.id); return summary && summary.total > summary.closed; }).length },
+    { key: "delivered", label: "Delivered", count: projects.filter(row => (projectSummaries.get(row.id)?.delivered || 0) > 0).length },
+    { key: "closed", label: "Closed", count: projects.filter(row => { const summary=projectSummaries.get(row.id); return summary && summary.total > 0 && summary.closed === summary.total; }).length },
+  ];
+  const projectFiltered = projects.filter(row => {
+    if (!`${row.name} ${row.description}`.toLowerCase().includes(query.toLowerCase())) return false;
+    const summary = projectSummaries.get(row.id) || { total:0, closed:0, delivered:0 };
+    if (projectFilter === "active") return summary.total > summary.closed;
+    if (projectFilter === "delivered") return summary.delivered > 0;
+    if (projectFilter === "closed") return summary.total > 0 && summary.closed === summary.total;
+    return true;
+  });
   const schoolFiltered = projectSchools.filter(row => `${row.beneficiary_name} ${row.school_label} ${row.proposal_name}`.toLowerCase().includes(query.toLowerCase()));
-  return <div className="pr-root">
+  return <div className={`pr-root ${!project ? "pr-root--index" : ""}`}>
     <div className="pr-header">
       <div className="pr-headline">
         {project && <button type="button" className="pr-back" onClick={backToParent}><Ico name="back" size={18}/>{school ? project.name : "Projects"}</button>}
         <h1>{school ? school.beneficiary_name : project ? project.name : "Projects"}</h1>
       </div>
       <div className="pr-top-actions">
-        <button type="button" className="pr-icon" title="Refresh" aria-label="Refresh" onClick={() => save(async () => {})} disabled={busy}><Ico name="refresh"/></button>
-        {!project && canCreate && <button type="button" className="pr-primary" onClick={openNewProject}><Ico name="plus" size={17}/> New Project</button>}
+        <button type="button" className="pr-icon" title="Refresh projects" aria-label="Refresh projects" onClick={() => save(async () => {})} disabled={busy}><Ico name="refresh"/></button>
+        {!project && canCreate && <button type="button" className="pr-primary pr-create-project" onClick={openNewProject}><Ico name="plus" size={18}/> New Project</button>}
         {project && !school && canManage && <><button type="button" className="pr-secondary" onClick={openEditProject}><Ico name="edit" size={16}/> Edit</button><button type="button" className="pr-primary" onClick={openSchools}><Ico name="plus" size={17}/> Add Schools</button></>}
       </div>
     </div>
     {error && <div className="pr-alert" role="alert"><span>{error}</span><button onClick={() => setError("")} aria-label="Dismiss"><Ico name="close" size={16}/></button></div>}
-    <div className="pr-metrics">
+    {!project && <div className="pr-index-controls">
+      <div className="pr-project-tabs" role="group" aria-label="Filter project folders">
+        {projectTabs.map(tab => <button key={tab.key} type="button" className={`pr-project-tab ${projectFilter === tab.key ? "is-active" : ""}`}
+          aria-pressed={projectFilter === tab.key} onClick={() => setProjectFilter(tab.key)}>
+          <span>{tab.label}</span><span className="pr-tab-count">{tab.count}</span>
+        </button>)}
+      </div>
+      <label className="pr-search pr-index-search"><Ico name="search" size={17}/><input aria-label="Search projects" placeholder="Search projects…" value={query} onChange={event=>setQuery(event.target.value)}/></label>
+    </div>}
+    {project && <div className="pr-metrics">
       {(school ? [
         ["Stages completed", `${progress.completed} / ${progress.total}`],
         ["Remaining", progress.total - progress.completed],
@@ -221,7 +245,7 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
       ] : [
         ["Projects", totals.projects], ["Schools", totals.schools], ["Delivered", totals.delivered], ["Closed", totals.closed],
       ]).map(([name, count]) => <div className="pr-metric" key={name}><span>{name}</span><strong>{count}</strong></div>)}
-    </div>
+    </div>}
     {project && !school && <div className="pr-tool-grid pr-project-tools">
       <button type="button" className="pr-tool" onClick={()=>setShowProjectCartons(true)}><span className="pr-tool-icon"><Ico name="box" size={20}/></span><strong>Project Kit Cartons</strong><Ico name="arrow" size={17}/></button>
       <button type="button" className="pr-tool" onClick={()=>setShowDashboard(true)}><span className="pr-tool-icon"><Ico name="chart" size={20}/></span><strong>Project Dashboard</strong><Ico name="arrow" size={17}/></button>
@@ -253,7 +277,7 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
         </button>;
       })}</div>
     </> : <>
-      <div className="pr-section-bar"><div><h2>{project ? "Schools" : "Project Folders"}</h2></div><label className="pr-search"><Ico name="search" size={17}/><input aria-label="Search projects or schools" placeholder="Search…" value={query} onChange={event=>setQuery(event.target.value)}/></label></div>
+      <div className="pr-section-bar"><div><h2>{project ? "Schools" : "Project Folders"}</h2></div>{project ? <label className="pr-search"><Ico name="search" size={17}/><input aria-label="Search schools" placeholder="Search schools…" value={query} onChange={event=>setQuery(event.target.value)}/></label> : <span className="pr-visible-count">{projectFiltered.length} {projectFiltered.length === 1 ? "folder" : "folders"}</span>}</div>
       <div className="pr-folders" aria-label={project ? "School folders" : "Project folders"}>
         {!project ? projectFiltered.map(row => {
           const summary = projectSummaries.get(row.id) || { total:0,closed:0,delivered:0 };
@@ -267,10 +291,10 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
               aria-label={`Open project ${row.name}. Press and hold for actions.`} aria-haspopup="menu" aria-expanded={menuOpen}>
               <span className="pr-folder-figure" aria-hidden="true"><span className="pr-folder-paper left"/><span className="pr-folder-paper middle"/><span className="pr-folder-paper right"/></span>
               <span className="pr-folder-copy"><strong>{row.name}</strong><em>{summary.closed} of {summary.total} closed</em></span>
-              <span className="pr-folder-foot"><Ico name="folder" size={15}/>{summary.total} schools <span className="pr-folder-foot-date">{fmtDate(row.created_at)}</span></span>
+              <span className="pr-folder-foot"><Ico name="folder" size={11}/>{summary.total} {summary.total === 1 ? "school" : "schools"}</span>
             </button>
             <button type="button" className="pr-folder-menu-trigger" aria-label={`Actions for ${row.name}`} aria-haspopup="menu" aria-expanded={menuOpen}
-              onClick={()=>{cancelFolderHold();suppressFolderClick.current=false;setFolderMenu(menuOpen ? "" : key);}}><Ico name="more" size={19}/></button>
+              onClick={()=>{cancelFolderHold();suppressFolderClick.current=false;setFolderMenu(menuOpen ? "" : key);}}><Ico name="more" size={14}/></button>
             {menuOpen && <div className="pr-folder-menu" role="menu" aria-label={`${row.name} actions`}>
               <button type="button" role="menuitem" onClick={()=>openProjectFolder(row.id)}>Open Project</button>
               {canManage && <button type="button" role="menuitem" onClick={()=>editProjectFolder(row)}>Edit Project</button>}
@@ -293,7 +317,7 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
               <span className="pr-folder-foot"><Ico name="school" size={15}/>{progress.completed} / {progress.total} stages <span className="pr-folder-foot-date">{progress.closed ? "Closed" : progress.delivered ? "Delivered" : "Preparing"}</span></span>
             </button>
             <button type="button" className="pr-folder-menu-trigger" aria-label={`Actions for ${row.beneficiary_name}`} aria-haspopup="menu" aria-expanded={menuOpen}
-              onClick={()=>{cancelFolderHold();suppressFolderClick.current=false;setFolderMenu(menuOpen ? "" : key);}}><Ico name="more" size={19}/></button>
+              onClick={()=>{cancelFolderHold();suppressFolderClick.current=false;setFolderMenu(menuOpen ? "" : key);}}><Ico name="more" size={14}/></button>
             {menuOpen && <div className="pr-folder-menu" role="menu" aria-label={`${row.beneficiary_name} actions`}>
               <button type="button" role="menuitem" onClick={()=>openSchoolFolder(row.id)}>Open School</button>
               <button type="button" role="menuitem" onClick={()=>openSchoolFolder(row.id,"components")}>Components & QC</button>
@@ -305,7 +329,7 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
           </article>;
         })}
         {project && !projectSchools.length && <div className="pr-empty"><Ico name="school" size={36}/><h3>No schools assigned</h3>{canManage && <button className="pr-primary" onClick={openSchools}>Add Schools</button>}</div>}
-        {!project && !projects.length && <div className="pr-empty"><Ico name="folder" size={36}/><h3>No project folders yet</h3>{canCreate && <button className="pr-primary" onClick={openNewProject}>Create first project</button>}</div>}
+        {!project && !projectFiltered.length && <div className="pr-empty"><Ico name="folder" size={36}/><h3>{projects.length ? "No matching projects" : "No project folders yet"}</h3>{canCreate && !projects.length && <button className="pr-primary" onClick={openNewProject}>Create first project</button>}</div>}
       </div>
     </>}
     {(sheet === "project" || sheet === "edit_project") && <Sheet title={sheet === "project" ? "New Project" : "Edit Project"} onClose={()=>setSheet("")}
