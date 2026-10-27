@@ -8,7 +8,8 @@
     "start": "node server.js",
     "security:preflight": "node scripts/security-preflight.mjs",
     "security:test-multiuser": "node --test tests/security-phase2q4a-multiuser-policy.test.mjs",
-    "security:staging-readonly": "node scripts/security-staging-readonly.mjs"
+    "security:staging-readonly": "node scripts/security-staging-readonly.mjs",
+    "security:production-readonly": "node scripts/security-production-readonly.mjs"
   },
   "dependencies": {
     "next": "latest",
