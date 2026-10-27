@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { featureAllowed } from "../../lib/feature-permissions-registry";
 import ComponentsManifest from "./ComponentsManifest";
 import PackingDelivery from "./PackingDelivery";
@@ -65,6 +65,10 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
   const [stageKey, setStageKey] = useState("");
   const [stageStatus, setStageStatus] = useState("not_started");
   const [stageNotes, setStageNotes] = useState("");
+  const [folderMenu, setFolderMenu] = useState("");
+  const longPressTimer = useRef(null);
+  const longPressStart = useRef(null);
+  const suppressFolderClick = useRef(false);
   const [showComponents, setShowComponents] = useState(false);
   const [showDelivery, setShowDelivery] = useState(false);
   const [showReconciliation,setShowReconciliation] = useState(false);
@@ -127,11 +131,62 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
     catch (err) { setError(err.message || "Unable to save."); }
     finally { setBusy(false); }
   }
+  // Match Proposals folders: open on click, actions on hold, right-click or keyboard.
+  // Clearing the timer on movement avoids accidental menus while scrolling on touch devices.
+  function cancelFolderHold() {
+    if (longPressTimer.current !== null) { clearTimeout(longPressTimer.current); longPressTimer.current = null; }
+    longPressStart.current = null;
+  }
+  function startFolderHold(event, key) {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    cancelFolderHold();
+    suppressFolderClick.current = false;
+    longPressStart.current = { x: event.clientX, y: event.clientY, pointerId: event.pointerId };
+    longPressTimer.current = setTimeout(() => {
+      longPressTimer.current = null;
+      longPressStart.current = null;
+      suppressFolderClick.current = true;
+      setFolderMenu(key);
+    }, 550);
+  }
+  function moveFolderHold(event) {
+    const start = longPressStart.current;
+    if (start && start.pointerId === event.pointerId && Math.hypot(event.clientX - start.x, event.clientY - start.y) > 12) cancelFolderHold();
+  }
+  function folderContextMenu(event, key) {
+    event.preventDefault();
+    cancelFolderHold();
+    suppressFolderClick.current = true;
+    setFolderMenu(key);
+  }
+  function folderKeyDown(event, key) {
+    if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) folderContextMenu(event, key);
+  }
+  function openProjectFolder(id) { cancelFolderHold(); suppressFolderClick.current = false; setFolderMenu(""); setProjectId(id); setSchoolId(""); setQuery(""); }
+  function openSchoolFolder(id, view = "") {
+    cancelFolderHold(); suppressFolderClick.current = false; setFolderMenu(""); setSchoolId(id);
+    setShowComponents(view === "components"); setShowDelivery(view === "delivery");
+    setShowTechnical(view === "technical"); setShowReconciliation(view === "returns"); setShowClosing(view === "closing");
+  }
+  function editProjectFolder(row) {
+    cancelFolderHold(); suppressFolderClick.current = false; setFolderMenu(""); setProjectId(row.id); setSchoolId("");
+    setProjectName(row.name || ""); setProjectDescription(row.description || ""); setSheet("edit_project");
+  }
+  useEffect(() => {
+    if (!folderMenu) return;
+    function closeOutside(event) { if (!event.target.closest?.(".pr-folder-card")) setFolderMenu(""); }
+    function closeEscape(event) { if (event.key === "Escape") setFolderMenu(""); }
+    document.addEventListener("pointerdown", closeOutside);
+    document.addEventListener("keydown", closeEscape);
+    return () => { document.removeEventListener("pointerdown", closeOutside); document.removeEventListener("keydown", closeEscape); };
+  }, [folderMenu]);
+  useEffect(() => () => { if (longPressTimer.current !== null) clearTimeout(longPressTimer.current); }, []);
   function openNewProject() { setProjectName(""); setProjectDescription(""); setSheet("project"); }
   function openEditProject() { setProjectName(project?.name || ""); setProjectDescription(project?.description || ""); setSheet("edit_project"); }
   function openSchools() { setSelectedMembers([]); setMemberQuery(""); setProposalId(""); setSheet("schools"); }
   function openStage(stage) { const record = schoolStages.find(row => row.stage_key === stage.key); setStageKey(stage.key); setStageStatus(record?.status || "not_started"); setStageNotes(record?.notes || ""); setSheet("stage"); }
   function backToParent() {
+    cancelFolderHold(); setFolderMenu("");
     if (school) { setSchoolId(""); setQuery(""); setShowComponents(false); setShowDelivery(false); setShowReconciliation(false); setShowTechnical(false); setShowClosing(false); return; }
     setProjectId(""); setQuery(""); setShowDashboard(false); setShowProjectCartons(false);
   }
@@ -199,12 +254,56 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
       })}</div>
     </> : <>
       <div className="pr-section-bar"><div><h2>{project ? "Schools" : "Project Folders"}</h2></div><label className="pr-search"><Ico name="search" size={17}/><input aria-label="Search projects or schools" placeholder="Search…" value={query} onChange={event=>setQuery(event.target.value)}/></label></div>
-      <div className="pr-folders">
-        {!project ? projectFiltered.map(row => { const summary = projectSummaries.get(row.id) || { total:0,closed:0,delivered:0 }; return <button type="button" className="pr-folder" key={row.id} onClick={()=>{setProjectId(row.id);setSchoolId("");setQuery("");}}>
-          <span className="pr-folder-icon"><Ico name="folder" size={26}/></span><strong>{row.name}</strong><div className="pr-folder-count">{summary.total} schools <span>{summary.closed} closed</span></div><Meter value={summary.closed} max={summary.total || 1}/><span className="pr-folder-date">{fmtDate(row.created_at)}</span>
-        </button>; }) : schoolFiltered.map(row => { const progress = schoolProgress(stages.filter(stage=>stage.school_id===row.id)); return <button type="button" className="pr-folder" key={row.id} onClick={()=>{setSchoolId(row.id);setShowComponents(false);setShowDelivery(false);setShowReconciliation(false);setShowTechnical(false);setShowClosing(false);}}>
-          <span className="pr-folder-icon school"><Ico name="school" size={26}/></span><strong>{row.beneficiary_name}</strong><small>{row.proposal_name}</small><div className="pr-folder-count">{progress.completed}/{progress.total} stages <span>{progress.closed ? "Closed" : progress.delivered ? "Delivered" : "Preparing"}</span></div><Meter value={progress.completed} max={progress.total}/>
-        </button>; })}
+      <div className="pr-folders" aria-label={project ? "School folders" : "Project folders"}>
+        {!project ? projectFiltered.map(row => {
+          const summary = projectSummaries.get(row.id) || { total:0,closed:0,delivered:0 };
+          const key = `project:${row.id}`;
+          const menuOpen = folderMenu === key;
+          return <article className={`pr-folder-card ${menuOpen ? "is-menu-open" : ""}`} key={row.id}>
+            <button type="button" className="pr-folder-main" onPointerDown={event=>startFolderHold(event,key)} onPointerMove={moveFolderHold}
+              onPointerUp={cancelFolderHold} onPointerCancel={cancelFolderHold} onPointerLeave={cancelFolderHold}
+              onContextMenu={event=>folderContextMenu(event,key)} onKeyDown={event=>folderKeyDown(event,key)}
+              onClick={()=>{ if(suppressFolderClick.current){suppressFolderClick.current=false;return;}openProjectFolder(row.id); }}
+              aria-label={`Open project ${row.name}. Press and hold for actions.`} aria-haspopup="menu" aria-expanded={menuOpen}>
+              <span className="pr-folder-figure" aria-hidden="true"><span className="pr-folder-paper left"/><span className="pr-folder-paper middle"/><span className="pr-folder-paper right"/></span>
+              <span className="pr-folder-copy"><strong>{row.name}</strong><em>{summary.closed} of {summary.total} closed</em></span>
+              <span className="pr-folder-foot"><Ico name="folder" size={15}/>{summary.total} schools <span className="pr-folder-foot-date">{fmtDate(row.created_at)}</span></span>
+            </button>
+            <button type="button" className="pr-folder-menu-trigger" aria-label={`Actions for ${row.name}`} aria-haspopup="menu" aria-expanded={menuOpen}
+              onClick={()=>{cancelFolderHold();suppressFolderClick.current=false;setFolderMenu(menuOpen ? "" : key);}}><Ico name="more" size={19}/></button>
+            {menuOpen && <div className="pr-folder-menu" role="menu" aria-label={`${row.name} actions`}>
+              <button type="button" role="menuitem" onClick={()=>openProjectFolder(row.id)}>Open Project</button>
+              {canManage && <button type="button" role="menuitem" onClick={()=>editProjectFolder(row)}>Edit Project</button>}
+              <button type="button" role="menuitem" onClick={()=>{openProjectFolder(row.id);setShowDashboard(true);}}>Project Dashboard</button>
+              <button type="button" role="menuitem" onClick={()=>{openProjectFolder(row.id);setShowProjectCartons(true);}}>Kit Cartons</button>
+            </div>}
+          </article>;
+        }) : schoolFiltered.map(row => {
+          const progress = schoolProgress(stages.filter(stage=>stage.school_id===row.id));
+          const key = `school:${row.id}`;
+          const menuOpen = folderMenu === key;
+          return <article className={`pr-folder-card pr-folder-card--school ${menuOpen ? "is-menu-open" : ""}`} key={row.id}>
+            <button type="button" className="pr-folder-main" onPointerDown={event=>startFolderHold(event,key)} onPointerMove={moveFolderHold}
+              onPointerUp={cancelFolderHold} onPointerCancel={cancelFolderHold} onPointerLeave={cancelFolderHold}
+              onContextMenu={event=>folderContextMenu(event,key)} onKeyDown={event=>folderKeyDown(event,key)}
+              onClick={()=>{ if(suppressFolderClick.current){suppressFolderClick.current=false;return;}openSchoolFolder(row.id); }}
+              aria-label={`Open school ${row.beneficiary_name}. Press and hold for actions.`} aria-haspopup="menu" aria-expanded={menuOpen}>
+              <span className="pr-folder-figure" aria-hidden="true"><span className="pr-folder-paper left"/><span className="pr-folder-paper middle"/><span className="pr-folder-paper right"/></span>
+              <span className="pr-folder-copy"><strong>{row.beneficiary_name}</strong><em>{row.proposal_name}</em></span>
+              <span className="pr-folder-foot"><Ico name="school" size={15}/>{progress.completed} / {progress.total} stages <span className="pr-folder-foot-date">{progress.closed ? "Closed" : progress.delivered ? "Delivered" : "Preparing"}</span></span>
+            </button>
+            <button type="button" className="pr-folder-menu-trigger" aria-label={`Actions for ${row.beneficiary_name}`} aria-haspopup="menu" aria-expanded={menuOpen}
+              onClick={()=>{cancelFolderHold();suppressFolderClick.current=false;setFolderMenu(menuOpen ? "" : key);}}><Ico name="more" size={19}/></button>
+            {menuOpen && <div className="pr-folder-menu" role="menu" aria-label={`${row.beneficiary_name} actions`}>
+              <button type="button" role="menuitem" onClick={()=>openSchoolFolder(row.id)}>Open School</button>
+              <button type="button" role="menuitem" onClick={()=>openSchoolFolder(row.id,"components")}>Components & QC</button>
+              <button type="button" role="menuitem" onClick={()=>openSchoolFolder(row.id,"delivery")}>Packing & Delivery</button>
+              <button type="button" role="menuitem" onClick={()=>openSchoolFolder(row.id,"technical")}>Technical Follow-up</button>
+              <button type="button" role="menuitem" onClick={()=>openSchoolFolder(row.id,"returns")}>Returns & Replacements</button>
+              <button type="button" role="menuitem" onClick={()=>openSchoolFolder(row.id,"closing")}>Final Closing</button>
+            </div>}
+          </article>;
+        })}
         {project && !projectSchools.length && <div className="pr-empty"><Ico name="school" size={36}/><h3>No schools assigned</h3>{canManage && <button className="pr-primary" onClick={openSchools}>Add Schools</button>}</div>}
         {!project && !projects.length && <div className="pr-empty"><Ico name="folder" size={36}/><h3>No project folders yet</h3>{canCreate && <button className="pr-primary" onClick={openNewProject}>Create first project</button>}</div>}
       </div>

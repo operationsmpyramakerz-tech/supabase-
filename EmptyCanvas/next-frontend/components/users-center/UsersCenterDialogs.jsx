@@ -671,10 +671,14 @@ function FeatureAccessModal({ member, onClose, protect }) {
           // Previously enabled Phase 2A profiles keep their enforced restrictions
           // until an admin explicitly switches a module back to legacy. Fresh
           // advanced profiles start with these unrelated modules opt-out.
+          // An active Advanced profile does not imply the Products or Operations
+          // pilot module was migrated. Inferring migration from result.enabled
+          // inadvertently persisted products.view=false when editing other modules,
+          // making an otherwise allowed Products page disappear from the sidebar.
           products: !stored.some(item => item.key === PHASE2A_LEGACY_MARKERS.products && item.allowed === true)
-            && (result.enabled === true || stored.some(item => item.key.startsWith("products.") && item.key !== PHASE2A_LEGACY_MARKERS.products)),
+            && stored.some(item => item.key.startsWith("products.") && item.key !== PHASE2A_LEGACY_MARKERS.products),
           "orders.operations": !stored.some(item => item.key === PHASE2A_LEGACY_MARKERS["orders.operations"] && item.allowed === true)
-            && (result.enabled === true || stored.some(item => item.key.startsWith("orders.operations.") && item.key !== PHASE2A_LEGACY_MARKERS["orders.operations"])),
+            && stored.some(item => item.key.startsWith("orders.operations.") && item.key !== PHASE2A_LEGACY_MARKERS["orders.operations"]),
           "orders.my": stored.some(item => item.key === MY_ORDERS_ENFORCEMENT_MARKER && item.allowed === true),
           "orders.maintenance": stored.some(item => item.key === "orders.maintenance.view"),
           "orders.shopping": stored.some(item => item.key === "orders.shopping.view"),
