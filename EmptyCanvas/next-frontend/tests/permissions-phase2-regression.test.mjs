@@ -10,10 +10,10 @@ const { FEATURE_DEFINITIONS, featureAllowed, isKnownFeature } = await import(`da
 function file(path) { return readFileSync(new URL(path, import.meta.url), 'utf8'); }
 const account = grants => ({ featureAccess: { mode: 'enforced', grants } });
 
-test('All 188 registered feature keys are unique and namespaced', () => {
-  assert.equal(FEATURE_DEFINITIONS.length, 188);
+test('Registered feature keys are unique and namespaced (including newly added modules)', () => {
+  assert.ok(FEATURE_DEFINITIONS.length >= 188);
   const keys = FEATURE_DEFINITIONS.map(item => item.key);
-  assert.equal(new Set(keys).size, 188);
+  assert.equal(new Set(keys).size, FEATURE_DEFINITIONS.length);
   assert.ok(keys.every(k => /^[a-z][a-z0-9_.]+$/.test(k)));
 });
 

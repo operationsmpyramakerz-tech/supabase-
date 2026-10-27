@@ -622,7 +622,10 @@ function FeatureAccessModal({ member, onClose, protect }) {
     { key: "events.team", label: "Event Team", optIn: true },
     { key: "kits", label: "Kits", optIn: true },
     { key: "proposals", label: "Proposals", optIn: true },
-    { key: "preparing", label: "Projects Preparing", optIn: true },
+    // Unlike older migrated modules, Preparing already requires an explicit
+    // feature View grant for every Advanced profile; it cannot opt back into
+    // legacy Page Access while the profile is enforced.
+    { key: "preparing", label: "Projects Preparing", optIn: false },
     { key: "orders.review", label: "Orders Review", optIn: true },
     { key: "stocktaking", label: "Stocktaking", optIn: true },
     { key: "expenses", label: "Expenses", optIn: true },
@@ -685,6 +688,8 @@ function FeatureAccessModal({ member, onClose, protect }) {
           "events.team": stored.some(item => item.key === "events.team.view"),
           kits: stored.some(item => item.key === "kits.view"),
           proposals: stored.some(item => item.key === "proposals.view"),
+          // This new module is always guarded by preparing.view in Advanced mode.
+          preparing: true,
           "orders.review": stored.some(item => item.key === "orders.review.view"),
           stocktaking: stored.some(item => item.key === "stocktaking.view"),
           expenses: stored.some(item => item.key === "expenses.view"),
@@ -799,7 +804,7 @@ function FeatureAccessModal({ member, onClose, protect }) {
           <div><strong>{active ? effectiveAllowedCount : "—"}</strong><small>Allowed actions in active modules*</small></div>
           <div><strong>{active ? blockedModules.length : "—"}</strong><small>Modules blocked by View</small></div>
         </div>
-        {active ? <small className="ua-feature-count-note">*Feature-grant status only. Page Access, Data Scope and required admin verification still apply.</small> : null}
+        {active ? <small className="ua-feature-count-note">*Feature-grant status only. Page Access, Data Scope and required admin verification still apply. Projects Preparing also requires an explicit <strong>View preparing projects</strong> grant here, even if Page Access is enabled.</small> : null}
         {active && blockedModules.length > 0 ? <p className="ua-feature-warning" role="status">View is denied in {blockedModules.map(item => item.label).join(", ")}. Other allowed actions in those modules won't work until View is granted.</p> : null}
         <button type="button" className="ua-team-scope-open" onClick={() => setTeamScopeOpen(true)}><UAIcon name="users"/><span><strong>Manage Team Visibility</strong><small>Set explicit reporting links for Own / Team / All.</small></span><UAIcon name="chevron"/></button>
         {active ? <>
@@ -824,7 +829,7 @@ function FeatureAccessModal({ member, onClose, protect }) {
             {enabledModules[module.key] ? <div className="ua-page-access-group__rows">{shown.filter(item => item.module === module.key && (!searchText || lower(module.label).includes(searchText) || lower(`${item.label} ${item.key}`).includes(searchText))).map(item => <div className="ua-page-access-row ua-feature-access-row" key={item.key}><div className="ua-page-access-name"><strong>{item.label}</strong><small>{item.key}</small></div><div className="ua-page-access-enable">{((item.key === "home.analysis" || item.key.startsWith("expenses.users.")) || ((ORDER_SCOPE_MARKERS[item.module] || item.module === "tasks" || EVENT_REQUEST_ROW_KEYS.has(item.key)) && scopedOrders[item.module] && item.key !== "orders.tracking.view")) && grants[item.key] === true ? <select aria-label={item.key === "home.analysis" ? "Home analysis data scope" : `${item.label} data scope`} className="ua-feature-scope-select" value={grantScopes[item.key] || "all"} onChange={e => setGrantScopes(current => ({ ...current, [item.key]: e.target.value }))}><option value="own">Own</option><option value="team">Team</option><option value="all">All</option></select> : null}<label className="ua-switch" title={item.label}><input type="checkbox" checked={grants[item.key] === true} onChange={e => setGrants(current => ({ ...current, [item.key]: e.target.checked }))}/><span/></label></div></div>)}</div> : null}
             </> : null}
           </section>)}
-          <small>Optional modules remain on legacy Page Access until enabled for this user. Enable a module, then grant only the features needed. A disabled View permission hides its page. Products and Operations Orders now have separate opt-in switches; turn them off to keep existing Page Access while enabling Expenses by Users. For an already-enabled profile, review those switches and save once. Existing Page Access and any required admin password still apply. Home Analysis and Expenses by Users support Own / Team / All. My Orders, Operations Orders and Maintenance Orders support the same scopes only after enabling their separate row-level scope switch. Other permissions retain their saved scope without row-level enforcement.</small>
+          <small>Most optional modules remain on legacy Page Access until enabled for this user. Projects Preparing is different: when Advanced Permissions is ON, explicitly allow View preparing projects (plus any actions needed) as well as Page Access. Enable other modules, then grant only the features needed. A disabled View permission hides its page. Products and Operations Orders now have separate opt-in switches; turn them off to keep existing Page Access while enabling Expenses by Users. For an already-enabled profile, review those switches and save once. Existing Page Access and any required admin password still apply. Home Analysis and Expenses by Users support Own / Team / All. My Orders, Operations Orders and Maintenance Orders support the same scopes only after enabling their separate row-level scope switch. Other permissions retain their saved scope without row-level enforcement.</small>
         </> : <p>Legacy page permissions will apply to this account. No feature grants will be enforced.</p>}
       </> : null}
       {savedDraft !== null ? <section className="ua-feature-review" aria-live="polite">
