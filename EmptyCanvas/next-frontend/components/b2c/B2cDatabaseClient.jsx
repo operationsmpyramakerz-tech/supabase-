@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { navigateWithinApp } from "../../lib/client-navigation";
+import { DeleteConfirmDialog } from "../shared/SystemDeleteDialogs";
+import { featureAllowed } from "../../lib/feature-permissions-registry";
 
 function text(value) { return String(value ?? "").trim(); }
 function lower(value) { return text(value).toLowerCase(); }
@@ -32,8 +35,15 @@ async function requestJson(url, options = {}) {
     throw new Error("Your session has expired.");
   }
   const body = await response.json().catch(() => ({}));
-  if (!response.ok || body?.ok === false) throw new Error(apiErrorMessage(body, "The request failed."));
+  if (!response.ok || body?.ok === false) {
+    const error = new Error(apiErrorMessage(body, "The request failed."));
+    error.status = response.status;
+    throw error;
+  }
   return body;
+}
+async function requestReadJson(directUrl) {
+  return await requestJson(directUrl);
 }
 
 function Toast({ toast, onClose }) {
@@ -101,28 +111,30 @@ function DeleteModal({ database, busy, onClose, onConfirm }) {
   const [confirmation, setConfirmation] = useState("");
   const [error, setError] = useState("");
   const matches = text(confirmation) === database.name;
-  const submit = async (event) => {
-    event.preventDefault();
+  const confirm = async () => {
     if (!matches) return setError("Type the exact table name to confirm deletion.");
     setError("");
     try { await onConfirm(); }
     catch (submitError) { setError(submitError?.message || "The table could not be deleted."); }
   };
-  return (
-    <ClassicModal title="Delete database?" subtitle={`You’re going to permanently delete “${database.name}”, including all properties, forms, and records.`} eyebrow="Permanent action" onClose={onClose}>
-      <form onSubmit={submit}>
-        <div className="next-b2c-classic-delete-summary"><strong>{database.name}</strong><span>{formatNumber(database.fieldCount)} properties · {formatNumber(database.recordCount)} records</span></div>
-        <div className="b2c-form-grid"><label className="b2c-form-control b2c-form-control--wide"><span>Type “{database.name}” to confirm</span><input autoFocus value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="off" /></label></div>
-        {error ? <div className="b2c-dialog__error">{error}</div> : null}
-        <div className="b2c-dialog__actions"><button type="button" className="b2c-secondary-btn" onClick={onClose} disabled={busy}>Cancel</button><button type="submit" className="b2c-primary-btn next-b2c-danger-btn" disabled={busy || !matches}>{busy ? "Deleting…" : "Delete Permanently"}</button></div>
-      </form>
-    </ClassicModal>
-  );
+  return <DeleteConfirmDialog
+    title="Delete database?"
+    message={`You’re going to permanently delete “${database.name}”, including all properties, forms, and records. This action cannot be undone.`}
+    busy={busy}
+    error={error}
+    onCancel={onClose}
+    onConfirm={confirm}
+    confirmDisabled={!matches}
+    confirmLabel="Yes, Delete!"
+  >
+    <div className="next-b2c-classic-delete-summary"><strong>{database.name}</strong><span>{formatNumber(database.fieldCount)} properties · {formatNumber(database.recordCount)} records</span></div>
+    <label className="system-delete-dialog__field"><span>Type “{database.name}” to confirm</span><input autoFocus value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="off" /></label>
+  </DeleteConfirmDialog>;
 }
 
-function DatabaseCard({ database, busy, menuOpen, onToggleMenu, onEdit, onCopy, onDelete }) {
+function DatabaseCard({ database, busy, menuOpen, onToggleMenu, onEdit, onCopy, onDelete, permissions }) {
   const openUrl = `/next/b2c/database/${encodeURIComponent(database.id)}`;
-  const exportUrl = `/api/b2c/databases/${encodeURIComponent(database.id)}/export.xlsx`;
+  const exportUrl = `/next/api/b2c/export-direct?id=${encodeURIComponent(database.id)}`;
   const caption = `${formatNumber(database.fieldCount)} ${database.fieldCount === 1 ? "property" : "properties"} · ${formatNumber(database.recordCount)} ${database.recordCount === 1 ? "record" : "records"}`;
   return (
     <div className={`b2c-folder-card ${menuOpen ? "is-actions-open" : ""}`}>
@@ -131,20 +143,26 @@ function DatabaseCard({ database, busy, menuOpen, onToggleMenu, onEdit, onCopy, 
         <div className="b2c-folder__name" title={database.name}>{database.name}</div>
         <div className="b2c-folder__caption">{caption}</div>
       </a>
-      <div className="b2c-folder-actions">
+      {(permissions.edit || permissions.copy || permissions.delete || permissions.export) ? <div className="b2c-folder-actions">
         <button className="b2c-folder__menu-btn" type="button" aria-label="Table actions" aria-expanded={menuOpen} onClick={(event) => { event.preventDefault(); event.stopPropagation(); onToggleMenu(); }}><span className="b2c-folder__menu-dots" aria-hidden="true">•••</span></button>
         <div className="b2c-folder__actions-menu">
-          <button type="button" onClick={() => onEdit(database)} disabled={Boolean(busy)}><span>Edit</span></button>
-          <button type="button" onClick={() => onCopy(database)} disabled={Boolean(busy)}><span>{busy === `copy:${database.id}` ? "Copying…" : "Make a copy"}</span></button>
-          <a href={exportUrl} download><span>Download Excel</span></a>
-          <button type="button" className="is-danger" onClick={() => onDelete(database)} disabled={Boolean(busy)}><span>Delete</span></button>
+          {permissions.edit ? <button type="button" onClick={() => onEdit(database)} disabled={Boolean(busy)}><span>Edit</span></button> : null}
+          {permissions.copy ? <button type="button" onClick={() => onCopy(database)} disabled={Boolean(busy)}><span>{busy === `copy:${database.id}` ? "Copying…" : "Make a copy"}</span></button> : null}
+          {permissions.export ? <a href={exportUrl} download><span>Download Excel</span></a> : null}
+          {permissions.delete ? <button type="button" className="is-danger" onClick={() => onDelete(database)} disabled={Boolean(busy)}><span>Delete</span></button> : null}
         </div>
-      </div>
+      </div> : null}
     </div>
   );
 }
 
-export default function B2cDatabaseClient({ initialPayload, bootstrapWarnings = [] }) {
+export default function B2cDatabaseClient({ account, initialPayload, bootstrapWarnings = [] }) {
+  const permissions = {
+    create: featureAllowed(account, "b2c.database.create"), edit: featureAllowed(account, "b2c.database.edit"),
+    copy: featureAllowed(account, "b2c.database.copy"), delete: featureAllowed(account, "b2c.database.delete"),
+    export: featureAllowed(account, "b2c.database.export"),
+    forms: featureAllowed(account, "b2c.forms.view"),
+  };
   const [databases, setDatabases] = useState(() => (Array.isArray(initialPayload?.databases) ? initialPayload.databases : []).map(normalizeDatabase));
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState("updated-desc");
@@ -187,7 +205,7 @@ export default function B2cDatabaseClient({ initialPayload, bootstrapWarnings = 
   const refresh = async ({ silent = false } = {}) => {
     if (!silent) setBusy("refresh");
     try {
-      const payload = await requestJson("/api/b2c/databases");
+      const payload = await requestReadJson("/next/api/b2c/databases?_fresh=1");
       setDatabases((Array.isArray(payload?.databases) ? payload.databases : []).map(normalizeDatabase));
       if (!silent) notify("Database folders were refreshed.");
     } catch (error) { notify(error?.message || "Unable to refresh B2C databases.", "error"); throw error; }
@@ -198,18 +216,18 @@ export default function B2cDatabaseClient({ initialPayload, bootstrapWarnings = 
     const database = dialog?.database;
     setBusy(isEdit ? `edit:${database?.id}` : "create");
     try {
-      const payload = await requestJson(isEdit ? `/api/b2c/databases/${encodeURIComponent(database.id)}` : "/api/b2c/databases", { method: isEdit ? "PATCH" : "POST", body: JSON.stringify({ name, description }) });
+      const payload = await requestJson("/next/api/b2c/mutations-direct", { method: "POST", body: JSON.stringify({ action: isEdit ? "database-update" : "database-create", databaseId: database?.id || "", name, description }) });
       setDialog(null);
       await refresh({ silent: true });
       notify(isEdit ? `“${name}” was updated.` : `“${name}” was created.`);
-      if (!isEdit && payload?.database?.id) window.location.href = `/next/b2c/database/${encodeURIComponent(payload.database.id)}`;
+      if (!isEdit && payload?.database?.id) navigateWithinApp(`/next/b2c/database/${encodeURIComponent(payload.database.id)}`);
     } finally { setBusy(""); }
   };
   const copyDatabase = async (database) => {
     setMenuOpen("");
     if (!window.confirm(`Make a copy of “${database.name}”? The copy keeps properties and form layouts without copying customer records.`)) return;
     setBusy(`copy:${database.id}`);
-    try { const payload = await requestJson(`/api/b2c/databases/${encodeURIComponent(database.id)}/copy`, { method: "POST" }); await refresh({ silent: true }); notify(`“${payload?.database?.name || `${database.name} Copy`}” was created.`); }
+    try { const payload = await requestJson("/next/api/b2c/mutations-direct", { method: "POST", body: JSON.stringify({ action: "database-copy", databaseId: database.id }) }); await refresh({ silent: true }); notify(`“${payload?.database?.name || `${database.name} Copy`}” was created.`); }
     catch (error) { notify(error?.message || "The database table could not be copied.", "error"); }
     finally { setBusy(""); }
   };
@@ -217,7 +235,7 @@ export default function B2cDatabaseClient({ initialPayload, bootstrapWarnings = 
     if (!deleteTarget) return;
     setBusy(`delete:${deleteTarget.id}`);
     try {
-      await requestJson(`/api/b2c/databases/${encodeURIComponent(deleteTarget.id)}`, { method: "DELETE" });
+      await requestJson("/next/api/b2c/mutations-direct", { method: "POST", body: JSON.stringify({ action: "database-delete", databaseId: deleteTarget.id }) });
       const id = deleteTarget.id; const deletedName = deleteTarget.name;
       setDeleteTarget(null); setDatabases((current) => current.filter((database) => database.id !== id)); notify(`“${deletedName}” was permanently deleted.`);
     } finally { setBusy(""); }
@@ -226,22 +244,22 @@ export default function B2cDatabaseClient({ initialPayload, bootstrapWarnings = 
   return (
     <main className="b2c-shell next-b2c-classic-library">
       <Toast toast={toast} onClose={() => setToast(null)} />
-      {bootstrapWarnings.length ? <div className="next-b2c-classic-warning"><strong>Some B2C resources did not finish loading.</strong><span>Refresh this page or use the Classic interface while the service recovers.</span><a href="/b2c/database?classic=1">Classic Database</a></div> : null}
+      {bootstrapWarnings.length ? <div className="next-b2c-classic-warning"><strong>Some B2C resources did not finish loading.</strong><span>Refresh this page while the service recovers.</span></div> : null}
       <section className="b2c-library-workspace" aria-labelledby="b2cDatabaseTitle">
         <div className="b2c-library-workspace__head">
           <div><span className="b2c-eyebrow">B2C data workspace</span><h2 id="b2cDatabaseTitle">Your databases</h2><p>Create independent customer data tables. Every table keeps its own properties, records, forms, and record-ID sequence.</p></div>
           <div className="b2c-top-actions">
             <label className="b2c-library-sort"><span>Sort</span><select value={sort} onChange={(event) => setSort(event.target.value)}><option value="updated-desc">Recently updated</option><option value="created-desc">Recently created</option><option value="name-asc">Name A–Z</option><option value="name-desc">Name Z–A</option><option value="records-desc">Most records</option><option value="fields-desc">Most properties</option></select></label>
             <button className="b2c-secondary-btn b2c-compact-btn" type="button" onClick={() => refresh().catch(() => {})} disabled={busy === "refresh"}>{busy === "refresh" ? "Refreshing…" : "Refresh"}</button>
-            <a className="b2c-secondary-btn b2c-compact-btn" href="/next/b2c/forms">Forms</a>
-            <button className="b2c-primary-btn" type="button" onClick={() => setDialog({ mode: "create" })}>+ New Table</button>
+            {permissions.forms ? <a className="b2c-secondary-btn b2c-compact-btn" href="/next/b2c/forms">Forms</a> : null}
+            {permissions.create ? <button className="b2c-primary-btn" type="button" onClick={() => setDialog({ mode: "create" })}>+ New Table</button> : null}
           </div>
         </div>
         <div className="b2c-library-summary"><div><div><small>Data tables</small><strong>{databases.length}</strong></div></div><p>{databases.length ? "Choose a folder to open its dedicated table page." : "Create your first B2C database table to begin."}</p></div>
         <section className="b2c-folders-panel">
           <div className="b2c-folders-panel__head"><div><h3>Database folders</h3><p>Open a folder to manage its properties, records, Excel export, and linked forms.</p></div><span>{visibleDatabases.length} table{visibleDatabases.length === 1 ? "" : "s"}</span></div>
           <div className="b2c-folders-grid">
-            {visibleDatabases.length ? visibleDatabases.map((database) => <DatabaseCard key={database.id} database={database} busy={busy} menuOpen={menuOpen === database.id} onToggleMenu={() => setMenuOpen((current) => current === database.id ? "" : database.id)} onEdit={(item) => { setMenuOpen(""); setDialog({ mode: "edit", database: item }); }} onCopy={copyDatabase} onDelete={(item) => { setMenuOpen(""); setDeleteTarget(item); }} />) : <div className="b2c-folder-empty"><strong>{databases.length ? "No matching tables" : "No data tables yet"}</strong><span>{databases.length ? "Try another phrase in the page search." : "Create the first B2C table to add independent records and forms."}</span></div>}
+            {visibleDatabases.length ? visibleDatabases.map((database) => <DatabaseCard key={database.id} database={database} permissions={permissions} busy={busy} menuOpen={menuOpen === database.id} onToggleMenu={() => setMenuOpen((current) => current === database.id ? "" : database.id)} onEdit={(item) => { setMenuOpen(""); setDialog({ mode: "edit", database: item }); }} onCopy={copyDatabase} onDelete={(item) => { setMenuOpen(""); setDeleteTarget(item); }} />) : <div className="b2c-folder-empty"><strong>{databases.length ? "No matching tables" : "No data tables yet"}</strong><span>{databases.length ? "Try another phrase in the page search." : "Create the first B2C table to add independent records and forms."}</span></div>}
           </div>
         </section>
       </section>

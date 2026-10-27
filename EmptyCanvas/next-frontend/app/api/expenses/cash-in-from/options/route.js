@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
-import { getLegacyAccountGate } from "../../../../../lib/products-auth";
+import { getDirectAccountGate } from "../../../../../lib/products-auth";
+import { featureGate } from "../../../../../lib/feature-permissions-server";
 import { cashInFromOptions } from "../../../../../lib/expenses-data";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const gate = await getLegacyAccountGate(["Expenses"]);
+  const gate = featureGate(await getDirectAccountGate(["Expenses"]), "expenses.view");
   if (!gate.ok) {
     return NextResponse.json(
       { success: false, error: gate.error || "Access denied." },

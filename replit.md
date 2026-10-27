@@ -1,72 +1,52 @@
-# Notion Order Dashboard
+# Operations Hub ERP — Final Architecture
 
-## Overview
+## Production application
 
-This is a Node.js web application that provides an order management dashboard connected to Notion databases. The system manages orders, inventory stocktaking, funds tracking, and team member assignments for what appears to be an educational institution or school system. The application features a multi-step order creation process, user authentication with role-based access control, and comprehensive order tracking from request to fulfillment.
+Operations Hub is now a Next.js + Supabase application. The historical Express
+backend has been retired and is not required by the production runtime.
 
-## User Preferences
+- **Application root:** `EmptyCanvas/next-frontend`
+- **Framework:** Next.js App Router
+- **Database:** Supabase
+- **Sessions:** signed cookie + Upstash Redis
+- **Storage:** Supabase Storage
+- **Deployment:** Vercel
+- **PWA:** owned by the Next deployment
+- **Notifications:** Supabase-backed notifications + Web Push
+- **Scheduled jobs:** Vercel Cron -> Next notification scanner
 
-Preferred communication style: Simple, everyday language.
+## Repository layout
 
-## System Architecture
+Runtime source lives under `EmptyCanvas/next-frontend/`.
 
-### Frontend Architecture
-- **Static File Serving**: Express.js serves static HTML, CSS, and JavaScript files from the `public` directory
-- **Client-Side JavaScript**: Modular JavaScript architecture with separate files for each major feature (orders, stocktaking, funds, login)
-- **UI Framework**: Custom CSS with responsive design, uses Feather Icons for iconography and Choices.js for enhanced select dropdowns
-- **Session-Based State Management**: Uses browser localStorage and sessionStorage for caching user preferences and temporary data
+The SQL files directly under `EmptyCanvas/` are retained database migrations /
+performance scripts and are intentionally not part of the application runtime.
 
-### Backend Architecture
-- **Express.js Server**: Simple Node.js backend with Express.js handling HTTP requests and serving static files
-- **Session Management**: Express-session middleware for user authentication and session persistence
-- **RESTful API Design**: API endpoints follow REST conventions for data operations (GET, POST, etc.)
-- **Middleware Stack**: JSON parsing, URL encoding, static file serving, and session management
+The repository no longer needs the historical `EmptyCanvas/server/`,
+`EmptyCanvas/api/`, legacy `EmptyCanvas/public/`, PM2 configuration, parent
+Vercel forwarding configs, or Express/Notion package dependencies.
 
-### Authentication & Authorization
-- **Session-Based Authentication**: Users log in with username/password, sessions stored server-side
-- **Role-Based Access Control**: Different user roles have access to different pages/features based on allowed pages configuration
-- **Page-Level Security**: Frontend dynamically shows/hides navigation elements based on user permissions
+## Required production environment
 
-### Data Architecture
-- **Notion as Database**: Uses Notion API client to interact with multiple Notion databases as the primary data store
-- **Multiple Database Schema**: 
-  - Products/Components Database: Product catalog and inventory
-  - Orders Database: Current orders and order history
-  - Products List Database: Order line items and requested products
-  - Team Members Database: User accounts and team management
-  - Stocktaking Database: Inventory tracking and stock levels
-  - Funds Database: Financial tracking and expense management
+Keep the active Supabase variables plus:
 
-### Key Features
-- **Multi-Step Order Creation**: Three-step process (Details → Products → Review) with draft persistence
-- **Order Management**: Separate views for current orders, requested orders, and assigned orders
-- **Inventory Tracking**: Stocktaking module with quantity management and categorization
-- **Financial Management**: Funds tracking for mission expenses with multiple expense types
-- **PDF Generation**: Server-side PDF creation using PDFKit for reports and documents
-- **Search & Filtering**: Client-side search functionality across orders, products, and inventory
+- `SESSION_SECRET`
+- `UPSTASH_REDIS_REST_URL`
+- `UPSTASH_REDIS_REST_TOKEN`
 
-## External Dependencies
+Keep feature variables that are in use, such as the VAPID keys and
+`CRON_SECRET`. `NEXT_FRONTEND_BASE_PATH` is optional because `/next` is the
+default base path.
 
-### Core Framework Dependencies
-- **@notionhq/client (^2.3.0)**: Official Notion API client for database operations and content management
-- **express (^4.21.2)**: Web server framework for handling HTTP requests and middleware
-- **express-session (^1.18.2)**: Session management middleware for user authentication
-- **pdfkit (^0.17.2)**: PDF document generation library for creating reports and printable documents
+Legacy routing variables such as `LEGACY_BACKEND_ORIGIN`,
+`NEXT_FRONTEND_ORIGIN`, `NEXT_FRONTEND_PUBLIC_ORIGIN`, and
+`ENABLE_NEXT_FRONTEND` are not part of the runtime anymore.
 
-### Frontend Libraries (CDN)
-- **Feather Icons**: Icon library loaded via CDN for consistent UI iconography
-- **Choices.js**: Enhanced select dropdown library for improved user experience with searchable selects
+## Development rule
 
-### Environment Configuration
-- **Notion API Integration**: Requires `Notion_API_Key` environment variable for API authentication
-- **Database IDs**: Multiple Notion database IDs configured via environment variables:
-  - `Products_Database`: Product catalog
-  - `Products_list`: Order items
-  - `Team_Members`: User management
-  - `School_Stocktaking_DB_ID`: Inventory tracking
-  - `Funds`: Financial records
-- **Session Security**: `SESSION_SECRET` environment variable for session encryption
+All new reads, mutations, exports, uploads, authentication, scheduled jobs and
+business logic must stay inside `EmptyCanvas/next-frontend` and use
+Next/Supabase. Do not reintroduce Express or Notion as a production data path.
 
-### Hosting Platform
-- **Replit Integration**: Configured for Replit hosting with environment variables managed through Replit Secrets
-- **Port Configuration**: Uses `process.env.PORT` with fallback to port 5000 for flexible deployment
+A small local-only compatibility helper remains for four pre-existing
+bracket-named routes/pages. It performs no network request to a legacy backend.

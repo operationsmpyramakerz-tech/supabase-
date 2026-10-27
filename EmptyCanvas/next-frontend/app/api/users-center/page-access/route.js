@@ -1,0 +1,30 @@
+import { NextResponse } from "next/server";
+import { getDirectAccountGate } from "../../../../lib/products-auth";
+import { featureGate } from "../../../../lib/feature-permissions-server";
+import { usersCenterPageAccess } from "../../../../lib/users-center-data";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+const ACCESS_PAGES = ["Users Center", "User Access & Data", "User Access", "Team Members"];
+
+export async function GET(request) {
+  const gate = featureGate(featureGate(await getDirectAccountGate(ACCESS_PAGES), "users.view"), "users.page_access_manage");
+  if (!gate.ok) {
+    return NextResponse.json({ ok: false, pages: [], error: gate.error || "Access denied." }, { status: gate.status || 503 });
+  }
+
+  try {
+    const id = String(request.nextUrl.searchParams.get("id") || "").trim();
+    if (!id) return NextResponse.json({ ok: false, pages: [], error: "Missing team member ID." }, { status: 400 });
+    return NextResponse.json(await usersCenterPageAccess(id), {
+      headers: { "Cache-Control": "no-store" },
+    });
+  } catch (error) {
+    console.error("GET /next/api/users-center/page-access error:", error?.details || error);
+    return NextResponse.json(
+      { ok: false, pages: [], error: error?.message || "Failed to load page access." },
+      { status: Number(error?.status) || 500 },
+    );
+  }
+}

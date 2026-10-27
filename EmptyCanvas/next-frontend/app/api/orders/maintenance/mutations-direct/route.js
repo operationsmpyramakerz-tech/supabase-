@@ -1,0 +1,117 @@
+import { NextResponse, after } from "next/server";
+import { dispatchQueuedNotifications } from "../../../../../lib/notification-event-worker";
+import { getDirectAccountGate } from "../../../../../lib/products-auth";
+import { featureGate } from "../../../../../lib/feature-permissions-server";
+import { assertOrderIdsInScope } from "../../../../../lib/order-data-scope";
+import {
+  logMaintenanceDirect,
+  markMaintenanceArrivedDirect,
+  performMaintenanceOrdersProtectedAction,
+} from "../../../../../lib/maintenance-orders-data";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const maxDuration = 60;
+
+function noStore(payload, init = {}) {
+  return NextResponse.json(payload, {
+    ...init,
+    headers: {
+      "Cache-Control": "private, no-store",
+      ...(init.headers || {}),
+    },
+  });
+}
+
+function text(value) {
+  return String(value ?? "").trim();
+}
+
+function actionKey(value) {
+  return text(value).toLowerCase().replace(/[_\s]+/g, "-");
+}
+
+function directErrorResponse(error) {
+  if (error?.code !== "DIRECT_MAINTENANCE_ORDERS_MUTATION_FAILED") return null;
+  return noStore(
+    { error: error?.message || "Maintenance Orders action failed." },
+    { status: Number(error?.status) || 500 },
+  );
+}
+
+export async function POST(request) {
+  const body = await request.json().catch(() => ({}));
+  const action = actionKey(body?.action);
+  if (!["archive", "delete", "edit-init", "log-maintenance", "mark-arrived"].includes(action)) {
+    return noStore({ error: "Unsupported Maintenance Orders action." }, { status: 400 });
+  }
+
+  const permissionByAction = {
+    "archive": "orders.maintenance.archive",
+    "delete": "orders.maintenance.delete",
+    "edit-init": "orders.maintenance.edit",
+    "log-maintenance": body?.replaceExisting === true ? "orders.maintenance.edit" : "orders.maintenance.log",
+    "mark-arrived": "orders.maintenance.mark_arrived",
+  };
+  const gate = featureGate(await getDirectAccountGate(["Maintenance Orders", "Operations Orders", "Requested Orders"]), permissionByAction[action]);
+  if (!gate.ok) {
+    return noStore({ error: gate.error || "Authentication required." }, { status: gate.status || 503 });
+  }
+
+  try {
+    await assertOrderIdsInScope(gate.account, permissionByAction[action], body?.orderIds);
+    let result = null;
+    if (["archive", "delete", "edit-init"].includes(action)) {
+      result = await performMaintenanceOrdersProtectedAction({
+        account: gate.account,
+        action,
+        orderIds: body?.orderIds,
+        adminPassword: body?.adminPassword,
+      });
+    } else if (action === "log-maintenance") {
+      result = await logMaintenanceDirect({
+        account: gate.account,
+        orderIds: body?.orderIds,
+        resolutionMethod: body?.resolutionMethod,
+        serialNumber: body?.serialNumber,
+        actualIssueDescription: body?.actualIssueDescription,
+        repairAction: body?.repairAction,
+        sparePartId: body?.sparePartId,
+        sparePartIds: body?.sparePartIds,
+        sparePartNames: body?.sparePartNames,
+        perItemLogs: body?.perItemLogs,
+        moveToArrived: body?.moveToArrived,
+        moveToShipping: body?.moveToShipping,
+        replaceExisting: body?.replaceExisting,
+        appendLog: body?.appendLog,
+      });
+    } else if (action === "mark-arrived") {
+      result = await markMaintenanceArrivedDirect({
+        account: gate.account,
+        orderIds: body?.orderIds,
+        orderReceiptDataUrls: body?.orderReceiptDataUrls,
+        orderReceiptFilenames: body?.orderReceiptFilenames,
+        receiptNumbers: body?.receiptNumbers ?? body?.receiptNumber,
+      });
+    }
+    if (result) {
+      if (["log-maintenance", "mark-arrived"].includes(action) && result?.ok !== false && result?.success !== false) {
+        after(() => dispatchQueuedNotifications({ limit: 5 }).catch((error) =>
+          console.warn("[notifications] Maintenance delivery deferred:", error?.message)));
+      }
+      return noStore(result);
+    }
+    return noStore(
+      { error: "This Maintenance Orders action is not available through the direct Supabase path." },
+      { status: 503 },
+    );
+  } catch (error) {
+    const response = directErrorResponse(error);
+    if (response) return response;
+    console.error(`[maintenance-orders] direct ${action} failed:`, error?.message || error);
+    return noStore(
+      { error: error?.message || "Maintenance Orders action failed." },
+      { status: Number(error?.status) || 500 },
+    );
+  }
+}

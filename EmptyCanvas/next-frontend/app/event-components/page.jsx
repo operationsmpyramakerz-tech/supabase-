@@ -1,30 +1,18 @@
 import { redirect } from "next/navigation";
 import AppShell from "../../components/AppShell";
 import EventComponentsClient from "../../components/events/EventComponentsClient";
-import { fetchLegacyJson } from "../../lib/legacy-api";
+import { loadDirectEventsPageData } from "../../lib/events-data";
+import { featureAllowed } from "../../lib/feature-permissions-registry";
 
 export const dynamic = "force-dynamic";
 
-function resourceMap(bundle) {
-  const map = new Map();
-  for (const resource of Array.isArray(bundle?.resources) ? bundle.resources : []) {
-    map.set(String(resource?.url || ""), resource?.body);
-  }
-  return map;
-}
-
-function getResource(map, prefix, fallback = null) {
-  for (const [url, body] of map.entries()) {
-    if (url === prefix || url.startsWith(prefix)) return body;
-  }
-  return fallback;
-}
-
 export default async function EventComponentsPage({ searchParams }) {
-  const response = await fetchLegacyJson("/api/page-bootstrap?scope=events-components", { timeoutMs: 35000 });
+  const params = await Promise.resolve(searchParams || {});
+  const initialCreate = ["1", "true", "yes", "on"].includes(String(params?.create || "").trim().toLowerCase());
+  const pageData = await loadDirectEventsPageData({ mode: "components" }).catch(() => null);
 
-  if (response.status === 401) redirect("/login?next=/next/event-components");
-  if (response.status === 403) {
+  if (pageData?.status === 401) redirect("/login?next=/next/event-components");
+  if (pageData?.status === 403 || (pageData?.ok && !featureAllowed(pageData.account, "events.components.view"))) {
     return (
       <main className="standalone-state">
         <section className="state-card">
@@ -37,15 +25,15 @@ export default async function EventComponentsPage({ searchParams }) {
     );
   }
 
-  if (!response.ok || !response.data?.ok) {
+  if (!pageData?.ok) {
     return (
       <main className="standalone-state">
         <section className="state-card">
           <span className="status-dot warning" />
-          <h1>The new Event Components page could not load</h1>
-          <p>{response.error || response.data?.error || "The current ERP API is temporarily unavailable."}</p>
+          <h1>The Event Components page could not load</h1>
+          <p>{pageData?.error || "The Events data service is temporarily unavailable."}</p>
           <div className="actions">
-            <a className="primary-button" href="/events/components?classic=1">Open classic Event Components</a>
+            <a className="primary-button" href="/next/event-components">Try again</a>
             <a className="secondary-button" href="/next/home">Return to Home</a>
           </div>
         </section>
@@ -53,24 +41,14 @@ export default async function EventComponentsPage({ searchParams }) {
     );
   }
 
-  const params = await Promise.resolve(searchParams || {});
-  const initialCreate = ["1", "true", "yes", "on"].includes(String(params?.create || "").trim().toLowerCase());
-
-  const resources = resourceMap(response.data);
-  const account = getResource(resources, "/api/account", null);
-  const componentsPayload = getResource(resources, "/api/events/components", { ok: true, components: [] });
-  const categoriesPayload = getResource(resources, "/api/events/component-categories", { ok: true, categories: [] });
-
-  if (!account) redirect("/login?next=/next/event-components");
-
   return (
-    <AppShell account={account} title="Event Components" eyebrow="Reusable event resources" activePath="/next/event-components" bodyClass="events-page events-components-page" classicStyles={["/css/events.css?v=next-stage-2k-events"]}>
+    <AppShell account={pageData.account} title="Events" eyebrow="Reusable event resources" activePath="/next/event-components" bodyClass="events-page events-components-page" pageStyles={["/next/css/events.css?v=nav-20261016"]}>
       <EventComponentsClient
-        account={account}
-        initialComponents={Array.isArray(componentsPayload?.components) ? componentsPayload.components : []}
-        initialCategories={Array.isArray(categoriesPayload?.categories) ? categoriesPayload.categories : []}
+        account={pageData.account}
+        initialComponents={Array.isArray(pageData.components) ? pageData.components : []}
+        initialCategories={Array.isArray(pageData.categories) ? pageData.categories : []}
         initialCreate={initialCreate}
-        bootstrapWarnings={response.data.omitted || []}
+        bootstrapWarnings={pageData.warnings || []}
       />
     </AppShell>
   );

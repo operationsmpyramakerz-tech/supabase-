@@ -5,11 +5,18 @@
   "scripts": {
     "dev": "next dev -p 3001",
     "build": "next build",
-    "start": "node server.js"
+    "start": "node server.js",
+    "security:preflight": "node scripts/security-preflight.mjs",
+    "security:test-multiuser": "node --test tests/security-phase2q4a-multiuser-policy.test.mjs",
+    "security:staging-readonly": "node scripts/security-staging-readonly.mjs"
   },
   "dependencies": {
     "next": "latest",
     "react": "latest",
-    "react-dom": "latest"
+    "react-dom": "latest",
+    "redis": "^4.6.14",
+    "exceljs": "^4.3.0",
+    "pdfkit": "^0.17.2",
+    "web-push": "^3.6.7"
   }
 }

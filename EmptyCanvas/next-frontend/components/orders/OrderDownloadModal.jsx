@@ -72,8 +72,8 @@ function clearLegacyTemplates() {
   } catch {}
 }
 
-async function instructionApi(path = "", options = {}) {
-  const response = await fetch(`/api/orders/download-instructions${path}`, {
+async function instructionApi(options = {}) {
+  const response = await fetch(`/next/api/orders/download-instructions`, {
     credentials: "include",
     cache: "no-store",
     ...options,
@@ -84,7 +84,9 @@ async function instructionApi(path = "", options = {}) {
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(payload?.error || payload?.message || "Saved instructions request failed.");
+    const error = new Error(payload?.error || payload?.message || "Saved instructions request failed.");
+    error.status = response.status;
+    throw error;
   }
   return payload;
 }
@@ -92,13 +94,16 @@ async function instructionApi(path = "", options = {}) {
 async function loadTemplatesFromDatabase() {
   const payload = await instructionApi();
   const source = Array.isArray(payload) ? payload : payload?.items;
-  return (Array.isArray(source) ? source : [])
-    .map(normalizeTemplate)
-    .filter((item) => item.id && item.title && (item.englishText || item.arabicText));
+  return {
+    items: (Array.isArray(source) ? source : [])
+      .map(normalizeTemplate)
+      .filter((item) => item.id && item.title && (item.englishText || item.arabicText)),
+    canManage: payload?.canManage === true,
+  };
 }
 
 async function createTemplateInDatabase(template) {
-  const payload = await instructionApi("", {
+  const payload = await instructionApi({
     method: "POST",
     body: JSON.stringify({
       title: text(template?.title),
@@ -112,9 +117,10 @@ async function createTemplateInDatabase(template) {
 async function updateTemplateInDatabase(template) {
   const id = text(template?.id);
   if (!id) return createTemplateInDatabase(template);
-  const payload = await instructionApi(`/${encodeURIComponent(id)}`, {
+  const payload = await instructionApi({
     method: "PATCH",
     body: JSON.stringify({
+      id,
       title: text(template?.title),
       englishText: text(template?.englishText),
       arabicText: text(template?.arabicText),
@@ -235,6 +241,9 @@ export default function OrderDownloadModal({
   showSignatureOptions = true,
   showRepeatedComponentOptions = false,
   defaultRepeatedComponentMode = "merge",
+  showCombinedOrderOptions = false,
+  orderOptions = [],
+  currentOrderKey = "",
   onClose,
   onDownload,
 }) {
@@ -263,13 +272,40 @@ export default function OrderDownloadModal({
     return Array.from(new Set(requested.length ? requested : ["Storekeeper", "Operations", "Delivered to"]));
   }, [defaultSignatureLabels]);
 
+  const normalizedOrderOptions = useMemo(() => {
+    const seen = new Set();
+    return (Array.isArray(orderOptions) ? orderOptions : [])
+      .map((option) => ({
+        key: text(option?.key),
+        label: text(option?.label) || "Order",
+        userName: text(option?.userName) || "—",
+        orderIds: [...new Set((Array.isArray(option?.orderIds) ? option.orderIds : []).map(text).filter(Boolean))],
+      }))
+      .filter((option) => {
+        if (!option.key || !option.orderIds.length || seen.has(option.key)) return false;
+        seen.add(option.key);
+        return true;
+      });
+  }, [orderOptions]);
+
+  const effectiveCurrentOrderKey = useMemo(() => {
+    const requested = text(currentOrderKey);
+    if (requested && normalizedOrderOptions.some((option) => option.key === requested)) return requested;
+    return normalizedOrderOptions[0]?.key || "";
+  }, [currentOrderKey, normalizedOrderOptions]);
+
   const [columns, setColumns] = useState(startingColumns);
   const [signatureLabels, setSignatureLabels] = useState(startingSignatures);
   const [repeatedComponentMode, setRepeatedComponentMode] = useState(
     String(defaultRepeatedComponentMode || "").toLowerCase() === "separate" ? "separate" : "merge",
   );
+  const [selectedOrderKeys, setSelectedOrderKeys] = useState(() => effectiveCurrentOrderKey ? [effectiveCurrentOrderKey] : []);
+  const [orderSelectorOpen, setOrderSelectorOpen] = useState(false);
+  const [orderQuery, setOrderQuery] = useState("");
   const [templates, setTemplates] = useState([]);
   const [templatesLoading, setTemplatesLoading] = useState(false);
+  const [canManageInstructions, setCanManageInstructions] = useState(false);
+  const [canDownloadInstructions, setCanDownloadInstructions] = useState(true);
   const [selectedInstructionId, setSelectedInstructionId] = useState("");
   const [instructionOpen, setInstructionOpen] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
@@ -277,6 +313,7 @@ export default function OrderDownloadModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const selectorRef = useRef(null);
+  const orderSelectorRef = useRef(null);
 
   const wasOpenRef = useRef(false);
 
@@ -288,7 +325,12 @@ export default function OrderDownloadModal({
     setColumns(startingColumns);
     setSignatureLabels(startingSignatures);
     setRepeatedComponentMode(String(defaultRepeatedComponentMode || "").toLowerCase() === "separate" ? "separate" : "merge");
+    setSelectedOrderKeys(effectiveCurrentOrderKey ? [effectiveCurrentOrderKey] : []);
+    setOrderSelectorOpen(false);
+    setOrderQuery("");
     setTemplates([]);
+    setCanManageInstructions(false);
+    setCanDownloadInstructions(true);
     setTemplatesLoading(true);
     setSelectedInstructionId("");
     setInstructionOpen(false);
@@ -296,7 +338,7 @@ export default function OrderDownloadModal({
     setEditingInstruction(null);
     setBusy(false);
     setError("");
-  }, [open, startingColumns, startingSignatures, defaultRepeatedComponentMode]);
+  }, [open, startingColumns, startingSignatures, defaultRepeatedComponentMode, effectiveCurrentOrderKey]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -304,10 +346,11 @@ export default function OrderDownloadModal({
 
     (async () => {
       try {
-        let databaseTemplates = await loadTemplatesFromDatabase();
+        const permissionResult = await loadTemplatesFromDatabase();
+        let databaseTemplates = permissionResult.items;
         const legacyTemplates = loadLegacyTemplates();
 
-        if (legacyTemplates.length) {
+        if (permissionResult.canManage && legacyTemplates.length) {
           const existing = new Set(databaseTemplates.map(templateFingerprint));
           const missingLegacy = legacyTemplates.filter((item) => !existing.has(templateFingerprint(item)));
           let migratedAll = true;
@@ -331,12 +374,16 @@ export default function OrderDownloadModal({
 
         if (!cancelled) {
           setTemplates(databaseTemplates);
+          setCanManageInstructions(permissionResult.canManage);
+          setCanDownloadInstructions(true);
           setError("");
         }
       } catch (loadError) {
         if (!cancelled) {
           setTemplates([]);
-          setError(loadError?.message || "Saved instructions could not be loaded.");
+          setCanManageInstructions(false);
+          setCanDownloadInstructions(loadError?.status !== 403);
+          setError(loadError?.status === 403 ? "" : (loadError?.message || "Saved instructions could not be loaded."));
         }
       } finally {
         if (!cancelled) setTemplatesLoading(false);
@@ -351,11 +398,13 @@ export default function OrderDownloadModal({
     const onKey = (event) => {
       if (event.key !== "Escape" || composerOpen) return;
       event.preventDefault();
-      if (instructionOpen) setInstructionOpen(false);
+      if (orderSelectorOpen) setOrderSelectorOpen(false);
+      else if (instructionOpen) setInstructionOpen(false);
       else if (!busy) onClose();
     };
     const onPointerDown = (event) => {
       if (instructionOpen && !selectorRef.current?.contains(event.target)) setInstructionOpen(false);
+      if (orderSelectorOpen && !orderSelectorRef.current?.contains(event.target)) setOrderSelectorOpen(false);
     };
     window.addEventListener("keydown", onKey);
     document.addEventListener("pointerdown", onPointerDown, true);
@@ -363,11 +412,27 @@ export default function OrderDownloadModal({
       window.removeEventListener("keydown", onKey);
       document.removeEventListener("pointerdown", onPointerDown, true);
     };
-  }, [open, instructionOpen, composerOpen, busy, onClose]);
+  }, [open, instructionOpen, orderSelectorOpen, composerOpen, busy, onClose]);
 
   if (!open) return null;
 
   const selectedInstruction = templates.find((item) => item.id === selectedInstructionId) || null;
+  const selectedOrders = normalizedOrderOptions.filter((option) => selectedOrderKeys.includes(option.key));
+  const combinedMode = showCombinedOrderOptions && selectedOrders.length > 1;
+  const visibleOrderOptions = normalizedOrderOptions.filter((option) => {
+    const needle = text(orderQuery).toLowerCase();
+    if (!needle) return true;
+    return `${option.label} ${option.userName}`.toLowerCase().includes(needle);
+  });
+
+  const toggleOrder = (key) => {
+    const cleanKey = text(key);
+    if (!cleanKey || cleanKey === effectiveCurrentOrderKey) return;
+    setSelectedOrderKeys((current) => {
+      if (current.includes(cleanKey)) return current.filter((item) => item !== cleanKey);
+      return [...current, cleanKey];
+    });
+  };
 
   const toggleColumn = (key) => {
     setColumns((current) => {
@@ -392,7 +457,15 @@ export default function OrderDownloadModal({
         kind,
         columns,
         signatureLabels: showSignatureOptions ? signatureLabels : null,
-        repeatedComponentMode: showRepeatedComponentOptions ? repeatedComponentMode : null,
+        repeatedComponentMode: showRepeatedComponentOptions ? (combinedMode ? "merge" : repeatedComponentMode) : null,
+        combinedOrders: showCombinedOrderOptions
+          ? selectedOrders.map((order) => ({
+              key: order.key,
+              label: order.label,
+              userName: order.userName,
+              orderIds: order.orderIds,
+            }))
+          : null,
         instruction: selectedInstruction
           ? {
               title: selectedInstruction.title,
@@ -411,6 +484,7 @@ export default function OrderDownloadModal({
   };
 
   const saveInstruction = async (template) => {
+    if (!canManageInstructions) throw new Error("You do not have permission to edit shared instructions.");
     const saved = template?.id
       ? await updateTemplateInDatabase(template)
       : await createTemplateInDatabase(template);
@@ -441,6 +515,57 @@ export default function OrderDownloadModal({
           </div>
         </div>
 
+        {showCombinedOrderOptions && normalizedOrderOptions.length > 1 ? (
+          <div className="order-download-section order-download-combined-orders">
+            <div className="order-download-instructions__heading">
+              <span className="order-download-section__label">Combine orders</span>
+              <small>{selectedOrders.length > 1 ? `${selectedOrders.length} orders selected` : "Add orders to compare in one file"}</small>
+            </div>
+            <div className="order-combined-select" ref={orderSelectorRef}>
+              <button
+                type="button"
+                className={`order-combined-select__trigger ${combinedMode ? "has-value" : ""}`}
+                aria-haspopup="listbox"
+                aria-expanded={orderSelectorOpen}
+                onClick={() => setOrderSelectorOpen((value) => !value)}
+              >
+                <span className="order-combined-select__trigger-icon"><ClassicOrderIcon name="layers" /></span>
+                <span className="order-combined-select__copy">
+                  <small>Orders</small>
+                  <strong>{selectedOrders.length > 1 ? `${selectedOrders.length} orders combined` : `${selectedOrders[0]?.label || "Current order"} only`}</strong>
+                </span>
+                <ClassicOrderIcon name="chevron-down" />
+              </button>
+              {orderSelectorOpen ? (
+                <div className="order-combined-select__menu" role="listbox" aria-label="Select orders to combine">
+                  <label className="order-combined-select__search">
+                    <ClassicOrderIcon name="search" />
+                    <input type="search" value={orderQuery} onChange={(event) => setOrderQuery(event.target.value)} placeholder="Search order or user..." autoFocus />
+                  </label>
+                  <div className="order-combined-select__options">
+                    {visibleOrderOptions.map((option) => {
+                      const checked = selectedOrderKeys.includes(option.key);
+                      const current = option.key === effectiveCurrentOrderKey;
+                      return (
+                        <label className={`order-combined-select__option ${checked ? "is-selected" : ""} ${current ? "is-current" : ""}`} key={option.key}>
+                          <input type="checkbox" checked={checked} disabled={current} onChange={() => toggleOrder(option.key)} />
+                          <span className="order-combined-select__option-copy">
+                            <strong>{option.label}</strong>
+                            <small>{option.userName}{current ? " · Current order" : ""}</small>
+                          </span>
+                          {checked ? <ClassicOrderIcon name="check" /> : null}
+                        </label>
+                      );
+                    })}
+                    {!visibleOrderOptions.length ? <div className="order-combined-select__empty">No matching orders</div> : null}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+            {combinedMode ? <div className="order-combined-select__note"><ClassicOrderIcon name="check-circle" /><span>Matching components will use one row. Selected quantity columns become one column per order.</span></div> : null}
+          </div>
+        ) : null}
+
         <div className="order-download-section order-download-columns">
           <span className="order-download-section__label">Columns</span>
           <div className="order-download-columns__grid">
@@ -457,17 +582,22 @@ export default function OrderDownloadModal({
           <div className="order-download-section order-download-repeated-components">
             <div className="order-download-instructions__heading">
               <span className="order-download-section__label">Repeated components</span>
+              {combinedMode ? <small>Combined exports always merge matching components.</small> : null}
             </div>
-            <div className="order-download-columns__grid order-download-repeat-grid">
-              <label className={`order-download-column-option order-download-repeat-option ${repeatedComponentMode === "merge" ? "is-selected" : ""}`}>
-                <input type="radio" name="repeated-component-mode" checked={repeatedComponentMode === "merge"} onChange={() => setRepeatedComponentMode("merge")} />
-                <span><strong>Combine quantities</strong><small>Add matching component quantities into one row.</small></span>
-              </label>
-              <label className={`order-download-column-option order-download-repeat-option ${repeatedComponentMode === "separate" ? "is-selected" : ""}`}>
-                <input type="radio" name="repeated-component-mode" checked={repeatedComponentMode === "separate"} onChange={() => setRepeatedComponentMode("separate")} />
-                <span><strong>Keep separate</strong><small>Keep repeated components in their original kit/tag rows.</small></span>
-              </label>
-            </div>
+            {combinedMode ? (
+              <div className="order-download-repeat-auto"><ClassicOrderIcon name="layers" /><span><strong>Combined automatically</strong><small>Each component appears once, with each order quantity in its own column.</small></span></div>
+            ) : (
+              <div className="order-download-columns__grid order-download-repeat-grid">
+                <label className={`order-download-column-option order-download-repeat-option ${repeatedComponentMode === "merge" ? "is-selected" : ""}`}>
+                  <input type="radio" name="repeated-component-mode" checked={repeatedComponentMode === "merge"} onChange={() => setRepeatedComponentMode("merge")} />
+                  <span><strong>Combine quantities</strong><small>Add matching component quantities into one row.</small></span>
+                </label>
+                <label className={`order-download-column-option order-download-repeat-option ${repeatedComponentMode === "separate" ? "is-selected" : ""}`}>
+                  <input type="radio" name="repeated-component-mode" checked={repeatedComponentMode === "separate"} onChange={() => setRepeatedComponentMode("separate")} />
+                  <span><strong>Keep separate</strong><small>Keep repeated components in their original kit/tag rows.</small></span>
+                </label>
+              </div>
+            )}
           </div>
         ) : null}
 
@@ -487,7 +617,7 @@ export default function OrderDownloadModal({
           </div>
         ) : null}
 
-        <div className="order-download-section order-download-instructions">
+        {canDownloadInstructions ? <div className="order-download-section order-download-instructions">
           <div className="order-download-instructions__heading">
             <span className="order-download-section__label">Instructions</span>
           </div>
@@ -527,11 +657,11 @@ export default function OrderDownloadModal({
                     {selectedInstructionId === template.id ? <ClassicOrderIcon name="check" /> : null}
                   </button>
                 ))}
-                <div className="order-instruction-select__divider" />
-                <button type="button" className="order-instruction-select__add" onClick={() => { setInstructionOpen(false); setEditingInstruction(null); setComposerOpen(true); }}>
+                {canManageInstructions ? <div className="order-instruction-select__divider" /> : null}
+                {canManageInstructions ? <button type="button" className="order-instruction-select__add" onClick={() => { setInstructionOpen(false); setEditingInstruction(null); setComposerOpen(true); }}>
                   <span className="order-instruction-select__add-icon">+</span>
                   <span><strong>Add new Instructions</strong><small>Save English and Arabic text separately</small></span>
-                </button>
+                </button> : null}
               </div>
             ) : null}
           </div>
@@ -539,7 +669,7 @@ export default function OrderDownloadModal({
             <div className="order-download-instruction-preview">
               <div className="order-download-instruction-preview__head">
                 <strong>{selectedInstruction.title}</strong>
-                <button
+                {canManageInstructions ? <button
                   type="button"
                   className="order-download-instruction-edit"
                   aria-label="Edit selected instructions"
@@ -547,13 +677,13 @@ export default function OrderDownloadModal({
                   onClick={() => { setInstructionOpen(false); setEditingInstruction(selectedInstruction); setComposerOpen(true); }}
                 >
                   <ClassicOrderIcon name="edit-2" />
-                </button>
+                </button> : null}
               </div>
               {selectedInstruction.englishText ? <p dir="ltr">{selectedInstruction.englishText}</p> : null}
               {selectedInstruction.arabicText ? <p dir="rtl" lang="ar">{selectedInstruction.arabicText}</p> : null}
             </div>
           ) : null}
-        </div>
+        </div> : null}
 
         {error ? <div className="order-download-error" role="alert">{error}</div> : null}
 
@@ -562,7 +692,7 @@ export default function OrderDownloadModal({
           <button type="button" className="order-download-btn order-download-btn--dark" disabled={busy} onClick={() => runDownload("excel")}><ClassicOrderIcon name="grid" /><span>{busy ? "Preparing…" : "Download Excel"}</span></button>
         </div>
       </div>
-      {composerOpen ? <InstructionComposer initialTemplate={editingInstruction} onClose={() => { setComposerOpen(false); setEditingInstruction(null); }} onSave={saveInstruction} /> : null}
+      {composerOpen && canManageInstructions ? <InstructionComposer initialTemplate={editingInstruction} onClose={() => { setComposerOpen(false); setEditingInstruction(null); }} onSave={saveInstruction} /> : null}
     </div>
   );
 }

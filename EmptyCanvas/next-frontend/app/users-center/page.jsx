@@ -1,78 +1,76 @@
 import { redirect } from "next/navigation";
 import AppShell from "../../components/AppShell";
 import UsersCenterClient from "../../components/users-center/UsersCenterClient";
-import { fetchLegacyJson } from "../../lib/legacy-api";
+import { getDirectAccountGate } from "../../lib/products-auth";
+import { featureGate } from "../../lib/feature-permissions-server";
+import { featureAllowed } from "../../lib/feature-permissions-registry";
+import { usersCenterDirectory, usersCenterSignupRequests } from "../../lib/users-center-data";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
-function resourceMap(bundle) {
-  const map = new Map();
-  for (const resource of Array.isArray(bundle?.resources) ? bundle.resources : []) {
-    map.set(String(resource?.url || ""), resource?.body);
-  }
-  return map;
+const ACCESS_PAGES = ["Users Center", "User Access & Data", "User Access", "Team Members"];
+
+function UnavailableState({ message, forbidden = false }) {
+  return (
+    <main className="standalone-state">
+      <section className="state-card">
+        <span className="status-dot warning" />
+        <h1>{forbidden ? "Users Center is not available" : "The new Users Center could not load"}</h1>
+        <p>{message}</p>
+        <div className="actions">
+          {!forbidden ? <a className="primary-button" href="/next/users-center">Try again</a> : null}
+          <a className={forbidden ? "primary-button" : "secondary-button"} href="/next/home">Return to Home</a>
+        </div>
+      </section>
+    </main>
+  );
 }
 
-function getResource(map, prefix, fallback = null) {
-  for (const [url, body] of map.entries()) {
-    if (url === prefix || url.startsWith(prefix)) return body;
-  }
-  return fallback;
-}
 
 export default async function UsersCenterPage() {
-  const response = await fetchLegacyJson("/api/page-bootstrap?scope=users-center", { timeoutMs: 45000 });
+  const gate = featureGate(await getDirectAccountGate(ACCESS_PAGES), "users.view");
 
-  if (response.status === 401) redirect("/login?next=/next/users-center");
-  if (response.status === 403) {
-    return (
-      <main className="standalone-state">
-        <section className="state-card">
-          <span className="status-dot warning" />
-          <h1>Users Center is not available</h1>
-          <p>Your account does not have access to team members, departments, and page permissions.</p>
-          <a className="primary-button" href="/next/home">Return to Home</a>
-        </section>
-      </main>
-    );
+  if (gate.status === 401) redirect("/login?next=/next/users-center");
+  if (gate.status === 403) {
+    return <UnavailableState forbidden message="Your account does not have access to team members, departments, and page permissions." />;
+  }
+  if (!gate.ok || !gate.account) {
+    return <UnavailableState message={gate.error || "The current ERP authentication service is temporarily unavailable."} />;
   }
 
-  if (!response.ok || !response.data?.ok) {
-    return (
-      <main className="standalone-state">
-        <section className="state-card">
-          <span className="status-dot warning" />
-          <h1>The new Users Center could not load</h1>
-          <p>{response.error || response.data?.error || "The current ERP API is temporarily unavailable."}</p>
-          <div className="actions">
-            <a className="primary-button" href="/user-access?classic=1">Open classic Users Center</a>
-            <a className="secondary-button" href="/next/home">Return to Home</a>
-          </div>
-        </section>
-      </main>
-    );
+  const [directoryResult, signupResult] = await Promise.allSettled([
+    usersCenterDirectory(),
+    featureAllowed(gate.account, "users.signup_approve") || featureAllowed(gate.account, "users.signup_reject")
+      ? usersCenterSignupRequests({ status: "pending" }) : Promise.resolve({ ok: true, requests: [] }),
+  ]);
+
+  if (directoryResult.status !== "fulfilled") {
+    return <UnavailableState message={directoryResult.reason?.message || "Users Center data is temporarily unavailable."} />;
   }
 
-  const resources = resourceMap(response.data);
-  const account = getResource(resources, "/api/account", null);
-  const directory = getResource(resources, "/api/user-access/team-members", { total: 0, editableFields: [], departments: [] });
-  const signup = getResource(resources, "/api/user-access/signup-requests", { ok: true, requests: [] });
-
-  if (!account) redirect("/login?next=/next/users-center");
+  const directory = directoryResult.value;
+  const signup = signupResult.status === "fulfilled"
+    ? signupResult.value
+    : { ok: true, requests: [] };
+  const warnings = signupResult.status === "rejected"
+    ? ["Sign up requests could not be loaded. Refresh to retry."]
+    : [];
 
   return (
     <AppShell
-      account={account}
+      account={gate.account}
       title="Users Center"
       eyebrow="Manage team access and member records"
       activePath="/next/users-center"
       bodyClass="user-access-page"
-      classicStyles={["/css/user-access.css?v=next-stage-2m-users-center"]}
+      pageStyles={["/next/css/user-access.css?v=permissions-2o2-20261024"]}
     >
       <UsersCenterClient
+        account={gate.account}
         initialDirectory={directory}
         initialSignupRequests={signup}
-        bootstrapWarnings={response.data.omitted || []}
+        bootstrapWarnings={warnings}
       />
     </AppShell>
   );

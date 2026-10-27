@@ -1,14 +1,93 @@
 import "server-only";
+import { parseStrictImageDataUrl } from "./strict-upload-image.mjs";
 import {
   createSignedUploadUrl,
   deleteById,
   getSupabaseConfig,
+  storagePublicUrl,
   insert,
+  select,
   selectAll,
+  selectById,
   updateById,
   updateByIds,
   uploadStorageObject,
 } from "./supabase-rest";
+
+const PRODUCT_READ_CACHE_TTL_MS = 30_000;
+const PRODUCT_READ_CACHE_MAX_ENTRIES = 12;
+const _productReadCache = new Map();
+const _productReadInflight = new Map();
+let productReadCacheGeneration = 0;
+let productProjectionSupported = null;
+
+// Product cards/pickers only use this compact projection. Full rows are still
+// available through the mutation/detail paths when needed. Legacy/custom
+// schemas automatically fall back to select=* once per warm process.
+const PRODUCT_LIST_SELECT = "id,name,id_code,unit_price,unit,url,image_url,tags";
+
+function productReadCacheGet(key) {
+  const entry = _productReadCache.get(key);
+  if (!entry) return null;
+  if (entry.expiresAt <= Date.now()) {
+    _productReadCache.delete(key);
+    return null;
+  }
+  return entry.value;
+}
+
+function productReadCacheSet(key, value, ttlMs = PRODUCT_READ_CACHE_TTL_MS) {
+  if (_productReadCache.size >= PRODUCT_READ_CACHE_MAX_ENTRIES && !_productReadCache.has(key)) {
+    const firstKey = _productReadCache.keys().next().value;
+    if (firstKey) _productReadCache.delete(firstKey);
+  }
+  _productReadCache.set(key, { value, expiresAt: Date.now() + Math.max(1000, Number(ttlMs) || PRODUCT_READ_CACHE_TTL_MS) });
+}
+
+async function productCachedRead(key, loader, { fresh = false, ttlMs = PRODUCT_READ_CACHE_TTL_MS } = {}) {
+  if (!fresh) {
+    const cached = productReadCacheGet(key);
+    if (cached !== null) return cached;
+    if (_productReadInflight.has(key)) return await _productReadInflight.get(key);
+  }
+
+  const generation = productReadCacheGeneration;
+  const pending = Promise.resolve().then(loader);
+  if (!fresh) _productReadInflight.set(key, pending);
+  try {
+    const value = await pending;
+    // A mutation may invalidate this cache while the Supabase read is still in
+    // flight. Do not let that older read repopulate a stale product snapshot.
+    if (generation === productReadCacheGeneration) productReadCacheSet(key, value, ttlMs);
+    return value;
+  } finally {
+    if (!fresh && _productReadInflight.get(key) === pending) _productReadInflight.delete(key);
+  }
+}
+
+function invalidateProductReadCaches(...keys) {
+  productReadCacheGeneration += 1;
+  const wanted = keys.flat().map((key) => String(key || "").trim()).filter(Boolean);
+  if (!wanted.length) {
+    _productReadCache.clear();
+    _productReadInflight.clear();
+    return;
+  }
+  for (const key of wanted) {
+    const variants = key === "tags"
+      ? ["tags:tolerant", "tags:strict"]
+      : key === "units"
+        ? ["units:tolerant", "units:strict"]
+        : [key];
+    for (const variant of variants) {
+      _productReadCache.delete(variant);
+      _productReadInflight.delete(variant);
+    }
+  }
+  // The combined catalog depends on products, tags, and units.
+  _productReadCache.delete("catalog");
+  _productReadInflight.delete("catalog");
+}
 
 function text(value) {
   return String(value ?? "").trim();
@@ -44,14 +123,191 @@ function parseTags(value) {
   return raw.split(/[,;|]/).map(text).filter(Boolean);
 }
 
-function cleanUrl(value) {
+function extractUrl(value) {
+  if (value === null || typeof value === "undefined") return null;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const url = extractUrl(item);
+      if (url) return url;
+    }
+    return null;
+  }
+  if (typeof value === "object") {
+    return extractUrl(value.url || value.publicUrl || value.public_url || value.href || value.external?.url || value.file?.url || null);
+  }
+
   const raw = text(value);
-  if (!raw) return null;
-  if (/^https?:\/\//i.test(raw)) return raw;
+  if (!raw || /^null$/i.test(raw)) return null;
+
+  try {
+    const parsed = JSON.parse(raw);
+    const parsedUrl = extractUrl(parsed);
+    if (parsedUrl) return parsedUrl;
+  } catch {}
+
+  if (/^(https?:|data:image\/|blob:)/i.test(raw)) return raw;
+  const match = raw.match(/https?:\/\/[^\s,"'<>]+/i);
+  return match ? match[0] : null;
+}
+
+function cleanUrl(value) {
+  const extracted = extractUrl(value);
+  if (extracted) return extracted;
+  const raw = text(value);
+  if (!raw || /^null$/i.test(raw)) return null;
+  if (raw.startsWith("/")) return raw;
   return `https://${raw.replace(/^\/+/, "")}`;
 }
 
-function serializeProduct(row = {}) {
+const LEGACY_PRODUCTS_STORAGE_HOSTS = new Set([
+  "pysup2.opik.net",
+]);
+
+function normalizeProductsStorageUrl(value) {
+  const raw = text(value).replace(/&amp;/g, "&");
+  if (!raw) return null;
+
+  const { url: supabaseUrl } = getSupabaseConfig();
+  const base = text(supabaseUrl).replace(/\/+$/, "");
+  if (!base || !/^https?:\/\//i.test(raw)) return raw;
+
+  try {
+    const source = new URL(raw);
+    const target = new URL(base);
+    const isPublicStorageObject = /^\/storage\/v1\/object\/public\//i.test(source.pathname);
+
+    // Most historical product images were uploaded while Supabase was exposed
+    // through pysup2.opik.net. The database still contains that old absolute
+    // origin, while the live Supabase host is supplied by SUPABASE_URL. Reuse
+    // the exact bucket/object path on the current origin so those files do not
+    // depend on a retired DNS name.
+    if (isPublicStorageObject && LEGACY_PRODUCTS_STORAGE_HOSTS.has(source.hostname.toLowerCase())) {
+      source.protocol = target.protocol;
+      source.host = target.host;
+      return source.toString();
+    }
+  } catch {}
+
+  return raw;
+}
+
+function cleanImageUrl(value) {
+  const { url: supabaseUrl } = getSupabaseConfig();
+  const base = text(supabaseUrl).replace(/\/+$/, "");
+  const bucket = text(getProductsStorageBucket()).replace(/^\/+|\/+$/g, "");
+
+  const extracted = extractUrl(value);
+  if (extracted) return normalizeProductsStorageUrl(extracted);
+
+  let raw = text(value);
+  if (!raw || /^null$/i.test(raw)) return null;
+
+  // Some migrated rows store only a Supabase Storage object path instead of
+  // the complete public URL. Resolve those paths against the configured bucket
+  // instead of turning them into an invalid https://products/... URL.
+  raw = raw.replace(/^\/+/, "");
+  if (/^storage\/v1\/object\/public\//i.test(raw)) {
+    return base ? `${base}/${raw}` : null;
+  }
+  if (/^object\/public\//i.test(raw)) {
+    return base ? `${base}/storage/v1/${raw}` : null;
+  }
+  if (bucket && raw.toLowerCase().startsWith(`${bucket.toLowerCase()}/`)) {
+    raw = raw.slice(bucket.length + 1);
+  }
+  if (/^(products\/images|products|images)\//i.test(raw) && bucket) {
+    return storagePublicUrl(raw, bucket) || null;
+  }
+
+  return normalizeProductsStorageUrl(cleanUrl(value));
+}
+
+
+
+function pushUniqueUrl(target, value) {
+  const clean = cleanImageUrl(value);
+  if (!clean) return;
+  if (!target.some((item) => item === clean)) target.push(clean);
+}
+
+function collectImageLikeUrls(value, target, depth = 0) {
+  if (depth > 5 || value === null || typeof value === "undefined") return;
+  if (Array.isArray(value)) {
+    for (const item of value) collectImageLikeUrls(item, target, depth + 1);
+    return;
+  }
+  if (typeof value === "object") {
+    const preferredKeys = [
+      "url", "publicUrl", "public_url", "src", "source", "href",
+      "image", "imageUrl", "image_url", "photo", "photoUrl", "photo_url",
+      "picture", "thumbnail", "cover", "coverUrl", "cover_url",
+      "external", "file", "files", "attachments",
+    ];
+    for (const key of preferredKeys) {
+      if (Object.prototype.hasOwnProperty.call(value, key)) collectImageLikeUrls(value[key], target, depth + 1);
+    }
+    return;
+  }
+
+  const raw = text(value);
+  if (!raw || /^null$/i.test(raw)) return;
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && parsed !== raw) {
+      collectImageLikeUrls(parsed, target, depth + 1);
+      if (target.length) return;
+    }
+  } catch {}
+
+  // Dedicated image fields can contain an absolute URL, a data URL, or just a
+  // Supabase Storage object path. cleanImageUrl resolves all three forms.
+  pushUniqueUrl(target, raw);
+}
+
+function productRowImageCandidates(row = {}) {
+  const urls = [];
+  const exactAliases = [
+    "image_url", "Image URL", "image", "Image", "product_image", "Product Image",
+    "product_photo", "Product Photo", "photo", "Photo", "picture", "Picture",
+    "thumbnail", "Thumbnail", "thumbnail_url", "Thumbnail URL",
+    "cover", "Cover", "cover_url", "Cover URL", "cover_image", "Cover Image",
+    "cover_image_url", "Cover Image URL", "icon", "Icon", "attachments", "Attachments",
+    "files", "Files",
+  ];
+
+  for (const alias of exactAliases) {
+    if (Object.prototype.hasOwnProperty.call(row || {}, alias)) {
+      collectImageLikeUrls(row[alias], urls);
+    }
+  }
+
+  // Custom/migrated schemas sometimes kept the original Notion file property
+  // under a different name. Inspect only columns whose names clearly describe
+  // image/file media so normal product links are never mistaken for images.
+  for (const [key, value] of Object.entries(row || {})) {
+    const normalized = norm(key).replace(/[^a-z0-9]+/g, "");
+    if (!/(image|photo|picture|thumbnail|cover|attachment|file)/.test(normalized)) continue;
+    collectImageLikeUrls(value, urls);
+  }
+
+  return urls;
+}
+
+export async function getProductImageSources(productId) {
+  const id = text(productId);
+  if (!id) return null;
+  const { productsTable } = getSupabaseConfig();
+  const row = await selectById(productsTable, id, { profileName: "products.image-source" });
+  if (!row) return null;
+  const product = serializeProduct(row);
+  return {
+    id,
+    name: product.name,
+    pageUrl: product.url || cleanUrl(pick(row, ["url", "URL", "product_url", "Product URL", "link", "Link", "website", "Website"])),
+    imageUrls: productRowImageCandidates(row),
+  };
+}
+export function serializeProduct(row = {}) {
   return {
     id: text(pick(row, ["id", "ID"])),
     name: text(pick(row, ["name", "Name", "product_name", "Product Name", "product", "Product"])) || "Untitled Product",
@@ -59,7 +315,7 @@ function serializeProduct(row = {}) {
     unitPrice: numberOrNull(pick(row, ["unit_price", "Unity Price", "Unit price", "Unit Price", "price", "Price"])),
     unit: text(pick(row, ["unit", "unit_name", "measurement_unit", "Unit", "Unit Name"])) || null,
     url: cleanUrl(pick(row, ["url", "URL", "product_url", "Product URL", "link", "Link", "website", "Website"])),
-    imageUrl: cleanUrl(pick(row, ["image_url", "Image URL", "image", "Image", "photo", "Photo", "picture", "Picture", "thumbnail", "Thumbnail"])),
+    imageUrl: cleanImageUrl(pick(row, ["image_url", "Image URL", "image", "Image", "photo", "Photo", "picture", "Picture", "thumbnail", "Thumbnail"])),
     tags: parseTags(pick(row, ["tags", "Tags", "tag", "Tag"])),
     source: "supabase",
   };
@@ -87,18 +343,159 @@ function missingTable(error) {
   );
 }
 
-async function productRows() {
+async function productRows({ fresh = false } = {}) {
   const { productsTable } = getSupabaseConfig();
-  return await selectAll(productsTable, { limit: 5000, order: "name.asc,id.asc" });
+  return await productCachedRead(
+    "products",
+    async () => {
+      if (productProjectionSupported !== false) {
+        try {
+          const rows = await selectAll(productsTable, {
+            limit: 5000,
+            order: "name.asc,id.asc",
+            select: PRODUCT_LIST_SELECT,
+            profileName: "products.catalog-compact",
+          });
+          productProjectionSupported = true;
+          return rows;
+        } catch {
+          productProjectionSupported = false;
+        }
+      }
+      return await selectAll(productsTable, {
+        limit: 5000,
+        order: "name.asc,id.asc",
+        profileName: "products.catalog-fallback",
+      });
+    },
+    { fresh },
+  );
 }
 
-export async function getProductsCatalog() {
-  const config = getSupabaseConfig();
-  const [rows, tagRows, unitRows] = await Promise.all([
-    productRows(),
-    selectAll(config.productTagsTable, { limit: 1000, order: "name.asc" }).catch(() => []),
-    selectAll(config.productUnitsTable, { limit: 1000, order: "name.asc" }).catch(() => []),
-  ]);
+async function productTagRows({ fresh = false, tolerant = true } = {}) {
+  const { productTagsTable } = getSupabaseConfig();
+  return await productCachedRead(
+    tolerant ? "tags:tolerant" : "tags:strict",
+    async () => {
+      try {
+        return await selectAll(productTagsTable, { limit: 1000, order: "name.asc" });
+      } catch (error) {
+        if (tolerant || missingTable(error)) return [];
+        throw error;
+      }
+    },
+    { fresh },
+  );
+}
+
+async function productUnitRows({ fresh = false, tolerant = true } = {}) {
+  const { productUnitsTable } = getSupabaseConfig();
+  return await productCachedRead(
+    tolerant ? "units:tolerant" : "units:strict",
+    async () => {
+      try {
+        return await selectAll(productUnitsTable, { limit: 1000, order: "name.asc" });
+      } catch (error) {
+        if (tolerant) return [];
+        throw error;
+      }
+    },
+    { fresh },
+  );
+}
+
+export async function getProductsList({ fresh = false } = {}) {
+  if (fresh) invalidateProductReadCaches("products");
+  const rows = await productRows({ fresh });
+  return (Array.isArray(rows) ? rows : [])
+    .map(serializeProduct)
+    .filter((product) => product.id && product.name);
+}
+
+// The order details sheet normally references a handful of known products.
+// Avoid paging the entire products catalog on the first cold request. Older
+// rows (without database product IDs), mismatched IDs, and legacy product
+// schemas still use the existing full-catalog resolver for compatibility.
+export async function getProductsForOrderDetails(items = [], { allowLargeTargeted = false } = {}) {
+  const source = Array.isArray(items) ? items : [];
+  if (!source.length) return [];
+  const ids = [...new Set(source.map((item) => text(item?.productId)).filter(Boolean))];
+  if (source.some((item) => !text(item?.productId))) {
+    return getProductsList();
+  }
+  if (!ids.length || (!allowLargeTargeted && ids.length > 240)) return getProductsList();
+
+  // Reuse the canonical snapshot when another page has already fetched it.
+  // This avoids extra requests after navigating from Products or Shopping Cart.
+  const warmRows = productReadCacheGet("products");
+  if (Array.isArray(warmRows)) {
+    return warmRows.map(serializeProduct).filter((product) => product.id && product.name);
+  }
+
+  try {
+    const { productsTable } = getSupabaseConfig();
+    const batches = [];
+    for (let i = 0; i < ids.length; i += 60) batches.push(ids.slice(i, i + 60));
+    // Limit concurrent requests for unusually large combined exports.
+    const pages = new Array(batches.length);
+    const workers = Array.from({ length: Math.min(3, batches.length) }, async (_, workerIndex) => {
+      for (let index = workerIndex; index < batches.length; index += 3) {
+        const batch = batches[index];
+        // Quoted PostgREST literals support numeric, UUID and text identifiers.
+      const inList = batch.map((id) => `"${id.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`).join(",");
+        pages[index] = await select(productsTable, {
+          select: productProjectionSupported === false ? "*" : PRODUCT_LIST_SELECT,
+          id: `in.(${inList})`,
+          limit: String(batch.length),
+        }, { profileName: "orders.products-targeted" });
+      }
+    });
+    await Promise.all(workers);
+    const products = pages.flat().map(serializeProduct).filter((product) => product.id && product.name)
+      .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+    const byId = new Map(products.map((product) => [product.id, product]));
+    if (ids.some((id) => !byId.has(id))) return getProductsList();
+
+    // An old row may point to a product ID that has since been repurposed,
+    // or contain a historical name/URL. Preserve the legacy name/URL lookup
+    // rather than silently enriching it with unrelated product metadata.
+    const safe = source.every((item) => {
+      const matched = byId.get(text(item?.productId));
+      if (!matched) return false;
+      const name = norm(item?.productName);
+      const url = norm(item?.productUrl);
+      return (!name && !url) || (name && name === norm(matched.name)) || (url && url === norm(matched.url));
+    });
+    return safe ? products : getProductsList();
+  } catch {
+    // Custom products tables and pre-migration schemas retain their previous
+    // behavior; no order data is modified by the optimized read.
+    return getProductsList();
+  }
+}
+
+export async function getProduct(productId) {
+  const id = text(productId);
+  if (!id) {
+    const error = new Error("Missing product ID.");
+    error.status = 400;
+    throw error;
+  }
+
+  const row = await selectById(getSupabaseConfig().productsTable, id, {
+    profileName: "products.detail",
+  });
+  return row ? serializeProduct(row) : null;
+}
+
+export async function getProductsCatalog({ fresh = false } = {}) {
+  if (fresh) invalidateProductReadCaches();
+  return await productCachedRead("catalog", async () => {
+    const [rows, tagRows, unitRows] = await Promise.all([
+      productRows({ fresh }),
+      productTagRows({ fresh, tolerant: true }),
+      productUnitRows({ fresh, tolerant: true }),
+    ]);
 
   const products = rows.map(serializeProduct).filter((product) => product.id && product.name);
   const tagsFromProducts = products.flatMap((product) => product.tags || []);
@@ -106,13 +503,14 @@ export async function getProductsCatalog() {
   const unitsFromProducts = products.map((product) => text(product.unit)).filter(Boolean);
   const unitsFromTable = unitRows.map((row) => text(pick(row, ["name", "unit", "Name", "Unit"]))).filter(Boolean);
 
-  return {
-    ok: true,
-    source: "supabase-next",
-    products,
-    tagsCatalog: mergeUnique([...tagsFromProducts, ...tagsFromTable]),
-    unitsCatalog: mergeUnique([...unitsFromProducts, ...unitsFromTable]),
-  };
+    return {
+      ok: true,
+      source: "supabase-next",
+      products,
+      tagsCatalog: mergeUnique([...tagsFromProducts, ...tagsFromTable]),
+      unitsCatalog: mergeUnique([...unitsFromProducts, ...unitsFromTable]),
+    };
+  }, { fresh });
 }
 
 function normalizeProductPayload(body = {}, { partial = false } = {}) {
@@ -180,22 +578,13 @@ function storageObjectName(originalName = "product-image") {
 }
 
 async function uploadProductImage(dataUrl, originalName) {
-  const match = text(dataUrl).match(/^data:(image\/[a-z0-9.+-]+);base64,(.+)$/i);
-  if (!match) {
-    const error = new Error("Invalid product image.");
-    error.status = 400;
-    throw error;
-  }
-
-  const buffer = Buffer.from(match[2], "base64");
-  if (buffer.length > 10 * 1024 * 1024) {
-    const error = new Error("Product image must not exceed 10 MB.");
-    error.status = 400;
-    throw error;
-  }
-
-  const uploaded = await uploadStorageObject(storageObjectName(originalName), buffer, {
-    contentType: match[1],
+  const { mime, buffer } = parseStrictImageDataUrl(dataUrl, {
+    label: "Product image", maxBytes: 10 * 1024 * 1024,
+  });
+  const extension = mime === "image/png" ? "png" : mime === "image/webp" ? "webp" : "jpg";
+  const basename = text(originalName || "product-image").replace(/\.[^.]+$/, "") || "product-image";
+  const uploaded = await uploadStorageObject(storageObjectName(`${basename}.${extension}`), buffer, {
+    contentType: mime,
     bucketName: getProductsStorageBucket(),
     upsert: false,
   });
@@ -226,7 +615,9 @@ export async function createProductImageUploadTicket({ filename, mime, size } = 
     throw error;
   }
 
-  const ticket = await createSignedUploadUrl(storageObjectName(filename || "product-image.webp"), {
+  const extension = cleanMime === "image/png" ? "png" : cleanMime === "image/webp" ? "webp" : "jpg";
+  const basename = text(filename || "product-image").replace(/\.[^.]+$/, "") || "product-image";
+  const ticket = await createSignedUploadUrl(storageObjectName(`${basename}.${extension}`), {
     bucketName: getProductsStorageBucket(),
   });
   if (!ticket?.signedUrl || !ticket?.publicUrl) {
@@ -275,7 +666,7 @@ function primaryKeyDuplicate(error) {
 async function nextNumericProductId() {
   let maxId = 0;
   let found = false;
-  for (const row of await productRows()) {
+  for (const row of await productRows({ fresh: true })) {
     const value = Number(pick(row, ["id", "ID"]));
     if (!Number.isSafeInteger(value) || value < 0) continue;
     found = true;
@@ -309,6 +700,7 @@ export async function createProduct(body = {}) {
     if (lastError) throw lastError;
   }
 
+  invalidateProductReadCaches("products");
   return serializeProduct(created || row);
 }
 
@@ -322,6 +714,7 @@ export async function updateProduct(productId, body = {}) {
   const prepared = await prepareProductBody(body);
   const patch = normalizeProductPayload(prepared, { partial: true });
   const updated = await updateById(getSupabaseConfig().productsTable, id, patch);
+  invalidateProductReadCaches("products");
   return serializeProduct(updated || { ...patch, id });
 }
 
@@ -332,21 +725,26 @@ export async function deleteProduct(productId) {
     error.status = 400;
     throw error;
   }
-  return await deleteById(getSupabaseConfig().productsTable, id);
+  const deleted = await deleteById(getSupabaseConfig().productsTable, id);
+  invalidateProductReadCaches("products");
+  return deleted;
 }
 
-export async function listProductUnits() {
-  const config = getSupabaseConfig();
-  const rows = await selectAll(config.productUnitsTable, { limit: 1000, order: "name.asc" }).catch((error) => {
+export async function listProductUnits({ fresh = false } = {}) {
+  if (fresh) invalidateProductReadCaches("units", "products");
+  let rows;
+  try {
+    rows = await productUnitRows({ fresh, tolerant: false });
+  } catch (error) {
     if (missingTable(error)) {
       const tableError = new Error("Product units table is not created yet. Please run products_units_migration.sql in Supabase first.");
       tableError.status = 400;
       throw tableError;
     }
     throw error;
-  });
+  }
   const fromTable = rows.map((row) => text(pick(row, ["name", "unit", "Name", "Unit"]))).filter(Boolean);
-  const fromProducts = (await productRows()).map(serializeProduct).map((product) => product.unit).filter(Boolean);
+  const fromProducts = (await productRows({ fresh })).map(serializeProduct).map((product) => product.unit).filter(Boolean);
   return mergeUnique([...fromTable, ...fromProducts]);
 }
 
@@ -357,7 +755,7 @@ export async function createProductUnit(name) {
     error.status = 400;
     throw error;
   }
-  const existing = await listProductUnits();
+  const existing = await listProductUnits({ fresh: true });
   const match = existing.find((unit) => norm(unit) === norm(clean));
   if (match) return { name: match, alreadyExists: true };
 
@@ -370,17 +768,15 @@ export async function createProductUnit(name) {
     }
     throw error;
   });
+  invalidateProductReadCaches("units");
   return { name: text(pick(created || row, ["name", "unit", "Name", "Unit"])) || clean, alreadyExists: false };
 }
 
-export async function listProductTags() {
-  const config = getSupabaseConfig();
-  const rows = await selectAll(config.productTagsTable, { limit: 1000, order: "name.asc" }).catch((error) => {
-    if (missingTable(error)) return [];
-    throw error;
-  });
+export async function listProductTags({ fresh = false } = {}) {
+  if (fresh) invalidateProductReadCaches("tags", "products");
+  const rows = await productTagRows({ fresh, tolerant: false });
   const tableTags = rows.map((row) => text(pick(row, ["name", "tag", "Name", "Tag"]))).filter(Boolean);
-  const productTags = (await productRows()).map(serializeProduct).map(firstTag).filter(Boolean);
+  const productTags = (await productRows({ fresh })).map(serializeProduct).map(firstTag).filter(Boolean);
   return mergeUnique([...tableTags, ...productTags]);
 }
 
@@ -391,7 +787,7 @@ export async function createProductTag(name) {
     error.status = 400;
     throw error;
   }
-  const existing = await listProductTags();
+  const existing = await listProductTags({ fresh: true });
   const match = existing.find((tag) => norm(tag) === norm(clean));
   if (match) return { name: match, alreadyExists: true };
 
@@ -404,6 +800,7 @@ export async function createProductTag(name) {
     }
     throw error;
   });
+  invalidateProductReadCaches("tags");
   return { name: text(pick(created || row, ["name", "tag", "Name", "Tag"])) || clean, alreadyExists: false };
 }
 
@@ -426,7 +823,7 @@ export async function renameProductTag(oldTag, newTag) {
     throw error;
   }
 
-  const products = (await productRows()).map(serializeProduct);
+  const products = (await productRows({ fresh: true })).map(serializeProduct);
   const matches = products.filter((product) => norm(firstTag(product)) === norm(fromTag));
   if (!matches.length) {
     const error = new Error("No products were found under this tag.");
@@ -444,6 +841,7 @@ export async function renameProductTag(oldTag, newTag) {
     updatedRows.push(...batch);
   }
 
+  invalidateProductReadCaches("products", "tags");
   return {
     oldTag: fromTag,
     newTag: toTag,
@@ -465,7 +863,7 @@ export async function deleteProductTag(tagName) {
     throw error;
   }
 
-  const products = (await productRows()).map(serializeProduct);
+  const products = (await productRows({ fresh: true })).map(serializeProduct);
   const matches = products.filter((product) => norm(firstTag(product)) === norm(tag));
   for (let i = 0; i < matches.length; i += 120) {
     await updateByIds(
@@ -475,12 +873,13 @@ export async function deleteProductTag(tagName) {
     );
   }
 
-  const rows = await selectAll(getSupabaseConfig().productTagsTable, { limit: 1000, order: "name.asc" }).catch(() => []);
+  const rows = await productTagRows({ fresh: true, tolerant: true });
   for (const row of rows) {
     const rowName = text(pick(row, ["name", "tag", "tags", "Name", "Tag"]));
     const rowId = pick(row, ["id", "ID"]);
     if (rowId && norm(rowName) === norm(tag)) await deleteById(getSupabaseConfig().productTagsTable, rowId);
   }
 
+  invalidateProductReadCaches("products", "tags");
   return { deletedTag: tag, movedCount: matches.length };
 }

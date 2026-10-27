@@ -1,9 +1,20 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import SaveProgressModal, { useSaveProgress } from "../SaveProgressModal";
 import ActionLoadingModal, { useActionLoading } from "../ActionLoadingModal";
 import { confirmDelete } from "../../lib/client-confirm";
+import { featureAllowed } from "../../lib/feature-permissions-registry";
+
+const KitDownloadModal = dynamic(() => import("./KitDialogs").then((module) => module.KitDownloadModal), { ssr: false });
+const SendKitToStockModal = dynamic(() => import("./KitDialogs").then((module) => module.SendKitToStockModal), { ssr: false });
+const NameModal = dynamic(() => import("./KitDialogs").then((module) => module.NameModal), { ssr: false });
+const FolderNameModal = dynamic(() => import("./KitDialogs").then((module) => module.FolderNameModal), { ssr: false });
+const MoveKitModal = dynamic(() => import("./KitDialogs").then((module) => module.MoveKitModal), { ssr: false });
+const PasswordModal = dynamic(() => import("./KitDialogs").then((module) => module.PasswordModal), { ssr: false });
+const CombineKitsModal = dynamic(() => import("./KitDialogs").then((module) => module.CombineKitsModal), { ssr: false });
+const AddProductModal = dynamic(() => import("./KitDialogs").then((module) => module.AddProductModal), { ssr: false });
 
 const EXPORT_COLUMNS = [
   ["idCode", "ID Code"],
@@ -13,10 +24,9 @@ const EXPORT_COLUMNS = [
   ["totalPrice", "Total Cost"],
 ];
 
-const RECEIPT_SOURCE_MAX_BYTES = 8 * 1024 * 1024;
-const RECEIPT_UPLOAD_TARGET_BYTES = Math.floor(1.5 * 1024 * 1024);
-const RECEIPT_MAX_EDGE = 2000;
-
+// Keep the lightweight value helpers local to the Kits client. These were
+// accidentally dropped during the Kits/Proposals split, which caused the page
+// to throw a ReferenceError as soon as the initial catalog was normalized.
 function text(value) {
   return String(value ?? "").trim();
 }
@@ -44,112 +54,11 @@ function formatMoney(value) {
   }).format(parsed);
 }
 
-function formatDate(value) {
-  const date = new Date(value || "");
-  if (Number.isNaN(date.getTime())) return "—";
-  return new Intl.DateTimeFormat("en-GB", { dateStyle: "medium" }).format(date);
-}
-
 function normalizedUrl(value) {
   const url = text(value);
   if (!url) return "";
   if (/^(https?:|data:|blob:)/i.test(url)) return url;
   return `https://${url.replace(/^\/+/, "")}`;
-}
-
-function openDownload(url) {
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.target = "_blank";
-  anchor.rel = "noopener";
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-}
-
-function readFileAsDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = () => reject(new Error(`Could not read ${file?.name || "receipt image"}.`));
-    reader.readAsDataURL(file);
-  });
-}
-
-function canvasToBlob(canvas, type, quality) {
-  return new Promise((resolve) => canvas.toBlob(resolve, type, quality));
-}
-
-async function prepareReceiptImage(file) {
-  if (!file || !/^image\//i.test(text(file.type))) throw new Error("Receipt uploads must be images.");
-  if (number(file.size) > RECEIPT_SOURCE_MAX_BYTES) throw new Error(`${file.name || "Receipt image"} is larger than 8 MB.`);
-  if (number(file.size) <= RECEIPT_UPLOAD_TARGET_BYTES) {
-    return { dataUrl: await readFileAsDataUrl(file), name: file.name || "receipt.jpg", size: number(file.size) };
-  }
-
-  const objectUrl = URL.createObjectURL(file);
-  try {
-    const image = await new Promise((resolve, reject) => {
-      const candidate = new Image();
-      candidate.onload = () => resolve(candidate);
-      candidate.onerror = () => reject(new Error(`${file.name || "Receipt image"} could not be opened for optimization.`));
-      candidate.src = objectUrl;
-    });
-    const naturalWidth = Math.max(1, number(image.naturalWidth || image.width) || 1);
-    const naturalHeight = Math.max(1, number(image.naturalHeight || image.height) || 1);
-    const longest = Math.max(naturalWidth, naturalHeight);
-    let dimensionScale = Math.min(1, RECEIPT_MAX_EDGE / longest);
-    let bestBlob = null;
-    let bestType = "image/webp";
-
-    for (let sizeAttempt = 0; sizeAttempt < 5; sizeAttempt += 1) {
-      const width = Math.max(1, Math.round(naturalWidth * dimensionScale));
-      const height = Math.max(1, Math.round(naturalHeight * dimensionScale));
-      const canvas = document.createElement("canvas");
-      canvas.width = width;
-      canvas.height = height;
-      const context = canvas.getContext("2d", { alpha: false });
-      if (!context) throw new Error("Receipt image optimization is not available in this browser.");
-      context.fillStyle = "#ffffff";
-      context.fillRect(0, 0, width, height);
-      context.drawImage(image, 0, 0, width, height);
-
-      let quality = 0.88;
-      let blob = await canvasToBlob(canvas, "image/webp", quality);
-      let mime = "image/webp";
-      if (!blob) {
-        quality = 0.86;
-        blob = await canvasToBlob(canvas, "image/jpeg", quality);
-        mime = "image/jpeg";
-      }
-      if (!blob) throw new Error(`${file.name || "Receipt image"} could not be optimized.`);
-
-      while (blob.size > RECEIPT_UPLOAD_TARGET_BYTES && quality > 0.5) {
-        quality = Math.max(0.5, quality - 0.08);
-        blob = await canvasToBlob(canvas, mime, quality);
-        if (!blob) break;
-      }
-      if (blob && (!bestBlob || blob.size < bestBlob.size)) {
-        bestBlob = blob;
-        bestType = mime;
-      }
-      if (blob && blob.size <= RECEIPT_UPLOAD_TARGET_BYTES) break;
-      dimensionScale *= 0.82;
-    }
-
-    if (!bestBlob || bestBlob.size > RECEIPT_UPLOAD_TARGET_BYTES) {
-      throw new Error(`${file.name || "Receipt image"} is still too large after optimization. Choose a smaller image.`);
-    }
-
-    const baseName = text(file.name).replace(/\.[^.]+$/, "") || "receipt";
-    return {
-      dataUrl: await readFileAsDataUrl(bestBlob),
-      name: `${baseName}.${bestType === "image/webp" ? "webp" : "jpg"}`,
-      size: bestBlob.size,
-    };
-  } finally {
-    URL.revokeObjectURL(objectUrl);
-  }
 }
 
 function normalizeUsersCenterMembers(payload) {
@@ -329,563 +238,10 @@ function Toast({ toast, onClose }) {
   );
 }
 
-function Modal({ title, subtitle, icon = "◆", children, onClose, wide = false, className = "" }) {
-  return (
-    <div className="products-modal-overlay next-proposals-classic-modal" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section className={`products-modal products-proposal-modal ${wide ? "next-proposals-classic-modal--wide" : ""} ${className}`.trim()} role="dialog" aria-modal="true" aria-label={title}>
-        <button type="button" className="products-modal__close" onClick={onClose} aria-label="Close"><span aria-hidden="true">×</span></button>
-        <div className="products-modal__header">
-          <div className="products-modal__icon" aria-hidden="true">{icon}</div>
-          <div><h2>{title}</h2>{subtitle ? <p>{subtitle}</p> : null}</div>
-        </div>
-        <div className="next-proposals-modal__body">{children}</div>
-      </section>
-    </div>
-  );
-}
-
-
-function ModernSelect({ label, value, options, placeholder = "Select", searchable = false, onChange, disabled = false }) {
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const rootRef = useRef(null);
-  const selected = options.find((option) => String(option.value) === String(value));
-  const filtered = useMemo(() => {
-    const needle = lower(query);
-    if (!needle) return options;
-    return options.filter((option) => lower(`${option.label || ""} ${option.meta || ""}`).includes(needle));
-  }, [options, query]);
-
-  useEffect(() => {
-    if (!open) return undefined;
-    const onPointerDown = (event) => {
-      if (!rootRef.current?.contains(event.target)) setOpen(false);
-    };
-    const onKeyDown = (event) => {
-      if (event.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("pointerdown", onPointerDown, true);
-    document.addEventListener("keydown", onKeyDown, true);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown, true);
-      document.removeEventListener("keydown", onKeyDown, true);
-    };
-  }, [open]);
-
-  const choose = (nextValue) => {
-    onChange(nextValue);
-    setOpen(false);
-    setQuery("");
-  };
-
-  return (
-    <div className={`next-proposals-modern-select ${open ? "is-open" : ""} ${disabled ? "is-disabled" : ""}`} ref={rootRef}>
-      {label ? <span className="next-proposals-modern-select__label">{label}</span> : null}
-      <button
-        type="button"
-        className="next-proposals-modern-select__trigger"
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        disabled={disabled}
-        onClick={() => setOpen((current) => !current)}
-      >
-        <span className={selected ? "" : "is-placeholder"}>{selected?.label || placeholder}</span>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m7 10 5 5 5-5" /></svg>
-      </button>
-      {open ? (
-        <div className="next-proposals-modern-select__menu" role="listbox" aria-label={label || placeholder}>
-          {searchable ? (
-            <div className="next-proposals-modern-select__search">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>
-              <input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search..." />
-            </div>
-          ) : null}
-          <div className="next-proposals-modern-select__options">
-            {filtered.map((option) => {
-              const active = String(option.value) === String(value);
-              return (
-                <button type="button" role="option" aria-selected={active} className={active ? "is-selected" : ""} key={`${label || "select"}-${option.value}`} onClick={() => choose(option.value)}>
-                  <span><strong>{option.label}</strong>{option.meta ? <small>{option.meta}</small> : null}</span>
-                  {active ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6" /></svg> : null}
-                </button>
-              );
-            })}
-            {!filtered.length ? <div className="next-proposals-modern-select__empty">No matching options.</div> : null}
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function KitDownloadModal({ columns, onToggleColumn, onDownload, onClose }) {
-  return (
-    <Modal
-      title="Download kit"
-      subtitle="Choose the columns you need, then select the file type."
-      icon={<FeatherIcon name="download" size={26} />}
-      className="proposal-download-modal"
-      onClose={onClose}
-    >
-      <div className="proposal-download-modal__body">
-        <div className="proposal-download-modal__columns">
-          <span>Columns</span>
-          <div>
-            {EXPORT_COLUMNS.map(([key, label]) => (
-              <label key={key}>
-                <input type="checkbox" checked={columns.includes(key)} onChange={() => onToggleColumn(key)} />
-                <span>{label}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-        <div className="proposal-download-modal__actions products-modal__actions">
-          <button type="button" className="products-btn products-btn--dark" onClick={() => onDownload("pdf")}>
-            <FeatherIcon name="file" /><span>Download PDF</span>
-          </button>
-          <button type="button" className="products-btn products-btn--dark" onClick={() => onDownload("excel")}>
-            <FeatherIcon name="grid" /><span>Download Excel</span>
-          </button>
-        </div>
-      </div>
-    </Modal>
-  );
-}
-
-function ReceiptImagePreviewGrid({ files, busy, onRemove }) {
-  const [previews, setPreviews] = useState([]);
-  useEffect(() => {
-    const next = (Array.isArray(files) ? files : []).map((file, index) => ({ file, index, url: URL.createObjectURL(file) }));
-    setPreviews(next);
-    return () => next.forEach((item) => URL.revokeObjectURL(item.url));
-  }, [files]);
-
-  if (!previews.length) return null;
-  return (
-    <div className="proposal-receipt-preview-grid" aria-label="Selected receipt images">
-      {previews.map((item) => (
-        <article className="proposal-receipt-preview-card" key={`${item.file.name}-${item.file.size}-${item.file.lastModified}-${item.index}`}>
-          <div className="proposal-receipt-preview-card__image">
-            <img src={item.url} alt={item.file.name || `Receipt image ${item.index + 1}`} />
-            <span>{item.index + 1}</span>
-          </div>
-          <div className="proposal-receipt-preview-card__copy">
-            <strong title={item.file.name}>{item.file.name || `Receipt ${item.index + 1}`}</strong>
-            <small>{Math.max(1, Math.round(Number(item.file.size || 0) / 1024))} KB</small>
-          </div>
-          <button type="button" onClick={() => onRemove(item.index)} disabled={busy} aria-label={`Remove ${item.file.name || `receipt ${item.index + 1}`}`}>×</button>
-        </article>
-      ))}
-    </div>
-  );
-}
-
-function SendKitToStockModal({ kit, members, busy, onClose, onSubmit }) {
-  const stockMembers = useMemo(() => (Array.isArray(members) ? members : []).filter((member) => text(member?.id) && text(member?.name)), [members]);
-  const [memberId, setMemberId] = useState("");
-  const [receiptNumber, setReceiptNumber] = useState("");
-  const [files, setFiles] = useState([]);
-  const [error, setError] = useState("");
-
-  const chooseFiles = (fileList) => {
-    const incoming = Array.from(fileList || []);
-    if (!incoming.length) return;
-    const invalid = incoming.find((file) => !/^image\//i.test(file.type || ""));
-    if (invalid) return setError("Receipt uploads must be images.");
-    const tooLarge = incoming.find((file) => Number(file.size || 0) > RECEIPT_SOURCE_MAX_BYTES);
-    if (tooLarge) return setError(`${tooLarge.name} is larger than 8 MB.`);
-    setFiles((current) => {
-      const combined = [...current, ...incoming];
-      const seen = new Set();
-      return combined.filter((file) => {
-        const key = `${file.name}:${file.size}:${file.lastModified}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      }).slice(0, 12);
-    });
-    setError("");
-  };
-
-  const submit = async (event) => {
-    event.preventDefault();
-    if (!memberId) return setError("Choose the user who will receive the stock.");
-    if (!text(receiptNumber)) return setError("Enter the receipt number.");
-    if (!files.length) return setError("Upload at least one receipt image.");
-    setError("");
-    try {
-      await onSubmit({ teamMemberId: memberId, receiptNumber: text(receiptNumber), files });
-    } catch (submitError) {
-      setError(submitError?.message || "The kit could not be sent to Stocktaking.");
-    }
-  };
-
-  const close = () => {
-    if (!busy) onClose();
-  };
-
-  return (
-    <Modal
-      title="Send to stock"
-      subtitle={`Add “${kit?.name || "Kit"}” directly to a user's Stocktaking column.`}
-      icon={<FeatherIcon name="archive" size={26} />}
-      onClose={close}
-    >
-      <form className="proposal-send-stock-form proposal-send-stock-modal-form" onSubmit={submit}>
-        <ModernSelect
-          label="Stock user *"
-          value={memberId}
-          placeholder={stockMembers.length ? "Select stock user" : "No Users Center users available"}
-          searchable
-          options={stockMembers.map((member) => ({
-            value: member.id,
-            label: member.name,
-            meta: text(member.stocktakingColumn)
-              ? `Stock column: ${member.stocktakingColumn}`
-              : `Will grant Stocktaking access and create ${member.name} Stock`,
-          }))}
-          onChange={(value) => { setMemberId(value); setError(""); }}
-        />
-
-        <label className="proposal-send-stock-text-field">
-          <span>Receipt number *</span>
-          <input
-            type="text"
-            inputMode="text"
-            autoComplete="off"
-            value={receiptNumber}
-            onChange={(event) => { setReceiptNumber(event.target.value); setError(""); }}
-            placeholder="Enter receipt number"
-            disabled={busy}
-          />
-        </label>
-
-        <label className="proposal-receipt-upload-field">
-          <span>Receipt images *</span>
-          <div className={`proposal-receipt-upload-box ${files.length ? "has-files" : ""}`}>
-            <FeatherIcon name="file" size={22} />
-            <div><strong>{files.length ? `${files.length} receipt image${files.length === 1 ? "" : "s"} selected` : "Upload receipt images"}</strong><small>JPG, PNG or WEBP · up to 8 MB each · optimized before upload</small></div>
-            <b>{busy ? "Uploading…" : "Choose images"}</b>
-            <input type="file" accept="image/*" multiple disabled={busy} onChange={(event) => { chooseFiles(event.target.files); event.target.value = ""; }} />
-          </div>
-          <ReceiptImagePreviewGrid files={files} busy={busy} onRemove={(index) => setFiles((current) => current.filter((_, idx) => idx !== index))} />
-        </label>
-
-        <div className="proposal-send-stock-note proposal-send-stock-note--access">
-          <FeatherIcon name="archive" size={17} />
-          <span>If the selected user does not have Stocktaking access, Confirm will grant it automatically. Their existing Users Center Stocktaking column will be reused; if none exists, a <strong>Username + Stock</strong> column will be created.</span>
-        </div>
-        <div className="proposal-send-stock-note"><strong>Main stock</strong><span>Rows will be added to the selected user's Stocktaking column and Tag will use this kit name.</span></div>
-        {error ? <div className="next-proposals-error products-form-error">{error}</div> : null}
-        <div className="proposal-send-stock-actions products-modal__actions">
-          <button type="button" className="products-btn products-btn--light" onClick={close} disabled={busy}>Cancel</button>
-          <button type="submit" className="products-btn products-btn--dark" disabled={busy || !stockMembers.length}><FeatherIcon name="archive" /><span>{busy ? "Sending…" : "Confirm"}</span></button>
-        </div>
-      </form>
-    </Modal>
-  );
-}
-
-function NameModal({ dialog, busy, onClose, onSubmit }) {
-  const [value, setValue] = useState(dialog?.value || "");
-  const [error, setError] = useState("");
-  const labels = {
-    create: ["Create New Kit", "Create a reusable collection of products and quantities.", "Create Kit"],
-    copy: ["Copy Kit", "Create an independent copy with all saved components.", "Create Copy"],
-    rename: ["Rename Kit", "Change the folder name without changing its components.", "Save Name"],
-  };
-  const [title, subtitle, action] = labels[dialog?.mode] || labels.create;
-
-  const submit = async (event) => {
-    event.preventDefault();
-    const name = text(value);
-    if (!name) return setError("Kit name is required.");
-    setError("");
-    try {
-      await onSubmit(name);
-    } catch (submitError) {
-      setError(submitError?.message || "The kit could not be saved.");
-    }
-  };
-
-  return (
-    <Modal title={title} subtitle={subtitle} icon="▣" onClose={onClose}>
-      <form className="next-proposals-form products-form-grid" onSubmit={submit}>
-        <label><span>Kit Name *</span><input autoFocus value={value} onChange={(event) => setValue(event.target.value)} placeholder="Example: Arduino starter kit" /></label>
-        {error ? <div className="next-proposals-error products-form-error">{error}</div> : null}
-        <div className="next-proposals-form__actions products-modal__actions">
-          <button type="button" className="products-btn products-btn--light" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="submit" className="products-btn products-btn--dark" disabled={busy}>{busy ? "Saving…" : action}</button>
-        </div>
-      </form>
-    </Modal>
-  );
-}
-
-function FolderNameModal({ dialog, busy, onClose, onSubmit }) {
-  const [value, setValue] = useState(dialog?.value || "");
-  const [error, setError] = useState("");
-  const creating = dialog?.mode !== "rename";
-  const submit = async (event) => {
-    event.preventDefault();
-    const name = text(value);
-    if (!name) return setError("Folder name is required.");
-    setError("");
-    try { await onSubmit(name); } catch (submitError) { setError(submitError?.message || "The folder could not be saved."); }
-  };
-  return (
-    <Modal
-      title={creating ? "Create Folder" : "Rename Folder"}
-      subtitle={creating ? "Enter a name only. You can create kits after opening the folder." : "Change the folder name without changing the kits inside it."}
-      icon={<FeatherIcon name="folder" size={20} />}
-      onClose={onClose}
-    >
-      <form className="next-proposals-form products-form-grid" onSubmit={submit}>
-        <label><span>Folder Name *</span><input autoFocus value={value} onChange={(event) => setValue(event.target.value)} placeholder="Example: TH1 Kits" /></label>
-        {error ? <div className="next-proposals-error products-form-error">{error}</div> : null}
-        <div className="next-proposals-form__actions products-modal__actions">
-          <button type="button" className="products-btn products-btn--light" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="submit" className="products-btn products-btn--dark" disabled={busy}>{busy ? "Saving…" : creating ? "Create Folder" : "Save Name"}</button>
-        </div>
-      </form>
-    </Modal>
-  );
-}
-
-function MoveKitModal({ dialog, folders, busy, onClose, onSubmit }) {
-  const kit = dialog?.kit;
-  const currentFolderId = text(kit?.folderId);
-  const [selectedFolderId, setSelectedFolderId] = useState(currentFolderId);
-  const [error, setError] = useState("");
-
-  const destinations = useMemo(() => [
-    { id: "", name: "Main Kits", description: "No folder" },
-    ...folders.map((folder) => ({
-      id: folder.id,
-      name: folder.name,
-      description: `${formatNumber(folder.kitCount || 0)} kit${number(folder.kitCount) === 1 ? "" : "s"}`,
-    })),
-  ], [folders]);
-
-  const submit = async (event) => {
-    event.preventDefault();
-    if (selectedFolderId === currentFolderId) return setError("Choose a different destination.");
-    setError("");
-    try {
-      await onSubmit(selectedFolderId);
-    } catch (submitError) {
-      setError(submitError?.message || "The kit could not be moved.");
-    }
-  };
-
-  return (
-    <Modal
-      title="Move Kit"
-      subtitle={`Choose where “${kit?.name || "this kit"}” should be moved.`}
-      icon={<FeatherIcon name="move" size={20} />}
-      onClose={onClose}
-    >
-      <form className="next-kit-move-form" onSubmit={submit}>
-        <div className="next-kit-move-list" role="radiogroup" aria-label="Move kit destination">
-          {destinations.map((destination) => {
-            const selected = selectedFolderId === destination.id;
-            const current = currentFolderId === destination.id;
-            return (
-              <button
-                type="button"
-                key={destination.id || "root"}
-                className={`${selected ? "is-selected" : ""} ${current ? "is-current" : ""}`}
-                onClick={() => { setSelectedFolderId(destination.id); setError(""); }}
-                disabled={busy}
-                role="radio"
-                aria-checked={selected}
-              >
-                <span className="next-kit-move-list__icon"><FeatherIcon name="folder" size={18} /></span>
-                <span className="next-kit-move-list__copy">
-                  <strong>{destination.name}</strong>
-                  <small>{current ? "Current location" : destination.description}</small>
-                </span>
-                <span className="next-kit-move-list__check" aria-hidden="true">{selected ? "✓" : ""}</span>
-              </button>
-            );
-          })}
-        </div>
-        {error ? <div className="next-proposals-error products-form-error">{error}</div> : null}
-        <div className="products-modal__actions next-kit-move-actions">
-          <button type="button" className="products-btn products-btn--light" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="submit" className="products-btn products-btn--dark" disabled={busy || selectedFolderId === currentFolderId}>
-            <FeatherIcon name="move" size={17} /><span>{busy ? "Moving…" : "Move Kit"}</span>
-          </button>
-        </div>
-      </form>
-    </Modal>
-  );
-}
-
-function PasswordModal({ request, busy, onClose, onVerified }) {
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-
-  const submit = async (event) => {
-    event.preventDefault();
-    if (!text(password)) return setError("Admin password is required.");
-    setError("");
-    try {
-      await requestJson("/api/products/admin/verify", { method: "POST", body: JSON.stringify({ password }) });
-      onVerified(text(password));
-    } catch (verifyError) {
-      setError(verifyError?.message || "Invalid Admin password.");
-    }
-  };
-
-  return (
-    <Modal title={request?.title || "Admin password required"} subtitle={request?.message || "Enter the Admin password to continue."} icon="⌾" onClose={onClose}>
-      <form className="next-proposals-form products-form-grid" onSubmit={submit}>
-        <label><span>Admin Password *</span><input autoFocus type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
-        {error ? <div className="next-proposals-error products-form-error">{error}</div> : null}
-        <div className="next-proposals-form__actions products-modal__actions">
-          <button type="button" className="products-btn products-btn--light" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="submit" className="products-btn products-btn--dark" disabled={busy}>{busy ? "Checking…" : "Continue"}</button>
-        </div>
-      </form>
-    </Modal>
-  );
-}
-
-function CombineKitsModal({ kits, busy, onClose, onCreate }) {
-  const [selectedIds, setSelectedIds] = useState([]);
-  const [name, setName] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-
-  const selectedKits = useMemo(() => selectedIds.map((id) => kits.find((kit) => kit.id === id)).filter(Boolean), [kits, selectedIds]);
-
-  const toggleKit = (kit) => {
-    setError("");
-    if (selectedIds.includes(kit.id)) {
-      setSelectedIds(selectedIds.filter((id) => id !== kit.id));
-      return;
-    }
-    if (selectedIds.length >= 2) return;
-    const next = [...selectedIds, kit.id];
-    setSelectedIds(next);
-    if (next.length === 2 && !text(name)) {
-      const names = next.map((id) => kits.find((entry) => entry.id === id)?.name).filter(Boolean);
-      if (names.length === 2) setName(`${names[0]} + ${names[1]}`);
-    }
-  };
-
-  const submit = async (event) => {
-    event.preventDefault();
-    const cleanName = text(name);
-    if (selectedIds.length !== 2) return setError("Select exactly two kits to combine.");
-    if (!cleanName) return setError("Combined kit name is required.");
-    if (!text(password)) return setError("Admin password is required.");
-    setError("");
-    try {
-      await onCreate({ kitIds: selectedIds, name: cleanName, password: text(password) });
-    } catch (submitError) {
-      setError(submitError?.message || "The combined kit could not be created.");
-    }
-  };
-
-  return (
-    <Modal title="Combined Kits" subtitle="Select exactly two kits. Duplicate components will be merged and their quantities added together." icon={<FeatherIcon name="merge" size={20} />} onClose={onClose} wide>
-      <form className="next-kit-combine-form" onSubmit={submit}>
-        <div className="next-kit-combine-headline">
-          <div><span>Selected kits</span><strong>{selectedIds.length} / 2</strong></div>
-          <p>The source kits stay unchanged. A new independent kit will be created.</p>
-        </div>
-
-        <div className="next-kit-combine-list" role="group" aria-label="Choose two kits">
-          {kits.map((kit) => {
-            const selected = selectedIds.includes(kit.id);
-            const disabled = !selected && selectedIds.length >= 2;
-            return (
-              <button type="button" key={kit.id} className={selected ? "is-selected" : ""} disabled={disabled || busy} onClick={() => toggleKit(kit)}>
-                <span className="next-kit-combine-check" aria-hidden="true">{selected ? "✓" : ""}</span>
-                <span className="next-kit-combine-copy"><strong>{kit.name}</strong><small>{formatNumber(kit.itemsCount)} component{kit.itemsCount === 1 ? "" : "s"} · Created by {kit.createdBy || "—"}</small></span>
-              </button>
-            );
-          })}
-        </div>
-
-        {selectedKits.length === 2 ? (
-          <div className="next-kit-combine-preview">
-            <FeatherIcon name="merge" size={18} />
-            <div><strong>{selectedKits[0].name}</strong><span>+</span><strong>{selectedKits[1].name}</strong></div>
-          </div>
-        ) : null}
-
-        <div className="products-form-grid next-kit-combine-fields">
-          <label className="products-field products-field--wide"><span>Combined Kit Name <em>*</em></span><input value={name} onChange={(event) => setName(event.target.value)} placeholder="Example: TH1 + TH2 Combined Kit" autoComplete="off" /></label>
-          <label className="products-field products-field--wide"><span>Admin Password <em>*</em></span><input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
-        </div>
-
-        {error ? <div className="next-proposals-error products-form-error">{error}</div> : null}
-
-        <div className="products-modal__actions next-kit-combine-actions">
-          <button type="button" className="products-btn products-btn--light" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="submit" className="products-btn products-btn--dark" disabled={busy || selectedIds.length !== 2}>
-            <FeatherIcon name="merge" size={17} /><span>{busy ? "Combining…" : "Create Combined Kit"}</span>
-          </button>
-        </div>
-      </form>
-    </Modal>
-  );
-}
-
-function AddProductModal({ kit, products, busy, onClose, onSubmit }) {
-  const [selected, setSelected] = useState("");
-  const [quantity, setQuantity] = useState(1);
-  const [search, setSearch] = useState("");
-  const [error, setError] = useState("");
-
-  const filteredProducts = useMemo(() => {
-    const needle = lower(search);
-    return products.filter((product) => !needle || [product.name, product.displayId, product.unit, firstTag(product)].some((value) => lower(value).includes(needle))).slice(0, 100);
-  }, [products, search]);
-
-  const submit = async (event) => {
-    event.preventDefault();
-    if (!selected) return setError("Choose a product.");
-    setError("");
-    try {
-      await onSubmit({ productId: selected, quantity: Math.max(1, Math.round(number(quantity) || 1)) });
-    } catch (submitError) {
-      setError(submitError?.message || "The product could not be added.");
-    }
-  };
-
-  return (
-    <Modal title={`Add Product to ${kit.name}`} subtitle="Choose a catalogue product and the quantity stored in this reusable kit." icon="＋" onClose={onClose} wide>
-      <form className="next-proposals-form products-form-grid" onSubmit={submit}>
-        <label><span>Search Catalogue</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Product name, ID code, tag or unit" /></label>
-        <div className="next-proposals-product-picker">
-          {filteredProducts.map((product) => (
-            <button type="button" className={selected === product.id ? "active" : ""} onClick={() => setSelected(product.id)} key={product.id}>
-              <span>{product.imageUrl ? <img src={product.imageUrl} alt="" loading="lazy" /> : "▧"}</span>
-              <div><strong>{product.name}</strong><small>{product.displayId || firstTag(product)} · {product.unit || "No unit"}</small></div>
-              <b>{formatMoney(product.unitPrice)}</b>
-            </button>
-          ))}
-          {!filteredProducts.length ? <div className="next-proposals-empty-inline">No matching catalogue products.</div> : null}
-        </div>
-        <div className="next-proposals-form-grid products-form-grid">
-          <label><span>Quantity *</span><input type="number" min="1" step="1" value={quantity} onChange={(event) => setQuantity(event.target.value)} /></label>
-          <label><span>Selected Product</span><input value={products.find((product) => product.id === selected)?.name || "No product selected"} readOnly /></label>
-        </div>
-        {error ? <div className="next-proposals-error products-form-error">{error}</div> : null}
-        <div className="next-proposals-form__actions products-modal__actions">
-          <button type="button" className="products-btn products-btn--light" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="submit" className="products-btn products-btn--dark" disabled={busy}>{busy ? "Adding…" : "Add Product"}</button>
-        </div>
-      </form>
-    </Modal>
-  );
-}
-
 export default function KitsClient({ account, initialCatalog, initialKits, initialFolders, bootstrapWarnings = [] }) {
+  const can = (action) => featureAllowed(account, `kits.${action}`);
+  // Creation must be able to save its components as well as its header.
+  const canCreate = can("create") && can("item_add");
   const [products, setProducts] = useState(() => (Array.isArray(initialCatalog?.products) ? initialCatalog.products : []).map(normalizeProduct));
   const [kits, setKits] = useState(() => (Array.isArray(initialKits?.kits) ? initialKits.kits : []).map(normalizeKit));
   const [folders, setFolders] = useState(() => (Array.isArray(initialFolders?.folders) ? initialFolders.folders : []).map(normalizeFolder));
@@ -1158,7 +514,7 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
     if (!kit?.id) return;
     const columns = exportColumns.length ? exportColumns.join(",") : EXPORT_COLUMNS.map(([key]) => key).join(",");
     const params = new URLSearchParams({ columns, groupBy });
-    openDownload(`/api/products/kits/${encodeURIComponent(kit.id)}/${type}?${params.toString()}`);
+    openDownload(`/next/api/products/export-direct?scope=kit&id=${encodeURIComponent(kit.id)}&kind=${encodeURIComponent(type)}&${params.toString()}`);
     setDownloadMenuOpen(false);
   };
 
@@ -1166,7 +522,7 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
     setDownloadMenuOpen(false);
     setSortMenuOpen(false);
     setSendToStockOpen(true);
-    requestJson(`/api/user-access/team-members?_fresh=1&_ts=${Date.now()}`)
+    requestJson(`/next/api/team-members?_fresh=1&_ts=${Date.now()}`)
       .then((body) => setMembers(normalizeUsersCenterMembers(body)))
       .catch((error) => notify(error?.message || "Users Center members could not be refreshed.", "error"));
   };
@@ -1177,6 +533,7 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
     setBusy(true);
     startActionLoading({ title: "Sending to stock", message: "Uploading receipt images and adding Stocktaking rows…" });
     try {
+      const { prepareReceiptImage } = await import("../../lib/receipt-image-client");
       const receipts = [];
       for (const file of files) {
         const prepared = await prepareReceiptImage(file);
@@ -1188,7 +545,7 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
       }
       if (!receipts.length) throw new Error("No receipt images were uploaded.");
 
-      const body = await requestJson(`/next/api/products/kits/${encodeURIComponent(kit.id)}/send-to-stock`, {
+      const body = await requestJson(`/next/api/products/kits/send-to-stock?id=${encodeURIComponent(kit.id)}`, {
         method: "POST",
         body: JSON.stringify({ teamMemberId, receiptNumber: text(receiptNumber), receipts }),
       });
@@ -1228,9 +585,9 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
   const refreshKits = async () => {
     try {
       const [kitBody, productBody, folderBody] = await Promise.all([
-        requestJson(`/next/api/products/kits?_ts=${Date.now()}`),
-        requestJson(`/next/api/products?_ts=${Date.now()}`),
-        requestJson(`/next/api/products/kit-folders?_ts=${Date.now()}`),
+        requestJson(`/next/api/products/kits?_fresh=1&_ts=${Date.now()}`),
+        requestJson(`/next/api/products?_fresh=1&_ts=${Date.now()}`),
+        requestJson(`/next/api/products/kit-folders?_fresh=1&_ts=${Date.now()}`),
       ]);
       setKits((kitBody.kits || []).map(normalizeKit));
       setProducts((productBody.products || []).map(normalizeProduct));
@@ -1251,7 +608,7 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
     setBusy(true);
     let createdId = "";
     try {
-      await requestJson("/api/products/admin/verify", {
+      await requestJson("/next/api/products/admin/verify", {
         method: "POST",
         body: JSON.stringify({ password: adminPassword }),
       });
@@ -1727,12 +1084,12 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
     const menuOpen = folderMenu === menuKey;
     return (
       <article className={`products-proposal-folder kit-library-kit ${menuOpen ? "is-menu-open" : ""}`} key={kit.id}>
-        {menuOpen ? (
+        {menuOpen && (can("edit") || can("copy") || can("delete") || can("item_add") || can("item_edit") || can("item_delete")) ? (
           <div className="proposal-folder-menu" onClick={(event) => event.stopPropagation()}>
-            <button type="button" onClick={() => { setFolderMenu(""); enterEditKit(kit); }}><FeatherIcon name="edit" /><span>Edit</span></button>
-            <button type="button" onClick={() => { setFolderMenu(""); startMoveKit(kit); }}><FeatherIcon name="move" /><span>Move</span></button>
-            <button type="button" onClick={() => { setFolderMenu(""); setNameDialog({ mode: "copy", kit, value: `${kit.name} copy` }); }}><FeatherIcon name="copy" /><span>Make a copy</span></button>
-            <button type="button" className="is-danger" onClick={() => { setFolderMenu(""); deleteKit(kit); }}><FeatherIcon name="trash" /><span>Delete</span></button>
+            {can("edit") || can("item_add") || can("item_edit") || can("item_delete") ? <button type="button" onClick={() => { setFolderMenu(""); enterEditKit(kit); }}><FeatherIcon name="edit" /><span>Edit</span></button> : null}
+            {can("edit") ? <button type="button" onClick={() => { setFolderMenu(""); startMoveKit(kit); }}><FeatherIcon name="move" /><span>Move</span></button> : null}
+            {can("copy") ? <button type="button" onClick={() => { setFolderMenu(""); setNameDialog({ mode: "copy", kit, value: `${kit.name} copy` }); }}><FeatherIcon name="copy" /><span>Make a copy</span></button> : null}
+            {can("delete") ? <button type="button" className="is-danger" onClick={() => { setFolderMenu(""); deleteKit(kit); }}><FeatherIcon name="trash" /><span>Delete</span></button> : null}
           </div>
         ) : null}
         <button
@@ -1787,7 +1144,7 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
       <div className="kit-component-card__metrics">
         <div className="kit-component-card__metric kit-component-card__metric--qty">
           <span>Qty</span>
-          {detailEdit ? (
+          {detailEdit && (createMode || can("item_edit")) ? (
             <input
               className="proposal-item-qty kit-component-card__qty-input"
               type="number"
@@ -1821,7 +1178,7 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
             <FeatherIcon name="minus" /><span>No link</span>
           </span>
         )}
-        {detailEdit ? (
+        {detailEdit && (createMode || can("item_delete")) ? (
           <button type="button" className="kit-component-card__action kit-component-card__action--remove" onClick={() => removeItem(row)} aria-label={`Delete ${row.name}`} title="Delete">
             <FeatherIcon name="trash" /><span>Remove</span>
           </button>
@@ -1836,10 +1193,10 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
     const kitCount = folderKitCounts.get(folder.id) || 0;
     return (
       <article className={`products-proposal-folder kit-library-folder ${menuOpen ? "is-menu-open" : ""}`} key={folder.id}>
-        {menuOpen ? (
+        {menuOpen && can("folder_manage") ? (
           <div className="proposal-folder-menu" onClick={(event) => event.stopPropagation()}>
-            <button type="button" onClick={() => { setFolderMenu(""); renameFolder(folder); }}><FeatherIcon name="edit" /><span>Rename</span></button>
-            <button type="button" className="is-danger" onClick={() => { setFolderMenu(""); deleteFolder(folder); }}><FeatherIcon name="trash" /><span>Delete folder</span></button>
+            {can("folder_manage") ? <button type="button" onClick={() => { setFolderMenu(""); renameFolder(folder); }}><FeatherIcon name="edit" /><span>Rename</span></button> : null}
+            {can("folder_manage") ? <button type="button" className="is-danger" onClick={() => { setFolderMenu(""); deleteFolder(folder); }}><FeatherIcon name="trash" /><span>Delete folder</span></button> : null}
           </div>
         ) : null}
         <button
@@ -1932,9 +1289,9 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
                             </div>
                           ) : null}
                         </div>
-                        <button type="button" className="products-btn products-btn--dark proposal-send-stock-btn" onClick={openSendToStock} disabled={!enrichedRows.length}>
+                        {can("send_stock") ? <button type="button" className="products-btn products-btn--dark proposal-send-stock-btn" onClick={openSendToStock} disabled={!enrichedRows.length}>
                           <FeatherIcon name="archive" /><span>Send to stock</span>
-                        </button>
+                        </button> : null}
                       </div>
                     </header>
                   )}
@@ -1954,6 +1311,7 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
                           <input
                             type="text"
                             value={editName}
+                            disabled={!createMode && !can("edit")}
                             onChange={(event) => {
                               setEditName(event.target.value);
                               if (text(event.target.value)) setDraftErrors((current) => ({ ...current, name: "" }));
@@ -1965,7 +1323,7 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
                         <div className="direct-create-inline-error direct-create-inline-error--name kit-create-inline-error kit-create-inline-error--name" aria-live="polite">{draftErrors.name}</div>
                       </div>
 
-                      <div className="products-proposal-tools proposals-one-tool">
+                      {(createMode || can("item_add")) ? <div className="products-proposal-tools proposals-one-tool">
                         <div className={`products-proposal-tool-card ${productPickerOpen ? "has-open-select" : ""}`}>
                           <div className="products-proposal-tool-title"><FeatherIcon name="plusCircle" /><span>Add kit component</span></div>
                           <div className="products-proposal-control-grid">
@@ -2017,7 +1375,7 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
                             <button type="button" className="products-btn products-btn--dark" onClick={addSelectedProduct} disabled={busy}><FeatherIcon name="plus" /><span>Add</span></button>
                           </div>
                         </div>
-                      </div>
+                      </div> : null}
                       <div className="direct-create-inline-error direct-create-inline-error--items kit-create-inline-error kit-create-inline-error--items" aria-live="polite">{draftErrors.items}</div>
                     </>
                   ) : (
@@ -2079,9 +1437,9 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
                   {detailEdit ? (
                     <div className={`kit-create-save-footer direct-create-save-footer ${createMode ? "direct-create-save-footer--create" : "direct-create-save-footer--edit"}`}>
                       <button type="button" className="products-btn products-btn--light direct-create-cancel-btn" onClick={backToKits} disabled={busy}>Cancel</button>
-                      <button type="button" className="products-btn products-btn--dark kit-create-save-btn direct-create-save-btn" onClick={saveKit} disabled={busy}>
+                      {(createMode || can("edit")) ? <button type="button" className="products-btn products-btn--dark kit-create-save-btn direct-create-save-btn" onClick={saveKit} disabled={busy}>
                         <FeatherIcon name="save" /><span>{busy ? "Saving…" : createMode ? "Save" : "Save Changes"}</span>
-                      </button>
+                      </button> : null}
                     </div>
                   ) : null}
                 </>
@@ -2120,13 +1478,13 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
       <div className="proposals-floating-actions kit-library-actions">
         {activeFolder ? (
           <>
-            <button type="button" className="products-btn products-btn--light proposal-classic-combine-btn next-kit-combine-btn" onClick={() => setCombineOpen(true)} disabled={kits.length < 2}><FeatherIcon name="merge" /><span>Combined Kits</span></button>
-            <button type="button" className="products-add-btn proposals-create-btn" onClick={startCreateKit}><FeatherIcon name="briefcase" /><span>Create New Kit</span></button>
+            {canCreate ? <button type="button" className="products-btn products-btn--light proposal-classic-combine-btn next-kit-combine-btn" onClick={() => setCombineOpen(true)} disabled={kits.length < 2}><FeatherIcon name="merge" /><span>Combined Kits</span></button> : null}
+            {canCreate ? <button type="button" className="products-add-btn proposals-create-btn" onClick={startCreateKit}><FeatherIcon name="briefcase" /><span>Create New Kit</span></button> : null}
           </>
         ) : (
           <>
-            <button type="button" className="products-add-btn proposals-create-btn" onClick={startCreateKit}><FeatherIcon name="briefcase" /><span>Create New Kit</span></button>
-            <button type="button" className="products-add-btn proposals-create-btn kit-create-folder-btn" onClick={() => setFolderDialog({ mode: "create", value: "" })}><FeatherIcon name="folderPlus" /><span>Create Folder</span></button>
+            {canCreate ? <button type="button" className="products-add-btn proposals-create-btn" onClick={startCreateKit}><FeatherIcon name="briefcase" /><span>Create New Kit</span></button> : null}
+            {can("folder_create") ? <button type="button" className="products-add-btn proposals-create-btn kit-create-folder-btn" onClick={() => setFolderDialog({ mode: "create", value: "" })}><FeatherIcon name="folderPlus" /><span>Create Folder</span></button> : null}
           </>
         )}
       </div>

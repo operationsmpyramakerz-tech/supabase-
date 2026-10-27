@@ -1,16 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import OrderDownloadModal from "../orders/OrderDownloadModal";
+import dynamic from "next/dynamic";
+import { featureAllowed } from "../../lib/feature-permissions-registry";
 
-const EXPORT_COLUMNS = [
-  { value: "stock", label: "Stock", checked: true },
-  { value: "receiptNumber", label: "Receipt number", checked: false },
-  { value: "unityPrice", label: "Unity price", checked: true },
-  { value: "totalPrice", label: "Total price", checked: true },
-  { value: "inventory", label: "Inventory", checked: false },
-  { value: "defected", label: "Defected", checked: false },
-];
+const StocktakingDialogs = dynamic(() => import("./StocktakingDialogs"), { ssr: false });
+
 
 const TAG_TONES = {
   gray: { background: "#F3F4F6", color: "#374151", border: "#E5E7EB" },
@@ -46,80 +41,6 @@ function normalizedUrl(value) {
   if (/^https?:\/\//i.test(url)) return url;
   if (/^www\./i.test(url)) return `https://${url}`;
   return "";
-}
-
-const RECEIPT_SOURCE_MAX_BYTES = 8 * 1024 * 1024;
-const RECEIPT_UPLOAD_TARGET_BYTES = Math.floor(1.5 * 1024 * 1024);
-const RECEIPT_MAX_EDGE = 2000;
-
-function readFileAsDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = () => reject(new Error(`Could not read ${file?.name || "receipt image"}.`));
-    reader.readAsDataURL(file);
-  });
-}
-
-function canvasToBlob(canvas, type, quality) {
-  return new Promise((resolve) => canvas.toBlob(resolve, type, quality));
-}
-
-async function prepareStockReceiptImage(file) {
-  if (!file || !/^image\//i.test(text(file.type))) throw new Error("Receipt uploads must be images.");
-  if (number(file.size) > RECEIPT_SOURCE_MAX_BYTES) throw new Error(`${file.name || "Receipt image"} is larger than 8 MB.`);
-  if (number(file.size) <= RECEIPT_UPLOAD_TARGET_BYTES) {
-    return { dataUrl: await readFileAsDataUrl(file), name: file.name || "receipt.jpg", size: number(file.size) };
-  }
-  const objectUrl = URL.createObjectURL(file);
-  try {
-    const image = await new Promise((resolve, reject) => {
-      const candidate = new Image();
-      candidate.onload = () => resolve(candidate);
-      candidate.onerror = () => reject(new Error(`${file.name || "Receipt image"} could not be opened for optimization.`));
-      candidate.src = objectUrl;
-    });
-    const naturalWidth = Math.max(1, number(image.naturalWidth || image.width) || 1);
-    const naturalHeight = Math.max(1, number(image.naturalHeight || image.height) || 1);
-    const longest = Math.max(naturalWidth, naturalHeight);
-    let dimensionScale = Math.min(1, RECEIPT_MAX_EDGE / longest);
-    let bestBlob = null;
-    let bestType = "image/webp";
-    for (let sizeAttempt = 0; sizeAttempt < 5; sizeAttempt += 1) {
-      const width = Math.max(1, Math.round(naturalWidth * dimensionScale));
-      const height = Math.max(1, Math.round(naturalHeight * dimensionScale));
-      const canvas = document.createElement("canvas");
-      canvas.width = width;
-      canvas.height = height;
-      const context = canvas.getContext("2d", { alpha: false });
-      if (!context) throw new Error("Receipt image optimization is not available in this browser.");
-      context.fillStyle = "#ffffff";
-      context.fillRect(0, 0, width, height);
-      context.drawImage(image, 0, 0, width, height);
-      let quality = 0.88;
-      let blob = await canvasToBlob(canvas, "image/webp", quality);
-      let mime = "image/webp";
-      if (!blob) {
-        quality = 0.86;
-        blob = await canvasToBlob(canvas, "image/jpeg", quality);
-        mime = "image/jpeg";
-      }
-      if (!blob) throw new Error(`${file.name || "Receipt image"} could not be optimized.`);
-      while (blob.size > RECEIPT_UPLOAD_TARGET_BYTES && quality > 0.5) {
-        quality = Math.max(0.5, quality - 0.08);
-        blob = await canvasToBlob(canvas, mime, quality);
-        if (!blob) break;
-      }
-      if (blob && (!bestBlob || blob.size < bestBlob.size)) { bestBlob = blob; bestType = mime; }
-      if (blob && blob.size <= RECEIPT_UPLOAD_TARGET_BYTES) break;
-      dimensionScale *= 0.82;
-    }
-    if (!bestBlob || bestBlob.size > RECEIPT_UPLOAD_TARGET_BYTES) throw new Error(`${file.name || "Receipt image"} is still too large after optimization. Choose a smaller image.`);
-    const baseName = text(file.name).replace(/\.[^.]+$/, "") || "receipt";
-    return { dataUrl: await readFileAsDataUrl(bestBlob), name: `${baseName}.${bestType === "image/webp" ? "webp" : "jpg"}`, size: bestBlob.size };
-  } finally {
-    URL.revokeObjectURL(objectUrl);
-  }
 }
 
 function tagColor(name, fallback) {
@@ -232,27 +153,6 @@ function groupRowsByOrderNumber(rows) {
     });
 }
 
-function downloadBlob(blob, filename) {
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  URL.revokeObjectURL(url);
-}
-
-function responseFileName(response, fallback) {
-  const disposition = response.headers.get("content-disposition") || "";
-  const match = disposition.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i);
-  if (!match) return fallback;
-  try {
-    return decodeURIComponent(match[1] || match[2] || fallback);
-  } catch {
-    return match[1] || match[2] || fallback;
-  }
-}
 
 function Icon({ name }) {
   const common = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true };
@@ -499,216 +399,7 @@ function StockReceiptUploadPicker({ files = [], disabled = false, onChange, onEr
   );
 }
 
-function ExportModal({ onClose, columnKey = "", inventorySession = null }) {
-  const columnOptions = useMemo(() => EXPORT_COLUMNS.map((column) => [column.value, column.label]), []);
-  const defaultColumns = useMemo(
-    () => EXPORT_COLUMNS.filter((column) => column.checked).map((column) => column.value),
-    [],
-  );
-
-  const runExport = async ({ kind, columns, signatureLabels, instruction }) => {
-    const fileType = kind === "excel" ? "excel" : "pdf";
-    const endpoint = fileType === "excel" ? "/api/stock/excel" : "/api/stock/pdf";
-    const params = new URLSearchParams({ columns: (columns || []).join(",") });
-    if (columnKey) params.set("column", columnKey);
-    if (inventorySession?.inventoryColumn) params.set("inventoryColumn", inventorySession.inventoryColumn);
-    if (inventorySession?.defectedColumn) params.set("defectedColumn", inventorySession.defectedColumn);
-
-    const response = await fetch(`${endpoint}?${params.toString()}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      cache: "no-store",
-      body: JSON.stringify({
-        signatureLabels: Array.isArray(signatureLabels) ? signatureLabels : null,
-        instruction: instruction || null,
-      }),
-    });
-
-    if (response.status === 401) {
-      window.location.href = "/login?next=/next/stocktaking";
-      return;
-    }
-    if (!response.ok) {
-      const body = await response.json().catch(() => null);
-      throw new Error(body?.error || "The stocktaking export failed.");
-    }
-
-    const fallback = fileType === "excel" ? "Stocktaking.xlsx" : "Stocktaking.pdf";
-    downloadBlob(await response.blob(), responseFileName(response, fallback));
-  };
-
-  return (
-    <OrderDownloadModal
-      open
-      title="Download stock file"
-      subtitle="Choose the columns, signatures and optional instructions, then select the file type."
-      columnOptions={columnOptions}
-      defaultColumns={defaultColumns}
-      defaultSignatureLabels={["Storekeeper", "Operations", "Delivered to"]}
-      onClose={onClose}
-      onDownload={runExport}
-    />
-  );
-}
-
-function InventorySetupModal({ column, busy, onClose, onConfirm }) {
-  const [mode, setMode] = useState("both");
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [error, setError] = useState("");
-
-  const submit = async (event) => {
-    event.preventDefault();
-    if (!date) return setError("Choose the inventory date.");
-    setError("");
-    try {
-      await onConfirm({ mode, date });
-    } catch (submitError) {
-      setError(submitError?.message || "Inventory columns could not be prepared.");
-    }
-  };
-
-  return (
-    <div className="stocktaking-inventory-modal" role="presentation" onMouseDown={(event) => { if (!busy && event.target === event.currentTarget) onClose(); }}>
-      <section className="stocktaking-inventory-modal__card" role="dialog" aria-modal="true" aria-label="Make inventory">
-        <button type="button" className="stocktaking-inventory-modal__close" onClick={onClose} disabled={busy} aria-label="Close">×</button>
-        <header>
-          <span className="stocktaking-inventory-modal__icon"><Icon name="folder" /></span>
-          <div><small>INVENTORY SETUP</small><h3>Make inventory</h3><p>{column?.label || "Stocktaking"}</p></div>
-        </header>
-        <form onSubmit={submit}>
-          <label className="stocktaking-inventory-field">
-            <span>Columns</span>
-            <select value={mode} onChange={(event) => setMode(event.target.value)} disabled={busy}>
-              <option value="both">Inventory &amp; Defecated</option>
-              <option value="inventory">Inventory</option>
-              <option value="defected">Defecated</option>
-            </select>
-          </label>
-          <label className="stocktaking-inventory-field">
-            <span>Date</span>
-            <input type="date" value={date} onChange={(event) => setDate(event.target.value)} disabled={busy} />
-          </label>
-          {error ? <div className="stocktaking-inventory-modal__error">{error}</div> : null}
-          <footer>
-            <button type="button" className="btn btn--light" onClick={onClose} disabled={busy}>Cancel</button>
-            <button type="submit" className="btn stocktaking-inventory-confirm" disabled={busy}><span>{busy ? "Preparing…" : "Confirm"}</span></button>
-          </footer>
-        </form>
-      </section>
-    </div>
-  );
-}
-
-function InventoryFinishModal({ session, columnKey, busy, onClose, onDone }) {
-  const hasInventory = !!session?.inventoryColumn;
-  const hasDefected = !!session?.defectedColumn;
-  const [fileType, setFileType] = useState("pdf");
-  const [columnsMode, setColumnsMode] = useState(hasInventory && hasDefected ? "both" : (hasInventory ? "inventory" : "defected"));
-  const [error, setError] = useState("");
-  const [finishing, setFinishing] = useState(false);
-
-  const finish = async () => {
-    setError("");
-    setFinishing(true);
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 650));
-      const selected = ["stock"];
-      if ((columnsMode === "both" || columnsMode === "inventory") && hasInventory) selected.push("inventory");
-      if ((columnsMode === "both" || columnsMode === "defected") && hasDefected) selected.push("defected");
-      const params = new URLSearchParams({ column: columnKey, columns: selected.join(",") });
-      if (session?.inventoryColumn) params.set("inventoryColumn", session.inventoryColumn);
-      if (session?.defectedColumn) params.set("defectedColumn", session.defectedColumn);
-      const endpoint = fileType === "excel" ? "/api/stock/excel" : "/api/stock/pdf";
-      const response = await fetch(`${endpoint}?${params.toString()}`, { credentials: "include", cache: "no-store" });
-      if (response.status === 401) {
-        window.location.href = "/login?next=/next/stocktaking";
-        return;
-      }
-      if (!response.ok) {
-        const body = await response.json().catch(() => ({}));
-        throw new Error(body?.error || "Inventory export failed.");
-      }
-      const fallback = fileType === "excel" ? "Stocktaking-Inventory.xlsx" : "Stocktaking-Inventory.pdf";
-      downloadBlob(await response.blob(), responseFileName(response, fallback));
-      onDone();
-    } catch (finishError) {
-      setError(finishError?.message || "Inventory export failed.");
-    } finally {
-      setFinishing(false);
-    }
-  };
-
-  return (
-    <div className="stocktaking-inventory-modal" role="presentation" onMouseDown={(event) => { if (!busy && event.target === event.currentTarget) onClose(); }}>
-      <section className="stocktaking-inventory-modal__card" role="dialog" aria-modal="true" aria-label="Finish inventory">
-        <button type="button" className="stocktaking-inventory-modal__close" onClick={onClose} disabled={busy || finishing} aria-label="Close">×</button>
-        <header>
-          <span className="stocktaking-inventory-modal__icon"><Icon name="download" /></span>
-          <div><small>EXPORT &amp; CLOSE</small><h3>Finish inventory</h3><p>Download the inventory file, then hide the inventory columns.</p></div>
-        </header>
-        <div className="stocktaking-inventory-finish-fields">
-          <label className="stocktaking-inventory-field">
-            <span>File type</span>
-            <select value={fileType} onChange={(event) => setFileType(event.target.value)}>
-              <option value="pdf">PDF</option>
-              <option value="excel">Excel</option>
-            </select>
-          </label>
-          {hasInventory && hasDefected ? (
-            <label className="stocktaking-inventory-field">
-              <span>Columns</span>
-              <select value={columnsMode} onChange={(event) => setColumnsMode(event.target.value)}>
-                <option value="both">Inventory &amp; Defecated</option>
-                <option value="inventory">Inventory</option>
-                <option value="defected">Defecated</option>
-              </select>
-            </label>
-          ) : null}
-        </div>
-        {error ? <div className="stocktaking-inventory-modal__error">{error}</div> : null}
-        <footer>
-          <button type="button" className="btn btn--light" onClick={onClose} disabled={finishing}>Cancel</button>
-          <button type="button" className="btn stocktaking-inventory-confirm" onClick={finish} disabled={finishing}><Icon name="download" /><span>{finishing ? "Preparing…" : "Download & finish"}</span></button>
-        </footer>
-      </section>
-    </div>
-  );
-}
-
-function StockEditPasswordModal({ column, busy, error, onClose, onSubmit }) {
-  const [password, setPassword] = useState("");
-
-  const submit = (event) => {
-    event.preventDefault();
-    if (!text(password) || busy) return;
-    onSubmit(text(password));
-  };
-
-  return (
-    <div className="stocktaking-edit-password-modal" role="presentation">
-      <button type="button" className="stocktaking-edit-password-modal__backdrop" onClick={busy ? undefined : onClose} aria-label="Close" />
-      <form className="stocktaking-edit-password-modal__card" role="dialog" aria-modal="true" aria-labelledby="stockEditPasswordTitle" onSubmit={submit}>
-        <button type="button" className="stocktaking-edit-password-modal__close" onClick={onClose} disabled={busy} aria-label="Close">×</button>
-        <header>
-          <span className="stocktaking-edit-password-modal__icon"><Icon name="edit" /></span>
-          <div><small>ADMIN VERIFICATION</small><h3 id="stockEditPasswordTitle">Admin password required</h3><p>Enter the Admin password to edit “{column?.label || "this Stocktaking folder"}”.</p></div>
-        </header>
-        <label className="stocktaking-edit-password-field">
-          <span>Admin password *</span>
-          <input autoFocus type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} />
-        </label>
-        {error ? <div className="stocktaking-edit-password-modal__error">{error}</div> : null}
-        <footer>
-          <button type="button" className="btn btn--light" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="submit" className="btn stocktaking-edit-password-confirm" disabled={busy || !text(password)}><span>{busy ? "Checking…" : "Continue"}</span></button>
-        </footer>
-      </form>
-    </div>
-  );
-}
-
-export default function StocktakingClient({ initialStock = [], initialColumns = [] }) {
+export default function StocktakingClient({ account, initialStock = [], initialColumns = [] }) {
   const fallbackColumn = useMemo(() => {
     const first = (Array.isArray(initialStock) ? initialStock : []).find((item) => text(item?.quantityColumn));
     const key = text(first?.quantityColumn);
@@ -730,6 +421,13 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
     return fallbackColumn ? [fallbackColumn] : [];
   }, [initialColumns, fallbackColumn]);
 
+  const can = (action) => featureAllowed(account, `stocktaking.${action}`);
+  const canEditRow = can("edit_rows") && can("authorize_column");
+  const canAddRow = can("add_row") && can("authorize_column");
+  const canEditColumn = canEditRow || canAddRow;
+  const canStartInventory = can("start_inventory");
+  const canUpdateInventory = can("update_inventory");
+  const canUploadReceipt = can("upload_receipt");
   const [search, setSearch] = useState("");
   const [exportOpen, setExportOpen] = useState(false);
   const [activeColumn, setActiveColumn] = useState(null);
@@ -845,14 +543,15 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [columns.map((item) => item.key).join("|")]);
 
-  async function loadColumn(column, session = inventorySession) {
+  async function loadColumn(column, session = inventorySession, { fresh = false } = {}) {
     setLoading(true);
     setError("");
     try {
-      const params = new URLSearchParams({ column: column.key, _fresh: "1" });
+      const params = new URLSearchParams({ column: column.key });
+      if (fresh) params.set("_fresh", "1");
       if (session?.inventoryColumn) params.set("inventoryColumn", session.inventoryColumn);
       if (session?.defectedColumn) params.set("defectedColumn", session.defectedColumn);
-      const response = await fetch(`/api/stock?${params.toString()}`, {
+      const response = await fetch(`/next/api/stock?${params.toString()}`, {
         method: "GET",
         credentials: "include",
         cache: "no-store",
@@ -877,12 +576,12 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
     setInventoryBusy(true);
     setInventorySaveError("");
     try {
-      const response = await fetch("/api/stock/inventory/start", {
+      const response = await fetch("/next/api/stock/mutations-direct", {
         method: "POST",
         credentials: "include",
         cache: "no-store",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ column: activeColumn.key, mode, date }),
+        body: JSON.stringify({ action: "inventory-start", column: activeColumn.key, mode, date }),
       });
       if (response.status === 401) {
         window.location.href = "/login?next=/next/stocktaking";
@@ -898,7 +597,7 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
       };
       setInventorySession(session);
       setInventorySetupOpen(false);
-      await loadColumn(activeColumn, session);
+      await loadColumn(activeColumn, session, { fresh: true });
       return session;
     } finally {
       setInventoryBusy(false);
@@ -917,12 +616,12 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
     setStock((current) => (Array.isArray(current) ? current : []).map((item) => text(item?.id) === text(row.id) ? { ...item, [kind]: value } : item));
     const timer = setTimeout(async () => {
       try {
-        const response = await fetch(`/api/stock/${encodeURIComponent(row.id)}/inventory-value`, {
-          method: "PATCH",
+        const response = await fetch("/next/api/stock/mutations-direct", {
+          method: "POST",
           credentials: "include",
           cache: "no-store",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ column, value, stockColumn: activeColumn?.key || "" }),
+          body: JSON.stringify({ action: "inventory-value", stockId: row.id, column, value, stockColumn: activeColumn?.key || "" }),
         });
         const body = await response.json().catch(() => ({}));
         if (!response.ok || body?.ok === false) throw new Error(body?.error || `Failed to save ${kind}.`);
@@ -940,14 +639,14 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
     setInventoryFinishOpen(false);
     setInventorySession(null);
     setInventorySaveError("");
-    if (activeColumn) loadColumn(activeColumn, null);
+    if (activeColumn) loadColumn(activeColumn, null, { fresh: true });
   }
 
   async function loadProducts() {
     if (products.length) return products;
     setProductsLoading(true);
     try {
-      const response = await fetch(`/api/stock/products?_fresh=1&_ts=${Date.now()}`, { credentials: "include", cache: "no-store" });
+      const response = await fetch(`/next/api/stock/products?_ts=${Date.now()}`, { credentials: "include", cache: "no-store" });
       if (response.status === 401) {
         window.location.href = "/login?next=/next/stocktaking";
         return [];
@@ -1011,12 +710,12 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
     setEditError("");
     if (fromModal) setEditPasswordError("");
     try {
-      const response = await fetch("/api/stock/edit-access", {
+      const response = await fetch("/next/api/stock/mutations-direct", {
         method: "POST",
         credentials: "include",
         cache: "no-store",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ column: activeColumn.key, adminPassword }),
+        body: JSON.stringify({ action: "edit-access", column: activeColumn.key, adminPassword }),
       });
       const body = await response.json().catch(() => ({}));
       if (response.status === 401 && body?.requiresPassword) {
@@ -1069,12 +768,13 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
     setEditBusy(true);
     setEditError("");
     try {
-      const response = await fetch("/api/stock", {
-        method: "PATCH",
+      const response = await fetch("/next/api/stock/mutations-direct", {
+        method: "POST",
         credentials: "include",
         cache: "no-store",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          action: "update-rows",
           column: activeColumn.key,
           updates: [{ id: row.id, quantity, productId: text(editDraft.productId) || null }],
           adminPassword: editAdminPassword,
@@ -1145,9 +845,10 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
     setEditBusy(true);
     setEditError("");
     try {
+      const { prepareReceiptImage } = await import("../../lib/receipt-image-client");
       const receiptPhotos = [];
       for (const file of newRowReceiptFiles) {
-        const prepared = await prepareStockReceiptImage(file);
+        const prepared = await prepareReceiptImage(file);
         const uploadResponse = await fetch("/next/api/stock/receipt-upload", {
           method: "POST",
           credentials: "include",
@@ -1164,12 +865,13 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
         receiptPhotos.push({ name: text(uploadBody?.name) || prepared.name || file.name || "Receipt photo", url: text(uploadBody.url) });
       }
 
-      const response = await fetch("/api/stock", {
+      const response = await fetch("/next/api/stock/mutations-direct", {
         method: "POST",
         credentials: "include",
         cache: "no-store",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          action: "add-row",
           column: activeColumn.key,
           productId,
           quantity,
@@ -1192,7 +894,7 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
       }
       if (!response.ok || body?.ok === false) throw new Error(body?.error || "The new Stocktaking row could not be saved.");
       cancelNewRow();
-      await loadColumn(activeColumn, inventorySession);
+      await loadColumn(activeColumn, inventorySession, { fresh: true });
     } catch (saveError) {
       setEditError(saveError?.message || "The new Stocktaking row could not be saved.");
     } finally {
@@ -1347,7 +1049,7 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
   const kitTagGroups = useMemo(() => groupRows(filteredRows, "component", "kit"), [filteredRows]);
   const receiptGroups = useMemo(() => groupRowsByReceipt(filteredRows), [filteredRows]);
   const orderGroups = useMemo(() => groupRowsByOrderNumber(filteredRows), [filteredRows]);
-  const tableColumnCount = 5 + (inventorySession?.inventoryColumn ? 1 : 0) + (inventorySession?.defectedColumn ? 1 : 0);
+  const tableColumnCount = 4 + (canEditColumn ? 1 : 0) + (inventorySession?.inventoryColumn ? 1 : 0) + (inventorySession?.defectedColumn ? 1 : 0);
 
   const toneForTag = (name) => TAG_TONES[tagToneMap.get(lower(name)) || "default"] || TAG_TONES.default;
 
@@ -1412,16 +1114,16 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
         </td>
         {inventorySession?.inventoryColumn ? (
           <td className={`stocktaking-data-inventory ${row.inventory !== null && Number(row.inventory) !== Number(row.quantity) ? "is-mismatch" : ""}`}>
-            <input type="number" min="0" step="1" inputMode="numeric" value={row.inventory ?? ""} onChange={(event) => saveInventoryCell(row, "inventory", event.target.value)} placeholder="—" disabled={isEditing} />
+            {canUpdateInventory ? <input type="number" min="0" step="1" inputMode="numeric" value={row.inventory ?? ""} onChange={(event) => saveInventoryCell(row, "inventory", event.target.value)} placeholder="—" disabled={isEditing} /> : <span>{row.inventory ?? "—"}</span>}
           </td>
         ) : null}
         {inventorySession?.defectedColumn ? (
           <td className="stocktaking-data-inventory">
-            <input type="number" min="0" step="1" inputMode="numeric" value={row.defected ?? ""} onChange={(event) => saveInventoryCell(row, "defected", event.target.value)} placeholder="—" disabled={isEditing} />
+            {canUpdateInventory ? <input type="number" min="0" step="1" inputMode="numeric" value={row.defected ?? ""} onChange={(event) => saveInventoryCell(row, "defected", event.target.value)} placeholder="—" disabled={isEditing} /> : <span>{row.defected ?? "—"}</span>}
           </td>
         ) : null}
-        <td className="stocktaking-row-edit-cell">
-          {isEditing ? (
+        {canEditColumn ? <td className="stocktaking-row-edit-cell">
+          {canEditRow && isEditing ? (
             <div className="stocktaking-row-edit-actions">
               <button
                 type="button"
@@ -1444,7 +1146,7 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
                 <Icon name="x" />
               </button>
             </div>
-          ) : (
+          ) : canEditRow ? (
             <button
               type="button"
               className="is-edit is-icon-only"
@@ -1455,8 +1157,8 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
             >
               <Icon name="edit" />
             </button>
-          )}
-        </td>
+          ) : null}
+        </td> : null}
       </tr>
     );
   };
@@ -1467,8 +1169,8 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
       {!activeColumn ? (
         <section className="card stocktaking-folders-card">
           <div className="stocktaking-folders-head">
-            <div>
-              <span className="stocktaking-folders-kicker">STOCKTAKING COLUMNS</span>
+            <div className="stocktaking-folders-title">
+              <span className="stocktaking-folders-title-icon" aria-hidden="true"><Icon name="folder" /></span>
               <h2>Stock Folders</h2>
             </div>
             <span className="stocktaking-folders-count">{visibleFolders.length} folder{visibleFolders.length === 1 ? "" : "s"}</span>
@@ -1496,7 +1198,11 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
                 </button>
               </article>
             )) : (
-              <div className="empty-block empty-block--no-data stocktaking-folder-empty">Sorry, No stock folders available</div>
+              <div className="empty-block empty-block--no-data stocktaking-folder-empty">
+                <span className="stocktaking-folder-empty__icon" aria-hidden="true"><Icon name="folder" /></span>
+                <strong>No stock folders available</strong>
+                <span>Folders available to your account will appear here.</span>
+              </div>
             )}
           </div>
         </section>
@@ -1509,10 +1215,10 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
               <div><span>STOCKTAKING</span><h2>{activeColumn.label}</h2></div>
             </div>
             <div className="stocktaking-folder-actions">
-              <button className={`btn stocktaking-make-inventory-btn ${inventorySession ? "is-active" : ""}`} type="button" onClick={() => inventorySession ? setInventoryFinishOpen(true) : setInventorySetupOpen(true)} disabled={loading || Boolean(error) || Boolean(editRowId) || newRowOpen}>
+              {(inventorySession ? canUpdateInventory : canStartInventory) ? <button className={`btn stocktaking-make-inventory-btn ${inventorySession ? "is-active" : ""}`} type="button" onClick={() => inventorySession ? setInventoryFinishOpen(true) : setInventorySetupOpen(true)} disabled={loading || Boolean(error) || Boolean(editRowId) || newRowOpen}>
                 <span>{inventorySession ? "Finish inventory" : "Make inventory"}</span>
-              </button>
-              <button className="btn b2b-download-primary" type="button" onClick={() => { setExportOpen(true); setSortMenuOpen(false); }} disabled={loading || Boolean(error)}><Icon name="download" /><span>Download</span></button>
+              </button> : null}
+              {can("export") ? <button className="btn b2b-download-primary" type="button" onClick={() => { setExportOpen(true); setSortMenuOpen(false); }} disabled={loading || Boolean(error)}><Icon name="download" /><span>Download</span></button> : null}
               <div className="stocktaking-sort-menu-wrap" ref={sortMenuRef}>
                 <button className="btn stocktaking-sort-btn" type="button" onClick={() => { setSortMenuOpen((open) => !open); setExportOpen(false); }} disabled={loading || Boolean(error)} aria-expanded={sortMenuOpen}>
                   <Icon name="sort" /><span>Sort</span><Icon name="chevron" />
@@ -1559,7 +1265,7 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
                       <th className="stocktaking-data-photos">Receipt photos</th>
                       {inventorySession?.inventoryColumn ? <th className="stocktaking-data-inventory">Inventory{inventorySession.date ? ` (${inventorySession.date})` : ""}</th> : null}
                       {inventorySession?.defectedColumn ? <th className="stocktaking-data-inventory">Defecated{inventorySession.date ? ` (${inventorySession.date})` : ""}</th> : null}
-                      <th className="stocktaking-row-edit-head">Edit</th>
+                      {canEditColumn ? <th className="stocktaking-row-edit-head">Edit</th> : null}
                     </tr>
                   </thead>
                   <tbody>
@@ -1606,7 +1312,7 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
                     )}
                   </tbody>
                   <tfoot>
-                    {newRowOpen ? (
+                    {newRowOpen && canAddRow ? (
                       <tr className="stocktaking-new-row-editor">
                         <td className="stocktaking-data-component">
                           <div className="stocktaking-new-row-component-stack">
@@ -1622,17 +1328,17 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
                         </td>
                         <td className="stocktaking-data-qty"><input className="stocktaking-edit-qty-input" type="number" step="1" inputMode="numeric" value={newRowDraft.quantity} onChange={(event) => setNewRowDraft((current) => ({ ...current, quantity: event.target.value }))} disabled={editBusy} /></td>
                         <td className="stocktaking-data-receipt"><input className="stocktaking-new-row-input" type="text" value={newRowDraft.receiptNumber} onChange={(event) => setNewRowDraft((current) => ({ ...current, receiptNumber: event.target.value }))} placeholder="Receipt no." /></td>
-                        <td className="stocktaking-data-photos"><StockReceiptUploadPicker files={newRowReceiptFiles} disabled={editBusy} onChange={setNewRowReceiptFiles} onError={setEditError} /></td>
+                        <td className="stocktaking-data-photos">{canUploadReceipt ? <StockReceiptUploadPicker files={newRowReceiptFiles} disabled={editBusy} onChange={setNewRowReceiptFiles} onError={setEditError} /> : <span className="stocktaking-no-photo">—</span>}</td>
                         {inventorySession?.inventoryColumn ? <td className="stocktaking-data-inventory"><span className="stocktaking-no-photo">—</span></td> : null}
                         {inventorySession?.defectedColumn ? <td className="stocktaking-data-inventory"><span className="stocktaking-no-photo">—</span></td> : null}
-                        <td className="stocktaking-row-edit-cell">
+                        {canAddRow ? <td className="stocktaking-row-edit-cell">
                           <div className="stocktaking-row-edit-actions">
                             <button type="button" className="is-save is-icon-only" onClick={saveNewStockRow} disabled={editBusy || productsLoading} aria-label={editBusy ? "Saving new row" : "Save new row"} title={editBusy ? "Saving..." : "Save"}><Icon name="save" /></button>
                             <button type="button" className="is-cancel is-icon-only" onClick={cancelNewRow} disabled={editBusy} aria-label="Cancel new row" title="Cancel"><Icon name="x" /></button>
                           </div>
-                        </td>
+                        </td> : null}
                       </tr>
-                    ) : (
+                    ) : canAddRow ? (
                       <tr className="stocktaking-new-row-button-row">
                         <td colSpan={tableColumnCount}>
                           <button type="button" className="stocktaking-new-row-btn" onClick={() => requestEditAccess(editAdminPassword, { target: { type: "new" } })} disabled={editBusy || productsLoading || Boolean(editRowId)}>
@@ -1640,7 +1346,7 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
                           </button>
                         </td>
                       </tr>
-                    )}
+                    ) : null}
                   </tfoot>
                 </table>
                 {!filteredRows.length && !newRowOpen ? <div className="empty-block empty-block--no-data stocktaking-empty-under-table">Sorry, No data available</div> : null}
@@ -1650,10 +1356,26 @@ export default function StocktakingClient({ initialStock = [], initialColumns = 
         </section>
       )}
 
-      {editPasswordOpen && activeColumn ? <StockEditPasswordModal column={activeColumn} busy={editBusy} error={editPasswordError} onClose={() => { if (!editBusy) { setEditPasswordOpen(false); setEditPasswordError(""); } }} onSubmit={(password) => requestEditAccess(password, { fromModal: true })} /> : null}
-      {exportOpen && activeColumn ? <ExportModal columnKey={activeColumn.key} inventorySession={inventorySession} onClose={() => setExportOpen(false)} /> : null}
-      {inventorySetupOpen && activeColumn ? <InventorySetupModal column={activeColumn} busy={inventoryBusy} onClose={() => setInventorySetupOpen(false)} onConfirm={startInventory} /> : null}
-      {inventoryFinishOpen && activeColumn && inventorySession ? <InventoryFinishModal session={inventorySession} columnKey={activeColumn.key} busy={inventoryBusy} onClose={() => setInventoryFinishOpen(false)} onDone={finishInventorySession} /> : null}
+      {(editPasswordOpen || exportOpen || inventorySetupOpen || inventoryFinishOpen) && activeColumn ? (
+        <StocktakingDialogs
+          editPasswordOpen={editPasswordOpen}
+          exportOpen={exportOpen}
+          inventorySetupOpen={inventorySetupOpen}
+          inventoryFinishOpen={inventoryFinishOpen}
+          activeColumn={activeColumn}
+          inventorySession={inventorySession}
+          editBusy={editBusy}
+          editPasswordError={editPasswordError}
+          inventoryBusy={inventoryBusy}
+          onCloseEditPassword={() => { if (!editBusy) { setEditPasswordOpen(false); setEditPasswordError(""); } }}
+          onSubmitEditPassword={(password) => requestEditAccess(password, { fromModal: true })}
+          onCloseExport={() => setExportOpen(false)}
+          onCloseInventorySetup={() => setInventorySetupOpen(false)}
+          onConfirmInventorySetup={startInventory}
+          onCloseInventoryFinish={() => setInventoryFinishOpen(false)}
+          onFinishInventory={finishInventorySession}
+        />
+      ) : null}
     </section>
   );
 }

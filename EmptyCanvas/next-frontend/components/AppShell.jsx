@@ -1,82 +1,31 @@
+"use client";
+
+import ShellStyleLinks from "./ShellStyleLinks";
+import { useLayoutEffect } from "react";
+import dynamic from "next/dynamic";
+import { usePersistentShellContext } from "./PersistentShellContext";
 import Link from "next/link";
 import NotificationsBell from "./notifications/NotificationsBell";
 import UserProfileMenu from "./UserProfileMenu";
 import HeaderSearch from "./HeaderSearch";
-import TaskManagementSidebarFlyout from "./task-management/TaskManagementSidebarFlyout";
-import EventsSidebarFlyout from "./events/EventsSidebarFlyout";
-import ShoppingCartSidebarFlyout from "./orders/ShoppingCartSidebarFlyout";
+import { MODULE_LINKS, CLASSIC_MAIN_LINKS, canSeeNavigationLink } from "../lib/navigation-config";
+import { featureAllowed } from "../lib/feature-permissions-registry";
 import {
   BodyClassSync,
   ClassicChromeAccessSync,
   ClassicSidebarBootstrap,
+  ClassicSmallWindowSidebarGuard,
   ClassicSidebarViewportKeeper,
   ClassicSidebarActiveIndicator,
   ClassicMobileDockStructure,
+  ClassicMobileDockQuickOpen,
   HeaderMenuToggle,
   SidebarBrandToggle,
 } from "./ClassicShellControls";
 
-const MODULE_LINKS = [
-  { label: "Notifications", href: "/next/notifications", classicHref: "/home", permissions: [], alwaysVisible: true },
-  { label: "How it works", href: "/next/how-it-works", classicHref: "/how-it-works", permissions: [], alwaysVisible: true },
-  { label: "Current Orders", href: "/next/orders", classicHref: "/orders", permissions: ["Current Orders"] },
-  { label: "Orders Review", href: "/next/orders-review", classicHref: "/orders/sv-orders", permissions: ["Orders Review"] },
-  { label: "Operations Orders", href: "/next/operations-orders", classicHref: "/orders/requested", permissions: ["Requested Orders", "Operations Orders"] },
-  { label: "Maintenance Orders", href: "/next/maintenance-orders", classicHref: "/orders/maintenance-orders", permissions: ["Maintenance Orders"] },
-  { label: "Shopping Cart", href: "/next/orders/new", classicHref: "/orders/new", permissions: ["Create New Order", "Shopping Cart", "Cart", "/orders/new"] },
-  { label: "Stocktaking", href: "/next/stocktaking", classicHref: "/stocktaking", permissions: ["Stocktaking"] },
-  { label: "Events", href: "/next/events", classicHref: "/events", permissions: ["Event Requests"] },
-  { label: "New Event Request", href: "/next/events/new", classicHref: "/events/new", permissions: ["Event Requests"] },
-  { label: "Event Calendar", href: "/next/events-calendar", classicHref: "/events/calendar", permissions: ["Event Calendar"] },
-  { label: "Event Components", href: "/next/event-components", classicHref: "/events/components", permissions: ["Event Components"] },
-  { label: "Products", href: "/next/products", classicHref: "/products", permissions: ["Products"] },
-  { label: "Proposals", href: "/next/proposals", classicHref: "/proposals", permissions: ["Proposals", "Products"] },
-  { label: "Kits", href: "/next/kits", classicHref: "/kits", permissions: ["Kits", "Proposals", "Products"] },
-  { label: "B2C Database", href: "/next/b2c/database", classicHref: "/b2c/database", permissions: ["B2C", "Customer Database", "B2C Customer Database", "/b2c/database"] },
-  { label: "B2C Forms", href: "/next/b2c/forms", classicHref: "/b2c/form", permissions: ["B2C", "Customer Form", "B2C Customer Form", "Customer Database", "B2C Customer Database", "/b2c/form"] },
-  { label: "Task Management", href: "/next/task-management", classicHref: "/task-management", permissions: ["All Tasks", "My Tasks", "Delegated Tasks", "Task Management", "/task-management", "/task-management/all-tasks", "/task-management/my-tasks", "/task-management/delegated-tasks"] },
-  { label: "Expenses", href: "/next/expenses", classicHref: "/expenses", permissions: ["Expenses"] },
-  { label: "Expenses Users", href: "/next/expenses/users", classicHref: "/expenses/users", permissions: ["Expenses Users"] },
-  { label: "KPIs", href: "/next/kpis", classicHref: "/kpis", permissions: ["KPIs"] },
-  { label: "Users Center", href: "/next/users-center", classicHref: "/user-access", permissions: ["Users Center", "User Access & Data", "User Access and Data", "User Access", "Team Members"] },
-  { label: "System History", href: "/next/history", classicHref: "/history", permissions: ["History", "System History", "Audit History", "Audit Log", "System Audit", "/history"] },
-  { label: "Database Backup", href: "/next/backup", classicHref: "/backup", permissions: ["Backup", "Back Up", "Database", "System Database", "System Backup", "Data Backup", "/backup"] },
-];
-
-// Matches the final Classic Operations Hub sidebar order.  System History,
-// Backup, Notifications and How-it-works stay available through their direct
-// routes/profile controls, just like the current Classic interface.
-export const CLASSIC_MAIN_LINKS = [
-  { label: "Home", href: "/next/home", icon: "home", permissions: [], alwaysVisible: true, boundary: "workspace" },
-  { label: "Current Orders", href: "/next/orders", icon: "list", permissions: ["Current Orders"] },
-  { label: "Orders Review", href: "/next/orders-review", icon: "award", permissions: ["Orders Review"] },
-  { label: "Operations Orders", href: "/next/operations-orders", icon: "users", permissions: ["Requested Orders", "Operations Orders"] },
-  { label: "Maintenance Orders", href: "/next/maintenance-orders", icon: "tool", permissions: ["Maintenance Orders"] },
-  { label: "Events", href: "/next/events", icon: "calendar", permissions: ["Event Requests", "Event Calendar", "Event Components", "Events", "/events", "/events/requests", "/events/calendar", "/events/components"] },
-  { label: "Shopping Cart", href: "/next/orders/new", icon: "shopping-cart", permissions: ["Create New Order", "Shopping Cart", "Cart", "/orders/new"] },
-  { label: "Stocktaking", href: "/next/stocktaking", icon: "archive", permissions: ["Stocktaking"] },
-  { label: "B2C", href: "/next/b2c", icon: "user-plus", permissions: ["B2C", "Customer Database", "B2C Customer Database", "Customer Form", "B2C Customer Form", "/b2c/database", "/b2c/form"] },
-  { label: "Products", href: "/next/products", icon: "package", permissions: ["Products", "Product", "Components"] },
-  { label: "Kits", href: "/next/kits", icon: "briefcase", permissions: ["Kits", "Proposals", "Products"] },
-  { label: "Proposals", href: "/next/proposals", icon: "file-text", permissions: ["Proposals", "Products"] },
-  { label: "Expenses", href: "/next/expenses", icon: "dollar-sign", permissions: ["Expenses"] },
-  { label: "Expenses by Users", href: "/next/expenses/users", icon: "credit-card", permissions: ["Expenses Users"] },
-  { label: "Task Management", href: "/next/task-management", icon: "git-branch", permissions: ["All Tasks", "My Tasks", "Delegated Tasks", "Task Management", "/task-management", "/task-management/all-tasks", "/task-management/my-tasks", "/task-management/delegated-tasks"] },
-  { label: "KPIs", href: "/next/kpis", icon: "bar-chart-2", permissions: ["KPIs"] },
-  { label: "Users Center", href: "/next/users-center", icon: "shield", permissions: ["Users Center", "User Access & Data", "User Access and Data", "User Access", "Team Members"], boundary: "users" },
-];
-
-
-function normalize(value) {
-  return String(value || "").trim().toLowerCase();
-}
-
-function canSee(link, allowedPages) {
-  if (link?.alwaysVisible) return true;
-  const allowed = new Set((Array.isArray(allowedPages) ? allowedPages : []).map(normalize));
-  if (!allowed.size) return false;
-  return (link.permissions || []).some((permission) => allowed.has(normalize(permission)));
-}
+const TaskManagementSidebarFlyout = dynamic(() => import("./task-management/TaskManagementSidebarFlyout"), { ssr: false });
+const EventsSidebarFlyout = dynamic(() => import("./events/EventsSidebarFlyout"), { ssr: false });
+const ShoppingCartSidebarFlyout = dynamic(() => import("./orders/ShoppingCartSidebarFlyout"), { ssr: false });
 
 
 function toNextClientHref(value) {
@@ -89,15 +38,6 @@ function toNextClientHref(value) {
   return raw;
 }
 
-function withClassicFlag(value) {
-  const raw = String(value || "").trim() || "/home";
-  const hashIndex = raw.indexOf("#");
-  const beforeHash = hashIndex >= 0 ? raw.slice(0, hashIndex) : raw;
-  const hash = hashIndex >= 0 ? raw.slice(hashIndex) : "";
-  if (/(?:\?|&)classic=(?:1|true|yes|on)(?:&|$)/i.test(beforeHash)) return raw;
-  const separator = beforeHash.includes("?") ? "&" : "?";
-  return `${beforeHash}${separator}classic=1${hash}`;
-}
 
 export function isActive(activePath, href) {
   const current = String(activePath || "").replace(/\/$/, "") || "/";
@@ -121,7 +61,9 @@ function isClassicNavActive(activePath, href) {
       || current === "/next/events-calendar"
       || current.startsWith("/next/events-calendar/")
       || current === "/next/event-components"
-      || current.startsWith("/next/event-components/");
+      || current.startsWith("/next/event-components/")
+      || current === "/next/event-team"
+      || current.startsWith("/next/event-team/");
   }
   return isActive(activePath, href);
 }
@@ -158,36 +100,80 @@ export default function AppShell({
   title = "Home",
   eyebrow = "Incremental frontend migration",
   activePath = "/next/home",
-  classicHrefOverride = "",
   bodyClass = "",
-  classicStyles = [],
+  pageStyles = [],
 }) {
+  const persistentShell = usePersistentShellContext();
   const allowedPages = Array.isArray(account?.allowedPages) ? account.allowedPages : [];
-  const activeLink = MODULE_LINKS.find((link) => isActive(activePath, link.href));
-  const classicHref = withClassicFlag(classicHrefOverride || activeLink?.classicHref || "/home");
-  const systemCoverUrl = String(account?.coverPhotoUrl || account?.coverPhoto || "").trim();
-  const systemCoverStyle = systemCoverUrl
-    ? { "--ops-system-cover-image": `url(${JSON.stringify(systemCoverUrl)})` }
-    : undefined;
+  const classicLinks = CLASSIC_MAIN_LINKS.filter((link) => {
+    if (!canSeeNavigationLink(link, allowedPages)) return false;
+    if (link.href === "/next/notifications") return featureAllowed(account, "notifications.view");
+    if (link.href === "/next/account") return featureAllowed(account, "account.view");
+    if (link.href === "/next/home") return featureAllowed(account, "home.view");
+    if (link.href === "/next/kpis") return featureAllowed(account, "kpis.view");
+    if (link.href === "/next/users-center") return featureAllowed(account, "users.view");
+    if (link.href === "/next/b2c") return featureAllowed(account, "b2c.database.view") || featureAllowed(account, "b2c.forms.view");
+    if (link.href === "/next/stocktaking") return featureAllowed(account, "stocktaking.view");
+    if (link.href === "/next/expenses") return featureAllowed(account, "expenses.view");
+    if (link.href === "/next/expenses/users") return featureAllowed(account, "expenses.users.view");
+    if (link.href === "/next/backup") return featureAllowed(account, "backup.view");
+    if (link.href === "/next/history") return featureAllowed(account, "history.view");
+    if (link.href === "/next/kits") return featureAllowed(account, "kits.view");
+    if (link.href === "/next/proposals") return featureAllowed(account, "proposals.view");
+    if (link.href === "/next/orders-review") return featureAllowed(account, "orders.review.view");
+    if (link.href === "/next/task-management") return featureAllowed(account, "tasks.view");
+    if (link.href === "/next/events") return ["events.calendar.view", "events.requests.view", "events.components.view", "events.team.view"].some(key => featureAllowed(account, key));
+    return true;
+  });
+  const combinedBodyClass = [bodyClass, "next-classic-shell-active"].filter(Boolean).join(" ");
+  const pageMainClass = [
+    "container-full-width",
+    "next-classic-page-content",
+    activePath === "/next/orders" ? "current-orders-main-surface" : "",
+  ].filter(Boolean).join(" ");
 
-  const classicLinks = CLASSIC_MAIN_LINKS.filter((link) => canSee(link, allowedPages));
-  const combinedBodyClass = [bodyClass, "next-classic-shell-active", systemCoverUrl ? "ops-has-system-cover" : ""].filter(Boolean).join(" ");
+  useLayoutEffect(() => {
+    if (!persistentShell?.persistent || typeof persistentShell.registerPage !== "function") return;
+    persistentShell.registerPage({ account, title, activePath });
+  }, [persistentShell, account, title, activePath]);
+
+  // RootLayout now owns one long-lived AppShell. Page-level AppShell instances
+  // remain in place so the migration does not require moving/deleting routes;
+  // inside the persistent shell they only apply page-specific styles/classes
+  // and refresh the chrome account/title metadata.
+  // React 19 stylesheet precedence hoists CSS into <head> and keeps page
+  // content behind its loading boundary until the styles are ready.
+  // Preserve the original cascade order: shell -> route performance ->
+  // workspace adjustments -> actual page styles.
+  if (persistentShell?.persistent) {
+    return (
+      <>
+        {pageStyles.map((href) => <link rel="stylesheet" href={href} key={href} precedence="erp-detail" />)}
+        <link rel="stylesheet" href="/next/css/unified-white-workspace.css?v=sidebar-inner-ring-main47-v2" precedence="erp-workspace" />
+        <link rel="stylesheet" href="/next/css/scrollbar-hidden.css?v=global-hidden-v1" precedence="erp-workspace" />
+        <BodyClassSync className={combinedBodyClass} />
+        <ClassicChromeAccessSync account={account} />
+        {children}
+      </>
+    );
+  }
 
   return (
     <>
-      <link rel="stylesheet" href="/css/style.css?v=bidi-mixed-v1" />
-      <link rel="stylesheet" href="/css/ui-redesign.css?v=sidebar-page-label-frame-v3" />
-      <link rel="stylesheet" href="/css/page-canvas-fix.css?v=page-canvas-single-layer-v3" />
-      {classicStyles.map((href) => <link rel="stylesheet" href={href} key={href} />)}
-      <link rel="stylesheet" href="/next/css/dark-mode.css?v=theme-v2-white-nav" />
+      <ShellStyleLinks />
+      {pageStyles.map((href) => <link rel="stylesheet" href={href} key={href} precedence="erp-performance" />)}
+      <link rel="stylesheet" href="/next/css/unified-white-workspace.css?v=sidebar-inner-ring-main47-v2" precedence="erp-workspace" />
+      <link rel="stylesheet" href="/next/css/scrollbar-hidden.css?v=global-hidden-v1" precedence="erp-workspace" />
       <BodyClassSync className={combinedBodyClass} />
       <ClassicChromeAccessSync account={account} />
       <ClassicSidebarBootstrap />
-      <ClassicMobileDockStructure />
+      <ClassicSmallWindowSidebarGuard />
+      <ClassicMobileDockStructure activePath={activePath} />
+      <ClassicMobileDockQuickOpen />
       <ClassicSidebarViewportKeeper />
-      <ClassicSidebarActiveIndicator />
-      <TaskManagementSidebarFlyout allowedPages={allowedPages} activePath={activePath} />
-      <EventsSidebarFlyout allowedPages={allowedPages} activePath={activePath} />
+      <ClassicSidebarActiveIndicator activePath={activePath} />
+      <TaskManagementSidebarFlyout allowedPages={allowedPages} account={account} activePath={activePath} />
+      <EventsSidebarFlyout allowedPages={allowedPages} account={account} activePath={activePath} />
       <ShoppingCartSidebarFlyout allowedPages={allowedPages} activePath={activePath} />
 
       <div className="app-container classic-app-shell">
@@ -220,7 +206,7 @@ export default function AppShell({
           <div className="sidebar-footer" />
         </aside>
 
-        <div className="main-content" style={systemCoverStyle}>
+        <div className="main-content">
           <header className="main-header dash-header dash-hide-row2">
             <div className="header-row1">
               <div className="left">
@@ -229,14 +215,14 @@ export default function AppShell({
               </div>
               <div className="right topbar-right">
                 <HeaderSearch title={title} />
-                <NotificationsBell classic />
+                {featureAllowed(account, "notifications.view") ? <NotificationsBell classic canManageRead={featureAllowed(account, "notifications.read_manage")} /> : null}
                 <UserProfileMenu account={account} />
               </div>
             </div>
             <div className="header-row2"><h1 className="page-title">{title}</h1></div>
           </header>
 
-          <main className="container-full-width next-classic-page-content">
+          <main className={pageMainClass}>
             {children}
           </main>
         </div>

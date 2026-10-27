@@ -1,27 +1,675 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "regions": ["fra1"],
   "framework": "nextjs",
   "buildCommand": "npm run build",
   "installCommand": "npm install",
   "rewrites": [
-    { "source": "/api/products", "destination": "/next/api/products" },
-    { "source": "/api/products/tags", "destination": "/next/api/products/tags" },
-    { "source": "/api/products/units", "destination": "/next/api/products/units" },
-    { "source": "/api/products/:id((?!admin|proposals|kits|tags|units)[^/]+)", "destination": "/next/api/products/:id" },
-
-    { "source": "/api/products/proposals", "destination": "/next/api/products/proposals" },
-    { "source": "/api/products/proposals/:id/copy", "destination": "/next/api/products/proposals/:id/copy" },
-    { "source": "/api/products/proposals/:id/items", "destination": "/next/api/products/proposals/:id/items" },
-    { "source": "/api/products/proposals/:id/items/:itemId((?!by-tag|by-kit)[^/]+)", "destination": "/next/api/products/proposals/:id/items/:itemId" },
-    { "source": "/api/products/proposals/:id((?!receipt-upload)[^/]+)", "destination": "/next/api/products/proposals/:id" },
-
-    { "source": "/api/products/kits", "destination": "/next/api/products/kits" },
-    { "source": "/api/products/kits/:id/copy", "destination": "/next/api/products/kits/:id/copy" },
-    { "source": "/api/products/kits/:id/items", "destination": "/next/api/products/kits/:id/items" },
-    { "source": "/api/products/kits/:id/items/:itemId", "destination": "/next/api/products/kits/:id/items/:itemId" },
-    { "source": "/api/products/kits/:id", "destination": "/next/api/products/kits/:id" }
+    {
+      "source": "/health",
+      "destination": "/next/api/health"
+    },
+    {
+      "source": "/ready",
+      "destination": "/next/api/health"
+    },
+    {
+      "source": "/api/supabase/:path*",
+      "destination": "/next/api/health"
+    },
+    {
+      "source": "/api/login",
+      "destination": "/next/api/auth/login"
+    },
+    {
+      "source": "/api/logout",
+      "destination": "/next/api/auth/logout"
+    },
+    {
+      "source": "/api/session-status",
+      "destination": "/next/api/auth/session-status"
+    },
+    {
+      "source": "/api/signup-request",
+      "destination": "/next/api/auth/signup-request"
+    },
+    {
+      "source": "/api/forgot-password",
+      "destination": "/next/api/auth/forgot-password"
+    },
+    {
+      "source": "/api/history",
+      "destination": "/next/api/history"
+    },
+    {
+      "source": "/api/history/clear",
+      "destination": "/next/api/history"
+    },
+    {
+      "source": "/api/app-download-links",
+      "destination": "/next/api/system/app-download-links"
+    },
+    {
+      "source": "/api/hard-refresh",
+      "destination": "/next/api/system/hard-refresh"
+    },
+    {
+      "source": "/api/session-diagnostics",
+      "destination": "/next/api/system/session-diagnostics"
+    },
+    {
+      "source": "/api/team-members/:id/public",
+      "destination": "/next/api/team-members/public?key=:id"
+    },
+    {
+      "source": "/service-worker.js",
+      "destination": "/next/service-worker.js"
+    },
+    {
+      "source": "/manifest.webmanifest",
+      "destination": "/next/manifest.webmanifest"
+    },
+    {
+      "source": "/manifest.json",
+      "destination": "/next/manifest.json"
+    },
+    {
+      "source": "/offline-fallback.html",
+      "destination": "/next/offline-fallback.html"
+    },
+    {
+      "source": "/icons/:path*",
+      "destination": "/next/icons/:path*"
+    },
+    {
+      "source": "/api/page-bootstrap",
+      "destination": "/next/api/system/page-bootstrap-direct"
+    },
+    {
+      "source": "/api/create-order/schools",
+      "destination": "/next/api/orders/shopping-cart/schools"
+    },
+    {
+      "source": "/api/order-types",
+      "destination": "/next/api/orders/shopping-cart/order-types"
+    },
+    {
+      "source": "/api/components",
+      "destination": "/next/api/orders/shopping-cart/components"
+    },
+    {
+      "source": "/api/submit-order",
+      "destination": "/next/api/orders/shopping-cart/submit-direct"
+    },
+    {
+      "source": "/api/update-received",
+      "destination": "/next/api/orders/current/update-received-direct"
+    },
+    {
+      "source": "/api/team-members",
+      "destination": "/next/api/team-members"
+    },
+    {
+      "source": "/api/push/vapid-public-key",
+      "destination": "/next/api/push/vapid-public-key"
+    },
+    {
+      "source": "/api/push/subscribe",
+      "destination": "/next/api/push/subscribe"
+    },
+    {
+      "source": "/api/push/unsubscribe",
+      "destination": "/next/api/push/unsubscribe"
+    },
+    {
+      "source": "/api/cron/notifications",
+      "destination": "/next/api/cron/notifications"
+    },
+    {
+      "source": "/api/expenses/screenshot/:expenseId",
+      "destination": "/next/api/expenses/screenshot-direct?expenseId=:expenseId"
+    },
+    {
+      "source": "/api/expenses/export/:kind(pdf|excel)",
+      "destination": "/next/api/expenses/export-direct?kind=:kind"
+    },
+    {
+      "source": "/api/orders/requested/paged-summary",
+      "destination": "/next/api/orders/requested/paged-summary"
+    },
+    {
+      "source": "/api/orders/requested/details-direct",
+      "destination": "/next/api/orders/requested/details-direct"
+    },
+    {
+      "source": "/api/orders/operations/mutations-direct",
+      "destination": "/next/api/orders/operations/mutations-direct"
+    },
+    {
+      "source": "/api/sv-orders/paged-summary",
+      "destination": "/next/api/sv-orders/paged-summary"
+    },
+    {
+      "source": "/api/sv-orders/details-direct",
+      "destination": "/next/api/sv-orders/details-direct"
+    },
+    {
+      "source": "/api/sv-orders/mutations-direct",
+      "destination": "/next/api/sv-orders/mutations-direct"
+    },
+    {
+      "source": "/api/products/admin/verify",
+      "destination": "/next/api/products/admin/verify"
+    },
+    {
+      "source": "/api/products",
+      "destination": "/next/api/products"
+    },
+    {
+      "source": "/api/products/tags",
+      "destination": "/next/api/products/tags"
+    },
+    {
+      "source": "/api/products/units",
+      "destination": "/next/api/products/units"
+    },
+    {
+      "source": "/api/products/proposals/team-members",
+      "destination": "/next/api/team-members"
+    },
+    {
+      "source": "/api/products/:id/image",
+      "destination": "/next/api/products/image?id=:id"
+    },
+    {
+      "source": "/api/products/:id((?!admin|proposals|kits|tags|units)[^/]+)",
+      "destination": "/next/api/products?id=:id"
+    },
+    {
+      "source": "/api/products/proposals/combine/:kind(pdf|excel)",
+      "destination": "/next/api/products/export-direct?scope=combined&kind=:kind"
+    },
+    {
+      "source": "/api/products/proposals/:id/:kind(pdf|excel)",
+      "destination": "/next/api/products/export-direct?scope=proposal&id=:id&kind=:kind"
+    },
+    {
+      "source": "/api/products/kits/:id/:kind(pdf|excel)",
+      "destination": "/next/api/products/export-direct?scope=kit&id=:id&kind=:kind"
+    },
+    {
+      "source": "/api/products/proposals",
+      "destination": "/next/api/products/proposals"
+    },
+    {
+      "source": "/api/products/proposals/receipt-upload",
+      "destination": "/next/api/products/proposals/receipt-upload"
+    },
+    {
+      "source": "/api/products/kits/:id/send-to-stock",
+      "destination": "/next/api/products/kits/send-to-stock?id=:id"
+    },
+    {
+      "source": "/api/products/proposals/:id/make-order",
+      "destination": "/next/api/products/proposals/make-order?id=:id"
+    },
+    {
+      "source": "/api/products/proposals/:id/send-to-stock",
+      "destination": "/next/api/products/proposals/send-to-stock?id=:id"
+    },
+    {
+      "source": "/api/products/proposals/:id/items/by-kit",
+      "destination": "/next/api/products/proposals/items-by-kit?id=:id"
+    },
+    {
+      "source": "/api/products/proposals/:id/items/by-tag",
+      "destination": "/next/api/products/proposals/items-by-tag?id=:id"
+    },
+    {
+      "source": "/api/products/proposals/combine/save",
+      "destination": "/next/api/products/proposals/combine/save"
+    },
+    {
+      "source": "/api/products/proposals/:id/copy",
+      "destination": "/next/api/products/proposals/:id/copy"
+    },
+    {
+      "source": "/api/products/proposals/:id/items",
+      "destination": "/next/api/products/proposals/:id/items"
+    },
+    {
+      "source": "/api/products/proposals/:id/items/:itemId((?!by-tag|by-kit)[^/]+)",
+      "destination": "/next/api/products/proposals/:id/items/:itemId"
+    },
+    {
+      "source": "/api/products/proposals/:id((?!receipt-upload)[^/]+)",
+      "destination": "/next/api/products/proposals/:id"
+    },
+    {
+      "source": "/api/products/kits",
+      "destination": "/next/api/products/kits"
+    },
+    {
+      "source": "/api/products/kits/:id/copy",
+      "destination": "/next/api/products/kits/:id/copy"
+    },
+    {
+      "source": "/api/products/kits/:id/items",
+      "destination": "/next/api/products/kits/:id/items"
+    },
+    {
+      "source": "/api/products/kits/:id/items/:itemId",
+      "destination": "/next/api/products/kits/:id/items/:itemId"
+    },
+    {
+      "source": "/api/products/kits/:id",
+      "destination": "/next/api/products/kits/:id"
+    }
   ],
   "redirects": [
-    { "source": "/", "destination": "/next/login", "permanent": false }
+    {
+      "source": "/",
+      "destination": "/next/login",
+      "permanent": false
+    },
+    {
+      "source": "/login",
+      "destination": "/next/login",
+      "permanent": false
+    },
+    {
+      "source": "/dashboard",
+      "destination": "/next/home",
+      "permanent": false
+    },
+    {
+      "source": "/home",
+      "destination": "/next/home",
+      "permanent": false
+    },
+    {
+      "source": "/user-access",
+      "destination": "/next/users-center",
+      "permanent": false
+    },
+    {
+      "source": "/orders",
+      "destination": "/next/orders",
+      "permanent": false
+    },
+    {
+      "source": "/orders/sv-orders",
+      "destination": "/next/orders-review",
+      "permanent": false
+    },
+    {
+      "source": "/orders/tracking",
+      "destination": "/next/orders/tracking",
+      "permanent": false
+    },
+    {
+      "source": "/orders/requested",
+      "destination": "/next/operations-orders",
+      "permanent": false
+    },
+    {
+      "source": "/orders/maintenance-orders",
+      "destination": "/next/maintenance-orders",
+      "permanent": false
+    },
+    {
+      "source": "/orders/new",
+      "destination": "/next/orders/new",
+      "permanent": false
+    },
+    {
+      "source": "/orders/new/products",
+      "destination": "/next/orders/new",
+      "permanent": false
+    },
+    {
+      "source": "/orders/order-receipt-viewer",
+      "destination": "/next/orders/receipt-viewer",
+      "permanent": false
+    },
+    {
+      "source": "/events",
+      "destination": "/next/events",
+      "permanent": false
+    },
+    {
+      "source": "/events/requests",
+      "destination": "/next/events",
+      "permanent": false
+    },
+    {
+      "source": "/events/calendar",
+      "destination": "/next/events-calendar",
+      "permanent": false
+    },
+    {
+      "source": "/events/new",
+      "destination": "/next/events/new",
+      "permanent": false
+    },
+    {
+      "source": "/events/components",
+      "destination": "/next/event-components",
+      "permanent": false
+    },
+    {
+      "source": "/events/components/new",
+      "destination": "/next/event-components?create=1",
+      "permanent": false
+    },
+    {
+      "source": "/b2c",
+      "destination": "/next/b2c/database",
+      "permanent": false
+    },
+    {
+      "source": "/b2c/database/:id",
+      "destination": "/next/b2c/database/:id",
+      "permanent": false
+    },
+    {
+      "source": "/b2c/database",
+      "destination": "/next/b2c/database",
+      "permanent": false
+    },
+    {
+      "source": "/b2c/form",
+      "destination": "/next/b2c/forms",
+      "permanent": false
+    },
+    {
+      "source": "/stocktaking",
+      "destination": "/next/stocktaking",
+      "permanent": false
+    },
+    {
+      "source": "/products",
+      "destination": "/next/products",
+      "permanent": false
+    },
+    {
+      "source": "/proposals",
+      "destination": "/next/proposals",
+      "permanent": false
+    },
+    {
+      "source": "/kits",
+      "destination": "/next/kits",
+      "permanent": false
+    },
+    {
+      "source": "/task-management",
+      "destination": "/next/task-management/all-tasks",
+      "permanent": false
+    },
+    {
+      "source": "/task-management/all-tasks",
+      "destination": "/next/task-management/all-tasks",
+      "permanent": false
+    },
+    {
+      "source": "/task-management/my-tasks",
+      "destination": "/next/task-management/my-tasks",
+      "permanent": false
+    },
+    {
+      "source": "/task-management/delegated-tasks",
+      "destination": "/next/task-management/delegated-tasks",
+      "permanent": false
+    },
+    {
+      "source": "/kpis",
+      "destination": "/next/kpis",
+      "permanent": false
+    },
+    {
+      "source": "/account",
+      "destination": "/next/account",
+      "permanent": false
+    },
+    {
+      "source": "/history",
+      "destination": "/next/history",
+      "permanent": false
+    },
+    {
+      "source": "/backup",
+      "destination": "/next/backup",
+      "permanent": false
+    },
+    {
+      "source": "/how-it-works",
+      "destination": "/next/how-it-works",
+      "permanent": false
+    },
+    {
+      "source": "/notifications",
+      "destination": "/next/notifications",
+      "permanent": false
+    },
+    {
+      "source": "/expenses",
+      "destination": "/next/expenses",
+      "permanent": false
+    },
+    {
+      "source": "/expenses/users",
+      "destination": "/next/expenses/users",
+      "permanent": false
+    },
+    {
+      "source": "/pwa-start",
+      "destination": "/next/pwa-start",
+      "permanent": false
+    },
+    {
+      "source": "/pwa-offline",
+      "destination": "/next/pwa-offline",
+      "permanent": false
+    },
+    {
+      "source": "/index.html",
+      "destination": "/next/login",
+      "permanent": false
+    },
+    {
+      "source": "/login.html",
+      "destination": "/next/login",
+      "permanent": false
+    },
+    {
+      "source": "/home.html",
+      "destination": "/next/home",
+      "permanent": false
+    },
+    {
+      "source": "/user-access.html",
+      "destination": "/next/users-center",
+      "permanent": false
+    },
+    {
+      "source": "/current-orders.html",
+      "destination": "/next/orders",
+      "permanent": false
+    },
+    {
+      "source": "/sv-orders.html",
+      "destination": "/next/orders-review",
+      "permanent": false
+    },
+    {
+      "source": "/requested-orders.html",
+      "destination": "/next/operations-orders",
+      "permanent": false
+    },
+    {
+      "source": "/maintenance-orders.html",
+      "destination": "/next/maintenance-orders",
+      "permanent": false
+    },
+    {
+      "source": "/create-order-products.html",
+      "destination": "/next/orders/new",
+      "permanent": false
+    },
+    {
+      "source": "/events.html",
+      "destination": "/next/events",
+      "permanent": false
+    },
+    {
+      "source": "/events-calendar.html",
+      "destination": "/next/events-calendar",
+      "permanent": false
+    },
+    {
+      "source": "/events-new.html",
+      "destination": "/next/events/new",
+      "permanent": false
+    },
+    {
+      "source": "/events-components.html",
+      "destination": "/next/event-components",
+      "permanent": false
+    },
+    {
+      "source": "/events-components-new.html",
+      "destination": "/next/event-components?create=1",
+      "permanent": false
+    },
+    {
+      "source": "/b2c-database.html",
+      "destination": "/next/b2c/database",
+      "permanent": false
+    },
+    {
+      "source": "/b2c-table.html",
+      "destination": "/next/b2c/database",
+      "permanent": false
+    },
+    {
+      "source": "/b2c-form.html",
+      "destination": "/next/b2c/forms",
+      "permanent": false
+    },
+    {
+      "source": "/stocktaking.html",
+      "destination": "/next/stocktaking",
+      "permanent": false
+    },
+    {
+      "source": "/products.html",
+      "destination": "/next/products",
+      "permanent": false
+    },
+    {
+      "source": "/proposals.html",
+      "destination": "/next/proposals",
+      "permanent": false
+    },
+    {
+      "source": "/kits.html",
+      "destination": "/next/kits",
+      "permanent": false
+    },
+    {
+      "source": "/task-management.html",
+      "destination": "/next/task-management/all-tasks",
+      "permanent": false
+    },
+    {
+      "source": "/kpis.html",
+      "destination": "/next/kpis",
+      "permanent": false
+    },
+    {
+      "source": "/account.html",
+      "destination": "/next/account",
+      "permanent": false
+    },
+    {
+      "source": "/history.html",
+      "destination": "/next/history",
+      "permanent": false
+    },
+    {
+      "source": "/backup.html",
+      "destination": "/next/backup",
+      "permanent": false
+    },
+    {
+      "source": "/how-it-works.html",
+      "destination": "/next/how-it-works",
+      "permanent": false
+    },
+    {
+      "source": "/notifications.html",
+      "destination": "/next/notifications",
+      "permanent": false
+    },
+    {
+      "source": "/expenses.html",
+      "destination": "/next/expenses",
+      "permanent": false
+    },
+    {
+      "source": "/expenses-users.html",
+      "destination": "/next/expenses/users",
+      "permanent": false
+    },
+    {
+      "source": "/pwa-start.html",
+      "destination": "/next/pwa-start",
+      "permanent": false
+    },
+    {
+      "source": "/pwa-offline.html",
+      "destination": "/next/pwa-offline",
+      "permanent": false
+    }
+  ],
+  "crons": [
+    {
+      "path": "/next/api/cron/notifications",
+      "schedule": "0 6 * * *"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/service-worker.js",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, no-store, must-revalidate"
+        },
+        {
+          "key": "Service-Worker-Allowed",
+          "value": "/"
+        }
+      ]
+    },
+    {
+      "source": "/manifest.webmanifest",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, no-store, must-revalidate"
+        }
+      ]
+    },
+    {
+      "source": "/manifest.json",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, no-store, must-revalidate"
+        }
+      ]
+    }
   ]
 }

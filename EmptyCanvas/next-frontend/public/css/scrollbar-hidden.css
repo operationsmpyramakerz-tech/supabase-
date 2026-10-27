@@ -1,0 +1,21 @@
+/* ========================================================================
+   Global invisible scrollbars — 2026-10-06
+   Preserve touch, wheel and keyboard scrolling everywhere in the authenticated
+   ERP while removing browser scrollbar tracks from pages, cards, sheets,
+   dropdowns and modal bodies.
+   ======================================================================== */
+body.next-classic-shell-active,
+body.next-classic-shell-active * {
+  scrollbar-width: none !important;
+  scrollbar-color: transparent transparent !important;
+  scrollbar-gutter: auto !important;
+  -ms-overflow-style: none !important;
+}
+
+body.next-classic-shell-active::-webkit-scrollbar,
+body.next-classic-shell-active *::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+  display: none !important;
+  background: transparent !important;
+}

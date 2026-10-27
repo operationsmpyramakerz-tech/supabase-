@@ -1,0 +1,53 @@
+import { NextResponse } from "next/server";
+import { getLegacyAccountGate } from "../../../../lib/products-auth";
+import { featureGate } from "../../../../lib/feature-permissions-server";
+import { loadOrdersReviewPage } from "../../../../lib/orders-review-data";
+import { measurePerformance } from "../../../../lib/performance-profiler";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+function noStore(payload, init = {}) {
+  return NextResponse.json(payload, {
+    ...init,
+    headers: {
+      "Cache-Control": "private, no-store",
+      ...(init.headers || {}),
+    },
+  });
+}
+
+async function GETImpl(request) {
+  const url = new URL(request.url);
+  const gate = await getLegacyAccountGate(["Orders Review"]);
+  if (!gate.ok) {
+    return noStore({ error: gate.error || "Authentication required." }, { status: gate.status || 503 });
+  }
+
+  const permissionGate = featureGate(gate, "orders.review.view");
+  if (!permissionGate.ok) return noStore({ error: permissionGate.error }, { status: permissionGate.status });
+
+  try {
+    const payload = await loadOrdersReviewPage({
+      account: gate.account,
+      tab: url.searchParams.get("tab") || "all",
+      type: url.searchParams.get("filterType") || url.searchParams.get("orderTypeKey") || url.searchParams.get("type") || "all",
+      query: url.searchParams.get("q") || url.searchParams.get("search") || "",
+      cursor: url.searchParams.get("cursor"),
+      limit: url.searchParams.get("limit"),
+      signal: request.signal,
+    });
+    if (payload) return noStore(payload);
+    return noStore({ error: "Orders Review direct Supabase data is unavailable." }, { status: 503 });
+  } catch (error) {
+    if (request.signal?.aborted || error?.code === "REQUEST_ABORTED" || error?.name === "AbortError") throw error;
+    return noStore(
+      { error: error?.message || "Failed to load Orders Review from Supabase." },
+      { status: Number(error?.status) || 502 },
+    );
+  }
+}
+
+export async function GET(request) {
+  return await measurePerformance("route", "orders.review.summary", async () => await GETImpl(request), { method: "GET" });
+}

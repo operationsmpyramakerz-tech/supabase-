@@ -1,14 +1,16 @@
 import { redirect } from "next/navigation";
 import AppShell from "../../../components/AppShell";
 import TaskManagementClient from "../../../components/task-management/TaskManagementClient";
+import { loadDirectTaskManagementPageData } from "../../../lib/task-management-data";
 import { fetchLegacyJson } from "../../../lib/legacy-api";
+import { featureAllowed } from "../../../lib/feature-permissions-registry";
 
 export const dynamic = "force-dynamic";
 
 const VIEW_MAP = {
-  "all-tasks": { key: "all", title: "All Tasks", classic: "/task-management/all-tasks?classic=1" },
-  "my-tasks": { key: "my", title: "My Tasks", classic: "/task-management/my-tasks?classic=1" },
-  "delegated-tasks": { key: "delegated", title: "Delegated Tasks", classic: "/task-management/delegated-tasks?classic=1" },
+  "all-tasks": { key: "all", title: "All Tasks" },
+  "my-tasks": { key: "my", title: "My Tasks" },
+  "delegated-tasks": { key: "delegated", title: "Delegated Tasks" },
 };
 
 function resourceMap(bundle) {
@@ -40,72 +42,100 @@ function allowedViews(account = {}) {
   ].filter((item) => item.visible);
 }
 
+function forbidden(config) {
+  return (
+    <main className="standalone-state">
+      <section className="state-card">
+        <span className="status-dot warning" />
+        <h1>{config.title} is not available</h1>
+        <p>Your account does not have access to this Task Management view.</p>
+        <div className="actions">
+          <a className="primary-button" href="/next/task-management">Open an available view</a>
+          <a className="secondary-button" href="/next/home">Return to Home</a>
+        </div>
+      </section>
+    </main>
+  );
+}
+
 export default async function TaskManagementViewPage({ params }) {
   const resolvedParams = await params;
   const config = VIEW_MAP[String(resolvedParams?.view || "")];
   if (!config) redirect("/task-management");
 
-  const response = await fetchLegacyJson(`/api/page-bootstrap?scope=task-management&view=${encodeURIComponent(config.key)}`, { timeoutMs: 45000 });
-  if (response.status === 401) redirect(`/login?next=/next/task-management/${resolvedParams.view}`);
-  if (response.status === 403) {
-    return (
-      <main className="standalone-state">
-        <section className="state-card">
-          <span className="status-dot warning" />
-          <h1>{config.title} is not available</h1>
-          <p>Your account does not have access to this Task Management view.</p>
-          <div className="actions">
-            <a className="primary-button" href="/next/task-management">Open an available view</a>
-            <a className="secondary-button" href="/next/home">Return to Home</a>
-          </div>
-        </section>
-      </main>
-    );
+  const currentPath = `/next/task-management/${resolvedParams.view}`;
+  let pageData = await loadDirectTaskManagementPageData({ view: config.key }).catch(() => null);
+
+  if (pageData?.status === 401) redirect(`/login?next=${encodeURIComponent(currentPath)}`);
+  if (pageData?.status === 403) return forbidden(config);
+
+  if (!pageData?.ok) {
+    // Never use the legacy bootstrap as a permission fallback when the new
+    // feature profiles might be in force. A temporary grant-store failure must
+    // not reveal data through an older unguarded endpoint.
+    if (process.env.ERP_ADVANCED_PERMISSIONS_ENABLED === "1") {
+      return (
+        <main className="standalone-state"><section className="state-card">
+          <h1>Task Management is temporarily unavailable</h1>
+          <p>The direct permissions service could not verify your access. Please retry shortly.</p>
+          <a className="primary-button" href={currentPath}>Try again</a>
+        </section></main>
+      );
+    }
+    const response = await fetchLegacyJson(`/api/page-bootstrap?scope=task-management&view=${encodeURIComponent(config.key)}`, { timeoutMs: 45000 });
+    if (response.status === 401) redirect(`/login?next=${encodeURIComponent(currentPath)}`);
+    if (response.status === 403) return forbidden(config);
+
+    if (!response.ok || !response.data?.ok) {
+      return (
+        <main className="standalone-state">
+          <section className="state-card">
+            <span className="status-dot warning" />
+            <h1>The new Task Management page could not load</h1>
+            <p>{response.error || response.data?.error || "The current ERP API is temporarily unavailable."}</p>
+            <div className="actions">
+              <a className="primary-button" href={currentPath}>Try again</a>
+              <a className="secondary-button" href="/next/home">Return to Home</a>
+            </div>
+          </section>
+        </main>
+      );
+    }
+
+    const resources = resourceMap(response.data);
+    const account = getResource(resources, "/api/account", null);
+    const meta = getResource(resources, "/api/task-management/meta", null);
+    const list = getResource(resources, "/api/task-management?", { ok: true, tickets: [] });
+    if (!account) redirect(`/login?next=${encodeURIComponent(currentPath)}`);
+    pageData = {
+      ok: true,
+      account,
+      meta: meta || { ok: true, view: config.key, departments: [], currentUser: {}, accessLevel: "view" },
+      tickets: Array.isArray(list?.tickets) ? list.tickets : [],
+      warnings: response.data.omitted || [],
+      source: "legacy-bootstrap",
+    };
   }
-
-  if (!response.ok || !response.data?.ok) {
-    return (
-      <main className="standalone-state">
-        <section className="state-card">
-          <span className="status-dot warning" />
-          <h1>The new Task Management page could not load</h1>
-          <p>{response.error || response.data?.error || "The current ERP API is temporarily unavailable."}</p>
-          <div className="actions">
-            <a className="primary-button" href={config.classic}>Open classic Task Management</a>
-            <a className="secondary-button" href="/next/home">Return to Home</a>
-          </div>
-        </section>
-      </main>
-    );
-  }
-
-  const resources = resourceMap(response.data);
-  const account = getResource(resources, "/api/account", null);
-  const meta = getResource(resources, "/api/task-management/meta", null);
-  const list = getResource(resources, "/api/task-management?", { ok: true, tickets: [] });
-
-  if (!account) redirect(`/login?next=/next/task-management/${resolvedParams.view}`);
 
   return (
     <>
-      <link rel="stylesheet" href="/css/task-management.css?v=task-management-stable-status-frame-v24" />
-      <link rel="stylesheet" href="/css/task-management-next-parity.css?v=classic-parity-v3-workflow" />
+      <link rel="stylesheet" href="/next/css/task-management.css?v=task-management-stable-status-frame-v24" />
+      <link rel="stylesheet" href="/next/css/task-management-next-parity.css?v=classic-parity-v3-workflow" />
       <AppShell
-      account={account}
-      title={config.title}
-      eyebrow="Task Management"
-      activePath={`/next/task-management/${resolvedParams.view}`}
-    >
-      <TaskManagementClient
-        view={config.key}
-        account={account}
-        viewSlug={resolvedParams.view}
-        initialMeta={meta || { ok: true, view: config.key, departments: [], currentUser: {}, accessLevel: "view" }}
-        initialTickets={Array.isArray(list?.tickets) ? list.tickets : []}
-        availableViews={allowedViews(account)}
-        classicHref={config.classic}
-        bootstrapWarnings={response.data.omitted || []}
-      />
+        account={pageData.account}
+        title={config.title}
+        eyebrow="Task Management"
+        activePath={currentPath}
+      >
+        <TaskManagementClient
+          view={config.key}
+          account={pageData.account}
+          viewSlug={resolvedParams.view}
+          initialMeta={pageData.meta || { ok: true, view: config.key, departments: [], currentUser: {}, accessLevel: "view" }}
+          initialTickets={Array.isArray(pageData.tickets) ? pageData.tickets : []}
+          availableViews={featureAllowed(pageData.account, "tasks.view") ? allowedViews(pageData.account) : []}
+          bootstrapWarnings={pageData.warnings || []}
+        />
       </AppShell>
     </>
   );

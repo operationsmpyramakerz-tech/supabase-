@@ -51,6 +51,7 @@ export function notificationScope(value) {
 
 export function notificationTone(item = {}) {
   const haystack = `${notificationText(item.type)} ${notificationText(item.title)}`.toLowerCase();
+  if (haystack.includes("sla") || haystack.includes("deadline approaching") || haystack.includes("deadline exceeded")) return { key: "sla", label: "SLA" };
   if (haystack.includes("maintenance") || haystack.includes("repair")) return { key: "maintenance", label: "MT" };
   if (haystack.includes("expense") || haystack.includes("cash") || haystack.includes("payment")) return { key: "expense", label: "$" };
   if (haystack.includes("stock") || haystack.includes("inventory")) return { key: "stock", label: "ST" };
@@ -96,7 +97,10 @@ export function modernNotificationUrl(value) {
   try {
     const origin = typeof window !== "undefined" ? window.location.origin : "https://operations.local";
     const parsed = new URL(raw, origin);
-    if (parsed.origin !== origin && origin !== "https://operations.local") return parsed.href;
+    // Stored notifications can originate from mutable ERP data. Navigation must
+    // never execute javascript:/data: URLs or forward a user to an external
+    // domain supplied by a notification payload (phishing/open redirect).
+    if (!(["http:", "https:"].includes(parsed.protocol)) || parsed.origin !== origin) return "";
     if (parsed.pathname.startsWith("/next/")) return `${parsed.pathname}${parsed.search}${parsed.hash}`;
 
     for (const [legacy, next] of NEXT_ROUTE_MAP) {
@@ -107,7 +111,7 @@ export function modernNotificationUrl(value) {
     }
     return `${parsed.pathname}${parsed.search}${parsed.hash}`;
   } catch {
-    return raw;
+    return "";
   }
 }
 
@@ -119,4 +123,59 @@ export function notificationMatches(item, query) {
     .join(" ")
     .toLowerCase();
   return haystack.includes(clean);
+}
+
+// Display grouping never deletes the underlying event or changes its read state.
+// Without an explicit entity reference, actionable orders/tasks/maintenance MUST
+// remain distinct: two different tasks can have identical titles and statuses.
+const GROUP_WINDOW_MS = 45 * 60 * 1000;
+const ENTITY_REF_PATTERN = /\b(?:TKT|ORD|MNT|MTN|REQ)[-\s]?\d{3,}\b/i;
+
+function groupingIdentity(item) {
+  const type = notificationText(item.type).toLowerCase();
+  if (type === "test" || type === "system" && /test/i.test(notificationText(item.title))) return "";
+  const category = notificationTone(item).key;
+  const content = `${notificationText(item.title)} ${notificationText(item.body)}`;
+  const explicitRef = content.match(ENTITY_REF_PATTERN)?.[0]?.replace(/\s+/g, "-").toUpperCase();
+  if (explicitRef) return `${category}:ref:${explicitRef}`;
+
+  // A URL only identifies a record when it contains a record-specific parameter.
+  // Generic URLs (/next/orders, /next/task-management/...) are NOT identities.
+  try {
+    const url = new URL(notificationText(item.url), "https://operations.local");
+    if (url.origin === "https://operations.local") {
+      const id = ["taskId", "orderId", "eventId", "maintenanceId", "recordId", "id"]
+        .map(key => url.searchParams.get(key)).find(value => value && /^[\w-]{3,100}$/.test(value));
+      if (id && ["task", "order", "maintenance", "event"].includes(category)) {
+        return `${category}:record:${id}`;
+      }
+    }
+  } catch { /* Invalid/missing URL: do not infer a record identity. */ }
+
+  if (["task", "order", "maintenance", "event", "expense", "test"].includes(category)) return "";
+  return [category, type, notificationText(item.title).toLowerCase(),
+    notificationText(item.body).toLowerCase(), notificationText(item.url)].join("\u001f");
+}
+
+export function groupNotificationRows(items, enabled = true) {
+  const rows = Array.isArray(items) ? items : [];
+  if (!enabled) return rows.map(item => ({ id: String(item.id), items: [item] }));
+  const groups = [];
+  const mostRecent = new Map();
+  for (const item of rows) {
+    const ts = notificationTimestamp(item.ts);
+    const key = groupingIdentity(item);
+    const candidate = key ? mostRecent.get(key) : null;
+    // Compare with the latest message in the group, not merely the previous
+    // sibling, so a sequence cannot stretch a group across an entire day.
+    if (candidate && ts && candidate.latestTs &&
+        Math.abs(candidate.latestTs - ts) <= GROUP_WINDOW_MS) {
+      candidate.items.push(item);
+      continue;
+    }
+    const group = { id: String(item.id), items: [item], latestTs: ts };
+    groups.push(group);
+    if (key) mostRecent.set(key, group);
+  }
+  return groups;
 }

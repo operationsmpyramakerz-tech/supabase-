@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { getLegacyAccountGate } from "../../../../lib/products-auth";
+import { getDirectAccountGate } from "../../../../lib/products-auth";
+import { featureGate } from "../../../../lib/feature-permissions-server";
 import { createProductImageUploadTicket } from "../../../../lib/products-service";
 
 export const dynamic = "force-dynamic";
@@ -16,7 +17,7 @@ function errorResponse(error, fallback) {
 }
 
 export async function POST(request) {
-  const gate = await getLegacyAccountGate("Products");
+  const gate = featureGate(await getDirectAccountGate("Products"), "products.image_upload");
   if (!gate.ok) return gateResponse(gate);
 
   try {

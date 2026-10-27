@@ -39,6 +39,14 @@ async function shutdown(signal = "shutdown") {
 }
 
 async function main() {
+  // Fail at startup instead of serving a login flow with a known signing key.
+  // The check must run at runtime, not during `next build`.
+  if (!dev) {
+    const { sessionSigningSecret, sessionSigningStatus } = await import("./lib/session-signing-secret.mjs");
+    sessionSigningSecret();
+    const status = sessionSigningStatus();
+    if (status.warning) console.warn(`[next-frontend] security warning: ${status.warning}`);
+  }
   await nextApp.prepare();
   server = http.createServer((req, res) => handle(req, res));
   server.keepAliveTimeout = Math.max(1000, Number(process.env.KEEP_ALIVE_TIMEOUT_MS || 65000) || 65000);

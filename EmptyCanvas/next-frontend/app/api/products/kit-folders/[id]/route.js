@@ -5,7 +5,7 @@ import { errorResponse, gateResponse, kitGate, requestBody } from "../../../../.
 export const dynamic = "force-dynamic";
 
 export async function PATCH(request, { params }) {
-  const gate = await kitGate();
+  const gate = await kitGate("folder_manage");
   if (!gate.ok) return gateResponse(gate);
   try {
     const { id } = await params;
@@ -17,7 +17,7 @@ export async function PATCH(request, { params }) {
 }
 
 export async function DELETE(request, { params }) {
-  const gate = await kitGate();
+  const gate = await kitGate("folder_manage");
   if (!gate.ok) return gateResponse(gate);
   try {
     const { id } = await params;

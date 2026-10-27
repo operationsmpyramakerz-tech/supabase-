@@ -20,20 +20,15 @@ function Icon({ name = "database" }) {
   const icons = {
     database: <><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></>,
     arrowLeft: <><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></>,
-    refresh: <><path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 4v5h5"/><path d="M4 13a8.1 8.1 0 0 0 15.5 2M20 20v-5h-5"/></>,
     edit: <><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></>,
     save: <><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></>,
     x: <><path d="M18 6 6 18"/><path d="m6 6 12 12"/></>,
-    download: <><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></>,
     chevronLeft: <path d="m15 18-6-6 6-6"/>,
     chevronRight: <path d="m9 18 6-6-6-6"/>,
-    shield: <><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></>,
-    search: <><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></>,
     plus: <><path d="M12 5v14"/><path d="M5 12h14"/></>,
   };
   return <svg {...common}>{icons[name] || icons.database}</svg>;
 }
-
 
 function columnType(column = {}) {
   return lower(column?.type || column?.format || column?.raw?.format);
@@ -75,14 +70,16 @@ function FieldEditor({ column, value, onChange }) {
   return <input type={inputType} value={value} onChange={(event) => onChange(event.target.value)} spellCheck={false} />;
 }
 
-export default function BackupTableClient({ tableKey, initialTable, backFolder = "" }) {
-  const [table, setTable] = useState(initialTable || null);
-  const [columns, setColumns] = useState([]);
-  const [rows, setRows] = useState([]);
-  const [canEdit, setCanEdit] = useState(false);
-  const [offset, setOffset] = useState(0);
-  const [hasMore, setHasMore] = useState(false);
-  const [loading, setLoading] = useState(true);
+export default function BackupTableClient({ tableKey, initialTable, initialPayload = null, backFolder = "" }) {
+  const hasInitialPayload = Boolean(initialPayload?.ok);
+  const [table, setTable] = useState(initialPayload?.table || initialTable || null);
+  const [columns, setColumns] = useState(Array.isArray(initialPayload?.columns) ? initialPayload.columns : []);
+  const [rows, setRows] = useState(Array.isArray(initialPayload?.rows) ? initialPayload.rows : []);
+  const [canEdit, setCanEdit] = useState(Boolean(initialPayload?.canEdit));
+  const [canCreate, setCanCreate] = useState(Boolean(initialPayload?.canCreate ?? initialPayload?.canEdit));
+  const [offset, setOffset] = useState(Number(initialPayload?.offset || 0));
+  const [hasMore, setHasMore] = useState(Boolean(initialPayload?.hasMore));
+  const [loading, setLoading] = useState(!hasInitialPayload);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [editRow, setEditRow] = useState(null);
@@ -99,7 +96,8 @@ export default function BackupTableClient({ tableKey, initialTable, backFolder =
     setLoading(true);
     setError("");
     try {
-      const response = await fetch(`/api/backup/tables/${encodeURIComponent(tableKey)}/rows?limit=${pageSize}&offset=${Math.max(0, nextOffset)}`, {
+      const query = `key=${encodeURIComponent(tableKey)}&limit=${pageSize}&offset=${Math.max(0, nextOffset)}`;
+      const response = await fetch(`/next/api/backup/rows-direct?${query}`, {
         credentials: "include",
         cache: "no-store",
       });
@@ -113,6 +111,7 @@ export default function BackupTableClient({ tableKey, initialTable, backFolder =
       setColumns(Array.isArray(body?.columns) ? body.columns : []);
       setRows(Array.isArray(body?.rows) ? body.rows : []);
       setCanEdit(Boolean(body?.canEdit));
+      setCanCreate(Boolean(body?.canCreate ?? body?.canEdit));
       setOffset(Number(body?.offset || 0));
       setHasMore(Boolean(body?.hasMore));
     } catch (err) {
@@ -123,6 +122,18 @@ export default function BackupTableClient({ tableKey, initialTable, backFolder =
   }
 
   useEffect(() => {
+    if (initialPayload?.ok) {
+      setTable(initialPayload.table || initialTable || null);
+      setColumns(Array.isArray(initialPayload.columns) ? initialPayload.columns : []);
+      setRows(Array.isArray(initialPayload.rows) ? initialPayload.rows : []);
+      setCanEdit(Boolean(initialPayload.canEdit));
+      setCanCreate(Boolean(initialPayload.canCreate ?? initialPayload.canEdit));
+      setOffset(Number(initialPayload.offset || 0));
+      setHasMore(Boolean(initialPayload.hasMore));
+      setError("");
+      setLoading(false);
+      return;
+    }
     loadRows(0);
   }, [tableKey]);
 
@@ -184,7 +195,7 @@ export default function BackupTableClient({ tableKey, initialTable, backFolder =
   }
 
   function openNewRow() {
-    if (!canEdit || saving || creating || editRow) return;
+    if (!canCreate || saving || creating || editRow) return;
     const next = {};
     visibleColumns.forEach((column) => { next[column.name] = ""; });
     setNewDraft(next);
@@ -201,16 +212,16 @@ export default function BackupTableClient({ tableKey, initialTable, backFolder =
   }
 
   async function saveNewRow() {
-    if (!canEdit || creating || !newRowOpen) return;
+    if (!canCreate || creating || !newRowOpen) return;
     setCreating(true);
     setCreateError("");
     try {
-      const response = await fetch(`/api/backup/tables/${encodeURIComponent(tableKey)}/rows`, {
+      const response = await fetch("/next/api/backup/rows-direct", {
         method: "POST",
         credentials: "include",
         cache: "no-store",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ values: newDraft }),
+        body: JSON.stringify({ key: tableKey, values: newDraft }),
       });
       if (!response.ok) throw new Error(await readError(response, "Failed to create row."));
       const body = await response.json();
@@ -240,12 +251,12 @@ export default function BackupTableClient({ tableKey, initialTable, backFolder =
     setSaving(true);
     setSaveError("");
     try {
-      const response = await fetch(`/api/backup/tables/${encodeURIComponent(tableKey)}/rows`, {
+      const response = await fetch("/next/api/backup/rows-direct", {
         method: "PATCH",
         credentials: "include",
         cache: "no-store",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ originalRow: editRow, changes }),
+        body: JSON.stringify({ key: tableKey, originalRow: editRow, changes }),
       });
       if (!response.ok) throw new Error(await readError(response, "Failed to save row."));
       const body = await response.json();
@@ -289,7 +300,7 @@ export default function BackupTableClient({ tableKey, initialTable, backFolder =
                 <tr>
                   <th className="backup-data-row-number">#</th>
                   {visibleColumns.map((column) => <th key={column.name} title={columnType(column)}>{column.name}</th>)}
-                  {canEdit ? <th className="backup-data-edit-head">Edit</th> : null}
+                  {canEdit || canCreate ? <th className="backup-data-edit-head">Actions</th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -326,12 +337,12 @@ export default function BackupTableClient({ tableKey, initialTable, backFolder =
                             </button>
                           )}
                         </td>
-                      ) : null}
+                      ) : canCreate ? <td className="backup-data-edit-cell" /> : null}
                     </tr>
                   );
                 })}
               </tbody>
-              {canEdit ? (
+              {canCreate ? (
                 <tfoot>
                   {newRowOpen ? (
                     <tr className="backup-new-row-editor">

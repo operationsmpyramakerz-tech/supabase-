@@ -1,6 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { navigateWithinApp } from "../../lib/client-navigation";
+import EventIcon from "./EventIcon";
+import { featureAllowed } from "../../lib/feature-permissions-registry";
 
 const STANDARD_EVENT_TYPES = [
   { code: "tech_day", label: "Tech Day", isCustom: false },
@@ -9,6 +12,14 @@ const STANDARD_EVENT_TYPES = [
   { code: "competition", label: "Competition", isCustom: false },
   { code: "exhibition", label: "Exhibition", isCustom: false },
 ];
+
+const EVENT_TYPE_META = {
+  tech_day: { icon: "cpu", meta: "Hands-on technology day" },
+  seminar: { icon: "mic", meta: "Talks, sessions, and presentations" },
+  steam_fair: { icon: "layers", meta: "STEAM showcase and activity fair" },
+  competition: { icon: "award", meta: "Challenge or judged competition" },
+  exhibition: { icon: "image", meta: "Showcase or exhibition" },
+};
 
 function text(value) {
   return String(value ?? "").trim();
@@ -224,20 +235,99 @@ function Toast({ toast, onClose }) {
 
 function Field({ label, required, wide, children }) {
   return (
-    <label className={`events-field next-event-form-field${wide ? " events-field--wide is-wide" : ""}`}>
+    <div className={`events-field next-event-form-field${wide ? " events-field--wide is-wide" : ""}`}>
       <span>{label}{required ? <em>*</em> : null}</span>
       {children}
-    </label>
+    </div>
   );
 }
 
-function FormSection({ number: sectionNumber, icon, title, description, action, children }) {
+function ModernSelect({ value, onChange, options = [], placeholder = "Select", disabled = false, searchable = false, ariaLabel = "Select option", variant = "" }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const rootRef = useRef(null);
+  const normalized = useMemo(() => options.map((option) => typeof option === "string"
+    ? { value: option, label: option, icon: "", meta: "" }
+    : {
+        value: text(option?.value),
+        label: text(option?.label) || text(option?.value),
+        icon: text(option?.icon),
+        meta: text(option?.meta),
+      }), [options]);
+  const selected = normalized.find((option) => text(option.value) === text(value));
+  const filtered = useMemo(() => {
+    const needle = lower(query);
+    if (!needle) return normalized;
+    return normalized.filter((option) => lower(option.label).includes(needle));
+  }, [normalized, query]);
+
+  useEffect(() => {
+    if (!open) {
+      setQuery("");
+      return undefined;
+    }
+    function closeFromOutside(event) {
+      if (!rootRef.current?.contains(event.target)) setOpen(false);
+    }
+    function closeFromEscape(event) {
+      if (event.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", closeFromOutside);
+    document.addEventListener("keydown", closeFromEscape);
+    return () => {
+      document.removeEventListener("mousedown", closeFromOutside);
+      document.removeEventListener("keydown", closeFromEscape);
+    };
+  }, [open]);
+
+  return (
+    <div ref={rootRef} className={`events-modern-select next-event-modern-select${variant ? ` next-event-modern-select--${variant}` : ""}${open ? " is-open" : ""}${disabled ? " is-disabled" : ""}`}>
+      <button type="button" className="events-modern-select__trigger" aria-label={ariaLabel} aria-haspopup="listbox" aria-expanded={open} disabled={disabled} onClick={() => setOpen((current) => !current)}>
+        <span className={`next-event-select-trigger-copy${selected ? "" : " is-placeholder"}`}>
+          {selected?.icon ? <span className="next-event-select-trigger-icon"><EventIcon name={selected.icon} /></span> : null}
+          <span>
+            <strong>{selected?.label || placeholder}</strong>
+            {selected?.meta ? <small>{selected.meta}</small> : null}
+          </span>
+        </span>
+        <span className="next-event-select-chevron" aria-hidden="true"><EventIcon name="chevron-down" /></span>
+      </button>
+      <div className="events-modern-select__menu next-event-modern-select__menu" hidden={!open}>
+        {searchable && open ? <div className="next-event-select-search"><EventIcon name="search" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search…" autoFocus /></div> : null}
+        <div className="next-event-select-options" role="listbox">
+          {filtered.length ? filtered.map((option) => (
+            <button type="button" role="option" aria-selected={text(option.value) === text(value)} className={`events-modern-select__option${text(option.value) === text(value) ? " is-selected" : ""}`} key={option.value || option.label} onClick={() => { onChange(option.value); setOpen(false); }}>
+              {option.icon ? <span className="next-event-select-option-icon"><EventIcon name={option.icon} /></span> : null}
+              <span className="next-event-select-option-copy"><strong>{option.label}</strong>{option.meta ? <small>{option.meta}</small> : null}</span>
+              {text(option.value) === text(value) ? <span className="next-event-select-option-check"><EventIcon name="check" /></span> : null}
+            </button>
+          )) : <div className="next-event-select-empty">No matching options</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FormSection({ number: sectionNumber, icon, title, description = "", action, backHref = "", children }) {
   return (
     <section className="events-form-section next-event-form-section">
-      <header className="events-form-section__heading">
-        <span className="events-section-icon next-event-form-section__icon">{icon}</span>
-        <div><h2>{sectionNumber}. {title}</h2><p>{description}</p></div>
-        {action || null}
+      <header className="events-form-section__heading next-event-form-section__heading">
+        <div className="next-event-form-section__lead">
+          {backHref ? (
+            <a className="next-event-section-back" href={backHref} aria-label="Back to Calendar" title="Back to Calendar">
+              <EventIcon name="chevron-left" />
+            </a>
+          ) : null}
+          <div className="next-event-form-section__title">
+            <span className="events-section-icon next-event-form-section__icon"><EventIcon name={icon} /></span>
+            <div className="next-event-form-section__copy">
+              <span className="next-event-section-kicker">Step <b>{String(sectionNumber).padStart(2, "0")}</b></span>
+              <h2>{title}</h2>
+              {description ? <p>{description}</p> : null}
+            </div>
+          </div>
+        </div>
+        {action ? <div className="next-event-section-action">{action}</div> : null}
       </header>
       {children}
     </section>
@@ -245,7 +335,174 @@ function FormSection({ number: sectionNumber, icon, title, description, action, 
 }
 
 function EmptyRows({ label }) {
-  return <div className="events-empty-repeat next-event-form-empty"><span>＋</span><strong>No {label} added yet</strong><small>Use the button above to add the first item.</small></div>;
+  return <div className="events-empty-repeat next-event-form-empty"><EventIcon name="plus-circle" /><div><strong>No {label} added yet</strong><small>Add the first item when it is needed.</small></div></div>;
+}
+
+function projectPhoto(component) {
+  const candidates = Array.isArray(component?.photoUrls) ? component.photoUrls : [component?.photoUrl];
+  return candidates.map(safeHttpUrl).find(Boolean) || "";
+}
+
+const COMPONENT_PICKER_META = Object.freeze({
+  project: {
+    eyebrow: "Project library",
+    title: "Select Projects",
+    description: "Choose one or more Project Resources from Event Components.",
+    search: "Search projects…",
+    badge: "Project Resource",
+    icon: "cpu",
+    singular: "Project",
+    plural: "Projects",
+    empty: "No projects found",
+    category: "project",
+    theme: { accent: "#2563eb", accent2: "#0ea5e9", soft: "#eff6ff", surface: "#f8fbff", border: "rgba(37,99,235,.24)", text: "#1d4ed8" },
+  },
+  marketing: {
+    eyebrow: "Material library",
+    title: "Select Materials",
+    description: "Choose one or more Marketing Materials from Event Components.",
+    search: "Search materials…",
+    badge: "Marketing Material",
+    icon: "image",
+    singular: "Material",
+    plural: "Materials",
+    empty: "No materials found",
+    category: "marketing_material",
+    theme: { accent: "#ea580c", accent2: "#f59e0b", soft: "#fff7ed", surface: "#fffbf5", border: "rgba(234,88,12,.24)", text: "#c2410c" },
+  },
+  venue: {
+    eyebrow: "Venue library",
+    title: "Select Venue Requirements",
+    description: "Choose one or more Venue Equipment items from Event Components.",
+    search: "Search venue requirements…",
+    badge: "Venue Equipment",
+    icon: "tool",
+    singular: "Requirement",
+    plural: "Requirements",
+    empty: "No venue requirements found",
+    category: "venue_equipment",
+    theme: { accent: "#059669", accent2: "#14b8a6", soft: "#ecfdf5", surface: "#f5fffb", border: "rgba(5,150,105,.24)", text: "#047857" },
+  },
+});
+
+function ComponentPicker({ kind = "project", components, alreadySelected = [], onClose, onConfirm }) {
+  const meta = COMPONENT_PICKER_META[kind] || COMPONENT_PICKER_META.project;
+  const [query, setQuery] = useState("");
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const existing = useMemo(() => new Set((Array.isArray(alreadySelected) ? alreadySelected : []).map(text).filter(Boolean)), [alreadySelected]);
+  const visible = useMemo(() => {
+    const needle = lower(query);
+    return (Array.isArray(components) ? components : []).filter((component) => {
+      if (component?.isActive === false || text(component?.category) !== meta.category) return false;
+      if (!needle) return true;
+      return [component?.name, component?.description, component?.ownershipType].some((value) => lower(value).includes(needle));
+    });
+  }, [components, query, meta.category]);
+
+  useEffect(() => {
+    function onKeyDown(event) {
+      if (event.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
+  function toggle(componentId) {
+    const id = text(componentId);
+    if (!id || existing.has(id)) return;
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  const selectedCount = selectedIds.size;
+  const categoryStyle = {
+    "--event-cat-accent": meta.theme.accent,
+    "--event-cat-accent-2": meta.theme.accent2,
+    "--event-cat-soft": meta.theme.soft,
+    "--event-cat-surface": meta.theme.surface,
+    "--event-cat-border": meta.theme.border,
+    "--event-cat-text": meta.theme.text,
+  };
+
+  return (
+    <div className="events-modal-overlay next-modal-layer next-event-project-picker-layer" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <section className={`next-event-project-picker next-event-project-picker--${kind}`} role="dialog" aria-modal="true" aria-label={meta.title}>
+        <header className="next-event-project-picker__head">
+          <div>
+            <span>{meta.eyebrow}</span>
+            <h2>{meta.title}</h2>
+            <p>{meta.description}</p>
+          </div>
+          <button type="button" onClick={onClose} aria-label={`Close ${meta.title.toLowerCase()}`}>×</button>
+        </header>
+
+        <div className="next-event-project-picker__toolbar">
+          <label className="next-event-project-picker__search">
+            <EventIcon name="search" />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={meta.search} autoFocus />
+          </label>
+          <span className="next-event-project-picker__count">{selectedCount} selected</span>
+        </div>
+
+        <div className="next-event-project-picker__grid">
+          {visible.map((component) => {
+            const id = text(component?.id);
+            const isSelected = selectedIds.has(id);
+            const isExisting = existing.has(id);
+            const photo = projectPhoto(component);
+            const external = lower(component?.ownershipType) === "external_rental";
+            const unit = componentUnitCost(component);
+            return (
+              <article className={`events-component-card next-event-project-choice${isSelected ? " is-selected" : ""}${isExisting ? " is-existing" : ""}`} style={categoryStyle} key={id || component?.name}>
+                <button
+                  type="button"
+                  className="next-event-project-choice__pick"
+                  onClick={() => toggle(id)}
+                  disabled={isExisting}
+                  aria-pressed={isSelected}
+                  aria-label={`${isExisting ? "Already added" : isSelected ? "Unselect" : "Select"} ${component?.name || meta.singular.toLowerCase()}`}
+                >
+                  <div className="events-component-card__top">
+                    <span className="events-component-badge"><EventIcon name={meta.icon} />{meta.badge}</span>
+                    <span className={`next-event-project-choice__state${isExisting ? " is-existing" : isSelected ? " is-selected" : ""}`}>
+                      {isExisting ? "Added" : isSelected ? "Selected" : "Select"}
+                    </span>
+                  </div>
+                  <div className="events-component-card__photo">
+                    {photo ? <img src={photo} alt="" loading="lazy" /> : <EventIcon name="box" />}
+                  </div>
+                  <div className="events-component-card__body">
+                    <h3 title={component?.name || ""}>{component?.name || `Untitled ${meta.singular.toLowerCase()}`}</h3>
+                    <p>{text(component?.description) || "No description added yet."}</p>
+                  </div>
+                  <div className="events-component-card__meta">
+                    <div><span>Source type</span><strong>{external ? "External Rental" : "Company Owned"}</strong></div>
+                    <div><span>Default qty.</span><strong>{component?.defaultQuantity ?? 1}</strong></div>
+                  </div>
+                  <div className="events-component-card__cost">
+                    <div><span>Event cost / unit</span><strong>{money(unit)}</strong></div>
+                    <div className="events-component-card__cost-breakdown"><span>Operating {money(number(component?.operatingCost))}</span></div>
+                  </div>
+                </button>
+              </article>
+            );
+          })}
+          {!visible.length ? <div className="next-event-project-picker__empty"><EventIcon name="search" /><strong>{meta.empty}</strong><span>Try another search term.</span></div> : null}
+        </div>
+
+        <footer className="next-event-project-picker__footer">
+          <button type="button" className="events-secondary-btn secondary-button" onClick={onClose}>Cancel</button>
+          <button type="button" className="events-primary-btn primary-button" disabled={!selectedCount} onClick={() => onConfirm(Array.from(selectedIds))}>
+            {selectedCount ? `Add ${selectedCount} ${selectedCount === 1 ? meta.singular : meta.plural}` : `Select ${meta.plural}`}
+          </button>
+        </footer>
+      </section>
+    </div>
+  );
 }
 
 export default function EventRequestFormClient({
@@ -289,6 +546,7 @@ export default function EventRequestFormClient({
   })));
   const [customTypeOpen, setCustomTypeOpen] = useState(false);
   const [customTypeName, setCustomTypeName] = useState("");
+  const [componentPickerKind, setComponentPickerKind] = useState("");
   const [savingType, setSavingType] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -303,6 +561,17 @@ export default function EventRequestFormClient({
   const [ratesError, setRatesError] = useState("");
   const [savingRates, setSavingRates] = useState(false);
   const [ratesAuthorized, setRatesAuthorized] = useState(!!initialCanEditRates || accessLevel === "admin");
+  const [ratesAuthorizationToken, setRatesAuthorizationToken] = useState("");
+  const [editAuthorizationToken, setEditAuthorizationToken] = useState("");
+
+  useEffect(() => {
+    if (!editingId || accessLevel === "admin") return;
+    try {
+      const key = `erp.events.editAuth.${editingId}`;
+      const stored = window.sessionStorage.getItem(key) || "";
+      if (stored) setEditAuthorizationToken(stored);
+    } catch {}
+  }, [editingId, accessLevel]);
 
   const projectComponents = useMemo(() => components.filter((item) => text(item.category) === "project"), [components]);
   const marketingComponents = useMemo(() => components.filter((item) => text(item.category) === "marketing_material"), [components]);
@@ -345,7 +614,29 @@ export default function EventRequestFormClient({
   function addProject() {
     if (viewOnly) return notify("info", "View access", "Your account can review this form but cannot change it.");
     if (!projectComponents.length) return notify("info", "Project catalogue", "There are no active Project Resource components.");
-    setProjects((current) => [...current, { key: makeKey("project"), componentId: "", quantity: 1, workingCost: 0, description: "" }]);
+    setComponentPickerKind("project");
+  }
+
+  function addSelectedProjects(componentIds) {
+    const wanted = new Set((Array.isArray(componentIds) ? componentIds : []).map(text).filter(Boolean));
+    if (!wanted.size) return;
+    setProjects((current) => {
+      const existing = new Set(current.map((item) => text(item.componentId)).filter(Boolean));
+      const additions = projectComponents
+        .filter((component) => wanted.has(text(component.id)) && !existing.has(text(component.id)))
+        .map((component) => {
+          const quantity = component?.defaultQuantity ?? 1;
+          return {
+            key: makeKey("project"),
+            componentId: text(component.id),
+            quantity,
+            workingCost: componentTotal(component, quantity),
+            description: "",
+          };
+        });
+      return [...current, ...additions];
+    });
+    setComponentPickerKind("");
   }
 
   function updateProject(key, patch) {
@@ -366,8 +657,27 @@ export default function EventRequestFormClient({
     if (viewOnly) return notify("info", "View access", "Your account can review this form but cannot change it.");
     const source = kind === "marketing" ? marketingComponents : venueComponents;
     if (!source.length) return notify("info", "Event Components", `There are no active ${kind === "marketing" ? "Marketing Material" : "Venue Equipment"} components.`);
+    setComponentPickerKind(kind);
+  }
+
+  function addSelectedComponents(kind, componentIds) {
+    const source = kind === "marketing" ? marketingComponents : venueComponents;
     const setter = kind === "marketing" ? setMarketing : setVenueRequirements;
-    setter((current) => [...current, { key: makeKey(kind), componentId: "", quantity: 1, notes: "" }]);
+    const wanted = new Set((Array.isArray(componentIds) ? componentIds : []).map(text).filter(Boolean));
+    if (!wanted.size) return;
+    setter((current) => {
+      const existing = new Set(current.map((item) => text(item.componentId)).filter(Boolean));
+      const additions = source
+        .filter((component) => wanted.has(text(component.id)) && !existing.has(text(component.id)))
+        .map((component) => ({
+          key: makeKey(kind),
+          componentId: text(component.id),
+          quantity: component?.defaultQuantity ?? 1,
+          notes: "",
+        }));
+      return [...current, ...additions];
+    });
+    setComponentPickerKind("");
   }
 
   function updateComponentRow(kind, key, patch) {
@@ -381,12 +691,16 @@ export default function EventRequestFormClient({
   }
 
   async function saveCustomType() {
+    if (!featureAllowed(account, "events.requests.create_type")) return;
     const label = text(customTypeName);
     if (!label) return notify("info", "Event Type", "Enter a name for the new event type.");
     setSavingType(true);
     try {
-      const payload = await requestJson("/api/events/types", { method: "POST", body: JSON.stringify({ label }) });
-      const nextTypes = normalizeTypes(Array.isArray(payload?.types) ? payload.types : types);
+      const payload = await requestJson("/next/api/events/mutations-direct", {
+        method: "POST",
+        body: JSON.stringify({ action: "create-type", label }),
+      });
+      const nextTypes = normalizeTypes([...(Array.isArray(types) ? types : []), ...(payload?.type ? [payload.type] : [])]);
       setTypes(nextTypes);
       updateField("eventType", text(payload?.type?.code) || nextTypes[nextTypes.length - 1]?.code || "tech_day");
       setCustomTypeName("");
@@ -403,10 +717,10 @@ export default function EventRequestFormClient({
     setRefreshing(true);
     try {
       const [typePayload, componentPayload, eventPayload, ratePayload] = await Promise.all([
-        requestJson(`/api/events/types?_ts=${Date.now()}`),
-        requestJson(`/api/events/components?activeOnly=1&_ts=${Date.now()}`),
-        requestJson(`/api/events?_ts=${Date.now()}`),
-        requestJson(`/api/events/governorate-rates?includeInactive=0&_ts=${Date.now()}`),
+        requestJson(`/next/api/events/types?_ts=${Date.now()}`),
+        requestJson(`/next/api/events/components?activeOnly=1&_ts=${Date.now()}`),
+        requestJson(`/next/api/events?_ts=${Date.now()}`),
+        requestJson(`/next/api/events/governorate-rates?includeInactive=0&_ts=${Date.now()}`),
       ]);
       setTypes(normalizeTypes(typePayload?.types));
       setComponents(Array.isArray(componentPayload?.components) ? componentPayload.components : []);
@@ -501,12 +815,20 @@ export default function EventRequestFormClient({
     if (validationError) return;
     setSubmitting(true);
     try {
-      await requestJson(editingId ? `/api/events/${encodeURIComponent(editingId)}` : "/api/events", {
-        method: editingId ? "PATCH" : "POST",
-        body: JSON.stringify(payload()),
+      await requestJson("/next/api/events/mutations-direct", {
+        method: "POST",
+        body: JSON.stringify({
+          action: editingId ? "update-event" : "create-event",
+          eventId: editingId || "",
+          authorizationToken: editingId ? editAuthorizationToken : "",
+          payload: payload(),
+        }),
       });
+      if (editingId) {
+        try { window.sessionStorage.removeItem(`erp.events.editAuth.${editingId}`); } catch {}
+      }
       notify("success", "Events", editingId ? "Event request updated successfully." : "Event request submitted successfully.");
-      window.setTimeout(() => { window.location.href = "/next/events"; }, 550);
+      window.setTimeout(() => { navigateWithinApp("/next/events"); }, 550);
     } catch (submitError) {
       setError(submitError?.message || "Could not save the event request.");
       setSubmitting(false);
@@ -517,7 +839,7 @@ export default function EventRequestFormClient({
     if (viewOnly) return notify("info", "View access", "Your account cannot edit transport rates.");
     if (ratesAuthorized || accessLevel === "admin") {
       try {
-        const payloadData = await requestJson(`/api/events/governorate-rates?includeInactive=1&_ts=${Date.now()}`);
+        const payloadData = await requestJson(`/next/api/events/governorate-rates?includeInactive=1&_ts=${Date.now()}`);
         setRatesDraft((Array.isArray(payloadData?.rates) ? payloadData.rates : []).map((rate, index) => ({ ...rate, key: text(rate.id) || makeKey(`rate-${index}`) })));
       } catch {
         setRatesDraft(rates.map((rate, index) => ({ ...rate, key: text(rate.id) || makeKey(`rate-${index}`) })));
@@ -538,13 +860,14 @@ export default function EventRequestFormClient({
     setAuthorizingRates(true);
     setRateAuthError("");
     try {
-      await requestJson("/api/events/admin/verify", {
+      const verified = await requestJson("/next/api/events/admin/verify", {
         method: "POST",
         body: JSON.stringify({ password, intent: "governorate_rates" }),
       });
+      setRatesAuthorizationToken(text(verified?.authorizationToken));
       setRatesAuthorized(true);
       setShowRateAuth(false);
-      const payloadData = await requestJson(`/api/events/governorate-rates?includeInactive=1&_ts=${Date.now()}`);
+      const payloadData = await requestJson(`/next/api/events/governorate-rates?includeInactive=1&_ts=${Date.now()}`);
       setRatesDraft((Array.isArray(payloadData?.rates) ? payloadData.rates : []).map((rate, index) => ({ ...rate, key: text(rate.id) || makeKey(`rate-${index}`) })));
       setShowRates(true);
     } catch (authError) {
@@ -577,13 +900,18 @@ export default function EventRequestFormClient({
     setSavingRates(true);
     setRatesError("");
     try {
-      const response = await requestJson("/api/events/governorate-rates", {
-        method: "PATCH",
-        body: JSON.stringify({ rates: cleaned }),
+      const response = await requestJson("/next/api/events/mutations-direct", {
+        method: "POST",
+        body: JSON.stringify({
+          action: "save-governorate-rates",
+          authorizationToken: ratesAuthorizationToken,
+          rates: cleaned,
+        }),
       });
       const saved = Array.isArray(response?.rates) ? response.rates : cleaned;
       setRates(saved.filter((item) => item?.isActive !== false));
       setRatesAuthorized(accessLevel === "admin");
+      if (accessLevel !== "admin") setRatesAuthorizationToken("");
       setShowRates(false);
       notify("success", "Transport rates", "Governorate transport rates were updated.");
     } catch (saveError) {
@@ -597,32 +925,39 @@ export default function EventRequestFormClient({
     <section className="events-shell events-shell--form next-event-form-page">
       <Toast toast={toast} onClose={() => setToast(null)} />
 
-      <div className="events-form-top">
-        <a className="events-back-link" href="/next/events-calendar" aria-label="Back to Calendar" title="Back to Calendar">←</a>
-      </div>
-
       {bootstrapWarnings.length ? <div className="events-stage2k-notice next-event-form-warning">Some optional reference data could not be loaded. Refresh the catalogues before submitting if a list looks incomplete.</div> : null}
       {viewOnly ? <div className="events-stage2k-notice is-info next-event-form-warning">Your Event Requests access is View only. You can inspect the form, but submission and catalogue changes are disabled.</div> : null}
 
       <form className="next-event-form" onSubmit={submit}>
-        <FormSection number="1" icon="◫" title="Event Overview" description="Who is requesting the event, and when will it happen?">
+        <FormSection number="1" icon="clipboard" title="Event Overview" backHref="/next/events-calendar">
           <div className="events-form-grid next-event-form-grid">
             <Field label="Event Name" required wide><input value={form.eventName} onChange={(event) => updateField("eventName", event.target.value)} maxLength={240} placeholder="Example: Green Valley School Tech Day 2026" disabled={viewOnly} /></Field>
             <Field label="Event Type" required>
               <div className="next-event-type-control">
-                <select value={form.eventType} onChange={(event) => updateField("eventType", event.target.value)} disabled={viewOnly}>
-                  {types.map((item) => <option value={item.code} key={item.code}>{item.label}</option>)}
-                </select>
-                {!viewOnly ? <button type="button" onClick={() => setCustomTypeOpen((current) => !current)}>＋ Type</button> : null}
+                <ModernSelect
+                  value={form.eventType}
+                  onChange={(value) => updateField("eventType", value)}
+                  options={types.map((item) => ({
+                    value: item.code,
+                    label: item.label,
+                    icon: EVENT_TYPE_META[item.code]?.icon || "calendar",
+                    meta: EVENT_TYPE_META[item.code]?.meta || "Custom event type",
+                  }))}
+                  placeholder="Select event type"
+                  disabled={viewOnly}
+                  ariaLabel="Event type"
+                  variant="event-type"
+                />
+                {!viewOnly && featureAllowed(account, "events.requests.create_type") ? <button type="button" className={customTypeOpen ? "is-active" : ""} onClick={() => setCustomTypeOpen((current) => !current)}><EventIcon name="plus-circle" /><span>Add Type</span></button> : null}
               </div>
             </Field>
-            <Field label="Expected Attendees"><input type="number" min="0" step="1" value={form.expectedAttendees} onChange={(event) => updateField("expectedAttendees", event.target.value)} placeholder="0" disabled={viewOnly} /></Field>
             {customTypeOpen ? (
               <div className="next-event-custom-type is-wide">
-                <input value={customTypeName} onChange={(event) => setCustomTypeName(event.target.value)} maxLength={80} placeholder="Example: Open Day" />
+                <label><span>New event type</span><input value={customTypeName} onChange={(event) => setCustomTypeName(event.target.value)} maxLength={80} placeholder="Example: Open Day" autoFocus /></label>
                 <button type="button" onClick={saveCustomType} disabled={savingType}>{savingType ? "Saving…" : "Save type"}</button>
               </div>
             ) : null}
+            <Field label="Expected Attendees"><input type="number" min="0" step="1" value={form.expectedAttendees} onChange={(event) => updateField("expectedAttendees", event.target.value)} placeholder="0" disabled={viewOnly} /></Field>
             <Field label="Start Date & Time" required><input type="datetime-local" value={form.eventStartDate} onChange={(event) => updateField("eventStartDate", event.target.value)} disabled={viewOnly} /></Field>
             <Field label="End Date & Time"><input type="datetime-local" value={form.eventEndDate} onChange={(event) => updateField("eventEndDate", event.target.value)} disabled={viewOnly} /></Field>
             {conflicts.length ? (
@@ -638,13 +973,13 @@ export default function EventRequestFormClient({
           </div>
         </FormSection>
 
-        <FormSection number="2" icon="⚙" title="Projects" description="Add every activity, kit, or technical project required for the event." action={<button type="button" className="events-inline-add next-event-inline-add" onClick={addProject} disabled={viewOnly}>＋ Add Project</button>}>
+        <FormSection number="2" icon="cpu" title="Projects" action={<button type="button" className="events-inline-add next-event-inline-add" onClick={addProject} disabled={viewOnly}><EventIcon name="plus-circle" /> Add Project</button>}>
           <div className="events-repeat-list next-event-repeat-list">
             {!projects.length ? <EmptyRows label="projects" /> : projects.map((item) => {
               const component = components.find((entry) => text(entry.id) === text(item.componentId));
               return (
                 <article className="events-repeat-row events-repeat-row--project next-event-repeat-row next-event-repeat-row--project" key={item.key}>
-                  <Field label="Project / Activity"><select value={item.componentId} onChange={(event) => selectProject(item.key, event.target.value)} disabled={viewOnly}><option value="">Select component</option>{projectComponents.map((entry) => <option value={entry.id} key={entry.id}>{entry.name}</option>)}</select></Field>
+                  <Field label="Project / Activity"><ModernSelect value={item.componentId} onChange={(value) => selectProject(item.key, value)} options={projectComponents.map((entry) => ({ value: entry.id, label: entry.name }))} placeholder="Select project" searchable disabled={viewOnly} ariaLabel="Project or activity" /></Field>
                   <Field label="Quantity"><input type="number" min="0" step="1" value={item.quantity} onChange={(event) => updateProject(item.key, { quantity: event.target.value })} disabled={viewOnly} /></Field>
                   <Field label="Working Cost"><input type="number" min="0" step="0.01" value={item.workingCost} onChange={(event) => updateProject(item.key, { workingCost: event.target.value })} disabled={viewOnly} /></Field>
                   <Field label="Description / Notes" wide><textarea rows={2} value={item.description} onChange={(event) => updateProject(item.key, { description: event.target.value })} maxLength={1500} disabled={viewOnly} /></Field>
@@ -657,9 +992,8 @@ export default function EventRequestFormClient({
 
         <ComponentSection
           number="3"
-          icon="▣"
+          icon="image"
           title="Marketing Materials"
-          description="Select reusable marketing materials and the quantity required."
           kind="marketing"
           rows={marketing}
           source={marketingComponents}
@@ -673,9 +1007,8 @@ export default function EventRequestFormClient({
 
         <ComponentSection
           number="4"
-          icon="⌁"
+          icon="tool"
           title="Venue Requirements"
-          description="List equipment, setup items, and venue needs required for proper execution."
           kind="venue"
           rows={venueRequirements}
           source={venueComponents}
@@ -687,17 +1020,14 @@ export default function EventRequestFormClient({
           onRemove={(key) => setVenueRequirements((current) => current.filter((item) => item.key !== key))}
         />
 
-        <FormSection number="5" icon="⌖" title="Venue & Location Details" description="Give Operations enough detail to prepare the team, transport, and setup.">
+        <FormSection number="5" icon="map-pin" title="Venue & Location Details">
           <div className="events-form-grid next-event-form-grid">
             <Field label="Venue Name" required wide><input value={form.venueName} onChange={(event) => updateField("venueName", event.target.value)} maxLength={240} placeholder="Example: Main Sports Hall" disabled={viewOnly} /></Field>
             <Field label="Venue Type"><input value={form.venueType} onChange={(event) => updateField("venueType", event.target.value)} maxLength={120} placeholder="School hall, outdoor area…" disabled={viewOnly} /></Field>
             <Field label="Governorate / Area" required>
               <div className="next-event-governorate-control">
-                <select value={form.governorate} onChange={(event) => updateField("governorate", event.target.value)} disabled={viewOnly}>
-                  <option value="">Select governorate</option>
-                  {rates.filter((rate) => rate?.isActive !== false && text(rate.areaName)).map((rate) => <option value={rate.areaName} key={rate.id || rate.areaName}>{rate.areaName}</option>)}
-                </select>
-                {!viewOnly ? <button type="button" onClick={openRateEditor}>Edit rates</button> : null}
+                <ModernSelect value={form.governorate} onChange={(value) => updateField("governorate", value)} options={rates.filter((rate) => rate?.isActive !== false && text(rate.areaName)).map((rate) => ({ value: rate.areaName, label: rate.areaName }))} placeholder="Select governorate" searchable disabled={viewOnly} ariaLabel="Governorate or area" />
+                {!viewOnly && featureAllowed(account, "events.requests.governorate_rates") ? <button type="button" onClick={openRateEditor}>Edit rates</button> : null}
               </div>
             </Field>
             <Field label="Google Maps / Location URL" required wide><input type="url" value={form.locationUrl} onChange={(event) => updateField("locationUrl", event.target.value)} maxLength={1000} placeholder="https://maps.app.goo.gl/..." disabled={viewOnly} /><small className={form.locationUrl && !isGoogleMapsUrl(form.locationUrl) ? "is-error" : ""}>{form.locationUrl && !isGoogleMapsUrl(form.locationUrl) ? "Paste a valid Google Maps link." : "Use the exact Google Maps venue link."}</small></Field>
@@ -723,6 +1053,16 @@ export default function EventRequestFormClient({
           <button type="submit" className="events-primary-btn primary-button" disabled={submitting || viewOnly}>{submitting ? (editingId ? "Updating…" : "Submitting…") : (editingId ? "Update Event Request" : "Submit Event Request")}</button>
         </footer>
       </form>
+
+      {componentPickerKind ? (
+        <ComponentPicker
+          kind={componentPickerKind}
+          components={componentPickerKind === "project" ? projectComponents : componentPickerKind === "marketing" ? marketingComponents : venueComponents}
+          alreadySelected={(componentPickerKind === "project" ? projects : componentPickerKind === "marketing" ? marketing : venueRequirements).map((item) => item.componentId)}
+          onClose={() => setComponentPickerKind("")}
+          onConfirm={(componentIds) => componentPickerKind === "project" ? addSelectedProjects(componentIds) : addSelectedComponents(componentPickerKind, componentIds)}
+        />
+      ) : null}
 
       {showRateAuth ? (
         <div className="events-modal-overlay next-modal-layer" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowRateAuth(false); }}>
@@ -761,7 +1101,7 @@ export default function EventRequestFormClient({
 
 function ComponentSection({ number: sectionNumber, icon, title, description, kind, rows, source, allComponents, viewOnly, onAdd, onSelect, onUpdate, onRemove }) {
   return (
-    <FormSection number={sectionNumber} icon={icon} title={title} description={description} action={<button type="button" className="events-inline-add next-event-inline-add" onClick={onAdd} disabled={viewOnly}>＋ Add {kind === "marketing" ? "Material" : "Requirement"}</button>}>
+    <FormSection number={sectionNumber} icon={icon} title={title} description={description} action={<button type="button" className="events-inline-add next-event-inline-add" onClick={onAdd} disabled={viewOnly}><EventIcon name="plus-circle" /> Add {kind === "marketing" ? "Material" : "Requirement"}</button>}>
       <div className="events-repeat-list next-event-repeat-list">
         {!rows.length ? <EmptyRows label={kind === "marketing" ? "marketing materials" : "venue requirements"} /> : rows.map((item) => {
           const component = allComponents.find((entry) => text(entry.id) === text(item.componentId));
@@ -769,7 +1109,7 @@ function ComponentSection({ number: sectionNumber, icon, title, description, kin
           const link = safeHttpUrl(component?.linkUrl);
           return (
             <article className="events-repeat-row next-event-repeat-row next-event-repeat-row--component" key={item.key}>
-              <Field label="Component"><select value={item.componentId} onChange={(event) => onSelect(item.key, event.target.value)} disabled={viewOnly}><option value="">Select component</option>{source.map((entry) => <option value={entry.id} key={entry.id}>{entry.name}</option>)}</select></Field>
+              <Field label="Component"><ModernSelect value={item.componentId} onChange={(value) => onSelect(item.key, value)} options={source.map((entry) => ({ value: entry.id, label: entry.name }))} placeholder="Select component" searchable disabled={viewOnly} ariaLabel="Event component" /></Field>
               <Field label="Quantity"><input type="number" min="0" step="0.01" value={item.quantity} onChange={(event) => onUpdate(item.key, { quantity: event.target.value })} disabled={viewOnly} /></Field>
               <div className="next-event-component-cost"><small>Cost</small><strong>{component ? money(cost) : "Select a component"}</strong><span>{component ? `${money(componentUnitCost(component))} / unit · ${lower(component.ownershipType) === "external_rental" ? "External Rental" : "Company Owned"}` : "Cost details appear here."}</span></div>
               <Field label="Notes" wide><textarea rows={2} value={item.notes} onChange={(event) => onUpdate(item.key, { notes: event.target.value })} maxLength={1000} disabled={viewOnly} /></Field>

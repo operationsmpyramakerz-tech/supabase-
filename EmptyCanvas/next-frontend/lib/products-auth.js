@@ -1,39 +1,81 @@
 import "server-only";
-import { fetchLegacyJson } from "./legacy-api";
+import { performance } from "node:perf_hooks";
+import { getDirectSessionAccountGate } from "./direct-session-account";
+import { recordPerformanceSample } from "./performance-profiler";
 
-function normalize(value) {
-  return String(value || "").trim().toLowerCase();
+async function getDirectAccountGateInternal(requiredPages = [], onSource = () => {}, options = {}) {
+  const direct = await getDirectSessionAccountGate(requiredPages, options).catch(() => null);
+  if (direct) {
+    onSource("direct");
+    return direct;
+  }
+  onSource("direct-unavailable");
+  return {
+    ok: false,
+    status: 503,
+    error: "The direct authentication context is unavailable. Please sign in again or retry shortly.",
+    account: null,
+    memberId: "",
+  };
 }
 
-export async function getLegacyAccountGate(requiredPages = []) {
-  const response = await fetchLegacyJson("/api/account", { timeoutMs: 15000 });
-
-  if (response.status === 401) {
-    return { ok: false, status: 401, error: "Authentication required.", account: null };
-  }
-  if (!response.ok || !response.data) {
-    return {
+export async function getDirectAccountGate(requiredPages = [], options = {}) {
+  const startedAt = performance.now();
+  let source = "direct";
+  let result = null;
+  let thrown = null;
+  try {
+    result = await getDirectAccountGateInternal(requiredPages, (value) => { source = value || source; }, options);
+    if (result) return result;
+    result = {
       ok: false,
-      status: response.status || 503,
-      error: response.error || response.data?.error || "The authentication service is unavailable.",
+      status: 503,
+      error: "The direct authentication context is unavailable. Please sign in again or retry shortly.",
       account: null,
     };
+    return result;
+  } catch (error) {
+    thrown = error;
+    throw error;
+  } finally {
+    recordPerformanceSample({
+      category: "auth",
+      name: options?.authOnly === true ? "account-gate-direct-auth-only" : "account-gate-direct",
+      durationMs: performance.now() - startedAt,
+      ok: thrown ? false : Boolean(result?.ok) || [401, 403].includes(Number(result?.status)),
+      status: Number(result?.status) || (thrown ? Number(thrown?.status) || 500 : (result ? 0 : 503)),
+      meta: {
+        source,
+        requiredPages: Array.isArray(requiredPages) ? requiredPages.length : (requiredPages ? 1 : 0),
+        authOnly: options?.authOnly === true,
+      },
+    });
   }
+}
 
-  const pages = Array.isArray(requiredPages) ? requiredPages : [requiredPages];
-  const wanted = pages.map(normalize).filter(Boolean);
-  if (wanted.length) {
-    const allowed = new Set((response.data.allowedPages || []).map(normalize).filter(Boolean));
-    const hasAccess = wanted.some((page) => allowed.has(page));
-    if (!hasAccess) {
-      return {
-        ok: false,
-        status: 403,
-        error: `${pages.join(" or ")} access is not allowed for this account.`,
-        account: response.data,
-      };
-    }
+export async function getLegacyAccountGate(requiredPages = [], options = {}) {
+  const startedAt = performance.now();
+  let source = "direct";
+  let result = null;
+  let thrown = null;
+  try {
+    result = await getDirectAccountGateInternal(requiredPages, (value) => { source = value || source; }, options);
+    return result;
+  } catch (error) {
+    thrown = error;
+    throw error;
+  } finally {
+    recordPerformanceSample({
+      category: "auth",
+      name: options?.authOnly === true ? "account-gate-auth-only" : "account-gate",
+      durationMs: performance.now() - startedAt,
+      ok: thrown ? false : Boolean(result?.ok) || [401, 403].includes(Number(result?.status)),
+      status: Number(result?.status) || (thrown ? Number(thrown?.status) || 500 : 0),
+      meta: {
+        source,
+        requiredPages: Array.isArray(requiredPages) ? requiredPages.length : (requiredPages ? 1 : 0),
+        authOnly: options?.authOnly === true,
+      },
+    });
   }
-
-  return { ok: true, status: 200, error: "", account: response.data };
 }

@@ -1,3 +1,4 @@
+import ShellStyleLinks from "./ShellStyleLinks";
 import { BodyClassSync } from "./ClassicShellControls";
 import { ClassicStableLoadingHeader, ClassicStableLoadingSidebar } from "./ClassicStableLoadingChrome";
 
@@ -6,10 +7,8 @@ const SIDEBAR_ITEMS = 18;
 export default function ClassicTaskManagementLoading() {
   return (
     <>
-      <link rel="stylesheet" href="/css/style.css?v=bidi-mixed-v1" />
-      <link rel="stylesheet" href="/css/ui-redesign.css?v=sidebar-page-label-frame-v3" />
-      <link rel="stylesheet" href="/css/page-canvas-fix.css?v=page-canvas-single-layer-v3" />
-      <link rel="stylesheet" href="/css/task-management.css?v=next-stage-2j" />
+      <ShellStyleLinks />
+      <link rel="stylesheet" href="/next/css/task-management.css?v=task-management-stable-status-frame-v24" precedence="erp-detail" />
       <BodyClassSync className="task-management-page next-classic-shell-active" />
       <div className="app-container classic-app-shell next-classic-task-loading" aria-label="Loading Task Management">
         <ClassicStableLoadingSidebar activeIndex={14} />

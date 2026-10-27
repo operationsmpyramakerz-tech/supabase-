@@ -1,32 +1,15 @@
+import ShellStyleLinks from "./ShellStyleLinks";
 import { cache } from "react";
 import { cookies } from "next/headers";
 import { BodyClassSync, ClassicMobileDockStructure, ClassicSidebarViewportKeeper } from "./ClassicShellControls";
-import { fetchLegacyJson } from "../lib/legacy-api";
+import { getLegacyAccountGate } from "../lib/products-auth";
 import ClassicStableLoadingNavItem from "./ClassicStableLoadingNavItem";
+import { CLASSIC_MAIN_LINKS, canSeeNavigationLink } from "../lib/navigation-config";
 
 const ALLOWED_PAGES_COOKIE = "ops_ui_allowed_pages_v1";
+const PROFILE_URL_COOKIE = "ops_ui_profile_url_v1";
 const SIDEBAR_SCROLL_COOKIE = "ops_ui_sidebar_scroll_top_v1";
 const SIDEBAR_SCROLL_LEFT_COOKIE = "ops_ui_sidebar_scroll_left_v1";
-
-const CLASSIC_MAIN_LINKS = [
-  { label: "Home", href: "/next/home", icon: "home", permissions: [], alwaysVisible: true, boundary: "workspace" },
-  { label: "Current Orders", href: "/next/orders", icon: "list", permissions: ["Current Orders"] },
-  { label: "Orders Review", href: "/next/orders-review", icon: "award", permissions: ["Orders Review"] },
-  { label: "Operations Orders", href: "/next/operations-orders", icon: "users", permissions: ["Requested Orders", "Operations Orders"] },
-  { label: "Maintenance Orders", href: "/next/maintenance-orders", icon: "tool", permissions: ["Maintenance Orders"] },
-  { label: "Events", href: "/next/events", icon: "calendar", permissions: ["Event Requests", "Events"] },
-  { label: "Shopping Cart", href: "/next/orders/new", icon: "shopping-cart", permissions: ["Create New Order", "Shopping Cart", "Cart", "/orders/new"] },
-  { label: "Stocktaking", href: "/next/stocktaking", icon: "archive", permissions: ["Stocktaking"] },
-  { label: "B2C", href: "/next/b2c", icon: "user-plus", permissions: ["B2C", "Customer Database", "B2C Customer Database", "Customer Form", "B2C Customer Form", "/b2c/database", "/b2c/form"] },
-  { label: "Products", href: "/next/products", icon: "package", permissions: ["Products", "Product", "Components"] },
-  { label: "Kits", href: "/next/kits", icon: "briefcase", permissions: ["Kits", "Proposals", "Products"] },
-  { label: "Proposals", href: "/next/proposals", icon: "file-text", permissions: ["Proposals", "Products"] },
-  { label: "Expenses", href: "/next/expenses", icon: "dollar-sign", permissions: ["Expenses"] },
-  { label: "Expenses by Users", href: "/next/expenses/users", icon: "credit-card", permissions: ["Expenses Users"] },
-  { label: "Task Management", href: "/next/task-management", icon: "git-branch", permissions: ["All Tasks", "My Tasks", "Delegated Tasks", "Task Management"] },
-  { label: "KPIs", href: "/next/kpis", icon: "bar-chart-2", permissions: ["KPIs"] },
-  { label: "Users Center", href: "/next/users-center", icon: "shield", permissions: ["Users Center", "User Access & Data", "User Access and Data", "User Access", "Team Members"], boundary: "users" },
-];
 
 function ClassicIcon({ name }) {
   const common = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true };
@@ -51,17 +34,6 @@ function ClassicIcon({ name }) {
     search: <><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></>,
   };
   return <svg {...common}>{paths[name] || paths.home}</svg>;
-}
-
-function normalize(value) {
-  return String(value || "").trim().toLowerCase();
-}
-
-function canSee(link, allowedPages) {
-  if (link?.alwaysVisible) return true;
-  const allowed = new Set((Array.isArray(allowedPages) ? allowedPages : []).map(normalize));
-  if (!allowed.size) return false;
-  return (link.permissions || []).some((permission) => allowed.has(normalize(permission)));
 }
 
 function BellIcon() {
@@ -99,32 +71,48 @@ function parseAllowedPagesCookie(value) {
   }
 }
 
+function parseHttpUrlCookie(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  let decoded = raw;
+  try { decoded = decodeURIComponent(raw); } catch {}
+  decoded = String(decoded || "").trim();
+  if (!decoded || decoded.length > 3200) return "";
+  try {
+    const parsed = new URL(decoded);
+    return parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed.toString() : "";
+  } catch {
+    return "";
+  }
+}
+
 const readStableChrome = cache(async () => {
   const cookieStore = await cookies();
   const scrollTop = Math.max(0, Number(cookieStore.get(SIDEBAR_SCROLL_COOKIE)?.value) || 0);
   const scrollLeft = Math.max(0, Number(cookieStore.get(SIDEBAR_SCROLL_LEFT_COOKIE)?.value) || 0);
   const fromCookie = parseAllowedPagesCookie(cookieStore.get(ALLOWED_PAGES_COOKIE)?.value);
+  const profileUrl = parseHttpUrlCookie(cookieStore.get(PROFILE_URL_COOKIE)?.value);
   if (Array.isArray(fromCookie)) {
-    return { allowedPages: fromCookie, name: "", photoUrl: "", scrollTop, scrollLeft };
+    return { allowedPages: fromCookie, name: "", photoUrl: profileUrl, scrollTop, scrollLeft };
   }
 
   // First request after deploying this fix may not have the UI cookie yet.
-  // Fall back to the authenticated account endpoint so the loading sidebar is
-  // still permission-correct rather than collapsing to Home only.
+  // Fall back to the shared account gate so the loading sidebar stays
+  // permission-correct without forcing an Express cold start when direct session validation is available.
   try {
-    const response = await fetchLegacyJson("/api/account", { timeoutMs: 4000 });
-    if (response.ok && response.data && typeof response.data === "object") {
+    const gate = await getLegacyAccountGate([]);
+    if (gate.ok && gate.account && typeof gate.account === "object") {
       return {
-        allowedPages: Array.isArray(response.data.allowedPages) ? response.data.allowedPages : [],
-        name: String(response.data.name || response.data.username || "").trim(),
-        photoUrl: String(response.data.photoUrl || "").trim(),
+        allowedPages: Array.isArray(gate.account.allowedPages) ? gate.account.allowedPages : [],
+        name: String(gate.account.name || gate.account.username || "").trim(),
+        photoUrl: String(gate.account.photoUrl || gate.account.profilePicture || profileUrl || "").trim(),
         scrollTop,
         scrollLeft,
       };
     }
   } catch {}
 
-  return { allowedPages: [], name: "", photoUrl: "", scrollTop, scrollLeft };
+  return { allowedPages: [], name: "", photoUrl: profileUrl, scrollTop, scrollLeft };
 });
 
 export async function ClassicStableLoadingSidebar({ activeIndex = -1 }) {
@@ -132,7 +120,7 @@ export async function ClassicStableLoadingSidebar({ activeIndex = -1 }) {
   const allowed = Array.isArray(chrome?.allowedPages) ? chrome.allowedPages : [];
   const links = CLASSIC_MAIN_LINKS
     .map((link, originalIndex) => ({ ...link, originalIndex }))
-    .filter((link) => canSee(link, allowed));
+    .filter((link) => canSeeNavigationLink(link, allowed));
   const visibleHrefs = links.map((link) => link.href);
   const loadingViewportStyle = {
     "--next-loading-sidebar-scroll-top": `${Math.round(chrome?.scrollTop || 0)}px`,
@@ -145,8 +133,8 @@ export async function ClassicStableLoadingSidebar({ activeIndex = -1 }) {
       <ClassicSidebarViewportKeeper />
       <div className="sidebar-header">
         <div className="sidebar-brand-toggle next-classic-loading-brand">
-          <img className="brand-logo-full" src="/images/Logo%20horizontal.png" alt="" />
-          <img className="brand-logo-icon" src="/images/logo.png" alt="" />
+          <img className="brand-logo-full" src="/next/images/Logo%20horizontal.png" alt="" />
+          <img className="brand-logo-icon" src="/next/images/logo.png" alt="" />
         </div>
       </div>
       <nav className="sidebar-nav" aria-label="Loading navigation">
@@ -186,7 +174,9 @@ export async function ClassicStableLoadingHeader({ title = "Home" }) {
           <span className="system-header-search__toggle next-stable-loading-header-button" aria-hidden="true"><ClassicIcon name="search" /></span>
           <span className="notif-bell-btn next-stable-loading-header-button" aria-hidden="true"><BellIcon /></span>
           <span className="header-user next-stable-loading-user" aria-label={name}>
-            {photoUrl ? <img className="header-user__avatar" src={photoUrl} alt="" /> : <span className="next-stable-loading-user__fallback"><UserIcon /></span>}
+            <span className="header-user__avatar next-stable-loading-user__avatar" aria-hidden="true">
+              {photoUrl ? <img className="header-user__img" src={photoUrl} alt="" /> : <span className="next-stable-loading-user__fallback"><UserIcon /></span>}
+            </span>
           </span>
         </div>
       </div>
@@ -201,15 +191,13 @@ export function ClassicStableLoadingShell({
   children,
   mainClassName = "container-full-width next-classic-page-content",
   ariaLabel = "Loading page",
-  classicStyles = [],
+  pageStyles = [],
 }) {
   const classes = [bodyClass, "next-classic-shell-active"].filter(Boolean).join(" ");
   return (
     <>
-      <link rel="stylesheet" href="/css/style.css?v=bidi-mixed-v1" />
-      <link rel="stylesheet" href="/css/ui-redesign.css?v=sidebar-page-label-frame-v3" />
-      <link rel="stylesheet" href="/css/page-canvas-fix.css?v=page-canvas-single-layer-v3" />
-      {classicStyles.map((href) => <link rel="stylesheet" href={href} key={href} />)}
+      <ShellStyleLinks />
+      {pageStyles.map((href) => <link rel="stylesheet" href={href} key={href}  precedence="erp-detail" />)}
       <BodyClassSync className={classes} />
       <div className="app-container classic-app-shell next-classic-stable-loading" aria-label={ariaLabel}>
         <ClassicStableLoadingSidebar activeIndex={activeIndex} />

@@ -1,0 +1,96 @@
+{
+  "id": "/next/pwa-start",
+  "name": "Operations Hub",
+  "short_name": "Operations",
+  "description": "Operations Hub internal ERP web application.",
+  "start_url": "/next/home",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": [
+    "standalone",
+    "minimal-ui"
+  ],
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "orientation": "any",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": [
+    "business",
+    "productivity"
+  ],
+  "launch_handler": {
+    "client_mode": [
+      "navigate-existing",
+      "auto"
+    ]
+  },
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Home",
+      "short_name": "Home",
+      "description": "Open Operations Hub home.",
+      "url": "/next/home",
+      "icons": [
+        {
+          "src": "/icons/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Notifications",
+      "short_name": "Notifications",
+      "description": "Open Operations Hub notifications.",
+      "url": "/next/notifications",
+      "icons": [
+        {
+          "src": "/icons/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "New Order",
+      "short_name": "New Order",
+      "description": "Open the new order workspace.",
+      "url": "/next/orders/new",
+      "icons": [
+        {
+          "src": "/icons/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
+  ],
+  "prefer_related_applications": false
+}

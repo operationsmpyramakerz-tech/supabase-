@@ -1,6 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { navigateWithinApp } from "../../lib/client-navigation";
+import EventIcon from "./EventIcon";
+import { featureAllowed } from "../../lib/feature-permissions-registry";
+import { eventRequestScopeFor } from "../../lib/event-request-scope.mjs";
 
 const STATUS_LABELS = {
   submitted: "Submitted",
@@ -161,7 +165,7 @@ function DetailList({ items, empty }) {
   );
 }
 
-function DetailsModal({ event, canOpenRequests, onClose }) {
+function DetailsModal({ event, canOpenRequests, canExport = true, onClose }) {
   useEffect(() => {
     if (!event) return undefined;
     const onKey = (keyEvent) => { if (keyEvent.key === "Escape") onClose(); };
@@ -191,22 +195,23 @@ function DetailsModal({ event, canOpenRequests, onClose }) {
             <div className="events-detail-grid next-events-detail-grid">
               <DetailItem label="Type" value={typeLabel(event)} />
               <DetailItem label="Organization" value={event.organizationName} />
-              <DetailItem label="Expected attendees" value={event.expectedAttendees ? String(event.expectedAttendees) : "—"} />
-              <DetailItem label="Requested by" value={event.requesterName} />
+              {canOpenRequests ? <DetailItem label="Expected attendees" value={event.expectedAttendees ? String(event.expectedAttendees) : "—"} /> : null}
+              {canOpenRequests ? <DetailItem label="Requested by" value={event.requesterName} /> : null}
             </div>
           </section>
 
           <section className="events-detail-block next-events-detail-section">
             <h3>Venue</h3>
             <div className="events-detail-grid next-events-detail-grid">
-              <DetailItem label="Venue" value={event.venueName} />
+              {canOpenRequests ? <DetailItem label="Venue" value={event.venueName} /> : null}
               <DetailItem label="Governorate" value={event.governorate} />
-              <DetailItem label="Setup time" value={event.venueSetupTime} />
-              <DetailItem label="Utilities" value={utilities} />
+              {canOpenRequests ? <DetailItem label="Setup time" value={event.venueSetupTime} /> : null}
+              {canOpenRequests ? <DetailItem label="Utilities" value={utilities} /> : null}
             </div>
-            {mapUrl ? <a className="next-events-map-link" href={mapUrl} target="_blank" rel="noreferrer">Open map location ↗</a> : null}
+            {canOpenRequests && mapUrl ? <a className="next-events-map-link" href={mapUrl} target="_blank" rel="noreferrer">Open map location ↗</a> : null}
           </section>
 
+          {canOpenRequests ? <>
           <section className="events-detail-block next-events-detail-section">
             <h3>Contact</h3>
             <div className="events-detail-grid next-events-detail-grid">
@@ -236,11 +241,12 @@ function DetailsModal({ event, canOpenRequests, onClose }) {
             <h3>Notes</h3>
             <p>{text(event.venueNotes) || "No venue notes were added."}</p>
           </section>
+          </> : null}
         </div>
 
         <footer className="events-modal__actions next-events-modal-actions">
           <div>
-            <a className="events-secondary-btn secondary-button" href={`/api/events/${encodeURIComponent(event.id)}/pdf`} target="_blank" rel="noreferrer">Download PDF</a>
+            {canExport ? <a className="events-secondary-btn secondary-button" href={`/next/api/events/pdf-direct?id=${encodeURIComponent(event.id)}`} target="_blank" rel="noreferrer">Download PDF</a> : null}
             {canOpenRequests ? <a className="events-secondary-btn secondary-button" href="/next/events">Open Event Requests</a> : null}
           </div>
           <button type="button" className="events-primary-btn primary-button" onClick={onClose}>Close</button>
@@ -252,16 +258,16 @@ function DetailsModal({ event, canOpenRequests, onClose }) {
 
 export default function EventsCalendarClient({ account, initialEvents = [], bootstrapWarnings = [] }) {
   const access = useMemo(() => allowedSet(account), [account]);
-  const canCreate = access.has("event requests");
-  const canOpenRequests = access.has("event requests");
-  const canOpenComponents = access.has("event components");
+  const canCreate = access.has("event requests") && featureAllowed(account, "events.requests.view") && featureAllowed(account, "events.requests.create");
+  const canOpenRequests = access.has("event requests") && featureAllowed(account, "events.requests.view")
+    && !["own", "team", "none"].includes(eventRequestScopeFor(account, "events.requests.view"));
+  const canExport = canOpenRequests && featureAllowed(account, "events.requests.pdf")
+    && !["own", "team", "none"].includes(eventRequestScopeFor(account, "events.requests.pdf"));
   const [events, setEvents] = useState(Array.isArray(initialEvents) ? initialEvents : []);
   const [month, setMonth] = useState(() => startOfMonth(new Date()));
   const [selectedKey, setSelectedKey] = useState(() => dateKey(new Date()));
   const [activeList, setActiveList] = useState("upcoming");
   const [activeEvent, setActiveEvent] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
 
   const selectedDate = useMemo(() => localDay(selectedKey) || startOfDay(new Date()), [selectedKey]);
   const today = useMemo(() => startOfDay(new Date()), []);
@@ -293,32 +299,63 @@ export default function EventsCalendarClient({ account, initialEvents = [], boot
     .sort((a, b) => (startDate(b)?.getTime() || -Infinity) - (startDate(a)?.getTime() || -Infinity)), [datedEvents, today]);
 
   const selectedDayEvents = useMemo(() => eventsForDate(selectedDate), [datedEvents, selectedKey]);
+  const mobileScheduledDayEvents = useMemo(() => selectedDayEvents
+    .filter((event) => normalizeStatus(event.status) !== "cancelled")
+    .sort((a, b) => (startDate(a)?.getTime() || Infinity) - (startDate(b)?.getTime() || Infinity)), [selectedDayEvents]);
+
+  const mobileUpcoming = useMemo(() => datedEvents
+    .filter((event) => {
+      const end = endDate(event);
+      return end && end >= today && normalizeStatus(event.status) !== "cancelled";
+    })
+    .sort((a, b) => (startDate(a)?.getTime() || Infinity) - (startDate(b)?.getTime() || Infinity)), [datedEvents, today]);
+
+  const mobilePast = useMemo(() => datedEvents
+    .filter((event) => {
+      const end = endDate(event);
+      return end && end < today && normalizeStatus(event.status) !== "cancelled";
+    })
+    .sort((a, b) => (startDate(b)?.getTime() || -Infinity) - (startDate(a)?.getTime() || -Infinity)), [datedEvents, today]);
+
+  const currentMonthEvents = useMemo(() => {
+    const currentMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    const nextMonthStart = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+    return datedEvents.filter((event) => {
+      if (normalizeStatus(event.status) === "cancelled") return false;
+      const start = startDate(event);
+      const end = endDate(event);
+      return Boolean(start && end && end >= currentMonthStart && start < nextMonthStart);
+    });
+  }, [datedEvents, today]);
+
+  const mobileWeekDays = useMemo(() => {
+    const offset = (selectedDate.getDay() + 6) % 7;
+    const first = new Date(selectedDate);
+    first.setDate(selectedDate.getDate() - offset);
+    return Array.from({ length: 7 }, (_, index) => {
+      const day = new Date(first);
+      day.setDate(first.getDate() + index);
+      return day;
+    });
+  }, [selectedKey]);
+
   const list = activeList === "past" ? past : upcoming;
-  const activeMonthEvents = useMemo(() => datedEvents.filter((event) => {
-    const start = startDate(event);
-    const end = endDate(event);
-    const first = new Date(month.getFullYear(), month.getMonth(), 1);
-    const last = new Date(month.getFullYear(), month.getMonth() + 1, 0);
-    return start && end && start <= last && end >= first;
-  }), [datedEvents, month]);
-
-  async function refresh() {
-    setLoading(true);
-    setError("");
-    try {
-      const payload = await requestJson(`/api/events?_ts=${Date.now()}`);
-      setEvents(Array.isArray(payload?.events) ? payload.events : []);
-    } catch (refreshError) {
-      setError(refreshError?.message || "Unable to refresh the schedule.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
   function selectDate(day) {
     setSelectedKey(dateKey(day));
     if (day.getFullYear() !== month.getFullYear() || day.getMonth() !== month.getMonth()) {
       setMonth(startOfMonth(day));
+    }
+  }
+
+  async function openEventDetails(event) {
+    if (!event?.id) return;
+    setActiveEvent(event);
+    try {
+      const body = await requestJson(`/next/api/events/${encodeURIComponent(event.id)}?${canOpenRequests ? "" : "view=calendar&"}_ts=${Date.now()}`);
+      if (body?.event) setActiveEvent(body.event);
+    } catch {
+      // Keep the compact summary visible if the detail request is temporarily
+      // unavailable. The list/calendar itself must remain usable.
     }
   }
 
@@ -327,111 +364,225 @@ export default function EventsCalendarClient({ account, initialEvents = [], boot
     const params = new URLSearchParams({ startDate: selectedKey });
     const codes = Array.from(new Set(overlapping.map((event) => text(event.eventCode)).filter(Boolean)));
     if (codes.length) params.set("conflictCodes", codes.join(","));
-    window.location.href = `/next/events/new?${params.toString()}`;
+    navigateWithinApp(`/next/events/new?${params.toString()}`);
+  }
+
+  function shiftSelectedWeek(direction) {
+    const next = new Date(selectedDate);
+    next.setDate(selectedDate.getDate() + (direction * 7));
+    selectDate(next);
   }
 
   return (
-    <section className="events-shell events-calendar-shell next-events-calendar-page">
-      <section className="events-calendar-workspace" aria-label="Event schedule">
+    <section className="events-shell events-calendar-shell">
+      <section className="events-calendar-workspace" aria-label="Event calendar">
+        <section className="events-calendar-mobile-view" aria-label="Mobile event schedule">
+          {canCreate ? (
+            <button type="button" className="events-mobile-add-card" onClick={openNewEvent} aria-label="Add new event">
+              <span className="events-mobile-add-card__copy">
+                <strong>Add new</strong>
+                <small>Create a new event</small>
+              </span>
+              <span className="events-mobile-add-card__plus"><EventIcon name="plus-circle" /></span>
+            </button>
+          ) : null}
+
+          <section className="events-mobile-week-card" aria-label="Weekly event calendar">
+            <div className="events-mobile-week-toolbar">
+              <button type="button" onClick={() => shiftSelectedWeek(-1)} aria-label="Previous week"><EventIcon name="chevron-left" /></button>
+              <button type="button" className="events-mobile-week-month" onClick={() => selectDate(new Date())}>
+                <strong>{selectedDate.toLocaleDateString("en-GB", { month: "long" })}</strong>
+                <span>{selectedDate.getFullYear()} · Today</span>
+              </button>
+              <button type="button" onClick={() => shiftSelectedWeek(1)} aria-label="Next week"><EventIcon name="chevron-right" /></button>
+            </div>
+
+            <div className="events-mobile-week-strip">
+              {mobileWeekDays.map((day) => {
+                const selected = dateKey(day) === selectedKey;
+                const current = sameDay(day, today);
+                const scheduled = eventsForDate(day).filter((event) => normalizeStatus(event.status) !== "cancelled");
+                return (
+                  <button
+                    type="button"
+                    key={dateKey(day)}
+                    className={`events-mobile-week-day${selected ? " is-selected" : ""}${current ? " is-today" : ""}${scheduled.length ? " has-events" : ""}`}
+                    onClick={() => selectDate(day)}
+                    aria-pressed={selected}
+                    aria-label={`${formatDate(day, { weekday: "long", day: "numeric", month: "long" })}${scheduled.length ? `, ${scheduled.length} event${scheduled.length === 1 ? "" : "s"}` : ""}`}
+                  >
+                    <span>{day.toLocaleDateString("en-GB", { weekday: "short" })}</span>
+                    <strong>{day.getDate()}</strong>
+                    <i aria-hidden="true" />
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+
+          <section className="events-mobile-summary-grid" aria-label="Event summary">
+            <article className="events-mobile-summary-card events-mobile-summary-card--past">
+              <span><EventIcon name="archive" /> Past</span>
+              <strong>{mobilePast.length}</strong>
+              <small>all previous events</small>
+            </article>
+            <article className="events-mobile-summary-card events-mobile-summary-card--upcoming">
+              <span><EventIcon name="clock" /> Upcoming</span>
+              <strong>{mobileUpcoming.length}</strong>
+              <small>scheduled ahead</small>
+            </article>
+            <article className="events-mobile-summary-card events-mobile-summary-card--month">
+              <span><EventIcon name="calendar" /> This month</span>
+              <strong>{currentMonthEvents.length}</strong>
+              <small>{today.toLocaleDateString("en-GB", { month: "short", year: "numeric" })}</small>
+            </article>
+          </section>
+
+          <section className="events-mobile-day-feed" aria-labelledby="eventsMobileDayTitle">
+            <div className="events-mobile-day-feed__head">
+              <div>
+                <span>{sameDay(selectedDate, today) ? "TODAY" : selectedDate.toLocaleDateString("en-GB", { weekday: "long" }).toUpperCase()}</span>
+                <h3 id="eventsMobileDayTitle">{formatDate(selectedDate, { day: "numeric", month: "long", year: "numeric" })}</h3>
+              </div>
+              <b>{mobileScheduledDayEvents.length}</b>
+            </div>
+
+            <div className="events-mobile-event-list">
+              {mobileScheduledDayEvents.length ? mobileScheduledDayEvents.map((event) => (
+                <button type="button" className="events-mobile-event-card" key={event.id} onClick={() => openEventDetails(event)}>
+                  <span className="events-mobile-event-card__date">
+                    <strong>{formatDate(startDate(event), { day: "2-digit" })}</strong>
+                    <small>{formatDate(startDate(event), { month: "short" })}</small>
+                  </span>
+                  <span className="events-mobile-event-card__body">
+                    <span>{typeLabel(event)}</span>
+                    <strong>{event.eventName || "Untitled Event"}</strong>
+                    <small>{event.organizationName || event.governorate || "Location to be confirmed"}</small>
+                  </span>
+                  <span className="events-mobile-event-card__side">
+                    <StatusPill status={event.status} />
+                    <EventIcon name="arrow-up-right" />
+                  </span>
+                </button>
+              )) : (
+                <div className="events-mobile-day-empty">
+                  <span><EventIcon name="calendar" /></span>
+                  <strong>No events on this date</strong>
+                  <small>Select another day from the week above{canCreate ? " or use the Add new card above." : "."}</small>
+                </div>
+              )}
+            </div>
+          </section>
+        </section>
+
+        <div className="events-calendar-desktop-view">
         <div className="events-calendar-workspace__top">
-          <div><span className="events-eyebrow">Event schedule</span></div>
+          <div>
+            <span className="events-eyebrow"><EventIcon name="calendar" /> Event schedule</span>
+            <h2 className="events-visually-hidden" id="eventsCalendarTitle">Calendar</h2>
+          </div>
           <div className="events-calendar-toolbar">
-            <button type="button" className="events-secondary-btn" onClick={() => selectDate(new Date())}>Today</button>
-            <button type="button" className="events-secondary-btn" onClick={refresh} disabled={loading}>{loading ? "Refreshing…" : "Refresh"}</button>
-            {canCreate ? <button type="button" className="events-primary-btn" onClick={openNewEvent}>＋ Add New Event</button> : null}
+            <button type="button" className="events-secondary-btn events-calendar-today" onClick={() => selectDate(new Date())}><EventIcon name="crosshair" /><span>Today</span></button>
+            {canCreate ? <button type="button" className="events-primary-btn" onClick={openNewEvent}><EventIcon name="plus-circle" /><span>Add New Event</span></button> : null}
           </div>
         </div>
 
-        {bootstrapWarnings.length ? <div className="next-inline-warning">Some optional calendar data could not be loaded. The available schedule is shown below.</div> : null}
-        {error ? <div className="next-inline-warning next-inline-warning--error">{error}</div> : null}
+        <div className="events-calendar-layout">
+          <section className="events-calendar-card" aria-label="Monthly event calendar">
+            <div className="events-calendar-card__header">
+              <button type="button" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))} className="events-calendar-nav" aria-label="Previous month"><EventIcon name="chevron-left" /></button>
+              <div className="events-calendar-month-title"><h3>{month.toLocaleDateString("en-GB", { month: "long" })}</h3><span>{month.getFullYear()}</span></div>
+              <button type="button" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))} className="events-calendar-nav" aria-label="Next month"><EventIcon name="chevron-right" /></button>
+            </div>
 
-      <div className="events-calendar-layout next-events-calendar-layout">
-        <section className="events-calendar-card next-events-calendar-card">
-          <header className="events-calendar-card__header">
-            <button type="button" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))} className="events-calendar-nav" aria-label="Previous month">‹</button>
-            <div className="events-calendar-month-title"><h3>{month.toLocaleDateString("en-GB", { month: "long" })}</h3><span>{month.getFullYear()}</span></div>
-            <button type="button" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))} className="events-calendar-nav" aria-label="Next month">›</button>
-          </header>
+            <div className="events-calendar-weekdays" aria-hidden="true">
+              {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => <span key={day}>{day}</span>)}
+            </div>
 
-          <div className="events-calendar-weekdays next-events-calendar-weekdays" aria-hidden="true">
-            {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => <span key={day}>{day}</span>)}
-          </div>
+            <div className="events-calendar-grid" aria-live="polite">
+              {calendarDays.map((day) => {
+                const scheduled = eventsForDate(day);
+                const outside = day.getMonth() !== month.getMonth();
+                const selected = dateKey(day) === selectedKey;
+                const current = sameDay(day, today);
+                const markers = scheduled.slice(0, 3);
+                return (
+                  <button
+                    type="button"
+                    key={dateKey(day)}
+                    className={`events-calendar-day${outside ? " is-outside" : ""}${selected ? " is-selected" : ""}${current ? " is-today" : ""}${scheduled.length ? " has-events" : ""}`}
+                    onClick={() => selectDate(day)}
+                    aria-pressed={selected}
+                    aria-label={`${formatDate(day, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}${scheduled.length ? `, ${scheduled.length} scheduled event${scheduled.length === 1 ? "" : "s"}` : ""}`}
+                  >
+                    <span className="events-calendar-day__number">{day.getDate()}</span>
+                    {scheduled.length ? (
+                      <span className="events-calendar-day__markers">
+                        {markers.map((event, index) => <i className={`events-calendar-marker events-calendar-marker--${typeClass(event)}`} key={`${event.id}-${index}`} />)}
+                        {scheduled.length > markers.length ? <span className="events-calendar-more">+{scheduled.length - markers.length}</span> : null}
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
 
-          <div className="events-calendar-grid next-events-calendar-grid">
-            {calendarDays.map((day) => {
-              const scheduled = eventsForDate(day);
-              const outside = day.getMonth() !== month.getMonth();
-              const selected = dateKey(day) === selectedKey;
-              const current = sameDay(day, today);
-              const markers = scheduled.slice(0, 3);
-              return (
-                <button
-                  type="button"
-                  key={dateKey(day)}
-                  className={`events-calendar-day ${outside ? "is-outside " : ""}${selected ? "is-selected " : ""}${current ? "is-today " : ""}${scheduled.length ? "has-events" : ""}`.trim()}
-                  onClick={() => selectDate(day)}
-                  aria-pressed={selected}
-                  aria-label={`${formatDate(day, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}${scheduled.length ? `, ${scheduled.length} event${scheduled.length === 1 ? "" : "s"}` : ""}`}
-                >
-                  <span className="events-calendar-day__number day-number">{day.getDate()}</span>
-                  {scheduled.length ? (
-                    <span className="events-calendar-day__markers day-markers">
-                      {markers.map((event, index) => <i className={`type-${typeClass(event)}`} key={`${event.id}-${index}`} />)}
-                      {scheduled.length > markers.length ? <b>+{scheduled.length - markers.length}</b> : null}
-                    </span>
-                  ) : null}
-                </button>
-              );
-            })}
-          </div>
-
-          <footer className="events-calendar-legend next-events-calendar-legend">
-            <span><i className="selected" /> Selected date</span>
-            <span><i className="scheduled" /> Event scheduled</span>
-          </footer>
-        </section>
-
-        <aside className="events-calendar-sidebar next-events-calendar-side">
-          <section className="next-events-calendar-selected-card">
-            <header><div><small>Selected date</small><h3>{formatDate(selectedDate, { weekday: "long", day: "2-digit", month: "long" })}</h3></div><b>{selectedDayEvents.length}</b></header>
-            <div className="next-events-calendar-selected-list">
-              {selectedDayEvents.length ? selectedDayEvents.map((event) => (
-                <button type="button" key={event.id} onClick={() => setActiveEvent(event)}>
-                  <i className={`type-${typeClass(event)}`} />
-                  <span><strong>{event.eventName || "Untitled Event"}</strong><small>{event.organizationName || event.governorate || typeLabel(event)}</small></span>
-                  <StatusPill status={event.status} />
-                </button>
-              )) : <div className="next-events-calendar-empty"><strong>No events on this date</strong><span>Select another date or create a new event.</span></div>}
+            <div className="events-calendar-legend">
+              <span><i className="events-calendar-dot events-calendar-dot--selected" />Selected date</span>
+              <span><i className="events-calendar-dot events-calendar-dot--has-events" />Event scheduled</span>
             </div>
           </section>
 
-          <section className="events-calendar-events-card next-events-calendar-list-card">
-            <div className="events-calendar-list-tabs next-events-calendar-tabs">
-              <button type="button" className={`events-calendar-list-tab${activeList === "upcoming" ? " is-active active" : ""}`} onClick={() => setActiveList("upcoming")}><span>Upcoming</span><b>{upcoming.length}</b></button>
-              <button type="button" className={`events-calendar-list-tab${activeList === "past" ? " is-active active" : ""}`} onClick={() => setActiveList("past")}><span>Past</span><b>{past.length}</b></button>
-            </div>
-            <div className="events-calendar-section-heading next-events-calendar-list-head"><div><small>{activeList === "past" ? "Before today" : `From ${formatDate(selectedDate, { day: "2-digit", month: "short", year: "numeric" })}`}</small><h3>{activeList === "past" ? "Past Events" : "Upcoming Events"}</h3></div><b>{list.length}</b></div>
-            <div className="events-calendar-upcoming-list next-events-calendar-event-list">
-              {list.length ? list.map((event) => (
-                <button type="button" className="events-calendar-upcoming-item" key={event.id} onClick={() => setActiveEvent(event)}>
-                  <span className="events-calendar-upcoming-item__date event-date"><strong>{formatDate(startDate(event), { day: "2-digit", month: "short" })}</strong><small>{startDate(event)?.getFullYear() || "—"}</small></span>
-                  <span className="events-calendar-upcoming-item__body event-copy"><small>{event.organizationName || event.governorate || "Event execution"}</small><strong>{event.eventName || "Untitled Event"}</strong><em>{typeLabel(event)} · {event.governorate || "Location to be confirmed"}</em></span>
-                  <span className="event-arrow">↗</span>
+          <aside className="events-calendar-sidebar">
+            <section className="events-calendar-events-card" aria-labelledby="eventsCalendarListTitle">
+              <div className="events-calendar-list-tabs" role="tablist" aria-label="Event schedule lists">
+                <button type="button" role="tab" aria-selected={activeList === "upcoming"} className={`events-calendar-list-tab${activeList === "upcoming" ? " is-active" : ""}`} onClick={() => setActiveList("upcoming")}>
+                  <EventIcon name="clock" /><span>Upcoming Events</span><b>{upcoming.length}</b>
                 </button>
-              )) : <div className="next-events-calendar-empty"><strong>{activeList === "past" ? "No past events" : "No upcoming events"}</strong><span>{activeList === "past" ? "Completed event history will appear here." : "No active events are scheduled from the selected date onward."}</span></div>}
-            </div>
-          </section>
-        </aside>
-      </div>
+                <button type="button" role="tab" aria-selected={activeList === "past"} className={`events-calendar-list-tab${activeList === "past" ? " is-active" : ""}`} onClick={() => setActiveList("past")}>
+                  <EventIcon name="archive" /><span>Past Events</span><b>{past.length}</b>
+                </button>
+              </div>
 
-      <div className="next-events-calendar-footer-actions">
-        {canOpenRequests ? <a className="events-secondary-btn secondary-button" href="/next/events">Event Requests</a> : null}
-        {canOpenComponents ? <a className="events-secondary-btn secondary-button" href="/next/event-components">Event Components</a> : null}
-        <a className="events-secondary-btn secondary-button" href="/events/calendar?classic=1">Open classic Calendar</a>
-      </div>
+              <div className="events-calendar-events-card__body">
+                <div className="events-calendar-section-heading">
+                  <div>
+                    <span className="events-calendar-section-label">{activeList === "past" ? "Before today" : `From ${formatDate(selectedDate, { day: "numeric", month: "short", year: "numeric" })}`}</span>
+                    <h3 id="eventsCalendarListTitle">{activeList === "past" ? "Past Events" : "Upcoming Events"}</h3>
+                  </div>
+                  <span className="events-calendar-count">{list.length}</span>
+                </div>
 
+                <div className="events-calendar-upcoming-list" role="tabpanel">
+                  {list.length ? list.map((event) => (
+                    <button type="button" className="events-calendar-upcoming-item" key={event.id} onClick={() => openEventDetails(event)}>
+                      <span className="events-calendar-upcoming-item__date">
+                        <strong>{formatDate(startDate(event), { day: "2-digit", month: "short" })}</strong>
+                        <small>{String(event.eventStartDate || "").slice(0, 4) || "—"}</small>
+                      </span>
+                      <span className="events-calendar-upcoming-item__body">
+                        <span className="events-calendar-upcoming-item__meta">{event.organizationName || event.governorate || "Event execution"}</span>
+                        <strong>{event.eventName || "Untitled Event"}</strong>
+                        <small>{typeLabel(event)} · {event.governorate || "Location to be confirmed"}</small>
+                      </span>
+                      <EventIcon name="arrow-up-right" />
+                    </button>
+                  )) : (
+                    <div className="events-calendar-empty events-calendar-empty--compact">
+                      <EventIcon name="calendar" />
+                      <strong>{activeList === "past" ? "No past events" : "No upcoming events"}</strong>
+                      <span>{activeList === "past" ? "Completed event history will appear here." : "No active events are scheduled from the selected date onward."}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </section>
+          </aside>
+        </div>
+        </div>
       </section>
-      <DetailsModal event={activeEvent} canOpenRequests={canOpenRequests} onClose={() => setActiveEvent(null)} />
+
+      <DetailsModal event={activeEvent} canOpenRequests={canOpenRequests} canExport={canExport} onClose={() => setActiveEvent(null)} />
     </section>
   );
 }

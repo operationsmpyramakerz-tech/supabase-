@@ -1,16 +1,24 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { confirmDelete } from "../../lib/client-confirm";
+import dynamic from "next/dynamic";
+import { navigateWithinApp } from "../../lib/client-navigation";
+
+const ProductPicker = dynamic(() => import("./ShoppingCartDialogs").then((module) => module.ProductPicker), { ssr: false });
+const OrderSubmissionBar = dynamic(() => import("./ShoppingCartDialogs").then((module) => module.OrderSubmissionBar), { ssr: false });
 
 const DEFAULT_ORDER_TYPES = ["Request Products", "Withdraw Products", "Request Maintenance"];
+const DIRECT_API_BASE = "/next/api";
 const EDIT_TRANSFER_TTL_MS = 30 * 60 * 1000;
+const CART_DRAFT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 const TYPE_META = {
   requestproducts: {
     label: "Request Products",
     icon: "shopping-cart",
     className: "request",
-    description: "Add new products or supplies and send them as a stock request.",
+    description: "",
     checkout: "Checkout Now",
   },
   withdrawproducts: {
@@ -140,10 +148,6 @@ async function requestJson(url, options = {}) {
   });
 
   if (response.status === 401) {
-    if (/submit-order/i.test(url)) {
-      const body = await response.json().catch(() => ({}));
-      throw new Error(apiMessage(body, "Incorrect password."));
-    }
     window.location.href = `/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`;
     throw new Error("Your session has expired.");
   }
@@ -230,6 +234,75 @@ function clearEditTransfer() {
   }
 }
 
+function storageKeyPart(value, fallback = "default") {
+  const clean = text(value).toLowerCase().slice(0, 180);
+  return encodeURIComponent(clean || fallback);
+}
+
+function cartDraftStorageKey({ draftScope = "account", type = "", editMode = false, editKey = "" } = {}) {
+  const scope = storageKeyPart(draftScope, "account");
+  const typeKey = storageKeyPart(key(type), "default");
+  const modeKey = editMode
+    ? `edit:${storageKeyPart(editKey || typeKey, "default")}`
+    : `new:${typeKey}`;
+  return `shopping_cart:draft:v3:${scope}:${modeKey}`;
+}
+
+function readCartDraft(options = {}) {
+  const storageKey = cartDraftStorageKey(options);
+  const candidates = [];
+  for (const storage of storageAreas()) {
+    try {
+      const payload = parseJson(storage.getItem(storageKey));
+      if (!payload) continue;
+      const ts = number(payload?.ts);
+      if (!ts || Date.now() - ts > CART_DRAFT_TTL_MS) {
+        storage.removeItem(storageKey);
+        continue;
+      }
+      if (key(payload?.orderType) && key(payload.orderType) !== key(options?.type)) continue;
+      candidates.push(payload);
+    } catch {}
+  }
+  candidates.sort((left, right) => number(right?.ts) - number(left?.ts));
+  return candidates[0] || null;
+}
+
+function writeCartDraft({ draftScope = "account", type = "", editMode = false, editKey = "", products = [], reason = "", editToken = "" } = {}) {
+  const storageKey = cartDraftStorageKey({ draftScope, type, editMode, editKey });
+  const cleanProducts = normalizeDraft(products);
+  const stores = storageAreas();
+  if (!cleanProducts.length) {
+    for (const storage of stores) {
+      try { storage.removeItem(storageKey); } catch {}
+    }
+    return true;
+  }
+
+  const payload = JSON.stringify({
+    ts: Date.now(),
+    orderType: text(type),
+    reason: text(reason),
+    products: cleanProducts,
+    editToken: editMode ? text(editToken) : "",
+  });
+  let saved = false;
+  for (const storage of stores) {
+    try {
+      storage.setItem(storageKey, payload);
+      saved = true;
+    } catch {}
+  }
+  return saved;
+}
+
+function clearCartDraft(options = {}) {
+  const storageKey = cartDraftStorageKey(options);
+  for (const storage of storageAreas()) {
+    try { storage.removeItem(storageKey); } catch {}
+  }
+}
+
 function CartSvgIcon({ name, size = 18 }) {
   const common = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round", width: size, height: size, "aria-hidden": true };
   const icons = {
@@ -242,6 +315,14 @@ function CartSvgIcon({ name, size = 18 }) {
     "arrow-left": <><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></>,
     "external-link": <><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></>,
     plus: <><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></>,
+    minus: <line x1="5" y1="12" x2="19" y2="12"/>,
+    search: <><circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16.65" y2="16.65"/></>,
+    "chevron-down": <polyline points="6 9 12 15 18 9"/>,
+    package: <><path d="M16.5 9.4 7.55 4.24"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.29 7 12 12 20.71 7"/><line x1="12" y1="22" x2="12" y2="12"/></>,
+    folder: <path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>,
+    check: <polyline points="20 6 9 17 4 12"/>,
+    x: <><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>,
+    trash: <><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M8 6V4h8v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></>,
   };
   return <svg {...common}>{icons[name] || icons.grid}</svg>;
 }
@@ -272,66 +353,13 @@ function TypeSelection({ orderTypes, onChoose }) {
           return (
             <button className={`classic-cart-order-type-btn ${themeClass}`} type="button" key={type} onClick={() => onChoose(type)}>
               <span className="classic-cart-order-type-icon"><CartSvgIcon name={meta.icon} size={24}/></span>
-              <span className="classic-cart-order-type-copy"><strong>{type}</strong><small>{meta.description}</small></span>
+              <span className="classic-cart-order-type-copy"><strong>{type}</strong>{meta.description ? <small>{meta.description}</small> : null}</span>
               <span className="classic-cart-order-type-arrow"><CartSvgIcon name="arrow-right" size={18}/></span>
             </button>
           );
         }) : <div className="classic-cart-order-type-loading"><span/><strong>No order types found.</strong></div>}
       </div>
     </section>
-  );
-}
-
-function ProductPicker({ products, type, item, onClose, onSave }) {
-  const maintenance = isMaintenance(type);
-  const [selectedId, setSelectedId] = useState(text(item?.id));
-  const [qty, setQty] = useState(item?.quantity || 1);
-  const [issueDescription, setIssueDescription] = useState(text(item?.issueDescription));
-  const [error, setError] = useState("");
-
-  const selected = products.find((product) => product.id === selectedId) || null;
-
-  const submit = () => {
-    if (!selected) return setError("Select a product first.");
-    if (maintenance && !text(issueDescription)) return setError("Issue Description is required for maintenance requests.");
-    if (!maintenance && quantity(qty, 0) <= 0) return setError("Quantity must be greater than zero.");
-    onSave({ id: selected.id, quantity: maintenance ? 1 : quantity(qty, 1), issueDescription: maintenance ? text(issueDescription) : "", schoolId: text(item?.schoolId) });
-  };
-
-  return (
-    <div className="classic-cart-modal-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section className="classic-cart-modal-card" role="dialog" aria-modal="true" aria-labelledby="classic-cart-modal-title">
-        <h3 className="classic-cart-modal-title" id="classic-cart-modal-title">{isWithdraw(type) ? "Update Withdraw Cart" : "Update Cart"}</h3>
-        <div className={`classic-cart-modal-grid ${maintenance ? "is-maintenance" : ""}`}>
-          <label className="classic-cart-mfield full">
-            <span>Product <em>*</em></span>
-            <select value={selectedId} onChange={(event) => { setSelectedId(event.target.value); setError(""); }} aria-label="Product">
-              <option value="">Select product...</option>
-              {products.map((product) => <option value={product.id} key={product.id}>{product.name}{product.displayId ? ` · ${product.displayId}` : ""}{product.unit ? ` · ${product.unit}` : ""}</option>)}
-            </select>
-          </label>
-          {!maintenance ? (
-            <label className="classic-cart-mfield">
-              <span>Qty <em>*</em></span>
-              <div className="classic-cart-qty-input-with-unit">
-                <input type="number" min="0.01" step="0.01" value={qty} onChange={(event) => setQty(event.target.value)} />
-                <b className={!selected?.unit ? "is-placeholder" : ""}>{selected?.unit || "Unit"}</b>
-              </div>
-            </label>
-          ) : (
-            <label className="classic-cart-mfield full">
-              <span>Issue Description <em>*</em></span>
-              <textarea value={issueDescription} onChange={(event) => setIssueDescription(event.target.value)} placeholder="Describe the issue..." rows={4} />
-            </label>
-          )}
-          {error ? <p className="classic-cart-modal-error full">{error}</p> : null}
-        </div>
-        <div className="classic-cart-modal-actions">
-          <button className="classic-cart-btn-ghost" type="button" onClick={onClose}>Close</button>
-          <button className="classic-cart-btn-solid" type="button" onClick={submit}>{item ? "Update" : "Add"}</button>
-        </div>
-      </section>
-    </div>
   );
 }
 
@@ -349,9 +377,6 @@ function CartItem({ item, product, type, index, onEdit, onDelete, onQuantityChan
   const withdraw = isWithdraw(type);
   const qty = quantity(item.quantity, 1);
   const total = product.unitPrice * qty * (withdraw ? -1 : 1);
-  const excludedTags = new Set(DEFAULT_ORDER_TYPES.map(key));
-  const tags = product.tags.filter((tag) => !excludedTags.has(key(tag))).slice(0, 2);
-
   if (maintenance) {
     return (
       <article className="classic-cart-row classic-cart-row--maintenance-card">
@@ -372,40 +397,189 @@ function CartItem({ item, product, type, index, onEdit, onDelete, onQuantityChan
 
   return (
     <article className="classic-cart-row classic-cart-row--request-card">
-      <div className="classic-cart-card-main" role="button" tabIndex={0} onClick={() => onEdit(item)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onEdit(item); } }}>
-        <CartThumb product={product} index={index}/>
-        <span className="classic-cart-prod-meta"><strong>{product.name}</strong>{tags.length ? <small>{tags.join(" • ")}</small> : null}{product.displayId ? <small className="part">Part No: {product.displayId}</small> : null}</span>
+      <div className="classic-cart-card-topline">
+        <div className="classic-cart-card-main" role="button" tabIndex={0} onClick={() => onEdit(item)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onEdit(item); } }}>
+          <CartThumb product={product} index={index}/>
+          <span className="classic-cart-prod-meta">
+            <strong>{product.name}</strong>
+            {product.displayId ? <small className="part">Part No: {product.displayId}</small> : null}
+          </span>
+        </div>
+        <div className="classic-cart-card-actions classic-cart-card-actions--compact">
+          {product.url ? <a className="classic-cart-action classic-cart-action--open" href={product.url} target="_blank" rel="noopener noreferrer" aria-label={`Open ${product.name}`} title="Open product"><CartSvgIcon name="external-link" size={17}/><span>Open</span></a> : <button className="classic-cart-action classic-cart-action--open" type="button" disabled aria-label="No product link" title="No product link"><CartSvgIcon name="external-link" size={17}/><span>Open</span></button>}
+          <button className="classic-cart-action classic-cart-action--delete" type="button" onClick={() => onDelete(item)} aria-label={`Delete ${product.name}`} title="Delete product"><CartSvgIcon name="trash" size={17}/><span>Delete</span></button>
+        </div>
       </div>
       <div className="classic-cart-card-metrics">
         <div className="classic-cart-card-metric classic-cart-card-metric--qty">
           <span>Qty</span>
           <div className="classic-cart-card-qty-unit-row">
             <div className="classic-cart-qty-control">
-              <button type="button" onClick={() => onQuantityChange(item.id, Math.max(0.01, qty - 1))}>−</button>
-              <b>{withdraw ? `-${formatQuantity(qty)}` : formatQuantity(qty)}</b>
-              <button type="button" onClick={() => onQuantityChange(item.id, qty + 1)}>+</button>
+              <button className="classic-cart-qty-step classic-cart-qty-step--minus" type="button" onClick={() => onQuantityChange(item.id, Math.max(0.01, qty - 1))} aria-label={`Decrease ${product.name} quantity`}>
+                <CartSvgIcon name="minus" size={15}/>
+              </button>
+              <b aria-live="polite">{withdraw ? `-${formatQuantity(qty)}` : formatQuantity(qty)}</b>
+              <button className="classic-cart-qty-step classic-cart-qty-step--plus" type="button" onClick={() => onQuantityChange(item.id, qty + 1)} aria-label={`Increase ${product.name} quantity`}>
+                <CartSvgIcon name="plus" size={15}/>
+              </button>
             </div>
             <strong className="classic-cart-unit-badge" title={product.unit}>{product.unit}</strong>
           </div>
         </div>
         <div className="classic-cart-card-metric"><span>Unit Price</span><strong>{formatMoney(product.unitPrice)}</strong></div>
-        <div className="classic-cart-card-metric"><span>Total</span><strong>{formatMoney(total)}</strong></div>
-      </div>
-      <div className="classic-cart-card-actions">
-        {product.url ? <a className="classic-cart-action classic-cart-action--open" href={product.url} target="_blank" rel="noopener noreferrer"><CartSvgIcon name="external-link" size={16}/><span>Open</span></a> : <button className="classic-cart-action classic-cart-action--open" type="button" disabled><CartSvgIcon name="external-link" size={16}/><span>Open</span></button>}
-        <button className="classic-cart-action classic-cart-action--delete" type="button" onClick={() => onDelete(item)}>Delete</button>
+        <div className="classic-cart-card-metric classic-cart-card-metric--total"><span>Total</span><strong>{formatMoney(total)}</strong></div>
       </div>
     </article>
   );
 }
 
+
+function SlideToSubmit({ onSubmit, disabled = false, label = "Slide to submit" }) {
+  const trackRef = useRef(null);
+  const knobRef = useRef(null);
+  const dragRef = useRef({ active: false, pointerId: null, startX: 0, startOffset: 0 });
+  const [offset, setOffset] = useState(0);
+  const [maxTravel, setMaxTravel] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  const measure = () => {
+    const track = trackRef.current;
+    const knob = knobRef.current;
+    if (!track || !knob) return;
+    const styles = window.getComputedStyle(track);
+    const inset = Number.parseFloat(styles.getPropertyValue("--slide-inset")) || 5;
+    const nextMax = Math.max(0, track.clientWidth - knob.offsetWidth - (inset * 2));
+    setMaxTravel(nextMax);
+    setOffset((current) => Math.min(current, nextMax));
+  };
+
+  useEffect(() => {
+    measure();
+    const onResize = () => measure();
+    window.addEventListener("resize", onResize, { passive: true });
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  useEffect(() => {
+    if (!disabled && !submitting) return;
+    dragRef.current.active = false;
+    setDragging(false);
+  }, [disabled, submitting]);
+
+  const reset = () => {
+    setDragging(false);
+    setOffset(0);
+  };
+
+  const complete = async () => {
+    if (disabled || submitting) return;
+    setOffset(maxTravel);
+    setSubmitting(true);
+    let submitted = false;
+    try {
+      submitted = (await onSubmit?.()) === true;
+    } finally {
+      window.setTimeout(() => {
+        setSubmitting(false);
+        reset();
+      }, submitted ? 520 : 180);
+    }
+  };
+
+  const onPointerDown = (event) => {
+    if (disabled || submitting || event.button > 0) return;
+    measure();
+    dragRef.current = {
+      active: true,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startOffset: offset,
+      lastOffset: offset,
+    };
+    setDragging(true);
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  };
+
+  const onPointerMove = (event) => {
+    const drag = dragRef.current;
+    if (!drag.active || drag.pointerId !== event.pointerId || disabled || submitting) return;
+    const next = Math.max(0, Math.min(maxTravel, drag.startOffset + event.clientX - drag.startX));
+    drag.lastOffset = next;
+    setOffset(next);
+  };
+
+  const finishPointer = (event) => {
+    const drag = dragRef.current;
+    if (!drag.active || drag.pointerId !== event.pointerId) return;
+    dragRef.current.active = false;
+    setDragging(false);
+    try { event.currentTarget.releasePointerCapture?.(event.pointerId); } catch {}
+    const finalOffset = Number.isFinite(drag.lastOffset) ? drag.lastOffset : offset;
+    if (!disabled && !submitting && maxTravel > 0 && finalOffset >= maxTravel * 0.84) {
+      complete();
+    } else {
+      setOffset(0);
+    }
+  };
+
+  const progress = maxTravel > 0 ? Math.max(0, Math.min(1, offset / maxTravel)) : 0;
+
+  return (
+    <div
+      ref={trackRef}
+      className={`classic-cart-submit-slider${dragging ? " is-dragging" : ""}${submitting ? " is-submitting" : ""}${disabled ? " is-disabled" : ""}`}
+      style={{
+        "--slide-progress": progress,
+        "--slide-offset": `${offset}px`,
+        "--slide-label-opacity": Math.max(0, 1 - (progress * 1.35)),
+        "--slide-label-shift": `${Math.round(progress * 14)}px`,
+        "--slide-fill-opacity": Math.max(.92, .98 - (progress * .05)),
+      }}
+      aria-label={label}
+    >
+      <span className="classic-cart-submit-slider-fill" aria-hidden="true"/>
+      <span className="classic-cart-submit-slider-label" aria-hidden="true">
+        {submitting ? "Submitting…" : label}
+      </span>
+      <button
+        ref={knobRef}
+        className="classic-cart-submit-slider-knob"
+        type="button"
+        role="slider"
+        aria-label={label}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(progress * 100)}
+        disabled={disabled || submitting}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={finishPointer}
+        onPointerCancel={finishPointer}
+        onKeyDown={(event) => {
+          if ((event.key === "Enter" || event.key === " ") && !disabled && !submitting) {
+            event.preventDefault();
+            complete();
+          }
+        }}
+      >
+        <span className="classic-cart-submit-slider-chevrons" aria-hidden="true">
+          <i/><i/><i/>
+        </span>
+      </button>
+    </div>
+  );
+}
+
 export default function ShoppingCartClient({
+  permissions = {},
   initialOrderTypes = [],
   initialComponents = [],
   initialDraft = {},
   initialType = "",
   editMode = false,
   editKey = "",
+  draftScope = "account",
   bootstrapWarnings = [],
 }) {
   const orderTypes = useMemo(() => {
@@ -425,14 +599,18 @@ export default function ShoppingCartClient({
   const [selectedType, setSelectedType] = useState(text(initialType));
   const [cart, setCart] = useState(() => normalizeDraft(initialDraft?.products));
   const [reason, setReason] = useState(() => text(initialDraft?.reason) || normalizeDraft(initialDraft?.products).find((item) => item.reason)?.reason || "");
-  const [password, setPassword] = useState("");
   const [picker, setPicker] = useState(null);
   const [busy, setBusy] = useState(false);
   const [loadingDraft, setLoadingDraft] = useState(false);
   const [notice, setNotice] = useState(null);
+  const [submittedOrder, setSubmittedOrder] = useState(null);
   const [saveState, setSaveState] = useState("");
   const [checkoutCommitted, setCheckoutCommitted] = useState(false);
+  const [activeEditTransfer, setActiveEditTransfer] = useState(null);
+  const [validationFeedback, setValidationFeedback] = useState({ cart: false, reason: false });
   const reasonTimer = useRef(null);
+  const validationTimer = useRef(null);
+  const reasonInputRef = useRef(null);
   const mounted = useRef(false);
 
   const meta = orderTypeMeta(selectedType);
@@ -466,20 +644,22 @@ export default function ShoppingCartClient({
     expectedSparePartId: "",
   }));
 
-  const persistDraft = async (items = cart, type = selectedType, globalReason = reason, { quiet = false } = {}) => {
+  const persistDraft = async (items = cart, type = selectedType, globalReason = reason, { quiet = false, editTransfer = null } = {}) => {
     const cleanType = text(type);
     if (!cleanType) return true;
     const cleanItems = normalizeDraft(items);
     try {
       if (!quiet) setSaveState("Saving…");
-      if (!cleanItems.length) {
-        await requestJson(`/api/order-draft?orderType=${encodeURIComponent(cleanType)}`, { method: "DELETE" });
-      } else {
-        await requestJson("/api/order-draft/products", {
-          method: "POST",
-          body: JSON.stringify({ products: payloadFor(cleanItems, cleanType, globalReason), orderType: cleanType }),
-        });
-      }
+      const saved = writeCartDraft({
+        draftScope,
+        type: cleanType,
+        editMode,
+        editKey,
+        products: cleanItems,
+        reason: globalReason,
+        editToken: text(editTransfer?.editToken || activeEditTransfer?.editToken),
+      });
+      if (!saved && cleanItems.length) throw new Error("Browser storage is unavailable.");
       if (!quiet) {
         setSaveState("Saved");
         window.setTimeout(() => setSaveState(""), 1300);
@@ -506,7 +686,23 @@ export default function ShoppingCartClient({
     if (!cleanType) return;
     setLoadingDraft(true);
     try {
-      const draft = fallback || await requestJson(`/api/order-draft?orderType=${encodeURIComponent(cleanType)}`);
+      if (editMode) {
+        const transfer = readEditTransfer(editKey);
+        const transferItems = normalizeDraft(transfer?.products);
+        if (transfer && transferItems.length) {
+          const transferReason = text(transfer?.reason) || transferItems.find((item) => item.reason)?.reason || "";
+          const patched = transferReason
+            ? transferItems.map((item) => ({ ...item, reason: item.reason || transferReason }))
+            : transferItems;
+          setActiveEditTransfer(transfer);
+          setCart(patched);
+          setReason(isMaintenance(cleanType) ? "" : transferReason);
+          await persistDraft(patched, cleanType, transferReason, { quiet: true, editTransfer: transfer });
+          return;
+        }
+      }
+
+      const draft = fallback || readCartDraft({ draftScope, type: cleanType, editMode, editKey }) || {};
       let items = normalizeDraft(draft?.products);
       let nextReason = text(draft?.reason) || items.find((item) => item.reason)?.reason || "";
 
@@ -517,12 +713,26 @@ export default function ShoppingCartClient({
         if (!items.length && transferItems.length) items = transferItems;
         if (!nextReason && transferReason) nextReason = transferReason;
         if (nextReason) items = items.map((item) => ({ ...item, reason: item.reason || nextReason }));
+        if (transfer) setActiveEditTransfer(transfer);
+        else if (text(draft?.editToken)) {
+          setActiveEditTransfer({
+            products: items,
+            reason: nextReason,
+            orderType: cleanType,
+            editToken: text(draft.editToken),
+            source: "shopping-cart-local-draft",
+            ts: number(draft?.ts) || Date.now(),
+          });
+        }
       }
 
       setCart(items);
       setReason(isMaintenance(cleanType) ? "" : nextReason);
       if (items.length && (!draft?.products?.length || (editMode && !text(draft?.reason) && nextReason))) {
-        await persistDraft(items, cleanType, nextReason, { quiet: true });
+        await persistDraft(items, cleanType, nextReason, {
+          quiet: true,
+          editTransfer: text(draft?.editToken) ? { editToken: text(draft.editToken) } : null,
+        });
       }
     } catch (error) {
       setCart([]);
@@ -532,6 +742,7 @@ export default function ShoppingCartClient({
       setLoadingDraft(false);
     }
   };
+
 
   useEffect(() => {
     if (mounted.current) return;
@@ -554,40 +765,129 @@ export default function ShoppingCartClient({
 
   useEffect(() => () => {
     if (reasonTimer.current) window.clearTimeout(reasonTimer.current);
+    if (validationTimer.current) window.clearTimeout(validationTimer.current);
   }, []);
+
+  const showValidationFeedback = ({ cart: cartMissing = false, reason: reasonMissing = false } = {}) => {
+    if (!cartMissing && !reasonMissing) return;
+
+    setNotice(null);
+    if (validationTimer.current) window.clearTimeout(validationTimer.current);
+
+    try {
+      if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+        navigator.vibrate([65, 35, 90]);
+      }
+    } catch {}
+
+    // Remove the state for one frame so repeated invalid slides replay the pulse.
+    setValidationFeedback({ cart: false, reason: false });
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        setValidationFeedback({ cart: cartMissing, reason: reasonMissing });
+
+        const target = cartMissing
+          ? document.querySelector(".classic-cart-add-new")
+          : document.querySelector(".classic-cart-reason-card");
+        target?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+
+        if (!cartMissing && reasonMissing) {
+          window.setTimeout(() => reasonInputRef.current?.focus?.({ preventScroll: true }), 220);
+        }
+
+        validationTimer.current = window.setTimeout(() => {
+          setValidationFeedback({ cart: false, reason: false });
+        }, 1150);
+      });
+    });
+  };
 
   const chooseType = async (type) => {
     const clean = text(type);
     setSelectedType(clean);
     setBrowserType(clean);
     setPicker(null);
-    setPassword("");
     await loadDraft(clean);
   };
 
   const backToTypes = async () => {
     if (editMode && !checkoutCommitted) {
-      try {
-        await requestJson("/api/order-edit/cancel", {
-          method: "POST",
-          body: JSON.stringify({ orderType: selectedType }),
-        });
-      } catch {}
+      if (reasonTimer.current) {
+        window.clearTimeout(reasonTimer.current);
+        reasonTimer.current = null;
+      }
+      clearCartDraft({ draftScope, type: selectedType, editMode: true, editKey });
       clearEditTransfer();
-      window.location.href = "/next/orders";
+      navigateWithinApp("/next/orders");
       return;
     }
     setSelectedType("");
     setBrowserType("");
     setCart([]);
     setReason("");
-    setPassword("");
   };
 
-  const savePickerItem = async (draftItem) => {
+  const savePickerSelection = async (selection) => {
+    if (maintenance && selection?.mode === "kit") {
+      throw new Error("Maintenance requests can include only one component.");
+    }
+
+    if (maintenance && !picker?.item && cart.length >= 1) {
+      throw new Error("A maintenance request can include only one component.");
+    }
+
+    if (selection?.mode === "kit") {
+      const entries = Array.isArray(selection?.selections) ? selection.selections : [];
+      if (!entries.length) throw new Error("Choose at least one kit.");
+      const next = [...cart];
+      let addedComponents = 0;
+
+      for (const entry of entries) {
+        const kitId = text(entry?.id);
+        const multiplier = Math.max(1, Math.round(number(entry?.quantity, 1) || 1));
+        if (!kitId) continue;
+        const kitBody = await requestJson(`/next/api/products/kits/${encodeURIComponent(kitId)}?_ts=${Date.now()}`);
+        const kitItems = Array.isArray(kitBody?.items) ? kitBody.items : [];
+        for (const kitItem of kitItems) {
+          const productId = text(kitItem?.productId || kitItem?.product_id);
+          if (!productId) continue;
+          const sourceQuantity = Math.max(1, Math.round(number(kitItem?.quantity, 1) || 1)) * multiplier;
+          const targetIndex = next.findIndex((row) => row.id === productId);
+          if (targetIndex >= 0) {
+            if (maintenance) {
+              next[targetIndex] = {
+                ...next[targetIndex],
+                quantity: 1,
+                issueDescription: text(selection?.issueDescription) || next[targetIndex].issueDescription,
+              };
+            } else {
+              next[targetIndex] = {
+                ...next[targetIndex],
+                quantity: quantity(next[targetIndex].quantity, 1) + sourceQuantity,
+              };
+            }
+          } else {
+            next.push(normalizeDraftItem({
+              id: productId,
+              quantity: maintenance ? 1 : sourceQuantity,
+              reason,
+              issueDescription: maintenance ? text(selection?.issueDescription) : "",
+            }));
+          }
+          addedComponents += 1;
+        }
+      }
+
+      if (!addedComponents) throw new Error("The selected kit has no components.");
+      setCart(next);
+      await persistDraft(next);
+      setPicker(null);
+      return;
+    }
+
+    const draftItem = selection?.item || selection;
     const next = [...cart];
     const previousId = text(picker?.item?.id);
-    const existingIndex = next.findIndex((item) => item.id === draftItem.id);
     if (previousId && previousId !== draftItem.id) {
       const previousIndex = next.findIndex((item) => item.id === previousId);
       if (previousIndex >= 0) next.splice(previousIndex, 1);
@@ -597,14 +897,11 @@ export default function ShoppingCartClient({
     if (targetIndex >= 0) next[targetIndex] = normalized;
     else next.push(normalized);
     setCart(next);
-    setPicker(null);
     await persistDraft(next);
+    setPicker(null);
   };
 
   const deleteItem = async (item) => {
-    const product = productMap.get(item.id);
-    const name = product?.name || "this item";
-    if (!window.confirm(`Remove “${name}” from this cart?`)) return;
     const next = cart.filter((row) => row.id !== item.id);
     setCart(next);
     await persistDraft(next);
@@ -618,6 +915,7 @@ export default function ShoppingCartClient({
 
   const updateReason = (value) => {
     setReason(value);
+    if (text(value)) setValidationFeedback((current) => ({ ...current, reason: false }));
     if (reasonTimer.current) window.clearTimeout(reasonTimer.current);
     reasonTimer.current = window.setTimeout(() => {
       if (cart.length) persistDraft(cart, selectedType, value, { quiet: false });
@@ -626,56 +924,106 @@ export default function ShoppingCartClient({
 
   const clearCart = async () => {
     if (!cart.length) return;
-    if (!window.confirm("Clear all products from this cart?")) return;
+    const confirmed = await confirmDelete({ title: "Clear cart?", itemType: "cart", message: "All products currently added to this cart will be removed." });
+    if (!confirmed) return;
     setCart([]);
     await persistDraft([]);
   };
 
+  const canSubmit = editMode ? permissions.edit_submit !== false : permissions.submit !== false;
   const checkout = async () => {
-    if (!cart.length) {
-      setNotice({ type: "error", title: "Empty cart", message: maintenance ? "Add at least one product to maintain." : "Add at least one product before checkout." });
-      return;
+    if (!canSubmit) return false;
+    const cartMissing = !cart.length;
+    const reasonMissing = !maintenance && !text(reason);
+    if (cartMissing || reasonMissing) {
+      showValidationFeedback({ cart: cartMissing, reason: reasonMissing });
+      return false;
     }
-    if (!maintenance && !text(reason)) {
-      setNotice({ type: "error", title: "Reason required", message: withdraw ? "Enter the withdrawal reason." : "Enter the order reason." });
-      return;
+    if (maintenance && cart.length > 1) {
+      setNotice({ type: "error", title: "One component only", message: "A maintenance request can include only one component. Remove the extra component before submitting." });
+      return false;
     }
     if (maintenance && cart.some((item) => !text(item.issueDescription))) {
-      setNotice({ type: "error", title: "Issue Description required", message: "Every maintenance product must include an Issue Description." });
-      return;
+      setNotice({ type: "error", title: "Issue Description required", message: "The maintenance component must include an Issue Description." });
+      return false;
     }
-    if (!text(password)) {
-      setNotice({ type: "error", title: "Password required", message: "Enter your account password before submitting." });
-      return;
-    }
-
+    // Warm the post-submit confirmation chunk while the network request is in flight.
+    void import("./ShoppingCartDialogs");
     setBusy(true);
     setNotice(null);
     try {
-      const draftSaved = await persistDraft(cart, selectedType, reason, { quiet: true });
-      if (!draftSaved) throw new Error("The cart draft could not be saved before checkout.");
-      const response = await requestJson("/api/submit-order", {
+      // Keep the current browser draft synchronized before submit so a failed
+      // request can be retried after a refresh without relying on Express session state.
+      await persistDraft(cart, selectedType, reason, { quiet: true });
+      const response = await requestJson(`${DIRECT_API_BASE}/orders/shopping-cart/submit-direct`, {
         method: "POST",
         body: JSON.stringify({
           products: payloadFor(cart, selectedType, reason),
-          password: text(password),
           orderType: selectedType,
+          editMode,
+          editToken: text(activeEditTransfer?.editToken),
         }),
       });
       setCheckoutCommitted(true);
+      if (reasonTimer.current) {
+        window.clearTimeout(reasonTimer.current);
+        reasonTimer.current = null;
+      }
+      clearCartDraft({ draftScope, type: selectedType, editMode, editKey });
       clearEditTransfer();
+      setActiveEditTransfer(null);
       setCart([]);
-      setPassword("");
-      setNotice({
-        type: "success",
-        title: editMode ? "Order updated" : (withdraw ? "Withdrawal submitted" : maintenance ? "Maintenance submitted" : "Order submitted"),
-        message: response?.message || "The order was saved successfully.",
-      });
-      window.setTimeout(() => { window.location.href = "/next/orders"; }, 850);
+      setReason("");
+
+      if (editMode) {
+        setNotice({
+          type: "success",
+          title: "Order updated",
+          message: response?.message || "The order was saved successfully.",
+        });
+        window.setTimeout(() => { navigateWithinApp("/next/orders"); }, 850);
+      } else {
+        setNotice(null);
+        setSubmittedOrder({
+          key: `${response?.orderId || response?.orderNumber || "order"}:${Date.now()}`,
+          orderId: text(response?.orderId) || (response?.orderNumber ? `ORD-${response.orderNumber}` : "Order created"),
+          orderType: selectedType,
+          nextStep: text(response?.nextStatusStep) || "Waiting for approval",
+          orderItems: Array.isArray(response?.orderItems) ? response.orderItems : [],
+          undoToken: text(response?.undoToken),
+        });
+      }
+      return true;
     } catch (error) {
       setNotice({ type: "error", title: "Submission failed", message: error?.message || "The order could not be submitted." });
+      return false;
     } finally {
       setBusy(false);
+    }
+  };
+
+  const undoSubmittedOrder = async (submission) => {
+    const orderPageIds = (Array.isArray(submission?.orderItems) ? submission.orderItems : [])
+      .map((item) => text(item?.orderPageId))
+      .filter(Boolean);
+
+    try {
+      await requestJson(`${DIRECT_API_BASE}/orders/shopping-cart/undo-direct`, {
+        method: "POST",
+        body: JSON.stringify({
+          undoToken: text(submission?.undoToken),
+          orderId: text(submission?.orderId),
+          orderPageIds,
+        }),
+      });
+      setNotice(null);
+    } catch (error) {
+      setNotice({
+        type: "error",
+        title: "Undo failed",
+        message: error?.message || "The order could not be removed.",
+      });
+      throw error;
     }
   };
 
@@ -686,7 +1034,6 @@ export default function ShoppingCartClient({
           <div className="dashboard-notice">
             <strong>Partial initial data</strong>
             <span>One Shopping Cart resource was not available.</span>
-            <a href="/orders/new?classic=1">Classic page</a>
           </div>
         ) : null}
         <TypeSelection orderTypes={orderTypes} onChoose={chooseType} />
@@ -704,25 +1051,27 @@ export default function ShoppingCartClient({
         : "theme-default";
 
   return (
-    <section className={`classic-cart-page ${maintenance ? "is-maintenance" : ""}`}>
+    <section className={`classic-cart-page ${maintenance ? "is-maintenance" : ""} ${typeTheme}`}>
       {bootstrapWarnings.length ? (
         <div className="dashboard-notice">
           <strong>Partial initial data</strong>
           <span>One Shopping Cart resource was not available.</span>
-          <a href="/orders/new?classic=1">Classic page</a>
         </div>
       ) : null}
 
-      <div className="classic-cart-type-pill">
+      <div className={`classic-cart-type-pill ${typeTheme}`}>
         {editMode ? (
           <button className="classic-cart-back-btn" type="button" onClick={backToTypes} aria-label="Back to Current Orders">
             <CartSvgIcon name="arrow-left" size={16}/>
           </button>
         ) : null}
-        <span className={`classic-cart-type-value ${typeTheme}`}>
-          <span className="classic-cart-type-value-icon"><CartSvgIcon name={meta.icon} size={16}/></span>
-          <span>{selectedType}</span>
-        </span>
+        <div className="classic-cart-flow-heading">
+          <span className="classic-cart-flow-heading-icon"><CartSvgIcon name={meta.icon} size={20}/></span>
+          <span className="classic-cart-flow-heading-copy">
+            <small>Shopping flow</small>
+            <strong>{selectedType}</strong>
+          </span>
+        </div>
         <span className={`classic-cart-save-state ${saveState === "Save failed" ? "is-error" : ""}`}>{saveState}</span>
       </div>
 
@@ -754,59 +1103,61 @@ export default function ShoppingCartClient({
               </div>
             ) : (
               <div className="classic-cart-empty">
-                <strong>Sorry, No data available</strong>
+                <button
+                  className={`classic-cart-add-new ${typeTheme}${validationFeedback.cart ? " is-validation-error" : ""}`}
+                  type="button"
+                  onClick={() => setPicker({ item: null })}
+                  aria-label={`Add new item to ${selectedType}`}
+                >
+                  <span className="classic-cart-add-new-copy">
+                    <strong>Add new</strong>
+                  </span>
+                  <span className="classic-cart-add-new-plus"><CartSvgIcon name="plus" size={30}/></span>
+                </button>
               </div>
             )}
 
-            <div className="classic-cart-footer">
-              <button className="classic-cart-update-btn" type="button" onClick={() => setPicker({ item: null })}>
-                {withdraw ? "Update Withdraw Cart" : "Update Cart"}
-              </button>
-            </div>
+            {cart.length && !maintenance ? (
+              <div className="classic-cart-footer">
+                <button className="classic-cart-update-btn" type="button" onClick={() => setPicker({ item: null })}>
+                  <CartSvgIcon name="plus" size={17}/>
+                  <span>{withdraw ? "Add to Withdraw Cart" : "Add to Cart"}</span>
+                </button>
+              </div>
+            ) : null}
           </div>
         </section>
 
         <aside className="classic-cart-summary" aria-label="Order summary">
           <div className="classic-cart-summary-card">
             <div className="classic-cart-summary-title">{withdraw ? "Withdrawal Summary" : "Order Summary"}</div>
-
             <div className="classic-cart-summary-lines">
               <div><span>Entry count</span><strong>{itemCount}</strong></div>
               {!maintenance ? <div className="classic-cart-summary-total"><span>Total</span><strong>{formatMoney(total)}</strong></div> : null}
             </div>
+          </div>
 
-            {!maintenance ? (
+          {!maintenance ? (
+            <div className={`classic-cart-reason-card${validationFeedback.reason ? " is-validation-error" : ""}`}>
               <label className="classic-cart-summary-field">
                 <span>Reason</span>
                 <input
+                  ref={reasonInputRef}
                   value={reason}
                   onChange={(event) => updateReason(event.target.value)}
                   placeholder="Reason..."
                   autoComplete="off"
+                  aria-invalid={validationFeedback.reason || undefined}
                 />
               </label>
-            ) : null}
+            </div>
+          ) : null}
 
-            <label className="classic-cart-voucher-row">
-              <input
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    checkout();
-                  }
-                }}
-                placeholder="Your password"
-                autoComplete="new-password"
-              />
-            </label>
-
-            <button className="classic-cart-checkout-btn" type="button" onClick={checkout} disabled={busy || loadingDraft}>
-              {busy ? (editMode ? "Saving..." : "Submitting...") : editMode ? "Save Order Changes" : withdraw ? "Withdraw Now" : "Checkout Now"}
-            </button>
-          </div>
+          {canSubmit ? <SlideToSubmit
+            label="Slide to submit"
+            disabled={busy || loadingDraft}
+            onSubmit={checkout}
+          /> : null}
         </aside>
       </div>
 
@@ -816,7 +1167,7 @@ export default function ShoppingCartClient({
           type={selectedType}
           item={picker.item}
           onClose={() => setPicker(null)}
-          onSave={savePickerItem}
+          onSave={savePickerSelection}
         />
       ) : null}
 
@@ -829,6 +1180,14 @@ export default function ShoppingCartClient({
         </div>
       ) : null}
 
+      {submittedOrder ? (
+        <OrderSubmissionBar
+          key={submittedOrder.key}
+          submission={submittedOrder}
+          onDone={setSubmittedOrder}
+          onUndo={permissions.undo === false ? null : undoSubmittedOrder}
+        />
+      ) : null}
       <Toast notice={notice} onClose={() => setNotice(null)} />
     </section>
   );

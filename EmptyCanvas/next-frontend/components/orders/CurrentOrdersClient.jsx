@@ -1,10 +1,24 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
+import { navigateWithinApp } from "../../lib/client-navigation";
 import ClassicOrderIcon from "./ClassicOrderIcon";
-import { groupOrderItems, OrderGroupHeader, OrderSortButton } from "./OrderGrouping";
-import OrderDownloadModal from "./OrderDownloadModal";
-import OrderComponentSearch, { matchesOrderComponentSearch } from "./OrderComponentSearch";
+import { createOrderDetailsLoader } from "./orderDetailsLoader";
+import { cancelOrderOpenTimer, loadOrderAndModalWithMetrics, markOrderOpenStarted, reportOrderVisibleAfterPaint, warmOrderModalOnIdle } from "./orderOpeningPerformance";
+import OrderDetailsLoadingOverlay from "./OrderDetailsLoadingOverlay";
+import OrdersPerformancePanel from "./OrdersPerformancePanel";
+import OrderTypeBadge from "./OrderTypeBadge";
+import OrdersEmptyState, { OrdersListHeader, sortOrderGroups } from "./OrdersEmptyState";
+import CurrentOrderCreatorPopover from "./CurrentOrderCreatorPopover";
+import { orderCardAllows } from "../../lib/order-data-scope.mjs";
+
+const loadCurrentOrdersHeavyModals = () => import("./CurrentOrdersHeavyModals");
+const CurrentOrdersHeavyModals = dynamic(loadCurrentOrdersHeavyModals, { ssr: false });
+
+// Direct route handlers live under the configured /next basePath. Keep the
+// explicit prefix so client requests stay inside the standalone Next deployment.
+const DIRECT_API_BASE = "/next/api";
 
 const STATUS_TABS = [
   { key: "all", label: "All", icon: "layers" },
@@ -28,28 +42,28 @@ const ACTIONS = {
     title: "Edit order",
     description: "Enter admin password to edit this order.",
     button: "Continue",
-    endpoint: "/api/orders/current/edit/init",
+    endpoint: `${DIRECT_API_BASE}/orders/current/edit-direct`,
     icon: "edit-2",
   },
   archive: {
     title: "Archive order",
     description: "Enter admin password to move this order to the Archive tab.",
     button: "Archive",
-    endpoint: "/api/orders/current/archive",
+    endpoint: `${DIRECT_API_BASE}/orders/current/mutations-direct`,
     icon: "archive",
   },
   unarchive: {
     title: "UnArchive order",
     description: "Enter admin password to restore this order from Archive.",
     button: "UnArchive",
-    endpoint: "/api/orders/current/unarchive",
+    endpoint: `${DIRECT_API_BASE}/orders/current/mutations-direct`,
     icon: "rotate-ccw",
   },
   delete: {
     title: "Delete order",
     description: "Enter admin password to permanently delete this order.",
     button: "Delete",
-    endpoint: "/api/orders/current/delete",
+    endpoint: `${DIRECT_API_BASE}/orders/current/mutations-direct`,
     icon: "trash-2",
     danger: true,
   },
@@ -271,6 +285,28 @@ function hasMixedApprovedRejected(items) {
   return tabs.includes("approved") && tabs.includes("rejected");
 }
 
+function receiptEntriesFromItem(item) {
+  const entries = [];
+  const seen = new Set();
+  const add = (entry = {}, fallbackIndex = 0) => {
+    const url = text(entry?.url ?? entry?.rawUrl ?? entry?.raw);
+    const name = text(entry?.name ?? entry?.filename) || `Receipt photo ${fallbackIndex + 1}`;
+    if (!url) return;
+    const key = `${url}|${name}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    entries.push({ name, url });
+  };
+
+  const direct = Array.isArray(item?.orderReceiptEntries) ? item.orderReceiptEntries : [];
+  direct.forEach((entry, index) => add(entry, index));
+
+  const urls = Array.isArray(item?.orderReceiptUrls) ? item.orderReceiptUrls : [item?.orderReceiptUrl];
+  const names = Array.isArray(item?.orderReceiptNames) ? item.orderReceiptNames : [item?.orderReceiptName];
+  urls.filter(Boolean).forEach((url, index) => add({ url, name: names[index] }, index));
+  return entries;
+}
+
 function buildGroups(rows) {
   const sorted = [...(Array.isArray(rows) ? rows : [])].sort((a, b) => dateValue(b?.createdTime) - dateValue(a?.createdTime));
   const map = new Map();
@@ -286,6 +322,7 @@ function buildGroups(rows) {
         orderType: item?.orderType,
         orderTypeColor: item?.orderTypeColor,
         createdByName: item?.createdByName,
+        createdById: item?.createdById || item?.teamMemberId,
       });
     }
     const group = map.get(key);
@@ -297,6 +334,7 @@ function buildGroups(rows) {
     if (!group.orderType && item?.orderType) group.orderType = item.orderType;
     if (!group.orderTypeColor && item?.orderTypeColor) group.orderTypeColor = item.orderTypeColor;
     if (!group.createdByName && item?.createdByName) group.createdByName = item.createdByName;
+    if (!group.createdById && (item?.createdById || item?.teamMemberId)) group.createdById = item?.createdById || item?.teamMemberId;
   }
 
   return [...map.values()].map((group) => {
@@ -306,6 +344,15 @@ function buildGroups(rows) {
     const stage = Math.max(...group.items.map((item) => statusIndex(item?.status)), 1);
     const hasRemaining = group.items.some((item) => Math.abs(remainingQuantity(item)) > 1e-9);
     const hasReceived = group.items.some((item) => Math.abs(receivedQuantity(item)) > 1e-9);
+    const operationsNames = [...new Set(group.items.map((item) => text(item?.operationsByName)).filter(Boolean))];
+    const receiptEntries = [];
+    const receiptSeen = new Set();
+    group.items.flatMap(receiptEntriesFromItem).forEach((entry) => {
+      const key = `${entry.url}|${entry.name}`;
+      if (receiptSeen.has(key)) return;
+      receiptSeen.add(key);
+      receiptEntries.push(entry);
+    });
     let status = dominantStatus(group.items);
     if (stage === 3) status = hasRemaining && !isMaintenanceOrder(group.orderType) ? "remaining" : "shipped";
     return {
@@ -319,6 +366,8 @@ function buildGroups(rows) {
       total: group.items.reduce((sum, item) => sum + itemTotal(item), 0),
       receivedTotal: group.items.reduce((sum, item) => sum + Math.abs(receivedQuantity(item)) * Math.abs(finite(item?.unitPrice ?? item?.unit_price ?? item?.price)), 0),
       remainingTotal: group.items.reduce((sum, item) => sum + Math.abs(remainingQuantity(item)) * Math.abs(finite(item?.unitPrice ?? item?.unit_price ?? item?.price)), 0),
+      operationsByName: operationsNames.length === 1 ? operationsNames[0] : operationsNames.length ? "Multiple" : "",
+      receiptEntries,
       status,
     };
   }).sort((a, b) => dateValue(b.latestCreated) - dateValue(a.latestCreated));
@@ -362,11 +411,18 @@ function writeEditTransfer(data, group) {
   try {
     const products = Array.isArray(data?.products) ? data.products : [];
     if (!products.length) return "";
-    const reason = text(group?.reason);
+    const reason = text(data?.reason || group?.reason);
     const orderType = text(data?.orderType || group?.orderType);
     const patched = products.map((item) => ({ ...item, reason: text(item?.reason) || reason }));
     const editKey = `current-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-    const payload = JSON.stringify({ products: patched, reason, orderType, source: "current-orders-next", ts: Date.now() });
+    const payload = JSON.stringify({
+      products: patched,
+      reason,
+      orderType,
+      editToken: text(data?.editToken),
+      source: text(data?.source) || "current-orders-next",
+      ts: Date.now(),
+    });
     const typeKey = orderTypeKey(orderType) || "default";
     const keys = [
       `shopping_cart:edit_payload:v2:${editKey}`,
@@ -485,43 +541,36 @@ function StatusPill({ status, className = "co-status-btn", reason = "", onReason
   return <span className={className} style={style}>{statusLabel(status)}</span>;
 }
 
-function OrderCard({ group, activeTab, onOpen, onReason }) {
-  const type = orderTypeMeta(group.orderType, group.orderTypeColor);
-  const thumbStyle = { "--co-thumb-bg": type.bg, "--co-thumb-fg": type.fg, "--co-thumb-border": type.bd };
+function OrderCard({ group, activeTab, onOpen, onReason, onCreator, onPrefetch, canOpen = true }) {
   const reasons = [...new Set(group.items.map(rejectedReason).filter(Boolean))].join("\n");
   const mixed = activeTab === "all" && group.stage === 2 && hasMixedApprovedRejected(group.items);
-  const displayItems = itemsForCurrentTab(group.items, activeTab);
   const displayStatus = activeTab === "remaining" ? "remaining" : activeTab === "shipped" ? "shipped" : group.status;
-  const displayTotal = activeTab === "remaining" ? group.remainingTotal : activeTab === "shipped" ? group.receivedTotal : group.total;
-  const progress = group.status === "archive" ? 100 : Math.min(100, progressIndex(group) * 25);
+  const creatorName = text(group.createdByName) || "—";
 
   return (
     <article
       className="co-card next-current-order-card"
-      role="button"
-      tabIndex={0}
-      aria-label={`Open ${group.orderIdLabel}`}
-      onClick={() => onOpen(group)}
-      onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen(group); } }}
+      role={canOpen ? "button" : undefined}
+      tabIndex={canOpen ? 0 : undefined}
+      aria-label={canOpen ? `Open ${group.orderIdLabel}` : group.orderIdLabel}
+      onPointerEnter={(event) => { if (canOpen && (event.pointerType === "mouse" || event.pointerType === "pen")) onPrefetch(group, true); }} onPointerLeave={() => { if (canOpen) onPrefetch(null, true); }} onFocus={(event) => { if (canOpen && event.target === event.currentTarget) onPrefetch(group); }} onClick={() => { if (canOpen) onOpen(group); }}
+      onKeyDown={(event) => { if (canOpen && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); onOpen(group); } }}
     >
       <div className="co-top">
-        <div className="co-thumb co-thumb--order-type" style={thumbStyle} title={type.label} aria-label={type.label}><ClassicOrderIcon name={type.icon} /></div>
         <div className="co-main">
-          <div className="co-title">{group.orderIdLabel}</div>
-          <div className="next-current-order-meta">
-            <span className="co-sub">{formatDate(group.latestCreated)}</span>
+          <OrderTypeBadge type={group.orderType} color={group.orderTypeColor} />
+          <div className="orders-workspace-order-info">
+            <div className="co-title">{group.orderIdLabel}</div>
+            <div className="orders-workspace-user" title={group.createdByName || "Unknown user"}>{group.createdByName || "Unknown user"}</div>
           </div>
         </div>
-        <div className="co-qty" title={`${displayItems.length} component${displayItems.length === 1 ? "" : "s"}`}>x{displayItems.length}</div>
-      </div>
-      <div className="co-divider" />
-      <div className="co-bottom">
-        <div className="co-est"><div className="co-est-label">Estimate Total</div><div className="co-est-value">{formatMoney(displayTotal)}</div></div>
-        <div className="co-actions">
-          {mixed ? <MixedStatusPill /> : <StatusPill status={displayStatus} reason={reasons} onReason={onReason} />}
-          <span className="next-current-order-progress next-current-order-progress--icon-only" aria-label={`${progress}% workflow progress`} title={`${progress}% workflow progress`}>
-            <ClassicOrderIcon name="percent" />
-          </span>
+        <div className="next-current-card-head-actions">
+          <div className="next-current-card-status">
+            {mixed ? <MixedStatusPill /> : <StatusPill status={displayStatus} reason={reasons} onReason={onReason} />}
+          </div>
+          <button type="button" className="co-creator-btn next-current-creator-chip" aria-label={`View creator: ${creatorName}`} title={`Created by ${creatorName}`} onClick={(event) => { event.preventDefault(); event.stopPropagation(); onCreator(event.currentTarget, group); }}>
+            <span className="next-current-creator-icon"><ClassicOrderIcon name="user" /></span>
+          </button>
         </div>
       </div>
     </article>
@@ -546,238 +595,16 @@ function ProgressTrack({ value }) {
   );
 }
 
-function OrderDetailsModal({ group, tab, busy, onClose, onAction, onReason, onExport }) {
-  const [moreOpen, setMoreOpen] = useState(false);
-  const [sortMode, setSortMode] = useState("product-tag");
-  const [downloadOpen, setDownloadOpen] = useState(false);
-  const [componentSearch, setComponentSearch] = useState("");
-  const moreRef = useRef(null);
 
-  useEffect(() => {
-    if (!group) return undefined;
-    const onKey = (event) => {
-      if (event.key !== "Escape") return;
-      if (downloadOpen) {
-        event.preventDefault();
-        setDownloadOpen(false);
-        return;
-      }
-      if (moreOpen) {
-        event.preventDefault();
-        setMoreOpen(false);
-        return;
-      }
-      onClose();
-    };
-    const onPointerDown = (event) => {
-      if (moreOpen && !moreRef.current?.contains(event.target)) setMoreOpen(false);
-    };
-    window.addEventListener("keydown", onKey);
-    document.addEventListener("pointerdown", onPointerDown, true);
-    document.body.classList.add("co-modal-open");
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      document.removeEventListener("pointerdown", onPointerDown, true);
-      document.body.classList.remove("co-modal-open");
-    };
-  }, [group, moreOpen, downloadOpen, onClose]);
-
-  useEffect(() => { setMoreOpen(false); setDownloadOpen(false); setSortMode("product-tag"); setComponentSearch(""); }, [group?.key, tab]);
-  if (!group) return null;
-
-  const archived = group.status === "archive";
-  const maintenance = isMaintenanceOrder(group.orderType);
-  const headerTitle = orderTypeHeaderTitle(group.orderType, group.orderTypeColor, statusLabel(group.status));
-  const tabItems = itemsForCurrentTab(group.items, tab);
-  const searchedTabItems = componentSearch.trim()
-    ? tabItems.filter((item) => matchesOrderComponentSearch(item, componentSearch))
-    : tabItems;
-  const groupedItems = groupOrderItems(searchedTabItems, sortMode);
-  const reasons = [...new Set(group.items.map(rejectedReason).filter(Boolean))].join("\n");
-  const modalStatus = tab === "remaining" ? "remaining" : tab === "shipped" ? "shipped" : group.status;
-
-  const menuAction = (action) => {
-    setMoreOpen(false);
-    onAction(action, group);
-  };
-
-  const renderItem = (item, index) => {
-    const qtyRequested = finite(item?.quantityRequested ?? item?.quantity_requested ?? item?.quantity);
-    const qtyEditedRaw = supervisorEditedQuantity(item);
-    const hasEdited = qtyEditedRaw !== null && qtyEditedRaw !== undefined && qtyEditedRaw !== "" && finite(qtyEditedRaw) !== qtyRequested;
-    const base = baseQuantity(item);
-    const received = receivedQuantity(item);
-    const remaining = remainingQuantity(item);
-    const stage = statusIndex(item?.status);
-    const itemStatus = tab === "remaining"
-      ? "remaining"
-      : tab === "shipped" && stage === 3
-        ? "shipped"
-        : tab === "all" && stage === 3 && !maintenance && Math.abs(remaining) > 1e-9
-          ? "remaining"
-          : statusTabForItem(item);
-    const itemReason = rejectedReason(item);
-    const safeUrl = text(item?.productUrl);
-    const partialRemaining = tab === "all" && !maintenance && hasPartialRemaining(item);
-    const visibleQty = tab === "remaining" ? remaining : tab === "shipped" && Math.abs(received) > 1e-9 ? received : base;
-    const qtyMarkup = partialRemaining
-      ? <span className="sv-qty-diff"><span className="sv-qty-old">{formatQuantity(base)}</span><strong className="sv-qty-new">{formatQuantity(remaining)}</strong></span>
-      : hasEdited && tab !== "remaining" && tab !== "shipped"
-        ? <span className="sv-qty-diff"><span className="sv-qty-old">{formatQuantity(qtyRequested)}</span><strong className="sv-qty-new">{formatQuantity(base)}</strong></span>
-        : <strong>{formatQuantity(visibleQty)}</strong>;
-    const displayTotal = (tab === "remaining" || tab === "shipped") ? Math.abs(visibleQty) * Math.abs(finite(item?.unitPrice ?? item?.unit_price ?? item?.price)) : itemTotal(item);
-    return (
-      <div className="co-item" key={text(item?.id) || index}>
-        <div className="co-item-left">
-          <div className="co-item-title">
-            <div className="co-item-name">{text(item?.productName) || "Unknown Product"}</div>
-            {/^[hH][tT][tT][pP][sS]?:\/\//.test(safeUrl) ? <a className="co-item-link" href={safeUrl} target="_blank" rel="noopener noreferrer" title="Open link" aria-label="Open component link"><ClassicOrderIcon name="external-link" /></a> : null}
-          </div>
-          {!maintenance ? <div className="co-item-sub">Unit: {formatMoney(item?.unitPrice)} · Total: {formatMoney(displayTotal)}</div> : null}
-        </div>
-        <div className="co-item-right">
-          {maintenance ? <div className="co-item-issue-desc">{text(item?.issueDescription || item?.reason) || "—"}</div> : <div className="co-item-total">{tab === "remaining" ? "Qty remaining:" : "Qty:"} {qtyMarkup}</div>}
-          <StatusPill status={itemStatus} className="co-item-status" reason={itemReason} onReason={onReason} />
-        </div>
-      </div>
-    );
-  };
-
-  return (
-    <div className="co-modal-overlay is-open" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <div className="co-modal-dialog" role="dialog" aria-modal="true" aria-label={`${group.orderIdLabel} details`}>
-        <div className="co-modal-more" ref={moreRef}>
-          <button type="button" className="co-modal-more-btn" aria-label="Order actions" aria-haspopup="menu" aria-expanded={moreOpen} onClick={() => setMoreOpen((state) => !state)}><span className="co-modal-more-dots" aria-hidden="true">⋮</span></button>
-          {moreOpen ? (
-            <div className="co-modal-more-panel" role="menu" aria-label="Order actions">
-              {!archived ? <button type="button" className="co-modal-more-item" onClick={() => menuAction("edit")}><ClassicOrderIcon name="edit-2" /><span>Edit</span></button> : null}
-              {!archived ? <button type="button" className="co-modal-more-item" onClick={() => menuAction("archive")}><ClassicOrderIcon name="archive" /><span>Archive</span></button> : null}
-              {archived ? <button type="button" className="co-modal-more-item" onClick={() => menuAction("unarchive")}><ClassicOrderIcon name="rotate-ccw" /><span>UnArchive</span></button> : null}
-              <button type="button" className="co-modal-more-item co-modal-more-item--danger" onClick={() => menuAction("delete")}><ClassicOrderIcon name="trash-2" /><span>Delete</span></button>
-            </div>
-          ) : null}
-        </div>
-        <button type="button" className="co-modal-close" onClick={onClose} aria-label="Close order details" />
-
-        <div className="co-modal-header"><div className="co-modal-head-left"><div className="co-modal-status">{headerTitle}</div><div className="co-modal-status-sub" hidden /></div></div>
-        <div className="next-current-order-modal-summary" aria-label="Order summary">
-          <div><span>Order</span><strong>{group.orderIdLabel}</strong></div>
-          <div><span>Date</span><strong>{formatDate(group.latestCreated)}</strong></div>
-          <div><span>Components</span><strong>{tabItems.length}</strong></div>
-          <div className="next-current-order-modal-summary__status"><span>Status</span>{tab === "all" && group.stage === 2 && hasMixedApprovedRejected(group.items) ? <MixedStatusPill /> : <StatusPill status={modalStatus} reason={reasons} onReason={onReason} />}</div>
-        </div>
-        <ProgressTrack value={archived ? 4 : progressIndex(group)} />
-
-        <div className="co-modal-body">
-          {!maintenance ? <div className="co-modal-meta"><div className="co-meta-row co-meta-row--reason"><span>Reason</span><strong>{group.reason}</strong></div></div> : null}
-          <div className="co-modal-actions ro-actions ro-actions--right order-group-sort-actions order-modal-search-actions">
-            <OrderComponentSearch key={`${group.key}:${tab}`} value={componentSearch} onChange={setComponentSearch} disabled={busy} />
-            <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => setDownloadOpen(true)} disabled={busy}><ClassicOrderIcon name="download" /><span>Download</span></button>
-            <OrderSortButton value={sortMode} onChange={setSortMode} />
-          </div>
-          <div className="co-modal-items order-component-groups">
-            {groupedItems.length ? groupedItems.map((section) => (
-              <section className="order-component-group" key={`${section.folderName || "products"}:${section.tag}`}>
-                <OrderGroupHeader group={section} mode={sortMode} />
-                <div className="order-component-group__items">{section.items.map(renderItem)}</div>
-              </section>
-            )) : <div className="order-component-search-empty">{componentSearch.trim() ? "No matching components." : "No items."}</div>}
-          </div>
-        </div>
-        <OrderDownloadModal
-          open={downloadOpen}
-          title={`Download ${group.orderIdLabel}`}
-          defaultSignatureLabels={orderTypeKey(group.orderType) === "withdrawproducts" ? ["Received From", "Operations", "Storekeeper"] : ["Storekeeper", "Operations", "Delivered to"]}
-          showSignatureOptions={!maintenance}
-          showRepeatedComponentOptions={!maintenance}
-          defaultRepeatedComponentMode="merge"
-          onClose={() => setDownloadOpen(false)}
-          onDownload={(options) => onExport({ ...options, sortMode }, { ...group, items: tabItems, orderIds: tabItems.map((item) => text(item?.id)).filter(Boolean) })}
-        />
-      </div>
-    </div>
-  );
-}
-
-function PasswordModal({ state, busy, error, onCancel, onSubmit }) {
-  const [password, setPassword] = useState("");
-  useEffect(() => setPassword(""), [state?.action, state?.group?.key]);
-  useEffect(() => {
-    if (!state) return undefined;
-    const onKey = (event) => { if (event.key === "Escape" && !busy) onCancel(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [state, busy, onCancel]);
-  if (!state) return null;
-  const config = ACTIONS[state.action];
-  return (
-    <div className="co-submodal-overlay is-open req-edit-modal" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onCancel(); }}>
-      <form className="co-submodal-dialog req-edit-dialog" role="dialog" aria-modal="true" onSubmit={(event) => { event.preventDefault(); onSubmit(password); }}>
-        <button type="button" className="co-submodal-close" onClick={onCancel} aria-label="Close admin password dialog" />
-        <div className="co-submodal-header req-edit-header">
-          <div className={`req-edit-icon ${config.danger ? "req-edit-icon--danger" : ""}`} aria-hidden="true"><ClassicOrderIcon name={config.icon || "shield"} /></div>
-          <div><div className="co-submodal-title">{config.title}</div><div className="co-submodal-sub">{config.description}</div></div>
-        </div>
-        <div className="co-submodal-body">
-          <label className="co-submodal-label" htmlFor="current-order-admin-password">Admin password</label>
-          <input id="current-order-admin-password" className="co-submodal-input" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoFocus autoComplete="current-password" placeholder="••••••••" disabled={busy} />
-          <div className="co-submodal-error" role="alert" aria-live="polite">{error}</div>
-        </div>
-        <div className="co-submodal-actions">
-          <button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancel} disabled={busy}>Cancel</button>
-          <button type="submit" className={`ro-action-btn ${config.danger ? "ro-action-btn--danger" : "ro-action-btn--dark"}`} disabled={busy || !password.trim()}>{busy ? "Working…" : config.button}</button>
-        </div>
-      </form>
-    </div>
-  );
-}
-
-function RejectedReasonModal({ reason, onClose }) {
-  if (!reason) return null;
-  return (
-    <div className="co-submodal-overlay is-open" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <div className="co-submodal-dialog reject-reason-dialog" role="dialog" aria-modal="true" aria-label="Rejected reason">
-        <button type="button" className="co-submodal-close" onClick={onClose} aria-label="Close rejected reason" />
-        <div className="co-submodal-header req-edit-header"><div className="req-edit-icon req-edit-icon--danger" aria-hidden="true"><ClassicOrderIcon name="x-circle" /></div><div><div className="co-submodal-title">Rejected reason</div><div className="co-submodal-sub">Reason saved with this rejected component.</div></div></div>
-        <div className="co-submodal-body"><div className="rejected-reason-view-text">{reason}</div></div>
-        <div className="co-submodal-actions"><button type="button" className="ro-action-btn ro-action-btn--dark" onClick={onClose}>Done</button></div>
-      </div>
-    </div>
-  );
-}
-
-function DeleteConfirmationModal({ state, busy, onCancel, onConfirm }) {
-  useEffect(() => {
-    if (!state) return undefined;
-    const onKey = (event) => { if (event.key === "Escape" && !busy) onCancel(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [state, busy, onCancel]);
-
-  if (!state) return null;
-  const count = state.group?.items?.length || state.group?.orderIds?.length || 1;
-  return (
-    <div className="co-confirm-overlay is-open next-current-order-delete-confirm" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onCancel(); }}>
-      <div className="co-confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="currentOrderDeleteTitle" aria-describedby="currentOrderDeleteMessage">
-        <div className="co-confirm-icon" aria-hidden="true"><ClassicOrderIcon name="trash-2" /></div>
-        <div className="co-confirm-title" id="currentOrderDeleteTitle">Delete {state.group?.orderIdLabel || "order"}?</div>
-        <div className="co-confirm-message" id="currentOrderDeleteMessage">
-          You’re going to permanently delete this order and its {count} saved component{count === 1 ? "" : "s"}. This action cannot be undone.
-        </div>
-        <div className="co-confirm-actions">
-          <button type="button" className="co-confirm-btn co-confirm-btn--light" onClick={onCancel} disabled={busy}>Cancel</button>
-          <button type="button" className="co-confirm-btn co-confirm-btn--dark next-current-order-delete-confirm__danger" onClick={onConfirm} disabled={busy}>{busy ? "Deleting…" : "Delete permanently"}</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export default function CurrentOrdersClient({ initialOrders = [], bootstrapWarnings = [] }) {
+export default function CurrentOrdersClient({ initialOrders = [], initialPageInfo = null, bootstrapWarnings = [], permissions = null, scopePolicy = null }) {
+  const [creatorPreview, setCreatorPreview] = useState(null);
   const [orders, setOrders] = useState(Array.isArray(initialOrders) ? initialOrders : []);
+  const [pageInfo, setPageInfo] = useState(initialPageInfo || { hasMore: false, nextCursor: null, limit: 36 });
+  const [listLoading, setListLoading] = useState(false);
   const [tab, setTab] = useState("all");
   const [type, setType] = useState("all");
   const [query, setQuery] = useState("");
+  const [sortMode, setSortMode] = useState("latest");
   const [selected, setSelected] = useState(null);
   const [actionState, setActionState] = useState(null);
   const [actionError, setActionError] = useState("");
@@ -785,6 +612,28 @@ export default function CurrentOrdersClient({ initialOrders = [], bootstrapWarni
   const [notice, setNotice] = useState("");
   const [reasonView, setReasonView] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState(null);
+  // Scoped to this screen; invalidate after every list refresh or mutation.
+  const detailsLoaderRef = useRef(null);
+  if (!detailsLoaderRef.current) detailsLoaderRef.current = createOrderDetailsLoader({
+    endpoint: `${DIRECT_API_BASE}/orders/current/details-direct`,
+    buildGroups,
+  });
+  const [openingGroup, setOpeningGroup] = useState(null);
+  useEffect(() => {
+    if (!selected) return undefined;
+    return reportOrderVisibleAfterPaint("My Orders");
+  }, [selected]);
+  const openRequestRef = useRef(0);
+  const listRequestRef = useRef(0);
+  const listAbortRef = useRef(null);
+  const initialFilterKeyRef = useRef("all|all|");
+
+  // Warm the modal code after the list is interactive. Never request an
+  // order's private details merely because its card was rendered or touched.
+  useEffect(() => {
+    if (listLoading || !orders.length) return undefined;
+    return warmOrderModalOnIdle(loadCurrentOrdersHeavyModals);
+  }, [listLoading, orders.length]);
 
   useClassicHeaderSearch(query, setQuery, "Search orders by reason...");
 
@@ -805,6 +654,19 @@ export default function CurrentOrdersClient({ initialOrders = [], bootstrapWarni
     if (!query.trim()) params.delete("q"); else params.set("q", query.trim());
     const search = params.toString();
     window.history.replaceState({}, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
+  }, [tab, type, query]);
+
+  useEffect(() => {
+    const key = `${tab}|${type}|${query.trim()}`;
+    if (key === initialFilterKeyRef.current) return undefined;
+    initialFilterKeyRef.current = key;
+    const timer = window.setTimeout(() => {
+      fetchOrdersPage({ reset: true }).catch((error) => {
+        setNotice(error?.message || "Failed to load Current Orders.");
+        window.setTimeout(() => setNotice(""), 4000);
+      });
+    }, query.trim() ? 300 : 0);
+    return () => window.clearTimeout(timer);
   }, [tab, type, query]);
 
   const allGroups = useMemo(() => buildGroups(orders), [orders]);
@@ -840,24 +702,125 @@ export default function CurrentOrdersClient({ initialOrders = [], bootstrapWarni
 
   const visibleGroups = useMemo(() => {
     const needle = lower(query);
+    const serverFilteredQuery = Boolean(needle)
+      && pageInfo?.serverFiltered === true
+      && lower(pageInfo?.query) === needle;
     return statusGroups.filter((group) => {
       if (type !== "all" && (orderTypeKey(group.orderType) || "other") !== type) return false;
-      return !needle || groupSearchText(group).includes(needle);
+      return !needle || serverFilteredQuery || groupSearchText(group).includes(needle);
     });
-  }, [statusGroups, type, query]);
+  }, [statusGroups, type, query, pageInfo]);
+
+  const sortedVisibleGroups = useMemo(() => sortOrderGroups(visibleGroups, sortMode), [visibleGroups, sortMode]);
+
+  async function fetchOrdersPage({ reset = true, fresh = false } = {}) {
+    const requestId = ++listRequestRef.current;
+    listAbortRef.current?.abort();
+    const controller = new AbortController();
+    listAbortRef.current = controller;
+    setListLoading(true);
+    try {
+      const params = new URLSearchParams({
+        mode: "summary",
+        paged: "1",
+        tab,
+        filterType: type,
+        limit: String(pageInfo?.limit || 36),
+      });
+      if (query.trim()) params.set("q", query.trim());
+      if (!reset && pageInfo?.nextCursor !== null && pageInfo?.nextCursor !== undefined) params.set("cursor", String(pageInfo.nextCursor));
+      if (fresh) params.set("_fresh", "1");
+
+      const response = await fetch(`${DIRECT_API_BASE}/orders/current/paged-summary?${params.toString()}`, {
+        credentials: "include",
+        cache: "no-store",
+        signal: controller.signal,
+      });
+      if (response.status === 401) {
+        window.location.href = "/login?next=/next/orders";
+        return;
+      }
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error || "Failed to load Current Orders.");
+      if (requestId !== listRequestRef.current) return;
+
+      const items = Array.isArray(data) ? data : (Array.isArray(data?.items) ? data.items : []);
+      const nextPageInfo = !Array.isArray(data) && data?.pageInfo
+        ? data.pageInfo
+        : { hasMore: false, nextCursor: null, limit: pageInfo?.limit || 36 };
+
+      setOrders((current) => {
+        if (reset) return items;
+        const map = new Map((Array.isArray(current) ? current : []).map((item) => [text(item?.id), item]));
+        items.forEach((item) => map.set(text(item?.id), item));
+        return [...map.values()];
+      });
+      setPageInfo(nextPageInfo);
+      if (reset) {
+        detailsLoaderRef.current.clear();
+        ++openRequestRef.current;
+        setOpeningGroup(null);
+        setSelected(null);
+      }
+    } catch (error) {
+      if (error?.name === "AbortError") return;
+      throw error;
+    } finally {
+      if (listAbortRef.current === controller) listAbortRef.current = null;
+      if (requestId === listRequestRef.current) setListLoading(false);
+    }
+  }
 
   async function refreshOrders() {
-    const response = await fetch("/api/orders?_fresh=1", { credentials: "include", cache: "no-store" });
-    if (response.status === 401) {
-      window.location.href = "/login?next=/next/orders";
-      return;
+    return fetchOrdersPage({ reset: true, fresh: true });
+  }
+
+  async function openOrderDetails(group) {
+    if (!group || permissions?.view_details === false || !orderCardAllows(scopePolicy, "details", group)) return;
+    const attemptId = markOrderOpenStarted("My Orders");
+    const requestId = ++openRequestRef.current;
+    // Begin loading the modal code and the data in parallel. The lightweight
+    // overlay appears immediately, so a slow Supabase response never looks
+    // like an unresponsive card.
+    setSelected(null);
+    // Keep the real-size loading sheet on screen until data and modal code
+    // are both ready, preventing a blank frame on slower connections.
+    setOpeningGroup(group);
+    try {
+      const detail = await loadOrderAndModalWithMetrics({
+        page: "My Orders",
+        attemptId,
+        loadDetails: ({ attemptId: measuredAttempt }) => detailsLoaderRef.current.get(group, { attemptId: measuredAttempt }),
+        loadModal: loadCurrentOrdersHeavyModals,
+      });
+      if (requestId !== openRequestRef.current) return;
+      setOpeningGroup(null);
+      setSelected(detail);
+    } catch (error) {
+      if (requestId !== openRequestRef.current) return;
+      cancelOrderOpenTimer("My Orders");
+      setOpeningGroup(null);
+      if (error?.status === 401) { window.location.href = "/login?next=/next/orders"; return; }
+      setNotice(error?.message || "Failed to load order details.");
+      window.setTimeout(() => setNotice(""), 4500);
     }
-    const data = await response.json().catch(() => null);
-    if (!response.ok) throw new Error(data?.error || "Failed to refresh orders.");
-    setOrders(Array.isArray(data) ? data : []);
+  }
+
+  function closeOrderDetails() {
+    cancelOrderOpenTimer("My Orders");
+    ++openRequestRef.current; // prevent a late response from reopening a closed dialog
+    setOpeningGroup(null);
+    setSelected(null);
+  }
+
+  function prefetchOrderDetails(group, hover = false) {
+    if (permissions?.view_details === false || (group && !orderCardAllows(scopePolicy, "details", group))) return;
+    if (!group) { detailsLoaderRef.current.cancelPrefetch(); return; }
+    detailsLoaderRef.current.prefetch(group, { defer: hover });
   }
 
   function beginAction(action, group) {
+    if (permissions?.[action] === false || !orderCardAllows(scopePolicy, action, group)) return;
     setActionError("");
     setActionState({ action, group });
   }
@@ -868,7 +831,7 @@ export default function CurrentOrdersClient({ initialOrders = [], bootstrapWarni
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ orderIds: group.orderIds, adminPassword: password }),
+      body: JSON.stringify({ action, orderIds: group.orderIds, adminPassword: password }),
     });
     const data = await response.json().catch(() => ({}));
     if (response.status === 401) {
@@ -905,13 +868,19 @@ export default function CurrentOrdersClient({ initialOrders = [], bootstrapWarni
         editUrl.searchParams.set("edit", "1");
         if (data?.orderType) editUrl.searchParams.set("type", String(data.orderType));
         if (editKey) editUrl.searchParams.set("editKey", editKey);
-        window.location.href = `${editUrl.pathname}${editUrl.search}`;
+        navigateWithinApp(`${editUrl.pathname}${editUrl.search}`);
         return;
       }
 
-      await refreshOrders();
+      // The mutation already succeeded. A failed list refresh must not prompt
+      // a second archive/restore request (or report a false save error).
       setActionState(null);
       setSelected(null);
+      try {
+        await refreshOrders();
+      } catch (refreshError) {
+        console.warn("[my-orders] Saved; list refresh deferred:", refreshError?.message || refreshError);
+      }
       setNotice(action === "archive" ? "Order moved to Archive." : "Order restored from Archive.");
       window.setTimeout(() => setNotice(""), 3500);
     } catch (error) {
@@ -927,9 +896,13 @@ export default function CurrentOrdersClient({ initialOrders = [], bootstrapWarni
     setBusy(true);
     try {
       await runProtectedAction("delete", group, password);
-      await refreshOrders();
       setDeleteConfirm(null);
       setSelected(null);
+      try {
+        await refreshOrders();
+      } catch (refreshError) {
+        console.warn("[my-orders] Deleted; list refresh deferred:", refreshError?.message || refreshError);
+      }
       setNotice("Order deleted successfully.");
       window.setTimeout(() => setNotice(""), 3500);
     } catch (error) {
@@ -943,12 +916,14 @@ export default function CurrentOrdersClient({ initialOrders = [], bootstrapWarni
 
   async function exportOrder(options, group) {
     const kind = options?.kind === "excel" ? "excel" : "pdf";
-    const endpoint = kind === "excel" ? "/api/orders/export/excel" : "/api/orders/export/pdf";
+    const endpoint = `${DIRECT_API_BASE}/orders/export-direct`;
     const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
       body: JSON.stringify({
+        scope: "current",
+        kind,
         orderIds: group.orderIds,
         columns: options?.columns || [],
         instruction: options?.instruction || null,
@@ -979,8 +954,8 @@ export default function CurrentOrdersClient({ initialOrders = [], bootstrapWarni
   }
 
   return (
-    <section className="next-classic-orders-parity">
-      {bootstrapWarnings.length ? <div className="dashboard-notice"><strong>Partial data</strong><span>One resource was not available during the initial load.</span><a href="/orders?classic=1">Classic page</a></div> : null}
+    <section className="next-classic-orders-parity orders-workspace">
+      {bootstrapWarnings.length ? <div className="dashboard-notice"><strong>Partial data</strong><span>One resource was not available during the initial load.</span></div> : null}
       {notice ? <div className="orders-parity-success" role="status"><ClassicOrderIcon name="check-circle" />{notice}</div> : null}
 
       <div className="next-current-orders-toolbar-wrap">
@@ -1003,17 +978,56 @@ export default function CurrentOrdersClient({ initialOrders = [], bootstrapWarni
       </div>
 
       <section className="card" id="current-orders">
+        <OrdersListHeader count={visibleGroups.length} hasMore={pageInfo?.hasMore} busy={listLoading} sortMode={sortMode} onSortChange={setSortMode} />
         <div className="co-cards" id="orders-list">
-          {visibleGroups.length ? visibleGroups.map((group) => <OrderCard group={group} activeTab={tab} onOpen={setSelected} onReason={setReasonView} key={group.key} />) : (
-            <div className="ops-no-data-state" role="status" aria-live="polite"><img className="ops-no-data-state__image" src="/images/no-data-illustration.png" alt="" loading="lazy"/><div className="ops-no-data-state__text">Sorry, No data available</div></div>
+          {visibleGroups.length ? sortedVisibleGroups.map((group) => <OrderCard group={group} canOpen={permissions?.view_details !== false && orderCardAllows(scopePolicy, "details", group)} activeTab={tab} onOpen={openOrderDetails} onPrefetch={prefetchOrderDetails} onReason={(reason) => { void loadCurrentOrdersHeavyModals(); setReasonView(reason); }} onCreator={(anchor, selectedGroup) => { const bounds = anchor.getBoundingClientRect(); setCreatorPreview({ id: selectedGroup.createdById, name: selectedGroup.createdByName, left: Math.max(12, Math.min(bounds.right - 320, window.innerWidth - 332)), top: bounds.bottom + 8, above: bounds.top }); }} key={group.key} />) : listLoading ? (
+            <div className="ops-no-data-state" role="status" aria-live="polite"><div className="ops-no-data-state__text">Loading orders…</div></div>
+          ) : (
+            <OrdersEmptyState filtered={tab !== "all" || type !== "all" || !!query.trim()} context={"my-orders"} onReset={() => { setTab("all"); setType("all"); setQuery(""); }} />
           )}
         </div>
+        {pageInfo?.hasMore ? (
+          <div style={{ display: "flex", justifyContent: "center", padding: "16px 0 4px" }}>
+            <button
+              type="button"
+              className="ro-action-btn ro-action-btn--light"
+              disabled={listLoading}
+              onClick={() => fetchOrdersPage({ reset: false }).catch((error) => {
+                setNotice(error?.message || "Failed to load more orders.");
+                window.setTimeout(() => setNotice(""), 4000);
+              })}
+            >
+              {listLoading ? "Loading…" : "Load more orders"}
+            </button>
+          </div>
+        ) : null}
       </section>
 
-      <OrderDetailsModal group={selected} tab={tab} busy={busy} onClose={() => setSelected(null)} onAction={beginAction} onReason={setReasonView} onExport={exportOrder} />
-      <PasswordModal state={actionState} busy={busy} error={actionError} onCancel={() => { if (!busy) { setActionState(null); setActionError(""); } }} onSubmit={submitAction} />
-      <DeleteConfirmationModal state={deleteConfirm} busy={busy} onCancel={() => { if (!busy) setDeleteConfirm(null); }} onConfirm={confirmDelete} />
-      <RejectedReasonModal reason={reasonView} onClose={() => setReasonView("")} />
+      {creatorPreview ? <CurrentOrderCreatorPopover creator={creatorPreview} onClose={() => setCreatorPreview(null)} /> : null}
+      <OrderDetailsLoadingOverlay group={openingGroup} onCancel={closeOrderDetails} variant="current" />
+      {(selected || actionState || deleteConfirm || reasonView) ? (
+        <CurrentOrdersHeavyModals
+          selected={selected}
+          tab={tab}
+          busy={busy}
+          onCloseSelected={closeOrderDetails}
+          onAction={beginAction}
+          onReason={setReasonView}
+          onExport={exportOrder}
+          permissions={selected ? Object.fromEntries(Object.entries(permissions || {}).map(([action, permitted]) =>
+            [action, permitted && orderCardAllows(scopePolicy, action, selected)])) : permissions}
+          actionState={actionState}
+          actionError={actionError}
+          onCancelAction={() => { if (!busy) { setActionState(null); setActionError(""); } }}
+          onSubmitAction={submitAction}
+          deleteConfirm={deleteConfirm}
+          onCancelDelete={() => { if (!busy) setDeleteConfirm(null); }}
+          onConfirmDelete={confirmDelete}
+          reasonView={reasonView}
+          onCloseReason={() => setReasonView("")}
+        />
+      ) : null}
+      <OrdersPerformancePanel />
     </section>
   );
 }

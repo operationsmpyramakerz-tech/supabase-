@@ -1,0 +1,34 @@
+import { NextResponse } from "next/server";
+import { getDirectAccountGate } from "../../../../lib/products-auth";
+import { featureGate } from "../../../../lib/feature-permissions-server";
+import { featureAllowed } from "../../../../lib/feature-permissions-registry";
+import { usersCenterSignupRequests } from "../../../../lib/users-center-data";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+const ACCESS_PAGES = ["Users Center", "User Access & Data", "User Access", "Team Members"];
+
+export async function GET(request) {
+  const gate = featureGate(await getDirectAccountGate(ACCESS_PAGES), "users.view");
+  if (!gate.ok) {
+    return NextResponse.json({ ok: false, requests: [], error: gate.error || "Access denied." }, { status: gate.status || 503 });
+  }
+  if (!featureAllowed(gate.account, "users.signup_approve") && !featureAllowed(gate.account, "users.signup_reject")) {
+    return NextResponse.json({ ok: false, requests: [], error: "Sign up request access is not allowed." }, { status: 403 });
+  }
+
+  try {
+    const status = request.nextUrl.searchParams.get("status") || "pending";
+    const fresh = request.nextUrl.searchParams.get("fresh") === "1";
+    return NextResponse.json(await usersCenterSignupRequests({ status, fresh }), {
+      headers: { "Cache-Control": "no-store" },
+    });
+  } catch (error) {
+    console.error("GET /next/api/users-center/signup-requests error:", error?.details || error);
+    return NextResponse.json(
+      { ok: false, requests: [], error: error?.message || "Failed to load sign up requests." },
+      { status: Number(error?.status) || 500 },
+    );
+  }
+}

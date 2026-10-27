@@ -1,6 +1,10 @@
 "use client";
 
+import { featureAllowed } from "../lib/feature-permissions-registry";
+import { beginAuthRouteTransition } from "../lib/auth-route-transition";
+
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 
 const HISTORY_PERMISSIONS = ["History", "System History", "Audit History", "Audit Log", "System Audit", "/history"];
@@ -9,6 +13,7 @@ const HARD_REFRESH_MARKER_KEY = "ops.hardRefresh.pendingAt";
 const CHROME_CACHE_KEY = "ops.ui.chrome.v1";
 const ALLOWED_PAGES_KEY = "allowedPages";
 const ALLOWED_PAGES_COOKIE = "ops_ui_allowed_pages_v1";
+const PROFILE_URL_COOKIE = "ops_ui_profile_url_v1";
 
 function normalize(value) {
   return String(value || "").trim().toLowerCase();
@@ -110,7 +115,7 @@ async function clearBrowserCachesForHardRefresh() {
 }
 
 async function clearServerCaches() {
-  const response = await fetch(`/api/hard-refresh?_fresh=1&_refresh=${encodeURIComponent(String(Date.now()))}`, {
+  const response = await fetch(`/next/api/system/hard-refresh?_fresh=1&_refresh=${encodeURIComponent(String(Date.now()))}`, {
     method: "POST",
     credentials: "include",
     cache: "no-store",
@@ -128,6 +133,7 @@ async function clearServerCaches() {
 }
 
 export default function UserProfileMenu({ account }) {
+  const router = useRouter();
   const triggerRef = useRef(null);
   const panelRef = useRef(null);
   const closeTimerRef = useRef(0);
@@ -153,7 +159,8 @@ export default function UserProfileMenu({ account }) {
       }
 
       try {
-        const response = await fetch(`/api/account?_refresh=${encodeURIComponent(String(Date.now()))}`, {
+        const query = `_refresh=${encodeURIComponent(String(Date.now()))}`;
+        const response = await fetch(`/next/api/account?${query}`, {
           credentials: "include",
           cache: "no-store",
           headers: { Accept: "application/json", "Cache-Control": "no-cache" },
@@ -173,8 +180,33 @@ export default function UserProfileMenu({ account }) {
 
   const displayName = String(profileAccount?.name || profileAccount?.username || "User").trim() || "User";
   const role = String(profileAccount?.position || profileAccount?.department || "").trim();
-  const photoUrl = String(profileAccount?.photoUrl || "").trim();
+  const photoUrl = String(profileAccount?.photoUrl || profileAccount?.profilePicture || "").trim();
   const allowedPages = Array.isArray(profileAccount?.allowedPages) ? profileAccount.allowedPages : [];
+
+  useEffect(() => {
+    // Keep the persistent transition avatar synchronized when a profile photo
+    // is changed from the Account page without requiring a full page reload.
+    const root = document.documentElement;
+    if (photoUrl) {
+      root.classList.add("ops-has-persistent-profile");
+      root.style.setProperty("--ops-profile-image", `url(${JSON.stringify(photoUrl)})`);
+      try {
+        const encoded = encodeURIComponent(photoUrl);
+        if (encoded.length < 3600) {
+          document.cookie = `${PROFILE_URL_COOKIE}=${encoded}; Path=/; Max-Age=2592000; SameSite=Lax`;
+        }
+      } catch {}
+      try {
+        const image = new Image();
+        image.decoding = "async";
+        image.src = photoUrl;
+      } catch {}
+    } else {
+      root.classList.remove("ops-has-persistent-profile");
+      root.style.removeProperty("--ops-profile-image");
+      try { document.cookie = `${PROFILE_URL_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`; } catch {}
+    }
+  }, [photoUrl]);
   const canSeeHistory = useMemo(() => hasPermission(allowedPages, HISTORY_PERMISSIONS), [allowedPages]);
   const canSeeBackup = useMemo(() => hasPermission(allowedPages, BACKUP_PERMISSIONS), [allowedPages]);
 
@@ -242,7 +274,13 @@ export default function UserProfileMenu({ account }) {
 
   function navigate(href) {
     closeMenu({ immediate: true });
-    window.location.href = href;
+    const target = String(href || "").trim();
+    if (target === "/next" || target.startsWith("/next/")) {
+      const clientRoute = target === "/next" ? "/" : target.slice(5) || "/";
+      router.push(clientRoute);
+      return;
+    }
+    window.location.href = target;
   }
 
   async function hardRefresh() {
@@ -266,16 +304,49 @@ export default function UserProfileMenu({ account }) {
   async function logout() {
     if (loggingOut) return;
     setLoggingOut(true);
-    try { await fetch("/api/logout", { method: "POST", credentials: "include" }); } catch {}
+    // Never register a new Service Worker during logout; only revoke a push
+    // subscription already installed on this browser. Bound the wait so a
+    // blocked browser API cannot stop someone from signing out.
+    let pushSubscription = null;
+    if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
+      let timer;
+      try {
+        pushSubscription = await Promise.race([
+          navigator.serviceWorker.getRegistration("/").then(registration => registration?.pushManager?.getSubscription?.() || null),
+          new Promise(resolve => { timer = setTimeout(() => resolve(null), 1500); }),
+        ]);
+      } catch {} finally { clearTimeout(timer); }
+    }
+    let logoutSucceeded = false;
+    try {
+      const response = await fetch("/next/api/auth/logout", {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pushEndpoint: pushSubscription?.endpoint || "" }),
+      });
+      logoutSucceeded = response.ok;
+    } catch {}
+    if (!logoutSucceeded) {
+      setLoggingOut(false);
+      window.alert("Could not sign out. Please check your connection and try again.");
+      return;
+    }
+    if (pushSubscription) {
+      try { await pushSubscription.unsubscribe(); } catch {}
+    }
     try { sessionStorage.clear(); } catch {}
     try { document.cookie = `${ALLOWED_PAGES_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`; } catch {}
+    try { document.cookie = `${PROFILE_URL_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`; } catch {}
     try {
       localStorage.removeItem("ui.sidebarMini");
       localStorage.removeItem("ui.sidebarCollapsed");
       localStorage.removeItem("username");
       localStorage.removeItem(CHROME_CACHE_KEY);
     } catch {}
-    window.location.href = "/login";
+    // Cross the authentication boundary with a full reload but do not expose
+    // an unstyled/intermediate login screen while the new session is checked.
+    beginAuthRouteTransition("/next/login");
+    window.location.replace("/next/login");
   }
 
   const panel = renderPanel ? (
@@ -300,9 +371,11 @@ export default function UserProfileMenu({ account }) {
 
         <div className="user-menu-sep user-menu-sep--tight" role="separator" />
 
-        <button type="button" className="user-menu-item" role="menuitem" onClick={() => navigate("/next/account")}>
-          <span className="umi-ico"><MenuIcon name="user" /></span><span className="umi-label">User Profile</span>
-        </button>
+        {featureAllowed(account, "account.view") ? (
+          <button type="button" className="user-menu-item" role="menuitem" onClick={() => navigate("/next/account")}>
+            <span className="umi-ico"><MenuIcon name="user" /></span><span className="umi-label">User Profile</span>
+          </button>
+        ) : null}
 
         {canSeeHistory ? (
           <button type="button" className="user-menu-item" role="menuitem" onClick={() => navigate("/next/history")}>

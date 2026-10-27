@@ -1,15 +1,83 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
+import { featureAllowed } from "../../lib/feature-permissions-registry";
+
+const EditFieldModal = dynamic(() => import("./AccountDialogs").then((module) => module.EditFieldModal), { ssr: false });
+const NotificationPreferencesPanel = dynamic(() => import("../notifications/NotificationPreferencesPanel"), { ssr: false });
+const ImageUploadModal = dynamic(() => import("./AccountDialogs").then((module) => module.ImageUploadModal), { ssr: false });
+const RemoveImageModal = dynamic(() => import("./AccountDialogs").then((module) => module.RemoveImageModal), { ssr: false });
 
 const FIELD_META = [
-  { key: "name", label: "Name", type: "text", required: true },
-  { key: "department", label: "Department", type: "text" },
-  { key: "position", label: "Position", type: "text" },
-  { key: "phone", label: "Phone", type: "text", placeholder: "e.g. 0123456789" },
-  { key: "email", label: "Email", type: "email", placeholder: "e.g. name@company.com" },
-  { key: "employeeCode", label: "Employee Code", type: "number" },
-  { key: "password", label: "Password", type: "password", required: true, placeholder: "New password" },
+  {
+    key: "name",
+    label: "Username",
+    type: "text",
+    required: true,
+    placeholder: "Enter username",
+    helper: "This name is shown across the system.",
+    maxLength: 80,
+    autoComplete: "username",
+  },
+  {
+    key: "department",
+    label: "Department",
+    type: "text",
+    placeholder: "Add department",
+    helper: "Your primary team or department.",
+    maxLength: 80,
+    autoComplete: "organization",
+  },
+  {
+    key: "position",
+    label: "Position",
+    type: "text",
+    placeholder: "Add position",
+    helper: "Your current role or job title.",
+    maxLength: 100,
+    autoComplete: "organization-title",
+  },
+  {
+    key: "phone",
+    label: "Phone",
+    type: "tel",
+    placeholder: "Add phone number",
+    helper: "Use a reachable phone number.",
+    maxLength: 32,
+    inputMode: "tel",
+    autoComplete: "tel",
+  },
+  {
+    key: "email",
+    label: "Email",
+    type: "email",
+    placeholder: "Add email address",
+    helper: "Use an email address you can access.",
+    maxLength: 160,
+    inputMode: "email",
+    autoComplete: "email",
+  },
+  {
+    key: "employeeCode",
+    label: "Employee code",
+    type: "text",
+    placeholder: "Add employee code",
+    helper: "Numbers only.",
+    maxLength: 30,
+    inputMode: "numeric",
+    autoComplete: "off",
+  },
+  {
+    key: "password",
+    label: "Password",
+    type: "password",
+    required: true,
+    placeholder: "Enter a new password",
+    helper: "Use at least 8 characters.",
+    maxLength: 128,
+    autoComplete: "new-password",
+  },
 ];
 
 function text(value) {
@@ -65,94 +133,9 @@ function normalizeAccount(account = {}) {
     email: text(account?.email),
     employeeCode: text(account?.employeeCode),
     photoUrl: safeUrl(account?.photoUrl),
-    coverPhotoUrl: safeUrl(account?.coverPhotoUrl),
     passwordSet: account?.passwordSet === true,
     filesMedia: normalizeFiles(account?.filesMedia),
   };
-}
-
-async function readFileAsDataUrl(file) {
-  return await new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = () => reject(reader.error || new Error("The selected image could not be read."));
-    reader.readAsDataURL(file);
-  });
-}
-
-async function loadImage(dataUrl) {
-  return await new Promise((resolve, reject) => {
-    const image = new Image();
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error("The selected image could not be prepared."));
-    image.src = dataUrl;
-  });
-}
-
-async function croppedImageDataUrl(file, kind, crop, viewportWidth, viewportHeight) {
-  const raw = await readFileAsDataUrl(file);
-  const image = await loadImage(raw);
-  const sourceWidth = Math.max(1, image.naturalWidth || image.width || 1);
-  const sourceHeight = Math.max(1, image.naturalHeight || image.height || 1);
-  const frameWidth = Math.max(1, Number(viewportWidth) || (kind === "cover" ? 680 : 360));
-  const frameHeight = Math.max(1, Number(viewportHeight) || (kind === "cover" ? 200 : 360));
-  const zoom = Math.max(1, Math.min(3, Number(crop?.zoom) || 1));
-  const baseScale = Math.max(frameWidth / sourceWidth, frameHeight / sourceHeight);
-  const displayScale = baseScale * zoom;
-  const cropWidth = Math.min(sourceWidth, frameWidth / displayScale);
-  const cropHeight = Math.min(sourceHeight, frameHeight / displayScale);
-  const centerX = (sourceWidth / 2) - ((Number(crop?.x) || 0) / displayScale);
-  const centerY = (sourceHeight / 2) - ((Number(crop?.y) || 0) / displayScale);
-  const sx = Math.max(0, Math.min(sourceWidth - cropWidth, centerX - cropWidth / 2));
-  const sy = Math.max(0, Math.min(sourceHeight - cropHeight, centerY - cropHeight / 2));
-
-  const outputWidth = kind === "cover" ? 1700 : 900;
-  const outputHeight = kind === "cover" ? 500 : 900;
-  const canvas = document.createElement("canvas");
-  canvas.width = outputWidth;
-  canvas.height = outputHeight;
-  const context = canvas.getContext("2d", { alpha: false });
-  if (!context) throw new Error("The image crop could not be prepared.");
-  context.fillStyle = "#ffffff";
-  context.fillRect(0, 0, outputWidth, outputHeight);
-  context.imageSmoothingEnabled = true;
-  context.imageSmoothingQuality = "high";
-  context.drawImage(image, sx, sy, cropWidth, cropHeight, 0, 0, outputWidth, outputHeight);
-  let result = canvas.toDataURL("image/webp", kind === "cover" ? 0.84 : 0.88);
-  if (!result.startsWith("data:image/webp")) result = canvas.toDataURL("image/jpeg", kind === "cover" ? 0.86 : 0.9);
-  return result;
-}
-
-async function fittedCoverImageDataUrl(file) {
-  const raw = await readFileAsDataUrl(file);
-  const image = await loadImage(raw);
-  const sourceWidth = Math.max(1, image.naturalWidth || image.width || 1);
-  const sourceHeight = Math.max(1, image.naturalHeight || image.height || 1);
-  const maxWidth = 2400;
-  const maxHeight = 1800;
-  const resizeScale = Math.min(1, maxWidth / sourceWidth, maxHeight / sourceHeight);
-  const outputWidth = Math.max(1, Math.round(sourceWidth * resizeScale));
-  const outputHeight = Math.max(1, Math.round(sourceHeight * resizeScale));
-
-  const canvas = document.createElement("canvas");
-  canvas.width = outputWidth;
-  canvas.height = outputHeight;
-  const context = canvas.getContext("2d", { alpha: false });
-  if (!context) throw new Error("The cover image could not be prepared.");
-  context.fillStyle = "#ffffff";
-  context.fillRect(0, 0, outputWidth, outputHeight);
-  context.imageSmoothingEnabled = true;
-  context.imageSmoothingQuality = "high";
-  context.drawImage(image, 0, 0, sourceWidth, sourceHeight, 0, 0, outputWidth, outputHeight);
-
-  let result = canvas.toDataURL("image/webp", 0.88);
-  if (!result.startsWith("data:image/webp")) result = canvas.toDataURL("image/jpeg", 0.9);
-  return result;
-}
-
-function clampCropOffset(value, displaySize, frameSize) {
-  const limit = Math.max(0, (displaySize - frameSize) / 2);
-  return Math.max(-limit, Math.min(limit, Number(value) || 0));
 }
 
 async function requestJson(url, options = {}, { redirectOn401 = true } = {}) {
@@ -197,6 +180,16 @@ function Icon({ name, size = 18 }) {
     alert: <><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></>,
     eye: <><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></>,
     eyeOff: <><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a20.7 20.7 0 0 1 5.06-6.94"/><path d="M1 1l22 22"/><path d="M9.88 9.88A3 3 0 0 0 12 15a3 3 0 0 0 2.12-.88"/></>,
+    sun: <><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></>,
+    moon: <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"/>,
+    user: <><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></>,
+    building: <><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M9 21v-4h6v4"/><path d="M8 7h.01M12 7h.01M16 7h.01M8 11h.01M12 11h.01M16 11h.01"/></>,
+    briefcase: <><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M3 12h18"/></>,
+    phone: <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.69 2.8a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.33 1.84.56 2.8.69A2 2 0 0 1 22 16.92Z"/>,
+    mail: <><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></>,
+    hash: <><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></>,
+    chevron: <polyline points="9 18 15 12 9 6"/>,
+    camera: <><path d="M14.5 4 16 6h3a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3l1.5-2Z"/><circle cx="12" cy="13" r="3"/></>,
   };
   return <svg {...common}>{paths[name] || paths.file}</svg>;
 }
@@ -210,13 +203,39 @@ function fileIcon(file) {
   return "file";
 }
 
+const ACCOUNT_ISLAND_DURATION_MS = 5200;
+
+function AccountSavedIsland({ toast, onClose }) {
+  useEffect(() => {
+    if (!toast) return undefined;
+    const timer = window.setTimeout(onClose, ACCOUNT_ISLAND_DURATION_MS + 140);
+    return () => window.clearTimeout(timer);
+  }, [toast, onClose]);
+
+  if (!toast) return null;
+  return (
+    <div className="account-saved-island" role="status" aria-live="polite">
+      <svg className="account-saved-island-progress" viewBox="0 0 500 92" preserveAspectRatio="none" aria-hidden="true">
+        <rect className="account-saved-island-track" x="3" y="3" width="494" height="86" rx="43" pathLength="100" />
+        <rect className="account-saved-island-line" x="3" y="3" width="494" height="86" rx="43" pathLength="100" />
+      </svg>
+      <span className="account-saved-island-icon"><Icon name="check" size={18} /></span>
+      <span className="account-saved-island-copy">
+        <strong>{toast.title || "Saved"}</strong>
+        <small>{toast.message || "Changes saved successfully."}</small>
+      </span>
+    </div>
+  );
+}
+
 function Toast({ toast, onClose }) {
   if (!toast) return null;
   const type = toast.type === "error" ? "error" : toast.type === "success" ? "success" : "info";
+  if (type === "success") return <AccountSavedIsland toast={toast} onClose={onClose} />;
   return (
     <div className="toast-stack account-classic-toast" role="status" aria-live="polite">
       <div className={`toast toast--${type} is-in`}>
-        <span className="toast__icon"><Icon name={type === "success" ? "check" : type === "error" ? "alert" : "file"} size={14} /></span>
+        <span className="toast__icon"><Icon name={type === "error" ? "alert" : "file"} size={14} /></span>
         <div className="toast__content"><div className="toast__title">{toast.title || "My Account"}</div><div className="toast__msg">{toast.message}</div></div>
         <button className="toast__close" type="button" onClick={onClose} aria-label="Close">×</button>
       </div>
@@ -224,328 +243,44 @@ function Toast({ toast, onClose }) {
   );
 }
 
-function PasswordToggle({ visible, onToggle, label }) {
-  return (
-    <button type="button" className="toggle-password" aria-label={`${visible ? "Hide" : "Show"} ${label}`} aria-pressed={visible} onClick={onToggle}>
-      <Icon name={visible ? "eyeOff" : "eye"} size={20} />
-    </button>
-  );
-}
-
-function EditFieldModal({ field, account, onClose, onSaved }) {
-  const isPassword = field?.key === "password";
-  const [value, setValue] = useState(isPassword ? "" : text(account?.[field?.key]));
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [showValue, setShowValue] = useState(false);
-  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    function handleKeyDown(event) {
-      if (event.key === "Escape" && !busy) onClose();
-    }
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [busy, onClose]);
-
-  async function submit(event) {
-    event.preventDefault();
-    const nextValue = String(value ?? "").trim();
-    if (field?.required && !nextValue) return setError(`${field.label} cannot be empty.`);
-    if (!text(currentPassword)) return setError("Current password is required.");
-    setBusy(true);
-    setError("");
-    try {
-      await requestJson("/api/account/verify-password", {
-        method: "POST",
-        body: JSON.stringify({ currentPassword }),
-      }, { redirectOn401: false });
-
-      await requestJson("/api/account", {
-        method: "PATCH",
-        body: JSON.stringify({ currentPassword, [field.key]: nextValue || null }),
-      }, { redirectOn401: false });
-
-      const refreshed = await requestJson("/api/account", {}, { redirectOn401: true });
-      onSaved(normalizeAccount(refreshed), `${field.label} updated successfully.`);
-      onClose();
-    } catch (saveError) {
-      setError(saveError?.status === 401 ? "invalid password" : (saveError?.message || "The account field could not be updated."));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="ex-modal" style={{ display: "flex" }} aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
-      <form className="ex-modal-box" role="dialog" aria-modal="true" aria-label={`Edit ${field.label}`} onSubmit={submit}>
-        <h3 className="ex-modal-title">Edit {field.label}</h3>
-        <label className="field-label"><Icon name="edit" size={16} /> {field.label}</label>
-        <div className={`password-wrapper ${isPassword ? "has-toggle" : ""}`}>
-          <input
-            autoFocus
-            className="ex-input"
-            type={isPassword ? (showValue ? "text" : "password") : (field.type || "text")}
-            value={value}
-            onChange={(event) => { setValue(event.target.value); setError(""); }}
-            placeholder={field.placeholder || ""}
-            autoComplete={isPassword ? "new-password" : undefined}
-          />
-          {isPassword ? <PasswordToggle visible={showValue} onToggle={() => setShowValue((current) => !current)} label="new password" /> : null}
-        </div>
-
-        <label className="field-label"><Icon name="lock" size={16} /> Current password</label>
-        <div className="password-wrapper has-toggle">
-          <input
-            className="ex-input"
-            type={showCurrentPassword ? "text" : "password"}
-            value={currentPassword}
-            onChange={(event) => { setCurrentPassword(event.target.value); setError(""); }}
-            autoComplete="current-password"
-          />
-          <PasswordToggle visible={showCurrentPassword} onToggle={() => setShowCurrentPassword((current) => !current)} label="current password" />
-        </div>
-
-        {error ? <div className="ex-error" style={{ display: "block" }} role="alert">{error}</div> : null}
-        <div className="ex-modal-actions">
-          <button className="ex-btn ex-primary" type="submit" disabled={busy}>{busy ? "Saving..." : "Submit"}</button>
-          <button className="ex-btn ex-danger" type="button" onClick={onClose} disabled={busy}>Close</button>
-        </div>
-      </form>
-    </div>
-  );
-}
-
-function ImageUploadModal({ imageRequest, onClose, onSaved }) {
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [crop, setCrop] = useState({ zoom: 1, x: 0, y: 0 });
-  const [imageMeta, setImageMeta] = useState({ width: 0, height: 0 });
-  const cropViewportRef = useRef(null);
-  const dragRef = useRef(null);
-  const kind = imageRequest?.kind === "cover" ? "cover" : "profile";
-  const label = kind === "cover" ? "Cover photo" : "Profile picture";
-
-  useEffect(() => {
-    setCrop({ zoom: 1, x: 0, y: 0 });
-    setImageMeta({ width: 0, height: 0 });
-    setError("");
-  }, [imageRequest?.preview, kind]);
-
-  useEffect(() => {
-    function handleKeyDown(event) {
-      if (event.key === "Escape" && !busy) onClose();
-    }
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [busy, onClose]);
-
-  function clampPosition(x, y, zoom) {
-    const viewport = cropViewportRef.current;
-    if (!viewport || !imageMeta.width || !imageMeta.height) return { x: 0, y: 0 };
-    const rect = viewport.getBoundingClientRect();
-    const baseScale = Math.max(rect.width / imageMeta.width, rect.height / imageMeta.height);
-    const displayWidth = imageMeta.width * baseScale * zoom;
-    const displayHeight = imageMeta.height * baseScale * zoom;
-    return {
-      x: clampCropOffset(x, displayWidth, rect.width),
-      y: clampCropOffset(y, displayHeight, rect.height),
-    };
-  }
-
-  function changeZoom(value) {
-    const zoom = Math.max(1, Math.min(3, Number(value) || 1));
-    setCrop((current) => {
-      const position = clampPosition(current.x, current.y, zoom);
-      return { zoom, ...position };
-    });
-  }
-
-  function resetCrop() {
-    setCrop({ zoom: 1, x: 0, y: 0 });
-  }
-
-  function handlePointerDown(event) {
-    if (busy) return;
-    event.preventDefault();
-    event.currentTarget.setPointerCapture?.(event.pointerId);
-    dragRef.current = {
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      startY: event.clientY,
-      cropX: crop.x,
-      cropY: crop.y,
-    };
-  }
-
-  function handlePointerMove(event) {
-    const drag = dragRef.current;
-    if (!drag || drag.pointerId !== event.pointerId || busy) return;
-    const nextX = drag.cropX + (event.clientX - drag.startX);
-    const nextY = drag.cropY + (event.clientY - drag.startY);
-    setCrop((current) => ({ ...current, ...clampPosition(nextX, nextY, current.zoom) }));
-  }
-
-  function handlePointerEnd(event) {
-    if (dragRef.current?.pointerId === event.pointerId) dragRef.current = null;
-    try { event.currentTarget.releasePointerCapture?.(event.pointerId); } catch {}
-  }
-
-  async function submit(event) {
-    event.preventDefault();
-    if (!imageRequest?.file) return setError("Please choose an image first.");
-    if (!text(currentPassword)) return setError("Current password is required.");
-    setBusy(true);
-    setError("");
-    try {
-      await requestJson("/api/account/verify-password", {
-        method: "POST",
-        body: JSON.stringify({ currentPassword }),
-      }, { redirectOn401: false });
-
-      const viewport = cropViewportRef.current?.getBoundingClientRect();
-      const dataUrl = kind === "cover"
-        ? await fittedCoverImageDataUrl(imageRequest.file)
-        : await croppedImageDataUrl(
-            imageRequest.file,
-            kind,
-            crop,
-            viewport?.width,
-            viewport?.height,
-          );
-      const endpoint = kind === "cover" ? "/api/account/cover-photo" : "/api/account/profile-picture";
-      const result = await requestJson(endpoint, {
-        method: "POST",
-        body: JSON.stringify({ dataUrl, filename: imageRequest.file.name, currentPassword }),
-      }, { redirectOn401: false });
-      onSaved(kind, safeUrl(kind === "cover" ? result.coverPhotoUrl : result.photoUrl));
-      onClose();
-    } catch (uploadError) {
-      setError(uploadError?.status === 401 ? "invalid password" : (uploadError?.message || "The image could not be uploaded."));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="ex-modal account-image-editor-layer" style={{ display: "flex" }} aria-hidden="false">
-      <form className={`ex-modal-box account-image-editor account-image-editor--${kind}`} role="dialog" aria-modal="true" aria-label={`Change ${label}`} onSubmit={submit}>
-        <div className="account-image-editor-head">
-          <div className="account-image-editor-headcopy">
-            <span className="account-image-editor-icon"><Icon name="image" size={20} /></span>
-            <div>
-              <h3 className="ex-modal-title">Change {label}</h3>
-              <p>{kind === "profile" ? "Drag the image to choose the visible area, then zoom if needed." : "The full cover image will be saved without cropping and fitted automatically across the system."}</p>
-            </div>
-          </div>
-          <button className="account-image-editor-close" type="button" onClick={onClose} disabled={busy} aria-label="Close"><Icon name="x" size={18} /></button>
-        </div>
-
-        {kind === "profile" ? (
-          <>
-            <div className="account-crop-stage">
-              <div
-                ref={cropViewportRef}
-                className="account-crop-viewport account-crop-viewport--profile"
-                onPointerDown={handlePointerDown}
-                onPointerMove={handlePointerMove}
-                onPointerUp={handlePointerEnd}
-                onPointerCancel={handlePointerEnd}
-                aria-label="Crop profile picture"
-              >
-                {imageRequest?.preview ? (
-                  <img
-                    className="account-crop-image"
-                    src={imageRequest.preview}
-                    alt="Profile picture crop preview"
-                    draggable="false"
-                    onLoad={(event) => {
-                      const element = event.currentTarget;
-                      setImageMeta({ width: element.naturalWidth || 1, height: element.naturalHeight || 1 });
-                      setCrop({ zoom: 1, x: 0, y: 0 });
-                    }}
-                    style={{ transform: `translate3d(${crop.x}px, ${crop.y}px, 0) scale(${crop.zoom})` }}
-                  />
-                ) : null}
-                <span className="account-crop-grid" aria-hidden="true" />
-                <span className="account-crop-profile-ring" aria-hidden="true" />
-              </div>
-              <div className="account-crop-hint">Drag to reposition</div>
-            </div>
-
-            <div className="account-crop-controls">
-              <span className="account-crop-zoom-label">Zoom</span>
-              <input
-                className="account-crop-zoom"
-                type="range"
-                min="1"
-                max="3"
-                step="0.01"
-                value={crop.zoom}
-                onChange={(event) => changeZoom(event.target.value)}
-                aria-label="Zoom image"
-              />
-              <button className="account-crop-reset" type="button" onClick={resetCrop} disabled={busy}>Reset</button>
-            </div>
-          </>
-        ) : (
-          <div className="account-cover-fit-stage">
-            <div className="account-cover-fit-preview" aria-label="Cover photo preview">
-              {imageRequest?.preview ? <img src={imageRequest.preview} alt="Cover photo preview" draggable="false" /> : null}
-            </div>
-            <div className="account-cover-fit-note">Full image • no crop • automatic system fit</div>
-          </div>
-        )}
-
-        <div className="account-image-editor-filename"><Icon name="image" size={15} /><span>{imageRequest?.file?.name || "Selected image"}</span></div>
-
-        <label className="field-label"><Icon name="lock" size={16} /> Current password</label>
-        <div className="password-wrapper has-toggle account-image-editor-password">
-          <input className="ex-input" type={showCurrentPassword ? "text" : "password"} value={currentPassword} onChange={(event) => { setCurrentPassword(event.target.value); setError(""); }} autoComplete="current-password" placeholder="Enter your current password" />
-          <PasswordToggle visible={showCurrentPassword} onToggle={() => setShowCurrentPassword((current) => !current)} label="current password" />
-        </div>
-        {error ? <div className="ex-error" style={{ display: "block" }} role="alert">{error}</div> : null}
-        <div className="ex-modal-actions account-image-editor-actions">
-          <button className="ex-btn account-image-editor-cancel" type="button" onClick={onClose} disabled={busy}>Cancel</button>
-          <button className="ex-btn ex-primary account-image-editor-save" type="submit" disabled={busy}>{busy ? "Saving…" : `Save ${kind === "cover" ? "cover" : "photo"}`}</button>
-        </div>
-      </form>
-    </div>
-  );
-}
-
-function RemoveImageModal({ kind, busy, onClose, onConfirm }) {
-  const label = kind === "cover" ? "cover photo" : "profile picture";
-
-  useEffect(() => {
-    function handleKeyDown(event) {
-      if (event.key === "Escape" && !busy) onClose();
-    }
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [busy, onClose]);
-
-  return (
-    <div className="account-confirm-layer" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
-      <section className="account-confirm-card" role="dialog" aria-modal="true" aria-labelledby="account-remove-title">
-        <span className="account-confirm-icon"><Icon name="alert" size={23} /></span>
-        <h3 id="account-remove-title">Remove {label}?</h3>
-        <p>You’re going to remove the current {label} and restore the default image. This action cannot be undone.</p>
-        <div className="account-confirm-actions">
-          <button className="account-confirm-cancel" type="button" onClick={onClose} disabled={busy}>Cancel</button>
-          <button className="account-confirm-remove" type="button" onClick={onConfirm} disabled={busy}>{busy ? "Removing…" : "Remove"}</button>
-        </div>
-      </section>
-    </div>
-  );
+function fieldHasValue(account, field) {
+  if (field.key === "password") return account.passwordSet === true;
+  return Boolean(text(account?.[field.key]));
 }
 
 function fieldDisplay(account, field) {
-  if (field.key === "password") return account.passwordSet ? "••••••••" : "—";
-  return text(account?.[field.key]) || "—";
+  if (field.key === "password") return account.passwordSet ? "••••••••" : (field.placeholder || "Set password");
+  return text(account?.[field.key]) || field.placeholder || "Not added";
+}
+
+const THEME_STORAGE_KEY = "ops_ui_theme_v1";
+
+function currentTheme() {
+  if (typeof document === "undefined") return "light";
+  const fromRoot = String(document.documentElement?.dataset?.theme || "").toLowerCase();
+  if (fromRoot === "dark" || fromRoot === "light") return fromRoot;
+  try {
+    const stored = String(localStorage.getItem(THEME_STORAGE_KEY) || "").toLowerCase();
+    if (stored === "dark" || stored === "light") return stored;
+  } catch {}
+  return "light";
+}
+
+function applyTheme(theme) {
+  const next = theme === "dark" ? "dark" : "light";
+  if (typeof document === "undefined") return next;
+  const root = document.documentElement;
+  root.dataset.theme = next;
+  root.classList.toggle("ops-theme-dark", next === "dark");
+  root.style.colorScheme = next;
+  const themeColor = document.getElementById("ops-theme-color");
+  if (themeColor) themeColor.setAttribute("content", next === "dark" ? "#080b11" : "#ffffff");
+  try { localStorage.setItem(THEME_STORAGE_KEY, next); } catch {}
+  try {
+    document.cookie = `${THEME_STORAGE_KEY}=${next}; Path=/; Max-Age=31536000; SameSite=Lax`;
+  } catch {}
+  try { window.dispatchEvent(new CustomEvent("ops:theme-changed", { detail: { theme: next } })); } catch {}
+  return next;
 }
 
 export default function AccountClient({ initialAccount }) {
@@ -555,8 +290,36 @@ export default function AccountClient({ initialAccount }) {
   const [toast, setToast] = useState(null);
   const [busyAction, setBusyAction] = useState("");
   const [removeRequest, setRemoveRequest] = useState("");
+  const [theme, setTheme] = useState("light");
+  const [showNotificationPreferences, setShowNotificationPreferences] = useState(false);
   const profileInputRef = useRef(null);
-  const coverInputRef = useRef(null);
+  const canEditProfile = featureAllowed(initialAccount, "account.edit");
+  const canEditAvatar = featureAllowed(initialAccount, "account.avatar");
+  const canChangePassword = featureAllowed(initialAccount, "account.password");
+  const canChangeNotificationSettings = featureAllowed(initialAccount, "notifications.preferences");
+
+  useEffect(() => {
+    const syncTheme = () => setTheme(currentTheme());
+    syncTheme();
+    const handleThemeChanged = (event) => {
+      const next = String(event?.detail?.theme || currentTheme()).toLowerCase();
+      setTheme(next === "dark" ? "dark" : "light");
+    };
+    const handleStorage = (event) => {
+      if (!event || event.key === THEME_STORAGE_KEY) syncTheme();
+    };
+    window.addEventListener("ops:theme-changed", handleThemeChanged);
+    window.addEventListener("storage", handleStorage);
+    return () => {
+      window.removeEventListener("ops:theme-changed", handleThemeChanged);
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, []);
+
+  function toggleTheme() {
+    const next = theme === "dark" ? "light" : "dark";
+    setTheme(applyTheme(next));
+  }
 
   function showToast(type, title, message) {
     setToast({ type, title, message });
@@ -578,30 +341,28 @@ export default function AccountClient({ initialAccount }) {
     if (imageRequest?.preview) URL.revokeObjectURL(imageRequest.preview);
     setImageRequest(null);
     if (profileInputRef.current) profileInputRef.current.value = "";
-    if (coverInputRef.current) coverInputRef.current.value = "";
   }
 
   function selectImage(kind, file) {
-    if (!file) return;
+    if (!canEditAvatar || !file) return;
     const isImage = lower(file.type).startsWith("image/") || /\.(png|jpe?g|webp|gif|bmp|avif|svg)$/i.test(file.name || "");
     if (!isImage) return showToast("error", "Invalid file", "Only image files can be used for the account profile.");
     if (file.size > 10 * 1024 * 1024) return showToast("error", "Image too large", "Please choose an image up to 10 MB.");
     setImageRequest({ kind, file, preview: URL.createObjectURL(file) });
   }
 
-  async function removeImage(kind) {
-    const label = kind === "cover" ? "cover photo" : "profile picture";
-    setBusyAction(`remove-${kind}`);
+  async function removeImage() {
+    if (!canEditAvatar) return;
+    setBusyAction("remove-profile");
     try {
-      const endpoint = kind === "cover" ? "/api/account/cover-photo" : "/api/account/profile-picture";
-      await requestJson(endpoint, { method: "DELETE" });
-      const next = { ...account, [kind === "cover" ? "coverPhotoUrl" : "photoUrl"]: "" };
+      await requestJson("/next/api/account/image-direct?kind=profile", { method: "DELETE" });
+      const next = { ...account, photoUrl: "" };
       setAccount(next);
       syncAccountChrome(next);
       setRemoveRequest("");
-      showToast("success", "Removed", `${kind === "cover" ? "Cover photo" : "Profile picture"} removed successfully.`);
+      showToast("success", "Removed", "Profile picture removed successfully.");
     } catch (error) {
-      showToast("error", "Remove failed", error?.message || `The ${label} could not be removed.`);
+      showToast("error", "Remove failed", error?.message || "The profile picture could not be removed.");
     } finally {
       setBusyAction("");
     }
@@ -616,88 +377,103 @@ export default function AccountClient({ initialAccount }) {
       <Toast toast={toast} onClose={() => setToast(null)} />
 
       <div id="account-content">
-        <div className="account-panel account-panel--profile account-profile-modern">
-          <section className="profile-hero-section" aria-label="User profile header">
-            <div className="profile-cover-section" data-field="coverPhoto">
-              <button className="profile-cover-display" type="button" aria-label="Change cover photo" title="Change cover photo" onClick={() => coverInputRef.current?.click()}>
-                {account.coverPhotoUrl ? <img className="profile-cover-image" src={account.coverPhotoUrl} alt={`${displayName} cover photo`} /> : <span className="profile-cover-fallback" aria-hidden="true" />}
+        <div className="account-panel account-panel--profile profile-settings-page">
+          <section className="profile-settings-summary" aria-label="Profile summary">
+            <div className="profile-settings-avatar-wrap">
+              <button className="profile-settings-avatar" type="button" aria-label="Change profile picture" disabled={!canEditAvatar} onClick={() => canEditAvatar && profileInputRef.current?.click()}>
+                {account.photoUrl ? <img src={account.photoUrl} width="84" height="84" alt={`${displayName} profile picture`} /> : <span>{initials(displayName)}</span>}
               </button>
-              {account.coverPhotoUrl ? (
-                <button className="profile-cover-remove profile-image-remove" type="button" aria-label="Remove cover photo" title="Remove cover photo" onClick={() => setRemoveRequest("cover")} disabled={busyAction === "remove-cover"}>
-                  <Icon name="x" size={18} />
+              <button className="profile-settings-avatar-edit" type="button" aria-label="Edit profile picture" onClick={() => canEditAvatar && profileInputRef.current?.click()} disabled={!canEditAvatar || busyAction === "remove-profile"}>
+                <Icon name="camera" size={15} />
+              </button>
+              {account.photoUrl && canEditAvatar ? (
+                <button className="profile-settings-avatar-remove" type="button" aria-label="Remove profile picture" onClick={() => setRemoveRequest("profile")} disabled={!canEditAvatar || busyAction === "remove-profile"}>
+                  <Icon name="x" size={14} />
                 </button>
               ) : null}
-              <button className="profile-cover-edit" type="button" aria-label="Edit cover photo" title="Edit cover photo" onClick={() => coverInputRef.current?.click()} disabled={busyAction === "remove-cover"}>
-                <Icon name="edit" size={18} />
-              </button>
-              <input ref={coverInputRef} className="acc-file-input profile-cover-file-input" type="file" accept="image/*" hidden onChange={(event) => selectImage("cover", event.target.files?.[0])} />
+              <input ref={profileInputRef} className="acc-file-input" type="file" accept="image/*" hidden onChange={(event) => selectImage("profile", event.target.files?.[0])} />
             </div>
-
-            <div className="profile-identity-block">
-              <div className="profile-avatar-section" data-field="profilePicture">
-                <div className="profile-avatar-shell">
-                  <button className="profile-avatar-display" type="button" aria-label="Change profile picture" title="Change profile picture" onClick={() => profileInputRef.current?.click()}>
-                    {account.photoUrl ? <img className="profile-avatar-image" src={account.photoUrl} width="142" height="142" alt={`${displayName} profile picture`} /> : <span className="profile-avatar-fallback" aria-hidden="true">{initials(displayName)}</span>}
-                  </button>
-                  <button className="profile-avatar-edit" type="button" aria-label="Edit profile picture" title="Edit profile picture" onClick={() => profileInputRef.current?.click()} disabled={busyAction === "remove-profile"}>
-                    <Icon name="edit" size={18} />
-                  </button>
-                  {account.photoUrl ? (
-                    <button className="profile-avatar-remove profile-image-remove" type="button" aria-label="Remove profile picture" title="Remove profile picture" onClick={() => setRemoveRequest("profile")} disabled={busyAction === "remove-profile"}>
-                      <Icon name="x" size={18} />
-                    </button>
-                  ) : null}
-                  <input ref={profileInputRef} className="acc-file-input profile-avatar-file-input" type="file" accept="image/*" hidden onChange={(event) => selectImage("profile", event.target.files?.[0])} />
-                </div>
-              </div>
-              <h2 className="profile-identity-name">{displayName}</h2>
-              <div className="profile-identity-subtitle">{subtitle}</div>
+            <div className="profile-settings-summary-copy">
+              <h2>{displayName}</h2>
+              <p>{account.email || "No email added"}</p>
+              <small>{subtitle}</small>
             </div>
           </section>
 
-          <div className="profile-fields-list">
-            {FIELD_META.map((field) => (
-              <section className="profile-field-card" data-field={field.key} key={field.key}>
-                <div className="profile-field-label">{field.label}</div>
-                <div className={`profile-field-box ${field.key === "password" ? "profile-field-box--password" : ""}`}>
-                  <span className="profile-field-value">{fieldDisplay(account, field)}</span>
-                  <button className="profile-field-edit acc-action acc-edit" type="button" aria-label={`Edit ${field.label}`} title={`Edit ${field.label}`} onClick={() => setEditField(field)}>
-                    <Icon name="edit" size={16} />
+          <section className="profile-settings-section" aria-labelledby="profile-account-heading">
+            <h3 id="profile-account-heading">Account</h3>
+            <div className="profile-settings-list">
+              {FIELD_META.filter((field) => field.key === "password" ? canChangePassword : canEditProfile).map((field) => {
+                const iconName = { name: "user", department: "building", position: "briefcase", phone: "phone", email: "mail", employeeCode: "hash", password: "lock" }[field.key] || "user";
+                const display = fieldDisplay(account, field);
+                return (
+                  <button className="profile-settings-row" type="button" key={field.key} onClick={() => setEditField(field)} aria-label={`Edit ${field.label}`}>
+                    <span className="profile-settings-row-icon" aria-hidden="true"><Icon name={iconName} size={19} /></span>
+                    <span className="profile-settings-row-copy">
+                      <strong>{field.key === "password" ? "Password & Security" : field.label}</strong>
+                      <small>{display}</small>
+                    </span>
+                    <span className="profile-settings-chevron" aria-hidden="true"><Icon name="chevron" size={18} /></span>
                   </button>
-                </div>
-              </section>
-            ))}
-          </div>
-
-          <section className="profile-files-media-section" aria-label="Files and media">
-            <div className="profile-files-media-head">
-              <span className="profile-files-media-badge"><Icon name="paperclip" size={18} /></span>
-              <div>
-                <div className="profile-files-media-title">Files &amp; media</div>
-                <div className="profile-files-media-sub">{files.length ? `${files.length} item${files.length === 1 ? "" : "s"} attached to your profile` : "Attachments from your Team Members record"}</div>
-              </div>
+                );
+              })}
             </div>
-            <div className="profile-media-files-grid">
+          </section>
+
+          <section className="profile-settings-section" aria-labelledby="profile-preferences-heading">
+            <h3 id="profile-preferences-heading">Preferences</h3>
+            <div className="profile-settings-list">
+              <div className="profile-settings-row profile-settings-row--static">
+                <span className="profile-settings-row-icon" aria-hidden="true"><Icon name={theme === "dark" ? "moon" : "sun"} size={19} /></span>
+                <span className="profile-settings-row-copy">
+                  <strong>Theme</strong>
+                  <small>{theme === "dark" ? "Dark" : "Light"}</small>
+                </span>
+                <button
+                  type="button"
+                  className={`profile-settings-theme-switch ${theme === "dark" ? "is-dark" : ""}`}
+                  role="switch"
+                  aria-checked={theme === "dark"}
+                  aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+                  onClick={toggleTheme}
+                >
+                  <span><Icon name={theme === "dark" ? "moon" : "sun"} size={14} /></span>
+                </button>
+              </div>
+              {canChangeNotificationSettings ? <button className="profile-settings-row" type="button" aria-expanded={showNotificationPreferences} onClick={() => setShowNotificationPreferences((value) => !value)}>
+                <span className="profile-settings-row-icon" aria-hidden="true"><Icon name="alert" size={19} /></span>
+                <span className="profile-settings-row-copy">
+                  <strong>Notifications</strong>
+                  <small>Customize In-App, Push and Email notifications</small>
+                </span>
+                <span className="profile-settings-chevron" aria-hidden="true"><Icon name="chevron" size={18} /></span>
+              </button> : null}
+              {canChangeNotificationSettings && showNotificationPreferences ? <NotificationPreferencesPanel /> : null}
+              <button className="profile-settings-row" type="button" onClick={() => document.getElementById("profile-files-media")?.scrollIntoView({ behavior: "smooth", block: "start" })}>
+                <span className="profile-settings-row-icon" aria-hidden="true"><Icon name="paperclip" size={19} /></span>
+                <span className="profile-settings-row-copy">
+                  <strong>Files &amp; media</strong>
+                  <small>{files.length ? `${files.length} attachment${files.length === 1 ? "" : "s"}` : "No attachments"}</small>
+                </span>
+                <span className="profile-settings-chevron" aria-hidden="true"><Icon name="chevron" size={18} /></span>
+              </button>
+            </div>
+          </section>
+
+          <section className="profile-settings-section profile-settings-files" id="profile-files-media" aria-label="Files and media">
+            <h3>Files &amp; media</h3>
+            <div className="profile-settings-file-list">
               {files.length ? files.map((file, index) => {
                 const host = hostLabel(file.url);
-                const inner = (
+                const content = (
                   <>
-                    <span className="profile-media-file-icon"><Icon name={fileIcon(file)} size={18} /></span>
-                    <span className="profile-media-file-body"><span className="profile-media-file-name">{file.name || host || `File ${index + 1}`}</span>{host ? <span className="profile-media-file-url">{host}</span> : null}</span>
-                    {file.url ? <span className="profile-media-file-open"><Icon name="external" size={17} /></span> : null}
+                    <span className="profile-settings-file-icon"><Icon name={fileIcon(file)} size={18} /></span>
+                    <span className="profile-settings-file-copy"><strong>{file.name || host || `File ${index + 1}`}</strong>{host ? <small>{host}</small> : null}</span>
+                    {file.url ? <span className="profile-settings-chevron"><Icon name="external" size={17} /></span> : null}
                   </>
                 );
-                return file.url ? (
-                  <a className="profile-media-file-card" href={file.url} target="_blank" rel="noopener noreferrer" key={`${file.name}-${index}`}>{inner}</a>
-                ) : (
-                  <div className="profile-media-file-card profile-media-file-card--disabled" key={`${file.name}-${index}`}>{inner}</div>
-                );
-              }) : (
-                <div className="profile-media-empty">
-                  <span className="profile-media-empty-icon"><Icon name="folder" size={18} /></span>
-                  <span>No files or links added yet.</span>
-                </div>
-              )}
+                return file.url ? <a className="profile-settings-file" href={file.url} target="_blank" rel="noopener noreferrer" key={`${file.name}-${index}`}>{content}</a> : <div className="profile-settings-file" key={`${file.name}-${index}`}>{content}</div>;
+              }) : <div className="profile-settings-empty"><Icon name="folder" size={20} /><span>No files or links added yet.</span></div>}
             </div>
           </section>
         </div>
@@ -716,11 +492,11 @@ export default function AccountClient({ initialAccount }) {
         <ImageUploadModal
           imageRequest={imageRequest}
           onClose={closeImageModal}
-          onSaved={(kind, url) => {
-            const next = { ...account, [kind === "cover" ? "coverPhotoUrl" : "photoUrl"]: url };
+          onSaved={(_kind, url) => {
+            const next = { ...account, photoUrl: url };
             setAccount(next);
             syncAccountChrome(next);
-            showToast("success", "Saved", kind === "cover" ? "Cover photo updated successfully." : "Profile picture updated successfully.");
+            showToast("success", "Saved", "Profile picture updated successfully.");
           }}
         />
       ) : null}
@@ -730,7 +506,7 @@ export default function AccountClient({ initialAccount }) {
           kind={removeRequest}
           busy={busyAction === `remove-${removeRequest}`}
           onClose={() => { if (!busyAction) setRemoveRequest(""); }}
-          onConfirm={() => removeImage(removeRequest)}
+          onConfirm={removeImage}
         />
       ) : null}
     </section>

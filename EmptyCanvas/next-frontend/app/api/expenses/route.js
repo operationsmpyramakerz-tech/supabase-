@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
-import { getLegacyAccountGate } from "../../../lib/products-auth";
+import { getDirectAccountGate } from "../../../lib/products-auth";
+import { featureGate } from "../../../lib/feature-permissions-server";
 import { expensesForAccount } from "../../../lib/expenses-data";
+import { measurePerformance } from "../../../lib/performance-profiler";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
-  const gate = await getLegacyAccountGate(["Expenses"]);
+async function GETImpl() {
+  const gate = featureGate(await getDirectAccountGate(["Expenses"]), "expenses.view");
   if (!gate.ok) {
     return NextResponse.json(
       { success: false, error: gate.error || "Access denied." },
@@ -24,4 +26,8 @@ export async function GET() {
       { status: Number(error?.status) || 500 },
     );
   }
+}
+
+export async function GET(request) {
+  return await measurePerformance("route", "expenses.list", async () => await GETImpl(request), { method: "GET" });
 }

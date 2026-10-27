@@ -1,23 +1,29 @@
 import { redirect } from "next/navigation";
 import AppShell from "../../../components/AppShell";
 import OrderTrackingClient from "../../../components/orders/OrderTrackingClient";
-import { fetchLegacyJson } from "../../../lib/legacy-api";
+import { getLegacyAccountGate } from "../../../lib/products-auth";
+import { getDirectAccountGateFromSessionContext } from "../../../lib/direct-session-account";
+import { featureGate } from "../../../lib/feature-permissions-server";
+import { featureAllowed } from "../../../lib/feature-permissions-registry";
+import { hideOrderReceiptFiles } from "../../../lib/order-receipt-visibility.mjs";
+import { loadOrderTracking } from "../../../lib/order-tracking-data";
 
 export const dynamic = "force-dynamic";
 
-function resourceMap(bundle) {
-  const map = new Map();
-  for (const resource of Array.isArray(bundle?.resources) ? bundle.resources : []) {
-    map.set(String(resource?.url || ""), resource?.body);
-  }
-  return map;
-}
-
-function getResource(map, prefix, fallback = null) {
-  for (const [url, body] of map.entries()) {
-    if (url === prefix || url.startsWith(`${prefix}?`)) return body;
-  }
-  return fallback;
+function StandaloneState({ title, message, primaryHref = "/next/orders", primaryLabel = "Return to My Orders", secondaryHref = "" }) {
+  return (
+    <main className="standalone-state">
+      <section className="state-card">
+        <span className="status-dot warning" />
+        <h1>{title}</h1>
+        <p>{message}</p>
+        <div className="actions">
+          <a className="primary-button" href={primaryHref}>{primaryLabel}</a>
+          {secondaryHref ? <a className="secondary-button" href={secondaryHref}>Refresh the page</a> : null}
+        </div>
+      </section>
+    </main>
+  );
 }
 
 export default async function OrderTrackingPage({ searchParams }) {
@@ -29,78 +35,83 @@ export default async function OrderTrackingPage({ searchParams }) {
 
   if (!groupId) {
     return (
-      <main className="standalone-state">
-        <section className="state-card">
-          <span className="status-dot warning" />
-          <h1>Order reference is missing</h1>
-          <p>Open Order Tracking from a Current Orders card or a linked order so the tracking reference is included.</p>
-          <div className="actions">
-            <a className="primary-button" href="/next/orders">Open Current Orders</a>
-            <a className="secondary-button" href="/next/home">Return to Home</a>
-          </div>
-        </section>
-      </main>
+      <StandaloneState
+        title="Order reference is missing"
+        message="Open Order Tracking from a My Orders card or a linked order so the tracking reference is included."
+        primaryHref="/next/orders"
+        primaryLabel="Open My Orders"
+      />
     );
   }
 
-  const query = new URLSearchParams({ scope: "order-tracking", groupId });
-  const response = await fetchLegacyJson(`/api/page-bootstrap?${query.toString()}`, { timeoutMs: 35000 });
-
-  if (response.status === 401) redirect(`/login?next=${encodeURIComponent(currentPath)}`);
-  if (response.status === 403) {
+  const sessionGate = await getLegacyAccountGate([], { authOnly: true });
+  if (!sessionGate.ok && sessionGate.status === 401) redirect(`/login?next=${encodeURIComponent(currentPath)}`);
+  if (!sessionGate.ok || !sessionGate.account) {
     return (
-      <main className="standalone-state">
-        <section className="state-card">
-          <span className="status-dot warning" />
-          <h1>Order Tracking is not available</h1>
-          <p>Your account does not have access to Current Orders.</p>
-          <a className="primary-button" href="/next/home">Return to Home</a>
-        </section>
-      </main>
+      <StandaloneState
+        title="Order Tracking could not load"
+        message={sessionGate.error || "The authentication service is temporarily unavailable."}
+        secondaryHref={currentPath}
+      />
     );
   }
 
-  if (!response.ok || !response.data?.ok) {
+  // Do not fetch tracking records before the freshly verified page + feature
+  // grants have completed. A revoked account must not load private data.
+  const rawGate = await getDirectAccountGateFromSessionContext(sessionGate, ["Current Orders"]);
+  const gate = rawGate ? featureGate(featureGate(rawGate, "orders.my.view"), "orders.tracking.view") : null;
+
+  if (!gate) {
     return (
-      <main className="standalone-state">
-        <section className="state-card">
-          <span className="status-dot warning" />
-          <h1>Order Tracking could not load</h1>
-          <p>{response.error || response.data?.error || "The ERP API is temporarily unavailable."}</p>
-          <div className="actions">
-            <a className="primary-button" href="/next/orders">Return to Current Orders</a>
-            <a className="secondary-button" href="/orders?classic=1">Open classic Current Orders</a>
-          </div>
-        </section>
-      </main>
+      <StandaloneState
+        title="Order Tracking could not load"
+        message="The account permission service is temporarily unavailable."
+        secondaryHref={currentPath}
+      />
+    );
+  }
+  if (!gate.ok && gate.status === 403) {
+    return (
+      <StandaloneState
+        title="Order Tracking is not available"
+        message="Your account does not have access to My Orders."
+        primaryHref="/next/home"
+        primaryLabel="Return to Home"
+      />
+    );
+  }
+  if (!gate.ok || !gate.account) {
+    return (
+      <StandaloneState
+        title="Order Tracking could not load"
+        message={gate.error || "The authentication service is temporarily unavailable."}
+        secondaryHref={currentPath}
+      />
     );
   }
 
-  const resources = resourceMap(response.data);
-  const account = getResource(resources, "/api/account", null);
-  const tracking = getResource(resources, "/api/orders/tracking", null);
-
-  if (!account) redirect(`/login?next=${encodeURIComponent(currentPath)}`);
+  const trackingResult = await loadOrderTracking({ account: gate.account, groupId })
+    .then((tracking) => ({ tracking, error: null }))
+    .catch((error) => ({ tracking: null, error }));
+  const tracking = trackingResult?.tracking || null;
+  const failure = trackingResult?.error || null;
 
   if (!tracking) {
-    const missing = Array.isArray(response.data?.omitted)
-      ? response.data.omitted.some((item) => String(item?.code || "") === "404")
-      : false;
+    const missing = Number(failure?.status) === 404;
     return (
       <AppShell
-        account={account}
+        account={gate.account}
         title="Order Tracking"
-        eyebrow="Current Orders delivery journey"
+        eyebrow="My Orders delivery journey"
         activePath="/next/orders"
-        classicHrefOverride="/orders"
       >
         <main className="standalone-state standalone-state--inside">
           <section className="state-card">
             <span className="status-dot warning" />
             <h1>{missing ? "Order not found" : "Tracking data is temporarily unavailable"}</h1>
-            <p>{missing ? "The selected order is no longer available to this account." : "The page opened, but the tracking resource could not be loaded."}</p>
+            <p>{missing ? "The selected order is no longer available to this account." : (failure?.message || "The tracking resource could not be loaded from Supabase.")}</p>
             <div className="actions">
-              <a className="primary-button" href="/next/orders">Return to Current Orders</a>
+              <a className="primary-button" href="/next/orders">Return to My Orders</a>
               <a className="secondary-button" href={currentPath}>Refresh the page</a>
             </div>
           </section>
@@ -111,16 +122,15 @@ export default async function OrderTrackingPage({ searchParams }) {
 
   return (
     <AppShell
-      account={account}
+      account={gate.account}
       title="Order Tracking"
-      eyebrow="Current Orders delivery journey"
+      eyebrow="My Orders delivery journey"
       activePath="/next/orders"
-      classicHrefOverride="/orders"
     >
       <OrderTrackingClient
-        initialTracking={tracking}
+        initialTracking={{ ...tracking, items: hideOrderReceiptFiles(tracking.items, featureAllowed(gate.account, "orders.documents.view_receipts")) }}
         groupId={groupId}
-        bootstrapWarnings={response.data.omitted || []}
+        bootstrapWarnings={[]}
       />
     </AppShell>
   );

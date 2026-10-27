@@ -95,3 +95,374 @@
 @media (prefers-reduced-motion: reduce) {
   .next-proposals-toast { animation: none !important; }
 }
+
+/* -------------------------------------------------------------------------
+ * Persistent App Router shell
+ *
+ * RootLayout now keeps the authenticated Classic chrome mounted while sibling
+ * routes change. Legacy loading components still contain their own temporary
+ * sidebar/header markup; when they are rendered inside the persistent content
+ * outlet, flatten that temporary shell to its page skeleton only. This avoids
+ * a nested/duplicated sidebar during streamed route loading without requiring
+ * every existing loading.jsx to be rewritten at once.
+ * ---------------------------------------------------------------------- */
+body.persistent-app-shell
+  .classic-app-shell > .main-content > .next-classic-page-content
+  > .app-container.classic-app-shell[class*="next-classic-"][class*="-loading"] {
+  display: block !important;
+  position: static !important;
+  width: 100% !important;
+  min-height: 0 !important;
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+body.persistent-app-shell
+  .classic-app-shell > .main-content > .next-classic-page-content
+  > .app-container.classic-app-shell[class*="next-classic-"][class*="-loading"]
+  > .sidebar {
+  display: none !important;
+}
+
+body.persistent-app-shell
+  .classic-app-shell > .main-content > .next-classic-page-content
+  > .app-container.classic-app-shell[class*="next-classic-"][class*="-loading"]
+  > .main-content {
+  display: block !important;
+  position: static !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  height: auto !important;
+  max-height: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: visible !important;
+  background: transparent !important;
+}
+
+body.persistent-app-shell
+  .classic-app-shell > .main-content > .next-classic-page-content
+  > .app-container.classic-app-shell[class*="next-classic-"][class*="-loading"]
+  > .main-content > .main-header {
+  display: none !important;
+}
+
+body.persistent-app-shell
+  .classic-app-shell > .main-content > .next-classic-page-content
+  > .app-container.classic-app-shell[class*="next-classic-"][class*="-loading"]
+  > .main-content > .next-classic-page-content {
+  width: 100% !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+
+/* -------------------------------------------------------------------------
+ * Mobile bottom dock — directional auto hide (Pinterest-style)
+ *
+ * The persistent shell adds .ops-mobile-dock-hidden after a deliberate
+ * downward page scroll and removes it immediately when the user scrolls up.
+ * Keep the page geometry untouched so showing/hiding the dock never causes a
+ * content jump; only the fixed dock itself moves beyond the viewport.
+ * ---------------------------------------------------------------------- */
+@media (max-width: 768px) {
+  html body.next-classic-shell-active .classic-app-shell > .sidebar {
+    transform: translate3d(0, 0, 0) scale(1) !important;
+    opacity: 1 !important;
+    filter: blur(0) !important;
+    transition:
+      transform .34s cubic-bezier(.16, 1, .3, 1),
+      opacity .20s ease-out,
+      filter .26s ease-out !important;
+    transform-origin: center bottom !important;
+    will-change: transform, opacity, filter;
+  }
+
+  html body.next-classic-shell-active .classic-app-shell > .sidebar.ops-mobile-dock-hidden,
+  html body.next-classic-shell-active .classic-app-shell > .sidebar.ops-small-window-sidebar-hidden {
+    transform: translate3d(0, calc(100% + 40px), 0) scale(.975) !important;
+    opacity: 0 !important;
+    filter: blur(1.5px) !important;
+    pointer-events: none !important;
+  }
+}
+
+@media (max-width: 768px) and (prefers-reduced-motion: reduce) {
+  html body.next-classic-shell-active .classic-app-shell > .sidebar {
+    transition: opacity .01ms linear !important;
+  }
+
+  html body.next-classic-shell-active .classic-app-shell > .sidebar.ops-mobile-dock-hidden,
+  html body.next-classic-shell-active .classic-app-shell > .sidebar.ops-small-window-sidebar-hidden {
+    transform: translate3d(0, calc(100% + 40px), 0) !important;
+    filter: none !important;
+  }
+}
+
+/* -------------------------------------------------------------------------
+ * Mobile dock quick-open handle
+ *
+ * Whenever the bottom navigation is intentionally hidden (scroll-down or a
+ * small modal/sheet), keep a tiny iPhone-style handle at the very bottom as a
+ * one-tap way to restore the dock. It lives outside the moving sidebar so it
+ * stays reachable while the dock itself is off-canvas.
+ * ---------------------------------------------------------------------- */
+@media (max-width: 768px) {
+  html body.next-classic-shell-active .classic-app-shell > .sidebar.ops-mobile-dock-forced-open {
+    transform: translate3d(0, 0, 0) scale(1) !important;
+    opacity: 1 !important;
+    filter: blur(0) !important;
+    pointer-events: auto !important;
+  }
+
+  .ops-mobile-dock-quick-open {
+    position: fixed !important;
+    left: 50% !important;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 1px) !important;
+    z-index: 2147482990 !important;
+    width: 168px !important;
+    height: 30px !important;
+    min-width: 168px !important;
+    min-height: 30px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    display: grid !important;
+    place-items: center !important;
+    border: 0 !important;
+    border-radius: 999px !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    transform: translate3d(-50%, 12px, 0) scale(.92) !important;
+    transform-origin: center bottom !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+    touch-action: manipulation !important;
+    cursor: pointer !important;
+    transition:
+      transform .28s cubic-bezier(.16, 1, .3, 1),
+      opacity .18s ease-out,
+      visibility 0s linear .28s !important;
+  }
+
+  .ops-mobile-dock-quick-open > span {
+    display: block !important;
+    width: 126px !important;
+    height: 5px !important;
+    border-radius: 999px !important;
+    background: #111318 !important;
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, .18) inset,
+      0 2px 8px rgba(15, 23, 42, .18) !important;
+    transition: transform .18s ease-out, background .18s ease-out !important;
+  }
+
+  .ops-mobile-dock-quick-open.is-visible {
+    transform: translate3d(-50%, 0, 0) scale(1) !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
+    transition-delay: 0s !important;
+  }
+
+  .ops-mobile-dock-quick-open.is-visible:active > span {
+    transform: scaleX(.86) !important;
+  }
+
+
+  /* Keep mobile sheets/dialogs physically above the quick-open dock.
+   * ClassicSmallWindowSidebarGuard marks the full-screen fixed layer that
+   * owns each visible dialog, so this applies across the system without
+   * requiring per-page modal offsets. */
+  .ops-small-window-dock-clearance {
+    box-sizing: border-box !important;
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 42px) !important;
+  }
+
+  html.ops-theme-dark .ops-mobile-dock-quick-open > span,
+  html[data-theme="dark"] .ops-mobile-dock-quick-open > span {
+    background: rgba(255, 255, 255, .92) !important;
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, .34) inset,
+      0 2px 10px rgba(0, 0, 0, .42) !important;
+  }
+}
+
+@media (min-width: 769px) {
+  .ops-mobile-dock-quick-open {
+    display: none !important;
+  }
+}
+
+@media (max-width: 768px) and (prefers-reduced-motion: reduce) {
+  .ops-mobile-dock-quick-open {
+    transition: opacity .01ms linear, visibility .01ms linear !important;
+  }
+
+  .ops-mobile-dock-quick-open.is-visible {
+    transform: translate3d(-50%, 0, 0) !important;
+  }
+}
+
+
+/* -------------------------------------------------------------------------
+ * Global close-control alignment + pure mobile modal dock surface
+ * 2026-09-25
+ *
+ * Keep every icon-style X visually centered, regardless of whether a feature
+ * renders an SVG, a wrapped × glyph, or one of the legacy pseudo-element Xs.
+ * Also keep the mobile gesture/dock strip pure white while nested sheets are
+ * open; stacked translucent backdrops must never tint that strip gray.
+ * ---------------------------------------------------------------------- */
+button[aria-label^="Close"]:not([class*="backdrop"]) {
+  display: inline-grid !important;
+  place-items: center !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+  line-height: 1 !important;
+}
+
+button[aria-label^="Close"]:not([class*="backdrop"]) > svg {
+  display: block !important;
+  margin: 0 !important;
+  align-self: center !important;
+  justify-self: center !important;
+  transform: none !important;
+  vertical-align: middle !important;
+}
+
+button[aria-label^="Close"]:not([class*="backdrop"]) > span:only-child {
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  display: grid !important;
+  place-items: center !important;
+  line-height: 1 !important;
+  transform: none !important;
+}
+
+/* Legacy order modals draw their X with ::before instead of an SVG. */
+.co-modal-close::before,
+.co-submodal-close::before {
+  position: absolute !important;
+  top: 50% !important;
+  left: 50% !important;
+  margin: 0 !important;
+  transform: translate(-50%, -52%) !important;
+  transform-origin: center !important;
+  line-height: 1 !important;
+}
+
+@media (max-width: 768px) {
+  /* The small-window guard already reserves this exact bottom clearance.
+   * Paint it above every stacked backdrop so opening a second/third sheet
+   * cannot progressively darken the gesture/dock area. */
+  body.ops-small-window-open::after {
+    content: "";
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: calc(env(safe-area-inset-bottom, 0px) + 42px);
+    background: #ffffff !important;
+    opacity: 1 !important;
+    filter: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    pointer-events: none;
+    z-index: 2147482880;
+  }
+
+  /* When the user explicitly re-opens navigation above a modal, the dock must
+   * still sit above the white safe-area surface. */
+  html body.next-classic-shell-active .classic-app-shell > .sidebar.ops-mobile-dock-forced-open {
+    z-index: 2147482940 !important;
+  }
+
+  .ops-mobile-dock-quick-open {
+    z-index: 2147482990 !important;
+  }
+}
+
+/* Preserve the legacy order-close fallback: those controls intentionally draw
+ * the X with ::before, so never reveal a hidden icon underneath it. */
+.co-modal-close > svg,
+.co-submodal-close > svg,
+.co-modal-close > i,
+.co-submodal-close > i {
+  display: none !important;
+}
+
+/* Home streaming fallback: match the real dashboard footprint during hard
+   refresh and cold start; keep these styles in the root CSS bundle. */
+.next-home-dashboard-loading { min-width: 0; width: 100%; }
+.next-home-dashboard-loading .next-home-loading-analysis,
+.next-home-dashboard-loading .next-home-loading-icon,
+.next-home-dashboard-loading .next-home-loading-arrow,
+.next-home-dashboard-loading .next-home-loading-number,
+.next-home-dashboard-loading .next-home-loading-value,
+.next-home-dashboard-loading .next-home-loading-count,
+.next-home-dashboard-loading .next-home-loading-insight {
+  display: block;
+  background: #eef0f4;
+  border-radius: 9px;
+  flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+}
+.next-home-dashboard-loading .next-home-loading-analysis { width: 72px; height: 44px; border-radius: 13px; }
+.next-home-dashboard-loading .next-home-loading-icon { width: 35px; height: 35px; border-radius: 11px; background: #fff1e8; }
+.next-home-dashboard-loading .next-home-loading-icon--1 { background: #efeafe; }
+.next-home-dashboard-loading .next-home-loading-icon--2 { background: #e7f6f0; }
+.next-home-dashboard-loading .next-home-loading-icon--3 { background: #eaf1ff; }
+.next-home-dashboard-loading .next-home-loading-arrow { width: 15px; height: 15px; }
+.next-home-dashboard-loading .next-home-loading-number { width: 66px; height: 36px; margin: 8px 0; }
+.next-home-dashboard-loading .next-home-loading-value { width: 86px; height: 14px; margin: 0 0 12px; }
+.next-home-dashboard-loading .erp-home-tile > .erp-home-distribution { margin-top: auto; background: #eef0f4; }
+.next-home-dashboard-loading .next-home-loading-count { width: 22px; height: 25px; border-radius: 6px; }
+.next-home-dashboard-loading .next-home-loading-backlog { padding: 20px 22px; border: 1px solid #e9edf2; border-radius: 20px; background: #fff; }
+.next-home-dashboard-loading .next-home-loading-backlog > h2 { font-size: 22px; margin: 10px 0 22px; }
+.next-home-dashboard-loading .next-home-loading-insights { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 10px; }
+.next-home-dashboard-loading .next-home-loading-insight { min-height: 100px; border-radius: 12px; }
+@media (max-width: 750px) {
+  .next-home-dashboard-loading .erp-home-tiles { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .next-home-dashboard-loading .erp-home-focus { display: block; }
+  .next-home-dashboard-loading .erp-home-focus__head { margin-bottom: 14px; }
+  .next-home-dashboard-loading .erp-home-focus__items { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .next-home-dashboard-loading .next-home-loading-insights { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .next-home-dashboard-loading .next-home-loading-number::after,
+  .next-home-dashboard-loading .next-home-loading-value::after,
+  .next-home-dashboard-loading .next-home-loading-count::after,
+  .next-home-dashboard-loading .next-home-loading-insight::after {
+    content: ""; position: absolute; inset: 0; transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,.75), transparent);
+    animation: nextClassicShimmer 1.35s infinite;
+  }
+}
+
+/* Keep the Home loading placeholders neutral in dark mode too. */
+html[data-theme="dark"] .next-home-dashboard-loading .next-home-loading-analysis,
+html[data-theme="dark"] .next-home-dashboard-loading .next-home-loading-arrow,
+html[data-theme="dark"] .next-home-dashboard-loading .next-home-loading-number,
+html[data-theme="dark"] .next-home-dashboard-loading .next-home-loading-value,
+html[data-theme="dark"] .next-home-dashboard-loading .next-home-loading-count,
+html[data-theme="dark"] .next-home-dashboard-loading .next-home-loading-insight { background: #252c39; }
+html[data-theme="dark"] .next-home-dashboard-loading .next-home-loading-backlog {
+  background: var(--eh-bg, #121822);
+  border-color: var(--eh-border, #353d4d);
+}

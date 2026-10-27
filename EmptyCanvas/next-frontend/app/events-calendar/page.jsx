@@ -1,30 +1,15 @@
 import { redirect } from "next/navigation";
 import AppShell from "../../components/AppShell";
 import EventsCalendarClient from "../../components/events/EventsCalendarClient";
-import { fetchLegacyJson } from "../../lib/legacy-api";
+import { loadDirectEventsPageData } from "../../lib/events-data";
 
 export const dynamic = "force-dynamic";
 
-function resourceMap(bundle) {
-  const map = new Map();
-  for (const resource of Array.isArray(bundle?.resources) ? bundle.resources : []) {
-    map.set(String(resource?.url || ""), resource?.body);
-  }
-  return map;
-}
-
-function getResource(map, prefix, fallback = null) {
-  for (const [url, body] of map.entries()) {
-    if (url === prefix || url.startsWith(prefix)) return body;
-  }
-  return fallback;
-}
-
 export default async function EventsCalendarPage() {
-  const response = await fetchLegacyJson("/api/page-bootstrap?scope=events-calendar", { timeoutMs: 35000 });
+  const pageData = await loadDirectEventsPageData({ mode: "calendar" }).catch(() => null);
 
-  if (response.status === 401) redirect("/login?next=/next/events-calendar");
-  if (response.status === 403) {
+  if (pageData?.status === 401) redirect("/login?next=/next/events-calendar");
+  if (pageData?.status === 403) {
     return (
       <main className="standalone-state">
         <section className="state-card">
@@ -37,15 +22,15 @@ export default async function EventsCalendarPage() {
     );
   }
 
-  if (!response.ok || !response.data?.ok) {
+  if (!pageData?.ok) {
     return (
       <main className="standalone-state">
         <section className="state-card">
           <span className="status-dot warning" />
-          <h1>The new Event Calendar could not load</h1>
-          <p>{response.error || response.data?.error || "The current ERP API is temporarily unavailable."}</p>
+          <h1>The Event Calendar could not load</h1>
+          <p>{pageData?.error || "The Events data service is temporarily unavailable."}</p>
           <div className="actions">
-            <a className="primary-button" href="/events/calendar?classic=1">Open classic Calendar</a>
+            <a className="primary-button" href="/next/events-calendar">Try again</a>
             <a className="secondary-button" href="/next/home">Return to Home</a>
           </div>
         </section>
@@ -53,18 +38,12 @@ export default async function EventsCalendarPage() {
     );
   }
 
-  const resources = resourceMap(response.data);
-  const account = getResource(resources, "/api/account", null);
-  const eventsPayload = getResource(resources, "/api/events", { ok: true, events: [] });
-
-  if (!account) redirect("/login?next=/next/events-calendar");
-
   return (
-    <AppShell account={account} title="Event Calendar" eyebrow="Event execution schedule" activePath="/next/events-calendar" bodyClass="events-page events-calendar-page" classicStyles={["/css/events.css?v=next-stage-2k-events"]}>
+    <AppShell account={pageData.account} title="Events" eyebrow="Event execution schedule" activePath="/next/events-calendar" bodyClass="events-page events-calendar-page" pageStyles={["/next/css/events.css?v=nav-20261016"]}>
       <EventsCalendarClient
-        account={account}
-        initialEvents={Array.isArray(eventsPayload?.events) ? eventsPayload.events : []}
-        bootstrapWarnings={response.data.omitted || []}
+        account={pageData.account}
+        initialEvents={Array.isArray(pageData.events) ? pageData.events : []}
+        bootstrapWarnings={pageData.warnings || []}
       />
     </AppShell>
   );

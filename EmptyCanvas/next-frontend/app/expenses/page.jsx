@@ -1,9 +1,9 @@
 import { redirect } from "next/navigation";
 import AppShell from "../../components/AppShell";
 import ExpensesClient from "../../components/expenses/ExpensesClient";
-import { fetchLegacyJson } from "../../lib/legacy-api";
-import { getLegacyAccountGate } from "../../lib/products-auth";
-import { cashInFromOptions, expenseTypeOptions, expensesForAccount } from "../../lib/expenses-data";
+import { getDirectAccountGate } from "../../lib/products-auth";
+import { featureGate } from "../../lib/feature-permissions-server";
+import { expensesForAccount } from "../../lib/expenses-data";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -16,7 +16,7 @@ function UnavailableState({ message, forbidden = false }) {
         <h1>{forbidden ? "Expenses is not available" : "The new Expenses page could not load"}</h1>
         <p>{message}</p>
         <div className="actions">
-          {!forbidden ? <a className="primary-button" href="/expenses?classic=1">Open classic Expenses</a> : null}
+          {!forbidden ? <a className="primary-button" href="/next/expenses">Try again</a> : null}
           <a className={forbidden ? "primary-button" : "secondary-button"} href="/next/home">Return to Home</a>
         </div>
       </section>
@@ -24,13 +24,9 @@ function UnavailableState({ message, forbidden = false }) {
   );
 }
 
-async function legacyPayload(path, fallback) {
-  const response = await fetchLegacyJson(path, { timeoutMs: 20000 });
-  return response.ok && response.data ? response.data : fallback;
-}
 
 export default async function ExpensesPage() {
-  const gate = await getLegacyAccountGate(["Expenses"]);
+  const gate = featureGate(await getDirectAccountGate(["Expenses"]), "expenses.view");
 
   if (gate.status === 401) redirect("/login?next=/next/expenses");
   if (gate.status === 403) {
@@ -40,32 +36,17 @@ export default async function ExpensesPage() {
     return <UnavailableState message={gate.error || "The current ERP authentication service is temporarily unavailable."} />;
   }
 
-  const warnings = [];
-
   let expensePayload;
   try {
     expensePayload = await expensesForAccount(gate.account);
   } catch (directError) {
-    expensePayload = await legacyPayload("/api/expenses", null);
-    if (!expensePayload) {
-      return <UnavailableState message={directError?.message || "Expense data is temporarily unavailable."} />;
-    }
-    warnings.push("Expenses recovery path used.");
+    return <UnavailableState message={directError?.message || "Expense data is temporarily unavailable."} />;
   }
 
-  const [typesResult, cashInResult, ordersPayload] = await Promise.all([
-    expenseTypeOptions().then((options) => ({ success: true, options })).catch(async () => {
-      warnings.push("Expense type options recovery path used.");
-      return await legacyPayload("/api/expenses/types", { success: true, options: [] });
-    }),
-    cashInFromOptions().then((options) => ({ success: true, options })).catch(async () => {
-      warnings.push("Cash-in options recovery path used.");
-      return await legacyPayload("/api/expenses/cash-in-from/options", { success: true, options: [] });
-    }),
-    legacyPayload("/api/expenses/orders/options", { success: true, options: [] }),
-  ]);
-
-  if (!Array.isArray(ordersPayload?.options)) warnings.push("Order options are temporarily unavailable.");
+  // Modal-only support data (funds types, team members and approved orders)
+  // is intentionally lazy-loaded by the client. Keeping it off the critical
+  // render path makes the Expenses dashboard appear as soon as the user's own
+  // transactions are ready.
 
   return (
     <AppShell
@@ -74,15 +55,12 @@ export default async function ExpensesPage() {
       eyebrow="Live cash-flow workspace"
       activePath="/next/expenses"
       bodyClass="expenses-page"
-      classicStyles={["/css/expenses-redesign.css?v=expenses-dashboard-v2", "/next/css/expenses-classic-inline.css?v=stage2f"]}
+      pageStyles={["/next/css/expenses-redesign.css?v=nav-20261016", "/next/css/expenses-classic-inline.css?v=stage2g-car"]}
     >
       <ExpensesClient
         account={gate.account}
         initialPayload={expensePayload || { success: true, items: [] }}
-        initialTypes={Array.isArray(typesResult?.options) ? typesResult.options : []}
-        cashInFromOptions={Array.isArray(cashInResult?.options) ? cashInResult.options : []}
-        orderOptions={Array.isArray(ordersPayload?.options) ? ordersPayload.options : []}
-        bootstrapWarnings={warnings}
+        bootstrapWarnings={[]}
       />
     </AppShell>
   );

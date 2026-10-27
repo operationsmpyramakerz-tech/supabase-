@@ -1,0 +1,6 @@
+# GitSync on some Android storage providers has trouble staging newly-created
+# Next.js dynamic route directories whose names contain square brackets.
+# These two routes were replaced by static/direct endpoints, so any local
+# leftovers can be ignored safely.
+/app/api/sv-orders/\[id\]/
+/app/api/team-members/\[key\]/

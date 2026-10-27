@@ -623,10 +623,7 @@
   }
 
   .page-account .profile-cover-fallback{
-    background:
-      radial-gradient(circle at 50% 115%, rgba(255,255,255,0.88) 0 11%, transparent 12%),
-      linear-gradient(135deg, rgba(15,23,42,0.86), rgba(17,24,39,0.74)),
-      linear-gradient(135deg, rgba(249,115,22,0.34), rgba(251,146,60,0.12));
+    background: #FFFFFF;
   }
 
   .page-account .profile-cover-edit{
@@ -862,572 +859,2392 @@
 @keyframes accountClassicShimmer { to { background-position: -220% 0; } }
 
 
-/* ===== User Profile: Facebook-style cover/avatar composition + modern crop editor ===== */
-.page-account .account-panel--profile.account-profile-modern{
-  width: min(100%, 820px) !important;
-  border-radius: 30px !important;
-  background: #fff !important;
-  border: 1px solid rgba(226,232,240,.95) !important;
-  box-shadow: 0 24px 60px rgba(15,23,42,.10) !important;
-  overflow: hidden !important;
-}
-.page-account .profile-hero-section{
-  padding-bottom: 1.35rem !important;
-  margin-bottom: .8rem !important;
-}
-.page-account .profile-cover-section{
-  height: clamp(180px, 23vw, 244px) !important;
-  margin: 18px 18px 0 !important;
-}
-.page-account .profile-cover-display{
-  border-radius: 26px !important;
-  background: #e5e7eb !important;
-  box-shadow: inset 0 0 0 1px rgba(15,23,42,.04);
-}
-.page-account .profile-cover-image,
-.page-account .profile-cover-fallback{
-  border-radius: inherit;
-}
-.page-account .profile-identity-block{
-  margin-top: -76px !important;
-  padding: 0 1rem !important;
-}
-.page-account .profile-avatar-section{
-  margin-bottom: .75rem !important;
-}
-.page-account .profile-avatar-shell{
-  width: 150px !important;
-  height: 150px !important;
-}
-.page-account .profile-avatar-display{
-  border: 0 !important;
-  box-shadow: 0 0 0 7px #fff, 0 16px 34px rgba(15,23,42,.22) !important;
-}
-.page-account .profile-avatar-edit{
-  right: -4px !important;
-  bottom: 8px !important;
-  width: 40px !important;
-  height: 40px !important;
-  border-radius: 50% !important;
-  background: #fff !important;
-  box-shadow: 0 8px 20px rgba(15,23,42,.18) !important;
-}
-.page-account .profile-avatar-remove{
-  top: -7px !important;
-  right: -7px !important;
-}
-.page-account .profile-cover-edit{
-  right: 16px !important;
-  bottom: 16px !important;
-  width: 40px !important;
-  height: 40px !important;
-  border-radius: 13px !important;
+/* -------------------------------------------------------------------------
+ * Next.js Account polish — responsive profile card + protected action dialogs
+ * ---------------------------------------------------------------------- */
+.page-account .account-page-shell{
+  padding: clamp(10px, 2vw, 24px) !important;
 }
 
-.page-account .account-image-editor-layer{
+.page-account .account-panel--profile.account-profile-modern{
+  width: min(100%, 980px);
+  border: 1px solid rgba(226,232,240,.96);
+  border-radius: 30px;
+  background: #fff;
+  box-shadow: 0 22px 58px rgba(15,23,42,.075);
+}
+
+.page-account .profile-hero-section{
+  margin-bottom: .8rem;
+  padding-bottom: 1.15rem;
+}
+
+.page-account .profile-cover-section{
+  height: clamp(190px, 25vw, 290px);
+  background: #e5e7eb;
+}
+
+.page-account .profile-cover-display{
+  font: inherit;
+  line-height: 0;
+}
+
+.page-account .profile-cover-image{
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.page-account .profile-identity-block{
+  margin-top: -66px;
+}
+
+.page-account .profile-avatar-shell{
+  width: 132px;
+  height: 132px;
+}
+
+.page-account .profile-avatar-display{
+  font: inherit;
+}
+
+.page-account .profile-avatar-display:focus-visible,
+.page-account .profile-cover-display:focus-visible,
+.page-account .profile-avatar-edit:focus-visible,
+.page-account .profile-cover-edit:focus-visible,
+.page-account .profile-field-edit:focus-visible,
+.page-account .profile-image-remove:focus-visible{
+  outline: 3px solid rgba(249,115,22,.28);
+  outline-offset: 3px;
+}
+
+.page-account .profile-identity-name{
+  font-size: clamp(1.55rem, 2.6vw, 2.15rem);
+}
+
+.page-account .profile-identity-subtitle{
+  margin-top: .38rem;
+  font-size: clamp(.9rem, 1.35vw, 1.06rem);
+  color: #64748b;
+}
+
+.page-account .profile-fields-list{
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem 1.15rem;
+}
+
+.page-account .profile-field-card{
+  gap: .45rem;
+}
+
+.page-account .profile-field-label{
+  padding-inline: .15rem;
+  color: #334155;
+  font-size: .86rem;
+  font-weight: 850;
+}
+
+.page-account .profile-field-box{
+  min-height: 58px;
+  padding: .72rem .72rem .72rem .95rem;
+  border-radius: 16px;
+  background: #fbfcfe;
+  box-shadow: none;
+}
+
+.page-account .profile-field-card:hover .profile-field-box{
+  background: #fff;
+  transform: translateY(-1px);
+}
+
+.page-account .profile-field-value{
+  font-size: .92rem;
+  font-weight: 700;
+  color: #475569;
+}
+
+.page-account .profile-field-edit{
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  border-radius: 11px;
+  background: #fff;
+  box-shadow: 0 5px 14px rgba(15,23,42,.07);
+}
+
+.page-account .profile-files-media-section{
+  margin-top: 1.15rem;
+  border-radius: 20px;
+  box-shadow: none;
+}
+
+.page-account .profile-media-files-grid{
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.page-account .profile-media-file-card,
+.page-account .profile-media-empty{
+  min-height: 68px;
+  border-radius: 16px;
+}
+
+.page-account .ex-modal{
   padding: 18px;
-  background: rgba(8,15,28,.66) !important;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  overflow: auto;
+  backdrop-filter: blur(7px);
+  -webkit-backdrop-filter: blur(7px);
 }
+
+.page-account .ex-modal-box{
+  width: min(100%, 470px);
+  max-height: min(86vh, 680px);
+  overflow: auto;
+  border: 1px solid rgba(226,232,240,.95);
+  border-radius: 24px;
+  box-shadow: 0 28px 80px rgba(15,23,42,.24);
+}
+
+.page-account .account-image-preview{
+  width: 100%;
+  height: 150px;
+  margin: 0 0 16px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  background: #f8fafc;
+}
+
+.page-account .account-image-preview img{
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.page-account .account-image-preview--profile{
+  width: 122px;
+  height: 122px;
+  margin-inline: auto;
+  border-radius: 50%;
+  box-shadow: 0 0 0 5px #fff, 0 0 0 7px rgba(249,115,22,.22), 0 14px 28px rgba(15,23,42,.12);
+}
+
+.page-account .account-confirm-layer{
+  position: fixed;
+  inset: 0;
+  z-index: 1000002;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(15,23,42,.48);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.page-account .account-confirm-card{
+  width: min(100%, 420px);
+  padding: 26px;
+  border: 1px solid rgba(226,232,240,.95);
+  border-radius: 24px;
+  background: #fff;
+  box-shadow: 0 30px 90px rgba(15,23,42,.28);
+  text-align: center;
+}
+
+.page-account .account-confirm-icon{
+  width: 52px;
+  height: 52px;
+  margin: 0 auto 14px;
+  display: grid;
+  place-items: center;
+  border-radius: 17px;
+  background: #fff1f2;
+  color: #be123c;
+}
+
+.page-account .account-confirm-card h3{
+  margin: 0;
+  color: #0f172a;
+  font-size: 1.12rem;
+  font-weight: 900;
+}
+
+.page-account .account-confirm-card p{
+  margin: 10px auto 0;
+  max-width: 330px;
+  color: #64748b;
+  font-size: .9rem;
+  line-height: 1.6;
+}
+
+.page-account .account-confirm-actions{
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.page-account .account-confirm-actions button{
+  min-height: 44px;
+  border-radius: 13px;
+  font: inherit;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.page-account .account-confirm-actions button:disabled{
+  opacity: .62;
+  cursor: wait;
+}
+
+.page-account .account-confirm-cancel{
+  border: 1px solid #dbe2ea;
+  background: #fff;
+  color: #475569;
+}
+
+.page-account .account-confirm-remove{
+  border: 1px solid #be123c;
+  background: #be123c;
+  color: #fff;
+}
+
+@media (max-width: 860px){
+  .page-account .profile-fields-list{
+    grid-template-columns: 1fr;
+  }
+
+  .page-account .profile-media-files-grid{
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px){
+  .page-account .account-page-shell{
+    padding: 8px !important;
+  }
+
+  .page-account .account-panel--profile.account-profile-modern{
+    border-radius: 22px;
+  }
+
+  .page-account .profile-cover-section{
+    height: clamp(150px, 42vw, 210px);
+  }
+
+  .page-account .profile-identity-block{
+    margin-top: -49px;
+    padding-inline: 14px;
+  }
+
+  .page-account .profile-avatar-shell{
+    width: 96px;
+    height: 96px;
+  }
+
+  .page-account .profile-avatar-edit{
+    right: -5px;
+    bottom: 5px;
+  }
+
+  .page-account .profile-avatar-remove{
+    top: -7px;
+    right: -7px;
+  }
+
+  .page-account .profile-identity-name{
+    font-size: 1.35rem;
+  }
+
+  .page-account .profile-identity-subtitle{
+    font-size: .86rem;
+  }
+
+  .page-account .profile-fields-list,
+  .page-account .profile-files-media-section{
+    margin-inline: 14px;
+  }
+
+  .page-account .profile-fields-list{
+    gap: .8rem;
+  }
+
+  .page-account .profile-field-box{
+    min-height: 54px;
+    padding: .62rem .64rem .62rem .82rem;
+    border-radius: 14px;
+  }
+
+  .page-account .profile-field-edit{
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+  }
+
+  .page-account .profile-files-media-section{
+    padding: .88rem;
+    border-radius: 17px;
+  }
+
+  .page-account .profile-files-media-badge,
+  .page-account .profile-media-empty-icon,
+  .page-account .profile-media-file-icon{
+    width: 36px;
+    height: 36px;
+    border-radius: 12px;
+  }
+
+  .page-account .ex-modal{
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .page-account .ex-modal-box{
+    width: 100%;
+    max-width: none;
+    max-height: 91vh;
+    margin: 0;
+    border-radius: 24px 24px 0 0;
+    padding-bottom: calc(18px + env(safe-area-inset-bottom));
+  }
+
+  .page-account .account-confirm-layer{
+    place-items: end center;
+    padding: 0;
+  }
+
+  .page-account .account-confirm-card{
+    width: 100%;
+    border-radius: 24px 24px 0 0;
+    padding: 24px 20px calc(20px + env(safe-area-inset-bottom));
+  }
+}
+
+@media (max-width: 420px){
+  .page-account .account-page-shell{
+    padding: 5px !important;
+  }
+
+  .page-account .account-panel--profile.account-profile-modern{
+    border-radius: 18px;
+  }
+
+  .page-account .profile-cover-section{
+    height: 142px;
+  }
+
+  .page-account .profile-cover-edit{
+    right: 10px;
+    bottom: 10px;
+  }
+
+  .page-account .profile-cover-remove{
+    top: 10px;
+    right: 10px;
+  }
+
+  .page-account .profile-fields-list,
+  .page-account .profile-files-media-section{
+    margin-inline: 11px;
+  }
+
+  .page-account .profile-field-label{
+    font-size: .8rem;
+  }
+
+  .page-account .profile-field-value{
+    font-size: .86rem;
+  }
+}
+
+/* ================================================================
+   Account image editor — compact modern profile / cover workflow
+   ================================================================ */
+.page-account .account-image-editor-layer{
+  padding: 22px;
+  align-items: center;
+  justify-content: center;
+}
+
 .page-account .account-image-editor{
-  width: min(94vw, 720px) !important;
-  max-width: 720px !important;
-  max-height: calc(100dvh - 36px);
+  position: relative;
+  width: min(100%, 460px);
+  max-height: min(88dvh, 720px);
+  padding: 22px;
   overflow: auto;
-  padding: 0 !important;
-  border-radius: 28px !important;
-  border: 1px solid rgba(226,232,240,.9);
-  box-shadow: 0 28px 80px rgba(2,6,23,.34) !important;
-  background: #fff !important;
+  overscroll-behavior: contain;
+  border: 1px solid rgba(226,232,240,.95);
+  border-radius: 28px;
+  background: #fff;
+  box-shadow: 0 30px 90px rgba(15,23,42,.22);
+  scrollbar-width: none;
 }
+.page-account .account-image-editor::-webkit-scrollbar{ display:none; }
+
 .page-account .account-image-editor-head{
+  position: relative;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 1rem;
-  padding: 20px 22px 16px;
-  border-bottom: 1px solid #edf0f4;
+  gap: 14px;
+  padding-right: 52px;
+  margin-bottom: 18px;
 }
+
 .page-account .account-image-editor-headcopy{
   min-width: 0;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 12px;
 }
+
 .page-account .account-image-editor-icon{
-  width: 44px;
-  height: 44px;
-  min-width: 44px;
-  border-radius: 14px;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
   display: grid;
   place-items: center;
-  color: #c65d20;
-  background: #fff7ed;
-  border: 1px solid #fed7aa;
+  border-radius: 13px;
+  color: #0f172a;
+  background: #f5f7fa;
+  border: 1px solid #e7ebf0;
 }
+
 .page-account .account-image-editor .ex-modal-title{
-  margin: 0 !important;
-  color: #111827;
-  font-size: 1.2rem !important;
-  font-weight: 850 !important;
-  line-height: 1.2;
+  margin: 1px 0 5px;
+  color: #101828;
+  font-size: 1.18rem;
+  line-height: 1.18;
+  font-weight: 800;
+  letter-spacing: -.02em;
 }
-.page-account .account-image-editor-head p{
-  margin: 4px 0 0;
-  color: #7b8494;
+
+.page-account .account-image-editor-headcopy p{
+  margin: 0;
+  max-width: 320px;
+  color: #667085;
   font-size: .82rem;
-  line-height: 1.35;
+  line-height: 1.45;
+  font-weight: 600;
 }
+
 .page-account .account-image-editor-close{
-  width: 38px;
-  height: 38px;
-  min-width: 38px;
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 42px;
+  height: 42px;
+  min-width: 42px;
   padding: 0;
-  border: 1px solid #e5e7eb;
-  border-radius: 50%;
-  background: #f8fafc;
-  color: #111827;
-  display: grid;
-  place-items: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 14px;
+  color: #101828;
+  background: #f4f6f8;
   cursor: pointer;
+  transition: transform .18s ease, background .18s ease;
 }
-.page-account .account-image-editor-close:hover{ background: #f1f5f9; }
-.page-account .account-crop-stage{
-  padding: 18px 22px 10px;
-  display: grid;
-  place-items: center;
+.page-account .account-image-editor-close:hover{ background:#e9edf2; }
+.page-account .account-image-editor-close:active{ transform:scale(.94); }
+.page-account .account-image-editor-close svg{ display:block; width:18px; height:18px; }
+
+.page-account .account-crop-stage,
+.page-account .account-cover-fit-stage{
+  padding: 12px;
+  border: 1px solid #e5eaf0;
+  border-radius: 22px;
+  background: #f8fafc;
 }
+
 .page-account .account-crop-viewport{
   position: relative;
   overflow: hidden;
-  background: #0f172a;
-  cursor: grab;
-  user-select: none;
-  -webkit-user-select: none;
   touch-action: none;
-  box-shadow: 0 16px 42px rgba(15,23,42,.18);
+  user-select: none;
+  background: #0f1115;
 }
-.page-account .account-crop-viewport:active{ cursor: grabbing; }
-.page-account .account-crop-viewport--cover{
-  width: 100%;
-  aspect-ratio: 17 / 5;
-  border-radius: 20px;
-}
+
 .page-account .account-crop-viewport--profile{
-  width: min(360px, 68vw);
+  width: min(100%, 270px);
   aspect-ratio: 1 / 1;
-  border-radius: 50%;
+  margin-inline: auto;
+  border-radius: 24px;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.1);
 }
+
 .page-account .account-crop-image{
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  max-width: none !important;
-  max-height: none !important;
   object-fit: cover;
-  object-position: center;
   transform-origin: 50% 50%;
   will-change: transform;
   pointer-events: none;
-  -webkit-user-drag: none;
 }
+
 .page-account .account-crop-grid{
   position: absolute;
   inset: 0;
   pointer-events: none;
-  opacity: .55;
+  opacity: .18;
   background:
-    linear-gradient(to right, transparent 33.15%, rgba(255,255,255,.58) 33.25%, rgba(255,255,255,.58) 33.55%, transparent 33.65%, transparent 66.45%, rgba(255,255,255,.58) 66.55%, rgba(255,255,255,.58) 66.85%, transparent 66.95%),
-    linear-gradient(to bottom, transparent 33.15%, rgba(255,255,255,.58) 33.25%, rgba(255,255,255,.58) 33.55%, transparent 33.65%, transparent 66.45%, rgba(255,255,255,.58) 66.55%, rgba(255,255,255,.58) 66.85%, transparent 66.95%);
+    linear-gradient(to right, transparent 33.2%, #fff 33.3%, #fff 33.8%, transparent 33.9%, transparent 66.2%, #fff 66.3%, #fff 66.8%, transparent 66.9%),
+    linear-gradient(to bottom, transparent 33.2%, #fff 33.3%, #fff 33.8%, transparent 33.9%, transparent 66.2%, #fff 66.3%, #fff 66.8%, transparent 66.9%);
 }
+
 .page-account .account-crop-profile-ring{
   position: absolute;
-  inset: 7px;
+  inset: 9%;
+  border: 2px solid rgba(255,255,255,.9);
   border-radius: 50%;
-  border: 2px solid rgba(255,255,255,.92);
-  box-shadow: 0 0 0 999px rgba(2,6,23,.18);
+  box-shadow: 0 0 0 999px rgba(0,0,0,.28);
   pointer-events: none;
 }
+
 .page-account .account-crop-hint{
-  margin-top: 10px;
-  padding: 6px 10px;
-  border-radius: 999px;
-  background: #f8fafc;
-  color: #64748b;
+  margin-top: 9px;
+  color: #667085;
   font-size: .76rem;
   font-weight: 700;
+  text-align: center;
 }
+
 .page-account .account-crop-controls{
-  margin: 0 22px;
-  padding: 12px 14px;
   display: grid;
   grid-template-columns: auto minmax(0,1fr) auto;
   align-items: center;
-  gap: 12px;
-  border: 1px solid #e8edf3;
-  border-radius: 15px;
-  background: #fafbfc;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid #e5eaf0;
+  border-radius: 16px;
+  background: #fff;
 }
 .page-account .account-crop-zoom-label{
-  color: #334155;
-  font-size: .78rem;
+  color: #475467;
+  font-size: .76rem;
   font-weight: 800;
 }
 .page-account .account-crop-zoom{
   width: 100%;
-  accent-color: #c65d20;
+  accent-color: #f97316;
 }
 .page-account .account-crop-reset{
+  min-height: 34px;
+  padding: 0 12px;
   border: 0;
-  border-radius: 10px;
-  padding: 7px 10px;
-  background: #fff;
-  color: #475569;
-  box-shadow: inset 0 0 0 1px #e2e8f0;
+  border-radius: 11px;
+  color: #344054;
+  background: #f2f4f7;
   font-size: .75rem;
   font-weight: 800;
   cursor: pointer;
 }
+
+.page-account .account-cover-fit-preview{
+  width: 100%;
+  aspect-ratio: 16 / 7;
+  max-height: 220px;
+  overflow: hidden;
+  border-radius: 17px;
+  background: #eef1f4;
+}
+.page-account .account-cover-fit-preview img{
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+.page-account .account-cover-fit-note{
+  margin-top: 9px;
+  color: #667085;
+  font-size: .76rem;
+  line-height: 1.35;
+  font-weight: 700;
+  text-align: center;
+}
+
 .page-account .account-image-editor-filename{
-  margin: 12px 22px 0;
-  min-height: 38px;
-  padding: 8px 11px;
-  border-radius: 12px;
-  background: #f8fafc;
-  border: 1px solid #eef2f7;
-  color: #64748b;
+  min-width: 0;
+  margin-top: 12px;
+  padding: 9px 11px;
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: .77rem;
-  overflow: hidden;
+  border: 1px solid #e5eaf0;
+  border-radius: 13px;
+  color: #475467;
+  background: #f8fafc;
+  font-size: .78rem;
+  font-weight: 700;
 }
 .page-account .account-image-editor-filename span{
+  min-width: 0;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-.page-account .account-image-editor > .field-label{
-  margin: 14px 22px 6px !important;
-  color: #334155;
+
+.page-account .account-image-editor .field-label{
+  margin: 14px 0 6px;
+  color: #344054;
   font-size: .8rem;
 }
+
 .page-account .account-image-editor-password{
-  margin: 0 22px 4px !important;
+  margin-bottom: 0;
 }
 .page-account .account-image-editor-password .ex-input{
-  min-height: 46px;
-  border-radius: 13px;
-  border-color: #dbe2ea;
-  font-size: .9rem;
+  height: 46px;
+  padding: 0 44px 0 14px;
+  border: 1px solid #dde3ea;
+  border-radius: 14px;
+  background: #fbfcfd;
+  font-size: .88rem;
 }
+.page-account .account-image-editor-password .ex-input:focus{
+  border-color: rgba(249,115,22,.55);
+  box-shadow: 0 0 0 4px rgba(249,115,22,.10);
+  outline: none;
+}
+
 .page-account .account-image-editor .ex-error{
-  margin: 8px 22px 0 !important;
-  font-size: .8rem !important;
+  margin: 8px 0 0;
+  padding: 9px 11px;
+  border: 1px solid #fecdd3;
+  border-radius: 12px;
+  background: #fff1f2;
+  color: #be123c;
+  font-size: .78rem;
 }
+
 .page-account .account-image-editor-actions{
-  margin: 16px 0 0 !important;
-  padding: 14px 22px 20px;
-  display: grid !important;
+  display: grid;
   grid-template-columns: 1fr 1.35fr;
   gap: 10px;
-  border-top: 1px solid #edf0f4;
+  margin-top: 14px;
 }
 .page-account .account-image-editor-actions .ex-btn{
-  min-height: 44px;
-  border-radius: 13px !important;
+  min-height: 46px;
+  padding: 0 16px;
+  border-radius: 14px;
+  font-size: .86rem;
   font-weight: 800;
 }
 .page-account .account-image-editor-cancel{
-  background: #fff !important;
-  color: #334155 !important;
-  box-shadow: inset 0 0 0 1px #dbe2ea;
+  color: #344054;
+  background: #f2f4f7;
+  border: 1px solid #e4e7ec;
 }
 .page-account .account-image-editor-save{
-  background: #0f172a !important;
-  color: #fff !important;
+  color: #fff;
+  background: #101828;
+  border: 1px solid #101828;
 }
-.page-account .account-image-editor-save:hover{ background: #020617 !important; }
+.page-account .account-image-editor-save:hover{ background:#1d2939; }
+
+@media (max-width: 640px){
+  .page-account .account-image-editor-layer{
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .page-account .account-image-editor{
+    width: 100%;
+    max-width: none;
+    max-height: min(84dvh, 720px);
+    margin: 0;
+    padding: 18px 18px calc(16px + env(safe-area-inset-bottom));
+    border-radius: 28px 28px 0 0;
+  }
+
+  .page-account .account-image-editor-head{
+    margin-bottom: 14px;
+    padding-right: 46px;
+  }
+
+  .page-account .account-image-editor-headcopy{
+    gap: 10px;
+  }
+
+  .page-account .account-image-editor-icon{
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    border-radius: 12px;
+  }
+
+  .page-account .account-image-editor .ex-modal-title{
+    font-size: 1.04rem;
+  }
+
+  .page-account .account-image-editor-headcopy p{
+    font-size: .75rem;
+    line-height: 1.38;
+  }
+
+  .page-account .account-image-editor-close{
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    border-radius: 13px;
+  }
+
+  .page-account .account-crop-stage,
+  .page-account .account-cover-fit-stage{
+    padding: 10px;
+    border-radius: 19px;
+  }
+
+  .page-account .account-crop-viewport--profile{
+    width: min(64vw, 230px);
+    border-radius: 20px;
+  }
+
+  .page-account .account-cover-fit-preview{
+    max-height: 170px;
+    border-radius: 15px;
+  }
+
+  .page-account .account-crop-controls{
+    margin-top: 10px;
+    padding: 8px 10px;
+  }
+
+  .page-account .account-image-editor-filename{
+    margin-top: 10px;
+    padding: 8px 10px;
+  }
+
+  .page-account .account-image-editor .field-label{
+    margin-top: 11px;
+  }
+
+  .page-account .account-image-editor-actions{
+    position: sticky;
+    bottom: calc(-16px - env(safe-area-inset-bottom));
+    z-index: 2;
+    margin: 12px -18px calc(-16px - env(safe-area-inset-bottom));
+    padding: 10px 18px calc(12px + env(safe-area-inset-bottom));
+    background: rgba(255,255,255,.96);
+    border-top: 1px solid #eef1f4;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+}
+
+
+/* ----------------------------------------------------------------
+   Account image editor — inline password feedback
+   ---------------------------------------------------------------- */
+.page-account .account-image-editor-password.is-invalid-password{
+  animation: accountInvalidPasswordShake .34s cubic-bezier(.36,.07,.19,.97) both;
+}
+.page-account .account-image-editor-password.is-invalid-password .ex-input{
+  border-color:#ef4444 !important;
+  background:#fff7f7 !important;
+  color:#b42318;
+  box-shadow:
+    0 0 0 4px rgba(239,68,68,.12),
+    0 0 22px rgba(239,68,68,.14) !important;
+}
+.page-account .account-image-editor-password.is-invalid-password .ex-input::placeholder{
+  color:#d92d20;
+  opacity:1;
+  font-weight:850;
+}
+.page-account .account-image-editor-password.is-invalid-password .toggle-password{
+  color:#d92d20;
+}
+@keyframes accountInvalidPasswordShake{
+  0%,100%{transform:translateX(0)}
+  18%{transform:translateX(-6px)}
+  36%{transform:translateX(5px)}
+  54%{transform:translateX(-4px)}
+  72%{transform:translateX(3px)}
+  88%{transform:translateX(-1px)}
+}
+
+/* ----------------------------------------------------------------
+   Account saved confirmation — Dynamic Island
+   Matches the Shopping Cart confirmation language.
+   ---------------------------------------------------------------- */
+.page-account .account-saved-island{
+  position:fixed;
+  top:16px;
+  left:50%;
+  z-index:2200;
+  width:min(420px,calc(100vw - 52px));
+  min-height:76px;
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr);
+  align-items:center;
+  gap:10px;
+  padding:11px 14px;
+  border-radius:38px;
+  overflow:hidden;
+  isolation:isolate;
+  color:#fff;
+  background:linear-gradient(145deg,#050505 0%,#111 58%,#080808 100%);
+  box-shadow:0 22px 54px -20px rgba(0,0,0,.64),0 8px 22px -16px rgba(0,0,0,.7);
+  transform:translateX(-50%);
+  transform-origin:50% 0%;
+  animation:accountSavedIslandLife 5.34s linear both;
+  will-change:transform,opacity,filter;
+}
+.page-account .account-saved-island-progress{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  z-index:0;
+  pointer-events:none;
+  overflow:visible;
+}
+.page-account .account-saved-island-track,
+.page-account .account-saved-island-line{
+  fill:none;
+  vector-effect:non-scaling-stroke;
+}
+.page-account .account-saved-island-track{
+  stroke:rgba(255,255,255,.10);
+  stroke-width:3px;
+}
+.page-account .account-saved-island-line{
+  stroke:#ff7518;
+  stroke-width:3.2px;
+  stroke-linecap:round;
+  stroke-dasharray:100;
+  stroke-dashoffset:0;
+  animation:accountSavedIslandProgress 5.2s linear forwards;
+  filter:drop-shadow(0 0 4px rgba(255,117,24,.42));
+}
+.page-account .account-saved-island-icon{
+  position:relative;
+  z-index:1;
+  width:42px;
+  height:42px;
+  min-width:42px;
+  display:grid;
+  place-items:center;
+  border-radius:999px;
+  background:#f7f7f5;
+  color:#139a57;
+  box-shadow:0 8px 22px -12px rgba(255,255,255,.3);
+}
+.page-account .account-saved-island-copy{
+  position:relative;
+  z-index:1;
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+  padding-right:4px;
+}
+.page-account .account-saved-island-copy strong{
+  display:block;
+  color:#fff;
+  font-size:.88rem;
+  line-height:1.18;
+  font-weight:900;
+  letter-spacing:-.012em;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.page-account .account-saved-island-copy small{
+  display:block;
+  color:rgba(255,255,255,.68);
+  font-size:.68rem;
+  line-height:1.2;
+  font-weight:700;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+@keyframes accountSavedIslandProgress{
+  from{stroke-dashoffset:0}
+  to{stroke-dashoffset:100}
+}
+@keyframes accountSavedIslandLife{
+  0%{opacity:0;filter:blur(2px);transform:translate(-50%,-54px) scale(.78,.58)}
+  3%{opacity:.72;filter:blur(.8px);transform:translate(-50%,-18px) scale(.94,.86)}
+  6%{opacity:1;filter:blur(0);transform:translate(-50%,5px) scale(1.018,1.035)}
+  9%{opacity:1;filter:blur(0);transform:translate(-50%,-2px) scale(.994,.985)}
+  12%{opacity:1;filter:blur(0);transform:translate(-50%,1px) scale(1.004,1.008)}
+  15%,88%{opacity:1;filter:blur(0);transform:translate(-50%,0) scale(1)}
+  92%{opacity:1;filter:blur(0);transform:translate(-50%,-2px) scale(.995,.985)}
+  96%{opacity:.78;filter:blur(.4px);transform:translate(-50%,-15px) scale(.94,.84)}
+  100%{opacity:0;filter:blur(2px);transform:translate(-50%,-52px) scale(.76,.54)}
+}
+@media (max-width:640px){
+  .page-account .account-saved-island{
+    top:12px;
+    width:calc(100vw - 52px);
+    max-width:430px;
+    min-height:70px;
+    gap:8px;
+    padding:10px 12px;
+    border-radius:35px;
+  }
+  .page-account .account-saved-island-icon{
+    width:36px;
+    height:36px;
+    min-width:36px;
+  }
+  .page-account .account-saved-island-copy strong{font-size:.80rem}
+  .page-account .account-saved-island-copy small{font-size:.62rem}
+}
+@media (max-width:380px){
+  .page-account .account-saved-island{
+    width:calc(100vw - 38px);
+    padding-left:10px;
+    padding-right:10px;
+    gap:7px;
+  }
+}
+@media (prefers-reduced-motion:reduce){
+  .page-account .account-image-editor-password.is-invalid-password{animation:none}
+  .page-account .account-saved-island{animation:accountSavedIslandFade 5.34s ease both}
+  .page-account .account-saved-island-line{animation:none;stroke-dashoffset:0}
+  @keyframes accountSavedIslandFade{
+    0%{opacity:0}
+    8%,90%{opacity:1}
+    100%{opacity:0}
+  }
+}
+
+/* Keep the compact editor coherent in dark mode too. */
+html[data-theme="dark"] body.page-account .account-image-editor-icon,
+html[data-theme="dark"] body.page-account .account-crop-stage,
+html[data-theme="dark"] body.page-account .account-cover-fit-stage,
+html[data-theme="dark"] body.page-account .account-image-editor-filename,
+html[data-theme="dark"] body.page-account .account-crop-controls{
+  background: #171d26;
+  border-color: #2b3544;
+}
+html[data-theme="dark"] body.page-account .account-image-editor-close,
+html[data-theme="dark"] body.page-account .account-crop-reset,
+html[data-theme="dark"] body.page-account .account-image-editor-cancel{
+  background: #202733;
+  border-color: #2b3544;
+  color: #f8fafc;
+}
+html[data-theme="dark"] body.page-account .account-image-editor-password .ex-input{
+  background: #171d26;
+  border-color: #2b3544;
+  color: #f8fafc;
+}
+html[data-theme="dark"] body.page-account .account-image-editor-filename,
+html[data-theme="dark"] body.page-account .account-crop-hint,
+html[data-theme="dark"] body.page-account .account-cover-fit-note,
+html[data-theme="dark"] body.page-account .account-crop-zoom-label{
+  color: #98a2b3;
+}
+html[data-theme="dark"] body.page-account .account-image-editor-actions{
+  background: rgba(17,22,31,.96);
+  border-top-color: #2b3544;
+}
+
+/* ================================================================
+   Profile hero — restore the latest cover / avatar overlap treatment
+   Reference: inset cover card + large white avatar halo that merges
+   into the white profile surface (the Abdullah profile design).
+   ================================================================ */
+.page-account .profile-cover-section{
+  margin: 16px 16px 0;
+  height: clamp(180px, 23vw, 260px);
+  border-radius: 26px;
+  overflow: visible;
+  background: transparent;
+}
+
+.page-account .profile-cover-display{
+  border-radius: 26px;
+  overflow: hidden;
+  background: #e5e7eb;
+  /* Cut the cover around the avatar so the lower edge flows into the
+     circular profile halo instead of leaving two square white shoulders. */
+  -webkit-mask-image: radial-gradient(
+    circle 70px at 50% 100%,
+    transparent 0 68px,
+    #000 70px
+  );
+  mask-image: radial-gradient(
+    circle 70px at 50% 100%,
+    transparent 0 68px,
+    #000 70px
+  );
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+}
+
+.page-account .profile-cover-image,
+.page-account .profile-cover-fallback{
+  border-radius: inherit;
+}
+
+.page-account .profile-identity-block{
+  margin-top: -68px;
+}
+
+.page-account .profile-avatar-shell{
+  position: relative;
+  width: 138px;
+  height: 138px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow:
+    0 1px 0 rgba(255,255,255,.98) inset,
+    0 18px 38px rgba(15,23,42,.14);
+  isolation: isolate;
+}
+
+.page-account .profile-avatar-display{
+  position: absolute;
+  left: 14%;
+  top: 14%;
+  width: 72%;
+  height: 72%;
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 2px rgba(255,255,255,.98),
+    0 5px 14px rgba(15,23,42,.10) !important;
+  transform: none !important;
+}
+
+.page-account .profile-avatar-display:hover{
+  transform: none !important;
+  box-shadow:
+    0 0 0 2px rgba(255,255,255,.98),
+    0 6px 16px rgba(15,23,42,.12) !important;
+}
+
+.page-account .profile-avatar-edit{
+  right: -3px;
+  bottom: 10px;
+}
+
+.page-account .profile-avatar-remove{
+  top: -5px;
+  right: -5px;
+}
+
+.page-account .account-classic-loading-avatar{
+  position: absolute;
+  left: 14%;
+  top: 14%;
+  width: 72%;
+  height: 72%;
+}
 
 @media (max-width: 768px){
   .page-account .profile-cover-section{
-    height: 150px !important;
-    margin: 12px 12px 0 !important;
+    margin: 12px 12px 0;
+    height: clamp(128px, 36vw, 176px);
+    border-radius: 22px;
   }
-  .page-account .profile-cover-display{ border-radius: 20px !important; }
-  .page-account .profile-identity-block{ margin-top: -58px !important; }
+
+  .page-account .profile-cover-display{
+    border-radius: 22px;
+    -webkit-mask-image: radial-gradient(
+      circle 53px at 50% 100%,
+      transparent 0 51px,
+      #000 53px
+    );
+    mask-image: radial-gradient(
+      circle 53px at 50% 100%,
+      transparent 0 51px,
+      #000 53px
+    );
+  }
+
+  .page-account .profile-identity-block{
+    margin-top: -52px;
+  }
+
   .page-account .profile-avatar-shell{
-    width: 116px !important;
-    height: 116px !important;
+    width: 104px;
+    height: 104px;
   }
-  .page-account .profile-avatar-display{
-    box-shadow: 0 0 0 6px #fff, 0 12px 28px rgba(15,23,42,.22) !important;
-  }
+
   .page-account .profile-avatar-edit{
-    width: 34px !important;
-    height: 34px !important;
-    right: -3px !important;
-    bottom: 5px !important;
+    right: -5px;
+    bottom: 6px;
   }
-  .page-account .account-image-editor-layer{
-    padding: 10px;
-    align-items: center;
+
+  .page-account .profile-avatar-remove{
+    top: -7px;
+    right: -7px;
   }
-  .page-account .account-image-editor{
-    width: min(96vw, 680px) !important;
-    max-height: calc(100dvh - 20px);
-    border-radius: 22px !important;
-  }
-  .page-account .account-image-editor-head{ padding: 15px 16px 12px; }
-  .page-account .account-image-editor-icon{
-    width: 38px;
-    height: 38px;
-    min-width: 38px;
-    border-radius: 12px;
-  }
-  .page-account .account-image-editor .ex-modal-title{ font-size: 1.04rem !important; }
-  .page-account .account-image-editor-head p{ font-size: .72rem; }
-  .page-account .account-image-editor-close{
-    width: 34px;
-    height: 34px;
-    min-width: 34px;
-  }
-  .page-account .account-crop-stage{ padding: 14px 16px 8px; }
-  .page-account .account-crop-viewport--cover{
-    aspect-ratio: 17 / 5;
-    border-radius: 14px;
-  }
-  .page-account .account-crop-viewport--profile{ width: min(300px, 72vw); }
-  .page-account .account-crop-controls{ margin: 0 16px; }
-  .page-account .account-image-editor-filename,
-  .page-account .account-image-editor > .field-label,
-  .page-account .account-image-editor .ex-error{ margin-left: 16px !important; margin-right: 16px !important; }
-  .page-account .account-image-editor-password{ margin-left: 16px !important; margin-right: 16px !important; }
-  .page-account .account-image-editor-actions{ padding: 12px 16px 16px; }
 }
 
-/* ===== User Profile v2: cover without crop + deeper Facebook-style avatar overlap ===== */
-.page-account .profile-identity-block{
-  margin-top: -94px !important;
-}
-.page-account .profile-avatar-shell{
-  width: 154px !important;
-  height: 154px !important;
-}
-.page-account .profile-avatar-display{
-  background: #fff !important;
-  box-shadow:
-    0 0 0 10px #fff,
-    0 15px 34px rgba(15,23,42,.20) !important;
-}
-.page-account .profile-avatar-edit{
-  right: -7px !important;
-  bottom: 7px !important;
-  width: 40px !important;
-  height: 40px !important;
-  border-radius: 50% !important;
-  border: 3px solid #fff !important;
-  background: #fff !important;
-  box-shadow: 0 7px 18px rgba(15,23,42,.18) !important;
-}
-.page-account .profile-avatar-remove{
-  top: -9px !important;
-  right: -9px !important;
+@media (max-width: 420px){
+  .page-account .profile-cover-section{
+    margin: 10px 10px 0;
+    height: 124px;
+    border-radius: 20px;
+  }
+
+  .page-account .profile-cover-display{
+    border-radius: 20px;
+    -webkit-mask-image: radial-gradient(
+      circle 51px at 50% 100%,
+      transparent 0 49px,
+      #000 51px
+    );
+    mask-image: radial-gradient(
+      circle 51px at 50% 100%,
+      transparent 0 49px,
+      #000 51px
+    );
+  }
+
+  .page-account .profile-identity-block{
+    margin-top: -50px;
+  }
+
+  .page-account .profile-avatar-shell{
+    width: 100px;
+    height: 100px;
+  }
 }
 
-.page-account .account-image-editor--cover{
-  width: min(94vw, 700px) !important;
-  max-width: 700px !important;
+html[data-theme="dark"] body.page-account .profile-avatar-shell{
+  background: #fff;
 }
-.page-account .account-cover-fit-stage{
-  padding: 18px 22px 4px;
+
+/* ================================================================
+   Profile cover / avatar overlap treatment
+   Restore the Abdullah reference look: a shallow centered notch in the
+   bottom edge of the cover so the white avatar halo feels integrated with
+   the cover without creating the large left/right white wedges.
+   ================================================================ */
+.page-account .profile-cover-display{
+  --profile-cover-notch-radius: 76px;
+  --profile-cover-notch-offset: 52px;
+  -webkit-mask-image: radial-gradient(
+    circle var(--profile-cover-notch-radius) at 50% calc(100% + var(--profile-cover-notch-offset)),
+    transparent 0 calc(var(--profile-cover-notch-radius) - 1px),
+    #000 var(--profile-cover-notch-radius)
+  ) !important;
+  mask-image: radial-gradient(
+    circle var(--profile-cover-notch-radius) at 50% calc(100% + var(--profile-cover-notch-offset)),
+    transparent 0 calc(var(--profile-cover-notch-radius) - 1px),
+    #000 var(--profile-cover-notch-radius)
+  ) !important;
+  -webkit-mask-repeat: no-repeat !important;
+  mask-repeat: no-repeat !important;
+  -webkit-mask-size: 100% 100% !important;
+  mask-size: 100% 100% !important;
 }
-.page-account .account-cover-fit-preview{
+
+@media (max-width: 768px){
+  .page-account .profile-cover-display{
+    --profile-cover-notch-radius: 56px;
+    --profile-cover-notch-offset: 38px;
+  }
+}
+
+@media (max-width: 420px){
+  .page-account .profile-cover-display{
+    --profile-cover-notch-radius: 54px;
+    --profile-cover-notch-offset: 37px;
+  }
+}
+
+/* ========================================================================
+   User Profile — settings-list redesign / cover removed — 2026-10-04
+   Inspired by compact mobile profile/settings patterns: one identity card,
+   grouped account rows, simple preference controls, and no decorative cover.
+   ======================================================================== */
+body.page-account .account-page-shell{
   width: 100%;
-  min-height: 250px;
-  max-height: min(54dvh, 430px);
-  padding: 12px;
-  border: 1px solid #e3e8ef;
-  border-radius: 20px;
-  background:
-    linear-gradient(45deg, #f3f4f6 25%, transparent 25%),
-    linear-gradient(-45deg, #f3f4f6 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, #f3f4f6 75%),
-    linear-gradient(-45deg, transparent 75%, #f3f4f6 75%),
-    #fff;
-  background-size: 20px 20px;
-  background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+  max-width: none;
+  margin: 0 !important;
+  padding: clamp(10px, 1.8vw, 18px) !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+body.page-account #account-content{
+  width: 100%;
+}
+
+body.page-account .profile-settings-page{
+  width: min(100%, 820px);
+  margin: 0 auto;
+  padding: 0 0 28px;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+body.page-account .profile-settings-summary{
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid #e7e9ee;
+  border-radius: 22px;
+  background: #fff;
+  box-shadow: 0 8px 28px rgba(15,23,42,.045);
+}
+
+body.page-account .profile-settings-avatar-wrap{
+  position: relative;
+  width: 84px;
+  height: 84px;
+  flex: 0 0 84px;
+}
+
+body.page-account .profile-settings-avatar{
+  width: 84px;
+  height: 84px;
   display: grid;
   place-items: center;
   overflow: hidden;
-  box-shadow: 0 14px 34px rgba(15,23,42,.08);
-}
-.page-account .account-cover-fit-preview img{
-  width: auto;
-  height: auto;
-  max-width: 100% !important;
-  max-height: min(50dvh, 400px) !important;
-  object-fit: contain !important;
-  object-position: center !important;
-  display: block;
-  border-radius: 13px;
-  box-shadow: 0 8px 22px rgba(15,23,42,.12);
-}
-.page-account .account-cover-fit-note{
-  width: fit-content;
-  margin: 10px auto 0;
-  padding: 6px 11px;
-  border-radius: 999px;
-  background: #f8fafc;
-  color: #64748b;
-  font-size: .75rem;
-  font-weight: 750;
+  padding: 0;
+  border: 1px solid #e4e7ec;
+  border-radius: 50%;
+  background: #f3f4f6;
+  color: #111827;
+  font: inherit;
+  font-size: 1.25rem;
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(15,23,42,.08);
 }
 
-@media (max-width: 768px){
-  .page-account .profile-identity-block{
-    margin-top: -72px !important;
-  }
-  .page-account .profile-avatar-shell{
-    width: 120px !important;
-    height: 120px !important;
-  }
-  .page-account .profile-avatar-display{
-    box-shadow:
-      0 0 0 8px #fff,
-      0 12px 28px rgba(15,23,42,.20) !important;
-  }
-  .page-account .profile-avatar-edit{
-    right: -6px !important;
-    bottom: 4px !important;
-    width: 34px !important;
-    height: 34px !important;
-    border-width: 2px !important;
-  }
-  .page-account .account-cover-fit-stage{
-    padding: 14px 16px 2px;
-  }
-  .page-account .account-cover-fit-preview{
-    min-height: 190px;
-    max-height: 48dvh;
-    padding: 8px;
-    border-radius: 16px;
-  }
-  .page-account .account-cover-fit-preview img{
-    max-height: 44dvh !important;
-    border-radius: 10px;
-  }
-}
-
-/* ===== User Profile v4: wide symmetric cover-to-avatar fillet ===== */
-/*
-   Match the reference composition: the white content panel rises into the
-   cover with two broad, symmetric fillets that meet the avatar's white ring.
-   The bridge is deliberately wider than the avatar so the transition starts
-   well before the circle instead of looking like two small rectangular ears.
-*/
-.page-account .profile-cover-section::after{
-  content: "";
-  position: absolute;
-  left: 50%;
-  /* Lower the white fillet so its straight edge sits exactly on the cover edge. */
-  bottom: -10px;
-  width: 410px;
-  height: 130px;
-  transform: translateX(-50%);
-  pointer-events: none;
-  z-index: 3;
-  background-repeat: no-repeat;
-  background-position: center bottom;
-  background-size: 100% 100%;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 410 130' preserveAspectRatio='none'%3E%3Cpath fill='%23ffffff' d='M0 130V119H62C91 119 101 109 109 84C121 46 147 12 205 12C263 12 289 46 301 84C309 109 319 119 348 119H410V130Z'/%3E%3C/svg%3E");
-}
-
-/* Keep the avatar and its controls above the fillet bridge. */
-.page-account .profile-identity-block,
-.page-account .profile-avatar-section,
-.page-account .profile-avatar-shell{
-  position: relative;
-  z-index: 4;
-}
-.page-account .profile-avatar-display{
-  z-index: 2;
-}
-.page-account .profile-avatar-edit,
-.page-account .profile-avatar-remove{
-  z-index: 6 !important;
-}
-
-/* Compact cover editor: preview the whole image inside the real cover ratio
-   instead of rendering the source image close to its natural portrait size. */
-.page-account .account-image-editor--cover{
-  width: min(92vw, 560px) !important;
-  max-width: 560px !important;
-  max-height: min(86dvh, 650px) !important;
-}
-.page-account .account-image-editor--cover .account-image-editor-head{
-  padding: 13px 15px 10px !important;
-}
-.page-account .account-image-editor--cover .account-image-editor-head p{
-  font-size: .7rem !important;
-  line-height: 1.35;
-}
-.page-account .account-image-editor--cover .account-cover-fit-stage{
-  padding: 10px 15px 2px !important;
-}
-.page-account .account-image-editor--cover .account-cover-fit-preview{
+body.page-account .profile-settings-avatar img{
   width: 100%;
-  min-height: 0 !important;
-  height: auto !important;
-  max-height: none !important;
-  aspect-ratio: 17 / 5;
-  padding: 7px !important;
-  border-radius: 16px !important;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+body.page-account .profile-settings-avatar-edit,
+body.page-account .profile-settings-avatar-remove{
+  position: absolute;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #111827;
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 5px 14px rgba(15,23,42,.18);
+}
+
+body.page-account .profile-settings-avatar-edit{
+  right: -2px;
+  bottom: 2px;
+  width: 31px;
+  height: 31px;
+}
+
+body.page-account .profile-settings-avatar-remove{
+  top: -3px;
+  right: -3px;
+  width: 27px;
+  height: 27px;
+  background: #fff;
+  border-color: #e5e7eb;
+  color: #dc2626;
+}
+
+body.page-account .profile-settings-avatar-edit:disabled,
+body.page-account .profile-settings-avatar-remove:disabled{
+  opacity: .55;
+  cursor: wait;
+}
+
+body.page-account .profile-settings-summary-copy{
+  min-width: 0;
+}
+
+body.page-account .profile-settings-summary-copy h2{
+  margin: 0;
+  color: #101828;
+  font-size: clamp(1.15rem, 2.4vw, 1.55rem);
+  line-height: 1.15;
+  font-weight: 900;
+  letter-spacing: -.025em;
+}
+
+body.page-account .profile-settings-summary-copy p,
+body.page-account .profile-settings-summary-copy small{
+  display: block;
+  max-width: 100%;
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.page-account .account-image-editor--cover .account-cover-fit-preview img{
-  width: 100% !important;
-  height: 100% !important;
-  max-width: 100% !important;
-  max-height: 100% !important;
-  object-fit: contain !important;
-  object-position: center !important;
-  border-radius: 10px !important;
-  box-shadow: none !important;
+
+body.page-account .profile-settings-summary-copy p{
+  margin: 5px 0 0;
+  color: #667085;
+  font-size: .9rem;
+  font-weight: 650;
 }
-.page-account .account-image-editor--cover .account-cover-fit-note{
-  margin: 7px auto 0 !important;
-  padding: 4px 9px !important;
-  font-size: .67rem !important;
+
+body.page-account .profile-settings-summary-copy small{
+  margin-top: 4px;
+  color: #98a2b3;
+  font-size: .78rem;
+  font-weight: 700;
 }
-.page-account .account-image-editor--cover .account-image-editor-filename{
-  margin-top: 8px !important;
+
+body.page-account .profile-settings-section{
+  margin-top: 22px;
+  scroll-margin-top: 88px;
 }
-.page-account .account-image-editor--cover .account-image-editor-actions{
-  padding-top: 10px !important;
+
+body.page-account .profile-settings-section > h3{
+  margin: 0 0 9px;
+  padding: 0 4px;
+  color: #7a8291;
+  font-size: .82rem;
+  line-height: 1.2;
+  font-weight: 800;
+  letter-spacing: .01em;
+}
+
+body.page-account .profile-settings-list,
+body.page-account .profile-settings-file-list{
+  overflow: hidden;
+  border: 1px solid #e7e9ee;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 8px 28px rgba(15,23,42,.035);
+}
+
+body.page-account .profile-settings-row{
+  width: 100%;
+  min-height: 64px;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  border: 0;
+  border-bottom: 1px solid #edf0f3;
+  background: #fff;
+  color: #111827;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  transition: background-color .16s ease, transform .16s ease;
+}
+
+body.page-account .profile-settings-row:last-child{
+  border-bottom: 0;
+}
+
+body.page-account button.profile-settings-row:hover{
+  background: #fafafa;
+}
+
+body.page-account button.profile-settings-row:active{
+  background: #f5f6f8;
+}
+
+body.page-account .profile-settings-row--static{
+  cursor: default;
+}
+
+body.page-account .profile-settings-row-icon,
+body.page-account .profile-settings-file-icon{
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: #f5f6f8;
+  color: #3f4753;
+}
+
+body.page-account .profile-settings-row-copy,
+body.page-account .profile-settings-file-copy{
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+body.page-account .profile-settings-row-copy strong,
+body.page-account .profile-settings-file-copy strong{
+  min-width: 0;
+  overflow: hidden;
+  color: #171a21;
+  font-size: .92rem;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.page-account .profile-settings-row-copy small,
+body.page-account .profile-settings-file-copy small{
+  min-width: 0;
+  overflow: hidden;
+  color: #98a2b3;
+  font-size: .78rem;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.page-account .profile-settings-chevron{
+  display: grid;
+  place-items: center;
+  color: #98a2b3;
+}
+
+body.page-account .profile-settings-theme-switch{
+  position: relative;
+  width: 54px;
+  height: 32px;
+  padding: 3px;
+  border: 1px solid #d9dee6;
+  border-radius: 999px;
+  background: #eef1f5;
+  cursor: pointer;
+  transition: background-color .2s ease, border-color .2s ease;
+}
+
+body.page-account .profile-settings-theme-switch > span{
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #fff;
+  color: #586174;
+  box-shadow: 0 2px 7px rgba(15,23,42,.13);
+  transform: translateX(0);
+  transition: transform .2s ease;
+}
+
+body.page-account .profile-settings-theme-switch.is-dark{
+  background: #191c23;
+  border-color: #191c23;
+}
+
+body.page-account .profile-settings-theme-switch.is-dark > span{
+  color: #111827;
+  transform: translateX(22px);
+}
+
+body.page-account .profile-settings-file{
+  min-height: 60px;
+  display: grid;
+  grid-template-columns: 38px minmax(0,1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #edf0f3;
+  color: inherit;
+  text-decoration: none;
+}
+
+body.page-account .profile-settings-file:last-child{
+  border-bottom: 0;
+}
+
+body.page-account a.profile-settings-file:hover{
+  background: #fafafa;
+}
+
+body.page-account .profile-settings-empty{
+  min-height: 70px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 16px;
+  color: #98a2b3;
+  font-size: .84rem;
+  font-weight: 700;
+}
+
+body.page-account .profile-settings-avatar:focus-visible,
+body.page-account .profile-settings-avatar-edit:focus-visible,
+body.page-account .profile-settings-avatar-remove:focus-visible,
+body.page-account .profile-settings-row:focus-visible,
+body.page-account .profile-settings-theme-switch:focus-visible,
+body.page-account .profile-settings-file:focus-visible{
+  outline: 3px solid rgba(99,102,241,.2);
+  outline-offset: 2px;
+}
+
+html[data-theme="dark"] body.page-account .profile-settings-summary,
+html[data-theme="dark"] body.page-account .profile-settings-list,
+html[data-theme="dark"] body.page-account .profile-settings-file-list,
+html[data-theme="dark"] body.page-account .profile-settings-row{
+  border-color: #252a33;
+  background: #11141a;
+}
+
+html[data-theme="dark"] body.page-account .profile-settings-row,
+html[data-theme="dark"] body.page-account .profile-settings-file{
+  border-bottom-color: #252a33;
+}
+
+html[data-theme="dark"] body.page-account button.profile-settings-row:hover,
+html[data-theme="dark"] body.page-account a.profile-settings-file:hover{
+  background: #161a21;
+}
+
+html[data-theme="dark"] body.page-account .profile-settings-summary-copy h2,
+html[data-theme="dark"] body.page-account .profile-settings-row-copy strong,
+html[data-theme="dark"] body.page-account .profile-settings-file-copy strong{
+  color: #f8fafc;
+}
+
+html[data-theme="dark"] body.page-account .profile-settings-summary-copy p,
+html[data-theme="dark"] body.page-account .profile-settings-summary-copy small,
+html[data-theme="dark"] body.page-account .profile-settings-section > h3,
+html[data-theme="dark"] body.page-account .profile-settings-row-copy small,
+html[data-theme="dark"] body.page-account .profile-settings-file-copy small,
+html[data-theme="dark"] body.page-account .profile-settings-chevron{
+  color: #9aa4b2;
+}
+
+html[data-theme="dark"] body.page-account .profile-settings-row-icon,
+html[data-theme="dark"] body.page-account .profile-settings-file-icon{
+  background: #1d222b;
+  color: #cbd5e1;
 }
 
 @media (max-width: 768px){
-  .page-account .profile-cover-section::after{
-    width: 320px;
-    height: 104px;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 320 104' preserveAspectRatio='none'%3E%3Cpath fill='%23ffffff' d='M0 104V94H48C70 94 78 86 84 68C94 39 114 8 160 8C206 8 226 39 236 68C242 86 250 94 272 94H320V104Z'/%3E%3C/svg%3E");
+  body.page-account .account-page-shell{
+    padding: 6px 5px 18px !important;
   }
 
-  .page-account .account-image-editor--cover{
-    width: min(92vw, 500px) !important;
-    max-width: 500px !important;
-    max-height: calc(100dvh - 28px) !important;
+  body.page-account .profile-settings-page{
+    width: 100%;
+    padding-bottom: 20px;
   }
-  .page-account .account-image-editor--cover .account-cover-fit-stage{
-    padding: 9px 12px 2px !important;
+
+  body.page-account .profile-settings-summary{
+    gap: 13px;
+    padding: 15px;
+    border-radius: 18px;
   }
-  .page-account .account-image-editor--cover .account-cover-fit-preview{
-    aspect-ratio: 17 / 5;
-    padding: 6px !important;
-    border-radius: 14px !important;
+
+  body.page-account .profile-settings-avatar-wrap,
+  body.page-account .profile-settings-avatar{
+    width: 72px;
+    height: 72px;
   }
+
+  body.page-account .profile-settings-avatar-wrap{
+    flex-basis: 72px;
+  }
+
+  body.page-account .profile-settings-avatar-edit{
+    width: 28px;
+    height: 28px;
+  }
+
+  body.page-account .profile-settings-avatar-remove{
+    width: 25px;
+    height: 25px;
+  }
+
+  body.page-account .profile-settings-summary-copy h2{
+    font-size: 1.08rem;
+  }
+
+  body.page-account .profile-settings-summary-copy p{
+    font-size: .78rem;
+  }
+
+  body.page-account .profile-settings-summary-copy small{
+    font-size: .7rem;
+  }
+
+  body.page-account .profile-settings-section{
+    margin-top: 18px;
+  }
+
+  body.page-account .profile-settings-section > h3{
+    margin-bottom: 8px;
+    padding-inline: 3px;
+    font-size: .76rem;
+  }
+
+  body.page-account .profile-settings-list,
+  body.page-account .profile-settings-file-list{
+    border-radius: 17px;
+  }
+
+  body.page-account .profile-settings-row{
+    min-height: 58px;
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+    gap: 10px;
+    padding: 9px 11px;
+  }
+
+  body.page-account .profile-settings-row-icon,
+  body.page-account .profile-settings-file-icon{
+    width: 34px;
+    height: 34px;
+    border-radius: 11px;
+  }
+
+  body.page-account .profile-settings-row-copy strong,
+  body.page-account .profile-settings-file-copy strong{
+    font-size: .84rem;
+  }
+
+  body.page-account .profile-settings-row-copy small,
+  body.page-account .profile-settings-file-copy small{
+    font-size: .7rem;
+  }
+
+  body.page-account .profile-settings-theme-switch{
+    width: 50px;
+    height: 30px;
+  }
+
+  body.page-account .profile-settings-theme-switch > span{
+    width: 22px;
+    height: 22px;
+  }
+
+  body.page-account .profile-settings-theme-switch.is-dark > span{
+    transform: translateX(20px);
+  }
+
+  body.page-account .profile-settings-file{
+    min-height: 56px;
+    grid-template-columns: 34px minmax(0,1fr) auto;
+    gap: 10px;
+    padding: 9px 11px;
+  }
+}
+
+@media (max-width: 390px){
+  body.page-account .profile-settings-summary{
+    padding: 13px;
+  }
+
+  body.page-account .profile-settings-avatar-wrap,
+  body.page-account .profile-settings-avatar{
+    width: 66px;
+    height: 66px;
+  }
+
+  body.page-account .profile-settings-summary-copy h2{
+    font-size: 1rem;
+  }
+}
+
+/* ========================================================================
+   User Profile — Edit field / Security bottom sheet (2026-10-16)
+   The account editor uses account-edit-* classes in AccountDialogs.jsx. These
+   rules were missing from the original stylesheet, leaving controls unstyled
+   on both desktop and mobile. Scope them to the edit dialog only so image
+   upload, account summary and other modals keep their current appearance.
+   ======================================================================== */
+body.page-account .ex-modal.account-edit-field-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 1000050;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, .52);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  overscroll-behavior: contain;
+}
+
+body.page-account .account-edit-field-modal,
+body.page-account .account-edit-field-modal * {
+  box-sizing: border-box;
+}
+
+body.page-account .ex-modal-box.account-edit-field-modal {
+  --profile-edit-ink: #101828;
+  --profile-edit-muted: #7b8595;
+  --profile-edit-border: #e5e8ef;
+  --profile-edit-orange: #e56b21;
+  width: min(100%, 510px);
+  max-width: 510px;
+  max-height: min(92dvh, 790px);
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--profile-edit-ink);
+  background: #fff;
+  border: 1px solid #eef0f3;
+  border-radius: 26px;
+  box-shadow: 0 24px 76px rgba(15, 23, 42, .22);
+  font-family: inherit;
+  line-height: 1.45;
+  isolation: isolate;
+}
+
+body.page-account .account-edit-field-modal :is(button, input) {
+  font: inherit;
+}
+
+body.page-account .account-edit-field-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 13px;
+  flex: 0 0 auto;
+  padding: 25px 26px 20px;
+  background: #fff;
+  border-bottom: 1px solid #f0f1f4;
+}
+
+body.page-account .account-edit-field-headcopy {
+  min-width: 0;
+  display: flex;
+  flex: 1 1 auto;
+  align-items: flex-start;
+  gap: 13px;
+}
+
+body.page-account .account-edit-field-headcopy > div {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+body.page-account .account-edit-field-icon {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  color: #d6631f;
+  background: #fff2e9;
+}
+
+body.page-account .account-edit-field-icon svg,
+body.page-account .account-edit-security-icon svg {
+  display: block;
+}
+
+body.page-account .account-edit-field-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+body.page-account .account-edit-field-modal .ex-modal-title {
+  margin: 0;
+  padding: 0;
+  color: #111827;
+  font-size: clamp(18px, 2.2vw, 22px);
+  font-weight: 800;
+  line-height: 1.25;
+  letter-spacing: -.025em;
+}
+
+body.page-account .account-edit-field-headcopy p {
+  margin: 7px 0 0;
+  color: var(--profile-edit-muted);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+body.page-account .account-edit-dirty-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 3px 8px;
+  color: #9a4b12;
+  background: #fff2df;
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+body.page-account .account-edit-field-modal .account-edit-field-close {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  flex: 0 0 36px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  margin: 0;
+  border: 1px solid #e8ebf0;
+  border-radius: 11px;
+  background: #f7f8fa;
+  color: #566174;
+  cursor: pointer;
+  box-shadow: none;
+}
+
+body.page-account .account-edit-field-close:hover {
+  background: #edf0f4;
+  color: #111827;
+}
+
+body.page-account .account-edit-field-body {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 23px 26px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  scrollbar-width: none;
+}
+
+body.page-account .account-edit-field-body::-webkit-scrollbar {
+  display: none;
+}
+
+body.page-account .account-edit-control-group {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 0;
+}
+
+body.page-account .account-edit-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  margin-bottom: 9px;
+}
+
+body.page-account .account-edit-label-row label {
+  min-width: 0;
+  margin: 0;
+  color: #293241;
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.4;
+}
+
+body.page-account .account-edit-required {
+  margin-left: 2px;
+  color: #e3651c;
+}
+
+body.page-account .account-edit-count {
+  flex: 0 0 auto;
+  color: #97a0ae;
+  font-size: 11px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+body.page-account .account-edit-input-shell {
+  width: 100%;
+  min-width: 0;
+  position: relative;
+  display: flex;
+  align-items: center;
+  border: 1.5px solid #dfe3ea;
+  background: #fff;
+  border-radius: 13px;
+  transition: border-color .16s ease, box-shadow .16s ease;
+}
+
+body.page-account .account-edit-input-shell:focus-within {
+  border-color: var(--profile-edit-orange);
+  box-shadow: 0 0 0 3px rgba(229, 107, 33, .11);
+}
+
+body.page-account .account-edit-input-shell.is-invalid {
+  border-color: #d92d20;
+  box-shadow: 0 0 0 3px rgba(217, 45, 32, .08);
+}
+
+body.page-account .account-edit-input-shell .ex-input.account-edit-input {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  height: 48px;
+  min-height: 48px;
+  padding: 12px 14px;
+  margin: 0;
+  border: 0;
+  outline: 0;
+  border-radius: 12px;
+  box-shadow: none;
+  background: transparent;
+  color: #101828;
+  font-size: 14px;
+  font-weight: 550;
+  line-height: 22px;
+}
+
+body.page-account .account-edit-input-shell .ex-input.account-edit-input:focus,
+body.page-account .account-edit-input-shell .ex-input.account-edit-input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+body.page-account .account-edit-input-shell .ex-input.account-edit-input::placeholder {
+  color: #a0a8b5;
+  opacity: 1;
+}
+
+body.page-account .account-edit-input-shell:is(.account-edit-input-shell--password, .account-edit-password-shell) .account-edit-input {
+  padding-right: 52px;
+}
+
+body.page-account .account-edit-input-shell > .toggle-password {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  margin: 0;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #8b95a4;
+  cursor: pointer;
+}
+
+body.page-account .account-edit-input-shell > .toggle-password:hover {
+  color: #334155;
+  background: #f3f4f6;
+}
+
+body.page-account .account-edit-input-shell > .toggle-password:active {
+  transform: translateY(-50%) scale(.96);
+}
+
+body.page-account .account-edit-input-shell > .toggle-password svg {
+  display: block;
+  width: 19px;
+  height: 19px;
+}
+
+body.page-account .account-edit-support-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  margin-top: 9px;
+}
+
+body.page-account .account-edit-helper {
+  flex: 1 1 175px;
+  min-width: 0;
+  color: #8691a1;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.55;
+}
+
+body.page-account .account-edit-valid {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #15803d;
+  font-size: 11px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+body.page-account .account-edit-security-card {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  padding: 17px;
+  border: 1px solid #e9edf2;
+  border-radius: 16px;
+  background: #f8f9fb;
+}
+
+body.page-account .account-edit-security-copy {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+body.page-account .account-edit-security-icon {
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: #e9edf2;
+  color: #5f6e81;
+}
+
+body.page-account .account-edit-security-copy > div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 3px;
+}
+
+body.page-account .account-edit-security-copy strong {
+  color: #293241;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+body.page-account .account-edit-security-copy > div > span {
+  color: #8390a0;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.6;
+}
+
+body.page-account .account-edit-security-card .account-edit-input-shell {
+  background: #fff;
+  border-color: #e0e5eb;
+}
+
+body.page-account .account-edit-inline-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 8px;
+  color: #b42318;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.5;
+}
+
+body.page-account .account-edit-inline-error svg,
+body.page-account .account-edit-server-error svg {
+  flex: 0 0 auto;
+}
+
+body.page-account .account-edit-server-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 13px;
+  border: 1px solid #fecaca;
+  border-radius: 12px;
+  background: #fef2f2;
+  color: #b42318;
+}
+
+body.page-account .account-edit-server-error > div,
+body.page-account .account-edit-discard > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+body.page-account .account-edit-server-error strong,
+body.page-account .account-edit-discard strong {
+  font-size: 12px;
+  font-weight: 800;
+}
+
+body.page-account .account-edit-server-error span,
+body.page-account .account-edit-discard span {
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+body.page-account .account-edit-discard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #fed7aa;
+  border-radius: 12px;
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+body.page-account .account-edit-discard-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+body.page-account .account-edit-discard-actions button {
+  padding: 8px 11px;
+  border: 1px solid #fed7aa;
+  border-radius: 9px;
+  background: #fff;
+  color: #92400e;
+  font-size: 11px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+body.page-account .account-edit-discard-actions button.is-danger {
+  border-color: #fecaca;
+  color: #b42318;
+}
+
+body.page-account .account-edit-field-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+  padding: 17px 26px calc(17px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid #f0f1f4;
+  background: #fff;
+}
+
+body.page-account .account-edit-field-actions > button {
+  min-width: 125px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin: 0;
+  padding: 10px 17px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: background-color .16s ease, opacity .16s ease;
+}
+
+body.page-account .account-edit-field-actions .account-edit-cancel {
+  color: #485468;
+  border-color: #e1e6ec;
+  background: #f6f7f9;
+}
+
+body.page-account .account-edit-field-actions .account-edit-cancel:hover {
+  background: #eceff3;
+}
+
+body.page-account .account-edit-field-actions .account-edit-save {
+  color: #fff;
+  background: #e56b21;
+  border-color: #e56b21;
+}
+
+body.page-account .account-edit-field-actions .account-edit-save:hover:not(:disabled) {
+  background: #c65314;
+  border-color: #c65314;
+}
+
+body.page-account .account-edit-field-actions > button:disabled,
+body.page-account .account-edit-field-close:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+body.page-account .account-edit-field-actions .account-edit-save:disabled {
+  color: #9ca3af;
+  background: #f1f2f4;
+  border-color: #f1f2f4;
+  opacity: 1;
+}
+
+body.page-account .account-edit-field-modal button:focus-visible {
+  outline: 3px solid rgba(229, 107, 33, .27);
+  outline-offset: 2px;
+}
+
+body.page-account .account-edit-spinner {
+  width: 15px;
+  height: 15px;
+  border: 2px solid rgba(255,255,255,.35);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: accountEditSpin .7s linear infinite;
+}
+
+@keyframes accountEditSpin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 768px) {
+  body.page-account .ex-modal.account-edit-field-layer {
+    align-items: flex-end;
+    justify-content: center;
+    padding: 0;
+  }
+
+  body.page-account .ex-modal-box.account-edit-field-modal {
+    width: 100%;
+    max-width: none;
+    max-height: min(90dvh, 790px);
+    margin: 0;
+    border-radius: 24px 24px 0 0;
+    border-bottom: 0;
+    box-shadow: 0 -15px 56px rgba(15, 23, 42, .17);
+  }
+
+  body.page-account .account-edit-field-modal::before {
+    content: "";
+    flex: 0 0 auto;
+    width: 38px;
+    height: 4px;
+    display: block;
+    margin: 9px auto 0;
+    border-radius: 999px;
+    background: #d8dde5;
+  }
+
+  body.page-account .account-edit-field-head {
+    padding: 16px 20px 17px;
+  }
+
+  body.page-account .account-edit-field-body {
+    padding: 19px 20px 23px;
+    gap: 17px;
+  }
+
+  body.page-account .account-edit-field-actions {
+    padding: 13px 20px calc(16px + env(safe-area-inset-bottom, 0px));
+  }
+
+  body.page-account .account-edit-field-actions > button {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 46px;
+  }
+}
+
+@media (max-width: 390px) {
+  body.page-account .account-edit-field-head {
+    gap: 8px;
+    padding-inline: 16px;
+  }
+
+  body.page-account .account-edit-field-headcopy {
+    gap: 10px;
+  }
+
+  body.page-account .account-edit-field-icon {
+    width: 38px;
+    height: 38px;
+    flex-basis: 38px;
+    border-radius: 12px;
+  }
+
+  body.page-account .account-edit-field-headcopy p {
+    font-size: 11px;
+  }
+
+  body.page-account .account-edit-field-body {
+    padding-inline: 16px;
+  }
+
+  body.page-account .account-edit-field-actions {
+    padding-inline: 16px;
+  }
+}
+
+/* The profile edit dialog must remain readable with the app's dark theme. */
+html[data-theme="dark"] body.page-account .ex-modal-box.account-edit-field-modal {
+  --profile-edit-ink: #f8fafc;
+  --profile-edit-muted: #9aa4b2;
+  --profile-edit-border: #303b4a;
+  color: #f8fafc;
+  background: #11161f;
+  border-color: #293241;
+}
+
+html[data-theme="dark"] body.page-account .account-edit-field-head,
+html[data-theme="dark"] body.page-account .account-edit-field-actions {
+  background: #11161f;
+  border-color: #2b3544;
+}
+
+html[data-theme="dark"] body.page-account .account-edit-field-modal :is(.ex-modal-title, .account-edit-label-row label, .account-edit-security-copy strong) {
+  color: #f8fafc;
+}
+
+html[data-theme="dark"] body.page-account .account-edit-field-modal :is(.account-edit-field-headcopy p, .account-edit-helper, .account-edit-security-copy > div > span) {
+  color: #98a2b3;
+}
+
+html[data-theme="dark"] body.page-account .account-edit-field-icon,
+html[data-theme="dark"] body.page-account .account-edit-dirty-badge {
+  background: #35241d;
+  color: #ffae71;
+}
+
+html[data-theme="dark"] body.page-account .account-edit-field-modal .account-edit-field-close,
+html[data-theme="dark"] body.page-account .account-edit-security-icon {
+  background: #252c38;
+  border-color: #344052;
+  color: #d7dee8;
+}
+
+html[data-theme="dark"] body.page-account .account-edit-security-card {
+  background: #191f29;
+  border-color: #303b4a;
+}
+
+html[data-theme="dark"] body.page-account .account-edit-input-shell,
+html[data-theme="dark"] body.page-account .account-edit-security-card .account-edit-input-shell {
+  background: #11161f;
+  border-color: #3a4656;
+}
+
+html[data-theme="dark"] body.page-account .account-edit-input-shell:focus-within {
+  border-color: #e56b21;
+}
+
+html[data-theme="dark"] body.page-account .account-edit-input-shell .ex-input.account-edit-input {
+  color: #f8fafc;
+  background: transparent;
+}
+
+html[data-theme="dark"] body.page-account .account-edit-field-actions .account-edit-cancel,
+html[data-theme="dark"] body.page-account .account-edit-field-actions .account-edit-save:disabled {
+  color: #cbd5e1;
+  background: #252d39;
+  border-color: #374354;
+}
+
+html[data-theme="dark"] body.page-account .account-edit-discard {
+  background: #34291e;
+  border-color: #75502f;
+  color: #ffcca2;
+}
+
+html[data-theme="dark"] body.page-account .account-edit-discard-actions button {
+  background: #252c38;
+  border-color: #75502f;
+  color: #ffcca2;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.page-account .account-edit-spinner { animation-duration: 2s; }
+  body.page-account .account-edit-input-shell,
+  body.page-account .account-edit-field-actions > button { transition: none; }
 }

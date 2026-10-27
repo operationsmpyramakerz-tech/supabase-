@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { getLegacyAccountGate } from "../../../../lib/products-auth";
+import { getDirectAccountGate } from "../../../../lib/products-auth";
+import { featureGate } from "../../../../lib/feature-permissions-server";
 import {
   createProductTag,
   deleteProductTag,
@@ -21,7 +22,7 @@ function errorResponse(error, fallback) {
 }
 
 export async function GET() {
-  const gate = await getLegacyAccountGate("Products");
+  const gate = await getDirectAccountGate("Products");
   if (!gate.ok) return gateResponse(gate);
   try {
     return NextResponse.json({ ok: true, source: "supabase-next", tags: await listProductTags() }, {
@@ -33,7 +34,7 @@ export async function GET() {
 }
 
 export async function POST(request) {
-  const gate = await getLegacyAccountGate("Products");
+  const gate = featureGate(await getDirectAccountGate("Products"), "products.tag_manage");
   if (!gate.ok) return gateResponse(gate);
   try {
     const body = await request.json().catch(() => ({}));
@@ -48,7 +49,7 @@ export async function POST(request) {
 }
 
 export async function PATCH(request) {
-  const gate = await getLegacyAccountGate("Products");
+  const gate = featureGate(await getDirectAccountGate("Products"), "products.tag_manage");
   if (!gate.ok) return gateResponse(gate);
   try {
     const body = await request.json().catch(() => ({}));
@@ -62,7 +63,7 @@ export async function PATCH(request) {
 }
 
 export async function DELETE(request) {
-  const gate = await getLegacyAccountGate("Products");
+  const gate = featureGate(await getDirectAccountGate("Products"), "products.tag_manage");
   if (!gate.ok) return gateResponse(gate);
   try {
     const body = await request.json().catch(() => ({}));

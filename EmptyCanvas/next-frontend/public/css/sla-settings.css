@@ -1,0 +1,72 @@
+/* SLA settings: namespaced styles, no global changes. */
+body.page-sla-settings .sla-editor{max-width:1150px;margin:0 auto;padding:18px 16px max(125px,env(safe-area-inset-bottom));color:#162033}
+body.page-sla-settings .sla-editor-hero{background:linear-gradient(120deg,#101a2c,#212b3e);color:white;border-radius:23px;padding:26px;box-shadow:0 20px 40px rgba(13,22,41,.1)}
+body.page-sla-settings .sla-editor-back{display:inline-block;color:#ffad75;text-decoration:none;font-weight:800;font-size:12px;margin-bottom:26px}
+body.page-sla-settings .sla-editor-hero>span,body.page-sla-settings .sla-editor-section-head span{display:block;font-size:10px;letter-spacing:.1em;color:#ed7b2b;font-weight:900}
+body.page-sla-settings .sla-editor-hero h1{font-size:clamp(24px,4.5vw,36px);margin:7px 0;font-weight:900;line-height:1.13}
+body.page-sla-settings .sla-editor-hero p{max-width:770px;color:#c9d2e0;line-height:1.6;font-size:12px;margin:6px 0 0}
+body.page-sla-settings .sla-editor-section-head{margin:27px 0 14px}
+body.page-sla-settings .sla-editor-section-head h2{font-size:clamp(19px,3vw,23px);margin:6px 0;color:inherit}
+body.page-sla-settings .sla-editor-section-head p{color:#758195;font-size:12px;line-height:1.6;margin:0}
+body.page-sla-settings .sla-editor-card{min-width:0;border:1px solid #e3e6ee;border-radius:22px;padding:20px;background:#fff;box-shadow:0 12px 30px rgba(15,23,42,.04)}
+body.page-sla-settings .sla-editor-policy-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}
+body.page-sla-settings .sla-editor-card__head{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:19px}
+body.page-sla-settings .sla-editor-card__head h3{font-size:16px;margin:3px 0;color:#152138}
+body.page-sla-settings .sla-editor-card__head>div>span{font-size:9px;color:#ed6c18;font-weight:900;letter-spacing:.07em}
+body.page-sla-settings .sla-editor-switch{display:inline-flex;gap:7px;align-items:center;font-size:11px;font-weight:800;white-space:nowrap;color:#2d3b50;cursor:pointer}
+body.page-sla-settings .sla-editor-switch input,body.page-sla-settings .sla-editor-days input{accent-color:#ec701e;width:17px;height:17px}
+body.page-sla-settings .sla-editor-fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+body.page-sla-settings .sla-editor-fields label,body.page-sla-settings .sla-editor-holidays{display:grid;gap:7px;font-weight:800;color:#39475e;font-size:11px}
+body.page-sla-settings .sla-editor-fields input,body.page-sla-settings .sla-editor-fields select,body.page-sla-settings .sla-editor-holidays textarea{box-sizing:border-box;width:100%;min-width:0;min-height:45px;border:1px solid #dfe3eb;border-radius:12px;background:#f8f9fb;color:#172033;padding:10px 12px;font:inherit;font-size:13px;outline:none}
+body.page-sla-settings .sla-editor-fields input:focus,body.page-sla-settings .sla-editor-fields select:focus,body.page-sla-settings .sla-editor-holidays textarea:focus{border-color:#ed752b;box-shadow:0 0 0 3px rgba(237,117,43,.12)}
+body.page-sla-settings .sla-editor-subsection{margin-top:20px}
+body.page-sla-settings .sla-editor-subsection>strong{display:block;font-size:12px;margin-bottom:10px}
+body.page-sla-settings .sla-editor-days{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:7px}
+body.page-sla-settings .sla-editor-days label{display:flex;align-items:center;justify-content:center;gap:5px;min-height:41px;padding:6px;border:1px solid #e2e6ed;border-radius:11px;background:#f8fafc;font-size:11px;font-weight:800;cursor:pointer}
+body.page-sla-settings .sla-editor-days label.is-active{border-color:#ec752c;background:#fff5ed;color:#a74711}
+body.page-sla-settings .sla-editor-holidays{margin-top:19px}
+body.page-sla-settings .sla-editor-holidays textarea{resize:vertical;min-height:97px}
+body.page-sla-settings .sla-editor-holidays small,body.page-sla-settings .sla-editor-card__footer small{font-size:10px;font-weight:600;color:#7b8796;line-height:1.5}
+body.page-sla-settings .sla-editor-card__footer{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:18px;padding-top:14px;border-top:1px solid #f0f0f3}
+body.page-sla-settings .sla-editor-card__footer button{border:0;background:#111a2a;color:#fff;border-radius:12px;min-height:42px;padding:0 18px;font-size:12px;font-weight:900;white-space:nowrap;cursor:pointer}
+body.page-sla-settings .sla-editor-card__footer button:disabled{opacity:.5;cursor:wait}
+body.page-sla-settings .sla-editor-warning{margin:14px 0 0;color:#ad4e0e;background:#fff5ea;border-radius:12px;padding:11px 13px;font-size:11px}
+body.page-sla-settings .sla-editor-message{margin:16px 0;padding:13px 15px;border-radius:13px;background:#ecf9f3;color:#126b49;font-size:12px;font-weight:750}
+body.page-sla-settings .sla-editor-message.is-error{background:#fff0f0;color:#a22b32}
+body.page-sla-settings .sla-editor-loading{margin:25px 0;font-weight:750}
+body.page-sla-settings .sla-editor-note{margin:22px 0;font-size:11px;line-height:1.6;color:#768195}
+@media(max-width:850px){body.page-sla-settings .sla-editor-policy-grid{grid-template-columns:1fr}}
+@media(max-width:620px){body.page-sla-settings .sla-editor{padding:10px 10px max(150px,env(safe-area-inset-bottom))}body.page-sla-settings .sla-editor-hero{padding:21px}body.page-sla-settings .sla-editor-card{padding:15px;border-radius:18px}body.page-sla-settings .sla-editor-fields{grid-template-columns:1fr}body.page-sla-settings .sla-editor-days{grid-template-columns:repeat(4,minmax(0,1fr))}body.page-sla-settings .sla-editor-card__footer{flex-direction:column;align-items:stretch}body.page-sla-settings .sla-editor-card__footer button{width:100%}}
+html[data-theme="dark"] body.page-sla-settings .sla-editor{color:#f4f5f7}
+html[data-theme="dark"] body.page-sla-settings .sla-editor-card{background:#161a21;border-color:#313845;box-shadow:none}
+html[data-theme="dark"] body.page-sla-settings .sla-editor-card h3,html[data-theme="dark"] body.page-sla-settings .sla-editor-switch,html[data-theme="dark"] body.page-sla-settings .sla-editor-fields label,html[data-theme="dark"] body.page-sla-settings .sla-editor-holidays{color:#e9edf4}
+html[data-theme="dark"] body.page-sla-settings .sla-editor-fields input,html[data-theme="dark"] body.page-sla-settings .sla-editor-fields select,html[data-theme="dark"] body.page-sla-settings .sla-editor-holidays textarea{background:#242b36;color:#f4f5f7;border-color:#465061}
+html[data-theme="dark"] body.page-sla-settings .sla-editor-days label{background:#242b36;border-color:#445064}
+html[data-theme="dark"] body.page-sla-settings .sla-editor-days label.is-active{background:#583421;border-color:#e87731;color:#ffe0c7}
+html[data-theme="dark"] body.page-sla-settings .sla-editor-card__footer{border-color:#303846}
+html[data-theme="dark"] body.page-sla-settings .sla-editor-card__footer button{background:#ed752b;color:#101521}
+
+/* Phase 8: opt-in supervisor routes */
+body.page-sla-settings .sla-routes__form{margin-bottom:16px}
+body.page-sla-settings .sla-routes__actions{display:flex;justify-content:space-between;gap:14px;align-items:center;margin:12px 0 18px}
+body.page-sla-settings .sla-routes__actions button,body.page-sla-settings .sla-routes__item button{border:0;border-radius:11px;padding:11px 15px;background:#e8752e;color:#fff;cursor:pointer;font-weight:800;font-size:12px}
+body.page-sla-settings .sla-routes button:disabled{opacity:.45;cursor:not-allowed}
+body.page-sla-settings .sla-routes__list{display:grid;gap:9px}
+body.page-sla-settings .sla-routes__item{display:flex;justify-content:space-between;align-items:center;gap:12px;border:1px solid #e6e9ef;border-radius:13px;padding:12px 14px;background:#fafbfc}
+body.page-sla-settings .sla-routes__item div{min-width:0;display:grid;gap:3px;overflow-wrap:anywhere}
+body.page-sla-settings .sla-routes__item strong{font-size:12px;color:#203047}
+body.page-sla-settings .sla-routes__item small{color:#7d8797;font-size:11px}
+body.page-sla-settings .sla-routes__empty{font-size:12px;color:#7b8796}
+@media(max-width:620px){body.page-sla-settings .sla-routes__actions{align-items:stretch;flex-direction:column}body.page-sla-settings .sla-routes__item{gap:8px}}
+html[data-theme="dark"] body.page-sla-settings .sla-routes__item{background:#222a35;border-color:#414b59}
+html[data-theme="dark"] body.page-sla-settings .sla-routes__item strong{color:#eef2f8}
+
+body.page-sla-settings .sla-routes__health{margin:0 0 19px;border:1px solid #e6e9ef;border-radius:14px;padding:14px;background:#f8fafc}
+body.page-sla-settings .sla-routes__health>strong{display:block;font-size:12px;margin-bottom:12px}
+body.page-sla-settings .sla-routes__health>div{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
+body.page-sla-settings .sla-routes__health span{display:grid;gap:4px;justify-items:start}
+body.page-sla-settings .sla-routes__health b{font-size:19px;font-weight:900}
+body.page-sla-settings .sla-routes__health small{font-size:10px;color:#7d8797}
+body.page-sla-settings .sla-routes__health>small{display:block;margin-top:12px;line-height:1.5}
+@media(max-width:620px){body.page-sla-settings .sla-routes__health>div{grid-template-columns:repeat(3,minmax(0,1fr))}}
+html[data-theme="dark"] body.page-sla-settings .sla-routes__health{background:#202631;border-color:#414b59}

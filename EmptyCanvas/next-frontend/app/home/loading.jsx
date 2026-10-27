@@ -1,3 +1,4 @@
+import ShellStyleLinks from "../../components/ShellStyleLinks";
 import { BodyClassSync } from "../../components/ClassicShellControls";
 import { ClassicStableLoadingHeader, ClassicStableLoadingSidebar } from "../../components/ClassicStableLoadingChrome";
 
@@ -6,10 +7,7 @@ const SIDEBAR_ITEMS = 14;
 export default function LoadingHome() {
   return (
     <>
-      <link rel="stylesheet" href="/css/style.css?v=bidi-mixed-v1" />
-      <link rel="stylesheet" href="/css/ui-redesign.css?v=sidebar-page-label-frame-v3" />
-      <link rel="stylesheet" href="/css/page-canvas-fix.css?v=page-canvas-single-layer-v3" />
-      <link rel="stylesheet" href="/css/home.css?v=home-expenses-dark-card-v1" />
+      <ShellStyleLinks />
       <BodyClassSync className="page-home next-classic-shell-active" />
 
       <div className="app-container classic-app-shell next-classic-home-loading" aria-label="Loading dashboard">
@@ -19,19 +17,44 @@ export default function LoadingHome() {
           <ClassicStableLoadingHeader title="Home" />
 
           <main className="container-full-width next-classic-page-content">
-            <section className="card home-card home-card--hero next-classic-loading-home-card">
-              <div className="home-section-head">
-                <span className="next-classic-loading-title" />
-                <span className="next-classic-loading-analysis" />
+            <section className="erp-home-dashboard next-home-dashboard-loading" aria-label="Loading workspace overview" aria-busy="true">
+              <div className="erp-home-dashboard__header">
+                <div className="erp-home-dashboard__heading">
+                  <span className="erp-home-dashboard__eyebrow">⌁ OPERATIONS DASHBOARD</span>
+                  <h2>Workspace overview</h2>
+                  <p>Order counts, values and progress in one place.</p>
+                </div>
+                <span className="next-home-loading-analysis" aria-hidden="true" />
               </div>
-              <div className="stats home-kpis next-classic-loading-kpis">
-                {Array.from({ length: 6 }).map((_, index) => <div className="next-classic-loading-kpi" key={index} />)}
+              <div className="erp-home-tiles next-home-loading-tiles">
+                {['Current orders', 'Review orders', 'Operations orders', 'Maintenance orders'].map((label, index) => (
+                  <div className="erp-home-tile next-home-loading-tile" key={label}>
+                    <div className="erp-home-tile__top"><span className={`next-home-loading-icon next-home-loading-icon--${index}`} /><span className="next-home-loading-arrow" /></div>
+                    <span className="erp-home-tile__title">{label}</span>
+                    <span className="next-home-loading-number" />
+                    <span className="next-home-loading-value" />
+                    <span className="erp-home-distribution" />
+                  </div>
+                ))}
               </div>
-            </section>
-            <section className="home-grid next-classic-loading-grid">
-              <div className="next-classic-loading-panel" />
-              <div className="next-classic-loading-panel" />
-              <div className="next-classic-loading-panel" />
+              <section className="erp-home-focus next-home-loading-focus">
+                <div className="erp-home-focus__head">
+                  <span className="erp-home-focus__icon" aria-hidden="true">◷</span>
+                  <div><h3>Needs follow-up</h3><p>Current status counts across your accessible workspaces</p></div>
+                </div>
+                <div className="erp-home-focus__items">
+                  {['In progress', 'Pending review', 'Pending operations', 'Pending maintenance'].map((label) => (
+                    <div className="erp-home-focus__item" key={label}><span className="erp-home-focus__item-label">{label}</span><span className="next-home-loading-count" /></div>
+                  ))}
+                </div>
+              </section>
+              <section className="erp-home-backlog next-home-loading-backlog">
+                <span className="erp-home-dashboard__eyebrow">◷ OPERATIONAL INSIGHTS</span>
+                <h2>Backlog health</h2>
+                <div className="next-home-loading-insights">
+                  {Array.from({ length: 4 }, (_, index) => <div className="next-home-loading-insight" key={index} />)}
+                </div>
+              </section>
             </section>
           </main>
         </div>

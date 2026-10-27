@@ -1,15 +1,17 @@
 import { NextResponse } from "next/server";
 import { createKitFolder, listKitFolders } from "../../../../lib/proposal-kit-service";
-import { errorResponse, gateResponse, kitGate, requestBody } from "../../../../lib/proposal-kit-api";
+import { errorResponse, gateResponse, kitGate, kitReadGate, requestBody } from "../../../../lib/proposal-kit-api";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
-  const gate = await kitGate();
+export async function GET(request) {
+  const gate = await kitReadGate();
   if (!gate.ok) return gateResponse(gate);
   try {
+    const url = new URL(request.url);
+    const fresh = url.searchParams.get("_fresh") === "1";
     return NextResponse.json(
-      { ok: true, source: "supabase-next", folders: await listKitFolders(gate.account) },
+      { ok: true, source: "supabase-next", folders: await listKitFolders(gate.account, { fresh }) },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {
@@ -18,7 +20,7 @@ export async function GET() {
 }
 
 export async function POST(request) {
-  const gate = await kitGate();
+  const gate = await kitGate("folder_create");
   if (!gate.ok) return gateResponse(gate);
   try {
     const body = await requestBody(request);

@@ -1,3 +1,4 @@
+import ShellStyleLinks from "./ShellStyleLinks";
 import { BodyClassSync } from "./ClassicShellControls";
 import { ClassicStableLoadingHeader, ClassicStableLoadingSidebar } from "./ClassicStableLoadingChrome";
 
@@ -6,10 +7,8 @@ const SIDEBAR_ITEMS = 18;
 export default function ClassicInventoryLoading({ title, bodyClass, activeIndex, products = false }) {
   return (
     <>
-      <link rel="stylesheet" href="/css/style.css?v=bidi-mixed-v1" />
-      <link rel="stylesheet" href="/css/ui-redesign.css?v=sidebar-page-label-frame-v3" />
-      <link rel="stylesheet" href="/css/page-canvas-fix.css?v=page-canvas-single-layer-v3" />
-      {products ? <link rel="stylesheet" href="/css/products.css?v=products-manual-image-v1" /> : null}
+      <ShellStyleLinks />
+      {products ? <link rel="stylesheet" href="/next/css/products.css?v=products-manual-image-v1"  precedence="erp-detail" /> : null}
       <BodyClassSync className={`${bodyClass} next-classic-shell-active`} />
 
       <div className="app-container classic-app-shell next-classic-inventory-loading" aria-label={`Loading ${title}`}>

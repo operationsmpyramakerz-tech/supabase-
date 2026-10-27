@@ -65,7 +65,7 @@
     }
 
     /* Restore legacy expenses one-column layout.
-       Global /css/style.css defines .expenses-layout as a grid for an old mobile UI,
+       Global /next/css/style.css defines .expenses-layout as a grid for an old mobile UI,
        which splits these pages into columns. These pages should remain stacked. */
     main.expenses-layout {
       display: block !important;
@@ -2546,3 +2546,23 @@ body.expense-shots-modal-open{
 }
 
 
+
+/* Own-car expense: live, non-editable monetary preview. */
+body.expenses-page .expense-own-car-preview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.4rem 1rem;
+  padding: 0.75rem 0.9rem;
+  margin: -0.2rem 0 1rem;
+  border: 1px solid #dbe5f1;
+  border-radius: 12px;
+  background: #f3f7fd;
+  color: #34465d;
+  font-size: 0.9rem;
+}
+body.expenses-page .expense-own-car-preview strong {
+  color: #15243b;
+  font-weight: 750;
+}

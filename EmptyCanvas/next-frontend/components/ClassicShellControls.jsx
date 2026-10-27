@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useLayoutEffect } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 const COLLAPSED_KEY = "ui.sidebarCollapsed";
 const SIDEBAR_SCROLL_KEY = "ui.sidebarScrollTop";
@@ -11,6 +12,7 @@ const SIDEBAR_SCROLL_LEFT_COOKIE = "ops_ui_sidebar_scroll_left_v1";
 const CHROME_CACHE_KEY = "ops.ui.chrome.v1";
 const ALLOWED_PAGES_KEY = "allowedPages";
 const ALLOWED_PAGES_COOKIE = "ops_ui_allowed_pages_v1";
+const PROFILE_URL_COOKIE = "ops_ui_profile_url_v1";
 
 function setCollapsed(collapsed) {
   if (typeof document === "undefined") return;
@@ -53,8 +55,42 @@ export function BodyClassSync({ className = "" }) {
 export function ClassicChromeAccessSync({ account }) {
   const hasAllowedPages = Array.isArray(account?.allowedPages);
   const allowedPages = hasAllowedPages ? account.allowedPages : null;
+  const profilePhotoUrl = String(account?.photoUrl || account?.profilePicture || account?.profile_picture || "").trim();
 
   useLayoutEffect(() => {
+    // Cover photos were removed from the ERP. Clear any legacy root/cookie/cache
+    // state so old sessions cannot repaint a former cover during navigation.
+    const root = document.documentElement;
+    root.classList.remove("ops-has-persistent-cover");
+    root.style.removeProperty("--ops-system-cover-image");
+    try { document.cookie = `ops_ui_cover_url_v1=; Path=/; Max-Age=0; SameSite=Lax`; } catch {}
+
+    // Keep the profile photo on the persistent <html> element as well. Route
+    // loading fallbacks replace the live header, so seeding the same photo at
+    // the root prevents the avatar from briefly falling back to initials/user
+    // icon while the destination page is loading.
+    if (profilePhotoUrl) {
+      root.classList.add("ops-has-persistent-profile");
+      root.style.setProperty("--ops-profile-image", `url(${JSON.stringify(profilePhotoUrl)})`);
+      try {
+        const encodedProfile = encodeURIComponent(profilePhotoUrl);
+        if (encodedProfile.length < 3600) {
+          document.cookie = `${PROFILE_URL_COOKIE}=${encodedProfile}; Path=/; Max-Age=2592000; SameSite=Lax`;
+        }
+      } catch {}
+      try {
+        const image = new Image();
+        image.decoding = "async";
+        image.src = profilePhotoUrl;
+      } catch {}
+    } else {
+      root.classList.remove("ops-has-persistent-profile");
+      root.style.removeProperty("--ops-profile-image");
+      try {
+        document.cookie = `${PROFILE_URL_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`;
+      } catch {}
+    }
+
     // Keep the loading/transition shell on the exact same permission snapshot
     // as the fully rendered page.  The loading sidebar cannot read the server
     // account prop directly, so persist the current user's resolved access as
@@ -83,15 +119,18 @@ export function ClassicChromeAccessSync({ account }) {
       const name = String(account?.name || account?.username || current?.name || current?.username || "").trim();
       const photoUrl = String(account?.photoUrl || account?.profilePicture || current?.photoUrl || "").trim();
 
+      const currentWithoutCover = { ...current };
+      delete currentWithoutCover.coverPhotoUrl;
+      delete currentWithoutCover.coverPhoto;
       localStorage.setItem(CHROME_CACHE_KEY, JSON.stringify({
-        ...current,
+        ...currentWithoutCover,
         ...(name ? { name, username: name } : {}),
         ...(photoUrl ? { photoUrl } : {}),
         allowedPages,
         savedAt: Date.now(),
       }));
     } catch {}
-  }, [account, allowedPages, hasAllowedPages]);
+  }, [account, allowedPages, hasAllowedPages, profilePhotoUrl]);
 
   return null;
 }
@@ -113,7 +152,170 @@ export function ClassicSidebarBootstrap() {
 
 
 
-export function ClassicMobileDockStructure() {
+
+const SMALL_WINDOW_SELECTOR = [
+  'dialog[open]',
+  '[role="dialog"][aria-modal="true"]',
+  '[role="alertdialog"][aria-modal="true"]',
+  '.action-loading-overlay',
+  '.save-progress-overlay',
+  '.classic-cart-saving-overlay',
+].join(',');
+
+const MOBILE_DOCK_HIDDEN_CLASS = 'ops-mobile-dock-hidden';
+const SMALL_WINDOW_SIDEBAR_HIDDEN_CLASS = 'ops-small-window-sidebar-hidden';
+const MOBILE_DOCK_FORCED_OPEN_CLASS = 'ops-mobile-dock-forced-open';
+const SMALL_WINDOW_DOCK_CLEARANCE_CLASS = 'ops-small-window-dock-clearance';
+
+function isVisibleSmallWindow(node) {
+  if (!(node instanceof HTMLElement)) return false;
+  if (node.getAttribute('aria-hidden') === 'true') return false;
+
+  const style = window.getComputedStyle(node);
+  if (style.display === 'none' || style.visibility === 'hidden' || style.visibility === 'collapse') {
+    return false;
+  }
+
+  return node.getClientRects().length > 0;
+}
+
+function smallWindowViewportLayer(node) {
+  if (!(node instanceof HTMLElement)) return null;
+
+  // Most small windows are a dialog/card inside a full-screen fixed overlay.
+  // Mark that viewport layer (rather than the card itself) so CSS can reserve
+  // a little space above the mobile quick-open dock without changing each
+  // feature-specific modal implementation. Some flows put role=dialog on the
+  // overlay itself, so include the starting node in the search.
+  let current = node;
+  while (current && current !== document.body) {
+    const style = window.getComputedStyle(current);
+    const rect = current.getBoundingClientRect();
+    const viewportWidth = Math.max(window.innerWidth || 0, document.documentElement.clientWidth || 0);
+    const viewportHeight = Math.max(window.innerHeight || 0, document.documentElement.clientHeight || 0);
+    const coversViewport = rect.width >= viewportWidth * 0.72 && rect.height >= viewportHeight * 0.62;
+
+    if (style.position === 'fixed' && coversViewport) return current;
+    current = current.parentElement;
+  }
+
+  return null;
+}
+
+export function ClassicSmallWindowSidebarGuard() {
+  useLayoutEffect(() => {
+    const sidebar = document.querySelector('.classic-app-shell > .sidebar');
+    if (!(sidebar instanceof HTMLElement)) return undefined;
+
+    const BODY_CLASS = 'ops-small-window-open';
+    const SIDEBAR_CLASS = SMALL_WINDOW_SIDEBAR_HIDDEN_CLASS;
+    let frame = 0;
+    let wasOpen = false;
+    let dockClearanceLayers = new Set();
+
+    const getOpenSmallWindows = () => Array.from(document.querySelectorAll(SMALL_WINDOW_SELECTOR))
+      .filter(isVisibleSmallWindow);
+
+    const syncDockClearance = (openWindows) => {
+      const nextLayers = new Set();
+
+      openWindows.forEach((windowNode) => {
+        const layer = smallWindowViewportLayer(windowNode);
+        if (layer) nextLayers.add(layer);
+      });
+
+      dockClearanceLayers.forEach((layer) => {
+        if (!nextLayers.has(layer)) layer.classList.remove(SMALL_WINDOW_DOCK_CLEARANCE_CLASS);
+      });
+      nextLayers.forEach((layer) => layer.classList.add(SMALL_WINDOW_DOCK_CLEARANCE_CLASS));
+      dockClearanceLayers = nextLayers;
+    };
+
+    const sync = () => {
+      frame = 0;
+      const openWindows = getOpenSmallWindows();
+      const open = openWindows.length > 0;
+
+      document.body.classList.toggle(BODY_CLASS, open);
+      sidebar.classList.toggle(SIDEBAR_CLASS, open);
+      syncDockClearance(openWindows);
+
+      // A newly opened sheet/modal starts with the full dock hidden and only
+      // leaves the tiny quick-open handle visible. If the user explicitly
+      // reveals the dock while the same window is still open, preserve that
+      // choice until the window closes.
+      if (!wasOpen && open) {
+        sidebar.classList.remove(MOBILE_DOCK_FORCED_OPEN_CLASS);
+      }
+
+      // Closing a sheet/modal should always return the navigation immediately,
+      // even when the dock had previously auto-hidden because of a downward
+      // scroll. The next deliberate scroll can hide it again as usual.
+      if (wasOpen && !open) {
+        sidebar.classList.remove(MOBILE_DOCK_HIDDEN_CLASS);
+        sidebar.classList.remove(MOBILE_DOCK_FORCED_OPEN_CLASS);
+      }
+      wasOpen = open;
+    };
+
+    const scheduleSync = () => {
+      if (frame) window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(sync);
+    };
+
+    const hideForcedDockFromSmallWindowTap = (event) => {
+      if (!sidebar.classList.contains(MOBILE_DOCK_FORCED_OPEN_CLASS)) return;
+
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+
+      // Navigation itself stays fully interactive while it is temporarily
+      // revealed above a sheet/modal. The next tap back inside that open
+      // window should immediately return the user to the modal by collapsing
+      // the dock again, without swallowing the tap or changing the modal state.
+      if (sidebar.contains(target)) return;
+      const quickOpen = document.querySelector('.ops-mobile-dock-quick-open');
+      if (quickOpen instanceof HTMLElement && quickOpen.contains(target)) return;
+
+      const openWindows = getOpenSmallWindows();
+      const tappedSmallWindow = openWindows.some((windowNode) => windowNode.contains(target));
+      if (!tappedSmallWindow) return;
+
+      sidebar.classList.remove(MOBILE_DOCK_FORCED_OPEN_CLASS);
+    };
+
+    sync();
+
+    const observer = new MutationObserver(scheduleSync);
+    observer.observe(document.body, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ['class', 'style', 'aria-hidden', 'aria-modal', 'open'],
+    });
+
+    window.addEventListener('resize', scheduleSync, { passive: true });
+    window.addEventListener('orientationchange', scheduleSync);
+    document.addEventListener('pointerdown', hideForcedDockFromSmallWindowTap, true);
+
+    return () => {
+      observer.disconnect();
+      if (frame) window.cancelAnimationFrame(frame);
+      document.body.classList.remove(BODY_CLASS);
+      sidebar.classList.remove(SIDEBAR_CLASS);
+      sidebar.classList.remove(MOBILE_DOCK_FORCED_OPEN_CLASS);
+      dockClearanceLayers.forEach((layer) => layer.classList.remove(SMALL_WINDOW_DOCK_CLEARANCE_CLASS));
+      dockClearanceLayers.clear();
+      window.removeEventListener('resize', scheduleSync);
+      window.removeEventListener('orientationchange', scheduleSync);
+      document.removeEventListener('pointerdown', hideForcedDockFromSmallWindowTap, true);
+    };
+  }, []);
+
+  return null;
+}
+
+export function ClassicMobileDockStructure({ activePath = "" }) {
   useLayoutEffect(() => {
     const sidebar = document.querySelector(".classic-app-shell .sidebar");
     const nav = sidebar?.querySelector(":scope > .sidebar-nav");
@@ -121,6 +323,7 @@ export function ClassicMobileDockStructure() {
 
     const MOBILE_QUERY = "(max-width: 768px)";
     const media = window.matchMedia(MOBILE_QUERY);
+    const HIDDEN_CLASS = MOBILE_DOCK_HIDDEN_CLASS;
 
     const structure = () => {
       const directList = nav.querySelector(":scope > .nav-list");
@@ -173,18 +376,176 @@ export function ClassicMobileDockStructure() {
     };
 
     structure();
-    const onChange = () => structure();
+
+    // Pinterest-style mobile dock behavior: the page gets the full viewport
+    // while the user is intentionally scrolling down, then the dock glides
+    // back as soon as they reverse direction.  The persistent shell owns one
+    // scrollable <main>, so this applies consistently to every authenticated
+    // page without wiring scroll logic into individual routes.
+    const pageScroller = document.querySelector(
+      ".classic-app-shell > .main-content > main.next-classic-page-content"
+    );
+    let lastScrollTop = pageScroller instanceof HTMLElement
+      ? Math.max(0, pageScroller.scrollTop || 0)
+      : 0;
+    let travel = 0;
+    let direction = 0;
+    let scrollFrame = 0;
+
+    const setDockHidden = (hidden) => {
+      const nextHidden = Boolean(hidden && media.matches);
+      sidebar.classList.toggle(HIDDEN_CLASS, nextHidden);
+    };
+
+    // Always start a freshly navigated page with navigation available.
+    setDockHidden(false);
+
+    const handlePageScroll = () => {
+      if (!(pageScroller instanceof HTMLElement) || !media.matches) {
+        setDockHidden(false);
+        return;
+      }
+
+      if (scrollFrame) window.cancelAnimationFrame(scrollFrame);
+      scrollFrame = window.requestAnimationFrame(() => {
+        scrollFrame = 0;
+        const current = Math.max(0, pageScroller.scrollTop || 0);
+        const delta = current - lastScrollTop;
+
+        // Keep the dock visible at the top and ignore tiny touch jitter.
+        if (current <= 8) {
+          setDockHidden(false);
+          travel = 0;
+          direction = 0;
+          lastScrollTop = current;
+          return;
+        }
+        if (Math.abs(delta) < 1) {
+          lastScrollTop = current;
+          return;
+        }
+
+        const nextDirection = delta > 0 ? 1 : -1;
+        if (nextDirection !== direction) {
+          direction = nextDirection;
+          travel = 0;
+        }
+        travel += Math.abs(delta);
+
+        // A slightly larger downward threshold prevents accidental hiding;
+        // upward intent reveals the dock faster, matching the reference video.
+        if (direction > 0 && current > 28 && travel >= 20) {
+          setDockHidden(true);
+          travel = 0;
+        } else if (direction < 0 && travel >= 10) {
+          setDockHidden(false);
+          travel = 0;
+        }
+
+        lastScrollTop = current;
+      });
+    };
+
+    const onChange = () => {
+      structure();
+      setDockHidden(false);
+      lastScrollTop = pageScroller instanceof HTMLElement
+        ? Math.max(0, pageScroller.scrollTop || 0)
+        : 0;
+      travel = 0;
+      direction = 0;
+    };
+
+    if (pageScroller instanceof HTMLElement) {
+      pageScroller.addEventListener("scroll", handlePageScroll, { passive: true });
+    }
     if (typeof media.addEventListener === "function") media.addEventListener("change", onChange);
     else media.addListener?.(onChange);
     window.addEventListener("orientationchange", onChange);
 
     return () => {
+      if (scrollFrame) window.cancelAnimationFrame(scrollFrame);
+      setDockHidden(false);
+      pageScroller?.removeEventListener?.("scroll", handlePageScroll);
       if (typeof media.removeEventListener === "function") media.removeEventListener("change", onChange);
       else media.removeListener?.(onChange);
       window.removeEventListener("orientationchange", onChange);
     };
-  }, []);
+  }, [activePath]);
   return null;
+}
+
+export function ClassicMobileDockQuickOpen() {
+  const [visible, setVisible] = useState(false);
+
+  useLayoutEffect(() => {
+    const sidebar = document.querySelector('.classic-app-shell > .sidebar');
+    if (!(sidebar instanceof HTMLElement)) return undefined;
+
+    const media = window.matchMedia('(max-width: 768px)');
+    let frame = 0;
+
+    const sync = () => {
+      frame = 0;
+      const hidden = media.matches
+        && !sidebar.classList.contains(MOBILE_DOCK_FORCED_OPEN_CLASS)
+        && (
+          sidebar.classList.contains(MOBILE_DOCK_HIDDEN_CLASS)
+          || sidebar.classList.contains(SMALL_WINDOW_SIDEBAR_HIDDEN_CLASS)
+        );
+      setVisible(hidden);
+    };
+
+    const scheduleSync = () => {
+      if (frame) window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(sync);
+    };
+
+    sync();
+
+    const observer = new MutationObserver(scheduleSync);
+    observer.observe(sidebar, { attributes: true, attributeFilter: ['class'] });
+
+    if (typeof media.addEventListener === 'function') media.addEventListener('change', scheduleSync);
+    else media.addListener?.(scheduleSync);
+    window.addEventListener('orientationchange', scheduleSync);
+
+    return () => {
+      observer.disconnect();
+      if (frame) window.cancelAnimationFrame(frame);
+      sidebar.classList.remove(MOBILE_DOCK_FORCED_OPEN_CLASS);
+      if (typeof media.removeEventListener === 'function') media.removeEventListener('change', scheduleSync);
+      else media.removeListener?.(scheduleSync);
+      window.removeEventListener('orientationchange', scheduleSync);
+    };
+  }, []);
+
+  const revealDock = () => {
+    const sidebar = document.querySelector('.classic-app-shell > .sidebar');
+    if (!(sidebar instanceof HTMLElement)) return;
+
+    const hiddenBySmallWindow = sidebar.classList.contains(SMALL_WINDOW_SIDEBAR_HIDDEN_CLASS);
+
+    // Scroll-driven hiding can simply be cleared. A modal keeps its own hidden
+    // marker while open, so use an explicit override there until that modal is
+    // closed by the user.
+    sidebar.classList.remove(MOBILE_DOCK_HIDDEN_CLASS);
+    sidebar.classList.toggle(MOBILE_DOCK_FORCED_OPEN_CLASS, hiddenBySmallWindow);
+    setVisible(false);
+  };
+
+  return (
+    <button
+      type="button"
+      className={`ops-mobile-dock-quick-open${visible ? ' is-visible' : ''}`}
+      onClick={revealDock}
+      aria-label="Open navigation"
+      aria-hidden={visible ? undefined : true}
+      tabIndex={visible ? 0 : -1}
+    >
+      <span aria-hidden="true" />
+    </button>
+  );
 }
 
 export function ClassicSidebarViewportKeeper() {
@@ -299,6 +660,297 @@ export function ClassicSidebarViewportKeeper() {
   return null;
 }
 
+
+export function ClassicSidebarActiveIndicator({ activePath = "" }) {
+  const router = useRouter();
+
+  useLayoutEffect(() => {
+    const sidebar = document.querySelector(".classic-app-shell > .sidebar");
+    if (!(sidebar instanceof HTMLElement)) return undefined;
+
+    const nav = sidebar.querySelector(":scope > .sidebar-nav");
+    if (!(nav instanceof HTMLElement)) return undefined;
+
+    const existing = sidebar.querySelector(".sidebar-active-indicator");
+    existing?.remove();
+
+    const indicator = document.createElement("span");
+    indicator.className = "sidebar-active-indicator is-instant";
+    indicator.setAttribute("aria-hidden", "true");
+    sidebar.appendChild(indicator);
+
+    let visualTarget = null;
+    let indicatorHost = sidebar;
+    let navigationTimer = 0;
+    let frame = 0;
+
+    const isMobile = () => window.matchMedia("(max-width: 768px)").matches;
+    const reduceMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    const hostForLink = (link) => {
+      if (!(link instanceof HTMLElement) || !isMobile()) return sidebar;
+      const pagesClip = nav.querySelector(":scope > .mobile-dock-pages-clip");
+      if (pagesClip instanceof HTMLElement && pagesClip.contains(link)) return pagesClip;
+      const homeRail = nav.querySelector(":scope > .mobile-dock-home-rail");
+      if (homeRail instanceof HTMLElement && homeRail.contains(link)) return homeRail;
+      return sidebar;
+    };
+
+    const ensureIndicatorHost = (host) => {
+      const nextHost = host instanceof HTMLElement ? host : sidebar;
+      if (indicatorHost === nextHost && indicator.parentElement === nextHost) return;
+      indicatorHost = nextHost;
+      indicator.classList.add("is-instant");
+      nextHost.appendChild(indicator);
+      indicator.getBoundingClientRect();
+      requestAnimationFrame(() => indicator.classList.remove("is-instant"));
+    };
+
+    const syncIndicatorIcon = (link) => {
+      indicator.replaceChildren();
+      if (!isMobile()) return;
+      const sourceIcon = link instanceof HTMLElement ? link.querySelector("svg") : null;
+      if (!(sourceIcon instanceof SVGElement)) return;
+      const clone = sourceIcon.cloneNode(true);
+      clone.removeAttribute("aria-hidden");
+      clone.setAttribute("focusable", "false");
+      clone.classList.add("sidebar-active-indicator__icon");
+      indicator.appendChild(clone);
+    };
+
+    const visualRectForLink = (link) => {
+      if (!(link instanceof HTMLElement)) return null;
+      const host = hostForLink(link);
+      const hostRect = host.getBoundingClientRect();
+      let targetRect = link.getBoundingClientRect();
+      let radius = window.getComputedStyle(link).borderRadius || "16px";
+
+      // On the mobile dock Home uses the padded SVG's rounded-square surface,
+      // while page items use the rounded-square active link. Measure the
+      // exact visual surface rather than the much wider Home link container.
+      if (isMobile()) {
+        const href = String(link.getAttribute("href") || "");
+        if (href === "/next/home") {
+          const icon = link.querySelector("svg");
+          if (icon instanceof SVGElement) {
+            targetRect = icon.getBoundingClientRect();
+            radius = window.getComputedStyle(icon).borderRadius || "17px";
+          }
+        } else {
+          // Inactive mobile page links are slightly smaller than the active
+          // surface. Animate the white tile to the final active footprint so it
+          // does not shrink while travelling to the destination icon.
+          const activeSize = window.innerWidth <= 390 ? 42 : 44;
+          const cx = targetRect.left + (targetRect.width / 2);
+          const cy = targetRect.top + (targetRect.height / 2);
+          targetRect = {
+            left: cx - (activeSize / 2),
+            top: cy - (activeSize / 2),
+            width: activeSize,
+            height: activeSize,
+          };
+          radius = window.innerWidth <= 390 ? "14px" : "15px";
+        }
+      }
+
+      const scrollLeft = host instanceof HTMLElement ? host.scrollLeft || 0 : 0;
+      const scrollTop = host instanceof HTMLElement ? host.scrollTop || 0 : 0;
+      return {
+        host,
+        x: targetRect.left - hostRect.left + scrollLeft,
+        y: targetRect.top - hostRect.top + scrollTop,
+        width: targetRect.width,
+        height: targetRect.height,
+        radius,
+      };
+    };
+
+    const moveIndicator = (link, instant = false) => {
+      if (!(link instanceof HTMLElement)) return;
+      const rect = visualRectForLink(link);
+      if (!rect) return;
+
+      ensureIndicatorHost(rect.host);
+      syncIndicatorIcon(link);
+      visualTarget = link;
+      if (instant) indicator.classList.add("is-instant");
+      indicator.style.width = `${Math.max(0, rect.width)}px`;
+      indicator.style.height = `${Math.max(0, rect.height)}px`;
+      indicator.style.borderRadius = rect.radius;
+      indicator.style.transform = `translate3d(${rect.x}px, ${rect.y}px, 0)`;
+      indicator.style.opacity = "1";
+
+      if (instant) {
+        // Force the geometry to commit before enabling transitions so the first
+        // render never flies in from the top-left corner of the sidebar.
+        indicator.getBoundingClientRect();
+        requestAnimationFrame(() => indicator.classList.remove("is-instant"));
+      }
+    };
+
+    const clearTargets = () => {
+      sidebar.querySelectorAll(".nav-link.is-indicator-target").forEach((item) => item.classList.remove("is-indicator-target"));
+    };
+
+    const initialize = () => {
+      const active = nav.querySelector(".nav-link.active");
+      if (!(active instanceof HTMLElement)) {
+        indicator.style.opacity = "0";
+        return;
+      }
+
+      // Keep the settled page on the native .nav-link.active surface. The
+      // travelling tile is only needed while a navigation is actually moving.
+      // Leaving it visible after hydration can place the white tile above the
+      // mobile SVG in a separate stacking context, which makes the active icon
+      // look blank. Prime its geometry here, then keep it hidden until click.
+      moveIndicator(active, true);
+      indicator.style.opacity = "0";
+      sidebar.classList.remove("sidebar-active-indicator-ready", "sidebar-active-indicator-animating");
+    };
+
+    // The mobile dock DOM is restructured in a sibling layout effect. Waiting
+    // one frame guarantees we measure the final geometry without exposing a
+    // visible static-to-animated jump.
+    frame = requestAnimationFrame(initialize);
+
+    const prefetchLink = (target) => {
+      const origin = target instanceof Element ? target : null;
+      const link = origin?.closest?.("a.nav-link");
+      if (!(link instanceof HTMLAnchorElement) || !sidebar.contains(link)) return;
+      const rawHref = String(link.getAttribute("href") || "").trim();
+      if (!rawHref || rawHref === "/next/task-management" || rawHref === "/next/events") return;
+      let destination;
+      try { destination = new URL(link.href, window.location.href); } catch { return; }
+      if (destination.origin !== window.location.origin) return;
+      const pathname = destination.pathname === "/next"
+        ? "/"
+        : destination.pathname.startsWith("/next/")
+          ? destination.pathname.slice(5) || "/"
+          : destination.pathname;
+      try { router.prefetch(`${pathname}${destination.search}${destination.hash}`); } catch {}
+    };
+
+    const onPrefetchIntent = (event) => prefetchLink(event.target);
+
+    const onClick = (event) => {
+      if (!(event instanceof MouseEvent) || event.defaultPrevented) return;
+      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+
+      const origin = event.target;
+      const link = origin instanceof Element ? origin.closest("a.nav-link") : null;
+      if (!(link instanceof HTMLAnchorElement) || !sidebar.contains(link)) return;
+      if (link.target && link.target !== "_self") return;
+      if (link.hasAttribute("download")) return;
+
+      const rawHref = String(link.getAttribute("href") || "").trim();
+      // Task Management and Events are parent buttons that open the approved
+      // secondary sidebar instead of navigating directly. Their own handlers
+      // stay fully in control of those interactions.
+      if (rawHref === "/next/task-management" || rawHref === "/next/events") return;
+
+      let destination;
+      try { destination = new URL(link.href, window.location.href); } catch { return; }
+      if (destination.origin !== window.location.origin) return;
+      if (destination.pathname === window.location.pathname && destination.search === window.location.search) return;
+
+      const currentActive = nav.querySelector(".nav-link.active");
+      if (isMobile() && currentActive instanceof HTMLElement && hostForLink(currentActive) !== hostForLink(link)) {
+        // Home is intentionally isolated from the horizontally scrolling pages rail.
+        // Do not animate a tile across those two different clipped containers.
+        return;
+      }
+
+      event.preventDefault();
+      clearTargets();
+
+      // Start from the currently active button using an instant frame, then
+      // enable the shared travelling surface and animate to the destination.
+      // After navigation the new page falls back to its normal active button,
+      // so the icon can never be covered by a persistent overlay.
+      if (currentActive instanceof HTMLElement) {
+        moveIndicator(currentActive, true);
+      }
+
+      link.classList.add("is-indicator-target");
+      sidebar.classList.add("sidebar-active-indicator-ready", "sidebar-active-indicator-animating");
+
+      // Commit the starting geometry/background removal before travelling.
+      indicator.getBoundingClientRect();
+      requestAnimationFrame(() => moveIndicator(link, reduceMotion()));
+
+      if (navigationTimer) window.clearTimeout(navigationTimer);
+      const pathname = destination.pathname === "/next"
+        ? "/"
+        : destination.pathname.startsWith("/next/")
+          ? destination.pathname.slice(5) || "/"
+          : destination.pathname;
+      const nextHref = `${pathname}${destination.search}${destination.hash}`;
+
+      // Start the route request immediately and let the travelling indicator
+      // animate while Next.js is fetching/rendering the destination. The old
+      // implementation waited 230ms before even starting navigation, adding a
+      // fixed delay to every sidebar click.
+      try { router.prefetch(nextHref); } catch {}
+      navigationTimer = window.setTimeout(() => router.push(nextHref), 0);
+    };
+
+    const syncToCurrentTarget = () => {
+      const target = visualTarget instanceof HTMLElement && document.contains(visualTarget)
+        ? visualTarget
+        : nav.querySelector(".nav-link.active");
+      if (!(target instanceof HTMLElement)) return;
+
+      indicator.classList.add("is-instant");
+      moveIndicator(target, true);
+
+      // ResizeObserver/scroll callbacks also run after the settled page mounts.
+      // They used to turn the primed indicator visible again even though the
+      // navigation animation had finished, which covered the active mobile SVG
+      // with a plain white tile. Keep the indicator hidden unless an actual
+      // navigation animation currently owns it.
+      if (!sidebar.classList.contains("sidebar-active-indicator-ready")) {
+        indicator.style.opacity = "0";
+      }
+    };
+
+    const resizeObserver = typeof ResizeObserver === "function"
+      ? new ResizeObserver(() => syncToCurrentTarget())
+      : null;
+    resizeObserver?.observe(sidebar);
+    resizeObserver?.observe(nav);
+
+    const pagesClip = nav.querySelector(":scope > .mobile-dock-pages-clip");
+    nav.addEventListener("scroll", syncToCurrentTarget, { passive: true });
+    pagesClip?.addEventListener("scroll", syncToCurrentTarget, { passive: true });
+    sidebar.addEventListener("pointerover", onPrefetchIntent, { passive: true });
+    sidebar.addEventListener("focusin", onPrefetchIntent);
+    sidebar.addEventListener("pointerdown", onPrefetchIntent, { passive: true });
+    sidebar.addEventListener("click", onClick);
+    window.addEventListener("resize", syncToCurrentTarget);
+    window.addEventListener("orientationchange", syncToCurrentTarget);
+
+    return () => {
+      if (frame) cancelAnimationFrame(frame);
+      if (navigationTimer) window.clearTimeout(navigationTimer);
+      resizeObserver?.disconnect();
+      nav.removeEventListener("scroll", syncToCurrentTarget);
+      pagesClip?.removeEventListener("scroll", syncToCurrentTarget);
+      sidebar.removeEventListener("pointerover", onPrefetchIntent);
+      sidebar.removeEventListener("focusin", onPrefetchIntent);
+      sidebar.removeEventListener("pointerdown", onPrefetchIntent);
+      sidebar.removeEventListener("click", onClick);
+      window.removeEventListener("resize", syncToCurrentTarget);
+      window.removeEventListener("orientationchange", syncToCurrentTarget);
+      clearTargets();
+      sidebar.classList.remove("sidebar-active-indicator-ready", "sidebar-active-indicator-animating");
+      indicator.remove();
+    };
+  }, [router, activePath]);
+
+  return null;
+}
+
 export function SidebarBrandToggle() {
   return (
     <div
@@ -315,8 +967,8 @@ export function SidebarBrandToggle() {
         }
       }}
     >
-      <img className="brand-logo-full" src="/images/Logo%20horizontal.png" alt="Company logo" />
-      <img className="brand-logo-icon" src="/images/logo.png" alt="" aria-hidden="true" />
+      <img className="brand-logo-full" src="/next/images/Logo%20horizontal.png" alt="Company logo" />
+      <img className="brand-logo-icon" src="/next/images/logo.png" alt="" aria-hidden="true" />
     </div>
   );
 }
@@ -324,7 +976,7 @@ export function SidebarBrandToggle() {
 export function HeaderMenuToggle() {
   return (
     <button id="menu-toggle" type="button" className="menu-toggle" aria-label="Toggle dashboard" onClick={toggleCollapsed}>
-      <img className="menu-toggle-logo" src="/images/logo.png" alt="" />
+      <img className="menu-toggle-logo" src="/next/images/logo.png" alt="" />
     </button>
   );
 }

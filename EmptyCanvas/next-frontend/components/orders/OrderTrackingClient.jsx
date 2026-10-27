@@ -111,7 +111,7 @@ export default function OrderTrackingClient({ initialTracking = {}, groupId = ""
     setBusy(true);
     setError("");
     try {
-      const response = await fetch(`/api/orders/tracking?groupId=${encodeURIComponent(groupId)}`, {
+      const response = await fetch(`/next/api/orders/tracking?groupId=${encodeURIComponent(groupId)}`, {
         credentials: "include",
         cache: "no-store",
       });

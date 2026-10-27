@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import {
   modernNotificationUrl,
@@ -8,6 +10,12 @@ import {
   notificationTimeAgo,
   notificationTone,
 } from "./notification-utils";
+
+// Notification titles can contain confidential work details. Do not cache them
+// in browser storage that persists across ERP user sign-outs/account switches.
+const BELL_REQUEST_MIN_INTERVAL_MS = 12_000;
+let lastBackgroundScanAt = 0;
+let backgroundScanInflight = null;
 
 async function requestJson(url, options = {}) {
   const response = await fetch(url, {
@@ -26,7 +34,21 @@ async function requestJson(url, options = {}) {
   return body;
 }
 
-export default function NotificationsBell({ classic = false }) {
+function triggerBackgroundNotificationScan() {
+  // Multiple bells can mount on the same page. One wake-up per tab is enough;
+  // the server's event-claim RPC also protects against concurrent workers.
+  if (backgroundScanInflight) return Promise.resolve(null);
+  const now = Date.now();
+  if (now - lastBackgroundScanAt < 2 * 60 * 1000) return Promise.resolve(null);
+  lastBackgroundScanAt = now;
+  backgroundScanInflight = requestJson(`/next/api/notifications/refresh?limit=12`, {
+    method: "GET",
+  }).catch(() => null).finally(() => { backgroundScanInflight = null; });
+  return backgroundScanInflight;
+}
+
+export default function NotificationsBell({ classic = false, canManageRead = true }) {
+  const router = useRouter();
   const [items, setItems] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [open, setOpen] = useState(false);
@@ -34,36 +56,75 @@ export default function NotificationsBell({ classic = false }) {
   const [error, setError] = useState("");
   const rootRef = useRef(null);
   const panelRef = useRef(null);
+  const lastLoadedAtRef = useRef(0);
+  const loadPromiseRef = useRef(null);
+  const mutationEpochRef = useRef(0);
+  const mountedRef = useRef(false);
   const [panelStyle, setPanelStyle] = useState({});
 
-  const preview = useMemo(() => items.slice(0, 7), [items]);
+  const preview = useMemo(() => items.slice(0, 5), [items]);
 
-  async function load({ quiet = false } = {}) {
+  function applyFeed(body, epoch) {
+    if (!mountedRef.current || epoch !== mutationEpochRef.current) return;
+    const nextItems = Array.isArray(body?.items) ? body.items : [];
+    const exactCount = Number(body?.unreadCount);
+    setItems(nextItems);
+    setUnreadCount(Number.isFinite(exactCount) && exactCount >= 0
+      ? exactCount : nextItems.filter((item) => !item?.read).length);
+    lastLoadedAtRef.current = Date.now();
+    setError("");
+  }
+
+  async function load({ quiet = false, force = false } = {}) {
+    const now = Date.now();
+    if (!force && now - lastLoadedAtRef.current < BELL_REQUEST_MIN_INTERVAL_MS) return null;
+    if (loadPromiseRef.current) return await loadPromiseRef.current;
+
+    const epoch = mutationEpochRef.current;
     if (!quiet) setLoading(true);
+    const pending = (async () => {
+      try {
+        const body = await requestJson("/next/api/notifications?limit=12");
+        applyFeed(body, epoch);
+        // The refresh endpoint already returns the updated rows. Do not issue
+        // a second identical GET after it; this saves one DB round trip.
+        triggerBackgroundNotificationScan().then((updated) => {
+          if (updated?.success) applyFeed(updated, epoch);
+        });
+        return body;
+      } catch (loadError) {
+        if (!quiet && mountedRef.current) setError(loadError.message || "Could not load notifications.");
+        return null;
+      } finally {
+        if (!quiet && mountedRef.current) setLoading(false);
+      }
+    })();
+
+    loadPromiseRef.current = pending;
     try {
-      const body = await requestJson(`/api/notifications?limit=12&_=${Date.now()}`);
-      const nextItems = Array.isArray(body?.items) ? body.items : [];
-      setItems(nextItems);
-      setUnreadCount(Number(body?.unreadCount) || nextItems.filter((item) => !item?.read).length);
-      setError("");
-    } catch (loadError) {
-      if (!quiet) setError(loadError.message || "Could not load notifications.");
+      return await pending;
     } finally {
-      if (!quiet) setLoading(false);
+      if (loadPromiseRef.current === pending) loadPromiseRef.current = null;
     }
   }
 
   useEffect(() => {
+    mountedRef.current = true;
+    // Discard notification previews saved by older versions. They were not
+    // account-scoped and should not survive a user switch on a shared phone.
+    try { window.sessionStorage.removeItem("ops.notifications.bell-cache.v1"); } catch {}
     load();
+
     const timer = window.setInterval(() => {
       if (document.visibilityState === "visible") load({ quiet: true });
-    }, 45000);
+    }, 60000);
     const onVisible = () => {
       if (document.visibilityState === "visible") load({ quiet: true });
     };
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("focus", onVisible);
     return () => {
+      mountedRef.current = false;
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("focus", onVisible);
@@ -114,28 +175,39 @@ export default function NotificationsBell({ classic = false }) {
   }, [classic, open]);
 
   async function markRead(item) {
+    if (!canManageRead) return;
     const id = notificationText(item?.id);
     if (!id || item?.read) return;
-    setItems((current) => current.map((row) => String(row?.id) === id ? { ...row, read: true } : row));
-    setUnreadCount((count) => Math.max(0, count - 1));
+    mutationEpochRef.current += 1;
+    const nextItems = items.map((row) => String(row?.id) === id ? { ...row, read: true } : row);
+    const nextUnread = Math.max(0, unreadCount - 1);
+    setItems(nextItems);
+    setUnreadCount(nextUnread);
     try {
-      await requestJson("/api/notifications/read", {
+      await requestJson("/next/api/notifications/read", {
         method: "POST",
         body: JSON.stringify({ id }),
       });
     } catch {
-      load({ quiet: true });
+      // Force re-read: the optimistic update may have failed.
+      load({ quiet: true, force: true });
     }
   }
 
   async function markAllRead() {
+    if (!canManageRead) return;
     if (!unreadCount) return;
+    mutationEpochRef.current += 1;
     const previous = items;
     const previousCount = unreadCount;
-    setItems((current) => current.map((item) => ({ ...item, read: true })));
+    const nextItems = items.map((item) => ({ ...item, read: true }));
+    setItems(nextItems);
     setUnreadCount(0);
     try {
-      await requestJson("/api/notifications/read-all", { method: "POST", body: "{}" });
+      await requestJson("/next/api/notifications/read-all", {
+        method: "POST",
+        body: "{}",
+      });
     } catch {
       setItems(previous);
       setUnreadCount(previousCount);
@@ -146,7 +218,17 @@ export default function NotificationsBell({ classic = false }) {
     await markRead(item);
     setOpen(false);
     const target = modernNotificationUrl(item?.url);
-    if (target) window.location.href = target;
+    if (!target) return;
+    if (target.startsWith("/")) {
+      const clientRoute = target === "/next"
+        ? "/"
+        : target.startsWith("/next/")
+          ? target.slice(5) || "/"
+          : target;
+      router.push(clientRoute);
+      return;
+    }
+    window.location.href = target;
   }
 
   if (classic) {
@@ -160,8 +242,8 @@ export default function NotificationsBell({ classic = false }) {
         <div className="notif-center-shell">
           <div className="notif-center-card">
             <div className="notif-center-head">
-              <div className="notif-center-title">Notification</div>
-              <button type="button" className="notif-center-markall" onClick={markAllRead} disabled={!unreadCount}>Mark all as read</button>
+              <div className="notif-center-title">Notifications</div>
+              {canManageRead ? <button type="button" className="notif-center-markall" onClick={markAllRead} disabled={!unreadCount}>Mark all read</button> : null}
             </div>
 
             <div className="notif-center-tabs" role="tablist" aria-label="Notification filters">
@@ -194,7 +276,7 @@ export default function NotificationsBell({ classic = false }) {
             </div>
 
             <div className="notif-center-footer">
-              <a className="notif-center-seeall" href="/next/notifications">See All</a>
+              <Link className="notif-center-seeall" href="/notifications" prefetch={true}>See All</Link>
             </div>
           </div>
         </div>
@@ -248,7 +330,7 @@ export default function NotificationsBell({ classic = false }) {
         <section className="next-notif-bell__panel" aria-label="Notifications preview">
           <header>
             <div><strong>Notifications</strong><span>{unreadCount ? `${unreadCount} unread` : "All caught up"}</span></div>
-            <button type="button" onClick={markAllRead} disabled={!unreadCount}>Mark all read</button>
+            {canManageRead ? <button type="button" onClick={markAllRead} disabled={!unreadCount}>Mark all read</button> : null}
           </header>
 
           <div className="next-notif-bell__list">

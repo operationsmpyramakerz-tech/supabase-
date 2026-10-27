@@ -1,0 +1,1476 @@
+
+* { 
+  box-sizing: border-box; 
+  margin: 0; 
+  padding: 0; 
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background-color: #f8fafc;
+  background-image: url('/next/images/login-background-desktop.png'), linear-gradient(135deg, #F5F3F0 0%, #E5E7EB 100%);
+  background-position: center center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #333;
+}
+
+.login-container {
+  width: 100%;
+  max-width: 400px;
+  padding: 2rem;
+}
+
+.login-card {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+  padding: 2.5rem;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.08);
+  text-align: center;
+}
+
+.login-header {
+  margin-bottom: 2rem;
+}
+
+.login-logo {
+  height: 60px;
+  margin-bottom: 0.78rem;
+}
+
+.login-header h1 {
+  color: #111827;
+  font-size: 1.8rem;
+  margin-bottom: 0.5rem;
+  font-weight: 700;
+}
+
+.login-header p {
+  color: #6B7280;
+  font-size: 0.95rem;
+}
+
+.login-form {
+  text-align: left;
+}
+
+.form-group {
+  margin-bottom: 1.5rem;
+}
+
+.form-group label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  color: #374151;
+  font-size: 0.9rem;
+}
+
+.form-group input {
+  width: 100%;
+  padding: 0.85rem 1rem;
+  border: 2px solid #E5E7EB;
+  border-radius: 8px;
+  font-size: 1rem;
+  transition: all 0.2s ease;
+  background-color: #F9FAFB;
+}
+
+.form-group input:focus {
+  outline: none;
+  border-color: #D97706;
+  background-color: #ffffff;
+  box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.1);
+}
+
+.login-btn {
+  width: 100%;
+  background-color: #EA580C;
+  color: white;
+  padding: 0.875rem 1rem;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  margin-top: 0.5rem;
+}
+
+.login-btn:hover {
+  background-color: #C2410C;
+}
+
+.login-btn:disabled {
+  background-color: #9CA3AF;
+  cursor: not-allowed;
+}
+
+.error-message {
+  background-color: #FEE2E2;
+  color: #DC2626;
+  padding: 0.75rem;
+  border-radius: 6px;
+  margin-top: 1rem;
+  font-size: 0.9rem;
+  border: 1px solid #FECACA;
+}
+
+.success-message {
+  background-color: #D1FAE5;
+  color: #059669;
+  padding: 0.75rem;
+  border-radius: 6px;
+  margin-top: 1rem;
+  font-size: 0.9rem;
+  border: 1px solid #A7F3D0;
+}
+
+/* Loading state */
+.login-btn.loading {
+  background-color: #9CA3AF;
+  cursor: not-allowed;
+}
+
+.login-btn.loading::after {
+  content: "";
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  margin-left: 8px;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  border-top-color: transparent;
+  animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 480px) {
+  .login-container {
+    padding: 1rem;
+  }
+
+  .login-card {
+    padding: 2rem;
+  }
+}
+
+/* Show/Hide password control */
+.password-wrapper { position: relative; }
+.password-wrapper input[type="password"],
+.password-wrapper input[type="text"] { padding-right: 2.5rem; }
+.toggle-password {
+  position: absolute; top: 50%; right: .6rem; transform: translateY(-50%);
+  width: 2rem; height: 2rem; border: 0; background: transparent; color: #6B7280;
+  display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+  border-radius: 50%;
+}
+.toggle-password:hover { color: #374151; background: rgba(0,0,0,.04); }
+.toggle-password:active { transform: translateY(-50%) scale(.98); }
+
+/* Forgot password flow */
+.login-form[hidden],
+.forgot-form[hidden] {
+  display: none !important;
+}
+
+.forgot-password-link,
+.back-login-link {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: #C2410C;
+  font-weight: 700;
+  font-size: 0.92rem;
+  cursor: pointer;
+  text-align: center;
+  transition: color 0.2s ease, transform 0.2s ease;
+}
+
+.forgot-password-link {
+  display: block;
+  margin: -0.35rem 0 1.1rem;
+}
+
+.back-login-link {
+  margin-top: 1rem;
+  color: #6B7280;
+}
+
+.forgot-password-link:hover,
+.back-login-link:hover {
+  color: #EA580C;
+  transform: translateY(-1px);
+}
+
+.forgot-copy {
+  text-align: center;
+  margin: -0.2rem 0 1.4rem;
+  padding: 1rem;
+  border: 1px solid #FED7AA;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(255, 247, 237, 0.95), rgba(255, 255, 255, 0.95));
+}
+
+.forgot-copy h2 {
+  color: #111827;
+  font-size: 1.25rem;
+  font-weight: 800;
+  margin-bottom: 0.45rem;
+}
+
+.forgot-copy p {
+  color: #6B7280;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+/* Sign up request flow */
+.signup-link-btn {
+  width: 100%;
+  margin-top: 0.85rem;
+  border: 1.5px solid rgba(234, 88, 12, 0.22);
+  background: #fff7ed;
+  color: #c2410c;
+  min-height: 46px;
+  border-radius: 12px;
+  font-size: 0.98rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.signup-link-btn:hover {
+  transform: translateY(-2px);
+  background: #ffedd5;
+  box-shadow: 0 14px 28px rgba(234, 88, 12, 0.12);
+}
+
+.signup-form {
+  animation: signupSweepIn 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.auth-signup-mode .login-card {
+  animation: signupCardGlow 0.65s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.signup-copy {
+  position: relative;
+  overflow: hidden;
+}
+
+.signup-copy::after {
+  content: "";
+  position: absolute;
+  inset: -40% auto auto -30%;
+  width: 180px;
+  height: 180px;
+  background: radial-gradient(circle, rgba(234, 88, 12, 0.16), transparent 68%);
+  pointer-events: none;
+}
+
+.signup-form .form-group {
+  margin-bottom: 1rem;
+}
+
+.signup-form input {
+  border-radius: 14px;
+  min-height: 50px;
+  font-weight: 650;
+}
+
+.signup-submit-btn {
+  border-radius: 14px;
+  min-height: 50px;
+  box-shadow: 0 16px 34px rgba(234, 88, 12, 0.24);
+}
+
+@keyframes signupSweepIn {
+  from {
+    opacity: 0;
+    transform: translateX(42px) scale(0.97);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes signupCardGlow {
+  0% { box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.08); }
+  45% { box-shadow: 0 26px 58px rgba(234, 88, 12, 0.18), 0 0 0 1px rgba(234, 88, 12, 0.12); }
+  100% { box-shadow: 0 22px 46px rgba(15, 23, 42, 0.14), 0 0 0 1px rgba(234, 88, 12, 0.08); }
+}
+
+@media (max-width: 480px) {
+  .signup-form .forgot-copy {
+    padding: 0.85rem;
+  }
+
+  .signup-form input {
+    min-height: 48px;
+  }
+}
+
+body.auth-signup-mode,
+body.auth-recovery-mode {
+  overflow-y: auto;
+  align-items: flex-start;
+  padding: 32px 0;
+}
+
+body.auth-signup-mode .login-container {
+  max-width: 460px;
+}
+
+@media (max-width: 480px) {
+  body.auth-signup-mode,
+  body.auth-recovery-mode {
+    padding: 18px 0;
+  }
+}
+
+/* Sign up transition refinement */
+.login-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.login-header {
+  position: relative;
+  z-index: 2;
+}
+
+.signup-logo-burst {
+  position: absolute;
+  left: 50%;
+  top: 28px;
+  width: 82px;
+  height: 82px;
+  transform: translateX(-50%);
+  pointer-events: none;
+  opacity: 0;
+  z-index: 1;
+}
+
+.signup-logo-burst i {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #EA580C;
+  box-shadow: 0 0 0 5px rgba(234, 88, 12, 0.12), 0 0 20px rgba(234, 88, 12, 0.35);
+  opacity: 0;
+}
+
+.signup-logo-burst i:nth-child(2n) { background: #111827; }
+.signup-logo-burst i:nth-child(3n) { background: #F97316; }
+.signup-logo-burst i:nth-child(1) { --x: -58px; --y: -28px; }
+.signup-logo-burst i:nth-child(2) { --x: 52px; --y: -34px; }
+.signup-logo-burst i:nth-child(3) { --x: -68px; --y: 22px; }
+.signup-logo-burst i:nth-child(4) { --x: 68px; --y: 20px; }
+.signup-logo-burst i:nth-child(5) { --x: -28px; --y: -64px; }
+.signup-logo-burst i:nth-child(6) { --x: 28px; --y: -62px; }
+.signup-logo-burst i:nth-child(7) { --x: -42px; --y: 58px; }
+.signup-logo-burst i:nth-child(8) { --x: 42px; --y: 58px; }
+
+.signup-link-btn {
+  background: #020617;
+  color: #ffffff;
+  border-color: #020617;
+  min-height: 48px;
+  box-shadow: 0 18px 32px rgba(2, 6, 23, 0.16);
+}
+
+.signup-link-btn:hover {
+  background: #111827;
+  color: #ffffff;
+  border-color: #111827;
+  box-shadow: 0 20px 38px rgba(2, 6, 23, 0.2);
+}
+
+.signup-link-btn:disabled {
+  opacity: 0.82;
+  cursor: wait;
+  transform: none;
+}
+
+body.auth-signup-mode .login-card,
+body.auth-recovery-mode .login-card,
+body.auth-transitioning-to-signup .login-card {
+  opacity: 1 !important;
+  transform: none !important;
+}
+
+body.auth-transitioning-to-signup .login-logo {
+  animation: signupLogoSpinFireworks 0.95s cubic-bezier(0.16, 1, 0.3, 1) both !important;
+}
+
+body.auth-transitioning-to-signup .signup-logo-burst {
+  opacity: 1;
+}
+
+body.auth-transitioning-to-signup .signup-logo-burst i {
+  animation: signupFireworkDot 0.82s cubic-bezier(0.17, 0.84, 0.44, 1) both;
+}
+
+body.auth-transitioning-to-signup .signup-logo-burst i:nth-child(2) { animation-delay: 0.04s; }
+body.auth-transitioning-to-signup .signup-logo-burst i:nth-child(3) { animation-delay: 0.07s; }
+body.auth-transitioning-to-signup .signup-logo-burst i:nth-child(4) { animation-delay: 0.1s; }
+body.auth-transitioning-to-signup .signup-logo-burst i:nth-child(5) { animation-delay: 0.13s; }
+body.auth-transitioning-to-signup .signup-logo-burst i:nth-child(6) { animation-delay: 0.16s; }
+body.auth-transitioning-to-signup .signup-logo-burst i:nth-child(7) { animation-delay: 0.19s; }
+body.auth-transitioning-to-signup .signup-logo-burst i:nth-child(8) { animation-delay: 0.22s; }
+
+body.auth-transitioning-to-signup #loginForm {
+  animation: loginDataDropAway 0.78s cubic-bezier(0.7, 0, 0.84, 0) both;
+}
+
+body.auth-transitioning-to-signup .login-header h1,
+body.auth-transitioning-to-signup .login-header p {
+  animation: loginTextSoftFade 0.56s ease both;
+}
+
+body.auth-signup-mode .signup-form {
+  animation: signupDataDropIn 0.72s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+body.auth-signup-mode .login-logo {
+  animation: logoFloat 3s infinite ease-in-out;
+}
+
+@keyframes signupLogoSpinFireworks {
+  0% { transform: translateY(0) rotate(0deg) scale(1); filter: drop-shadow(0 0 0 rgba(234, 88, 12, 0)); }
+  42% { transform: translateY(-16px) rotate(220deg) scale(1.12); filter: drop-shadow(0 16px 26px rgba(234, 88, 12, 0.32)); }
+  72% { transform: translateY(24px) rotate(430deg) scale(0.96); }
+  100% { transform: translateY(0) rotate(720deg) scale(1); filter: drop-shadow(0 0 0 rgba(234, 88, 12, 0)); }
+}
+
+@keyframes signupFireworkDot {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.1); }
+  20% { opacity: 1; }
+  70% { opacity: 1; transform: translate(calc(-50% + var(--x)), calc(-50% + var(--y))) scale(1); }
+  100% { opacity: 0; transform: translate(calc(-50% + var(--x) * 1.16), calc(-50% + var(--y) * 1.16 + 14px)) scale(0.55); }
+}
+
+@keyframes loginDataDropAway {
+  0% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+  62% { opacity: 0.28; transform: translateY(38px) scale(0.98); filter: blur(2px); }
+  100% { opacity: 0; transform: translateY(90px) scale(0.94); filter: blur(7px); }
+}
+
+@keyframes loginTextSoftFade {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0.15; transform: translateY(-10px); }
+}
+
+@keyframes signupDataDropIn {
+  from { opacity: 0; transform: translateY(-46px) scale(0.97); filter: blur(5px); }
+  to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+
+@media (max-width: 480px) {
+  .signup-logo-burst {
+    top: 22px;
+  }
+
+  .signup-link-btn {
+    min-height: 50px;
+  }
+}
+
+/* Pyramakerz login refinements */
+.login-header {
+  margin-bottom: 1.45rem;
+}
+
+.login-wordmark {
+  display: block;
+  width: min(125px, 48%);
+  height: auto;
+  margin: 0.1rem auto 0.3rem;
+  object-fit: contain;
+}
+
+.login-brand-title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.login-subtitle {
+  display: none !important;
+}
+
+.signup-link-btn {
+  display: none !important;
+}
+
+.signup-inline-prompt {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: #6B7280;
+  min-height: auto;
+  margin: 1rem 0 0;
+  padding: 0.15rem 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: center;
+  box-shadow: none;
+  transition: transform 0.2s ease, color 0.2s ease;
+}
+
+.signup-inline-prompt:hover {
+  transform: translateY(-1px);
+}
+
+.signup-prompt-text {
+  color: #6B7280;
+  font-weight: 700;
+}
+
+.signup-prompt-action {
+  color: #C2410C;
+  font-weight: 900;
+  margin-left: 0.25rem;
+}
+
+.signup-inline-prompt:hover .signup-prompt-action {
+  color: #EA580C;
+}
+
+.signup-inline-prompt:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+body.auth-transitioning-to-signup .login-header h1,
+body.auth-transitioning-to-signup .login-header p,
+body.auth-transitioning-to-signup .login-wordmark {
+  animation: loginTextSoftFade 0.56s ease both;
+}
+
+@media (max-width: 768px), (orientation: portrait) {
+  body {
+    background-image: url('/next/images/login-background-mobile.png'), linear-gradient(135deg, #F5F3F0 0%, #E5E7EB 100%);
+    background-position: center center;
+    background-size: cover;
+    background-attachment: scroll;
+  }
+}
+
+@media (max-width: 480px) {
+  body {
+    align-items: center;
+    padding: 0;
+    background-position: center center;
+    background-size: cover;
+  }
+
+  .login-container {
+    max-width: 320px;
+    padding: 0.55rem;
+  }
+
+  .login-card {
+    border-radius: 14px;
+    padding: 1.18rem 1.1rem 1.08rem;
+  }
+
+  .login-logo {
+    height: 40px;
+    margin-bottom: 0.45rem;
+  }
+
+  .login-wordmark {
+    width: min(102px, 42%);
+    margin-bottom: 0.2rem;
+  }
+
+  .login-header {
+    margin-bottom: 0.95rem;
+  }
+
+  .form-group {
+    margin-bottom: 1rem;
+  }
+
+  .form-group input {
+    min-height: 42px;
+    padding-top: 0.62rem;
+    padding-bottom: 0.62rem;
+    font-size: 0.9rem;
+    border-radius: 10px;
+  }
+
+  .forgot-password-link {
+    margin: -0.08rem 0 0.72rem;
+    font-size: 0.86rem;
+  }
+
+  .login-btn {
+    min-height: 42px;
+    border-radius: 10px;
+    padding: 0.64rem 1rem;
+    font-size: 0.94rem;
+  }
+
+  .signup-inline-prompt {
+    margin-top: 0.72rem;
+    font-size: 0.84rem;
+  }
+
+  body.auth-signup-mode,
+  body.auth-recovery-mode {
+    padding: 14px 0;
+  }
+
+  body.auth-recovery-mode .login-container,
+  body.auth-signup-mode .login-container {
+    max-width: 336px;
+  }
+
+  body.auth-recovery-mode .login-card,
+  body.auth-signup-mode .login-card {
+    padding: 1.18rem;
+  }
+
+  body.auth-signup-mode .login-logo,
+  body.auth-recovery-mode .login-logo {
+    height: 40px;
+  }
+
+  body.auth-signup-mode .login-wordmark,
+  body.auth-recovery-mode .login-wordmark {
+    width: min(102px, 42%);
+  }
+
+  .forgot-copy {
+    margin-bottom: 1rem;
+    padding: 0.85rem;
+  }
+
+  .forgot-copy h2 {
+    font-size: 1.1rem;
+  }
+
+  .forgot-copy p {
+    font-size: 0.82rem;
+  }
+}
+
+
+/* Icon-only after-login transition.
+   The existing login logo animates in-place, then the app opens Home. */
+body.login-success-active {
+  overflow: hidden !important;
+}
+
+.login-logo-stage {
+  --inline-logo-size: 72px;
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: var(--inline-logo-size);
+  height: var(--inline-logo-size);
+  margin: 0 auto 0.78rem;
+  isolation: isolate;
+  transform-origin: center;
+}
+
+.login-logo-stage .login-logo {
+  width: 60px;
+  height: 60px;
+  object-fit: contain;
+  margin: 0;
+  position: relative;
+  z-index: 3;
+  transform-origin: center;
+  transition: opacity .18s ease, transform .18s ease;
+}
+
+.login-inline-logo-pieces {
+  position: absolute;
+  inset: 6px;
+  z-index: 4;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(4, 1fr);
+  opacity: 0;
+  pointer-events: none;
+  filter: drop-shadow(0 16px 24px rgba(194, 65, 12, .22));
+}
+
+.login-inline-logo-piece {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background-image: url('/next/images/logo.png');
+  background-repeat: no-repeat;
+  background-size: 400% 400%;
+  transform-origin: center;
+  will-change: transform, opacity, filter, clip-path;
+}
+
+.login-inline-logo-pulse-echo {
+  position: absolute;
+  inset: 0;
+  background-image: url('/next/images/logo.png');
+  background-repeat: no-repeat;
+  background-size: contain;
+  background-position: center;
+  opacity: 0;
+  transform-origin: center;
+  will-change: transform, opacity, filter;
+}
+
+.login-inline-logo-ring,
+.login-inline-logo-flare {
+  position: absolute;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.login-inline-logo-ring {
+  z-index: 1;
+  inset: 4px;
+  border-radius: 26px;
+  border: 2px solid rgba(234, 88, 12, .24);
+  box-shadow:
+    0 0 0 0 rgba(234, 88, 12, .18),
+    inset 0 0 28px rgba(251, 146, 60, .08);
+}
+
+.login-inline-logo-flare {
+  z-index: 2;
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: #EA580C;
+  box-shadow: 0 0 24px rgba(234, 88, 12, .38);
+}
+
+.login-inline-logo-flare--one { top: 5px; right: 12px; }
+.login-inline-logo-flare--two { left: 7px; bottom: 10px; width: 7px; height: 7px; background: #0F172A; }
+
+body.login-inline-success-active .login-card,
+body.login-inline-success-active .login-form,
+body.login-inline-success-active .signup-inline-prompt,
+body.login-inline-success-active .forgot-password-link {
+  pointer-events: none;
+}
+
+body.login-inline-success-active .login-logo-stage.is-running {
+  animation: loginInlineStageHold 2.2s cubic-bezier(.16, 1, .3, 1) both;
+}
+
+body.login-inline-success-active .login-btn.loading::after {
+  opacity: 0;
+}
+
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="explode"] {
+  animation-name: loginInlineExplodeStage;
+}
+
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="explode"] .login-logo,
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="slide"] .login-logo {
+  opacity: 0;
+  animation: none !important;
+  transform: scale(.86);
+}
+
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="explode"] .login-inline-logo-pieces,
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="slide"] .login-inline-logo-pieces,
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="line"] .login-inline-logo-pieces {
+  opacity: 1;
+}
+
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="explode"] .login-inline-logo-piece {
+  animation: loginInlineLogoPieceBreak 1.96s cubic-bezier(.16, 1, .3, 1) var(--d, 0s) both;
+}
+
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="explode"] .login-inline-logo-ring {
+  animation: loginInlineLogoRing 1.95s cubic-bezier(.16, 1, .3, 1) both;
+}
+
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="explode"] .login-inline-logo-flare--one {
+  animation: loginInlineLogoFlareOne 1.95s cubic-bezier(.16, 1, .3, 1) both;
+}
+
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="explode"] .login-inline-logo-flare--two {
+  animation: loginInlineLogoFlareTwo 1.95s cubic-bezier(.16, 1, .3, 1) both;
+}
+
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="pulse"] {
+  animation: loginInlinePulseStage 1.92s cubic-bezier(.16, 1, .3, 1) both;
+}
+
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="pulse"] .login-logo {
+  opacity: 1;
+  animation: loginInlinePulseLogo 1.92s cubic-bezier(.16, 1, .3, 1) both !important;
+}
+
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="pulse"] .login-inline-logo-pieces {
+  display: block;
+  opacity: 1;
+  inset: 6px;
+  filter: none;
+}
+
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="pulse"] .login-inline-logo-pulse-echo {
+  animation: loginInlinePulseEcho 1.62s cubic-bezier(.16, 1, .3, 1) var(--d, 0s) both;
+}
+
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="pulse"] .login-inline-logo-ring {
+  animation: loginInlinePulseRing 1.82s cubic-bezier(.16, 1, .3, 1) both;
+}
+
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="pulse"] .login-inline-logo-flare--one {
+  animation: loginInlineLogoFlareOne 1.70s cubic-bezier(.16, 1, .3, 1) both;
+}
+
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="pulse"] .login-inline-logo-flare--two {
+  animation: loginInlineLogoFlareTwo 1.70s cubic-bezier(.16, 1, .3, 1) both;
+}
+
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="line"] {
+  animation: loginInlineLineStage 2.18s cubic-bezier(.16, 1, .3, 1) both;
+}
+
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="line"] .login-logo {
+  opacity: 0;
+  animation: loginInlineLineSolid 2.16s cubic-bezier(.16, 1, .3, 1) both !important;
+}
+
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="line"] .login-inline-logo-piece {
+  opacity: 0;
+  transform: translate(calc(var(--line-x, 1) * -2px), calc(var(--line-y, 1) * -2px)) scale(.98);
+  clip-path: inset(0 100% 0 0 round 1px);
+  animation: loginInlineLinePiece 1.82s cubic-bezier(.16, 1, .3, 1) var(--d, 0s) both;
+}
+
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="line"] .login-inline-logo-ring {
+  animation: loginInlineLineRing 2.02s cubic-bezier(.16, 1, .3, 1) both;
+}
+
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="slide"] {
+  animation-name: loginInlineSlideStage;
+}
+
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="slide"] .login-inline-logo-piece {
+  opacity: 0;
+  transform: translate(var(--tx), var(--ty)) rotate(var(--rot)) scale(.96);
+  filter: blur(4px);
+  animation: loginInlineSlidePiece 1.98s cubic-bezier(.16, 1, .3, 1) var(--d, 0s) both;
+}
+
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="slide"] .login-inline-logo-ring {
+  animation: loginInlineSlideRing 2.0s cubic-bezier(.16, 1, .3, 1) both;
+}
+
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="slide"] .login-inline-logo-flare--one {
+  animation: loginInlineSlideFlareOne 1.95s cubic-bezier(.16, 1, .3, 1) both;
+}
+
+body.login-inline-success-active .login-logo-stage.is-running[data-logo-animation="slide"] .login-inline-logo-flare--two {
+  animation: loginInlineSlideFlareTwo 1.95s cubic-bezier(.16, 1, .3, 1) both;
+}
+
+@keyframes loginInlineStageHold {
+  0% { transform: translateY(0) scale(1); }
+  100% { transform: translateY(0) scale(1); }
+}
+
+@keyframes loginInlineExplodeStage {
+  0% { transform: translateY(0) scale(1); filter: drop-shadow(0 0 0 rgba(234, 88, 12, 0)); }
+  18% { transform: translateY(-4px) scale(1.10); filter: drop-shadow(0 16px 20px rgba(234, 88, 12, .18)); }
+  46% { transform: translateY(0) scale(1.02) rotate(0deg); }
+  74% { transform: translateY(-2px) scale(1.08); }
+  100% { transform: translateY(0) scale(1); filter: drop-shadow(0 0 0 rgba(234, 88, 12, 0)); }
+}
+
+@keyframes loginInlineLogoPieceBreak {
+  0%, 14% {
+    transform: translate(0, 0) rotate(0deg) scale(1);
+    opacity: 1;
+    filter: blur(0);
+  }
+  38% {
+    transform: translate(var(--tx), var(--ty)) rotate(var(--rot)) scale(.90);
+    opacity: .94;
+    filter: blur(.2px);
+  }
+  58% {
+    transform: translate(var(--rx), var(--ry)) rotate(calc(var(--rot) * -0.42)) scale(1.08);
+    opacity: 1;
+    filter: blur(0);
+  }
+  82%, 100% {
+    transform: translate(0, 0) rotate(0deg) scale(1);
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+@keyframes loginInlineLogoRing {
+  0% { opacity: 0; transform: scale(.72) rotate(0deg); box-shadow: 0 0 0 0 rgba(234,88,12,.20); }
+  28% { opacity: .82; transform: scale(1.06) rotate(45deg); box-shadow: 0 0 0 12px rgba(234,88,12,.08); }
+  66% { opacity: .56; transform: scale(1.22) rotate(100deg); }
+  100% { opacity: 0; transform: scale(1.36) rotate(145deg); box-shadow: 0 0 0 26px rgba(234,88,12,0); }
+}
+
+@keyframes loginInlineLogoFlareOne {
+  0% { opacity: 0; transform: translate(0, 0) scale(.2); }
+  30% { opacity: 1; transform: translate(22px, -12px) scale(1); }
+  72% { opacity: .9; transform: translate(-9px, 9px) scale(.82); }
+  100% { opacity: 0; transform: translate(0, 0) scale(.2); }
+}
+
+@keyframes loginInlineLogoFlareTwo {
+  0% { opacity: 0; transform: translate(0, 0) scale(.2); }
+  34% { opacity: .85; transform: translate(-20px, 14px) scale(1); }
+  72% { opacity: .75; transform: translate(8px, -8px) scale(.78); }
+  100% { opacity: 0; transform: translate(0, 0) scale(.2); }
+}
+
+@keyframes loginInlinePulseStage {
+  0% { transform: scale(.94) rotate(0deg); }
+  24% { transform: scale(1.14) rotate(-4deg); }
+  50% { transform: scale(1.28) rotate(4deg); }
+  72% { transform: scale(.98) rotate(-1deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+
+@keyframes loginInlinePulseLogo {
+  0% { transform: scale(.82); filter: drop-shadow(0 0 0 rgba(234,88,12,0)); }
+  28% { transform: scale(1.10); filter: drop-shadow(0 0 18px rgba(234,88,12,.45)); }
+  54% { transform: scale(1.22); filter: drop-shadow(0 0 28px rgba(234,88,12,.62)); }
+  78% { transform: scale(.97); filter: drop-shadow(0 8px 16px rgba(234,88,12,.22)); }
+  100% { transform: scale(1); filter: drop-shadow(0 0 0 rgba(234,88,12,0)); }
+}
+
+@keyframes loginInlinePulseEcho {
+  0% { opacity: 0; transform: scale(.86); filter: blur(0); }
+  26% { opacity: .18; transform: scale(1.08); }
+  68% { opacity: .08; transform: scale(1.48); filter: blur(1px); }
+  100% { opacity: 0; transform: scale(1.72); filter: blur(2px); }
+}
+
+@keyframes loginInlinePulseRing {
+  0% { opacity: 0; transform: scale(.68) rotate(0deg); box-shadow: 0 0 0 0 rgba(234,88,12,.18); }
+  36% { opacity: .78; transform: scale(1.08) rotate(45deg); box-shadow: 0 0 0 16px rgba(234,88,12,.10); }
+  100% { opacity: 0; transform: scale(1.48) rotate(120deg); box-shadow: 0 0 0 28px rgba(234,88,12,0); }
+}
+
+@keyframes loginInlineLineStage {
+  0% { transform: scale(.96); filter: drop-shadow(0 0 0 rgba(234,88,12,0)); }
+  58% { transform: scale(1.06); filter: drop-shadow(0 0 16px rgba(234,88,12,.28)); }
+  86% { transform: scale(1.02); }
+  100% { transform: scale(1); filter: drop-shadow(0 0 0 rgba(234,88,12,0)); }
+}
+
+@keyframes loginInlineLinePiece {
+  0% {
+    opacity: 0;
+    clip-path: inset(0 100% 0 0 round 1px);
+    transform: translate(calc(var(--line-x, 1) * -4px), calc(var(--line-y, 1) * -4px)) scale(.98);
+    filter: drop-shadow(0 0 0 rgba(234,88,12,0));
+  }
+  34% {
+    opacity: 1;
+    clip-path: inset(0 42% 0 0 round 1px);
+    transform: translate(0, 0) scale(1.02);
+    filter: drop-shadow(0 0 9px rgba(234,88,12,.38));
+  }
+  72%, 100% {
+    opacity: 1;
+    clip-path: inset(0 0 0 0 round 0);
+    transform: translate(0, 0) scale(1);
+    filter: drop-shadow(0 0 0 rgba(234,88,12,0));
+  }
+}
+
+@keyframes loginInlineLineSolid {
+  0%, 72% { opacity: 0; transform: scale(.98); filter: drop-shadow(0 0 0 rgba(234,88,12,0)); }
+  86% { opacity: 1; transform: scale(1.04); filter: drop-shadow(0 0 15px rgba(234,88,12,.28)); }
+  100% { opacity: 1; transform: scale(1); filter: drop-shadow(0 0 0 rgba(234,88,12,0)); }
+}
+
+@keyframes loginInlineLineRing {
+  0% { opacity: 0; transform: scale(.82) rotate(45deg); }
+  50% { opacity: .46; transform: scale(1.05) rotate(45deg); }
+  100% { opacity: 0; transform: scale(1.30) rotate(45deg); }
+}
+
+@keyframes loginInlineSlideStage {
+  0% { transform: scale(.98); filter: drop-shadow(0 0 0 rgba(234,88,12,0)); }
+  50% { transform: scale(1.08); filter: drop-shadow(0 18px 22px rgba(234,88,12,.18)); }
+  78% { transform: scale(.98); }
+  100% { transform: scale(1); filter: drop-shadow(0 0 0 rgba(234,88,12,0)); }
+}
+
+@keyframes loginInlineSlidePiece {
+  0% {
+    opacity: 0;
+    transform: translate(var(--tx), var(--ty)) rotate(var(--rot)) scale(.95);
+    filter: blur(4px);
+  }
+  34% {
+    opacity: .96;
+    transform: translate(calc(var(--tx) * .26), calc(var(--ty) * .26)) rotate(calc(var(--rot) * .4)) scale(1.03);
+    filter: blur(1.4px);
+  }
+  68% {
+    opacity: 1;
+    transform: translate(var(--sx), var(--sy)) rotate(calc(var(--rot) * -.18)) scale(1.05);
+    filter: blur(.2px);
+  }
+  86%, 100% {
+    opacity: 1;
+    transform: translate(0, 0) rotate(0deg) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes loginInlineSlideRing {
+  0% { opacity: 0; transform: scale(.72) rotate(-30deg); }
+  36% { opacity: .48; transform: scale(1.02) rotate(45deg); }
+  100% { opacity: 0; transform: scale(1.30) rotate(90deg); }
+}
+
+@keyframes loginInlineSlideFlareOne {
+  0% { opacity: 0; transform: translate(42px, -16px) scale(.3); }
+  38% { opacity: .82; transform: translate(16px, -7px) scale(1); }
+  100% { opacity: 0; transform: translate(0, 0) scale(.2); }
+}
+
+@keyframes loginInlineSlideFlareTwo {
+  0% { opacity: 0; transform: translate(-38px, 18px) scale(.3); }
+  38% { opacity: .72; transform: translate(-14px, 8px) scale(1); }
+  100% { opacity: 0; transform: translate(0, 0) scale(.2); }
+}
+
+@media (max-width: 480px) {
+  .login-logo-stage {
+    --inline-logo-size: 52px;
+    margin-bottom: 0.45rem;
+  }
+
+  .login-logo-stage .login-logo {
+    width: 40px;
+    height: 40px;
+  }
+
+  .login-inline-logo-pieces {
+    inset: 6px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.login-inline-success-active .login-logo-stage.is-running,
+  body.login-inline-success-active .login-logo-stage.is-running * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+.login-success-splash {
+  --logo-size: clamp(112px, 12vw, 156px);
+  --logo-start-x: 50vw;
+  --logo-start-y: 50vh;
+  --logo-start-scale: .42;
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.48);
+  backdrop-filter: blur(18px) saturate(1.08);
+  -webkit-backdrop-filter: blur(18px) saturate(1.08);
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  animation: loginSplashFadeIn 0.18s ease-out forwards;
+}
+
+.login-success-splash[hidden] {
+  display: none !important;
+}
+
+.login-success-splash::before,
+.login-success-splash::after,
+.login-success-splash__ambient {
+  content: "";
+  position: absolute;
+  inset: auto;
+  border-radius: 999px;
+  pointer-events: none;
+}
+
+.login-success-splash::before {
+  width: min(72vmax, 980px);
+  height: min(72vmax, 980px);
+  background:
+    radial-gradient(circle, rgba(234, 88, 12, 0.18) 0 7%, rgba(251, 146, 60, 0.10) 18%, transparent 62%);
+  filter: blur(6px);
+  animation: loginLogoAura 2.1s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.login-success-splash::after {
+  width: calc(var(--logo-size) + 112px);
+  height: calc(var(--logo-size) + 112px);
+  border: 1px solid rgba(234, 88, 12, 0.18);
+  box-shadow:
+    0 0 0 18px rgba(255, 255, 255, 0.24),
+    inset 0 0 62px rgba(251, 146, 60, 0.08),
+    0 28px 90px rgba(15, 23, 42, 0.12);
+  animation: loginLogoOuterRing 2.15s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.login-success-splash__ambient {
+  inset: -10%;
+  background:
+    radial-gradient(circle at 18% 24%, rgba(234, 88, 12, 0.10), transparent 18%),
+    radial-gradient(circle at 78% 28%, rgba(15, 23, 42, 0.08), transparent 20%),
+    radial-gradient(circle at 62% 82%, rgba(251, 146, 60, 0.12), transparent 24%);
+  filter: blur(16px);
+  animation: loginLogoAmbient 2.2s ease-in-out infinite alternate;
+}
+
+.login-success-splash__stage {
+  position: relative;
+  z-index: 2;
+  width: var(--logo-size);
+  height: var(--logo-size);
+  display: grid;
+  place-items: center;
+  transform-origin: center;
+  animation: loginLogoTravel 2.18s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.login-success-splash__halo {
+  position: absolute;
+  inset: -22px;
+  border-radius: 34px;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.96), rgba(255, 247, 237, 0.84) 48%, rgba(255, 255, 255, 0) 70%);
+  box-shadow:
+    0 34px 82px rgba(124, 45, 18, 0.18),
+    0 0 0 1px rgba(234, 88, 12, 0.08);
+  animation: loginLogoHalo 2.08s ease both;
+}
+
+.login-success-splash__logo-grid {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(4, 1fr);
+  filter: drop-shadow(0 26px 42px rgba(124, 45, 18, 0.22));
+}
+
+.login-success-splash__piece {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background-image: url("/next/images/logo.png");
+  background-repeat: no-repeat;
+  background-size: 400% 400%;
+  transform-origin: center;
+  will-change: transform, opacity, filter;
+  animation: loginLogoPieceBreak 2.06s cubic-bezier(0.16, 1, 0.3, 1) var(--d, 0s) both;
+}
+
+.login-success-splash__solid-logo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  opacity: 0;
+  transform: scale(.9);
+  filter: drop-shadow(0 28px 42px rgba(124, 45, 18, 0.20));
+  animation: loginLogoSolidReveal 2.12s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.login-success-splash__wordmark,
+.login-success-splash__ring,
+.login-success-splash__burst,
+.login-success-splash__logo-wrap,
+.login-success-splash__logo {
+  display: none !important;
+}
+
+.sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+@keyframes loginSplashFadeIn {
+  to { opacity: 1; }
+}
+
+@keyframes loginLogoTravel {
+  0% {
+    transform:
+      translate(calc(var(--logo-start-x) - 50vw), calc(var(--logo-start-y) - 50vh))
+      scale(var(--logo-start-scale));
+    filter: blur(0);
+  }
+  18% {
+    transform: translate(0, 0) scale(1);
+    filter: blur(0);
+  }
+  66% {
+    transform: translate(0, 0) scale(1.02);
+  }
+  88% {
+    transform: translate(0, 0) scale(.98);
+  }
+  100% {
+    transform: translate(0, 0) scale(1.08);
+  }
+}
+
+@keyframes loginLogoPieceBreak {
+  0%, 22% {
+    transform: translate(0, 0) rotate(0deg) scale(1);
+    opacity: 1;
+    filter: blur(0);
+  }
+  42% {
+    transform: translate(var(--tx), var(--ty)) rotate(var(--rot)) scale(.92);
+    opacity: .94;
+    filter: blur(.15px);
+  }
+  63% {
+    transform: translate(var(--mx), var(--my)) rotate(var(--mrot)) scale(1.05);
+    opacity: 1;
+    filter: blur(0);
+  }
+  82%, 100% {
+    transform: translate(0, 0) rotate(0deg) scale(1);
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+@keyframes loginLogoSolidReveal {
+  0%, 68% {
+    opacity: 0;
+    transform: scale(.94);
+  }
+  82% {
+    opacity: 1;
+    transform: scale(1.02);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes loginLogoHalo {
+  0% { opacity: 0; transform: scale(.55) rotate(0deg); }
+  24% { opacity: .95; transform: scale(1) rotate(45deg); }
+  62% { opacity: .85; transform: scale(1.12) rotate(90deg); }
+  100% { opacity: .96; transform: scale(1.04) rotate(135deg); }
+}
+
+@keyframes loginLogoAura {
+  from { opacity: 0; transform: scale(.46); }
+  38% { opacity: 1; }
+  to { opacity: .78; transform: scale(1.02); }
+}
+
+@keyframes loginLogoOuterRing {
+  0% { opacity: 0; transform: scale(.38) rotate(0deg); }
+  30% { opacity: .85; }
+  100% { opacity: .58; transform: scale(1.08) rotate(90deg); }
+}
+
+@keyframes loginLogoAmbient {
+  from { transform: translate3d(-1%, -1%, 0) rotate(0deg); }
+  to { transform: translate3d(1.5%, 1%, 0) rotate(3deg); }
+}
+
+@media (max-width: 560px) {
+  .login-success-splash {
+    --logo-size: clamp(96px, 30vw, 136px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-success-splash,
+  .login-success-splash *,
+  .login-success-splash::before,
+  .login-success-splash::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+/* =========================================================
+   Login-only parity rules
+   Moved out of the authenticated shell stylesheet so the login route no
+   longer downloads the full ERP parity bundle.
+   ========================================================= */
+body.next-classic-login-active .login-card {
+  animation: classicLoginCardSlideUp .8s ease-out forwards;
+}
+
+@keyframes classicLoginCardSlideUp {
+  from { opacity: 0; transform: translateY(50px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+body.next-classic-login-active .login-logo {
+  animation: classicLoginLogoFloat 3s infinite ease-in-out;
+}
+
+@keyframes classicLoginLogoFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-15px); }
+}
+
+body.next-classic-login-active .input-with-icon { position: relative; }
+body.next-classic-login-active .input-with-icon .input-icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #9ca3af;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 2;
+}
+body.next-classic-login-active .input-with-icon .input-icon svg { width: 18px; height: 18px; }
+body.next-classic-login-active .input-with-icon input { padding-left: 2.65rem; }
+body.next-classic-login-active .input-with-icon:focus-within .input-icon { color: #d97706; }
+body.next-classic-login-active .login-btn {
+  position: relative;
+  overflow: hidden;
+  transition: all .4s ease;
+}
+body.next-classic-login-active .login-btn:hover:not(:disabled) {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 25px rgba(102,126,234,.3);
+}
+body.next-classic-login-active .toggle-password { transition: all .3s ease; }
+body.next-classic-login-active .toggle-password:hover {
+  background: rgba(0,0,0,.05);
+  border-radius: 50%;
+}
+body.next-classic-login-active .error-message { animation: classicLoginShake .6s ease-in-out; }
+
+@keyframes classicLoginShake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-10px); }
+  40%, 80% { transform: translateX(10px); }
+}
+
+.next-classic-login-loading-card {
+  opacity: 1;
+  transform: none;
+  animation: none;
+}
+.next-classic-login-loading-form { display: grid; gap: 14px; }
+.next-classic-login-loading-field,
+.next-classic-login-loading-button,
+.next-classic-login-loading-link {
+  position: relative;
+  overflow: hidden;
+  background: #eef1f5;
+}
+.next-classic-login-loading-field::after,
+.next-classic-login-loading-button::after,
+.next-classic-login-loading-link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.72), transparent);
+  animation: nextClassicLoginShimmer 1.35s infinite;
+}
+@keyframes nextClassicLoginShimmer { 100% { transform: translateX(100%); } }
+.next-classic-login-loading-field { height: 48px; border-radius: 10px; }
+.next-classic-login-loading-link { width: 92px; height: 12px; border-radius: 999px; justify-self: end; }
+.next-classic-login-loading-button { height: 48px; border-radius: 10px; }
+
+@media (prefers-reduced-motion: reduce) {
+  body.next-classic-login-active .login-card,
+  body.next-classic-login-active .login-logo,
+  body.next-classic-login-active .error-message,
+  .next-classic-login-loading-field::after,
+  .next-classic-login-loading-button::after,
+  .next-classic-login-loading-link::after {
+    animation: none !important;
+  }
+}
+
+
+/* =========================================================
+   v56 — Restore the original login artwork after shell CSS
+   ---------------------------------------------------------
+   The shared ui-redesign.css forces body background-image:none
+   and style.css paints .login-container white. Login is a
+   standalone route, so restore its own background at a higher
+   specificity without changing any authenticated page.
+   :has() also covers app/login/loading.jsx before hydration.
+   ========================================================= */
+html[data-theme] body:has(.login-container),
+html[data-theme] body.next-classic-login-active {
+  background-color: #f8fafc !important;
+  background-image: url('/next/images/login-background-desktop.png'),
+    linear-gradient(135deg, #F5F3F0 0%, #E5E7EB 100%) !important;
+  background-position: center center !important;
+  background-size: cover !important;
+  background-repeat: no-repeat !important;
+  background-attachment: fixed !important;
+}
+
+/* Remove the opaque white layer that was hiding the body artwork. */
+html[data-theme] body:has(.login-container) .login-container,
+html[data-theme] body.next-classic-login-active .login-container {
+  background: transparent !important;
+}
+
+@media (max-width: 768px), (orientation: portrait) {
+  html[data-theme] body:has(.login-container),
+  html[data-theme] body.next-classic-login-active {
+    background-image: url('/next/images/login-background-mobile.png'),
+      linear-gradient(135deg, #F5F3F0 0%, #E5E7EB 100%) !important;
+    background-attachment: scroll !important;
+  }
+}

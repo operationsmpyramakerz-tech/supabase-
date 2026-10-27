@@ -1,10 +1,23 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { featureAllowed } from "../../lib/feature-permissions-registry";
+import dynamic from "next/dynamic";
 import ClassicOrderIcon from "./ClassicOrderIcon";
-import { groupOrderItems, OrderGroupHeader, OrderSortButton } from "./OrderGrouping";
-import OrderDownloadModal from "./OrderDownloadModal";
-import OrderComponentSearch, { matchesOrderComponentSearch } from "./OrderComponentSearch";
+import { createOrderDetailsLoader } from "./orderDetailsLoader";
+import { cancelOrderOpenTimer, loadOrderAndModalWithMetrics, markOrderOpenStarted, reportOrderVisibleAfterPaint, warmOrderModalOnIdle } from "./orderOpeningPerformance";
+import OrderDetailsLoadingOverlay from "./OrderDetailsLoadingOverlay";
+import OrdersPerformancePanel from "./OrdersPerformancePanel";
+import OrderTypeBadge from "./OrderTypeBadge";
+import OrdersEmptyState, { OrdersListHeader, sortOrderGroups } from "./OrdersEmptyState";
+import { loadTeamMemberPublicProfile } from "../../lib/team-member-public-client";
+
+const loadOrdersReviewHeavyModals = () => import("./OrdersReviewHeavyModals");
+const OrdersReviewHeavyModals = dynamic(loadOrdersReviewHeavyModals, { ssr: false });
+
+// Direct route handlers live under the configured /next basePath. Keep the
+// explicit prefix so client requests stay inside the standalone Next deployment.
+const DIRECT_API_BASE = "/next/api";
 
 const REVIEW_TABS = [
   { key: "all", label: "All", icon: "layers" },
@@ -19,7 +32,8 @@ const PASSWORD_ACTIONS = {
     title: "Archive order",
     description: "Enter admin password to move this order to Archive.",
     button: "Archive",
-    endpoint: "/api/sv-orders/actions/archive",
+    endpoint: `${DIRECT_API_BASE}/sv-orders/mutations-direct`,
+    directAction: "archive",
     icon: "archive",
     danger: true,
   },
@@ -27,14 +41,16 @@ const PASSWORD_ACTIONS = {
     title: "UnArchive order",
     description: "Enter admin password to restore this order.",
     button: "UnArchive",
-    endpoint: "/api/sv-orders/actions/unarchive",
+    endpoint: `${DIRECT_API_BASE}/sv-orders/mutations-direct`,
+    directAction: "unarchive",
     icon: "rotate-ccw",
   },
   editReview: {
     title: "Edit review decision",
     description: "Enter admin password to update the approval status for each component.",
     button: "Continue",
-    endpoint: "/api/sv-orders/actions/verify-edit",
+    endpoint: `${DIRECT_API_BASE}/sv-orders/mutations-direct`,
+    directAction: "verify-edit",
     icon: "edit-2",
   },
 };
@@ -177,9 +193,9 @@ function buildGroups(rows) {
     const counts = reasons.reduce((acc, reason) => acc.set(reason, (acc.get(reason) || 0) + 1), new Map());
     const reason = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "No reason";
     return {
-      ...group, reason, orderIdLabel: orderIdLabel(group.items), orderIds: group.items.map((item) => text(item?.id)).filter(Boolean),
-      total: group.items.reduce((sum, item) => sum + itemTotal(item), 0), approval: dominantApproval(group.items),
-      archived: group.items.length > 0 && group.items.every(isArchived),
+      ...group, reason, orderIdLabel: orderIdLabel(group.items), orderIds: [...new Set(group.items.flatMap((item) => Array.isArray(item?.orderIds) && item.orderIds.length ? item.orderIds : [item?.id]).map(text).filter(Boolean))],
+      total: group.items.reduce((sum, item) => sum + itemTotal(item), 0), approval: group.items.find((item) => item?._summaryCard)?._groupApproval || dominantApproval(group.items),
+      archived: group.items.find((item) => item?._summaryCard) ? Boolean(group.items.find((item) => item?._summaryCard)?._groupArchived) : (group.items.length > 0 && group.items.every(isArchived)),
     };
   }).sort((a, b) => dateValue(b.latestCreated) - dateValue(a.latestCreated));
 }
@@ -274,26 +290,24 @@ function ApprovalPill({ approval, className = "co-status-btn", reason = "", onRe
   return <span className={className} style={style}>{statusLabel(key)}</span>;
 }
 
-function OrderReviewCard({ group, activeTab, onOpen, onCreator }) {
-  const type = orderTypeMeta(group.orderType, group.orderTypeColor);
+function OrderReviewCard({ group, activeTab, onOpen, onPrefetch, onCreator, canOpen = true }) {
   const state = group.archived ? "archive" : group.approval;
   const mixed = activeTab === "all" && !group.archived && group.approval === "mixed";
   return (
-    <article className="co-card next-review-order-card" role="button" tabIndex={0} aria-label={`Open ${group.orderIdLabel}`} onClick={() => onOpen(group)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen(group); } }}>
+    <article className="co-card next-review-order-card" role={canOpen ? "button" : undefined} tabIndex={canOpen ? 0 : undefined} aria-label={canOpen ? `Open ${group.orderIdLabel}` : group.orderIdLabel} onPointerEnter={(event) => { if (canOpen && (event.pointerType === "mouse" || event.pointerType === "pen")) onPrefetch(group, true); }} onPointerLeave={() => { if (canOpen) onPrefetch(null, true); }} onFocus={(event) => { if (canOpen && event.target === event.currentTarget) onPrefetch(group); }} onClick={() => { if (canOpen) onOpen(group); }} onKeyDown={(event) => { if (canOpen && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); onOpen(group); } }}>
       <div className="co-top">
-        <div className="co-thumb co-thumb--order-type" style={{ "--co-thumb-bg": type.bg, "--co-thumb-fg": type.fg, "--co-thumb-border": type.bd }} title={type.label} aria-label={type.label}><ClassicOrderIcon name={type.icon} /></div>
         <div className="co-main">
-          <div className="co-title">{group.orderIdLabel}</div>
-          <div className="next-review-order-meta"><span className="co-sub">{formatDate(group.latestCreated)}</span></div>
+          <OrderTypeBadge type={group.orderType} color={group.orderTypeColor} />
+          <div className="orders-workspace-order-info">
+            <div className="co-title">{group.orderIdLabel}</div>
+            <div className="orders-workspace-user" title={group.createdByName || "Unknown user"}>{group.createdByName || "Unknown user"}</div>
+          </div>
         </div>
-        <div className="co-qty">x{group.items.length}</div>
-      </div>
-      <div className="co-divider" />
-      <div className="co-bottom">
-        <div className="co-est"><div className="co-est-label">Estimate Total</div><div className="co-est-value">{formatMoney(group.total)}</div></div>
-        <div className="co-actions">
-          {mixed ? <MixedStatusPill /> : <ApprovalPill approval={state} />}
-          <button className="co-right-ico co-creator-btn next-review-creator-btn" type="button" aria-label={`Created by ${group.createdByName || "Creator"}`} title={`Created by ${group.createdByName || "Creator"}`} onClick={(event) => { event.preventDefault(); event.stopPropagation(); onCreator(event.currentTarget, group); }}><ClassicOrderIcon name="user" /></button>
+        <div className="next-review-card-head-actions">
+          <div className="next-review-card-status">{mixed ? <MixedStatusPill /> : <ApprovalPill approval={state} />}</div>
+          {canOpen ? <button className="co-creator-btn next-review-creator-btn" type="button" aria-label={`Created by ${group.createdByName || "Creator"}`} title={`Created by ${group.createdByName || "Creator"}`} onClick={(event) => { event.preventDefault(); event.stopPropagation(); onCreator(event.currentTarget, group); }}>
+            <span className="next-review-creator-icon"><ClassicOrderIcon name="user" /></span>
+          </button> : null}
         </div>
       </div>
     </article>
@@ -309,275 +323,16 @@ function ProgressTrack({ value }) {
   })}</div>;
 }
 
-function QuantityEditor({ item, busy, onSave, onCancel }) {
-  const [value, setValue] = useState(formatQuantity(effectiveQuantity(item)));
-  useEffect(() => setValue(formatQuantity(effectiveQuantity(item))), [item?.id, item?.quantityEdited, item?.quantity]);
-  return <form className="next-classic-qty-editor" onSubmit={(event) => { event.preventDefault(); onSave(item, value); onCancel(); }}>
-    <input className="sv-qty-input" type="number" step="any" value={value} onChange={(event) => setValue(event.target.value)} disabled={busy} aria-label={`Quantity for ${text(item?.productName) || "component"}`} />
-    <div className="sv-qty-actions"><button type="button" className="sv-qty-btn" onClick={onCancel}>×</button><button type="submit" className="ro-action-btn ro-action-btn--dark" disabled={busy || !text(value)}>Save</button></div>
-  </form>;
-}
-
-function ReviewDetailsModal({ group, activeTab, busyIds, onClose, onQuantitySave, onDecision, onBulkDecision, onPasswordAction, onReason, onExport }) {
-  const [moreOpen, setMoreOpen] = useState(false);
-  const [editingQty, setEditingQty] = useState("");
-  const [sortMode, setSortMode] = useState("product-tag");
-  const [downloadOpen, setDownloadOpen] = useState(false);
-  const [componentSearch, setComponentSearch] = useState("");
-  const moreRef = useRef(null);
-
-  useEffect(() => {
-    if (!group) return undefined;
-    const onKey = (event) => {
-      if (event.key !== "Escape") return;
-      if (downloadOpen) {
-        event.preventDefault();
-        setDownloadOpen(false);
-        return;
-      }
-      if (moreOpen) {
-        event.preventDefault();
-        setMoreOpen(false);
-        return;
-      }
-      onClose();
-    };
-    const onPointerDown = (event) => {
-      if (moreOpen && !moreRef.current?.contains(event.target)) setMoreOpen(false);
-    };
-    window.addEventListener("keydown", onKey);
-    document.addEventListener("pointerdown", onPointerDown, true);
-    document.body.classList.add("co-modal-open");
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      document.removeEventListener("pointerdown", onPointerDown, true);
-      document.body.classList.remove("co-modal-open");
-    };
-  }, [group, moreOpen, downloadOpen, onClose]);
-
-  useEffect(() => { setMoreOpen(false); setEditingQty(""); setDownloadOpen(false); setSortMode("product-tag"); setComponentSearch(""); }, [group?.key, activeTab]);
-  if (!group) return null;
-
-  const archived = group.archived;
-  const approval = group.approval;
-  const canAct = !archived && approval === "not-started" && activeTab === "not-started";
-  const showEdit = !archived && (approval === "approved" || approval === "rejected" || activeTab === "approved" || activeTab === "rejected");
-  const showArchive = !archived && ["not-started", "approved", "rejected"].includes(activeTab);
-  const showUnarchive = archived || activeTab === "archive";
-  const maintenance = isMaintenanceOrder(group.orderType);
-  const headerTitle = orderTypeHeaderTitle(group.orderType, group.orderTypeColor, statusLabel(approval));
-  const searchedItems = componentSearch.trim()
-    ? group.items.filter((item) => matchesOrderComponentSearch(item, componentSearch))
-    : group.items;
-  const groupedItems = groupOrderItems(searchedItems, sortMode);
-  const state = archived ? "archive" : approval;
-
-  const menuAction = (action) => {
-    setMoreOpen(false);
-    onPasswordAction(action, group);
-  };
-
-  const renderItem = (item, index) => {
-    const itemApproval = approvalKey(item?.approval ?? item?.svApproval ?? item?.sv_approval);
-    const itemBusy = busyIds.has(text(item?.id));
-    const itemReason = text(item?.rejectedReason ?? item?.rejected_reason);
-    const qtyRequested = finite(item?.quantityRequested ?? item?.quantity_requested ?? item?.quantity);
-    const qtyEdited = item?.quantityEdited ?? item?.quantity_edited_by_supervisor ?? item?.quantityEditedBySupervisor;
-    const showEdited = qtyEdited !== null && qtyEdited !== undefined && qtyEdited !== "" && finite(qtyEdited) !== qtyRequested;
-    const safeUrl = text(item?.productUrl ?? item?.product_url);
-    return <div className="co-item next-review-order-item" key={text(item?.id) || index}>
-      <div className="co-item-left"><div className="co-item-title"><div className="co-item-name">{text(item?.productName) || "Unknown Product"}</div>{/^https?:\/\//i.test(safeUrl) ? <a className="co-item-link" href={safeUrl} target="_blank" rel="noopener noreferrer" title="Open component link" aria-label="Open component link" onClick={(event) => event.stopPropagation()}><ClassicOrderIcon name="external-link" /></a> : null}</div>{!maintenance ? <div className="co-item-sub">Unit: {formatMoney(item?.unitPrice)} · Total: {formatMoney(itemTotal(item))}</div> : null}</div>
-      <div className="co-item-right">
-        {maintenance ? <div className="co-item-issue-desc">{text(item?.issueDescription || item?.reason) || "—"}</div> : <div className="co-item-total">Qty: {showEdited ? <span className="sv-qty-diff"><span className="sv-qty-old">{formatQuantity(qtyRequested)}</span><strong className="sv-qty-new">{formatQuantity(qtyEdited)}</strong></span> : <strong>{formatQuantity(qtyRequested)}</strong>}</div>}
-        <ApprovalPill approval={itemApproval} className="co-item-status" reason={itemReason} onReason={onReason} />
-        {canAct && !maintenance ? <div className="next-review-item-actions"><button className="next-review-action-btn next-review-action-btn--edit" type="button" disabled={itemBusy} onClick={() => setEditingQty((current) => current === text(item?.id) ? "" : text(item?.id))}><ClassicOrderIcon name="edit-2" /><span>Edit qty</span></button><button className="next-review-action-btn next-review-action-btn--reject" type="button" disabled={itemBusy} onClick={() => onDecision(item, "Rejected")}><ClassicOrderIcon name="x" /><span>Reject</span></button><button className="next-review-action-btn next-review-action-btn--approve" type="button" disabled={itemBusy} onClick={() => onDecision(item, "Approved")}><ClassicOrderIcon name="check" /><span>Approve</span></button></div> : null}
-        {editingQty === text(item?.id) ? <QuantityEditor item={item} busy={itemBusy} onSave={onQuantitySave} onCancel={() => setEditingQty("")} /> : null}
-      </div>
-    </div>;
-  };
-
-  return <div className="co-modal-overlay is-open" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <div className="co-modal-dialog next-review-order-modal" role="dialog" aria-modal="true" aria-label={`${group.orderIdLabel} review details`}>
-      {(showEdit || showArchive || showUnarchive) ? <div className="co-modal-more" ref={moreRef}>
-        <button type="button" className="co-modal-more-btn" aria-label="Order review actions" aria-haspopup="menu" aria-expanded={moreOpen} onClick={() => setMoreOpen((stateValue) => !stateValue)}><span className="co-modal-more-dots">⋮</span></button>
-        {moreOpen ? <div className="co-modal-more-panel" role="menu" aria-label="Order review actions">
-          {showEdit ? <button type="button" className="co-modal-more-item" onClick={() => menuAction("editReview")}><ClassicOrderIcon name="edit-2" /><span>Edit review</span></button> : null}
-          {showArchive ? <button type="button" className="co-modal-more-item" onClick={() => menuAction("archive")}><ClassicOrderIcon name="archive" /><span>Archive</span></button> : null}
-          {showUnarchive ? <button type="button" className="co-modal-more-item" onClick={() => menuAction("unarchive")}><ClassicOrderIcon name="rotate-ccw" /><span>UnArchive</span></button> : null}
-        </div> : null}
-      </div> : null}
-      <button type="button" className="co-modal-close" onClick={onClose} aria-label="Close order details" />
-      <div className="co-modal-header"><div className="co-modal-head-left"><div className="co-modal-status">{headerTitle}</div></div></div>
-
-      <div className="next-review-order-modal-summary" aria-label="Review order summary">
-        <div><span>Order</span><strong>{group.orderIdLabel}</strong></div>
-        <div><span>Date</span><strong>{formatDate(group.latestCreated)}</strong></div>
-        <div><span>Components</span><strong>{group.items.length}</strong></div>
-        <div className="next-review-order-modal-summary__status"><span>Review</span>{approval === "mixed" && !archived ? <MixedStatusPill /> : <ApprovalPill approval={state} />}</div>
-      </div>
-
-      <ProgressTrack value={archived ? 4 : workflowProgress(group)} />
-      <div className="co-modal-body">
-        {!maintenance ? <div className="co-modal-meta"><div className="co-meta-row co-meta-row--reason"><span>Reason</span><strong>{group.reason}</strong></div></div> : null}
-        <div className="co-modal-actions ro-actions ro-actions--right order-group-sort-actions order-modal-search-actions">
-          <OrderComponentSearch key={`${group.key}:${activeTab}`} value={componentSearch} onChange={setComponentSearch} />
-          <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => setDownloadOpen(true)}><ClassicOrderIcon name="download" /><span>Download</span></button>
-          <OrderSortButton value={sortMode} onChange={setSortMode} />
-        </div>
-        {canAct ? <div className="next-review-bulk-actions"><div><span>Review all components</span><strong>Apply one decision to every item in this order.</strong></div><div className="next-classic-review-actions"><button className="btn btn-success btn-xs" type="button" onClick={() => onBulkDecision(group, "Approved")}><ClassicOrderIcon name="check" /> Approve all</button><button className="btn btn-danger btn-xs" type="button" onClick={() => onBulkDecision(group, "Rejected")}><ClassicOrderIcon name="x" /> Reject all</button></div></div> : null}
-        <div className="co-modal-items order-component-groups">
-          {groupedItems.length ? groupedItems.map((section) => (
-            <section className="order-component-group" key={`${section.folderName || "products"}:${section.tag}`}>
-              <OrderGroupHeader group={section} mode={sortMode} />
-              <div className="order-component-group__items">{section.items.map(renderItem)}</div>
-            </section>
-          )) : <div className="order-component-search-empty">{componentSearch.trim() ? "No matching components." : "No items."}</div>}
-        </div>
-      </div>
-      <OrderDownloadModal
-        open={downloadOpen}
-        title={`Download ${group.orderIdLabel}`}
-        defaultSignatureLabels={orderTypeKey(group.orderType) === "withdrawproducts" ? ["Received From", "Operations", "Storekeeper"] : ["Storekeeper", "Operations", "Delivered to"]}
-        showSignatureOptions={!maintenance}
-        showRepeatedComponentOptions={!maintenance}
-        defaultRepeatedComponentMode="merge"
-        onClose={() => setDownloadOpen(false)}
-        onDownload={(options) => onExport({ ...options, sortMode }, group, activeTab)}
-      />
-    </div>
-  </div>;
-}
-
-function PasswordModal({ state, busy, error, onCancel, onSubmit }) {
-  const [password, setPassword] = useState("");
-  useEffect(() => setPassword(""), [state?.action, state?.group?.key]);
-  useEffect(() => {
-    if (!state) return undefined;
-    const onKey = (event) => { if (event.key === "Escape" && !busy) onCancel(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [state, busy, onCancel]);
-  if (!state) return null;
-  const config = PASSWORD_ACTIONS[state.action];
-  return <div className="co-submodal-overlay is-open req-edit-modal" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onCancel(); }}>
-    <form className="co-submodal-dialog req-edit-dialog" role="dialog" aria-modal="true" onSubmit={(event) => { event.preventDefault(); onSubmit(password); }}>
-      <button type="button" className="co-submodal-close" onClick={onCancel} aria-label="Close admin password dialog" />
-      <div className="co-submodal-header req-edit-header"><div className={`req-edit-icon ${config.danger ? "req-edit-icon--danger" : ""}`}><ClassicOrderIcon name={config.icon} /></div><div><div className="co-submodal-title">{config.title}</div><div className="co-submodal-sub">{config.description}</div></div></div>
-      <div className="co-submodal-body"><label className="co-submodal-label" htmlFor="review-admin-password">Admin password</label><input id="review-admin-password" className="co-submodal-input" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoFocus autoComplete="current-password" placeholder="••••••••" disabled={busy}/><div className="co-submodal-error" role="alert" aria-live="polite">{error}</div></div>
-      <div className="co-submodal-actions"><button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancel} disabled={busy}>Cancel</button><button type="submit" className={`ro-action-btn ${config.danger ? "ro-action-btn--danger" : "ro-action-btn--dark"}`} disabled={busy || !password.trim()}>{busy ? "Working…" : config.button}</button></div>
-    </form>
-  </div>;
-}
-
-function RejectionModal({ state, busy, error, onCancel, onSubmit }) {
-  const [reason, setReason] = useState("");
-  useEffect(() => setReason(""), [state?.key]);
-  useEffect(() => {
-    if (!state) return undefined;
-    const onKey = (event) => { if (event.key === "Escape" && !busy) onCancel(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [state, busy, onCancel]);
-  if (!state) return null;
-  return <div className="co-submodal-overlay is-open" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onCancel(); }}><form className="co-submodal-dialog reject-reason-dialog" role="dialog" aria-modal="true" onSubmit={(event) => { event.preventDefault(); onSubmit(reason); }}>
-    <button type="button" className="co-submodal-close" onClick={onCancel} aria-label="Close rejected reason dialog" />
-    <div className="co-submodal-header req-edit-header"><div className="req-edit-icon req-edit-icon--danger"><ClassicOrderIcon name="x-circle" /></div><div><div className="co-submodal-title">Rejected reason</div><div className="co-submodal-sub">Add the reason that should be saved with the rejected component{state.group ? "s" : ""}.</div></div></div>
-    <div className="co-submodal-body"><label className="co-submodal-label" htmlFor="review-reject-reason">Reason</label><textarea id="review-reject-reason" className="co-submodal-textarea reject-reason-input" value={reason} onChange={(event) => setReason(event.target.value)} autoFocus disabled={busy}/><div className="co-submodal-error" role="alert" aria-live="polite">{error}</div></div>
-    <div className="co-submodal-actions"><button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancel} disabled={busy}>Cancel</button><button type="submit" className="ro-action-btn ro-action-btn--danger" disabled={busy || !reason.trim()}>{busy ? "Saving…" : "Reject"}</button></div>
-  </form></div>;
-}
-
-function ReviewEditorModal({ state, busy, error, onCancel, onSubmit }) {
-  const [approvals, setApprovals] = useState({});
-  useEffect(() => {
-    if (!state?.group) return;
-    const next = {};
-    state.group.items.forEach((item) => { next[text(item?.id)] = normalizeApproval(item?.approval ?? item?.svApproval ?? item?.sv_approval); });
-    setApprovals(next);
-  }, [state?.group?.key]);
-  useEffect(() => {
-    if (!state) return undefined;
-    const onKey = (event) => { if (event.key === "Escape" && !busy) onCancel(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [state, busy, onCancel]);
-  if (!state?.group) return null;
-  const choices = [
-    { value: "Not Started", label: "Not started", icon: "pause-circle" },
-    { value: "Approved", label: "Approved", icon: "check-circle" },
-    { value: "Rejected", label: "Rejected", icon: "x-circle" },
-  ];
-  return <div className="co-submodal-overlay is-open sv-review-edit-modal" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onCancel(); }}><form className="co-submodal-dialog sv-review-edit-dialog next-review-editor-dialog" role="dialog" aria-modal="true" onSubmit={(event) => { event.preventDefault(); onSubmit(approvals); }}>
-    <button type="button" className="co-submodal-close" onClick={onCancel} aria-label="Close review edit dialog" />
-    <div className="co-submodal-header req-edit-header"><div className="req-edit-icon"><ClassicOrderIcon name="edit-2" /></div><div><div className="co-submodal-title">Edit review decision</div><div className="co-submodal-sub">Update the approval status for each component.</div></div></div>
-    <div className="co-submodal-body"><div className="co-submodal-fields"><div className="co-submodal-field"><div className="co-submodal-label">Component approval status</div><div className="sv-review-edit-items">{state.group.items.map((item) => {
-      const id = text(item?.id);
-      const value = approvals[id] || "Not Started";
-      const valueClass = value === "Approved" ? "is-approved" : value === "Rejected" ? "is-rejected" : "is-not-started";
-      return <div className={`sv-review-edit-item next-review-edit-item ${valueClass}`} key={id}><div className="sv-review-edit-item__info"><div className="sv-review-edit-item__name">{text(item?.productName) || "Component"}</div><div className="sv-review-edit-item__sub">Qty: {formatQuantity(effectiveQuantity(item))}</div></div><div className="next-review-status-picker" role="radiogroup" aria-label={`Approval status for ${text(item?.productName) || "component"}`}>{choices.map((choice) => <button type="button" key={choice.value} className={`next-review-status-choice next-review-status-choice--${choice.value === "Approved" ? "approved" : choice.value === "Rejected" ? "rejected" : "pending"} ${value === choice.value ? "is-active" : ""}`} role="radio" aria-checked={value === choice.value} onClick={() => setApprovals((current) => ({ ...current, [id]: choice.value }))} disabled={busy}><ClassicOrderIcon name={choice.icon} /><span>{choice.label}</span></button>)}</div></div>;
-    })}</div></div></div><div className="co-submodal-error" role="alert" aria-live="polite">{error}</div></div>
-    <div className="co-submodal-actions"><button type="button" className="ro-action-btn ro-action-btn--light" onClick={onCancel} disabled={busy}>Cancel</button><button type="submit" className="ro-action-btn ro-action-btn--dark" disabled={busy}>{busy ? "Saving…" : "Confirm"}</button></div>
-  </form></div>;
-}
-
-function RejectedReasonModal({ reason, onClose }) {
-  useEffect(() => {
-    if (!reason) return undefined;
-    const onKey = (event) => { if (event.key === "Escape") onClose(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [reason, onClose]);
-  if (!reason) return null;
-  return <div className="co-submodal-overlay is-open" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><div className="co-submodal-dialog reject-reason-dialog" role="dialog" aria-modal="true"><button type="button" className="co-submodal-close" onClick={onClose} aria-label="Close rejected reason"/><div className="co-submodal-header req-edit-header"><div className="req-edit-icon req-edit-icon--danger"><ClassicOrderIcon name="x-circle"/></div><div><div className="co-submodal-title">Rejected reason</div><div className="co-submodal-sub">Reason saved with this rejected component.</div></div></div><div className="co-submodal-body"><div className="rejected-reason-view-text">{reason}</div></div><div className="co-submodal-actions"><button type="button" className="ro-action-btn ro-action-btn--dark" onClick={onClose}>Done</button></div></div></div>;
-}
-
-function profileFieldValue(profile, aliases = []) {
-  const wanted = new Set(aliases.map((value) => lower(value).replace(/[^a-z0-9]/g, "")));
-  const topLevel = Object.entries(profile || {}).find(([key, value]) => wanted.has(lower(key).replace(/[^a-z0-9]/g, "")) && text(value));
-  if (topLevel) return text(topLevel[1]);
-  const field = (Array.isArray(profile?.fields) ? profile.fields : []).find((item) => wanted.has(lower(item?.label || item?.name || item?.key).replace(/[^a-z0-9]/g, "")) && text(item?.value));
-  return text(field?.value);
-}
-function safeHttpUrl(value) {
-  const url = text(value);
-  return /^https?:\/\//i.test(url) ? url : "";
-}
-function CreatorProfilePopover({ state, onClose }) {
-  if (!state) return null;
-  const profile = state.profile || {};
-  const name = profileFieldValue(profile, ["name", "full name", "username"]) || text(state.name) || "Creator";
-  const department = profileFieldValue(profile, ["department", "dept"]);
-  const position = profileFieldValue(profile, ["position", "job title", "title"]);
-  const phone = profileFieldValue(profile, ["phone", "mobile", "phone number"]);
-  const email = profileFieldValue(profile, ["email", "email address"]);
-  const employeeCode = profileFieldValue(profile, ["employee code", "employee id", "code"]);
-  const photoUrl = safeHttpUrl(profile?.photoUrl || profile?.profilePicture || profile?.profile_picture);
-  const files = (Array.isArray(profile?.filesMedia) ? profile.filesMedia : Array.isArray(profile?.files_media) ? profile.files_media : []).map((file) => ({
-    name: text(file?.name || file?.filename || file?.title) || "File",
-    url: safeHttpUrl(file?.url || file?.href),
-  }));
-  const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "U";
-  const subtitle = [position, department].filter(Boolean).join(" • ") || "Team member";
-  const details = [
-    ["Department", department], ["Position", position], ["Phone", phone], ["Email", email], ["Employee code", employeeCode],
-  ].filter(([, value]) => value);
-
-  return <div className="creator-profile-popover is-open next-review-creator-popover" style={{ left: state.left, top: state.top }} aria-hidden="false"><div className="creator-profile-window" role="dialog" aria-modal="false" aria-label="Created by profile">
-    <button type="button" className="creator-profile-close" onClick={onClose} aria-label="Close"><span className="creator-profile-close-x">×</span></button>
-    <div className="creator-profile-head"><div className={`creator-profile-avatar ${photoUrl ? "has-image" : ""}`}>{photoUrl ? <img src={photoUrl} alt={name}/> : <span>{initials}</span>}</div><div className="creator-profile-title-wrap"><div className="creator-profile-kicker">Created by</div><div className="creator-profile-name">{name}</div><div className="creator-profile-subtitle">{subtitle}</div></div></div>
-    {state.loading ? <div className="creator-profile-state"><span>Loading user details...</span></div> : state.error ? <div className="creator-profile-state creator-profile-state--error"><span>Could not load this user details.</span></div> : <>
-      <div className="creator-profile-section-title">Profile details</div>
-      {details.length ? <div className="creator-profile-fields next-review-creator-fields">{details.map(([label, value]) => <div className="creator-profile-field" key={label}><span>{label}</span><strong>{value}</strong></div>)}</div> : <div className="creator-profile-empty creator-profile-empty--fields"><span>No profile details available.</span></div>}
-      <div className="creator-profile-section-title creator-profile-section-title--files">Files &amp; media</div>
-      {files.length ? <div className="creator-profile-files">{files.map((file, index) => file.url ? <a className="creator-profile-file" href={file.url} target="_blank" rel="noopener noreferrer" key={`${file.name}-${index}`}><span className="creator-profile-file-icon"><ClassicOrderIcon name="clipboard" /></span><span className="creator-profile-file-body"><span className="creator-profile-file-name">{file.name}</span></span><span className="creator-profile-file-open"><ClassicOrderIcon name="external-link" /></span></a> : <div className="creator-profile-file creator-profile-file--disabled" key={`${file.name}-${index}`}><span className="creator-profile-file-icon"><ClassicOrderIcon name="clipboard" /></span><span className="creator-profile-file-body"><span className="creator-profile-file-name">{file.name}</span></span></div>)}</div> : <div className="creator-profile-empty"><span>No files or media.</span></div>}
-    </>}
-  </div></div>;
-}
-export default function OrdersReviewClient({ initialOrders = [], bootstrapWarnings = [] }) {
+export default function OrdersReviewClient({ initialOrders = [], initialPageInfo = null, bootstrapWarnings = [], account }) {
+  const canReview = (action) => featureAllowed(account, `orders.review.${action}`);
+  const permissions = Object.fromEntries(["view_details", "approve", "bulk_approve", "quantity", "archive", "unarchive", "update_approval"].map(action => [action, canReview(action)]));
   const [orders, setOrders] = useState(Array.isArray(initialOrders) ? initialOrders : []);
+  const [pageInfo, setPageInfo] = useState(initialPageInfo || { hasMore: false, nextCursor: null, limit: 36 });
+  const [listLoading, setListLoading] = useState(false);
   const [tab, setTab] = useState("all");
   const [type, setType] = useState("all");
   const [query, setQuery] = useState("");
+  const [sortMode, setSortMode] = useState("latest");
   const [selectedKey, setSelectedKey] = useState("");
   const [busyIds, setBusyIds] = useState(new Set());
   const [notice, setNotice] = useState("");
@@ -592,7 +347,26 @@ export default function OrdersReviewClient({ initialOrders = [], bootstrapWarnin
   const [editorBusy, setEditorBusy] = useState(false);
   const [reasonView, setReasonView] = useState("");
   const [creatorState, setCreatorState] = useState(null);
+  const [detailGroups, setDetailGroups] = useState(() => new Map());
+  const [detailLoadingKey, setDetailLoadingKey] = useState("");
+  const detailRequestIdRef = useRef(0);
+  const detailsLoaderRef = useRef(null);
+  if (!detailsLoaderRef.current) detailsLoaderRef.current = createOrderDetailsLoader({
+    endpoint: `${DIRECT_API_BASE}/sv-orders/details-direct`,
+    buildGroups,
+  });
+  const [detailError, setDetailError] = useState("");
   const creatorProfileCache = useRef(new Map());
+  const listRequestRef = useRef(0);
+  const listAbortRef = useRef(null);
+  const initialFilterKeyRef = useRef("all|all|");
+
+  // Warm the modal code after the list is interactive. Never request an
+  // order's private details merely because its card was rendered or touched.
+  useEffect(() => {
+    if (listLoading || !orders.length) return undefined;
+    return warmOrderModalOnIdle(loadOrdersReviewHeavyModals);
+  }, [listLoading, orders.length]);
 
   useClassicHeaderSearch(query, setQuery, "Search by reason or item...");
 
@@ -612,6 +386,15 @@ export default function OrdersReviewClient({ initialOrders = [], bootstrapWarnin
     if (!query.trim()) params.delete("q"); else params.set("q", query.trim());
     const search = params.toString();
     window.history.replaceState({}, "", `${window.location.pathname}${search ? `?${search}` : ""}`);
+  }, [tab, type, query]);
+  useEffect(() => {
+    const key = `${tab}|${type}|${query.trim()}`;
+    if (key === initialFilterKeyRef.current) return undefined;
+    initialFilterKeyRef.current = key;
+    const timer = window.setTimeout(() => {
+      fetchReviewPage({ reset: true }).catch((error) => showNotice(error?.message || "Failed to load review orders."));
+    }, query.trim() ? 300 : 0);
+    return () => window.clearTimeout(timer);
   }, [tab, type, query]);
   useEffect(() => {
     const close = (event) => {
@@ -634,7 +417,8 @@ export default function OrdersReviewClient({ initialOrders = [], bootstrapWarnin
   }, [creatorState]);
 
   const allGroups = useMemo(() => buildGroups(orders), [orders]);
-  const selected = useMemo(() => allGroups.find((group) => group.key === selectedKey) || null, [allGroups, selectedKey]);
+  const selectedSummary = useMemo(() => allGroups.find((group) => group.key === selectedKey) || null, [allGroups, selectedKey]);
+  const selected = selectedKey ? (detailGroups.get(selectedKey) || null) : null;
   const statusRows = useMemo(() => {
     if (tab === "all") return orders.filter((item) => !isArchived(item));
     if (tab === "archive") return orders.filter(isArchived);
@@ -654,36 +438,147 @@ export default function OrdersReviewClient({ initialOrders = [], bootstrapWarnin
   }, [statusGroups]);
   const visibleGroups = useMemo(() => {
     const needle = lower(query);
+    const serverFilteredQuery = Boolean(needle)
+      && pageInfo?.serverFiltered === true
+      && lower(pageInfo?.query) === needle;
     return statusGroups.filter((group) => {
       if (type !== "all" && (orderTypeKey(group.orderType) || "other") !== type) return false;
-      return !needle || groupSearchText(group).includes(needle);
+      return !needle || serverFilteredQuery || groupSearchText(group).includes(needle);
     });
-  }, [statusGroups, type, query]);
+  }, [statusGroups, type, query, pageInfo]);
+
+  const sortedVisibleGroups = useMemo(() => sortOrderGroups(visibleGroups, sortMode), [visibleGroups, sortMode]);
+
+  useEffect(() => {
+    if (!selected || detailLoadingKey) return undefined;
+    return reportOrderVisibleAfterPaint("Review");
+  }, [selected, detailLoadingKey]);
 
   function showNotice(message) {
     setNotice(message);
     window.setTimeout(() => setNotice(""), 3500);
   }
+  function closeReviewDetails() {
+    cancelOrderOpenTimer("Review");
+    ++detailRequestIdRef.current;
+    setSelectedKey("");
+    setDetailLoadingKey("");
+    setDetailError("");
+  }
+  function patchDetailItem(id, patch) {
+    const targetId = text(id);
+    if (!targetId) return;
+    setDetailGroups((current) => {
+      let changed = false;
+      const next = new Map(current);
+      for (const [key, group] of next.entries()) {
+        if (!(group?.items || []).some((item) => text(item?.id) === targetId)) continue;
+        const items = group.items.map((item) => text(item?.id) === targetId ? { ...item, ...patch } : item);
+        const rebuilt = buildGroups(items)[0];
+        if (rebuilt) next.set(key, { ...rebuilt, key });
+        changed = true;
+      }
+      return changed ? next : current;
+    });
+  }
+  async function openReviewDetails(group, { force = false } = {}) {
+    if (!canReview("view_details") || !group?.key) return;
+    const attemptId = markOrderOpenStarted("Review");
+    const requestId = ++detailRequestIdRef.current;
+    setSelectedKey(group.key);
+    setDetailError("");
+    if (!force && detailGroups.has(group.key)) return;
+    setDetailLoadingKey(group.key);
+    try {
+      // Keep the full-size loading sheet until both the review details and
+      // their interactive modal code are available.
+      const detail = await loadOrderAndModalWithMetrics({
+        page: "Review",
+        attemptId,
+        loadDetails: ({ attemptId: measuredAttempt }) => detailsLoaderRef.current.get(group, { fresh: force, attemptId: measuredAttempt }),
+        loadModal: loadOrdersReviewHeavyModals,
+      });
+      if (requestId !== detailRequestIdRef.current) return;
+      setDetailGroups((current) => {
+        const next = new Map(current);
+        next.set(group.key, detail);
+        return next;
+      });
+    } catch (error) {
+      if (requestId !== detailRequestIdRef.current) return;
+      cancelOrderOpenTimer("Review");
+      if (error?.status === 401) { window.location.href = "/login?next=/next/orders-review"; return; }
+      setDetailError(error?.message || "Order details could not be loaded.");
+    } finally {
+      if (requestId === detailRequestIdRef.current) setDetailLoadingKey("");
+    }
+  }
+
+  function prefetchReviewDetails(group, hover = false) {
+    if (!group) { detailsLoaderRef.current.cancelPrefetch(); return; }
+    detailsLoaderRef.current.prefetch(group, { defer: hover });
+  }
+  async function fetchReviewPage({ reset = true } = {}) {
+    const requestId = ++listRequestRef.current;
+    listAbortRef.current?.abort();
+    const controller = new AbortController();
+    listAbortRef.current = controller;
+    setListLoading(true);
+    try {
+      const params = new URLSearchParams({
+        tab,
+        mode: "summary",
+        paged: "1",
+        filterType: type,
+        limit: String(pageInfo?.limit || 36),
+      });
+      if (query.trim()) params.set("q", query.trim());
+      if (!reset && pageInfo?.nextCursor !== null && pageInfo?.nextCursor !== undefined) params.set("cursor", String(pageInfo.nextCursor));
+      const response = await fetch(`${DIRECT_API_BASE}/sv-orders/paged-summary?${params.toString()}`, { credentials: "include", cache: "no-store", signal: controller.signal });
+      if (response.status === 401) { window.location.href = "/login?next=/next/orders-review"; return; }
+      const data = await readJson(response);
+      if (!response.ok) throw new Error(data?.error || "Failed to load review orders.");
+      if (requestId !== listRequestRef.current) return;
+      const items = Array.isArray(data) ? data : (Array.isArray(data?.items) ? data.items : []);
+      const nextPageInfo = !Array.isArray(data) && data?.pageInfo ? data.pageInfo : { hasMore: false, nextCursor: null, limit: pageInfo?.limit || 36 };
+      setOrders((current) => {
+        if (reset) return items;
+        const map = new Map((Array.isArray(current) ? current : []).map((item) => [text(item?.id), item]));
+        items.forEach((item) => map.set(text(item?.id), item));
+        return [...map.values()];
+      });
+      setPageInfo(nextPageInfo);
+      if (reset) {
+        setSelectedKey("");
+        detailsLoaderRef.current.clear();
+        ++detailRequestIdRef.current;
+        setDetailLoadingKey("");
+        setDetailGroups(new Map());
+        setDetailError("");
+      }
+    } catch (error) {
+      if (error?.name === "AbortError") return;
+      throw error;
+    } finally {
+      if (listAbortRef.current === controller) listAbortRef.current = null;
+      if (requestId === listRequestRef.current) setListLoading(false);
+    }
+  }
+
   async function refreshOrders() {
-    const [activeResponse, archiveResponse] = await Promise.all([
-      fetch("/api/sv-orders?tab=all", { credentials: "include", cache: "no-store" }),
-      fetch("/api/sv-orders?tab=archive", { credentials: "include", cache: "no-store" }),
-    ]);
-    if (activeResponse.status === 401 || archiveResponse.status === 401) { window.location.href = "/login?next=/next/orders-review"; return; }
-    const [activeData, archiveData] = await Promise.all([readJson(activeResponse), readJson(archiveResponse)]);
-    if (!activeResponse.ok) throw new Error(activeData?.error || "Failed to refresh review orders.");
-    if (!archiveResponse.ok) throw new Error(archiveData?.error || "Failed to refresh archived review orders.");
-    setOrders([...(Array.isArray(activeData) ? activeData : []), ...(Array.isArray(archiveData) ? archiveData : [])]);
+    return fetchReviewPage({ reset: true });
   }
   async function updateDecision(item, decision, rejectedReason = "") {
     const id = text(item?.id);
     if (!id) return;
     setBusyIds((current) => new Set(current).add(id));
     try {
-      const response = await fetch(`/api/sv-orders/${encodeURIComponent(id)}/approval`, { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ decision, rejectedReason }) });
+      const response = await fetch(`${DIRECT_API_BASE}/sv-orders/mutations-direct`, { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ action: "approval", id, decision, rejectedReason }) });
       const data = await readJson(response);
       if (!response.ok) throw new Error(data?.error || "Failed to update approval.");
-      setOrders((current) => current.map((row) => text(row?.id) === id ? { ...row, approval: normalizeApproval(decision), rejectedReason: normalizeApproval(decision) === "Rejected" ? text(rejectedReason) : "", status: data?.status || row?.status } : row));
+      const patch = { approval: normalizeApproval(decision), rejectedReason: normalizeApproval(decision) === "Rejected" ? text(rejectedReason) : "", status: data?.status };
+      setOrders((current) => current.map((row) => text(row?.id) === id ? { ...row, ...patch, status: data?.status || row?.status } : row));
+      patchDetailItem(id, { ...patch, status: data?.status || item?.status });
       showNotice(`Component marked as ${normalizeApproval(decision)}.`);
     } finally {
       setBusyIds((current) => { const next = new Set(current); next.delete(id); return next; });
@@ -698,9 +593,49 @@ export default function OrdersReviewClient({ initialOrders = [], bootstrapWarnin
     submitBulkDecision(group, decision, "").catch((error) => showNotice(error?.message || "Bulk decision could not be saved."));
   }
   async function submitBulkDecision(group, decision, rejectedReason) {
-    for (const item of group?.items || []) {
-      if (normalizeApproval(item?.approval ?? item?.svApproval ?? item?.sv_approval) === normalizeApproval(decision) && decision !== "Rejected") continue;
-      await updateDecision(item, decision, rejectedReason);
+    const items = Array.isArray(group?.items) ? group.items : [];
+    const ids = [...new Set(items.map((item) => text(item?.id)).filter(Boolean))];
+    if (!ids.length) throw new Error("This order has no components to review.");
+    // Lock every component during the single server transaction. A failed
+    // request leaves local decisions untouched (no partially optimistic UI).
+    setBusyIds((current) => new Set([...current, ...ids]));
+    try {
+      const response = await fetch(`${DIRECT_API_BASE}/sv-orders/mutations-direct`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "bulk-approval", orderIds: ids, decision, rejectedReason }),
+      });
+      const data = await readJson(response);
+      if (!response.ok || data?.ok === false) throw new Error(data?.error || "Could not save the entire review.");
+      const changed = new Set((data?.changedIds || []).map(text));
+      const normalized = normalizeApproval(decision);
+      if (changed.size) {
+        const patch = (item) => changed.has(text(item?.id))
+          ? { ...item, approval: normalized, svApproval: normalized,
+              rejectedReason: normalized === "Rejected" ? text(rejectedReason) : "", status: data?.status || item?.status }
+          : item;
+        setDetailGroups((current) => {
+          const next = new Map(current);
+          for (const [key, detailed] of current.entries()) {
+            if (!(detailed?.items || []).some((item) => changed.has(text(item?.id)))) continue;
+            const rebuilt = buildGroups(detailed.items.map(patch))[0];
+            if (rebuilt) next.set(key, { ...rebuilt, key });
+          }
+          return next;
+        });
+        setOrders((current) => current.map((row) => {
+          if (row?._summaryCard && groupKey(row, 0) === group.key) {
+            return { ...row, approval: normalized, _groupApproval: lower(normalized),
+              status: changed.size === ids.length ? (data?.status || row?.status) : row?.status };
+          }
+          return patch(row);
+        }));
+      }
+      detailsLoaderRef.current.clear();
+      showNotice(`${data?.changed ?? changed.size} component${(data?.changed ?? changed.size) === 1 ? "" : "s"} ${normalized.toLowerCase()} together.`);
+    } finally {
+      setBusyIds((current) => { const next = new Set(current); ids.forEach((id) => next.delete(id)); return next; });
     }
   }
   async function submitRejection(reason) {
@@ -713,15 +648,18 @@ export default function OrdersReviewClient({ initialOrders = [], bootstrapWarnin
   }
   async function saveQuantity(item, value) {
     const id = text(item?.id); const number = Number(value);
-    if (!id || !Number.isFinite(number)) return;
+    if (!id || text(value) === "" || !Number.isFinite(number)) { showNotice("Enter a valid quantity."); return false; }
     setBusyIds((current) => new Set(current).add(id));
     try {
-      const response = await fetch(`/api/sv-orders/${encodeURIComponent(id)}/quantity`, { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ value: number }) });
+      const response = await fetch(`${DIRECT_API_BASE}/sv-orders/mutations-direct`, { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ action: "quantity", id, value: number }) });
       const data = await readJson(response);
       if (!response.ok) throw new Error(data?.error || "Failed to update quantity.");
-      setOrders((current) => current.map((row) => text(row?.id) === id ? { ...row, quantityEdited: data?.cleared ? null : finite(data?.value, number) } : row));
+      const quantityEdited = data?.cleared ? null : finite(data?.value, number);
+      setOrders((current) => current.map((row) => text(row?.id) === id ? { ...row, quantityEdited } : row));
+      patchDetailItem(id, { quantityEdited });
       showNotice("Quantity updated.");
-    } catch (error) { showNotice(error?.message || "Quantity could not be updated."); } finally { setBusyIds((current) => { const next = new Set(current); next.delete(id); return next; }); }
+      return true;
+    } catch (error) { showNotice(error?.message || "Quantity could not be updated."); return false; } finally { setBusyIds((current) => { const next = new Set(current); next.delete(id); return next; }); }
   }
   function beginPasswordAction(action, group) { setPasswordError(""); setPasswordState({ action, group }); }
   async function submitPasswordAction(password) {
@@ -729,7 +667,7 @@ export default function OrdersReviewClient({ initialOrders = [], bootstrapWarnin
     const { action, group } = passwordState; const config = PASSWORD_ACTIONS[action];
     setPasswordBusy(true); setPasswordError("");
     try {
-      const response = await fetch(config.endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ orderIds: group.orderIds, adminPassword: password }) });
+      const response = await fetch(config.endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ action: config.directAction, orderIds: group.orderIds, adminPassword: password }) });
       const data = await readJson(response);
       if (response.status === 401) throw new Error("Wrong password. Please try again.");
       if (!response.ok) throw new Error(data?.error || "The protected action could not be completed.");
@@ -741,14 +679,15 @@ export default function OrdersReviewClient({ initialOrders = [], bootstrapWarnin
     if (!editorState) return;
     setEditorBusy(true); setEditorError("");
     try {
-      const response = await fetch("/api/sv-orders/actions/update-approval", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ orderIds: editorState.group.orderIds, adminPassword: editorState.password, approvals }) });
+      const response = await fetch(`${DIRECT_API_BASE}/sv-orders/mutations-direct`, { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ action: "update-approval", orderIds: editorState.group.orderIds, adminPassword: editorState.password, approvals }) });
       const data = await readJson(response);
       if (response.status === 401) throw new Error("The verified password is no longer valid.");
       if (!response.ok) throw new Error(data?.error || "Review decisions could not be updated.");
-      await refreshOrders(); setEditorState(null); showNotice("Review decisions updated.");
+      await refreshOrders(); setEditorState(null); setSelectedKey(""); showNotice("Review decisions updated.");
     } catch (error) { setEditorError(error?.message || "Review decisions could not be updated."); } finally { setEditorBusy(false); }
   }
   async function openCreatorProfile(anchor, group) {
+    void loadOrdersReviewHeavyModals();
     const rect = anchor.getBoundingClientRect();
     const width = Math.min(330, window.innerWidth - 28);
     const estimatedHeight = Math.min(500, Math.max(240, window.innerHeight - 28));
@@ -765,9 +704,7 @@ export default function OrdersReviewClient({ initialOrders = [], bootstrapWarnin
       return;
     }
     try {
-      const response = await fetch(`/api/team-members/${encodeURIComponent(key)}/public`, { credentials: "include", cache: "no-store" });
-      const data = await readJson(response);
-      if (!response.ok) throw new Error(data?.error || "Failed to load user profile.");
+      const data = await loadTeamMemberPublicProfile(key);
       creatorProfileCache.current.set(key, data);
       setCreatorState({ ...base, loading: false, profile: data, error: false });
     } catch { setCreatorState({ ...base, loading: false, error: true }); }
@@ -775,12 +712,14 @@ export default function OrdersReviewClient({ initialOrders = [], bootstrapWarnin
 
   async function exportOrder(options, group, selectedTab) {
     const kind = options?.kind === "excel" ? "excel" : "pdf";
-    const endpoint = kind === "excel" ? "/api/sv-orders/export/excel" : "/api/sv-orders/export/pdf";
+    const endpoint = `${DIRECT_API_BASE}/orders/export-direct`;
     const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
       body: JSON.stringify({
+        scope: "review",
+        kind,
         orderIds: group.orderIds,
         tab: selectedTab,
         columns: options?.columns || [],
@@ -808,8 +747,8 @@ export default function OrdersReviewClient({ initialOrders = [], bootstrapWarnin
     showNotice(`${kind.toUpperCase()} downloaded.`);
   }
 
-  return <section className="next-classic-orders-parity">
-    {bootstrapWarnings.length ? <div className="dashboard-notice"><strong>Partial data</strong><span>One resource was not available during the initial load.</span><a href="/orders/sv-orders?classic=1">Classic page</a></div> : null}
+  return <section className="next-classic-orders-parity orders-workspace">
+    {bootstrapWarnings.length ? <div className="dashboard-notice"><strong>Partial data</strong><span>One resource was not available during the initial load.</span></div> : null}
     {notice ? <div className="orders-parity-success" role="status"><ClassicOrderIcon name="check-circle" />{notice}</div> : null}
 
     <div className="next-orders-review-toolbar-wrap">
@@ -819,13 +758,48 @@ export default function OrdersReviewClient({ initialOrders = [], bootstrapWarnin
       </div>
     </div>
 
-    <section className="orders-review-list-surface" id="sv-orders"><div className="co-cards" id="sv-list">{visibleGroups.length ? visibleGroups.map((group) => <OrderReviewCard group={group} activeTab={tab} onOpen={(value) => setSelectedKey(value.key)} onCreator={openCreatorProfile} key={group.key}/>) : <div className="ops-no-data-state" role="status" aria-live="polite"><img className="ops-no-data-state__image" src="/images/no-data-illustration.png" alt="" loading="lazy"/><div className="ops-no-data-state__text">Sorry, No data available</div></div>}</div></section>
+    <section className="orders-review-list-surface" id="sv-orders"><OrdersListHeader count={visibleGroups.length} hasMore={pageInfo?.hasMore} busy={listLoading} sortMode={sortMode} onSortChange={setSortMode} /><div className="co-cards" id="sv-list">{visibleGroups.length ? sortedVisibleGroups.map((group) => <OrderReviewCard group={group} activeTab={tab} onOpen={openReviewDetails} onPrefetch={prefetchReviewDetails} onCreator={openCreatorProfile} canOpen={permissions.view_details} key={group.key}/>) : listLoading ? <div className="ops-no-data-state" role="status" aria-live="polite"><div className="ops-no-data-state__text">Loading orders…</div></div> : <OrdersEmptyState filtered={tab !== "all" || type !== "all" || !!query.trim()} context={"orders"} onReset={() => { setTab("all"); setType("all"); setQuery(""); }} />}</div>{pageInfo?.hasMore ? <div style={{ display: "flex", justifyContent: "center", padding: "16px 0 4px" }}><button type="button" className="ro-action-btn ro-action-btn--light" disabled={listLoading} onClick={() => fetchReviewPage({ reset: false }).catch((error) => showNotice(error?.message || "Failed to load more orders."))}>{listLoading ? "Loading…" : "Load more orders"}</button></div> : null}</section>
 
-    <ReviewDetailsModal group={selected} activeTab={tab} busyIds={busyIds} onClose={() => setSelectedKey("")} onQuantitySave={saveQuantity} onDecision={beginDecision} onBulkDecision={beginBulkDecision} onPasswordAction={beginPasswordAction} onReason={setReasonView} onExport={exportOrder}/>
-    <PasswordModal state={passwordState} busy={passwordBusy} error={passwordError} onCancel={() => { if (!passwordBusy) { setPasswordState(null); setPasswordError(""); } }} onSubmit={submitPasswordAction}/>
-    <RejectionModal state={rejectionState} busy={rejectionBusy} error={rejectionError} onCancel={() => { if (!rejectionBusy) { setRejectionState(null); setRejectionError(""); } }} onSubmit={submitRejection}/>
-    <ReviewEditorModal state={editorState} busy={editorBusy} error={editorError} onCancel={() => { if (!editorBusy) { setEditorState(null); setEditorError(""); } }} onSubmit={submitReviewEditor}/>
-    <RejectedReasonModal reason={reasonView} onClose={() => setReasonView("")}/>
-    <CreatorProfilePopover state={creatorState} onClose={() => setCreatorState(null)}/>
+    {selectedKey && !selected && !detailError ? <OrderDetailsLoadingOverlay group={selectedSummary} onCancel={closeReviewDetails} variant="review" /> : null}
+    {(selected || detailError || passwordState || rejectionState || editorState || reasonView || creatorState) ? (
+      <OrdersReviewHeavyModals
+        selectedKey={selectedKey}
+        selected={selected}
+        selectedSummary={selectedSummary}
+        detailLoadingKey={detailLoadingKey}
+        detailError={detailError}
+        onRetryDetails={() => selectedSummary && openReviewDetails(selectedSummary, { force: true })}
+        onCloseDetails={closeReviewDetails}
+        tab={tab}
+        busyIds={busyIds}
+        permissions={permissions}
+        onQuantitySave={saveQuantity}
+        onDecision={beginDecision}
+        onBulkDecision={beginBulkDecision}
+        onPasswordAction={beginPasswordAction}
+        onReason={setReasonView}
+        onExport={exportOrder}
+        passwordState={passwordState}
+        passwordBusy={passwordBusy}
+        passwordError={passwordError}
+        onCancelPassword={() => { if (!passwordBusy) { setPasswordState(null); setPasswordError(""); } }}
+        onSubmitPassword={submitPasswordAction}
+        rejectionState={rejectionState}
+        rejectionBusy={rejectionBusy}
+        rejectionError={rejectionError}
+        onCancelRejection={() => { if (!rejectionBusy) { setRejectionState(null); setRejectionError(""); } }}
+        onSubmitRejection={submitRejection}
+        editorState={editorState}
+        editorBusy={editorBusy}
+        editorError={editorError}
+        onCancelEditor={() => { if (!editorBusy) { setEditorState(null); setEditorError(""); } }}
+        onSubmitEditor={submitReviewEditor}
+        reasonView={reasonView}
+        onCloseReason={() => setReasonView("")}
+        creatorState={creatorState}
+        onCloseCreator={() => setCreatorState(null)}
+      />
+    ) : null}
+    <OrdersPerformancePanel />
   </section>;
 }

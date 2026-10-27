@@ -1,9 +1,19 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import SaveProgressModal, { useSaveProgress } from "../SaveProgressModal";
 import ActionLoadingModal, { useActionLoading } from "../ActionLoadingModal";
 import { confirmDelete } from "../../lib/client-confirm";
+import { featureAllowed } from "../../lib/feature-permissions-registry";
+import { removeSourceKitFromDraft } from "../../lib/proposal-source-kit-management.mjs";
+
+const NameModal = dynamic(() => import("./ProposalDialogs").then((module) => module.NameModal), { ssr: false });
+const PasswordModal = dynamic(() => import("./ProposalDialogs").then((module) => module.PasswordModal), { ssr: false });
+const AddItemsModal = dynamic(() => import("./ProposalDialogs").then((module) => module.AddItemsModal), { ssr: false });
+const ProposalDownloadModal = dynamic(() => import("./ProposalDialogs").then((module) => module.ProposalDownloadModal), { ssr: false });
+const MakeOrderModal = dynamic(() => import("./ProposalDialogs").then((module) => module.MakeOrderModal), { ssr: false });
+const ProposalSourceKitsModal = dynamic(() => import("./ProposalSourceKitsModal"), { ssr: false });
 
 const EXPORT_COLUMNS = [
   ["idCode", "ID Code"],
@@ -23,6 +33,7 @@ const COMBINE_LOGICS = [
 const PROPOSAL_ICON_PATHS = {
   download: [<path key="p1" d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />, <polyline key="p2" points="7 10 12 15 17 10" />, <line key="l" x1="12" y1="15" x2="12" y2="3" />],
   shoppingBag: [<path key="p1" d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z" />, <line key="l" x1="3" y1="6" x2="21" y2="6" />, <path key="p2" d="M16 10a4 4 0 0 1-8 0" />],
+  folder: [<path key="p" d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />],
   archive: [<polyline key="p1" points="21 8 21 21 3 21 3 8" />, <rect key="r" x="1" y="3" width="22" height="5" rx="1" />, <line key="l" x1="10" y1="12" x2="14" y2="12" />],
   edit: [<path key="p1" d="M12 20h9" />, <path key="p2" d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />],
   copy: [<rect key="r" x="9" y="9" width="13" height="13" rx="2" ry="2" />, <path key="p" d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />],
@@ -89,104 +100,6 @@ function normalizedUrl(value) {
   if (!url) return "";
   if (/^(https?:|data:|blob:)/i.test(url)) return url;
   return `https://${url.replace(/^\/+/, "")}`;
-}
-
-const RECEIPT_SOURCE_MAX_BYTES = 8 * 1024 * 1024;
-const RECEIPT_UPLOAD_TARGET_BYTES = Math.floor(1.5 * 1024 * 1024);
-const RECEIPT_MAX_EDGE = 2000;
-
-function readFileAsDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = () => reject(new Error(`Could not read ${file?.name || "receipt image"}.`));
-    reader.readAsDataURL(file);
-  });
-}
-
-function canvasToBlob(canvas, type, quality) {
-  return new Promise((resolve) => canvas.toBlob(resolve, type, quality));
-}
-
-async function prepareReceiptImage(file) {
-  if (!file || !/^image\//i.test(text(file.type))) throw new Error("Receipt uploads must be images.");
-  if (number(file.size) > RECEIPT_SOURCE_MAX_BYTES) throw new Error(`${file.name || "Receipt image"} is larger than 8 MB.`);
-
-  // Small files are already comfortably below Vercel's request-body limit even
-  // after Base64 encoding, so keep them untouched to preserve original quality.
-  if (number(file.size) <= RECEIPT_UPLOAD_TARGET_BYTES) {
-    return {
-      dataUrl: await readFileAsDataUrl(file),
-      name: file.name || "receipt.jpg",
-      size: number(file.size),
-    };
-  }
-
-  const objectUrl = URL.createObjectURL(file);
-  try {
-    const image = await new Promise((resolve, reject) => {
-      const candidate = new Image();
-      candidate.onload = () => resolve(candidate);
-      candidate.onerror = () => reject(new Error(`${file.name || "Receipt image"} could not be opened for optimization.`));
-      candidate.src = objectUrl;
-    });
-
-    const naturalWidth = Math.max(1, number(image.naturalWidth || image.width) || 1);
-    const naturalHeight = Math.max(1, number(image.naturalHeight || image.height) || 1);
-    const longest = Math.max(naturalWidth, naturalHeight);
-    let dimensionScale = Math.min(1, RECEIPT_MAX_EDGE / longest);
-    let bestBlob = null;
-    let bestType = "image/webp";
-
-    for (let sizeAttempt = 0; sizeAttempt < 5; sizeAttempt += 1) {
-      const width = Math.max(1, Math.round(naturalWidth * dimensionScale));
-      const height = Math.max(1, Math.round(naturalHeight * dimensionScale));
-      const canvas = document.createElement("canvas");
-      canvas.width = width;
-      canvas.height = height;
-      const context = canvas.getContext("2d", { alpha: false });
-      if (!context) throw new Error("Receipt image optimization is not available in this browser.");
-      context.fillStyle = "#ffffff";
-      context.fillRect(0, 0, width, height);
-      context.drawImage(image, 0, 0, width, height);
-
-      let quality = 0.88;
-      let blob = await canvasToBlob(canvas, "image/webp", quality);
-      let mime = "image/webp";
-      if (!blob) {
-        quality = 0.86;
-        blob = await canvasToBlob(canvas, "image/jpeg", quality);
-        mime = "image/jpeg";
-      }
-      if (!blob) throw new Error(`${file.name || "Receipt image"} could not be optimized.`);
-
-      while (blob.size > RECEIPT_UPLOAD_TARGET_BYTES && quality > 0.5) {
-        quality = Math.max(0.5, quality - 0.08);
-        blob = await canvasToBlob(canvas, mime, quality);
-        if (!blob) break;
-      }
-
-      if (blob && (!bestBlob || blob.size < bestBlob.size)) {
-        bestBlob = blob;
-        bestType = mime;
-      }
-      if (blob && blob.size <= RECEIPT_UPLOAD_TARGET_BYTES) break;
-      dimensionScale *= 0.82;
-    }
-
-    if (!bestBlob || bestBlob.size > RECEIPT_UPLOAD_TARGET_BYTES) {
-      throw new Error(`${file.name || "Receipt image"} is still too large after optimization. Choose a smaller image.`);
-    }
-
-    const baseName = text(file.name).replace(/\.[^.]+$/, "") || "receipt";
-    return {
-      dataUrl: await readFileAsDataUrl(bestBlob),
-      name: `${baseName}.${bestType === "image/webp" ? "webp" : "jpg"}`,
-      size: bestBlob.size,
-    };
-  } finally {
-    URL.revokeObjectURL(objectUrl);
-  }
 }
 
 function normalizeProduct(product, index = 0) {
@@ -350,146 +263,6 @@ function Modal({ title, subtitle, icon = "◆", children, footer, onClose, wide 
   );
 }
 
-function NameModal({ dialog, busy, onClose, onSubmit }) {
-  const [value, setValue] = useState(dialog?.value || "");
-  const [error, setError] = useState("");
-  const labels = {
-    create: ["Create New Proposal", "Name the proposal folder so you can return to it later.", "Create Proposal"],
-    copy: ["Copy Proposal", "Create an independent copy with all saved components.", "Create Copy"],
-    rename: ["Rename Proposal", "Update the folder name without changing its components.", "Save Name"],
-    combine: ["Save Combined Proposal", "Save the selected proposals as a reusable proposal folder.", "Save Combined Proposal"],
-  };
-  const [title, subtitle, action] = labels[dialog?.mode] || labels.create;
-
-  const submit = async (event) => {
-    event.preventDefault();
-    const name = text(value);
-    if (!name) return setError("Proposal name is required.");
-    setError("");
-    try {
-      await onSubmit(name);
-    } catch (submitError) {
-      setError(submitError?.message || "The proposal could not be saved.");
-    }
-  };
-
-  return (
-    <Modal title={title} subtitle={subtitle} icon="▣" onClose={onClose} footer={null}>
-      <form className="next-proposals-form products-form-grid" onSubmit={submit}>
-        <label><span>Proposal Name *</span><input autoFocus value={value} onChange={(event) => setValue(event.target.value)} placeholder="Example: School supplies quotation" /></label>
-        {error ? <div className="next-proposals-error products-form-error">{error}</div> : null}
-        <div className="next-proposals-form__actions products-modal__actions">
-          <button type="button" className="products-btn products-btn--light" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="submit" className="products-btn products-btn--dark" disabled={busy}>{busy ? "Saving…" : action}</button>
-        </div>
-      </form>
-    </Modal>
-  );
-}
-
-function PasswordModal({ request, busy, onClose, onVerified }) {
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-
-  const submit = async (event) => {
-    event.preventDefault();
-    if (!text(password)) return setError("Admin password is required.");
-    setError("");
-    try {
-      await requestJson("/api/products/admin/verify", { method: "POST", body: JSON.stringify({ password }) });
-      onVerified(text(password));
-    } catch (verifyError) {
-      setError(verifyError?.message || "Invalid Admin password.");
-    }
-  };
-
-  return (
-    <Modal title={request?.title || "Admin password required"} subtitle={request?.message || "Enter the Admin password to continue."} icon="⌾" onClose={onClose}>
-      <form className="next-proposals-form products-form-grid" onSubmit={submit}>
-        <label><span>Admin Password *</span><input autoFocus type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
-        {error ? <div className="next-proposals-error products-form-error">{error}</div> : null}
-        <div className="next-proposals-form__actions products-modal__actions">
-          <button type="button" className="products-btn products-btn--light" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="submit" className="products-btn products-btn--dark" disabled={busy}>{busy ? "Checking…" : "Continue"}</button>
-        </div>
-      </form>
-    </Modal>
-  );
-}
-
-
-function ModernSelect({ label, value, options, placeholder = "Select", searchable = false, onChange, disabled = false }) {
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const rootRef = useRef(null);
-  const selected = options.find((option) => String(option.value) === String(value));
-  const filtered = useMemo(() => {
-    const needle = lower(query);
-    if (!needle) return options;
-    return options.filter((option) => lower(`${option.label || ""} ${option.meta || ""}`).includes(needle));
-  }, [options, query]);
-
-  useEffect(() => {
-    if (!open) return undefined;
-    const onPointerDown = (event) => {
-      if (!rootRef.current?.contains(event.target)) setOpen(false);
-    };
-    const onKeyDown = (event) => {
-      if (event.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("pointerdown", onPointerDown, true);
-    document.addEventListener("keydown", onKeyDown, true);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown, true);
-      document.removeEventListener("keydown", onKeyDown, true);
-    };
-  }, [open]);
-
-  const choose = (nextValue) => {
-    onChange(nextValue);
-    setOpen(false);
-    setQuery("");
-  };
-
-  return (
-    <div className={`next-proposals-modern-select ${open ? "is-open" : ""} ${disabled ? "is-disabled" : ""}`} ref={rootRef}>
-      {label ? <span className="next-proposals-modern-select__label">{label}</span> : null}
-      <button
-        type="button"
-        className="next-proposals-modern-select__trigger"
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        disabled={disabled}
-        onClick={() => setOpen((current) => !current)}
-      >
-        <span className={selected ? "" : "is-placeholder"}>{selected?.label || placeholder}</span>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m7 10 5 5 5-5" /></svg>
-      </button>
-      {open ? (
-        <div className="next-proposals-modern-select__menu" role="listbox" aria-label={label || placeholder}>
-          {searchable ? (
-            <div className="next-proposals-modern-select__search">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>
-              <input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search..." />
-            </div>
-          ) : null}
-          <div className="next-proposals-modern-select__options">
-            {filtered.map((option) => {
-              const active = String(option.value) === String(value);
-              return (
-                <button type="button" role="option" aria-selected={active} className={active ? "is-selected" : ""} key={`${label || "select"}-${option.value}`} onClick={() => choose(option.value)}>
-                  <span><strong>{option.label}</strong>{option.meta ? <small>{option.meta}</small> : null}</span>
-                  {active ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6" /></svg> : null}
-                </button>
-              );
-            })}
-            {!filtered.length ? <div className="next-proposals-modern-select__empty">No matching options.</div> : null}
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
-}
 
 function ProposalMultiSelect({ proposals, selectedIds, onToggle }) {
   const [open, setOpen] = useState(false);
@@ -558,550 +331,6 @@ function ProposalMultiSelect({ proposals, selectedIds, onToggle }) {
   );
 }
 
-function KitBrowserDialog({ folders, kits, selectedKits, onToggleKit, onQuantityChange, onClose }) {
-  const [activeFolderId, setActiveFolderId] = useState("");
-  const [query, setQuery] = useState("");
-  const [bulkQuantity, setBulkQuantity] = useState("1");
-  const [bulkQuantityVisible, setBulkQuantityVisible] = useState(false);
-  const activeFolder = folders.find((folder) => folder.id === activeFolderId) || null;
-  const needle = lower(query);
-  const selectedCount = Object.keys(selectedKits || {}).length;
-  const folderCounts = useMemo(() => {
-    const map = new Map();
-    kits.forEach((kit) => {
-      if (kit.folderId) map.set(kit.folderId, (map.get(kit.folderId) || 0) + 1);
-    });
-    return map;
-  }, [kits]);
-  const visibleFolders = useMemo(() => {
-    if (activeFolderId) return [];
-    if (!needle) return folders;
-    return folders.filter((folder) => lower(folder.name).includes(needle));
-  }, [activeFolderId, folders, needle]);
-  const currentScopeKits = useMemo(() => (
-    activeFolderId ? kits.filter((kit) => kit.folderId === activeFolderId) : kits.filter((kit) => !kit.folderId)
-  ), [activeFolderId, kits]);
-  const visibleKits = useMemo(() => {
-    let rows = activeFolderId
-      ? kits.filter((kit) => kit.folderId === activeFolderId)
-      : needle
-        ? kits
-        : kits.filter((kit) => !kit.folderId);
-    if (needle) rows = rows.filter((kit) => lower(kit.name).includes(needle));
-    return rows;
-  }, [activeFolderId, kits, needle]);
-  const selectedInScopeCount = currentScopeKits.filter((kit) => Object.prototype.hasOwnProperty.call(selectedKits || {}, kit.id)).length;
-  const allScopeSelected = currentScopeKits.length > 0 && selectedInScopeCount === currentScopeKits.length;
-
-  const normalizeQuantityInput = (value) => {
-    const raw = String(value ?? "").replace(/[^0-9]/g, "");
-    if (!raw) return "0";
-    return raw.replace(/^0+(?=\d)/, "") || "0";
-  };
-
-  const selectAllInScope = () => {
-    const nextQty = normalizeQuantityInput(bulkQuantity || "1");
-    currentScopeKits.forEach((kit) => {
-      if (!Object.prototype.hasOwnProperty.call(selectedKits || {}, kit.id)) onToggleKit(kit.id);
-      onQuantityChange(kit.id, nextQty);
-    });
-    setBulkQuantity(nextQty);
-    setBulkQuantityVisible(true);
-  };
-
-  const unselectAllInScope = () => {
-    Object.keys(selectedKits || {}).forEach((kitId) => onToggleKit(kitId));
-    setBulkQuantityVisible(false);
-    setBulkQuantity("1");
-  };
-
-  const changeBulkQuantity = (value) => {
-    const nextQty = normalizeQuantityInput(value);
-    setBulkQuantity(nextQty);
-    currentScopeKits.forEach((kit) => {
-      if (Object.prototype.hasOwnProperty.call(selectedKits || {}, kit.id)) onQuantityChange(kit.id, nextQty);
-    });
-  };
-
-  useEffect(() => {
-    const onKeyDown = (event) => { if (event.key === "Escape") onClose(); };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
-
-  return (
-    <div className="proposal-kit-browser-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section className="proposal-kit-browser proposal-kit-browser--multi" role="dialog" aria-modal="true" aria-label="Select kits">
-        <header className="proposal-kit-browser__head">
-          <div>
-            <span className="proposal-kit-browser__eyebrow">Kit library</span>
-            <h3>{activeFolder ? activeFolder.name : "Select kits"}</h3>
-            <p>{activeFolder ? "Select one or more kits from this folder." : "Open a folder or select one or more unfiled kits."}</p>
-          </div>
-          <button type="button" className="proposal-kit-browser__close" onClick={onClose} aria-label="Close">×</button>
-        </header>
-
-        <div className="proposal-kit-browser__toolbar">
-          {activeFolder ? (
-            <button type="button" className="proposal-kit-browser__back" onClick={() => { setActiveFolderId(""); setQuery(""); setBulkQuantityVisible(false); }}>
-              <span aria-hidden="true">←</span><span>All folders</span>
-            </button>
-          ) : <span className="proposal-kit-browser__location">Folders & kits</span>}
-          <label className="proposal-kit-browser__search">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search kits..." autoComplete="off" />
-          </label>
-          <div className="proposal-kit-browser__bulk-actions">
-            <button type="button" className="proposal-kit-browser__bulk-button" onClick={selectAllInScope} disabled={!currentScopeKits.length || allScopeSelected}>Select all</button>
-            <button type="button" className="proposal-kit-browser__bulk-button proposal-kit-browser__bulk-button--muted" onClick={unselectAllInScope} disabled={!selectedCount}>Unselect all</button>
-          </div>
-          {bulkQuantityVisible && selectedInScopeCount ? (
-            <label className="proposal-kit-browser__bulk-qty">
-              <span>Qty all</span>
-              <input
-                type="number"
-                min="0"
-                step="1"
-                inputMode="numeric"
-                value={bulkQuantity}
-                onChange={(event) => changeBulkQuantity(event.target.value)}
-                onFocus={(event) => { if (event.currentTarget.value === "0") event.currentTarget.select(); }}
-              />
-            </label>
-          ) : null}
-          <span className="proposal-kit-browser__selected-count">{selectedCount} selected</span>
-        </div>
-
-        <div className="proposal-kit-browser__grid">
-          {visibleFolders.map((folder) => {
-            const kitCount = folderCounts.get(folder.id) || 0;
-            return (
-              <article className="products-proposal-folder kit-library-folder proposal-kit-browser-library-folder" key={folder.id}>
-                <button type="button" className="products-proposal-folder__main" onClick={() => { setActiveFolderId(folder.id); setQuery(""); setBulkQuantityVisible(false); setBulkQuantity("1"); }} aria-label={`Open folder ${folder.name}`}>
-                  <span className="proposal-folder-figure" aria-hidden="true">
-                    <span className="proposal-folder-figure__paper proposal-folder-figure__paper--left" />
-                    <span className="proposal-folder-figure__paper proposal-folder-figure__paper--middle" />
-                    <span className="proposal-folder-figure__paper proposal-folder-figure__paper--right" />
-                    <span className="proposal-folder-figure__back" />
-                    <span className="proposal-folder-figure__front"><small>F</small></span>
-                  </span>
-                  <span className="proposal-folder-copy"><strong>{folder.name}</strong><em>Kit folder</em></span>
-                  <span className="proposal-folder-count">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" /></svg>
-                    <span>{formatNumber(kitCount)} kit{kitCount === 1 ? "" : "s"}</span>
-                  </span>
-                </button>
-              </article>
-            );
-          })}
-          {visibleKits.map((kit) => {
-            const isSelected = Object.prototype.hasOwnProperty.call(selectedKits || {}, kit.id);
-            const qty = isSelected ? selectedKits[kit.id] : 1;
-            return (
-              <article className={`products-proposal-folder kit-library-kit proposal-kit-browser-library-kit ${isSelected ? "is-selected" : ""}`} key={kit.id}>
-                <button type="button" className="products-proposal-folder__main" onClick={() => onToggleKit(kit.id)} aria-pressed={isSelected} aria-label={`${isSelected ? "Unselect" : "Select"} kit ${kit.name}`}>
-                  <span className="proposal-folder-figure" aria-hidden="true">
-                    <span className="proposal-folder-figure__paper proposal-folder-figure__paper--left" />
-                    <span className="proposal-folder-figure__paper proposal-folder-figure__paper--middle" />
-                    <span className="proposal-folder-figure__paper proposal-folder-figure__paper--right" />
-                    <span className="proposal-folder-figure__back" />
-                    <span className="proposal-folder-figure__front"><small>K</small></span>
-                  </span>
-                  <span className="proposal-folder-copy"><strong>{kit.name}</strong><em>Created by {kit.createdBy || "—"}</em></span>
-                  <span className="proposal-folder-count">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></svg>
-                    <span>{formatNumber(kit.itemsCount)} component{kit.itemsCount === 1 ? "" : "s"}</span>
-                  </span>
-                </button>
-                {isSelected ? (
-                  <div className="proposal-kit-browser-library-kit__selected-panel">
-                    <span className="proposal-kit-browser-library-kit__selected-name">{kit.name}</span>
-                    <label onClick={(event) => event.stopPropagation()}>
-                      <span>Qty</span>
-                      <input
-                        type="number"
-                        min="0"
-                        step="1"
-                        inputMode="numeric"
-                        value={qty}
-                        onChange={(event) => onQuantityChange(kit.id, normalizeQuantityInput(event.target.value))}
-                        onFocus={(event) => { if (event.currentTarget.value === "0") event.currentTarget.select(); }}
-                        onClick={(event) => event.stopPropagation()}
-                      />
-                    </label>
-                  </div>
-                ) : null}
-              </article>
-            );
-          })}
-          {!visibleFolders.length && !visibleKits.length ? <div className="proposal-kit-browser__empty">No kits found here.</div> : null}
-        </div>
-
-        <footer className="proposal-kit-browser__footer">
-          <span>{selectedCount} kit{selectedCount === 1 ? "" : "s"} selected</span>
-          <button type="button" className="products-btn products-btn--dark" onClick={onClose} disabled={!selectedCount}>Done</button>
-        </footer>
-      </section>
-    </div>
-  );
-}
-
-function AddItemsModal({ proposal, products, kits, kitFolders, tags, busy, onClose, onSubmit }) {
-  const [mode, setMode] = useState("product");
-  const [selected, setSelected] = useState("");
-  const [selectedProducts, setSelectedProducts] = useState({});
-  const [selectedKits, setSelectedKits] = useState({});
-  const [quantity, setQuantity] = useState(1);
-  const [mergeLogic, setMergeLogic] = useState("add");
-  const [search, setSearch] = useState("");
-  const [kitBrowserOpen, setKitBrowserOpen] = useState(false);
-  const [error, setError] = useState("");
-
-  const filteredProducts = useMemo(() => products.filter((product) => {
-    const needle = lower(search);
-    if (!needle) return true;
-    return [product.name, product.displayId, product.unit, firstTag(product)].some((value) => lower(value).includes(needle));
-  }).slice(0, 120), [products, search]);
-
-  const selectedProductCount = Object.keys(selectedProducts).length;
-  const selectedKitCount = Object.keys(selectedKits).length;
-  const selectedKitNames = Object.keys(selectedKits).map((id) => kits.find((kit) => kit.id === id)?.name).filter(Boolean);
-
-  const toggleProduct = (productId) => {
-    setSelectedProducts((current) => {
-      const next = { ...current };
-      if (Object.prototype.hasOwnProperty.call(next, productId)) delete next[productId];
-      else next[productId] = 1;
-      return next;
-    });
-    setError("");
-  };
-
-  const normalizeQuantityInput = (value) => {
-    const raw = String(value ?? "").replace(/[^0-9]/g, "");
-    if (!raw) return "0";
-    return raw.replace(/^0+(?=\d)/, "") || "0";
-  };
-
-  const setProductQuantity = (productId, value) => {
-    setSelectedProducts((current) => ({ ...current, [productId]: normalizeQuantityInput(value) }));
-  };
-
-  const toggleKit = (kitId) => {
-    setSelectedKits((current) => {
-      const next = { ...current };
-      if (Object.prototype.hasOwnProperty.call(next, kitId)) delete next[kitId];
-      else next[kitId] = 1;
-      return next;
-    });
-    setError("");
-  };
-
-  const setKitQuantity = (kitId, value) => {
-    setSelectedKits((current) => ({ ...current, [kitId]: normalizeQuantityInput(value) }));
-  };
-
-  const switchMode = (value) => {
-    setMode(value);
-    setSelected("");
-    setSelectedProducts({});
-    setSelectedKits({});
-    setQuantity(1);
-    setSearch("");
-    setError("");
-  };
-
-  const submit = async (event) => {
-    event.preventDefault();
-    if (mode === "product") {
-      const selections = Object.entries(selectedProducts).map(([productId, qty]) => ({ selected: productId, quantity: Math.max(1, Math.round(number(qty) || 1)) }));
-      if (!selections.length) return setError("Choose at least one product.");
-      setError("");
-      try {
-        await onSubmit({ mode, selections, mergeLogic });
-      } catch (submitError) {
-        setError(submitError?.message || "The components could not be added.");
-      }
-      return;
-    }
-    if (mode === "kit") {
-      const selections = Object.entries(selectedKits).map(([kitId, qty]) => ({ selected: kitId, quantity: Math.max(1, Math.round(number(qty) || 1)) }));
-      if (!selections.length) return setError("Choose at least one kit.");
-      setError("");
-      try {
-        await onSubmit({ mode, selections, mergeLogic });
-      } catch (submitError) {
-        setError(submitError?.message || "The components could not be added.");
-      }
-      return;
-    }
-    if (!selected) return setError(`Choose a ${mode}.`);
-    setError("");
-    try {
-      await onSubmit({ mode, selected, quantity: Math.max(1, Math.round(number(quantity) || 1)), mergeLogic });
-    } catch (submitError) {
-      setError(submitError?.message || "The components could not be added.");
-    }
-  };
-
-  return (
-    <Modal title={`Add Components to ${proposal.name || "New Proposal"}`} subtitle="Add one product or a reusable kit." icon="＋" onClose={onClose} wide className="proposal-add-items-modal">
-      <form className="next-proposals-form products-form-grid proposal-add-items-form" onSubmit={submit}>
-        <div className="next-proposals-segmented">
-          {[["product", "Single Product"], ["kit", "Kit"]].map(([value, label]) => (
-            <button type="button" key={value} className={mode === value ? "active" : ""} onClick={() => switchMode(value)}>{label}</button>
-          ))}
-        </div>
-
-        {mode === "product" ? (
-          <>
-            <div className="proposal-multi-product-head">
-              <label><span>Search Catalogue</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Product name, code, tag or unit" /></label>
-              <span className="proposal-multi-product-count">{selectedProductCount} selected</span>
-            </div>
-            <div className="next-proposals-product-picker proposal-multi-product-picker">
-              {filteredProducts.map((product) => {
-                const isSelected = Object.prototype.hasOwnProperty.call(selectedProducts, product.id);
-                return (
-                  <article className={`proposal-product-choice ${isSelected ? "is-selected" : ""}`} key={product.id}>
-                    <button type="button" className="proposal-product-choice__pick" onClick={() => toggleProduct(product.id)} aria-pressed={isSelected}>
-                      <span className="proposal-product-choice__media">{product.imageUrl ? <img src={product.imageUrl} alt="" /> : "▧"}</span>
-                      <span className="proposal-product-choice__copy"><strong>{product.name}</strong><small>{product.displayId || "No ID"} · {firstTag(product)}</small></span>
-                      <b>{formatMoney(product.unitPrice)}</b>
-                    </button>
-                    {isSelected ? (
-                      <div
-                        className="proposal-product-choice__selected-panel"
-                        role="button"
-                        tabIndex={0}
-                        aria-label={`Unselect ${product.name}`}
-                        onClick={() => toggleProduct(product.id)}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" || event.key === " ") {
-                            event.preventDefault();
-                            toggleProduct(product.id);
-                          }
-                        }}
-                      >
-                        <span className="proposal-product-choice__selected-copy"><small>✓ Selected</small><strong>{product.name}</strong></span>
-                        <label onClick={(event) => event.stopPropagation()}>
-                          <span>Qty</span>
-                          <input type="number" min="0" step="1" inputMode="numeric" value={selectedProducts[product.id]} onChange={(event) => setProductQuantity(product.id, event.target.value)} onFocus={(event) => { if (event.currentTarget.value === "0") event.currentTarget.select(); }} onClick={(event) => event.stopPropagation()} />
-                        </label>
-                      </div>
-                    ) : null}
-                  </article>
-                );
-              })}
-              {!filteredProducts.length ? <p className="next-proposals-empty-inline">No products match your search.</p> : null}
-            </div>
-          </>
-        ) : null}
-
-        {mode === "kit" ? (
-          <div className="proposal-kit-select-field">
-            <span className="proposal-kit-select-field__label">Kits *</span>
-            <button type="button" className={`proposal-kit-select-trigger ${selectedKitCount ? "has-value" : ""}`} onClick={() => setKitBrowserOpen(true)}>
-              <span className="proposal-kit-select-trigger__icon" aria-hidden="true">▣</span>
-              <span className="proposal-kit-select-trigger__copy">
-                <strong>{selectedKitCount ? `${selectedKitCount} kit${selectedKitCount === 1 ? "" : "s"} selected` : "Select Kits"}</strong>
-                <small>{selectedKitCount ? selectedKitNames.slice(0, 3).join(" · ") + (selectedKitCount > 3 ? ` +${selectedKitCount - 3}` : "") : "Browse folders and kits"}</small>
-              </span>
-              <span className="proposal-kit-select-trigger__arrow" aria-hidden="true">›</span>
-            </button>
-          </div>
-        ) : null}
-
-        {mode !== "product" ? (
-          <div className="next-proposals-form-grid products-form-grid proposal-add-items-settings proposal-add-items-settings--kit">
-            <ModernSelect
-              label="When Product Already Exists"
-              value={mergeLogic}
-              options={[
-                { value: "add", label: "Add quantities", meta: "Add the new quantity to the saved one" },
-                { value: "max", label: "Keep maximum", meta: "Keep whichever quantity is higher" },
-                { value: "min", label: "Keep minimum", meta: "Keep whichever quantity is lower" },
-              ]}
-              onChange={setMergeLogic}
-            />
-          </div>
-        ) : (
-          <ModernSelect
-            label="When Product Already Exists"
-            value={mergeLogic}
-            options={[
-              { value: "add", label: "Add quantities", meta: "Add each selected quantity to the saved one" },
-              { value: "max", label: "Keep maximum", meta: "Keep whichever quantity is higher" },
-              { value: "min", label: "Keep minimum", meta: "Keep whichever quantity is lower" },
-            ]}
-            onChange={setMergeLogic}
-          />
-        )}
-
-        {error ? <div className="next-proposals-error products-form-error">{error}</div> : null}
-        <div className="next-proposals-form__actions products-modal__actions proposal-add-items-actions">
-          <button type="button" className="products-btn products-btn--light" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="submit" className="products-btn products-btn--dark" disabled={busy}>{busy ? "Adding…" : mode === "product" && selectedProductCount > 1 ? `Add ${selectedProductCount} Components` : mode === "kit" && selectedKitCount > 1 ? `Add ${selectedKitCount} Kits` : "Add Components"}</button>
-        </div>
-      </form>
-      {kitBrowserOpen ? <KitBrowserDialog folders={kitFolders} kits={kits} selectedKits={selectedKits} onToggleKit={toggleKit} onQuantityChange={setKitQuantity} onClose={() => setKitBrowserOpen(false)} /> : null}
-    </Modal>
-  );
-}
-
-function ProposalDownloadModal({ columns, repeatedComponentMode, onRepeatedComponentModeChange, onToggleColumn, onDownload, onClose }) {
-  return (
-    <Modal
-      title="Download proposal"
-      subtitle="Choose the columns you need, then select the file type."
-      icon={<ProposalIcon name="download" size={26} />}
-      className="proposal-download-modal"
-      onClose={onClose}
-    >
-      <div className="proposal-download-modal__body">
-        <div className="proposal-download-modal__columns">
-          <span>Columns</span>
-          <div>
-            {EXPORT_COLUMNS.map(([key, label]) => (
-              <label key={key}>
-                <input type="checkbox" checked={columns.includes(key)} onChange={() => onToggleColumn(key)} />
-                <span>{label}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-        <div className="proposal-download-modal__columns proposal-download-modal__repeat">
-          <span>Repeated components</span>
-          <div>
-            <label className={repeatedComponentMode === "merge" ? "is-selected" : ""}>
-              <input type="radio" name="proposal-repeated-components" checked={repeatedComponentMode === "merge"} onChange={() => onRepeatedComponentModeChange("merge")} />
-              <span><strong>Combine quantities</strong><small>Add matching component quantities into one row.</small></span>
-            </label>
-            <label className={repeatedComponentMode === "separate" ? "is-selected" : ""}>
-              <input type="radio" name="proposal-repeated-components" checked={repeatedComponentMode === "separate"} onChange={() => onRepeatedComponentModeChange("separate")} />
-              <span><strong>Keep separate</strong><small>Keep repeated components in their original kit/tag rows.</small></span>
-            </label>
-          </div>
-        </div>
-        <div className="proposal-download-modal__actions products-modal__actions">
-          <button type="button" className="products-btn products-btn--dark" onClick={() => onDownload("pdf")}>
-            <ProposalIcon name="file" /><span>Download PDF</span>
-          </button>
-          <button type="button" className="products-btn products-btn--dark" onClick={() => onDownload("excel")}>
-            <ProposalIcon name="grid" /><span>Download Excel</span>
-          </button>
-        </div>
-      </div>
-    </Modal>
-  );
-}
-
-function ReceiptImagePreviewGrid({ files, busy, onRemove }) {
-  const [previews, setPreviews] = useState([]);
-
-  useEffect(() => {
-    const next = (Array.isArray(files) ? files : []).map((file, index) => ({
-      file,
-      index,
-      url: URL.createObjectURL(file),
-    }));
-    setPreviews(next);
-    return () => next.forEach((item) => URL.revokeObjectURL(item.url));
-  }, [files]);
-
-  if (!previews.length) return null;
-  return (
-    <div className="proposal-receipt-preview-grid" aria-label="Selected receipt images">
-      {previews.map((item) => (
-        <article className="proposal-receipt-preview-card" key={`${item.file.name}-${item.file.size}-${item.file.lastModified}-${item.index}`}>
-          <div className="proposal-receipt-preview-card__image">
-            <img src={item.url} alt={item.file.name || `Receipt image ${item.index + 1}`} />
-            <span>{item.index + 1}</span>
-          </div>
-          <div className="proposal-receipt-preview-card__copy">
-            <strong title={item.file.name}>{item.file.name || `Receipt ${item.index + 1}`}</strong>
-            <small>{Math.max(1, Math.round(Number(item.file.size || 0) / 1024))} KB</small>
-          </div>
-          <button type="button" onClick={() => onRemove(item.index)} disabled={busy} aria-label={`Remove ${item.file.name || `receipt ${item.index + 1}`}`}>×</button>
-        </article>
-      ))}
-    </div>
-  );
-}
-
-function MakeOrderModal({ proposal, members, busy, onClose, onSubmit }) {
-  const teamMembers = useMemo(() => (Array.isArray(members) ? members : []).filter((member) => text(member?.id) && text(member?.name)), [members]);
-  const [memberId, setMemberId] = useState("");
-  const [adminPassword, setAdminPassword] = useState("");
-  const [error, setError] = useState("");
-
-  const submit = async (event) => {
-    event.preventDefault();
-    if (!memberId) return setError("Select the team member who will receive this order.");
-    if (!text(adminPassword)) return setError("Enter the Admin password.");
-    setError("");
-    try {
-      await onSubmit({ teamMemberId: memberId, adminPassword: text(adminPassword) });
-    } catch (submitError) {
-      setError(submitError?.message || "The order could not be created.");
-    }
-  };
-
-  const close = () => {
-    if (!busy) onClose();
-  };
-
-  return (
-    <Modal
-      title="Make order"
-      subtitle={`Create a normal Request Products order from all components in “${proposal?.name || "Proposal"}”.`}
-      icon={<ProposalIcon name="shoppingBag" size={26} />}
-      className="proposal-make-order-modal"
-      onClose={close}
-    >
-      <form className="next-proposals-form products-form-grid proposal-make-order-form" onSubmit={submit}>
-        <ModernSelect
-          label="Team Member *"
-          value={memberId}
-          placeholder={teamMembers.length ? "Select team member" : "No team members available"}
-          searchable
-          options={teamMembers.map((member) => ({
-            value: member.id,
-            label: member.name,
-            meta: [text(member.department), text(member.position)].filter(Boolean).join(" · "),
-          }))}
-          onChange={(value) => { setMemberId(value); setError(""); }}
-          disabled={busy}
-        />
-
-        <label>
-          <span>Admin Password *</span>
-          <input
-            type="password"
-            autoComplete="current-password"
-            value={adminPassword}
-            onChange={(event) => { setAdminPassword(event.target.value); setError(""); }}
-            placeholder="Enter Admin password"
-            disabled={busy}
-          />
-        </label>
-
-        <div className="proposal-make-order-note">
-          <ProposalIcon name="shoppingBag" size={18} />
-          <span>The proposal components will be created as a normal <strong>Request Products</strong> order for the selected user and will continue through the standard order process.</span>
-        </div>
-
-        {error ? <div className="next-proposals-error products-form-error">{error}</div> : null}
-        <div className="next-proposals-form__actions products-modal__actions">
-          <button type="button" className="products-btn products-btn--light" onClick={close} disabled={busy}>Cancel</button>
-          <button type="submit" className="products-btn products-btn--dark" disabled={busy || !teamMembers.length}>
-            <ProposalIcon name="shoppingBag" /><span>{busy ? "Creating…" : "Create Order"}</span>
-          </button>
-        </div>
-      </form>
-    </Modal>
-  );
-}
 
 export default function ProposalsClient({
   account,
@@ -1109,13 +338,14 @@ export default function ProposalsClient({
   initialProposals,
   initialKits,
   initialKitFolders,
-  initialMembers,
 }) {
+  const can = (action) => featureAllowed(account, `proposals.${action}`);
   const [products, setProducts] = useState(() => (Array.isArray(initialCatalog?.products) ? initialCatalog.products : []).map(normalizeProduct));
   const [proposals, setProposals] = useState(() => (Array.isArray(initialProposals?.proposals) ? initialProposals.proposals : []).map(normalizeProposal));
   const [kits, setKits] = useState(() => (Array.isArray(initialKits?.kits) ? initialKits.kits : []).map(normalizeKit));
   const [kitFolders, setKitFolders] = useState(() => (Array.isArray(initialKitFolders?.folders) ? initialKitFolders.folders : []).map(normalizeKitFolder));
-  const [members, setMembers] = useState(() => normalizeUsersCenterMembers(initialMembers));
+  const [members, setMembers] = useState([]);
+  const [membersLoading, setMembersLoading] = useState(false);
   const [activeDetail, setActiveDetail] = useState(null);
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState("updated-desc");
@@ -1139,6 +369,7 @@ export default function ProposalsClient({
   const [passwordRequest, setPasswordRequest] = useState(null);
   const [addDialog, setAddDialog] = useState(false);
   const [makeOrderOpen, setMakeOrderOpen] = useState(false);
+  const [sourceKitManagerOpen, setSourceKitManagerOpen] = useState(false);
   const [folderMenu, setFolderMenu] = useState("");
   const folderLongPressTimerRef = useRef(null);
   const folderLongPressStartRef = useRef(null);
@@ -1451,17 +682,15 @@ export default function ProposalsClient({
   const refreshFolders = async () => {
     setBusy(true);
     try {
-      const [proposalBody, kitBody, kitFolderBody, memberBody, productBody] = await Promise.all([
-        requestJson(`/next/api/products/proposals?_ts=${Date.now()}`),
-        requestJson(`/next/api/products/kits?_ts=${Date.now()}`),
-        requestJson(`/next/api/products/kit-folders?_ts=${Date.now()}`),
-        requestJson(`/api/user-access/team-members?_fresh=1&_ts=${Date.now()}`),
-        requestJson(`/next/api/products?_ts=${Date.now()}`),
+      const [proposalBody, kitBody, kitFolderBody, productBody] = await Promise.all([
+        requestJson(`/next/api/products/proposals?_fresh=1&_ts=${Date.now()}`),
+        requestJson(`/next/api/products/kits?_fresh=1&_ts=${Date.now()}`),
+        requestJson(`/next/api/products/kit-folders?_fresh=1&_ts=${Date.now()}`),
+        requestJson(`/next/api/products?_fresh=1&_ts=${Date.now()}`),
       ]);
       setProposals((proposalBody.proposals || []).map(normalizeProposal));
       setKits((kitBody.kits || []).map(normalizeKit));
       setKitFolders((kitFolderBody.folders || []).map(normalizeKitFolder));
-      setMembers(normalizeUsersCenterMembers(memberBody));
       setProducts((productBody.products || []).map(normalizeProduct));
       if (activeDetail?.proposal?.id) await loadProposal(activeDetail.proposal.id);
       notify("Proposal data has been refreshed.");
@@ -1506,6 +735,7 @@ export default function ProposalsClient({
     setDraftErrors({ name: "", items: "" });
     setAddDialog(false);
     setMakeOrderOpen(false);
+    setSourceKitManagerOpen(false);
   };
 
   const startCreateProposal = async () => {
@@ -1703,7 +933,7 @@ export default function ProposalsClient({
         syncProposal(body.proposal);
         notify("Proposal name updated.");
       } else if (dialog.mode === "combine") {
-        const body = await requestJson("/api/products/proposals/combine/save", {
+        const body = await requestJson("/next/api/products/proposals/combine/save", {
           method: "POST",
           body: JSON.stringify({ name, proposalIds: selectedIds, combineLogic }),
         });
@@ -1849,7 +1079,7 @@ export default function ProposalsClient({
       if (mode === "kit") {
         let body = null;
         for (const entry of selections) {
-          body = await requestJson(`/api/products/proposals/${encodeURIComponent(proposal.id)}/items/by-kit`, {
+          body = await requestJson(`/next/api/products/proposals/items-by-kit?id=${encodeURIComponent(proposal.id)}`, {
             method: "POST",
             body: JSON.stringify({
               kitId: entry.selected,
@@ -1878,6 +1108,54 @@ export default function ProposalsClient({
     } catch (error) {
       if (loadingStarted) await finishActionLoading("failed", error?.message || "The components could not be added.");
       throw error;
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const removeWholeSourceKit = async (kit) => {
+    if (!(detailEdit || activeDetail?.proposal?.canEdit) || !kit?.id || !kit.canRemove || busy) return;
+    const proposal = activeDetail?.proposal;
+    const confirmed = await confirmDelete({
+      itemName: kit.name,
+      itemType: "source kit",
+      title: "Remove source kit?",
+      message: `Remove “${kit.name}” from this proposal? ${kit.components} component${kit.components === 1 ? "" : "s"} will be adjusted, subtracting ${formatNumber(kit.totalQuantity)} total units. Shared components will keep quantities belonging to other kits. The original saved kit will not be deleted.`,
+      confirmLabel: "Remove Kit",
+    });
+    if (!confirmed) return;
+    if (createMode) {
+      try {
+        // Calculate the entire next draft before committing any state change.
+        const nextItems = removeSourceKitFromDraft(activeDetail?.items || [], kit.id);
+        setActiveDetail((current) => current ? { ...current, items: nextItems } : current);
+        notify(`“${kit.name}” removed from the draft.`);
+      } catch (error) {
+        notify(error?.message || "The kit could not be removed.", "error");
+      }
+      return;
+    }
+    const adminPassword = editAdminPassword || await protectedPassword(proposal, "Enter the Admin password to remove a source kit from this proposal.");
+    if (adminPassword === null) return;
+    if (adminPassword && !editAdminPassword) setEditAdminPassword(adminPassword);
+    setBusy(true);
+    startActionLoading({ title: "Removing source kit", message: `Recalculating quantities for “${kit.name}”…` });
+    try {
+      const pendingName = editName;
+      const result = await requestJson("/next/api/products/proposals/remove-source-kit", {
+        method: "POST",
+        body: JSON.stringify({
+          proposalId: proposal.id, kitId: kit.id, expectedComponents: kit.components,
+          expectedQuantity: kit.totalQuantity, adminPassword,
+        }),
+      });
+      syncDetail(result);
+      setEditName(pendingName);
+      notify(`“${kit.name}” removed. Remaining quantities have been updated.`);
+      await finishActionLoading("done", `Source kit “${kit.name}” removed successfully.`);
+    } catch (error) {
+      await finishActionLoading("failed", error?.message || "Could not remove source kit.");
+      notify(error?.message || "Could not remove source kit.", "error");
     } finally {
       setBusy(false);
     }
@@ -1957,9 +1235,11 @@ export default function ProposalsClient({
     setDownloadMenuOpen(false);
     setSortMenuOpen(false);
     setMakeOrderOpen(true);
-    requestJson(`/api/user-access/team-members?_fresh=1&_ts=${Date.now()}`)
+    setMembersLoading(true);
+    requestJson(`/next/api/team-members?_fresh=1&_ts=${Date.now()}`)
       .then((body) => setMembers(normalizeUsersCenterMembers(body)))
-      .catch((error) => notify(error?.message || "Users Center members could not be refreshed.", "error"));
+      .catch((error) => notify(error?.message || "Users Center members could not be refreshed.", "error"))
+      .finally(() => setMembersLoading(false));
   };
 
   const makeOrder = async ({ teamMemberId, adminPassword }) => {
@@ -1968,7 +1248,7 @@ export default function ProposalsClient({
     setBusy(true);
     startActionLoading({ title: "Creating order", message: "Creating a normal order from the proposal components…" });
     try {
-      const body = await requestJson(`/next/api/products/proposals/${encodeURIComponent(proposal.id)}/make-order`, {
+      const body = await requestJson(`/next/api/products/proposals/make-order?id=${encodeURIComponent(proposal.id)}`, {
         method: "POST",
         body: JSON.stringify({ teamMemberId, adminPassword }),
       });
@@ -1995,7 +1275,7 @@ export default function ProposalsClient({
     if (!activeDetail?.proposal?.id) return;
     const columns = exportColumns.length ? exportColumns.join(",") : EXPORT_COLUMNS.map(([key]) => key).join(",");
     const params = new URLSearchParams({ columns, groupBy, repeatedComponents: repeatedComponentMode });
-    openDownload(`/api/products/proposals/${encodeURIComponent(activeDetail.proposal.id)}/${type}?${params.toString()}`);
+    openDownload(`/next/api/products/export-direct?scope=proposal&id=${encodeURIComponent(activeDetail.proposal.id)}&kind=${encodeURIComponent(type)}&${params.toString()}`);
     setDownloadMenuOpen(false);
   };
 
@@ -2009,7 +1289,7 @@ export default function ProposalsClient({
       groupBy,
       repeatedComponents: repeatedComponentMode,
     });
-    openDownload(`/api/products/proposals/combine/${type}?${params.toString()}`);
+    openDownload(`/next/api/products/export-direct?scope=combined&kind=${encodeURIComponent(type)}&${params.toString()}`);
   };
 
   const toggleExportColumn = (key) => {
@@ -2057,7 +1337,7 @@ export default function ProposalsClient({
         <div className="kit-component-card__metrics proposal-component-card__metrics">
           <div className="kit-component-card__metric kit-component-card__metric--qty">
             <span>{sourceQuantities.length ? "Total Qty" : "Qty"}</span>
-            {detailEdit ? (
+            {detailEdit && (createMode || can("item_edit")) ? (
               <input
                 className="proposal-item-qty kit-component-card__qty-input"
                 type="number"
@@ -2090,7 +1370,7 @@ export default function ProposalsClient({
               <span aria-hidden="true">—</span><span>No link</span>
             </span>
           )}
-          {detailEdit ? (
+          {detailEdit && (createMode || can("item_delete")) ? (
             <button type="button" className="kit-component-card__action kit-component-card__action--remove" onClick={() => removeItem(row)} aria-label={`Remove ${row.name}`}>
               <span aria-hidden="true">×</span><span>Remove</span>
             </button>
@@ -2106,7 +1386,7 @@ export default function ProposalsClient({
       <main className="products-shell proposals-shell next-proposals-classic-parity">
         <Toast toast={toast} onClose={() => setToast(null)} />
         <SaveProgressModal state={saveProgress} />
-        <ActionLoadingModal state={actionLoading} />
+        <ActionLoadingModal state={actionLoading} zIndex={13000} />
         {downloadMenuOpen ? (
           <ProposalDownloadModal
             columns={exportColumns}
@@ -2117,10 +1397,22 @@ export default function ProposalsClient({
             onClose={() => setDownloadMenuOpen(false)}
           />
         ) : null}
+        {sourceKitManagerOpen && activeDetail ? (
+          <ProposalSourceKitsModal
+            items={activeDetail.items || []}
+            kits={kits}
+            folders={kitFolders}
+            editable={detailEdit || Boolean(proposal?.canEdit)}
+            busy={busy}
+            onClose={() => setSourceKitManagerOpen(false)}
+            onRemove={removeWholeSourceKit}
+          />
+        ) : null}
         {makeOrderOpen && proposal ? (
           <MakeOrderModal
             proposal={proposal}
             members={members}
+            membersLoading={membersLoading}
             busy={busy}
             onClose={() => setMakeOrderOpen(false)}
             onSubmit={makeOrder}
@@ -2142,6 +1434,7 @@ export default function ProposalsClient({
                         <button type="button" className="products-back-btn" onClick={backToProposals} aria-label="Back to proposals">←</button>
                         <span>Create New Proposal</span>
                       </div>
+                      {(createMode || can("item_delete")) ? <button type="button" className="products-btn proposal-manage-kits-btn" onClick={() => setSourceKitManagerOpen(true)}><ProposalIcon name="folder" /><span>Manage Kits</span></button> : null}
                     </header>
                   ) : (
                     <header className="products-proposal-detail__head proposal-detail-head--compact">
@@ -2152,6 +1445,9 @@ export default function ProposalsClient({
                             <ProposalIcon name="download" /><span>Download</span><ProposalIcon name="chevronDown" size={15} />
                           </button>
                         </div>
+                        {can("item_delete") ? <button type="button" className="products-btn proposal-manage-kits-btn" onClick={() => { setSourceKitManagerOpen(true); setSortMenuOpen(false); setDownloadMenuOpen(false); }}>
+                          <ProposalIcon name="folder" /><span>Manage Kits</span>
+                        </button> : null}
                         <div className="proposal-sort-menu-wrap">
                           <button type="button" className="products-btn proposal-sort-btn" onClick={() => { setSortMenuOpen((open) => !open); setDownloadMenuOpen(false); }}>
                             <ProposalIcon name="sort" /><span>Sort</span><ProposalIcon name="chevronDown" size={15} />
@@ -2169,7 +1465,7 @@ export default function ProposalsClient({
                             </div>
                           ) : null}
                         </div>
-                        <button type="button" className="products-btn products-btn--dark proposal-make-order-btn" onClick={openMakeOrder} disabled={!enrichedRows.length}><ProposalIcon name="shoppingBag" /><span>Make order</span></button>
+                        {can("make_order") ? <button type="button" className="products-btn products-btn--dark proposal-make-order-btn" onClick={openMakeOrder} disabled={!enrichedRows.length}><ProposalIcon name="shoppingBag" /><span>Make order</span></button> : null}
                       </div>
                     </header>
                   )}
@@ -2195,6 +1491,7 @@ export default function ProposalsClient({
                           <span>Proposal name <em>*</em></span>
                           <input
                             value={editName}
+                            disabled={!createMode && !can("edit")}
                             onChange={(event) => {
                               setEditName(event.target.value);
                               setDraftErrors((current) => ({ ...current, name: "" }));
@@ -2208,12 +1505,12 @@ export default function ProposalsClient({
 
                       <div className="products-proposal-tools proposals-one-tool">
                         <div className="products-proposal-tool-card proposal-add-components-tool-card">
-                          <button type="button" className="products-proposal-tool-title proposal-add-components-launch" onClick={() => setAddDialog(true)}>
+                          {(createMode || can("item_add")) ? <button type="button" className="products-proposal-tool-title proposal-add-components-launch" onClick={() => setAddDialog(true)}>
                             <span aria-hidden="true">＋</span><span>Add proposal components</span>
-                          </button>
+                          </button> : null}
                           {!createMode ? (
                             <div className="proposal-classic-inline-actions proposal-classic-inline-actions--delete-only">
-                              <button type="button" className="products-btn next-proposals-classic-danger" onClick={() => deleteProposal(proposal)}>Delete Proposal</button>
+                              {can("delete") ? <button type="button" className="products-btn next-proposals-classic-danger" onClick={() => deleteProposal(proposal)}>Delete Proposal</button> : null}
                             </div>
                           ) : null}
                         </div>
@@ -2279,9 +1576,9 @@ export default function ProposalsClient({
                   {detailEdit ? (
                     <div className={`direct-create-save-footer proposal-create-save-footer ${createMode ? "direct-create-save-footer--create" : "direct-create-save-footer--edit"}`}>
                       <button type="button" className="products-btn products-btn--light direct-create-cancel-btn" onClick={backToProposals} disabled={busy}>Cancel</button>
-                      <button type="button" className="products-btn products-btn--dark direct-create-save-btn" onClick={saveProposal} disabled={busy}>
+                      {(createMode || can("edit")) ? <button type="button" className="products-btn products-btn--dark direct-create-save-btn" onClick={saveProposal} disabled={busy}>
                         <span>{busy ? "Saving…" : createMode ? "Save" : "Save Changes"}</span>
-                      </button>
+                      </button> : null}
                     </div>
                   ) : null}
 
@@ -2291,7 +1588,7 @@ export default function ProposalsClient({
           </section>
         </section>
 
-        {addDialog && proposal ? <AddItemsModal proposal={proposal} products={products} kits={kits} kitFolders={kitFolders} tags={tags} busy={busy} onClose={() => setAddDialog(false)} onSubmit={submitAdd} /> : null}
+        {addDialog && proposal && (createMode || can("item_add")) ? <AddItemsModal proposal={proposal} products={products} kits={kits} kitFolders={kitFolders} tags={tags} busy={busy} onClose={() => setAddDialog(false)} onSubmit={submitAdd} /> : null}
 
         {nameDialog ? <NameModal key={`${nameDialog.mode}-${nameDialog.proposal?.id || "new"}`} dialog={nameDialog} busy={busy} onClose={() => setNameDialog(null)} onSubmit={submitNameDialog} /> : null}
         {passwordRequest ? <PasswordModal request={passwordRequest} busy={busy} onClose={closePassword} onVerified={verifyPassword} /> : null}
@@ -2304,8 +1601,8 @@ export default function ProposalsClient({
       <Toast toast={toast} onClose={() => setToast(null)} />
 
       <div className="proposals-floating-actions">
-        <button type="button" className="products-btn products-btn--light proposal-classic-combine-btn" onClick={() => setCombineOpen(true)} disabled={proposals.length < 2}>Combine Proposals</button>
-        <button type="button" className="products-add-btn proposals-create-btn" onClick={startCreateProposal}><span aria-hidden="true">＋</span><span>Create New Proposal</span></button>
+        {can("combine") ? <button type="button" className="products-btn products-btn--light proposal-classic-combine-btn" onClick={() => setCombineOpen(true)} disabled={proposals.length < 2}>Combine Proposals</button> : null}
+        {can("create") ? <button type="button" className="products-add-btn proposals-create-btn" onClick={startCreateProposal}><span aria-hidden="true">＋</span><span>Create New Proposal</span></button> : null}
       </div>
 
 
@@ -2318,11 +1615,11 @@ export default function ProposalsClient({
                   const menuOpen = folderMenu === proposal.id;
                   return (
                   <article className={`products-proposal-folder ${menuOpen ? "is-menu-open" : ""}`} key={proposal.id}>
-                    {menuOpen ? (
+                    {menuOpen && (can("edit") || can("copy") || can("delete") || can("item_add") || can("item_edit") || can("item_delete")) ? (
                       <div className="proposal-folder-menu" onClick={(event) => event.stopPropagation()}>
-                        <button type="button" onClick={() => enterEditProposal(proposal)}><ProposalIcon name="edit" /><span>Edit</span></button>
-                        <button type="button" onClick={() => { setFolderMenu(""); setNameDialog({ mode: "copy", proposal, value: `${proposal.name} Copy` }); }}><ProposalIcon name="copy" /><span>Make a copy</span></button>
-                        <button type="button" className="is-danger" onClick={() => { setFolderMenu(""); deleteProposal(proposal); }}><ProposalIcon name="trash" /><span>Delete</span></button>
+                        {(can("edit") || can("item_add") || can("item_edit") || can("item_delete")) ? <button type="button" onClick={() => enterEditProposal(proposal)}><ProposalIcon name="edit" /><span>Edit</span></button> : null}
+                        {can("copy") ? <button type="button" onClick={() => { setFolderMenu(""); setNameDialog({ mode: "copy", proposal, value: `${proposal.name} Copy` }); }}><ProposalIcon name="copy" /><span>Make a copy</span></button> : null}
+                        {can("delete") ? <button type="button" className="is-danger" onClick={() => { setFolderMenu(""); deleteProposal(proposal); }}><ProposalIcon name="trash" /><span>Delete</span></button> : null}
                       </div>
                     ) : null}
                     <button

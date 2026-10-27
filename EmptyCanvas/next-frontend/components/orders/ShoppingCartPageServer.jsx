@@ -1,0 +1,134 @@
+import { redirect } from "next/navigation";
+import AppShell from "../AppShell";
+import ShoppingCartClient from "./ShoppingCartClient";
+import { getLegacyAccountGate } from "../../lib/products-auth";
+import { getDirectAccountGateFromSessionContext } from "../../lib/direct-session-account";
+import { featureGate } from "../../lib/feature-permissions-server";
+import { featureAllowed } from "../../lib/feature-permissions-registry";
+import { loadShoppingCartInitialData } from "../../lib/shopping-cart-data";
+
+function StateCard({ title, message, publicPath, retry = false }) {
+  return (
+    <main className="standalone-state">
+      <section className="state-card">
+        <span className="status-dot warning" />
+        <h1>{title}</h1>
+        <p>{message}</p>
+        <div className="actions">
+          {retry ? <a className="primary-button" href={publicPath}>Try again</a> : null}
+          <a className={retry ? "secondary-button" : "primary-button"} href="/next/home">Return to Home</a>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+export default async function ShoppingCartPageServer({
+  searchParams,
+  flow,
+  initialType,
+  title,
+}) {
+  const query = await Promise.resolve(searchParams);
+  const editMode = String(query?.edit || "") === "1";
+  const editKey = String(query?.editKey || "").trim();
+  const publicPath = `/next/orders/new/${flow}`;
+  const loginParams = new URLSearchParams();
+  if (editMode) loginParams.set("edit", "1");
+  if (editKey) loginParams.set("editKey", editKey);
+  const loginNext = `${publicPath}${loginParams.toString() ? `?${loginParams.toString()}` : ""}`;
+
+  const sessionGate = await getLegacyAccountGate([], { authOnly: true });
+  if (!sessionGate.ok && sessionGate.status === 401) redirect(`/login?next=${encodeURIComponent(loginNext)}`);
+  if (!sessionGate.ok || !sessionGate.account) {
+    return (
+      <StateCard
+        title="The new Shopping Cart could not load"
+        message={sessionGate.error || "The authentication service is temporarily unavailable."}
+        publicPath={publicPath}
+        retry
+      />
+    );
+  }
+
+  const [gate, initialResult] = await Promise.all([
+    getDirectAccountGateFromSessionContext(sessionGate, ["Create New Order"]).then(gate => featureGate(gate, "orders.shopping.view")),
+    loadShoppingCartInitialData()
+      .then((initial) => ({ initial, error: null }))
+      .catch((error) => ({ initial: null, error })),
+  ]);
+
+  if (!gate) {
+    return (
+      <StateCard
+        title="The new Shopping Cart could not load"
+        message="The account permission service is temporarily unavailable."
+        publicPath={publicPath}
+        retry
+      />
+    );
+  }
+  if (!gate.ok && gate.status === 403) {
+    return (
+      <StateCard
+        title="Shopping Cart is not available"
+        message="Your account does not have access to Create New Order."
+        publicPath={publicPath}
+      />
+    );
+  }
+  if (!gate.ok || !gate.account) {
+    return (
+      <StateCard
+        title="The new Shopping Cart could not load"
+        message={gate.error || "The authentication service is temporarily unavailable."}
+        publicPath={publicPath}
+        retry
+      />
+    );
+  }
+
+  const draftScope = String(
+    gate.account?.teamMemberId ||
+    gate.account?.userSupabaseId ||
+    gate.account?.userId ||
+    gate.account?.id ||
+    gate.account?.username ||
+    "account"
+  ).trim() || "account";
+
+  const initial = initialResult?.initial;
+  if (!initial) {
+    return (
+      <StateCard
+        title="The new Shopping Cart could not load"
+        message={initialResult?.error?.message || "The product catalog is temporarily unavailable."}
+        publicPath={publicPath}
+        retry
+      />
+    );
+  }
+
+  return (
+    <AppShell
+      account={gate.account}
+      title={title}
+      eyebrow="Create, withdraw, or maintain products"
+      activePath={publicPath}
+      bodyClass="shopping-cart-page"
+    >
+      <ShoppingCartClient
+        key={`${flow}:${editMode ? "edit" : "new"}:${editKey}`}
+        permissions={Object.fromEntries(["view", "submit", "edit_submit", "undo"].map(action => [action, featureAllowed(gate.account, `orders.shopping.${action}`)]))}
+        initialOrderTypes={initial.orderTypes}
+        initialComponents={initial.components}
+        initialDraft={null}
+        initialType={initialType}
+        editMode={editMode}
+        editKey={editKey}
+        draftScope={draftScope}
+        bootstrapWarnings={[]}
+      />
+    </AppShell>
+  );
+}

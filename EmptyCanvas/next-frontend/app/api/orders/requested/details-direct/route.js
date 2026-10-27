@@ -1,0 +1,77 @@
+import { NextResponse } from "next/server";
+import { performance } from "node:perf_hooks";
+import { getLegacyAccountGate } from "../../../../../lib/products-auth";
+import { featureGate } from "../../../../../lib/feature-permissions-server";
+import { featureAllowed } from "../../../../../lib/feature-permissions-registry";
+import { hideOrderReceiptFiles } from "../../../../../lib/order-receipt-visibility.mjs";
+import { assertOrderIdsInScope } from "../../../../../lib/order-data-scope";
+import { loadOperationsOrderDetails } from "../../../../../lib/operations-orders-data";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+function noStore(payload, init = {}) {
+  return NextResponse.json(payload, {
+    ...init,
+    headers: {
+      "Cache-Control": "private, no-store",
+      ...(init.headers || {}),
+    },
+  });
+}
+
+function cleanIds(body = {}) {
+  return [...new Set((Array.isArray(body?.orderIds) ? body.orderIds : [])
+    .map((id) => String(id || "").trim())
+    .filter(Boolean))]
+    .slice(0, 500);
+}
+
+export async function POST(request) {
+  const body = await request.json().catch(() => ({}));
+  const orderIds = cleanIds(body);
+  if (!orderIds.length) return noStore({ error: "orderIds required" }, { status: 400 });
+
+  const authStartedAt = performance.now();
+  const authStages = {};
+  const gate = featureGate(featureGate(await getLegacyAccountGate(["Requested Orders", "Operations Orders"], { timings: authStages }), "orders.operations.view"), "orders.operations.details");
+  const authMs = performance.now() - authStartedAt;
+  // Expose stage timings to browser DevTools without sending order payloads
+  // into logs or affecting private/no-store response semantics.
+  const timing = (detailsMs = 0, stages = {}) => {
+    const parts = [`auth;dur=${authMs.toFixed(1)}`, `details;dur=${detailsMs.toFixed(1)}`];
+    for (const name of ["authStore", "authRevocation", "authSession", "authMember", "authPages", "authAccess", "authPermissions", "authWait"]) {
+      if (Number.isFinite(authStages[name])) parts.push(`${name};dur=${authStages[name].toFixed(1)}`);
+    }
+    // Opt-in breakdown in DevTools; timings contain durations only, never data.
+    for (const name of ["db", "bundle", "bundleHeaders", "bundleBody", "bundleParse", "bundleCompact", "bundleCompactFallback", "bundleUnpack", "bundleDbPack", "bundleDbRows", "bundleDbProposalHeaders", "bundleDbProductsId", "bundleDbProductsName", "bundleDbKitItems", "bundleDbKits", "bundleDbFolders", "bundleDbProposalItems", "bundleProposalScanSkipped", "fastPath", "bundleInvalid", "bundleError", "bundleErrorStatus", "bundleProductMiss", "bundleKitOrphans", "bundleProposalRecovery", "bundleProposalEmpty", "bundleProposalFullOnly", "bundleProposalNoMatch", "bundleProposalComplete", "proposalConfirmedEmpty", "proposalUnresolved", "proposalRecovered", "proposalFallbackTags", "kitHeaders", "kitItems", "kitFullSnapshot", "kitTargetFailed", "kitTargetStatus", "visibility", "prepare", "enrich", "proposal", "proposalNames", "proposalItems", "proposalFallback", "products", "kits", "folders", "grouping"]) {
+      if (Number.isFinite(stages[name])) parts.push(`${name};dur=${stages[name].toFixed(1)}`);
+    }
+    return {
+      "Server-Timing": parts.join(", "),
+      // Only a byte count and deployment region: no private order content.
+      ...(Number.isFinite(stages.bundlePayloadBytes)
+        ? { "X-Orders-Bundle-Bytes": String(Math.max(0, Math.round(stages.bundlePayloadBytes))) } : {}),
+      ...(Number.isFinite(stages.bundleDeclaredBytes)
+        ? { "X-Orders-Bundle-Declared-Bytes": String(Math.max(0, Math.round(stages.bundleDeclaredBytes))) } : {}),
+      ...(stages.bundleEncoding
+        ? { "X-Orders-Bundle-Encoding": stages.bundleEncoding } : {}),
+      ...(process.env.VERCEL_REGION ? { "X-Orders-Server-Region": process.env.VERCEL_REGION } : {}),
+    };
+  };
+  if (!gate.ok) return noStore({ error: gate.error || "Authentication required." }, { status: gate.status || 503, headers: timing() });
+
+  const detailsStartedAt = performance.now();
+  const stages = {};
+  try {
+    await assertOrderIdsInScope(gate.account, "orders.operations.details", orderIds);
+    const items = await loadOperationsOrderDetails(orderIds, { timings: stages });
+    if (Array.isArray(items)) return noStore(hideOrderReceiptFiles(items, featureAllowed(gate.account, "orders.documents.view_receipts")), { headers: timing(performance.now() - detailsStartedAt, stages) });
+    return noStore({ error: "Operations Orders direct Supabase data is unavailable." }, { status: 503, headers: timing(performance.now() - detailsStartedAt, stages) });
+  } catch (error) {
+    return noStore(
+      { error: error?.message || "Failed to load order details from Supabase." },
+      { status: Number(error?.status) || 502, headers: timing(performance.now() - detailsStartedAt, stages) },
+    );
+  }
+}

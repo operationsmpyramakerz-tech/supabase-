@@ -64,7 +64,7 @@ export default function OrderReceiptViewerClient({ ids, initialPayload, canExpen
     if (busy) return;
     setBusy(true); setError("");
     try {
-      const payload = await requestJson(`/api/orders/order-receipts?ids=${encodeURIComponent(ids)}`);
+      const payload = await requestJson(`/next/api/orders/order-receipts?ids=${encodeURIComponent(ids)}&_fresh=1`);
       setItems(Array.isArray(payload?.items) ? payload.items : []);
       notify("Receipt files refreshed.");
     } catch (refreshError) {

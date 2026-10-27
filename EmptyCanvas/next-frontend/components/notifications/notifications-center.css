@@ -1,0 +1,1464 @@
+/* Phase 4 compact notification center. Scoped overrides: the existing topbar,
+   dock, sidebar and bell keep their global styles. */
+.next-notifications-page.next-notifications-v4{gap:14px;padding-bottom:32px}
+.next-notifications-v4 .next-notifications-hero{min-height:0;padding:18px 21px;gap:14px;border-radius:19px;background:#111827;box-shadow:none}
+.next-notifications-v4 .next-notifications-hero h2{font-size:22px;margin:4px 0;letter-spacing:-.025em}
+.next-notifications-v4 .next-notifications-hero p{font-size:11px;line-height:1.5}
+.next-notifications-v4 .next-notifications-hero>div>span{font-size:9px;color:#fcb685}
+.next-notifications-v4 .next-notifications-hero__actions{display:flex;min-width:0;flex-wrap:wrap;gap:7px}
+.next-notifications-v4 .next-notifications-hero__actions button{min-height:34px;background:#f97316;border-color:#f97316;border-radius:10px;font-size:10px;padding:0 12px}
+.next-notifications-v4 .next-notifications-hero__actions button.is-secondary{background:rgba(255,255,255,.09);border-color:rgba(255,255,255,.22)}
+.next-notifications-v4 .next-notifications-stats{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.next-notifications-v4 .next-notifications-stat{min-height:72px;padding:12px 14px;gap:3px;border-radius:15px;box-shadow:none}
+.next-notifications-v4 .next-notifications-stat strong{font-size:22px}
+.next-notifications-v4 .next-notifications-stat small{font-size:9px}
+.next-notifications-v4 .next-notifications-workspace{border-radius:19px;box-shadow:none}
+.next-notifications-v4 .next-notifications-workspace>header{padding:13px 15px}
+.next-notifications-v4 .next-notifications-workspace>header h2{font-size:15px}
+.next-notifications-v4 .next-notifications-tabs{padding:10px 12px;gap:6px;scrollbar-width:none}
+.next-notifications-v4 .next-notifications-tabs::-webkit-scrollbar{display:none}
+.next-notifications-v4 .next-notifications-tabs button{font-size:10px;min-height:32px;padding:0 10px}
+.next-notifications-v4 .next-notifications-tabs button.is-active{background:#111827;border-color:#111827;color:#fff}
+.next-notifications-v4 .next-notifications-tabs button.is-active b{background:#f97316}
+.next-notifications-v4 .next-notifications-toolbar{grid-template-columns:minmax(180px,1.5fr) repeat(3,minmax(110px,.7fr)) auto;gap:7px;padding:11px 12px}
+.next-notifications-v4 .next-notifications-toolbar input,.next-notifications-v4 .next-notifications-toolbar select,.next-notifications-v4 .next-notifications-toolbar>button{min-height:36px;font-size:10px}
+.next-notifications-v4 .next-notifications-group-settings{display:flex;align-items:center;justify-content:space-between;padding:10px 15px;font-size:10px;color:#667085;border-bottom:1px solid #edf0f4}
+.next-notifications-v4 .next-notifications-group-settings label{display:flex;align-items:center;gap:7px;cursor:pointer}
+.next-notifications-v4 .next-notifications-group-settings input{accent-color:#f97316}
+.next-notifications-v4 .next-notifications-row{padding:13px 14px;gap:11px}
+.next-notifications-v4 .next-notifications-row.is-unread{background:#fffaf5;box-shadow:inset 3px 0 #f97316}
+.next-notifications-v4 .next-notifications-row__main h3{font-size:12px}
+.next-notifications-v4 .next-notifications-row__main>div em.is-grouped{background:#f1f5f9;color:#475569}
+.next-notifications-v4 .next-notifications-row__side{min-width:110px}
+.next-notifications-v4 .next-notifications-row__side button.is-open{background:#fff7ed;border-color:#fed7aa;color:#c2410c}
+.next-notifications-v4 .next-notifications-group-children{display:grid;gap:5px;margin-top:6px}
+.next-notifications-v4 .next-notifications-group-children button{border:0;background:#f8fafc;color:#475569;border-radius:7px;padding:7px 9px;text-align:left;font-size:10px;cursor:pointer}
+.next-notifications-v4 .next-notifications-device{background:#fff;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden}
+.next-notifications-v4 .next-notifications-device>summary{padding:13px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:pointer;list-style:none;color:#344054;font-size:12px;font-weight:800}
+.next-notifications-v4 .next-notifications-device>summary::-webkit-details-marker{display:none}
+.next-notifications-v4 .next-notifications-device>summary:after{content:'+';font-size:20px;color:#f97316;order:3}
+.next-notifications-v4 .next-notifications-device[open]>summary:after{content:'−'}
+.next-notifications-v4 .next-notifications-device>summary small{font-size:9px;font-weight:500;color:#98a2b3}
+.next-notifications-v4 .next-notifications-device__body{border-top:1px solid #edf0f4;padding:12px;display:grid;gap:12px}
+.next-notifications-v4 .next-notifications-push{box-shadow:none}
+.next-notifications-v4 .next-notifications-device__links{display:flex;flex-wrap:wrap;gap:8px}
+.next-notifications-v4 .next-notifications-device__links button,.next-notifications-v4 .next-notifications-device__links a{background:#111827;border:1px solid #111827;border-radius:10px;color:#fff;text-decoration:none;min-height:35px;display:inline-flex;align-items:center;padding:0 13px;font:inherit;font-size:10px;font-weight:800;cursor:pointer}
+.next-notifications-v4 .next-notifications-device__links a{background:#fff;color:#374151;border-color:#e2e8f0}
+.next-notifications-v4__source{font-size:9px;color:#98a2b3;text-align:center}
+@media(max-width:1100px){.next-notifications-v4 .next-notifications-toolbar{grid-template-columns:repeat(4,minmax(0,1fr))}.next-notifications-v4 .next-notifications-search{grid-column:1/-1}}
+@media(max-width:760px){.next-notifications-v4 .next-notifications-hero{flex-direction:row;align-items:center}.next-notifications-v4 .next-notifications-hero__actions{width:auto}.next-notifications-v4 .next-notifications-toolbar{grid-template-columns:repeat(2,minmax(0,1fr))}.next-notifications-v4 .next-notifications-search{grid-column:1/-1}.next-notifications-v4 .next-notifications-hero__actions button{flex:none}}
+@media(max-width:520px){.next-notifications-v4 .next-notifications-hero{padding:15px;flex-direction:column;align-items:stretch}.next-notifications-v4 .next-notifications-hero__actions{display:flex;width:100%}.next-notifications-v4 .next-notifications-hero__actions button{flex:1}.next-notifications-v4 .next-notifications-stats{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}.next-notifications-v4 .next-notifications-stat{padding:10px 8px;min-height:68px}.next-notifications-v4 .next-notifications-stat small{display:none}.next-notifications-v4 .next-notifications-row{grid-template-columns:36px minmax(0,1fr);gap:9px}.next-notifications-v4 .next-notifications-row__side{grid-column:2;display:flex;align-items:center;justify-content:space-between;width:100%;gap:8px}.next-notifications-v4 .next-notifications-device>summary{flex-wrap:wrap}.next-notifications-v4 .next-notifications-device>summary small{width:100%;order:2}}
+
+/* Phase 5: private delivery history, collapsed by default on mobile. */
+.next-notifications-v4 .next-notifications-delivery__head{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.next-notifications-v4 .next-notifications-delivery__head p{margin:0;font-size:11px;line-height:1.6;color:#667085;max-width:680px}
+.next-notifications-v4 .next-notifications-delivery__head button{border:1px solid #e2e8f0;background:#fff;color:#344054;border-radius:10px;min-height:33px;padding:0 13px;white-space:nowrap;cursor:pointer;font-size:10px;font-weight:700}
+.next-notifications-v4 .next-notifications-delivery__head button:disabled{opacity:.55;cursor:wait}
+.next-notifications-v4 .next-notifications-delivery__counts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.next-notifications-v4 .next-notifications-delivery__counts>span{display:flex;flex-direction:column;gap:4px;padding:11px;background:#f8fafc;border:1px solid #eef2f6;border-radius:11px;color:#667085;font-size:10px}
+.next-notifications-v4 .next-notifications-delivery__counts strong{font-size:17px;color:#111827}
+.next-notifications-v4 .next-notifications-delivery__list{display:grid;gap:9px;max-height:570px;overflow-y:auto;scrollbar-width:none}
+.next-notifications-v4 .next-notifications-delivery__list::-webkit-scrollbar{display:none}
+.next-notifications-v4 .next-notifications-delivery__row{border:1px solid #e9edf3;border-radius:13px;padding:12px;display:grid;gap:12px;background:#fff}
+.next-notifications-v4 .next-notifications-delivery__title{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.next-notifications-v4 .next-notifications-delivery__title span{text-transform:capitalize;color:#f97316;font-size:9px;font-weight:800}
+.next-notifications-v4 .next-notifications-delivery__title h3{margin:3px 0 0;font-size:12px;color:#111827;font-weight:800}
+.next-notifications-v4 .next-notifications-delivery__title time{font-size:9px;color:#98a2b3;white-space:nowrap}
+.next-notifications-v4 .next-notifications-delivery__channels{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.next-notifications-v4 .next-notifications-delivery__channel{display:grid;gap:4px;background:#f8fafc;border:1px solid #f1f5f9;border-radius:9px;padding:9px;min-width:0}
+.next-notifications-v4 .next-notifications-delivery__channel strong{font-size:10px;color:#344054}
+.next-notifications-v4 .next-notifications-delivery__channel span{font-size:9px;color:#667085}
+.next-notifications-v4 .next-notifications-delivery__channel small{font-size:9px;color:#98a2b3;overflow-wrap:anywhere}
+.next-notifications-v4 .next-notifications-delivery__channel.is-accepted span,.next-notifications-v4 .next-notifications-delivery__channel.is-stored span{color:#118654}
+.next-notifications-v4 .next-notifications-delivery__channel.is-retrying span,.next-notifications-v4 .next-notifications-delivery__channel.is-queued span{color:#b96a0b}
+.next-notifications-v4 .next-notifications-delivery__channel.is-failed span{color:#b91c1c}
+.next-notifications-v4 .next-notifications-delivery__empty,.next-notifications-v4 .next-notifications-delivery__error{padding:14px;border:1px dashed #e2e8f0;border-radius:10px;color:#667085;font-size:11px;line-height:1.6;margin:0}
+.next-notifications-v4 .next-notifications-delivery__error{color:#b91c1c;border-color:#fecaca}
+.next-notifications-v4 .next-notifications-delivery__foot{margin:0;font-size:9px;color:#98a2b3;line-height:1.5}
+@media(max-width:520px){.next-notifications-v4 .next-notifications-delivery__head{align-items:flex-start;flex-direction:column}.next-notifications-v4 .next-notifications-delivery__counts{grid-template-columns:repeat(2,minmax(0,1fr))}.next-notifications-v4 .next-notifications-delivery__channels{gap:5px}.next-notifications-v4 .next-notifications-delivery__channel{padding:7px}.next-notifications-v4 .next-notifications-delivery__channel strong{font-size:9px}}
+
+/* Phase 6: keep group actions readable without overflowing mobile cards. */
+.next-notifications-v4 .next-notifications-row__side>div{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:5px}
+@media(max-width:520px){.next-notifications-v4 .next-notifications-row__side>div{justify-content:flex-start}}
+
+/* Global-app style notifications feed — 2026-10-09 */
+.next-notifications-appfeed{
+  width:min(860px,100%);
+  margin:0 auto;
+  padding:0 0 110px;
+  gap:0!important;
+  color:#111827;
+}
+.next-notifications-appfeed .next-notifications-commandbar{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+  padding:8px 4px 14px;
+}
+.next-notifications-commandbar__status{display:grid;gap:2px;min-width:0}
+.next-notifications-commandbar__status strong{font-size:13px;font-weight:900;color:#111827}
+.next-notifications-commandbar__status span{font-size:10px;font-weight:700;color:#98a2b3}
+.next-notifications-commandbar__actions{display:flex;align-items:center;gap:7px}
+.next-notifications-commandbar__actions button{
+  min-height:36px;
+  padding:0 12px;
+  border:1px solid #e5e7eb;
+  border-radius:999px;
+  background:#fff;
+  color:#344054;
+  font:inherit;
+  font-size:10px;
+  font-weight:850;
+  box-shadow:0 4px 12px rgba(15,23,42,.045);
+  cursor:pointer;
+}
+.next-notifications-commandbar__actions button.is-icon{width:36px;padding:0;font-size:18px;line-height:1}
+.next-notifications-commandbar__actions button:disabled{opacity:.42;cursor:default}
+.next-notifications-appfeed .next-notifications-warning{margin:0 0 10px;border-radius:14px}
+
+.next-notifications-searchrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:start;margin:0 0 10px}
+.next-notifications-appfeed .next-notifications-search{
+  position:relative;
+  display:flex;
+  align-items:center;
+  min-width:0;
+  height:42px;
+  border:1px solid #e7eaf0;
+  border-radius:14px;
+  background:#f7f8fa;
+  overflow:hidden;
+}
+.next-notifications-appfeed .next-notifications-search i{width:38px;display:grid;place-items:center;color:#98a2b3;font-style:normal;font-size:20px}
+.next-notifications-appfeed .next-notifications-search input{
+  width:100%;height:100%;border:0;outline:0;background:transparent;color:#111827;font:inherit;font-size:12px;font-weight:700;padding:0 6px 0 0;
+}
+.next-notifications-appfeed .next-notifications-search input::placeholder{color:#98a2b3;font-weight:650}
+.next-notifications-appfeed .next-notifications-search>button{width:38px;height:38px;border:0;background:transparent;color:#98a2b3;font-size:18px;cursor:pointer}
+.next-notifications-filter-popover{position:relative}
+.next-notifications-filter-popover>summary{
+  list-style:none;display:flex;align-items:center;justify-content:center;height:42px;padding:0 14px;border:1px solid #e7eaf0;border-radius:14px;background:#fff;color:#344054;font-size:11px;font-weight:850;cursor:pointer;box-shadow:0 4px 12px rgba(15,23,42,.035)
+}
+.next-notifications-filter-popover>summary::-webkit-details-marker{display:none}
+.next-notifications-filter-popover[open]>summary{background:#111827;color:#fff;border-color:#111827}
+.next-notifications-filter-popover__body{
+  position:absolute;z-index:40;right:0;top:48px;width:min(320px,calc(100vw - 28px));padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:9px;border:1px solid #e5e7eb;border-radius:16px;background:#fff;box-shadow:0 18px 50px rgba(15,23,42,.16)
+}
+.next-notifications-filter-popover__body label{display:grid;gap:5px;font-size:9px;font-weight:800;color:#667085}
+.next-notifications-filter-popover__body select{height:38px;border:1px solid #e5e7eb;border-radius:10px;background:#f8fafc;color:#344054;padding:0 10px;font:inherit;font-size:10px;font-weight:750}
+.next-notifications-filter-popover__body .next-notifications-group-toggle{grid-column:1/-1;display:flex;align-items:center;gap:8px;padding:4px 1px;font-size:10px}
+.next-notifications-filter-popover__body .next-notifications-group-toggle input{accent-color:#111827}
+.next-notifications-filter-popover__body>button{grid-column:1/-1;height:36px;border:0;border-radius:10px;background:#111827;color:#fff;font:inherit;font-size:10px;font-weight:850;cursor:pointer}
+
+.next-notifications-quickfilters{display:flex;align-items:center;gap:7px;margin:0 0 17px}
+.next-notifications-quickfilters button{display:inline-flex;align-items:center;gap:7px;min-height:34px;padding:0 12px;border:1px solid #e7eaf0;border-radius:999px;background:#fff;color:#667085;font:inherit;font-size:10px;font-weight:850;cursor:pointer}
+.next-notifications-quickfilters button b{display:grid;place-items:center;min-width:20px;height:20px;padding:0 5px;border-radius:999px;background:#f1f3f6;color:#667085;font-size:9px}
+.next-notifications-quickfilters button.is-active{background:#111827;border-color:#111827;color:#fff}
+.next-notifications-quickfilters button.is-active b{background:#fff;color:#111827}
+
+.next-notifications-feed{display:grid;gap:24px}
+.next-notifications-section{display:grid;gap:7px}
+.next-notifications-section__head{display:flex;align-items:center;justify-content:space-between;padding:0 4px}
+.next-notifications-section__head h2{margin:0;color:#111827;font-size:15px;line-height:1.2;font-weight:950;letter-spacing:-.02em}
+.next-notifications-section__head span{display:grid;place-items:center;min-width:25px;height:25px;padding:0 7px;border-radius:999px;background:#f3f4f6;color:#667085;font-size:9px;font-weight:900}
+.next-notifications-appfeed .next-notifications-list{display:grid;gap:0;border:0;border-radius:0;background:transparent;overflow:visible}
+.next-notifications-appfeed .next-notifications-row{
+  position:relative;display:grid;grid-template-columns:46px minmax(0,1fr) 30px;align-items:start;gap:11px;padding:12px 4px;border:0!important;border-bottom:1px solid #eef0f3!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;overflow:visible
+}
+.next-notifications-appfeed .next-notifications-row:last-child{border-bottom-color:transparent!important}
+.next-notifications-appfeed .next-notifications-row.is-unread{background:linear-gradient(90deg,rgba(249,115,22,.045),rgba(249,115,22,0) 48%)!important;box-shadow:none!important}
+.next-notifications-appfeed .next-notif-icon{
+  position:relative;width:44px;height:44px;min-width:44px;border:0;border-radius:50%;display:grid;place-items:center;background:#f2f4f7;color:#344054;font:inherit;font-size:10px;font-weight:950;box-shadow:none;cursor:pointer
+}
+.next-notifications-appfeed .next-notif-icon.is-order{background:#e7fbef;color:#147a49}
+.next-notifications-appfeed .next-notif-icon.is-maintenance{background:#fff5cf;color:#a55a0d}
+.next-notifications-appfeed .next-notif-icon.is-expense{background:#eef2ff;color:#4f46e5}
+.next-notifications-appfeed .next-notif-icon.is-stock{background:#ecfeff;color:#0f766e}
+.next-notifications-appfeed .next-notif-icon.is-task{background:#fff1e8;color:#c2410c}
+.next-notifications-appfeed .next-notif-icon.is-event{background:#f4edff;color:#7c3aed}
+.next-notifications-appfeed .next-notif-icon.is-test{background:#f3f4f6;color:#475569}
+.next-notifications-appfeed .next-notif-icon>i{position:absolute;right:-1px;bottom:0;width:12px;height:12px;border:2px solid #fff;border-radius:50%;background:#f97316}
+.next-notifications-appfeed .next-notifications-row__main{min-width:0;display:grid;gap:4px;padding-top:1px}
+.next-notifications-appfeed .next-notifications-row__main h3{display:flex;align-items:baseline;gap:7px;margin:0;min-width:0;color:#111827;font-size:12.5px;font-weight:900;line-height:1.35}
+.next-notifications-appfeed .next-notifications-row__main h3>button{min-width:0;padding:0;border:0;background:transparent;color:inherit;font:inherit;font-weight:inherit;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.next-notifications-appfeed .next-notifications-row__main h3 time{flex:0 0 auto;color:#a0a7b2;font-size:9px;font-weight:700}
+.next-notifications-appfeed .next-notifications-row__main>p{margin:0;color:#667085;font-size:11px;line-height:1.45;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.next-notifications-row__meta{display:flex;align-items:center;flex-wrap:wrap;gap:5px;margin-top:1px}
+.next-notifications-row__meta>span,.next-notifications-row__meta>button{min-height:22px;padding:0 7px;border:0;border-radius:999px;background:#f3f4f6;color:#667085;font:inherit;font-size:8.5px;font-weight:800}
+.next-notifications-row__meta>button{cursor:pointer}
+.next-notifications-appfeed .next-notifications-row__open{align-self:center;width:28px;height:28px;border:0;border-radius:50%;background:transparent;color:#a0a7b2;font-size:25px;font-weight:400;line-height:1;cursor:pointer}
+.next-notifications-appfeed .next-notifications-row__open:hover{background:#f3f4f6;color:#111827}
+.next-notifications-appfeed .next-notifications-group-children{margin-top:4px;display:flex;flex-wrap:wrap;gap:5px}
+.next-notifications-appfeed .next-notifications-group-children button{border:0;border-radius:999px;background:#f8fafc;color:#667085;padding:6px 8px;font-size:8.5px;font-weight:700;cursor:pointer}
+.next-notifications-appfeed .next-notifications-empty{margin-top:8px;border:1px dashed #e5e7eb;border-radius:18px;background:#fafafa;box-shadow:none}
+
+.next-notifications-appfeed .next-notifications-device{margin-top:18px;border:1px solid #e7eaf0;border-radius:16px;background:#fff;box-shadow:none}
+.next-notifications-appfeed .next-notifications-device>summary{padding:13px 15px;color:#344054}
+.next-notifications-appfeed .next-notifications-settings-card{margin-top:26px}
+.next-notifications-appfeed .next-notifications-v4__source{display:block;margin-top:12px;padding-bottom:8px;color:#a0a7b2;text-align:center}
+
+@media(max-width:620px){
+  .next-notifications-appfeed{width:100%;padding:0 15px 125px}
+  .next-notifications-appfeed .next-notifications-commandbar{padding:1px 0 12px}
+  .next-notifications-commandbar__actions button:not(.is-icon){min-width:104px}
+  .next-notifications-searchrow{margin-bottom:9px}
+  .next-notifications-filter-popover__body{position:fixed;top:auto;right:14px;left:14px;bottom:104px;width:auto;grid-template-columns:1fr 1fr}
+  .next-notifications-quickfilters{margin-bottom:18px}
+  .next-notifications-feed{gap:23px}
+  .next-notifications-section__head h2{font-size:15px}
+  .next-notifications-appfeed .next-notifications-row{grid-template-columns:44px minmax(0,1fr) 26px;gap:10px;padding:12px 2px}
+  .next-notifications-appfeed .next-notif-icon{width:42px;height:42px;min-width:42px}
+  .next-notifications-appfeed .next-notifications-row__main h3{font-size:12px}
+  .next-notifications-appfeed .next-notifications-row__main>p{font-size:10.5px}
+  .next-notifications-row__meta>span,.next-notifications-row__meta>button{font-size:8px}
+}
+
+@media(max-width:380px){
+  .next-notifications-commandbar__status span{display:none}
+  .next-notifications-commandbar__actions button:not(.is-icon){padding:0 10px;min-width:0}
+  .next-notifications-filter-popover>summary{padding:0 11px}
+}
+
+html[data-theme="dark"] .next-notifications-appfeed{color:#f8fafc}
+html[data-theme="dark"] .next-notifications-commandbar__status strong,
+html[data-theme="dark"] .next-notifications-section__head h2,
+html[data-theme="dark"] .next-notifications-appfeed .next-notifications-row__main h3{color:#f8fafc}
+html[data-theme="dark"] .next-notifications-commandbar__actions button,
+html[data-theme="dark"] .next-notifications-filter-popover>summary,
+html[data-theme="dark"] .next-notifications-quickfilters button,
+html[data-theme="dark"] .next-notifications-appfeed .next-notifications-device{background:#12161d;border-color:#2b313b;color:#d7deea}
+html[data-theme="dark"] .next-notifications-appfeed .next-notifications-search{background:#12161d;border-color:#2b313b}
+html[data-theme="dark"] .next-notifications-appfeed .next-notifications-search input{color:#f8fafc}
+html[data-theme="dark"] .next-notifications-filter-popover__body{background:#161b23;border-color:#2b313b}
+html[data-theme="dark"] .next-notifications-filter-popover__body select{background:#10141a;border-color:#303741;color:#e5e7eb}
+html[data-theme="dark"] .next-notifications-appfeed .next-notifications-row{border-bottom-color:#252b34!important}
+html[data-theme="dark"] .next-notifications-appfeed .next-notifications-row.is-unread{background:linear-gradient(90deg,rgba(249,115,22,.09),rgba(249,115,22,0) 48%)!important}
+html[data-theme="dark"] .next-notifications-appfeed .next-notifications-row__main>p,
+html[data-theme="dark"] .next-notifications-commandbar__status span{color:#aab3c2}
+html[data-theme="dark"] .next-notifications-row__meta>span,
+html[data-theme="dark"] .next-notifications-row__meta>button,
+html[data-theme="dark"] .next-notifications-section__head span{background:#20262f;color:#b8c1cf}
+html[data-theme="dark"] .next-notifications-appfeed .next-notifications-row__open:hover{background:#20262f;color:#fff}
+
+/* ==========================================================================
+   Notifications v5 — clean feed + colored icons + bottom-sheet filters
+   2026-10-09
+   ========================================================================== */
+body.notifications-filter-sheet-open{overflow:hidden!important}
+
+.next-notifications-appfeed{
+  width:min(780px,100%)!important;
+  margin:0 auto!important;
+  padding:0 18px 128px!important;
+}
+
+.next-notifications-appfeed .next-notifications-commandbar{
+  display:flex!important;
+  align-items:center!important;
+  justify-content:space-between!important;
+  gap:14px!important;
+  margin:0!important;
+  padding:8px 0 14px!important;
+}
+.next-notifications-commandbar__status{
+  display:flex!important;
+  flex-direction:column!important;
+  gap:3px!important;
+  min-width:0!important;
+}
+.next-notifications-commandbar__status strong{
+  color:#111827!important;
+  font-size:15px!important;
+  line-height:1.2!important;
+  font-weight:950!important;
+  letter-spacing:-.02em!important;
+}
+.next-notifications-commandbar__status span{
+  color:#98a2b3!important;
+  font-size:10.5px!important;
+  line-height:1.25!important;
+  font-weight:750!important;
+}
+.next-notifications-commandbar__actions{display:flex!important;align-items:center!important;gap:8px!important;flex:0 0 auto!important}
+.next-notifications-commandbar__actions button{
+  min-height:38px!important;
+  padding:0 14px!important;
+  border:1px solid #e7eaf0!important;
+  border-radius:13px!important;
+  background:#fff!important;
+  color:#344054!important;
+  font-size:10.5px!important;
+  font-weight:900!important;
+  box-shadow:0 5px 16px rgba(15,23,42,.045)!important;
+}
+.next-notifications-commandbar__actions button.is-icon{
+  width:40px!important;
+  min-width:40px!important;
+  padding:0!important;
+  border-radius:50%!important;
+  font-size:20px!important;
+}
+.next-notifications-commandbar__actions button:disabled{opacity:.36!important}
+
+.next-notifications-searchrow{
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr) auto!important;
+  align-items:center!important;
+  gap:9px!important;
+  margin:0 0 10px!important;
+}
+.next-notifications-appfeed .next-notifications-search{
+  position:relative!important;
+  display:grid!important;
+  grid-template-columns:42px minmax(0,1fr) 36px!important;
+  align-items:center!important;
+  min-width:0!important;
+  height:48px!important;
+  padding:0 5px 0 0!important;
+  border:1px solid #e7eaf0!important;
+  border-radius:16px!important;
+  background:#f7f8fa!important;
+  overflow:hidden!important;
+}
+.next-notifications-search__icon{
+  display:grid!important;
+  place-items:center!important;
+  width:42px!important;
+  height:100%!important;
+  color:#98a2b3!important;
+}
+.next-notifications-search__icon svg{width:19px!important;height:19px!important}
+.next-notifications-appfeed .next-notifications-search input{
+  min-width:0!important;
+  width:100%!important;
+  height:100%!important;
+  padding:0!important;
+  border:0!important;
+  outline:0!important;
+  background:transparent!important;
+  color:#111827!important;
+  font-size:12px!important;
+  font-weight:750!important;
+}
+.next-notifications-appfeed .next-notifications-search input::placeholder{color:#98a2b3!important;font-weight:700!important}
+.next-notifications-appfeed .next-notifications-search>button{
+  width:34px!important;
+  height:34px!important;
+  display:grid!important;
+  place-items:center!important;
+  border:0!important;
+  border-radius:10px!important;
+  background:transparent!important;
+  color:#98a2b3!important;
+  font-size:18px!important;
+}
+.next-notifications-search .sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
+
+.next-notifications-filter-button{
+  position:relative!important;
+  height:48px!important;
+  min-width:48px!important;
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  gap:8px!important;
+  padding:0 14px!important;
+  border:1px solid #e7eaf0!important;
+  border-radius:16px!important;
+  background:#fff!important;
+  color:#344054!important;
+  font:inherit!important;
+  font-size:10.5px!important;
+  font-weight:900!important;
+  box-shadow:0 5px 16px rgba(15,23,42,.04)!important;
+  cursor:pointer!important;
+}
+.next-notifications-filter-button svg{width:18px!important;height:18px!important}
+.next-notifications-filter-button b{
+  min-width:19px!important;
+  height:19px!important;
+  display:grid!important;
+  place-items:center!important;
+  padding:0 5px!important;
+  border-radius:999px!important;
+  background:#f97316!important;
+  color:#fff!important;
+  font-size:8px!important;
+}
+.next-notifications-filter-button.has-active{border-color:#fed7aa!important;background:#fffaf5!important;color:#c2410c!important}
+
+.next-notifications-quickfilters{
+  display:flex!important;
+  align-items:center!important;
+  gap:7px!important;
+  margin:0 0 22px!important;
+}
+.next-notifications-quickfilters button{
+  min-height:36px!important;
+  padding:0 13px!important;
+  border:1px solid #e7eaf0!important;
+  border-radius:999px!important;
+  background:#fff!important;
+  color:#667085!important;
+  font-size:10px!important;
+  font-weight:900!important;
+}
+.next-notifications-quickfilters button.is-active{border-color:#111827!important;background:#111827!important;color:#fff!important}
+.next-notifications-quickfilters button b{min-width:20px!important;height:20px!important;font-size:9px!important}
+
+.next-notifications-feed{display:grid!important;gap:28px!important}
+.next-notifications-section{display:grid!important;gap:8px!important}
+.next-notifications-section__head{
+  display:flex!important;
+  align-items:center!important;
+  justify-content:space-between!important;
+  padding:0 2px!important;
+}
+.next-notifications-section__head h2{
+  margin:0!important;
+  color:#111827!important;
+  font-size:16px!important;
+  font-weight:950!important;
+  letter-spacing:-.025em!important;
+}
+.next-notifications-section__head span{
+  min-width:28px!important;
+  height:28px!important;
+  display:grid!important;
+  place-items:center!important;
+  padding:0 7px!important;
+  border-radius:999px!important;
+  background:#f3f4f6!important;
+  color:#667085!important;
+  font-size:9px!important;
+  font-weight:900!important;
+}
+
+.next-notifications-appfeed .next-notifications-list{
+  display:grid!important;
+  gap:2px!important;
+  border:0!important;
+  background:transparent!important;
+}
+.next-notifications-appfeed .next-notifications-row{
+  position:relative!important;
+  display:grid!important;
+  grid-template-columns:50px minmax(0,1fr) 30px!important;
+  align-items:center!important;
+  gap:12px!important;
+  min-height:72px!important;
+  padding:11px 4px!important;
+  border:0!important;
+  border-bottom:1px solid #eff1f4!important;
+  border-radius:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+  overflow:visible!important;
+}
+.next-notifications-appfeed .next-notifications-row.is-unread{
+  background:linear-gradient(90deg,rgba(249,115,22,.055),transparent 55%)!important;
+  box-shadow:inset 3px 0 0 rgba(249,115,22,.78)!important;
+}
+.next-notifications-appfeed .next-notif-icon{
+  position:relative!important;
+  width:46px!important;
+  height:46px!important;
+  min-width:46px!important;
+  display:grid!important;
+  place-items:center!important;
+  border:0!important;
+  border-radius:16px!important;
+  color:#475569!important;
+  background:#f3f4f6!important;
+  box-shadow:0 7px 18px rgba(15,23,42,.06)!important;
+  cursor:pointer!important;
+}
+.next-notifications-appfeed .next-notif-icon svg{width:21px!important;height:21px!important;stroke-width:2.15!important}
+.next-notifications-appfeed .next-notif-icon.is-order{background:linear-gradient(145deg,#dcfce7,#bbf7d0)!important;color:#15803d!important}
+.next-notifications-appfeed .next-notif-icon.is-maintenance{background:linear-gradient(145deg,#fff7d6,#fde68a)!important;color:#b45309!important}
+.next-notifications-appfeed .next-notif-icon.is-expense{background:linear-gradient(145deg,#eef2ff,#ddd6fe)!important;color:#5b4ad8!important}
+.next-notifications-appfeed .next-notif-icon.is-stock{background:linear-gradient(145deg,#cffafe,#a5f3fc)!important;color:#0e7490!important}
+.next-notifications-appfeed .next-notif-icon.is-task{background:linear-gradient(145deg,#ffedd5,#fed7aa)!important;color:#c2410c!important}
+.next-notifications-appfeed .next-notif-icon.is-event{background:linear-gradient(145deg,#f3e8ff,#e9d5ff)!important;color:#7e22ce!important}
+.next-notifications-appfeed .next-notif-icon.is-test{background:linear-gradient(145deg,#e2e8f0,#f1f5f9)!important;color:#475569!important}
+.next-notifications-appfeed .next-notif-icon.is-general{background:linear-gradient(145deg,#e0f2fe,#bae6fd)!important;color:#0369a1!important}
+.next-notifications-appfeed .next-notif-icon>i{
+  position:absolute!important;
+  right:-1px!important;
+  bottom:-1px!important;
+  width:12px!important;
+  height:12px!important;
+  border:2px solid #fff!important;
+  border-radius:50%!important;
+  background:#f97316!important;
+}
+.next-notifications-appfeed .next-notifications-row__main{
+  min-width:0!important;
+  display:grid!important;
+  gap:4px!important;
+  padding:0!important;
+}
+.next-notifications-appfeed .next-notifications-row__main h3{
+  display:flex!important;
+  align-items:baseline!important;
+  gap:7px!important;
+  min-width:0!important;
+  margin:0!important;
+  color:#111827!important;
+  font-size:12.5px!important;
+  font-weight:950!important;
+  line-height:1.3!important;
+}
+.next-notifications-appfeed .next-notifications-row__main h3>button{
+  min-width:0!important;
+  overflow:hidden!important;
+  text-overflow:ellipsis!important;
+  white-space:nowrap!important;
+}
+.next-notifications-appfeed .next-notifications-row__main h3 time{
+  flex:0 0 auto!important;
+  color:#a0a7b2!important;
+  font-size:9px!important;
+  font-weight:750!important;
+}
+.next-notifications-appfeed .next-notifications-row__main>p{
+  margin:0!important;
+  color:#667085!important;
+  font-size:10.8px!important;
+  line-height:1.38!important;
+  -webkit-line-clamp:2!important;
+}
+.next-notifications-row__meta{display:flex!important;align-items:center!important;gap:5px!important;margin-top:1px!important}
+.next-notifications-row__meta>span,.next-notifications-row__meta>button{
+  min-height:20px!important;
+  padding:0 7px!important;
+  border-radius:999px!important;
+  background:#f3f4f6!important;
+  color:#7b8493!important;
+  font-size:8px!important;
+  font-weight:850!important;
+}
+.next-notifications-appfeed .next-notifications-row__open{
+  width:28px!important;
+  height:28px!important;
+  display:grid!important;
+  place-items:center!important;
+  align-self:center!important;
+  color:#a0a7b2!important;
+  font-size:24px!important;
+}
+.next-notifications-appfeed .next-notifications-row__open:hover{background:#f3f4f6!important;color:#111827!important}
+
+.next-notifications-appfeed .next-notifications-device{margin-top:22px!important}
+.next-notifications-appfeed .next-notifications-settings-card{margin-top:30px!important}
+
+/* Full bottom-sheet filters. role=dialog + aria-modal also lets the shared
+   AppShell small-window guard hide the sidebar/dock just like Shopping Cart. */
+.next-notifications-filter-sheet-layer{
+  position:fixed!important;
+  z-index:12050!important;
+  inset:0!important;
+  display:flex!important;
+  align-items:flex-end!important;
+  justify-content:center!important;
+  padding:0!important;
+  background:rgba(10,15,24,.52)!important;
+  -webkit-backdrop-filter:blur(9px)!important;
+  backdrop-filter:blur(9px)!important;
+}
+.next-notifications-filter-sheet{
+  width:min(560px,100vw)!important;
+  max-height:min(78dvh,760px)!important;
+  min-height:420px!important;
+  display:flex!important;
+  flex-direction:column!important;
+  overflow:hidden!important;
+  border:1px solid #e7eaf0!important;
+  border-bottom:0!important;
+  border-radius:28px 28px 0 0!important;
+  background:#fff!important;
+  box-shadow:0 -24px 80px rgba(15,23,42,.24)!important;
+}
+.next-notifications-filter-sheet__head{
+  flex:0 0 auto!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:space-between!important;
+  gap:16px!important;
+  padding:18px 20px 14px!important;
+  border-bottom:1px solid #eef1f4!important;
+  background:#fff!important;
+}
+.next-notifications-filter-sheet__head>div{display:grid!important;gap:3px!important}
+.next-notifications-filter-sheet__head span{
+  color:#f97316!important;
+  font-size:9px!important;
+  font-weight:950!important;
+  letter-spacing:.12em!important;
+  text-transform:uppercase!important;
+}
+.next-notifications-filter-sheet__head h2{
+  margin:0!important;
+  color:#111827!important;
+  font-size:22px!important;
+  line-height:1.1!important;
+  font-weight:950!important;
+  letter-spacing:-.03em!important;
+}
+.next-notifications-filter-sheet__head>button{
+  width:44px!important;
+  height:44px!important;
+  display:grid!important;
+  place-items:center!important;
+  border:0!important;
+  border-radius:14px!important;
+  background:#f4f6f8!important;
+  color:#111827!important;
+  font:inherit!important;
+  font-size:25px!important;
+  line-height:1!important;
+}
+.next-notifications-filter-sheet__body{
+  flex:1 1 auto!important;
+  min-height:0!important;
+  overflow-y:auto!important;
+  display:grid!important;
+  gap:14px!important;
+  align-content:start!important;
+  padding:18px 20px 24px!important;
+  scrollbar-width:none!important;
+}
+.next-notifications-filter-sheet__body::-webkit-scrollbar{display:none!important}
+.next-notifications-filter-field{
+  display:grid!important;
+  gap:7px!important;
+}
+.next-notifications-filter-field>span{
+  color:#344054!important;
+  font-size:11px!important;
+  font-weight:900!important;
+}
+.next-notifications-filter-field select{
+  width:100%!important;
+  height:54px!important;
+  padding:0 14px!important;
+  border:1px solid #dfe4ea!important;
+  border-radius:15px!important;
+  outline:0!important;
+  background:#f8fafc!important;
+  color:#111827!important;
+  font:inherit!important;
+  font-size:12px!important;
+  font-weight:800!important;
+}
+.next-notifications-filter-toggle{
+  min-height:72px!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:space-between!important;
+  gap:16px!important;
+  padding:14px!important;
+  border:1px solid #e5e7eb!important;
+  border-radius:16px!important;
+  background:#fafbfc!important;
+}
+.next-notifications-filter-toggle>span{display:grid!important;gap:3px!important}
+.next-notifications-filter-toggle strong{color:#111827!important;font-size:11.5px!important;font-weight:900!important}
+.next-notifications-filter-toggle small{color:#98a2b3!important;font-size:9.5px!important;font-weight:650!important;line-height:1.4!important}
+.next-notifications-filter-toggle input{
+  width:22px!important;
+  height:22px!important;
+  flex:0 0 22px!important;
+  accent-color:#111827!important;
+}
+.next-notifications-filter-sheet__footer{
+  flex:0 0 auto!important;
+  display:grid!important;
+  grid-template-columns:.72fr 1.28fr!important;
+  gap:10px!important;
+  padding:12px 20px calc(18px + env(safe-area-inset-bottom,0px))!important;
+  border-top:1px solid #eef1f4!important;
+  background:#fff!important;
+}
+.next-notifications-filter-sheet__footer button{
+  min-height:52px!important;
+  border-radius:16px!important;
+  font:inherit!important;
+  font-size:12px!important;
+  font-weight:950!important;
+}
+.next-notifications-filter-sheet__footer .is-secondary{border:1px solid #e5e7eb!important;background:#fff!important;color:#344054!important}
+.next-notifications-filter-sheet__footer .is-primary{border:1px solid #111827!important;background:#111827!important;color:#fff!important}
+
+@media(max-width:620px){
+  .next-notifications-appfeed{padding:0 18px 126px!important}
+  .next-notifications-commandbar__actions button:not(.is-icon){min-width:0!important;padding:0 12px!important}
+  .next-notifications-searchrow{grid-template-columns:minmax(0,1fr) 48px!important}
+  .next-notifications-filter-button{width:48px!important;min-width:48px!important;padding:0!important;border-radius:15px!important}
+  .next-notifications-filter-button>span{display:none!important}
+  .next-notifications-filter-button b{position:absolute!important;right:-4px!important;top:-4px!important}
+  .next-notifications-quickfilters{margin-bottom:24px!important}
+  .next-notifications-feed{gap:29px!important}
+  .next-notifications-appfeed .next-notifications-row{
+    grid-template-columns:48px minmax(0,1fr) 26px!important;
+    gap:10px!important;
+    padding:11px 1px!important;
+  }
+  .next-notifications-appfeed .next-notif-icon{width:44px!important;height:44px!important;min-width:44px!important;border-radius:15px!important}
+  .next-notifications-appfeed .next-notifications-row__main h3{font-size:12px!important}
+  .next-notifications-appfeed .next-notifications-row__main>p{font-size:10.5px!important}
+  .next-notifications-filter-sheet{width:100vw!important;max-width:none!important;max-height:82dvh!important;border-left:0!important;border-right:0!important}
+}
+
+@media(max-width:390px){
+  .next-notifications-appfeed{padding-left:14px!important;padding-right:14px!important}
+  .next-notifications-commandbar__status span{display:block!important}
+  .next-notifications-commandbar__actions button:not(.is-icon){font-size:0!important;width:42px!important;min-width:42px!important;padding:0!important}
+  .next-notifications-commandbar__actions button:not(.is-icon)::before{content:"✓";font-size:15px!important}
+}
+
+html[data-theme="dark"] .next-notifications-filter-sheet{background:#11161d!important;border-color:#2b313b!important}
+html[data-theme="dark"] .next-notifications-filter-sheet__head,
+html[data-theme="dark"] .next-notifications-filter-sheet__footer{background:#11161d!important;border-color:#2b313b!important}
+html[data-theme="dark"] .next-notifications-filter-sheet__head h2,
+html[data-theme="dark"] .next-notifications-filter-toggle strong{color:#f8fafc!important}
+html[data-theme="dark"] .next-notifications-filter-sheet__head>button,
+html[data-theme="dark"] .next-notifications-filter-field select,
+html[data-theme="dark"] .next-notifications-filter-toggle{background:#181e27!important;border-color:#303741!important;color:#f8fafc!important}
+html[data-theme="dark"] .next-notifications-filter-sheet__footer .is-secondary{background:#181e27!important;border-color:#303741!important;color:#e5e7eb!important}
+html[data-theme="dark"] .next-notifications-search,
+html[data-theme="dark"] .next-notifications-filter-button{background:#12161d!important;border-color:#2b313b!important;color:#e5e7eb!important}
+
+/* ==========================================================================
+   Notifications v6 — aligned controls + framed cards + grouped cards
+   2026-10-09
+   ========================================================================== */
+
+/* ---------- Top controls ---------- */
+.next-notifications-appfeed .next-notifications-commandbar{
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr) auto!important;
+  align-items:center!important;
+  column-gap:12px!important;
+  row-gap:8px!important;
+  width:100%!important;
+  padding:8px 0 16px!important;
+}
+.next-notifications-appfeed .next-notifications-commandbar__status{
+  min-width:0!important;
+  justify-self:start!important;
+}
+.next-notifications-appfeed .next-notifications-commandbar__actions{
+  display:flex!important;
+  align-items:center!important;
+  justify-content:flex-end!important;
+  gap:8px!important;
+  flex-wrap:nowrap!important;
+}
+.next-notifications-appfeed .next-notifications-commandbar__actions button{
+  height:42px!important;
+  min-height:42px!important;
+  margin:0!important;
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  line-height:1!important;
+}
+.next-notifications-appfeed .next-notifications-commandbar__actions button.is-icon{
+  width:42px!important;
+  min-width:42px!important;
+  flex:0 0 42px!important;
+}
+.next-notifications-appfeed .next-notifications-commandbar__actions button:not(.is-icon){
+  min-width:118px!important;
+  white-space:nowrap!important;
+}
+
+/* Search and filter ALWAYS stay on the same line. */
+.next-notifications-appfeed .next-notifications-searchrow{
+  display:flex!important;
+  align-items:stretch!important;
+  justify-content:stretch!important;
+  gap:9px!important;
+  width:100%!important;
+  min-width:0!important;
+  margin:0 0 12px!important;
+}
+.next-notifications-appfeed .next-notifications-search{
+  flex:1 1 0!important;
+  width:0!important;
+  min-width:0!important;
+  height:50px!important;
+  margin:0!important;
+}
+.next-notifications-appfeed .next-notifications-filter-button{
+  flex:0 0 50px!important;
+  width:50px!important;
+  min-width:50px!important;
+  height:50px!important;
+  margin:0!important;
+  padding:0!important;
+  display:grid!important;
+  place-items:center!important;
+  border-radius:16px!important;
+}
+.next-notifications-appfeed .next-notifications-filter-button>span{display:none!important}
+.next-notifications-appfeed .next-notifications-filter-button svg{
+  display:block!important;
+  width:20px!important;
+  height:20px!important;
+  margin:auto!important;
+  flex:none!important;
+}
+.next-notifications-appfeed .next-notifications-filter-button b{
+  position:absolute!important;
+  top:-5px!important;
+  right:-5px!important;
+}
+
+.next-notifications-appfeed .next-notifications-quickfilters{
+  display:flex!important;
+  align-items:center!important;
+  justify-content:flex-start!important;
+  gap:8px!important;
+  width:100%!important;
+  margin:0 0 24px!important;
+}
+.next-notifications-appfeed .next-notifications-quickfilters button{
+  height:38px!important;
+  min-height:38px!important;
+  margin:0!important;
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  gap:7px!important;
+  line-height:1!important;
+}
+.next-notifications-appfeed .next-notifications-quickfilters button b{
+  display:grid!important;
+  place-items:center!important;
+  line-height:1!important;
+}
+
+/* ---------- Section cards ---------- */
+.next-notifications-appfeed .next-notifications-feed{
+  gap:30px!important;
+}
+.next-notifications-appfeed .next-notifications-section{
+  gap:10px!important;
+}
+.next-notifications-appfeed .next-notifications-list{
+  display:grid!important;
+  gap:10px!important;
+}
+
+/* Every notification has a clear standalone frame. */
+.next-notifications-appfeed .next-notifications-row{
+  position:relative!important;
+  display:grid!important;
+  grid-template-columns:52px minmax(0,1fr) 30px!important;
+  align-items:center!important;
+  gap:12px!important;
+  min-height:82px!important;
+  padding:13px 14px!important;
+  border:1px solid #e7eaf0!important;
+  border-radius:19px!important;
+  background:#fff!important;
+  box-shadow:0 7px 22px rgba(15,23,42,.055)!important;
+  overflow:hidden!important;
+}
+.next-notifications-appfeed .next-notifications-row:hover{
+  border-color:#dce1e8!important;
+  box-shadow:0 10px 28px rgba(15,23,42,.075)!important;
+}
+.next-notifications-appfeed .next-notifications-row.is-unread{
+  border-color:#fed7aa!important;
+  background:linear-gradient(110deg,#fffaf5 0%,#fff 58%)!important;
+  box-shadow:0 8px 24px rgba(249,115,22,.07)!important;
+}
+.next-notifications-appfeed .next-notifications-row.is-unread::before{
+  content:""!important;
+  position:absolute!important;
+  left:0!important;
+  top:18px!important;
+  bottom:18px!important;
+  width:3px!important;
+  border-radius:0 999px 999px 0!important;
+  background:#f97316!important;
+}
+
+/* Grouped notifications are a visually distinct framed card. */
+.next-notifications-appfeed .next-notifications-row.is-grouped{
+  border-color:#d9dee7!important;
+  background:linear-gradient(145deg,#ffffff 0%,#fafbfc 100%)!important;
+  box-shadow:0 9px 26px rgba(15,23,42,.065)!important;
+}
+.next-notifications-appfeed .next-notifications-row.is-grouped::after{
+  content:"GROUPED"!important;
+  position:absolute!important;
+  top:9px!important;
+  right:12px!important;
+  height:20px!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  padding:0 7px!important;
+  border-radius:999px!important;
+  background:#eef2f6!important;
+  color:#7b8493!important;
+  font-size:7px!important;
+  font-weight:950!important;
+  letter-spacing:.08em!important;
+}
+.next-notifications-appfeed .next-notifications-row.is-grouped.is-unread{
+  border-color:#fdba74!important;
+  background:linear-gradient(145deg,#fffaf5 0%,#fff 72%)!important;
+}
+
+/* ---------- Icon label alignment ---------- */
+.next-notifications-appfeed .next-notif-icon{
+  width:48px!important;
+  height:48px!important;
+  min-width:48px!important;
+  padding:0!important;
+  margin:0!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  place-items:unset!important;
+  line-height:0!important;
+  align-self:center!important;
+  justify-self:center!important;
+  border-radius:16px!important;
+}
+.next-notifications-appfeed .next-notif-icon svg{
+  display:block!important;
+  width:22px!important;
+  height:22px!important;
+  margin:0!important;
+  flex:0 0 22px!important;
+  transform:none!important;
+}
+.next-notifications-appfeed .next-notif-icon>i{
+  right:-2px!important;
+  bottom:-2px!important;
+}
+
+/* Meta labels are centered as well. */
+.next-notifications-appfeed .next-notifications-row__meta{
+  display:flex!important;
+  align-items:center!important;
+  flex-wrap:wrap!important;
+  gap:6px!important;
+}
+.next-notifications-appfeed .next-notifications-row__meta>span,
+.next-notifications-appfeed .next-notifications-row__meta>button{
+  min-height:22px!important;
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  padding:0 8px!important;
+  line-height:1!important;
+  text-align:center!important;
+}
+
+/* Keep the open arrow centered vertically in the card. */
+.next-notifications-appfeed .next-notifications-row__open{
+  align-self:center!important;
+  justify-self:center!important;
+  margin:0!important;
+  line-height:1!important;
+}
+
+/* ---------- Expanded grouped updates ---------- */
+.next-notifications-appfeed .next-notifications-group-children{
+  grid-column:1/-1!important;
+  display:grid!important;
+  gap:7px!important;
+  margin-top:7px!important;
+  padding-top:9px!important;
+  border-top:1px solid #edf0f3!important;
+}
+.next-notifications-appfeed .next-notifications-group-child{
+  width:100%!important;
+  min-height:52px!important;
+  display:grid!important;
+  grid-template-columns:28px minmax(0,1fr) 22px!important;
+  align-items:center!important;
+  gap:9px!important;
+  padding:8px 9px!important;
+  border:1px solid #e6e9ee!important;
+  border-radius:13px!important;
+  background:#fff!important;
+  color:#344054!important;
+  text-align:left!important;
+  font:inherit!important;
+  cursor:pointer!important;
+  box-shadow:0 3px 10px rgba(15,23,42,.035)!important;
+}
+.next-notifications-appfeed .next-notifications-group-child.is-unread{
+  border-color:#fed7aa!important;
+  background:#fffaf5!important;
+}
+.next-notifications-group-child__index{
+  width:28px!important;
+  height:28px!important;
+  display:grid!important;
+  place-items:center!important;
+  border-radius:9px!important;
+  background:#f2f4f7!important;
+  color:#667085!important;
+  font-size:9px!important;
+  font-weight:950!important;
+}
+.next-notifications-group-child.is-unread .next-notifications-group-child__index{
+  background:#ffedd5!important;
+  color:#c2410c!important;
+}
+.next-notifications-group-child__copy{
+  min-width:0!important;
+  display:grid!important;
+  gap:2px!important;
+}
+.next-notifications-group-child__copy strong{
+  overflow:hidden!important;
+  text-overflow:ellipsis!important;
+  white-space:nowrap!important;
+  color:#111827!important;
+  font-size:10px!important;
+  font-weight:900!important;
+}
+.next-notifications-group-child__copy small{
+  overflow:hidden!important;
+  text-overflow:ellipsis!important;
+  white-space:nowrap!important;
+  color:#98a2b3!important;
+  font-size:8.5px!important;
+  font-weight:700!important;
+}
+.next-notifications-group-child__arrow{
+  display:grid!important;
+  place-items:center!important;
+  color:#98a2b3!important;
+  font-size:20px!important;
+}
+
+/* ---------- Mobile ---------- */
+@media(max-width:620px){
+  .next-notifications-appfeed{
+    padding-left:16px!important;
+    padding-right:16px!important;
+  }
+  .next-notifications-appfeed .next-notifications-commandbar{
+    grid-template-columns:minmax(0,1fr) auto!important;
+    gap:8px!important;
+    padding-top:4px!important;
+  }
+  .next-notifications-appfeed .next-notifications-commandbar__actions{
+    gap:6px!important;
+  }
+  .next-notifications-appfeed .next-notifications-commandbar__actions button{
+    height:40px!important;
+    min-height:40px!important;
+  }
+  .next-notifications-appfeed .next-notifications-commandbar__actions button.is-icon{
+    width:40px!important;
+    min-width:40px!important;
+    flex-basis:40px!important;
+  }
+  .next-notifications-appfeed .next-notifications-commandbar__actions button:not(.is-icon){
+    min-width:0!important;
+    padding:0 12px!important;
+  }
+  .next-notifications-appfeed .next-notifications-searchrow{
+    display:flex!important;
+    flex-wrap:nowrap!important;
+  }
+  .next-notifications-appfeed .next-notifications-search{
+    flex:1 1 0!important;
+    width:0!important;
+  }
+  .next-notifications-appfeed .next-notifications-filter-button{
+    flex:0 0 50px!important;
+  }
+  .next-notifications-appfeed .next-notifications-row{
+    grid-template-columns:48px minmax(0,1fr) 24px!important;
+    gap:10px!important;
+    min-height:78px!important;
+    padding:12px!important;
+    border-radius:17px!important;
+  }
+  .next-notifications-appfeed .next-notif-icon{
+    width:46px!important;
+    height:46px!important;
+    min-width:46px!important;
+    border-radius:15px!important;
+  }
+  .next-notifications-appfeed .next-notif-icon svg{
+    width:21px!important;
+    height:21px!important;
+    flex-basis:21px!important;
+  }
+  .next-notifications-appfeed .next-notifications-row.is-grouped::after{
+    top:7px!important;
+    right:9px!important;
+  }
+}
+
+/* Dark mode frames */
+html[data-theme="dark"] .next-notifications-appfeed .next-notifications-row{
+  border-color:#2d3440!important;
+  background:#151a22!important;
+  box-shadow:none!important;
+}
+html[data-theme="dark"] .next-notifications-appfeed .next-notifications-row.is-unread{
+  border-color:rgba(249,115,22,.42)!important;
+  background:linear-gradient(110deg,rgba(249,115,22,.10),#151a22 58%)!important;
+}
+html[data-theme="dark"] .next-notifications-appfeed .next-notifications-row.is-grouped{
+  border-color:#39414d!important;
+  background:linear-gradient(145deg,#171c24,#131820)!important;
+}
+html[data-theme="dark"] .next-notifications-appfeed .next-notifications-row.is-grouped::after{
+  background:#242b35!important;
+  color:#b9c1cc!important;
+}
+html[data-theme="dark"] .next-notifications-appfeed .next-notifications-group-child{
+  border-color:#303741!important;
+  background:#191f28!important;
+  color:#e5e7eb!important;
+  box-shadow:none!important;
+}
+html[data-theme="dark"] .next-notifications-group-child__copy strong{color:#f8fafc!important}
+html[data-theme="dark"] .next-notifications-group-child__index{background:#252c36!important;color:#c7ced8!important}
+
+
+/* Notifications v7 — single compact action row; precise glyph centering. */
+.next-notifications-appfeed .next-notifications-controls{
+  display:flex!important;
+  align-items:center!important;
+  justify-content:space-between!important;
+  gap:8px!important;
+  min-width:0!important;
+  width:100%!important;
+  margin:12px 0 24px!important;
+}
+.next-notifications-appfeed .next-notifications-quickfilters{
+  flex:0 1 auto!important;
+  min-width:0!important;
+  width:auto!important;
+  gap:7px!important;
+  margin:0!important;
+}
+.next-notifications-appfeed .next-notifications-quickfilters button{
+  flex-shrink:0!important;
+  white-space:nowrap!important;
+  padding:0 10px!important;
+}
+.next-notifications-appfeed .next-notifications-controls__actions{
+  display:flex!important;
+  flex:0 0 auto!important;
+  align-items:center!important;
+  justify-content:flex-end!important;
+  gap:7px!important;
+  margin-left:auto!important;
+}
+.next-notifications-appfeed .next-notifications-mark-read{
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  flex:0 0 auto!important;
+  min-width:0!important;
+  height:38px!important;
+  padding:0 11px!important;
+  border:1px solid #e7eaf0!important;
+  border-radius:13px!important;
+  background:#fff!important;
+  color:#344054!important;
+  font:inherit!important;
+  font-size:10px!important;
+  font-weight:850!important;
+  line-height:1!important;
+  white-space:nowrap!important;
+  box-shadow:0 5px 16px rgba(15,23,42,.04)!important;
+  cursor:pointer!important;
+}
+.next-notifications-appfeed .next-notifications-mark-read:disabled{
+  opacity:.42!important;
+  cursor:default!important;
+}
+.next-notifications-appfeed .next-notifications-controls .next-notifications-filter-button{
+  flex:0 0 38px!important;
+  display:grid!important;
+  place-items:center!important;
+  width:38px!important;
+  min-width:38px!important;
+  height:38px!important;
+  min-height:38px!important;
+  padding:0!important;
+  margin:0!important;
+  border-radius:13px!important;
+}
+.next-notifications-appfeed .next-notifications-controls .next-notifications-filter-button svg{
+  width:19px!important;
+  height:19px!important;
+  margin:auto!important;
+}
+/* The glyph is positioned independently of the icon button's intrinsic line-box. */
+.next-notifications-appfeed .next-notif-icon{
+  position:relative!important;
+  padding:0!important;
+  line-height:0!important;
+  overflow:visible!important;
+}
+.next-notifications-appfeed .next-notif-icon .next-notifications-icon-glyph{
+  position:absolute!important;
+  inset:0!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  width:100%!important;
+  height:100%!important;
+  line-height:0!important;
+  pointer-events:none!important;
+}
+.next-notifications-appfeed .next-notif-icon .next-notifications-icon-glyph svg{
+  position:absolute!important;
+  top:50%!important;
+  left:50%!important;
+  width:22px!important;
+  height:22px!important;
+  margin:0!important;
+  flex:none!important;
+  transform:translate(-50%,-50%)!important;
+}
+@media(max-width:620px){
+  .next-notifications-appfeed .next-notifications-controls{
+    gap:6px!important;
+    margin:8px 0 23px!important;
+  }
+  .next-notifications-appfeed .next-notifications-quickfilters,
+  .next-notifications-appfeed .next-notifications-controls__actions{gap:6px!important;}
+  .next-notifications-appfeed .next-notifications-quickfilters button{
+    height:36px!important;
+    min-height:36px!important;
+    padding:0 9px!important;
+  }
+  .next-notifications-appfeed .next-notifications-mark-read{
+    height:36px!important;
+    padding:0 9px!important;
+    font-size:9.5px!important;
+  }
+  .next-notifications-appfeed .next-notifications-controls .next-notifications-filter-button{
+    flex-basis:36px!important;
+    width:36px!important;
+    min-width:36px!important;
+    height:36px!important;
+    min-height:36px!important;
+  }
+  .next-notifications-appfeed .next-notif-icon .next-notifications-icon-glyph svg{
+    width:21px!important;
+    height:21px!important;
+  }
+}
+@media(max-width:370px){
+  .next-notifications-appfeed .next-notifications-controls,
+  .next-notifications-appfeed .next-notifications-quickfilters,
+  .next-notifications-appfeed .next-notifications-controls__actions{gap:4px!important;}
+  .next-notifications-appfeed .next-notifications-quickfilters button{
+    gap:4px!important;
+    padding:0 7px!important;
+    font-size:9px!important;
+  }
+  .next-notifications-appfeed .next-notifications-mark-read{
+    padding:0 7px!important;
+    font-size:9px!important;
+  }
+  .next-notifications-appfeed .next-notifications-controls .next-notifications-filter-button{
+    flex-basis:34px!important;
+    width:34px!important;
+    min-width:34px!important;
+  }
+}
+html[data-theme="dark"] .next-notifications-appfeed .next-notifications-mark-read{
+  background:#12161d!important;
+  border-color:#2b313b!important;
+  color:#e5e7eb!important;
+}
+
+
+/* Notifications v8 — safe footer, custom pickers and compact close button. */
+.next-notifications-filter-sheet__head .next-notifications-filter-sheet__close{
+  flex:0 0 38px!important;
+  width:38px!important;
+  height:38px!important;
+  min-height:38px!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  padding:0!important;
+  border:1px solid #e8ebef!important;
+  border-radius:12px!important;
+  background:#f8f9fb!important;
+  color:#344054!important;
+  box-shadow:0 2px 7px rgba(15,23,42,.035)!important;
+  cursor:pointer!important;
+  transition:background .18s,border-color .18s,transform .18s!important;
+}
+.next-notifications-filter-sheet__close svg{
+  display:block!important;
+  width:17px!important;
+  height:17px!important;
+  flex:none!important;
+}
+.next-notifications-filter-sheet__close:hover{
+  background:#eef1f6!important;
+  border-color:#d9dee7!important;
+}
+.next-notifications-filter-sheet__close:active{transform:scale(.95)!important}
+.next-notifications-filter-sheet__close:focus-visible,
+.next-notifications-filter-select__trigger:focus-visible,
+.next-notifications-filter-select__option:focus-visible{
+  outline:2px solid #f97316!important;
+  outline-offset:2px!important;
+}
+
+.next-notifications-filter-field .next-notifications-filter-select{
+  display:block!important;
+  min-width:0!important;
+}
+.next-notifications-filter-select__trigger{
+  width:100%!important;
+  min-height:54px!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:space-between!important;
+  gap:12px!important;
+  padding:0 16px!important;
+  border:1px solid #dfe4ea!important;
+  border-radius:15px!important;
+  background:#f8fafc!important;
+  color:#111827!important;
+  font:inherit!important;
+  font-size:12px!important;
+  font-weight:850!important;
+  line-height:1.3!important;
+  text-align:left!important;
+  cursor:pointer!important;
+  transition:border-color .18s,background .18s,box-shadow .18s!important;
+}
+.next-notifications-filter-select__trigger>span{
+  min-width:0!important;
+  overflow:hidden!important;
+  text-overflow:ellipsis!important;
+  white-space:nowrap!important;
+}
+.next-notifications-filter-select__trigger svg{
+  display:block!important;
+  width:18px!important;
+  height:18px!important;
+  color:#667085!important;
+  flex:0 0 18px!important;
+  transition:transform .18s!important;
+}
+.next-notifications-filter-select.is-open .next-notifications-filter-select__trigger{
+  border-color:#b7c2d4!important;
+  background:#fff!important;
+  box-shadow:0 0 0 3px rgba(44,65,106,.065)!important;
+}
+.next-notifications-filter-select.is-open .next-notifications-filter-select__trigger svg{
+  transform:rotate(180deg)!important;
+}
+.next-notifications-filter-select__options{
+  display:grid!important;
+  gap:4px!important;
+  max-height:232px!important;
+  overflow-y:auto!important;
+  margin-top:8px!important;
+  padding:6px!important;
+  border:1px solid #e5e9f1!important;
+  border-radius:16px!important;
+  background:#fff!important;
+  box-shadow:0 9px 26px rgba(15,23,42,.085)!important;
+  scrollbar-width:none!important;
+  -webkit-overflow-scrolling:touch!important;
+}
+.next-notifications-filter-select__options::-webkit-scrollbar{display:none!important}
+.next-notifications-filter-select__option{
+  width:100%!important;
+  min-height:43px!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:space-between!important;
+  gap:10px!important;
+  padding:9px 12px!important;
+  border:0!important;
+  border-radius:11px!important;
+  background:transparent!important;
+  color:#344054!important;
+  font:inherit!important;
+  font-size:12px!important;
+  font-weight:750!important;
+  line-height:1.3!important;
+  text-align:left!important;
+  cursor:pointer!important;
+  transition:background .15s,color .15s!important;
+}
+.next-notifications-filter-select__option:hover{background:#f5f7fa!important}
+.next-notifications-filter-select__option.is-selected{
+  background:#eff3fa!important;
+  color:#1c3155!important;
+  font-weight:900!important;
+}
+.next-notifications-filter-select__option svg{
+  width:16px!important;
+  height:16px!important;
+  flex:0 0 16px!important;
+  visibility:hidden!important;
+}
+.next-notifications-filter-select__option.is-selected svg{visibility:visible!important}
+
+/* The Android navigation bar / web-app bottom overlay can cover the normal
+   sheet footer. Reserve extra room beneath the buttons, not over them. */
+@media(max-width:620px){
+  .next-notifications-filter-sheet{
+    min-height:0!important;
+    max-height:min(86dvh,900px)!important;
+  }
+  .next-notifications-filter-sheet__footer{
+    padding-bottom:calc(74px + env(safe-area-inset-bottom,0px))!important;
+  }
+}
+@media(min-width:621px){
+  .next-notifications-filter-sheet__footer{
+    padding-bottom:calc(26px + env(safe-area-inset-bottom,0px))!important;
+  }
+}
+html[data-theme="dark"] .next-notifications-filter-sheet__head .next-notifications-filter-sheet__close{
+  background:#1e2632!important;
+  border-color:#303b4a!important;
+  color:#e5e7eb!important;
+}
+html[data-theme="dark"] .next-notifications-filter-select__trigger{
+  background:#181e27!important;
+  border-color:#303741!important;
+  color:#f8fafc!important;
+}
+html[data-theme="dark"] .next-notifications-filter-select.is-open .next-notifications-filter-select__trigger{
+  background:#1b2330!important;
+  border-color:#65738a!important;
+}
+html[data-theme="dark"] .next-notifications-filter-select__trigger svg{color:#a3aec1!important}
+html[data-theme="dark"] .next-notifications-filter-select__options{
+  background:#191f28!important;
+  border-color:#303741!important;
+}
+html[data-theme="dark"] .next-notifications-filter-select__option{color:#e5e7eb!important}
+html[data-theme="dark"] .next-notifications-filter-select__option:hover{background:#252e3b!important}
+html[data-theme="dark"] .next-notifications-filter-select__option.is-selected{
+  background:#253750!important;
+  color:#fff!important;
+}
+
+/* Phase 7: distinct SLA category, preserving existing icon centering rules. */
+.next-notifications-appfeed .next-notif-icon.is-sla{background:linear-gradient(145deg,#ffedd5,#fdba74)!important;color:#c2410c!important}

@@ -1,0 +1,2727 @@
+import "server-only";
+import { operationsHasOutstandingQuantity, operationsMatchesTab } from "./operations-remaining-status.mjs";
+import { validateWholeOperationsOrder } from "./operations-whole-order-policy.mjs";
+import { performAtomicOrderAction, useAtomicOrderActions } from "./order-atomic-actions";
+import { parseStrictImageDataUrl } from "./strict-upload-image.mjs";
+import { isTrustedLegacyAdmin } from "./admin-identity-policy.mjs";
+import { performance } from "node:perf_hooks";
+import { deleteById, deleteByIds, getSupabaseConfig, insert, isSupabaseConfigured, select, selectAll, supabaseRequest, updateById, updateByIds, uploadStorageObject } from "./supabase-rest";
+import { enrichOrderDetailGrouping, loadRawOrderRowsByIds, serializeOperationsOrderDetail } from "./order-details-data";
+import { getProductsCatalog } from "./products-service";
+import { loadFastOrderDetailsBundle } from "./order-details-fast-path";
+import { listTeamMembersLite } from "./team-members-service";
+import { invalidateStocktakingReadCaches } from "./stocktaking-data";
+import { consumeOrderSummaryWindows, loadOrderRowsByNumbers, scanOrderNumberCandidates } from "./order-pagination";
+import { applyOrderSearchPlan, canUseOrderSearchText, createOrderSearchPlan, noteOrderSearchTextError } from "./order-search-hotpath";
+import { canUseOrderCandidateRpc, loadOrderCandidateNumbersRpc, noteOrderCandidateRpcError } from "./order-candidate-rpc";
+import { canUseOrderCardSummaryRpc, canUseOrderSummaryRpc, loadOrderCardSummariesRpc, loadOrderSummaryRowsRpc, noteOrderCardSummaryRpcError, noteOrderSummaryRpcError } from "./order-summary-rpc";
+import { measurePerformance, recordPerformanceSample } from "./performance-profiler";
+import { directPageMutationAccess } from "./order-action-auth";
+import { featureAllowed } from "./feature-permissions-registry";
+import { resolveOrderScope, visibleOrderRow } from "./order-data-scope";
+
+const PAGE_LIMIT = 36;
+const PAGE_MAX = 80;
+const SUMMARY_BASE_SELECT = [
+  "id",
+  "reason",
+  "order_number",
+  "order_type",
+  "notion_created_time",
+  "unit_price",
+  "quantity_requested",
+  "quantity_progress",
+  "quantity_edited_by_supervisor",
+  "quantity_received_by_operations",
+  "quantity_remaining",
+  "status",
+  // Kept only for the maintenance effective-status calculation.
+  "actual_issue_description",
+  "repair_action",
+  "resolution_method",
+  "operations_approval",
+  "rejected_reason",
+  "team_member_id",
+  "team_member_name",
+  "sv_approval",
+];
+const SUMMARY_SEARCH_SELECT = [
+  ...SUMMARY_BASE_SELECT,
+  "product_name",
+  "issue_description",
+  "receipt_number",
+  "person_received_by_operations",
+].join(",");
+const SUMMARY_SELECT = SUMMARY_BASE_SELECT.join(",");
+
+function text(value) {
+  if (value === null || typeof value === "undefined") return "";
+  if (Array.isArray(value)) return value.map(text).find(Boolean) || "";
+  if (typeof value === "object") return text(value.name || value.value || value.label || value.title || value.email || value.url);
+  return String(value).replace(/\u00a0/g, " ").trim();
+}
+
+function norm(value) {
+  return text(value).toLowerCase();
+}
+
+function num(value) {
+  if (value === null || typeof value === "undefined") return null;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  const raw = text(value);
+  if (!raw || /^null$/i.test(raw)) return null;
+  const parsed = Number(raw.replace(/[^0-9.-]/g, ""));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function dateValue(value) {
+  const raw = text(value);
+  if (!raw) return null;
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? raw : parsed.toISOString();
+}
+
+function roundQty(value, decimals = 6) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 0;
+  const factor = 10 ** decimals;
+  return Math.round(parsed * factor) / factor;
+}
+
+function statusColor(status) {
+  const value = norm(status);
+  if (/archive/.test(value)) return "purple";
+  if (/(arrived|delivered|received)/.test(value)) return "green";
+  if (/shipped/.test(value)) return "blue";
+  if (/rejected/.test(value)) return "red";
+  if (/progress/.test(value)) return "yellow";
+  if (/supervision/.test(value)) return "orange";
+  return "default";
+}
+
+function orderTypeColor(orderType) {
+  const value = norm(orderType);
+  if (/maintenance/.test(value)) return "purple";
+  if (/withdraw/.test(value)) return "red";
+  if (/request/.test(value)) return "green";
+  return "default";
+}
+
+function statusIndex(value) {
+  const status = norm(value).replace(/[_-]+/g, " ");
+  if (/(archive|archived)/.test(status)) return 5;
+  if (/(arrived|delivered|received)/.test(status)) return 4;
+  if (/(shipped|shipping|on the way|delivering|prepared)/.test(status)) return 3;
+  if (/(in progress|inprogress|progress|approved)/.test(status)) return 2;
+  return 1;
+}
+
+export function serializeOperationsSummaryRow(row = {}) {
+  const id = text(row.id ?? row.ID);
+  const orderNumber = num(row.order_number ?? row["Order - ID"] ?? row["Order ID"]);
+  const quantityProgress = num(row.quantity_progress ?? row["Quantity Progress"] ?? row.quantity ?? row.Quantity ?? row.qty ?? row.Qty);
+  const quantityRequested = num(row.quantity_requested ?? row["Quantity Requested"] ?? row.requested_quantity ?? row["Requested Quantity"]);
+  const quantityEditedBySupervisor = num(row.quantity_edited_by_supervisor ?? row["Quantity Edited by supervisor"] ?? row["Quantity Edited by Supervisor"] ?? row.quantity_edited ?? row.edited_quantity);
+  const originalBase = roundQty(quantityRequested !== null ? quantityRequested : (quantityProgress !== null ? quantityProgress : 0));
+  const base = roundQty(quantityEditedBySupervisor !== null ? quantityEditedBySupervisor : originalBase);
+  const receivedRaw = num(row.quantity_received_by_operations ?? row["Quantity Received by operations"] ?? row["Quantity Received by Operations"] ?? row.received_quantity ?? row.quantity_received);
+  const remainingRaw = num(row.quantity_remaining ?? row["Quantity Remaining"] ?? row.remaining_quantity);
+  const rawStatus = text(row.status ?? row.Status) || "Pending";
+  const orderType = text(row.order_type ?? row["Order Type"]) || null;
+  const svApproval = text(row.sv_approval ?? row["S.V Approval"] ?? row["SV Approval"]) || null;
+  const status = effectiveOperationsStatus(row, rawStatus, orderType, svApproval);
+  const statusKey = norm(status);
+  const isFinalReceivedStatus = /(arrived|delivered|received)/.test(statusKey);
+  const hasBaseQty = Math.abs(Number(base) || 0) > 1e-9;
+  const receivedIsZero = receivedRaw !== null && Math.abs(Number(receivedRaw) || 0) < 1e-9;
+  const remainingIsZero = remainingRaw !== null && Math.abs(Number(remainingRaw) || 0) < 1e-9;
+  const remainingEqualsBase = remainingRaw !== null && Math.abs(roundQty(Number(remainingRaw) - Number(base))) < 1e-9;
+  const remainingEqualsOriginalBase = remainingRaw !== null && Math.abs(roundQty(Number(remainingRaw) - Number(originalBase))) < 1e-9;
+  const supervisorEditActive = quantityEditedBySupervisor !== null && Math.abs(roundQty(Number(quantityEditedBySupervisor) - Number(originalBase))) > 1e-9;
+  const noMeaningfulReceivedYet = receivedRaw === null || Math.abs(Number(receivedRaw) || 0) < 1e-9;
+  const zeroZeroPlaceholder = hasBaseQty && receivedIsZero && remainingIsZero && !isFinalReceivedStatus;
+  const zeroReceivedWithBaseRemaining = hasBaseQty && receivedIsZero && remainingEqualsBase;
+  const supervisorEditedBeforeOps = supervisorEditActive && noMeaningfulReceivedYet && remainingEqualsOriginalBase;
+
+  let quantityReceived = receivedRaw;
+  let quantityRemaining;
+  let quantityReceivedEdited = false;
+  if (zeroZeroPlaceholder || zeroReceivedWithBaseRemaining || supervisorEditedBeforeOps) {
+    quantityReceived = null;
+    quantityRemaining = base;
+  } else if (remainingRaw !== null) {
+    quantityRemaining = roundQty(remainingRaw);
+    quantityReceivedEdited = receivedRaw !== null && Math.abs(Number(receivedRaw) || 0) > 1e-9;
+  } else {
+    const receivedForRemaining = receivedRaw === null ? 0 : Number(receivedRaw) || 0;
+    quantityRemaining = roundQty((Number(base) || 0) - receivedForRemaining);
+    quantityReceivedEdited = receivedRaw !== null && Math.abs(Number(receivedRaw) || 0) > 1e-9;
+  }
+
+  const createdByName = text(row.team_member_name ?? row["Teams Members"] ?? row.teams_members ?? row.Supervisor ?? row.supervisor);
+  const createdById = text(row.team_member_id ?? row["Team Member ID"]) || createdByName;
+  const operationsByName = text(row.person_received_by_operations ?? row["Person Received by Operations"] ?? row["Received by operations"]);
+  const issueDescription = text(row.issue_description ?? row["Issue Description"]);
+  const rawReason = text(row.reason ?? row.Reason) || "No Reason";
+  const reason = /^created\s+from\s+proposal\s*:/i.test(issueDescription) ? "Generated from Proposal" : rawReason;
+  const createdTime = dateValue(row.notion_created_time ?? row.created_time ?? row.created_at ?? row["Created time"]) || new Date().toISOString();
+
+  return {
+    id,
+    orderId: Number.isFinite(orderNumber) ? `ORD-${orderNumber}` : (id ? `ORD-${id}` : null),
+    orderIdPrefix: Number.isFinite(orderNumber) ? "ORD" : null,
+    orderIdNumber: Number.isFinite(orderNumber) ? orderNumber : null,
+    reason,
+    productName: text(row.product_name ?? row["Product Name"] ?? row.product ?? row.Product) || "Unknown Product",
+    unitPrice: num(row.unit_price ?? row["Unit price"] ?? row["Unity Price"] ?? row.Price),
+    quantityRequested: quantityRequested !== null ? quantityRequested : base,
+    quantityProgress: quantityEditedBySupervisor,
+    quantityEditedBySupervisor,
+    quantityReceived,
+    quantityRemaining,
+    quantityReceivedEdited,
+    quantity: base,
+    status,
+    statusColor: statusColor(status),
+    orderType,
+    orderTypeColor: orderTypeColor(orderType),
+    issueDescription: issueDescription || null,
+    actualIssueDescription: text(row.actual_issue_description ?? row["Actual Issue Description"]) || null,
+    repairAction: text(row.repair_action ?? row["Repair Action"]) || null,
+    resolutionMethod: text(row.resolution_method ?? row["Resolution Method"]) || null,
+    operationsByName,
+    operationsApproval: text(row.operations_approval ?? row["Operations Approval"] ?? row.operation_approval ?? row["Operation Approval"]) || null,
+    rejectedReason: text(row.rejected_reason ?? row["Rejected Reason"] ?? row["Reject Reason"] ?? row.rejection_reason ?? row["Rejection Reason"]) || null,
+    receiptNumber: text(row.receipt_number ?? row["Receipt Number"] ?? row["Store Receipt Number"]) || null,
+    createdTime,
+    createdById,
+    createdByName,
+    svApproval,
+    summaryOnly: true,
+    source: "supabase",
+  };
+}
+
+
+/**
+ * Fast-path serializer used by the paged order lists. The list only needs a
+ * compact workflow/quantity shape; detail-only fields are loaded lazily when
+ * the user opens an order. Keeping this separate from the broader Home/detail
+ * summary serializer avoids allocating and then discarding many properties for
+ * every component row in a page.
+ */
+export function serializeOperationsCompactSummaryRow(row = {}, { includeSearchText = false, includeCreatedById = true } = {}) {
+  // Modern direct reads always expose the snake_case projection below. If a
+  // customized legacy table returns only old alias columns, preserve the old
+  // compatibility serializer instead of dropping the row.
+  if (!Object.prototype.hasOwnProperty.call(row || {}, "order_number")) {
+    const legacy = serializeOperationsSummaryRow(row);
+    const item = compactOperationsSummaryItem(legacy);
+    if (!includeCreatedById) delete item.createdById;
+    if (includeSearchText) item._summarySearchText = groupSearchText([legacy]);
+    return item;
+  }
+  const id = text(row.id);
+  const orderNumber = num(row.order_number);
+  const quantityProgress = num(row.quantity_progress);
+  const quantityRequested = num(row.quantity_requested);
+  const quantityEditedBySupervisor = num(row.quantity_edited_by_supervisor);
+  const originalBase = roundQty(quantityRequested !== null ? quantityRequested : (quantityProgress !== null ? quantityProgress : 0));
+  const base = roundQty(quantityEditedBySupervisor !== null ? quantityEditedBySupervisor : originalBase);
+  const receivedRaw = num(row.quantity_received_by_operations);
+  const remainingRaw = num(row.quantity_remaining);
+  const rawStatus = text(row.status) || "Pending";
+  const orderType = text(row.order_type) || null;
+  const svApproval = text(row.sv_approval) || null;
+  const status = effectiveOperationsStatus(row, rawStatus, orderType, svApproval);
+  const statusKey = norm(status);
+  const isFinalReceivedStatus = /(arrived|delivered|received)/.test(statusKey);
+  const hasBaseQty = Math.abs(Number(base) || 0) > 1e-9;
+  const receivedIsZero = receivedRaw !== null && Math.abs(Number(receivedRaw) || 0) < 1e-9;
+  const remainingIsZero = remainingRaw !== null && Math.abs(Number(remainingRaw) || 0) < 1e-9;
+  const remainingEqualsBase = remainingRaw !== null && Math.abs(roundQty(Number(remainingRaw) - Number(base))) < 1e-9;
+  const remainingEqualsOriginalBase = remainingRaw !== null && Math.abs(roundQty(Number(remainingRaw) - Number(originalBase))) < 1e-9;
+  const supervisorEditActive = quantityEditedBySupervisor !== null && Math.abs(roundQty(Number(quantityEditedBySupervisor) - Number(originalBase))) > 1e-9;
+  const noMeaningfulReceivedYet = receivedRaw === null || Math.abs(Number(receivedRaw) || 0) < 1e-9;
+  const zeroZeroPlaceholder = hasBaseQty && receivedIsZero && remainingIsZero && !isFinalReceivedStatus;
+  const zeroReceivedWithBaseRemaining = hasBaseQty && receivedIsZero && remainingEqualsBase;
+  const supervisorEditedBeforeOps = supervisorEditActive && noMeaningfulReceivedYet && remainingEqualsOriginalBase;
+
+  let quantityReceived = receivedRaw;
+  let quantityRemaining;
+  let quantityReceivedEdited = false;
+  if (zeroZeroPlaceholder || zeroReceivedWithBaseRemaining || supervisorEditedBeforeOps) {
+    quantityReceived = null;
+    quantityRemaining = base;
+  } else if (remainingRaw !== null) {
+    quantityRemaining = roundQty(remainingRaw);
+    quantityReceivedEdited = receivedRaw !== null && Math.abs(Number(receivedRaw) || 0) > 1e-9;
+  } else {
+    const receivedForRemaining = receivedRaw === null ? 0 : Number(receivedRaw) || 0;
+    quantityRemaining = roundQty((Number(base) || 0) - receivedForRemaining);
+    quantityReceivedEdited = receivedRaw !== null && Math.abs(Number(receivedRaw) || 0) > 1e-9;
+  }
+
+  const createdByName = text(row.team_member_name);
+  const createdById = text(row.team_member_id) || createdByName;
+  const issueDescription = text(row.issue_description);
+  const rawReason = text(row.reason) || "No Reason";
+  const reason = /^created\s+from\s+proposal\s*:/i.test(issueDescription) ? "Generated from Proposal" : rawReason;
+  const createdTime = dateValue(row.notion_created_time) || new Date().toISOString();
+  const item = {
+    id,
+    orderId: Number.isFinite(orderNumber) ? `ORD-${orderNumber}` : (id ? `ORD-${id}` : null),
+    orderIdNumber: Number.isFinite(orderNumber) ? orderNumber : null,
+    reason,
+    unitPrice: num(row.unit_price),
+    quantityRequested: quantityRequested !== null ? quantityRequested : base,
+    quantityEditedBySupervisor,
+    quantityReceived,
+    quantityRemaining,
+    quantityReceivedEdited,
+    quantity: base,
+    status,
+    orderType,
+    orderTypeColor: orderTypeColor(orderType),
+    operationsApproval: text(row.operations_approval) || null,
+    rejectedReason: text(row.rejected_reason) || null,
+    createdTime,
+    createdByName,
+    svApproval,
+    summaryOnly: true,
+    source: "supabase",
+  };
+
+  if (includeCreatedById) item.createdById = createdById || null;
+  if (includeSearchText) {
+    item._summarySearchText = [
+      row.reason,
+      row.team_member_name,
+      row.product_name,
+      row.issue_description,
+      row.actual_issue_description,
+      row.repair_action,
+      row.resolution_method,
+      row.person_received_by_operations,
+      row.receipt_number,
+      row.rejected_reason,
+    ].map(text).filter(Boolean).join(" ");
+  }
+  return item;
+}
+
+function tableName() {
+  return text(process.env.SUPABASE_ORDERS_TABLE) || "orders";
+}
+
+function pageLimit(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return PAGE_LIMIT;
+  return Math.max(10, Math.min(PAGE_MAX, Math.floor(parsed)));
+}
+
+function pageCursor(value) {
+  if (value === null || value === undefined || String(value).trim() === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function orderTypeKey(value) {
+  return String(value || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function orderTypeLabel(value) {
+  const key = orderTypeKey(value);
+  if (key === "requestproducts") return "Request Products";
+  if (key === "withdrawproducts") return "Withdraw Products";
+  if (key === "requestmaintenance") return "Request Maintenance";
+  return "";
+}
+
+function effectiveOperationsStatus(row = {}, rawStatus = "", orderType = "", svApproval = "") {
+  const status = text(rawStatus) || "Pending";
+  if (orderTypeKey(orderType) !== "requestmaintenance") return status;
+  if (statusIndex(status) !== 2 || approvalKey(svApproval) !== "approved") return status;
+
+  // A saved maintenance log means the technical visit was completed and the
+  // Operations workflow is in Shipping, even for older rows whose DB status
+  // was left as "In progress" by the previous client.
+  const hasMaintenanceLog = [
+    row?.serial_number,
+    row?.actual_issue_description,
+    row?.repair_action,
+    row?.resolution_method,
+    row?.spare_parts_replaced,
+  ].some((value) => Boolean(text(value)));
+  return hasMaintenanceLog ? "Shipped" : status;
+}
+
+function approvalKey(value) {
+  const state = norm(value).replace(/[_.-]+/g, " ");
+  if (state.includes("reject")) return "rejected";
+  if (state.includes("approv")) return "approved";
+  return "not-started";
+}
+
+function decision(item = {}) {
+  const operations = approvalKey(item.operationsApproval ?? item.operations_approval);
+  const supervisor = approvalKey(item.svApproval ?? item.sv_approval ?? item.approval);
+  if (operations === "rejected" || supervisor === "rejected" || text(item.rejectedReason ?? item.rejected_reason)) return "rejected";
+  if (operations === "approved" || supervisor === "approved" || statusIndex(item.status) === 2) return "approved";
+  return "not-started";
+}
+
+function groupMeta(items = []) {
+  const summary = items.find((item) => item?._summaryCard);
+  if (summary) {
+    return {
+      stage: Number(summary._groupStage) || statusIndex(summary.status),
+      hasRemaining: Boolean(summary._groupHasRemaining),
+      hasReceived: Boolean(summary._groupHasReceived),
+      maintenance: orderTypeKey(summary.orderType) === "requestmaintenance",
+    };
+  }
+  const stage = Math.max(1, ...items.map((item) => statusIndex(item?.status)));
+  const hasRemaining = items.some((item) => Math.abs(Number(item?.quantityRemaining ?? item?.quantity_remaining ?? 0) || 0) > 1e-9);
+  const hasReceived = items.some((item) => Math.abs(Number(item?.quantityReceived ?? item?.quantity_received_by_operations ?? 0) || 0) > 1e-9);
+  const rawType = text(items?.[0]?.orderType ?? items?.[0]?.order_type);
+  const maintenance = orderTypeKey(rawType) === "requestmaintenance";
+  return { stage, hasRemaining, hasReceived, maintenance };
+}
+
+function groupMatchesTab(items = [], tab = "all") {
+  const cleanTab = String(tab || "all").trim().toLowerCase();
+  const summary = items.find((item) => item?._summaryCard);
+  if (summary && summary._summaryTab === cleanTab) return true;
+  if (cleanTab === "approved" || cleanTab === "rejected") {
+    return items.some((item) => statusIndex(item?.status) === 2 && decision(item) === cleanTab);
+  }
+  const meta = groupMeta(items);
+  if (["all", "archive", "delivered", "remaining", "received"].includes(cleanTab)) {
+    return operationsMatchesTab(meta, cleanTab);
+  }
+  return true;
+}
+
+function rowsForTab(items = [], tab = "all") {
+  const cleanTab = String(tab || "all").trim().toLowerCase();
+  if (items.some((item) => item?._summaryCard)) return items;
+  if (cleanTab === "approved" || cleanTab === "rejected") {
+    return items.filter((item) => statusIndex(item?.status) === 2 && decision(item) === cleanTab);
+  }
+  return items;
+}
+
+function groupSearchText(items = []) {
+  return items.flatMap((item) => [
+    item?.orderId,
+    item?.orderIdNumber,
+    item?.reason,
+    item?.createdByName,
+    item?.createdById,
+    item?.orderType,
+    item?.productName,
+    item?.issueDescription,
+    item?.actualIssueDescription,
+    item?.repairAction,
+    item?.resolutionMethod,
+    item?.operationsByName,
+    item?.receiptNumber,
+    item?.rejectedReason,
+    item?._summarySearchText,
+  ]).map((value) => norm(value)).join(" ");
+}
+
+function filterText(value) {
+  return String(value ?? "").trim().replace(/[,*%()]/g, " ").replace(/\s+/g, " ");
+}
+
+const SEARCH_COLUMNS = [
+  "reason",
+  "team_member_name",
+  "product_name",
+  "issue_description",
+  "actual_issue_description",
+  "repair_action",
+  "resolution_method",
+  "person_received_by_operations",
+  "receipt_number",
+  "rejected_reason",
+];
+
+function searchLogic(query = "") {
+  return createOrderSearchPlan(query, SEARCH_COLUMNS);
+}
+
+function statusLogic(tab = "all") {
+  const cleanTab = String(tab || "all").trim().toLowerCase();
+  if (cleanTab === "archive") return ["status.ilike.*archive*"];
+  if (cleanTab === "delivered") return ["status.ilike.*arrived*", "status.ilike.*delivered*", "status.ilike.*received*"];
+  if (cleanTab === "remaining") {
+    // Partial deliveries retain a persisted Arrived status for stocktaking and
+    // receipt history. Do not exclude them before evaluating quantity_remaining.
+    return ["status.ilike.*shipped*", "status.ilike.*shipping*", "status.ilike.*prepared*", "status.ilike.*delivering*", "status.ilike.*arrived*", "status.ilike.*delivered*", "status.ilike.*received*"];
+  }
+  // Maintenance logs created by the older client can legitimately be stored as
+  // "In progress" while they are already in the Shipping step. Keep this
+  // candidate query broad and let the exact normalized status decide below.
+  if (cleanTab === "received") return null;
+  if (cleanTab === "approved" || cleanTab === "rejected") return ["status.ilike.*progress*", "status.ilike.*approved*"];
+  return null;
+}
+
+function logicalParams({ query = "", tab = "all", type = "all", searchMode = "fast" } = {}) {
+  const params = {};
+  const logicGroups = [];
+  applyOrderSearchPlan({ params, logicGroups, plan: searchLogic(query), mode: searchMode });
+
+  const statusClauses = statusLogic(tab);
+  if (statusClauses?.length) logicGroups.push(statusClauses);
+
+  const typeLabel = orderTypeLabel(type);
+  if (typeLabel) params.order_type = `ilike.*${typeLabel.replace(/[*%]/g, "")}*`;
+
+  if (logicGroups.length === 1) params.or = `(${logicGroups[0].join(",")})`;
+  else if (logicGroups.length > 1) params.and = `(${logicGroups.map((clauses) => `or(${clauses.join(",")})`).join(",")})`;
+  return params;
+}
+
+async function candidateNumbers({ cursor = null, scanGroups = 90, filters = {}, searchMode = "", rpcOptions = null, signal = null } = {}) {
+  const suffix = searchMode ? `.search-${searchMode}` : "";
+  if (rpcOptions && rpcOptions.tab !== "remaining" && canUseOrderCandidateRpc()) {
+    try {
+      return await loadOrderCandidateNumbersRpc({
+        ...rpcOptions,
+        cursor,
+        wanted: scanGroups,
+        profileName: `orders.operations${suffix}.candidates-rpc`,
+        signal,
+      });
+    } catch (error) {
+      if (signal?.aborted || error?.code === "REQUEST_ABORTED" || error?.name === "AbortError") throw error;
+      noteOrderCandidateRpcError(error);
+    }
+  }
+  return await scanOrderNumberCandidates({
+    table: tableName(),
+    cursor,
+    wanted: scanGroups,
+    minWanted: 20,
+    maxWanted: 240,
+    rowChunk: 1000,
+    maxScannedRows: 12000,
+    filters,
+    queryProfileName: `orders.operations${suffix}.candidates`,
+    scanProfileName: `orders.operations${suffix}.candidate-scan`,
+    signal,
+  });
+}
+
+function stageStatus(stage) {
+  const value = Number(stage) || 1;
+  if (value >= 5) return "Archive";
+  if (value === 4) return "Delivered";
+  if (value === 3) return "Shipped";
+  if (value === 2) return "In progress";
+  return "Pending";
+}
+
+function operationsCardSummaryItem(row = {}, tab = "all") {
+  const orderIds = Array.isArray(row?.orderIds) ? row.orderIds.map(text).filter(Boolean) : [];
+  const orderNumber = Number(row?.orderNumber);
+  const cleanTab = String(tab || "all").trim().toLowerCase();
+  const hasApproved = Boolean(row?.hasApproved);
+  const hasRejected = Boolean(row?.hasRejected);
+  return {
+    id: orderIds[0] || `summary-${Number.isFinite(orderNumber) ? orderNumber : "order"}`,
+    orderIds,
+    orderId: Number.isFinite(orderNumber) ? `ORD-${orderNumber}` : null,
+    orderIdNumber: Number.isFinite(orderNumber) ? orderNumber : null,
+    reason: text(row?.reason) || "No Reason",
+    unitPrice: 0,
+    quantityRequested: 1,
+    quantityEditedBySupervisor: null,
+    quantityReceived: row?.hasReceived ? 1 : 0,
+    quantityRemaining: row?.hasRemaining ? 1 : 0,
+    quantityReceivedEdited: Boolean(row?.hasReceived),
+    quantity: 1,
+    status: stageStatus(row?.stage),
+    orderType: text(row?.orderType) || null,
+    orderTypeColor: orderTypeColor(row?.orderType),
+    operationsApproval: cleanTab === "rejected" ? "Rejected" : cleanTab === "approved" ? "Approved" : (hasRejected && !hasApproved ? "Rejected" : hasApproved && !hasRejected ? "Approved" : null),
+    rejectedReason: null,
+    createdTime: dateValue(row?.createdTime) || new Date().toISOString(),
+    createdById: text(row?.teamMemberId) || text(row?.teamMemberName) || null,
+    _scopeOwnerId: text(row?.teamMemberId),
+    createdByName: text(row?.teamMemberName) || null,
+    svApproval: cleanTab === "rejected" ? "Rejected" : cleanTab === "approved" ? "Approved" : null,
+    summaryOnly: true,
+    source: "supabase",
+    _summaryCard: true,
+    _summaryTab: cleanTab,
+    _groupStage: Number(row?.stage) || 1,
+    _groupHasRemaining: Boolean(row?.hasRemaining),
+    _groupHasReceived: Boolean(row?.hasReceived),
+    _groupHasApproved: hasApproved,
+    _groupHasRejected: hasRejected,
+  };
+}
+
+async function rowsByNumbers(numbers = [], signal = null, includeLocalSearchFields = false, { tab = "all", scoped = false } = {}) {
+  // Card-summary RPC may aggregate mixed owners into one card. Never trust it
+  // for row-scoped lists: fetch component owners before filtering groups.
+  if (tab !== "remaining" && !scoped && !includeLocalSearchFields && canUseOrderCardSummaryRpc()) {
+    try {
+      const rows = await loadOrderCardSummariesRpc({
+        numbers,
+        context: "operations",
+        tab,
+        profileName: "orders.operations.card-summary-rpc",
+        signal,
+      });
+      return rows.map((row) => operationsCardSummaryItem(row, tab));
+    } catch (error) {
+      if (signal?.aborted || error?.code === "REQUEST_ABORTED" || error?.name === "AbortError") throw error;
+      noteOrderCardSummaryRpcError(error);
+    }
+  }
+
+  if (canUseOrderSummaryRpc()) {
+    try {
+      return await loadOrderSummaryRowsRpc({
+        numbers,
+        profileName: "orders.operations.summary-rpc",
+        signal,
+      });
+    } catch (error) {
+      if (signal?.aborted || error?.code === "REQUEST_ABORTED" || error?.name === "AbortError") throw error;
+      noteOrderSummaryRpcError(error);
+    }
+  }
+
+  return await loadOrderRowsByNumbers({
+    table: tableName(),
+    numbers,
+    selectExpr: includeLocalSearchFields ? SUMMARY_SEARCH_SELECT : SUMMARY_SELECT,
+    queryProfileName: "orders.operations.summary",
+    fallbackProfileName: "orders.operations.summary-fallback",
+    loadProfileName: "orders.operations.summary-load",
+    signal,
+  });
+}
+
+function groupRows(rows = [], includeLocalSearchFields = false, resolved = null) {
+  const startedAt = performance.now();
+  const groups = new Map();
+  const blocked = new Set();
+  for (const row of rows) {
+    const rowOrderNumber = Number(row?._summaryCard ? row.orderIdNumber : row.order_number);
+    if (resolved && !visibleOrderRow(row, resolved)) {
+      if (Number.isFinite(rowOrderNumber)) blocked.add(rowOrderNumber);
+      continue;
+    }
+    const item = row?._summaryCard ? row : serializeOperationsCompactSummaryRow(row, { includeSearchText: includeLocalSearchFields });
+    const orderNumber = Number(item.orderIdNumber);
+    if (!Number.isFinite(orderNumber)) continue;
+    if (!groups.has(orderNumber)) groups.set(orderNumber, []);
+    groups.get(orderNumber).push(item);
+  }
+  for (const number of blocked) groups.delete(number);
+  recordPerformanceSample({
+    category: "orders-summary",
+    name: "orders.operations.summary-transform",
+    durationMs: performance.now() - startedAt,
+    meta: { rows: rows.length, groups: groups.size, localSearch: includeLocalSearchFields },
+  });
+  return groups;
+}
+
+function compactOperationsSummaryItem(item = {}) {
+  return {
+    id: item.id,
+    orderId: item.orderId,
+    orderIdNumber: item.orderIdNumber,
+    reason: item.reason,
+    unitPrice: item.unitPrice,
+    quantityRequested: item.quantityRequested,
+    quantityEditedBySupervisor: item.quantityEditedBySupervisor,
+    quantityReceived: item.quantityReceived,
+    quantityRemaining: item.quantityRemaining,
+    quantityReceivedEdited: item.quantityReceivedEdited,
+    quantity: item.quantity,
+    status: item.status,
+    orderType: item.orderType,
+    orderTypeColor: item.orderTypeColor,
+    operationsApproval: item.operationsApproval,
+    rejectedReason: item.rejectedReason,
+    createdTime: item.createdTime,
+    createdById: item.createdById,
+    createdByName: item.createdByName,
+    svApproval: item.svApproval,
+    summaryOnly: true,
+    source: "supabase",
+  };
+}
+
+export async function loadOperationsOrdersPage({
+  account = {},
+  tab = "all",
+  type = "all",
+  query = "",
+  cursor = null,
+  limit = PAGE_LIMIT,
+  signal = null,
+} = {}) {
+  if (!isSupabaseConfigured()) return null;
+  const resolved = await resolveOrderScope(account, "orders.operations.view");
+  const safeLimit = pageLimit(limit);
+  const outputGroups = [];
+  let nextCursor = pageCursor(cursor);
+  let hasMore = true;
+  let loops = 0;
+
+  while (outputGroups.length < safeLimit && hasMore && loops < 12) {
+    loops += 1;
+    const searchPlan = searchLogic(query);
+    const hasTextSearch = Boolean(searchPlan?.clean && !Number.isFinite(searchPlan?.orderNumber));
+    const fastSearch = hasTextSearch && canUseOrderSearchText();
+    const filters = logicalParams({ query, tab, type, searchMode: fastSearch ? "fast" : "legacy" });
+    let candidates;
+    let localSearchFallback = false;
+    try {
+      candidates = await candidateNumbers({
+        cursor: nextCursor,
+        scanGroups: Math.max(safeLimit * 2, 60),
+        filters,
+        searchMode: hasTextSearch ? (fastSearch ? "fast" : "legacy") : "",
+        rpcOptions: !searchPlan ? {
+          context: "operations",
+          orderType: orderTypeLabel(type),
+          tab,
+        } : null,
+        signal,
+      });
+    } catch (error) {
+      if (signal?.aborted || error?.code === "REQUEST_ABORTED" || error?.name === "AbortError") throw error;
+      if (fastSearch && noteOrderSearchTextError(error)) {
+        try {
+          candidates = await candidateNumbers({
+            cursor: nextCursor,
+            scanGroups: Math.max(safeLimit * 2, 60),
+            filters: logicalParams({ query, tab, type, searchMode: "legacy" }),
+            searchMode: "legacy",
+            signal,
+          });
+        } catch (fallbackError) {
+          if (signal?.aborted || fallbackError?.code === "REQUEST_ABORTED" || fallbackError?.name === "AbortError") throw fallbackError;
+          candidates = null;
+        }
+      }
+      if (!candidates) {
+        // Older/custom schemas can reject one of the projected filter columns.
+        // Keep the optimized order-number paging and apply the exact filters in
+        // JavaScript rather than falling all the way back to a full-table scan.
+        localSearchFallback = hasTextSearch;
+        candidates = await candidateNumbers({
+          cursor: nextCursor,
+          scanGroups: Math.max(safeLimit * 2, 60),
+          filters: {},
+          searchMode: hasTextSearch ? "local" : "",
+          signal,
+        });
+      }
+    }
+
+    if (!candidates.numbers.length) {
+      hasMore = false;
+      break;
+    }
+
+    const cleanType = orderTypeKey(type);
+    const directSearch = searchLogic(query);
+    const needle = localSearchFallback && !Number.isFinite(directSearch?.orderNumber) ? norm(directSearch?.clean || query) : "";
+    const windowResult = await consumeOrderSummaryWindows({
+      numbers: candidates.numbers,
+      remainingGroups: safeLimit - outputGroups.length,
+      loadRows: (numbers, loadSignal) => rowsByNumbers(numbers, loadSignal, localSearchFallback, { tab, scoped: !!resolved }),
+      profileName: "orders.operations.summary-window",
+      signal,
+      consumeRows: ({ numbers, rows }) => {
+        const groups = groupRows(rows, localSearchFallback, resolved);
+        let processedCandidates = 0;
+        let matchedGroups = 0;
+
+        for (const orderNumber of numbers) {
+          processedCandidates += 1;
+          nextCursor = orderNumber;
+          const items = groups.get(orderNumber) || [];
+          if (!items.length || !groupMatchesTab(items, tab)) continue;
+          if (cleanType && cleanType !== "all" && orderTypeKey(items[0]?.orderType || "") !== cleanType) continue;
+          if (needle && !groupSearchText(items).includes(needle)) continue;
+          outputGroups.push({ orderNumber, items: rowsForTab(items, tab) });
+          matchedGroups += 1;
+          if (outputGroups.length >= safeLimit) break;
+        }
+
+        return {
+          processedCandidates,
+          matchedGroups,
+          done: outputGroups.length >= safeLimit,
+        };
+      },
+    });
+
+    // There can still be unconsumed groups inside the current candidate window
+    // even when Supabase itself has no rows beyond that window.
+    hasMore = candidates.hasMore || windowResult.processedCandidates < candidates.numbers.length;
+    if (outputGroups.length >= safeLimit || !hasMore) break;
+  }
+
+  const pageGroups = outputGroups.slice(0, safeLimit);
+  return {
+    items: pageGroups.flatMap((group) => group.items),
+    pageInfo: {
+      limit: safeLimit,
+      serverFiltered: true,
+      query: text(query),
+      summaryFormat: "compact-v2",
+      groupCount: pageGroups.length,
+      hasMore: !!hasMore,
+      nextCursor: hasMore && pageCursor(nextCursor) !== null ? pageCursor(nextCursor) : null,
+    },
+  };
+}
+
+export async function loadOperationsOrdersInitialPage({ account = {}, limit = PAGE_LIMIT } = {}) {
+  return await measurePerformance("page-data", "orders.operations.initial", async () =>
+    await loadOperationsOrdersPage({ account, tab: "all", type: "all", query: "", cursor: null, limit }),
+  );
+}
+export async function loadOperationsOrderDetails(orderIds = [], { timings = null, productsSink = null } = {}) {
+  if (!isSupabaseConfigured()) return null;
+  // Try a single live PostgreSQL bundle first. It reads all components and
+  // their product/kit/proposal references in one network round trip. No
+  // cross-request snapshot is stored, so mutations remain immediately visible.
+  // The existing exact-ID verified REST loader is the safety fallback.
+  const fast = await loadFastOrderDetailsBundle(orderIds, { timings });
+  if (fast) {
+    const prepareStartedAt = performance.now();
+    const details = await enrichOrderDetailGrouping(
+      fast.rows.map(serializeOperationsOrderDetail),
+      { timings, productsSink, references: fast.references, recoverProposalSources: fast.proposalRecovery },
+    );
+    if (timings) {
+      timings.prepare = performance.now() - prepareStartedAt;
+      timings.enrich = timings.prepare;
+      timings.fastPath = 1;
+    }
+    return details;
+  }
+
+  const dbStartedAt = performance.now();
+  const rows = await loadRawOrderRowsByIds(orderIds);
+  if (timings) timings.db = performance.now() - dbStartedAt;
+  const enrichStartedAt = performance.now();
+  const serialized = rows.map(serializeOperationsOrderDetail);
+  const details = await enrichOrderDetailGrouping(serialized, { timings, productsSink });
+  if (timings) timings.enrich = performance.now() - enrichStartedAt;
+  return details;
+}
+
+
+
+function directOperationsMutationError(message, status = 500) {
+  const error = new Error(message || "Operations Orders action failed.");
+  error.code = "DIRECT_OPERATIONS_MUTATION_FAILED";
+  error.status = Number(status) || 500;
+  return error;
+}
+
+
+function ensureOperationsMutationAccess(account = {}) {
+  const access = directPageMutationAccess(account, ["Requested Orders", "Operations Orders"]);
+  if (access === null) return null;
+  if (!access) throw directOperationsMutationError("Edit access is required for this action.", 403);
+  return true;
+}
+
+function operationsAccessToken(value) {
+  return text(value).toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function operationsTeamMembersTable() {
+  return text(process.env.SUPABASE_TEAM_MEMBERS_TABLE) || "team_members";
+}
+
+function operationsValueFor(row = {}, aliases = []) {
+  for (const alias of aliases) {
+    if (Object.prototype.hasOwnProperty.call(row || {}, alias)) return row[alias];
+  }
+  const wanted = new Set(aliases.map(operationsAccessToken).filter(Boolean));
+  for (const [key, value] of Object.entries(row || {})) {
+    if (wanted.has(operationsAccessToken(key))) return value;
+  }
+  return null;
+}
+
+function hasOperationsAdminAccess(account = {}) {
+  if (isTrustedLegacyAdmin(account)) return true;
+
+  const wanted = new Set(["operationsorders", "requestedorders", "operationsrequestedorders", "schoolsrequestedorders"]);
+  const pages = Array.isArray(account?.pageAccess?.pages) ? account.pageAccess.pages : [];
+  return pages.some((row) => {
+    if (row?.isEnabled === false) return false;
+    if (text(row?.accessLevel || row?.access_level).toLowerCase() !== "admin") return false;
+    const candidates = [
+      row?.pageName,
+      row?.pageKey,
+      row?.routePath,
+      ...(Array.isArray(row?.aliases) ? row.aliases : []),
+    ].map(operationsAccessToken).filter(Boolean);
+    return candidates.some((candidate) => wanted.has(candidate));
+  });
+}
+
+async function directOperationsAdminPasswordResult(account = {}, password = "") {
+  const pwd = text(password);
+  if (!pwd) throw directOperationsMutationError("adminPassword required", 400);
+  if (hasOperationsAdminAccess(account)) return true;
+  if (pwd === "__OPS_PAGE_ADMIN_BYPASS__") return false;
+  if (!isSupabaseConfigured()) return null;
+
+  let candidates = [];
+  let hadSuccessfulLookup = false;
+  const attempts = [
+    { select: "*", name: "ilike.admin", limit: "10" },
+  ];
+  for (const params of attempts) {
+    try {
+      const rows = await select(operationsTeamMembersTable(), params);
+      hadSuccessfulLookup = true;
+      if (Array.isArray(rows) && rows.length) candidates.push(...rows);
+    } catch {
+      // Custom/older schemas may reject a filter name. Keep trying and use the
+      // Legacy verifier when the direct schema cannot prove compatibility.
+    }
+    if (candidates.length) break;
+  }
+
+  if (!candidates.length) {
+    try {
+      const rows = await selectAll(operationsTeamMembersTable(), { limit: 1000 });
+      hadSuccessfulLookup = true;
+      candidates = Array.isArray(rows) ? rows : [];
+    } catch {
+      return null;
+    }
+  }
+  if (!hadSuccessfulLookup) return null;
+
+  // An editable position/title is never a source of Admin credentials.
+  const adminRow = candidates.find((row) => isTrustedLegacyAdmin({
+    name: operationsValueFor(row, ["name", "Name"]),
+    id: operationsValueFor(row, ["id", "ID"]),
+  }));
+  if (!adminRow) return null;
+
+  const stored = text(operationsValueFor(adminRow, ["password", "Password"]));
+  if (!stored) return null;
+  return stored === pwd;
+}
+
+function cleanOperationsActionIds(value = []) {
+  const source = Array.isArray(value) ? value : [value];
+  const clean = [...new Set(source.map((id) => text(id)).filter(Boolean))];
+  // Never silently drop a submitted tail of IDs: that turns a request for
+  // several orders into a mutation of only the first 1,000 components.
+  if (clean.length > 1000) throw directOperationsMutationError("Too many order components in one action.", 400);
+  return clean;
+}
+
+async function loadOperationRowsByIds(ids = []) {
+  const clean = cleanOperationsActionIds(ids);
+  if (!clean.length) throw directOperationsMutationError("orderIds required", 400);
+  if (!clean.every((id) => /^\d+$/.test(id))) return null;
+  if (!isSupabaseConfigured()) return null;
+
+  const rows = [];
+  for (let index = 0; index < clean.length; index += 180) {
+    const batch = clean.slice(index, index + 180);
+    const chunk = await select(tableName(), {
+      select: "*",
+      id: `in.(${batch.join(",")})`,
+      limit: String(Math.max(batch.length, 1)),
+    });
+    if (Array.isArray(chunk)) rows.push(...chunk);
+  }
+
+  const byId = new Map(rows.map((row) => [text(row?.id ?? row?.ID), row]));
+  return { clean, byId, rows };
+}
+
+function repeatOrderFinalStatus(status) {
+  return /(arrived|delivered|received)/i.test(text(status));
+}
+
+function repeatOrderEffectiveDeliveredQty(item = {}) {
+  const received = Number(item?.quantityReceived);
+  if (item?.quantityReceived !== null && typeof item?.quantityReceived !== "undefined" && Math.abs(roundQty(received)) > 1e-9) {
+    return Math.abs(roundQty(received));
+  }
+  for (const candidate of [item?.quantityProgress, item?.quantityRequested, item?.quantity]) {
+    const value = Number(candidate);
+    if (Number.isFinite(value) && Math.abs(roundQty(value)) > 1e-9) return Math.abs(roundQty(value));
+  }
+  return 0;
+}
+
+async function nextOperationsOrderNumber() {
+  const rows = await select(tableName(), {
+    select: "order_number",
+    order: "order_number.desc",
+    limit: "1",
+  }, {
+    profileName: "orders.operations.repeat-next-number",
+  });
+  const current = Array.isArray(rows) && rows[0] ? num(rows[0]?.order_number) : null;
+  return Number.isFinite(current) ? Number(current) + 1 : 1;
+}
+
+async function insertOperationsRepeatRows(rows = []) {
+  let payload = (Array.isArray(rows) ? rows : []).map((row) => opsEditCleanInsertRow(row));
+  if (!payload.length) return [];
+  let receiptCompatibilityRetried = false;
+
+  while (true) {
+    try {
+      const inserted = await supabaseRequest(`/${encodeURIComponent(tableName())}`, {
+        method: "POST",
+        headers: { Prefer: "return=representation" },
+        body: payload,
+        timeoutMs: 30_000,
+        profileName: "orders.operations.repeat-create",
+      });
+      return Array.isArray(inserted) ? inserted : (inserted ? [inserted] : []);
+    } catch (error) {
+      const missing = opsEditMissingColumn(error);
+      const receiptColumns = new Set(["order_receipt", "receipt_number", "maintenance_receipt"]);
+      // Match the Legacy Supabase compatibility path: old Orders imports can
+      // miss the optional receipt columns, so retry the same atomic batch once
+      // without those columns. Other schema errors must stay fail-closed.
+      if (!receiptCompatibilityRetried && missing && receiptColumns.has(missing)) {
+        receiptCompatibilityRetried = true;
+        payload = payload.map((row) => {
+          const next = { ...row };
+          delete next.order_receipt;
+          delete next.receipt_number;
+          delete next.maintenance_receipt;
+          return next;
+        });
+        continue;
+      }
+
+      // A failed/aborted POST can be ambiguous at the network boundary. Never
+      // fall back to Express after a direct create attempt, otherwise the same
+      // repeat order could be created twice.
+      throw directOperationsCommittedError(
+        error?.message || "Failed to create the repeat order.",
+        Number(error?.status) || 500,
+        error,
+      );
+    }
+  }
+}
+
+export async function createOperationsRepeatOrder({
+  account,
+  orderIds = [],
+  action = "",
+} = {}) {
+  const access = ensureOperationsMutationAccess(account || {});
+  if (access === null) return null;
+
+  const mode = text(action).toLowerCase().replace(/[_\s]+/g, "-");
+  const config = mode === "create-withdrawal"
+    ? {
+        expectedSourceType: "Request Products",
+        targetType: "Withdraw Products",
+        quantitySign: -1,
+        defaultReason: "Withdraw Products",
+        successMessage: "Withdrawal order created in Not Started.",
+        noQuantityError: "No delivered quantities were found to withdraw.",
+      }
+    : mode === "create-delivery"
+      ? {
+          expectedSourceType: "Withdraw Products",
+          targetType: "Request Products",
+          quantitySign: 1,
+          defaultReason: "Request Products",
+          successMessage: "Delivery order created in Not Started.",
+          noQuantityError: "No delivered quantities were found to create a delivery.",
+        }
+      : null;
+
+  if (!config) throw directOperationsMutationError("Unsupported repeat-order action", 400);
+
+  const loaded = await loadOperationRowsByIds(orderIds);
+  if (!loaded) return null;
+  if (loaded.clean.some((id) => !loaded.byId.has(id))) {
+    throw directOperationsMutationError("Orders not found", 404);
+  }
+
+  const sourceRows = loaded.clean.map((id) => loaded.byId.get(id) || {});
+  const sourceItems = sourceRows.map((row) => serializeOperationsOrderDetail(row));
+  const expectedKey = orderTypeKey(config.expectedSourceType);
+  const wrongType = sourceItems.find((item) => orderTypeKey(item?.orderType) !== expectedKey);
+  if (wrongType) {
+    throw directOperationsMutationError(`Only delivered ${config.expectedSourceType} orders can create this order.`, 400);
+  }
+
+  const notDelivered = sourceItems.find((item) => !repeatOrderFinalStatus(item?.status));
+  if (notDelivered) {
+    throw directOperationsMutationError("Order must be in Delivered / Arrived before creating this order.", 400);
+  }
+
+  const orderNumber = await nextOperationsOrderNumber();
+  const now = new Date().toISOString();
+  const sign = Number(config.quantitySign) < 0 ? -1 : 1;
+  const fallbackUserName = text(account?.username || account?.name) || null;
+  const createdRows = [];
+
+  for (let index = 0; index < sourceRows.length; index += 1) {
+    const sourceRow = sourceRows[index] || {};
+    const item = sourceItems[index] || serializeOperationsOrderDetail(sourceRow);
+    const qtyAbs = repeatOrderEffectiveDeliveredQty(item);
+    if (Math.abs(roundQty(qtyAbs)) <= 1e-9) continue;
+
+    const qty = roundQty(sign * qtyAbs);
+    const teamMemberName =
+      text(item?.createdByName)
+      || text(operationsValueFor(sourceRow, ["team_member_name", "teams_members", "Teams Members", "Supervisor", "supervisor"]))
+      || fallbackUserName;
+    const supervisorName =
+      text(item?.assignedToName)
+      || text(operationsValueFor(sourceRow, ["supervisor", "Supervisor"]))
+      || null;
+
+    createdRows.push(opsEditCleanInsertRow({
+      reason: text(item?.reason || config.defaultReason) || config.defaultReason || null,
+      order_number: orderNumber,
+      order_type: orderTypeLabel(config.targetType) || config.targetType || null,
+      notion_created_time: now,
+      product_name: text(item?.productName)
+        || text(operationsValueFor(sourceRow, ["product_name", "Product Name", "product", "Product"]))
+        || "Unknown Product",
+      product_url: text(item?.productUrl)
+        || text(operationsValueFor(sourceRow, ["product_url", "Product URL"]))
+        || null,
+      unit_price: Number.isFinite(Number(item?.unitPrice)) ? Number(item.unitPrice) : null,
+      quantity_requested: qty,
+      quantity_progress: qty,
+      quantity_received_by_operations: 0,
+      quantity_remaining: qty,
+      status: "Under Supervision",
+      sv_approval: "Approved",
+      team_member_name: teamMemberName || null,
+      issue_description: text(item?.issueDescription)
+        || text(operationsValueFor(sourceRow, ["issue_description", "Issue Description"]))
+        || null,
+      supervisor: supervisorName || null,
+      person_received_by_operations: null,
+      order_receipt: null,
+      receipt_number: null,
+      maintenance_receipt: null,
+    }));
+  }
+
+  if (!createdRows.length) {
+    throw directOperationsMutationError(config.noQuantityError, 400);
+  }
+
+  const insertedRows = await insertOperationsRepeatRows(createdRows);
+  await invalidateLegacyOperationsCaches(account).catch(() => {});
+
+  return {
+    success: true,
+    source: "supabase-direct",
+    createdCount: insertedRows.length || createdRows.length,
+    orderIdNumber: Number.isFinite(Number(orderNumber)) ? Number(orderNumber) : null,
+    message: config.successMessage,
+  };
+}
+
+function splitReceiptNumbers(value) {
+  const source = Array.isArray(value) ? value : [value];
+  return source
+    .flatMap((entry) => String(entry ?? "").replace(/\r\n/g, "\n").split(/[\n,]+/))
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function mergeReceiptNumbers(existing, next) {
+  const seen = new Set();
+  const values = [];
+  for (const entry of [...splitReceiptNumbers(existing), ...splitReceiptNumbers(next)]) {
+    const key = entry.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    values.push(entry);
+  }
+  return values.join("\n").trim();
+}
+
+function orderBaseQuantity(row = {}) {
+  const requested = num(row.quantity_requested ?? row["Quantity Requested"] ?? row.requested_quantity ?? row["Requested Quantity"]);
+  const progress = num(row.quantity_progress ?? row["Quantity Progress"] ?? row.quantity ?? row.Quantity ?? row.qty ?? row.Qty);
+  const edited = num(row.quantity_edited_by_supervisor ?? row["Quantity Edited by supervisor"] ?? row["Quantity Edited by Supervisor"] ?? row.quantity_edited ?? row.edited_quantity);
+  const original = roundQty(requested !== null ? requested : (progress !== null ? progress : 0));
+  return roundQty(edited !== null ? edited : original);
+}
+
+function rawReceivedQuantity(row = {}) {
+  return num(row.quantity_received_by_operations ?? row["Quantity Received by operations"] ?? row["Quantity Received by Operations"] ?? row.received_quantity ?? row.quantity_received);
+}
+
+function rawRemainingQuantity(row = {}) {
+  return num(row.quantity_remaining ?? row["Quantity Remaining"] ?? row.remaining_quantity);
+}
+
+function effectiveReceivedForMutation(row = {}) {
+  const base = orderBaseQuantity(row);
+  const receivedRaw = rawReceivedQuantity(row);
+  const remainingRaw = rawRemainingQuantity(row);
+  const status = norm(row.status ?? row.Status);
+  const finalStatus = /(arrived|delivered|received)/.test(status);
+  const hasBase = Math.abs(base) > 1e-9;
+  const receivedZero = receivedRaw !== null && Math.abs(Number(receivedRaw) || 0) < 1e-9;
+  const remainingZero = remainingRaw !== null && Math.abs(Number(remainingRaw) || 0) < 1e-9;
+  const remainingEqualsBase = remainingRaw !== null && Math.abs(roundQty(Number(remainingRaw) - base)) < 1e-9;
+
+  // Imported empty Notion number cells can appear as 0/0 in Supabase. Match
+  // the Legacy serializer and treat those as "not received yet" until final.
+  if (hasBase && receivedZero && ((remainingZero && !finalStatus) || remainingEqualsBase)) return null;
+  return receivedRaw;
+}
+
+function clampQuantityToBase(base, value) {
+  const baseQty = roundQty(base);
+  const nextQty = roundQty(value);
+  if (baseQty >= 0) return Math.min(Math.max(nextQty, 0), baseQty);
+  return Math.max(Math.min(nextQty, 0), baseQty);
+}
+
+async function mapWithConcurrency(items = [], concurrency = 12, mapper = async (item) => item) {
+  const list = Array.isArray(items) ? items : [];
+  if (!list.length) return [];
+  const limit = Math.max(1, Math.min(list.length, Number(concurrency) || 1));
+  const results = new Array(list.length);
+  let cursor = 0;
+  const worker = async () => {
+    while (true) {
+      const index = cursor++;
+      if (index >= list.length) return;
+      results[index] = await mapper(list[index], index);
+    }
+  };
+  await Promise.all(Array.from({ length: limit }, () => worker()));
+  return results;
+}
+
+async function upstashDeleteOperationsKeys(keys = []) {
+  const url = text(process.env.UPSTASH_REDIS_REST_URL);
+  const tokenValue = text(process.env.UPSTASH_REDIS_REST_TOKEN);
+  const clean = [...new Set((keys || []).map(text).filter(Boolean))];
+  if (!url || !tokenValue || !clean.length) return false;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 1800);
+  try {
+    const response = await fetch(url.replace(/\/+$/, ""), {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        Authorization: `Bearer ${tokenValue}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(["DEL", ...clean]),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export async function invalidateLegacyOperationsCaches(account = {}) {
+  const username = text(account?.username || account?.name);
+  const userKey = username ? norm(username).replace(/[^a-z0-9]+/g, "") : "";
+  const keys = [
+    "cache:api:orders:requested:v7",
+    "cache:api:orders:requested:supabase:v1",
+    "cache:api:orders:requested:supabase:v2:approved",
+    "cache:api:orders:requested:supabase:v2:all-system",
+    "cache:api:orders:requested:supabase:v4:approved",
+    "cache:api:orders:requested:supabase:v4:all-system",
+    "cache:api:orders:requested:supabase:v5:approved",
+    "cache:api:orders:requested:supabase:v5:all-system",
+    "cache:api:orders:requested-summary:supabase:v1:approved",
+    "cache:api:orders:requested-summary:supabase:v1:all-system",
+    "cache:api:orders:maintenance:supabase:v1",
+    "cache:api:orders:maintenance-summary:supabase:v1",
+    "cache:api:orders:current:supabase:v1",
+    "cache:api:orders:current:supabase:v1:all",
+    "cache:api:orders:current-summary:supabase:v1:all",
+  ];
+  if (userKey) {
+    keys.push(
+      `cache:api:orders:current:supabase:v1:${userKey}`,
+      `cache:api:orders:current-summary:supabase:v1:${userKey}`,
+      `cache:api:orders:current-home-summary:supabase:v1:${userKey}`,
+    );
+  }
+  await upstashDeleteOperationsKeys(keys).catch(() => false);
+}
+
+export async function updateOperationsApproval({ account, ids = [], decision = "", rejectedReason = "" } = {}) {
+  const access = ensureOperationsMutationAccess(account || {});
+  if (access === null) return null;
+
+  const raw = norm(decision);
+  const normalizedDecision = raw === "approved" ? "Approved" : raw === "rejected" ? "Rejected" : raw === "not started" || raw === "not-started" ? "Not Started" : "";
+  const reason = text(rejectedReason);
+  if (!normalizedDecision) throw directOperationsMutationError("Invalid ids or decision", 400);
+  if (normalizedDecision === "Rejected" && !reason) throw directOperationsMutationError("Rejected reason is required", 400);
+
+  const loaded = await loadOperationRowsByIds(ids);
+  if (!loaded) return null;
+  const existingIds = loaded.clean.filter((id) => loaded.byId.has(id));
+  const failed = loaded.clean.filter((id) => !loaded.byId.has(id)).map((id) => ({ id, error: "Order not found" }));
+  const patch = {
+    operations_approval: normalizedDecision,
+    rejected_reason: normalizedDecision === "Rejected" ? reason : null,
+  };
+
+  for (let index = 0; index < existingIds.length; index += 180) {
+    const batch = existingIds.slice(index, index + 180);
+    try {
+      await updateByIds(tableName(), batch, patch);
+    } catch (error) {
+      for (const id of batch) {
+        try { await updateById(tableName(), id, patch); }
+        catch (rowError) { failed.push({ id, error: rowError?.message || String(rowError) }); }
+      }
+    }
+  }
+
+  const failedIds = new Set(failed.map((item) => text(item?.id)));
+  const updated = existingIds
+    .filter((id) => !failedIds.has(id))
+    .map((id) => ({ id, decision: normalizedDecision, rejectedReason: normalizedDecision === "Rejected" ? reason : null }));
+  await invalidateLegacyOperationsCaches(account).catch(() => {});
+  return {
+    ok: failed.length === 0,
+    decision: normalizedDecision,
+    rejectedReason: normalizedDecision === "Rejected" ? reason : null,
+    updated,
+    failed,
+    source: "supabase-direct",
+  };
+}
+
+export async function markOperationsShipped({
+  account,
+  orderIds = [],
+  receiptNumber = null,
+  quantities = null,
+  issueDescription = "",
+  perItemIssues = [],
+} = {}) {
+  const access = ensureOperationsMutationAccess(account || {});
+  if (access === null) return null;
+
+  const loaded = await loadOperationRowsByIds(orderIds);
+  if (!loaded) return null;
+  if (loaded.clean.some((id) => !loaded.byId.has(id))) {
+    throw directOperationsMutationError("Order not found", 404);
+  }
+  if (loaded.rows.some((row) => statusIndex(row?.status ?? row?.Status) >= 4)) {
+    throw directOperationsMutationError("A delivered or archived order cannot be received again. Refresh the order.", 409);
+  }
+  if (loaded.rows.some((row) => decision(row) === "rejected")) {
+    throw directOperationsMutationError("Rejected components must be reviewed before receiving them.", 409);
+  }
+
+  const quantityMap = quantities && typeof quantities === "object" && !Array.isArray(quantities) ? quantities : null;
+  const globalIssue = text(issueDescription);
+  const issues = new Map(
+    (Array.isArray(perItemIssues) ? perItemIssues : [])
+      .map((entry) => [text(entry?.orderId), text(entry?.issueDescription)])
+      .filter(([id]) => id),
+  );
+  const incomingReceipt = mergeReceiptNumbers("", receiptNumber);
+  const operationsByName = text(account?.username || account?.name);
+
+  /*
+   * Receive Components used to send one Supabase PATCH per component, up to
+   * 16 requests at the same time. With large orders this could hit the shared
+   * 15s Supabase request budget. Some PATCHes had already committed when one
+   * request timed out, so the UI showed "fetch failed" / "Supabase request
+   * timed out..." even though the quantities were actually saved.
+   *
+   * The new path:
+   *  1) writes the fields shared by every row in ONE PATCH;
+   *  2) sends row-specific quantity/receipt/issue PATCHes only when a stored
+   *     value really needs to change;
+   *  3) uses return=minimal to avoid waiting for large response payloads;
+   *  4) treats PATCHes as idempotent absolute writes and verifies/retries only
+   *     ambiguous rows when Supabase/network returns a timeout/fetch error.
+   *
+   * This keeps the same final database values while dramatically reducing the
+   * number of Supabase requests for Receive Components.
+   */
+
+  const commonPatch = {
+    status: "Shipped",
+    person_received_by_operations: operationsByName || null,
+  };
+
+  const specificById = new Map();
+  const expectedById = new Map();
+
+  const valuesMatch = (actual, expected) => {
+    if (expected === null || typeof expected === "undefined") {
+      return actual === null || typeof actual === "undefined" || text(actual) === "";
+    }
+    if (typeof expected === "number") {
+      const actualNumber = Number(actual);
+      return Number.isFinite(actualNumber) && Math.abs(roundQty(actualNumber) - roundQty(expected)) <= 1e-9;
+    }
+    return text(actual) === text(expected);
+  };
+
+  for (const id of loaded.clean) {
+    const row = loaded.byId.get(id) || {};
+    const patch = {};
+
+    const currentReceipt = text(row.receipt_number ?? row["Receipt Number"] ?? row["Store Receipt Number"]);
+    const mergedReceipt = incomingReceipt ? mergeReceiptNumbers(currentReceipt, incomingReceipt) : "";
+    if (mergedReceipt && mergedReceipt !== currentReceipt) {
+      patch.receipt_number = mergedReceipt;
+    }
+
+    const rowIssue = issues.has(id) ? issues.get(id) : globalIssue;
+    if (rowIssue && text(row.issue_description ?? row["Issue Description"]) !== rowIssue) {
+      patch.issue_description = rowIssue;
+    }
+
+    const base = orderBaseQuantity(row);
+    const hasExplicit = quantityMap && Object.prototype.hasOwnProperty.call(quantityMap, id);
+    const providedValue = hasExplicit ? quantityMap[id] : null;
+    const explicit = hasExplicit ? Number(providedValue) : null;
+    if (quantityMap && Object.keys(quantityMap).length && !hasExplicit) {
+      throw directOperationsMutationError("Received quantities must include every selected component.", 400);
+    }
+    if (hasExplicit && (providedValue === null || text(providedValue) === "" || !Number.isFinite(explicit))) {
+      throw directOperationsMutationError("Invalid received quantity for a component.", 400);
+    }
+    if (hasExplicit && Math.abs(explicit - clampQuantityToBase(base, explicit)) > 1e-9) {
+      throw directOperationsMutationError("Received quantity exceeds the requested amount.", 400);
+    }
+
+    if (hasExplicit && Number.isFinite(explicit)) {
+      const received = clampQuantityToBase(base, explicit);
+      const remaining = roundQty(base - received);
+      const currentReceivedRaw = rawReceivedQuantity(row);
+      const currentRemainingRaw = rawRemainingQuantity(row);
+
+      if (currentReceivedRaw === null || !valuesMatch(currentReceivedRaw, received)) {
+        patch.quantity_received_by_operations = received;
+      }
+      if (currentRemainingRaw === null || !valuesMatch(currentRemainingRaw, remaining)) {
+        patch.quantity_remaining = remaining;
+      }
+    } else {
+      // Preserve the existing mark-shipped behavior for actions that do not
+      // provide an explicit quantity map (for example the technical-visit flow).
+      const currentReceived = effectiveReceivedForMutation(row);
+      const currentRemaining = rawRemainingQuantity(row);
+      const hasMeaningfulReceived = currentReceived !== null && Math.abs(Number(currentReceived) || 0) > 1e-9;
+
+      if (!hasMeaningfulReceived) {
+        if (rawReceivedQuantity(row) === null || !valuesMatch(rawReceivedQuantity(row), roundQty(base))) {
+          patch.quantity_received_by_operations = roundQty(base);
+        }
+        if (currentRemaining === null || !valuesMatch(currentRemaining, 0)) {
+          patch.quantity_remaining = 0;
+        }
+      } else if (currentRemaining === null || Math.abs(Number(currentRemaining) || 0) > 1e-9) {
+        const received = roundQty(Number(currentReceived) || 0);
+        const remaining = roundQty(base - received);
+        if (rawReceivedQuantity(row) === null || !valuesMatch(rawReceivedQuantity(row), received)) {
+          patch.quantity_received_by_operations = received;
+        }
+        if (currentRemaining === null || !valuesMatch(currentRemaining, remaining)) {
+          patch.quantity_remaining = remaining;
+        }
+      }
+    }
+
+    if (Object.keys(patch).length) specificById.set(id, patch);
+    expectedById.set(id, { ...commonPatch, ...patch });
+  }
+
+  const inFilter = (ids = []) =>
+    ids.map((id) => (/^-?\d+(?:\.\d+)?$/.test(String(id)) ? String(id) : `"${String(id).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`)).join(",");
+
+  const patchMany = async (ids, patch, profileName, timeoutMs = 25_000) => {
+    if (!ids?.length || !patch || !Object.keys(patch).length) return;
+    await supabaseRequest(
+      `/${encodeURIComponent(tableName())}?id=in.(${encodeURIComponent(inFilter(ids))})`,
+      {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: patch,
+        timeoutMs,
+        profileName,
+      },
+    );
+  };
+
+  const patchOne = async (id, patch, profileName, timeoutMs = 25_000) => {
+    if (!patch || !Object.keys(patch).length) return;
+    await supabaseRequest(
+      `/${encodeURIComponent(tableName())}?id=eq.${encodeURIComponent(String(id))}`,
+      {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: patch,
+        timeoutMs,
+        profileName,
+      },
+    );
+  };
+
+  const rowMatchesPatch = (row, patch) => {
+    if (!row) return false;
+    return Object.entries(patch || {}).every(([key, expected]) => valuesMatch(row?.[key], expected));
+  };
+
+  const verifyExpectedRows = async () => {
+    const verified = await loadOperationRowsByIds(loaded.clean);
+    if (!verified) return { verified: null, mismatched: loaded.clean.slice() };
+    const mismatched = loaded.clean.filter((id) => !rowMatchesPatch(verified.byId.get(id), expectedById.get(id)));
+    return { verified, mismatched };
+  };
+
+  let firstWriteError = null;
+
+  // One shared PATCH replaces N duplicated status/person PATCHes.
+  try {
+    await patchMany(
+      loaded.clean,
+      commonPatch,
+      "orders.operations.mark-shipped.common",
+      25_000,
+    );
+  } catch (error) {
+    firstWriteError = error;
+  }
+
+  // Only rows whose quantity / receipt / issue actually changed need another
+  // PATCH. Keep concurrency moderate to avoid connection spikes.
+  const specificEntries = Array.from(specificById.entries());
+  const specificResults = await mapWithConcurrency(specificEntries, 6, async ([id, patch]) => {
+    try {
+      await patchOne(id, patch, "orders.operations.mark-shipped.row", 25_000);
+      return { id, ok: true };
+    } catch (error) {
+      if (!firstWriteError) firstWriteError = error;
+      return { id, ok: false, error };
+    }
+  });
+
+  const hadSpecificFailure = specificResults.some((entry) => entry?.ok === false);
+
+  // PATCH is an absolute/idempotent write. If the network boundary times out
+  // after Supabase committed it, verify the stored values before reporting an
+  // error. Retry only rows that are actually missing the intended values.
+  if (firstWriteError || hadSpecificFailure) {
+    await new Promise((resolve) => setTimeout(resolve, 180));
+
+    let verification = null;
+    try {
+      verification = await verifyExpectedRows();
+    } catch {
+      verification = { verified: null, mismatched: loaded.clean.slice() };
+    }
+
+    if (verification.mismatched.length) {
+      const retryResults = await mapWithConcurrency(verification.mismatched, 4, async (id) => {
+        try {
+          await patchOne(
+            id,
+            expectedById.get(id),
+            "orders.operations.mark-shipped.retry",
+            15_000,
+          );
+          return { id, ok: true };
+        } catch (error) {
+          return { id, ok: false, error };
+        }
+      });
+
+      if (retryResults.some((entry) => entry?.ok === false)) {
+        try {
+          verification = await verifyExpectedRows();
+        } catch {
+          verification = { verified: null, mismatched: verification.mismatched };
+        }
+      } else {
+        try {
+          verification = await verifyExpectedRows();
+        } catch {
+          // The retry itself succeeded. A verification read failure should not
+          // turn a confirmed PATCH response into a false "fetch failed".
+          verification = { verified: null, mismatched: [] };
+        }
+      }
+    }
+
+    if (verification.mismatched.length) {
+      const source = firstWriteError || specificResults.find((entry) => entry?.error)?.error;
+      throw directOperationsMutationError(
+        source?.message || "Could not confirm the received quantities. Please try again.",
+        Number(source?.status) || 503,
+      );
+    }
+  }
+
+  await invalidateLegacyOperationsCaches(account).catch(() => {});
+
+  const returnedReceipt = loaded.clean
+    .map((id) => {
+      const specific = specificById.get(id) || {};
+      if (specific.receipt_number) return text(specific.receipt_number);
+      const row = loaded.byId.get(id) || {};
+      return text(row?.receipt_number ?? row?.["Receipt Number"] ?? row?.["Store Receipt Number"]);
+    })
+    .find(Boolean) || incomingReceipt || null;
+
+  return {
+    success: true,
+    status: "Shipped",
+    statusColor: "blue",
+    operationsByName,
+    issueDescription: globalIssue || null,
+    perItemIssues: Array.from(issues.entries()).map(([orderId, issue]) => ({ orderId, issueDescription: issue })),
+    receiptNumber: returnedReceipt,
+    source: "supabase-direct",
+  };
+}
+
+function operationsProductKey(value) {
+  return text(value).normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+}
+
+function operationsProductMaps(products = []) {
+  const byId = new Map();
+  const byName = new Map();
+  const byUrl = new Map();
+  for (const product of Array.isArray(products) ? products : []) {
+    const id = text(product?.id);
+    const nameKey = operationsProductKey(product?.name);
+    const urlKey = text(product?.url).toLowerCase();
+    if (id) byId.set(id, product);
+    if (nameKey && !byName.has(nameKey)) byName.set(nameKey, product);
+    if (urlKey && !byUrl.has(urlKey)) byUrl.set(urlKey, product);
+  }
+  return { byId, byName, byUrl };
+}
+
+function resolveOperationsEditProduct(row = {}, maps = {}) {
+  const directId = text(operationsValueFor(row, ["product_id", "productId", "product_page_id", "productPageId"]));
+  if (directId && maps.byId?.has(directId)) return maps.byId.get(directId);
+  const url = text(operationsValueFor(row, ["product_url", "Product URL", "url", "URL"])).toLowerCase();
+  if (url && maps.byUrl?.has(url)) return maps.byUrl.get(url);
+  const nameKey = operationsProductKey(operationsValueFor(row, ["product_name", "Product Name", "product", "Product"]));
+  if (nameKey && maps.byName?.has(nameKey)) return maps.byName.get(nameKey);
+  return null;
+}
+
+function addOperationsStatusOption(list, value) {
+  const clean = text(value);
+  if (!clean) return;
+  if (!list.some((item) => norm(item) === norm(clean))) list.push(clean);
+}
+
+export async function performOperationsProtectedAction({
+  account,
+  action,
+  orderIds = [],
+  adminPassword = "",
+} = {}) {
+  const access = ensureOperationsMutationAccess(account || {});
+  if (access === null) return null;
+
+  const cleanAction = text(action).toLowerCase().replace(/[_\s]+/g, "-");
+  if (!["archive", "unarchive", "delete", "edit-init"].includes(cleanAction)) {
+    throw directOperationsMutationError("Unsupported protected action", 400);
+  }
+
+  const loaded = await loadOperationRowsByIds(orderIds);
+  if (!loaded) return null;
+  if (loaded.clean.some((id) => !loaded.byId.has(id))) {
+    throw directOperationsMutationError("Orders not found", 404);
+  }
+
+  if (cleanAction !== "unarchive") {
+    const passwordOk = await directOperationsAdminPasswordResult(account || {}, adminPassword);
+    if (passwordOk === null) return null;
+    if (!passwordOk) throw directOperationsMutationError("Invalid admin password", 401);
+  }
+
+  if (["archive", "unarchive", "delete"].includes(cleanAction)) {
+    // Archive, restore and delete all operate on an ORDER, not on arbitrary
+    // component IDs. Enforce that the request contains exactly one complete
+    // saved order. Validation must run even for legacy (unscoped) accounts.
+    const orderNumbers = [...new Set(loaded.rows.map(row => text(row?.order_number)))];
+    if (orderNumbers.length !== 1 || !/^\d+$/.test(orderNumbers[0] || "")) {
+      throw directOperationsMutationError("Order number could not be verified. Refresh the order before continuing.", 409);
+    }
+    const allRows = await select(tableName(), {
+      select: "id,order_number",
+      order_number: `eq.${orderNumbers[0]}`,
+      limit: "1001",
+    });
+    const verdict = validateWholeOperationsOrder(loaded.clean, loaded.rows, allRows);
+    if (!verdict.ok) {
+      throw directOperationsMutationError("Order components have changed or could not be fully verified. Refresh the order before continuing.", 409);
+    }
+
+    // Opt-in SQL transaction: repeat the complete-order/snapshot checks under a
+    // database write lock before changing anything. Never silently fall back
+    // to separate writes if the RPC is enabled but unavailable.
+    if (useAtomicOrderActions()) {
+      let atomic;
+      try {
+        atomic = await performAtomicOrderAction({
+          action: cleanAction,
+          ids: loaded.clean,
+          rows: loaded.rows,
+          orderNumber: orderNumbers[0],
+          tableName: tableName(),
+        });
+      } catch (error) {
+        throw directOperationsMutationError(error?.message || "Atomic order action failed.", error?.status || 503);
+      }
+      await invalidateLegacyOperationsCaches(account).catch(() => {});
+      if (cleanAction === "delete") return { success: true, deleted: atomic.affected, source: "supabase-atomic" };
+      const nextStatus = cleanAction === "archive" ? "Archive" : "In progress";
+      return {
+        success: true, status: nextStatus,
+        statusColor: cleanAction === "archive" ? "purple" : "yellow",
+        source: "supabase-atomic",
+      };
+    }
+
+    if (cleanAction === "delete") {
+      const deleted = await deleteByIds(tableName(), loaded.clean);
+      if (!Array.isArray(deleted) || deleted.length !== loaded.clean.length) {
+        // The mutation may have committed partially; never retry automatically.
+        throw directOperationsMutationError("Deletion was not fully confirmed. Refresh the orders list.", 409);
+      }
+      await invalidateLegacyOperationsCaches(account).catch(() => {});
+      return { success: true, deleted: deleted.length, source: "supabase-direct" };
+    }
+
+    const nextStatus = cleanAction === "archive" ? "Archive" : "In progress";
+    const changed = await updateByIds(tableName(), loaded.clean, { status: nextStatus });
+    if (!Array.isArray(changed) || changed.length !== loaded.clean.length) {
+      // A concurrent edit/delete can change the selected set after the read.
+      // Fail closed rather than reporting that an order was fully archived.
+      throw directOperationsMutationError("The order update was not fully confirmed. Refresh the orders list.", 409);
+    }
+    await invalidateLegacyOperationsCaches(account).catch(() => {});
+    return {
+      success: true,
+      status: nextStatus,
+      statusColor: cleanAction === "archive" ? "purple" : "yellow",
+      source: "supabase-direct",
+    };
+  }
+
+  const catalog = await getProductsCatalog();
+  const products = Array.isArray(catalog?.products) ? catalog.products : [];
+  const maps = operationsProductMaps(products);
+  const items = loaded.clean.map((id) => {
+    const row = loaded.byId.get(id) || {};
+    const serialized = serializeOperationsOrderDetail(row);
+    const product = resolveOperationsEditProduct(row, maps);
+    const status = text(serialized?.status) || "In Progress";
+    const delivered = /(arrived|delivered|received)/i.test(status);
+    const requestedQty = Number(serialized?.quantityRequested ?? serialized?.quantity ?? 0) || 0;
+    const receivedQty = Number(serialized?.quantityReceived ?? 0) || 0;
+    const remainingQty = Number(serialized?.quantityRemaining ?? (requestedQty - receivedQty)) || 0;
+    return {
+      ...serialized,
+      productId: text(product?.id || operationsValueFor(row, ["product_id", "productId", "product_page_id", "productPageId"])) || null,
+      productIdCode: text(product?.displayId) || null,
+      effectiveIdCode: text(serialized?.customizeId || product?.displayId) || null,
+      requestedQty,
+      receivedQty,
+      remainingQty,
+      deliveredQty: delivered ? receivedQty : 0,
+      unitPrice: Number.isFinite(Number(serialized?.unitPrice)) ? Number(serialized.unitPrice) : null,
+    };
+  });
+
+  const statusOptions = [];
+  addOperationsStatusOption(statusOptions, "In Progress");
+  addOperationsStatusOption(statusOptions, "Shipped");
+  addOperationsStatusOption(statusOptions, "Arrived");
+  loaded.clean.forEach((id) => addOperationsStatusOption(statusOptions, loaded.byId.get(id)?.status ?? loaded.byId.get(id)?.Status));
+
+  return {
+    ok: true,
+    source: "supabase-direct",
+    count: items.length,
+    items,
+    products,
+    statusOptions,
+  };
+}
+function directOperationsCommittedError(message, status = 500, cause = null) {
+  const error = directOperationsMutationError(message || "Operations order edit failed.", status);
+  error.noFallback = true;
+  if (cause) error.cause = cause;
+  return error;
+}
+
+function opsEditMissingColumn(error) {
+  const message = String(error?.message || error?.details?.message || error?.details || error?.hint || "");
+  return (message.match(/Could not find the ['"]([^'"]+)['"] column/i) || [])[1]
+    || (message.match(/column ['"]([^'"]+)['"]/i) || [])[1]
+    || "";
+}
+
+function opsEditCleanInsertRow(row = {}) {
+  const out = {};
+  for (const [key, value] of Object.entries(row || {})) {
+    if (!key || typeof value === "undefined") continue;
+    out[key] = typeof value === "number" && !Number.isFinite(value) ? null : value;
+  }
+  return out;
+}
+
+async function opsEditUpdateOrderSafe(id, row = {}, requiredColumns = []) {
+  let payload = { ...(row || {}) };
+  const required = new Set((requiredColumns || []).filter(Boolean));
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    try {
+      return await updateById(tableName(), id, payload);
+    } catch (error) {
+      const missing = opsEditMissingColumn(error);
+      if (!missing || !Object.prototype.hasOwnProperty.call(payload, missing)) throw error;
+      if (required.has(missing)) throw directOperationsMutationError(`Missing required Orders column: ${missing}. Run the Customize ID SQL migration first.`, 400);
+      delete payload[missing];
+    }
+  }
+  throw new Error("Failed to update the Operations order after removing unsupported optional columns.");
+}
+
+async function opsEditInsertOrderSafe(row = {}, requiredColumns = []) {
+  let payload = opsEditCleanInsertRow(row);
+  const required = new Set((requiredColumns || []).filter(Boolean));
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    try {
+      return await insert(tableName(), payload);
+    } catch (error) {
+      const missing = opsEditMissingColumn(error);
+      if (!missing || !Object.prototype.hasOwnProperty.call(payload, missing)) throw error;
+      if (required.has(missing)) throw directOperationsMutationError(`Missing required Orders column: ${missing}. Run the Customize ID SQL migration first.`, 400);
+      delete payload[missing];
+    }
+  }
+  throw new Error("Failed to create the split Operations order row after removing unsupported optional columns.");
+}
+
+function opsEditParseSourceKits(value) {
+  let raw = value;
+  if (!Array.isArray(raw) && !(raw && typeof raw === "object")) {
+    const candidate = text(value);
+    if (!candidate) return [];
+    try { raw = JSON.parse(candidate); } catch { return []; }
+  }
+  return (Array.isArray(raw) ? raw : [])
+    .map((source, index) => ({
+      kitId: text(source?.kitId || source?.kit_id || source?.id),
+      kitName: text(source?.kitName || source?.kit_name || source?.name),
+      quantity: Math.max(0, Number(source?.quantity ?? source?.qty ?? 1) || 0),
+      order: Number.isFinite(Number(source?.order)) ? Number(source.order) : index,
+    }))
+    .filter((source) => source.kitId || source.kitName);
+}
+
+function opsEditSplitQtyBySources(value, sources = []) {
+  const list = Array.isArray(sources) ? sources : [];
+  if (!list.length) return [];
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || Math.abs(numeric) < 1e-9) return list.map(() => 0);
+  const sign = numeric < 0 ? -1 : 1;
+  const targetAbs = Math.abs(numeric);
+  const weights = list.map((source) => Math.max(0, Number(source?.quantity) || 0));
+  const total = weights.reduce((sum, weight) => sum + weight, 0);
+  if (total <= 0) return list.map((_, index) => index === 0 ? roundQty(numeric) : 0);
+  if (Math.abs(targetAbs - Math.round(targetAbs)) < 1e-9) {
+    const target = Math.round(targetAbs);
+    const parts = weights.map((weight, index) => {
+      const raw = (weight * target) / total;
+      const base = Math.floor(raw);
+      return { index, value: base, fraction: raw - base };
+    });
+    let remaining = target - parts.reduce((sum, part) => sum + part.value, 0);
+    const ranked = parts.slice().sort((a, b) => (b.fraction - a.fraction) || (a.index - b.index));
+    for (let index = 0; remaining > 0 && ranked.length; index = (index + 1) % ranked.length) {
+      ranked[index].value += 1;
+      remaining -= 1;
+    }
+    return parts.sort((a, b) => a.index - b.index).map((part) => sign * part.value);
+  }
+  const result = weights.map((weight) => roundQty(sign * targetAbs * weight / total));
+  const difference = roundQty(numeric - result.reduce((sum, part) => sum + part, 0));
+  if (Math.abs(difference) > 1e-9) result[result.length - 1] = roundQty(result[result.length - 1] + difference);
+  return result;
+}
+
+function opsEditSplitOrderRow(row = {}) {
+  const sources = opsEditParseSourceKits(operationsValueFor(row, ["source_kits", "Source Kits", "proposal_source_kits", "Proposal Source Kits"]));
+  if (sources.length <= 1) return null;
+  const serialized = serializeOperationsOrderDetail(row);
+  const requested = Number(serialized?.quantityRequested ?? serialized?.quantity ?? 0) || 0;
+  const base = Number(serialized?.quantity ?? requested) || 0;
+  const received = Number(serialized?.quantityReceived ?? 0) || 0;
+  const remaining = Number(serialized?.quantityRemaining ?? (base - received)) || 0;
+  const editedRaw = serialized?.quantityEditedBySupervisor;
+  const requestedParts = opsEditSplitQtyBySources(requested, sources);
+  const baseParts = opsEditSplitQtyBySources(base, sources);
+  const receivedParts = opsEditSplitQtyBySources(received, sources);
+  const remainingParts = opsEditSplitQtyBySources(remaining, sources);
+  const editedParts = editedRaw === null || typeof editedRaw === "undefined" ? sources.map(() => null) : opsEditSplitQtyBySources(Number(editedRaw) || 0, sources);
+  return sources.map((source, index) => {
+    const requestedQty = roundQty(requestedParts[index] ?? 0);
+    const cleanSource = {
+      kitId: text(source?.kitId),
+      kitName: text(source?.kitName),
+      quantity: Math.abs(requestedQty),
+      order: Number.isFinite(Number(source?.order)) ? Number(source.order) : index,
+    };
+    return {
+      source: cleanSource,
+      sourceIndex: index,
+      row: {
+        ...(row || {}),
+        quantity_requested: requestedQty,
+        quantity_progress: roundQty(baseParts[index] ?? requestedQty),
+        quantity_edited_by_supervisor: editedParts[index],
+        quantity_received_by_operations: roundQty(receivedParts[index] ?? 0),
+        quantity_remaining: roundQty(remainingParts[index] ?? ((baseParts[index] ?? requestedQty) - (receivedParts[index] ?? 0))),
+        kit_tag: cleanSource.kitName || null,
+        source_kits: [cleanSource],
+      },
+    };
+  });
+}
+
+function opsEditCloneOrderInsertRow(row = {}) {
+  const clone = { ...(row || {}) };
+  ["id", "ID", "notion_page_id", "notion_id", "page_id", "notionPageId"].forEach((key) => delete clone[key]);
+  return opsEditCleanInsertRow(clone);
+}
+
+function opsEditProductFirstTag(product = {}) {
+  return (Array.isArray(product?.tags) ? product.tags : []).map(text).find(Boolean) || null;
+}
+
+function opsEditBuildItemPatch(beforeRow, itemUpdate, productMap, sourceMeta = null) {
+  if (!itemUpdate) return {};
+  const patch = {};
+  const has = (key) => Object.prototype.hasOwnProperty.call(itemUpdate, key);
+  const numberField = (key, label) => {
+    if (!has(key)) return null;
+    const value = Number(itemUpdate[key]);
+    if (!Number.isFinite(value)) throw directOperationsMutationError(`${label} must be a valid number.`, 400);
+    return roundQty(value);
+  };
+
+  if (has("productId")) {
+    const productId = text(itemUpdate.productId);
+    const product = productMap.get(productId) || null;
+    if (!product?.id) throw directOperationsMutationError("The selected Product component was not found.", 400);
+    patch.product_id = Number.isFinite(Number(product.id)) ? Number(product.id) : String(product.id);
+    patch.product_name = text(product.name) || "Unknown Product";
+    patch.product_url = product.url || null;
+    patch.unit_price = Number.isFinite(Number(product.unitPrice)) ? Number(product.unitPrice) : null;
+    patch.product_tag = opsEditProductFirstTag(product);
+  }
+  if (has("unitPrice")) patch.unit_price = itemUpdate.unitPrice === null || itemUpdate.unitPrice === "" ? null : numberField("unitPrice", "Unit cost");
+  if (has("productTag")) patch.product_tag = text(itemUpdate.productTag) || null;
+  if (has("customizeId")) patch.customize_id = text(itemUpdate.customizeId) || null;
+  if (has("kitTag")) patch.kit_tag = text(itemUpdate.kitTag) || null;
+  if (has("reason")) patch.reason = text(itemUpdate.reason) || null;
+  if (has("issueDescription")) patch.issue_description = String(itemUpdate.issueDescription || "").replace(/\r\n/g, "\n").trim() || null;
+  if (has("status")) {
+    const status = text(itemUpdate.status);
+    if (!status) throw directOperationsMutationError("Status is required.", 400);
+    patch.status = status;
+  }
+
+  const serialized = serializeOperationsOrderDetail(beforeRow);
+  const requestedQty = has("requestedQty") ? numberField("requestedQty", "Requested quantity") : roundQty(Number(serialized?.quantityRequested ?? serialized?.quantity ?? 0) || 0);
+  let receivedQty = has("receivedQty") ? numberField("receivedQty", "Received quantity") : roundQty(Number(serialized?.quantityReceived ?? 0) || 0);
+  let remainingQty = has("remainingQty") ? numberField("remainingQty", "Remaining quantity") : roundQty(Number(serialized?.quantityRemaining ?? (requestedQty - receivedQty)) || 0);
+  const nextStatus = text(has("status") ? itemUpdate.status : serialized?.status);
+  const finalStatus = /(arrived|delivered|received)/i.test(nextStatus);
+  if (has("deliveredQty")) {
+    const deliveredQty = numberField("deliveredQty", "Delivered quantity");
+    if (finalStatus) {
+      receivedQty = deliveredQty;
+      remainingQty = roundQty(requestedQty - deliveredQty);
+    } else if (Math.abs(deliveredQty) > 1e-9) {
+      throw directOperationsMutationError("Delivered quantity can only be greater than zero when the status is Arrived/Delivered.", 400);
+    }
+  }
+  if (has("requestedQty")) {
+    patch.quantity_requested = requestedQty;
+    patch.quantity_progress = requestedQty;
+    patch.quantity_edited_by_supervisor = null;
+  }
+  if (has("receivedQty") || has("remainingQty") || has("requestedQty") || has("deliveredQty")) {
+    patch.quantity_received_by_operations = receivedQty;
+    patch.quantity_remaining = remainingQty;
+  }
+
+  if (sourceMeta) {
+    const kitName = has("kitTag") ? text(itemUpdate.kitTag) : text(sourceMeta?.kitName || itemUpdate?.sourceKitName);
+    patch.kit_tag = kitName || null;
+    patch.source_kits = [{
+      kitId: text(sourceMeta?.kitId || itemUpdate?.sourceKitId),
+      kitName,
+      quantity: Math.abs(requestedQty),
+      order: Number.isFinite(Number(sourceMeta?.order)) ? Number(sourceMeta.order) : 0,
+    }];
+  }
+  return patch;
+}
+
+function opsEditApplyQuantityMapPatch(beforeRow, rawQty) {
+  const value = Number(rawQty);
+  if (!Number.isFinite(value)) throw directOperationsMutationError("Quantity received must be a valid number.", 400);
+  const serialized = serializeOperationsOrderDetail(beforeRow);
+  const base = Number(serialized?.quantity) || 0;
+  let nextQty = roundQty(value);
+  if (base < 0 && nextQty > 0) nextQty = -Math.abs(nextQty);
+  const clamped = clampQuantityToBase(base, nextQty);
+  return { quantity_received_by_operations: clamped, quantity_remaining: roundQty(base - clamped) };
+}
+
+function opsStockCanonical(value) {
+  return text(value).normalize("NFKC").toLowerCase().replace(/&/g, "and").replace(/[^\p{L}\p{N}]+/gu, "");
+}
+
+function opsStockColumnKey(value) {
+  return text(value).normalize("NFKC").toLowerCase().replace(/&/g, " and ").replace(/%/g, " percent ").replace(/[’'"`]/g, "").replace(/[^\p{L}\p{N}]+/gu, "_").replace(/^_+|_+$/g, "").replace(/_+/g, "_");
+}
+
+function opsStockFindKey(keys = [], aliases = []) {
+  const canonicalMap = new Map((keys || []).map((key) => [opsStockCanonical(key), key]));
+  for (const alias of aliases || []) {
+    const exact = (keys || []).find((key) => key === alias);
+    if (exact) return exact;
+    const hit = canonicalMap.get(opsStockCanonical(alias));
+    if (hit) return hit;
+  }
+  return "";
+}
+
+function opsStockQuantityColumn(keys = [], schoolName = "") {
+  const base = opsStockColumnKey(schoolName);
+  // Do not send one school's order quantities to a generic or another
+  // school's stock column when the requester's own column is missing.
+  const candidates = [schoolName, base, base && !base.endsWith("_done") ? `${base}_done` : "", base && base.endsWith("_done") ? base.replace(/_done$/, "") : "", base && !base.endsWith("_2nd_term") ? `${base}_2nd_term` : ""].filter(Boolean);
+  const direct = opsStockFindKey(keys, candidates);
+  if (direct) return direct;
+  if (!base) return "";
+  return keys.find((key) => {
+    const normalized = opsStockColumnKey(key);
+    return normalized === base || normalized === `${base}_done` || normalized === `${base}_2nd_term` || (normalized.includes(base) && /(done|stock|quantity|2nd_term)/i.test(normalized));
+  }) || "";
+}
+
+function opsStockTableName() {
+  return text(process.env.SUPABASE_STOCKTAKING_TABLE) || "stocktaking";
+}
+
+async function opsSelectAllPaged(table, { order = "" } = {}) {
+  const rows = [];
+  const pageSize = 1000;
+  for (let offset = 0; offset < 100000; offset += pageSize) {
+    const page = await select(table, { select: "*", limit: String(pageSize), offset: String(offset), ...(order ? { order } : {}) });
+    const list = Array.isArray(page) ? page : [];
+    rows.push(...list);
+    if (list.length < pageSize) break;
+  }
+  return rows;
+}
+
+function opsOrderTypeKey(value) {
+  return text(value).toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function opsSupportedStockOrderType(value) {
+  const key = opsOrderTypeKey(value);
+  return key === "requestproducts" || key === "withdrawproducts";
+}
+
+function opsFinalStatus(value) {
+  return /(arrived|delivered|received)/i.test(text(value));
+}
+
+function opsReceiptPhotosJson(serialized = {}) {
+  const entries = Array.isArray(serialized?.orderReceiptEntries) ? serialized.orderReceiptEntries : [];
+  const clean = entries.map((entry, index) => ({
+    name: text(entry?.name) || `Receipt photo ${index + 1}`,
+    url: text(entry?.url || entry?.publicUrl || entry?.public_url || entry?.raw),
+  })).filter((entry) => entry.url);
+  return clean.length ? JSON.stringify(clean) : null;
+}
+
+function opsResolveOwnerMember(row = {}, members = []) {
+  const rowId = text(operationsValueFor(row, ["team_member_id", "Team Member ID"]));
+  const rowName = operationsAccessToken(operationsValueFor(row, ["team_member_name", "Teams Members", "Supervisor", "supervisor"]));
+  return (members || []).find((member) => rowId && text(member?.id) === rowId)
+    || (members || []).find((member) => rowName && operationsAccessToken(member?.name) === rowName)
+    || null;
+}
+
+async function opsPrepareStockContext(plannedFinalRows = [], rowsBefore = [], products = []) {
+  const relevantAfter = (plannedFinalRows || []).filter((row) => {
+    const serialized = serializeOperationsOrderDetail(row || {});
+    return opsFinalStatus(serialized?.status) && opsSupportedStockOrderType(serialized?.orderType);
+  });
+  const relevantBefore = (rowsBefore || []).filter((row) => {
+    const serialized = serializeOperationsOrderDetail(row || {});
+    return opsFinalStatus(serialized?.status) && opsSupportedStockOrderType(serialized?.orderType);
+  });
+  if (!relevantAfter.length && !relevantBefore.length) return { needed: false };
+
+  const [stockRows, members] = await Promise.all([
+    opsSelectAllPaged(opsStockTableName(), { order: "id.asc" }),
+    listTeamMembersLite({ fresh: true }),
+  ]);
+  // A new/empty Stocktaking table contains no rows to inspect. Use the
+  // PostgREST schema for its column names instead of silently declining the
+  // delivery action. Never infer that a column exists from an empty result.
+  let keys = [...new Set(stockRows.flatMap((row) => Object.keys(row || {})))];
+  if (!keys.length) {
+    try {
+      const openApi = await supabaseRequest("/", {
+        headers: { Accept: "application/openapi+json" },
+        profileName: "orders.operations.stocktaking-schema",
+      });
+      const schemas = openApi?.definitions || openApi?.components?.schemas || {};
+      const match = Object.entries(schemas).find(([name]) =>
+        opsStockCanonical(name.replace(/^public[._-]/i, "")) === opsStockCanonical(opsStockTableName()));
+      keys = Object.keys(match?.[1]?.properties || match?.[1]?.items?.properties || {});
+    } catch {
+      // Some self-hosted PostgREST installations disable OpenAPI. The error
+      // below explains the missing schema without making any modifications.
+    }
+  }
+  if (!keys.length) {
+    throw directOperationsMutationError(
+      "Cannot read the Stocktaking schema. Verify the Stocktaking table and Supabase access before delivering this order.", 503,
+    );
+  }
+  const sourceOrderColumn = opsStockFindKey(keys, ["source_order_id", "Source Order ID", "source_order", "Source Order", "order_row_id", "Order Row ID"]);
+  if (!sourceOrderColumn) {
+    throw directOperationsMutationError(
+      "Stocktaking is missing source_order_id. Run supabase_operations_delivery_stocktaking.sql in Supabase SQL Editor before marking this order delivered.", 409,
+    );
+  }
+
+  const quantityColumnBySchool = new Map();
+  for (const row of relevantAfter) {
+    const member = opsResolveOwnerMember(row, members);
+    const school = text(member?.stocktakingColumn);
+    if (!member || !school) {
+      const requestedBy = text(operationsValueFor(row, ["team_member_name", "Teams Members", "team_member_id", "Team Member ID"])) || "the order requester";
+      throw directOperationsMutationError(
+        `Cannot sync Stocktaking: ${requestedBy} has no matching Team Member / School (Stocktaking) assignment. Configure it in Users Center first.`, 409,
+      );
+    }
+    if (!quantityColumnBySchool.has(school)) {
+      const quantityColumn = opsStockQuantityColumn(keys, school);
+      if (!quantityColumn) {
+        throw directOperationsMutationError(
+          `Stocktaking quantity column for ${school} was not found. Check the requester's Stocktaking assignment and school column.`, 409,
+        );
+      }
+      quantityColumnBySchool.set(school, quantityColumn);
+    }
+  }
+  return { needed: true, stockRows, keys, members, sourceOrderColumn, quantityColumnBySchool, productMaps: operationsProductMaps(products) };
+}
+
+async function opsStockInsertSafe(row = {}, requiredColumns = []) {
+  let payload = { ...(row || {}) };
+  const required = new Set((requiredColumns || []).filter(Boolean));
+  for (let attempt = 0; attempt < 16; attempt += 1) {
+    try { return await insert(opsStockTableName(), payload); }
+    catch (error) {
+      const missing = opsEditMissingColumn(error);
+      if (!missing || !Object.prototype.hasOwnProperty.call(payload, missing)) throw error;
+      if (required.has(missing)) throw directOperationsCommittedError(`Missing required Stocktaking column: ${missing}.`, 400, error);
+      delete payload[missing];
+    }
+  }
+  throw directOperationsCommittedError("Failed to synchronize the Operations order with Stocktaking.", 500);
+}
+
+function opsBuildStockRow(orderRow = {}, context = {}) {
+  const serialized = serializeOperationsOrderDetail(orderRow || {});
+  const orderType = text(serialized?.orderType);
+  if (!opsSupportedStockOrderType(orderType)) return null;
+  const member = opsResolveOwnerMember(orderRow, context.members || []);
+  const school = text(member?.stocktakingColumn);
+  const quantityColumn = context.quantityColumnBySchool?.get(school) || "";
+  if (!school || !quantityColumn) throw directOperationsCommittedError("Could not determine the requester Stocktaking column.", 500);
+
+  let quantity = 0;
+  for (const candidate of [serialized?.quantityReceived, serialized?.quantityProgress, serialized?.quantityRequested, serialized?.quantity]) {
+    const value = Number(candidate);
+    if (Number.isFinite(value) && Math.abs(value) > 1e-9) { quantity = roundQty(value); break; }
+  }
+  if (Math.abs(quantity) < 1e-9) throw directOperationsCommittedError("No delivered quantity was found for Stocktaking sync.", 500);
+  quantity = opsOrderTypeKey(orderType) === "withdrawproducts" ? -Math.abs(quantity) : Math.abs(quantity);
+
+  const keys = context.keys || [];
+  const product = resolveOperationsEditProduct(orderRow, context.productMaps || {}) || null;
+  const productName = text(serialized?.productName) || text(product?.name) || "Untitled Product";
+  const proposal = /^created\s+from\s+proposal\s*:/i.test(text(serialized?.issueDescription));
+  const proposalKitTag = proposal ? (text(serialized?.kitTag) || "Direct components") : "";
+  const componentTag = text(serialized?.productTag) || opsEditProductFirstTag(product) || "";
+  const stockTag = proposalKitTag || (opsOrderTypeKey(orderType) === "withdrawproducts" ? "Withdrawal Components" : "Request Components");
+  const rawOrderId = Number(operationsValueFor(orderRow, ["id", "ID"]));
+  const rawOrderNumber = Number(serialized?.orderIdNumber ?? operationsValueFor(orderRow, ["order_number", "Order Number", "Order - ID", "Order ID"]));
+  const sourceOrderColumn = context.sourceOrderColumn;
+  const sourceOrderNumberColumn = opsStockFindKey(keys, ["source_order_number", "Source Order Number", "order_number", "Order Number"]);
+  const productTagColumn = opsStockFindKey(keys, ["product_tag", "Product Tag", "component_tag", "Component Tag"]) || "product_tag";
+  const kitTagColumn = opsStockFindKey(keys, ["kit_tag", "Kit Tag", "source_kit", "Source Kit", "kit_name", "Kit Name"]) || "kit_tag";
+  const orderTypeColumn = opsStockFindKey(keys, ["order_type", "Order Type"]) || "order_type";
+  const receiptPhotosColumn = opsStockFindKey(keys, ["receipt_photos", "Receipt Photos", "receipt_photo", "Receipt Photo", "receipt_images", "Receipt Images", "receipt_image", "Receipt Image"]) || "receipt_photos";
+  const idCodeColumn = opsStockFindKey(keys, ["id_code", "ID Code", "id code", "code", "Code"]) || "id_code";
+  const customizeIdColumn = opsStockFindKey(keys, ["customize_id", "Customize ID", "custom_id", "Custom ID"]) || "customize_id";
+  const row = {};
+  const setExisting = (aliases, value, fallback = "") => {
+    if (value === null || typeof value === "undefined" || value === "") return "";
+    const key = opsStockFindKey(keys, aliases) || (!keys.length ? fallback : "");
+    if (!key) return "";
+    row[key] = value;
+    return key;
+  };
+  const nameKey = setExisting(["name", "Name", "component", "Component"], productName, "name");
+  const productKey = setExisting(["product_name", "Product Name", "product", "Product", "products", "Products"], productName, nameKey ? "" : "product_name");
+  if (!nameKey && !productKey && !keys.length) row.name = productName;
+  setExisting(["product_url", "Product URL", "url", "URL", "item_url", "Item URL"], text(serialized?.productUrl || product?.url), "product_url");
+  setExisting(["unity_price", "unit_price", "Unity Price", "Unit Price", "one_piece_price"], Number.isFinite(Number(serialized?.unitPrice)) ? Number(serialized.unitPrice) : null, "unit_price");
+  setExisting(["tag", "Tag", "tags", "Tags"], stockTag, "tag");
+  if (componentTag) row[productTagColumn] = componentTag;
+  if (proposalKitTag) row[kitTagColumn] = proposalKitTag;
+  if (orderType) row[orderTypeColumn] = orderType;
+  setExisting(["receipt_number", "Receipt Number", "store_receipt_number", "Store Receipt Number", "receipt", "Receipt"], text(serialized?.receiptNumber), "receipt_number");
+  const receiptPhotos = opsReceiptPhotosJson(serialized);
+  if (receiptPhotos) row[receiptPhotosColumn] = receiptPhotos;
+  if (text(product?.displayId)) row[idCodeColumn] = text(product.displayId);
+  if (text(serialized?.customizeId)) row[customizeIdColumn] = text(serialized.customizeId);
+  if (Number.isFinite(rawOrderId)) row[sourceOrderColumn] = Math.trunc(rawOrderId);
+  if (sourceOrderNumberColumn && Number.isFinite(rawOrderNumber)) row[sourceOrderNumberColumn] = Math.trunc(rawOrderNumber);
+  setExisting(["team_member_name", "Team Member", "requester", "Requester", "created_by", "Created By"], text(serialized?.createdByName), "team_member_name");
+  setExisting(["school", "School", "stocktaking_column", "Stocktaking Column"], school, "school");
+  setExisting(["created_at", "Created at", "created_time", "Created time", "notion_created_time"], new Date().toISOString(), "");
+  row[quantityColumn] = quantity;
+  return {
+    row,
+    required: [quantityColumn, Number.isFinite(rawOrderId) ? sourceOrderColumn : "", sourceOrderNumberColumn && Number.isFinite(rawOrderNumber) ? sourceOrderNumberColumn : ""].filter(Boolean),
+  };
+}
+
+async function opsSyncStocktakingAfterEdit(rowsBefore = [], rowsAfter = [], context = {}) {
+  if (!context?.needed) return { synced: 0, skipped: 0 };
+  const oldIds = new Set((rowsBefore || []).map((row) => text(operationsValueFor(row, ["id", "ID"]))).filter(Boolean));
+  const stockRowsToDelete = (context.stockRows || []).filter((row) => oldIds.has(text(row?.[context.sourceOrderColumn])));
+  await mapWithConcurrency(stockRowsToDelete, 10, async (row) => {
+    const id = text(row?.id ?? row?.ID);
+    if (id) await deleteById(opsStockTableName(), id);
+  });
+
+  let synced = 0;
+  let skipped = 0;
+  for (const row of rowsAfter || []) {
+    const serialized = serializeOperationsOrderDetail(row || {});
+    if (!opsFinalStatus(serialized?.status) || !opsSupportedStockOrderType(serialized?.orderType)) { skipped += 1; continue; }
+    const prepared = opsBuildStockRow(row, context);
+    if (!prepared) { skipped += 1; continue; }
+    await opsStockInsertSafe(prepared.row, prepared.required);
+    synced += 1;
+  }
+  invalidateStocktakingReadCaches();
+  await upstashDeleteOperationsKeys(["cache:api:b2b:school-stock:supabase:v1"]).catch(() => false);
+  return { synced, skipped };
+}
+
+
+function opsHasColumn(row = {}, aliases = []) {
+  const wanted = new Set((aliases || []).map(operationsAccessToken).filter(Boolean));
+  return Object.keys(row || {}).some((key) => wanted.has(operationsAccessToken(key)));
+}
+
+function opsReceiptUploadInput(dataUrls = [], filenames = []) {
+  const urls = (Array.isArray(dataUrls) ? dataUrls : [dataUrls]).map(text).filter(Boolean);
+  const names = (Array.isArray(filenames) ? filenames : [filenames]).map(text).filter(Boolean);
+  if (!urls.length) throw directOperationsMutationError("Receipt photos are required.", 400);
+  return urls.map((dataUrl, index) => {
+    const { mime: contentType, buffer } = parseStrictImageDataUrl(dataUrl, {
+      label: "Receipt photo", maxBytes: 12 * 1024 * 1024,
+    });
+    const fallbackName = `delivery-receipt-${index + 1}.jpg`;
+    const rawName = text(names[index] || names[0] || fallbackName) || fallbackName;
+    const cleanName = rawName.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 120) || fallbackName;
+    const safeExt = contentType === "image/png" ? "png" : contentType === "image/webp" ? "webp" : "jpg";
+    return { buffer, contentType, cleanName, safeExt };
+  });
+}
+
+function opsReceiptStoragePath(file = {}, index = 0) {
+  return `delivery-receipts/${Date.now()}-${index + 1}-${Math.random().toString(36).slice(2, 10)}.${text(file?.safeExt) || "jpg"}`;
+}
+
+export async function markOperationsArrived({
+  account,
+  orderIds = [],
+  orderReceiptDataUrls = [],
+  orderReceiptFilenames = [],
+  receiptNumbers = [],
+  maintenanceOnly = false,
+} = {}) {
+  // Maintenance-only editors may deliver maintenance orders, but this must
+  // never grant access to a product/withdrawal order. Check both permission
+  // and every stored order type before doing any upload or database write.
+  const access = maintenanceOnly
+    ? directPageMutationAccess(account || {}, ["Maintenance Orders", "Operations Orders", "Requested Orders"])
+    : ensureOperationsMutationAccess(account || {});
+  if (access === null) throw directOperationsMutationError("Page access could not be verified. Please sign in again or contact the administrator.", 503);
+  if (access === false) throw directOperationsMutationError("Edit access is required to deliver this order.", 403);
+
+  const loaded = await loadOperationRowsByIds(orderIds);
+  if (!loaded) throw directOperationsMutationError("The order IDs or direct Supabase connection are unavailable. Refresh the order and try again.", 503);
+  if (loaded.clean.some((id) => !loaded.byId.has(id))) throw directOperationsMutationError("Orders not found", 404);
+  const serializedRows = loaded.rows.map((row) => serializeOperationsOrderDetail(row || {}));
+  const maintenanceBatch = serializedRows.every((item) =>
+    text(item?.orderType).toLowerCase().replace(/[^a-z0-9]/g, "") === "requestmaintenance"
+  );
+  // This service is also invoked by the generic Operations Orders endpoint.
+  // Re-check the persisted order type here so that using that endpoint cannot
+  // bypass the maintenance-specific delivery grant.
+  if (maintenanceBatch && !featureAllowed(account, "orders.maintenance.mark_arrived")) {
+    throw directOperationsMutationError("Permission orders.maintenance.mark_arrived is not allowed.", 403);
+  }
+  if (maintenanceOnly && !maintenanceBatch) {
+    throw directOperationsMutationError("Maintenance access cannot deliver other order types.", 403);
+  }
+  // Maintenance lists can be "In progress" based on a saved maintenance log
+  // even if the raw order status is not yet Shipped. Require an actual log in
+  // this case; for ordinary orders, the raw status must be Shipped.
+  const hasMaintenanceLog = (item) => Boolean(
+    item?.maintenanceLogged || (Array.isArray(item?.maintenanceLogs) && item.maintenanceLogs.length)
+    || text(item?.serialNumber) || text(item?.resolutionMethod)
+    || text(item?.actualIssueDescription) || text(item?.repairAction)
+  );
+  if (loaded.rows.some((row) => statusIndex(row?.status ?? row?.Status) >= 4)
+    || (!maintenanceBatch && loaded.rows.some((row) => statusIndex(row?.status ?? row?.Status) !== 3))
+    || (maintenanceBatch && !serializedRows.some(hasMaintenanceLog))) {
+    throw directOperationsMutationError("This order is not ready for delivery, or was already delivered. Refresh and try again.", 409);
+  }
+
+  const receiptEntries = splitReceiptNumbers(receiptNumbers);
+  if (maintenanceBatch && receiptEntries.some((number) => !/^\d+$/.test(number))) {
+    throw directOperationsMutationError("Store receipt numbers must contain digits only.", 400);
+  }
+  if (maintenanceBatch && serializedRows.some((item) =>
+    Array.isArray(item?.sparePartsReplacedEntries) && item.sparePartsReplacedEntries.length > 0
+  ) && !receiptEntries.length) {
+    throw directOperationsMutationError("Store receipt number is required when maintenance spare parts were replaced.", 400);
+  }
+  const uploadInputs = opsReceiptUploadInput(orderReceiptDataUrls, orderReceiptFilenames);
+  const receiptText = mergeReceiptNumbers("", receiptNumbers);
+  const firstRow = loaded.rows[0] || {};
+  if (!Object.prototype.hasOwnProperty.call(firstRow, "status")) {
+    throw directOperationsMutationError("Orders table is missing the status column required for delivery.", 409);
+  }
+  // Updates use the canonical snake_case column names. Do not accept a
+  // similarly named legacy column that this mutation never actually writes.
+  if (!Object.prototype.hasOwnProperty.call(firstRow, "order_receipt")) {
+    throw directOperationsMutationError(
+      "Orders table is missing order_receipt. Run supabase_operations_delivery_stocktaking.sql in Supabase SQL Editor before delivering this order.", 409,
+    );
+  }
+  if (receiptText && !Object.prototype.hasOwnProperty.call(firstRow, "receipt_number")) {
+    throw directOperationsMutationError(
+      "Orders table is missing receipt_number. Run supabase_operations_delivery_stocktaking.sql in Supabase SQL Editor before delivering this order.", 409,
+    );
+  }
+
+  const plannedRows = loaded.rows.map((row) => ({ ...row, status: "Arrived" }));
+  const needsStocktaking = plannedRows.some((row) => {
+    const serialized = serializeOperationsOrderDetail(row || {});
+    return opsSupportedStockOrderType(serialized?.orderType);
+  });
+  let products = [];
+  let stockContext = { needed: false };
+  if (needsStocktaking) {
+    const catalog = await getProductsCatalog({ fresh: true });
+    products = Array.isArray(catalog?.products) ? catalog.products : [];
+    stockContext = await opsPrepareStockContext(plannedRows, loaded.rows, products);
+    if (!stockContext) throw directOperationsMutationError("Stocktaking prerequisites could not be verified; delivery was not started.", 503);
+    // Validate every Stocktaking record before uploading any receipts or
+    // changing an order status. For example an order with zero received
+    // quantity must not be marked delivered and then fail halfway through sync.
+    for (const row of plannedRows) {
+      const serialized = serializeOperationsOrderDetail(row || {});
+      if (opsSupportedStockOrderType(serialized?.orderType)) opsBuildStockRow(row, stockContext);
+    }
+  }
+
+  const cfg = getSupabaseConfig();
+  if (!text(cfg?.storageBucket)) {
+    throw directOperationsMutationError("Supabase Storage bucket is not configured for receipt photos.", 503);
+  }
+
+  let mutationStarted = false;
+  try {
+    const receiptEntries = [];
+    for (let index = 0; index < uploadInputs.length; index += 1) {
+      const file = uploadInputs[index];
+      const uploaded = await uploadStorageObject(opsReceiptStoragePath(file, index), file.buffer, {
+        contentType: file.contentType,
+        bucketName: cfg.storageBucket,
+        upsert: false,
+      });
+      if (!uploaded?.publicUrl) throw new Error("Supabase Storage did not return a public receipt URL.");
+      mutationStarted = true;
+      receiptEntries.push({ name: file.cleanName, url: uploaded.publicUrl });
+    }
+
+    const receiptJson = JSON.stringify(receiptEntries);
+    const updatedRows = await mapWithConcurrency(loaded.clean, 10, async (id) => {
+      const before = loaded.byId.get(id) || {};
+      const patch = { status: "Arrived", order_receipt: receiptJson };
+      if (receiptText) patch.receipt_number = mergeReceiptNumbers(operationsValueFor(before, ["receipt_number", "Receipt Number", "Store Receipt Number"]), receiptText);
+      const updated = await updateById(tableName(), id, patch);
+      mutationStarted = true;
+      return updated || { ...before, ...patch };
+    });
+
+    let stock = { synced: 0, skipped: 0 };
+    if (stockContext?.needed) stock = await opsSyncStocktakingAfterEdit(loaded.rows, updatedRows, stockContext);
+
+    await invalidateLegacyOperationsCaches(account || {});
+    return {
+      success: true,
+      status: "Arrived",
+      statusColor: "green",
+      orderReceiptNames: receiptEntries.map((entry) => entry.name),
+      orderReceiptName: receiptEntries[0]?.name || null,
+      orderReceiptUrls: receiptEntries.map((entry) => entry.url),
+      orderReceiptUrl: receiptEntries[0]?.url || null,
+      maintenanceReceiptNames: receiptEntries.map((entry) => entry.name),
+      maintenanceReceiptName: receiptEntries[0]?.name || null,
+      maintenanceReceiptUrls: receiptEntries.map((entry) => entry.url),
+      maintenanceReceiptUrl: receiptEntries[0]?.url || null,
+      receiptNumber: receiptText || null,
+      stocktakingSyncedCount: Number(stock?.synced || 0),
+      stocktakingSkippedCount: Number(stock?.skipped || 0),
+      source: "supabase-direct",
+    };
+  } catch (error) {
+    if (error?.code === "DIRECT_OPERATIONS_MUTATION_FAILED" && error?.noFallback) throw error;
+    if (mutationStarted) {
+      throw directOperationsCommittedError(
+        error?.message || "Delivery was partially saved and requires review.",
+        Number(error?.status) || 500,
+        error,
+      );
+    }
+    throw error;
+  }
+}
+
+export async function saveOperationsEditDetails({
+  account,
+  orderIds = [],
+  adminPassword = "",
+  itemUpdates = [],
+  itemAdds = [],
+  itemDeletes = [],
+  quantities = null,
+  unsupportedReceiptEdit = false,
+} = {}) {
+  const access = ensureOperationsMutationAccess(account || {});
+  if (access === null) return null;
+  if (unsupportedReceiptEdit) return null;
+  const loaded = await loadOperationRowsByIds(orderIds);
+  if (!loaded) return null;
+  if (loaded.clean.some((id) => !loaded.byId.has(id))) throw directOperationsMutationError("Orders not found", 404);
+
+  const passwordOk = await directOperationsAdminPasswordResult(account || {}, adminPassword);
+  if (passwordOk === null) return null;
+  if (!passwordOk) throw directOperationsMutationError("Invalid admin password", 401);
+
+  const updates = (Array.isArray(itemUpdates) ? itemUpdates : []).filter((entry) => entry && typeof entry === "object");
+  const additions = (Array.isArray(itemAdds) ? itemAdds : []).filter((entry) => entry && typeof entry === "object");
+  const deletions = (Array.isArray(itemDeletes) ? itemDeletes : []).filter((entry) => entry && typeof entry === "object");
+  const updatesById = new Map();
+  for (const entry of updates) {
+    const id = text(entry?.id || entry?.orderId || entry?.order_id);
+    if (!id) continue;
+    if (!updatesById.has(id)) updatesById.set(id, []);
+    updatesById.get(id).push(entry);
+  }
+  const deletionsById = new Map();
+  for (const entry of deletions) {
+    const id = text(entry?.id || entry?.orderId || entry?.order_id);
+    if (!id) continue;
+    if (!deletionsById.has(id)) deletionsById.set(id, []);
+    deletionsById.get(id).push(entry);
+  }
+  if (!updatesById.size && !deletionsById.size && !additions.length && !(quantities && typeof quantities === "object")) {
+    throw directOperationsMutationError("No Operations order changes were provided.", 400);
+  }
+  // An edited component must still belong to this order. Reject stale edits
+  // before *any* database write, rather than silently claiming success for an
+  // unknown row or a row removed by another user.
+  const knownIds = new Set(loaded.clean);
+  for (const id of [...updatesById.keys(), ...deletionsById.keys(), ...Object.keys(quantities || {})]) {
+    if (!knownIds.has(id)) {
+      throw directOperationsMutationError("The selected component no longer belongs to this order. Refresh and try again.", 409);
+    }
+  }
+
+  const catalog = await getProductsCatalog({ fresh: true });
+  const products = Array.isArray(catalog?.products) ? catalog.products : [];
+  const productMap = new Map(products.map((product) => [text(product?.id), product]).filter(([id]) => id));
+  const quantityMap = quantities && typeof quantities === "object" && !Array.isArray(quantities) ? quantities : {};
+  const plans = [];
+
+  for (const id of loaded.clean) {
+    const beforeRow = loaded.byId.get(id) || null;
+    if (!beforeRow) continue;
+
+    const updatesForId = updatesById.get(id) || [];
+    const deletesForId = deletionsById.get(id) || [];
+    const fullDelete = deletesForId.some((entry) => entry?.sourceSpecific !== true && !(Number(entry?.sourceCount || 0) > 1));
+    if (fullDelete) {
+      plans.push({ id, beforeRow, delete: true });
+      continue;
+    }
+
+    const sourceSpecificUpdates = updatesForId.filter((entry) => entry?.sourceSpecific === true || Number(entry?.sourceCount || 0) > 1);
+    const sourceSpecificDeletes = deletesForId.filter((entry) => entry?.sourceSpecific === true || Number(entry?.sourceCount || 0) > 1);
+    const needsSplit = sourceSpecificUpdates.length || sourceSpecificDeletes.length;
+    const splitRows = needsSplit ? opsEditSplitOrderRow(beforeRow) : null;
+
+    if (splitRows && splitRows.length > 1) {
+      const deletedIndexes = new Set();
+      const deletedSourceIds = new Set();
+      const deletedSourceNames = new Set();
+
+      sourceSpecificDeletes.forEach((entry) => {
+        const index = Number(entry?.sourceIndex);
+        if (Number.isInteger(index) && index >= 0) deletedIndexes.add(index);
+        const sourceId = text(entry?.sourceKitId);
+        if (sourceId) deletedSourceIds.add(sourceId);
+        const sourceName = operationsAccessToken(entry?.sourceKitName);
+        if (sourceName) deletedSourceNames.add(sourceName);
+      });
+
+      const matchSource = (change, source, sourceIndex) => {
+        const specifiedId = text(change?.sourceKitId);
+        const specifiedName = operationsAccessToken(change?.sourceKitName);
+        const index = Number(change?.sourceIndex);
+        if (specifiedId) return specifiedId === text(source?.kitId);
+        if (Number.isInteger(index) && index >= 0) return index === sourceIndex;
+        return Boolean(specifiedName && specifiedName === operationsAccessToken(source?.kitName));
+      };
+      // Never apply a source-specific operation to a different Kit just because
+      // another editor changed the order's source_kits between opening and Save.
+      for (const change of [...sourceSpecificDeletes, ...sourceSpecificUpdates]) {
+        if (!splitRows.some((entry, index) => matchSource(change, entry?.source, index))) {
+          throw directOperationsMutationError("This Kit source has changed. Refresh the order before saving.", 409);
+        }
+      }
+      const activeSplitRows = splitRows.filter((entry, sourceIndex) => {
+        const source = entry?.source || {};
+        return !sourceSpecificDeletes.some((change) => matchSource(change, source, sourceIndex));
+      });
+
+      if (!activeSplitRows.length) {
+        plans.push({ id, beforeRow, delete: true });
+        continue;
+      }
+
+      const byIndex = new Map();
+      const bySourceId = new Map();
+      const bySourceName = new Map();
+      sourceSpecificUpdates.forEach((entry) => {
+        const index = Number(entry?.sourceIndex);
+        if (Number.isInteger(index) && index >= 0) byIndex.set(index, entry);
+        const sourceId = text(entry?.sourceKitId);
+        if (sourceId) bySourceId.set(sourceId, entry);
+        const sourceName = operationsAccessToken(entry?.sourceKitName);
+        if (sourceName) bySourceName.set(sourceName, entry);
+      });
+
+      const quantityOverride = Object.prototype.hasOwnProperty.call(quantityMap, id) ? Number(quantityMap[id]) : null;
+      if (quantityOverride !== null && !Number.isFinite(quantityOverride)) throw directOperationsMutationError("Quantity received must be a valid number.", 400);
+      const quantityParts = quantityOverride === null ? null : opsEditSplitQtyBySources(quantityOverride, activeSplitRows.map((entry) => entry.source));
+
+      const materialized = activeSplitRows.map((entry, activeIndex) => {
+        const source = entry.source || {};
+        const originalIndex = splitRows.findIndex((candidate) => candidate === entry);
+        const update = bySourceId.get(text(source?.kitId))
+          || byIndex.get(originalIndex)
+          || bySourceName.get(operationsAccessToken(source?.kitName))
+          || null;
+        const patch = opsEditBuildItemPatch(entry.row, update, productMap, source);
+        if (quantityParts) Object.assign(patch, opsEditApplyQuantityMapPatch(entry.row, quantityParts[activeIndex] ?? 0));
+        const finalRow = { ...entry.row, ...patch };
+        return {
+          finalRow,
+          updatePatch: {
+            quantity_requested: entry.row.quantity_requested,
+            quantity_progress: entry.row.quantity_progress,
+            quantity_edited_by_supervisor: entry.row.quantity_edited_by_supervisor,
+            quantity_received_by_operations: entry.row.quantity_received_by_operations,
+            quantity_remaining: entry.row.quantity_remaining,
+            kit_tag: entry.row.kit_tag,
+            source_kits: entry.row.source_kits,
+            ...patch,
+          },
+        };
+      });
+      plans.push({ id, beforeRow, split: true, materialized });
+      continue;
+    }
+
+    if (sourceSpecificDeletes.length || sourceSpecificUpdates.length) {
+      // A source-specific deletion is NOT permission to delete the entire
+      // component if its source list was changed/removed in the meantime.
+      throw directOperationsMutationError("Kit source details have changed. Refresh the order before editing this component.", 409);
+    }
+
+    const update = updatesForId[updatesForId.length - 1] || null;
+    const patch = opsEditBuildItemPatch(beforeRow, update, productMap);
+    if (Object.prototype.hasOwnProperty.call(quantityMap, id)) Object.assign(patch, opsEditApplyQuantityMapPatch(beforeRow, quantityMap[id]));
+    plans.push({ id, beforeRow, split: false, patch, finalRow: { ...beforeRow, ...patch } });
+  }
+
+  const templateRow = loaded.rows[0] || null;
+  const additionPlans = additions.map((addition) => {
+    if (!templateRow) throw directOperationsMutationError("Orders not found", 404);
+    const patch = opsEditBuildItemPatch(templateRow, addition, productMap);
+    const finalRow = {
+      ...opsEditCloneOrderInsertRow(templateRow),
+      ...patch,
+      source_kits: null,
+      actual_issue_description: null,
+      repair_action: null,
+      spare_parts: null,
+      serial_number: null,
+      maintenance_resolution_method: null,
+      maintenance_checklist: null,
+    };
+    return { finalRow };
+  });
+
+  const plannedFinalRows = [
+    ...plans.flatMap((plan) => plan.delete ? [] : (plan.split ? plan.materialized.map((entry) => entry.finalRow) : [plan.finalRow])),
+    ...additionPlans.map((plan) => plan.finalRow),
+  ];
+  const stockContext = await opsPrepareStockContext(plannedFinalRows, loaded.rows, products);
+  if (stockContext === null) return null;
+
+  let mutationStarted = false;
+  const updatedRows = [];
+  try {
+    for (const plan of plans) {
+      if (plan.delete) {
+        mutationStarted = true;
+        await deleteById(tableName(), plan.id);
+        continue;
+      }
+      if (plan.split) {
+        const insertedRows = [];
+        try {
+          for (let index = 1; index < plan.materialized.length; index += 1) {
+            mutationStarted = true;
+            const insertRow = opsEditCloneOrderInsertRow(plan.materialized[index].finalRow);
+            const inserted = await opsEditInsertOrderSafe(insertRow, Object.prototype.hasOwnProperty.call(insertRow, "customize_id") ? ["customize_id"] : []);
+            insertedRows.push(inserted);
+          }
+          mutationStarted = true;
+          const firstPatch = plan.materialized[0].updatePatch;
+          const firstUpdated = await opsEditUpdateOrderSafe(plan.id, firstPatch, Object.prototype.hasOwnProperty.call(firstPatch, "customize_id") ? ["customize_id"] : []);
+          updatedRows.push(firstUpdated, ...insertedRows);
+        } catch (error) {
+          for (const insertedRow of insertedRows) {
+            const insertedId = text(insertedRow?.id ?? insertedRow?.ID);
+            if (insertedId) await deleteById(tableName(), insertedId).catch(() => {});
+          }
+          throw error;
+        }
+        continue;
+      }
+      if (!Object.keys(plan.patch || {}).length) {
+        updatedRows.push(plan.beforeRow);
+        continue;
+      }
+      mutationStarted = true;
+      updatedRows.push(await opsEditUpdateOrderSafe(plan.id, plan.patch, Object.prototype.hasOwnProperty.call(plan.patch, "customize_id") ? ["customize_id"] : []));
+    }
+
+    for (const additionPlan of additionPlans) {
+      mutationStarted = true;
+      const requiredColumns = Object.prototype.hasOwnProperty.call(additionPlan.finalRow, "customize_id") && text(additionPlan.finalRow.customize_id)
+        ? ["customize_id"]
+        : [];
+      updatedRows.push(await opsEditInsertOrderSafe(additionPlan.finalRow, requiredColumns));
+    }
+
+    const stock = await opsSyncStocktakingAfterEdit(loaded.rows, updatedRows, stockContext || { needed: false });
+    await invalidateLegacyOperationsCaches(account).catch(() => {});
+    const responseIds = updatedRows.map((row) => text(row?.id ?? row?.ID)).filter(Boolean);
+    const fresh = responseIds.length ? await loadOperationRowsByIds(responseIds).catch(() => null) : null;
+    const responseRows = fresh?.rows?.length ? fresh.rows : updatedRows;
+    return {
+      success: true,
+      items: responseRows.map((row) => serializeOperationsOrderDetail(row)),
+      stocktakingSyncedCount: Number(stock?.synced || 0),
+      stocktakingSkippedCount: Number(stock?.skipped || 0),
+      source: "supabase-direct",
+    };
+  } catch (error) {
+    if (error?.code === "DIRECT_OPERATIONS_MUTATION_FAILED" && error?.noFallback) throw error;
+    if (mutationStarted) throw directOperationsCommittedError(error?.message || "Order details were partially updated and require review.", Number(error?.status) || 500, error);
+    throw error;
+  }
+}
+

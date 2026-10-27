@@ -4,16 +4,18 @@ import { errorResponse, gateResponse, proposalGate, requestBody } from "../../..
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
-  const gate = await proposalGate();
+export async function GET(request) {
+  const gate = await proposalGate("view");
   if (!gate.ok) return gateResponse(gate);
   try {
-    return NextResponse.json({ ok: true, source: "supabase-next", proposals: await listProposals(gate.account) }, { headers: { "Cache-Control": "no-store" } });
+    const url = new URL(request.url);
+    const fresh = url.searchParams.get("_fresh") === "1";
+    return NextResponse.json({ ok: true, source: "supabase-next", proposals: await listProposals(gate.account, { fresh }) }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) { return errorResponse(error, "Failed to load proposals."); }
 }
 
 export async function POST(request) {
-  const gate = await proposalGate();
+  const gate = await proposalGate("create");
   if (!gate.ok) return gateResponse(gate);
   try {
     const body = await requestBody(request);

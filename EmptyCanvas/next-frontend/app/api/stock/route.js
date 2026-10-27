@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
-import { getLegacyAccountGate } from "../../../lib/products-auth";
-import { stocktakingForAccount } from "../../../lib/stocktaking-data";
+import { getDirectAccountGate } from "../../../lib/products-auth";
+import { featureGate } from "../../../lib/feature-permissions-server";
+import { canAccessStocktakingColumn, stocktakingForAccount, stocktakingForColumn } from "../../../lib/stocktaking-data";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
-  const gate = await getLegacyAccountGate(["Stocktaking"]);
+export async function GET(request) {
+  const gate = featureGate(await getDirectAccountGate(["Stocktaking"]), "stocktaking.view");
   if (!gate.ok) {
     return NextResponse.json(
       { ok: false, error: gate.error || "Access denied." },
@@ -14,10 +15,26 @@ export async function GET() {
   }
 
   try {
-    const items = await stocktakingForAccount(gate.account || {});
+    const url = new URL(request.url);
+    const column = String(url.searchParams.get("column") || "").trim();
+    const inventoryColumn = String(url.searchParams.get("inventoryColumn") || url.searchParams.get("inventory_column") || "").trim();
+    const defectedColumn = String(url.searchParams.get("defectedColumn") || url.searchParams.get("defected_column") || "").trim();
+    const fresh = url.searchParams.get("_fresh") === "1";
+    if (column) {
+      const allowed = await canAccessStocktakingColumn(gate.account || {}, column, { fresh });
+      if (!allowed) {
+        return NextResponse.json(
+          { ok: false, error: "This Stocktaking folder is not available for your access level." },
+          { status: 403, headers: { "Cache-Control": "private, no-store" } },
+        );
+      }
+    }
+    const items = column
+      ? await stocktakingForColumn(column, { inventoryColumn, defectedColumn, fresh })
+      : await stocktakingForAccount(gate.account || {}, { fresh });
     return NextResponse.json(items, {
       status: 200,
-      headers: { "Cache-Control": "no-store" },
+      headers: { "Cache-Control": "private, no-store" },
     });
   } catch (error) {
     console.error("[next stocktaking]", error?.details || error);

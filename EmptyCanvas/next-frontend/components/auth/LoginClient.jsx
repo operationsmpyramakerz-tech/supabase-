@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { beginAuthRouteTransition, finishAuthRouteTransition } from "../../lib/auth-route-transition";
 
 const MODES = Object.freeze({ LOGIN: "login", RECOVERY: "recovery", SIGNUP: "signup" });
 const ALLOWED_PAGES_COOKIE = "ops_ui_allowed_pages_v1";
@@ -63,7 +64,7 @@ function EyeIcon({ off = false }) {
   return <svg className="icon-eye" width="20" height="20" {...common}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>;
 }
 
-export default function LoginClient({ requestedNext = "/next/home", backendAvailable = true, classicLoginHref = "/login?classic=1" }) {
+export default function LoginClient({ requestedNext = "/next/home", backendAvailable = true }) {
   const [mode, setMode] = useState(MODES.LOGIN);
   const [busy, setBusy] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -77,6 +78,9 @@ export default function LoginClient({ requestedNext = "/next/home", backendAvail
     body.classList.toggle("auth-signup-mode", mode === MODES.SIGNUP);
     body.classList.toggle("auth-recovery-mode", mode === MODES.RECOVERY);
     body.classList.toggle("login-inline-success-active", loginSuccess);
+    // After logout, keep the cover in place until the login UI has hydrated
+    // and has its final body classes (rather than flashing the generic layout).
+    finishAuthRouteTransition();
     return () => {
       body.classList.remove("next-classic-login-active", "auth-signup-mode", "auth-recovery-mode", "login-success-active", "login-inline-success-active");
     };
@@ -109,7 +113,7 @@ export default function LoginClient({ requestedNext = "/next/home", backendAvail
     const password = String(form.get("password") || "");
 
     try {
-      const response = await fetch("/api/login", {
+      const response = await fetch("/next/api/auth/login", {
         method: "POST",
         credentials: "same-origin",
         cache: "no-store",
@@ -133,7 +137,7 @@ export default function LoginClient({ requestedNext = "/next/home", backendAvail
       warmAccountCache({ allowedPages: Array.isArray(result?.allowedPages) ? result.allowedPages : [] }, username);
 
       try {
-        const accountResponse = await fetch(`/api/account?_next_login_check=${Date.now()}`, {
+        const accountResponse = await fetch(`/next/api/account?_next_login_check=${Date.now()}`, {
           credentials: "same-origin",
           cache: "no-store",
         });
@@ -143,7 +147,10 @@ export default function LoginClient({ requestedNext = "/next/home", backendAvail
       // Match the current Classic login: keep the user on the card long enough
       // for the pulse transition to finish before opening the requested page.
       const remaining = Math.max(0, 1950 - (Date.now() - transitionStartedAt));
-      window.setTimeout(() => window.location.replace(destination), remaining);
+      window.setTimeout(() => {
+        beginAuthRouteTransition(destination);
+        window.location.replace(destination);
+      }, remaining);
     } catch (error) {
       console.error("Next login error:", error);
       showError("Network error. Please check your connection and try again.");
@@ -161,7 +168,7 @@ export default function LoginClient({ requestedNext = "/next/home", backendAvail
     const email = String(form.get("email") || "").trim();
 
     try {
-      const response = await fetch("/api/forgot-password", {
+      const response = await fetch("/next/api/auth/forgot-password", {
         method: "POST",
         credentials: "same-origin",
         cache: "no-store",
@@ -203,7 +210,7 @@ export default function LoginClient({ requestedNext = "/next/home", backendAvail
 
     setBusy(true);
     try {
-      const response = await fetch("/api/signup-request", {
+      const response = await fetch("/next/api/auth/signup-request", {
         method: "POST",
         credentials: "same-origin",
         cache: "no-store",
@@ -227,7 +234,7 @@ export default function LoginClient({ requestedNext = "/next/home", backendAvail
 
   return (
     <>
-      <link rel="stylesheet" href="/css/login.css?v=concept-2-pulse-settle-v1" />
+      <link rel="stylesheet" href="/next/css/login.css?v=login-background-v56" precedence="erp-detail" />
       <div className="login-container">
         <div className="login-card" aria-live="polite">
           <div className="login-header">
@@ -235,7 +242,7 @@ export default function LoginClient({ requestedNext = "/next/home", backendAvail
               <i /><i /><i /><i /><i /><i /><i /><i />
             </span>
             <span className={`login-logo-stage ${loginSuccess ? "is-running" : ""}`} id="loginLogoStage" data-logo-animation="pulse">
-              <img src="/images/logo.png" alt="Logo" className="login-logo" />
+              <img src="/next/images/logo.png" alt="Logo" className="login-logo" />
               <span className="login-inline-logo-pieces" aria-hidden="true">
                 <span className="login-inline-logo-pulse-echo" style={{ "--d": "0.00s" }} />
                 <span className="login-inline-logo-pulse-echo" style={{ "--d": "0.16s" }} />
@@ -245,7 +252,7 @@ export default function LoginClient({ requestedNext = "/next/home", backendAvail
               <span className="login-inline-logo-flare login-inline-logo-flare--one" aria-hidden="true" />
               <span className="login-inline-logo-flare login-inline-logo-flare--two" aria-hidden="true" />
             </span>
-            <img src="/images/pyramakerz-wordmark.png" alt="Pyramakerz" className="login-wordmark" />
+            <img src="/next/images/pyramakerz-wordmark.png" alt="Pyramakerz" className="login-wordmark" />
             <h1 className="login-brand-title">Pyramakerz</h1>
             <p className="login-subtitle" aria-hidden="true" />
           </div>

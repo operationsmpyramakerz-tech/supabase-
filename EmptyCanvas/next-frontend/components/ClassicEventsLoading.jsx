@@ -1,16 +1,15 @@
+import ShellStyleLinks from "./ShellStyleLinks";
 import { BodyClassSync } from "./ClassicShellControls";
 import { ClassicStableLoadingHeader, ClassicStableLoadingSidebar } from "./ClassicStableLoadingChrome";
 
 const SIDEBAR_ITEMS = 18;
 
 export default function ClassicEventsLoading({ mode = "requests" }) {
-  const title = mode === "components" ? "Event Components" : mode === "calendar" ? "Event Calendar" : mode === "form" ? "New Event Request" : "Events";
+  const title = mode === "components" ? "Event Components" : mode === "calendar" ? "Event Calendar" : mode === "team" ? "Event Team" : mode === "form" ? "New Event Request" : "Events";
   return (
     <>
-      <link rel="stylesheet" href="/css/style.css?v=bidi-mixed-v1" />
-      <link rel="stylesheet" href="/css/ui-redesign.css?v=sidebar-page-label-frame-v3" />
-      <link rel="stylesheet" href="/css/page-canvas-fix.css?v=page-canvas-single-layer-v3" />
-      <link rel="stylesheet" href="/css/events.css?v=next-stage-2k-events" />
+      <ShellStyleLinks />
+      <link rel="stylesheet" href="/next/css/events.css?v=nav-20261016" precedence="erp-detail" />
       <BodyClassSync className="events-page next-classic-shell-active" />
       <div className="app-container classic-app-shell next-classic-events-loading" aria-label={`Loading ${title}`}>
         <ClassicStableLoadingSidebar activeIndex={5} />

@@ -1,5 +1,32 @@
 import "server-only";
 
+import { performance } from "node:perf_hooks";
+import { recordPerformanceSample } from "./performance-profiler";
+
+const supabaseGetInflight = new Map();
+
+function stableHeadersKey(headers = {}) {
+  const entries = Object.entries(headers || {})
+    .map(([key, value]) => [String(key).toLowerCase(), String(value ?? "")])
+    .sort((a, b) => a[0].localeCompare(b[0]) || a[1].localeCompare(b[1]));
+  return JSON.stringify(entries);
+}
+
+function supabaseGetDedupeKey(pathname, options = {}) {
+  return JSON.stringify({
+    pathname: String(pathname || ""),
+    timeoutMs: Number(options.timeoutMs || process.env.SUPABASE_REQUEST_TIMEOUT_MS || 15000) || 15000,
+    attempts: Number(options.attempts || process.env.SUPABASE_READ_ATTEMPTS || 2) || 2,
+    headers: stableHeadersKey(options.headers || {}),
+  });
+}
+
+function cloneSupabasePayload(value) {
+  if (value === null || typeof value !== "object") return value;
+  try { return structuredClone(value); } catch {}
+  try { return JSON.parse(JSON.stringify(value)); } catch { return value; }
+}
+
 function cleanBaseUrl(raw) {
   return String(raw || "").trim().replace(/\/+$/, "").replace(/\/rest\/v1\/?$/i, "");
 }
@@ -73,86 +100,204 @@ function retryableStatus(status) {
 }
 
 export async function supabaseRequest(pathname, options = {}) {
-  const { url, key } = ensureConfigured();
   const method = String(options.method || "GET").toUpperCase();
+
+  // A write is a freshness boundary. Do not let a GET started before a mutation
+  // satisfy an identical read that starts after the mutation.
+  if (method !== "GET" && supabaseGetInflight.size) supabaseGetInflight.clear();
+
+  // System-wide runtime dedupe: identical GETs that are already in flight share
+  // one Supabase request. Nothing is cached after completion, so reads stay
+  // fresh while duplicate concurrent work is removed. Abortable callers keep
+  // their own request so one consumer cannot cancel another consumer's read.
+  if (method === "GET" && options?.dedupe !== false && !options?.signal && options?.body === undefined) {
+    const dedupeKey = supabaseGetDedupeKey(pathname, options);
+    const existing = supabaseGetInflight.get(dedupeKey);
+    if (existing) return cloneSupabasePayload(await existing);
+
+    const pending = supabaseRequest(pathname, { ...options, dedupe: false });
+    supabaseGetInflight.set(dedupeKey, pending);
+    try {
+      return cloneSupabasePayload(await pending);
+    } finally {
+      if (supabaseGetInflight.get(dedupeKey) === pending) supabaseGetInflight.delete(dedupeKey);
+    }
+  }
+
+  const { url, key } = ensureConfigured();
+  const metricStartedAt = performance.now();
+  let metricStatus = 0;
+  let metricOk = false;
+  let metricAttempts = 0;
+  let metricRows = null;
+  const metricTable = (() => {
+    const first = String(pathname || "").replace(/^\/+/, "").split(/[?\/]/)[0] || "unknown";
+    try { return decodeURIComponent(first); } catch { return first; }
+  })();
+  const metricName = String(options.profileName || `${method} ${metricTable}`).trim().slice(0, 120) || `${method} ${metricTable}`;
   const timeoutMs = Math.max(
     1000,
     Math.min(120000, Number(options.timeoutMs || process.env.SUPABASE_REQUEST_TIMEOUT_MS || 15000) || 15000),
   );
-  const requestedAttempts = Number(options.attempts || process.env.SUPABASE_READ_ATTEMPTS || 3) || 3;
-  const maxAttempts = method === "GET" ? Math.max(1, Math.min(3, requestedAttempts)) : 1;
+  // Treat timeoutMs as a total request budget, not a fresh timeout for every
+  // retry. The old behavior could turn a 15s read into ~45s during a transient
+  // Supabase/network issue, which was especially visible during page navigation.
+  const requestedAttempts = Number(options.attempts || process.env.SUPABASE_READ_ATTEMPTS || 2) || 2;
+  const maxAttempts = method === "GET" ? Math.max(1, Math.min(2, requestedAttempts)) : 1;
   let lastError = null;
+  const startedAt = Date.now();
 
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      metricAttempts = attempt;
+      const elapsed = Date.now() - startedAt;
+      const remainingMs = timeoutMs - elapsed;
+      if (remainingMs <= 0) break;
 
-    try {
-      const headers = {
-        apikey: key,
-        Authorization: `Bearer ${key}`,
-        ...(options.headers || {}),
-      };
-      if (options.body !== undefined && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
+      const controller = new AbortController();
+      const externalSignal = options.signal || null;
+      const abortFromCaller = () => controller.abort(externalSignal?.reason);
+      if (externalSignal?.aborted) abortFromCaller();
+      else externalSignal?.addEventListener?.("abort", abortFromCaller, { once: true });
+      const timeout = setTimeout(() => controller.abort(), remainingMs);
 
-      const response = await fetch(`${url}/rest/v1${pathname}`, {
-        method,
-        cache: "no-store",
-        signal: controller.signal,
-        headers,
-        body: options.body === undefined ? undefined : JSON.stringify(options.body),
-      });
+      try {
+        const headers = {
+          apikey: key,
+          Authorization: `Bearer ${key}`,
+          ...(options.headers || {}),
+        };
+        if (options.body !== undefined && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
 
-      const raw = await response.text();
-      let data = null;
-      try { data = raw ? JSON.parse(raw) : null; } catch { data = raw; }
+        const networkStartedAt = performance.now();
+        const response = await fetch(`${url}/rest/v1${pathname}`, {
+          method,
+          cache: "no-store",
+          signal: controller.signal,
+          headers,
+          body: options.body === undefined ? undefined : JSON.stringify(options.body),
+        });
 
-      if (!response.ok) {
-        const message = data && typeof data === "object"
-          ? (data.message || data.details || data.hint || JSON.stringify(data))
-          : (raw || `Supabase request failed with status ${response.status}`);
-        const error = new Error(message);
-        error.status = response.status;
-        error.details = data;
-        throw error;
+        const headersAt = performance.now();
+        const raw = await response.text();
+        const bodyAt = performance.now();
+        let data = null;
+        try { data = raw ? JSON.parse(raw) : null; } catch { data = raw; }
+        const parsedAt = performance.now();
+        // Phase 22: optional per-request transport diagnostics. Callbacks get
+        // aggregate timings and UTF-8 size only; never the response or secrets.
+        if (typeof options.onNetworkTiming === "function") {
+          try {
+            options.onNetworkTiming({
+              headersMs: headersAt - networkStartedAt,
+              bodyMs: bodyAt - headersAt,
+              parseMs: parsedAt - bodyAt,
+              payloadBytes: Buffer.byteLength(raw, "utf8"),
+              // Length is the uncompressed JSON body, not a claim about wire bytes.
+              // Content-Length, when supplied by the upstream, describes the
+              // HTTP entity (which may be compressed). Node's fetch can
+              // transparently decompress the response before response.text().
+              contentEncoding: String(response.headers.get("content-encoding") || "").toLowerCase(),
+              contentLength: response.headers.get("content-length"),
+            });
+          } catch { /* diagnostics must never affect order loading */ }
+        }
+
+        metricStatus = response.status;
+        if (!response.ok) {
+          const message = data && typeof data === "object"
+            ? (data.message || data.details || data.hint || JSON.stringify(data))
+            : (raw || `Supabase request failed with status ${response.status}`);
+          const error = new Error(message);
+          error.status = response.status;
+          error.details = data;
+          throw error;
+        }
+        metricOk = true;
+        metricRows = Array.isArray(data) ? data.length : null;
+        return data;
+      } catch (error) {
+        let current = error;
+        if (error?.name === "AbortError") {
+          if (externalSignal?.aborted) {
+            current = new Error("Supabase request was cancelled by the caller.");
+            current.name = "AbortError";
+            current.code = "REQUEST_ABORTED";
+            current.status = 499;
+          } else {
+            current = new Error(`Supabase request timed out after ${timeoutMs} ms.`);
+            current.code = "SUPABASE_TIMEOUT";
+            current.status = 504;
+          }
+        }
+        metricStatus = Number(current?.status) || metricStatus || 0;
+        lastError = current;
+        const budgetLeft = timeoutMs - (Date.now() - startedAt);
+        const canRetry = method === "GET" && attempt < maxAttempts && retryableStatus(current?.status) && budgetLeft > 220;
+        if (!canRetry) throw current;
+        await wait(Math.min(140, Math.max(0, budgetLeft - 80)));
+      } finally {
+        clearTimeout(timeout);
+        externalSignal?.removeEventListener?.("abort", abortFromCaller);
       }
-      return data;
-    } catch (error) {
-      let current = error;
-      if (error?.name === "AbortError") {
-        current = new Error(`Supabase request timed out after ${timeoutMs} ms.`);
-        current.code = "SUPABASE_TIMEOUT";
-        current.status = 504;
-      }
-      lastError = current;
-      const canRetry = method === "GET" && attempt < maxAttempts && retryableStatus(current?.status);
-      if (!canRetry) throw current;
-      await wait(attempt === 1 ? 180 : 420);
-    } finally {
-      clearTimeout(timeout);
     }
+
+    if (lastError) throw lastError;
+    const timeoutError = new Error(`Supabase request timed out after ${timeoutMs} ms.`);
+    timeoutError.code = "SUPABASE_TIMEOUT";
+    timeoutError.status = 504;
+    metricStatus = 504;
+    throw timeoutError;
+  } finally {
+    recordPerformanceSample({
+      category: "supabase",
+      name: metricName,
+      durationMs: performance.now() - metricStartedAt,
+      ok: metricOk,
+      status: metricStatus,
+      meta: {
+        attempts: metricAttempts || 1,
+        ...(metricRows === null ? {} : { rows: metricRows }),
+      },
+    });
   }
-
-  throw lastError || new Error("Supabase request failed.");
 }
 
-export async function select(table, params = {}) {
-  return await supabaseRequest(`/${encodeTableName(table)}${queryString(params)}`);
+export async function select(table, params = {}, options = {}) {
+  return await supabaseRequest(`/${encodeTableName(table)}${queryString(params)}`, options);
 }
 
-export async function selectAll(table, { limit = 1000, order = "", select: selectExpr = "*" } = {}) {
+export async function rpc(functionName, args = {}, options = {}) {
+  const cleanName = String(functionName || "").trim();
+  if (!cleanName) {
+    const error = new Error("Supabase RPC function name is required.");
+    error.status = 400;
+    throw error;
+  }
+  return await supabaseRequest(`/rpc/${encodeTableName(cleanName)}`, {
+    ...options,
+    method: "POST",
+    body: args && typeof args === "object" ? args : {},
+  });
+}
+
+export async function selectAll(table, { limit = 1000, order = "", select: selectExpr = "*", profileName = "" } = {}) {
   const params = {
     select: selectExpr,
     limit: String(Math.max(1, Math.min(5000, Number(limit) || 1000))),
   };
   if (order) params.order = order;
-  const rows = await select(table, params);
+  const rows = await select(table, params, profileName ? { profileName } : {});
   return Array.isArray(rows) ? rows : [];
 }
 
-export async function selectById(table, id) {
+export async function selectById(table, id, options = {}) {
+  const selectExpr = String(options?.select || "*").trim() || "*";
+  const requestOptions = { ...(options || {}) };
+  delete requestOptions.select;
   const rows = await supabaseRequest(
-    `/${encodeTableName(table)}?select=*&id=eq.${encodeFilterValue(id)}&limit=1`,
+    `/${encodeTableName(table)}?select=${encodeURIComponent(selectExpr)}&id=eq.${encodeFilterValue(id)}&limit=1`,
+    requestOptions,
   );
   return Array.isArray(rows) ? rows[0] || null : null;
 }
@@ -164,6 +309,17 @@ export async function insert(table, row) {
     body: row,
   });
   return Array.isArray(rows) ? rows[0] || null : rows;
+}
+
+export async function insertMany(table, rows = []) {
+  const payload = Array.isArray(rows) ? rows.filter((row) => row && typeof row === "object") : [];
+  if (!payload.length) return [];
+  const result = await supabaseRequest(`/${encodeTableName(table)}`, {
+    method: "POST",
+    headers: { Prefer: "return=representation" },
+    body: payload,
+  });
+  return Array.isArray(result) ? result : (result ? [result] : []);
 }
 
 export async function updateById(table, id, row) {
@@ -201,12 +357,58 @@ export async function deleteById(table, id) {
   return Array.isArray(rows) ? rows[0] || null : rows;
 }
 
+export async function deleteByIds(table, ids = []) {
+  const clean = [...new Set((ids || []).map((id) => String(id ?? "").trim()).filter(Boolean))];
+  if (!clean.length) return [];
+  const inList = clean.map((id) => (/^-?\d+(?:\.\d+)?$/.test(id) ? id : `"${id.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`)).join(",");
+  const rows = await supabaseRequest(`/${encodeTableName(table)}?id=in.(${encodeURIComponent(inList)})`, {
+    method: "DELETE",
+    headers: { Prefer: "return=representation" },
+  });
+  return Array.isArray(rows) ? rows : [];
+}
+
 export function storagePublicUrl(objectPath, bucketName = null) {
   const { url, storageBucket } = getSupabaseConfig();
   const bucket = String(bucketName || storageBucket || "").trim();
   const key = String(objectPath || "").replace(/^\/+/, "");
   if (!/^https:\/\//i.test(url) || !bucket || !key) return "";
   return `${url}/storage/v1/object/public/${encodeURIComponent(bucket)}/${encodeStoragePath(key)}`;
+}
+
+// Refuse to send confidential files to a misconfigured public bucket.
+// The service-role request is made on the server; never expose its key.
+const verifiedPrivateBuckets = new Map();
+export async function assertPrivateStorageBucket(bucketName) {
+  const bucket = String(bucketName || "").trim();
+  if (!bucket) {
+    const error = new Error("Private Storage bucket is not configured.");
+    error.status = 503;
+    throw error;
+  }
+  const now = Date.now();
+  if (Number(verifiedPrivateBuckets.get(bucket) || 0) > now) return;
+  const { url, key } = ensureConfigured();
+  let response;
+  try {
+    response = await fetch(`${url}/storage/v1/bucket/${encodeURIComponent(bucket)}`, {
+      cache: "no-store",
+      headers: { apikey: key, Authorization: `Bearer ${key}` },
+      signal: AbortSignal.timeout(8000),
+    });
+  } catch {
+    const error = new Error("Private Storage bucket verification is unavailable.");
+    error.status = 503;
+    throw error;
+  }
+  const metadata = await response.json().catch(() => null);
+  if (!response.ok || !metadata || metadata.public !== false || String(metadata.id || metadata.name || "") !== bucket) {
+    verifiedPrivateBuckets.delete(bucket);
+    const error = new Error("Private Storage bucket is missing, inaccessible, or publicly readable. Refusing upload.");
+    error.status = 503;
+    throw error;
+  }
+  verifiedPrivateBuckets.set(bucket, now + 30_000);
 }
 
 export async function createSignedUploadUrl(objectPath, { bucketName = null } = {}) {
@@ -269,6 +471,59 @@ export async function createSignedUploadUrl(objectPath, { bucketName = null } = 
     signedUrl,
     publicUrl: storagePublicUrl(cleanPath, bucket),
   };
+}
+
+
+export async function createSignedDownloadUrl(objectPath, { bucketName = null, expiresIn = 180 } = {}) {
+  const { url, key, storageBucket } = ensureConfigured();
+  const bucket = String(bucketName || storageBucket || "").trim();
+  const cleanPath = String(objectPath || "").replace(/^\/+/, "");
+  const safeExpiresIn = Math.max(30, Math.min(3600, Number(expiresIn) || 180));
+  if (!bucket || !cleanPath) {
+    const error = new Error("Supabase Storage bucket and object path are required.");
+    error.status = 500;
+    throw error;
+  }
+
+  const endpoint = `${url}/storage/v1/object/sign/${encodeURIComponent(bucket)}/${encodeStoragePath(cleanPath)}`;
+  const response = await fetch(endpoint, {
+    method: "POST",
+    cache: "no-store",
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ expiresIn: safeExpiresIn }),
+  });
+
+  const raw = await response.text();
+  let data = null;
+  try { data = raw ? JSON.parse(raw) : null; } catch { data = raw; }
+  if (!response.ok) {
+    const error = new Error(
+      data && typeof data === "object"
+        ? (data.message || data.error || JSON.stringify(data))
+        : (raw || `Failed to create signed download URL with status ${response.status}`),
+    );
+    error.status = response.status;
+    error.details = data;
+    throw error;
+  }
+
+  const token = String(data?.token || "").trim();
+  let signedUrl = String(data?.signedURL || data?.signedUrl || data?.url || "").trim();
+  if (!signedUrl && token) signedUrl = `${endpoint}?token=${encodeURIComponent(token)}`;
+  else if (signedUrl.startsWith("/storage/v1/")) signedUrl = `${url}${signedUrl}`;
+  else if (signedUrl.startsWith("/object/")) signedUrl = `${url}/storage/v1${signedUrl}`;
+  else if (signedUrl && !/^https?:\/\//i.test(signedUrl)) signedUrl = `${url}/storage/v1/${signedUrl.replace(/^\/+/, "")}`;
+  if (token && signedUrl && !/[?&]token=/.test(signedUrl)) signedUrl += `${signedUrl.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}`;
+  if (!signedUrl) {
+    const error = new Error("Supabase Storage did not return a signed download URL.");
+    error.status = 502;
+    throw error;
+  }
+  return { bucket, path: cleanPath, signedUrl, expiresIn: safeExpiresIn, data };
 }
 
 export async function uploadStorageObject(objectPath, buffer, {
@@ -340,3 +595,57 @@ export async function uploadStorageObject(objectPath, buffer, {
     clearTimeout(timeout);
   }
 }
+
+export async function deleteStorageObjects(objectPaths = [], { bucketName = null } = {}) {
+  const { url, key, storageBucket } = ensureConfigured();
+  const bucket = String(bucketName || storageBucket || "").trim();
+  const prefixes = [...new Set((Array.isArray(objectPaths) ? objectPaths : [objectPaths])
+    .map((value) => String(value || "").trim().replace(/^\/+/, ""))
+    .filter(Boolean))];
+  if (!bucket || !prefixes.length) return { deleted: 0, paths: [] };
+
+  const controller = new AbortController();
+  const timeoutMs = Math.max(
+    1000,
+    Math.min(120000, Number(process.env.SUPABASE_STORAGE_TIMEOUT_MS || process.env.SUPABASE_REQUEST_TIMEOUT_MS || 20000) || 20000),
+  );
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(`${url}/storage/v1/object/${encodeURIComponent(bucket)}`, {
+      method: "DELETE",
+      signal: controller.signal,
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ prefixes }),
+    });
+    const raw = await response.text();
+    let data = null;
+    try { data = raw ? JSON.parse(raw) : null; } catch { data = raw; }
+    if (!response.ok) {
+      const error = new Error(
+        data && typeof data === "object"
+          ? (data.message || data.error || JSON.stringify(data))
+          : (raw || `Supabase Storage delete failed with status ${response.status}`),
+      );
+      error.status = response.status;
+      error.details = data;
+      throw error;
+    }
+    return { deleted: prefixes.length, paths: prefixes, data };
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      const timeoutError = new Error(`Supabase Storage delete timed out after ${timeoutMs} ms.`);
+      timeoutError.status = 504;
+      timeoutError.code = "SUPABASE_STORAGE_TIMEOUT";
+      throw timeoutError;
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
