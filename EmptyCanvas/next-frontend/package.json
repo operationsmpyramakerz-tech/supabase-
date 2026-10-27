@@ -6,7 +6,8 @@
     "dev": "next dev -p 3001",
     "build": "next build",
     "start": "node server.js",
-    "security:preflight": "node scripts/security-preflight.mjs"
+    "security:preflight": "node scripts/security-preflight.mjs",
+    "security:test-multiuser": "node --test tests/security-phase2q4a-multiuser-policy.test.mjs"
   },
   "dependencies": {
     "next": "latest",
