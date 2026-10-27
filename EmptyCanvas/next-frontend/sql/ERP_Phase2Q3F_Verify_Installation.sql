@@ -1,6 +1,7 @@
 -- Phase 2Q3F: READ-ONLY installation and access check.
 -- Safe to run in Staging first. Does not archive, delete, or alter any rows.
 -- Expected ready-for-test result: all boolean columns except the last two are TRUE;
+-- This verifies pg_catalog, pg_temp order, instead of an empty-string proconfig comparison.
 -- anon_can_execute and authenticated_can_execute must be FALSE.
 WITH target AS (
   SELECT to_regprocedure(
@@ -12,7 +13,11 @@ SELECT
   to_regclass('public.orders') IS NOT NULL AS orders_table_exists,
   p.oid IS NOT NULL AS function_installed,
   COALESCE(p.prosecdef, FALSE) AS security_definer,
-  COALESCE('search_path=' = ANY(p.proconfig), FALSE) AS empty_search_path,
+  COALESCE(EXISTS (
+    SELECT 1 FROM unnest(p.proconfig) AS setting(value)
+    WHERE regexp_replace(setting.value, '[[:space:]]+', '', 'g')
+      = 'search_path=pg_catalog,pg_temp'
+  ), FALSE) AS secure_search_path,
   CASE WHEN p.oid IS NULL THEN FALSE
        ELSE has_function_privilege('service_role', p.oid, 'EXECUTE') END
     AS service_role_can_execute,

@@ -39,6 +39,7 @@ test('2Q3F: reject mismatched orders, duplicates, invalid IDs, incomplete snapsh
 
 test('2Q3F: DB performs all checks and mutations in the SAME transaction, under a write-conflicting lock', () => {
   const sql = file('../sql/ERP_Phase2Q3F_Atomic_Order_Actions.sql');
+  assert.match(sql, /LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp/i);
   assert.match(sql, /LOCK TABLE public\.orders IN SHARE ROW EXCLUSIVE MODE/i);
   assert.match(sql, /v_locked_snapshot IS DISTINCT FROM p_expected/i);
   assert.match(sql, /v_count <> v_requested/i);
@@ -53,6 +54,8 @@ test('2Q3F: DB performs all checks and mutations in the SAME transaction, under 
 test('2Q3F: shipped verification SQL is read-only and confirms function privileges', () => {
   const sql = file('../sql/ERP_Phase2Q3F_Verify_Installation.sql');
   assert.match(sql, /to_regprocedure\(/i);
+  assert.match(sql, /AS secure_search_path/i);
+  assert.match(sql, /search_path=pg_catalog,pg_temp/i);
   assert.match(sql, /has_function_privilege\('service_role'/i);
   assert.match(sql, /has_function_privilege\('anon'/i);
   assert.match(sql, /has_function_privilege\('authenticated'/i);

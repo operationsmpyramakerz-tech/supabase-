@@ -9,7 +9,7 @@ CREATE OR REPLACE FUNCTION public.erp_atomic_order_action(
   p_action text,
   p_expected jsonb
 ) RETURNS jsonb
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp
 AS $$
 DECLARE
   v_count integer;
