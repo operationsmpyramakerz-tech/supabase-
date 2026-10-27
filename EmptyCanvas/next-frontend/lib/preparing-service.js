@@ -1,7 +1,7 @@
 import "server-only";
 import { select, selectAll, selectById, insert, updateById, supabaseRequest, rpc } from "./supabase-rest";
 import { listTeamMembersLite } from "./team-members-service";
-import { listProposals } from "./proposal-kit-service";
+import { listProposals, getProposal } from "./proposal-kit-service";
 import { PREPARING_STAGES, PREPARING_STATES, canCompleteStage, validStage } from "./preparing-workflow";
 
 const PROJECTS = "erp_preparing_projects";
@@ -87,4 +87,62 @@ export async function updatePreparingStage(schoolId, body, account) {
     p_school_id: uuid(schoolId), p_stage_key: stageKey, p_status: status,
     p_notes: notes, p_member_id: memberId,
   }, { profileName: "preparing.stage-transition" });
+}
+
+
+// Phase 2: a school-specific, immutable proposal baseline. The source proposal is never mutated.
+const MANIFESTS = "erp_preparing_manifests";
+const COMPONENTS = "erp_preparing_components";
+const QTY_LIMIT = 1000000;
+function units(value, label) {
+  if (!Number.isSafeInteger(value) || value < 0 || value > QTY_LIMIT) fail(`${label} must be a whole number between 0 and ${QTY_LIMIT}.`);
+  return value;
+}
+export async function preparingComponents(schoolId) {
+  serviceOnly(); const school = await requireSchool(schoolId);
+  const [manifests, items] = await Promise.all([
+    select(MANIFESTS, { select:"*", school_id:`eq.${uuid(schoolId)}`, limit:"1" }, { profileName:"preparing.manifest" }),
+    select(COMPONENTS, { select:"*", school_id:`eq.${uuid(schoolId)}`, order:"item_order.asc", limit:"1000" }, { profileName:"preparing.components" }),
+  ]);
+  return { schoolId: school.id, proposalId: school.proposal_id, manifest: manifests?.[0] || null, items: Array.isArray(items) ? items : [] };
+}
+export async function initializePreparingComponents(schoolId, account) {
+  serviceOnly(); const memberId = identity(account); const school = await requireSchool(schoolId);
+  // Read the existing proposal with its original item identities and kit/grade source labels.
+  const source = await getProposal(school.proposal_id);
+  if (!source?.items?.length) fail("The selected proposal has no items. Cannot create an empty preparing manifest.", 409);
+  if (source.items.length > 1000) fail("The proposal exceeds the 1000-item limit.", 409);
+  const items = source.items.map((row, index) => ({
+    itemId: clean(row.id), productId: clean(row.productId),
+    productName: clean(row.productName).slice(0, 500),
+    planned: units(Number(row.quantity), "Planned quantity"),
+    sourceKits: Array.isArray(row.sourceKits) ? row.sourceKits : [], order: index,
+  }));
+  if (items.some(row => !row.itemId || !row.productName || !row.planned) || new Set(items.map(row => row.itemId)).size !== items.length)
+    fail("Source proposal has invalid, zero-quantity, or duplicate item rows. Resolve this in Proposals before preparing.", 409);
+  // One atomic DB transaction; concurrent initialization cannot duplicate items.
+  return rpc("erp_preparing_initialize_manifest", {
+    p_school_id: uuid(schoolId), p_proposal_id: school.proposal_id,
+    p_proposal_name: clean(source.proposal?.name || school.proposal_name),
+    p_proposal_updated_at: source.proposal?.updatedAt || null,
+    p_items: items, p_member_id: memberId,
+  }, { profileName: "preparing.snapshot" });
+}
+export async function updatePreparingComponent(schoolId, body, account) {
+  serviceOnly(); const memberId = identity(account); await requireSchool(schoolId);
+  const componentId = uuid(body?.componentId);
+  const received = units(body?.received, "Received quantity");
+  const damaged = units(body?.damaged, "Damaged quantity");
+  const prepared = units(body?.prepared, "Prepared quantity");
+  const notes = clean(body?.notes);
+  if (notes.length > 1000) fail("Notes must be under 1000 characters.");
+  if (damaged > received || prepared > received - damaged)
+    fail("Damaged cannot exceed received, and prepared cannot exceed usable received.");
+  if (typeof body?.expectedUpdatedAt !== "string" || !Number.isFinite(Date.parse(body.expectedUpdatedAt)))
+    fail("A valid row version is required. Refresh and retry.", 409);
+  return rpc("erp_preparing_update_component", {
+    p_school_id: uuid(schoolId), p_component_id: componentId,
+    p_received: received, p_damaged: damaged, p_prepared: prepared,
+    p_notes: notes, p_expected_updated_at: body.expectedUpdatedAt, p_member_id: memberId,
+  }, { profileName: "preparing.component-update" });
 }

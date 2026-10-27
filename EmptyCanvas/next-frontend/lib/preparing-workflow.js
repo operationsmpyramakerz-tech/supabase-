@@ -23,3 +23,17 @@ export function canCompleteStage(stageKey, records = []) {
   const done = new Set(records.filter(row => row.status === "completed").map(row => row.stage_key));
   return PREPARING_STAGES.slice(0, index).every(stage => done.has(stage.key));
 }
+
+// Quantities are counted per proposal item, never merged by product name.
+export function componentTotals(items = []) {
+  return items.reduce((sum, row) => {
+    const planned = Math.max(0, Number(row.planned_qty) || 0);
+    const received = Math.max(0, Number(row.received_qty) || 0);
+    const damaged = Math.max(0, Number(row.damaged_qty) || 0);
+    const prepared = Math.max(0, Number(row.prepared_qty) || 0);
+    sum.planned += planned; sum.received += received; sum.damaged += damaged;
+    sum.prepared += prepared; sum.missing += Math.max(0, planned - received);
+    sum.usableShortage += Math.max(0, planned - (received - damaged));
+    return sum;
+  }, { planned:0, received:0, damaged:0, prepared:0, missing:0, usableShortage:0 });
+}
