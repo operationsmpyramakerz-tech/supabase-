@@ -146,3 +146,91 @@ export async function updatePreparingComponent(schoolId, body, account) {
     p_notes: notes, p_expected_updated_at: body.expectedUpdatedAt, p_member_id: memberId,
   }, { profileName: "preparing.component-update" });
 }
+
+
+// Phase 3: transport records are *evidence-only*; they do not change warehouse stock.
+const SHIPMENTS = "erp_preparing_shipments";
+const SHIPMENT_LINES = "erp_preparing_shipment_lines";
+function bounded(value, label, max) { const text = clean(value); if (text.length > max) fail(`${label} exceeds ${max} characters.`); return text; }
+function httpsEvidence(value) { const text=bounded(value,"Evidence URL",2048); if (text && !/^https:\/\/[^\s]+$/i.test(text)) fail("Evidence link must be a full HTTPS URL."); return text; }
+async function preparingSchoolRows(table,id,{fields="*",order="created_at.asc",maximum=10000,label="records"}={}) {
+  // Page below the PostgREST max-rows cap; never silently omit BOM or shipment lines.
+  const rows=[];
+  for(let offset=0; offset<=maximum; offset+=400) {
+    const page=await select(table,{select:fields,school_id:`eq.${id}`,order,offset:String(offset),limit:"400"},{profileName:`preparing.delivery.${table}`});
+    if(!Array.isArray(page)) fail(`Unexpected ${label} response.`,502);
+    rows.push(...page);
+    if(rows.length>maximum) fail(`Too many ${label} for a single school. Contact support.`,409);
+    if(page.length<400) return rows;
+  }
+  fail(`Too many ${label} for a single school. Contact support.`,409);
+}
+export async function preparingShipments(schoolId) {
+  serviceOnly(); await requireSchool(schoolId);
+  const id=uuid(schoolId);
+  const [shipments,lines,components] = await Promise.all([
+    preparingSchoolRows(SHIPMENTS,id,{maximum:2000,label:"carton history"}),
+    preparingSchoolRows(SHIPMENT_LINES,id,{order:"shipment_id.asc,component_id.asc",maximum:10000,label:"shipment lines"}),
+    preparingSchoolRows(COMPONENTS,id,{fields:"id,product_name,source_kits,planned_qty,prepared_qty,item_order",order:"item_order.asc",maximum:1000,label:"proposal items"}),
+  ]);
+  return {schoolId:id,shipments,lines,components};
+}
+export async function createPreparingShipment(body, account) {
+  serviceOnly(); const actor=identity(account); await requireSchool(body?.schoolId);
+  const cartonLabel=bounded(body?.cartonLabel,"Carton label",100);
+  if (cartonLabel.length<2) fail("Carton label must contain at least 2 characters.");
+  return rpc("erp_preparing_create_shipment",{
+    p_school_id:uuid(body.schoolId),p_carton_label:cartonLabel,
+    p_carrier:bounded(body?.carrier,"Carrier",160),p_tracking_reference:bounded(body?.trackingReference,"Tracking reference",160),
+    p_notes:bounded(body?.notes,"Notes",1000),p_member_id:actor,
+  },{profileName:"preparing.create-carton"});
+}
+export async function packPreparingComponent(body,account) {
+  serviceOnly(); const actor=identity(account); await requireSchool(body?.schoolId);
+  const quantity=units(body?.quantity,"Packed quantity");
+  const version=body?.expectedUpdatedAt;
+  if (version!==null && version!==undefined && (typeof version!=="string" || !Number.isFinite(Date.parse(version))))
+    fail("Invalid line version. Refresh and retry.",409);
+  return rpc("erp_preparing_pack_component",{
+    p_school_id:uuid(body.schoolId),p_shipment_id:uuid(body.shipmentId),p_component_id:uuid(body.componentId),
+    p_quantity:quantity,p_expected_updated_at:version || null,p_member_id:actor,
+  },{profileName:"preparing.pack-component"});
+}
+export async function cancelPreparingShipment(body,account) {
+  serviceOnly(); const actor=identity(account); await requireSchool(body?.schoolId);
+  const version=clean(body?.expectedUpdatedAt);
+  if(!Number.isFinite(Date.parse(version))) fail("Refresh before cancelling.",409);
+  return rpc("erp_preparing_cancel_draft_shipment",{
+    p_school_id:uuid(body.schoolId),p_shipment_id:uuid(body.shipmentId),
+    p_expected_updated_at:version,p_member_id:actor,
+  },{profileName:"preparing.cancel-carton"});
+}
+export async function dispatchPreparingShipment(body,account) {
+  serviceOnly(); const actor=identity(account); await requireSchool(body?.schoolId);
+  const carrier=bounded(body?.carrier,"Transport provider",160);
+  if (!carrier) fail("Transport provider / vehicle is required.");
+  const version=clean(body?.expectedUpdatedAt);
+  if (!Number.isFinite(Date.parse(version))) fail("Refresh before dispatching.",409);
+  return rpc("erp_preparing_dispatch_shipment",{
+    p_school_id:uuid(body.schoolId),p_shipment_id:uuid(body.shipmentId),p_carrier:carrier,
+    p_tracking_reference:bounded(body?.trackingReference,"Tracking reference",160),p_notes:bounded(body?.notes,"Notes",1000),
+    p_expected_updated_at:version,p_member_id:actor,
+  },{profileName:"preparing.dispatch"});
+}
+export async function receivePreparingShipment(body,account) {
+  serviceOnly(); const actor=identity(account); await requireSchool(body?.schoolId);
+  const items=Array.isArray(body?.items)?body.items:[];
+  if (!items.length || items.length>1000 || items.some(item=>!item || typeof item!=="object" ||
+      !Number.isSafeInteger(item.received) || item.received<0 || item.received>QTY_LIMIT)) fail("Invalid received counts.");
+  const version=clean(body?.expectedUpdatedAt);
+  if (!Number.isFinite(Date.parse(version))) fail("Refresh before confirming receipt.",409);
+  const recipient=bounded(body?.recipientName,"Recipient",160), reference=bounded(body?.receiptReference,"Receipt reference",160);
+  if (recipient.length<2 || reference.length<2) fail("School recipient and signed receipt reference are required.");
+  return rpc("erp_preparing_receive_shipment",{
+    p_school_id:uuid(body.schoolId),p_shipment_id:uuid(body.shipmentId),
+    p_items:items.map(item=>({componentId:uuid(item.componentId),received:item.received})),
+    p_recipient_name:recipient,p_receipt_reference:reference,
+    p_receipt_url:httpsEvidence(body?.receiptUrl),p_delivery_notes:bounded(body?.deliveryNotes,"Delivery notes",1000),
+    p_expected_updated_at:version,p_member_id:actor,
+  },{profileName:"preparing.school-receipt"});
+}

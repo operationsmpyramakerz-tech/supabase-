@@ -98,3 +98,33 @@
 .pr-component-inputs input,.pr-component-editor textarea {width:100%;border:1px solid var(--pr-border);border-radius:10px;padding:10px;background:#fff;color:var(--pr-ink);}
 .pr-component-buttons {display:flex;justify-content:flex-end;gap:8px;}
 @media(max-width:670px) { .pr-component-entry {flex-direction:column;align-items:stretch;padding:15px;}.pr-components-sheet {padding:17px 15px 115px;}.pr-qty-summary {grid-template-columns:repeat(3,minmax(0,1fr));}.pr-component-head {flex-direction:column;}.pr-component-values>div {padding:8px 6px;}.pr-component-values b {font-size:13px;}.pr-component-values small {font-size:9px;} }
+
+/* Phase 3 — carton packing, school delivery and receipt reconciliation */
+.pr-delivery { display:flex; flex-direction:column; gap:16px; }
+.pr-delivery-entry {background:#f6f8fb;border-color:#e6eaf0;}
+.pr-delivery-toolbar {display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;}
+.pr-delivery-toolbar h4,.pr-delivery-action h4 {margin:0;font-size:14px;}
+.pr-delivery-toolbar .pr-muted {margin:5px 0 0;}
+.pr-delivery-create {display:flex;align-items:flex-end;gap:10px;border:1px solid var(--pr-border);border-radius:12px;padding:12px;}
+.pr-delivery-create .pr-field {flex:1;}
+.pr-carton-pills {display:flex;align-items:stretch;gap:9px;overflow:auto;padding:3px 1px 8px;scrollbar-width:none;}
+.pr-carton-pills::-webkit-scrollbar {display:none;}
+.pr-carton-pill {flex:0 0 auto;min-width:125px;max-width:235px;display:flex;flex-direction:column;gap:5px;text-align:left;background:#fafbfc;border:1px solid var(--pr-border);border-radius:12px;padding:12px;color:var(--pr-ink);}
+.pr-carton-pill strong {font-size:12px;overflow-wrap:anywhere;}.pr-carton-pill small {font-size:10px;color:var(--pr-muted);text-transform:capitalize;}
+.pr-carton-pill.selected {border-color:#ed9f51;background:#fff8f0;}
+.pr-carton-detail {border:1px solid var(--pr-border);border-radius:15px;padding:15px;display:flex;flex-direction:column;gap:14px;}
+.pr-delivery-lines {display:flex;flex-direction:column;gap:8px;max-height:340px;overflow:auto;overscroll-behavior:contain;scrollbar-width:none;}
+.pr-delivery-lines::-webkit-scrollbar {display:none;}
+.pr-delivery-line {display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 12px;border:1px solid #eff0f3;border-radius:11px;}
+.pr-delivery-line>div:first-child {display:flex;flex-direction:column;gap:5px;min-width:0;}
+.pr-delivery-line strong {font-size:12px;overflow-wrap:anywhere;}.pr-delivery-line small {font-size:10px;color:var(--pr-muted);}
+.pr-line-input {display:flex;align-items:center;gap:8px;flex-shrink:0;}.pr-line-input input {width:85px;border:1px solid var(--pr-border);border-radius:10px;padding:10px;font-size:12px;}
+.pr-delivery-search input {min-width:200px;}
+.pr-delivery-fields {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
+.pr-delivery-action {display:flex;flex-direction:column;gap:11px;background:#fafbfc;border:1px solid #edf0f4;border-radius:12px;padding:15px;}
+.pr-delivery-action .pr-primary {align-self:flex-end;}
+.pr-delivery-closed {display:flex;flex-direction:column;gap:9px;padding:14px;border-radius:12px;background:#effcf5;font-size:12px;overflow-wrap:anywhere;}
+.pr-delivery-closed p {margin:0;white-space:pre-wrap;}.pr-delivery-closed a {color:#167d62;text-decoration:underline;}
+@media (max-width:670px){ .pr-delivery-create {align-items:stretch;flex-direction:column;}.pr-delivery-fields {grid-template-columns:1fr;}.pr-delivery-line {align-items:flex-start;flex-direction:column;}.pr-line-input {width:100%;justify-content:flex-end;}.pr-qty-summary.pr-delivery-totals {grid-template-columns:repeat(3,minmax(0,1fr));}.pr-delivery-action .pr-primary {align-self:stretch;} }
+
+.pr-carton-actions {display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
