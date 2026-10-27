@@ -70,7 +70,7 @@ export default function ComponentsManifest({ schoolId, proposalName, allowed, re
     const a=document.createElement("a");a.href=url;a.download=`preparing-${schoolId}.csv`;a.click();URL.revokeObjectURL(url);
   }
   return <div className="pr-manifest">
-    <div className="pr-manifest-title"><div><h3>Components & QC</h3><p>School-specific BOM from {formatted(proposalName)}</p></div><button className="pr-secondary" type="button" onClick={onClose}>Close</button></div>
+    <div className="pr-manifest-title"><div><h3>Components & QC</h3></div><button className="pr-secondary" type="button" onClick={onClose}>Close</button></div>
     {error && <div className="pr-alert" role="alert">{error}</div>}
     {message && <p className="pr-manifest-success" role="status">{message}</p>}
     {!loaded ? <p className="pr-muted">Loading components…</p> : !manifest ? <div className="pr-manifest-empty">
@@ -86,7 +86,7 @@ export default function ComponentsManifest({ schoolId, proposalName, allowed, re
         {row.notes && !isEditing && <p className="pr-component-note">{row.notes}</p>}
         {isEditing ? <div className="pr-component-editor"><div className="pr-component-inputs">{[["Received","received"],["Damaged","damaged"],["Prepared","prepared"]].map(([label,key])=><label key={key}>{label}<input aria-label={`${label} ${row.product_name}`} type="number" min="0" step="1" max="1000000" value={d[key]} onChange={e=>setDrafts(prev=>({...prev,[row.id]:{...d,[key]:e.target.value}}))}/></label>)}</div><label>Notes<textarea maxLength={1000} rows={2} value={d.notes} onChange={e=>setDrafts(prev=>({...prev,[row.id]:{...d,notes:e.target.value}}))}/></label><div className="pr-component-buttons"><button className="pr-secondary" disabled={busy} onClick={()=>{setEditing("");setDrafts(prev=>({...prev,[row.id]:initialDraft(row)}));}}>Cancel</button><button className="pr-primary" disabled={busy} onClick={()=>saveRow(row)}>{busy?"Saving…":"Save quantities"}</button></div></div> : allowed && <button className="pr-component-edit" disabled={busy} onClick={()=>setEditing(row.id)}>Update quantities</button>}
       </div>;})}{!shown.length && <p className="pr-muted">No matching components.</p>}</div>
-      <p className="pr-muted">Missing = Required − Received (minimum zero). Usable shortage also includes damaged items. Prepared cannot exceed usable received stock. Every update is audited. Completed preparing stages lock quantity changes.</p>
+
     </>}
   </div>;
 }

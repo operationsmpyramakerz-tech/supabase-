@@ -90,7 +90,7 @@ export default function TechnicalFollowUp({schoolId,schoolName,stageStatuses=[],
   const activeIssue=data.issues.find(i=>i.id===editIssue);
   const acceptanceReady=installed&&summary.tested===summary.testingTotal&&summary.openIssues===0&&!testing;
   return <div className="pr-technical">
-    <div className="pr-manifest-title"><div><h3>Technical Installation Follow-up</h3><p>{schoolName} · Technical team executes · Operations coordinates and follows progress</p></div><button type="button" className="pr-secondary" onClick={onClose}>Close</button></div>
+    <div className="pr-manifest-title"><div><h3>Technical Installation Follow-up</h3></div><button type="button" className="pr-secondary" onClick={onClose}>Close</button></div>
     {error&&<div className="pr-alert" role="alert">{error}</div>}{notice&&<div className="pr-manifest-success" role="status">{notice}</div>}
     {!loaded?<p className="pr-muted">Loading technical follow-up…</p>:<>
       <div className="pr-technical-summary">{[["Installation",`${summary.installed}/${summary.installationTotal}`],["Testing",`${summary.tested}/${summary.testingTotal}`],["Open issues",summary.openIssues],["Acceptance",summary.accepted?"Recorded":"Pending"]].map(([name,value])=><div key={name}><small>{name}</small><strong>{value}</strong></div>)}</div>
@@ -98,12 +98,12 @@ export default function TechnicalFollowUp({schoolId,schoolName,stageStatuses=[],
       {testing&&<p className="pr-hint">Testing is completed. Reopen the Testing stage before changing technical records.</p>}
       <div className="pr-technical-tabs" role="tablist" aria-label="Technical follow-up sections">{[["installation","Installation"],["testing","Testing"],["issues",`Issues (${summary.openIssues} open)`],["acceptance","Technical acceptance"]].map(([key,label])=><button type="button" role="tab" aria-selected={tab===key} className={tab===key?"active":""} onClick={()=>setTab(key)} key={key}>{label}</button>)}</div>
       {(["installation","testing"].includes(tab))&&<div className="pr-technical-checkpoints">
-        <p className="pr-muted">{tab==="installation"?"Technical team confirms installation tasks. Complete all four before closing Installation Follow-up.":"Testing follows completed Installation. Record the technical acceptance reference before closing Testing & Commissioning."}</p>
+
         {TECHNICAL_CHECKPOINTS.filter(item=>item.phase===tab).map(item=><Milestone key={`${item.key}:${data.checkpoints.find(x=>x.milestone_key===item.key)?.updated_at||"new"}`}
           item={item} record={data.checkpoints.find(x=>x.milestone_key===item.key)} disabled={!canMilestoneEdit(item.key)} busy={busy} onSave={saveCheckpoint}/>)}
       </div>}
       {tab==="issues"&&<div className="pr-technical-checkpoints">
-        <div className="pr-delivery-toolbar"><div><h4>Snag / issue register</h4><p className="pr-muted">Issues stay traceable, including resolved ones; no hard deletion.</p></div>
+        <div className="pr-delivery-toolbar"><div><h4>Snag / issue register</h4></div>
           <div className="pr-carton-actions"><button className="pr-secondary" type="button" onClick={()=>downloadIssues(data.issues,schoolId)}>Export CSV</button>{canEdit&&<button type="button" className="pr-primary" onClick={()=>setEditIssue("new")}>+ Add Issue</button>}</div></div>
         <label className="pr-field">Filter<select value={issueFilter} onChange={e=>setIssueFilter(e.target.value)}><option value="all">All issues</option>{ISSUE_STATES.map(v=><option key={v} value={v}>{displayStatus(v)}</option>)}</select></label>
         {editIssue==="new"&&<EditIssue key="new" disabled={!canEdit} busy={busy} onSave={form=>saveIssue(form,null)} onCancel={()=>setEditIssue("")}/>}
@@ -131,7 +131,7 @@ export default function TechnicalFollowUp({schoolId,schoolName,stageStatuses=[],
           <div className="pr-component-buttons"><button type="button" className="pr-primary" disabled={!acceptanceReady||busy||acceptForm.technicianName.trim().length<2||acceptForm.confirmationReference.trim().length<2} onClick={saveAcceptance}>{busy?"Saving…":data.acceptance?"Update acceptance reference":"Record acceptance reference"}</button></div>
         </div>}
       </div>}
-      <p className="pr-muted">Operations records follow-up only. The technical execution, testing and acceptance must be confirmed by the responsible technical team.</p>
+
     </>}
   </div>;
 }

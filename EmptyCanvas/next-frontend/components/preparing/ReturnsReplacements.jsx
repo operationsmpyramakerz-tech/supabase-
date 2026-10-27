@@ -56,10 +56,10 @@ export default function ReturnsReplacements({schoolId,schoolName,stageStatuses=[
   run(()=>request("/reconciliation","PATCH",{action:"cancel_replacement",schoolId,shipmentId:batch.shipment_id,
    expectedUpdatedAt:batches.get(batch.shipment_id)?.updated_at}),"Draft replacement cancelled; reservation released.");}
  return <div className="pr-delivery pr-reconciliation">
-  <div className="pr-manifest-title"><div><h3>Returns & Replacements</h3><p>{schoolName} · Signed discrepancies, physical returns and corrective batches</p></div><button className="pr-secondary" onClick={onClose}>Close</button></div>
+  <div className="pr-manifest-title"><div><h3>Returns & Replacements</h3></div><button className="pr-secondary" onClick={onClose}>Close</button></div>
   {error&&<div className="pr-alert" role="alert">{error}</div>}{notice&&<div className="pr-manifest-success" role="status">{notice}</div>}
   {loading?<p className="pr-muted">Loading reconciliation records…</p>:<>
-   <p className="pr-hint">Original signed receipts remain unchanged. Net accepted = original and replacement receipts minus documented physical returns. Returns are permanent records; replacement batches are dispatched and received from School Delivery.</p>
+
    <div className="pr-delivery-toolbar"><h4>Reconciliation by component</h4><div className="pr-carton-actions"><button className="pr-secondary" type="button" onClick={exportLedger}>Export Ledger CSV</button>{onOpenDelivery&&<button className="pr-secondary" type="button" onClick={onOpenDelivery}>Open Delivery</button>}</div></div>
    <div className="pr-delivery-lines">{data.components.map(c=>{const t=totals.get(c.id);return <div className="pr-delivery-line" key={c.id}><div><strong>{c.product_name}</strong><small>Required {c.planned_qty} · Gross signed {t.gross} · Returned {t.returns} · Net {t.net}</small></div><div><strong>{t.due} outstanding</strong><small>{t.pending} replacement units pending</small></div></div>;})}</div>
    {allowed&&<div className="pr-delivery-action"><h4>New reconciliation entry</h4><div className="pr-carton-pills"><button className={`pr-carton-pill ${mode==="replacement"?"selected":""}`} type="button" onClick={()=>{setMode("replacement");setDraft(initial);}}>Replacement</button><button className={`pr-carton-pill ${mode==="return"?"selected":""}`} type="button" onClick={()=>{setMode("return");setDraft(initial);}}>Physical return</button></div>
@@ -76,7 +76,7 @@ export default function ReturnsReplacements({schoolId,schoolName,stageStatuses=[
    <div className="pr-delivery-lines">{data.replacements.map(r=>{const s=batches.get(r.shipment_id);const c=data.components.find(c=>c.id===r.component_id);return <div className="pr-delivery-line" key={r.id}><div><strong>{s?.carton_label} · {c?.product_name}</strong><small>{r.quantity} units · {s?.status||"unknown"} · Reference: {r.reference}</small><small>{r.reason}</small></div>{allowed&&s?.status==="draft"&&<button className="pr-secondary" type="button" disabled={busy} onClick={()=>cancel(r)}>Cancel draft</button>}</div>;})}{!data.replacements.length&&<p className="pr-muted">No replacement batches yet.</p>}</div>
    <div className="pr-delivery-toolbar"><h4>Signed physical returns ({data.returns.length})</h4></div>
    <div className="pr-delivery-lines">{data.returns.map(r=>{const c=data.components.find(c=>c.id===r.component_id);return <div className="pr-delivery-line" key={r.id}><div><strong>{c?.product_name} · {r.quantity} returned</strong><small>Reference: {r.reference} · {date(r.created_at)}</small><small>{r.reason}</small>{r.evidence_url&&<a href={r.evidence_url} target="_blank" rel="noopener noreferrer">Evidence</a>}</div></div>;})}{!data.returns.length&&<p className="pr-muted">No returns recorded.</p>}</div>
-   <p className="pr-muted">This ledger documents delivery reconciliation only; warehouse stock adjustments and custody settlement require their own signed warehouse/accounting transactions.</p>
+
   </>}
  </div>;
 }

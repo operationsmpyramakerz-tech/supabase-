@@ -43,5 +43,5 @@ test("packing workflow has explicit create, pack, dispatch, and receive actions"
   assert.match(service,/offset:String\(offset\)/);
   assert.match(ui,/action:"pack"/);assert.match(ui,/action:"cancel"/);assert.match(ui,/action:"dispatch"/);assert.match(ui,/action:"receive"/);
   assert.match(ui,/Export reconciliation CSV/);
-  assert.match(main,/PackingDelivery/);assert.match(main,/Open Delivery/);
+  assert.match(main,/PackingDelivery/);assert.match(main,/name:"Packing & Delivery", icon:"truck", open:\(\)=>setShowDelivery\(true\)/);
 });

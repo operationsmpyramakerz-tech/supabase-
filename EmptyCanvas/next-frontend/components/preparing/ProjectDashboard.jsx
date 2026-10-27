@@ -16,8 +16,8 @@ function downloadCSV(content, name) {
   link.href = url; link.download = name; document.body.appendChild(link); link.click(); link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-function Metric({ label, value, subtitle, warning = false }) {
-  return <div className={`pr-report-metric${warning ? " warning" : ""}`}><span>{label}</span><strong>{value}</strong><small>{subtitle}</small></div>;
+function Metric({ label, value, warning = false }) {
+  return <div className={`pr-report-metric${warning ? " warning" : ""}`}><span>{label}</span><strong>{value}</strong></div>;
 }
 function Qty({ value }) { return value === null || value === undefined ? <span className="pr-report-na">N/A</span> : number(value); }
 function Status({ phase }) { return <span className={`pr-report-pill ${phase}`}>{nice(phase)}</span>; }
@@ -56,7 +56,7 @@ export default function ProjectDashboard({ projectId, request, onClose, onOpenSc
   const risky = useMemo(() => report ? report.schools.filter(row => row.blocked || row.overdueIssues || row.anomalies.length || !row.hasManifest || row.openIssues).sort((a, b) => b.overdueIssues - a.overdueIssues || b.openIssues - a.openIssues) : [], [report]);
   const safeFileName = (report?.project?.name || "Preparing_Project").replace(/[^a-zA-Z0-9_-]+/g, "_").slice(0, 65);
   return <div className="pr-report-root">
-    <div className="pr-manifest-title pr-report-top"><div><span className="pr-eyebrow">PROJECT ANALYTICS · READ ONLY</span><h3>Master Project Dashboard</h3><p>{report?.project?.name || "Preparing project"} · Live workflow records · As of {report?.asOfDate || "—"} (Cairo)</p></div>
+    <div className="pr-manifest-title pr-report-top"><div><h3>Master Project Dashboard</h3></div>
       <div className="pr-report-actions"><button className="pr-secondary" type="button" onClick={load} disabled={loading}>Refresh</button><button className="pr-secondary" type="button" onClick={onClose}>Close</button></div>
     </div>
     {error && <div className="pr-alert" role="alert">{error} <button className="pr-link" onClick={load} type="button">Retry</button></div>}
@@ -69,16 +69,16 @@ export default function ProjectDashboard({ projectId, request, onClose, onOpenSc
         <Metric label="Open technical issues" value={number(report.summary.openIssues)} subtitle={`${report.summary.overdueIssues} past their individual deadlines`} warning={report.summary.overdueIssues>0}/>
         <Metric label="BOM not captured" value={number(report.summary.schoolsWithoutManifest)} subtitle="Excluded from quantity totals" warning={report.summary.schoolsWithoutManifest>0}/>
       </div>
-      <div className="pr-report-exports"><div><strong>Reporting & exports</strong><p>Internal closing is independent from the informational Ministry status report. Figures reflect currently saved records, not a formal sign-off.</p></div><div>
+      <div className="pr-report-exports"><div><strong>Reporting & exports</strong></div><div>
         <button type="button" className="pr-secondary" onClick={()=>downloadCSV(internalPreparingCSV(report),`${safeFileName}_Operations_Report.csv`)}>Operations CSV</button>
         <button type="button" className="pr-secondary" onClick={()=>downloadCSV(ministryStatusCSV(report),`${safeFileName}_Ministry_Status.csv`)}>Ministry Status CSV</button>
       </div></div>
       <nav className="pr-report-tabs" aria-label="Preparing dashboard sections">{[["overview","Overview"],["schools","School matrix"],["risks","Risks & follow-up"]].map(([id,label])=><button key={id} className={tab===id?"active":""} type="button" aria-current={tab===id?"page":undefined} onClick={()=>setTab(id)}>{label}</button>)}</nav>
       {tab==="overview" && <>
-        <div className="pr-report-columns"><section className="pr-report-panel"><h4>Workflow stage distribution</h4><p className="pr-muted">Current first incomplete stage of each open school; closed schools are counted separately.</p>
+        <div className="pr-report-columns"><section className="pr-report-panel"><h4>Workflow stage distribution</h4>
           <div className="pr-report-stages">{report.stageBreakdown.map(stage=><div className="pr-report-stage" key={stage.key}><div><span>{stage.title}</span><b>{stage.count}</b></div><div className="pr-report-bar"><span style={{width:`${report.summary.totalSchools ? stage.count / report.summary.totalSchools * 100 : 0}%`}}/></div></div>)}</div>
           <p className="pr-muted">Closed: {report.summary.closedSchools} schools</p>
-        </section><section className="pr-report-panel"><h4>Component & delivery quantities</h4><p className="pr-muted">Numbers cover {report.summary.totalSchools-report.summary.schoolsWithoutManifest} schools with a captured BOM. Quantities combine different component types (units), not kit count.</p>
+        </section><section className="pr-report-panel"><h4>Component & delivery quantities</h4>
           <div className="pr-report-quantities">{[["Required", "planned"],["Warehouse received","received"],["Damaged","damaged"],["Prepared","prepared"],["Packed (active cartons)","packed"],["Gross signed receipt","grossDelivered"],["Returned to Operations","returned"],["Net school received","delivered"],["Missing at receiving","missing"],["Usable shortage","usableShortage"]].map(([title,key])=><div key={key}><span>{title}</span><strong>{number(report.summary.quantities[key])}</strong></div>)}</div>
           {report.summary.schoolsWithoutManifest>0&&<p className="pr-hint">{report.summary.schoolsWithoutManifest} schools have no snapshot; totals are incomplete, not zero for those schools.</p>}
         </section></div>
@@ -94,7 +94,7 @@ export default function ProjectDashboard({ projectId, request, onClose, onOpenSc
         </tbody></table></div><p className="pr-muted">Showing {rows.length} of {report.schools.length} schools. Zero required quantities are not assumed when the BOM snapshot is missing.</p>
       </>}
       {tab==="risks" && <div className="pr-report-risk-list">{!risky.length&&<div className="pr-report-panel"><p className="pr-muted">No open issues, blocks, reporting discrepancies or uncaptured BOM snapshots are currently recorded.</p></div>}{risky.map(row=><article className="pr-report-risk" key={row.id}><div><strong>{row.name}</strong><small>{row.stageTitle}</small><div className="pr-report-flags">{row.blocked&&<span>Blocked</span>}{row.openIssues>0&&<span>{row.openIssues} open issues</span>}{row.overdueIssues>0&&<span className="danger">{row.overdueIssues} overdue</span>}{!row.hasManifest&&<span>No BOM snapshot</span>}{row.anomalies.map(flag=><span className="danger" key={flag}>{flag}</span>)}</div>{row.nextIssueDeadline&&<small>Nearest assigned issue deadline: {row.nextIssueDeadline}</small>}</div><button className="pr-secondary" type="button" onClick={()=>onOpenSchool(row.id)}>Open school</button></article>)}</div>}
-      <p className="pr-report-disclaimer">Read-only management view. Overdue means an unresolved technical issue past its individually assigned due date (Cairo); no fixed project-wide SLA is assumed. Machine condition is not independently certified by this report. Data may change during the separate read requests; refresh before a formal report.</p>
+
     </>}
   </div>;
 }

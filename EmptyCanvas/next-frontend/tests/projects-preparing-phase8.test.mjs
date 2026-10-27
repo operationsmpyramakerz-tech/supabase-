@@ -74,7 +74,7 @@ test("route checks both page and granular permissions",()=>{
 });
 test("school screen exposes reconciliation and original delivery handover separately",()=>{
  assert.match(shell,/ReturnsReplacements/);
- assert.match(shell,/Open Reconciliation/);
+ assert.match(shell,/name:"Returns & Replacements", icon:"return", open:\(\)=>setShowReconciliation\(true\)/);
  assert.match(ui,/Open Delivery/);
  assert.match(ui,/signed/);
  assert.match(ui,/replacement/);

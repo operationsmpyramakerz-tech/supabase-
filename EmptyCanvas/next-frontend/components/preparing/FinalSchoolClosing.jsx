@@ -61,13 +61,13 @@ export default function FinalSchoolClosing({schoolId,schoolName,stageStatuses=[]
   function reopen(){if(!window.confirm("Reopen this closed school? The previous approval remains in the audit history."))return;
     execute(()=>request("/closing","PATCH",{action:"reopen",schoolId,reason:reopenReason}),"School reopening recorded. Update outstanding records before approving again.");}
   return <div className="pr-closing">
-    <div className="pr-manifest-title"><div><h3>Final School Closing</h3><p>{schoolName} · Documented approval after Operations delivery and technical team follow-up</p></div><button type="button" className="pr-secondary" onClick={onClose}>Close</button></div>
+    <div className="pr-manifest-title"><div><h3>Final School Closing</h3></div><button type="button" className="pr-secondary" onClick={onClose}>Close</button></div>
     {error&&<div className="pr-alert" role="alert">{error}</div>}{notice&&<p className="pr-manifest-success" role="status">{notice}</p>}
     {!loaded?<p className="pr-muted">Loading final closing…</p>:<>
       <div className="pr-closing-stats"><div><span>Verified checks</span><strong>{summary.verified}/{summary.total}</strong></div><div><span>Prior stages</span><strong>{priorReady?"8/8":"Pending"}</strong></div><div><span>7-day review</span><strong>{graceFinished?"Finished":"Pending"}</strong></div><div><span>School status</span><strong>{closed?"Closed":"Open"}</strong></div></div>
       {!priorReady&&<p className="pr-hint">Complete delivery, installation follow-up, and testing stages before final approval.</p>}
       {data.technicalAcceptance?<p className="pr-muted">Technical acceptance: {data.technicalAcceptance.confirmation_reference} · {data.technicalAcceptance.technician_name}</p>:<p className="pr-hint">Technical acceptance has not been recorded.</p>}
-      <div className="pr-closing-heading"><div className="pr-closing-heading-row"><h4>Closing Checklist</h4><button type="button" className="pr-secondary" onClick={()=>exportClosing(data,schoolName)}>Export CSV</button></div><p>Every Verified item requires a real record reference. This screen does not replace signed documents or Accounting confirmation.</p></div>
+      <div className="pr-closing-heading"><div className="pr-closing-heading-row"><h4>Closing Checklist</h4><button type="button" className="pr-secondary" onClick={()=>exportClosing(data,schoolName)}>Export CSV</button></div></div>
       <div className="pr-closing-items">{CLOSING_CHECKS.map(item=><ClosingCheck key={`${item.key}:${data.checks.find(x=>x.check_key===item.key)?.updated_at||"new"}`} item={item}
         record={data.checks.find(x=>x.check_key===item.key)} earliestGrace={graceDate}
         busy={busy} disabled={!canEdit||closed} onSave={saveCheck}/>)}</div>
@@ -87,7 +87,7 @@ export default function FinalSchoolClosing({schoolId,schoolName,stageStatuses=[]
           <label className="pr-field">Reason for reopening<textarea value={reopenReason} maxLength={1500} rows={2} disabled={!canApprove} onChange={e=>setReopenReason(e.target.value)}/></label>
           <button type="button" className="pr-secondary" disabled={!canApprove||busy||reopenReason.trim().length<10} onClick={reopen}>Reopen School</button></div>}
       </div>
-      <div className="pr-closing-heading"><h4>Closing Audit History</h4><p>Recent 100 actions; complete history remains in Supabase.</p></div>
+      <div className="pr-closing-heading"><h4>Closing Audit History</h4></div>
       <div className="pr-closing-audit">{data.audit.length?data.audit.map(row=><div key={row.id}><strong>{friendly(row.action)}</strong><span>{row.changed_by_id} · {new Date(row.changed_at).toLocaleString("en-GB")}</span></div>):<p className="pr-muted">No closing activity recorded yet.</p>}</div>
     </>}
   </div>;

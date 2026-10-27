@@ -133,12 +133,12 @@ export default function PackingDelivery({schoolId,schoolName,proposalName,reques
     downloadCsv(rows,`school-delivery-reconciliation-${schoolId}.csv`);
   }
   return <div className="pr-delivery">
-    <div className="pr-manifest-title"><div><h3>Packing & Delivery</h3><p>{schoolName} · {proposalName} · School delivery batches (including allocations from shared project cartons)</p></div><button className="pr-secondary" onClick={onClose}>Close</button></div>
+    <div className="pr-manifest-title"><div><h3>Packing & Delivery</h3></div><button className="pr-secondary" onClick={onClose}>Close</button></div>
     {error&&<div className="pr-alert" role="alert">{error}</div>}
     {notice&&<div className="pr-manifest-success" role="status">{notice}</div>}
     {!loaded?<p className="pr-muted">Loading cartons…</p>:!data.components.length?<div className="pr-manifest-empty"><h3>Capture Proposal components first</h3><p>Open Components & QC and capture the school BOM before creating packing records.</p></div>:<>
       <div className="pr-qty-summary pr-delivery-totals">{[["Required",summary.required],["Prepared",data.components.reduce((a,c)=>a+num(c.prepared_qty),0)],["Packed",summary.packed],["Gross received",summary.gross],["Returned",summary.returned],["Net school received",summary.delivered],["To pack",summary.packingGap],["Receipt gap",summary.deliveryGap]].map(([label,value])=><div key={label}><small>{label}</small><strong>{value}</strong></div>)}</div>
-      <p className="pr-muted">Create carton labels while Packing is open. Complete the Packing stage when all required units are allocated, then dispatch each carton. Finally record signed school receipt and reconcile quantities before Delivery Handover.</p>
+
       <div className="pr-delivery-toolbar"><h4>Cartons / shipments ({data.shipments.filter(s=>s.status!=="cancelled").length})</h4><button className="pr-secondary" onClick={exportReconciliation}>Export reconciliation CSV</button></div>
       {!preparingComplete&&<p className="pr-hint">Complete Sorting & Preparing (stage 3) before making carton lists. This freezes component quantities and avoids packing figures changing during preparation.</p>}
       {canPack&&<div className="pr-delivery-create"><label className="pr-field">New carton / packing label<input maxLength={100} placeholder="30J-S01-BOX01" value={cartonLabel} onChange={e=>setCartonLabel(e.target.value)}/></label><button className="pr-primary" disabled={busy||cartonLabel.trim().length<2} onClick={create}>Add carton</button></div>}
