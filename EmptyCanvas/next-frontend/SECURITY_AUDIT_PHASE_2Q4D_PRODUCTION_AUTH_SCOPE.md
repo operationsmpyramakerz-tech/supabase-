@@ -69,8 +69,8 @@ Before entering any session credentials, check available options:
 npm run security:production-auth-scope -- --help
 ```
 
-After setting the consent, verified **existing** order numbers and Production URL,
-validate these nonsecret inputs without supplying any cookies or making requests:
+After setting the verified **existing** order numbers and Production URL,
+validate these nonsecret inputs without supplying consent or any cookies or making requests:
 
 ```bash
 npm run security:production-auth-scope -- --check-config
@@ -93,3 +93,11 @@ unbounded JSON from the live service. Oversized or malformed responses produce
 
 This change updates **only local audit tools/tests/docs**; no ERP runtime routes,
 Production permissions, SQL, records, or environment variables are changed.
+
+## Phase 2Q4D.2 — v209 local-preparation improvement
+
+`--check-config` now checks the fixed allowlisted Production URL and three distinct numeric
+order references **without** the live-run consent phrase. The local check never reads
+cookies or calls Production, and it cannot establish ownership or existence of the
+references. The full authenticated run still **requires** the exact live-run consent
+phrase and four authorized distinct sessions. Live coverage remains **pending**.

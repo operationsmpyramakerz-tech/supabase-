@@ -10,8 +10,11 @@ const ROLES = Object.freeze(["DENIED", "OWN", "TEAM", "ALL"]);
 const FIXTURES = Object.freeze(["OWN", "TEAM", "OUTSIDE"]);
 const clean = (v) => String(v ?? "").trim();
 
-export function parseProductionAuthScopeConfig(env = {}) {
-  if (clean(env.ERP_PROD_SCOPE_CONSENT) !== CONSENT) {
+export function parseProductionAuthScopeConfig(env = {}, { requireConsent = true } = {}) {
+  // A local-only configuration check never reads cookies or connects to Production.
+  // Reserve consent for the live authenticated probe; do not make it a prerequisite
+  // to checking three order numbers and the reviewed destination offline.
+  if (requireConsent && clean(env.ERP_PROD_SCOPE_CONSENT) !== CONSENT) {
     throw new Error("Authenticated production GET-only consent is required; no requests sent.");
   }
   let url;

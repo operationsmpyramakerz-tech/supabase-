@@ -13,15 +13,15 @@ if (args.has("--help")) {
   npm run security:production-auth-scope -- --check-config
   npm run security:production-auth-scope
 
---check-config validates the production URL, consent and 3 existing order
-numbers only. It reads NO cookies and sends NO network requests.
+--check-config validates the production URL and 3 order-number references
+locally. Consent is required ONLY for the full live authenticated run. It reads NO cookies and sends NO network requests.
 The full command requires 4 explicitly authorized distinct account sessions
 (DENIED / OWN / TEAM / ALL). Do not paste cookies into chat, screenshots or Git.
 Follow SECURITY_AUDIT_PHASE_2Q4D_PRODUCTION_AUTH_SCOPE.md.
 No test action changes the ERP database or permissions.`);
 } else if (args.has("--check-config")) {
   try {
-    parseProductionAuthScopeConfig(process.env);
+    parseProductionAuthScopeConfig(process.env, { requireConsent: false });
     console.log("[2Q4D] Configuration PASS: approved Production URL, consent and order references valid. No cookies read; no requests sent.");
   } catch (error) {
     console.error(`[2Q4D] Configuration BLOCKED: ${error.message}. No cookies read; no requests sent.`);

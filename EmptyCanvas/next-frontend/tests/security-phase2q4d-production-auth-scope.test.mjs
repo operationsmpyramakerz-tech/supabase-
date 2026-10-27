@@ -215,3 +215,23 @@ test("2Q4D: CLI help and configuration-only mode never need cookies or contact P
   assert.equal(wrong.status, 2);
   assert.match(wrong.stderr, /No cookies read; no requests sent/);
 });
+
+
+test("2Q4D.2: offline check-config validates references without live consent and still sends no requests", () => {
+  const script = new URL("../scripts/security-production-auth-scope.mjs", import.meta.url).pathname;
+  const env = valid();
+  delete env.ERP_PROD_SCOPE_CONSENT;
+  for (const key of Object.keys(env)) if (key.startsWith("ERP_PROD_SCOPE_COOKIE_")) delete env[key];
+  const offline = spawnSync(process.execPath, [script, "--check-config"], { encoding: "utf8", env });
+  assert.equal(offline.status, 0);
+  assert.match(offline.stdout, /No cookies read; no requests sent/);
+  assert.throws(() => parseProductionAuthScopeConfig(env), /consent is required/);
+  const live = spawnSync(process.execPath, [script], { encoding: "utf8", env });
+  assert.equal(live.status, 2);
+  assert.match(live.stderr, /Authenticated production GET-only consent is required/);
+  const invalid = spawnSync(process.execPath, [script, "--check-config"], {
+    encoding: "utf8", env: { ...env, ERP_PROD_SCOPE_ORDER_OUTSIDE: "11" },
+  });
+  assert.equal(invalid.status, 2);
+  assert.match(invalid.stderr, /distinct existing orders/);
+});
