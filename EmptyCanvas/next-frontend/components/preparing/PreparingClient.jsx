@@ -5,6 +5,7 @@ import { featureAllowed } from "../../lib/feature-permissions-registry";
 import ComponentsManifest from "./ComponentsManifest";
 import PackingDelivery from "./PackingDelivery";
 import TechnicalFollowUp from "./TechnicalFollowUp";
+import FinalSchoolClosing from "./FinalSchoolClosing";
 import { PREPARING_STAGES, PREPARING_STATES, canCompleteStage, schoolProgress } from "../../lib/preparing-workflow";
 
 const clean = value => String(value ?? "").trim();
@@ -57,9 +58,11 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
   const [showComponents, setShowComponents] = useState(false);
   const [showDelivery, setShowDelivery] = useState(false);
   const [showTechnical, setShowTechnical] = useState(false);
+  const [showClosing, setShowClosing] = useState(false);
   const canCreate = featureAllowed(account, "preparing.create");
   const canManage = featureAllowed(account, "preparing.manage");
   const canStage = featureAllowed(account, "preparing.stage_update");
+  const canClose = featureAllowed(account, "preparing.close");
   const projects = asArray(data.projects);
   const schools = asArray(data.schools);
   const stages = asArray(data.stages);
@@ -113,7 +116,7 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
   const schoolFiltered = projectSchools.filter(row => `${row.beneficiary_name} ${row.school_label} ${row.proposal_name}`.toLowerCase().includes(query.toLowerCase()));
   return <div className="pr-root">
     <div className="pr-header">
-      <div className="pr-headline">{project ? <button className="pr-back" onClick={() => { setProjectId(""); setSchoolId(""); setQuery(""); setShowComponents(false); setShowDelivery(false); setShowTechnical(false); }}><Ico name="back"/> Projects</button> : <span className="pr-eyebrow">OPERATIONS WORKSPACE</span>}
+      <div className="pr-headline">{project ? <button className="pr-back" onClick={() => { setProjectId(""); setSchoolId(""); setQuery(""); setShowComponents(false); setShowDelivery(false); setShowTechnical(false);setShowClosing(false); }}><Ico name="back"/> Projects</button> : <span className="pr-eyebrow">OPERATIONS WORKSPACE</span>}
         <h1>{school ? school.beneficiary_name : project ? project.name : "Projects Preparing"}</h1>
         <p>{school ? `Source proposal: ${school.proposal_name}` : project ? (project.description || "Select a beneficiary to view the preparing workflow") : "Manage preparing, delivery and technical follow-up across projects."}</p>
       </div>
@@ -133,14 +136,16 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
       ].map(([name, count]) => <div className="pr-metric" key={name}><span>{name}</span><strong>{count}</strong></div>)}
     </div>
     {school ? <>
-      <div className="pr-breadcrumb"><button onClick={() => {setSchoolId("");setShowComponents(false);setShowDelivery(false);setShowTechnical(false);}}>{project.name}</button><Ico name="arrow" size={14}/><span>{school.beneficiary_name}</span></div>
+      <div className="pr-breadcrumb"><button onClick={() => {setSchoolId("");setShowComponents(false);setShowDelivery(false);setShowTechnical(false);setShowClosing(false);}}>{project.name}</button><Ico name="arrow" size={14}/><span>{school.beneficiary_name}</span></div>
       <div className="pr-school-info"><div><span>BENEFICIARY</span><strong>{school.beneficiary_name}</strong><small>{school.school_label || "No school column assigned"}</small></div><div><span>PROPOSAL</span><strong>{school.proposal_name}</strong><small>Linked source (read-only)</small></div><div><span>OVERALL PROGRESS</span><strong>{schoolProgress(schoolStages).completed} / {PREPARING_STAGES.length} stages</strong><Meter value={schoolProgress(schoolStages).completed} max={PREPARING_STAGES.length}/></div></div>
       <div className="pr-component-entry"><div><h2>Components & QC</h2><p>Proposal BOM · Received, damaged, prepared and missing quantities, per school</p></div><button className="pr-primary" type="button" onClick={()=>setShowComponents(true)}>Open Components</button></div>
       {showComponents && <div className="pr-components-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setShowComponents(false);}}><section className="pr-components-sheet" role="dialog" aria-modal="true" aria-label="Components and QC"><ComponentsManifest key={school.id} schoolId={school.id} proposalName={school.proposal_name} allowed={canStage} request={api} onClose={()=>setShowComponents(false)}/></section></div>}
       <div className="pr-component-entry pr-delivery-entry"><div><h2>Packing & School Delivery</h2><p>Carton labels, packing lists, transport, signed receipt and school reconciliation</p></div><button className="pr-primary" type="button" onClick={()=>setShowDelivery(true)}>Open Delivery</button></div>
       {showDelivery && <div className="pr-components-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setShowDelivery(false);}}><section className="pr-components-sheet" role="dialog" aria-modal="true" aria-label="Packing and delivery"><PackingDelivery key={school.id} schoolId={school.id} schoolName={school.beneficiary_name} proposalName={school.proposal_name} stageStatuses={schoolStages} allowed={canStage} request={api} onClose={()=>{setShowDelivery(false);reload().catch(err=>setError(err.message));}}/></section></div>}
       <div className="pr-component-entry pr-technical-entry"><div><h2>Technical Installation Follow-up</h2><p>Technical checkpoints, assigned team, due dates, snag list, commissioning and sign-off evidence</p></div><button className="pr-primary" type="button" onClick={()=>setShowTechnical(true)}>Open Technical</button></div>
-      {showTechnical && <div className="pr-components-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setShowTechnical(false);}}><section className="pr-components-sheet" role="dialog" aria-modal="true" aria-label="Technical installation follow-up"><TechnicalFollowUp key={school.id} schoolId={school.id} schoolName={school.beneficiary_name} stageStatuses={schoolStages} allowed={canStage} request={api} onClose={()=>{setShowTechnical(false);reload().catch(err=>setError(err.message));}}/></section></div>}
+      {showTechnical && <div className="pr-components-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setShowTechnical(false);setShowClosing(false);}}><section className="pr-components-sheet" role="dialog" aria-modal="true" aria-label="Technical installation follow-up"><TechnicalFollowUp key={school.id} schoolId={school.id} schoolName={school.beneficiary_name} stageStatuses={schoolStages} allowed={canStage} request={api} onClose={()=>{setShowTechnical(false);setShowClosing(false);reload().catch(err=>setError(err.message));}}/></section></div>}
+      <div className="pr-component-entry pr-closing-entry"><div><h2>Final School Closing</h2><p>Signed records, seven-day receipt review, custody reconciliation, technical acceptance and final Operations approval</p></div><button className="pr-primary" type="button" onClick={()=>setShowClosing(true)}>Open Closing</button></div>
+      {showClosing && <div className="pr-components-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setShowClosing(false);}}><section className="pr-components-sheet" role="dialog" aria-modal="true" aria-label="Final school closing"><FinalSchoolClosing key={school.id} schoolId={school.id} schoolName={school.beneficiary_name} stageStatuses={schoolStages} canEdit={canStage} canApprove={canClose} request={api} onClose={()=>{setShowClosing(false);reload().catch(err=>setError(err.message));}}/></section></div>}
       <div className="pr-section-heading"><h2>Preparing Workflow</h2><p>Operations executes steps 1–6. Technical installation and commissioning are followed up in steps 7–9.</p></div>
       <div className="pr-stage-list">{PREPARING_STAGES.map((stage, index) => {
         const entry = schoolStages.find(row => row.stage_key === stage.key);
@@ -156,7 +161,7 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
       <div className="pr-folders">
         {!project ? projectFiltered.map(row => { const summary = projectSummaries.get(row.id) || { total:0,closed:0,delivered:0 }; return <button type="button" className="pr-folder" key={row.id} onClick={()=>{setProjectId(row.id);setSchoolId("");setQuery("");}}>
           <span className="pr-folder-icon"><Ico name="folder" size={32}/></span><strong>{row.name}</strong><small>{row.description || "Preparing & Deployment Project"}</small><div className="pr-folder-count">{summary.total} schools <span>{summary.closed} closed</span></div><Meter value={summary.closed} max={summary.total || 1}/><span className="pr-folder-date">Created {fmtDate(row.created_at)}</span>
-        </button>; }) : schoolFiltered.map(row => { const progress = schoolProgress(stages.filter(stage=>stage.school_id===row.id)); return <button type="button" className="pr-folder" key={row.id} onClick={()=>{setSchoolId(row.id);setShowComponents(false);setShowDelivery(false);setShowTechnical(false);}}>
+        </button>; }) : schoolFiltered.map(row => { const progress = schoolProgress(stages.filter(stage=>stage.school_id===row.id)); return <button type="button" className="pr-folder" key={row.id} onClick={()=>{setSchoolId(row.id);setShowComponents(false);setShowDelivery(false);setShowTechnical(false);setShowClosing(false);}}>
           <span className="pr-folder-icon school"><Ico name="school" size={31}/></span><strong>{row.beneficiary_name}</strong><small>{row.proposal_name}</small><div className="pr-folder-count">{progress.completed}/{progress.total} stages <span>{progress.closed ? "Closed" : progress.delivered ? "Delivered" : "Preparing"}</span></div><Meter value={progress.completed} max={progress.total}/><span className="pr-folder-date">{row.school_label || "Beneficiary account"}</span>
         </button>; })}
         {project && !projectSchools.length && <div className="pr-empty"><Ico name="school" size={36}/><h3>No schools assigned</h3><p>Use Add Schools to select the beneficiaries and the approved proposal.</p>{canManage && <button className="pr-primary" onClick={openSchools}>Add Schools</button>}</div>}
@@ -177,13 +182,13 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
       <p className="pr-muted">Each selected beneficiary receives the same proposal. To use different proposals, add the schools in separate selections.</p>
     </Sheet>}
     {sheet === "stage" && currentStage && <Sheet title={currentStage.title} subtitle={currentStage.team === "operations" ? "Operations · Direct execution" : "Operations · Technical follow-up"} onClose={()=>setSheet("")}
-      footer={<><button className="pr-secondary" onClick={()=>setSheet("")}>Cancel</button>{canStage && <button className="pr-primary" disabled={busy} onClick={()=>save(async()=>api("/stages","PATCH",{schoolId,stageKey,status:stageStatus,notes:stageNotes}))}>{busy ? "Saving…" : "Save Status"}</button>}</>}>
+      footer={<><button className="pr-secondary" onClick={()=>setSheet("")}>Cancel</button>{canStage && currentStage.key !== "final_closing" && <button className="pr-primary" disabled={busy} onClick={()=>save(async()=>api("/stages","PATCH",{schoolId,stageKey,status:stageStatus,notes:stageNotes}))}>{busy ? "Saving…" : "Save Status"}</button>}</>}>
       <p className="pr-muted">{currentStage.subtitle}</p>
-      <label className="pr-field">Stage status<select value={stageStatus} disabled={!canStage} onChange={event=>setStageStatus(event.target.value)}>{PREPARING_STATES.map(status=><option key={status} value={status} disabled={status === "completed" && (currentStage.key === "final_closing" || !canCompleteStage(currentStage.key, schoolStages))}>{stateLabels[status]}</option>)}</select></label>
+      <label className="pr-field">Stage status<select value={stageStatus} disabled={!canStage || currentStage.key === "final_closing"} onChange={event=>setStageStatus(event.target.value)}>{PREPARING_STATES.map(status=><option key={status} value={status} disabled={currentStage.key === "final_closing" || (status === "completed" && !canCompleteStage(currentStage.key, schoolStages))}>{stateLabels[status]}</option>)}</select></label>
       {!canCompleteStage(currentStage.key, schoolStages) && <p className="pr-hint">Previous stages must be completed before this stage can be marked completed.</p>}
-      {currentStage.key === "final_closing" && <p className="pr-hint">Formal Final Closing will be enabled in Phase 5 after its own closure approvals and supporting records are implemented.</p>}
+      {currentStage.key === "final_closing" && <p className="pr-hint">Use Open Closing to verify the checklist, approve and close, or reopen. Stage status is read-only here.</p>}
       {["installation","testing"].includes(currentStage.key) && <p className="pr-hint">Use Open Technical to complete the technical checkpoints, resolve issues, and record acceptance before marking this stage completed.</p>}
-      <label className="pr-field">Notes / reference<textarea disabled={!canStage} maxLength={2000} rows={5} placeholder="Enter handover number, issues, or technical follow-up reference…" value={stageNotes} onChange={event=>setStageNotes(event.target.value)} /></label>
+      <label className="pr-field">Notes / reference<textarea disabled={!canStage || currentStage.key === "final_closing"} maxLength={2000} rows={5} placeholder="Enter handover number, issues, or technical follow-up reference…" value={stageNotes} onChange={event=>setStageNotes(event.target.value)} /></label>
       <p className="pr-muted">Last updated {fmtDate(stageRow?.updated_at)}. Component quantities are managed in Components & QC. Packing and delivery records are in Open Delivery. File uploads are planned for a later phase.</p>
     </Sheet>}
   </div>;

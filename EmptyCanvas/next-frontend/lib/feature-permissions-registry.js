@@ -6,6 +6,7 @@ export const FEATURE_DEFINITIONS = Object.freeze(
   { "module": "preparing", "key": "preparing.create", "label": "Create preparing project folders" },
   { "module": "preparing", "key": "preparing.manage", "label": "Edit projects and assign beneficiaries" },
   { "module": "preparing", "key": "preparing.stage_update", "label": "Update preparing stage status and notes" },
+  { "module": "preparing", "key": "preparing.close", "label": "Approve or reopen final school closing" },
   {
     "module": "home",
     "key": "home.view",
@@ -1128,7 +1129,7 @@ export const PILOT_FEATURE_MODULES = Object.freeze(["products", "orders.operatio
 // Permissions with audited server-side gates and corresponding administrator controls.
 // Do not expose unprotected actions; that would imply false security.
 export const ACTIVE_PILOT_FEATURE_KEYS = Object.freeze([
-  "preparing.view", "preparing.create", "preparing.manage", "preparing.stage_update",
+  "preparing.view", "preparing.create", "preparing.manage", "preparing.stage_update", "preparing.close",
   "home.view", "home.analysis", "home.financial_analysis", "home.sla_view", "home.sla_manage",
   "kpis.view", "kpis.standard_manage", "kpis.review_create", "kpis.scores_edit", "kpis.evidence_upload", "kpis.report",
   "sla.view", "sla.manage",

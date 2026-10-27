@@ -75,6 +75,7 @@ export async function updatePreparingStage(schoolId, body, account) {
   serviceOnly(); const memberId = identity(account); await requireSchool(schoolId);
   const stageKey = clean(body?.stageKey); const status = clean(body?.status); const notes = clean(body?.notes);
   if (!validStage(stageKey) || !PREPARING_STATES.includes(status)) fail("Unknown stage or status.");
+  if (stageKey === "final_closing") fail("Use Final Closing to approve or reopen the school, not stage status.", 409);
   if (notes.length > 2000) fail("Notes must be under 2000 characters.");
   const stages = await select(STAGES, { select: "stage_key,status", school_id: `eq.${uuid(schoolId)}`, limit: "30" });
   if (status === "completed" && !canCompleteStage(stageKey, stages)) fail("Complete the preceding stages first.", 409);
@@ -302,4 +303,55 @@ export async function recordTechnicalAcceptance(body,account){
     p_evidence_url:technicalEvidence(body?.evidenceUrl),p_notes:technicalText(body?.notes,"Notes",1000),
     p_expected_updated_at:technicalVersion(body?.expectedUpdatedAt),p_member_id:actor,
   },{profileName:"preparing.technical-acceptance"});
+}
+
+// Phase 5: formal Final School Closing (evidence and a privileged approval are distinct).
+import { CLOSING_CHECKS, CLOSING_STATES } from "./preparing-closing";
+const CLOSING_CHECKS_TABLE="erp_preparing_closing_checks";
+const CLOSING_APPROVAL_TABLE="erp_preparing_closing_approval";
+const CLOSING_AUDIT_TABLE="erp_preparing_closing_audit";
+export async function preparingClosing(schoolId){
+  serviceOnly();const school=await requireSchool(schoolId);
+  const [checks,approvals,audit,shipments,technical]=await Promise.all([
+    select(CLOSING_CHECKS_TABLE,{select:"*",school_id:`eq.${school.id}`,limit:"10"},{profileName:"preparing.closing-checks"}),
+    select(CLOSING_APPROVAL_TABLE,{select:"*",school_id:`eq.${school.id}`,limit:"1"},{profileName:"preparing.closing-approval"}),
+    select(CLOSING_AUDIT_TABLE,{select:"id,action,changed_by_id,changed_at,details",school_id:`eq.${school.id}`,order:"changed_at.desc",limit:"100"},{profileName:"preparing.closing-audit"}),
+    select(SHIPMENTS,{select:"delivered_at,status,receipt_reference",school_id:`eq.${school.id}`,limit:"2000"},{profileName:"preparing.closing-shipments"}),
+    select(TECHNICAL_ACCEPTANCES,{select:"confirmed_on,confirmation_reference,technician_name",school_id:`eq.${school.id}`,limit:"1"},{profileName:"preparing.closing-technical"}),
+  ]);
+  const lastDelivery=(shipments||[]).filter(s=>s.status==="delivered"&&s.delivered_at)
+    .map(s=>s.delivered_at).sort().at(-1)||null;
+  return {checks:checks||[],approval:approvals?.[0]||null,audit:audit||[],lastDelivery,technicalAcceptance:technical?.[0]||null};
+}
+export async function saveClosingCheck(body,account){
+  serviceOnly();const actor=identity(account);const schoolId=uuid(body?.schoolId);await requireSchool(schoolId);
+  const checkKey=clean(body?.checkKey),status=clean(body?.status);
+  if(!CLOSING_CHECKS.some(row=>row.key===checkKey)||!CLOSING_STATES.includes(status))fail("Invalid closing check or status.");
+  const reference=technicalText(body?.reference,"Closing reference",160);
+  const date=technicalDate(body?.verifiedOn);
+  if(status==="verified"&&(reference.length<2||!date))fail("Verified checks require a supporting reference and date.");
+  return rpc("erp_preparing_save_closing_check",{
+    p_school_id:schoolId,p_key:checkKey,p_status:status,p_reference:reference,
+    p_evidence_url:technicalEvidence(body?.evidenceUrl),p_notes:technicalText(body?.notes,"Closing notes",1500),
+    p_verified_on:status==="verified"?date:null,
+    p_expected_updated_at:technicalVersion(body?.expectedUpdatedAt),p_member_id:actor,
+  },{profileName:"preparing.closing-check"});
+}
+export async function finalizePreparingSchool(body,account){
+  serviceOnly();const actor=identity(account);const schoolId=uuid(body?.schoolId);await requireSchool(schoolId);
+  const approver=technicalText(body?.approverName,"Operations approver",160);
+  const reference=technicalText(body?.approvalReference,"Closing approval reference",160);
+  const approvedOn=technicalDate(body?.approvedOn);
+  if(approver.length<2||reference.length<2||!approvedOn)fail("Closing approver, reference and date are required.");
+  return rpc("erp_preparing_finalize_school",{
+    p_school_id:schoolId,p_approver_name:approver,p_reference:reference,p_approved_on:approvedOn,
+    p_evidence_url:technicalEvidence(body?.evidenceUrl),p_notes:technicalText(body?.notes,"Approval notes",1500),p_member_id:actor,
+  },{profileName:"preparing.finalize-school"});
+}
+export async function reopenPreparingSchool(body,account){
+  serviceOnly();const actor=identity(account);const schoolId=uuid(body?.schoolId);await requireSchool(schoolId);
+  const reason=technicalText(body?.reason,"Reason for reopening",1500);
+  if(reason.length<10)fail("Enter a documented reason (at least 10 characters).");
+  return rpc("erp_preparing_reopen_school",{p_school_id:schoolId,p_reason:reason,p_member_id:actor},
+    {profileName:"preparing.reopen-school"});
 }

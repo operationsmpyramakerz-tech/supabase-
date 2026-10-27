@@ -50,7 +50,7 @@ test("SQL enforces 4 installation + 4 testing checkpoints and resolves all issue
   assert.match(sql,/milestone_key IN \('site_ready','equipment_installed','cabling_and_safety','software_configured'\)/);
   assert.match(sql,/milestone_key IN \('power_on','functional_tests','safety_validation','technical_handover'\)/);
   assert.match(sql,/status<>'resolved'/);
-  assert.match(sql,/Record the technical team's acceptance reference first/);
+  assert.match(sql,/Record the technical team''s acceptance reference first/);
   for(const legacy of ["current_position=4","current_position=5","current_position=6","received_qty<planned_qty"])
     assert.ok(sql.includes(legacy),`Preserved Phase 3 gate: ${legacy}`);
 });
