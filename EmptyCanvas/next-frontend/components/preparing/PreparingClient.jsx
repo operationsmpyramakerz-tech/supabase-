@@ -6,6 +6,7 @@ import ComponentsManifest from "./ComponentsManifest";
 import PackingDelivery from "./PackingDelivery";
 import TechnicalFollowUp from "./TechnicalFollowUp";
 import FinalSchoolClosing from "./FinalSchoolClosing";
+import ProjectDashboard from "./ProjectDashboard";
 import { PREPARING_STAGES, PREPARING_STATES, canCompleteStage, schoolProgress } from "../../lib/preparing-workflow";
 
 const clean = value => String(value ?? "").trim();
@@ -59,6 +60,7 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
   const [showDelivery, setShowDelivery] = useState(false);
   const [showTechnical, setShowTechnical] = useState(false);
   const [showClosing, setShowClosing] = useState(false);
+  const [showDashboard, setShowDashboard] = useState(false);
   const canCreate = featureAllowed(account, "preparing.create");
   const canManage = featureAllowed(account, "preparing.manage");
   const canStage = featureAllowed(account, "preparing.stage_update");
@@ -116,13 +118,14 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
   const schoolFiltered = projectSchools.filter(row => `${row.beneficiary_name} ${row.school_label} ${row.proposal_name}`.toLowerCase().includes(query.toLowerCase()));
   return <div className="pr-root">
     <div className="pr-header">
-      <div className="pr-headline">{project ? <button className="pr-back" onClick={() => { setProjectId(""); setSchoolId(""); setQuery(""); setShowComponents(false); setShowDelivery(false); setShowTechnical(false);setShowClosing(false); }}><Ico name="back"/> Projects</button> : <span className="pr-eyebrow">OPERATIONS WORKSPACE</span>}
+      <div className="pr-headline">{project ? <button className="pr-back" onClick={() => { setProjectId(""); setSchoolId(""); setQuery(""); setShowComponents(false); setShowDelivery(false); setShowTechnical(false);setShowClosing(false); setShowDashboard(false); }}><Ico name="back"/> Projects</button> : <span className="pr-eyebrow">OPERATIONS WORKSPACE</span>}
         <h1>{school ? school.beneficiary_name : project ? project.name : "Projects Preparing"}</h1>
         <p>{school ? `Source proposal: ${school.proposal_name}` : project ? (project.description || "Select a beneficiary to view the preparing workflow") : "Manage preparing, delivery and technical follow-up across projects."}</p>
       </div>
       <div className="pr-top-actions">
         <button type="button" className="pr-icon" title="Refresh" aria-label="Refresh" onClick={() => save(async () => {})} disabled={busy}><Ico name="refresh" /></button>
         {!project && canCreate && <button className="pr-primary" onClick={openNewProject}><Ico name="plus" size={17}/> New Project</button>}
+        {project && !school && <button type="button" className="pr-primary" onClick={()=>setShowDashboard(true)}>Project Dashboard</button>}
         {project && !school && canManage && <><button className="pr-secondary" onClick={openEditProject}><Ico name="edit" size={17}/> Edit Project</button><button className="pr-primary" onClick={openSchools}><Ico name="plus" size={17}/> Add Schools</button></>}
       </div>
     </div>
@@ -135,6 +138,8 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
         ["Closed", project ? (projectSummaries.get(project.id)?.closed || 0) : totals.closed],
       ].map(([name, count]) => <div className="pr-metric" key={name}><span>{name}</span><strong>{count}</strong></div>)}
     </div>
+    {project && !school && <div className="pr-report-entry"><div><strong>Project Performance & Reports</strong><p>Track all schools, BOM quantities, deliveries, technical issues, and final closing from one read-only dashboard.</p></div><button type="button" className="pr-secondary" onClick={()=>setShowDashboard(true)}>Open Dashboard</button></div>}
+    {project && !school && showDashboard && <div className="pr-components-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setShowDashboard(false);}}><section className="pr-components-sheet pr-report-sheet" role="dialog" aria-modal="true" aria-label="Master project dashboard"><ProjectDashboard key={projectId} projectId={projectId} request={api} onClose={()=>setShowDashboard(false)} onOpenSchool={id=>{setShowDashboard(false);setSchoolId(id);setShowComponents(false);setShowDelivery(false);setShowTechnical(false);setShowClosing(false);}}/></section></div>}
     {school ? <>
       <div className="pr-breadcrumb"><button onClick={() => {setSchoolId("");setShowComponents(false);setShowDelivery(false);setShowTechnical(false);setShowClosing(false);}}>{project.name}</button><Ico name="arrow" size={14}/><span>{school.beneficiary_name}</span></div>
       <div className="pr-school-info"><div><span>BENEFICIARY</span><strong>{school.beneficiary_name}</strong><small>{school.school_label || "No school column assigned"}</small></div><div><span>PROPOSAL</span><strong>{school.proposal_name}</strong><small>Linked source (read-only)</small></div><div><span>OVERALL PROGRESS</span><strong>{schoolProgress(schoolStages).completed} / {PREPARING_STAGES.length} stages</strong><Meter value={schoolProgress(schoolStages).completed} max={PREPARING_STAGES.length}/></div></div>
