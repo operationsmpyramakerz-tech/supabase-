@@ -18,9 +18,10 @@ export async function recordProjectTesting(body,account){
  const lines=raw.map(row=>{
   const itemId=checkProjectId(row?.itemId);
   if(seen.has(itemId))fail("Duplicate component in test batch.");seen.add(itemId);
-  const values=[row?.passedDelta,row?.failedDelta,row?.expectedPassed,row?.expectedFailed];
-  if(values.some(n=>!Number.isSafeInteger(n))||Math.abs(values[0])>1000000||Math.abs(values[1])>1000000||values[2]<0||values[3]<0||(!values[0]&&!values[1]))fail("Invalid test quantities.");
-  return {itemId,passedDelta:values[0],failedDelta:values[1],expectedPassed:values[2],expectedFailed:values[3]};
+  const values=[row?.receivedDelta,row?.passedDelta,row?.failedDelta,row?.expectedReceived,row?.expectedPassed,row?.expectedFailed];
+  const technicianName=String(row?.technicianName||"").trim();
+  if(values.some(n=>!Number.isSafeInteger(n))||values.slice(0,3).some(n=>Math.abs(n)>1000000)||values.slice(3).some(n=>n<0)||!values.slice(0,3).some(Boolean)||technicianName.length<2||technicianName.length>160)fail("Invalid test quantities or technician name.");
+  return {itemId,receivedDelta:values[0],passedDelta:values[1],failedDelta:values[2],expectedReceived:values[3],expectedPassed:values[4],expectedFailed:values[5],technicianName};
  });
  return rpc("erp_preparing_project_testing_record",{p_project_id:id,p_reference:reference,p_notes:notes,p_lines:lines,p_member_id:actor},{profileName:"preparing.testing.save"});
 }

@@ -17,7 +17,7 @@ export default async function ProjectsPreparingPage() {
   let bootstrapError = "";
   try { const [workspace, catalog] = await Promise.all([preparingWorkspace(), preparingCatalog()]); data = { ...workspace, ...catalog }; }
   catch (error) { bootstrapError = error?.message || "Unable to load Preparing tables."; }
-  return <AppShell account={gate.account} title="Projects Preparing" eyebrow="" activePath="/next/projects-preparing" bodyClass="preparing-page" pageStyles={["/next/css/projects-preparing.css?v=235"]}>
+  return <AppShell account={gate.account} title="Projects Preparing" eyebrow="" activePath="/next/projects-preparing" bodyClass="preparing-page" pageStyles={["/next/css/projects-preparing.css?v=236"]}>
     <PreparingClient account={gate.account} initialData={data} bootstrapError={bootstrapError} />
   </AppShell>;
 }

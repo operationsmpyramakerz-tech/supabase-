@@ -10,14 +10,16 @@ const ui=file("components/preparing/ProjectTesting.jsx");
 const shell=file("components/preparing/PreparingClient.jsx");
 const server=file("lib/preparing-project-testing.js");
 const route=file("app/api/projects-preparing/testing/route.js");
-test("test input is bounded by accepted warehouse quantities",()=>{
- const row={id:"item-1",accepted:10,passed:4,failed:2};
- assert.deepEqual(testingChange(row,{passed:"5",failed:"3"}),{itemId:"item-1",passedDelta:1,failedDelta:1,expectedPassed:4,expectedFailed:2});
- assert.equal(testingChange(row,{passed:"4",failed:"2"}),null);
- assert.deepEqual(testingChange(row,{passed:"6",failed:"0"}),{itemId:"item-1",passedDelta:2,failedDelta:-2,expectedPassed:4,expectedFailed:2});
- assert.throws(()=>testingChange(row,{passed:"10",failed:"1"}));
- assert.throws(()=>testingChange(row,{passed:"1.5",failed:"0"}));
- assert.throws(()=>testingChange(row,{passed:"-1",failed:"1"}));
+test("testing intake can be saved before any warehouse receipt, with technician",()=>{
+ const row={id:"item-1",required:20,received:0,accepted:0,passed:0,failed:0};
+ assert.deepEqual(testingChange(row,{received:"10",passed:"6",failed:"2",technicianName:"Abdelfattah"}),
+  {itemId:"item-1",receivedDelta:10,passedDelta:6,failedDelta:2,expectedReceived:0,expectedPassed:0,expectedFailed:0,technicianName:"Abdelfattah"});
+ assert.equal(testingChange({...row,received:10,passed:6,failed:2},{received:"10",passed:"6",failed:"2",technicianName:"Abdelfattah"}),null);
+ assert.deepEqual(testingChange({...row,received:10,passed:6,failed:2},{received:"10",passed:"8",failed:"0",technicianName:"Abdelfattah"}).failedDelta,-2);
+ assert.throws(()=>testingChange(row,{received:"4",passed:"4",failed:"1",technicianName:"Abdelfattah"}));
+ assert.throws(()=>testingChange(row,{received:"10",passed:"1.5",failed:"0",technicianName:"Abdelfattah"}));
+ assert.throws(()=>testingChange(row,{received:"10",passed:"1",failed:"0",technicianName:""}));
+ assert.throws(()=>testingChange({...row,received:10,passed:8,accepted:6},{received:"10",passed:"5",failed:"0",technicianName:"Abdelfattah"}));
 });
 test("testing persists append-only reports independent from school deliveries",()=>{
  for(const t of ["erp_preparing_project_test_batches","erp_preparing_project_test_lines"])assert.match(migration,new RegExp(`CREATE TABLE IF NOT EXISTS public\\.${t}`));
@@ -37,8 +39,8 @@ test("project testing route is strictly feature-gated",()=>{
 });
 test("testing is a separate project-level screen like warehouse receiving",()=>{
  assert.match(shell,/ProjectTesting/);
- assert.ok(shell.indexOf("Warehouse Receiving</strong>")<shell.indexOf("Project Testing</strong>"));
- assert.ok(shell.indexOf("Project Testing</strong>")<shell.indexOf("Project Kit Cartons</strong>"));
+ assert.ok(shell.indexOf("Project Testing</strong>")<shell.indexOf("Warehouse Receiving</strong>"));
+ assert.ok(shell.indexOf("Warehouse Receiving</strong>")<shell.indexOf("Project Kit Cartons</strong>"));
  for(const label of ["Passed","Failed","Not tested","Testing History","Export CSV","Report reference"]){
   if(label==="Report reference")assert.match(ui,/report \/ reference/i);
   else assert.ok(ui.includes(label),label);
@@ -49,5 +51,5 @@ test("new server and JSX files parse cleanly",()=>{
   const parsed=ts.createSourceFile(name,file(name),ts.ScriptTarget.Latest,true,name.endsWith(".jsx")?ts.ScriptKind.JSX:ts.ScriptKind.JS);
   assert.deepEqual(parsed.parseDiagnostics,[],name);
  }
- assert.match(file("app/projects-preparing/page.jsx"),/projects-preparing\.css\?v=235/);
+ assert.match(file("app/projects-preparing/page.jsx"),/projects-preparing\.css\?v=236/);
 });

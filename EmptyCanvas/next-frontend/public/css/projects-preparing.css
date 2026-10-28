@@ -1150,3 +1150,14 @@
 .pr-pt-actions button{padding:10px 11px;border-radius:10px;white-space:nowrap;font-size:11px;}
 @media(max-width:1090px){.pr-pt-row{grid-template-columns:1fr;gap:13px}.pr-pt-controls{max-width:550px;}}
 @media(max-width:600px){.pr-pt-figures{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.pr-pt-row{padding:13px}.pr-pt-controls{grid-template-columns:repeat(2,minmax(0,1fr))}.pr-pt-actions{grid-column:1/-1}.pr-pt-actions button{flex:1}}
+
+/* v236 – testing is independent of the subsequent warehouse handover. */
+.pr-pt-row{grid-template-columns:minmax(175px,1fr) minmax(265px,1.28fr);align-items:start;gap:14px;padding:16px;min-height:unset;}
+.pr-pt-row .pr-pt-controls{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,minmax(115px,1fr)) minmax(170px,1.35fr) auto;max-width:none;gap:10px;align-items:end;background:#fafbfd;border:1px solid #eceef2;border-radius:12px;padding:12px;}
+.pr-pt-row .pr-pt-controls label{min-width:0;}
+.pr-pt-row .pr-pt-controls input{height:39px;min-width:0;}
+.pr-pt-row .pr-pt-actions{display:flex;align-items:center;gap:6px;min-height:39px;}
+.pr-pt-row .pr-pt-actions button{min-height:39px;}
+.pr-pt-figures{grid-template-columns:repeat(4,minmax(0,1fr));align-self:center;}
+@media(max-width:950px){.pr-pt-row{grid-template-columns:1fr}.pr-pt-row .pr-pt-controls{grid-template-columns:repeat(2,minmax(0,1fr));}.pr-pt-row .pr-pt-actions{grid-column:1/-1}.pr-pt-row .pr-pt-actions button{flex:1;}}
+@media(max-width:520px){.pr-pt-row .pr-pt-controls{padding:10px;gap:9px}.pr-pt-row .pr-pt-controls .pr-pt-technician{grid-column:1/-1}.pr-pt-row .pr-pt-figures{grid-template-columns:repeat(2,minmax(0,1fr))}}

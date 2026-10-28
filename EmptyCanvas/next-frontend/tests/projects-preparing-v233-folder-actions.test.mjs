@@ -53,7 +53,7 @@ test('listing excludes archived projects and orphan UI schools/stages',()=>{
   assert.match(sql,/REVOKE ALL ON FUNCTION public\.erp_preparing_archive_project/);
 });
 test('new stylesheet and changed JSX/API/service parse cleanly',()=>{
-  assert.match(read('app/projects-preparing/page.jsx'),/projects-preparing\.css\?v=235/);
+  assert.match(read('app/projects-preparing/page.jsx'),/projects-preparing\.css\?v=236/);
   for(const name of ['components/preparing/PreparingClient.jsx','app/api/projects-preparing/route.js','lib/preparing-service.js']){
     const source=ts.createSourceFile(name,read(name),ts.ScriptTarget.Latest,true,name.endsWith('.jsx')?ts.ScriptKind.JSX:ts.ScriptKind.JS);
     assert.deepEqual(source.parseDiagnostics.map(d=>d.messageText),[],name);
