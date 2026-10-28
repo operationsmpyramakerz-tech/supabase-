@@ -1,12 +1,24 @@
 import "server-only";
-import { selectById, rpc } from "./supabase-rest";
+import { select, selectById, rpc } from "./supabase-rest";
+import { testingRemaining } from "./preparing-project-testing-grouping.mjs";
 import { randomUUID } from "node:crypto";
 const idPattern=/^[\da-f]{8}-[\da-f]{4}-[1-8][\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/i;
 function fail(message,status=400){const error=new Error(message);error.status=status;throw error;}
 function checkProjectId(value){const id=String(value||"").trim();if(!idPattern.test(id))fail("Invalid project ID.");return id;}
 function serviceOnly(){if(!(process.env.SUPABASE_SERVICE_ROLE_KEY||process.env.SUPABASE_SECRET_KEY||process.env.SUPABASE_SERVICE_KEY))fail("Server-side Supabase key is required.",503);}
 async function projectId(value){serviceOnly();const id=checkProjectId(value);const project=await selectById("erp_preparing_projects",id);if(!project||project.deleted_at)fail("Project not found.",404);return id;}
-export async function projectTestingOverview(value){const id=await projectId(value);return rpc("erp_preparing_project_testing_overview",{p_project_id:id},{profileName:"preparing.testing.read"});}
+export async function projectTestingOverview(value){
+ const id=await projectId(value);
+ const [overview, master, kitGroups]=await Promise.all([
+  rpc("erp_preparing_project_testing_overview",{p_project_id:id},{profileName:"preparing.testing.read"}),
+  select("erp_preparing_warehouse_items",{select:"id,source_kits",project_id:`eq.${id}`,limit:"2000"},{profileName:"preparing.testing.kits"}),
+  select("erp_preparing_project_kit_groups",{select:"kit_key,kit_name,sort_order",project_id:`eq.${id}`,order:"sort_order.asc",limit:"200"},{profileName:"preparing.testing.groups"}),
+ ]);
+ const sources=new Map((master||[]).map(row=>[row.id,Array.isArray(row.source_kits)?row.source_kits:[]]));
+ return {...overview,kitGroups:kitGroups||[],items:(overview.items||[]).map(row=>({
+  ...row,sourceKits:sources.get(row.id)||[],remaining:testingRemaining(row)
+ }))};
+}
 export async function recordProjectTesting(body,account){
  const id=await projectId(body?.projectId);
  const actor=String(account?.id||account?.memberId||account?.teamMemberId||"").trim();

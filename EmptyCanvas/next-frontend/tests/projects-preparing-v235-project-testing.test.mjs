@@ -41,7 +41,7 @@ test("testing is a separate project-level screen like warehouse receiving",()=>{
  assert.match(shell,/ProjectTesting/);
  assert.ok(shell.indexOf("Project Testing</strong>")<shell.indexOf("Warehouse Receiving</strong>"));
  assert.ok(shell.indexOf("Warehouse Receiving</strong>")<shell.indexOf("Project Kit Cartons</strong>"));
- for(const label of ["Passed","Failed","Remaining","Testing History","Export CSV","Report reference"]){
+ for(const label of ["Passed","Failed","Remaining","Testing History","Export","Report reference"]){
   if(label==="Report reference")assert.match(ui,/Report reference \(optional\)/i);
   else assert.ok(ui.includes(label),label);
  }
@@ -51,5 +51,5 @@ test("new server and JSX files parse cleanly",()=>{
   const parsed=ts.createSourceFile(name,file(name),ts.ScriptTarget.Latest,true,name.endsWith(".jsx")?ts.ScriptKind.JSX:ts.ScriptKind.JS);
   assert.deepEqual(parsed.parseDiagnostics,[],name);
  }
- assert.match(file("app/projects-preparing/page.jsx"),/projects-preparing\.css\?v=238/);
+ assert.match(file("app/projects-preparing/page.jsx"),/projects-preparing\.css\?v=239/);
 });
