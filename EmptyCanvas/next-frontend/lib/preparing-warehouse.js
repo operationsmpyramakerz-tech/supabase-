@@ -1,7 +1,7 @@
 import "server-only";
 import { select, selectById, rpc } from "./supabase-rest";
 import { getProposal } from "./proposal-kit-service";
-import { assembleSchoolProposalItems } from "./preparing-warehouse-math.mjs";
+import { assembleSchoolProposalItems, assembleProjectProposalItems } from "./preparing-warehouse-math.mjs";
 
 const text = v => String(v ?? "").trim();
 const validId = /^[\da-f]{8}-[\da-f]{4}-[1-8][\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/i;
@@ -25,16 +25,17 @@ async function paged(table,filters,label,max=6000,order="created_at.asc") {
 const rootProject=async projectId=>{ const key=id(projectId); if(!await selectById("erp_preparing_projects",key)) fail("Project not found.",404); return key; };
 export async function warehouseWorkspace(projectId) {
   serviceOnly(); const project=await rootProject(projectId);
-  const [schools,items,demands,receipts,receiptLines,allocations]=await Promise.all([
+  const [schools,items,demands,receipts,receiptLines,allocations,kitGroups]=await Promise.all([
     paged("erp_preparing_schools",{project_id:`eq.${project}`},"schools",500),
     paged("erp_preparing_warehouse_items",{project_id:`eq.${project}`},"BOM",5000),
     paged("erp_preparing_warehouse_demands",{project_id:`eq.${project}`},"requirements",20000),
     paged("erp_preparing_warehouse_receipts",{project_id:`eq.${project}`},"vouchers",5000,"created_at.desc"),
     paged("erp_preparing_warehouse_receipt_lines",{project_id:`eq.${project}`},"receipt lines",20000,"id.asc"),
     paged("erp_preparing_warehouse_allocations",{project_id:`eq.${project}`},"school assignments",20000,"created_at.desc"),
+    paged("erp_preparing_project_kit_groups",{project_id:`eq.${project}`},"Kit groups",200,"sort_order.asc"),
   ]);
   const bomAudit=await paged("erp_preparing_warehouse_bom_audit",{project_id:`eq.${project}`},"BOM audit",5000,"changed_at.desc");
-  return {projectId:project,schools,items,demands,receipts,receiptLines,allocations,bomAudit};
+  return {projectId:project,schools,items,demands,receipts,receiptLines,allocations,kitGroups,bomAudit};
 }
 export async function captureWarehouseBOM(body,account) {
   serviceOnly(); const project=await rootProject(body?.projectId);
@@ -93,7 +94,7 @@ async function sourceProposalItems(proposalId) {
   const sourceId=str(proposalId,"source Proposal",200,true);
   const proposal=await getProposal(sourceId);
   if(!proposal?.items?.length) fail("The selected Proposal has no components.",409);
-  return {id:sourceId,name:str(proposal.proposal?.name,"Proposal name",160,true),items:assembleSchoolProposalItems(proposal.items)};
+  return {id:sourceId,name:str(proposal.proposal?.name,"Proposal name",160,true),items:assembleProjectProposalItems(proposal.items)};
 }
 export async function attachProjectProposal(body,account) {
   serviceOnly();const project=await rootProject(body?.projectId);
@@ -119,4 +120,37 @@ export async function changeProjectBOM(body,account) {
     p_product_id:code,p_product_name:name,p_required_qty:action==="delete"?null:quantity,
     p_expected_updated_at:version,p_member_id:actor(account),
   },{profileName:`preparing.warehouse.bom-${action}`});
+}
+
+// One-time Kit attribution for projects already created with a source Proposal under v229.
+export async function initializeProjectKits(body,account) {
+  serviceOnly();const project=await rootProject(body?.projectId);
+  const record=await selectById("erp_preparing_projects",project);
+  if(!record?.source_proposal_id) fail("This project has no source Proposal.",409);
+  const proposal=await sourceProposalItems(record.source_proposal_id);
+  return rpc("erp_preparing_initialize_project_kits",{
+    p_project_id:project,p_items:proposal.items,p_member_id:actor(account),
+  },{profileName:"preparing.warehouse.initialize-kits"});
+}
+export async function editProjectKitItem(body,account) {
+  serviceOnly();const project=await rootProject(body?.projectId);
+  const action=text(body?.operation);
+  if(!["add","update","delete"].includes(action))fail("Invalid Kit edit action.");
+  const quantity=action==="delete"?null:body?.quantity;
+  if(action!=="delete"&&(!Number.isSafeInteger(quantity)||quantity<=0||quantity>1000000000))
+    fail("Enter a positive whole-number Kit quantity.");
+  const kitId=str(body?.kitId,"Kit id",160);
+  const kitName=str(body?.kitName,"Kit name",160,true);
+  const itemId=body?.itemId?id(body.itemId):null;
+  if(action!=="add"&&!itemId)fail("Component id is required.");
+  const version=text(body?.expectedUpdatedAt);
+  if(action!=="add"&&(!version||!Number.isFinite(Date.parse(version))))fail("Refresh this Kit component before editing.",409);
+  const productId=action==="add"?str(body?.productId,"component code",500):"";
+  const productName=action==="add"?str(body?.productName,"component name",500,true):"";
+  return rpc("erp_preparing_edit_project_kit_item",{
+    p_project_id:project,p_action:action,p_item_id:itemId,
+    p_product_id:productId,p_product_name:productName,p_quantity:quantity,
+    p_kit_id:kitId,p_kit_name:kitName,
+    p_expected_updated_at:action==="add"?null:version,p_member_id:actor(account),
+  },{profileName:`preparing.warehouse.kit-${action}`});
 }

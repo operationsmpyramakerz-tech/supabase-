@@ -14,7 +14,7 @@ test("new projects require Proposal and capture it with project in one transacti
  assert.match(ui,/Source Proposal<select required/);
  assert.match(ui,/sheet === "project" && !projectSourceId/);
  assert.match(service,/erp_preparing_create_project_with_bom/);
- assert.match(service,/assembleSchoolProposalItems\(source\.items\)/);
+ assert.match(service,/assembleProjectProposalItems\(source\.items\)/);
  assert.match(sql,/CREATE OR REPLACE FUNCTION public\.erp_preparing_create_project_with_bom/);
  assert.match(sql,/INSERT INTO public\.erp_preparing_projects/);
  assert.match(sql,/amount:=public\.erp_preparing_seed_project_bom\(output_id,p_items,p_member_id\)/);
@@ -22,7 +22,8 @@ test("new projects require Proposal and capture it with project in one transacti
 test("project component editor has management gate and optimistic concurrency",()=>{
  assert.match(ui,/ProjectMasterComponents/);
  assert.match(ui,/allowed=\{canManage\}/);
- assert.match(route,/edit_bom"\?"manage"/);
+ assert.match(route,/body.action==="edit_bom"/);
+ assert.match(route,/body.action==="edit_kit"\?"manage"/);
  assert.match(warehouse,/erp_preparing_edit_project_bom/);
  assert.match(sql,/old_row\.updated_at IS DISTINCT FROM p_expected_updated_at/);
  assert.match(sql,/FROM public\.erp_preparing_projects WHERE id=p_project_id FOR UPDATE/);

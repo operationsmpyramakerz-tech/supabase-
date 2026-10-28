@@ -1,40 +1,67 @@
 "use client";
 import {useEffect,useMemo,useState} from "react";
 import {warehouseTotals} from "../../lib/preparing-warehouse-math.mjs";
-const empty={items:[],receiptLines:[],allocations:[],demands:[],bomAudit:[]};
+
+const empty={items:[],receiptLines:[],allocations:[],demands:[],kitGroups:[],bomAudit:[]};
 const fmt=v=>Number(v||0).toLocaleString("en-US");
+const groupKey=kit=>kit?.kitId?`id:${String(kit.kitId).toLowerCase()}`:`name:${String(kit?.kitName||"").toLowerCase()}`;
+
 export default function ProjectMasterComponents({project,proposals,allowed,request,onClose}) {
-  const [state,setState]=useState(empty),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false);
-  const [error,setError]=useState(""),[notice,setNotice]=useState(""),[search,setSearch]=useState("");
-  const [sourceId,setSourceId]=useState(""),[edit,setEdit]=useState(null),[confirmDelete,setConfirmDelete]=useState(null);
-  const [draft,setDraft]=useState({productName:"",productId:"",requiredQty:"1"});
-  const rows=useMemo(()=>warehouseTotals(state.items||[],state.receiptLines||[],state.allocations||[]),[state]);
-  const filtered=useMemo(()=>rows.filter(r=>`${r.product_name} ${r.product_id}`.toLowerCase().includes(search.toLowerCase().trim())),[rows,search]);
-  const total=rows.reduce((sum,r)=>sum+Number(r.required_qty||0),0);
-  const hasMovements=!!(state.receiptLines?.length||state.allocations?.length||state.demands?.length);
-  async function reload(){const value=await request(`/warehouse?projectId=${encodeURIComponent(project.id)}`);setState(value);setLoading(false);}
-  useEffect(()=>{let active=true;request(`/warehouse?projectId=${encodeURIComponent(project.id)}`).then(value=>{if(active){setState(value);setLoading(false);}}).catch(e=>{if(active){setError(e.message);setLoading(false);}});return()=>{active=false;};},[project.id]);
-  async function submit(payload,msg){if(busy)return;setBusy(true);setError("");setNotice("");try{await request("/warehouse","POST",{projectId:project.id,...payload});await reload();setEdit(null);setConfirmDelete(null);setNotice(msg); }catch(e){setError(e.message||"Unable to save changes.");}finally{setBusy(false);}}
-  function editor(row){setConfirmDelete(null);setEdit(row||{id:null});setDraft({productName:row?.product_name||"",productId:row?.product_id||"",requiredQty:String(row?.required_qty??1)});}
-  function saveItem(){const requiredQty=Number(draft.requiredQty);if(!Number.isSafeInteger(requiredQty)||requiredQty<0||requiredQty>1000000000){setError("Enter a valid whole-number quantity.");return;}
-    if(!draft.productName.trim()){setError("Component name is required.");return;}
-    submit({action:"edit_bom",operation:edit?.id?"update":"add",itemId:edit?.id,expectedUpdatedAt:edit?.updated_at,productName:draft.productName.trim(),productId:draft.productId.trim(),requiredQty},edit?.id?"Component updated.":"Component added.");
+ const [state,setState]=useState(empty),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false);
+ const [error,setError]=useState(""),[notice,setNotice]=useState(""),[search,setSearch]=useState("");
+ const [sourceId,setSourceId]=useState("");
+ const [editor,setEditor]=useState(null),[quantity,setQuantity]=useState("1"),[newName,setNewName]=useState(""),[newCode,setNewCode]=useState("");
+ const [confirm,setConfirm]=useState(null);
+ const rows=useMemo(()=>warehouseTotals(state.items||[],state.receiptLines||[],state.allocations||[]),[state]);
+ const total=rows.reduce((sum,r)=>sum+Number(r.required_qty||0),0);
+ const hasMovements=!!(state.receiptLines?.length||state.allocations?.length||state.demands?.length);
+ const needsKitCapture=rows.length>0&&!rows.some(r=>Array.isArray(r.source_kits)&&r.source_kits.length>0)&&!!project.source_proposal_id;
+ const groups=useMemo(()=>{
+  const result=new Map();
+  for(const group of state.kitGroups||[])result.set(group.kit_key,{key:group.kit_key,kitId:group.kit_id,kitName:group.kit_name,items:[],total:0});
+  for(const row of rows) for(const kit of Array.isArray(row.source_kits)?row.source_kits:[]){
+    const key=groupKey(kit);
+    if(!result.has(key))result.set(key,{key,kitId:kit.kitId||"",kitName:kit.kitName||"Direct components",items:[],total:0});
+    const group=result.get(key);const qty=Number(kit.quantity)||0;
+    group.items.push({row,qty,kit});group.total+=qty;
   }
-  return <div className="pr-pbom">
-    <div className="pr-manifest-title"><div><span className="pr-wh-overline">PROJECT INVENTORY · {project.name}</span><h3>Project Components</h3></div><button className="pr-secondary" type="button" onClick={onClose}>Close</button></div>
-    {error&&<div className="pr-alert" role="alert">{error}<button type="button" onClick={()=>setError("")} aria-label="Dismiss">×</button></div>}
-    {notice&&<div className="pr-manifest-success" role="status">{notice}</div>}
-    {loading?<p className="pr-muted">Loading components…</p>:<>
-      <div className="pr-pbom-summary"><div><span>Source Proposal</span><strong>{project.source_proposal_name||"Custom / legacy project"}</strong></div><div><span>Components</span><strong>{fmt(rows.length)}</strong></div><div><span>Project Required</span><strong>{fmt(total)}</strong></div></div>
-      {!rows.length&&!project.source_proposal_id&&allowed&&!hasMovements&&<div className="pr-pbom-import"><div><strong>Import an existing Proposal</strong><small>For projects created before Proposal selection was available. This creates the project BOM without creating or receiving any school shipments.</small></div><div className="pr-pbom-import-action"><select aria-label="Choose project source Proposal" value={sourceId} onChange={e=>setSourceId(e.target.value)}><option value="">Select Proposal…</option>{(proposals||[]).map(p=><option key={p.id} value={p.id}>{p.name} ({p.itemsCount} components)</option>)}</select><button className="pr-primary" type="button" disabled={busy||!sourceId} onClick={()=>submit({action:"attach_proposal",proposalId:sourceId},"Source Proposal imported into project BOM.")}>Import Proposal</button></div></div>}
-      <div className="pr-pbom-toolbar"><label className="pr-search"><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search project components…" aria-label="Search project components"/></label><div className="pr-pbom-actions"><button className="pr-secondary" type="button" onClick={()=>{setLoading(true);reload().catch(e=>{setError(e.message);setLoading(false);});}}>Refresh</button>{allowed&&<button className="pr-primary" type="button" onClick={()=>editor(null)}>+ Add Component</button>}</div></div>
-      <div className="pr-pbom-list">{filtered.map(row=>{
-        const referenced=state.receiptLines.some(r=>r.item_id===row.id)||state.allocations.some(r=>r.item_id===row.id)||state.demands.some(r=>r.item_id===row.id);
-        return <div key={row.id} className="pr-pbom-row"><div className="pr-pbom-name"><strong>{row.product_name}</strong><small>{row.product_id||"No product code"}</small></div><div className="pr-pbom-qty"><span>Required</span><b>{fmt(row.required_qty)}</b></div><div className="pr-pbom-qty"><span>Received</span><b>{fmt(row.accepted)}</b></div><div className="pr-pbom-qty"><span>Allocated</span><b>{fmt(row.allocated)}</b></div>{allowed&&<div className="pr-pbom-row-actions"><button type="button" className="pr-secondary" onClick={()=>editor(row)}>Edit</button><button type="button" className="pr-pbom-delete" title={referenced?"Cannot remove component with warehouse or school history":"Remove component"} disabled={referenced} onClick={()=>{setEdit(null);setConfirmDelete(row);}}>Remove</button></div>}</div>;
-      })}{!filtered.length&&<div className="pr-wh-empty">{rows.length?"No matching components.":"No project components yet. Select a Proposal or add a component."}</div>}</div>
-      <div className="pr-pbom-foot"><span>Project quantities are independent from school QC and delivery.</span><span>{fmt(state.bomAudit?.length)} BOM audit entries</span></div>
-      {edit&&<div className="pr-pbom-form" role="group" aria-label="Edit project component"><div className="pr-pbom-form-head"><strong>{edit.id?"Edit Component":"Add Component"}</strong><button type="button" className="pr-secondary" onClick={()=>setEdit(null)}>Cancel</button></div><div className="pr-pbom-form-fields"><label>Component name<input maxLength={500} value={draft.productName} onChange={e=>setDraft(p=>({...p,productName:e.target.value}))}/></label><label>Product code (optional)<input maxLength={500} value={draft.productId} onChange={e=>setDraft(p=>({...p,productId:e.target.value}))}/></label><label>Project required quantity<input type="number" min="0" max="1000000000" step="1" value={draft.requiredQty} onChange={e=>setDraft(p=>({...p,requiredQty:e.target.value}))}/></label></div><div className="pr-pbom-form-footer"><small>{edit.id?"Changes to components with stock or school activity may adjust the required quantity only.":"New components appear immediately in Warehouse Receiving."}</small><button className="pr-primary" type="button" disabled={busy||!draft.productName.trim()} onClick={saveItem}>{busy?"Saving…":"Save Component"}</button></div></div>}
-      {confirmDelete&&<div className="pr-pbom-confirm" role="group" aria-label="Confirm component removal"><div><strong>Remove {confirmDelete.product_name}?</strong><small>Only unused components can be removed. The change will be recorded in the audit history.</small></div><div className="pr-pbom-actions"><button className="pr-secondary" type="button" onClick={()=>setConfirmDelete(null)}>Cancel</button><button type="button" className="pr-pbom-delete" disabled={busy} onClick={()=>submit({action:"edit_bom",operation:"delete",itemId:confirmDelete.id,expectedUpdatedAt:confirmDelete.updated_at},"Component removed.")}>Confirm Remove</button></div></div>}
-    </>}
-  </div>;
+  const orphaned=rows.filter(row=>!Array.isArray(row.source_kits)||!row.source_kits.length);
+  if(orphaned.length)result.set("ungrouped",{key:"ungrouped",kitId:"",kitName:"Unassigned components",items:orphaned.map(row=>({row,qty:Number(row.required_qty)||0,kit:null})),total:orphaned.reduce((s,r)=>s+Number(r.required_qty||0),0)});
+  return [...result.values()];
+ },[rows,state.kitGroups]);
+ const visibleGroups=groups.map(group=>({...group,items:group.items.filter(({row})=>`${row.product_name} ${row.product_id}`.toLowerCase().includes(search.toLowerCase().trim()))})).filter(group=>group.items.length||!search.trim());
+ async function reload(){const value=await request(`/warehouse?projectId=${encodeURIComponent(project.id)}`);setState(value);setLoading(false);}
+ useEffect(()=>{let active=true;request(`/warehouse?projectId=${encodeURIComponent(project.id)}`).then(v=>{if(active){setState(v);setLoading(false);}}).catch(e=>{if(active){setError(e.message);setLoading(false);}});return()=>{active=false;};},[project.id]);
+ async function submit(payload,message){if(busy)return false;setBusy(true);setError("");setNotice("");try{
+   await request("/warehouse","POST",{projectId:project.id,...payload});await reload();setEditor(null);setConfirm(null);setNotice(message);return true;
+  }catch(e){setError(e.message||"Unable to save.");return false;}finally{setBusy(false);}}
+ function addTo(group){setEditor({kind:"add",group,row:null});setNewName("");setNewCode("");setQuantity("1");}
+ function changeQuantity(group,item){setEditor({kind:"update",group,row:item.row});setQuantity(String(item.qty));}
+ function saveEditor(){const q=Number(quantity);if(!Number.isSafeInteger(q)||q<=0||q>1000000000){setError("Enter a positive whole-number quantity.");return;}
+   if(editor.kind==="add"&&!newName.trim()){setError("Enter a component name.");return;}
+   submit({action:"edit_kit",operation:editor.kind,itemId:editor.row?.id||null,
+     kitId:editor.group.kitId,kitName:editor.group.kitName,
+     productName:newName.trim(),productId:newCode.trim(),quantity:q,expectedUpdatedAt:editor.row?.updated_at},
+     editor.kind==="add"?"Component added to Kit.":"Kit quantity updated.");
+ }
+ return <div className="pr-pbom">
+  <div className="pr-manifest-title"><div><span className="pr-wh-overline">PROJECT · {project.name}</span><h3>Project Components</h3></div><button className="pr-secondary" type="button" onClick={onClose}>Close</button></div>
+  {error&&<div className="pr-alert" role="alert">{error}<button type="button" onClick={()=>setError("")} aria-label="Dismiss">×</button></div>}
+  {notice&&<div className="pr-manifest-success" role="status">{notice}</div>}
+  {loading?<p className="pr-muted">Loading Kits…</p>:<>
+   <div className="pr-pbom-summary"><div><span>Source Proposal</span><strong>{project.source_proposal_name||"Custom project"}</strong></div><div><span>Unique components</span><strong>{fmt(rows.length)}</strong></div><div><span>Project required quantity</span><strong>{fmt(total)}</strong></div></div>
+   {!rows.length&&!project.source_proposal_id&&allowed&&!hasMovements&&<div className="pr-pbom-import"><strong>Import source Proposal</strong><div className="pr-pbom-import-action"><select value={sourceId} onChange={e=>setSourceId(e.target.value)} aria-label="Source Proposal"><option value="">Select Proposal…</option>{(proposals||[]).map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select><button className="pr-primary" disabled={!sourceId||busy} onClick={()=>submit({action:"attach_proposal",proposalId:sourceId},"Proposal imported.")}>Import Proposal</button></div></div>}
+   {needsKitCapture&&<div className="pr-pbom-import"><div><strong>Load Kit Groups from Proposal</strong><small>One-time organization of the existing Master BOM. Warehouse receipts and allocation amounts stay unchanged.</small></div>{allowed&&<button type="button" className="pr-primary" disabled={busy} onClick={()=>submit({action:"init_kits"},"Proposal Kit groups loaded.")}>Load Kit Groups</button>}</div>}
+   <div className="pr-pbom-toolbar"><label className="pr-search"><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search within Kits…" aria-label="Search project components"/></label><button type="button" className="pr-secondary" disabled={busy} onClick={()=>{setLoading(true);reload().catch(e=>{setError(e.message);setLoading(false);});}}>Refresh</button></div>
+   <div className="pr-kit-group-list">{visibleGroups.map(group=><details key={group.key} className="pr-kit-group" open>
+    <summary className="pr-kit-group-head"><span className="pr-kit-group-icon">▤</span><span className="pr-kit-group-title"><strong>{group.kitName}</strong><small>{group.items.length} components · {fmt(group.total)} units</small></span><span className="pr-kit-group-chevron">⌄</span></summary>
+    <div className="pr-kit-group-body">
+      <div className="pr-kit-group-rows">{group.items.map(({row,qty,kit})=><div key={row.id} className="pr-kit-group-row"><div className="pr-pbom-name"><strong>{row.product_name}</strong><small>{row.product_id||"No product code"}</small></div><div className="pr-pbom-qty"><span>Kit Qty</span><b>{fmt(qty)}</b></div><div className="pr-pbom-qty"><span>Total Required</span><b>{fmt(row.required_qty)}</b></div>{allowed&&kit&&<div className="pr-pbom-row-actions"><button type="button" className="pr-secondary" onClick={()=>changeQuantity(group,{row,qty})}>Edit Qty</button><button type="button" className="pr-pbom-delete" onClick={()=>{setEditor(null);setConfirm({group,row});}}>Remove</button></div>}</div>)}</div>
+      {allowed&&group.key!=="ungrouped"&&<button type="button" className="pr-kit-group-add" onClick={()=>addTo(group)}>+ Add Component to {group.kitName}</button>}
+    </div>
+   </details>)}{!visibleGroups.length&&<div className="pr-wh-empty">{rows.length?"No matching components.":"No components in this project."}</div>}</div>
+   {editor&&<div className="pr-kit-inline-editor" role="group" aria-label="Kit component editor"><div className="pr-pbom-form-head"><strong>{editor.kind==="add"?`Add to ${editor.group.kitName}`:`Edit ${editor.row.product_name} · ${editor.group.kitName}`}</strong><button type="button" className="pr-secondary" onClick={()=>setEditor(null)}>Cancel</button></div><div className="pr-kit-editor-fields">{editor.kind==="add"&&<><label>Component<input value={newName} maxLength={500} onChange={e=>setNewName(e.target.value)}/></label><label>Product code<input value={newCode} maxLength={500} onChange={e=>setNewCode(e.target.value)}/></label></>}<label>Kit quantity<input type="number" min="1" max="1000000000" step="1" value={quantity} onChange={e=>setQuantity(e.target.value)}/></label><button className="pr-primary" type="button" disabled={busy} onClick={saveEditor}>{busy?"Saving…":"Save"}</button></div></div>}
+   {confirm&&<div className="pr-pbom-confirm" role="group" aria-label="Confirm component removal"><div><strong>Remove {confirm.row.product_name} from {confirm.group.kitName}?</strong><small>This changes the planned Kit quantity only. Recorded stock and school movements are protected.</small></div><div className="pr-pbom-actions"><button className="pr-secondary" type="button" onClick={()=>setConfirm(null)}>Cancel</button><button className="pr-pbom-delete" type="button" disabled={busy} onClick={()=>submit({action:"edit_kit",operation:"delete",itemId:confirm.row.id,kitId:confirm.group.kitId,kitName:confirm.group.kitName,expectedUpdatedAt:confirm.row.updated_at},"Component removed from Kit.")}>Confirm Remove</button></div></div>}
+  </>}
+ </div>;
 }

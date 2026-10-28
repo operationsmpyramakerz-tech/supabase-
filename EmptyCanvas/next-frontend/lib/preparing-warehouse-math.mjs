@@ -37,3 +37,40 @@ export function assembleSchoolProposalItems(proposalItems) {
   if (!rows.size || rows.size > 1000) throw new Error("Proposal must contain 1-1000 valid component types.");
   return [...rows.values()];
 }
+
+// Preserve the per-Kit split without duplicating a component in the warehouse stock ledger.
+// Every product remains ONE master BOM row, while sourceKits records its planned quantities.
+export function assembleProjectProposalItems(proposalItems) {
+  const aggregate=assembleSchoolProposalItems(proposalItems);
+  const groupsByProduct=new Map();
+  for(const original of proposalItems||[]) {
+    const key=componentKey(original.productId,original.productName);
+    if(!groupsByProduct.has(key))groupsByProduct.set(key,new Map());
+    const groups=groupsByProduct.get(key),total=Number(original.quantity);
+    const sources=Array.isArray(original?.sourceKits)?original.sourceKits:Array.isArray(original?.source_kits)?original.source_kits:[];
+    let used=0;
+    function add(kitId,kitName,quantity) {
+      const sourceKey=kitId?`id:${kitId.toLowerCase()}`:`name:${kitName.toLowerCase()}`;
+      const previous=groups.get(sourceKey);
+      if(previous)previous.quantity+=quantity;
+      else groups.set(sourceKey,{kitId,kitName,quantity,order:groups.size});
+    }
+    for(const source of sources) {
+      const kitId=String(source?.kitId||source?.kit_id||"").trim();
+      const kitName=String(source?.kitName||source?.kit_name||source?.name||"").trim();
+      const quantity=Number(source?.quantity??source?.qty);
+      if(!kitId&&!kitName)continue;
+      if(!kitName||kitName.length>160||!Number.isSafeInteger(quantity)||quantity<=0||quantity>1000000000)
+        throw new Error(`Invalid Kit quantity in Proposal for ${original.productName}.`);
+      used+=quantity;add(kitId,kitName,quantity);
+    }
+    if(used>total)throw new Error(`Kit quantities exceed total Proposal quantity for ${original.productName}.`);
+    if(used<total)add("","Direct components",total-used);
+  }
+  return aggregate.map(row=>{
+    const sourceKits=[...(groupsByProduct.get(row.key)?.values()||[])];
+    if(sourceKits.reduce((sum,kit)=>sum+kit.quantity,0)!==row.qty)
+      throw new Error(`Kit quantity mismatch for ${row.name}.`);
+    return {...row,sourceKits};
+  });
+}

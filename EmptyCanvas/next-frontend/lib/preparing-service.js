@@ -3,7 +3,7 @@ import { select, selectAll, selectById, insert, updateById, supabaseRequest, rpc
 import { listTeamMembersLite } from "./team-members-service";
 import { listProposals, getProposal } from "./proposal-kit-service";
 import { PREPARING_STAGES, PREPARING_STATES, canCompleteStage, validStage } from "./preparing-workflow";
-import { assembleSchoolProposalItems } from "./preparing-warehouse-math.mjs";
+import { assembleSchoolProposalItems, assembleProjectProposalItems } from "./preparing-warehouse-math.mjs";
 
 const PROJECTS = "erp_preparing_projects";
 const SCHOOLS = "erp_preparing_schools";
@@ -46,7 +46,7 @@ export async function createPreparingProject(body, account) {
   if (!proposals.some(row => row.id === proposalId)) fail("Source Proposal is unavailable.", 404);
   const source = await getProposal(proposalId);
   if (!source?.items?.length) fail("Source Proposal has no components.", 409);
-  const items = assembleSchoolProposalItems(source.items);
+  const items = assembleProjectProposalItems(source.items);
   // One transaction captures the project and its independent warehouse BOM.
   return rpc("erp_preparing_create_project_with_bom", {
     p_name: name, p_description: clean(body?.description), p_source_proposal_id: proposalId,

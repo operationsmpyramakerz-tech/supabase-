@@ -57,7 +57,7 @@ test('changed JSX parses and CSS version is refreshed', () => {
     const source = ts.createSourceFile(file, read(file), ts.ScriptTarget.Latest, true, ts.ScriptKind.JSX);
     assert.deepEqual(source.parseDiagnostics.map(d => d.messageText), [], file);
   }
-  assert.match(read('app/projects-preparing/page.jsx'), /projects-preparing\.css\?v=229/);
+  assert.match(read('app/projects-preparing/page.jsx'), /projects-preparing\.css\?v=230/);
 });
 
 // v226: actual filtering controls replace oversized, noninteractive stats on the index.
