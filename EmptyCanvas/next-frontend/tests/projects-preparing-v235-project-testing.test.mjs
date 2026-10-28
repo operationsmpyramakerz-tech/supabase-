@@ -12,10 +12,10 @@ const server=file("lib/preparing-project-testing.js");
 const route=file("app/api/projects-preparing/testing/route.js");
 test("testing intake can be saved before any warehouse receipt, with technician",()=>{
  const row={id:"item-1",required:20,received:0,accepted:0,passed:0,failed:0};
- assert.deepEqual(testingChange(row,{received:"10",passed:"6",failed:"2"}),
-  {itemId:"item-1",receivedDelta:10,passedDelta:6,failedDelta:2,expectedReceived:0,expectedPassed:0,expectedFailed:0});
- assert.equal(testingChange({...row,received:10,passed:6,failed:2},{received:"10",passed:"6",failed:"2"}),null);
- assert.deepEqual(testingChange({...row,received:10,passed:6,failed:2},{received:"10",passed:"8",failed:"0"}).failedDelta,-2);
+ assert.deepEqual(testingChange(row,{received:"10",passed:"6",failed:"4"}),
+  {itemId:"item-1",receivedDelta:10,passedDelta:6,failedDelta:4,expectedReceived:0,expectedPassed:0,expectedFailed:0});
+ assert.equal(testingChange({...row,received:10,passed:6,failed:4},{received:"10",passed:"6",failed:"4"}),null);
+ assert.deepEqual(testingChange({...row,received:10,passed:6,failed:4},{received:"10",passed:"8",failed:"2"}).failedDelta,-2);
  assert.throws(()=>testingChange(row,{received:"4",passed:"4",failed:"1"}));
  assert.throws(()=>testingChange(row,{received:"10",passed:"1.5",failed:"0"}));
 
@@ -41,10 +41,10 @@ test("testing is a separate project-level screen like warehouse receiving",()=>{
  assert.match(shell,/ProjectTesting/);
  assert.ok(shell.indexOf("Project Testing</strong>")<shell.indexOf("Warehouse Receiving</strong>"));
  assert.ok(shell.indexOf("Warehouse Receiving</strong>")<shell.indexOf("Project Kit Cartons</strong>"));
- for(const label of ["Passed","Failed","Remaining","Testing History","Export","Report reference"]){
-  if(label==="Report reference")assert.match(ui,/Report reference \(optional\)/i);
-  else assert.ok(ui.includes(label),label);
+ for(const label of ["Passed","Failed","Remaining","Testing History","Export"]){
+  assert.ok(ui.includes(label),label);
  }
+ assert.doesNotMatch(ui,/Testing Record|Report reference \(optional\)|Save All Changes/);
 });
 test("new server and JSX files parse cleanly",()=>{
  for(const name of ["components/preparing/ProjectTesting.jsx","components/preparing/PreparingClient.jsx","app/api/projects-preparing/testing/route.js","lib/preparing-project-testing.js"]){

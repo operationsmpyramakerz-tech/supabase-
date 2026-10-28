@@ -35,6 +35,11 @@ export async function recordProjectTesting(body,account){
   if(seen.has(itemId))fail("Duplicate component in test batch.");seen.add(itemId);
   const values=[row?.receivedDelta,row?.passedDelta,row?.failedDelta,row?.expectedReceived,row?.expectedPassed,row?.expectedFailed];
   if(values.some(n=>!Number.isSafeInteger(n))||values.slice(0,3).some(n=>Math.abs(n)>1000000)||values.slice(3).some(n=>n<0)||!values.slice(0,3).some(Boolean))fail("Invalid testing quantities.");
+  const newReceived=values[3]+values[0];
+  const newPassed=values[4]+values[1];
+  const newFailed=values[5]+values[2];
+  if(!Number.isSafeInteger(newReceived)||!Number.isSafeInteger(newPassed)||!Number.isSafeInteger(newFailed)||newPassed+newFailed!==newReceived)
+   fail("Passed + Failed must equal Testing Received before you can save.");
   return {itemId,receivedDelta:values[0],passedDelta:values[1],failedDelta:values[2],expectedReceived:values[3],expectedPassed:values[4],expectedFailed:values[5]};
  });
  return rpc("erp_preparing_project_testing_record_v238",{p_project_id:id,p_reference:reference,p_notes:notes,p_lines:lines,p_member_id:actor,p_actor_name:actorName},{profileName:"preparing.testing.save"});

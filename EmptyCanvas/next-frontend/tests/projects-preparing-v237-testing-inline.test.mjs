@@ -25,9 +25,9 @@ test('editing swaps each displayed metric for an input in the exact same metric 
  assert.match(ui,/save\(\[r\.id\]\)/);
  assert.match(ui,/rowError\[r\.id\]/);
 });
-test('Save without reference generates a unique report reference server-side',()=>{
- assert.match(ui,/reference:manualReference/);
- assert.match(ui,/leave it blank for automatic generation/);
+test('Save per row automatically generates a unique report reference server-side',()=>{
+ assert.doesNotMatch(ui,/reference:manualReference|Report reference|Save All Changes/);
+ assert.match(ui,/await request\("\/testing","POST",\{projectId,lines\}\)/);
  assert.match(backend,/import \{ randomUUID \} from "node:crypto"/);
  assert.match(backend,/\|\| `QC-\$\{randomUUID\(\)\}`/);
  assert.match(ui,/Save and refresh are separate/);

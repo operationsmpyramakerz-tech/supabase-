@@ -23,7 +23,6 @@ export default function ProjectTesting({projectId,projectName,canTest,request,on
  const [expandedKit,setExpandedKit]=useState(null),[showExport,setShowExport]=useState(false);
  const [exportColumns,setExportColumns]=useState(TESTING_EXPORT_COLUMNS.map(c=>c.key));
  const [exportGroups,setExportGroups]=useState([]),[exportBusy,setExportBusy]=useState(false);
- const [reference,setReference]=useState(""),[notes,setNotes]=useState("");
  const [draft,setDraft]=useState({}),[editing,setEditing]=useState({});
  const [error,setError]=useState(""),[success,setSuccess]=useState(""),[rowError,setRowError]=useState({});
  const load=async()=>{const result=await request(`/testing?projectId=${encodeURIComponent(projectId)}`);setData({items:result.items||[],history:result.history||[],kitGroups:result.kitGroups||[]});};
@@ -44,8 +43,6 @@ export default function ProjectTesting({projectId,projectName,canTest,request,on
  [data.items,search,filter]);
  const allGroups=useMemo(()=>testingGroups(data.items,data.kitGroups),[data.items,data.kitGroups]);
  const groupedShown=useMemo(()=>testingGroups(shown,data.kitGroups).filter(group=>group.items.length),[shown,data.kitGroups]);
- const activeIds=Object.keys(editing).filter(k=>editing[k]);
- const reset=()=>{setDraft({});setEditing({});setRowError({});};
  const edit=r=>{
   setEditing(old=>({...old,[r.id]:true}));
   setDraft(old=>({...old,[r.id]:{received:String(r.received),passed:String(r.passed),failed:String(r.failed)}}));
@@ -56,13 +53,14 @@ export default function ProjectTesting({projectId,projectName,canTest,request,on
   setDraft(old=>{const next={...old};delete next[id];return next;});
   setRowError(old=>{const next={...old};delete next[id];return next;});
  };
- const change=(id,key,value)=>setDraft(old=>({...old,[id]:{...old[id],[key]:value}}));
- async function save(ids=activeIds) {
+ const change=(id,key,value)=>{
+  setDraft(old=>({...old,[id]:{...old[id],[key]:value}}));
+  setRowError(old=>({...old,[id]:""}));
+ };
+ async function save(ids) {
   if(busy)return;
   const rowId=ids.length===1?ids[0]:null;
   const fail=message=>{setError(message);if(rowId)setRowError(old=>({...old,[rowId]:message}));};
-  const manualReference=reference.trim();
-  if(manualReference&&manualReference.length<2){fail("Report reference must have at least 2 characters, or leave it blank for automatic generation.");return;}
   const lines=[];
   try{for(const itemId of ids){const row=data.items.find(r=>r.id===itemId),values=draft[itemId];if(!row||!values)continue;
    const line=testingChange(row,values);if(line)lines.push(line);
@@ -70,9 +68,12 @@ export default function ProjectTesting({projectId,projectName,canTest,request,on
   if(!lines.length){fail("Change at least one testing quantity before saving.");return;}
   setBusy(true);setError("");setSuccess("");setRowError({});
   try{
-   await request("/testing","POST",{projectId,reference:manualReference,notes:notes.trim(),lines});
+   await request("/testing","POST",{projectId,lines});
    // Save and refresh are separate. Never describe a committed save as failed on refresh errors.
-   reset();setReference("");setNotes("");
+   const savedIds=new Set(lines.map(line=>line.itemId));
+   setEditing(old=>Object.fromEntries(Object.entries(old).filter(([id])=>!savedIds.has(id))));
+   setDraft(old=>Object.fromEntries(Object.entries(old).filter(([id])=>!savedIds.has(id))));
+   setRowError(old=>Object.fromEntries(Object.entries(old).filter(([id])=>!savedIds.has(id))));
    setSuccess(`Saved ${lines.length} component(s). Your ERP user is recorded in Testing History.`);
    try{await load();}catch{setError("Saved successfully, but the latest values could not be refreshed. Use Refresh to reload them.");}
   }catch(e){fail(e.message||"Unable to save testing results.");}
@@ -137,12 +138,7 @@ export default function ProjectTesting({projectId,projectName,canTest,request,on
     <button type="button" className="pr-wh-export pr-pt-export-open" onClick={()=>setShowExport(true)} disabled={!data.items.length}>Export <span aria-hidden="true">⌄</span></button>
    </div>
    {tab==="testing"&&<>
-    {canTest&&<div className="pr-wh-voucher pr-pt-report">
-     <div className="pr-wh-voucher-head"><strong>Testing Record</strong><span className="pr-pt-audit-hint">Saved under your signed-in ERP account</span></div>
-     <div className="pr-wh-form"><label>Report reference (optional)<input value={reference} maxLength={160} placeholder="Generated automatically if blank" onChange={e=>setReference(e.target.value)}/></label><label>Notes<input value={notes} maxLength={1000} placeholder="Batch, test conditions, or retest details" onChange={e=>setNotes(e.target.value)}/></label></div>
-     <div className="pr-wh-voucher-bottom"><small>{activeIds.length} component(s) in edit mode</small><button type="button" className="pr-primary" disabled={busy||!activeIds.length} onClick={()=>save()}>{busy?"Saving…":"Save All Changes"}</button></div>
-    </div>}
-    <div className="pr-wh-toolbar pr-pt-toolbar"><label className="pr-search"><input type="search" aria-label="Search testing components" placeholder="Search component or code…" value={search} onChange={e=>setSearch(e.target.value)}/></label><select aria-label="Filter testing components" value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">All components</option><option value="pending">Remaining to pass</option><option value="failed">Has failed units</option><option value="done">Fully received for testing</option></select><button type="button" className="pr-secondary" disabled={busy} onClick={()=>{setLoading(true);load().catch(e=>setError(e.message)).finally(()=>setLoading(false));}}>Refresh</button></div>
+     <div className="pr-wh-toolbar pr-pt-toolbar"><label className="pr-search"><input type="search" aria-label="Search testing components" placeholder="Search component or code…" value={search} onChange={e=>setSearch(e.target.value)}/></label><select aria-label="Filter testing components" value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">All components</option><option value="pending">Remaining to pass</option><option value="failed">Has failed units</option><option value="done">Fully received for testing</option></select><button type="button" className="pr-secondary" disabled={busy} onClick={()=>{setLoading(true);load().catch(e=>setError(e.message)).finally(()=>setLoading(false));}}>Refresh</button></div>
     <div className="pr-wh-list pr-pt-list pr-pt-kit-list" aria-label="Project component testing">{groupedShown.map((group,index)=>{
      const open=!!search.trim()||(expandedKit===null?index===0:expandedKit===group.key);
      return <section className={`pr-pt-kit-group${open?" is-open":""}`} key={group.key}>

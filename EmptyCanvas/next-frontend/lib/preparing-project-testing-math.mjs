@@ -5,8 +5,8 @@ export function testingChange(row, values) {
   throw new Error("Testing Received, Passed and Failed must be non-negative whole numbers.");
  const received=Number(values.received), passed=Number(values.passed), failed=Number(values.failed);
  const oldReceived=Number(row.received||0), oldPassed=Number(row.passed||0), oldFailed=Number(row.failed||0);
- if ([received,passed,failed,oldReceived,oldPassed,oldFailed].some(value=>!Number.isSafeInteger(value)) || passed+failed>received)
-  throw new Error("Passed and Failed must fit within the quantity received for testing.");
+ if ([received,passed,failed,oldReceived,oldPassed,oldFailed].some(value=>!Number.isSafeInteger(value)) || passed+failed!==received)
+  throw new Error("Passed + Failed must equal Testing Received before you can save.");
  // Warehouse Receiving is a subsequent physical handover. Do not invalidate it by
  // lowering a historical Passed quantity below already accepted/allocated stock.
  if (passed<oldPassed && passed < Number(row.accepted||0))
