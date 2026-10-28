@@ -1,4 +1,5 @@
 import "server-only";
+import { randomUUID } from "node:crypto";
 import { select, selectById, rpc } from "./supabase-rest";
 import { getProposal } from "./proposal-kit-service";
 import { assembleSchoolProposalItems, assembleProjectProposalItems } from "./preparing-warehouse-math.mjs";
@@ -62,11 +63,15 @@ export async function receiveWarehouseComponents(body,account) {
   if(kind!=="receipt" && kind!=="adjustment") fail("Invalid voucher type.");
   const rows=Array.isArray(body?.lines)?body.lines:[];
   if(!rows.length||rows.length>200) fail("Select 1-200 component lines.");
-  const lines=rows.map(row=>({itemId:id(row.itemId),accepted:delta(row.accepted,kind==="adjustment"),damaged:delta(row.damaged,kind==="adjustment")}));
-  if(lines.some(row=>!row.accepted&&!row.damaged) || new Set(lines.map(row=>row.itemId)).size!==lines.length) fail("Duplicate or empty receipt lines.");
-  return rpc("erp_preparing_warehouse_receive",{p_project_id:project,p_kind:kind,
-    p_reference:str(body.reference,"warehouse voucher reference",160,true),p_notes:str(body.notes,"notes",1000),
-    p_lines:lines,p_member_id:actor(account)},{profileName:"preparing.warehouse.receive"});
+  const lines=rows.map(row=>({itemId:id(row.itemId),accepted:delta(row.accepted,kind==="adjustment"),damaged:0}));
+  // No damaged stock enters this workflow. Explicitly reject old clients that still send damage.
+  if(rows.some(row=>row.damaged!==undefined&&Number(row.damaged)!==0))fail("Warehouse Receiving accepts passed/usable components only; damaged quantities are not supported.");
+  if(lines.some(row=>!row.accepted) || new Set(lines.map(row=>row.itemId)).size!==lines.length) fail("Duplicate or empty receipt lines.");
+  const name=str(account?.name||account?.username,"ERP account name",160,true);
+  const reference=str(body.reference,"warehouse voucher reference",160)||`WH-${randomUUID()}`;
+  return rpc("erp_preparing_warehouse_receive_v241",{p_project_id:project,p_kind:kind,
+    p_reference:reference,p_notes:str(body.notes,"notes",1000),
+    p_lines:lines,p_member_id:actor(account),p_actor_name:name},{profileName:"preparing.warehouse.receive"});
 }
 export async function allocateWarehouseComponents(body,account) {
   serviceOnly(); const project=await rootProject(body?.projectId);

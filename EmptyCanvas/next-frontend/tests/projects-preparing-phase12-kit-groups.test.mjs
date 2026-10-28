@@ -39,7 +39,7 @@ test('migration includes additive Kit snapshot, receipt-safe initialization and 
 test('Kit editor belongs to Project Components; receipt editor and delete belong to warehouse',()=>{
  assert.match(bom,/pr-kit-group-list/);assert.match(bom,/Edit Qty/);assert.match(bom,/Add Component to/);
  assert.match(bom,/Confirm Remove/);assert.doesNotMatch(bom,/Receiving <input/);
- assert.match(receiving,/disabled=\{!active\|\|busy\}/);assert.match(receiving,/Confirm Delete/);
+ assert.match(receiving,/is-editing/);assert.match(receiving,/Confirm reversal/);
  assert.match(receiving,/kind:"adjustment"/);assert.match(receiving,/Movement History/);
  assert.match(route,/edit_kit/);assert.match(route,/init_kits/);
  assert.match(service,/erp_preparing_edit_project_kit_item/);
