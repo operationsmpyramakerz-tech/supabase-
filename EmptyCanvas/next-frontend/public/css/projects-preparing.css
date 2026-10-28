@@ -1051,3 +1051,69 @@
 .pr-wh-voucher-help{font-size:10px;color:#9a7c59;font-weight:650}
 @media(max-width:1100px){.pr-wh-item--editable{grid-template-columns:1fr}.pr-wh-receiving-control{justify-content:flex-start}.pr-wh-receiving-control>label{flex:0 1 130px}}
 @media(max-width:700px){.pr-kit-group-row{grid-template-columns:minmax(0,1.5fr) 1fr 1fr}.pr-kit-group-row .pr-pbom-row-actions{grid-column:1/-1;justify-content:flex-start}.pr-kit-group-head{padding:12px}.pr-kit-editor-fields .pr-primary{width:100%}.pr-wh-inline-buttons{width:100%}.pr-wh-inline-buttons button{flex:1}.pr-wh-receiving-control>label{flex:1 1 110px}}
+
+
+/* v231 — Project Components: stable Kit accordion and non-overlapping rows.
+   Avoid a second scroll container inside the parent bottom sheet; a fixed-height
+   flex list was shrinking and clipping the contents of expanded Kit cards. */
+.pr-pbom .pr-kit-group-list{
+  display:flex;flex-direction:column;gap:12px;
+  max-height:none;overflow:visible;min-width:0;
+}
+.pr-pbom .pr-kit-group{
+  flex:0 0 auto;min-height:0;min-width:0;height:auto;
+  overflow:hidden;border:1px solid #e9ebef;border-radius:16px;
+  background:#fff;box-shadow:0 3px 12px rgba(17,24,39,.025);
+}
+.pr-pbom .pr-kit-group.is-open{border-color:#edcfb0;box-shadow:0 5px 20px rgba(196,116,37,.055)}
+.pr-pbom .pr-kit-group-head{
+  width:100%;min-width:0;display:flex;align-items:center;gap:14px;
+  padding:16px 18px;min-height:73px;text-align:left;border:0;
+  color:#172033;background:#fff;cursor:pointer;
+}
+.pr-pbom .pr-kit-group.is-open .pr-kit-group-head{background:linear-gradient(105deg,#fff9f3,#fff)}
+.pr-pbom .pr-kit-group-head:focus-visible{outline:2px solid #ef9e4e;outline-offset:-4px}
+.pr-pbom .pr-kit-group-icon{width:40px;height:40px;border-radius:12px;background:#fff1e5;color:#cb7627;flex-shrink:0}
+.pr-pbom .pr-kit-group-title{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px}
+.pr-pbom .pr-kit-group-title strong{font-size:13px;line-height:1.45;white-space:normal;overflow-wrap:anywhere}
+.pr-pbom .pr-kit-group-title small{font-size:10px;line-height:1.35;color:#868d98}
+.pr-pbom .pr-kit-group-count{color:#7c8492;font-size:10px;font-weight:700;padding:7px 10px;border:1px solid #eceef2;border-radius:999px;white-space:nowrap}
+.pr-pbom .pr-kit-group-chevron{flex-shrink:0;transform:none;transition:transform .18s ease;color:#8b929d}
+.pr-pbom .pr-kit-group.is-open .pr-kit-group-chevron{transform:rotate(180deg)}
+.pr-pbom .pr-kit-group-body{padding:14px 16px 16px;border-top:1px solid #f1ebe5;display:flex;flex-direction:column;gap:10px;min-width:0}
+.pr-pbom .pr-kit-group-rows{display:flex;flex-direction:column;gap:9px;min-width:0}
+.pr-pbom .pr-kit-group-row-shell{min-width:0;flex:0 0 auto;border:1px solid #ebedf1;border-radius:13px;background:#fff;overflow:hidden;transition:border-color .15s ease}
+.pr-pbom .pr-kit-group-row-shell:hover{border-color:#e5c5a4}
+.pr-pbom .pr-kit-group-row{
+  border:0;border-radius:0;box-shadow:none;background:transparent;
+  display:grid;grid-template-columns:minmax(0,2.2fr) minmax(72px,.7fr) minmax(100px,.9fr) auto;
+  align-items:center;gap:16px;padding:15px 16px;min-height:80px;min-width:0;
+}
+.pr-pbom .pr-pbom-name{min-width:0;gap:6px}
+.pr-pbom .pr-pbom-name strong{font-size:12px;line-height:1.55;overflow-wrap:anywhere;word-break:normal}
+.pr-pbom .pr-pbom-name small{font-size:10px;color:#98a0ac;line-height:1.4}
+.pr-pbom .pr-pbom-qty{min-width:0;gap:7px}
+.pr-pbom .pr-pbom-qty span{font-size:10px;white-space:normal;line-height:1.4}
+.pr-pbom .pr-pbom-qty b{font-size:14px;line-height:1.35;font-variant-numeric:tabular-nums}
+.pr-pbom .pr-pbom-row-actions{min-width:0;display:flex;align-items:center;justify-content:flex-end;gap:7px;flex-wrap:wrap}
+.pr-pbom .pr-pbom-row-actions .pr-secondary,.pr-pbom .pr-pbom-row-actions .pr-pbom-delete{min-height:35px;padding:7px 11px;font-size:10px!important;border-radius:9px}
+.pr-pbom .pr-kit-group-add{margin:0;min-height:42px;font-size:11px;border-radius:11px}
+.pr-pbom .pr-kit-inline-editor{margin:0;border:0;border-top:1px solid #f0d8b9;border-radius:0;padding:15px 16px;background:#fff9f2}
+.pr-pbom .pr-kit-group-body>.pr-kit-inline-editor{border:1px solid #efcfab;border-radius:12px}
+@media(max-width:850px){
+ .pr-pbom .pr-kit-group-row{grid-template-columns:minmax(0,1.8fr) minmax(75px,.65fr) minmax(90px,.8fr);gap:12px;padding:14px}
+ .pr-pbom .pr-pbom-row-actions{grid-column:1/-1;justify-content:flex-start;padding-top:2px}
+}
+@media(max-width:560px){
+ .pr-pbom .pr-kit-group-head{padding:12px 13px;gap:9px;min-height:65px}
+ .pr-pbom .pr-kit-group-icon{width:34px;height:34px;font-size:19px}
+ .pr-pbom .pr-kit-group-count{font-size:9px;padding:5px 7px}
+ .pr-pbom .pr-kit-group-body{padding:9px;gap:9px}
+ .pr-pbom .pr-kit-group-row{grid-template-columns:minmax(0,1fr) minmax(68px,.45fr);gap:12px;min-height:0;padding:13px}
+ .pr-pbom .pr-pbom-name{grid-column:1/-1}
+ .pr-pbom .pr-pbom-qty{grid-column:auto}
+ .pr-pbom .pr-pbom-row-actions{grid-column:1/-1}
+ .pr-pbom .pr-pbom-row-actions button{flex:1 1 auto}
+ .pr-pbom .pr-kit-editor-fields{align-items:stretch}
+ .pr-pbom .pr-kit-editor-fields label{flex:1 1 100%}
+}
