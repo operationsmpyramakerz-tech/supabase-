@@ -15,8 +15,5 @@ export function testingChange(row, values) {
  if ([receivedDelta,passedDelta,failedDelta].some(value=>Math.abs(value)>1000000))
   throw new Error("Maximum change per component is 1,000,000 units.");
  if (!receivedDelta && !passedDelta && !failedDelta) return null;
- const technicianName=String(values.technicianName||"").trim();
- if (technicianName.length<2 || technicianName.length>160)
-  throw new Error("Enter the testing technician's name (2-160 characters).");
- return {itemId:row.id,receivedDelta,passedDelta,failedDelta,expectedReceived:oldReceived,expectedPassed:oldPassed,expectedFailed:oldFailed,technicianName};
+ return {itemId:row.id,receivedDelta,passedDelta,failedDelta,expectedReceived:oldReceived,expectedPassed:oldPassed,expectedFailed:oldFailed};
 }
