@@ -9,6 +9,7 @@ import TechnicalFollowUp from "./TechnicalFollowUp";
 import FinalSchoolClosing from "./FinalSchoolClosing";
 import ProjectDashboard from "./ProjectDashboard";
 import ProjectKitCartons from "./ProjectKitCartons";
+import ProjectWarehouseReceiving from "./ProjectWarehouseReceiving";
 import { PREPARING_STAGES, PREPARING_STATES, canCompleteStage, schoolProgress } from "../../lib/preparing-workflow";
 
 const clean = value => String(value ?? "").trim();
@@ -79,10 +80,13 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
   const [showClosing, setShowClosing] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
   const [showProjectCartons, setShowProjectCartons] = useState(false);
+  const [showWarehouse, setShowWarehouse] = useState(false);
   const canCreate = featureAllowed(account, "preparing.create");
   const canManage = featureAllowed(account, "preparing.manage");
   const canStage = featureAllowed(account, "preparing.stage_update");
   const canClose = featureAllowed(account, "preparing.close");
+  const canWarehouseReceive = featureAllowed(account, "preparing.warehouse_receive");
+  const canWarehouseAllocate = featureAllowed(account, "preparing.warehouse_allocate");
   const projects = asArray(data.projects);
   const schools = asArray(data.schools);
   const stages = asArray(data.stages);
@@ -191,7 +195,7 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
   function backToParent() {
     cancelFolderHold(); setFolderMenu("");
     if (school) { setSchoolId(""); setQuery(""); setShowComponents(false); setShowDelivery(false); setShowReconciliation(false); setShowTechnical(false); setShowClosing(false); return; }
-    setProjectId(""); setQuery(""); setShowDashboard(false); setShowProjectCartons(false);
+    setProjectId(""); setQuery(""); setShowDashboard(false); setShowProjectCartons(false); setShowWarehouse(false);
   }
   const filteredMembers = asArray(data.members).filter(member => {
     const used = new Set(projectSchools.map(row => clean(row.beneficiary_id)));
@@ -252,9 +256,11 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
       </div>
     </section>}
     {project && !school && <div className="pr-tool-grid pr-project-tools" aria-label="Project tools">
-      <button type="button" className="pr-tool" onClick={()=>setShowProjectCartons(true)}><span className="pr-tool-icon"><Ico name="box" size={22}/></span><span className="pr-tool-label"><strong>Project Kit Cartons</strong><small>01 · Packing</small></span><span className="pr-tool-arrow"><Ico name="arrow" size={18}/></span></button>
-      <button type="button" className="pr-tool" onClick={()=>setShowDashboard(true)}><span className="pr-tool-icon"><Ico name="chart" size={22}/></span><span className="pr-tool-label"><strong>Project Dashboard</strong><small>02 · Reports</small></span><span className="pr-tool-arrow"><Ico name="arrow" size={18}/></span></button>
+      <button type="button" className="pr-tool pr-tool--warehouse" onClick={()=>setShowWarehouse(true)}><span className="pr-tool-icon"><Ico name="clipboard" size={22}/></span><span className="pr-tool-label"><strong>Warehouse Receiving</strong><small>01 · Project stock</small></span><span className="pr-tool-arrow"><Ico name="arrow" size={18}/></span></button>
+      <button type="button" className="pr-tool" onClick={()=>setShowProjectCartons(true)}><span className="pr-tool-icon"><Ico name="box" size={22}/></span><span className="pr-tool-label"><strong>Project Kit Cartons</strong><small>02 · Packing</small></span><span className="pr-tool-arrow"><Ico name="arrow" size={18}/></span></button>
+      <button type="button" className="pr-tool" onClick={()=>setShowDashboard(true)}><span className="pr-tool-icon"><Ico name="chart" size={22}/></span><span className="pr-tool-label"><strong>Project Dashboard</strong><small>03 · Reports</small></span><span className="pr-tool-arrow"><Ico name="arrow" size={18}/></span></button>
     </div>}
+    {project && !school && showWarehouse && <div className="pr-components-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setShowWarehouse(false);}}><section className="pr-components-sheet pr-warehouse-sheet" role="dialog" aria-modal="true" aria-label="Project Warehouse Receiving"><ProjectWarehouseReceiving key={projectId} projectId={projectId} projectName={project.name} canReceive={canWarehouseReceive} canAllocate={canWarehouseAllocate} request={api} onClose={()=>setShowWarehouse(false)}/></section></div>}
     {project && !school && showProjectCartons && <div className="pr-components-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setShowProjectCartons(false);}}><section className="pr-components-sheet" role="dialog" aria-modal="true" aria-label="Project Kit Cartons"><ProjectKitCartons key={projectId} projectId={projectId} projectName={project?.name||""} stageRecords={stages} allowed={canStage} request={api} onClose={()=>{setShowProjectCartons(false);reload().catch(err=>setError(err.message));}}/></section></div>}
     {project && !school && showDashboard && <div className="pr-components-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setShowDashboard(false);}}><section className="pr-components-sheet pr-report-sheet" role="dialog" aria-modal="true" aria-label="Master project dashboard"><ProjectDashboard key={projectId} projectId={projectId} request={api} onClose={()=>setShowDashboard(false)} onOpenSchool={id=>{setShowDashboard(false);setSchoolId(id);setWorkflowFilter("all");setShowComponents(false);setShowDelivery(false);setShowReconciliation(false);setShowTechnical(false);setShowClosing(false);}}/></section></div>}
     {school ? <>

@@ -1,6 +1,6 @@
 // Shared pure workflow definition. No React/server imports so it can be tested directly.
 export const PREPARING_STAGES = Object.freeze([
-  { key: "receiving", title: "Warehouse Receiving", subtitle: "Receive components from the warehouse", team: "operations" },
+  { key: "receiving", title: "School Preparation Intake", subtitle: "Confirm components entering this school’s preparation workflow", team: "operations" },
   { key: "quality", title: "Inventory & QC", subtitle: "Count, inspect and record discrepancies", team: "operations" },
   { key: "preparing", title: "Sorting & Preparing", subtitle: "Sort per school and approved proposal", team: "operations" },
   { key: "packing", title: "Packing & Dispatch", subtitle: "Packing list, labels and shipment readiness", team: "operations" },
