@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { warehouseTotals,demandsForSchool } from "../../lib/preparing-warehouse-math.mjs";
+import { warehouseTotals,demandsForSchool,projectRequired } from "../../lib/preparing-warehouse-math.mjs";
 const number=v=>Number(v)||0;
 const pretty=v=>number(v).toLocaleString("en-US");
 const safeCSV=v=>{const raw=String(v??"");const safe=/^[\s]*[=+@-]/.test(raw)?`'${raw}`:raw;return `"${safe.replaceAll('"','""')}"`;};
@@ -15,7 +15,7 @@ export default function ProjectWarehouseReceiving({projectId,projectName,hasProj
  const [error,setError]=useState(""),[success,setSuccess]=useState("");
  async function reload(){const response=await request(`/warehouse?projectId=${encodeURIComponent(projectId)}`);setState(response);setLoading(false);}
  useEffect(()=>{let active=true;request(`/warehouse?projectId=${encodeURIComponent(projectId)}`).then(v=>{if(active){setState(v);setLoading(false);}}).catch(e=>{if(active){setError(e.message);setLoading(false);}});return()=>{active=false;};},[projectId]);
- const summaries=useMemo(()=>warehouseTotals(state.items||[],state.receiptLines||[],state.allocations||[]),[state]);
+ const summaries=useMemo(()=>warehouseTotals((state.items||[]).map(row=>({...row,required_qty:projectRequired(Number(row.required_qty||0),(state.schools||[]).length)})),state.receiptLines||[],state.allocations||[]),[state]);
  const nameById=useMemo(()=>new Map(state.items.map(row=>[row.id,row.product_name])),[state]);
  const schoolsCaptured=new Set(state.demands.map(row=>row.school_id));
  const uncaptured=state.schools.filter(row=>!schoolsCaptured.has(row.id));

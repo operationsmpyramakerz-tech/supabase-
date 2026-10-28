@@ -1,6 +1,6 @@
 "use client";
 import {useEffect,useMemo,useState} from "react";
-import {warehouseTotals} from "../../lib/preparing-warehouse-math.mjs";
+import {warehouseTotals,projectRequired} from "../../lib/preparing-warehouse-math.mjs";
 
 const empty={items:[],receiptLines:[],allocations:[],demands:[],kitGroups:[],bomAudit:[]};
 const fmt=v=>Number(v||0).toLocaleString("en-US");
@@ -14,7 +14,8 @@ export default function ProjectMasterComponents({project,proposals,allowed,reque
  const [confirm,setConfirm]=useState(null);
  const [expandedGroup,setExpandedGroup]=useState(null);
  const rows=useMemo(()=>warehouseTotals(state.items||[],state.receiptLines||[],state.allocations||[]),[state]);
- const total=rows.reduce((sum,r)=>sum+Number(r.required_qty||0),0);
+ const schoolCount=(state.schools||[]).length;
+ const total=rows.reduce((sum,r)=>sum+projectRequired(Number(r.required_qty||0),schoolCount),0);
  const hasMovements=!!(state.receiptLines?.length||state.allocations?.length||state.demands?.length);
  const needsKitCapture=rows.length>0&&!rows.some(r=>Array.isArray(r.source_kits)&&r.source_kits.length>0)&&!!project.source_proposal_id;
  const groups=useMemo(()=>{
@@ -50,7 +51,7 @@ export default function ProjectMasterComponents({project,proposals,allowed,reque
   {error&&<div className="pr-alert" role="alert">{error}<button type="button" onClick={()=>setError("")} aria-label="Dismiss">×</button></div>}
   {notice&&<div className="pr-manifest-success" role="status">{notice}</div>}
   {loading?<p className="pr-muted">Loading Kits…</p>:<>
-   <div className="pr-pbom-summary"><div><span>Source Proposal</span><strong>{project.source_proposal_name||"Custom project"}</strong></div><div><span>Unique components</span><strong>{fmt(rows.length)}</strong></div><div><span>Project required quantity</span><strong>{fmt(total)}</strong></div></div>
+   <div className="pr-pbom-summary"><div><span>Source Proposal</span><strong>{project.source_proposal_name||"Custom project"}</strong></div><div><span>Unique components</span><strong>{fmt(rows.length)}</strong></div><div><span>Project required · {schoolCount} schools</span><strong>{fmt(total)}</strong></div></div>
    {!rows.length&&!project.source_proposal_id&&allowed&&!hasMovements&&<div className="pr-pbom-import"><strong>Import source Proposal</strong><div className="pr-pbom-import-action"><select value={sourceId} onChange={e=>setSourceId(e.target.value)} aria-label="Source Proposal"><option value="">Select Proposal…</option>{(proposals||[]).map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select><button className="pr-primary" disabled={!sourceId||busy} onClick={()=>submit({action:"attach_proposal",proposalId:sourceId},"Proposal imported.")}>Import Proposal</button></div></div>}
    {needsKitCapture&&<div className="pr-pbom-import"><div><strong>Load Kit Groups from Proposal</strong><small>One-time organization of the existing Master BOM. Warehouse receipts and allocation amounts stay unchanged.</small></div>{allowed&&<button type="button" className="pr-primary" disabled={busy} onClick={()=>submit({action:"init_kits"},"Proposal Kit groups loaded.")}>Load Kit Groups</button>}</div>}
    <div className="pr-pbom-toolbar"><label className="pr-search"><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search within Kits…" aria-label="Search project components"/></label><button type="button" className="pr-secondary" disabled={busy} onClick={()=>{setLoading(true);reload().catch(e=>{setError(e.message);setLoading(false);});}}>Refresh</button></div>
@@ -61,7 +62,7 @@ export default function ProjectMasterComponents({project,proposals,allowed,reque
       return <section key={group.key} className={`pr-kit-group${isOpen?" is-open":""}`}>
         <button type="button" className="pr-kit-group-head" aria-expanded={isOpen} aria-controls={groupItemsId} onClick={()=>setExpandedGroup(isOpen?"__none__":group.key)}>
           <span className="pr-kit-group-icon" aria-hidden="true">▤</span>
-          <span className="pr-kit-group-title"><strong>{group.kitName}</strong><small>{fmt(group.total)} units</small></span>
+          <span className="pr-kit-group-title"><strong>{group.kitName}</strong><small>{fmt(group.total)} units / school · {schoolCount} schools</small></span>
           <span className="pr-kit-group-count">{group.items.length} components</span>
           <span className="pr-kit-group-chevron" aria-hidden="true">⌄</span>
         </button>
@@ -70,8 +71,8 @@ export default function ProjectMasterComponents({project,proposals,allowed,reque
             {group.items.map(({row,qty,kit})=><div key={row.id} className="pr-kit-group-row-shell">
               <div className="pr-kit-group-row">
                 <div className="pr-pbom-name"><strong>{row.product_name}</strong><small>{row.product_id||"No product code"}</small></div>
-                <div className="pr-pbom-qty"><span>Kit Qty</span><b>{fmt(qty)}</b></div>
-                <div className="pr-pbom-qty"><span>Total Required</span><b>{fmt(row.required_qty)}</b></div>
+                <div className="pr-pbom-qty"><span>Kit Qty / School</span><b>{fmt(qty)}</b></div>
+                <div className="pr-pbom-qty"><span>Total Required · {schoolCount} schools</span><b>{fmt(projectRequired(qty,schoolCount))}</b></div>
                 {allowed&&kit&&<div className="pr-pbom-row-actions"><button type="button" className="pr-secondary" onClick={()=>changeQuantity(group,{row,qty})}>Edit Qty</button><button type="button" className="pr-pbom-delete" onClick={()=>{setEditor(null);setConfirm({group,row});}}>Remove</button></div>}
               </div>
               {editor?.kind==="update"&&editor.row?.id===row.id&&editor.group.key===group.key&&<div className="pr-kit-inline-editor" role="group" aria-label={`Edit ${row.product_name} quantity`}>

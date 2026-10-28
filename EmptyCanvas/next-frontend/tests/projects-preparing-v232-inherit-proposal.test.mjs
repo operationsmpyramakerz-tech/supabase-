@@ -15,6 +15,7 @@ const extract = service.slice(service.indexOf('export async function addPreparin
 
 function setup({projectProposal = sourceId, proposals = [{id: sourceId, name: '30 June'}], existing = []} = {}) {
   const writes = [];
+  const bom=[{id:"12345678-1234-4234-8234-123456789013",item_key:"id:motor",product_id:"motor",product_name:"DC Motor",required_qty:3,source_kits:[{kitId:"g2",kitName:"G2",quantity:3}]}];
   const dependencies = {
     serviceOnly: () => {},
     identity: () => 'creator-1',
@@ -22,10 +23,10 @@ function setup({projectProposal = sourceId, proposals = [{id: sourceId, name: '3
     clean: value => String(value ?? '').trim(),
     fail: (message, status = 400) => { const e = new Error(message); e.status = status; throw e; },
     preparingCatalog: async () => ({ members:[{id: memberId, name:'School One', school:'School One'}], proposals }),
-    select: async () => existing.map(beneficiary_id => ({beneficiary_id})),
+    select: async (table) => table === "erp_preparing_warehouse_items" ? bom : existing.map(beneficiary_id => ({beneficiary_id})),
     uuid: id => id,
     SCHOOLS: 'erp_preparing_schools',
-    supabaseRequest: async (path, options) => {writes.push({path,options}); return options.body;},
+    rpc: async (name, payload) => {writes.push({name,payload}); return payload.p_schools.map(s=>({id:"school-row",proposal_id:sourceId,proposal_name:"Original proposal name",...s}));},
   };
   const names = Object.keys(dependencies);
   const add = new Function(...names, `${extract}\nreturn addPreparingSchools;`)(...Object.values(dependencies));
@@ -49,8 +50,11 @@ test('server derives school Proposal from its parent project, not request body',
   const {add, writes} = setup();
   const result = await add(PROJECT_ID, {beneficiaryIds:[memberId]}, {id:'creator-1'});
   assert.equal(result.length,1);
-  assert.equal(result[0].proposal_id, sourceId);
-  assert.equal(result[0].proposal_name,'Original proposal name');
+  assert.equal(writes[0].name,"erp_preparing_add_schools_with_components");
+  assert.equal(writes[0].payload.p_items.length,1);
+  assert.equal(writes[0].payload.p_items[0].planned,3);
+  assert.equal(writes[0].payload.p_items[0].sourceKits[0].kitName,"G2");
+  assert.equal(writes[0].payload.p_schools[0].beneficiaryId,memberId);
   assert.equal(writes.length,1);
 });
 

@@ -80,28 +80,44 @@ export async function archivePreparingProject(id, body, account) {
 export async function addPreparingSchools(projectId, body, account) {
   serviceOnly(); const creator = identity(account);
   const project = await requireProject(projectId);
-  // School Proposal always comes from its project, never from the Add Schools request.
+  // The server chooses the parent Proposal; clients cannot substitute one per school.
   const proposalId = clean(project.source_proposal_id);
   if (!proposalId) fail("Set a source Proposal for this project in Project Components before adding schools.", 409);
   if (body?.proposalId && clean(body.proposalId) !== proposalId)
     fail("School Proposal must match the project's source Proposal.", 409);
   const ids = [...new Set((Array.isArray(body?.beneficiaryIds) ? body.beneficiaryIds : []).map(clean).filter(Boolean))];
   if (!ids.length || ids.length > 100) fail("Select between 1 and 100 beneficiaries.");
-  const [{ members, proposals }, existing] = await Promise.all([
-    preparingCatalog(), select(SCHOOLS, { select: "beneficiary_id", project_id: `eq.${uuid(projectId)}`, limit: "5000" }),
+  const [{ members, proposals }, existing, projectComponents] = await Promise.all([
+    preparingCatalog(),
+    select(SCHOOLS, { select: "beneficiary_id", project_id: `eq.${uuid(projectId)}`, limit: "5000" }),
+    select("erp_preparing_warehouse_items", {select:"*", project_id:`eq.${uuid(projectId)}`, order:"created_at.asc", limit:"1001"}),
   ]);
   const memberMap = new Map(members.map(member => [member.id, member]));
   const proposal = proposals.find(row => row.id === proposalId);
   if (!proposal) fail("The project's source Proposal is no longer available.", 409);
   if (ids.some(id => !memberMap.has(id))) fail("One or more beneficiaries do not exist.");
   const already = new Set((existing || []).map(row => clean(row.beneficiary_id)));
-  const duplicates = ids.filter(id => already.has(id));
-  if (duplicates.length) fail("One or more beneficiaries are already in this project.", 409);
-  // Insert as a single PostgREST request; unique constraints prevent concurrent duplicates.
-  const rows = ids.map(id => ({ project_id: uuid(projectId), beneficiary_id: id,
-    beneficiary_name: memberMap.get(id).name, school_label: memberMap.get(id).school,
-    proposal_id: proposalId, proposal_name: clean(project.source_proposal_name) || proposal.name, created_by_id: creator }));
-  return supabaseRequest(`/${SCHOOLS}`, { method: "POST", headers: { Prefer: "return=representation" }, body: rows });
+  if (ids.some(id => already.has(id))) fail("One or more beneficiaries are already in this project.", 409);
+  // A school takes a FROZEN snapshot of the CURRENT project components, including
+  // manual Kit edits. Existing schools keep their original QC records.
+  const master = (projectComponents || []).filter(row => Number(row.required_qty) > 0);
+  if (!master.length || master.length > 1000 || (projectComponents || []).length > 1000)
+    fail("Project must have between 1 and 1000 components before adding schools.", 409);
+  const items = master.map((row, order) => {
+    const planned = Number(row.required_qty);
+    if (!Number.isSafeInteger(planned) || planned > 1000000)
+      fail("A project's per-school component quantity cannot exceed 1,000,000.", 409);
+    return { itemId:row.id, itemKey:row.item_key, productId:row.product_id,
+      productName:row.product_name, sourceKits:Array.isArray(row.source_kits)?row.source_kits:[],
+      planned, order };
+  });
+  const schools = ids.map(id => ({ beneficiaryId:id, beneficiaryName:memberMap.get(id).name,
+    schoolLabel:memberMap.get(id).school }));
+  // Atomic SQL transaction: create all schools + QC manifests + warehouse demand.
+  // A failure cannot leave school folders with a missing component baseline.
+  return rpc("erp_preparing_add_schools_with_components", {
+    p_project_id:uuid(projectId), p_schools:schools, p_items:items, p_member_id:creator,
+  }, {profileName:"preparing.add-schools-with-components"});
 }
 export async function updatePreparingStage(schoolId, body, account) {
   serviceOnly(); const memberId = identity(account); await requireSchool(schoolId);

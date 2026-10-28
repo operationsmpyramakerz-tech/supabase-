@@ -74,3 +74,14 @@ export function assembleProjectProposalItems(proposalItems) {
     return {...row,sourceKits};
   });
 }
+
+// Project BOM / Kit quantities represent ONE school's plan. The project
+// requirement is a read-time calculation; receipts remain physical stock.
+export function projectRequired(perSchoolQty, schoolCount) {
+  const qty=Number(perSchoolQty), schools=Number(schoolCount);
+  if (!Number.isSafeInteger(qty) || qty<0 || !Number.isSafeInteger(schools) || schools<0)
+    throw new Error("Invalid project requirement input.");
+  const total=qty*schools;
+  if (!Number.isSafeInteger(total)) throw new Error("Project requirement exceeds safe integer range.");
+  return total;
+}
