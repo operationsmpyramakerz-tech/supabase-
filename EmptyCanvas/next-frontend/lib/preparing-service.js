@@ -3,6 +3,7 @@ import { select, selectAll, selectById, insert, updateById, supabaseRequest, rpc
 import { listTeamMembersLite } from "./team-members-service";
 import { listProposals, getProposal } from "./proposal-kit-service";
 import { PREPARING_STAGES, PREPARING_STATES, canCompleteStage, validStage } from "./preparing-workflow";
+import { assembleSchoolProposalItems } from "./preparing-warehouse-math.mjs";
 
 const PROJECTS = "erp_preparing_projects";
 const SCHOOLS = "erp_preparing_schools";
@@ -39,8 +40,19 @@ export async function createPreparingProject(body, account) {
   serviceOnly(); const id = identity(account); const name = clean(body?.name);
   if (name.length < 2 || name.length > 160) fail("Project name must be between 2 and 160 characters.");
   if (clean(body?.description).length > 1000) fail("Description must be under 1000 characters.");
-  return insert(PROJECTS, { name, description: clean(body?.description), created_by_id: id,
-    created_by_name: clean(account?.name || account?.username) });
+  const proposalId = clean(body?.proposalId);
+  if (!proposalId) fail("Select a source Proposal when creating the project.");
+  const { proposals } = await preparingCatalog();
+  if (!proposals.some(row => row.id === proposalId)) fail("Source Proposal is unavailable.", 404);
+  const source = await getProposal(proposalId);
+  if (!source?.items?.length) fail("Source Proposal has no components.", 409);
+  const items = assembleSchoolProposalItems(source.items);
+  // One transaction captures the project and its independent warehouse BOM.
+  return rpc("erp_preparing_create_project_with_bom", {
+    p_name: name, p_description: clean(body?.description), p_source_proposal_id: proposalId,
+    p_source_proposal_name: clean(source.proposal?.name || proposals.find(row => row.id === proposalId)?.name),
+    p_items: items, p_member_id: id, p_member_name: clean(account?.name || account?.username),
+  }, { profileName: "preparing.project-create-with-bom" });
 }
 export async function updatePreparingProject(id, body) {
   serviceOnly(); await requireProject(id);

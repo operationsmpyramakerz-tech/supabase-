@@ -33,7 +33,8 @@ export async function warehouseWorkspace(projectId) {
     paged("erp_preparing_warehouse_receipt_lines",{project_id:`eq.${project}`},"receipt lines",20000,"id.asc"),
     paged("erp_preparing_warehouse_allocations",{project_id:`eq.${project}`},"school assignments",20000,"created_at.desc"),
   ]);
-  return {projectId:project,schools,items,demands,receipts,receiptLines,allocations};
+  const bomAudit=await paged("erp_preparing_warehouse_bom_audit",{project_id:`eq.${project}`},"BOM audit",5000,"changed_at.desc");
+  return {projectId:project,schools,items,demands,receipts,receiptLines,allocations,bomAudit};
 }
 export async function captureWarehouseBOM(body,account) {
   serviceOnly(); const project=await rootProject(body?.projectId);
@@ -85,4 +86,37 @@ export async function allocateWarehouseBatch(body,account) {
   return rpc("erp_preparing_warehouse_allocate_batch",{p_project_id:project,p_school_id:id(body.schoolId),
     p_reference:str(body.reference,"assignment reference",160,true),p_notes:str(body.notes,"notes",1000),
     p_lines:lines,p_member_id:actor(account)},{profileName:"preparing.warehouse.allocate-batch"});
+}
+
+// Source Proposal for an EXISTING, empty project. Never replace a project with stock or school demand.
+async function sourceProposalItems(proposalId) {
+  const sourceId=str(proposalId,"source Proposal",200,true);
+  const proposal=await getProposal(sourceId);
+  if(!proposal?.items?.length) fail("The selected Proposal has no components.",409);
+  return {id:sourceId,name:str(proposal.proposal?.name,"Proposal name",160,true),items:assembleSchoolProposalItems(proposal.items)};
+}
+export async function attachProjectProposal(body,account) {
+  serviceOnly();const project=await rootProject(body?.projectId);
+  const proposal=await sourceProposalItems(body?.proposalId);
+  return rpc("erp_preparing_attach_project_proposal",{
+    p_project_id:project,p_source_proposal_id:proposal.id,p_source_proposal_name:proposal.name,
+    p_items:proposal.items,p_member_id:actor(account),
+  },{profileName:"preparing.warehouse.attach-source"});
+}
+export async function changeProjectBOM(body,account) {
+  serviceOnly();const project=await rootProject(body?.projectId);
+  const action=text(body?.operation);
+  if(!["add","update","delete"].includes(action)) fail("Invalid component action.");
+  const quantity=body?.requiredQty;
+  if(action!=="delete" && (!Number.isSafeInteger(quantity)||quantity<0||quantity>1000000000))
+    fail("Project required quantity must be a whole number between 0 and 1,000,000,000.");
+  const code=action==="delete"?"":str(body?.productId,"component code",500);
+  const name=action==="delete"?"":str(body?.productName,"component name",500,true);
+  const version=action==="add"?null:text(body?.expectedUpdatedAt);
+  if(action!=="add" && (!version || !Number.isFinite(Date.parse(version)))) fail("Refresh this component before changing it.",409);
+  return rpc("erp_preparing_edit_project_bom",{
+    p_project_id:project,p_action:action,p_item_id:action==="add"?null:id(body?.itemId),
+    p_product_id:code,p_product_name:name,p_required_qty:action==="delete"?null:quantity,
+    p_expected_updated_at:version,p_member_id:actor(account),
+  },{profileName:`preparing.warehouse.bom-${action}`});
 }

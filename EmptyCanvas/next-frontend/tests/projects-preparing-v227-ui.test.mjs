@@ -43,5 +43,5 @@ test('school folder styling matches proposals dimensions and works on narrow scr
 test('new JSX remains parseable and CSS route is refreshed',()=>{
   const source=ts.createSourceFile('PreparingClient.jsx',ui,ts.ScriptTarget.Latest,true,ts.ScriptKind.JSX);
   assert.deepEqual(source.parseDiagnostics.map(d=>d.messageText),[]);
-  assert.match(read('app/projects-preparing/page.jsx'),/projects-preparing\.css\?v=228/);
+  assert.match(read('app/projects-preparing/page.jsx'),/projects-preparing\.css\?v=229/);
 });
