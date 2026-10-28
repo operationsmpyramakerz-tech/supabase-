@@ -634,3 +634,295 @@
 @media(max-width:670px) {
   .pr-root--index .pr-visible-count {align-self:flex-start;}
 }
+
+/* v227 folder parity: project-school folders reuse the Proposals visual specification. */
+/* Literal sizing from proposals.css: 154px wide, 144px high, 5px black frame.
+   Apply the same exact Proposals sizing to school folders in the project view. */
+.pr-root--project .pr-folders {
+  grid-template-columns:repeat(auto-fill,minmax(154px,154px));
+  gap:18px 16px; padding:0 0 28px; align-items:start; justify-items:start;
+}
+.pr-root--project .pr-folder-card {
+  width:154px; height:144px; min-height:144px;
+  border:5px solid #101217; border-radius:20px;
+  background:radial-gradient(circle at 23% 5%,rgba(255,255,255,.42) 0 14%,transparent 36%),
+    radial-gradient(circle at 82% 0%,rgba(255,255,255,.18) 0 11%,transparent 32%),
+    linear-gradient(135deg,#ff8a1f 0%,#f97316 46%,#e45512 100%);
+  box-shadow:0 14px 26px rgba(15,23,42,.12);
+}
+.pr-root--project .pr-folder-card:hover,
+.pr-root--project .pr-folder-card:focus-within {
+  transform:translateY(-2px); box-shadow:0 20px 34px rgba(15,23,42,.16);
+}
+.pr-root--project .pr-folder-main {
+  inset:0; width:100%; height:100%; border-radius:15px; overflow:hidden;
+}
+.pr-root--project .pr-folder-main::before {
+  height:86px; border-radius:0 0 15px 15px;
+  background:#272727; box-shadow:inset 0 1px 0 rgba(255,255,255,.07);
+}
+.pr-root--project .pr-folder-main::after {
+  top:43px;left:0;width:130px;height:28px;
+  border-radius:0 13px 0 0;
+  clip-path:polygon(0 0,83px 0,130px 100%,100% 100%,0 100%);
+  background:#272727;
+}
+.pr-root--project .pr-folder-figure {
+  top:16px; width:118px; height:68px;
+}
+.pr-root--project .pr-folder-paper {
+  top:0; width:50px; height:54px; border-radius:7px;
+  border:1px solid rgba(15,23,42,.05);
+  background:linear-gradient(180deg,#fff,#fafafa);
+  box-shadow:0 14px 24px rgba(15,23,42,.16);
+}
+.pr-root--project .pr-folder-paper::before {
+  left:8px;right:8px;top:10px;height:3px;
+  box-shadow:0 10px 0 rgba(203,213,225,.42),0 20px 0 rgba(203,213,225,.32);
+}
+.pr-root--project .pr-folder-paper.left {left:9px;transform:rotate(-6deg);}
+.pr-root--project .pr-folder-paper.middle {left:34px;top:-4px;transform:rotate(1deg);}
+.pr-root--project .pr-folder-paper.right {right:9px;transform:rotate(7deg);}
+.pr-root--project .pr-folder-copy {top:70px;left:11px;right:31px;}
+.pr-root--project .pr-folder-copy strong {
+  font-size:.72rem; line-height:1.03; margin-bottom:3px; letter-spacing:-.015em;
+  font-weight:900;
+}
+.pr-root--project .pr-folder-copy em {font-size:.55rem;line-height:1.05;}
+.pr-root--project .pr-folder-foot {
+  left:11px;right:7px;bottom:10px;gap:4px;font-size:.58rem;line-height:1;
+}
+.pr-root--project .pr-folder-foot svg {width:10px;height:10px;}
+.pr-root--project .pr-folder-menu-trigger {
+  top:64px;right:7px;width:17px;height:17px;min-width:17px;min-height:17px;
+  border-radius:50%;background:rgba(255,255,255,.10);opacity:0;
+  transition:opacity .15s ease,background .15s ease;
+}
+.pr-root--project .pr-folder-menu-trigger svg {width:12px;height:12px;}
+.pr-root--project .pr-folder-card:hover .pr-folder-menu-trigger,
+.pr-root--project .pr-folder-menu-trigger:focus-visible,
+.pr-root--project .pr-folder-menu-trigger[aria-expanded="true"] {opacity:1;}
+.pr-root--project .pr-folder-menu {top:89px;right:6px;}
+@media(hover:none) {
+  .pr-root--project .pr-folder-menu-trigger {opacity:.9;}
+}
+@media(max-width:670px) {
+  .pr-root--project .pr-header {flex-direction:row;align-items:center;flex-wrap:wrap;}
+  .pr-root--project .pr-index-controls {align-items:stretch;gap:11px;}
+  .pr-root--project .pr-project-tabs {display:flex;width:100%;overflow-x:auto;flex-wrap:nowrap;scrollbar-width:none;}
+  .pr-root--project .pr-project-tabs::-webkit-scrollbar {display:none;}
+  .pr-root--project .pr-project-tab {flex:0 0 auto;padding:0 11px;}
+  .pr-root--project .pr-index-search {max-width:100%;width:100%;}
+  .pr-root--project .pr-folders {grid-template-columns:repeat(auto-fill,minmax(154px,154px));gap:16px 14px;}
+  .pr-root--project .pr-folder-card {width:154px;height:144px;min-height:144px;border-radius:20px;}
+  .pr-root--project .pr-folder-main {border-radius:15px;}
+  .pr-root--project .pr-folder-main::before {height:86px;border-radius:0 0 15px 15px;}
+  .pr-root--project .pr-folder-main::after {top:43px;width:130px;height:28px;clip-path:polygon(0 0,83px 0,130px 100%,100% 100%,0 100%);}
+  .pr-root--project .pr-folder-figure {top:16px;transform:translateX(-50%) scale(1);}
+  .pr-root--project .pr-folder-copy {top:70px;left:11px;right:31px;}
+  .pr-root--project .pr-folder-copy strong {font-size:.72rem;}
+  .pr-root--project .pr-folder-copy em {font-size:.55rem;}
+  .pr-root--project .pr-folder-foot {left:11px;right:7px;bottom:10px;font-size:.58rem;}
+  .pr-root--project .pr-folder-menu-trigger {top:64px;right:7px;}
+  .pr-root--project .pr-folder-menu {top:89px;right:6px;}
+}
+@media(max-width:430px) {
+  .pr-root--project .pr-header {align-items:flex-start;}
+  .pr-root--project .pr-create-project {min-height:43px;padding:0 14px;}
+  .pr-root--project .pr-top-actions>.pr-icon {height:43px;width:43px;min-width:43px;}
+}
+
+
+/* v227 — project and school pages (index v226 deliberately unchanged).
+   Non-destructive: UI-only, separate from shipment, closing, and approval logic. */
+.pr-root--project,.pr-root--school {
+  --pr-orange:#f28c28;--pr-ink:#121a2b;--pr-muted:#7b8495;--pr-border:#e7eaf0;
+  padding-top:17px;color:var(--pr-ink);
+}
+.pr-root--project .pr-header,.pr-root--school .pr-header {
+  align-items:center;gap:20px;margin-bottom:25px;
+}
+.pr-root--project .pr-headline h1,.pr-root--school .pr-headline h1 {
+  font-size:clamp(24px,2.4vw,32px);font-weight:850;letter-spacing:-.045em;
+  color:#111827;line-height:1.16;
+}
+.pr-root--project .pr-back,.pr-root--school .pr-back {
+  width:max-content;display:inline-flex;align-items:center;gap:9px;
+  color:#8e6b4d;font-size:12px!important;font-weight:720;
+  transition:color .18s ease,transform .18s ease;
+}
+.pr-root--project .pr-back:hover,.pr-root--school .pr-back:hover {color:#ea7f1d;transform:translateX(-2px);}
+.pr-root--project .pr-top-actions,.pr-root--school .pr-top-actions {gap:9px;}
+.pr-root--project .pr-top-actions>.pr-icon,.pr-root--school .pr-top-actions>.pr-icon {
+  border:1px solid #e6e8ed;background:#fff;width:45px;height:45px;min-width:45px;min-height:45px;
+  border-radius:15px;color:#465062;box-shadow:0 5px 16px rgba(18,25,40,.04);
+}
+.pr-root--project .pr-top-actions>.pr-icon:hover,.pr-root--school .pr-top-actions>.pr-icon:hover {background:#fff8f1;border-color:#f9c998;}
+.pr-root--project .pr-top-actions .pr-primary {
+  height:46px;min-height:46px;padding:0 20px;border-radius:14px;border:1px solid #101727;
+  background:#111827;color:#fff;font-weight:780;font-size:12px!important;box-shadow:0 9px 20px rgba(17,24,39,.13);
+}
+.pr-root--project .pr-top-actions .pr-primary:hover {background:#252f43;transform:translateY(-1px);}
+.pr-root--project .pr-top-actions .pr-secondary {height:45px;min-height:45px;border-radius:14px;padding:0 17px;}
+
+/* Unified summary instead of 4 counters + 2 duplicated school tiles. */
+.pr-summary-card {
+  position:relative;isolation:isolate;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.04fr);
+  gap:24px;align-items:center;margin:0 0 24px;padding:24px 27px;
+  background:linear-gradient(135deg,#fff 0%,#fff 50%,#fffaf6 100%);
+  border:1px solid #ebe8e5;border-radius:24px;
+  box-shadow:0 10px 30px rgba(17,24,39,.04);overflow:hidden;
+}
+.pr-summary-card::before {
+  content:"";position:absolute;inset:0 auto 0 0;width:5px;
+  background:linear-gradient(180deg,#fdb65f,#f47618);z-index:-1;
+}
+.pr-summary-card--school {grid-template-columns:minmax(0,1.08fr) minmax(0,1fr);}
+.pr-summary-lead {display:flex;align-items:center;gap:22px;min-width:0;}
+.pr-summary-ring {
+  --pr-percent:0%;flex:0 0 105px;width:105px;height:105px;
+  padding:10px;display:grid;place-items:center;border-radius:50%;
+  background:conic-gradient(#f28c28 var(--pr-percent),#f1f2f5 0);
+  box-shadow:0 8px 16px rgba(19,26,43,.04);
+}
+.pr-summary-ring::before {
+  content:"";grid-area:1/1;width:100%;height:100%;border-radius:50%;background:#fff;
+  box-shadow:inset 0 0 0 1px rgba(21,27,45,.025);
+}
+.pr-summary-ring>span {grid-area:1/1;z-index:1;font-size:23px;color:#121827;font-weight:870;letter-spacing:-.055em;}
+.pr-summary-title {display:flex;flex-direction:column;gap:10px;min-width:0;flex:1;}
+.pr-summary-overline {font-size:10px!important;font-weight:850;color:#b76c31;letter-spacing:.11em;}
+.pr-summary-title>strong {font-size:clamp(23px,2.25vw,32px);font-weight:850;color:#111827;letter-spacing:-.045em;line-height:1.12;}
+.pr-summary-title>strong span {color:#848b98;font-size:15px;font-weight:630;letter-spacing:-.02em;}
+.pr-summary-title .pr-meter {height:7px;max-width:215px;background:#ebeef2;}
+.pr-summary-title .pr-meter>span {background:linear-gradient(90deg,#fbb45b,#ef7e1d);}
+.pr-summary-metrics {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));min-width:0;}
+.pr-summary-metric {display:flex;flex-direction:column;gap:8px;align-items:flex-start;padding:13px 20px;border-left:1px solid #edeef1;min-width:0;}
+.pr-summary-metric>span {font-size:11px;color:#818998;font-weight:650;}
+.pr-summary-metric>strong {font-size:30px;font-weight:840;letter-spacing:-.05em;line-height:1.05;color:#182134;}
+.pr-summary-school-details {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);align-items:stretch;gap:16px;min-width:0;}
+.pr-summary-source {display:flex;flex-direction:column;justify-content:center;gap:9px;min-width:0;padding:12px 20px;border-left:1px solid #edeef1;}
+.pr-summary-source>span {color:#818998;font-size:11px;font-weight:650;}
+.pr-summary-source>strong {font-size:14px;line-height:1.4;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.pr-summary-milestones {display:flex;flex-direction:column;justify-content:center;gap:9px;min-width:0;}
+.pr-summary-milestones>span {display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;color:#626b7b;}
+.pr-summary-milestones svg {color:#ed8827;flex:none;}
+.pr-summary-milestones b {margin-left:auto;padding:6px 9px;border:1px solid #e9eaf0;border-radius:999px;background:#f4f5f8;color:#677181;font-size:10px;white-space:nowrap;}
+.pr-summary-milestones b.is-done {border-color:#d3f0e0;background:#e8f8ef;color:#157b56;}
+
+.pr-root--project .pr-section-bar,.pr-root--school .pr-section-heading {margin-bottom:16px;}
+.pr-root--project .pr-section-bar h2,.pr-root--school .pr-section-heading h2 {font-size:17px;font-weight:820;color:#141c2c;letter-spacing:-.025em;}
+.pr-root--project .pr-section-bar>div {display:flex;gap:12px;align-items:center;}
+.pr-section-count {font-size:10px;font-weight:760;color:#788193;background:#f5f6f8;padding:6px 10px;border-radius:99px;white-space:nowrap;}
+.pr-root--project .pr-search {height:44px;max-width:275px;border-radius:14px;border-color:#eaecf0;box-shadow:0 4px 12px rgba(15,23,42,.025);}
+.pr-root--project .pr-search:focus-within {border-color:#f4a25a;box-shadow:0 0 0 3px rgba(244,139,35,.09);}
+
+/* Project and school action cards use one system. */
+.pr-root--project .pr-project-tools {grid-template-columns:repeat(2,minmax(0,1fr));gap:13px;margin-bottom:29px;}
+.pr-root--school .pr-school-tools {grid-template-columns:repeat(3,minmax(0,1fr));gap:13px;margin-bottom:28px;}
+.pr-root--project .pr-tool,.pr-root--school .pr-tool {
+  position:relative;min-width:0;min-height:100px;gap:16px;padding:18px;
+  border-radius:19px;border:1px solid #e9ebef;background:#fff;
+  box-shadow:0 8px 23px rgba(17,24,39,.032);
+  transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease,background .18s ease;
+}
+.pr-root--project .pr-tool:hover,.pr-root--school .pr-tool:hover {background:#fffcf9;border-color:#f6c897;box-shadow:0 13px 27px rgba(24,32,48,.09);transform:translateY(-2px);}
+.pr-root--project .pr-tool:active,.pr-root--school .pr-tool:active {transform:translateY(0);}
+.pr-root--project .pr-tool-icon,.pr-root--school .pr-tool-icon {
+  height:50px;width:50px;border-radius:15px;color:#d87b29;background:linear-gradient(145deg,#fff6ed,#fff0e1);
+  border:1px solid #ffefdf;flex:none;
+}
+.pr-tool-label {display:flex;flex:1;flex-direction:column;gap:7px;min-width:0;}
+.pr-tool-label strong {display:block;font-size:13px!important;font-weight:800;line-height:1.32;color:#172033;overflow-wrap:anywhere;}
+.pr-tool-label small {display:block;font-size:10px;color:#929aaa;font-weight:650;}
+.pr-tool-arrow {display:grid;place-items:center;width:27px;height:27px;border-radius:50%;color:#9da5b2;background:#f6f7f9;flex:none;transition:transform .18s ease,background .18s ease,color .18s ease;}
+.pr-tool-arrow svg {flex:none;}
+.pr-tool:hover .pr-tool-arrow {transform:translateX(2px);background:#fff0e3;color:#e78b34;}
+.pr-workspace-heading {display:flex;align-items:center;justify-content:space-between;gap:12px;}
+
+/* Fresh sequential stage layout and functional status filters. */
+.pr-workflow-top {display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;margin:14px 0 16px;}
+.pr-root--school .pr-workflow-heading {margin:0;display:flex;align-items:center;gap:12px;}
+.pr-workflow-tabs {display:inline-flex;align-items:center;gap:4px;padding:4px;border-radius:14px;border:1px solid #ebeef1;background:#f7f8fa;max-width:100%;overflow-x:auto;scrollbar-width:none;}
+.pr-workflow-tabs::-webkit-scrollbar {display:none;}
+.pr-workflow-tab {display:inline-flex;align-items:center;gap:8px;min-height:36px;padding:0 13px;border-radius:10px;color:#657083;background:transparent;border:0;font-size:11px!important;font-weight:760;white-space:nowrap;}
+.pr-workflow-tab:hover:not(.is-active) {background:#fff;}
+.pr-workflow-tab.is-active {background:#111827;color:#fff;box-shadow:0 4px 10px rgba(17,24,39,.14);}
+.pr-workflow-tab span {font-size:10px;padding:3px 6px;border-radius:6px;background:#e9ebef;color:#596273;}
+.pr-workflow-tab.is-active span {background:#ffbc7a;color:#141c2b;}
+.pr-root--school .pr-stage-list {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px;}
+.pr-root--school .pr-stage {
+  position:relative;min-height:85px;padding:15px 17px;gap:13px;
+  border:1px solid #e9ebef;border-radius:17px;background:#fff;
+  box-shadow:0 6px 18px rgba(17,24,39,.022);
+  transition:border-color .18s ease,box-shadow .18s ease,transform .18s ease;
+}
+.pr-root--school .pr-stage:hover {transform:translateY(-1px);border-color:#f2be8c;box-shadow:0 9px 24px rgba(24,32,48,.07);}
+.pr-root--school .pr-stage-number {width:43px;height:43px;flex:0 0 43px;border-radius:14px;font-weight:820;font-size:12px;background:#f4f5f8;color:#7d8796;}
+.pr-root--school .pr-stage.in_progress .pr-stage-number {background:#fff0df;color:#d57723;}
+.pr-root--school .pr-stage.completed .pr-stage-number {background:#e5f8ee;color:#158059;}
+.pr-root--school .pr-stage.blocked .pr-stage-number {background:#fff0ed;color:#bf4a35;}
+.pr-root--school .pr-stage-body {min-width:0;gap:6px;}
+.pr-root--school .pr-stage-body strong {font-size:12px;font-weight:800;color:#182235;line-height:1.25;}
+.pr-root--school .pr-stage-body small {font-size:10px;font-weight:580;color:#9aa1ad;}
+.pr-root--school .pr-stage-body em {max-width:100%;font-size:10px;color:#ae6f35;}
+.pr-root--school .pr-status {padding:6px 9px;font-size:9px;min-width:0;font-weight:760;}
+.pr-root--school .pr-stage-arrow {color:#bbc1cb;}
+.pr-root--school .pr-stage.completed {border-color:#d9ede3;}
+.pr-root--school .pr-stage.blocked {border-color:#f3dbd6;}
+
+/* Shared refinement for inner files/sheets: improve consistency without changing handlers. */
+.pr-components-sheet,.pr-sheet {box-shadow:0 -8px 48px rgba(11,18,33,.12);}
+.pr-components-sheet .pr-primary,.pr-sheet .pr-primary {border-radius:12px;font-weight:760;}
+.pr-components-sheet .pr-secondary,.pr-sheet .pr-secondary {border-radius:12px;font-weight:730;}
+.pr-components-sheet button:focus-visible,.pr-sheet button:focus-visible {outline:2px solid #f28c28;outline-offset:2px;}
+.pr-component-entry,.pr-carton-detail,.pr-closing-check {border-color:#e9ebf0!important;box-shadow:0 3px 14px rgba(19,28,45,.025);}
+
+@media(max-width:1120px) {
+  .pr-summary-card {grid-template-columns:1fr;gap:18px;}
+  .pr-summary-metrics {border-top:1px solid #eceef1;padding-top:12px;}
+  .pr-summary-metric:first-child {border-left:0;}
+  .pr-summary-source {border-left:0;padding-left:0;}
+  .pr-root--school .pr-school-tools {grid-template-columns:repeat(2,minmax(0,1fr));}
+}
+@media(max-width:750px) {
+  .pr-root--project,.pr-root--school {padding:12px 13px 110px;}
+  .pr-root--project .pr-header,.pr-root--school .pr-header {align-items:flex-start;flex-wrap:wrap;margin-bottom:18px;gap:10px;}
+  .pr-root--project .pr-top-actions,.pr-root--school .pr-top-actions {justify-content:flex-start;}
+  .pr-root--project .pr-headline h1,.pr-root--school .pr-headline h1 {font-size:24px;}
+  .pr-summary-card {padding:20px 17px;gap:16px;border-radius:20px;margin-bottom:20px;}
+  .pr-summary-ring {width:87px;height:87px;flex-basis:87px;padding:8px;}
+  .pr-summary-ring>span {font-size:20px;}
+  .pr-summary-lead {gap:16px;}
+  .pr-summary-title>strong {font-size:26px;}
+  .pr-summary-title>strong span {font-size:12px;}
+  .pr-summary-metric {padding:8px 11px;}
+  .pr-summary-metric>strong {font-size:24px;}
+  .pr-summary-school-details {grid-template-columns:1fr;border-top:1px solid #eceef1;padding-top:11px;gap:11px;}
+  .pr-summary-milestones {gap:7px;}
+  .pr-root--project .pr-project-tools,.pr-root--school .pr-school-tools {gap:9px;}
+  .pr-root--project .pr-tool,.pr-root--school .pr-tool {min-height:90px;padding:13px;gap:9px;border-radius:16px;}
+  .pr-root--project .pr-tool-icon,.pr-root--school .pr-tool-icon {width:42px;height:42px;border-radius:13px;}
+  .pr-tool-label strong {font-size:11px!important;}
+  .pr-tool-arrow {display:none;}
+  .pr-workflow-top {align-items:stretch;flex-direction:column;gap:12px;}
+  .pr-workflow-tabs {width:100%;}
+  .pr-root--school .pr-stage-list {grid-template-columns:1fr;gap:9px;}
+}
+@media(max-width:490px) {
+  .pr-root--project .pr-top-actions .pr-primary {padding:0 12px;min-height:43px;height:43px;}
+  .pr-root--project .pr-top-actions .pr-secondary {min-height:43px;height:43px;padding:0 11px;}
+  .pr-root--project .pr-top-actions>.pr-icon,.pr-root--school .pr-top-actions>.pr-icon {height:43px;width:43px;min-width:43px;min-height:43px;}
+  .pr-root--school .pr-school-tools {grid-template-columns:1fr;}
+  .pr-root--project .pr-project-tools {grid-template-columns:1fr;}
+  .pr-root--school .pr-tool,.pr-root--project .pr-tool {min-height:73px;}
+  .pr-root--project .pr-section-bar {align-items:stretch;flex-direction:column;}
+  .pr-root--project .pr-search {width:100%;max-width:none;}
+  .pr-root--school .pr-stage {padding:12px;gap:9px;min-height:74px;}
+  .pr-root--school .pr-status {font-size:9px;padding:5px 7px;}
+}
+@media(prefers-reduced-motion:reduce) {
+  .pr-root--project .pr-tool,.pr-root--school .pr-tool,.pr-root--school .pr-stage {transition:none;}
+}
+/* Prevent the root's own horizontal padding from expanding the page beyond 100%. */
+.pr-root {box-sizing:border-box;max-width:100%;}

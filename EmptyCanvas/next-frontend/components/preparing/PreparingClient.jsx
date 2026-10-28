@@ -59,6 +59,7 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
   const [sheet, setSheet] = useState("");
   const [query, setQuery] = useState("");
   const [projectFilter, setProjectFilter] = useState("all");
+  const [workflowFilter, setWorkflowFilter] = useState("all");
   const [projectName, setProjectName] = useState("");
   const [projectDescription, setProjectDescription] = useState("");
   const [selectedMembers, setSelectedMembers] = useState([]);
@@ -164,11 +165,11 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
   function folderKeyDown(event, key) {
     if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) folderContextMenu(event, key);
   }
-  function openProjectFolder(id) { cancelFolderHold(); suppressFolderClick.current = false; setFolderMenu(""); setProjectId(id); setSchoolId(""); setQuery(""); }
+  function openProjectFolder(id) { cancelFolderHold(); suppressFolderClick.current = false; setFolderMenu(""); setProjectId(id); setSchoolId(""); setWorkflowFilter("all"); setQuery(""); }
   function openSchoolFolder(id, view = "") {
     cancelFolderHold(); suppressFolderClick.current = false; setFolderMenu(""); setSchoolId(id);
     setShowComponents(view === "components"); setShowDelivery(view === "delivery");
-    setShowTechnical(view === "technical"); setShowReconciliation(view === "returns"); setShowClosing(view === "closing");
+    setShowTechnical(view === "technical"); setShowReconciliation(view === "returns"); setShowClosing(view === "closing"); setWorkflowFilter("all");
   }
   function editProjectFolder(row) {
     cancelFolderHold(); suppressFolderClick.current = false; setFolderMenu(""); setProjectId(row.id); setSchoolId("");
@@ -211,7 +212,12 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
     return true;
   });
   const schoolFiltered = projectSchools.filter(row => `${row.beneficiary_name} ${row.school_label} ${row.proposal_name}`.toLowerCase().includes(query.toLowerCase()));
-  return <div className={`pr-root ${!project ? "pr-root--index" : ""}`}>
+  const workflowTabs = [{ key:"all", label:"All stages", count:PREPARING_STAGES.length },
+    { key:"operations", label:"Operations", count:PREPARING_STAGES.filter(stage=>stage.team === "operations").length },
+    { key:"followup", label:"Technical follow-up", count:PREPARING_STAGES.filter(stage=>stage.team === "followup").length }];
+  const visibleWorkflowStages = PREPARING_STAGES.map((stage, index)=>({stage,index})).filter(({stage})=>workflowFilter === "all" || stage.team === workflowFilter);
+  const schoolPercent = progress ? Math.round(progress.completed * 100 / (progress.total || 1)) : 0;
+  return <div className={`pr-root ${!project ? "pr-root--index" : school ? "pr-root--school" : "pr-root--project"}`}>
     <div className="pr-header">
       <div className="pr-headline">
         {project && <button type="button" className="pr-back" onClick={backToParent}><Ico name="back" size={18}/>{school ? project.name : "Projects"}</button>}
@@ -233,51 +239,62 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
       </div>
       <label className="pr-search pr-index-search"><Ico name="search" size={17}/><input aria-label="Search projects" placeholder="Search projects…" value={query} onChange={event=>setQuery(event.target.value)}/></label>
     </div>}
-    {project && <div className="pr-metrics">
-      {(school ? [
-        ["Stages completed", `${progress.completed} / ${progress.total}`],
-        ["Remaining", progress.total - progress.completed],
-        ["Delivery", progress.delivered ? "Done" : "Pending"],
-        ["Closing", progress.closed ? "Closed" : "Open"],
-      ] : project ? [
-        ["Schools", projectSchools.length], ["Delivered", projectSummaries.get(project.id)?.delivered || 0],
-        ["Closed", projectSummaries.get(project.id)?.closed || 0], ["Progress", `${projectProgress}%`],
-      ] : [
-        ["Projects", totals.projects], ["Schools", totals.schools], ["Delivered", totals.delivered], ["Closed", totals.closed],
-      ]).map(([name, count]) => <div className="pr-metric" key={name}><span>{name}</span><strong>{count}</strong></div>)}
-    </div>}
-    {project && !school && <div className="pr-tool-grid pr-project-tools">
-      <button type="button" className="pr-tool" onClick={()=>setShowProjectCartons(true)}><span className="pr-tool-icon"><Ico name="box" size={20}/></span><strong>Project Kit Cartons</strong><Ico name="arrow" size={17}/></button>
-      <button type="button" className="pr-tool" onClick={()=>setShowDashboard(true)}><span className="pr-tool-icon"><Ico name="chart" size={20}/></span><strong>Project Dashboard</strong><Ico name="arrow" size={17}/></button>
+    {project && !school && <section className="pr-summary-card pr-summary-card--project" aria-label="Project overview">
+      <div className="pr-summary-lead">
+        <div className="pr-summary-ring" style={{"--pr-percent": `${projectProgress}%`}} aria-label={`${projectProgress}% project progress`}>
+          <span>{projectProgress}%</span>
+        </div>
+        <div className="pr-summary-title"><span className="pr-summary-overline">PROJECT PROGRESS</span><strong>{projectCompletedStages} <span>/ {projectSchools.length * PREPARING_STAGES.length} stages</span></strong><Meter value={projectCompletedStages} max={projectSchools.length * PREPARING_STAGES.length}/></div>
+      </div>
+      <div className="pr-summary-metrics">
+        {[["Schools", projectSchools.length], ["Delivered", projectSummaries.get(project.id)?.delivered || 0], ["Closed", projectSummaries.get(project.id)?.closed || 0]].map(([name,count]) =>
+          <div className="pr-summary-metric" key={name}><span>{name}</span><strong>{count}</strong></div>)}
+      </div>
+    </section>}
+    {project && !school && <div className="pr-tool-grid pr-project-tools" aria-label="Project tools">
+      <button type="button" className="pr-tool" onClick={()=>setShowProjectCartons(true)}><span className="pr-tool-icon"><Ico name="box" size={22}/></span><span className="pr-tool-label"><strong>Project Kit Cartons</strong><small>01 · Packing</small></span><span className="pr-tool-arrow"><Ico name="arrow" size={18}/></span></button>
+      <button type="button" className="pr-tool" onClick={()=>setShowDashboard(true)}><span className="pr-tool-icon"><Ico name="chart" size={22}/></span><span className="pr-tool-label"><strong>Project Dashboard</strong><small>02 · Reports</small></span><span className="pr-tool-arrow"><Ico name="arrow" size={18}/></span></button>
     </div>}
     {project && !school && showProjectCartons && <div className="pr-components-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setShowProjectCartons(false);}}><section className="pr-components-sheet" role="dialog" aria-modal="true" aria-label="Project Kit Cartons"><ProjectKitCartons key={projectId} projectId={projectId} projectName={project?.name||""} stageRecords={stages} allowed={canStage} request={api} onClose={()=>{setShowProjectCartons(false);reload().catch(err=>setError(err.message));}}/></section></div>}
-    {project && !school && showDashboard && <div className="pr-components-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setShowDashboard(false);}}><section className="pr-components-sheet pr-report-sheet" role="dialog" aria-modal="true" aria-label="Master project dashboard"><ProjectDashboard key={projectId} projectId={projectId} request={api} onClose={()=>setShowDashboard(false)} onOpenSchool={id=>{setShowDashboard(false);setSchoolId(id);setShowComponents(false);setShowDelivery(false);setShowReconciliation(false);setShowTechnical(false);setShowClosing(false);}}/></section></div>}
+    {project && !school && showDashboard && <div className="pr-components-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setShowDashboard(false);}}><section className="pr-components-sheet pr-report-sheet" role="dialog" aria-modal="true" aria-label="Master project dashboard"><ProjectDashboard key={projectId} projectId={projectId} request={api} onClose={()=>setShowDashboard(false)} onOpenSchool={id=>{setShowDashboard(false);setSchoolId(id);setWorkflowFilter("all");setShowComponents(false);setShowDelivery(false);setShowReconciliation(false);setShowTechnical(false);setShowClosing(false);}}/></section></div>}
     {school ? <>
-      <div className="pr-school-info">
-        <div><span>PROPOSAL</span><strong>{school.proposal_name}</strong></div>
-        <div><span>OVERALL PROGRESS</span><strong>{progress.completed} / {progress.total} stages</strong><Meter value={progress.completed} max={progress.total}/></div>
-      </div>
-      <div className="pr-section-heading"><h2>Workspace</h2></div>
-      <div className="pr-tool-grid pr-school-tools">{tools.map(tool => <button className="pr-tool" type="button" key={tool.key} onClick={tool.open}>
-        <span className="pr-tool-icon"><Ico name={tool.icon} size={20}/></span><strong>{tool.name}</strong><Ico name="arrow" size={17}/>
+      <section className="pr-summary-card pr-summary-card--school" aria-label="School progress overview">
+        <div className="pr-summary-lead">
+          <div className="pr-summary-ring" style={{"--pr-percent": `${schoolPercent}%`}} aria-label={`${schoolPercent}% school progress`}><span>{schoolPercent}%</span></div>
+          <div className="pr-summary-title"><span className="pr-summary-overline">SCHOOL READINESS</span><strong>{progress.completed} <span>/ {progress.total} stages</span></strong><Meter value={progress.completed} max={progress.total}/></div>
+        </div>
+        <div className="pr-summary-school-details">
+          <div className="pr-summary-source"><span>Linked proposal</span><strong title={school.proposal_name}>{school.proposal_name}</strong></div>
+          <div className="pr-summary-milestones"><span><Ico name="truck" size={16}/> Delivery <b className={progress.delivered ? "is-done" : ""}>{progress.delivered ? "Delivered" : "Pending"}</b></span>
+            <span><Ico name="shield" size={16}/> Closing <b className={progress.closed ? "is-done" : ""}>{progress.closed ? "Closed" : "Open"}</b></span></div>
+        </div>
+      </section>
+      <div className="pr-section-heading pr-workspace-heading"><h2>Workspace</h2><span className="pr-section-count">{tools.length} tools</span></div>
+      <div className="pr-tool-grid pr-school-tools" aria-label="School workspaces">{tools.map((tool,index) => <button className="pr-tool" type="button" key={tool.key} onClick={tool.open}>
+        <span className="pr-tool-icon"><Ico name={tool.icon} size={21}/></span><span className="pr-tool-label"><strong>{tool.name}</strong><small>{String(index + 1).padStart(2,"0")} · Workspace</small></span><span className="pr-tool-arrow"><Ico name="arrow" size={18}/></span>
       </button>)}</div>
       {showComponents && <div className="pr-components-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setShowComponents(false);}}><section className="pr-components-sheet" role="dialog" aria-modal="true" aria-label="Components and QC"><ComponentsManifest key={school.id} schoolId={school.id} proposalName={school.proposal_name} allowed={canStage} request={api} onClose={()=>setShowComponents(false)}/></section></div>}
       {showDelivery && <div className="pr-components-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setShowDelivery(false);}}><section className="pr-components-sheet" role="dialog" aria-modal="true" aria-label="Packing and delivery"><PackingDelivery key={school.id} schoolId={school.id} schoolName={school.beneficiary_name} proposalName={school.proposal_name} stageStatuses={schoolStages} allowed={canStage} request={api} onClose={()=>{setShowDelivery(false);reload().catch(err=>setError(err.message));}}/></section></div>}
       {showTechnical && <div className="pr-components-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setShowTechnical(false);setShowClosing(false);}}><section className="pr-components-sheet" role="dialog" aria-modal="true" aria-label="Technical installation follow-up"><TechnicalFollowUp key={school.id} schoolId={school.id} schoolName={school.beneficiary_name} stageStatuses={schoolStages} allowed={canStage} request={api} onClose={()=>{setShowTechnical(false);setShowClosing(false);reload().catch(err=>setError(err.message));}}/></section></div>}
       {showReconciliation && <div className="pr-components-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setShowReconciliation(false);}}><section className="pr-components-sheet" role="dialog" aria-modal="true" aria-label="Returns and replacements"><ReturnsReplacements key={school.id} schoolId={school.id} schoolName={school.beneficiary_name} stageStatuses={schoolStages} allowed={canStage} request={api} onOpenDelivery={()=>{setShowReconciliation(false);setShowDelivery(true);}} onClose={()=>{setShowReconciliation(false);reload().catch(err=>setError(err.message));}}/></section></div>}
       {showClosing && <div className="pr-components-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setShowClosing(false);}}><section className="pr-components-sheet" role="dialog" aria-modal="true" aria-label="Final school closing"><FinalSchoolClosing key={school.id} schoolId={school.id} schoolName={school.beneficiary_name} stageStatuses={schoolStages} canEdit={canStage} canApprove={canClose} request={api} onClose={()=>{setShowClosing(false);reload().catch(err=>setError(err.message));}}/></section></div>}
-      <div className="pr-section-heading pr-workflow-heading"><h2>Preparing Workflow</h2><span>{progress.completed} of {progress.total}</span></div>
-      <div className="pr-stage-list">{PREPARING_STAGES.map((stage, index) => {
+      <div className="pr-workflow-top">
+        <div className="pr-section-heading pr-workflow-heading"><h2>Preparing Workflow</h2><span className="pr-section-count">{progress.completed} / {progress.total} complete</span></div>
+        <div className="pr-workflow-tabs" role="group" aria-label="Filter workflow stages">{workflowTabs.map(tab =>
+          <button type="button" key={tab.key} className={`pr-workflow-tab ${workflowFilter === tab.key ? "is-active" : ""}`}
+            aria-pressed={workflowFilter === tab.key} onClick={()=>setWorkflowFilter(tab.key)}>{tab.label}<span>{tab.count}</span></button>)}</div>
+      </div>
+      <div className="pr-stage-list">{visibleWorkflowStages.map(({stage,index}) => {
         const entry = schoolStages.find(row => row.stage_key === stage.key);
         const status = entry?.status || "not_started";
         return <button type="button" key={stage.key} className={`pr-stage ${status}`} onClick={() => openStage(stage)}>
           <span className="pr-stage-number">{status === "completed" ? <Ico name="check" size={19}/> : String(index + 1).padStart(2,"0")}</span>
-          <span className="pr-stage-body"><strong>{stage.title}</strong>{entry?.notes && <em>{entry.notes}</em>}</span>
+          <span className="pr-stage-body"><strong>{stage.title}</strong><small>{stage.team === "operations" ? "Operations execution" : "Technical coordination"}</small>{entry?.notes && <em>{entry.notes}</em>}</span>
           <span className={`pr-status ${status}`}>{stateLabels[status]}</span><span className="pr-stage-arrow"><Ico name="arrow" size={18}/></span>
         </button>;
       })}</div>
     </> : <>
-      <div className="pr-section-bar"><div><h2>{project ? "Schools" : "Project Folders"}</h2></div>{project ? <label className="pr-search"><Ico name="search" size={17}/><input aria-label="Search schools" placeholder="Search schools…" value={query} onChange={event=>setQuery(event.target.value)}/></label> : <span className="pr-visible-count">{projectFiltered.length} {projectFiltered.length === 1 ? "folder" : "folders"}</span>}</div>
+      <div className="pr-section-bar"><div><h2>{project ? "Schools" : "Project Folders"}</h2>{project && <span className="pr-section-count">{projectSchools.length} schools</span>}</div>{project ? <label className="pr-search"><Ico name="search" size={17}/><input aria-label="Search schools" placeholder="Search schools…" value={query} onChange={event=>setQuery(event.target.value)}/></label> : <span className="pr-visible-count">{projectFiltered.length} {projectFiltered.length === 1 ? "folder" : "folders"}</span>}</div>
       <div className="pr-folders" aria-label={project ? "School folders" : "Project folders"}>
         {!project ? projectFiltered.map(row => {
           const summary = projectSummaries.get(row.id) || { total:0,closed:0,delivered:0 };
