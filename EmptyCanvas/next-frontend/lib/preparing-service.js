@@ -62,17 +62,21 @@ export async function updatePreparingProject(id, body) {
   return updateById(PROJECTS, uuid(id), { name, description: clean(body?.description), updated_at: new Date().toISOString() });
 }
 export async function addPreparingSchools(projectId, body, account) {
-  serviceOnly(); const creator = identity(account); await requireProject(projectId);
+  serviceOnly(); const creator = identity(account);
+  const project = await requireProject(projectId);
+  // School Proposal always comes from its project, never from the Add Schools request.
+  const proposalId = clean(project.source_proposal_id);
+  if (!proposalId) fail("Set a source Proposal for this project in Project Components before adding schools.", 409);
+  if (body?.proposalId && clean(body.proposalId) !== proposalId)
+    fail("School Proposal must match the project's source Proposal.", 409);
   const ids = [...new Set((Array.isArray(body?.beneficiaryIds) ? body.beneficiaryIds : []).map(clean).filter(Boolean))];
   if (!ids.length || ids.length > 100) fail("Select between 1 and 100 beneficiaries.");
-  const proposalId = clean(body?.proposalId);
-  if (!proposalId) fail("Select a proposal.");
   const [{ members, proposals }, existing] = await Promise.all([
     preparingCatalog(), select(SCHOOLS, { select: "beneficiary_id", project_id: `eq.${uuid(projectId)}`, limit: "5000" }),
   ]);
   const memberMap = new Map(members.map(member => [member.id, member]));
   const proposal = proposals.find(row => row.id === proposalId);
-  if (!proposal) fail("The selected proposal no longer exists.", 404);
+  if (!proposal) fail("The project's source Proposal is no longer available.", 409);
   if (ids.some(id => !memberMap.has(id))) fail("One or more beneficiaries do not exist.");
   const already = new Set((existing || []).map(row => clean(row.beneficiary_id)));
   const duplicates = ids.filter(id => already.has(id));
@@ -80,7 +84,7 @@ export async function addPreparingSchools(projectId, body, account) {
   // Insert as a single PostgREST request; unique constraints prevent concurrent duplicates.
   const rows = ids.map(id => ({ project_id: uuid(projectId), beneficiary_id: id,
     beneficiary_name: memberMap.get(id).name, school_label: memberMap.get(id).school,
-    proposal_id: proposal.id, proposal_name: proposal.name, created_by_id: creator }));
+    proposal_id: proposalId, proposal_name: clean(project.source_proposal_name) || proposal.name, created_by_id: creator }));
   return supabaseRequest(`/${SCHOOLS}`, { method: "POST", headers: { Prefer: "return=representation" }, body: rows });
 }
 export async function updatePreparingStage(schoolId, body, account) {

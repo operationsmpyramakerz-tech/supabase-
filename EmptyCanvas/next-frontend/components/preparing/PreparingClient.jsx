@@ -65,7 +65,6 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
   const [projectName, setProjectName] = useState("");
   const [projectDescription, setProjectDescription] = useState("");
   const [selectedMembers, setSelectedMembers] = useState([]);
-  const [proposalId, setProposalId] = useState("");
   const [memberQuery, setMemberQuery] = useState("");
   const [stageKey, setStageKey] = useState("");
   const [stageStatus, setStageStatus] = useState("not_started");
@@ -193,7 +192,7 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
   useEffect(() => () => { if (longPressTimer.current !== null) clearTimeout(longPressTimer.current); }, []);
   function openNewProject() { setProjectName(""); setProjectDescription(""); setProjectSourceId(""); setSheet("project"); }
   function openEditProject() { setProjectName(project?.name || ""); setProjectDescription(project?.description || ""); setSheet("edit_project"); }
-  function openSchools() { setSelectedMembers([]); setMemberQuery(""); setProposalId(""); setSheet("schools"); }
+  function openSchools() { setSelectedMembers([]); setMemberQuery(""); setSheet("schools"); }
   function openStage(stage) { const record = schoolStages.find(row => row.stage_key === stage.key); setStageKey(stage.key); setStageStatus(record?.status || "not_started"); setStageNotes(record?.notes || ""); setSheet("stage"); }
   function backToParent() {
     cancelFolderHold(); setFolderMenu("");
@@ -367,8 +366,8 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
       <label className="pr-field">Description<textarea rows={4} maxLength={1000} value={projectDescription} placeholder="STEAM Labs · 11 schools" onChange={event=>setProjectDescription(event.target.value)}/></label>
     </Sheet>}
     {sheet === "schools" && <Sheet title="Add Beneficiaries" onClose={()=>setSheet("")}
-      footer={<><button className="pr-secondary" onClick={()=>setSheet("")}>Cancel</button><button className="pr-primary" disabled={busy || !proposalId || !selectedMembers.length} onClick={()=>save(async()=>api("","POST",{action:"add_schools",projectId,proposalId,beneficiaryIds:selectedMembers}))}>{busy ? "Adding…" : `Add ${selectedMembers.length} Schools`}</button></>}>
-      <label className="pr-field">Source Proposal<select value={proposalId} onChange={event=>setProposalId(event.target.value)}><option value="">Select proposal…</option>{asArray(data.proposals).map(proposal=><option key={proposal.id} value={proposal.id}>{proposal.name} ({proposal.itemsCount} items)</option>)}</select></label>
+      footer={<><button className="pr-secondary" onClick={()=>setSheet("")}>Cancel</button><button className="pr-primary" disabled={busy || !project?.source_proposal_id || !selectedMembers.length} onClick={()=>save(async()=>api("","POST",{action:"add_schools",projectId,beneficiaryIds:selectedMembers}))}>{busy ? "Adding…" : `Add ${selectedMembers.length} Schools`}</button></>}>
+      {!project?.source_proposal_id && <p className="pr-hint" role="alert">Add a source Proposal to this project in Project Components before adding schools.</p>}
       <label className="pr-field">Beneficiary users / schools<input value={memberQuery} placeholder="Search beneficiaries…" onChange={event=>setMemberQuery(event.target.value)}/></label>
       <div className="pr-choose-tools"><span>{selectedMembers.length} selected</span><button type="button" className="pr-link" onClick={()=>setSelectedMembers([])}>Clear selection</button></div>
       <div className="pr-member-list">{filteredMembers.map(member=><label className="pr-member" key={member.id}><input type="checkbox" checked={selectedMembers.includes(member.id)} onChange={event=>setSelectedMembers(previous=>event.target.checked ? [...previous,member.id] : previous.filter(id=>id!==member.id))}/><span><strong>{member.name}</strong>{member.school && <small>{member.school}</small>}</span></label>)}{!filteredMembers.length && <p className="pr-muted">No available users match the search.</p>}</div>
