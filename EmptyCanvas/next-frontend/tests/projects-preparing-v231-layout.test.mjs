@@ -26,7 +26,7 @@ test('Kit layout allows natural height without nested scrolling and prevents com
  assert.match(css, /@media\(max-width:560px\)/);
 });
 test('Page bumps its stylesheet URL so production browsers fetch the fixed layout', () => {
- assert.match(read('app/projects-preparing/page.jsx'), /projects-preparing\.css\?v=233/);
+ assert.match(read('app/projects-preparing/page.jsx'), /projects-preparing\.css\?v=235/);
 });
 test('revised JSX parses cleanly', () => {
  const parsed = ts.createSourceFile('ProjectMasterComponents.jsx', jsx, ts.ScriptTarget.Latest, true, ts.ScriptKind.JSX);

@@ -1131,3 +1131,22 @@
 .pr-delete-notice p {font-size:12px;line-height:1.6;margin:6px 0 0;color:#76494f;}
 /* Keep the two-action folder menu inside the page, including the leftmost card. */
 .pr-root--index .pr-folder-menu {right:auto;left:0;min-width:154px;}
+
+/* Project Testing v235 — styled consistently with Warehouse Receiving. */
+.pr-pt-list{max-height:55vh;min-height:0;overflow-y:auto;scrollbar-width:none;}
+.pr-pt-row{display:grid;grid-template-columns:minmax(155px,1.12fr) minmax(280px,1.55fr) minmax(275px,1.35fr);align-items:center;gap:15px;padding:14px 16px;border:1px solid #e7e9ee;border-radius:15px;background:#fff;min-height:96px;flex:none;}
+.pr-pt-row.is-editing{border-color:#f2b375;box-shadow:0 4px 18px #d9922820;background:#fffdfa;}
+.pr-pt-figures{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;min-width:0;}
+.pr-pt-figures span{display:flex;flex-direction:column;gap:6px;min-width:0;}
+.pr-pt-figures small{font-size:10px;color:#949ba7;line-height:1.35;}
+.pr-pt-figures b{font-size:14px;font-weight:800;}
+.pr-pt-pass{color:#14845c;}.pr-pt-fail{color:#bd4e37;}.pr-pt-warning{color:#bd4e37!important;line-height:1.45;}
+.pr-pt-controls{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;align-items:end;gap:8px;min-width:0;}
+.pr-pt-controls label{display:flex;flex-direction:column;gap:6px;min-width:0;font-size:10px;color:#818997;font-weight:740;}
+.pr-pt-controls input{width:100%;padding:10px 8px;font-size:12px;font-weight:750;border-radius:11px;border:1px solid #e3e6ed;background:#fff;}
+.pr-pt-controls input:disabled{background:#f5f6f8;color:#6c7685;opacity:1;}
+.pr-pt-row.is-editing input{border-color:#eca25c;}
+.pr-pt-actions{display:flex;align-items:end;gap:5px;}
+.pr-pt-actions button{padding:10px 11px;border-radius:10px;white-space:nowrap;font-size:11px;}
+@media(max-width:1090px){.pr-pt-row{grid-template-columns:1fr;gap:13px}.pr-pt-controls{max-width:550px;}}
+@media(max-width:600px){.pr-pt-figures{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.pr-pt-row{padding:13px}.pr-pt-controls{grid-template-columns:repeat(2,minmax(0,1fr))}.pr-pt-actions{grid-column:1/-1}.pr-pt-actions button{flex:1}}
