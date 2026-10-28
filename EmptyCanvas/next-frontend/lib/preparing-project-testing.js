@@ -1,5 +1,6 @@
 import "server-only";
 import { selectById, rpc } from "./supabase-rest";
+import { randomUUID } from "node:crypto";
 const idPattern=/^[\da-f]{8}-[\da-f]{4}-[1-8][\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/i;
 function fail(message,status=400){const error=new Error(message);error.status=status;throw error;}
 function checkProjectId(value){const id=String(value||"").trim();if(!idPattern.test(id))fail("Invalid project ID.");return id;}
@@ -10,7 +11,7 @@ export async function recordProjectTesting(body,account){
  const id=await projectId(body?.projectId);
  const actor=String(account?.id||account?.memberId||account?.teamMemberId||"").trim();
  if(!actor)fail("A verified user is required.",401);
- const reference=String(body?.reference||"").trim(),notes=String(body?.notes||"").trim();
+ const reference=String(body?.reference||"").trim() || `QC-${randomUUID()}`,notes=String(body?.notes||"").trim();
  if(reference.length<2||reference.length>160||notes.length>1000)fail("Enter a test record reference (2-160 characters) and optional notes.");
  const raw=body?.lines;
  if(!Array.isArray(raw)||!raw.length||raw.length>200)fail("Select 1-200 component rows.");
