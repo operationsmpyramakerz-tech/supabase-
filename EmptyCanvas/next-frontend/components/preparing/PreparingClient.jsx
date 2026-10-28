@@ -39,6 +39,7 @@ function Ico({ name, size = 20 }) {
     wrench: <><path d="M14 7a5 5 0 0 0-7 7L3 18l3 3 4-4a5 5 0 0 0 7-7l-4 4-3-3z"/></>,
     return: <><path d="m9 14-5-5 5-5M4 9h11a5 5 0 0 1 0 10h-3"/></>,
     shield: <><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></>,
+    trash: <><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 10v7M14 10v7"/></>,
   };
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name] || paths.folder}</svg>;
 }
@@ -64,6 +65,8 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
   const [workflowFilter, setWorkflowFilter] = useState("all");
   const [projectName, setProjectName] = useState("");
   const [projectDescription, setProjectDescription] = useState("");
+  const [actionProjectId, setActionProjectId] = useState("");
+  const [deleteConfirmName, setDeleteConfirmName] = useState("");
   const [selectedMembers, setSelectedMembers] = useState([]);
   const [memberQuery, setMemberQuery] = useState("");
   const [stageKey, setStageKey] = useState("");
@@ -177,9 +180,13 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
     setShowComponents(view === "components"); setShowDelivery(view === "delivery");
     setShowTechnical(view === "technical"); setShowReconciliation(view === "returns"); setShowClosing(view === "closing"); setWorkflowFilter("all");
   }
-  function editProjectFolder(row) {
-    cancelFolderHold(); suppressFolderClick.current = false; setFolderMenu(""); setProjectId(row.id); setSchoolId("");
-    setProjectName(row.name || ""); setProjectDescription(row.description || ""); setSheet("edit_project");
+  function renameProjectFolder(row) {
+    cancelFolderHold(); suppressFolderClick.current = false; setFolderMenu("");
+    setActionProjectId(row.id); setProjectName(row.name || ""); setSheet("rename_project");
+  }
+  function deleteProjectFolder(row) {
+    cancelFolderHold(); suppressFolderClick.current = false; setFolderMenu("");
+    setActionProjectId(row.id); setDeleteConfirmName(""); setSheet("delete_project");
   }
   useEffect(() => {
     if (!folderMenu) return;
@@ -191,7 +198,6 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
   }, [folderMenu]);
   useEffect(() => () => { if (longPressTimer.current !== null) clearTimeout(longPressTimer.current); }, []);
   function openNewProject() { setProjectName(""); setProjectDescription(""); setProjectSourceId(""); setSheet("project"); }
-  function openEditProject() { setProjectName(project?.name || ""); setProjectDescription(project?.description || ""); setSheet("edit_project"); }
   function openSchools() { setSelectedMembers([]); setMemberQuery(""); setSheet("schools"); }
   function openStage(stage) { const record = schoolStages.find(row => row.stage_key === stage.key); setStageKey(stage.key); setStageStatus(record?.status || "not_started"); setStageNotes(record?.notes || ""); setSheet("stage"); }
   function backToParent() {
@@ -232,7 +238,7 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
       <div className="pr-top-actions">
         <button type="button" className="pr-icon" title="Refresh projects" aria-label="Refresh projects" onClick={() => save(async () => {})} disabled={busy}><Ico name="refresh"/></button>
         {!project && canCreate && <button type="button" className="pr-primary pr-create-project" onClick={openNewProject}><Ico name="plus" size={18}/> New Project</button>}
-        {project && !school && canManage && <><button type="button" className="pr-secondary" onClick={openEditProject}><Ico name="edit" size={16}/> Edit</button><button type="button" className="pr-primary" onClick={openSchools}><Ico name="plus" size={17}/> Add Schools</button></>}
+        {project && !school && canManage && <button type="button" className="pr-primary" onClick={openSchools}><Ico name="plus" size={17}/> Add Schools</button>}
       </div>
     </div>
     {error && <div className="pr-alert" role="alert"><span>{error}</span><button onClick={() => setError("")} aria-label="Dismiss"><Ico name="close" size={16}/></button></div>}
@@ -311,22 +317,20 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
           const key = `project:${row.id}`;
           const menuOpen = folderMenu === key;
           return <article className={`pr-folder-card ${menuOpen ? "is-menu-open" : ""}`} key={row.id}>
-            <button type="button" className="pr-folder-main" onPointerDown={event=>startFolderHold(event,key)} onPointerMove={moveFolderHold}
+            <button type="button" className="pr-folder-main" onPointerDown={event=>{if(canManage)startFolderHold(event,key);}} onPointerMove={moveFolderHold}
               onPointerUp={cancelFolderHold} onPointerCancel={cancelFolderHold} onPointerLeave={cancelFolderHold}
-              onContextMenu={event=>folderContextMenu(event,key)} onKeyDown={event=>folderKeyDown(event,key)}
+              onContextMenu={event=>{if(canManage)folderContextMenu(event,key);}} onKeyDown={event=>{if(canManage)folderKeyDown(event,key);}}
               onClick={()=>{ if(suppressFolderClick.current){suppressFolderClick.current=false;return;}openProjectFolder(row.id); }}
-              aria-label={`Open project ${row.name}. Press and hold for actions.`} aria-haspopup="menu" aria-expanded={menuOpen}>
+              aria-label={`Open project ${row.name}${canManage ? ". Press and hold for actions." : ""}`} aria-haspopup={canManage ? "menu" : undefined} aria-expanded={canManage ? menuOpen : undefined}>
               <span className="pr-folder-figure" aria-hidden="true"><span className="pr-folder-paper left"/><span className="pr-folder-paper middle"/><span className="pr-folder-paper right"/></span>
               <span className="pr-folder-copy"><strong>{row.name}</strong><em>{summary.closed} of {summary.total} closed</em></span>
               <span className="pr-folder-foot"><Ico name="folder" size={11}/>{summary.total} {summary.total === 1 ? "school" : "schools"}</span>
             </button>
-            <button type="button" className="pr-folder-menu-trigger" aria-label={`Actions for ${row.name}`} aria-haspopup="menu" aria-expanded={menuOpen}
-              onClick={()=>{cancelFolderHold();suppressFolderClick.current=false;setFolderMenu(menuOpen ? "" : key);}}><Ico name="more" size={14}/></button>
-            {menuOpen && <div className="pr-folder-menu" role="menu" aria-label={`${row.name} actions`}>
-              <button type="button" role="menuitem" onClick={()=>openProjectFolder(row.id)}>Open Project</button>
-              {canManage && <button type="button" role="menuitem" onClick={()=>editProjectFolder(row)}>Edit Project</button>}
-              <button type="button" role="menuitem" onClick={()=>{openProjectFolder(row.id);setShowDashboard(true);}}>Project Dashboard</button>
-              <button type="button" role="menuitem" onClick={()=>{openProjectFolder(row.id);setShowProjectCartons(true);}}>Kit Cartons</button>
+            {canManage && <button type="button" className="pr-folder-menu-trigger" aria-label={`Actions for ${row.name}`} aria-haspopup="menu" aria-expanded={menuOpen}
+              onClick={()=>{cancelFolderHold();suppressFolderClick.current=false;setFolderMenu(menuOpen ? "" : key);}}><Ico name="more" size={14}/></button>}
+            {menuOpen && canManage && <div className="pr-folder-menu" role="menu" aria-label={`${row.name} actions`}>
+              <button type="button" role="menuitem" onClick={()=>renameProjectFolder(row)}><Ico name="edit" size={15}/> Rename</button>
+              <button type="button" role="menuitem" className="pr-folder-menu-danger" onClick={()=>deleteProjectFolder(row)}><Ico name="trash" size={15}/> Delete</button>
             </div>}
           </article>;
         }) : schoolFiltered.map(row => {
@@ -359,11 +363,20 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
         {!project && !projectFiltered.length && <div className="pr-empty"><Ico name="folder" size={36}/><h3>{projects.length ? "No matching projects" : "No project folders yet"}</h3>{canCreate && !projects.length && <button className="pr-primary" onClick={openNewProject}>Create first project</button>}</div>}
       </div>
     </>}
-    {(sheet === "project" || sheet === "edit_project") && <Sheet title={sheet === "project" ? "New Project" : "Edit Project"} onClose={()=>setSheet("")}
-      footer={<><button className="pr-secondary" onClick={()=>setSheet("")}>Cancel</button><button className="pr-primary" disabled={busy || projectName.trim().length < 2 || (sheet === "project" && !projectSourceId)} onClick={()=>save(async()=>api("", sheet === "project" ? "POST" : "PATCH", { action:"create_project", projectId, name:projectName, description:projectDescription, ...(sheet === "project" ? {proposalId:projectSourceId}: {}) }))}>{busy ? "Saving…" : "Save Project"}</button></>}>
+    {sheet === "project" && <Sheet title="New Project" onClose={()=>setSheet("")}
+      footer={<><button className="pr-secondary" onClick={()=>setSheet("")}>Cancel</button><button className="pr-primary" disabled={busy || projectName.trim().length < 2 || !projectSourceId} onClick={()=>save(async()=>api("", "POST", {action:"create_project", name:projectName, description:projectDescription, proposalId:projectSourceId}))}>{busy ? "Saving…" : "Save Project"}</button></> }>
       <label className="pr-field">Project name<input autoFocus maxLength={160} value={projectName} placeholder="30 June Schools" onChange={event=>setProjectName(event.target.value)}/></label>
-      {sheet === "project" ? <label className="pr-field">Source Proposal<select required value={projectSourceId} onChange={event=>setProjectSourceId(event.target.value)}><option value="">Select project Proposal…</option>{asArray(data.proposals).map(row=><option key={row.id} value={row.id}>{row.name} ({row.itemsCount} components)</option>)}</select><span className="pr-form-meta">The selected Proposal creates the project's component list and warehouse required quantities immediately.</span></label> : <div className="pr-form-meta">Source Proposal: {project?.source_proposal_name || "Legacy project. Use Project Components to import an initial Proposal if no warehouse records exist."}</div>}
+      <label className="pr-field">Source Proposal<select required value={projectSourceId} onChange={event=>setProjectSourceId(event.target.value)}><option value="">Select project Proposal…</option>{asArray(data.proposals).map(row=><option key={row.id} value={row.id}>{row.name} ({row.itemsCount} components)</option>)}</select><span className="pr-form-meta">The selected Proposal creates the project's component list and warehouse required quantities immediately.</span></label>
       <label className="pr-field">Description<textarea rows={4} maxLength={1000} value={projectDescription} placeholder="STEAM Labs · 11 schools" onChange={event=>setProjectDescription(event.target.value)}/></label>
+    </Sheet>}
+    {sheet === "rename_project" && <Sheet title="Rename Project" onClose={()=>setSheet("")}
+      footer={<><button type="button" className="pr-secondary" onClick={()=>setSheet("")}>Cancel</button><button type="button" className="pr-primary" disabled={busy || projectName.trim().length < 2 || projectName.trim().length > 160 || projectName.trim() === projects.find(row=>row.id===actionProjectId)?.name} onClick={()=>save(async()=>api("", "PATCH", {action:"rename_project",projectId:actionProjectId,name:projectName,expectedName:projects.find(row=>row.id===actionProjectId)?.name}))}>{busy ? "Renaming…" : "Save Name"}</button></>}>
+      <label className="pr-field">Project name<input autoFocus maxLength={160} value={projectName} onChange={event=>setProjectName(event.target.value)}/></label>
+    </Sheet>}
+    {sheet === "delete_project" && <Sheet title="Delete Project" onClose={()=>setSheet("")}
+      footer={<><button type="button" className="pr-secondary" onClick={()=>setSheet("")}>Cancel</button><button type="button" className="pr-primary pr-danger-button" disabled={busy || !actionProjectId || deleteConfirmName !== (projects.find(row=>row.id===actionProjectId)?.name || "")} onClick={()=>save(async()=>{await api("", "DELETE", {action:"delete_project",projectId:actionProjectId,confirmName:deleteConfirmName});setActionProjectId("");setDeleteConfirmName("");})}>{busy ? "Deleting…" : "Delete Project"}</button></>}>
+      <div className="pr-delete-notice" role="alert"><Ico name="trash" size={20}/><div><strong>Remove this project from your workspace?</strong><p>Its folder will disappear from Projects. Schools, warehouse receipts, allocations, deliveries, and audit records will be preserved for recovery and compliance.</p></div></div>
+      <label className="pr-field">Type the project name to confirm: <strong>{projects.find(row=>row.id===actionProjectId)?.name || ""}</strong><input autoComplete="off" autoFocus value={deleteConfirmName} onChange={event=>setDeleteConfirmName(event.target.value)} placeholder="Project name"/></label>
     </Sheet>}
     {sheet === "schools" && <Sheet title="Add Beneficiaries" onClose={()=>setSheet("")}
       footer={<><button className="pr-secondary" onClick={()=>setSheet("")}>Cancel</button><button className="pr-primary" disabled={busy || !project?.source_proposal_id || !selectedMembers.length} onClick={()=>save(async()=>api("","POST",{action:"add_schools",projectId,beneficiaryIds:selectedMembers}))}>{busy ? "Adding…" : `Add ${selectedMembers.length} Schools`}</button></>}>

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDirectAccountGate } from "../../../lib/products-auth";
 import { featureGate } from "../../../lib/feature-permissions-server";
-import { preparingWorkspace, preparingCatalog, createPreparingProject, updatePreparingProject, addPreparingSchools } from "../../../lib/preparing-service";
+import { preparingWorkspace, preparingCatalog, createPreparingProject, renamePreparingProject, archivePreparingProject, addPreparingSchools } from "../../../lib/preparing-service";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -35,6 +35,15 @@ export async function POST(request) {
 }
 export async function PATCH(request) {
   const gate = await access("manage"); if (!gate.ok) return denied(gate);
-  try { const body = await bodyFor(request); return answer({ ok: true, result: await updatePreparingProject(body.projectId, body) }); }
+  try { const body = await bodyFor(request); if (body.action !== "rename_project") return answer({ok:false,error:"Unknown action."},400); return answer({ ok: true, result: await renamePreparingProject(body.projectId, body,gate.account) }); }
   catch (error) { return failed(error); }
+}
+
+export async function DELETE(request) {
+  const gate = await access("manage"); if (!gate.ok) return denied(gate);
+  try {
+    const body = await bodyFor(request);
+    if (body.action !== "delete_project") return answer({ok:false,error:"Unknown action."},400);
+    return answer({ok:true,result:await archivePreparingProject(body.projectId,body,gate.account)});
+  } catch (error) { return failed(error); }
 }

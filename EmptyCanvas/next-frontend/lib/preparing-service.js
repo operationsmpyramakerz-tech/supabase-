@@ -1,5 +1,5 @@
 import "server-only";
-import { select, selectAll, selectById, insert, updateById, supabaseRequest, rpc } from "./supabase-rest";
+import { select, selectAll, selectById, insert, supabaseRequest, rpc } from "./supabase-rest";
 import { listTeamMembersLite } from "./team-members-service";
 import { listProposals, getProposal } from "./proposal-kit-service";
 import { PREPARING_STAGES, PREPARING_STATES, canCompleteStage, validStage } from "./preparing-workflow";
@@ -17,8 +17,8 @@ function serviceOnly() {
 function accountId(account) { return clean(account?.id || account?.memberId || account?.teamMemberId); }
 function identity(account) { const id = accountId(account); if (!id) fail("A verified member is required.", 401); return id; }
 function uuid(id) { if (!/^[\da-f]{8}-[\da-f]{4}-[1-8][\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/i.test(clean(id))) fail("Invalid ID."); return clean(id); }
-async function requireProject(id) { const row = await selectById(PROJECTS, uuid(id)); if (!row) fail("Project not found.", 404); return row; }
-async function requireSchool(id) { const row = await selectById(SCHOOLS, uuid(id)); if (!row) fail("School not found.", 404); return row; }
+async function requireProject(id) { const row = await selectById(PROJECTS, uuid(id)); if (!row || row.deleted_at) fail("Project not found.", 404); return row; }
+async function requireSchool(id) { const row = await selectById(SCHOOLS, uuid(id)); if (!row) fail("School not found.", 404); await requireProject(row.project_id); return row; }
 
 export async function preparingCatalog() {
   serviceOnly();
@@ -28,13 +28,16 @@ export async function preparingCatalog() {
 }
 export async function preparingWorkspace() {
   serviceOnly();
-  const projects = await selectAll(PROJECTS, { limit: 500, order: "created_at.desc", profileName: "preparing.projects" });
+  const projects = await select(PROJECTS, {select:"*",deleted_at:"is.null",limit:500,order:"created_at.desc"}, {profileName:"preparing.projects"});
   // Small bounded project workspace. All records are protected by the module-level page/feature gate.
   const [schools, stages] = await Promise.all([
     selectAll(SCHOOLS, { limit: 5000, order: "created_at.asc", profileName: "preparing.schools" }),
     selectAll(STAGES, { limit: 5000, order: "updated_at.asc", profileName: "preparing.stages" }),
   ]);
-  return { projects, schools, stages };
+  const visibleProjectIds = new Set((projects || []).map(row=>row.id));
+  const visibleSchools = schools.filter(row=>visibleProjectIds.has(row.project_id));
+  const visibleSchoolIds = new Set(visibleSchools.map(row=>row.id));
+  return { projects, schools:visibleSchools, stages:stages.filter(row=>visibleSchoolIds.has(row.school_id)) };
 }
 export async function createPreparingProject(body, account) {
   serviceOnly(); const id = identity(account); const name = clean(body?.name);
@@ -54,12 +57,25 @@ export async function createPreparingProject(body, account) {
     p_items: items, p_member_id: id, p_member_name: clean(account?.name || account?.username),
   }, { profileName: "preparing.project-create-with-bom" });
 }
-export async function updatePreparingProject(id, body) {
-  serviceOnly(); await requireProject(id);
+export async function renamePreparingProject(id, body, account) {
+  serviceOnly(); const memberId = identity(account); const project = await requireProject(id);
   const name = clean(body?.name);
-  if (name.length < 2 || name.length > 160) fail("Invalid project name.");
-  if (clean(body?.description).length > 1000) fail("Description is too long.");
-  return updateById(PROJECTS, uuid(id), { name, description: clean(body?.description), updated_at: new Date().toISOString() });
+  if (name.length < 2 || name.length > 160) fail("Project name must be between 2 and 160 characters.");
+  if (name === project.name) return project;
+  // One locked transaction changes only the name, and audits the old/new values.
+  return rpc("erp_preparing_rename_project", {
+    p_project_id:uuid(id), p_expected_name:clean(body?.expectedName),
+    p_new_name:name, p_member_id:memberId,
+  }, {profileName:"preparing.project-rename"});
+}
+export async function archivePreparingProject(id, body, account) {
+  serviceOnly(); const memberId = identity(account); await requireProject(id);
+  const expectedName = clean(body?.confirmName);
+  if (!expectedName || expectedName.length > 160) fail("Type the exact project name to confirm deletion.");
+  // A single locked SQL transaction archives the folder without cascading into schools or inventory.
+  return rpc("erp_preparing_archive_project", {
+    p_project_id:uuid(id), p_expected_name:expectedName, p_member_id:memberId,
+  }, {profileName:"preparing.project-archive"});
 }
 export async function addPreparingSchools(projectId, body, account) {
   serviceOnly(); const creator = identity(account);

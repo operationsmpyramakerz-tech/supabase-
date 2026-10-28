@@ -18,15 +18,20 @@ test('Proposals-style cards keep both project and school drill-down actions', ()
   assert.match(preparing, /pr-folder-paper right/);
   assert.match(preparing, /openProjectFolder\(row\.id\)/);
   assert.match(preparing, /openSchoolFolder\(row\.id\)/);
-  assert.match(preparing, /onPointerDown=\{event=>startFolderHold/);
-  assert.match(preparing, /onContextMenu=\{event=>folderContextMenu/);
+  assert.match(preparing, /onPointerDown=\{event=>\{if\(canManage\)startFolderHold/);
+  assert.match(preparing, /onContextMenu=\{event=>\{if\(canManage\)folderContextMenu/);
   assert.match(preparing, /event\.key === "ContextMenu"/);
-  for (const action of ['Project Dashboard','Kit Cartons','Edit Project','Packing & Delivery','Technical Follow-up','Final Closing'])
+  for (const action of ['Project Dashboard','Project Kit Cartons','Rename','Delete','Packing & Delivery','Technical Follow-up','Final Closing'])
     assert.ok(preparing.includes(action), action);
 });
-test('no destructive folder actions are added without API support', () => {
+test('project folder shows Rename/Delete only and deletion uses explicit server action', () => {
   const folderArea = preparing.split('<div className="pr-folders"')[1].split('        {project && !projectSchools.length')[0];
-  assert.doesNotMatch(folderArea, /Delete Project|Make a copy|Copy Project|delete_project/);
+  const projectMenu = folderArea.split('aria-label={`${row.name} actions`}')[1].split('</div>}')[0];
+  assert.match(projectMenu,/renameProjectFolder\(row\)/);
+  assert.match(projectMenu,/deleteProjectFolder\(row\)/);
+  assert.doesNotMatch(projectMenu,/Open Project|Project Dashboard|Kit Cartons|Edit Project/);
+  assert.match(preparing,/action:"delete_project"/);
+  assert.match(read('app/api/projects-preparing/route.js'),/export async function DELETE/);
 });
 test('Proposals exact compact folder dimensions and accessibility work on tablet and phone', () => {
   assert.match(css, /\.pr-root \.pr-folder-card \{/);
@@ -57,7 +62,7 @@ test('changed JSX parses and CSS version is refreshed', () => {
     const source = ts.createSourceFile(file, read(file), ts.ScriptTarget.Latest, true, ts.ScriptKind.JSX);
     assert.deepEqual(source.parseDiagnostics.map(d => d.messageText), [], file);
   }
-  assert.match(read('app/projects-preparing/page.jsx'), /projects-preparing\.css\?v=231/);
+  assert.match(read('app/projects-preparing/page.jsx'), /projects-preparing\.css\?v=233/);
 });
 
 // v226: actual filtering controls replace oversized, noninteractive stats on the index.

@@ -1117,3 +1117,17 @@
  .pr-pbom .pr-kit-editor-fields{align-items:stretch}
  .pr-pbom .pr-kit-editor-fields label{flex:1 1 100%}
 }
+
+/* Project folder management: compact two-action menu, safe deletion confirmation. */
+.pr-root .pr-folder-menu button {gap:9px;}
+.pr-root .pr-folder-menu .pr-folder-menu-danger {color:#b42335;}
+.pr-root .pr-folder-menu .pr-folder-menu-danger:hover,
+.pr-root .pr-folder-menu .pr-folder-menu-danger:focus-visible {background:#fff0f1;color:#9e1b2c;}
+.pr-sheet .pr-danger-button {background:#b42335;color:#fff;border-color:#b42335;}
+.pr-sheet .pr-danger-button:hover:not(:disabled) {background:#921f2f;border-color:#921f2f;}
+.pr-delete-notice {display:flex;align-items:flex-start;gap:13px;padding:16px;border:1px solid #f5c8cf;background:#fff7f7;border-radius:14px;color:#9e2636;}
+.pr-delete-notice svg {flex-shrink:0;}
+.pr-delete-notice strong {display:block;font-size:13px;}
+.pr-delete-notice p {font-size:12px;line-height:1.6;margin:6px 0 0;color:#76494f;}
+/* Keep the two-action folder menu inside the page, including the leftmost card. */
+.pr-root--index .pr-folder-menu {right:auto;left:0;min-width:154px;}
