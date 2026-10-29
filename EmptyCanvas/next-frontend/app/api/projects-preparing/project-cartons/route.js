@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getDirectAccountGate } from "../../../../lib/products-auth";
 import { featureGate } from "../../../../lib/feature-permissions-server";
 import { projectCartonWorkspace,createProjectCarton,setProjectCartonLine,sealProjectCarton,
-  allocateProjectCarton,reverseProjectAllocation,cancelProjectCarton } from "../../../../lib/preparing-project-cartons";
+  allocateProjectCarton,reverseProjectAllocation,cancelProjectCarton,renameProjectCarton } from "../../../../lib/preparing-project-cartons";
 export const dynamic="force-dynamic";
 export const revalidate=0;
 const reply=(payload,status=200)=>NextResponse.json(payload,{status,headers:{"Cache-Control":"private, no-store"}});
@@ -15,7 +15,7 @@ export async function POST(req){const auth=await gate("stage_update");if(!auth.o
   try{const b=await bodyOf(req);if(b.action!=="create")return reply({ok:false,error:"Unknown action"},400);return reply({ok:true,result:await createProjectCarton(b,auth.account)},201);}catch(e){return failed(e);}}
 export async function PATCH(req){const auth=await gate("stage_update");if(!auth.ok)return reply({ok:false,error:auth.error||"Access denied"},auth.status||403);
   try{const b=await bodyOf(req);const methods={set_line:setProjectCartonLine,seal:sealProjectCarton,
-    allocate:allocateProjectCarton,reverse:reverseProjectAllocation,cancel:cancelProjectCarton};
+    allocate:allocateProjectCarton,reverse:reverseProjectAllocation,cancel:cancelProjectCarton,rename:renameProjectCarton};
     if(!methods[b.action])return reply({ok:false,error:"Unknown action"},400);
     return reply({ok:true,result:await methods[b.action](b,auth.account)});
   }catch(e){return failed(e);}}

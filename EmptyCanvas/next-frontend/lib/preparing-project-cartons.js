@@ -97,3 +97,13 @@ export async function cancelProjectCarton(body,account) {
   requireService();return rpc("erp_preparing_cancel_project_carton",{p_project_id:id(body.projectId),
     p_carton_id:id(body.cartonId),p_member_id:actor(account)},{profileName:"preparing.pool.cancel"});
 }
+
+export async function renameProjectCarton(body,account) {
+  requireService();const cartonLabel=sized(body.cartonLabel,"Box name",100);
+  if(cartonLabel.length<2)fail("Box name must be at least 2 characters.");
+  return rpc("erp_preparing_rename_project_carton_v250",{
+    p_project_id:id(body.projectId),p_carton_id:id(body.cartonId),
+    p_new_label:cartonLabel,p_expected_updated_at:version(body.expectedUpdatedAt),
+    p_member_id:actor(account),p_actor_name:sized(account?.name||account?.username||"","ERP user name",160)||actor(account),
+  },{profileName:"preparing.pool.rename"});
+}
