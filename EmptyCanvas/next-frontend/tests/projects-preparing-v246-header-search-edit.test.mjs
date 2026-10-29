@@ -16,7 +16,8 @@ test("Projects and schools use the AppShell search bar instead of duplicated inp
  assert.match(page,/Search projects\.\.\./);
  assert.match(page,/Search schools\.\.\./);
  assert.doesNotMatch(page,/aria-label="Search projects"/);
- assert.doesNotMatch(page,/aria-label="Search schools"/);
+ // The new split design intentionally adds an in-panel school search bound to the same query state.
+ assert.match(page,/aria-label="Search schools"/);
  assert.doesNotMatch(page,/aria-label="Refresh projects"/);
  assert.match(page,/setSchoolId\(id\); setQuery\(""\)/);
 });

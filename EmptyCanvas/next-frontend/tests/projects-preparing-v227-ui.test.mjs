@@ -13,7 +13,7 @@ test('project and school routes show unified progress cards not six separate sta
   assert.match(ui,/pr-summary-card--school/);
   assert.doesNotMatch(ui,/className="pr-metrics"/);
   assert.doesNotMatch(ui,/className="pr-school-info"/);
-  assert.match(ui,/projectCompletedStages/);
+  assert.match(ui,/completedProjectSteps/);
   assert.match(ui,/schoolPercent/);
   assert.match(ui,/progress\.delivered/);
   assert.match(ui,/progress\.closed/);
@@ -43,5 +43,5 @@ test('school folder styling matches proposals dimensions and works on narrow scr
 test('new JSX remains parseable and CSS route is refreshed',()=>{
   const source=ts.createSourceFile('PreparingClient.jsx',ui,ts.ScriptTarget.Latest,true,ts.ScriptKind.JSX);
   assert.deepEqual(source.parseDiagnostics.map(d=>d.messageText),[]);
-  assert.match(read('app/projects-preparing/page.jsx'),/projects-preparing\.css\?v=252/);
+  assert.match(read('app/projects-preparing/page.jsx'),/projects-preparing\.css\?v=254/);
 });

@@ -17,7 +17,8 @@ test('contextual back button returns to project rather than resetting the projec
 });
 test('project tools are one set of controls; school tools keep original handlers',()=>{
  assert.equal((ui.match(/<div className="pr-project-tools"/g)||[]).length,0); // conditional grid has two classes
- assert.equal((ui.match(/className="pr-tool-grid pr-project-tools"/g)||[]).length,1);
+ assert.equal((ui.match(/className="pr-project-split"/g)||[]).length,1);
+ assert.match(ui,/pr-project-step-timeline/);
  assert.equal((ui.match(/className="pr-tool-grid pr-school-tools"/g)||[]).length,1);
  assert.match(ui,/setShowProjectCartons\(true\)/);
  for (const name of ['setShowComponents','setShowDelivery','setShowTechnical','setShowReconciliation','setShowClosing']) assert.match(ui,new RegExp(`${name}\\(true\\)`));
@@ -30,7 +31,7 @@ test('workspace no longer repeats beneficiaries and removes intro descriptions',
  assert.doesNotMatch(ui,/Source proposal:/);
  assert.match(ui,/\["Schools", projectSchools.length\]/);
  assert.match(ui,/pr-summary-card--project/);
- assert.match(ui,/projectProgress}% project progress/);
+ assert.match(ui,/value=\{overallProjectProgress\}/);
 });
 test('modern responsive controls retain focus, reduced motion, and mobile layout',()=>{
  assert.match(css,/\.pr-tool-grid/);

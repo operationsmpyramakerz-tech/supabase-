@@ -49,5 +49,5 @@ test('Testing export modal supports selected columns, Kit group selection, print
  assert.match(ui,/exportColumns/);
  assert.match(ui,/groupKeys:exportGroups/);
  assert.match(ui,/testingGroups\(shown,data.kitGroups\)/);
- assert.match(src('app/projects-preparing/page.jsx'),/projects-preparing\.css\?v=252/);
+ assert.match(src('app/projects-preparing/page.jsx'),/projects-preparing\.css\?v=254/);
 });

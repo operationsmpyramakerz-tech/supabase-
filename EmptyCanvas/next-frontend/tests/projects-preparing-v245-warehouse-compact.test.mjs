@@ -37,7 +37,7 @@ test('Edit toggles the same Received value into an input and requires warehouse 
 test('Warehouse compact CSS is responsive and the newer stylesheet is used',()=>{
  assert.match(css,/grid-template-columns:minmax\(125px,1fr\) minmax\(125px,1fr\) minmax\(150px,1\.25fr\) auto/);
  assert.match(css,/@media\(max-width:620px\)/);
- assert.match(read('app/projects-preparing/page.jsx'),/projects-preparing\.css\?v=252/);
+ assert.match(read('app/projects-preparing/page.jsx'),/projects-preparing\.css\?v=254/);
  const parsed=ts.createSourceFile('ProjectWarehouseReceiving.jsx',ui,ts.ScriptTarget.Latest,true,ts.ScriptKind.JSX);
  assert.deepEqual(parsed.parseDiagnostics,[]);
 });

@@ -62,6 +62,6 @@ test("Warehouse updated React/CSS/PDF route parse cleanly",()=>{
   const parsed=ts.createSourceFile(path,read(path),ts.ScriptTarget.Latest,true,path.endsWith(".jsx")?ts.ScriptKind.JSX:ts.ScriptKind.JS);
   assert.deepEqual(parsed.parseDiagnostics.map(x=>x.messageText),[],path);
  }
- assert.match(read("app/projects-preparing/page.jsx"),/projects-preparing\.css\?v=252/);
+ assert.match(read("app/projects-preparing/page.jsx"),/projects-preparing\.css\?v=254/);
  assert.match(read("public/css/projects-preparing.css"),/\.pr-wr-row\.is-editing/);
 });

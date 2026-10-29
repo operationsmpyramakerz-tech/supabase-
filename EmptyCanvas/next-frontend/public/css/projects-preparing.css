@@ -1489,3 +1489,198 @@
 .pr-box-create select:focus-visible,.pr-box-editor select:focus-visible{border-color:#e99542;box-shadow:0 0 0 3px rgba(237,145,45,.12);}
 @media(max-width:520px){.pr-production-controls>input,.pr-stage-filter{width:100%;flex:1 1 100%;min-width:0;}.pr-stage-filter-menu{left:0;right:0;}.pr-stage-filter-trigger{min-height:44px;}}
 @media(prefers-reduced-motion:reduce){.pr-stage-filter-menu{animation:none;}.pr-stage-filter-chevron{transition:none;}}
+
+/* v254 — Project overview: schools on the left, five measured steps on the right.
+   All figures are sourced from the project BOM / testing / warehouse / production
+   read endpoints; no fabricated progress is painted while they are loading. */
+.pr-root--project .pr-header {margin-bottom:19px;}
+.pr-root--project .pr-summary-card--project {padding:20px 28px;margin-bottom:22px;min-height:142px;}
+.pr-root--project .pr-summary-card--project .pr-summary-lead {gap:22px;}
+.pr-root--project .pr-summary-card--project .pr-summary-title>strong {font-size:27px;}
+.pr-root--project .pr-summary-card--project .pr-summary-title>strong span {font-size:14px;}
+.pr-root--project .pr-summary-card--project .pr-summary-metrics {gap:0;}
+.pr-root--project .pr-summary-card--project .pr-summary-metric {
+  flex-direction:row;align-items:center;gap:12px;padding:8px 16px;
+}
+.pr-root--project .pr-summary-card--project .pr-summary-metric:first-child {border-left:1px solid #edeef1;}
+.pr-summary-metric-icon {
+  display:grid;place-items:center;width:43px;height:43px;flex:none;
+  color:#db7b26;background:#fff1e5;border-radius:13px;
+}
+.pr-summary-metric-copy {display:flex;flex-direction:column;gap:5px;min-width:0;}
+.pr-summary-metric-copy>span {font-size:11px;color:#828b9b;font-weight:680;}
+.pr-summary-metric-copy>strong {font-size:28px;line-height:1.1;font-weight:860;color:#151d30;}
+.pr-root--project .pr-summary-card--project .pr-summary-title .pr-meter {max-width:300px;}
+.pr-root--project .pr-summary-card--project .pr-summary-title .pr-meter>span {background:linear-gradient(90deg,#fb7d2b,#f05719);}
+
+.pr-liquid-gauge {
+  --pr-liquid-color:#f7a523;--pr-liquid-color-light:#ffcd7a;
+  --pr-liquid-pct:0%;position:relative;display:grid;place-items:center;
+  flex:0 0 76px;width:76px;height:76px;padding:5px;box-sizing:border-box;
+  border-radius:50%;background:conic-gradient(var(--pr-liquid-color) var(--pr-liquid-pct),#e8ebf0 0);
+  box-shadow:0 5px 13px rgba(15,23,42,.04);
+}
+.pr-liquid-gauge--low {--pr-liquid-color:#fa594d;--pr-liquid-color-light:#ffb29a;}
+.pr-liquid-gauge--medium {--pr-liquid-color:#ffb316;--pr-liquid-color-light:#ffe08a;}
+.pr-liquid-gauge--high {--pr-liquid-color:#22c965;--pr-liquid-color-light:#a4f6bf;}
+.pr-liquid-gauge--empty {--pr-liquid-color:#d6dbe4;--pr-liquid-color-light:#eef0f3;}
+.pr-liquid-gauge--summary {flex-basis:108px;width:108px;height:108px;padding:8px;--pr-liquid-color:#fa762b;--pr-liquid-color-light:#ffb18c;}
+.pr-liquid-gauge__inside {
+  position:relative;display:grid;place-items:center;width:100%;height:100%;
+  overflow:hidden;border-radius:50%;background:#fff;
+}
+.pr-liquid-gauge__water {
+  position:absolute;inset:auto 0 0;height:var(--pr-liquid-pct);min-height:0;
+  background:linear-gradient(180deg,var(--pr-liquid-color-light),var(--pr-liquid-color));
+  transition:height .45s ease;opacity:.9;
+}
+.pr-liquid-gauge__water::before,.pr-liquid-gauge__water::after {
+  content:"";position:absolute;top:-8px;left:-15%;width:130%;height:19px;
+  background:rgba(255,255,255,.47);border-radius:50%;transform:rotate(-7deg);
+  animation:pr-liquid-wave 4.5s ease-in-out infinite alternate;
+}
+.pr-liquid-gauge__water::after {top:-4px;left:-9%;height:13px;background:rgba(255,255,255,.26);animation-delay:-2s;transform:rotate(6deg);}
+.pr-liquid-gauge__inside>strong {z-index:1;color:#111827;font-size:17px;font-weight:900;letter-spacing:-.06em;text-shadow:0 1px 4px #fff;}
+.pr-liquid-gauge--summary .pr-liquid-gauge__inside>strong {font-size:25px;}
+@keyframes pr-liquid-wave {from{transform:translateX(-7%) rotate(-7deg);}to{transform:translateX(7%) rotate(7deg);}}
+
+.pr-project-split {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:17px;align-items:stretch;}
+.pr-project-schools-panel,.pr-project-steps-panel {
+  min-width:0;padding:20px 19px 25px;border:1px solid #e6e9ed;border-radius:23px;
+  background:#fff;box-shadow:0 11px 32px rgba(17,24,39,.035);
+}
+.pr-project-panel-heading {display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0;}
+.pr-project-panel-title {display:flex;align-items:center;gap:11px;min-width:0;}
+.pr-project-panel-title h2 {margin:0;font-size:21px;font-weight:870;letter-spacing:-.04em;color:#151d30;white-space:nowrap;}
+.pr-project-schools-controls {display:flex;gap:7px;align-items:center;min-width:0;}
+.pr-project-school-search {
+  display:flex;align-items:center;gap:7px;min-width:0;width:166px;max-width:100%;height:40px;
+  padding:0 11px;border:1px solid #e7eaf0;border-radius:11px;background:#fafbfc;color:#8892a3;
+}
+.pr-project-school-search input {min-width:0;width:100%;border:0!important;outline:none!important;box-shadow:none!important;background:transparent!important;font-size:11px!important;color:#111827;padding:0!important;}
+.pr-project-school-search:focus-within {border-color:#f1a36c;box-shadow:0 0 0 3px rgba(247,134,45,.09);}
+.pr-project-view-switch {display:flex;gap:2px;align-items:center;padding:3px;border:1px solid #e7eaf0;border-radius:11px;}
+.pr-project-view-switch button {border:0;border-radius:8px;min-height:32px;min-width:32px;font-size:18px;background:transparent;color:#69778b;cursor:pointer;}
+.pr-project-view-switch button.is-selected {background:#f77319;color:#fff;box-shadow:0 3px 8px rgba(249,112,31,.18);}
+.pr-root--project .pr-dashboard-schools {
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(154px,154px));
+  justify-content:start;align-content:start;align-items:start;justify-items:start;
+  gap:15px;margin-top:22px;padding:0;min-height:260px;
+}
+.pr-root--project .pr-dashboard-schools .pr-folder-card {margin:0;}
+.pr-root--project .pr-dashboard-schools--list {grid-template-columns:1fr;}
+.pr-root--project .pr-dashboard-schools--list .pr-folder-card {width:min(100%,260px);}
+.pr-add-school-tile {
+  display:flex;flex-direction:column;justify-content:center;align-items:center;gap:13px;
+  width:154px;height:144px;min-height:144px;
+  border:1px dashed #d7dce5;border-radius:17px;background:#fff;
+  color:#303b51;font-size:12px;font-weight:780;cursor:pointer;
+}
+.pr-add-school-tile span {display:grid;place-items:center;width:52px;height:52px;background:#f3f5f8;color:#7f8a9d;border-radius:50%;}
+.pr-add-school-tile:hover,.pr-add-school-tile:focus-visible {border-color:#f39b51;background:#fffaf5;}
+.pr-dashboard-empty {font-size:12px;color:#8b93a2;padding:16px;}
+.pr-project-steps-subtitle {margin:5px 0 19px;color:#929bab;font-size:12px;line-height:1.5;}
+.pr-project-report-link {
+  display:flex;align-items:center;gap:5px;min-height:34px;padding:0 9px;
+  border:1px solid #e8ebef;border-radius:10px;background:#fff;color:#798292;
+  font-size:11px;font-weight:740;cursor:pointer;white-space:nowrap;
+}
+.pr-project-report-link:hover {color:#d47829;border-color:#f7bd8d;background:#fffaf5;}
+.pr-project-step-error {display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 10px;padding:10px 12px;border-radius:11px;background:#fff1f0;color:#ae4237;font-size:11px;}
+.pr-project-step-error button {border:0;background:transparent;color:#a63a2a;text-decoration:underline;font-weight:750;cursor:pointer;}
+.pr-project-step-loading {display:block;padding:4px 0 8px;color:#929bab;font-size:11px;}
+.pr-project-step-timeline {position:relative;display:flex;flex-direction:column;gap:11px;margin:0;padding:0;list-style:none;}
+.pr-project-step-timeline::before {content:"";position:absolute;z-index:0;left:17px;top:32px;bottom:32px;width:3px;border-radius:10px;background:linear-gradient(#fa5e50 0%,#fb9025 33%,#ffc52f 57%,#3bd16c 80%,#e1e5eb 100%);}
+.pr-project-step-row {position:relative;display:grid;grid-template-columns:36px minmax(0,1fr);gap:9px;align-items:center;min-width:0;}
+.pr-project-step-index {
+  z-index:1;display:grid;place-items:center;width:36px;height:36px;flex:none;
+  background:#ff6750;color:#fff;border-radius:50%;font-size:15px;font-weight:860;
+  box-shadow:0 3px 10px rgba(17,24,39,.07);
+}
+.pr-project-step-row:nth-child(2) .pr-project-step-index {background:#ff8524;}
+.pr-project-step-row:nth-child(3) .pr-project-step-index {background:#ffc328;}
+.pr-project-step-row:nth-child(4) .pr-project-step-index {background:#31ca63;}
+.pr-project-step-row:nth-child(5) .pr-project-step-index {background:#dfe3e9;color:#243046;}
+.pr-project-step-card {
+  display:flex;align-items:center;gap:12px;min-width:0;width:100%;min-height:94px;
+  padding:11px 12px;border:1px solid #e7eaf0;border-radius:17px;background:#fff;
+  box-shadow:0 5px 17px rgba(17,24,39,.027);text-align:left;cursor:pointer;
+  transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease;
+}
+.pr-project-step-card:hover {transform:translateY(-2px);border-color:#f7bd8d;box-shadow:0 12px 26px rgba(17,24,39,.09);}
+.pr-project-step-card:focus-visible {outline:2px solid #f78a28;outline-offset:3px;}
+.pr-project-step-icon {display:grid;place-items:center;width:45px;height:45px;flex:none;background:linear-gradient(135deg,#fff5ec,#ffeadb);color:#eb791e;border-radius:13px;}
+.pr-project-step-text {display:flex;flex:1;min-width:0;flex-direction:column;gap:6px;}
+.pr-project-step-text strong {font-size:12px;font-weight:835;color:#162037;line-height:1.25;}
+.pr-project-step-text small {font-size:10px;color:#929aaa;line-height:1.35;}
+.pr-project-step-arrow {display:grid;place-items:center;width:26px;height:26px;flex:none;border-radius:50%;color:#929baa;background:#f4f6f8;}
+.pr-project-step-card:hover .pr-project-step-arrow {color:#e17721;background:#fff1e3;}
+@media(max-width:1260px) {
+  .pr-project-split {gap:12px;}
+  .pr-project-schools-panel,.pr-project-steps-panel {padding:18px 15px 22px;}
+  .pr-project-panel-title h2 {font-size:18px;}
+  .pr-project-school-search {width:132px;}
+  .pr-project-step-card {gap:9px;padding:9px;}
+  .pr-project-step-icon {width:39px;height:39px;}
+  .pr-liquid-gauge--step {width:65px;height:65px;flex-basis:65px;}
+  .pr-root--project .pr-summary-card--project .pr-summary-metric {padding:8px 10px;gap:8px;}
+}
+@media(max-width:980px) {
+  .pr-project-split {grid-template-columns:1fr;}
+  .pr-project-schools-panel {min-height:240px;}
+  .pr-project-step-card {min-height:88px;}
+  .pr-root--project .pr-summary-card--project {grid-template-columns:1fr;}
+  .pr-root--project .pr-summary-card--project .pr-summary-metrics {border-top:1px solid #e9edf1;padding-top:10px;}
+  .pr-root--project .pr-summary-card--project .pr-summary-metric:first-child {border-left:0;}
+}
+@media(max-width:590px) {
+  .pr-project-panel-heading.pr-project-schools-heading {align-items:flex-start;flex-wrap:wrap;}
+  .pr-project-schools-controls {width:100%;}
+  .pr-project-school-search {width:auto;flex:1;}
+  .pr-project-split {gap:13px;}
+  .pr-root--project .pr-summary-card--project {padding:18px 15px;}
+  .pr-liquid-gauge--summary {width:82px;height:82px;flex-basis:82px;}
+  .pr-liquid-gauge--summary .pr-liquid-gauge__inside>strong {font-size:19px;}
+  .pr-root--project .pr-summary-card--project .pr-summary-title>strong {font-size:22px;}
+  .pr-root--project .pr-summary-card--project .pr-summary-title>strong span {font-size:12px;}
+  .pr-root--project .pr-summary-card--project .pr-summary-metric {padding:7px 5px;gap:5px;}
+  .pr-summary-metric-icon {width:30px;height:30px;border-radius:9px;}
+  .pr-summary-metric-icon svg {width:17px;height:17px;}
+  .pr-summary-metric-copy>span {font-size:10px;}
+  .pr-summary-metric-copy>strong {font-size:21px;}
+  .pr-project-step-timeline {gap:9px;}
+  .pr-project-step-card {gap:8px;min-height:76px;}
+  .pr-project-step-index {width:29px;height:29px;font-size:12px;}
+  .pr-project-step-timeline::before {left:13px;}
+  .pr-project-step-row {grid-template-columns:29px minmax(0,1fr);gap:7px;}
+  .pr-liquid-gauge--step {width:53px;height:53px;flex-basis:53px;padding:4px;}
+  .pr-liquid-gauge__inside>strong {font-size:14px;}
+  .pr-project-step-icon {width:31px;height:31px;border-radius:9px;}
+  .pr-project-step-icon svg {width:17px;height:17px;}
+  .pr-project-step-text strong {font-size:11px;}
+  .pr-project-step-text small {font-size:9px;}
+  .pr-project-step-arrow {width:20px;height:20px;}
+  .pr-project-step-arrow svg {width:13px;height:13px;}
+}
+@media(max-width:390px) {
+  .pr-root--project .pr-dashboard-schools {grid-template-columns:repeat(auto-fill,minmax(145px,145px));}
+  .pr-project-step-icon {display:none;}
+  .pr-project-steps-panel,.pr-project-schools-panel {padding:16px 12px;}
+}
+@media(prefers-reduced-motion:reduce) {
+  .pr-liquid-gauge__water,.pr-project-step-card {animation:none!important;transition:none!important;}
+  .pr-liquid-gauge__water::before,.pr-liquid-gauge__water::after {animation:none!important;}
+}
+/* Match the school-folder proportions in the approved split-screen mockup. */
+@media(min-width:591px) {
+  .pr-root--project .pr-dashboard-schools {grid-template-columns:repeat(auto-fill,minmax(174px,174px));}
+  .pr-root--project .pr-dashboard-schools .pr-folder-card {width:174px;height:168px;min-height:168px;}
+  .pr-root--project .pr-dashboard-schools .pr-folder-main::before {height:101px;}
+  .pr-root--project .pr-dashboard-schools .pr-folder-main::after {top:56px;}
+  .pr-root--project .pr-dashboard-schools .pr-folder-figure {top:20px;}
+  .pr-root--project .pr-dashboard-schools .pr-folder-copy {top:89px;}
+  .pr-root--project .pr-dashboard-schools .pr-folder-menu-trigger {top:88px;}
+  .pr-root--project .pr-dashboard-schools .pr-folder-menu {top:110px;}
+  .pr-root--project .pr-dashboard-schools .pr-add-school-tile {width:174px;height:168px;min-height:168px;}
+  .pr-root--project .pr-dashboard-schools--list {grid-template-columns:1fr;}
+}

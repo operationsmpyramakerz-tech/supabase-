@@ -14,6 +14,7 @@ import ProjectMasterComponents from "./ProjectMasterComponents";
 import ProjectTesting from "./ProjectTesting";
 import ProjectProductionReceiving from "./ProjectProductionReceiving";
 import { PREPARING_STAGES, PREPARING_STATES, canCompleteStage, schoolProgress } from "../../lib/preparing-workflow";
+import { calculateProjectPreparationProgress } from "../../lib/preparing-project-progress.mjs";
 
 const clean = value => String(value ?? "").trim();
 const asArray = value => Array.isArray(value) ? value : [];
@@ -46,6 +47,17 @@ function Ico({ name, size = 20 }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name] || paths.folder}</svg>;
 }
 function Meter({ value = 0, max = 1 }) { return <div className="pr-meter"><span style={{ width: `${Math.min(100, Math.round(value * 100 / (max || 1)))}%` }} /></div>; }
+// Percentages in this dashboard are calculated from persisted project quantities,
+// not from the school delivery/closing workflow (which has its own 9 stages).
+function LiquidGauge({ value, size = "step", label = "Progress" }) {
+  const percent = value === null || value === undefined ? null : Math.max(0, Math.min(100, Math.round(value)));
+  const tone = percent === null || percent === 0 ? "empty" : percent < 35 ? "low" : percent < 75 ? "medium" : "high";
+  return <span className={`pr-liquid-gauge pr-liquid-gauge--${size} pr-liquid-gauge--${tone}`}
+    role="img" aria-label={`${label}: ${percent === null ? "loading" : `${percent}%`}`}
+    style={{ "--pr-liquid-pct": `${percent ?? 0}%` }}>
+    <span className="pr-liquid-gauge__inside"><span className="pr-liquid-gauge__water" aria-hidden="true"/><strong>{percent === null ? "—" : `${percent}%`}</strong></span>
+  </span>;
+}
 function Sheet({ title, onClose, children, footer }) {
   return <div className="pr-overlay" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
     <section className="pr-sheet" role="dialog" aria-modal="true" aria-label={title}>
@@ -90,6 +102,12 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
   const [showProduction, setShowProduction] = useState(false);
   const [showProjectBOM, setShowProjectBOM] = useState(false);
   const [projectSourceId, setProjectSourceId] = useState("");
+  const [schoolView, setSchoolView] = useState("grid");
+  const [projectStageData, setProjectStageData] = useState(null);
+  const [projectStageLoading, setProjectStageLoading] = useState(false);
+  const [projectStageError, setProjectStageError] = useState("");
+  const [projectStageRevision, setProjectStageRevision] = useState(0);
+
   // The AppShell header search is the single search control for projects,
   // schools, and the current school's workflow. Reset it on navigation.
   useEffect(() => {
@@ -134,8 +152,34 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
     delivered: schools.filter(school => schoolProgress(stages.filter(row => row.school_id === school.id)).delivered).length,
     closed: schools.filter(school => schoolProgress(stages.filter(row => row.school_id === school.id)).closed).length };
   const progress = school ? schoolProgress(schoolStages) : null;
-  const projectCompletedStages = projectSchools.reduce((total, row) => total + schoolProgress(stages.filter(stage => stage.school_id === row.id)).completed, 0);
-  const projectProgress = projectSchools.length ? Math.round(projectCompletedStages * 100 / (projectSchools.length * PREPARING_STAGES.length)) : 0;
+  // Load the same read-only operational data used by the five stage workspaces.
+  // No percentage is invented while a request is pending or has failed.
+  useEffect(() => {
+    if (!projectId || schoolId) { setProjectStageData(null); setProjectStageError(""); setProjectStageLoading(false); return; }
+    let active = true;
+    setProjectStageData(null); setProjectStageError(""); setProjectStageLoading(true);
+    const suffix = `?projectId=${encodeURIComponent(projectId)}`;
+    Promise.all([api(`/testing${suffix}`), api(`/warehouse${suffix}`), api(`/production${suffix}`)])
+      .then(([testing, warehouse, production]) => {
+        if (active) setProjectStageData({ testing, warehouse, production });
+      }).catch(cause => { if (active) setProjectStageError(cause?.message || "Unable to load project progress."); })
+      .finally(() => { if (active) setProjectStageLoading(false); });
+    return () => { active = false; };
+  }, [projectId, schoolId, projectSchools.length, projectStageRevision]);
+  const projectStageProgress = useMemo(() => projectStageData
+    ? calculateProjectPreparationProgress({ sourceProposalId: project?.source_proposal_id,
+      testing: projectStageData.testing, warehouse: projectStageData.warehouse, production: projectStageData.production })
+    : null, [projectStageData, project?.source_proposal_id]);
+  const projectStepPercents = projectStageProgress?.stages ?? null;
+  const overallProjectProgress = projectStageProgress?.overall ?? null;
+  const completedProjectSteps = projectStageProgress?.completed ?? null;
+  const projectStepCards = [
+    { key:"components", title:"Project Components", subtitle:`Master BOM · ${project?.source_proposal_name || "Custom project"}`, icon:"box", open:()=>setShowProjectBOM(true) },
+    { key:"testing", title:"Project Testing", subtitle:"01 · Components QC", icon:"shield", open:()=>setShowProjectTesting(true) },
+    { key:"warehouse", title:"Warehouse Receiving", subtitle:"02 · Warehouse handover", icon:"clipboard", open:()=>setShowWarehouse(true) },
+    { key:"production", title:"Production Receiving", subtitle:"03 · Team handover & boxes", icon:"truck", open:()=>setShowProduction(true) },
+    { key:"cartons", title:"Project Kit Cartons", subtitle:"04 · Packing", icon:"box", open:()=>setShowProjectCartons(true) },
+  ];
   const tools = [
     { key:"components", name:"Components & QC", icon:"box", open:()=>setShowComponents(true) },
     { key:"delivery", name:"Packing & Delivery", icon:"truck", open:()=>setShowDelivery(true) },
@@ -273,29 +317,84 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
     </div>}
     {project && !school && <section className="pr-summary-card pr-summary-card--project" aria-label="Project overview">
       <div className="pr-summary-lead">
-        <div className="pr-summary-ring" style={{"--pr-percent": `${projectProgress}%`}} aria-label={`${projectProgress}% project progress`}>
-          <span>{projectProgress}%</span>
-        </div>
-        <div className="pr-summary-title"><span className="pr-summary-overline">PROJECT PROGRESS</span><strong>{projectCompletedStages} <span>/ {projectSchools.length * PREPARING_STAGES.length} stages</span></strong><Meter value={projectCompletedStages} max={projectSchools.length * PREPARING_STAGES.length}/></div>
+        <LiquidGauge value={overallProjectProgress} size="summary" label="Overall project progress"/>
+        <div className="pr-summary-title"><span className="pr-summary-overline">PROJECT PROGRESS</span><strong>{completedProjectSteps === null ? "—" : completedProjectSteps} <span>/ 5 stages completed</span></strong><Meter value={overallProjectProgress ?? 0} max={100}/></div>
       </div>
       <div className="pr-summary-metrics">
         {[["Schools", projectSchools.length], ["Delivered", projectSummaries.get(project.id)?.delivered || 0], ["Closed", projectSummaries.get(project.id)?.closed || 0]].map(([name,count]) =>
-          <div className="pr-summary-metric" key={name}><span>{name}</span><strong>{count}</strong></div>)}
+          <div className="pr-summary-metric" key={name}><span className="pr-summary-metric-icon"><Ico name={name === "Schools" ? "school" : name === "Delivered" ? "truck" : "shield"} size={23}/></span><span className="pr-summary-metric-copy"><span>{name}</span><strong>{count}</strong></span></div>)}
       </div>
     </section>}
-    {project && !school && <div className="pr-tool-grid pr-project-tools" aria-label="Project tools">
-      <button type="button" className="pr-tool" onClick={()=>setShowProjectBOM(true)}><span className="pr-tool-icon"><Ico name="box" size={22}/></span><span className="pr-tool-label"><strong>Project Components</strong><small>Master BOM · {project.source_proposal_name || "Custom project"}</small></span><span className="pr-tool-arrow"><Ico name="arrow" size={18}/></span></button>
-      <button type="button" className="pr-tool" onClick={()=>setShowProjectTesting(true)}><span className="pr-tool-icon"><Ico name="shield" size={22}/></span><span className="pr-tool-label"><strong>Project Testing</strong><small>01 · Components QC</small></span><span className="pr-tool-arrow"><Ico name="arrow" size={18}/></span></button>
-      <button type="button" className="pr-tool pr-tool--warehouse" onClick={()=>setShowWarehouse(true)}><span className="pr-tool-icon"><Ico name="clipboard" size={22}/></span><span className="pr-tool-label"><strong>Warehouse Receiving</strong><small>02 · Warehouse handover</small></span><span className="pr-tool-arrow"><Ico name="arrow" size={18}/></span></button>
-      <button type="button" className="pr-tool" onClick={()=>setShowProduction(true)}><span className="pr-tool-icon"><Ico name="truck" size={22}/></span><span className="pr-tool-label"><strong>Production Receiving</strong><small>03 · Team handover & boxes</small></span><span className="pr-tool-arrow"><Ico name="arrow" size={18}/></span></button>
-      <button type="button" className="pr-tool" onClick={()=>setShowProjectCartons(true)}><span className="pr-tool-icon"><Ico name="box" size={22}/></span><span className="pr-tool-label"><strong>Project Kit Cartons</strong><small>04 · Packing</small></span><span className="pr-tool-arrow"><Ico name="arrow" size={18}/></span></button>
-      <button type="button" className="pr-tool" onClick={()=>setShowDashboard(true)}><span className="pr-tool-icon"><Ico name="chart" size={22}/></span><span className="pr-tool-label"><strong>Project Dashboard</strong><small>05 · Reports</small></span><span className="pr-tool-arrow"><Ico name="arrow" size={18}/></span></button>
+    {project && !school && <div className="pr-project-split" aria-label="Project schools and five operational steps">
+      <section className="pr-project-schools-panel" aria-label="Schools">
+        <div className="pr-project-panel-heading pr-project-schools-heading">
+          <div className="pr-project-panel-title"><h2>Schools</h2><span className="pr-section-count">{projectSchools.length} {projectSchools.length === 1 ? "school" : "schools"}</span></div>
+          <div className="pr-project-schools-controls">
+            <label className="pr-project-school-search"><Ico name="search" size={16}/><input type="search" aria-label="Search schools" placeholder="Search schools..." value={query} onChange={event=>setQuery(event.target.value)}/></label>
+            <div className="pr-project-view-switch" role="group" aria-label="School folder view">
+              <button type="button" aria-label="Grid view" aria-pressed={schoolView === "grid"} className={schoolView === "grid" ? "is-selected" : ""} onClick={()=>setSchoolView("grid")}>▦</button>
+              <button type="button" aria-label="List view" aria-pressed={schoolView === "list"} className={schoolView === "list" ? "is-selected" : ""} onClick={()=>setSchoolView("list")}>☷</button>
+            </div>
+          </div>
+        </div>
+        <div className={`pr-folders pr-dashboard-schools ${schoolView === "list" ? "pr-dashboard-schools--list" : ""}`} aria-label="School folders">
+          {schoolFiltered.map(row => {
+            const rowProgress = schoolProgress(stages.filter(stage=>stage.school_id===row.id));
+            const key = `school:${row.id}`;
+            const menuOpen = folderMenu === key;
+            return <article className={`pr-folder-card pr-folder-card--school ${menuOpen ? "is-menu-open" : ""}`} key={row.id}>
+              <button type="button" className="pr-folder-main" onPointerDown={event=>startFolderHold(event,key)} onPointerMove={moveFolderHold}
+                onPointerUp={cancelFolderHold} onPointerCancel={cancelFolderHold} onPointerLeave={cancelFolderHold}
+                onContextMenu={event=>folderContextMenu(event,key)} onKeyDown={event=>folderKeyDown(event,key)}
+                onClick={()=>{if(suppressFolderClick.current){suppressFolderClick.current=false;return;}openSchoolFolder(row.id);}}
+                aria-label={`Open school ${row.beneficiary_name}. Press and hold for actions.`} aria-haspopup="menu" aria-expanded={menuOpen}>
+                <span className="pr-folder-figure" aria-hidden="true"><span className="pr-folder-paper left"/><span className="pr-folder-paper middle"/><span className="pr-folder-paper right"/></span>
+                <span className="pr-folder-copy"><strong>{row.beneficiary_name}</strong><em>{row.proposal_name}</em></span>
+                <span className="pr-folder-foot"><Ico name="school" size={15}/>{rowProgress.completed} / {rowProgress.total} stages<span className="pr-folder-foot-date">{rowProgress.closed ? "Closed" : rowProgress.delivered ? "Delivered" : "Preparing"}</span></span>
+              </button>
+              <button type="button" className="pr-folder-menu-trigger" aria-label={`Actions for ${row.beneficiary_name}`} aria-haspopup="menu" aria-expanded={menuOpen}
+                onClick={()=>{cancelFolderHold();suppressFolderClick.current=false;setFolderMenu(menuOpen ? "" : key);}}><Ico name="more" size={14}/></button>
+              {menuOpen && <div className="pr-folder-menu" role="menu" aria-label={`${row.beneficiary_name} actions`}>
+                <button type="button" role="menuitem" onClick={()=>openSchoolFolder(row.id)}>Open School</button>
+                <button type="button" role="menuitem" onClick={()=>openSchoolFolder(row.id,"components")}>Components & QC</button>
+                <button type="button" role="menuitem" onClick={()=>openSchoolFolder(row.id,"delivery")}>Packing & Delivery</button>
+                <button type="button" role="menuitem" onClick={()=>openSchoolFolder(row.id,"technical")}>Technical Follow-up</button>
+                <button type="button" role="menuitem" onClick={()=>openSchoolFolder(row.id,"returns")}>Returns & Replacements</button>
+                <button type="button" role="menuitem" onClick={()=>openSchoolFolder(row.id,"closing")}>Final Closing</button>
+              </div>}
+            </article>;
+          })}
+          {canManage && <button type="button" className="pr-add-school-tile" onClick={openSchools}><span><Ico name="plus" size={28}/></span>Add School</button>}
+          {!schoolFiltered.length && projectSchools.length > 0 && <div className="pr-dashboard-empty">No schools match your search.</div>}
+          {!projectSchools.length && !canManage && <div className="pr-dashboard-empty">No schools assigned yet.</div>}
+        </div>
+      </section>
+      <section className="pr-project-steps-panel" aria-label="Project Steps">
+        <div className="pr-project-panel-heading">
+          <div className="pr-project-panel-title"><h2>Project Steps</h2><span className="pr-section-count">5 stages</span></div>
+          <button type="button" className="pr-project-report-link" onClick={()=>setShowDashboard(true)} aria-label="Open Project Dashboard" title="Project Dashboard"><Ico name="chart" size={17}/> Reports</button>
+        </div>
+        <p className="pr-project-steps-subtitle">These five stages determine the overall project completion.</p>
+        {projectStageError && <div className="pr-project-step-error" role="alert"><span>Progress unavailable: {projectStageError}</span><button type="button" onClick={()=>setProjectStageRevision(n=>n+1)}>Retry</button></div>}
+        {projectStageLoading && <span className="pr-project-step-loading" role="status">Updating project stage progress…</span>}
+        <ol className="pr-project-step-timeline">
+          {projectStepCards.map((step,index) => <li key={step.key} className="pr-project-step-row">
+            <span className={`pr-project-step-index ${projectStepPercents?.[index] === 100 ? "is-done" : ""}`} aria-hidden="true">{index+1}</span>
+            <button type="button" className="pr-project-step-card" onClick={step.open} aria-label={`Open ${step.title}`}>
+              <LiquidGauge value={projectStepPercents?.[index]} label={step.title}/>
+              <span className="pr-project-step-icon"><Ico name={step.icon} size={23}/></span>
+              <span className="pr-project-step-text"><strong>{step.title}</strong><small>{step.subtitle}</small></span>
+              <span className="pr-project-step-arrow"><Ico name="arrow" size={18}/></span>
+            </button>
+          </li>)}
+        </ol>
+      </section>
     </div>}
-    {project && !school && showProjectBOM && <div className="pr-components-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setShowProjectBOM(false);}}><section className="pr-components-sheet pr-warehouse-sheet" role="dialog" aria-modal="true" aria-label="Project Components"><ProjectMasterComponents key={projectId} project={project} proposals={data.proposals} allowed={canManage} request={api} onClose={()=>{setShowProjectBOM(false);reload().catch(err=>setError(err.message));}}/></section></div>}
-    {project && !school && showWarehouse && <div className="pr-components-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setShowWarehouse(false);}}><section className="pr-components-sheet pr-warehouse-sheet" role="dialog" aria-modal="true" aria-label="Project Warehouse Receiving"><ProjectWarehouseReceiving key={projectId} projectId={projectId} projectName={project.name} hasProjectProposal={!!project.source_proposal_id} canReceive={canWarehouseReceive} canAllocate={canWarehouseAllocate} request={api} onClose={()=>setShowWarehouse(false)}/></section></div>}
-    {project && !school && showProjectTesting && <div className="pr-components-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setShowProjectTesting(false);}}><section className="pr-components-sheet pr-warehouse-sheet" role="dialog" aria-modal="true" aria-label="Project Testing"><ProjectTesting key={projectId} projectId={projectId} projectName={project.name} canTest={canStage} request={api} onClose={()=>setShowProjectTesting(false)}/></section></div>}
-    {project && !school && showProduction && <div className="pr-components-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setShowProduction(false);}}><section className="pr-components-sheet pr-warehouse-sheet" role="dialog" aria-modal="true" aria-label="Production Receiving & Box Distribution"><ProjectProductionReceiving key={projectId} projectId={projectId} projectName={project.name} stageRecords={stages} allowed={canStage} cartonsAllowed={canStage} request={api} onClose={()=>setShowProduction(false)}/></section></div>}
-    {project && !school && showProjectCartons && <div className="pr-components-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setShowProjectCartons(false);}}><section className="pr-components-sheet" role="dialog" aria-modal="true" aria-label="Project Kit Cartons"><ProjectKitCartons key={projectId} projectId={projectId} projectName={project?.name||""} stageRecords={stages} allowed={canStage} request={api} onClose={()=>{setShowProjectCartons(false);reload().catch(err=>setError(err.message));}}/></section></div>}
+    {project && !school && showProjectBOM && <div className="pr-components-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setShowProjectBOM(false);}}><section className="pr-components-sheet pr-warehouse-sheet" role="dialog" aria-modal="true" aria-label="Project Components"><ProjectMasterComponents key={projectId} project={project} proposals={data.proposals} allowed={canManage} request={api} onClose={()=>{setShowProjectBOM(false);setProjectStageRevision(n=>n+1);reload().catch(err=>setError(err.message));}}/></section></div>}
+    {project && !school && showWarehouse && <div className="pr-components-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setShowWarehouse(false);}}><section className="pr-components-sheet pr-warehouse-sheet" role="dialog" aria-modal="true" aria-label="Project Warehouse Receiving"><ProjectWarehouseReceiving key={projectId} projectId={projectId} projectName={project.name} hasProjectProposal={!!project.source_proposal_id} canReceive={canWarehouseReceive} canAllocate={canWarehouseAllocate} request={api} onClose={()=>{setShowWarehouse(false);setProjectStageRevision(n=>n+1);}}/></section></div>}
+    {project && !school && showProjectTesting && <div className="pr-components-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setShowProjectTesting(false);}}><section className="pr-components-sheet pr-warehouse-sheet" role="dialog" aria-modal="true" aria-label="Project Testing"><ProjectTesting key={projectId} projectId={projectId} projectName={project.name} canTest={canStage} request={api} onClose={()=>{setShowProjectTesting(false);setProjectStageRevision(n=>n+1);}}/></section></div>}
+    {project && !school && showProduction && <div className="pr-components-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setShowProduction(false);}}><section className="pr-components-sheet pr-warehouse-sheet" role="dialog" aria-modal="true" aria-label="Production Receiving & Box Distribution"><ProjectProductionReceiving key={projectId} projectId={projectId} projectName={project.name} stageRecords={stages} allowed={canStage} cartonsAllowed={canStage} request={api} onClose={()=>{setShowProduction(false);setProjectStageRevision(n=>n+1);}}/></section></div>}
+    {project && !school && showProjectCartons && <div className="pr-components-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setShowProjectCartons(false);}}><section className="pr-components-sheet" role="dialog" aria-modal="true" aria-label="Project Kit Cartons"><ProjectKitCartons key={projectId} projectId={projectId} projectName={project?.name||""} stageRecords={stages} allowed={canStage} request={api} onClose={()=>{setShowProjectCartons(false);setProjectStageRevision(n=>n+1);reload().catch(err=>setError(err.message));}}/></section></div>}
     {project && !school && showDashboard && <div className="pr-components-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setShowDashboard(false);}}><section className="pr-components-sheet pr-report-sheet" role="dialog" aria-modal="true" aria-label="Master project dashboard"><ProjectDashboard key={projectId} projectId={projectId} request={api} onClose={()=>setShowDashboard(false)} onOpenSchool={id=>{setShowDashboard(false);setSchoolId(id);setWorkflowFilter("all");setShowComponents(false);setShowDelivery(false);setShowReconciliation(false);setShowTechnical(false);setShowClosing(false);}}/></section></div>}
     {school ? <>
       <section className="pr-summary-card pr-summary-card--school" aria-label="School progress overview">
@@ -333,7 +432,7 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
           <span className={`pr-status ${status}`}>{stateLabels[status]}</span><span className="pr-stage-arrow"><Ico name="arrow" size={18}/></span>
         </button>;
       })}</div>
-    </> : <>
+    </> : !project ? <>
       <div className="pr-section-bar"><div><h2>{project ? "Schools" : "Project Folders"}</h2>{project && <span className="pr-section-count">{projectSchools.length} schools</span>}</div>{project ? null : <span className="pr-visible-count">{projectFiltered.length} {projectFiltered.length === 1 ? "folder" : "folders"}</span>}</div>
       <div className="pr-folders" aria-label={project ? "School folders" : "Project folders"}>
         {!project ? projectFiltered.map(row => {
@@ -386,7 +485,7 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
         {project && !projectSchools.length && <div className="pr-empty"><Ico name="school" size={36}/><h3>No schools assigned</h3>{canManage && <button className="pr-primary" onClick={openSchools}>Add Schools</button>}</div>}
         {!project && !projectFiltered.length && <div className="pr-empty"><Ico name="folder" size={36}/><h3>{projects.length ? "No matching projects" : "No project folders yet"}</h3>{canCreate && !projects.length && <button className="pr-primary" onClick={openNewProject}>Create first project</button>}</div>}
       </div>
-    </>}
+    </> : null}
     {sheet === "project" && <Sheet title="New Project" onClose={()=>setSheet("")}
       footer={<><button className="pr-secondary" onClick={()=>setSheet("")}>Cancel</button><button className="pr-primary" disabled={busy || projectName.trim().length < 2 || !projectSourceId} onClick={()=>save(async()=>api("", "POST", {action:"create_project", name:projectName, description:projectDescription, proposalId:projectSourceId}))}>{busy ? "Saving…" : "Save Project"}</button></> }>
       <label className="pr-field">Project name<input autoFocus maxLength={160} value={projectName} placeholder="30 June Schools" onChange={event=>setProjectName(event.target.value)}/></label>

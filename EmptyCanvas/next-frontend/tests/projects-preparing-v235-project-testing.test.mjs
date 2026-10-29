@@ -39,8 +39,8 @@ test("project testing route is strictly feature-gated",()=>{
 });
 test("testing is a separate project-level screen like warehouse receiving",()=>{
  assert.match(shell,/ProjectTesting/);
- assert.ok(shell.indexOf("Project Testing</strong>")<shell.indexOf("Warehouse Receiving</strong>"));
- assert.ok(shell.indexOf("Warehouse Receiving</strong>")<shell.indexOf("Project Kit Cartons</strong>"));
+ assert.ok(shell.indexOf('title:"Project Testing"')<shell.indexOf('title:"Warehouse Receiving"'));
+ assert.ok(shell.indexOf('title:"Warehouse Receiving"')<shell.indexOf('title:"Project Kit Cartons"'));
  for(const label of ["Passed","Failed","Remaining","Testing History","Export"]){
   assert.ok(ui.includes(label),label);
  }
@@ -51,5 +51,5 @@ test("new server and JSX files parse cleanly",()=>{
   const parsed=ts.createSourceFile(name,file(name),ts.ScriptTarget.Latest,true,name.endsWith(".jsx")?ts.ScriptKind.JSX:ts.ScriptKind.JS);
   assert.deepEqual(parsed.parseDiagnostics,[],name);
  }
- assert.match(file("app/projects-preparing/page.jsx"),/projects-preparing\.css\?v=252/);
+ assert.match(file("app/projects-preparing/page.jsx"),/projects-preparing\.css\?v=254/);
 });

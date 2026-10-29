@@ -56,7 +56,7 @@ test("feature-gated API exposes read to viewer, write by warehouse rights and no
 test("project root links warehouse before project cartons; school component receiving stays separate",()=>{
  assert.match(shell,/ProjectWarehouseReceiving/);
  assert.match(shell,/Warehouse Receiving/);
- assert.ok(shell.indexOf("Warehouse Receiving") < shell.indexOf("Project Kit Cartons</strong>"));
+ assert.ok(shell.indexOf('title:"Warehouse Receiving"') < shell.indexOf('title:"Project Kit Cartons"'));
  assert.doesNotMatch(service,/erp_preparing_update_component|erp_preparing_receive_shipment/);
  assert.match(ui,/School Allocation/);assert.match(ui,/Warehouse Receiving/);assert.match(ui,/Movement History/);
 });
@@ -65,5 +65,5 @@ test("new/updated JSX parses without diagnostics",()=>{
   const parsed=ts.createSourceFile(file,read(file),ts.ScriptTarget.Latest,true,ts.ScriptKind.JSX);
   assert.deepEqual(parsed.parseDiagnostics.map(d=>d.messageText),[],file);
  }
- assert.match(read("app/projects-preparing/page.jsx"),/projects-preparing\.css\?v=252/);
+ assert.match(read("app/projects-preparing/page.jsx"),/projects-preparing\.css\?v=254/);
 });
