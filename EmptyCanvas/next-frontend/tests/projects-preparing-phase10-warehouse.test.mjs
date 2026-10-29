@@ -65,5 +65,5 @@ test("new/updated JSX parses without diagnostics",()=>{
   const parsed=ts.createSourceFile(file,read(file),ts.ScriptTarget.Latest,true,ts.ScriptKind.JSX);
   assert.deepEqual(parsed.parseDiagnostics.map(d=>d.messageText),[],file);
  }
- assert.match(read("app/projects-preparing/page.jsx"),/projects-preparing\.css\?v=245/);
+ assert.match(read("app/projects-preparing/page.jsx"),/projects-preparing\.css\?v=247/);
 });

@@ -40,7 +40,7 @@ test('testing calculations and validation remain enforced',()=>{
 });
 test('responsive layout and syntax remain valid',()=>{
  assert.match(css,/@media\(max-width:580px\)/);
- assert.match(file('app/projects-preparing/page.jsx'),/projects-preparing\.css\?v=245/);
+ assert.match(file('app/projects-preparing/page.jsx'),/projects-preparing\.css\?v=247/);
  for(const f of ['components/preparing/ProjectTesting.jsx','lib/preparing-project-testing.js','app/projects-preparing/page.jsx']){
   const ast=ts.createSourceFile(f,file(f),ts.ScriptTarget.Latest,true,f.endsWith('jsx')?ts.ScriptKind.JSX:ts.ScriptKind.JS);
   assert.deepEqual(ast.parseDiagnostics,[],f);
