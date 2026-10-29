@@ -1,6 +1,7 @@
 import "server-only";
 import { isTrustedLegacyAdmin } from "./admin-identity-policy.mjs";
 import { assertSessionColumnOwner, assertWritableSessionColumn } from "./stocktaking-session-access.mjs";
+import { readAllStocktakingPages } from "./stocktaking-pagination.mjs";
 import { getProductsCatalog } from "./products-service";
 import { listTeamMembersLite } from "./team-members-service";
 import { getReviewerVisibility } from "./reviewer-visibility-service";
@@ -415,7 +416,13 @@ async function loadStockRows({ fresh = false } = {}) {
   const now = Date.now();
   if (!fresh && stockRowsCache && stockRowsCache.expiresAt > now) return stockRowsCache.value;
   if (!fresh && stockRowsInflight) return await stockRowsInflight;
-  const pending = selectAll(stocktakingTable(), { limit: 5000, order: "name.asc,id.asc", profileName: "stocktaking.rows-full-fallback" });
+  // A single limit=5000 request is still capped by PostgREST max_rows (often
+  // 1,000), losing the remaining components. Always read every ordered page.
+  const pending = readAllStocktakingPages(({ limit, offset }) => select(stocktakingTable(), {
+    limit: String(limit),
+    offset: String(offset),
+    order: "name.asc,id.asc",
+  }, { profileName: "stocktaking.rows-full-fallback" }));
   if (!fresh) stockRowsInflight = pending;
   try {
     const loaded = await pending;
@@ -480,7 +487,7 @@ async function loadStockSchemaKeys({ fresh = false } = {}) {
   }
 }
 
-async function loadStockProjection(keys = [], { fresh = false } = {}) {
+async function loadStockProjection(keys = [], { fresh = false, quantityColumn = "" } = {}) {
   const uniqueKeys = [...new Set((keys || []).map(text).filter(Boolean))];
   if (!uniqueKeys.length) return [];
   const selectExpr = uniqueKeys.map(quoteStockSelectColumn).filter(Boolean).join(",");
@@ -488,20 +495,24 @@ async function loadStockProjection(keys = [], { fresh = false } = {}) {
   // to the compatibility full-row query is safer than risking a 414 response.
   if (!selectExpr || selectExpr.length > 7000) return null;
 
-  const cacheKey = stockProjectionKey(uniqueKeys);
+  // Filtering at the database lets a folder with 167 non-zero components load
+  // those 167 directly instead of scanning the first N rows of every school.
+  const stockFilter = uniqueKeys.includes(quantityColumn) ? quantityColumn : "";
+  const cacheKey = `${stockProjectionKey(uniqueKeys)}\u001e${stockFilter}`;
   const now = Date.now();
   const cached = stockProjectionCache.get(cacheKey);
   if (!fresh && cached?.expiresAt > now) return cached.value;
   if (!fresh && stockProjectionInflight.has(cacheKey)) return await stockProjectionInflight.get(cacheKey);
 
   const hasName = uniqueKeys.includes("name");
-  const hasId = uniqueKeys.includes("id");
-  const pending = selectAll(stocktakingTable(), {
-    limit: 5000,
+  const pending = readAllStocktakingPages(({ limit, offset }) => select(stocktakingTable(), {
     select: selectExpr,
-    order: hasName ? `name.asc${hasId ? ",id.asc" : ""}` : "",
-    profileName: "stocktaking.rows-projection",
-  });
+    limit: String(limit),
+    offset: String(offset),
+    // A stable, unique tie-breaker is required for offset pagination.
+    order: hasName ? "name.asc,id.asc" : "id.asc",
+    ...(stockFilter ? { [stockFilter]: "neq.0" } : {}),
+  }, { profileName: "stocktaking.rows-projection" }));
   if (!fresh) stockProjectionInflight.set(cacheKey, pending);
   try {
     const loaded = await pending;
@@ -711,7 +722,7 @@ export async function stocktakingForColumn(column, { inventoryColumn = "", defec
     // Once a folder is opened, fetch only that folder quantity plus the fields
     // actually rendered/edited by Stocktaking. Other schools' quantity columns
     // and historical inventory columns are intentionally excluded.
-    rows = await loadStockProjection(projectionKeys, { fresh });
+    rows = await loadStockProjection(projectionKeys, { fresh, quantityColumn });
   } catch (error) {
     console.warn("[stocktaking] targeted folder projection unavailable; using full-row compatibility query:", error?.message || error);
   }
@@ -785,7 +796,7 @@ export async function stocktakingForAccount(account = {}, { fresh = false } = {}
   try {
     quantityColumn = findQuantityColumnFromKeys(schemaKeys, schoolName);
     if (!quantityColumn) throw new Error(`Could not determine the Stocktaking quantity column for ${schoolName}.`);
-    stockRows = await loadStockProjection(stockDetailProjectionKeys(schemaKeys, [quantityColumn]), { fresh });
+    stockRows = await loadStockProjection(stockDetailProjectionKeys(schemaKeys, [quantityColumn]), { fresh, quantityColumn });
   } catch (error) {
     console.warn("[stocktaking] targeted account projection unavailable; using full-row compatibility query:", error?.message || error);
   }
