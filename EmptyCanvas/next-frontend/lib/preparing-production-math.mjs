@@ -25,3 +25,13 @@ export function boxPackingTarget(productionReceived,totalPacked,packedInSelected
  if(nextTotal<0)throw Error("Packed total cannot be negative.");
  return {packed:nextTotal,unpacked:Number(productionReceived)-nextTotal};
 }
+
+// Production Receiving filters: available stock from Warehouse is the default.
+// "Not Received" means no Production handover has ever been recorded for the
+// component; it intentionally includes items not yet available from Warehouse.
+export function filterProductionReceivingRows(rows,filter="available"){
+ const items=Array.isArray(rows)?rows:[];
+ if(filter==="available")return items.filter(row=>Number(row.availableToProduction)>0);
+ if(filter==="not-received")return items.filter(row=>Number(row.productionReceived??0)===0);
+ return items;
+}
