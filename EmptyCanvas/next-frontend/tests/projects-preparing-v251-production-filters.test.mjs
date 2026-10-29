@@ -29,8 +29,9 @@ test("Production Receiving page defaults to Available to Receive and offers Not 
  const source=readFileSync(new URL("../components/preparing/ProjectProductionReceiving.jsx",import.meta.url),"utf8");
  assert.match(source,/\[filter,setFilter\]=useState\("available"\)/);
  assert.match(source,/filterProductionReceivingRows\(/);
- assert.match(source,/<option value="not-received">Not Received<\/option>/);
- assert.match(source,/<option value="all">All components<\/option>/);
+ assert.match(source,/value:"not-received",label:"Not Received"/);
+ assert.match(source,/value:"all",label:"All Components"/);
+ assert.match(source,/PreparingStatusFilter/);
  const parsed=ts.createSourceFile("ProjectProductionReceiving.jsx",source,ts.ScriptTarget.Latest,true,ts.ScriptKind.JSX);
  assert.deepEqual(parsed.parseDiagnostics,[]);
 });

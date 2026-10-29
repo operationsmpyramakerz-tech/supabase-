@@ -18,7 +18,7 @@ test("Packing queue shows only components with Production stock and positive Ava
 });
 test("Boxes support long press, context menu, rename / Delete, and show history",()=>{
  const src=read("components/preparing/ProjectBoxDistribution.jsx");
- for(const pattern of [/onPointerDown/,/setTimeout\(/,/onContextMenu/,/Rename/,/Delete/,/boxDialog/,/action:"rename"/,/action:"cancel"/,/"rename"\]/,/packableRows\(items\)/])assert.match(src,pattern);
+ for(const pattern of [/onPointerDown/,/setTimeout\(/,/onContextMenu/,/Rename/,/Delete/,/boxDialog/,/action:"rename"/,/action:"cancel"/,/"rename"\]/,/filterBoxDistributionRows\(items,filter\)/])assert.match(src,pattern);
  const parsed=ts.createSourceFile("ProjectBoxDistribution.jsx",src,ts.ScriptTarget.Latest,true,ts.ScriptKind.JSX);
  assert.deepEqual(parsed.parseDiagnostics,[]);
 });

@@ -3,3 +3,14 @@
 export const packableRows = rows => (Array.isArray(rows)?rows:[]).filter(row =>
   Number(row.productionReceived) > 0 && Number(row.unpacked) > 0
 );
+
+/** Filter packing visibility without changing carton lines, stock balances or history.
+ * Default: queue with unpacked stock. Not Packed: received by Production but never
+ * placed in any active box. All: include fully packed and not-yet-received items
+ * for auditing and (when permitted) correction/unpacking. */
+export function filterBoxDistributionRows(rows,filter="available"){
+ const items=Array.isArray(rows)?rows:[];
+ if(filter==="available")return packableRows(items);
+ if(filter==="not-packed")return items.filter(r=>Number(r.productionReceived)>0&&Number(r.packedQty)===0);
+ return items;
+}
