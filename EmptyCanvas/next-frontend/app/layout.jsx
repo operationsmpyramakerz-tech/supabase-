@@ -224,7 +224,7 @@ export default async function RootLayout({ children }) {
             Previously these links came only from client-rendered AppShell,
             allowing the PWA/Hard Refresh to paint the raw shell first. */}
         <link rel="stylesheet" href="/next/css/style.css?v=boot-main51-v1" precedence="erp-shell" />
-        <link rel="stylesheet" href="/next/css/ui-redesign.css?v=boot-main51-v1" precedence="erp-shell" />
+        <link rel="stylesheet" href="/next/css/ui-redesign.css?v=orders-filter-dot-black-251" precedence="erp-shell" />
         <link rel="stylesheet" href="/next/css/page-canvas-fix.css?v=boot-main51-v1" precedence="erp-shell" />
         <link rel="stylesheet" href="/next/css/classic-parity.css?v=orders-sort-v54" precedence="erp-shell" />
         <link rel="stylesheet" href="/next/css/dark-mode.css?v=theme-v2-white-nav" precedence="erp-theme" />

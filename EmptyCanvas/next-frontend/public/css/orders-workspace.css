@@ -486,20 +486,59 @@ body .orders-workspace.orders-workspace .co-cards .co-card .orders-workspace-typ
   stroke-width: 2.15 !important;
 }
 /* Sort acts on loaded results; the count remains server-page aware. */
-body .orders-workspace .orders-workspace-list-head__tools { display: flex; flex-wrap: nowrap; align-items: center; justify-content: flex-end; gap: 10px; min-width: 0; }
-body .orders-workspace .orders-workspace-sort { display: inline-flex; align-items: center; gap: 4px; min-height: 34px; padding: 0 8px; background: var(--ow-surface); color: var(--ow-ink); border: 1px solid var(--ow-border); border-radius: 11px; cursor: pointer; }
-body .orders-workspace .orders-workspace-sort > svg { width: 15px; height: 15px; flex: 0 0 auto; }
-body .orders-workspace .orders-workspace-sort select { max-width: 108px; min-height: 32px; padding: 0 2px; border: 0; outline: 0; background: transparent; color: inherit; font: inherit; font-size: 12px; font-weight: 750; cursor: pointer; }
-body .orders-workspace .orders-workspace-sort select option { background: var(--ow-surface); color: var(--ow-ink); }
-body .orders-workspace .orders-workspace-sort:focus-within { outline: 2px solid var(--ow-selection); outline-offset: 2px; }
-body .orders-workspace .orders-workspace-sort__sr { position: absolute; overflow: hidden; clip: rect(0,0,0,0); width: 1px; height: 1px; }
+/* Shared order list toolbar: the list count and opt-in Speed button are intentionally hidden.
+   The popup is rendered inside the same sort control on all four order routes. */
+body .orders-workspace .orders-workspace-list-head__tools { display: flex; align-items: center; justify-content: flex-end; min-width: 0; }
+body .orders-workspace .orders-workspace-sort { position: relative; display: inline-flex; align-items: center; min-width: 148px; color: var(--ow-ink); font: inherit; }
+body .orders-workspace .orders-workspace-sort__trigger {
+  width: 100%; min-height: 40px; display: flex; align-items: center; gap: 9px;
+  padding: 0 12px; border-radius: 13px; border: 1px solid #e4e7ec;
+  background: #fff; box-shadow: 0 3px 11px rgba(15,23,42,.035);
+  color: #111827; cursor: pointer; font: inherit; font-size: 12px; font-weight: 750;
+  transition: border-color .18s ease, box-shadow .18s ease, background .18s ease;
+}
+body .orders-workspace .orders-workspace-sort__trigger:hover,
+body .orders-workspace .orders-workspace-sort.is-open .orders-workspace-sort__trigger { border-color: #e4a17b; box-shadow: 0 0 0 3px rgba(244,91,23,.09); }
+body .orders-workspace .orders-workspace-sort__trigger:focus-visible { outline: 2px solid var(--ow-selection); outline-offset: 2px; }
+body .orders-workspace .orders-workspace-sort__trigger > svg { width: 17px; height: 17px; flex: 0 0 auto; }
+body .orders-workspace .orders-workspace-sort__value { flex: 1; white-space: nowrap; text-align: left; }
+body .orders-workspace .orders-workspace-sort__trigger > .orders-workspace-sort__chevron { width: 14px; height: 14px; transition: transform .18s ease; }
+body .orders-workspace .orders-workspace-sort.is-open .orders-workspace-sort__chevron { transform: rotate(180deg); }
+body .orders-workspace .orders-workspace-sort__menu {
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 100;
+  width: 192px; max-width: calc(100vw - 32px); padding: 7px;
+  border: 1px solid #e8ebf0; border-radius: 16px; background: #fff;
+  box-shadow: 0 18px 45px rgba(15,23,42,.16), 0 3px 10px rgba(15,23,42,.05);
+  animation: orders-sort-menu-in .15s ease-out both;
+}
+body .orders-workspace .orders-workspace-sort__menu-label {
+  display: block; padding: 8px 11px 6px; color: #868e9b;
+  font-size: 10px; font-weight: 850; letter-spacing: .11em;
+}
+body .orders-workspace .orders-workspace-sort__option {
+  display: flex; width: 100%; min-height: 38px; padding: 8px 11px;
+  align-items: center; justify-content: space-between; gap: 10px;
+  border: 0; border-radius: 10px; background: transparent; color: #30394b;
+  text-align: left; cursor: pointer; font: inherit; font-size: 12px; font-weight: 650;
+}
+body .orders-workspace .orders-workspace-sort__option:hover,
+body .orders-workspace .orders-workspace-sort__option:focus-visible { outline: none; background: #f2f4f7; }
+body .orders-workspace .orders-workspace-sort__option.is-active { background: #fff2e9; color: #b84b10; font-weight: 800; }
+body .orders-workspace .orders-workspace-sort__option > svg { width: 15px; height: 15px; flex: 0 0 auto; }
+@keyframes orders-sort-menu-in { from { opacity: 0; transform: translateY(-5px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@media (prefers-reduced-motion: reduce) { body .orders-workspace .orders-workspace-sort__menu { animation: none; } }
+html[data-theme="dark"] body .orders-workspace .orders-workspace-sort__trigger,
+html[data-theme="dark"] body .orders-workspace .orders-workspace-sort__menu { background: #171f2d; color: #f3f4f6; border-color: #384459; }
+html[data-theme="dark"] body .orders-workspace .orders-workspace-sort__option { color: #e5e7eb; }
+html[data-theme="dark"] body .orders-workspace .orders-workspace-sort__option:hover,
+html[data-theme="dark"] body .orders-workspace .orders-workspace-sort__option:focus-visible { background: #293547; }
+html[data-theme="dark"] body .orders-workspace .orders-workspace-sort__option.is-active { background: #50301d; color: #ffb17a; }
 @media (max-width: 768px) {
   body .orders-workspace.orders-workspace .co-cards .co-card .co-main { gap: 10px !important; }
   body .orders-workspace.orders-workspace .co-cards .co-card .orders-workspace-type-icon { width: 48px !important; min-width: 48px !important; max-width: 48px !important; height: 48px !important; min-height: 48px !important; max-height: 48px !important; flex-basis: 48px !important; border-radius: 14px !important; }
   body .orders-workspace.orders-workspace .co-cards .co-card .orders-workspace-type-icon svg { width: 25px !important; height: 25px !important; }
   body .orders-workspace .orders-workspace-list-head__tools { gap: 6px; }
   body .orders-workspace .orders-workspace-sort { min-height: 32px; }
-  body .orders-workspace .orders-workspace-list-head__count { font-size: 10px; }
 }
 
 /* Match the real order details sheet while its API request is running.

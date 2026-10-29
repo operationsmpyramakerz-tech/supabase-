@@ -3381,8 +3381,8 @@ body.ops-has-system-cover:not(.shell-embedded) .ua-members-grid{
   top: 18px !important;
   width: 9px !important;
   height: 9px !important;
-  background: #FF5A1F !important;
-  box-shadow: 0 0 0 4px rgba(255,90,31,0.18) !important;
+  background: #111827 !important;
+  box-shadow: 0 0 0 4px rgba(17,24,39,0.12) !important;
 }
 
 :where(body.current-orders-page, body.operations-orders-page, body.orders-review-page, body[data-orders-view="maintenance"], body.page-orders-maintenance-orders) .orders-toolbar__divider{
