@@ -12,6 +12,31 @@ export function warehouseTotals(items, receiptLines, allocations) {
   for (const item of summaries.values()) item.available = item.accepted - item.allocated;
   return [...summaries.values()];
 }
+// Testing Passed is the upper bound for a NEW warehouse receipt. Physical
+// accepted stock remains a separate balance used by school allocations.
+export function warehouseReceivingBalances(rows, testBalances = []) {
+  const passedById = new Map(testBalances.map(item => [item.item_id, n(item.passed)]));
+  return rows.map(row => {
+    const passed = passedById.get(row.id) || 0;
+    const readyToReceive = Math.max(0, passed - n(row.accepted));
+    return { ...row, passed, readyToReceive };
+  });
+}
+
+export function warehouseReceiptLimit(current, next, passed, allocated = 0) {
+  const change = Number(next);
+  const accepted = n(current), approved = n(passed);
+  if (String(next).trim() === '' || !Number.isSafeInteger(change) || change < 0 || change > 1000000000)
+    throw new Error('Received quantity must be a non-negative whole number.');
+  if (Math.abs(change - accepted) > 1000000)
+    throw new Error('Change cannot exceed 1,000,000 units in one transaction.');
+  if (change > accepted && change - accepted > Math.max(0, approved - accepted))
+    throw new Error(`Only ${Math.max(0, approved - accepted)} Passed unit(s) are available to receive.`);
+  if (change < n(allocated))
+    throw new Error('Received cannot be reduced below quantities already allocated to schools.');
+  return change - accepted;
+}
+
 export function demandsForSchool(demands, allocations, schoolId) {
   const assigned = new Map();
   for (const row of allocations) if (row.school_id === schoolId)

@@ -3,8 +3,8 @@ import {testingGroups} from "./preparing-project-testing-grouping.mjs";
 const qty=v=>Number(v)||0;
 export const WAREHOUSE_COLUMNS=[
  {key:"name",label:"Component",fixed:true},{key:"code",label:"Code"},
- {key:"required",label:"Required"},{key:"accepted",label:"Received"},
- {key:"allocated",label:"Allocated"},{key:"available",label:"Available"},
+ {key:"required",label:"Required"},{key:"passed",label:"Passed Testing"},{key:"accepted",label:"Received"},
+ {key:"allocated",label:"Allocated"},{key:"available",label:"Available to Receive"},
  {key:"remaining",label:"Remaining"},{key:"receivedBy",label:"Received By"},
  {key:"signature",label:"Signature"},
 ];
@@ -22,6 +22,7 @@ export function warehouseExportValue(row,key,blank=false){
  if(blank)return "";
  if(key==="remaining")return String(Math.max(0,qty(row.projectTotalRequired??row.required)-qty(row.accepted)));
  if(key==="receivedBy")return (row.receivedBy||[]).map(person=>person.name).join("; ");
+ if(key==="available")return String(qty(row.readyToReceive??row.available));
  return String(qty(row[key]));
 }
 export function warehouseReceiptDelta(current,next){

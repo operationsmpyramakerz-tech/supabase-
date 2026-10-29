@@ -1,12 +1,12 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { warehouseTotals,demandsForSchool,projectRequired } from "../../lib/preparing-warehouse-math.mjs";
-import {WAREHOUSE_COLUMNS,warehouseGroups,warehouseExportValue,warehouseReceiptDelta} from "../../lib/preparing-warehouse-view.mjs";
+import { warehouseTotals,warehouseReceivingBalances,warehouseReceiptLimit,demandsForSchool,projectRequired } from "../../lib/preparing-warehouse-math.mjs";
+import {WAREHOUSE_COLUMNS,warehouseGroups,warehouseExportValue} from "../../lib/preparing-warehouse-view.mjs";
 const number=v=>Number(v)||0;
 const pretty=v=>number(v).toLocaleString("en-US");
 const safeCSV=v=>{const raw=String(v??"");const safe=/^[\s]*[=+@-]/.test(raw)?`'${raw}`:raw;return `"${safe.replaceAll('"','""')}"`;};
 const date=v=>new Date(v).toLocaleString("en-GB",{dateStyle:"medium",timeStyle:"short"});
-const empty={schools:[],items:[],demands:[],receipts:[],receiptLines:[],allocations:[]};
+const empty={schools:[],items:[],demands:[],receipts:[],receiptLines:[],allocations:[],testingBalances:[]};
 export default function ProjectWarehouseReceiving({projectId,projectName,hasProjectProposal=false,canReceive,canAllocate,request,onClose}) {
  const [state,setState]=useState(empty),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false);
  const [tab,setTab]=useState("receiving"),[search,setSearch]=useState(""),[filter,setFilter]=useState("all");
@@ -18,7 +18,7 @@ export default function ProjectWarehouseReceiving({projectId,projectName,hasProj
  const [error,setError]=useState(""),[success,setSuccess]=useState("");
  async function reload(){const response=await request(`/warehouse?projectId=${encodeURIComponent(projectId)}`);setState(response);setLoading(false);}
  useEffect(()=>{let active=true;request(`/warehouse?projectId=${encodeURIComponent(projectId)}`).then(v=>{if(active){setState(v);setLoading(false);}}).catch(e=>{if(active){setError(e.message);setLoading(false);}});return()=>{active=false;};},[projectId]);
- const summaries=useMemo(()=>warehouseTotals((state.items||[]).map(row=>({...row,required_qty:projectRequired(Number(row.required_qty||0),(state.schools||[]).length)})),state.receiptLines||[],state.allocations||[]),[state]);
+ const summaries=useMemo(()=>warehouseReceivingBalances(warehouseTotals((state.items||[]).map(row=>({...row,required_qty:projectRequired(Number(row.required_qty||0),(state.schools||[]).length)})),state.receiptLines||[],state.allocations||[]),state.testingBalances||[]),[state]);
  const nameById=useMemo(()=>new Map(state.items.map(row=>[row.id,row.product_name])),[state]);
  const receivedById=useMemo(()=>{
   const result=new Map();
@@ -33,8 +33,8 @@ export default function ProjectWarehouseReceiving({projectId,projectName,hasProj
  },[state.receipts,state.receiptLines]);
  const schoolsCaptured=new Set(state.demands.map(row=>row.school_id));
  const uncaptured=state.schools.filter(row=>!schoolsCaptured.has(row.id));
- const totals=useMemo(()=>summaries.reduce((sum,row)=>({required:sum.required+number(row.required_qty),accepted:sum.accepted+row.accepted,damaged:sum.damaged+row.damaged,allocated:sum.allocated+row.allocated,available:sum.available+row.available}),{required:0,accepted:0,damaged:0,allocated:0,available:0}),[summaries]);
- const shown=useMemo(()=>summaries.filter(row=>`${row.product_name} ${row.product_id}`.toLowerCase().includes(search.toLowerCase().trim())).filter(row=>filter==="short"?row.accepted<row.required_qty:filter==="available"?row.available>0:true),[summaries,search,filter]);
+ const totals=useMemo(()=>summaries.reduce((sum,row)=>({required:sum.required+number(row.required_qty),accepted:sum.accepted+row.accepted,damaged:sum.damaged+row.damaged,allocated:sum.allocated+row.allocated,available:sum.available+row.available,passed:sum.passed+row.passed,readyToReceive:sum.readyToReceive+row.readyToReceive}),{required:0,accepted:0,damaged:0,allocated:0,available:0,passed:0,readyToReceive:0}),[summaries]);
+ const shown=useMemo(()=>summaries.filter(row=>`${row.product_name} ${row.product_id}`.toLowerCase().includes(search.toLowerCase().trim())).filter(row=>filter==="short"?row.accepted<row.required_qty:filter==="available"?row.readyToReceive>0:true),[summaries,search,filter]);
  const schoolDemands=useMemo(()=>demandsForSchool(state.demands,state.allocations,schoolId),[state.demands,state.allocations,schoolId]);
  const demandsMap=useMemo(()=>new Map(schoolDemands.map(row=>[row.item_id,row])),[schoolDemands]);
  const schoolShown=shown.filter(row=>demandsMap.has(row.id));
@@ -58,7 +58,7 @@ export default function ProjectWarehouseReceiving({projectId,projectName,hasProj
  async function saveReceipt(row){
   if(busy)return;
   let acceptedDelta;
-  try{acceptedDelta=warehouseReceiptDelta(row.accepted,draft[row.id]);}
+  try{acceptedDelta=warehouseReceiptLimit(row.accepted,draft[row.id],row.passed,row.allocated);}
   catch(e){setRowError(old=>({...old,[row.id]:e.message}));return;}
   if(acceptedDelta===0){setRowError(old=>({...old,[row.id]:"Change the Received amount before saving."}));return;}
   const ok=await execute("receive",{kind:acceptedDelta<0?"adjustment":"receipt",lines:[{itemId:row.id,accepted:acceptedDelta}]});
@@ -113,13 +113,13 @@ export default function ProjectWarehouseReceiving({projectId,projectName,hasProj
   {error&&<div className="pr-alert" role="alert">{error}<button type="button" onClick={()=>setError("")} aria-label="Dismiss">×</button></div>}
   {success&&<div className="pr-manifest-success" role="status">{success}</div>}
   {loading?<p className="pr-muted">Loading warehouse records…</p>:<>
-   <div className="pr-wh-stats">{[["Project Required",totals.required],["Received",totals.accepted],["Remaining",Math.max(0,totals.required-totals.accepted)],["Allocated",totals.allocated],["Available",totals.available]].map(([label,value])=><div key={label}><span>{label}</span><strong>{pretty(value)}</strong></div>)}</div>
+   <div className="pr-wh-stats">{[["Project Required",totals.required],["Passed Testing",totals.passed],["Received",totals.accepted],["Available to Receive",totals.readyToReceive],["Available for Schools",totals.available]].map(([label,value])=><div key={label}><span>{label}</span><strong>{pretty(value)}</strong></div>)}</div>
    <div className="pr-wh-navigation" role="group" aria-label="Warehouse view">
     {[["receiving","Warehouse Receiving"],["allocation","School Allocation"],["history","Movement History"]].map(([key,label])=><button type="button" key={key} className={tab===key?"is-active":""} onClick={()=>{setTab(key);setError("");}}>{label}</button>)}
     <button type="button" className="pr-wh-export" onClick={()=>setShowExport(true)} disabled={!state.items.length}>Export <span aria-hidden="true">⌄</span></button>
    </div>
    {uncaptured.length>0&&<div className="pr-wh-notice"><div><strong>{uncaptured.length} school(s) need requirement capture</strong><small>{hasProjectProposal?"Capture each school’s Proposal for school allocation limits. This does not modify the project Master BOM or warehouse receipts.":"Capture linked school Proposals to calculate legacy project requirements. Existing school baselines stay frozen."}</small></div>{canReceive&&<button className="pr-primary" disabled={busy} onClick={()=>execute("capture",{})}>{busy?"Capturing…":hasProjectProposal?"Capture School Requirements":"Capture Project BOM"}</button>}</div>}
-   {!!state.items.length&&<div className="pr-wh-toolbar"><label className="pr-search"><input aria-label="Search warehouse components" placeholder="Search component or code…" value={search} onChange={e=>setSearch(e.target.value)}/></label><select aria-label="Warehouse filter" value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">All components</option><option value="short">Warehouse shortage</option><option value="available">Available to allocate</option></select><button type="button" className="pr-secondary" disabled={busy} onClick={()=>{setLoading(true);reload().catch(e=>{setLoading(false);setError(e.message);});}}>Refresh</button></div>}
+   {!!state.items.length&&<div className="pr-wh-toolbar"><label className="pr-search"><input aria-label="Search warehouse components" placeholder="Search component or code…" value={search} onChange={e=>setSearch(e.target.value)}/></label><select aria-label="Warehouse filter" value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">All components</option><option value="short">Warehouse shortage</option><option value="available">Available to Receive</option></select><button type="button" className="pr-secondary" disabled={busy} onClick={()=>{setLoading(true);reload().catch(e=>{setLoading(false);setError(e.message);});}}>Refresh</button></div>}
    {tab==="receiving"&&<div className="pr-wh-list pr-wr-list" aria-label="Master project components by Kit">{shownGroups.map((group,index)=>{
     const open=!!search.trim()||(expandedKit===null?index===0:expandedKit===group.key);
     return <section className={`pr-pt-kit-group${open?" is-open":""}`} key={group.key}>
@@ -128,14 +128,14 @@ export default function ProjectWarehouseReceiving({projectId,projectName,hasProj
       const active=!!editing[row.id],people=[...(receivedById.get(row.id)?.values()||[])];
       return <article className={`pr-wr-row${active?" is-editing":""}`} key={`${group.key}-${row.id}`}>
        <div className="pr-wr-heading"><div className="pr-wr-name"><strong>{row.product_name}</strong><small>{row.product_id?`#${row.product_id}`:"No component code"}{row.kitQuantity>0?` · Kit Qty: ${pretty(row.kitQuantity)}`:""}</small></div><span className="pr-wr-required">Required <b>{pretty(row.required_qty)}</b></span></div>
-       <div className="pr-wr-metrics"><div className="pr-wr-stat"><span>Received</span>{active?<input type="number" step="1" min="0" aria-label={`Received ${row.product_name}`} disabled={busy} value={draft[row.id]??""} onChange={e=>{setDraft(prev=>({...prev,[row.id]:e.target.value}));setRowError(prev=>({...prev,[row.id]:""}));}}/>:<strong>{pretty(row.accepted)}</strong>}</div>
-       <div className="pr-wr-stat"><span>Remaining</span><strong>{pretty(Math.max(0,row.required_qty-(active?Number(draft[row.id])||0:row.accepted)))}</strong></div>
+       <div className="pr-wr-metrics"><div className="pr-wr-stat"><span>Received</span>{active?<input type="number" step="1" min="0" aria-label={`Received ${row.product_name}`} disabled={busy} value={draft[row.id]??""} max={Math.max(row.accepted,row.passed)} onChange={e=>{setDraft(prev=>({...prev,[row.id]:e.target.value}));setRowError(prev=>({...prev,[row.id]:""}));}}/>:<strong>{pretty(row.accepted)}</strong>}</div>
+       <div className="pr-wr-stat"><span>Passed Testing</span><strong>{pretty(row.passed)}</strong></div>
        <div className="pr-wr-stat"><span>Allocated</span><strong>{pretty(row.allocated)}</strong></div>
-       <div className="pr-wr-stat"><span>Available</span><strong>{pretty(active?(Number(draft[row.id])||0)-row.allocated:row.available)}</strong></div>
+       <div className="pr-wr-stat"><span>Available to Receive</span><strong>{pretty(active?Math.max(0,row.passed-(Number(draft[row.id])||0)):row.readyToReceive)}</strong></div>
        {!active&&<div className="pr-wr-stat pr-wr-person"><span>Received By</span><div className="pr-wr-people">{people.length?people.map(person=><span key={person.id}>{person.name}</span>):<em>—</em>}</div></div>}
        <div className="pr-wr-actions">{canReceive&&(active?<><button className="pr-secondary" type="button" disabled={busy} onClick={()=>cancelReceipt(row)}>Cancel</button><button className="pr-primary" type="button" disabled={busy} onClick={()=>saveReceipt(row)}>Save</button></>:<><button className="pr-secondary" type="button" disabled={busy} onClick={()=>enableReceipt(row)}>Edit</button>{row.accepted>0&&<button className="pr-wr-erase" type="button" disabled={busy} title="Reverse received balance without deleting audit history" onClick={()=>setClearConfirm(row)}>Clear</button>}</>)}</div></div>
        {rowError[row.id]&&<p className="pr-wr-inline-error" role="alert">{rowError[row.id]}</p>}
-       {clearConfirm?.id===row.id&&<div className="pr-wr-confirm"><strong>Reverse all Received units?</strong><small>This records a signed correction. Existing vouchers are never deleted. Allocated or tested quantities cannot be reversed.</small><button type="button" className="pr-secondary" onClick={()=>setClearConfirm(null)}>Cancel</button><button type="button" className="pr-wr-erase" disabled={busy} onClick={()=>clearReceipt(row)}>Confirm reversal</button></div>}
+       {clearConfirm?.id===row.id&&<div className="pr-wr-confirm"><strong>Reverse all Received units?</strong><small>This records a signed correction. Existing vouchers are never deleted. Allocated quantities cannot be reversed.</small><button type="button" className="pr-secondary" onClick={()=>setClearConfirm(null)}>Cancel</button><button type="button" className="pr-wr-erase" disabled={busy} onClick={()=>clearReceipt(row)}>Confirm reversal</button></div>}
       </article>;
      })}</div>}
     </section>;

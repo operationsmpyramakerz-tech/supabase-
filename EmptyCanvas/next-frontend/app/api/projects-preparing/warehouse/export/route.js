@@ -2,7 +2,7 @@ import PDFDocument from "pdfkit";
 import {getDirectAccountGate} from "../../../../../lib/products-auth";
 import {featureGate} from "../../../../../lib/feature-permissions-server";
 import {warehouseWorkspace} from "../../../../../lib/preparing-warehouse";
-import {warehouseTotals,projectRequired} from "../../../../../lib/preparing-warehouse-math.mjs";
+import {warehouseTotals,warehouseReceivingBalances,projectRequired} from "../../../../../lib/preparing-warehouse-math.mjs";
 import {WAREHOUSE_COLUMNS,warehouseGroups,warehouseExportValue} from "../../../../../lib/preparing-warehouse-view.mjs";
 
 export const runtime="nodejs";
@@ -10,7 +10,7 @@ export const dynamic="force-dynamic";
 export const revalidate=0;
 const reply=(message,status)=>Response.json({ok:false,error:message},{status,headers:{"Cache-Control":"private, no-store"}});
 const labels=Object.fromEntries(WAREHOUSE_COLUMNS.map(col=>[col.key,col.label]));
-const widths={name:215,code:69,required:70,accepted:70,allocated:70,available:75,remaining:75,receivedBy:120,signature:114};
+const widths={name:215,code:69,required:70,passed:70,accepted:70,allocated:70,available:75,remaining:75,receivedBy:120,signature:114};
 function collect(doc){return new Promise((resolve,reject)=>{const chunks=[];doc.on("data",chunk=>chunks.push(chunk));doc.on("end",()=>resolve(Buffer.concat(chunks)));doc.on("error",reject);});}
 export async function POST(request){
  const gate=featureGate(await getDirectAccountGate(["Projects Preparing"]),"preparing.view");
@@ -24,7 +24,7 @@ export async function POST(request){
   if(visible.size>150||[...visible].some(key=>typeof key!=="string"||key.length>200))return reply("Invalid Kit groups.",400);
   const state=await warehouseWorkspace(body.projectId);
   const count=state.schools.length;
-  const items=warehouseTotals(state.items.map(r=>({...r,required_qty:projectRequired(Number(r.required_qty||0),count)})),state.receiptLines,state.allocations);
+  const items=warehouseReceivingBalances(warehouseTotals(state.items.map(r=>({...r,required_qty:projectRequired(Number(r.required_qty||0),count)})),state.receiptLines,state.allocations),state.testingBalances||[]);
   const members=new Map();
   for(const receipt of [...state.receipts].reverse()){
    if(!receipt.created_by_name)continue;

@@ -26,7 +26,7 @@ async function paged(table,filters,label,max=6000,order="created_at.asc") {
 const rootProject=async projectId=>{ const key=id(projectId); if(!await selectById("erp_preparing_projects",key)) fail("Project not found.",404); return key; };
 export async function warehouseWorkspace(projectId) {
   serviceOnly(); const project=await rootProject(projectId);
-  const [schools,items,demands,receipts,receiptLines,allocations,kitGroups]=await Promise.all([
+  const [schools,items,demands,receipts,receiptLines,allocations,kitGroups,testingBalances]=await Promise.all([
     paged("erp_preparing_schools",{project_id:`eq.${project}`},"schools",500),
     paged("erp_preparing_warehouse_items",{project_id:`eq.${project}`},"BOM",5000),
     paged("erp_preparing_warehouse_demands",{project_id:`eq.${project}`},"requirements",20000),
@@ -34,9 +34,10 @@ export async function warehouseWorkspace(projectId) {
     paged("erp_preparing_warehouse_receipt_lines",{project_id:`eq.${project}`},"receipt lines",20000,"id.asc"),
     paged("erp_preparing_warehouse_allocations",{project_id:`eq.${project}`},"school assignments",20000,"created_at.desc"),
     paged("erp_preparing_project_kit_groups",{project_id:`eq.${project}`},"Kit groups",200,"sort_order.asc"),
+    rpc("erp_preparing_warehouse_testing_balances_v243",{p_project_id:project},{profileName:"preparing.warehouse.passed"}),
   ]);
   const bomAudit=await paged("erp_preparing_warehouse_bom_audit",{project_id:`eq.${project}`},"BOM audit",5000,"changed_at.desc");
-  return {projectId:project,schools,items,demands,receipts,receiptLines,allocations,kitGroups,bomAudit};
+  return {projectId:project,schools,items,demands,receipts,receiptLines,allocations,kitGroups,testingBalances,bomAudit};
 }
 export async function captureWarehouseBOM(body,account) {
   serviceOnly(); const project=await rootProject(body?.projectId);
