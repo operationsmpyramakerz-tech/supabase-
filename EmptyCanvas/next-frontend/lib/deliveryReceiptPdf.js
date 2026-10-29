@@ -248,6 +248,8 @@ async function pipeDeliveryReceiptPDF(
     // Used for header colors when grouping is disabled
     headerColorKey = null,
     documentTitle = "Delivery Receipt",
+    summaryTitle = "Order Summary",
+    summaryLabels = null,
     recipientLabelLeft = "Delivered to",
     thirdSignatureLabel = null,
     signatureLabels = null,
@@ -557,7 +559,7 @@ async function pipeDeliveryReceiptPDF(
     .fillColor(COLORS.text)
     .font("Helvetica-Bold")
     .fontSize(14)
-    .text("Order Summary", mL, doc.y);
+    .text(String(summaryTitle || "Order Summary"), mL, doc.y);
   doc.moveDown(0.45);
 
   const infoGap = 12;
@@ -581,11 +583,14 @@ async function pipeDeliveryReceiptPDF(
   const infoY1 = doc.y;
   const teamLabel = String(teamMember || "—");
   const reasonLabel = String(preparedBy || "—");
-  drawInfoBox(mL, infoY1, "Team member", teamLabel);
-  drawInfoBox(mL + infoW + infoGap, infoY1, "Reason", reasonLabel);
+  // An optional label override lets other reports reuse the exact Operations Orders
+  // PDF layout without referring to a stock folder as an order or team member.
+  const summaryLabel = (key, fallback) => String(summaryLabels?.[key] || fallback);
+  drawInfoBox(mL, infoY1, summaryLabel("teamMember", "Team member"), teamLabel);
+  drawInfoBox(mL + infoW + infoGap, infoY1, summaryLabel("reason", "Reason"), reasonLabel);
   const infoY2 = infoY1 + infoH + 8;
-  drawInfoBox(mL, infoY2, "Order ID", String(orderId || "—"));
-  drawInfoBox(mL + infoW + infoGap, infoY2, "Date", formatDateTime(generatedAt));
+  drawInfoBox(mL, infoY2, summaryLabel("orderId", "Order ID"), String(orderId || "—"));
+  drawInfoBox(mL + infoW + infoGap, infoY2, summaryLabel("date", "Date"), formatDateTime(generatedAt));
   doc.y = infoY2 + infoH + 16;
 
   // Keep the proposal-style summary compact. The three dark statistic cards
