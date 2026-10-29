@@ -6,6 +6,7 @@ import { orderCardAllows } from "../../lib/order-data-scope.mjs";
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import ClassicOrderIcon from "./ClassicOrderIcon";
+import useCompleteOrderTypeCounts from "./useCompleteOrderTypeCounts";
 import { withSingleOrderSourceAttribution } from "../../lib/order-kit-attribution.mjs";
 import { createOrderDetailsLoader } from "./orderDetailsLoader";
 import { cancelOrderOpenTimer, loadOrderAndModalWithMetrics, markOrderOpenStarted, reportOrderVisibleAfterPaint, warmOrderModalOnIdle } from "./orderOpeningPerformance";
@@ -541,7 +542,7 @@ function useClassicHeaderSearch(query, setQuery, placeholder) {
   }, [query]);
 }
 
-function TypeFilter({ value, options, onChange }) {
+function TypeFilter({ value, options, onChange, onOpen, loading, error }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
 
@@ -559,14 +560,13 @@ function TypeFilter({ value, options, onChange }) {
 
   return (
     <div ref={wrapRef} className={`orders-type-filter ${open ? "is-open" : ""} ${value !== "all" ? "is-filtered" : ""}`}>
-      <button type="button" className="orders-type-filter__button" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((state) => !state)}>
+      <button type="button" className="orders-type-filter__button" aria-haspopup="menu" aria-expanded={open} onClick={() => { if (!open) onOpen?.(); setOpen(!open); }}>
         <span className="orders-type-filter__button-icon"><ClassicOrderIcon name="filter" /></span>
         <span className="orders-type-filter__button-label">Filter</span>
-        {value !== "all" ? <span className="orders-type-filter__button-dot" /> : null}
       </button>
       {open ? (
         <div className="orders-type-filter__panel" role="menu" aria-label="Filter operations orders by type">
-          <div className="orders-type-filter__panel-head"><span className="orders-type-filter__panel-title">Order type</span><span className="orders-type-filter__panel-sub">Choose one</span></div>
+          <div className="orders-type-filter__panel-head"><span className="orders-type-filter__panel-title">Order type</span><span className="orders-type-filter__panel-sub">{loading ? "Counting all orders…" : error ? "Counts unavailable" : "All available orders"}</span></div>
           <div className="orders-type-filter__options">
             <button type="button" className={`orders-type-filter__option ${value === "all" ? "is-active" : ""}`} onClick={() => { onChange("all"); setOpen(false); }}>
               <span className="orders-type-filter__option-icon"><ClassicOrderIcon name="layers" /></span>
@@ -579,7 +579,7 @@ function TypeFilter({ value, options, onChange }) {
               return (
                 <button type="button" className={`orders-type-filter__option ${value === option.key ? "is-active" : ""}`} onClick={() => { onChange(option.key); setOpen(false); }} key={option.key}>
                   <span className="orders-type-filter__option-icon" style={style}><ClassicOrderIcon name={meta.icon} /></span>
-                  <span className="orders-type-filter__option-body"><span className="orders-type-filter__option-title">{option.label}</span><span className="orders-type-filter__option-sub">{option.count} order{option.count === 1 ? "" : "s"}</span></span>
+                  <span className="orders-type-filter__option-body"><span className="orders-type-filter__option-title">{option.label}</span><span className="orders-type-filter__option-sub">{loading ? "Counting…" : error ? "Count unavailable" : option.count === null ? "Open to count" : `${option.count} order${option.count === 1 ? "" : "s"}`}</span></span>
                   <span className="orders-type-filter__option-check"><ClassicOrderIcon name="check" /></span>
                 </button>
               );
@@ -762,6 +762,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
   const [tab, setTab] = useState("all");
   const [type, setType] = useState("all");
   const [query, setQuery] = useState("");
+  const completeTypes = useCompleteOrderTypeCounts({ endpoint: `${DIRECT_API_BASE}/orders/requested/paged-summary`, tab, query });
   const [sortMode, setSortMode] = useState("latest");
   const [selected, setSelected] = useState(null);
   const [actionState, setActionState] = useState(null);
@@ -853,16 +854,27 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
   const groups = useMemo(() => buildGroups(orders), [orders]);
   const tabGroups = useMemo(() => groupsForTab(groups, orders, tab), [groups, orders, tab]);
   const typeOptions = useMemo(() => {
+    const full = completeTypes.counts?.options;
     const map = new Map();
-    tabGroups.forEach((group) => {
-      const key = orderTypeKey(group.orderType) || "other";
-      const meta = orderTypeMeta(group.orderType);
-      const current = map.get(key) || { key, raw: group.orderType, label: meta.label, count: 0 };
-      current.count += 1;
-      map.set(key, current);
-    });
+    // While checking, expose all known types, including types not yet loaded.
+    if (!full) for (const raw of ["Request Maintenance", "Request Products", "Withdraw Products"]) {
+      const key = orderTypeKey(raw);
+      map.set(key, { key, raw, label: orderTypeMeta(raw).label, count: null });
+    }
+    const source = full || tabGroups.map((group) => ({
+      key: orderTypeKey(group.orderType) || "other", raw: group.orderType,
+      color: group.orderTypeColor, count: 0,
+    }));
+    for (const entry of source) {
+      const key = entry.key || orderTypeKey(entry.raw) || "other";
+      const meta = orderTypeMeta(entry.raw, entry.color);
+      map.set(key, {
+        key, raw: entry.raw, color: entry.color, label: meta.label,
+        count: full ? entry.count : null,
+      });
+    }
     return [...map.values()].sort((a, b) => a.label.localeCompare(b.label));
-  }, [tabGroups]);
+  }, [tabGroups, completeTypes.counts]);
 
   const visibleGroups = useMemo(() => {
     const needle = lower(query);
@@ -1479,7 +1491,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
             </div>
           </div>
           <div className="orders-toolbar__divider" aria-hidden="true" />
-          <TypeFilter value={type} options={typeOptions} onChange={setType} />
+          <TypeFilter value={type} options={typeOptions} onChange={setType} onOpen={completeTypes.refresh} loading={completeTypes.loading} error={completeTypes.error} />
         </div>
       </div>
 

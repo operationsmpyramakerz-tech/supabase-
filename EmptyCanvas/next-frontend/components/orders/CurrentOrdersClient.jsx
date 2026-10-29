@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { navigateWithinApp } from "../../lib/client-navigation";
 import ClassicOrderIcon from "./ClassicOrderIcon";
+import useCompleteOrderTypeCounts from "./useCompleteOrderTypeCounts";
 import { createOrderDetailsLoader } from "./orderDetailsLoader";
 import { cancelOrderOpenTimer, loadOrderAndModalWithMetrics, markOrderOpenStarted, reportOrderVisibleAfterPaint, warmOrderModalOnIdle } from "./orderOpeningPerformance";
 import OrderDetailsLoadingOverlay from "./OrderDetailsLoadingOverlay";
@@ -466,11 +467,11 @@ function useClassicHeaderSearch(query, setQuery, placeholder) {
   }, [query]);
 }
 
-function TypeFilter({ value, options, onChange }) {
+function TypeFilter({ value, options, onChange, onOpen, loading, error }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
   const activeOption = options.find((option) => option.key === value);
-  const totalOrders = options.reduce((sum, option) => sum + finite(option.count), 0);
+  const totalOrders = options.every((option) => option.count !== null) ? options.reduce((sum, option) => sum + finite(option.count), 0) : null;
 
   useEffect(() => {
     if (!open) return undefined;
@@ -488,21 +489,20 @@ function TypeFilter({ value, options, onChange }) {
 
   return (
     <div ref={wrapRef} className={`orders-type-filter ${open ? "is-open" : ""} ${value !== "all" ? "is-filtered" : ""}`}>
-      <button type="button" className="orders-type-filter__button" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((state) => !state)}>
+      <button type="button" className="orders-type-filter__button" aria-haspopup="menu" aria-expanded={open} onClick={() => { if (!open) onOpen?.(); setOpen(!open); }}>
         <span className="orders-type-filter__button-icon"><ClassicOrderIcon name="filter" /></span>
         <span className="orders-type-filter__button-label">{value === "all" ? "Filter" : activeOption?.label || "Filter"}</span>
-        {value !== "all" ? <span className="orders-type-filter__button-dot" /> : null}
       </button>
       {open ? (
         <div className="orders-type-filter__panel" role="menu" aria-label="Filter current orders by type">
           <div className="orders-type-filter__panel-head">
             <span className="orders-type-filter__panel-title">Order type</span>
-            <span className="orders-type-filter__panel-sub">{totalOrders} order{totalOrders === 1 ? "" : "s"}</span>
+            <span className="orders-type-filter__panel-sub">{loading ? "Counting all orders…" : error ? "Counts unavailable" : totalOrders === null ? "Open to count" : `${totalOrders} order${totalOrders === 1 ? "" : "s"}`}</span>
           </div>
           <div className="orders-type-filter__options">
             <button type="button" className={`orders-type-filter__option ${value === "all" ? "is-active" : ""}`} onClick={() => { onChange("all"); setOpen(false); }}>
               <span className="orders-type-filter__option-icon"><ClassicOrderIcon name="layers" /></span>
-              <span className="orders-type-filter__option-body"><span className="orders-type-filter__option-title">All order types</span><span className="orders-type-filter__option-sub">{totalOrders} order{totalOrders === 1 ? "" : "s"}</span></span>
+              <span className="orders-type-filter__option-body"><span className="orders-type-filter__option-title">All order types</span><span className="orders-type-filter__option-sub">{loading ? "Counting all orders…" : error ? "Counts unavailable" : totalOrders === null ? "Open to count" : `${totalOrders} order${totalOrders === 1 ? "" : "s"}`}</span></span>
               <span className="orders-type-filter__option-check"><ClassicOrderIcon name="check" /></span>
             </button>
             {options.map((option) => {
@@ -511,7 +511,7 @@ function TypeFilter({ value, options, onChange }) {
               return (
                 <button type="button" className={`orders-type-filter__option ${value === option.key ? "is-active" : ""}`} onClick={() => { onChange(option.key); setOpen(false); }} key={option.key}>
                   <span className="orders-type-filter__option-icon" style={style}><ClassicOrderIcon name={meta.icon} /></span>
-                  <span className="orders-type-filter__option-body"><span className="orders-type-filter__option-title">{option.label}</span><span className="orders-type-filter__option-sub">{option.count} order{option.count === 1 ? "" : "s"}</span></span>
+                  <span className="orders-type-filter__option-body"><span className="orders-type-filter__option-title">{option.label}</span><span className="orders-type-filter__option-sub">{loading ? "Counting…" : error ? "Count unavailable" : option.count === null ? "Open to count" : `${option.count} order${option.count === 1 ? "" : "s"}`}</span></span>
                   <span className="orders-type-filter__option-check"><ClassicOrderIcon name="check" /></span>
                 </button>
               );
@@ -604,6 +604,7 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
   const [tab, setTab] = useState("all");
   const [type, setType] = useState("all");
   const [query, setQuery] = useState("");
+  const completeTypes = useCompleteOrderTypeCounts({ endpoint: `${DIRECT_API_BASE}/orders/current/paged-summary`, tab, query });
   const [sortMode, setSortMode] = useState("latest");
   const [selected, setSelected] = useState(null);
   const [actionState, setActionState] = useState(null);
@@ -672,6 +673,7 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
   const allGroups = useMemo(() => buildGroups(orders), [orders]);
   const statusGroups = useMemo(() => groupsForCurrentTab(allGroups, orders, tab), [allGroups, orders, tab]);
   const typeOptions = useMemo(() => {
+    const full = completeTypes.counts?.options;
     const counts = new Map();
     const sample = new Map();
     for (const group of statusGroups) {
@@ -680,12 +682,14 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
       if (!sample.has(key)) sample.set(key, group);
     }
 
+    if (full) for (const entry of full) { counts.set(entry.key, entry.count); sample.set(entry.key, { orderType: entry.raw, orderTypeColor: entry.color }); }
+
     const preferred = ORDER_TYPE_FILTERS.map((definition) => {
       const group = sample.get(definition.key);
       const raw = group?.orderType || definition.raw;
       const color = group?.orderTypeColor || "";
       const meta = orderTypeMeta(raw, color);
-      return { key: definition.key, raw, color, label: meta.label, count: counts.get(definition.key) || 0 };
+      return { key: definition.key, raw, color, label: meta.label, count: full ? (counts.get(definition.key) || 0) : null };
     });
 
     const known = new Set(ORDER_TYPE_FILTERS.map((definition) => definition.key));
@@ -693,12 +697,12 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
       .filter(([key]) => !known.has(key))
       .map(([key, group]) => {
         const meta = orderTypeMeta(group.orderType, group.orderTypeColor);
-        return { key, raw: group.orderType, color: group.orderTypeColor, label: meta.label, count: counts.get(key) || 0 };
+        return { key, raw: group.orderType, color: group.orderTypeColor, label: meta.label, count: full ? (counts.get(key) || 0) : null };
       })
       .sort((a, b) => a.label.localeCompare(b.label));
 
     return [...preferred, ...extras];
-  }, [statusGroups]);
+  }, [statusGroups, completeTypes.counts]);
 
   const visibleGroups = useMemo(() => {
     const needle = lower(query);
@@ -973,7 +977,7 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
             </div>
           </div>
           <div className="orders-toolbar__divider" aria-hidden="true" />
-          <TypeFilter value={type} options={typeOptions} onChange={setType} />
+          <TypeFilter value={type} options={typeOptions} onChange={setType} onOpen={completeTypes.refresh} loading={completeTypes.loading} error={completeTypes.error} />
         </div>
       </div>
 

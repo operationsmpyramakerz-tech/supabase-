@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { featureAllowed } from "../../lib/feature-permissions-registry";
 import dynamic from "next/dynamic";
 import ClassicOrderIcon from "./ClassicOrderIcon";
+import useCompleteOrderTypeCounts from "./useCompleteOrderTypeCounts";
 import { createOrderDetailsLoader } from "./orderDetailsLoader";
 import { cancelOrderOpenTimer, loadOrderAndModalWithMetrics, markOrderOpenStarted, reportOrderVisibleAfterPaint, warmOrderModalOnIdle } from "./orderOpeningPerformance";
 import OrderDetailsLoadingOverlay from "./OrderDetailsLoadingOverlay";
@@ -238,11 +239,11 @@ function useClassicHeaderSearch(query, setQuery, placeholder) {
   }, [query]);
 }
 
-function TypeFilter({ value, options, onChange }) {
+function TypeFilter({ value, options, onChange, onOpen, loading, error }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
   const activeOption = options.find((option) => option.key === value);
-  const totalOrders = options.reduce((sum, option) => sum + finite(option.count), 0);
+  const totalOrders = options.every((option) => option.count !== null) ? options.reduce((sum, option) => sum + finite(option.count), 0) : null;
 
   useEffect(() => {
     if (!open) return undefined;
@@ -255,22 +256,21 @@ function TypeFilter({ value, options, onChange }) {
 
   return (
     <div ref={wrapRef} className={`orders-type-filter ${open ? "is-open" : ""} ${value !== "all" ? "is-filtered" : ""}`}>
-      <button type="button" className="orders-type-filter__button" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((state) => !state)}>
+      <button type="button" className="orders-type-filter__button" aria-haspopup="menu" aria-expanded={open} onClick={() => { if (!open) onOpen?.(); setOpen(!open); }}>
         <span className="orders-type-filter__button-icon"><ClassicOrderIcon name="filter" /></span>
         <span className="orders-type-filter__button-label">{value === "all" ? "Filter" : activeOption?.label || "Filter"}</span>
-        {value !== "all" ? <span className="orders-type-filter__button-dot" /> : null}
       </button>
       {open ? <div className="orders-type-filter__panel" role="menu" aria-label="Filter review orders by type">
-        <div className="orders-type-filter__panel-head"><span className="orders-type-filter__panel-title">Order type</span><span className="orders-type-filter__panel-sub">{totalOrders} order{totalOrders === 1 ? "" : "s"}</span></div>
+        <div className="orders-type-filter__panel-head"><span className="orders-type-filter__panel-title">Order type</span><span className="orders-type-filter__panel-sub">{loading ? "Counting all orders…" : error ? "Counts unavailable" : totalOrders === null ? "Open to count" : `${totalOrders} order${totalOrders === 1 ? "" : "s"}`}</span></div>
         <div className="orders-type-filter__options">
           <button type="button" className={`orders-type-filter__option ${value === "all" ? "is-active" : ""}`} onClick={() => { onChange("all"); setOpen(false); }}>
-            <span className="orders-type-filter__option-icon"><ClassicOrderIcon name="layers" /></span><span className="orders-type-filter__option-body"><span className="orders-type-filter__option-title">All order types</span><span className="orders-type-filter__option-sub">{totalOrders} order{totalOrders === 1 ? "" : "s"}</span></span><span className="orders-type-filter__option-check"><ClassicOrderIcon name="check" /></span>
+            <span className="orders-type-filter__option-icon"><ClassicOrderIcon name="layers" /></span><span className="orders-type-filter__option-body"><span className="orders-type-filter__option-title">All order types</span><span className="orders-type-filter__option-sub">{loading ? "Counting all orders…" : error ? "Counts unavailable" : totalOrders === null ? "Open to count" : `${totalOrders} order${totalOrders === 1 ? "" : "s"}`}</span></span><span className="orders-type-filter__option-check"><ClassicOrderIcon name="check" /></span>
           </button>
           {options.map((option) => {
             const meta = orderTypeMeta(option.raw, option.color);
             return <button type="button" className={`orders-type-filter__option ${value === option.key ? "is-active" : ""}`} onClick={() => { onChange(option.key); setOpen(false); }} key={option.key}>
               <span className="orders-type-filter__option-icon" style={{ "--otf-icon-bg": meta.bg, "--otf-icon-fg": meta.fg, "--otf-icon-border": meta.bd }}><ClassicOrderIcon name={meta.icon} /></span>
-              <span className="orders-type-filter__option-body"><span className="orders-type-filter__option-title">{option.label}</span><span className="orders-type-filter__option-sub">{option.count} order{option.count === 1 ? "" : "s"}</span></span><span className="orders-type-filter__option-check"><ClassicOrderIcon name="check" /></span>
+              <span className="orders-type-filter__option-body"><span className="orders-type-filter__option-title">{option.label}</span><span className="orders-type-filter__option-sub">{loading ? "Counting…" : error ? "Count unavailable" : option.count === null ? "Open to count" : `${option.count} order${option.count === 1 ? "" : "s"}`}</span></span><span className="orders-type-filter__option-check"><ClassicOrderIcon name="check" /></span>
             </button>;
           })}
         </div>
@@ -332,6 +332,7 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
   const [tab, setTab] = useState("all");
   const [type, setType] = useState("all");
   const [query, setQuery] = useState("");
+  const completeTypes = useCompleteOrderTypeCounts({ endpoint: `${DIRECT_API_BASE}/sv-orders/paged-summary`, tab, query });
   const [sortMode, setSortMode] = useState("latest");
   const [selectedKey, setSelectedKey] = useState("");
   const [busyIds, setBusyIds] = useState(new Set());
@@ -426,16 +427,28 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
   }, [orders, tab]);
   const statusGroups = useMemo(() => buildGroups(statusRows), [statusRows]);
   const typeOptions = useMemo(() => {
+    const full = completeTypes.counts?.options;
     const map = new Map();
-    statusGroups.forEach((group) => {
-      const key = orderTypeKey(group.orderType) || "other";
-      const meta = orderTypeMeta(group.orderType, group.orderTypeColor);
-      const current = map.get(key) || { key, raw: group.orderType, color: group.orderTypeColor, label: meta.label, count: 0 };
-      current.count += 1;
-      map.set(key, current);
-    });
+    // While checking, expose all known types, including types not yet loaded.
+    if (!full) for (const raw of ["Request Maintenance", "Request Products", "Withdraw Products"]) {
+      const key = orderTypeKey(raw);
+      map.set(key, { key, raw, label: orderTypeMeta(raw).label, count: null });
+    }
+    const source = full || statusGroups.map((group) => ({
+      key: orderTypeKey(group.orderType) || "other", raw: group.orderType,
+      color: group.orderTypeColor, count: 0,
+    }));
+    for (const entry of source) {
+      const key = entry.key || orderTypeKey(entry.raw) || "other";
+      const meta = orderTypeMeta(entry.raw, entry.color);
+      map.set(key, {
+        key, raw: entry.raw, color: entry.color, label: meta.label,
+        count: full ? entry.count : null,
+      });
+    }
     return [...map.values()].sort((a, b) => a.label.localeCompare(b.label));
-  }, [statusGroups]);
+  }, [statusGroups, completeTypes.counts]);
+
   const visibleGroups = useMemo(() => {
     const needle = lower(query);
     const serverFilteredQuery = Boolean(needle)
@@ -754,7 +767,7 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
     <div className="next-orders-review-toolbar-wrap">
       <div className="orders-toolbar" aria-label="Orders review tools">
         <div className="orders-toolbar__scroll"><div className="portfolio-tabs portfolio-tabs--iconic" role="tablist" aria-label="Orders Review status">{REVIEW_TABS.map((item) => <button type="button" className={`tab-portfolio order-status-tab ${tab === item.key ? "active" : ""}`} onClick={() => setTab(item.key)} role="tab" aria-selected={tab === item.key} key={item.key}><span className="order-status-tab__icon"><ClassicOrderIcon name={item.icon}/></span><span className="order-status-tab__copy"><span className="order-status-tab__label">{item.label}</span></span></button>)}</div></div>
-        <div className="orders-toolbar__divider" aria-hidden="true"/><TypeFilter value={type} options={typeOptions} onChange={setType}/>
+        <div className="orders-toolbar__divider" aria-hidden="true"/><TypeFilter value={type} options={typeOptions} onChange={setType} onOpen={completeTypes.refresh} loading={completeTypes.loading} error={completeTypes.error}/>
       </div>
     </div>
 

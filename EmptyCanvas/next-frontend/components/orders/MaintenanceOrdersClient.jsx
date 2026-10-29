@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import ClassicOrderIcon from "./ClassicOrderIcon";
+import useCompleteOrderTypeCounts from "./useCompleteOrderTypeCounts";
 import { createOrderDetailsLoader } from "./orderDetailsLoader";
 import { cancelOrderOpenTimer, loadOrderAndModalWithMetrics, markOrderOpenStarted, reportOrderVisibleAfterPaint, warmOrderModalOnIdle } from "./orderOpeningPerformance";
 import OrderDetailsLoadingOverlay from "./OrderDetailsLoadingOverlay";
@@ -476,7 +477,7 @@ function CreatorProfilePopover({ state, onClose }) {
   );
 }
 
-function MaintenanceFilter({ value, onChange, count }) {
+function MaintenanceFilter({ value, onChange, count, onOpen, loading, error }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
   useEffect(() => {
@@ -489,19 +490,18 @@ function MaintenanceFilter({ value, onChange, count }) {
   }, [open]);
 
   const options = [
-    { value: "all", label: "All Types", sub: `${count} order${count === 1 ? "" : "s"}`, icon: "layers", bg: "#F3F4F6", fg: "#111827", bd: "#E5E7EB" },
-    { value: "requestmaintenance", label: "Request Maintenance", sub: `${count} maintenance order${count === 1 ? "" : "s"}`, icon: "tool", bg: "#FEF3C7", fg: "#92400E", bd: "#FDE68A" },
+    { value: "all", label: "All Types", sub: loading ? "Counting…" : error ? "Count unavailable" : count === null ? "Open to count" : `${count} order${count === 1 ? "" : "s"}`, icon: "layers", bg: "#F3F4F6", fg: "#111827", bd: "#E5E7EB" },
+    { value: "requestmaintenance", label: "Request Maintenance", sub: loading ? "Counting…" : error ? "Count unavailable" : count === null ? "Open to count" : `${count} maintenance order${count === 1 ? "" : "s"}`, icon: "tool", bg: "#FEF3C7", fg: "#92400E", bd: "#FDE68A" },
   ];
 
   return (
     <div ref={wrapRef} className={`orders-type-filter ${open ? "is-open" : ""} ${value !== "all" ? "is-filtered" : ""}`}>
-      <button type="button" className="orders-type-filter__button" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((state) => !state)}>
+      <button type="button" className="orders-type-filter__button" aria-haspopup="menu" aria-expanded={open} onClick={() => { if (!open) onOpen?.(); setOpen(!open); }}>
         <span className="orders-type-filter__button-icon"><ClassicOrderIcon name="filter" /></span>
         <span className="orders-type-filter__button-label">Filter</span>
-        {value !== "all" ? <span className="orders-type-filter__button-dot" /> : null}
       </button>
       {open ? <div className="orders-type-filter__panel" role="menu" aria-label="Filter maintenance orders by type">
-        <div className="orders-type-filter__panel-head"><span className="orders-type-filter__panel-title">Filter by type</span><span className="orders-type-filter__panel-sub">{count} order{count === 1 ? "" : "s"}</span></div>
+        <div className="orders-type-filter__panel-head"><span className="orders-type-filter__panel-title">Filter by type</span><span className="orders-type-filter__panel-sub">{loading ? "Counting all orders…" : error ? "Counts unavailable" : count === null ? "Open to count" : `${count} order${count === 1 ? "" : "s"}`}</span></div>
         <div className="orders-type-filter__options">
           {options.map((option) => <button type="button" className={`orders-type-filter__option ${value === option.value ? "is-active" : ""}`} role="menuitemradio" aria-checked={value === option.value} onClick={() => { onChange(option.value); setOpen(false); }} key={option.value}>
             <span className="orders-type-filter__option-icon" style={{ "--otf-icon-bg": option.bg, "--otf-icon-fg": option.fg, "--otf-icon-border": option.bd }}><ClassicOrderIcon name={option.icon} /></span>
@@ -608,6 +608,7 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
   const [tab, setTab] = useState("all");
   const [type, setType] = useState("all");
   const [query, setQuery] = useState("");
+  const completeTypes = useCompleteOrderTypeCounts({ endpoint: `${DIRECT_API_BASE}/orders/maintenance/paged-summary`, tab, query });
   const [sortMode, setSortMode] = useState("latest");
   const [selected, setSelected] = useState(null);
   const [logGroup, setLogGroup] = useState(null);
@@ -1170,7 +1171,7 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
         <div className="orders-toolbar" aria-label="Maintenance orders tools">
           <div className="orders-toolbar__scroll"><div className="portfolio-tabs portfolio-tabs--iconic" role="tablist" aria-label="Maintenance Orders status">{STATUS_TABS.map((item) => <button type="button" className={`tab-portfolio order-status-tab ${tab === item.key ? "active" : ""}`} onClick={() => setTab(item.key)} role="tab" aria-selected={tab === item.key} key={item.key}><span className="order-status-tab__icon"><ClassicOrderIcon name={item.icon} /></span><span className="order-status-tab__label">{item.label}</span></button>)}</div></div>
           <div className="orders-toolbar__divider" aria-hidden="true" />
-          <MaintenanceFilter value={type} onChange={setType} count={groups.length} />
+          <MaintenanceFilter value={type} onChange={setType} count={completeTypes.counts?.total ?? null} onOpen={completeTypes.refresh} loading={completeTypes.loading} error={completeTypes.error} />
         </div>
       </div>
 
