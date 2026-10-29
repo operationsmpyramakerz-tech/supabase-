@@ -35,3 +35,12 @@ export async function saveProductionHandoff(body,account){
  if(reference.length>160||clean(body?.notes).length>1000)fail("Reference or notes too long.");
  return rpc("erp_preparing_production_handoff_v247",{p_project_id:project,p_item_id:item,p_new_total:target,p_expected_total:expected,p_reference:reference,p_notes:clean(body?.notes),p_member_id:member,p_actor_name:name},{profileName:"preparing.production.save"});
 }
+
+// Atomic box edit: original carton RPC + verified actor on its audit record.
+export async function saveProductionBox(body,account){
+ requireService();const project=id(body?.projectId),carton=id(body?.cartonId),source=id(body?.sourceComponentId),item=id(body?.itemId),{member,name}=identity(account);
+ const quantity=body?.quantity,stamp=clean(body?.expectedUpdatedAt);
+ if(!Number.isSafeInteger(quantity)||quantity<0||quantity>1000000)fail("Packed must be a whole number from 0 to 1,000,000.");
+ if(!stamp||!Number.isFinite(Date.parse(stamp)))fail("Refresh the box before editing its quantities.",409);
+ return rpc("erp_preparing_production_pack_v249",{p_project_id:project,p_carton_id:carton,p_source_component_id:source,p_item_id:item,p_quantity:quantity,p_expected_updated_at:stamp,p_member_id:member,p_actor_name:name},{profileName:"preparing.production.pack"});
+}

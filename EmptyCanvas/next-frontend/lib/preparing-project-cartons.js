@@ -53,17 +53,18 @@ export async function projectCartonWorkspace(projectId) {
   requireService(); const project=id(projectId);
   if(!await selectById(TABLES.project,project)) fail("Project not found.",404);
   const schools=await paged(TABLES.school,{project_id:`eq.${project}`},"schools",400);
-  const [cartons,lines,allocations]=await Promise.all([
+  const [cartons,lines,allocations,audit]=await Promise.all([
     paged(TABLES.carton,{project_id:`eq.${project}`},"cartons",1000),
     paged(TABLES.line,{project_id:`eq.${project}`},"carton lines",12000,"carton_id.asc,id.asc"),
     paged(TABLES.allocation,{project_id:`eq.${project}`},"allocations",15000),
+    paged("erp_preparing_project_carton_audit",{project_id:`eq.${project}`},"box audit",20000,"changed_at.desc"),
   ]);
   let components=[];
   for(let start=0;start<schools.length;start+=30) {
     const ids=schools.slice(start,start+30).map(x=>x.id);
     components.push(...await paged(TABLES.component,{school_id:`in.(${ids.join(",")})`},"school BOM",12000,"school_id.asc,item_order.asc"));
   }
-  return { projectId:project,schools,cartons,lines,allocations,components,kits:kitOptions(components) };
+  return { projectId:project,schools,cartons,lines,allocations,components,audit,kits:kitOptions(components) };
 }
 export async function createProjectCarton(body,account) {
   requireService();const project=id(body.projectId), cartonLabel=sized(body.cartonLabel,"Carton label",100),kitName=sized(body.kitName,"Kit name",160);

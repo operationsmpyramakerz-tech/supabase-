@@ -14,3 +14,14 @@ export function productionReceiptDelta(current,next,warehouse,packed){
  if(Math.abs(delta)>1000000)throw Error("Change cannot exceed 1,000,000 units.");
  return delta;
 }
+
+// The chosen carton stores a quantity; packing elsewhere stays untouched.
+export function boxPackingTarget(productionReceived,totalPacked,packedInSelectedBox,nextValue){
+ const raw=String(nextValue);
+ if(!/^\d+$/.test(raw)||!Number.isSafeInteger(Number(raw))||Number(raw)>1000000)throw Error("Packed must be a non-negative whole number up to 1,000,000.");
+ const target=Number(raw);
+ const nextTotal=Number(totalPacked)-Number(packedInSelectedBox)+target;
+ if(nextTotal>Number(productionReceived))throw Error(`Packed quantity cannot exceed Production Received (${productionReceived}).`);
+ if(nextTotal<0)throw Error("Packed total cannot be negative.");
+ return {packed:nextTotal,unpacked:Number(productionReceived)-nextTotal};
+}

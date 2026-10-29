@@ -35,6 +35,6 @@ test("Project tool order and production tabs, exports and sheet are wired",()=>{
  assert.ok(main.indexOf("Warehouse Receiving</strong>")<main.indexOf("Production Receiving</strong>"));
  assert.ok(main.indexOf("Production Receiving</strong>")<main.indexOf("Project Kit Cartons</strong>"));
  assert.match(main,/showProduction &&/);assert.match(ui,/Box Distribution/);
- for(const label of ["CSV · Values","CSV · Blank","PDF · Values","PDF · Blank","Movement History","Production Received","Available for Production"]){assert.ok(ui.includes(label),label);}
+ for(const label of ["CSV · Values","CSV · Blank","PDF · Values","PDF · Blank","Receiving History","Box History","Production Received","Available to Receive"]){assert.ok(ui.includes(label),label);}
  for(const f of ["components/preparing/PreparingClient.jsx","components/preparing/ProjectProductionReceiving.jsx"]){const parsed=ts.createSourceFile(f,read(f),ts.ScriptTarget.Latest,true,ts.ScriptKind.JSX);assert.deepEqual(parsed.parseDiagnostics,[],f);}
 });
