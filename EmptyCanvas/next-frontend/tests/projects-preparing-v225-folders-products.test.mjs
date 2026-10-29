@@ -72,7 +72,9 @@ test('compact first-page project tabs filter source data with keyboard-safe butt
   assert.match(preparing, /aria-pressed=\{projectFilter === tab.key\}/);
   assert.match(preparing, /projectFilter === "delivered"/);
   assert.match(preparing, /projectFilter === "closed"/);
-  assert.match(preparing, /className="pr-search pr-index-search"/);
+  // v246: the global AppShell search replaces this duplicated page-local field.
+  assert.doesNotMatch(preparing, /className="pr-search pr-index-search"/);
+  assert.match(preparing, /system-header-search__input/);
   assert.match(css, /\.pr-root--index \.pr-project-tab\.is-active/);
   assert.match(css, /\.pr-root--index \.pr-create-project/);
 });

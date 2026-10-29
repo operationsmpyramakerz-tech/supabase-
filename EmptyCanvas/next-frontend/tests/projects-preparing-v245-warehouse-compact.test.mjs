@@ -24,8 +24,10 @@ test('Edit toggles the same Received value into an input and requires warehouse 
  assert.match(ui, /setDraft\(prev=>\(\{\.\.\.prev,\[row\.id\]:String\(row\.accepted\)\}\)\)/);
  assert.match(ui, /active\?<input type="number"/);
  assert.match(ui, /aria-label=\{`Received \$\{row.product_name\}`\}/);
- assert.match(ui, /disabled=\{busy\|\|!canReceive\}/);
- assert.match(ui, /onClick=\{\(\)=>enableReceipt\(row\)\}>Edit/);
+ assert.match(ui, /disabled=\{busy\} title=\{!canReceive/);
+ assert.match(ui, /Enable Warehouse Receiving permission in Users Center/);
+ assert.match(ui, /if\(!canReceive\)/);
+ assert.match(ui, /enableReceipt\(row\);\}\}>Edit/);
  assert.match(ui, /onClick=\{\(\)=>saveReceipt\(row\)\}>Save/);
  assert.equal(warehouseReceiptLimit(0,'2',2,0),2);
  assert.throws(()=>warehouseReceiptLimit(0,'3',2,0),/Passed/);

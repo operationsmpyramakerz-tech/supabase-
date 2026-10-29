@@ -88,6 +88,22 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
   const [showProjectTesting, setShowProjectTesting] = useState(false);
   const [showProjectBOM, setShowProjectBOM] = useState(false);
   const [projectSourceId, setProjectSourceId] = useState("");
+  // The AppShell header search is the single search control for projects,
+  // schools, and the current school's workflow. Reset it on navigation.
+  useEffect(() => {
+    const input = document.querySelector(".classic-app-shell .main-header .system-header-search__input");
+    if (!input) return undefined;
+    const previousPlaceholder = input.placeholder;
+    input.placeholder = schoolId ? "Search preparing stages..." : projectId ? "Search schools..." : "Search projects...";
+    input.value = "";
+    const onInput = event => setQuery(event.target.value || "");
+    input.addEventListener("input", onInput);
+    return () => {
+      input.removeEventListener("input", onInput);
+      input.placeholder = previousPlaceholder;
+      input.value = "";
+    };
+  }, [projectId, schoolId]);
   const canCreate = featureAllowed(account, "preparing.create");
   const canManage = featureAllowed(account, "preparing.manage");
   const canStage = featureAllowed(account, "preparing.stage_update");
@@ -178,7 +194,7 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
   }
   function openProjectFolder(id) { cancelFolderHold(); suppressFolderClick.current = false; setFolderMenu(""); setProjectId(id); setSchoolId(""); setWorkflowFilter("all"); setQuery(""); }
   function openSchoolFolder(id, view = "") {
-    cancelFolderHold(); suppressFolderClick.current = false; setFolderMenu(""); setSchoolId(id);
+    cancelFolderHold(); suppressFolderClick.current = false; setFolderMenu(""); setSchoolId(id); setQuery("");
     setShowComponents(view === "components"); setShowDelivery(view === "delivery");
     setShowTechnical(view === "technical"); setShowReconciliation(view === "returns"); setShowClosing(view === "closing"); setWorkflowFilter("all");
   }
@@ -229,7 +245,9 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
   const workflowTabs = [{ key:"all", label:"All stages", count:PREPARING_STAGES.length },
     { key:"operations", label:"Operations", count:PREPARING_STAGES.filter(stage=>stage.team === "operations").length },
     { key:"followup", label:"Technical follow-up", count:PREPARING_STAGES.filter(stage=>stage.team === "followup").length }];
-  const visibleWorkflowStages = PREPARING_STAGES.map((stage, index)=>({stage,index})).filter(({stage})=>workflowFilter === "all" || stage.team === workflowFilter);
+  const visibleWorkflowStages = PREPARING_STAGES.map((stage, index)=>({stage,index})).filter(({stage}) =>
+    (workflowFilter === "all" || stage.team === workflowFilter) &&
+    `${stage.title} ${stage.team} ${stage.description || ""}`.toLowerCase().includes(query.trim().toLowerCase()));
   const schoolPercent = progress ? Math.round(progress.completed * 100 / (progress.total || 1)) : 0;
   return <div className={`pr-root ${!project ? "pr-root--index" : school ? "pr-root--school" : "pr-root--project"}`}>
     <div className="pr-header">
@@ -238,7 +256,6 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
         <h1>{school ? school.beneficiary_name : project ? project.name : "Projects"}</h1>
       </div>
       <div className="pr-top-actions">
-        <button type="button" className="pr-icon" title="Refresh projects" aria-label="Refresh projects" onClick={() => save(async () => {})} disabled={busy}><Ico name="refresh"/></button>
         {!project && canCreate && <button type="button" className="pr-primary pr-create-project" onClick={openNewProject}><Ico name="plus" size={18}/> New Project</button>}
         {project && !school && canManage && <button type="button" className="pr-primary" onClick={openSchools}><Ico name="plus" size={17}/> Add Schools</button>}
       </div>
@@ -251,7 +268,6 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
           <span>{tab.label}</span><span className="pr-tab-count">{tab.count}</span>
         </button>)}
       </div>
-      <label className="pr-search pr-index-search"><Ico name="search" size={17}/><input aria-label="Search projects" placeholder="Search projects…" value={query} onChange={event=>setQuery(event.target.value)}/></label>
     </div>}
     {project && !school && <section className="pr-summary-card pr-summary-card--project" aria-label="Project overview">
       <div className="pr-summary-lead">
@@ -314,7 +330,7 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
         </button>;
       })}</div>
     </> : <>
-      <div className="pr-section-bar"><div><h2>{project ? "Schools" : "Project Folders"}</h2>{project && <span className="pr-section-count">{projectSchools.length} schools</span>}</div>{project ? <label className="pr-search"><Ico name="search" size={17}/><input aria-label="Search schools" placeholder="Search schools…" value={query} onChange={event=>setQuery(event.target.value)}/></label> : <span className="pr-visible-count">{projectFiltered.length} {projectFiltered.length === 1 ? "folder" : "folders"}</span>}</div>
+      <div className="pr-section-bar"><div><h2>{project ? "Schools" : "Project Folders"}</h2>{project && <span className="pr-section-count">{projectSchools.length} schools</span>}</div>{project ? null : <span className="pr-visible-count">{projectFiltered.length} {projectFiltered.length === 1 ? "folder" : "folders"}</span>}</div>
       <div className="pr-folders" aria-label={project ? "School folders" : "Project folders"}>
         {!project ? projectFiltered.map(row => {
           const summary = projectSummaries.get(row.id) || { total:0,closed:0,delivered:0 };
