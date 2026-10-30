@@ -220,6 +220,26 @@ export async function renderPrPdf(raw) {
     write(value,left,y-1,pageContent-13,29,{size:11.4,bold:true,color:palette.orange,rtl:true,align:"right"});
     return y+27;
   }
+  function centeredDate(value,x,y,w,h) {
+    // Draw dates as one LTR run. Token-by-token spacing made the slash-delimited
+    // dates appear off-center inside otherwise symmetrical value cells.
+    const date=String(value).trim().replace(/\s*\/\s*/g," / ");
+    const fontSize=8.9*PDF_FONT_SCALE;
+    doc.font("Helvetica").fontSize(fontSize).fillColor(palette.ink);
+    const dateWidth=doc.widthOfString(date);
+    const dateX=x+(w-dateWidth)/2;
+    const dateY=y+(h-fontSize*1.18)/2;
+    doc.save().rect(x+1,y+1,w-2,h-2).clip();
+    doc.text(date,dateX,dateY,{lineBreak:false});
+    doc.restore();
+  }
+  function prNumberLabel(x,y,w,h) {
+    // Keep the English abbreviation in its own LTR region instead of mixing
+    // its parentheses into the RTL label's word-by-word layout.
+    rect(x,y,w,h,palette.label);
+    write("رقم طلب الشراء",x+58,y,w-64,h,{size:8.5,bold:true,rtl:true,align:"right",padding:0});
+    write("(PR No.)",x+5,y,54,h,{size:7.7,bold:true,rtl:false,align:"center",padding:0});
+  }
   function pairRow(labelRight,valueRight,labelLeft,valueLeft,y,h=32) {
     // Columns are laid out from right to left, with wider, shaded field labels.
     const sizes=[143,126,143,pageContent-143-126-143];
@@ -228,11 +248,18 @@ export async function renderPrPdf(raw) {
     for(let j=0;j<4;j++) {
       const width=sizes[j];xx-=width;
       const label=j%2===0;
-      cell(safeCellText(values[j]),xx,y,width,h,{
-        bg:label?palette.label:palette.white,size:label?8.5:8.9,bold:label,
-        rtl:label||hasPrArabic(values[j]),align:label||hasPrArabic(values[j])?"right":"center",
-        color:label?palette.navy:palette.ink,padding:6,maxLines:3
-      });
+      if(label && values[j]==="رقم طلب الشراء (PR No.)") {
+        prNumberLabel(xx,y,width,h);
+      } else if(!label && /^\d{2}\s*\/\s*\d{2}\s*\/\s*\d{4}$/.test(String(values[j]??""))) {
+        rect(xx,y,width,h,palette.white);
+        centeredDate(values[j],xx,y,width,h);
+      } else {
+        cell(safeCellText(values[j]),xx,y,width,h,{
+          bg:label?palette.label:palette.white,size:label?8.5:8.9,bold:label,
+          rtl:label||hasPrArabic(values[j]),align:label||hasPrArabic(values[j])?"right":"center",
+          color:label?palette.navy:palette.ink,padding:6,maxLines:3
+        });
+      }
     }
     return y+h;
   }
@@ -316,7 +343,9 @@ export async function renderPrPdf(raw) {
   const noteSize=9.2, noteStep=noteSize*1.48;
   const noteMeasure=token=>measureToken(token,noteSize);
   const noteLines=form.notes ? prSplitLines(form.notes,pageContent-24,noteMeasure,noteSize*.38) : [];
-  if (!noteLines.length) {cell("",left,y,pageContent,46);y+=54;}
+  // Blank notes need a compact writing area; the old 46pt placeholder left
+  // unnecessary white space before signatures on the following page.
+  if (!noteLines.length) {cell("",left,y,pageContent,25);y+=33;}
   else {
     let current=0;
     while(current<noteLines.length){
@@ -329,7 +358,9 @@ export async function renderPrPdf(raw) {
     }
   }
 
-  y=guard(y,175);y+=7;y=section("خامساً | التوقيعات والاعتمادات",y);
+  // Actual section+signature height is 27+40+3*30. Reserve precisely that,
+  // rather than forcing an early page break with a padded 175pt estimate.
+  y=guard(y,162);y+=5;y=section("خامساً | التوقيعات والاعتمادات",y);
   const roles=["requester","manager","technical","approver"];
   const roleLabels=["مقدم الطلب","رئيس القسم / المدير المباشر","المراجعة الفنية (إن لزم)","اعتماد صاحب الصلاحية"];
   const width=pageContent/4;
@@ -340,9 +371,15 @@ export async function renderPrPdf(raw) {
     for(const [j,label,value] of [[0,"الاسم",signer.name],[1,"التوقيع",signer.signature],[2,"التاريخ",displayDate(signer.date)]]){
       const rowY=y+40+j*30;
       rect(xx,rowY,width,30,palette.white);
-      write(label+":",xx+width-49,rowY,45,30,{size:8.2,bold:true,rtl:true,align:"right",padding:3});
-      if (value) write(value,xx+7,rowY,width-58,30,{size:8.4,rtl:hasPrArabic(value),align:"center",padding:2,maxLines:2});
-      else doc.save().moveTo(xx+12,rowY+21).lineTo(xx+width-59,rowY+21).lineWidth(.6).strokeColor("#9EAAB8").dash(1.2,2.8).stroke().undash().restore();
+      // A dedicated right-aligned label region and centered value region keep
+      // both Arabic and Latin signer names away from the column divider.
+      const labelWidth=43,valueLeft=xx+7,valueWidth=width-labelWidth-19;
+      write(label+":",xx+width-labelWidth-4,rowY,labelWidth,30,{size:8.2,bold:true,rtl:true,align:"right",padding:2});
+      if (value) {
+        doc.save().rect(valueLeft,rowY+1,valueWidth,28).clip();
+        write(value,valueLeft,rowY,valueWidth,30,{size:8.2,rtl:hasPrArabic(value),align:"center",padding:1,maxLines:2,lineSpacing:1.35});
+        doc.restore();
+      } else doc.save().moveTo(valueLeft+4,rowY+21).lineTo(valueLeft+valueWidth-4,rowY+21).lineWidth(.6).strokeColor("#9EAAB8").dash(1.2,2.8).stroke().undash().restore();
     }
   }
   footer();
