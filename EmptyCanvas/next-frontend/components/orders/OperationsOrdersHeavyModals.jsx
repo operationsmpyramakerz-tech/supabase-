@@ -3,6 +3,7 @@
 import { operationsHasOutstandingQuantity, operationsMatchesTab } from "../../lib/operations-remaining-status.mjs";
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
 import ClassicOrderIcon from "./ClassicOrderIcon";
 import { withSingleOrderSourceAttribution } from "../../lib/order-kit-attribution.mjs";
 import { confirmDelete as confirmDeleteAction } from "../../lib/client-confirm";
@@ -513,6 +514,7 @@ function Progress({ stage }) {
 }
 
 function OrderModal({ group, tab, busy, onClose, onAction, onExport, orderOptions = [], editMode, onPatchEditItem, onUpsertEditAddition, onDeleteEditItem, onSaveEdit, onCancelEdit, permissions = {} }) {
+  const router = useRouter();
   const permitted = (key) => permissions[key] !== false;
   const [moreOpen, setMoreOpen] = useState(false);
   const [downloadOpen, setDownloadOpen] = useState(false);
@@ -944,6 +946,7 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, orderOption
           currentOrderKey={text(group?.key)}
           onClose={() => setDownloadOpen(false)}
           onDownload={exportAction}
+          onPurchaseRequisition={permitted("export") ? () => { const ids = [...new Set(exportActionGroup.orderIds)].filter((id) => /^\d+$/.test(id)); if (ids.length) router.push(`/operations-orders/purchase-requisition?ids=${encodeURIComponent(ids.join(","))}`); } : null}
         />
         <OperationsComponentEditModal
           state={editItemState}

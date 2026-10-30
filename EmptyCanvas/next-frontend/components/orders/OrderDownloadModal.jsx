@@ -246,6 +246,7 @@ export default function OrderDownloadModal({
   currentOrderKey = "",
   onClose,
   onDownload,
+  onPurchaseRequisition = null,
 }) {
   const availableColumns = useMemo(() => {
     const source = Array.isArray(columnOptions) && columnOptions.length ? columnOptions : ORDER_EXPORT_COLUMNS;
@@ -690,6 +691,7 @@ export default function OrderDownloadModal({
         <div className="order-download-actions">
           <button type="button" className="order-download-btn order-download-btn--dark" disabled={busy} onClick={() => runDownload("pdf")}><ClassicOrderIcon name="file-text" /><span>{busy ? "Preparing…" : "Download PDF"}</span></button>
           <button type="button" className="order-download-btn order-download-btn--dark" disabled={busy} onClick={() => runDownload("excel")}><ClassicOrderIcon name="grid" /><span>{busy ? "Preparing…" : "Download Excel"}</span></button>
+          {typeof onPurchaseRequisition === "function" ? <button type="button" className="order-download-btn order-download-btn--purchase" disabled={busy} onClick={onPurchaseRequisition}><ClassicOrderIcon name="file-text" /><span>Purchase Requisition</span></button> : null}
         </div>
       </div>
       {composerOpen && canManageInstructions ? <InstructionComposer initialTemplate={editingInstruction} onClose={() => { setComposerOpen(false); setEditingInstruction(null); }} onSave={saveInstruction} /> : null}
