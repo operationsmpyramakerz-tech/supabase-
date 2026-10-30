@@ -1,5 +1,5 @@
 "use client";
-import {useState} from "react";
+import {useRef,useState} from "react";
 import Link from "next/link";
 import "./purchase-requisition.css";
 
@@ -8,11 +8,27 @@ const itemFields=[['code','كود الصنف'],['description','اسم الصنف
 function Field({label,value,onChange,type="text",placeholder="",span=false}){return <label className={`pr-field ${span?'pr-field--wide':''}`}><span>{label}</span><input type={type} value={value||""} placeholder={placeholder} onChange={e=>onChange(e.target.value)} dir={/^[\u0600-\u06ff]/.test(String(value||""))?'rtl':'auto'}/></label>}
 function Choice({label,value,onChange,values}){return <div className="pr-field"><span>{label}</span><div className="pr-choice">{values.map(v=><label key={v} className={value===v?'is-selected':''}><input type="radio" checked={value===v} onChange={()=>onChange(v)}/>{v}</label>)}</div></div>}
 function MultiChoice({label,value,onChange,values}){const selected=String(value||" ").split(/[,،;]/).map(v=>v.trim()).filter(Boolean);return <div className="pr-field"><span>{label}</span><div className="pr-choice">{values.map(v=><label key={v} className={selected.includes(v)?"is-selected":""}><input type="checkbox" checked={selected.includes(v)} onChange={()=>onChange(selected.includes(v)?selected.filter(a=>a!==v).join(","):selected.concat(v).join(","))}/>{v}</label>)}</div></div>}
-export default function PurchaseRequisitionClient({initialForm,orderIds}){
- const [form,setForm]=useState(initialForm);const [busy,setBusy]=useState("");const [error,setError]=useState("");
+export default function PurchaseRequisitionClient({initialForm,orderIds,initialSavedAt=null,initialLoadError=""}){
+ const [form,setFormState]=useState(initialForm);const [busy,setBusy]=useState("");const [error,setError]=useState("");
+ const [savedAt,setSavedAt]=useState(initialSavedAt);const [dirty,setDirty]=useState(false);
+ const revision=useRef(0);
+ const setForm=updater=>{revision.current+=1;setDirty(true);setFormState(updater)};
  const set=(key,value)=>setForm(old=>({...old,[key]:value}));
  const item=(i,key,value)=>setForm(old=>({...old,items:old.items.map((r,j)=>j===i?{...r,[key]:value}:r)}));
  const sign=(r,key,value)=>setForm(old=>({...old,signatures:{...old.signatures,[r]:{...old.signatures[r],[key]:value}}}));
+ const saveForm=async()=>{
+  if(busy)return;
+  const revisionAtSave=revision.current;
+  setBusy("save");setError("");
+  try{
+   const response=await fetch("/next/api/orders/purchase-requisition/save",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({orderIds,form})});
+   const data=await response.json().catch(()=>({}));
+   if(!response.ok||!data.ok)throw new Error(data.error||"Failed to save Purchase Requisition");
+   setSavedAt(data.updatedAt||new Date().toISOString());
+   if(revision.current===revisionAtSave)setDirty(false);
+  }catch(e){setError(e.message||"Save failed")}
+  finally{setBusy("")}
+ };
  const exportFile=async kind=>{
   if(busy)return;setBusy(kind);setError("");
   try{
@@ -25,10 +41,10 @@ export default function PurchaseRequisitionClient({initialForm,orderIds}){
   finally{setBusy("")}
  };
  return <div className="pr-workspace" dir="rtl">
-  <div className="pr-top" dir="ltr"><Link href="/operations-orders" className="pr-back">← Back to orders</Link><div><strong>Purchase Requisition</strong><small>Fill in the form, then export as PDF or editable Word</small></div><div className="pr-top-actions"><button type="button" disabled={!!busy} onClick={()=>exportFile("pdf")}>⬇ Download PDF</button><button type="button" disabled={!!busy} onClick={()=>exportFile("word")}>⬇ Download Word</button></div></div>
+  <div className="pr-top" dir="ltr"><Link href="/operations-orders" className="pr-back">← Back to orders</Link><div><strong>Purchase Requisition</strong><small>Fill in the form, then export as PDF or editable Word</small></div><div className="pr-top-actions"><button type="button" className="pr-save" disabled={!!busy} onClick={saveForm}>{busy==="save"?"Saving…":"Save"}</button><button type="button" disabled={!!busy} onClick={()=>exportFile("pdf")}>⬇ Download PDF</button><button type="button" disabled={!!busy} onClick={()=>exportFile("word")}>⬇ Download Word</button></div></div>
   <div className="pr-paper">
    <header className="pr-paper-head"><img src="/next/images/purchase-requisition-logo.png" alt="PRO Pyramakerz"/><div>PRO Pyramakerz<br/>Global HLD</div></header>
-   <h2>نموذج طلب شراء <span>| PURCHASE REQUISITION (PR)</span></h2>
+   <h2>نموذج طلب شراء <span>| Purchase Requisition (PR)</span></h2>
    <section><h3>أولاً | بيانات طلب الشراء</h3><div className="pr-fields">
     <Field label="رقم طلب الشراء (PR No.)" value={form.prNumber} onChange={v=>set('prNumber',v)}/>
     <Field label="تاريخ الطلب" type="date" value={form.requestDate} onChange={v=>set('requestDate',v)}/>
@@ -55,7 +71,9 @@ export default function PurchaseRequisitionClient({initialForm,orderIds}){
    <section><h3>رابعاً | الملاحظات</h3><textarea className="pr-notes" rows={3} value={form.notes} onChange={e=>set('notes',e.target.value)} placeholder="أضف أي ملاحظات إضافية..."/></section>
    <section><h3>خامساً | التوقيعات والاعتمادات</h3><div className="pr-signatures">{signatures.map(([role,label])=><div key={role} className="pr-signer"><h4>{label}</h4>{[['name','الاسم'],['signature','التوقيع'],['date','التاريخ']].map(([key,label])=><Field key={key} label={label} value={form.signatures[role][key]} onChange={v=>sign(role,key,v)} type={key==='date'?'date':'text'}/>)}</div>)}</div></section>
   </div>
+  {initialLoadError&&<div role="alert" className="pr-alert">{initialLoadError}</div>}
+  <div className={`pr-save-status ${dirty?'is-unsaved':'is-saved'}`} role="status" dir="ltr">{dirty ? "Unsaved changes" : savedAt ? `Saved · ${new Date(savedAt).toLocaleString("en-GB",{timeZone:"Africa/Cairo"})}` : "Not saved yet"}</div>
   {error&&<div role="alert" className="pr-alert">{error}</div>}
-  <div className="pr-bottom" dir="ltr"><span>{form.items.length} items · {orderIds.length} order rows</span><button type="button" disabled={!!busy} onClick={()=>exportFile('pdf')}>{busy==='pdf'?'Preparing…':'Download PDF'}</button><button type="button" disabled={!!busy} onClick={()=>exportFile('word')}>{busy==='word'?'Preparing…':'Download Word'}</button></div>
+  <div className="pr-bottom" dir="ltr"><span>{form.items.length} items · {orderIds.length} order rows</span><button type="button" className="pr-save" disabled={!!busy} onClick={saveForm}>{busy==="save"?"Saving…":"Save"}</button><button type="button" disabled={!!busy} onClick={()=>exportFile('pdf')}>{busy==='pdf'?'Preparing…':'Download PDF'}</button><button type="button" disabled={!!busy} onClick={()=>exportFile('word')}>{busy==='word'?'Preparing…':'Download Word'}</button></div>
  </div>
 }
