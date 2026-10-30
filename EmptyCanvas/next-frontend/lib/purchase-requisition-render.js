@@ -239,7 +239,8 @@ export async function renderPrPdf(raw) {
     // Both segments have explicit coordinates: bidi cannot split the title.
     const groupWidth=365,groupLeft=(pageWidth-groupWidth)/2;
     write(english,groupLeft,cy,182,33,{size:13,bold:true,rtl:false,align:"right"});
-    doc.save().moveTo(groupLeft+190,cy+8).lineTo(groupLeft+190,cy+28).lineWidth(2).strokeColor(palette.orange).stroke().restore();
+    // Center the vertical orange divider against both title text baselines.
+    doc.save().moveTo(groupLeft+190,cy+1).lineTo(groupLeft+190,cy+21).lineWidth(2).strokeColor(palette.orange).stroke().restore();
     // Arabic glyph metrics sit visibly lower than Latin at identical y; lift by 7 pt.
     write(arabic,groupLeft+200,cy-7,165,33,{size:14.5,bold:true,rtl:true,align:"left"});
   }

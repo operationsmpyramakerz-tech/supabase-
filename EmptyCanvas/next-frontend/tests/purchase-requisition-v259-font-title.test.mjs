@@ -15,10 +15,10 @@ test('native PR PDF text uses a six-percent smaller font throughout, not in Word
   assert.ok(wordStart >= 0 && pdfStart > wordStart && fontScaleAt > pdfStart);
 });
 
-test('Arabic PR title is moved up seven points while English title and divider stay fixed', () => {
+test('Arabic PR title and orange divider are vertically aligned with the English title', () => {
   assert.match(src, /write\(english,groupLeft,cy,182,33,\{size:13,bold:true,rtl:false,align:"right"\}\)/);
   assert.match(src, /write\(arabic,groupLeft\+200,cy-7,165,33,\{size:14\.5,bold:true,rtl:true,align:"left"\}\)/);
-  assert.match(src, /moveTo\(groupLeft\+190,cy\+8\)/);
+  assert.match(src, /moveTo\(groupLeft\+190,cy\+1\)\.lineTo\(groupLeft\+190,cy\+21\)/);
 });
 
 test('table geometry and native PDF export flow are unchanged', () => {
