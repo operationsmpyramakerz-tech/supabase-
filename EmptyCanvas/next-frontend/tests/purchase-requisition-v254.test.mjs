@@ -5,7 +5,7 @@ import { normalizePrForm, prInitialForm, PR_COLUMNS, PR_SIGNERS } from "../lib/p
 const read = p => fs.readFileSync(new URL(p, import.meta.url), "utf8");
 test("initial PR uses requested quantities and never accidentally received counts", () => {
   const f = prInitialForm([{orderIdNumber:123,productName:"DC Motor",quantityRequested:5,quantityReceived:2,customizeId:"A100001",createdByName:"User",reason:"Prototype"}]);
-  assert.equal(f.prNumber,"PR-ORD-123");assert.equal(f.workOrder,"ORD-123");assert.equal(f.items[0].quantity,"5");assert.equal(f.items[0].code,"A100001");assert.equal(f.items[0].description,"DC Motor");
+  assert.equal(f.prNumber,"");assert.equal(f.workOrder,"ORD-123");assert.equal(f.items[0].quantity,"5");assert.equal(f.items[0].code,"A100001");assert.equal(f.items[0].description,"DC Motor");
 });
 test("all form sections and all signature roles are preserved", () => {
  const f=normalizePrForm({department:"Ops",priority:"عاجل",notes:"Purchase needed",items:[{description:"A"}],signatures:{technical:{name:"Technical reviewer"}}});

@@ -35,7 +35,7 @@ export default function PurchaseRequisitionClient({initialForm,orderIds,initialS
    const response=await fetch("/next/api/orders/purchase-requisition",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({orderIds,kind,form})});
    if(!response.ok){const data=await response.json().catch(()=>({}));throw new Error(data.error||"Failed to create file")}
    const file=await response.blob();const url=URL.createObjectURL(file);const a=document.createElement("a");a.href=url;
-   a.download=`purchase-requisition-${(form.prNumber||"draft").replace(/[^a-zA-Z0-9_-]/g,'-')}.${kind==='word'?'docx':'pdf'}`;
+   a.download=`purchase-requisition-${(form.prNumber||form.workOrder||"draft").replace(/[^a-zA-Z0-9_-]/g,'-')}.${kind==='word'?'docx':'pdf'}`;
    document.body.appendChild(a);a.click();a.remove();window.setTimeout(()=>URL.revokeObjectURL(url),120_000);
   }catch(e){setError(e.message||"Download failed")}
   finally{setBusy("")}
@@ -46,7 +46,7 @@ export default function PurchaseRequisitionClient({initialForm,orderIds,initialS
    <header className="pr-paper-head"><img src="/next/images/purchase-requisition-logo.png" alt="PRO Pyramakerz"/><div>PRO Pyramakerz<br/>Global HLD</div></header>
    <h2>نموذج طلب شراء <span>| Purchase Requisition (PR)</span></h2>
    <section><h3>أولاً | بيانات طلب الشراء</h3><div className="pr-fields">
-    <Field label="رقم طلب الشراء (PR No.)" value={form.prNumber} onChange={v=>set('prNumber',v)}/>
+    <Field label="رقم طلب الشراء - PR No." value={form.prNumber} onChange={v=>set('prNumber',v)}/>
     <Field label="تاريخ الطلب" type="date" value={form.requestDate} onChange={v=>set('requestDate',v)}/>
     <Field label="الإدارة / القسم الطالب" value={form.department} onChange={v=>set('department',v)}/>
     <Field label="مركز التكلفة / المشروع" value={form.costCenter} onChange={v=>set('costCenter',v)}/>

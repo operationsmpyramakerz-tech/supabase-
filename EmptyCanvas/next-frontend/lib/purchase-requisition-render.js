@@ -234,11 +234,19 @@ export async function renderPrPdf(raw) {
     doc.restore();
   }
   function prNumberLabel(x,y,w,h) {
-    // Keep the English abbreviation in its own LTR region instead of mixing
-    // its parentheses into the RTL label's word-by-word layout.
+    // Form a compact, centered bilingual label as one optical group. Measure
+    // both scripts independently so their separation is consistent on PDFKit.
     rect(x,y,w,h,palette.label);
-    write("رقم طلب الشراء",x+58,y,w-64,h,{size:8.5,bold:true,rtl:true,align:"right",padding:0});
-    write("(PR No.)",x+5,y,54,h,{size:7.7,bold:true,rtl:false,align:"center",padding:0});
+    const arabic="رقم طلب الشراء", english="PR No.";
+    const arabicSize=8.5*PDF_FONT_SCALE, englishSize=8.5*PDF_FONT_SCALE;
+    const arabicWidth=prLineWidth(prTextTokens(arabic),token=>measureToken(token,arabicSize,true),arabicSize*.28)+3;
+    const englishWidth=measureToken(english,englishSize,true)+3;
+    const dashWidth=7,gap=4;
+    const groupWidth=englishWidth+gap+dashWidth+gap+arabicWidth;
+    const groupLeft=x+(w-groupWidth)/2;
+    write(english,groupLeft,y,englishWidth,h,{size:8.5,bold:true,rtl:false,align:"center",padding:0});
+    write("-",groupLeft+englishWidth+gap,y,dashWidth,h,{size:8.5,bold:true,rtl:false,align:"center",padding:0});
+    write(arabic,groupLeft+englishWidth+gap+dashWidth+gap,y,arabicWidth,h,{size:8.5,bold:true,rtl:true,align:"center",padding:0});
   }
   function pairRow(labelRight,valueRight,labelLeft,valueLeft,y,h=32) {
     // Columns are laid out from right to left, with wider, shaded field labels.
@@ -248,13 +256,15 @@ export async function renderPrPdf(raw) {
     for(let j=0;j<4;j++) {
       const width=sizes[j];xx-=width;
       const label=j%2===0;
-      if(label && values[j]==="رقم طلب الشراء (PR No.)") {
+      if(label && values[j]==="رقم طلب الشراء - PR No.") {
         prNumberLabel(xx,y,width,h);
       } else if(!label && /^\d{2}\s*\/\s*\d{2}\s*\/\s*\d{4}$/.test(String(values[j]??""))) {
         rect(xx,y,width,h,palette.white);
         centeredDate(values[j],xx,y,width,h);
       } else {
-        cell(safeCellText(values[j]),xx,y,width,h,{
+        // The PR No. field is intentionally empty until the user assigns one.
+        // Keep its PDF value cell blank rather than inserting an em dash.
+        cell(j===1 && labelRight==="رقم طلب الشراء - PR No." ? String(values[j]??"") : safeCellText(values[j]),xx,y,width,h,{
           bg:label?palette.label:palette.white,size:label?8.5:8.9,bold:label,
           rtl:label||hasPrArabic(values[j]),align:label||hasPrArabic(values[j])?"right":"center",
           color:label?palette.navy:palette.ink,padding:6,maxLines:3
@@ -277,7 +287,7 @@ export async function renderPrPdf(raw) {
   brand();sectionTitle();
   let y=136;
   y=section("أولاً | بيانات طلب الشراء",y);
-  y=pairRow("رقم طلب الشراء (PR No.)",form.prNumber,"تاريخ الطلب",displayDate(form.requestDate),y);
+  y=pairRow("رقم طلب الشراء - PR No.",form.prNumber,"تاريخ الطلب",displayDate(form.requestDate),y);
   y=pairRow("الإدارة / القسم الطالب",form.department,"مركز التكلفة / المشروع",form.costCenter,y);
   y=pairRow("اسم مقدم الطلب / الوظيفة",form.requester,"رقم أمر الشغل (إن وجد)",form.workOrder,y);
   y=pairRow("نوع الطلب",check(form.requestType,["مخزني","خدمة","أصل ثابت"]),"درجة الأولوية",check(form.priority,["عادي","عاجل","طارئ"]),y,36);
@@ -373,8 +383,10 @@ export async function renderPrPdf(raw) {
       rect(xx,rowY,width,30,palette.white);
       // A dedicated right-aligned label region and centered value region keep
       // both Arabic and Latin signer names away from the column divider.
-      const labelWidth=43,valueLeft=xx+7,valueWidth=width-labelWidth-19;
-      write(label+":",xx+width-labelWidth-4,rowY,labelWidth,30,{size:8.2,bold:true,rtl:true,align:"right",padding:2});
+      // Shift the label and its writing/value zone right by about 6-8pt,
+      // while retaining an internal gap to prevent Latin/Arabic collisions.
+      const labelWidth=39,valueLeft=xx+13,valueWidth=width-labelWidth-18;
+      write(label+":",xx+width-labelWidth-2,rowY,labelWidth,30,{size:8.2,bold:true,rtl:true,align:"right",padding:2});
       if (value) {
         doc.save().rect(valueLeft,rowY+1,valueWidth,28).clip();
         write(value,valueLeft,rowY,valueWidth,30,{size:8.2,rtl:hasPrArabic(value),align:"center",padding:1,maxLines:2,lineSpacing:1.35});
@@ -385,4 +397,4 @@ export async function renderPrPdf(raw) {
   footer();
   doc.end();return await ready;
 }
-export function prDownloadName(raw,ext){const form=normalizePrForm(raw);return `purchase-requisition-${safe(form.prNumber||"draft")}.${ext}`;}
+export function prDownloadName(raw,ext){const form=normalizePrForm(raw);return `purchase-requisition-${safe(form.prNumber||form.workOrder||"draft")}.${ext}`;}

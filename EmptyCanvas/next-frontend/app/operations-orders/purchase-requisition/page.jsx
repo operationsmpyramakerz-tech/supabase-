@@ -6,7 +6,7 @@ import { featureGate } from "../../../lib/feature-permissions-server";
 import { assertOrderIdsInScope } from "../../../lib/order-data-scope";
 import { loadOperationsOrderDetails } from "../../../lib/operations-orders-data";
 import { getProductsForOrderDetails } from "../../../lib/products-service";
-import { prApplyProductCatalog, prInitialForm } from "../../../lib/purchase-requisition-data.mjs";
+import { prApplyProductCatalog, prInitialForm, prClearLegacyAutofilledNumber } from "../../../lib/purchase-requisition-data.mjs";
 import { prStorageIdentityFromRows, readSavedPurchaseRequisition } from "../../../lib/purchase-requisition-storage";
 
 export const dynamic = "force-dynamic";
@@ -33,7 +33,7 @@ export default async function PurchaseRequisitionPage({searchParams}){
     try {
       const saved = await readSavedPurchaseRequisition(prStorageIdentityFromRows(items));
       if (saved) {
-        form = prApplyProductCatalog(saved.form, items, products);
+        form = prApplyProductCatalog(prClearLegacyAutofilledNumber(saved.form, form.workOrder), items, products);
         savedAt = saved.updatedAt;
       }
     } catch (err) {

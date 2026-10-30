@@ -29,7 +29,7 @@ test('loads canonical code and URL on opening saved form, preserving typed quant
  assert.equal(merged.items[0].quantity,'8');
  assert.equal(merged.notes,'لا تستبدل');
  assert.match(page,/getProductsForOrderDetails\(items\)/);
- assert.match(page,/prApplyProductCatalog\(saved.form, items, products\)/);
+ assert.match(page,/prApplyProductCatalog\(prClearLegacyAutofilledNumber\(saved.form, form.workOrder\), items, products\)/);
 });
 
 test('rejects unsafe product links and does not invent a link on ambiguous catalog names',()=>{

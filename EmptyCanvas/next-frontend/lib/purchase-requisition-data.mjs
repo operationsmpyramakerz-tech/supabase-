@@ -61,7 +61,8 @@ export function prInitialForm(items = [], account = {}, products = []) {
   const orderLabel = numbers.length === 1 ? `ORD-${numbers[0]}` : numbers.length ? `ORD-${numbers.join(", ")}` : "";
   const date = new Date().toLocaleDateString("sv-SE", { timeZone: "Africa/Cairo" });
   const initial = normalizePrForm({
-    prNumber: orderLabel ? `PR-${orderLabel}` : "",
+    // PR numbers are assigned independently; never copy the Operations Order number.
+    prNumber: "",
     requestDate: date,
     requester: first?.createdByName || first?.assignedToName || "",
     workOrder: orderLabel,
@@ -78,4 +79,14 @@ export function prInitialForm(items = [], account = {}, products = []) {
     signatures: { requester: { name: first?.createdByName || first?.assignedToName || "" } },
   });
   return prApplyProductCatalog(initial, items, products);
+}
+
+// Migration compatibility: legacy forms were prefilled with PR-ORD-NNN.
+// Preserve manually assigned PR identifiers; clear only that exact legacy default.
+export function prClearLegacyAutofilledNumber(savedForm, verifiedWorkOrder = "") {
+  const workOrder = String(verifiedWorkOrder ?? "").trim();
+  const oldNumber = `PR-${workOrder}`;
+  return workOrder && savedForm?.prNumber === oldNumber
+    ? { ...savedForm, prNumber: "" }
+    : savedForm;
 }
