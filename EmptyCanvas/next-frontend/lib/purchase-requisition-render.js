@@ -8,7 +8,7 @@ import JSZip from "jszip";
 import PDFDocument from "pdfkit";
 import pdfArabicSupport from "./pdfArabicSupport";
 import { normalizePrForm, PR_SIGNERS, safePrProductUrl } from "./purchase-requisition-data.mjs";
-import { hasPrArabic, prTextTokens, prSplitLines, prLineWidth, prNotesNumeralBaselineDrop } from "./purchase-requisition-pdf-layout.mjs";
+import { hasPrArabic, prTextTokens, prSplitLines, prLineWidth } from "./purchase-requisition-pdf-layout.mjs";
 
 const { enableArabicPdf, ensurePdfArabicSupport, withNativeArabicPdfText } = pdfArabicSupport;
 const encodeXml = value => String(value ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&apos;").replace(/\r?\n/g,"&#10;");
@@ -131,7 +131,7 @@ export async function renderPrPdf(raw) {
     const width=withNativeArabicPdfText(doc,()=>doc.widthOfString(token));
     return Number.isFinite(width)?width:size*String(token).length*.59;
   }
-  function paintToken(token,xx,yy,size,bold,color,numeralBaselineDrop=0) {
+  function paintToken(token,xx,yy,size,bold,color,opts={}) {
     if (token==="☐" || token==="☑") {
       const len=size*.8;
       doc.save().lineWidth(.75).strokeColor(color).rect(xx,yy+size*.22,len,len).stroke();
@@ -141,18 +141,16 @@ export async function renderPrPdf(raw) {
     // Place standalone | and / a little lower so they sit on the same optical
     // centerline as Arabic text. Other glyphs retain their existing baseline.
     const isolatedPunctuation=/^[\/|()]$/.test(token);
+    const lowerAsciiDigits=Boolean(opts.lowerAsciiDigitsInArabic) && /\d/.test(token) && !/[\u0600-\u06FF]/.test(token);
     doc.font(fontFor(bold)).fontSize(size).fillColor(color);
-    if (isolatedPunctuation) {
+    if (isolatedPunctuation || lowerAsciiDigits) {
       const printed=token==="("?")":token===")"?"(":token;
       // Pipe separators in section headings and slashes in RTL labels need a
       // little more descent than parentheses to align with adjacent Arabic.
-      const baselineDrop=token==="|"?size*.36:token==="/"?size*.33:size*.14;
+      // In Arabic notes, standalone Latin digits also sit optically high, so
+      // they receive a slightly stronger baseline drop.
+      const baselineDrop=lowerAsciiDigits ? (opts.digitBaselineDrop ?? size*.32) : (token==="|"?size*.36:token==="/"?size*.33:size*.14);
       withNativeArabicPdfText(doc,()=>doc.text(printed,xx,yy+baselineDrop,{lineBreak:false}));
-    } else if (numeralBaselineDrop > 0) {
-      // Only standalone numerals inside the Arabic Notes field need an optical
-      // descent. Leave Arabic words, mixed identifiers and every other table
-      // or date cell on their previous baselines.
-      withNativeArabicPdfText(doc,()=>doc.text(token,xx,yy+numeralBaselineDrop,{lineBreak:false}));
     } else withNativeArabicPdfText(doc,()=>doc.text(token,xx,yy,{lineBreak:false}));
   }
   function write(value,x,y,w,h,opts={}) {
@@ -175,12 +173,12 @@ export async function renderPrPdf(raw) {
       if(rtl){
         const align=opts.align??"right";
         cursor=align==="center"?x+(w+used)/2:align==="left"?x+padding+used:x+w-padding;
-        for(const token of tokens){const tw=measure(token);cursor-=tw;paintToken(token,cursor,top+i*lineHeight,size,bold,color,opts.notesNumeralAlignment?prNotesNumeralBaselineDrop(token,size):0);cursor-=gap;}
+        for(const token of tokens){const tw=measure(token);cursor-=tw;paintToken(token,cursor,top+i*lineHeight,size,bold,color,opts);cursor-=gap;}
       } else {
         const align=opts.align??"left";
         cursor=align==="center"?x+(w-used)/2:align==="right"?x+w-padding-used:x+padding;
         // Latin text uses PDFKit's normal LTR order and keeps nested parentheses.
-        for(const token of tokens){paintToken(token,cursor,top+i*lineHeight,size,bold,color);cursor+=measure(token)+gap;}
+        for(const token of tokens){paintToken(token,cursor,top+i*lineHeight,size,bold,color,opts);cursor+=measure(token)+gap;}
       }
     });
   }
@@ -369,7 +367,7 @@ export async function renderPrPdf(raw) {
       const capacity=Math.max(1,Math.floor((bottomLimit-y-23)/noteStep));
       const segment=noteLines.slice(current,current+capacity);
       const height=Math.max(54,Math.ceil(segment.length*noteStep+20));
-      cell(segment.map(tokens=>tokens.join(" ")).join("\n"),left,y,pageContent,height,{size:noteSize,rtl:true,align:"right",maxLines:segment.length,valign:"top",padding:11,notesNumeralAlignment:true});
+      cell(segment.map(tokens=>tokens.join(" ")).join("\n"),left,y,pageContent,height,{size:noteSize,rtl:true,align:"right",maxLines:segment.length,valign:"top",padding:11,lowerAsciiDigitsInArabic:true,digitBaselineDrop:3.5});
       current+=segment.length;y+=height+8;
       if(current<noteLines.length){y=newPage();y=section("رابعاً | الملاحظات — تابع",y);}
     }
