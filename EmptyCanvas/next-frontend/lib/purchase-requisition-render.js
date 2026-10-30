@@ -8,6 +8,7 @@ import JSZip from "jszip";
 import PDFDocument from "pdfkit";
 import pdfArabicSupport from "./pdfArabicSupport";
 import { normalizePrForm, PR_SIGNERS } from "./purchase-requisition-data.mjs";
+import { nativePrPdfRtlWordOrder } from "./purchase-requisition-pdf-text.mjs";
 
 const { enableArabicPdf, ensurePdfArabicSupport, withNativeArabicPdfText } = pdfArabicSupport;
 const encodeXml = value => String(value ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&apos;").replace(/\r?\n/g,"&#10;");
@@ -91,7 +92,7 @@ export async function renderPrPdf(raw) {
   const line="#B7BDC5",ink="#253746",orange="#C66723";
   const drawTxt=(str,xx,yy,ww,hh,{fontSize=9,bold=false,align="right",color=ink}={})=>{
     doc.fillColor(color).font(bold?"Helvetica-Bold":"Helvetica").fontSize(fontSize);
-    withNativeArabicPdfText(doc, () => doc.text(String(str||""),xx+4,yy+3,{width:ww-8,height:hh-5,align,ellipsis:true,lineBreak:false}));
+    withNativeArabicPdfText(doc, () => doc.text(nativePrPdfRtlWordOrder(str),xx+4,yy+3,{width:ww-8,height:hh-5,align,ellipsis:true,lineBreak:false}));
   };
   const cell=(txt,xx,yy,ww,hh,opts={})=>{
     doc.rect(xx,yy,ww,hh).lineWidth(.65).stroke(line);
@@ -113,11 +114,11 @@ export async function renderPrPdf(raw) {
   };
   const begin=()=>{header();watermark();};
   const ensure=(y,h)=>{if(y+h > ph-46){doc.addPage();begin();return 100;}return y;};
-  const heading=(value,y)=>{doc.fillColor(orange).font("Helvetica-Bold").fontSize(12);withNativeArabicPdfText(doc, () => doc.text(value,x,y,{width:w,align:"right"}));return y+23;};
+  const heading=(value,y)=>{doc.fillColor(orange).font("Helvetica-Bold").fontSize(12);withNativeArabicPdfText(doc, () => doc.text(nativePrPdfRtlWordOrder(value),x,y,{width:w,align:"right"}));return y+23;};
   const row4=(a,b,c,d,y,h=29)=>{const widths=[w*.28,w*.22,w*.27,w*.23];let xx=x+w;for(const [v,ww,opts] of [[a,widths[0],{bold:true}],[b,widths[1],{}],[c,widths[2],{bold:true}],[d,widths[3],{}]]){xx-=ww;cell(v,xx,y,ww,h,opts)}return y+h;};
   begin();
   let y=107;
-  drawTxt("Purchase Requisition (PR)   |   نموذج طلب شراء",x,y,w,31,{fontSize:15,bold:true,align:"center"});y+=36;
+  drawTxt("Purchase Requisition (PR)",x,y,w*.48,31,{fontSize:13,bold:true,align:"right"});drawTxt("|",x+w*.49,y,w*.02,31,{fontSize:13,bold:true,align:"center"});drawTxt("نموذج طلب شراء",x+w*.51,y,w*.49,31,{fontSize:15,bold:true,align:"center"});y+=36;
   y=heading("أولاً | بيانات طلب الشراء",y);
   y=row4("رقم طلب الشراء (PR No.)",form.prNumber,"تاريخ الطلب",displayDate(form.requestDate),y);
   y=row4("الإدارة / القسم الطالب",form.department,"مركز التكلفة / المشروع",form.costCenter,y);

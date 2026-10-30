@@ -9956,7 +9956,7 @@ html[data-theme="dark"] body.operations-orders-page .next-operations-component-e
 }
 /* v254: Purchase Requisition is intentionally shown only in Operations Orders. */
 .order-download-actions:has(.order-download-btn--purchase){grid-template-columns:repeat(3,minmax(0,1fr))}
-.order-download-btn--purchase{background:#ee640a;border:1px solid #ee640a;color:#fff;text-transform:uppercase;letter-spacing:.025em}
+.order-download-btn--purchase{background:#ee640a;border:1px solid #ee640a;color:#fff;text-transform:none;letter-spacing:normal}
 .order-download-btn--purchase:hover{background:#d85907;border-color:#d85907}
 @media(max-width:750px){.order-download-actions:has(.order-download-btn--purchase){grid-template-columns:1fr 1fr}.order-download-btn--purchase{grid-column:1/-1}}
 @media(max-width:420px){.order-download-actions:has(.order-download-btn--purchase){grid-template-columns:1fr}}

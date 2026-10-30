@@ -41,7 +41,7 @@ export default function PurchaseRequisitionClient({initialForm,orderIds,initialS
   finally{setBusy("")}
  };
  return <div className="pr-workspace" dir="rtl">
-  <div className="pr-top" dir="ltr"><Link href="/operations-orders" className="pr-back">← Back to orders</Link><div><strong>Purchase Requisition</strong><small>Fill in the form, then export as PDF or editable Word</small></div><div className="pr-top-actions"><button type="button" className="pr-save" disabled={!!busy} onClick={saveForm}>{busy==="save"?"Saving…":"Save"}</button><button type="button" disabled={!!busy} onClick={()=>exportFile("pdf")}>⬇ Download PDF</button><button type="button" disabled={!!busy} onClick={()=>exportFile("word")}>⬇ Download Word</button></div></div>
+  <div className="pr-top" dir="ltr"><Link href="/operations-orders" className="pr-back">← Back to orders</Link><div><strong>Purchase Requisition</strong><small>Fill in the form, then export as PDF or editable Word</small></div></div>
   <div className="pr-paper">
    <header className="pr-paper-head"><img src="/next/images/purchase-requisition-logo.png" alt="PRO Pyramakerz"/><div>PRO Pyramakerz<br/>Global HLD</div></header>
    <h2>نموذج طلب شراء <span>| Purchase Requisition (PR)</span></h2>
