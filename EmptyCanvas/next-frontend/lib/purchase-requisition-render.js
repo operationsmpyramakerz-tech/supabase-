@@ -244,7 +244,9 @@ export async function renderPrPdf(raw) {
     const dashWidth=7,gap=4;
     const groupWidth=englishWidth+gap+dashWidth+gap+arabicWidth;
     const groupLeft=x+(w-groupWidth)/2;
-    write(english,groupLeft,y,englishWidth,h,{size:8.5,bold:true,rtl:false,align:"center",padding:0});
+    // The Latin glyphs render optically higher than the adjacent Arabic.
+    // Lower PR No. alone by 2.5pt; preserve the group width and all other baselines.
+    write(english,groupLeft,y+2.5,englishWidth,h,{size:8.5,bold:true,rtl:false,align:"center",padding:0});
     write("-",groupLeft+englishWidth+gap,y,dashWidth,h,{size:8.5,bold:true,rtl:false,align:"center",padding:0});
     write(arabic,groupLeft+englishWidth+gap+dashWidth+gap,y,arabicWidth,h,{size:8.5,bold:true,rtl:true,align:"center",padding:0});
   }
