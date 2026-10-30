@@ -13,10 +13,10 @@ test('Arabic parentheticals stay paired, preserving RTL word order',()=>{
 test('PDF fallback has no watermark, has compact branded header and shaded labels',()=>{
   const pdf=source('lib/purchase-requisition-render.js');
   assert.doesNotMatch(pdf,/const watermark\s*=/);
-  assert.match(pdf,/const begin=\(\)=>\{header\(\);\};/);
-  assert.match(pdf,/labelBg="\#EAF1F7"/);
-  assert.match(pdf,/titleStart\+217/);
-  assert.match(pdf,/normalizeArabicLabels/);
+  assert.match(pdf,/function brand\(\)/);
+  assert.match(pdf,/label:"\#EAF1F7"/);
+  assert.match(pdf,/function sectionTitle\(\)/);
+  assert.match(pdf,/prSplitLines\(text,maxWidth,measure,gap\)/);
 });
 test('editor preview does not draw watermark, and company appears alongside logo',()=>{
   const css=source('components/orders/purchase-requisition.css');
