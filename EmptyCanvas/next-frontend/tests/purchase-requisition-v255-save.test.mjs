@@ -42,7 +42,7 @@ test("existing saved form restores on page open, including unsaved changes indic
 });
 test("native Arabic PDFKit shaping is used, no manual character reversal", () => {
   const code=source("../lib/purchase-requisition-render.js");
-  assert.match(code,/withNativeArabicPdfText\(doc, \(\) => doc\.text\(String\(str/);
-  assert.match(code,/withNativeArabicPdfText\(doc, \(\) => doc\.text\(value/);
+  assert.match(code,/withNativeArabicPdfText\(doc, \(\) => doc\.text\(nativePrPdfRtlWordOrder\(normalizeArabicLabels\(str\)\)/);
+  assert.match(code,/withNativeArabicPdfText\(doc, \(\) => doc\.text\(nativePrPdfRtlWordOrder\(normalizeArabicLabels\(value\)\)/);
   assert.match(code,/Purchase Requisition \(PR\)/);
 });

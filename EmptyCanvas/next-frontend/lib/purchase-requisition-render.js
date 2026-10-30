@@ -89,36 +89,43 @@ export async function renderPrPdf(raw) {
   const chunks=[];doc.on("data",c=>chunks.push(c));
   const ready = new Promise((resolve,reject)=>{doc.on("end",()=>resolve(Buffer.concat(chunks)));doc.on("error",reject);});
   const pw=doc.page.width,ph=doc.page.height,x=33,w=pw-66;
-  const line="#B7BDC5",ink="#253746",orange="#C66723";
+  const line="#D4DCE5",ink="#253746",orange="#E86617",labelBg="#EAF1F7",stripeBg="#F8FAFD";
+  const normalizeArabicLabels = value => /[\u0600-\u06FF]/.test(String(value ?? "")) ? String(value).replace(/\s*\/\s*/g, " / ").trim() : String(value ?? "");
   const drawTxt=(str,xx,yy,ww,hh,{fontSize=9,bold=false,align="right",color=ink}={})=>{
     doc.fillColor(color).font(bold?"Helvetica-Bold":"Helvetica").fontSize(fontSize);
-    withNativeArabicPdfText(doc, () => doc.text(nativePrPdfRtlWordOrder(str),xx+4,yy+3,{width:ww-8,height:hh-5,align,ellipsis:true,lineBreak:false}));
+    withNativeArabicPdfText(doc, () => doc.text(nativePrPdfRtlWordOrder(normalizeArabicLabels(str)),xx+4,yy+3,{width:ww-8,height:hh-5,align,ellipsis:true,lineBreak:false}));
   };
   const cell=(txt,xx,yy,ww,hh,opts={})=>{
+    if(opts.fill) doc.rect(xx,yy,ww,hh).fill(opts.fill);
     doc.rect(xx,yy,ww,hh).lineWidth(.65).stroke(line);
     drawTxt(txt,xx,yy,ww,hh,opts);
   };
+  // Compact identity at the left side of every page: icon | orange rule | company.
   function header(){
-    try{doc.image(path.join(process.cwd(),"public","images","purchase-requisition-logo.png"),x+4,23,{width:67});}catch{}
-    drawTxt("PRO Pyramakerz",pw-195,27,160,23,{fontSize:12,align:"right"});
-    drawTxt("Global HLD",pw-195,46,160,19,{fontSize:12,align:"right"});
+    const baseY=23;
+    try{doc.image(path.join(process.cwd(),"public","images","purchase-requisition-logo.png"),x+4,baseY,{width:65});}catch{}
+    doc.save().moveTo(x+84,baseY+3).lineTo(x+84,baseY+65).lineWidth(2.4).stroke(orange).restore();
+    drawTxt("PRO Pyramakerz",x+96,baseY+11,172,23,{fontSize:11,bold:true,align:"left"});
+    drawTxt("Global HLD",x+96,baseY+31,172,22,{fontSize:10,align:"left"});
   }
-  const watermark=()=>{
-    doc.save().opacity(.055).fillColor("#182D43");
-    const cx=pw/2,cy=ph/2;
-    for(let j=0;j<4;j++){
-      const s=85+j*50;
-      doc.save().translate(cx,cy).rotate(45).rect(-s/2,-s/2,s,s).lineWidth(17).stroke("#182D43").restore();
-    }
-    doc.restore();
-  };
-  const begin=()=>{header();watermark();};
+  const begin=()=>{header();};
   const ensure=(y,h)=>{if(y+h > ph-46){doc.addPage();begin();return 100;}return y;};
-  const heading=(value,y)=>{doc.fillColor(orange).font("Helvetica-Bold").fontSize(12);withNativeArabicPdfText(doc, () => doc.text(nativePrPdfRtlWordOrder(value),x,y,{width:w,align:"right"}));return y+23;};
-  const row4=(a,b,c,d,y,h=29)=>{const widths=[w*.28,w*.22,w*.27,w*.23];let xx=x+w;for(const [v,ww,opts] of [[a,widths[0],{bold:true}],[b,widths[1],{}],[c,widths[2],{bold:true}],[d,widths[3],{}]]){xx-=ww;cell(v,xx,y,ww,h,opts)}return y+h;};
+  const heading=(value,y)=>{doc.fillColor(orange).font("Helvetica-Bold").fontSize(12);withNativeArabicPdfText(doc, () => doc.text(nativePrPdfRtlWordOrder(normalizeArabicLabels(value)),x,y,{width:w,align:"right"}));return y+25;};
+  const row4=(a,b,c,d,y,h=32)=>{
+    const widths=[w*.28,w*.22,w*.27,w*.23];let xx=x+w;
+    for(const [v,ww,opts] of [[a,widths[0],{bold:true,fill:labelBg}],[b,widths[1],{}],[c,widths[2],{bold:true,fill:labelBg}],[d,widths[3],{}]]){
+      xx-=ww;cell(v,xx,y,ww,h,opts);
+    }
+    return y+h;
+  };
   begin();
   let y=107;
-  drawTxt("Purchase Requisition (PR)",x,y,w*.48,31,{fontSize:13,bold:true,align:"right"});drawTxt("|",x+w*.49,y,w*.02,31,{fontSize:13,bold:true,align:"center"});drawTxt("نموذج طلب شراء",x+w*.51,y,w*.49,31,{fontSize:15,bold:true,align:"center"});y+=36;
+  // Three adjacent segments prevent Arabic/LTR BiDi layout from separating the title.
+  const titleStart=pw/2-191;
+  drawTxt("Purchase Requisition (PR)",titleStart,y,196,31,{fontSize:13,bold:true,align:"right"});
+  drawTxt("|",titleStart+196,y,17,31,{fontSize:13,bold:true,align:"center",color:orange});
+  drawTxt("نموذج طلب شراء",titleStart+217,y,166,31,{fontSize:15,bold:true,align:"left"});
+  y+=38;
   y=heading("أولاً | بيانات طلب الشراء",y);
   y=row4("رقم طلب الشراء (PR No.)",form.prNumber,"تاريخ الطلب",displayDate(form.requestDate),y);
   y=row4("الإدارة / القسم الطالب",form.department,"مركز التكلفة / المشروع",form.costCenter,y);
@@ -128,11 +135,11 @@ export async function renderPrPdf(raw) {
   drawTxt("يُكتب لكل صنف وصف فني واضح؛ ويمكن إرفاق كشف تكميلي مع الإشارة إلى رقم الطلب نفسه.",x,y,w,19,{fontSize:9});y+=21;
   const widths=[26,66,175,38,38,78,65,w-(26+66+175+38+38+78+65)];
   const headers=["م","كود الصنف","اسم الصنف / الخدمة والمواصفات الفنية","الوحدة","الكمية","العلامة / الموديل / المقاس","الضمان المطلوب","الصلاحية / تاريخ الانتهاء"];
-  const itemRow=(values,yy,h,headerMode=false)=>{
+  const itemRow=(values,yy,h,headerMode=false,alternate=false)=>{
     let xx=x+w;for(let i=0;i<widths.length;i++){
       const ww=widths[i];xx-=ww;
-      if(headerMode)doc.rect(xx,yy,ww,h).fill("#F3F5F7");
-      cell(values[i],xx,yy,ww,h,{fontSize:headerMode?8:7.8,bold:headerMode,align:i===2?"right":"center"});
+      const fill=headerMode ? "#E7EFF7" : i===0 ? labelBg : (alternate ? stripeBg : "#FFFFFF");
+      cell(values[i],xx,yy,ww,h,{fontSize:headerMode?8:7.8,bold:headerMode,align:i===2?"right":"center",fill});
     }
     return yy+h;
   };
@@ -143,7 +150,7 @@ export async function renderPrPdf(raw) {
     if(y===100)drawTableHeader();
     const it=form.items[i]||{};
     const values=[String(i+1),it.code||"",it.description||"",it.unit||"",it.quantity||"",it.model||"",it.warranty||"",it.expiry||""];
-    y=itemRow(values,y,38);
+    y=itemRow(values,y,38,false,i%2===1);
   }
   y=ensure(y,174);y+=8;y=heading("ثالثاً | المتطلبات الفنية والتسليم",y);
   y=row4("تاريخ التوريد المطلوب",displayDate(form.requiredDate),"مكان التسليم",form.deliveryPlace,y);
@@ -158,10 +165,10 @@ export async function renderPrPdf(raw) {
   const q=w/4;
   for(let col=0;col<4;col++){
     const xx=x+w-(col+1)*q, signer=form.signatures[roles[col]];
-    cell(labels[col],xx,y,q,37,{bold:true,align:"center"});
-    cell(`الاسم: ${signer.name||"........................"}`,xx,y+37,q,27);
-    cell(`التوقيع: ${signer.signature||"........................"}`,xx,y+64,q,27);
-    cell(`التاريخ: ${displayDate(signer.date)||".... / .... / ........"}`,xx,y+91,q,27);
+    cell(labels[col],xx,y,q,42,{bold:true,align:"center",fill:labelBg});
+    cell(`الاسم: ${signer.name||"........................"}`,xx,y+42,q,27);
+    cell(`التوقيع: ${signer.signature||"........................"}`,xx,y+69,q,27);
+    cell(`التاريخ: ${displayDate(signer.date)||".... / .... / ........"}`,xx,y+96,q,27);
   }
   doc.end();return await ready;
 }
