@@ -142,14 +142,19 @@ export async function renderPrPdf(raw) {
     // centerline as Arabic text. Other glyphs retain their existing baseline.
     const isolatedPunctuation=/^[\/|()]$/.test(token);
     const lowerAsciiDigits=Boolean(opts.lowerAsciiDigitsInArabic) && /\d/.test(token) && !/[\u0600-\u06FF]/.test(token);
+    const lowerInlineSymbols=Boolean(opts.lowerInlineSymbolsInArabic) && /^[():\-–—]+$/.test(token);
     doc.font(fontFor(bold)).fontSize(size).fillColor(color);
-    if (isolatedPunctuation || lowerAsciiDigits) {
+    if (isolatedPunctuation || lowerAsciiDigits || lowerInlineSymbols) {
       const printed=token==="("?")":token===")"?"(":token;
       // Pipe separators in section headings and slashes in RTL labels need a
       // little more descent than parentheses to align with adjacent Arabic.
-      // In Arabic notes, standalone Latin digits also sit optically high, so
-      // they receive a slightly stronger baseline drop.
-      const baselineDrop=lowerAsciiDigits ? (opts.digitBaselineDrop ?? size*.32) : (token==="|"?size*.36:token==="/"?size*.33:size*.14);
+      // In Arabic notes, standalone Latin digits and inline symbols like
+      // colons, hyphens and parentheses sit optically high, so they receive
+      // a stronger baseline drop there.
+      const baselineDrop=
+        lowerAsciiDigits ? (opts.digitBaselineDrop ?? size*.32)
+        : lowerInlineSymbols ? (opts.symbolBaselineDrop ?? size*.34)
+        : (token==="|"?size*.36:token==="/"?size*.33:size*.14);
       withNativeArabicPdfText(doc,()=>doc.text(printed,xx,yy+baselineDrop,{lineBreak:false}));
     } else withNativeArabicPdfText(doc,()=>doc.text(token,xx,yy,{lineBreak:false}));
   }
@@ -357,7 +362,17 @@ export async function renderPrPdf(raw) {
   // individually page-aware blocks, retaining all user-entered text.
   const noteSize=9.2, noteStep=noteSize*1.48;
   const noteMeasure=token=>measureToken(token,noteSize);
-  const noteLines=form.notes ? prSplitLines(form.notes,pageContent-24,noteMeasure,noteSize*.38) : [];
+  const normalizedNotes=form.notes
+    ? String(form.notes)
+        .split(/\r?\n/)
+        .map(line=>line
+          .replace(/([:()\-])/g," $1 ")
+          .replace(/\s+/g," ")
+          .trim())
+        .join("\n")
+    : "";
+  const noteLines=normalizedNotes ? prSplitLines(normalizedNotes,pageContent-24,noteMeasure,noteSize*.38) : [];
+
   // Blank notes need a compact writing area; the old 46pt placeholder left
   // unnecessary white space before signatures on the following page.
   if (!noteLines.length) {cell("",left,y,pageContent,25);y+=33;}
@@ -367,7 +382,7 @@ export async function renderPrPdf(raw) {
       const capacity=Math.max(1,Math.floor((bottomLimit-y-23)/noteStep));
       const segment=noteLines.slice(current,current+capacity);
       const height=Math.max(54,Math.ceil(segment.length*noteStep+20));
-      cell(segment.map(tokens=>tokens.join(" ")).join("\n"),left,y,pageContent,height,{size:noteSize,rtl:true,align:"right",maxLines:segment.length,valign:"top",padding:11,lowerAsciiDigitsInArabic:true,digitBaselineDrop:3.5});
+      cell(segment.map(tokens=>tokens.join(" ")).join("\n"),left,y,pageContent,height,{size:noteSize,rtl:true,align:"right",maxLines:segment.length,valign:"top",padding:11,lowerAsciiDigitsInArabic:true,digitBaselineDrop:4.9,lowerInlineSymbolsInArabic:true,symbolBaselineDrop:4.2});
       current+=segment.length;y+=height+8;
       if(current<noteLines.length){y=newPage();y=section("رابعاً | الملاحظات — تابع",y);}
     }
