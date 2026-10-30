@@ -96,6 +96,8 @@ export async function renderPrPdf(raw) {
   const palette={ink:"#172638",secondary:"#536477",orange:"#EF6B1B",paleOrange:"#FFF4EB",navy:"#152438",rule:"#D5DEE7",label:"#EAF1F7",stripe:"#F7F9FC",white:"#FFFFFF"};
   const rightEdge=left+pageContent;
   const bottomLimit=pageHeight-55;
+  // Slightly smaller typography across the native PDF without changing table geometry.
+  const PDF_FONT_SCALE=0.94;
   let pageNumber=1;
 
   const fontFor=(bold=false)=>bold?"Helvetica-Bold":"Helvetica";
@@ -117,7 +119,7 @@ export async function renderPrPdf(raw) {
   }
   function write(value,x,y,w,h,opts={}) {
     const text=String(value??'').trim(); if (!text) return;
-    const size=opts.size??9,bold=Boolean(opts.bold),color=opts.color??palette.ink;
+    const size=(opts.size??9)*PDF_FONT_SCALE,bold=Boolean(opts.bold),color=opts.color??palette.ink;
     const padding=opts.padding??7;
     const maxWidth=Math.max(5,w-padding*2), lineHeight=size*(opts.lineSpacing??1.48);
     const rtl=opts.rtl??hasPrArabic(text);
@@ -204,7 +206,8 @@ export async function renderPrPdf(raw) {
     const groupWidth=365,groupLeft=(pageWidth-groupWidth)/2;
     write(english,groupLeft,cy,182,33,{size:13,bold:true,rtl:false,align:"right"});
     doc.save().moveTo(groupLeft+190,cy+8).lineTo(groupLeft+190,cy+28).lineWidth(2).strokeColor(palette.orange).stroke().restore();
-    write(arabic,groupLeft+200,cy,165,33,{size:14.5,bold:true,rtl:true,align:"left"});
+    // Arabic glyph metrics sit visibly lower than Latin at identical y; lift by 7 pt.
+    write(arabic,groupLeft+200,cy-7,165,33,{size:14.5,bold:true,rtl:true,align:"left"});
   }
   brand();sectionTitle();
   let y=136;
