@@ -138,13 +138,16 @@ export async function renderPrPdf(raw) {
       if (token==="☑") doc.moveTo(xx+1.4,yy+size*.57).lineTo(xx+len*.43,yy+size*.84).lineTo(xx+len-1,yy+size*.28).lineWidth(1.25).stroke();
       doc.restore();return;
     }
-    // Standalone separators rendered in Helvetica appear higher than Arabic
-    // glyphs. Compensate their baseline without moving the surrounding words.
+    // Place standalone | and / a little lower so they sit on the same optical
+    // centerline as Arabic text. Other glyphs retain their existing baseline.
     const isolatedPunctuation=/^[\/|()]$/.test(token);
     doc.font(fontFor(bold)).fontSize(size).fillColor(color);
     if (isolatedPunctuation) {
       const printed=token==="("?")":token===")"?"(":token;
-      withNativeArabicPdfText(doc,()=>doc.text(printed,xx,yy+size*.14,{lineBreak:false}));
+      // Pipe separators in section headings and slashes in RTL labels need a
+      // little more descent than parentheses to align with adjacent Arabic.
+      const baselineDrop=token==="|"?size*.36:token==="/"?size*.33:size*.14;
+      withNativeArabicPdfText(doc,()=>doc.text(printed,xx,yy+baselineDrop,{lineBreak:false}));
     } else withNativeArabicPdfText(doc,()=>doc.text(token,xx,yy,{lineBreak:false}));
   }
   function write(value,x,y,w,h,opts={}) {
