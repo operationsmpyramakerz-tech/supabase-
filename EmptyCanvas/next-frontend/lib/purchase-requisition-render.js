@@ -242,8 +242,8 @@ export async function renderPrPdf(raw) {
     doc.restore();
   }
   function prNumberLabel(x,y,w,h) {
-    // Form a compact, centered bilingual label as one optical group. Measure
-    // both scripts independently so their separation is consistent on PDFKit.
+    // Right-align the complete bilingual label to the same inner edge as the
+    // other RTL field labels. Keep the hyphen and script spacing unchanged.
     rect(x,y,w,h,palette.label);
     const arabic="رقم طلب الشراء", english="PR No.";
     const arabicSize=8.5*PDF_FONT_SCALE, englishSize=8.5*PDF_FONT_SCALE;
@@ -251,7 +251,7 @@ export async function renderPrPdf(raw) {
     const englishWidth=measureToken(english,englishSize,true)+3;
     const dashWidth=7,gap=4;
     const groupWidth=englishWidth+gap+dashWidth+gap+arabicWidth;
-    const groupLeft=x+(w-groupWidth)/2;
+    const groupLeft=x+w-7-groupWidth;
     // The Latin glyphs render optically higher than the adjacent Arabic.
     // Lower PR No. alone by 2.5pt; preserve the group width and all other baselines.
     write(english,groupLeft,y+2.5,englishWidth,h,{size:8.5,bold:true,rtl:false,align:"center",padding:0});

@@ -13,10 +13,10 @@ test('date values are one LTR run centered within their own cells', () => {
   assert.match(source, /centeredDate\(values\[j\],xx,y,width,h\)/);
 });
 
-test('PR No label measures both scripts, centers the group, and inserts a dash', () => {
+test('PR No label measures both scripts, right-aligns the group, and inserts a dash', () => {
   assert.match(source, /function prNumberLabel\(x,y,w,h\)/);
   assert.match(source, /const arabic="رقم طلب الشراء", english="PR No\."/);
-  assert.match(source, /const groupLeft=x\+\(w-groupWidth\)\/2/);
+  assert.match(source, /const groupLeft=x\+w-7-groupWidth/);
   assert.match(source, /write\("-",groupLeft\+englishWidth\+gap/);
   assert.match(source, /if\(label && values\[j\]==="رقم طلب الشراء - PR No\."\)/);
 });

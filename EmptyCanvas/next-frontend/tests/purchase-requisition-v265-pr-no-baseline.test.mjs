@@ -11,8 +11,8 @@ test("PR No. Latin text drops 2.5 points to align optically with Arabic text", (
   assert.match(label, /write\(arabic,groupLeft\+englishWidth\+gap\+dashWidth\+gap,y,arabicWidth,h,/);
 });
 
-test("the separator, group centering and cell dimensions remain unchanged", () => {
-  assert.match(label, /const groupLeft=x\+\(w-groupWidth\)\/2/);
+test("the separator, group right alignment and cell dimensions remain unchanged", () => {
+  assert.match(label, /const groupLeft=x\+w-7-groupWidth/);
   assert.match(label, /write\("-",groupLeft\+englishWidth\+gap,y,dashWidth,h,/);
   assert.match(render, /prNumberLabel\(xx,y,width,h\)/);
 });

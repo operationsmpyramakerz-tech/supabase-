@@ -33,7 +33,7 @@ test("custom/manual PR numbers survive reopening and normalized save", () => {
 test("PDF leaves blank number cell truly blank and labels both scripts near a hyphen", () => {
   const render = source("../lib/purchase-requisition-render.js");
   assert.match(render, /prNumberLabel\(xx,y,width,h\)/);
-  assert.match(render, /const groupLeft=x\+\(w-groupWidth\)\/2/);
+  assert.match(render, /const groupLeft=x\+w-7-groupWidth/);
   assert.match(render, /write\("-",groupLeft\+englishWidth\+gap/);
   assert.match(render, /j===1 && labelRight==="رقم طلب الشراء - PR No\." \? String\(values\[j\]\?\?""\) : safeCellText/);
 });
