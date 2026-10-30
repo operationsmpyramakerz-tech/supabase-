@@ -8,7 +8,7 @@ import JSZip from "jszip";
 import PDFDocument from "pdfkit";
 import pdfArabicSupport from "./pdfArabicSupport";
 import { normalizePrForm, PR_SIGNERS, safePrProductUrl } from "./purchase-requisition-data.mjs";
-import { hasPrArabic, prTextTokens, prSplitLines, prLineWidth } from "./purchase-requisition-pdf-layout.mjs";
+import { hasPrArabic, prTextTokens, prSplitLines, prLineWidth, prNotesNumeralBaselineDrop } from "./purchase-requisition-pdf-layout.mjs";
 
 const { enableArabicPdf, ensurePdfArabicSupport, withNativeArabicPdfText } = pdfArabicSupport;
 const encodeXml = value => String(value ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&apos;").replace(/\r?\n/g,"&#10;");
@@ -131,7 +131,7 @@ export async function renderPrPdf(raw) {
     const width=withNativeArabicPdfText(doc,()=>doc.widthOfString(token));
     return Number.isFinite(width)?width:size*String(token).length*.59;
   }
-  function paintToken(token,xx,yy,size,bold,color) {
+  function paintToken(token,xx,yy,size,bold,color,numeralBaselineDrop=0) {
     if (token==="☐" || token==="☑") {
       const len=size*.8;
       doc.save().lineWidth(.75).strokeColor(color).rect(xx,yy+size*.22,len,len).stroke();
@@ -148,6 +148,11 @@ export async function renderPrPdf(raw) {
       // little more descent than parentheses to align with adjacent Arabic.
       const baselineDrop=token==="|"?size*.36:token==="/"?size*.33:size*.14;
       withNativeArabicPdfText(doc,()=>doc.text(printed,xx,yy+baselineDrop,{lineBreak:false}));
+    } else if (numeralBaselineDrop > 0) {
+      // Only standalone numerals inside the Arabic Notes field need an optical
+      // descent. Leave Arabic words, mixed identifiers and every other table
+      // or date cell on their previous baselines.
+      withNativeArabicPdfText(doc,()=>doc.text(token,xx,yy+numeralBaselineDrop,{lineBreak:false}));
     } else withNativeArabicPdfText(doc,()=>doc.text(token,xx,yy,{lineBreak:false}));
   }
   function write(value,x,y,w,h,opts={}) {
@@ -170,7 +175,7 @@ export async function renderPrPdf(raw) {
       if(rtl){
         const align=opts.align??"right";
         cursor=align==="center"?x+(w+used)/2:align==="left"?x+padding+used:x+w-padding;
-        for(const token of tokens){const tw=measure(token);cursor-=tw;paintToken(token,cursor,top+i*lineHeight,size,bold,color);cursor-=gap;}
+        for(const token of tokens){const tw=measure(token);cursor-=tw;paintToken(token,cursor,top+i*lineHeight,size,bold,color,opts.notesNumeralAlignment?prNotesNumeralBaselineDrop(token,size):0);cursor-=gap;}
       } else {
         const align=opts.align??"left";
         cursor=align==="center"?x+(w-used)/2:align==="right"?x+w-padding-used:x+padding;
@@ -364,7 +369,7 @@ export async function renderPrPdf(raw) {
       const capacity=Math.max(1,Math.floor((bottomLimit-y-23)/noteStep));
       const segment=noteLines.slice(current,current+capacity);
       const height=Math.max(54,Math.ceil(segment.length*noteStep+20));
-      cell(segment.map(tokens=>tokens.join(" ")).join("\n"),left,y,pageContent,height,{size:noteSize,rtl:true,align:"right",maxLines:segment.length,valign:"top",padding:11});
+      cell(segment.map(tokens=>tokens.join(" ")).join("\n"),left,y,pageContent,height,{size:noteSize,rtl:true,align:"right",maxLines:segment.length,valign:"top",padding:11,notesNumeralAlignment:true});
       current+=segment.length;y+=height+8;
       if(current<noteLines.length){y=newPage();y=section("رابعاً | الملاحظات — تابع",y);}
     }

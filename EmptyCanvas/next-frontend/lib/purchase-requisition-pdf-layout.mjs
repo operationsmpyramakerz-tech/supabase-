@@ -44,3 +44,13 @@ export function prSplitLines(value, availableWidth, measure, gap = 3.5) {
 export function prLineWidth(tokens, measure, gap = 3.5) {
   return tokens.reduce((sum, token, index) => sum + measure(token) + (index ? gap : 0), 0);
 }
+
+// Latin numerals (e.g. "350" and "100") use a higher optical baseline than
+// surrounding Arabic words in PDFKit. Apply a small descent ONLY when these
+// isolated numeric tokens occur in an Arabic Notes paragraph; no font-size or
+// line-height change is needed.
+export function prNotesNumeralBaselineDrop(token, fontSize) {
+  const text=String(token ?? "").trim();
+  return /^\d+(?:[.,]\d+)*$/.test(text) && Number.isFinite(fontSize) && fontSize>0
+    ? fontSize*.25 : 0;
+}
