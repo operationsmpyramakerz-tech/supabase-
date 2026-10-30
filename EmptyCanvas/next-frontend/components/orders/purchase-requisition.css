@@ -5,3 +5,7 @@
 
 /* Printed document brand: logo, orange divider, company name stay adjacent. */
 .pr-paper-head{justify-content:flex-start;gap:16px}.pr-paper-head img{flex:0 0 auto}.pr-paper-head div{border-left:3px solid #ea6a16;padding-left:16px;text-align:left;line-height:1.45;font-weight:650}.pr-paper h2{display:flex;justify-content:center;align-items:center;gap:10px;flex-wrap:wrap}.pr-paper h2 span{border-right:2px solid #ea6a16;padding-right:12px}.pr-paper h3{word-spacing:normal}
+
+/* Product links remain available while the item description stays editable. */
+.pr-product-link{display:inline-block;margin-block-start:5px;font-size:11px;font-weight:650;color:#1464a3;text-decoration:underline;text-underline-offset:2px}
+.pr-product-link:hover{color:#0b3659}

@@ -5,7 +5,8 @@ import { getLegacyAccountGate } from "../../../lib/products-auth";
 import { featureGate } from "../../../lib/feature-permissions-server";
 import { assertOrderIdsInScope } from "../../../lib/order-data-scope";
 import { loadOperationsOrderDetails } from "../../../lib/operations-orders-data";
-import { prInitialForm } from "../../../lib/purchase-requisition-data.mjs";
+import { getProductsForOrderDetails } from "../../../lib/products-service";
+import { prApplyProductCatalog, prInitialForm } from "../../../lib/purchase-requisition-data.mjs";
 import { prStorageIdentityFromRows, readSavedPurchaseRequisition } from "../../../lib/purchase-requisition-storage";
 
 export const dynamic = "force-dynamic";
@@ -24,11 +25,15 @@ export default async function PurchaseRequisitionPage({searchParams}){
     await assertOrderIdsInScope(gate.account,"orders.operations.export",ids);
     const items=await loadOperationsOrderDetails(ids);
     if(!items?.length)throw new Error("Order components are not available.");
-    form=prInitialForm(items,gate.account);
+    const products = await getProductsForOrderDetails(items).catch((error) => {
+      console.error("[purchase-requisition] Products lookup failed:", error?.message);
+      return [];
+    });
+    form=prInitialForm(items,gate.account,products);
     try {
       const saved = await readSavedPurchaseRequisition(prStorageIdentityFromRows(items));
       if (saved) {
-        form = saved.form;
+        form = prApplyProductCatalog(saved.form, items, products);
         savedAt = saved.updatedAt;
       }
     } catch (err) {

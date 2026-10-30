@@ -7,7 +7,7 @@ import { promisify } from "node:util";
 import JSZip from "jszip";
 import PDFDocument from "pdfkit";
 import pdfArabicSupport from "./pdfArabicSupport";
-import { normalizePrForm, PR_SIGNERS } from "./purchase-requisition-data.mjs";
+import { normalizePrForm, PR_SIGNERS, safePrProductUrl } from "./purchase-requisition-data.mjs";
 import { hasPrArabic, prTextTokens, prSplitLines, prLineWidth } from "./purchase-requisition-pdf-layout.mjs";
 
 const { enableArabicPdf, ensurePdfArabicSupport, withNativeArabicPdfText } = pdfArabicSupport;
@@ -45,10 +45,34 @@ export async function renderPrWord(raw) {
   const end = xml.indexOf("</w:tr>",rowIndex) + 7;
   if(start < 0 || end < 7) throw new Error("Could not locate purchase requisition item table");
   const prototype = xml.slice(start,end);
+  const relPath="word/_rels/document.xml.rels";
+  let rels = await zip.file(relPath).async("string");
+  const links = new Map();
+  const hyperlinkIds = new Map();
   const rows = (form.items.length ? form.items : [{}]).map((item,i) => {
     const props = { SEQ:String(i+1),CODE:item.code||"",DESCRIPTION:item.description||"",UNIT:item.unit||"",QTY:item.quantity||"",MODEL:item.model||"",WARRANTY:item.warranty||"",EXPIRY:item.expiry||"" };
-    return prototype.replace(/__ITEM_([A-Z]+)__/g,(_match,key)=>encodeXml(props[key] || ""));
+    let row=prototype.replace(/__ITEM_([A-Z]+)__/g,(_match,key)=>encodeXml(props[key] || ""));
+    const link = safePrProductUrl(item.url);
+    if (link && props.DESCRIPTION) {
+      if (!hyperlinkIds.has(link)) {
+        const id = `rIdPrProduct${hyperlinkIds.size+1}`;
+        hyperlinkIds.set(link,id);
+        links.set(id,link);
+      }
+      const id=hyperlinkIds.get(link);
+      // Keep the original template run styling, but make ONLY the component
+      // description a real clickable Word hyperlink (not a displayed URL).
+      const desc=encodeXml(props.DESCRIPTION);
+      const escaped=desc.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+      const runPattern=new RegExp(`<w:r>(<w:rPr>(?:(?!<\\/w:rPr>)[\\s\\S])*?<\\/w:rPr>)<w:t>${escaped}<\\/w:t><\\/w:r>`);
+      row=row.replace(runPattern, (_match,rPr)=>`<w:hyperlink r:id="${id}" w:history="1"><w:r>${rPr.replace("</w:rPr>",'<w:color w:val="1570B8"/><w:u w:val="single"/></w:rPr>')}<w:t>${desc}</w:t></w:r></w:hyperlink>`);
+    }
+    return row;
   }).join("");
+  if (links.size) {
+    rels=rels.replace("</Relationships>", [...links].map(([id,url])=>`<Relationship Id="${id}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="${encodeXml(url)}" TargetMode="External"/>`).join("")+"</Relationships>");
+    zip.file(relPath,rels);
+  }
   xml = xml.slice(0,start) + rows + xml.slice(end);
   const map=variables(form);
   xml = xml.replace(/__([A-Z_]+)__/g,(_match,key)=>Object.prototype.hasOwnProperty.call(map,key) ? encodeXml(map[key]||"") : _match);
@@ -114,8 +138,14 @@ export async function renderPrPdf(raw) {
       if (token==="☑") doc.moveTo(xx+1.4,yy+size*.57).lineTo(xx+len*.43,yy+size*.84).lineTo(xx+len-1,yy+size*.28).lineWidth(1.25).stroke();
       doc.restore();return;
     }
+    // Standalone separators rendered in Helvetica appear higher than Arabic
+    // glyphs. Compensate their baseline without moving the surrounding words.
+    const isolatedPunctuation=/^[\/|()]$/.test(token);
     doc.font(fontFor(bold)).fontSize(size).fillColor(color);
-    withNativeArabicPdfText(doc,()=>doc.text(token,xx,yy,{lineBreak:false}));
+    if (isolatedPunctuation) {
+      const printed=token==="("?")":token===")"?"(":token;
+      withNativeArabicPdfText(doc,()=>doc.text(printed,xx,yy+size*.14,{lineBreak:false}));
+    } else withNativeArabicPdfText(doc,()=>doc.text(token,xx,yy,{lineBreak:false}));
   }
   function write(value,x,y,w,h,opts={}) {
     const text=String(value??'').trim(); if (!text) return;
@@ -123,13 +153,14 @@ export async function renderPrPdf(raw) {
     const padding=opts.padding??7;
     const maxWidth=Math.max(5,w-padding*2), lineHeight=size*(opts.lineSpacing??1.48);
     const rtl=opts.rtl??hasPrArabic(text);
-    const gap=size*.38;
+    const gap=size*.28;
     const measure=token=>measureToken(token,size,bold);
     let lines=prSplitLines(text,maxWidth,measure,gap);
     const maxLines=opts.maxLines??Math.max(1,Math.floor((h-6)/lineHeight));
     if (lines.length>maxLines) lines=lines.slice(0,maxLines);
     const textHeight=lines.length*lineHeight;
-    const top=y+(opts.valign==="top"?padding:Math.max(1,(h-textHeight)/2));
+    // Arabic glyph ascenders differ from Helvetica; keep all tokens optically centered.
+    const top=y+(opts.valign==="top"?padding:Math.max(1,(h-textHeight)/2))-(rtl?0.9:0);
     lines.forEach((tokens,i)=>{
       const used=prLineWidth(tokens,measure,gap);
       let cursor;
@@ -178,12 +209,15 @@ export async function renderPrPdf(raw) {
   const newPage=()=>{footer();doc.addPage();pageNumber++;brand();return 101;};
   const guard=(y,h)=>y+h>bottomLimit?newPage():y;
   function section(value,y) {
-    y=guard(y,32);
-    doc.save().fillColor(palette.orange).roundedRect(rightEdge-4,y+7,4,17,2).fill().restore();
-    write(value,left,y,pageContent-13,32,{size:11.7,bold:true,color:palette.orange,rtl:true,align:"right"});
-    return y+31;
+    // Arabic tanween combining marks can float away from short section labels
+    // in PDFKit; render these headings without diacritics.
+    value=String(value).replace(/[\u064B-\u065F]/g, "");
+    y=guard(y,29);
+    doc.save().fillColor(palette.orange).roundedRect(rightEdge-4,y+6,4,15,2).fill().restore();
+    write(value,left,y-1,pageContent-13,29,{size:11.4,bold:true,color:palette.orange,rtl:true,align:"right"});
+    return y+27;
   }
-  function pairRow(labelRight,valueRight,labelLeft,valueLeft,y,h=39) {
+  function pairRow(labelRight,valueRight,labelLeft,valueLeft,y,h=32) {
     // Columns are laid out from right to left, with wider, shaded field labels.
     const sizes=[143,126,143,pageContent-143-126-143];
     const values=[labelRight,valueRight,labelLeft,valueLeft];
@@ -192,7 +226,7 @@ export async function renderPrPdf(raw) {
       const width=sizes[j];xx-=width;
       const label=j%2===0;
       cell(safeCellText(values[j]),xx,y,width,h,{
-        bg:label?palette.label:palette.white,size:label?8.8:9.1,bold:label,
+        bg:label?palette.label:palette.white,size:label?8.5:8.9,bold:label,
         rtl:label||hasPrArabic(values[j]),align:label||hasPrArabic(values[j])?"right":"center",
         color:label?palette.navy:palette.ink,padding:6,maxLines:3
       });
@@ -215,11 +249,11 @@ export async function renderPrPdf(raw) {
   y=pairRow("رقم طلب الشراء (PR No.)",form.prNumber,"تاريخ الطلب",displayDate(form.requestDate),y);
   y=pairRow("الإدارة / القسم الطالب",form.department,"مركز التكلفة / المشروع",form.costCenter,y);
   y=pairRow("اسم مقدم الطلب / الوظيفة",form.requester,"رقم أمر الشغل (إن وجد)",form.workOrder,y);
-  y=pairRow("نوع الطلب",check(form.requestType,["مخزني","خدمة","أصل ثابت"]),"درجة الأولوية",check(form.priority,["عادي","عاجل","طارئ"]),y,42);
+  y=pairRow("نوع الطلب",check(form.requestType,["مخزني","خدمة","أصل ثابت"]),"درجة الأولوية",check(form.priority,["عادي","عاجل","طارئ"]),y,36);
 
-  y+=8;y=section("ثانياً | الأصناف / الخدمات المطلوبة",y);
+  y+=6;y=section("ثانياً | الأصناف / الخدمات المطلوبة",y);
   write("يُكتب لكل صنف وصف فني واضح؛ ويمكن إرفاق كشف تكميلي مع الإشارة إلى رقم الطلب نفسه.",left,y,pageContent,24,{size:8.5,color:palette.secondary,align:"right",rtl:true});
-  y+=23;
+  y+=21;
   // All widths add exactly to the A4 content width. The description owns a
   // third of the table instead of being squeezed by narrow auxiliary fields.
   const columnWidths=[25,51,172,39,36,73,61,pageContent-(25+51+172+39+36+73+61)];
@@ -233,13 +267,13 @@ export async function renderPrPdf(raw) {
       [item.warranty||"",columnWidths[6],8.15],
       [item.expiry||"",columnWidths[7],8.15],
     ];
-    return Math.max(35,...fields.map(([value,width,size]) => {
+    return Math.max(29,...fields.map(([value,width,size]) => {
       const measure=token=>measureToken(token,size);
       const lines=prSplitLines(value,Math.max(8,width-10),measure,size*.38).length;
-      return Math.ceil(lines*size*1.48+10);
+      return Math.ceil(lines*size*1.35+7);
     }));
   }
-  function itemRow(values,y,h,header=false,index=0) {
+  function itemRow(values,y,h,header=false,index=0,productUrl="") {
     let xx=rightEdge;
     for(let c=0;c<columnWidths.length;c++){
       const ww=columnWidths[c];xx-=ww;
@@ -247,35 +281,38 @@ export async function renderPrPdf(raw) {
       cell(values[c]??"",xx,y,ww,h,{
         bg,size:header?7.75:(c===2?8.5:8.15),bold:header||c===0,
         rtl:hasPrArabic(values[c]),align:c===2?"right":"center",
-        color:header?palette.navy:palette.ink,padding:header?3:5,maxLines:header?3:Math.floor((h-6)/(8.5*1.48)),
+        color:header?palette.navy:(c===2&&productUrl?"#1568A8":palette.ink),padding:header?3:4,maxLines:header?3:Math.max(1,Math.floor((h-5)/(8.5*1.38))),
       });
+      if (!header && c===2 && safePrProductUrl(productUrl)) {
+        doc.link(xx+2,y+2,ww-4,h-4,safePrProductUrl(productUrl));
+      }
     }
     return y+h;
   }
-  const tableHead=()=>{y=itemRow(titles,y,41,true);};
+  const tableHead=()=>{y=itemRow(titles,y,35,true);};
   tableHead();
   for(let index=0;index<Math.max(4,form.items.length);index++){
     const item=form.items[index]||{};
     const description=String(item.description||"");
     const height=itemHeight(item);
     if(y+height>bottomLimit){y=newPage();write("الأصناف / الخدمات المطلوبة — تابع",left,y,pageContent,27,{size:10.5,bold:true,color:palette.orange,rtl:true,align:"right"});y+=31;tableHead();}
-    y=itemRow([String(index+1),item.code,description,item.unit,item.quantity,item.model,item.warranty,item.expiry],y,height,false,index);
+    y=itemRow([String(index+1),item.code,description,item.unit,item.quantity,item.model,item.warranty,item.expiry],y,height,false,index,item.url);
   }
 
-  const deliveryHeight=36+3*39+45;
+  const deliveryHeight=28+3*32+39;
   y=guard(y,deliveryHeight+12);y+=12;
   y=section("ثالثاً | المتطلبات الفنية والتسليم",y);
   y=pairRow("تاريخ التوريد المطلوب",displayDate(form.requiredDate),"مكان التسليم",form.deliveryPlace,y);
   y=pairRow("الحد الأدنى للصلاحية عند التوريد",form.minShelfLife,"متطلبات الفحص / الاختبار",form.inspection,y);
   y=pairRow("المرفقات",check(form.attachments,["كتالوج","صورة","مواصفة","أخرى"]),"بديل معادل مسموح؟",check(form.alternative,["نعم","لا","بموافقة فنية"]),y);
-  y=pairRow("هل الصنف متاح بالمخزن؟",check(form.stockAvailable,["نعم","لا"]),"مبرر الشراء / الاستخدام",form.purchaseReason,y,45);
+  y=pairRow("هل الصنف متاح بالمخزن؟",check(form.stockAvailable,["نعم","لا"]),"مبرر الشراء / الاستخدام",form.purchaseReason,y,39);
   y=guard(y,115);y+=10;y=section("رابعاً | الملاحظات",y);
   // Notes can be 1,800 characters. Never silently truncate them: split into
   // individually page-aware blocks, retaining all user-entered text.
   const noteSize=9.2, noteStep=noteSize*1.48;
   const noteMeasure=token=>measureToken(token,noteSize);
   const noteLines=form.notes ? prSplitLines(form.notes,pageContent-24,noteMeasure,noteSize*.38) : [];
-  if (!noteLines.length) {cell("",left,y,pageContent,56);y+=64;}
+  if (!noteLines.length) {cell("",left,y,pageContent,46);y+=54;}
   else {
     let current=0;
     while(current<noteLines.length){
@@ -288,20 +325,20 @@ export async function renderPrPdf(raw) {
     }
   }
 
-  y=guard(y,205);y+=7;y=section("خامساً | التوقيعات والاعتمادات",y);
+  y=guard(y,175);y+=7;y=section("خامساً | التوقيعات والاعتمادات",y);
   const roles=["requester","manager","technical","approver"];
   const roleLabels=["مقدم الطلب","رئيس القسم / المدير المباشر","المراجعة الفنية (إن لزم)","اعتماد صاحب الصلاحية"];
   const width=pageContent/4;
   for(let i=0;i<roles.length;i++){
     const xx=rightEdge-(i+1)*width;
     const signer=form.signatures[roles[i]]||{};
-    cell(roleLabels[i],xx,y,width,49,{bg:palette.label,bold:true,size:9.1,rtl:true,align:"center",maxLines:2});
+    cell(roleLabels[i],xx,y,width,40,{bg:palette.label,bold:true,size:8.9,rtl:true,align:"center",maxLines:2});
     for(const [j,label,value] of [[0,"الاسم",signer.name],[1,"التوقيع",signer.signature],[2,"التاريخ",displayDate(signer.date)]]){
-      const rowY=y+49+j*35;
-      rect(xx,rowY,width,35,palette.white);
-      write(label+":",xx+width-49,rowY,45,35,{size:8.2,bold:true,rtl:true,align:"right",padding:3});
-      if (value) write(value,xx+7,rowY,width-58,35,{size:8.4,rtl:hasPrArabic(value),align:"center",padding:2,maxLines:2});
-      else doc.save().moveTo(xx+12,rowY+24).lineTo(xx+width-59,rowY+24).lineWidth(.6).strokeColor("#9EAAB8").dash(1.2,2.8).stroke().undash().restore();
+      const rowY=y+40+j*30;
+      rect(xx,rowY,width,30,palette.white);
+      write(label+":",xx+width-49,rowY,45,30,{size:8.2,bold:true,rtl:true,align:"right",padding:3});
+      if (value) write(value,xx+7,rowY,width-58,30,{size:8.4,rtl:hasPrArabic(value),align:"center",padding:2,maxLines:2});
+      else doc.save().moveTo(xx+12,rowY+21).lineTo(xx+width-59,rowY+21).lineWidth(.6).strokeColor("#9EAAB8").dash(1.2,2.8).stroke().undash().restore();
     }
   }
   footer();
