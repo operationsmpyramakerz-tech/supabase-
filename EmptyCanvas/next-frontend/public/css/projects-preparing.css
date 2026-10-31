@@ -2424,3 +2424,74 @@
 @media(prefers-reduced-motion:reduce) {
  .pr-pt-modern .pr-pt-kit-group.is-open .pr-pt-kit-body {animation:none;}
 }
+
+/* v279 – Components Testing: semantic traffic-light KPIs and compact action controls. */
+.pr-pt-modern .pr-pt-stat-grid>.pr-pt-stat.pr-pt-stat--passed {
+  --pt-card-bg:#087d53;--pt-card-border:#087d53;--pt-card-text:#fff;
+  --pt-card-muted:rgba(255,255,255,.92);--pt-card-icon-bg:rgba(255,255,255,.16);
+  --pt-card-divider:rgba(255,255,255,.55);
+}
+.pr-pt-modern .pr-pt-stat-grid>.pr-pt-stat.pr-pt-stat--failed {
+  --pt-card-bg:#ca2e3c;--pt-card-border:#ca2e3c;--pt-card-text:#fff;
+  --pt-card-muted:rgba(255,255,255,.92);--pt-card-icon-bg:rgba(255,255,255,.16);
+  --pt-card-divider:rgba(255,255,255,.55);
+}
+.pr-pt-modern .pr-pt-stat-grid>.pr-pt-stat.pr-pt-stat--remaining {
+  --pt-card-bg:#f5c536;--pt-card-border:#f5c536;--pt-card-text:#171b23;
+  --pt-card-muted:#30333a;--pt-card-icon-bg:rgba(255,255,255,.35);
+  --pt-card-divider:rgba(23,27,35,.32);
+}
+/* One accessible tab strip: Testing on the left, History icon on the right. */
+.pr-pt-modern .pr-pt-navigation {display:flex;align-items:center;gap:9px;flex-wrap:nowrap;}
+.pr-pt-modern .pr-pt-view-tabs {display:flex;align-items:center;flex:1 1 auto;min-width:0;gap:6px;}
+.pr-pt-modern .pr-pt-view-tabs .pr-pt-history-button {
+  margin-left:auto;flex:0 0 40px;width:40px;height:40px;min-width:40px;
+  display:grid;place-items:center;padding:0;border:1px solid #e3e7ee;
+  border-radius:11px;background:#fff;color:#263449;line-height:0;
+  box-shadow:0 2px 6px rgba(17,24,39,.035);
+  transition:background-color .18s,border-color .18s,transform .18s;
+}
+.pr-pt-modern .pr-pt-view-tabs .pr-pt-history-button.is-active {
+  background:#101010;color:#fff;border-color:#101010;
+}
+.pr-pt-modern .pr-pt-view-tabs .pr-pt-history-button:hover:not(.is-active) {border-color:#adb8c8;background:#f9fafc;}
+.pr-pt-modern .pr-pt-download-button {
+  display:inline-flex;align-items:center;justify-content:center;gap:9px;
+  min-height:40px;padding:0 17px;border:1px solid #ff6900;
+  border-radius:11px;background:#ff6900;color:#fff;
+  font-size:12px;font-weight:820;white-space:nowrap;line-height:1;
+  box-shadow:0 4px 12px rgba(255,105,0,.16);
+  transition:background-color .18s,box-shadow .18s,transform .18s;
+}
+.pr-pt-modern .pr-pt-download-button svg {flex:none;}
+.pr-pt-modern .pr-pt-download-button:hover:not(:disabled) {background:#eb6100;box-shadow:0 6px 15px rgba(255,105,0,.22);transform:translateY(-1px);}
+.pr-pt-modern .pr-pt-download-button:disabled {opacity:.48;cursor:not-allowed;box-shadow:none;}
+.pr-pt-modern .pr-pt-download-button:focus-visible,
+.pr-pt-modern .pr-pt-history-button:focus-visible {outline:2px solid #ff6900;outline-offset:3px;}
+/* The existing accessible, portalled select becomes an icon-only Filter button. */
+.pr-pt-modern .pr-pt-toolbar {flex-wrap:nowrap;align-items:center;gap:10px;}
+.pr-pt-modern .pr-pt-toolbar .pr-modern-select.pr-pt-filter-select {
+  flex:0 0 47px;width:47px;min-width:47px;max-width:47px;
+}
+.pr-pt-modern .pr-pt-toolbar .pr-pt-filter-select .pr-modern-select-trigger {
+  display:grid;place-items:center;width:47px;height:47px;min-height:47px;
+  padding:0;border-radius:13px;border:1px solid #dfe5ed;background:#fff;
+  color:#1b2637;box-shadow:0 2px 9px rgba(19,36,56,.03);
+}
+.pr-pt-modern .pr-pt-toolbar .pr-pt-filter-select .pr-modern-select-trigger>svg {transform:none;}
+.pr-pt-modern .pr-pt-toolbar .pr-pt-filter-select.is-filtered .pr-modern-select-trigger {
+  background:#101010;border-color:#101010;color:#fff;
+}
+.pr-pt-modern .pr-pt-toolbar .pr-pt-filter-select.is-open .pr-modern-select-trigger,
+.pr-pt-modern .pr-pt-toolbar .pr-pt-filter-select .pr-modern-select-trigger:focus-visible {
+  outline:2px solid #ff6900;outline-offset:2px;box-shadow:none;
+}
+@media(max-width:580px) {
+ .pr-pt-modern .pr-pt-navigation {gap:6px;padding:5px;}
+ .pr-pt-modern .pr-pt-view-tabs .pr-pt-history-button {flex-basis:38px;width:38px;height:38px;min-width:38px;}
+ .pr-pt-modern .pr-pt-download-button {min-height:38px;padding:0 11px;gap:6px;font-size:11px;}
+ .pr-pt-modern .pr-pt-toolbar .pr-pt-search {flex:1 1 auto;min-width:0;}
+}
+@media(prefers-reduced-motion:reduce) {
+ .pr-pt-modern .pr-pt-history-button,.pr-pt-modern .pr-pt-download-button {transition:none;transform:none!important;}
+}

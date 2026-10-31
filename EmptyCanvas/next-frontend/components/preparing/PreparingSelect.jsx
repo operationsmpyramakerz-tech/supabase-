@@ -6,7 +6,7 @@ import { createPortal } from "react-dom";
 /** Accessible, consistent select for Projects Preparing screens and bottom sheets.
  * Keeps the normal select onChange({ target: { value } }) contract used by pages.
  */
-export default function PreparingSelect({value = "", onChange, children, disabled = false, required = false, className = "", name, id, ...props}) {
+export default function PreparingSelect({value = "", onChange, children, disabled = false, required = false, className = "", iconOnly = false, name, id, ...props}) {
   const items = Children.toArray(children).filter(item => item?.type === "option").map(item => ({
     value: String(item.props.value ?? ""),
     label: item.props.children,
@@ -60,10 +60,9 @@ export default function PreparingSelect({value = "", onChange, children, disable
     const next = event.key === "Home" ? enabled[0] : event.key === "End" ? enabled[enabled.length-1] : enabled[(pos+(event.key === "ArrowDown"?1:-1)+enabled.length)%enabled.length];
     optionRefs.current[next]?.focus();
   };
-  return <span className={`pr-modern-select ${className}${open?" is-open":""}${disabled?" is-disabled":""}`}>
-    <button type="button" ref={trigger} id={id} disabled={disabled} aria-label={props["aria-label"]} aria-haspopup="listbox" aria-expanded={open} aria-controls={open?listId:undefined} aria-required={required} className="pr-modern-select-trigger" onClick={e=>{e.preventDefault();if(!open)reposition();setOpen(!open);}} onKeyDown={e=>{if(!open && ["ArrowDown","ArrowUp"," "].includes(e.key)){e.preventDefault();reposition();setOpen(true);}}}>
-      <span className="pr-modern-select-value">{active?.label || "Select…"}</span>
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+  return <span className={`pr-modern-select ${className}${iconOnly?" pr-modern-select--icon-only":""}${open?" is-open":""}${disabled?" is-disabled":""}`}>
+    <button type="button" ref={trigger} id={id} disabled={disabled} aria-label={props["aria-label"]} title={iconOnly?String(active?.label||"Select filter"):undefined} aria-haspopup="listbox" aria-expanded={open} aria-controls={open?listId:undefined} aria-required={required} className="pr-modern-select-trigger" onClick={e=>{e.preventDefault();if(!open)reposition();setOpen(!open);}} onKeyDown={e=>{if(!open && ["ArrowDown","ArrowUp"," "].includes(e.key)){e.preventDefault();reposition();setOpen(true);}}}>
+      {iconOnly ? <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 6h16l-6.5 7.5v5l-3 1.5v-6.5L4 6Z"/></svg> : <><span className="pr-modern-select-value">{active?.label || "Select…"}</span><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></>}
     </button>
     {open && typeof document !== "undefined" && createPortal(<div className="pr-modern-select-backdrop" onPointerDown={e=>{if(e.target===e.currentTarget)setOpen(false);}}>
       <div className={`pr-modern-select-menu${bounds.above?" is-above":""}`} style={{left:bounds.left,top:bounds.top,width:bounds.width,maxHeight:bounds.maxHeight}} id={listId} role="listbox" aria-label={props["aria-label"] || name || "Choose option"}>

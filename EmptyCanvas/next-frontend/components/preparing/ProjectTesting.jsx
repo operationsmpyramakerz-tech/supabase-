@@ -43,6 +43,8 @@ function TestingIcon({name="box",size=20}){
   wrench:<path d="M21 7.5a6 6 0 0 1-8 5.7L6.4 20a2 2 0 0 1-2.8-2.8l6.7-6.6a6 6 0 0 1 6-8l-3.8 3.8 3.1 3.1L19.5 6 21 7.5Z"/>,
   close:<path d="M5 5 19 19M19 5 5 19"/>,
   search:<><circle cx="10.8" cy="10.8" r="7"/><path d="m16 16 5 5"/></>,
+  history:<><path d="M3 12a9 9 0 1 0 2.3-6"/><path d="M3 4v5h5M12 7v5l3.5 2"/></>,
+  download:<><path d="M12 3v12m-5-5 5 5 5-5"/><path d="M4 17v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></>,
  };
  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{shapes[name]||shapes.box}</svg>;
 }
@@ -105,7 +107,7 @@ export default function ProjectTesting({projectId,projectName,canTest,request,on
    setDraft(old=>Object.fromEntries(Object.entries(old).filter(([id])=>!savedIds.has(id))));
    setRowError(old=>Object.fromEntries(Object.entries(old).filter(([id])=>!savedIds.has(id))));
    setSuccess(`Saved ${lines.length} component(s). Your ERP user is recorded in Testing History.`);
-   try{await load();}catch{setError("Saved successfully, but the latest values could not be refreshed. Use Refresh to reload them.");}
+   try{await load();}catch{setError("Saved successfully, but the latest values could not be refreshed. Reopen Components Testing to reload them.");}
   }catch(e){fail(e.message||"Unable to save testing results.");}
   finally{setBusy(false);}
  }
@@ -162,13 +164,15 @@ export default function ProjectTesting({projectId,projectName,canTest,request,on
    ].map(stat=><div className={`pr-pt-stat pr-pt-stat--${stat.key}`} key={stat.key}>
     <span className="pr-pt-stat-icon" aria-hidden="true">{stat.mark}</span><span className="pr-pt-stat-copy"><span>{stat.label}</span><strong>{pretty(stat.value)}</strong></span>
    </div>)}</div>
-   <div className="pr-wh-navigation pr-pt-navigation" role="tablist" aria-label="Project testing views">
-    <button role="tab" type="button" aria-selected={tab==="testing"} className={tab==="testing"?"is-active":""} onClick={()=>setTab("testing")}>Testing</button>
-    <button role="tab" type="button" aria-selected={tab==="history"} className={tab==="history"?"is-active":""} onClick={()=>setTab("history")}>Testing History <span className="pr-pt-tab-count">{entries.length}</span></button>
-    <button type="button" className="pr-wh-export pr-pt-export-open" onClick={()=>setShowExport(true)} disabled={!data.items.length}>Export <span aria-hidden="true">⌄</span></button>
+   <div className="pr-wh-navigation pr-pt-navigation">
+    <div className="pr-pt-view-tabs" role="tablist" aria-label="Project testing views">
+     <button role="tab" type="button" aria-selected={tab==="testing"} className={tab==="testing"?"is-active":""} onClick={()=>setTab("testing")}>Testing</button>
+     <button role="tab" type="button" aria-selected={tab==="history"} aria-label={`Testing History (${entries.length} changes)`} title={`Testing History (${entries.length})`} className={`pr-pt-history-button${tab==="history"?" is-active":""}`} onClick={()=>setTab("history")}><TestingIcon name="history" size={19}/></button>
+    </div>
+    <button type="button" className="pr-pt-download-button" aria-label="Download testing report" onClick={()=>setShowExport(true)} disabled={!data.items.length}><TestingIcon name="download" size={18}/><span>Download</span></button>
    </div>
    {tab==="testing"&&<>
-     <div className="pr-wh-toolbar pr-pt-toolbar"><label className="pr-search pr-pt-search"><TestingIcon name="search" size={18}/><input type="search" aria-label="Search testing components" placeholder="Search component or code…" value={search} onChange={e=>setSearch(e.target.value)}/>{search&&<button type="button" className="pr-pt-clear-search" onClick={()=>setSearch("")} aria-label="Clear search" title="Clear search"><TestingIcon name="close" size={16}/></button>}</label><PreparingSelect aria-label="Filter testing components" value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">All components</option><option value="pending">Remaining to pass</option><option value="failed">Has failed units</option><option value="done">Fully received for testing</option></PreparingSelect><button type="button" className="pr-secondary" disabled={busy} onClick={()=>{setLoading(true);load().catch(e=>setError(e.message)).finally(()=>setLoading(false));}}>Refresh</button></div>
+     <div className="pr-wh-toolbar pr-pt-toolbar"><label className="pr-search pr-pt-search"><TestingIcon name="search" size={18}/><input type="search" aria-label="Search testing components" placeholder="Search component or code…" value={search} onChange={e=>setSearch(e.target.value)}/>{search&&<button type="button" className="pr-pt-clear-search" onClick={()=>setSearch("")} aria-label="Clear search" title="Clear search"><TestingIcon name="close" size={16}/></button>}</label><PreparingSelect iconOnly className={`pr-pt-filter-select${filter!=="all"?" is-filtered":""}`} aria-label="Filter testing components" value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">All components</option><option value="pending">Remaining to pass</option><option value="failed">Has failed units</option><option value="done">Fully received for testing</option></PreparingSelect></div>
     <div className="pr-wh-list pr-pt-list pr-pt-kit-list" aria-label="Project component testing">{groupedShown.map(group=>{
      const open=!!search.trim()||expandedKit===group.key;
      const appearance=testingKitAppearance(group.name);
