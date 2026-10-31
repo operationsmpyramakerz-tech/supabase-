@@ -31,7 +31,7 @@ test('workspace no longer repeats beneficiaries and removes intro descriptions',
  assert.doesNotMatch(ui,/Source proposal:/);
  assert.match(ui,/\["Schools", projectSchools.length\]/);
  assert.match(ui,/pr-summary-card--project/);
- assert.match(ui,/value=\{overallProjectProgress\}/);
+ assert.match(ui,/pr-overview-lead/);
 });
 test('modern responsive controls retain focus, reduced motion, and mobile layout',()=>{
  assert.match(css,/\.pr-tool-grid/);

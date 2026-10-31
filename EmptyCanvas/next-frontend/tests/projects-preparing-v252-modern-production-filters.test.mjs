@@ -49,5 +49,5 @@ test("Modern styling and cache refresh cover both tabs",()=>{
  assert.match(css,/\.pr-stage-filter-menu/);
  assert.match(css,/\.pr-stage-filter-option\.is-selected/);
  assert.match(css,/@media\(max-width:520px\)/);
- assert.match(read("app/projects-preparing/page.jsx"),/projects-preparing\.css\?v=254/);
+ assert.match(read("app/projects-preparing/page.jsx"),/projects-preparing\.css\?v=\d+/);
 });

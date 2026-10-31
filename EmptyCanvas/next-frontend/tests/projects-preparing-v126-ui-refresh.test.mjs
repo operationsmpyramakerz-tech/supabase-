@@ -7,16 +7,17 @@ const read=name=>readFileSync(new URL(`../${name}`,import.meta.url),'utf8');
 const css=read('public/css/projects-preparing.css');
 const select=read('components/preparing/PreparingSelect.jsx');
 
-test('all five stage indices use one dark accessible number color',()=>{
+test('four preparation stage indices use one dark accessible number color',()=>{
  assert.match(css,/\.pr-project-step-timeline::before \{background:#141b2b/);
- assert.match(css,/\.pr-project-step-row:nth-child\(5\) \.pr-project-step-index/);
+ assert.match(css,/\.pr-root--project \.pr-project-step-row:nth-child\(n\) \.pr-project-step-index/);
  assert.match(css,/background:#141b2b;color:#fff/);
 });
-test('gauge has real progress but a matte, motionless water surface',()=>{
+test('Master BOM card has no progress; four operational cards keep muted horizontal bars',()=>{
  const src=read('components/preparing/PreparingClient.jsx');
- assert.match(src, /--pr-liquid-pct/);
- assert.match(css,/\.pr-liquid-gauge__water \{background:var\(--pr-liquid-color\);opacity:\.76/);
- assert.match(css,/\.pr-liquid-gauge__water::before,\.pr-liquid-gauge__water::after \{content:none;animation:none;/);
+ assert.match(src,/pr-project-components-card/);
+ assert.doesNotMatch(src,/--pr-liquid-pct/);
+ assert.match(src,/pr-step-kpi-track/);
+ assert.match(css,/\.pr-step-kpi-fill/);
 });
 test('all Preparing native selects have been migrated to accessible controlled dropdowns',()=>{
  const folder=new URL('../components/preparing/',import.meta.url);

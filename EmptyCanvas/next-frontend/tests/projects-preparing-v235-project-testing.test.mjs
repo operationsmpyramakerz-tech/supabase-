@@ -51,5 +51,5 @@ test("new server and JSX files parse cleanly",()=>{
   const parsed=ts.createSourceFile(name,file(name),ts.ScriptTarget.Latest,true,name.endsWith(".jsx")?ts.ScriptKind.JSX:ts.ScriptKind.JS);
   assert.deepEqual(parsed.parseDiagnostics,[],name);
  }
- assert.match(file("app/projects-preparing/page.jsx"),/projects-preparing\.css\?v=254/);
+ assert.match(file("app/projects-preparing/page.jsx"),/projects-preparing\.css\?v=\d+/);
 });

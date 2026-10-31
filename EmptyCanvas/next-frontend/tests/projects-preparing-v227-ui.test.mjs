@@ -8,12 +8,12 @@ const read=name=>readFileSync(new URL(`../${name}`,import.meta.url),'utf8');
 const ui=read('components/preparing/PreparingClient.jsx');
 const css=read('public/css/projects-preparing.css');
 
-test('project and school routes show unified progress cards not six separate stat cards',()=>{
+test('project summary shows overview and school retains its progress card',()=>{
   assert.match(ui,/pr-summary-card--project/);
   assert.match(ui,/pr-summary-card--school/);
   assert.doesNotMatch(ui,/className="pr-metrics"/);
   assert.doesNotMatch(ui,/className="pr-school-info"/);
-  assert.match(ui,/completedProjectSteps/);
+  assert.match(ui,/pr-overview-title/);
   assert.match(ui,/schoolPercent/);
   assert.match(ui,/progress\.delivered/);
   assert.match(ui,/progress\.closed/);
@@ -43,5 +43,5 @@ test('school folder styling matches proposals dimensions and works on narrow scr
 test('new JSX remains parseable and CSS route is refreshed',()=>{
   const source=ts.createSourceFile('PreparingClient.jsx',ui,ts.ScriptTarget.Latest,true,ts.ScriptKind.JSX);
   assert.deepEqual(source.parseDiagnostics.map(d=>d.messageText),[]);
-  assert.match(read('app/projects-preparing/page.jsx'),/projects-preparing\.css\?v=254/);
+  assert.match(read('app/projects-preparing/page.jsx'),/projects-preparing\.css\?v=271/);
 });

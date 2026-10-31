@@ -37,6 +37,7 @@ function Ico({ name, size = 20 }) {
     search: <><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></>,
     refresh: <><path d="M20 7v6h-6"/><path d="M4 17v-6h6"/><path d="M5.5 9A7 7 0 0 1 18 6l2 1M4 17l2 1a7 7 0 0 0 12-3"/></>,
     box: <><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M3 11h18M12 7v13M7 4h10"/></>,
+    components: <><rect x="9" y="3" width="6" height="6" rx="1"/><rect x="3" y="15" width="7" height="6" rx="1"/><rect x="14" y="15" width="7" height="6" rx="1"/><path d="M12 9v3M6.5 15v-3h11v3"/></>,
     chart: <><path d="M4 20V4M4 20h17M8 16v-4M13 16V7M18 16V9"/></>,
     clipboard: <><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4.5h6M9 11h6M9 15h6"/></>,
     truck: <><path d="M3 6h12v12H3zM15 10h4l3 4v4h-7"/><circle cx="7" cy="19" r="2"/><circle cx="18" cy="19" r="2"/></>,
@@ -50,15 +51,6 @@ function Ico({ name, size = 20 }) {
 function Meter({ value = 0, max = 1 }) { return <div className="pr-meter"><span style={{ width: `${Math.min(100, Math.round(value * 100 / (max || 1)))}%` }} /></div>; }
 // Percentages in this dashboard are calculated from persisted project quantities,
 // not from the school delivery/closing workflow (which has its own 9 stages).
-function LiquidGauge({ value, size = "step", label = "Progress" }) {
-  const percent = value === null || value === undefined ? null : Math.max(0, Math.min(100, Math.round(value)));
-  const tone = percent === null || percent === 0 ? "empty" : percent < 35 ? "low" : percent < 75 ? "medium" : "high";
-  return <span className={`pr-liquid-gauge pr-liquid-gauge--${size} pr-liquid-gauge--${tone}`}
-    role="img" aria-label={`${label}: ${percent === null ? "loading" : `${percent}%`}`}
-    style={{ "--pr-liquid-pct": `${percent ?? 0}%` }}>
-    <span className="pr-liquid-gauge__inside"><span className="pr-liquid-gauge__water" aria-hidden="true"/><strong>{percent === null ? "—" : `${percent}%`}</strong></span>
-  </span>;
-}
 function StepAccessAvatars({ access, loading, unavailable }) {
   if (loading) return <span className="pr-step-access-placeholder" aria-label="Loading stage access">Checking access…</span>;
   if (unavailable || !access) return <span className="pr-step-access-placeholder" aria-label="Stage access unavailable">Access unavailable</span>;
@@ -168,7 +160,7 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
     delivered: schools.filter(school => schoolProgress(stages.filter(row => row.school_id === school.id)).delivered).length,
     closed: schools.filter(school => schoolProgress(stages.filter(row => row.school_id === school.id)).closed).length };
   const progress = school ? schoolProgress(schoolStages) : null;
-  // Load the same read-only operational data used by the five stage workspaces.
+  // Load read-only progress data for the four operational preparation stages.
   // No percentage is invented while a request is pending or has failed.
   useEffect(() => {
     if (!projectId || schoolId) { setProjectStageData(null); setProjectStageError(""); setProjectStageLoading(false); return; }
@@ -203,18 +195,16 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
     return () => controller.abort();
   }, [projectId, schoolId, projectStageRevision]);
   const projectStageProgress = useMemo(() => projectStageData
-    ? calculateProjectPreparationProgress({ sourceProposalId: project?.source_proposal_id,
+    ? calculateProjectPreparationProgress({
       testing: projectStageData.testing, warehouse: projectStageData.warehouse, production: projectStageData.production })
-    : null, [projectStageData, project?.source_proposal_id]);
+    : null, [projectStageData]);
   const projectStepPercents = projectStageProgress?.stages ?? null;
-  const overallProjectProgress = projectStageProgress?.overall ?? null;
-  const completedProjectSteps = projectStageProgress?.completed ?? null;
+  // Project Components is the Master BOM, not a preparation stage.
   const projectStepCards = [
-    { key:"components", title:"Project Components", subtitle:`Master BOM · ${project?.source_proposal_name || "Custom project"}`, detail:"Master component list and quantities", open:()=>setShowProjectBOM(true) },
-    { key:"testing", title:"Project Testing", subtitle:"01 · Components QC", detail:"Component testing and quality checks", open:()=>setShowProjectTesting(true) },
-    { key:"warehouse", title:"Warehouse Receiving", subtitle:"02 · Warehouse handover", detail:"Warehouse receiving and handover", open:()=>setShowWarehouse(true) },
-    { key:"production", title:"Production Receiving", subtitle:"03 · Team handover & boxes", detail:"Production handover and box preparation", open:()=>setShowProduction(true) },
-    { key:"cartons", title:"Project Kit Cartons", subtitle:"04 · Packing", detail:"Final packing and carton preparation", open:()=>setShowProjectCartons(true) },
+    { key:"testing", icon:"shield", title:"Project Testing", subtitle:"01 · Components QC", detail:"Component testing and quality checks", open:()=>setShowProjectTesting(true) },
+    { key:"warehouse", icon:"clipboard", title:"Warehouse Receiving", subtitle:"02 · Warehouse handover", detail:"Warehouse receiving and handover", open:()=>setShowWarehouse(true) },
+    { key:"production", icon:"truck", title:"Production Receiving", subtitle:"03 · Team handover & boxes", detail:"Production handover and box preparation", open:()=>setShowProduction(true) },
+    { key:"cartons", icon:"box", title:"Project Kit Cartons", subtitle:"04 · Packing", detail:"Final packing and carton preparation", open:()=>setShowProjectCartons(true) },
   ];
   const tools = [
     { key:"components", name:"Components & QC", icon:"box", open:()=>setShowComponents(true) },
@@ -351,17 +341,24 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
         </button>)}
       </div>
     </div>}
-    {project && !school && <section className="pr-summary-card pr-summary-card--project" aria-label="Project overview">
-      <div className="pr-summary-lead">
-        <LiquidGauge value={overallProjectProgress} size="summary" label="Overall project progress"/>
-        <div className="pr-summary-title"><span className="pr-summary-overline">PROJECT PROGRESS</span><strong>{completedProjectSteps === null ? "—" : completedProjectSteps} <span>/ 5 stages completed</span></strong><Meter value={overallProjectProgress ?? 0} max={100}/></div>
+    {project && !school && <section className="pr-summary-card pr-summary-card--project pr-summary-card--overview" aria-label="Project overview">
+      <div className="pr-summary-lead pr-overview-lead">
+        <span className="pr-overview-icon" aria-hidden="true"><Ico name="components" size={26}/></span>
+        <div className="pr-overview-title"><strong>Project Overview</strong><span>Key project information and status.</span></div>
       </div>
       <div className="pr-summary-metrics">
         {[["Schools", projectSchools.length], ["Delivered", projectSummaries.get(project.id)?.delivered || 0], ["Closed", projectSummaries.get(project.id)?.closed || 0]].map(([name,count]) =>
           <div className="pr-summary-metric" key={name}><span className="pr-summary-metric-icon"><Ico name={name === "Schools" ? "school" : name === "Delivered" ? "truck" : "shield"} size={23}/></span><span className="pr-summary-metric-copy"><span>{name}</span><strong>{count}</strong></span></div>)}
       </div>
     </section>}
-    {project && !school && <div className="pr-project-split" aria-label="Project schools and five operational steps">
+    {project && !school && <div className="pr-project-split" aria-label="Project components, schools and four preparation stages">
+      <div className="pr-project-left-column">
+        <button type="button" className="pr-project-components-card" onClick={()=>setShowProjectBOM(true)} aria-label="Open Project Components master bill of materials">
+          <span className="pr-project-components-icon" aria-hidden="true"><Ico name="components" size={27}/></span>
+          <span className="pr-project-components-copy"><strong>Project Components</strong><small>Master BOM · {project.source_proposal_name || "Custom project"}</small></span>
+          <StepAccessAvatars access={stepAccess?.components} loading={stepAccessLoading} unavailable={stepAccessError}/>
+          <span className="pr-project-components-arrow" aria-hidden="true"><Ico name="arrow" size={18}/></span>
+        </button>
       <section className="pr-project-schools-panel" aria-label="Schools">
         <div className="pr-project-panel-heading pr-project-schools-heading">
           <div className="pr-project-panel-title"><h2>Schools</h2><span className="pr-section-count">{projectSchools.length} {projectSchools.length === 1 ? "school" : "schools"}</span></div>
@@ -405,12 +402,13 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
           {!projectSchools.length && !canManage && <div className="pr-dashboard-empty">No schools assigned yet.</div>}
         </div>
       </section>
+      </div>
       <section className="pr-project-steps-panel" aria-label="Project Steps">
         <div className="pr-project-panel-heading">
-          <div className="pr-project-panel-title"><h2>Project Steps</h2><span className="pr-section-count">5 stages</span></div>
+          <div className="pr-project-panel-title"><h2>Project Steps</h2><span className="pr-section-count">4 stages</span></div>
           <button type="button" className="pr-project-report-link" onClick={()=>setShowDashboard(true)} aria-label="Open Project Dashboard" title="Project Dashboard"><Ico name="chart" size={17}/> Reports</button>
         </div>
-        <p className="pr-project-steps-subtitle">These five stages determine the overall project completion.</p>
+        <p className="pr-project-steps-subtitle">These four stages determine the overall project completion.</p>
         {projectStageError && <div className="pr-project-step-error" role="alert"><span>Progress unavailable: {projectStageError}</span><button type="button" onClick={()=>setProjectStageRevision(n=>n+1)}>Retry</button></div>}
         {projectStageLoading && <span className="pr-project-step-loading" role="status">Updating project stage progress…</span>}
         <ol className="pr-project-step-timeline">
@@ -421,6 +419,7 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
               <span className="pr-project-step-index" aria-hidden="true">{index+1}</span>
               <button type="button" className="pr-project-step-card pr-project-step-card--kpi" onClick={step.open} aria-label={`Open ${step.title}${percent === null ? "" : `, ${percent}% complete`}`}>
                 <span className="pr-step-kpi-top">
+                  <span className="pr-step-kpi-stage-icon" aria-hidden="true"><Ico name={step.icon} size={19}/></span>
                   <span className="pr-step-kpi-title"><strong>{step.title}</strong><small>{step.subtitle}</small></span>
                   <StepAccessAvatars access={stepAccess?.[step.key]} loading={stepAccessLoading} unavailable={stepAccessError}/>
                   <span className="pr-step-kpi-arrow"><Ico name="arrow" size={17}/></span>

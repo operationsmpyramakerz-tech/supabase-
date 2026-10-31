@@ -1855,3 +1855,88 @@
 @media(prefers-reduced-motion:reduce) {
   .pr-project-step-card--kpi,.pr-step-kpi-fill {transition:none!important;}
 }
+
+
+/* v271 — Project Components is foundational Master BOM, not a completion step.
+   Separate standalone card above Schools; four real workflow stages remain. */
+.pr-root--project .pr-summary-card--overview {
+  grid-template-columns:minmax(0,1.05fr) minmax(0,1.22fr);
+  min-height:118px;
+  padding:22px 25px;
+}
+.pr-root--project .pr-overview-lead {gap:17px;}
+.pr-overview-icon {
+  display:grid;place-items:center;flex:0 0 59px;width:59px;height:59px;
+  border-radius:16px;background:#fff1e6;color:#ed771e;
+}
+.pr-overview-title {display:flex;flex-direction:column;gap:7px;min-width:0;}
+.pr-overview-title strong {font-size:20px;font-weight:850;letter-spacing:-.035em;color:#172033;line-height:1.2;}
+.pr-overview-title span {font-size:12px;color:#8993a2;line-height:1.45;}
+.pr-project-left-column {display:flex;flex-direction:column;gap:16px;min-width:0;}
+.pr-project-left-column > .pr-project-schools-panel {flex:1;min-height:0;}
+.pr-project-components-card {
+  display:flex;align-items:center;gap:15px;text-align:left;min-width:0;width:100%;
+  min-height:128px;padding:20px 21px;
+  border:1px solid #e3e9ee;border-radius:23px;
+  background:linear-gradient(105deg,#f4fffb 0%,#fff 40%,#fbfbff 100%);
+  box-shadow:0 9px 30px rgba(19,33,47,.035);
+  cursor:pointer;transition:border-color .15s ease,box-shadow .15s ease,transform .15s ease;
+}
+.pr-project-components-card:hover {border-color:#b8d9cf;box-shadow:0 12px 26px rgba(17,51,39,.09);transform:translateY(-1px);}
+.pr-project-components-card:focus-visible {outline:3px solid rgba(0,143,106,.38);outline-offset:3px;}
+.pr-project-components-icon {
+  display:grid;place-items:center;flex:0 0 59px;width:59px;height:59px;
+  border-radius:16px;background:#ddf9ee;color:#0a9b6d;
+}
+.pr-project-components-copy {display:flex;flex:1;min-width:0;flex-direction:column;gap:7px;}
+.pr-project-components-copy strong {font-size:20px;font-weight:860;letter-spacing:-.035em;color:#172033;line-height:1.15;}
+.pr-project-components-copy small {display:block;max-width:100%;font-size:12px;color:#929bac;line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.pr-project-components-card .pr-step-access-avatars {margin-left:auto;}
+.pr-project-components-card .pr-step-access-placeholder {max-width:85px;text-wrap:wrap;text-align:right;}
+.pr-project-components-arrow {
+  display:grid;place-items:center;flex:0 0 34px;width:34px;height:34px;
+  border:1px solid #e7ebf2;border-radius:12px;color:#66768b;background:#fff;
+}
+.pr-project-components-card:hover .pr-project-components-arrow {color:#098360;border-color:#c7e9dc;}
+/* Project Steps are now four, with the existing KPI bars, real users and dark timeline. */
+.pr-root--project .pr-project-step-index {background:#151d30;color:#fff;}
+.pr-root--project .pr-project-step-row:nth-child(n) .pr-project-step-index {background:#151d30;color:#fff;}
+@media(max-width:1260px) {
+  .pr-project-components-card {gap:11px;padding:17px 15px;min-height:117px;}
+  .pr-project-components-icon {flex-basis:49px;width:49px;height:49px;}
+  .pr-project-components-copy strong {font-size:17px;}
+  .pr-project-components-copy small {font-size:11px;}
+  .pr-project-components-arrow {width:30px;height:30px;flex-basis:30px;}
+}
+@media(max-width:980px) {
+  .pr-root--project .pr-summary-card--overview {grid-template-columns:1fr;gap:15px;}
+  .pr-root--project .pr-summary-card--overview .pr-summary-metrics {border-top:1px solid #e9edf1;padding-top:10px;}
+  .pr-project-left-column {gap:13px;}
+}
+@media(max-width:590px) {
+  .pr-root--project .pr-summary-card--overview {padding:17px 15px;}
+  .pr-overview-icon {width:46px;height:46px;flex-basis:46px;border-radius:13px;}
+  .pr-overview-title strong {font-size:17px;}
+  .pr-overview-title span {font-size:11px;}
+  .pr-project-components-card {min-height:105px;padding:13px 12px;gap:10px;border-radius:18px;}
+  .pr-project-components-icon {width:42px;height:42px;flex-basis:42px;border-radius:12px;}
+  .pr-project-components-icon svg {width:22px;height:22px;}
+  .pr-project-components-copy strong {font-size:15px;}
+  .pr-project-components-copy small {font-size:10px;}
+  .pr-project-components-card .pr-step-access-avatars {max-width:58px;}
+  .pr-project-components-card .pr-step-access-placeholder {display:none;}
+  .pr-project-components-arrow {width:26px;height:26px;flex-basis:26px;border-radius:9px;}
+}
+@media(prefers-reduced-motion:reduce) {
+  .pr-project-components-card {transition:none!important;}
+}
+
+/* Four stage cards preserve the approved icon + title treatment. */
+.pr-step-kpi-stage-icon {
+  display:grid;place-items:center;flex:0 0 36px;width:36px;height:36px;
+  color:#d77d2b;background:#fff2e8;border-radius:11px;
+}
+@media(max-width:590px) {
+  .pr-step-kpi-stage-icon {width:32px;height:32px;flex-basis:32px;border-radius:9px;}
+  .pr-step-kpi-stage-icon svg {width:17px;height:17px;}
+}
