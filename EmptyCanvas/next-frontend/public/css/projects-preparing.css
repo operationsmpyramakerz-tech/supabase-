@@ -2275,3 +2275,49 @@
   .pr-pbom--modern .pr-pbom-add-actions {width:100%;}
   .pr-pbom--modern .pr-kit-editor-fields .pr-pbom-add-actions button {flex:1 1 0;min-width:0;}
 }
+
+
+/* v277 — Project Components: icon-only close and clean, single-layer search field.
+   Override the global input focus ring rather than displaying a second orange
+   rectangle inside the search container. Scoped to this dialog only. */
+.pr-pbom--modern .pr-pbom-close {
+  display:grid;place-items:center;flex:0 0 42px;
+  width:42px;height:42px;min-width:42px;min-height:42px;
+  padding:0;gap:0;line-height:0;border-radius:13px;
+}
+.pr-pbom--modern .pr-pbom-close svg {width:19px;height:19px;display:block;}
+.pr-pbom--modern .pr-pbom-search {
+  min-width:0;gap:11px;padding:0 13px;box-sizing:border-box;
+}
+.pr-pbom--modern .pr-pbom-search:focus-within {
+  border-color:#cad2dd;box-shadow:0 0 0 3px rgba(31,41,55,.055);
+}
+.pr-pbom--modern .pr-pbom-search input,
+.pr-pbom--modern .pr-pbom-search input:focus,
+.pr-pbom--modern .pr-pbom-search input:focus-visible {
+  appearance:none;-webkit-appearance:none;display:block;
+  flex:1 1 0;min-width:0;width:100%;min-height:0;height:100%;
+  margin:0;padding:0;border:0;border-radius:0;
+  outline:none;outline-offset:0;background:transparent;
+  box-shadow:none;color:#17243b;caret-color:#17243b;
+}
+.pr-pbom--modern .pr-pbom-search .pr-pbom-clear-search {
+  appearance:none;-webkit-appearance:none;display:grid;place-items:center;
+  flex:0 0 29px;width:29px;height:29px;min-width:29px;min-height:29px;
+  margin:0;padding:0;border:0;border-radius:9px;
+  background:transparent;color:#707b8a;box-shadow:none;
+  line-height:0;cursor:pointer;transition:background .15s,color .15s;
+}
+.pr-pbom--modern .pr-pbom-search .pr-pbom-clear-search svg {
+  display:block;width:16px;height:16px;flex:none;
+}
+.pr-pbom--modern .pr-pbom-search .pr-pbom-clear-search:hover {
+  background:#f1f3f6;color:#192334;
+}
+.pr-pbom--modern .pr-pbom-search .pr-pbom-clear-search:focus-visible {
+  outline:2px solid #aab6c5;outline-offset:2px;
+}
+@media (max-width:560px) {
+  .pr-pbom--modern .pr-pbom-close {width:42px;height:42px;min-width:42px;min-height:42px;}
+  .pr-pbom--modern .pr-pbom-search {gap:9px;padding:0 12px;}
+}

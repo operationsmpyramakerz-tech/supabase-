@@ -93,7 +93,7 @@ export default function ProjectMasterComponents({project,proposals,allowed,reque
  return <div className="pr-pbom pr-pbom--modern">
   <div className="pr-manifest-title pr-pbom-title">
    <div><span className="pr-wh-overline">PROJECT · {project.name}</span><h3>Project Components</h3></div>
-   <button className="pr-pbom-close" type="button" onClick={onClose}><BomIcon name="close" size={17}/> Close</button>
+   <button className="pr-pbom-close" type="button" onClick={onClose} aria-label="Close Project Components" title="Close"><BomIcon name="close" size={19}/></button>
   </div>
   {error&&<div className="pr-alert" role="alert">{error}<button type="button" onClick={()=>setError("")} aria-label="Dismiss">×</button></div>}
   {notice&&<div className="pr-manifest-success" role="status">{notice}</div>}
@@ -106,7 +106,7 @@ export default function ProjectMasterComponents({project,proposals,allowed,reque
    {!rows.length&&!project.source_proposal_id&&allowed&&!hasMovements&&<div className="pr-pbom-import"><strong>Import source Proposal</strong><div className="pr-pbom-import-action"><PreparingSelect value={sourceId} onChange={e=>setSourceId(e.target.value)} aria-label="Source Proposal"><option value="">Select Proposal…</option>{(proposals||[]).map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</PreparingSelect><button className="pr-primary" disabled={!sourceId||busy} onClick={()=>submit({action:"attach_proposal",proposalId:sourceId},"Proposal imported.")}>Import Proposal</button></div></div>}
    {needsKitCapture&&<div className="pr-pbom-import"><div><strong>Load Kit Groups from Proposal</strong><small>One-time organization of the existing Master BOM. Warehouse receipts and allocation amounts stay unchanged.</small></div>{allowed&&<button type="button" className="pr-primary" disabled={busy} onClick={()=>submit({action:"init_kits"},"Proposal Kit groups loaded.")}>Load Kit Groups</button>}</div>}
    <div className="pr-pbom-toolbar">
-    <label className="pr-search pr-pbom-search"><BomIcon name="search" size={18}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search within Kits or components…" aria-label="Search project components"/>{search&&<button type="button" onClick={()=>setSearch("")} aria-label="Clear search"><BomIcon name="close" size={14}/></button>}</label>
+    <label className="pr-search pr-pbom-search"><BomIcon name="search" size={18}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search within Kits or components…" aria-label="Search project components"/>{search&&<button className="pr-pbom-clear-search" type="button" onClick={()=>setSearch("")} aria-label="Clear search" title="Clear search"><BomIcon name="close" size={16}/></button>}</label>
 
    </div>
    <div className="pr-pbom-list-heading"><span>Kit groups <b>{visibleGroups.length}</b></span></div>
