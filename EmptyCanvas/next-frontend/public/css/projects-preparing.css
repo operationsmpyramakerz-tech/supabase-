@@ -1740,7 +1740,7 @@
 @media (max-width:600px) {
   .pr-wh-toolbar .pr-modern-select,.pr-manifest-actions .pr-modern-select {width:100%;flex:1 1 190px;}
   .pr-modern-select-trigger {min-height:46px;font-size:13px;}
-  .pr-modern-select-menu {max-height:min(50vh,360px)!important;}
+  .pr-modern-select-menu {max-height:min(50vh,360px);}
 }
 
 /* Clear group accordions with consistent chevrons instead of typographic arrows. */
@@ -2495,3 +2495,65 @@
 @media(prefers-reduced-motion:reduce) {
  .pr-pt-modern .pr-pt-history-button,.pr-pt-modern .pr-pt-download-button {transition:none;transform:none!important;}
 }
+
+/* v280 · Components Testing: compact filter trigger and sheet-aligned popover.
+   Scoped to icon-only filters; the remaining Preparing selects are unchanged. */
+.pr-pt-modern .pr-pt-toolbar .pr-pt-filter-select .pr-modern-select-trigger {
+  border-radius:14px;
+  border:1px solid #dce2e9;
+  background:#fff;
+  color:#1c2736;
+  box-shadow:0 2px 8px rgba(13,22,37,.035);
+  transition:background .16s,border-color .16s,box-shadow .16s;
+}
+.pr-pt-modern .pr-pt-toolbar .pr-pt-filter-select .pr-modern-select-trigger:hover:not(:disabled) {
+  border-color:#aab5c3;background:#f7f9fb;
+}
+.pr-pt-modern .pr-pt-toolbar .pr-pt-filter-select.is-open .pr-modern-select-trigger,
+.pr-pt-modern .pr-pt-toolbar .pr-pt-filter-select .pr-modern-select-trigger:focus-visible {
+  outline:none;border-color:#30394a;
+  box-shadow:0 0 0 3px rgba(27,36,53,.085);
+}
+.pr-pt-modern .pr-pt-toolbar .pr-pt-filter-select.is-filtered .pr-modern-select-trigger {
+  color:#fff;background:#111827;border-color:#111827;
+}
+.pr-pt-modern .pr-pt-toolbar .pr-pt-filter-select.is-filtered .pr-modern-select-trigger:hover:not(:disabled) {
+  color:#fff;background:#273346;border-color:#273346;
+}
+.pr-pt-modern .pr-pt-toolbar .pr-pt-filter-select.is-filtered.is-open .pr-modern-select-trigger {
+  border-color:#111827;box-shadow:0 0 0 3px rgba(27,36,53,.13);
+}
+.pr-modern-select-menu--filter {
+  padding:7px;
+  border:1px solid #e2e5eb;
+  border-radius:16px;
+  box-shadow:0 16px 42px rgba(17,24,39,.18),0 2px 8px rgba(17,24,39,.04);
+  background:#fff;
+  animation:pr-testing-filter-in .15s ease-out both;
+}
+.pr-modern-select-filter-heading {
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  margin:0 2px 5px;padding:10px 10px 11px;
+  border-bottom:1px solid #eef0f3;
+  color:#192132;line-height:1.2;
+}
+.pr-modern-select-filter-heading strong {font-size:12px;font-weight:800;}
+.pr-modern-select-filter-heading small {font-size:10px;font-weight:600;color:#9199a7;white-space:nowrap;}
+.pr-modern-select-menu--filter .pr-modern-select-option {
+  min-height:46px;padding:11px 12px;border-radius:10px;
+  color:#344054;font-size:12px;font-weight:680;
+  transition:background .14s,color .14s;
+}
+.pr-modern-select-menu--filter .pr-modern-select-option:hover:not(:disabled),
+.pr-modern-select-menu--filter .pr-modern-select-option:focus-visible {
+  background:#f3f5f8;color:#111827;outline:none;
+}
+.pr-modern-select-menu--filter .pr-modern-select-option.is-selected,
+.pr-modern-select-menu--filter .pr-modern-select-option.is-selected:hover {
+  background:#111827;color:#fff;
+}
+.pr-modern-select-menu--filter .pr-modern-select-check {color:#fff;}
+@keyframes pr-testing-filter-in {from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:translateY(0)}}
+/* Above-trigger popovers retain their exact positioning transform. */
+.pr-modern-select-menu--filter.is-above {animation:none;transform:translateY(-100%);}
+@media (prefers-reduced-motion:reduce) {.pr-modern-select-menu--filter{animation:none;}}

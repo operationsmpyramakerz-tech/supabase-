@@ -22,12 +22,24 @@ export default function PreparingSelect({value = "", onChange, children, disable
   const reposition = () => {
     if (!trigger.current || typeof window === "undefined") return;
     const r = trigger.current.getBoundingClientRect();
+    // Keep icon-only menus within the current project sheet, rather than
+    // allowing a right-edge filter to overlap the dimmed area outside it.
+    const sheet = iconOnly ? trigger.current.closest(".pr-components-sheet") : null;
+    const sheetBounds = sheet?.getBoundingClientRect();
+    const minLeft = Math.max(12, sheetBounds ? sheetBounds.left + 16 : 12);
+    const maxRight = Math.min(window.innerWidth - 12, sheetBounds ? sheetBounds.right - 16 : window.innerWidth - 12);
+    const availableWidth = Math.max(120, maxRight - minLeft);
+    const width = Math.min(iconOnly ? 280 : Math.max(220, r.width), availableWidth);
+    // An icon-only filter opens from the right edge of its trigger; text
+    // selects continue to start at the left edge as before.
+    const desiredLeft = iconOnly ? r.right - width : r.left;
+    const left = Math.max(minLeft, Math.min(desiredLeft, maxRight - width));
     const roomBelow = window.innerHeight - r.bottom - 14;
     const roomAbove = r.top - 14;
-    const above = roomBelow < 185 && roomAbove > roomBelow;
-    const maxHeight = Math.min(330, Math.max(125, above ? roomAbove : roomBelow));
-    const width = Math.min(Math.max(220,r.width), window.innerWidth - 24);
-    setBounds({left:Math.max(12,Math.min(r.left,window.innerWidth-width-12)),top:above?r.top-7:r.bottom+7,width,maxHeight,above});
+    const wantedHeight = Math.min(340, items.length * 49 + (iconOnly ? 74 : 14));
+    const above = roomBelow < wantedHeight && roomAbove > roomBelow;
+    const maxHeight = Math.max(100, Math.min(wantedHeight, above ? roomAbove - 8 : roomBelow - 8));
+    setBounds({left,top:above?r.top-9:r.bottom+9,width,maxHeight,above});
   };
   useEffect(() => {
     if (!open) return;
@@ -65,7 +77,8 @@ export default function PreparingSelect({value = "", onChange, children, disable
       {iconOnly ? <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 6h16l-6.5 7.5v5l-3 1.5v-6.5L4 6Z"/></svg> : <><span className="pr-modern-select-value">{active?.label || "Select…"}</span><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></>}
     </button>
     {open && typeof document !== "undefined" && createPortal(<div className="pr-modern-select-backdrop" onPointerDown={e=>{if(e.target===e.currentTarget)setOpen(false);}}>
-      <div className={`pr-modern-select-menu${bounds.above?" is-above":""}`} style={{left:bounds.left,top:bounds.top,width:bounds.width,maxHeight:bounds.maxHeight}} id={listId} role="listbox" aria-label={props["aria-label"] || name || "Choose option"}>
+      <div className={`pr-modern-select-menu${bounds.above?" is-above":""}${iconOnly?" pr-modern-select-menu--filter":""}`} style={{left:bounds.left,top:bounds.top,width:bounds.width,maxHeight:bounds.maxHeight}} id={listId} role="listbox" aria-label={props["aria-label"] || name || "Choose option"}>
+        {iconOnly && <div className="pr-modern-select-filter-heading" role="presentation"><strong>Filter components</strong><small>Choose a view</small></div>}
         {items.map((item,index)=><button key={`${item.value}:${index}`} ref={el=>{optionRefs.current[index]=el;}} type="button" role="option" aria-selected={String(value)===item.value} disabled={item.disabled} className={`pr-modern-select-option${String(value)===item.value?" is-selected":""}`} onClick={()=>choose(item)} onKeyDown={e=>keyOption(e,index)}>
           <span>{item.label}</span><svg className="pr-modern-select-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg>
         </button>)}
