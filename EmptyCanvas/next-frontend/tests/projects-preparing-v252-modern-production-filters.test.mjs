@@ -27,10 +27,10 @@ test("All Components permits review and correction of fully packed items without
 test("Box filter and Production filter share modern dropdown and remain separate state",()=>{
  const boxes=read("components/preparing/ProjectBoxDistribution.jsx");
  const production=read("components/preparing/ProjectProductionReceiving.jsx");
- for(const source of [boxes,production]){
-  assert.match(source,/import PreparingStatusFilter from/);
-  assert.match(source,/<PreparingStatusFilter/);
- }
+ assert.match(boxes,/import PreparingStatusFilter from/);
+ assert.match(boxes,/<PreparingStatusFilter/);
+ assert.match(production,/import PreparingSelect from/);
+ assert.match(production,/<PreparingSelect iconOnly/);
  assert.match(boxes,/\[filter,setFilter\]=useState\("available"\)/);
  assert.match(boxes,/filterBoxDistributionRows\(items,filter\)/);
  assert.match(boxes,/value:"not-packed",label:"Not Packed"/);
@@ -38,8 +38,10 @@ test("Box filter and Production filter share modern dropdown and remain separate
  assert.match(boxes,/setEditing\(""\)/);
  assert.match(production,/value:"not-received",label:"Not Received"/);
  const menu=read("components/preparing/PreparingStatusFilter.jsx");
+ const modernMenu=read("components/preparing/PreparingSelect.jsx");
  for(const pattern of [/role="listbox"/,/role="option"/,/aria-expanded=/,/Escape/,/ArrowDown/,/pointerdown/,/aria-selected=/])assert.match(menu,pattern);
- for(const [name,jsx] of [["Box",boxes],["Production",production],["Filter",menu]]){
+ for(const pattern of [/createPortal/,/iconOnly/,/role="listbox"/,/role="option"/,/aria-expanded=/,/Escape/,/ArrowDown/,/aria-selected=/])assert.match(modernMenu,pattern);
+ for(const [name,jsx] of [["Box",boxes],["Production",production],["Filter",menu],["ModernFilter",modernMenu]]){
   const parsed=ts.createSourceFile(name+".jsx",jsx,ts.ScriptTarget.Latest,true,ts.ScriptKind.JSX);
   assert.deepEqual(parsed.parseDiagnostics,[],name);
  }

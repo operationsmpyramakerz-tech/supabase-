@@ -25,7 +25,11 @@ test('Box Distribution is an independent fourth step; cartons move to fifth',()=
 test('production and boxes are isolated to their own modal tabs and preserve existing actions',()=>{
  assert.match(production,/view="receiving"/);
  assert.match(production,/boxView\?"boxes":"receiving"/);
- assert.match(production,/boxView\?<><button[\s\S]*Box Distribution[\s\S]*Box History[\s\S]*:<>[\s\S]*Production Receiving[\s\S]*Receiving History/);
+ assert.match(production,/boxView \? <div className="pr-pt-tabs pr-production-tabs"/);
+ assert.match(production,/Box Distribution<\/button>/);
+ assert.match(production,/Box History<\/button>/);
+ assert.match(production,/pr-production-navigation/);
+ assert.match(production,/Receiving History \(\$\{data\.handoffs\.length\} changes\)/);
  assert.match(production,/isBoxTab&&<ProjectBoxDistribution/);
  assert.match(production,/scope:isBoxTab\?"boxes":"receiving"/);
  assert.match(production,/action:"handoff"/);
