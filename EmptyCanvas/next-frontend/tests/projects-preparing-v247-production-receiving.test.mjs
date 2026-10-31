@@ -30,11 +30,12 @@ test("Additive SQL enforces stage boundaries, carton packing and historical rece
  assert.match(sql,/REVOKE ALL ON public\.erp_preparing_production_handoffs FROM PUBLIC,anon,authenticated/);
  assert.doesNotMatch(sql,/DELETE FROM public\.erp_preparing_warehouse_receipts/);
 });
-test("Project tool order and production tabs, exports and sheet are wired",()=>{
+test("Project tool order and separate Production and Box screens, exports and sheets are wired",()=>{
  const main=read("components/preparing/PreparingClient.jsx"),ui=read("components/preparing/ProjectProductionReceiving.jsx");
  assert.ok(main.indexOf('title:"Warehouse Receiving"')<main.indexOf('title:"Production Receiving"'));
  assert.ok(main.indexOf('title:"Production Receiving"')<main.indexOf('title:"Project Kit Cartons"'));
- assert.match(main,/showProduction &&/);assert.match(ui,/Box Distribution/);
+ assert.match(main,/showProduction &&/);assert.match(main,/showBoxDistribution &&/);
+ assert.match(ui,/boxView\?"Box Distribution":"Production Receiving"/);
  for(const label of ["CSV · Values","CSV · Blank","PDF · Values","PDF · Blank","Receiving History","Box History","Production Received","Available to Receive"]){assert.ok(ui.includes(label),label);}
  for(const f of ["components/preparing/PreparingClient.jsx","components/preparing/ProjectProductionReceiving.jsx"]){const parsed=ts.createSourceFile(f,read(f),ts.ScriptTarget.Latest,true,ts.ScriptKind.JSX);assert.deepEqual(parsed.parseDiagnostics,[],f);}
 });

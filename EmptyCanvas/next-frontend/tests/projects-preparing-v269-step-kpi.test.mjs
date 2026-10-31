@@ -17,6 +17,7 @@ test('stage editor avatars use permissioned ERP members, not school beneficiarie
   assert.deepEqual(list.testing.map(p=>p.name),['Ada','Bela']);
   assert.deepEqual(list.warehouse.map(p=>p.name),['Ada']);
   assert.deepEqual(list.production.map(p=>p.name),['Ada','Bela']);
+  assert.deepEqual(list.boxes.map(p=>p.name),['Ada','Bela']);
   assert.deepEqual(list.cartons.map(p=>p.name),['Ada','Bela']);
 });
 test('explicit feature deny or disabled page cannot display a user',()=>{
@@ -56,5 +57,5 @@ test('avatar lookup is gated and returns only permission-holders; CSS uses muted
   assert.match(service,/membersWithPreparingStageAccess/);
   assert.match(css,/\.pr-step-kpi-fill/);
   assert.match(css,/background:#39b99b/);
-  assert.deepEqual(Object.keys(PREPARING_STEP_PERMISSIONS),['components','testing','warehouse','production','cartons']);
+  assert.deepEqual(Object.keys(PREPARING_STEP_PERMISSIONS),['components','testing','warehouse','production','boxes','cartons']);
 });

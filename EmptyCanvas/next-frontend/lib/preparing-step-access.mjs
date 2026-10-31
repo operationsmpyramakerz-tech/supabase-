@@ -6,6 +6,7 @@ export const PREPARING_STEP_PERMISSIONS = Object.freeze({
   testing: "preparing.stage_update",
   warehouse: "preparing.warehouse_receive",
   production: "preparing.stage_update",
+  boxes: "preparing.stage_update",
   cartons: "preparing.stage_update",
 });
 

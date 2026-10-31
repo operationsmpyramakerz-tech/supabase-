@@ -15,14 +15,14 @@ test('Project Components is above Schools as a clickable, independent Master BOM
   assert.match(ui,/StepAccessAvatars access=\{stepAccess\?\.components\}/);
   const cards=ui.split('const projectStepCards = [')[1].split('];')[0];
   assert.doesNotMatch(cards,/key:"components"/);
-  assert.equal((cards.match(/key:"(?:testing|warehouse|production|cartons)"/g)||[]).length,4);
+  assert.equal((cards.match(/key:"(?:testing|warehouse|production|boxes|cartons)"/g)||[]).length,5);
 });
-test('top overview and step timeline show four-stage logic without component progress',()=>{
+test('top overview and step timeline show five-stage logic without component progress',()=>{
   assert.match(ui,/pr-summary-card--overview/);
   assert.match(ui,/Project Overview/);
   assert.doesNotMatch(ui,/PROJECT PROGRESS/);
-  assert.match(ui,/<span className="pr-section-count">4 stages<\/span>/);
-  assert.match(ui,/These four stages determine the overall project completion/);
+  assert.match(ui,/<span className="pr-section-count">5 stages<\/span>/);
+  assert.match(ui,/These five stages determine the overall project completion/);
   assert.match(ui,/projectStepPercents\?\.\[index\]/);
   assert.match(ui,/pr-step-kpi-stage-icon/);
   assert.match(ui,/pr-step-kpi-track/);
@@ -32,8 +32,8 @@ test('progress math excludes Master BOM even when source proposal changes',()=>{
   const a=calculateProjectPreparationProgress({...inputs,sourceProposalId:null});
   const b=calculateProjectPreparationProgress({...inputs,sourceProposalId:'proposal-id'});
   assert.deepEqual(a,b);
-  assert.deepEqual(a.stages,[40,30,20,10]);
-  assert.equal(a.overall,25);
+  assert.deepEqual(a.stages,[40,30,20,10,0]);
+  assert.equal(a.overall,20);
   assert.equal(a.completed,0);
 });
 test('responsive layout, permissioned avatars and component-card semantics remain sound',()=>{
