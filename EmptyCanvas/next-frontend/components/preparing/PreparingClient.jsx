@@ -59,6 +59,18 @@ function LiquidGauge({ value, size = "step", label = "Progress" }) {
     <span className="pr-liquid-gauge__inside"><span className="pr-liquid-gauge__water" aria-hidden="true"/><strong>{percent === null ? "—" : `${percent}%`}</strong></span>
   </span>;
 }
+function StepAccessAvatars({ access, loading, unavailable }) {
+  if (loading) return <span className="pr-step-access-placeholder" aria-label="Loading stage access">Checking access…</span>;
+  if (unavailable || !access) return <span className="pr-step-access-placeholder" aria-label="Stage access unavailable">Access unavailable</span>;
+  if (!access.count) return <span className="pr-step-access-placeholder" aria-label="No verified stage editors">No editors</span>;
+  return <span className="pr-step-access-avatars" aria-label={`${access.count} ${access.count === 1 ? "user" : "users"} with stage edit access`}>
+    {access.users.map(user => <span className="pr-step-access-avatar" key={user.id} title={user.name} aria-label={user.name}>
+      {user.photoUrl ? <img src={user.photoUrl} alt="" loading="lazy" referrerPolicy="no-referrer" onError={event => { event.currentTarget.hidden = true; }} /> : null}
+      <span className="pr-step-access-initials" aria-hidden="true">{clean(user.name).split(/\s+/).slice(0, 2).map(part => part[0]).join("").toUpperCase() || "?"}</span>
+    </span>)}
+    {access.count > access.users.length && <span className="pr-step-access-extra" title={`${access.count} users have access`}>+{access.count - access.users.length}</span>}
+  </span>;
+}
 function Sheet({ title, onClose, children, footer }) {
   return <div className="pr-overlay" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
     <section className="pr-sheet" role="dialog" aria-modal="true" aria-label={title}>
@@ -108,6 +120,9 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
   const [projectStageLoading, setProjectStageLoading] = useState(false);
   const [projectStageError, setProjectStageError] = useState("");
   const [projectStageRevision, setProjectStageRevision] = useState(0);
+  const [stepAccess, setStepAccess] = useState(null);
+  const [stepAccessLoading, setStepAccessLoading] = useState(false);
+  const [stepAccessError, setStepAccessError] = useState(false);
 
   // The AppShell header search is the single search control for projects,
   // schools, and the current school's workflow. Reset it on navigation.
@@ -167,6 +182,26 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
       .finally(() => { if (active) setProjectStageLoading(false); });
     return () => { active = false; };
   }, [projectId, schoolId, projectSchools.length, projectStageRevision]);
+  // These are real Users Center accounts with effective feature/page grants;
+  // school beneficiaries must never be used as stage-user avatars.
+  useEffect(() => {
+    if (!projectId || schoolId) {
+      setStepAccess(null); setStepAccessError(false); setStepAccessLoading(false);
+      return;
+    }
+    const controller = new AbortController();
+    setStepAccess(null); setStepAccessError(false); setStepAccessLoading(true);
+    fetch("/next/api/projects-preparing/step-access", { cache: "no-store", signal: controller.signal })
+      .then(async response => {
+        const json = await response.json().catch(() => ({}));
+        if (!response.ok || !json.ok) throw new Error(json.error || "Access unavailable");
+        return json.stages || {};
+      })
+      .then(users => { if (!controller.signal.aborted) setStepAccess(users); })
+      .catch(() => { if (!controller.signal.aborted) setStepAccessError(true); })
+      .finally(() => { if (!controller.signal.aborted) setStepAccessLoading(false); });
+    return () => controller.abort();
+  }, [projectId, schoolId, projectStageRevision]);
   const projectStageProgress = useMemo(() => projectStageData
     ? calculateProjectPreparationProgress({ sourceProposalId: project?.source_proposal_id,
       testing: projectStageData.testing, warehouse: projectStageData.warehouse, production: projectStageData.production })
@@ -175,11 +210,11 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
   const overallProjectProgress = projectStageProgress?.overall ?? null;
   const completedProjectSteps = projectStageProgress?.completed ?? null;
   const projectStepCards = [
-    { key:"components", title:"Project Components", subtitle:`Master BOM · ${project?.source_proposal_name || "Custom project"}`, icon:"box", open:()=>setShowProjectBOM(true) },
-    { key:"testing", title:"Project Testing", subtitle:"01 · Components QC", icon:"shield", open:()=>setShowProjectTesting(true) },
-    { key:"warehouse", title:"Warehouse Receiving", subtitle:"02 · Warehouse handover", icon:"clipboard", open:()=>setShowWarehouse(true) },
-    { key:"production", title:"Production Receiving", subtitle:"03 · Team handover & boxes", icon:"truck", open:()=>setShowProduction(true) },
-    { key:"cartons", title:"Project Kit Cartons", subtitle:"04 · Packing", icon:"box", open:()=>setShowProjectCartons(true) },
+    { key:"components", title:"Project Components", subtitle:`Master BOM · ${project?.source_proposal_name || "Custom project"}`, detail:"Master component list and quantities", open:()=>setShowProjectBOM(true) },
+    { key:"testing", title:"Project Testing", subtitle:"01 · Components QC", detail:"Component testing and quality checks", open:()=>setShowProjectTesting(true) },
+    { key:"warehouse", title:"Warehouse Receiving", subtitle:"02 · Warehouse handover", detail:"Warehouse receiving and handover", open:()=>setShowWarehouse(true) },
+    { key:"production", title:"Production Receiving", subtitle:"03 · Team handover & boxes", detail:"Production handover and box preparation", open:()=>setShowProduction(true) },
+    { key:"cartons", title:"Project Kit Cartons", subtitle:"04 · Packing", detail:"Final packing and carton preparation", open:()=>setShowProjectCartons(true) },
   ];
   const tools = [
     { key:"components", name:"Components & QC", icon:"box", open:()=>setShowComponents(true) },
@@ -379,15 +414,25 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
         {projectStageError && <div className="pr-project-step-error" role="alert"><span>Progress unavailable: {projectStageError}</span><button type="button" onClick={()=>setProjectStageRevision(n=>n+1)}>Retry</button></div>}
         {projectStageLoading && <span className="pr-project-step-loading" role="status">Updating project stage progress…</span>}
         <ol className="pr-project-step-timeline">
-          {projectStepCards.map((step,index) => <li key={step.key} className="pr-project-step-row">
-            <span className={`pr-project-step-index ${projectStepPercents?.[index] === 100 ? "is-done" : ""}`} aria-hidden="true">{index+1}</span>
-            <button type="button" className="pr-project-step-card" onClick={step.open} aria-label={`Open ${step.title}`}>
-              <LiquidGauge value={projectStepPercents?.[index]} label={step.title}/>
-              <span className="pr-project-step-icon"><Ico name={step.icon} size={23}/></span>
-              <span className="pr-project-step-text"><strong>{step.title}</strong><small>{step.subtitle}</small></span>
-              <span className="pr-project-step-arrow"><Ico name="arrow" size={18}/></span>
-            </button>
-          </li>)}
+          {projectStepCards.map((step,index) => {
+            const value = projectStepPercents?.[index];
+            const percent = value === null || value === undefined ? null : Math.min(100, Math.max(0, Math.round(Number(value) || 0)));
+            return <li key={step.key} className="pr-project-step-row">
+              <span className="pr-project-step-index" aria-hidden="true">{index+1}</span>
+              <button type="button" className="pr-project-step-card pr-project-step-card--kpi" onClick={step.open} aria-label={`Open ${step.title}${percent === null ? "" : `, ${percent}% complete`}`}>
+                <span className="pr-step-kpi-top">
+                  <span className="pr-step-kpi-title"><strong>{step.title}</strong><small>{step.subtitle}</small></span>
+                  <StepAccessAvatars access={stepAccess?.[step.key]} loading={stepAccessLoading} unavailable={stepAccessError}/>
+                  <span className="pr-step-kpi-arrow"><Ico name="arrow" size={17}/></span>
+                </span>
+                <strong className="pr-step-kpi-percent">{percent === null ? "—" : `${percent}%`}</strong>
+                <span className="pr-step-kpi-track" role="progressbar" aria-label={`${step.title} completion`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent === null ? undefined : percent} aria-valuetext={percent === null ? "Loading" : `${percent}%`}>
+                  <span className="pr-step-kpi-fill" style={{ width: `${percent ?? 0}%` }}/>
+                </span>
+                <span className="pr-step-kpi-note">{percent === 100 ? "Stage completed" : step.detail}</span>
+              </button>
+            </li>;
+          })}
         </ol>
       </section>
     </div>}

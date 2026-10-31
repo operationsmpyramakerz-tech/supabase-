@@ -1797,3 +1797,61 @@
 .pr-pt-export-body>.pr-muted {margin:0;padding:14px 16px;border:1px solid #e8e2d8;background:#faf8f5;color:#79624f;border-radius:14px;font-size:12px;line-height:1.6;}
 /* Avoid double-rotation: older PBOM rules rotate the wrapper itself. */
 .pr-pbom .pr-kit-group.is-open .pr-kit-group-chevron {transform:none;}
+
+/* v269 — KPI-style Project Steps, matching the approved horizontal-bar mockup. */
+.pr-project-step-timeline {gap:10px;}
+.pr-project-step-timeline::before {top:39px;bottom:39px;background:#151d30;}
+.pr-project-step-row {grid-template-columns:36px minmax(0,1fr);gap:9px;}
+.pr-project-step-card--kpi {
+  display:flex;flex-direction:column;align-items:stretch;gap:0;
+  min-width:0;min-height:117px;padding:12px 14px 11px;
+  border:1px solid #e6eaf0;border-radius:15px;background:#fff;
+  box-shadow:0 2px 10px rgba(23,32,50,.024);
+  text-align:left;transition:border-color .15s ease,box-shadow .15s ease,transform .15s ease;
+}
+.pr-project-step-card--kpi:hover {border-color:#cdd5e0;box-shadow:0 6px 17px rgba(23,32,50,.055);transform:translateY(-1px);}
+.pr-step-kpi-top {width:100%;min-width:0;display:flex;align-items:center;gap:9px;}
+.pr-step-kpi-title {display:flex;flex:1;min-width:0;flex-direction:column;gap:3px;}
+.pr-step-kpi-title>strong {font-size:12px;line-height:1.35;color:#192338;font-weight:825;letter-spacing:-.015em;}
+.pr-step-kpi-title>small {font-size:10px;line-height:1.4;color:#929bad;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.pr-step-kpi-percent {display:block;margin:4px 0 1px;font-size:23px;line-height:1.12;letter-spacing:-.045em;font-weight:865;color:#171f32;}
+.pr-step-kpi-track {position:relative;display:block;overflow:hidden;width:100%;height:8px;flex:none;border-radius:99px;background:#e9edf3;margin:0 0 6px;}
+.pr-step-kpi-fill {display:block;height:100%;min-width:0;border-radius:inherit;background:#39b99b;transition:width .23s ease;}
+.pr-step-kpi-note {font-size:10px;line-height:1.35;color:#929bab;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.pr-step-kpi-arrow {width:23px;height:23px;display:grid;place-items:center;flex:none;border-radius:50%;color:#91a0b2;}
+.pr-project-step-card--kpi:hover .pr-step-kpi-arrow {color:#192338;background:#f3f5f9;}
+.pr-step-access-avatars {display:inline-flex;align-items:center;justify-content:flex-end;flex:none;padding-left:5px;max-width:116px;}
+.pr-step-access-avatar,.pr-step-access-extra {
+  display:grid;place-items:center;position:relative;overflow:hidden;flex:none;
+  width:25px;height:25px;border:2px solid white;border-radius:50%;
+  background:#e7eaf1;color:#3f5066;font-size:9px;font-weight:800;
+}
+.pr-step-access-avatar + .pr-step-access-avatar,.pr-step-access-extra {margin-left:-7px;}
+.pr-step-access-avatar img:not([hidden]) {position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;z-index:1;}
+.pr-step-access-initials {display:block;line-height:1;}
+.pr-step-access-extra {background:#eef1f7;color:#65738a;font-size:9px;z-index:2;}
+.pr-step-access-placeholder {flex:none;color:#929bad;font-size:9px;white-space:nowrap;}
+@media(max-width:1260px) {
+  .pr-project-step-card--kpi {min-height:110px;gap:0;padding:11px 12px;}
+  .pr-step-kpi-title>strong {font-size:11.5px;}
+  .pr-step-kpi-title>small,.pr-step-kpi-note {font-size:9.5px;}
+}
+@media(max-width:590px) {
+  .pr-project-step-row {grid-template-columns:29px minmax(0,1fr);gap:9px;}
+  .pr-project-step-timeline::before {left:13px;top:35px;bottom:35px;}
+  .pr-project-step-card--kpi {min-height:108px;padding:11px 12px;border-radius:15px;}
+  .pr-step-kpi-percent {font-size:23px;}
+  .pr-step-kpi-title>strong {font-size:12px;}
+  .pr-step-kpi-title>small {font-size:10px;}
+  .pr-step-access-avatar,.pr-step-access-extra {width:23px;height:23px;}
+  .pr-step-access-avatars {max-width:98px;}
+}
+@media(max-width:390px) {
+  .pr-project-step-card--kpi {padding:10px;}
+  .pr-step-kpi-top {gap:4px;}
+  .pr-step-access-avatar,.pr-step-access-extra {width:21px;height:21px;}
+  .pr-step-access-placeholder {font-size:8px;}
+}
+@media(prefers-reduced-motion:reduce) {
+  .pr-project-step-card--kpi,.pr-step-kpi-fill {transition:none!important;}
+}

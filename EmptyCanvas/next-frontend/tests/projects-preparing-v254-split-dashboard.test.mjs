@@ -41,12 +41,14 @@ test('dashboard renders exactly five project step routes and a separate reports 
  assert.match(ui,/setShowProduction\(true\)/);
  assert.doesNotMatch(ui,/title:"Project Dashboard", subtitle:/);
 });
-test('liquid gauges support live percentages, reduced motion, small screens and readable labels',()=>{
+test('dashboard KPI bars support live percentages, reduced motion, small screens and readable labels',()=>{
  assert.match(ui,/aria-label=\{`\$\{label\}: \$\{percent === null/);
  assert.match(css,/\.pr-liquid-gauge__water/);
  assert.match(css,/@keyframes pr-liquid-wave/);
  assert.match(css,/@media\(prefers-reduced-motion:reduce\)/);
  assert.match(css,/\.pr-project-split \{grid-template-columns:1fr;/);
+ assert.match(ui,/pr-step-kpi-track/);
+ assert.match(ui,/pr-step-kpi-fill/);
  assert.match(read('app/projects-preparing/page.jsx'),/projects-preparing\.css\?v=254/);
  const parsed=ts.createSourceFile('PreparingClient.jsx',ui,ts.ScriptTarget.Latest,true,ts.ScriptKind.JSX);
  assert.deepEqual(parsed.parseDiagnostics,[]);
