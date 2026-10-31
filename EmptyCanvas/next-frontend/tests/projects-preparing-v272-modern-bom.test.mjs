@@ -31,8 +31,8 @@ test('search, kit filtering, preview, and refresh preserve all rows and accessib
  assert.match(jsx,/Search within Kits or components/);
  assert.match(jsx,/Filter Kits/);
  assert.match(jsx,/kitFilter==="with"&&group\.items\.length>0/);
- assert.match(jsx,/shownItems=showAll\?group\.items:group\.items\.slice\(0,3\)/);
- assert.match(jsx,/View all components/);
+ assert.match(jsx,/const shownItems=group\.items/);
+ assert.doesNotMatch(jsx,/View all components/);
  assert.match(jsx,/await reload\(\)/);
  assert.match(jsx,/aria-label="Clear search"/);
 });
@@ -50,5 +50,5 @@ test('latest JSX and CSS are structurally valid and responsive',()=>{
  assert.deepEqual(parsed.parseDiagnostics,[]);
  assert.doesNotThrow(()=>postcss.parse(css));
  assert.match(css,/@media\(max-width:560px\)/);
- assert.match(read('app/projects-preparing/page.jsx'),/projects-preparing\.css\?v=272/);
+ assert.match(read('app/projects-preparing/page.jsx'),/projects-preparing\.css\?v=273/);
 });

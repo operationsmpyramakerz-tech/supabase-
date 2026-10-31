@@ -2,6 +2,7 @@
 
 import {useEffect,useMemo,useState} from "react";
 import PreparingSelect from "./PreparingSelect";
+import ProjectProductPicker from "./ProjectProductPicker";
 import {warehouseTotals,projectRequired} from "../../lib/preparing-warehouse-math.mjs";
 
 const empty={items:[],receiptLines:[],allocations:[],demands:[],kitGroups:[],bomAudit:[]};
@@ -45,10 +46,10 @@ export default function ProjectMasterComponents({project,proposals,allowed,reque
  const [state,setState]=useState(empty),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[refreshing,setRefreshing]=useState(false);
  const [error,setError]=useState(""),[notice,setNotice]=useState(""),[search,setSearch]=useState(""),[kitFilter,setKitFilter]=useState("all");
  const [sourceId,setSourceId]=useState("");
- const [createKit,setCreateKit]=useState(false),[kitName,setKitName]=useState(""),[kitFirstName,setKitFirstName]=useState(""),[kitFirstCode,setKitFirstCode]=useState(""),[kitFirstQty,setKitFirstQty]=useState("1");
- const [editor,setEditor]=useState(null),[quantity,setQuantity]=useState("1"),[newName,setNewName]=useState(""),[newCode,setNewCode]=useState("");
+ const [createKit,setCreateKit]=useState(false),[kitName,setKitName]=useState(""),[kitFirstProduct,setKitFirstProduct]=useState(null),[kitFirstQty,setKitFirstQty]=useState("1");
+ const [editor,setEditor]=useState(null),[quantity,setQuantity]=useState("1"),[selectedProduct,setSelectedProduct]=useState(null);
  const [confirm,setConfirm]=useState(null);
- const [expandedGroup,setExpandedGroup]=useState(null),[fullGroups,setFullGroups]=useState({});
+ const [expandedGroup,setExpandedGroup]=useState(null);
  const rows=useMemo(()=>warehouseTotals(state.items||[],state.receiptLines||[],state.allocations||[]),[state]);
  const schoolCount=(state.schools||[]).length;
  const total=rows.reduce((sum,row)=>sum+projectRequired(Number(row.required_qty||0),schoolCount),0);
@@ -84,22 +85,22 @@ export default function ProjectMasterComponents({project,proposals,allowed,reque
  async function submit(payload,message){if(busy)return false;setBusy(true);setError("");setNotice("");try{
    await request("/warehouse","POST",{projectId:project.id,...payload});await reload();setEditor(null);setConfirm(null);setNotice(message);return true;
   }catch(e){setError(e.message||"Unable to save.");return false;}finally{setBusy(false);}}
- function addTo(group){setExpandedGroup(group.key);setEditor({kind:"add",group,row:null});setNewName("");setNewCode("");setQuantity("1");}
- function changeQuantity(group,item){setExpandedGroup(group.key);setFullGroups(current=>({...current,[group.key]:true}));setEditor({kind:"update",group,row:item.row});setQuantity(String(item.qty));}
+ function addTo(group){setExpandedGroup(group.key);setEditor({kind:"add",group,row:null});setSelectedProduct(null);setQuantity("1");setError("");}
+ function changeQuantity(group,item){setExpandedGroup(group.key);setEditor({kind:"update",group,row:item.row});setQuantity(String(item.qty));setError("");}
  function saveEditor(){const q=Number(quantity);if(!Number.isSafeInteger(q)||q<=0||q>1000000000){setError("Enter a positive whole-number quantity.");return;}
-   if(editor.kind==="add"&&!newName.trim()){setError("Enter a component name.");return;}
+   if(editor.kind==="add"&&!selectedProduct){setError("Select a product from the Products catalog.");return;}
    submit({action:"edit_kit",operation:editor.kind,itemId:editor.row?.id||null,
      kitId:editor.group.kitId,kitName:editor.group.kitName,
-     productName:newName.trim(),productId:newCode.trim(),quantity:q,expectedUpdatedAt:editor.row?.updated_at},
+     productCatalogId:editor.kind==="add"?selectedProduct.id:null,quantity:q,expectedUpdatedAt:editor.row?.updated_at},
      editor.kind==="add"?"Component added to Kit.":"Kit quantity updated.");
  }
  async function saveNewKit(){
-  const name=kitName.trim(),component=kitFirstName.trim(),code=kitFirstCode.trim(),qty=Number(kitFirstQty);
-  if(!name||name.length>160||!component||component.length>500||code.length>500){setError("Enter a Kit name and its first component.");return;}
+  const name=kitName.trim(),qty=Number(kitFirstQty);
+  if(!name||name.length>160||!kitFirstProduct){setError("Enter a Kit name and select its first product from Products.");return;}
   if(!Number.isSafeInteger(qty)||qty<1||qty>1000000000){setError("Enter a positive whole-number quantity.");return;}
   if(groups.some(group=>group.kitName.trim().toLowerCase()===name.toLowerCase())){setError("This Kit already exists. Open it to add components.");return;}
-  const saved=await submit({action:"edit_kit",operation:"add",itemId:null,kitId:"",kitName:name,productName:component,productId:code,quantity:qty},"Kit created with its first component.");
-  if(saved){setCreateKit(false);setSearch("");setKitFilter("all");setExpandedGroup(groupKey({kitName:name}));setFullGroups(current=>({...current,[groupKey({kitName:name})]:true}));}
+  const saved=await submit({action:"edit_kit",operation:"add",itemId:null,kitId:"",kitName:name,productCatalogId:kitFirstProduct.id,quantity:qty},"Kit created with its first component.");
+  if(saved){setCreateKit(false);setSearch("");setKitFilter("all");setExpandedGroup(groupKey({kitName:name}));setKitFirstProduct(null);}
  }
 
  return <div className="pr-pbom pr-pbom--modern">
@@ -125,7 +126,7 @@ export default function ProjectMasterComponents({project,proposals,allowed,reque
    </div>
    {allowed&&createKit&&<div className="pr-pbom-new-kit" id="pr-pbom-create-kit" role="group" aria-label="Create Kit with first component">
     <div className="pr-pbom-new-kit-head"><div><strong>Create a Kit</strong><small>A new Kit begins with its first component. Quantities are per school.</small></div><button type="button" className="pr-secondary" onClick={()=>setCreateKit(false)}>Cancel</button></div>
-    <div className="pr-pbom-new-kit-fields"><label>Kit name<input maxLength={160} value={kitName} onChange={e=>setKitName(e.target.value)} placeholder="e.g. Electronics Kit"/></label><label>First component<input maxLength={500} value={kitFirstName} onChange={e=>setKitFirstName(e.target.value)} placeholder="Component name"/></label><label>Product code<input maxLength={500} value={kitFirstCode} onChange={e=>setKitFirstCode(e.target.value)} placeholder="Optional"/></label><label>Qty / school<input type="number" min="1" max="1000000000" step="1" value={kitFirstQty} onChange={e=>setKitFirstQty(e.target.value)}/></label></div>
+    <div className="pr-pbom-new-kit-fields"><label>Kit name<input maxLength={160} value={kitName} onChange={e=>setKitName(e.target.value)} placeholder="e.g. Electronics Kit"/></label><div className="pr-pbom-product-field"><span>First component</span><ProjectProductPicker value={kitFirstProduct} onChange={setKitFirstProduct} disabled={busy} label="Select first component from Products"/></div><label>Qty / school<input type="number" min="1" max="1000000000" step="1" value={kitFirstQty} onChange={e=>setKitFirstQty(e.target.value)}/></label></div>
     <button type="button" className="pr-primary" disabled={busy} onClick={saveNewKit}>{busy?"Saving…":"Create Kit"}</button>
    </div>}
    <div className="pr-pbom-list-heading"><span>Kit groups <b>{visibleGroups.length}</b></span><small>{search?"Matching your search":"Select a Kit to view or edit its components"}</small></div>
@@ -134,8 +135,7 @@ export default function ProjectMasterComponents({project,proposals,allowed,reque
       const isOpen=Boolean(search.trim())||(expandedGroup===null?index===0:expandedGroup===group.key);
       const groupItemsId=`pr-kit-items-${index}`;
       const appearance=kitAppearance(group.kitName);
-      const showAll=Boolean(search.trim())||Boolean(fullGroups[group.key]);
-      const shownItems=showAll?group.items:group.items.slice(0,3);
+      const shownItems=group.items;
       return <section key={group.key} className={`pr-kit-group pr-kit-group--${appearance.tone}${isOpen?" is-open":""}`}>
        <button type="button" className="pr-kit-group-head" aria-expanded={isOpen} aria-controls={groupItemsId} onClick={()=>setExpandedGroup(isOpen?"__none__":group.key)}>
         <span className="pr-kit-group-icon" aria-hidden="true"><BomIcon name={appearance.icon} size={22}/></span>
@@ -145,26 +145,22 @@ export default function ProjectMasterComponents({project,proposals,allowed,reque
        </button>
        <div className={`pr-kit-group-panel${isOpen?" is-expanded":""}`} aria-hidden={!isOpen} inert={!isOpen}>
         <div className="pr-kit-group-panel-inner"><div className="pr-kit-group-body" id={groupItemsId}>
-         <div className="pr-pbom-preview-heading"><span>Components <small>{group.items.length>3&&!showAll?`Showing 3 of ${group.items.length}`:`${fmt(group.items.length)} total`}</small></span>{group.items.length>3&&!search.trim()&&<button type="button" onClick={()=>setFullGroups(current=>({...current,[group.key]:!current[group.key]}))}>{showAll?"Show fewer":"View all components"}<span aria-hidden="true">→</span></button>}</div>
+         <div className="pr-pbom-preview-heading"><span>Components <small>{fmt(group.items.length)} total</small></span></div>
          <div className="pr-kit-group-rows">
           {shownItems.map(({row,qty,kit})=><div key={row.id} className="pr-kit-group-row-shell">
            <div className="pr-kit-group-row">
             <div className="pr-pbom-name"><strong>{row.product_name}</strong><small>{row.product_id||"No product code"}</small></div>
-            <div className="pr-pbom-qty"><span>Kit Qty / School</span><b>{fmt(qty)}</b></div>
-            <div className="pr-pbom-qty"><span>Total Required · {schoolCount} {schoolCount===1?"school":"schools"}</span><b>{fmt(projectRequired(qty,schoolCount))}</b></div>
-            {allowed&&kit&&<div className="pr-pbom-row-actions"><button type="button" className="pr-secondary" onClick={()=>changeQuantity(group,{row,qty})}>Edit Qty</button><button type="button" className="pr-pbom-delete" onClick={()=>{setEditor(null);setConfirm({group,row});}}>Remove</button></div>}
+            <div className="pr-pbom-qty"><span>Kit Qty / School</span>{editor?.kind==="update"&&editor.row?.id===row.id&&editor.group.key===group.key?<input className="pr-pbom-inline-qty" type="number" aria-label={`Kit quantity for ${row.product_name}`} min="1" max="1000000000" step="1" value={quantity} disabled={busy} onChange={e=>setQuantity(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();saveEditor();}else if(e.key==="Escape"){setEditor(null);}}} autoFocus/>:<b>{fmt(qty)}</b>}</div>
+            <div className="pr-pbom-qty"><span>Total Required · {schoolCount} {schoolCount===1?"school":"schools"}</span><b>{fmt(editor?.kind==="update"&&editor.row?.id===row.id&&editor.group.key===group.key&&Number.isSafeInteger(Number(quantity))&&Number(quantity)>0?projectRequired(Number(quantity),schoolCount):projectRequired(qty,schoolCount))}</b></div>
+            {allowed&&kit&&<div className="pr-pbom-row-actions">{editor?.kind==="update"&&editor.row?.id===row.id&&editor.group.key===group.key?<><button type="button" className="pr-primary" disabled={busy} onClick={saveEditor}>{busy?"Saving…":"Save"}</button><button type="button" className="pr-secondary" disabled={busy} onClick={()=>setEditor(null)}>Cancel</button></>:<><button type="button" className="pr-secondary" disabled={busy} onClick={()=>changeQuantity(group,{row,qty})}>Edit Qty</button><button type="button" className="pr-pbom-delete" disabled={busy} onClick={()=>{setEditor(null);setConfirm({group,row});}}>Remove</button></>}</div>}
            </div>
-           {editor?.kind==="update"&&editor.row?.id===row.id&&editor.group.key===group.key&&<div className="pr-kit-inline-editor" role="group" aria-label={`Edit ${row.product_name} quantity`}>
-            <div className="pr-pbom-form-head"><strong>Edit Kit quantity</strong><button type="button" className="pr-secondary" onClick={()=>setEditor(null)}>Cancel</button></div>
-            <div className="pr-kit-editor-fields"><label>Kit quantity<input type="number" min="1" max="1000000000" step="1" value={quantity} onChange={e=>setQuantity(e.target.value)}/></label><button className="pr-primary" type="button" disabled={busy} onClick={saveEditor}>{busy?"Saving…":"Save"}</button></div>
-           </div>}
           </div>)}
          </div>
          {!group.items.length&&<p className="pr-pbom-group-empty">No components in this Kit yet.</p>}
          {allowed&&group.key!=="ungrouped"&&<button type="button" className="pr-kit-group-add" onClick={()=>addTo(group)}><BomIcon name="plus" size={16}/> Add Component to {group.kitName}</button>}
          {editor?.kind==="add"&&editor.group.key===group.key&&<div className="pr-kit-inline-editor" role="group" aria-label={`Add component to ${group.kitName}`}>
           <div className="pr-pbom-form-head"><strong>Add Component to {group.kitName}</strong><button type="button" className="pr-secondary" onClick={()=>setEditor(null)}>Cancel</button></div>
-          <div className="pr-kit-editor-fields"><label>Component<input value={newName} maxLength={500} onChange={e=>setNewName(e.target.value)}/></label><label>Product code<input value={newCode} maxLength={500} onChange={e=>setNewCode(e.target.value)}/></label><label>Kit quantity<input type="number" min="1" max="1000000000" step="1" value={quantity} onChange={e=>setQuantity(e.target.value)}/></label><button className="pr-primary" type="button" disabled={busy} onClick={saveEditor}>{busy?"Saving…":"Save"}</button></div>
+          <div className="pr-kit-editor-fields"><div className="pr-pbom-product-field"><span>Component</span><ProjectProductPicker value={selectedProduct} onChange={setSelectedProduct} disabled={busy} label="Select component from Products"/></div><label>Kit quantity<input type="number" min="1" max="1000000000" step="1" value={quantity} onChange={e=>setQuantity(e.target.value)}/></label><button className="pr-primary" type="button" disabled={busy} onClick={saveEditor}>{busy?"Saving…":"Save"}</button></div>
          </div>}
         </div></div>
        </div>

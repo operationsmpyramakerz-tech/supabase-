@@ -2,6 +2,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { select, selectById, rpc } from "./supabase-rest";
 import { getProposal } from "./proposal-kit-service";
+import { getProduct } from "./products-service";
 import { assembleSchoolProposalItems, assembleProjectProposalItems } from "./preparing-warehouse-math.mjs";
 
 const text = v => String(v ?? "").trim();
@@ -151,8 +152,14 @@ export async function editProjectKitItem(body,account) {
   if(action!=="add"&&!itemId)fail("Component id is required.");
   const version=text(body?.expectedUpdatedAt);
   if(action!=="add"&&(!version||!Number.isFinite(Date.parse(version))))fail("Refresh this Kit component before editing.",409);
-  const productId=action==="add"?str(body?.productId,"component code",500):"";
-  const productName=action==="add"?str(body?.productName,"component name",500,true):"";
+  // New components must come from Products. Resolve the authoritative
+  // catalog record on the server so a client cannot spoof the name / ID Code.
+  const catalogId=action==="add"?str(body?.productCatalogId,"catalog product",160,true):"";
+  const catalogProduct=action==="add"?await getProduct(catalogId):null;
+  if(action==="add"&&!catalogProduct)fail("The selected Product is no longer available. Search again.",409);
+  if(action==="add"&&!catalogProduct.displayId)fail("This Product has no ID Code. Add it in Products first.",409);
+  const productId=action==="add"?str(catalogProduct.displayId,"component code",500):"";
+  const productName=action==="add"?str(catalogProduct.name,"component name",500,true):"";
   return rpc("erp_preparing_edit_project_kit_item",{
     p_project_id:project,p_action:action,p_item_id:itemId,
     p_product_id:productId,p_product_name:productName,p_quantity:quantity,

@@ -17,7 +17,7 @@ test('component forms stay beside the edited row or selected Kit', () => {
  assert.match(jsx, /editor\?\.kind==="update"/);
  assert.match(jsx, /editor\?\.kind==="add"/);
  assert.match(jsx, /<div key=\{row\.id\} className="pr-kit-group-row-shell"/);
- assert.match(jsx, /aria-label=\{`Edit \$\{row\.product_name\} quantity`\}/);
+ assert.match(jsx, /aria-label=\{`Kit quantity for \$\{row\.product_name\}`\}/);
 });
 test('Kit layout allows natural height without nested scrolling and prevents compressed rows', () => {
  assert.match(css, /\.pr-pbom \.pr-kit-group-list\s*\{[^}]*max-height:none;overflow:visible/s);
