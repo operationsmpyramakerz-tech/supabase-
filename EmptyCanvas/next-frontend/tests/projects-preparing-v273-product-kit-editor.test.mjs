@@ -27,7 +27,7 @@ test('Edit Qty uses same-row input and Save Cancel replacement, with optimistic 
 test('product additions use a real selected catalog item and no manual Product code',()=>{
  assert.match(main,/ProjectProductPicker/);
  assert.match(main,/productCatalogId:editor\.kind==="add"\?selectedProduct\.id:null/);
- assert.match(main,/productCatalogId:kitFirstProduct\.id/);
+ assert.doesNotMatch(main,/kitFirstProduct|Create Kit with first component/);
  assert.doesNotMatch(main,/newCode|kitFirstCode|Product code<input/);
  assert.match(service,/import \{ getProduct \} from "\.\/products-service"/);
  assert.match(service,/await getProduct\(catalogId\)/);
@@ -64,5 +64,5 @@ test('modified JSX and CSS parse and cache-busting version is updated',()=>{
   assert.deepEqual(parsed.parseDiagnostics,[],`${file} has syntax errors`);
  }
  assert.doesNotThrow(()=>postcss.parse(css));
- assert.match(read('app/projects-preparing/page.jsx'),/projects-preparing\.css\?v=273/);
+ assert.match(read('app/projects-preparing/page.jsx'),/projects-preparing\.css\?v=274/);
 });

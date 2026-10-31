@@ -27,21 +27,13 @@ test('Kit list renders category icons and a controlled animated accordion',()=>{
  assert.match(css,/@media\(prefers-reduced-motion:reduce\)/);
 });
 
-test('search, kit filtering, preview, and refresh preserve all rows and accessible actions',()=>{
+test('search works without the removed filter, Refresh, helper text, or Add Kit toolbar button',()=>{
  assert.match(jsx,/Search within Kits or components/);
- assert.match(jsx,/Filter Kits/);
- assert.match(jsx,/kitFilter==="with"&&group\.items\.length>0/);
  assert.match(jsx,/const shownItems=group\.items/);
- assert.doesNotMatch(jsx,/View all components/);
  assert.match(jsx,/await reload\(\)/);
  assert.match(jsx,/aria-label="Clear search"/);
-});
-
-test('Add Kit is permission-gated and backed by existing edit_kit operation',()=>{
- assert.match(jsx,/\{allowed&&<button[^>]+className="pr-pbom-create-trigger"/);
- assert.match(jsx,/Create Kit with first component/);
- assert.match(jsx,/action:"edit_kit",operation:"add",itemId:null/);
- assert.match(jsx,/if\(groups\.some\(group=>group\.kitName/);
+ assert.doesNotMatch(jsx,/Filter Kits|kitFilter|pr-pbom-refresh|pr-pbom-create-trigger/);
+ assert.doesNotMatch(jsx,/Select a Kit to view or edit its components|Manage project Kits and their components/);
  assert.match(read('lib/preparing-warehouse.js'),/export async function editProjectKitItem\(/);
 });
 
@@ -50,5 +42,5 @@ test('latest JSX and CSS are structurally valid and responsive',()=>{
  assert.deepEqual(parsed.parseDiagnostics,[]);
  assert.doesNotThrow(()=>postcss.parse(css));
  assert.match(css,/@media\(max-width:560px\)/);
- assert.match(read('app/projects-preparing/page.jsx'),/projects-preparing\.css\?v=273/);
+ assert.match(read('app/projects-preparing/page.jsx'),/projects-preparing\.css\?v=274/);
 });

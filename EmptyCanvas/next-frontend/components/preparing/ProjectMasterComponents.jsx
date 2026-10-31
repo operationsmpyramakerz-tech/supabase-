@@ -43,10 +43,9 @@ function kitAppearance(name) {
 }
 
 export default function ProjectMasterComponents({project,proposals,allowed,request,onClose}) {
- const [state,setState]=useState(empty),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[refreshing,setRefreshing]=useState(false);
- const [error,setError]=useState(""),[notice,setNotice]=useState(""),[search,setSearch]=useState(""),[kitFilter,setKitFilter]=useState("all");
+ const [state,setState]=useState(empty),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false);
+ const [error,setError]=useState(""),[notice,setNotice]=useState(""),[search,setSearch]=useState("");
  const [sourceId,setSourceId]=useState("");
- const [createKit,setCreateKit]=useState(false),[kitName,setKitName]=useState(""),[kitFirstProduct,setKitFirstProduct]=useState(null),[kitFirstQty,setKitFirstQty]=useState("1");
  const [editor,setEditor]=useState(null),[quantity,setQuantity]=useState("1"),[selectedProduct,setSelectedProduct]=useState(null);
  const [confirm,setConfirm]=useState(null);
  const [expandedGroup,setExpandedGroup]=useState(null);
@@ -72,16 +71,12 @@ export default function ProjectMasterComponents({project,proposals,allowed,reque
 
  const visibleGroups=useMemo(()=>{
   const term=search.trim().toLowerCase();
-  return groups.filter(group=>kitFilter==="all"||(kitFilter==="with"&&group.items.length>0)||(kitFilter==="empty"&&group.items.length===0)||(kitFilter==="ungrouped"&&group.key==="ungrouped"))
-   .map(group=>({...group,items:!term||group.kitName.toLowerCase().includes(term)?group.items:group.items.filter(({row})=>`${row.product_name} ${row.product_id}`.toLowerCase().includes(term))}))
+  return groups.map(group=>({...group,items:!term||group.kitName.toLowerCase().includes(term)?group.items:group.items.filter(({row})=>`${row.product_name} ${row.product_id}`.toLowerCase().includes(term))}))
    .filter(group=>!term||group.kitName.toLowerCase().includes(term)||group.items.length>0);
- },[groups,kitFilter,search]);
- const withItems=groups.filter(group=>group.items.length>0).length;
- const emptyKits=groups.length-withItems;
+ },[groups,search]);
 
  async function reload(){const value=await request(`/warehouse?projectId=${encodeURIComponent(project.id)}`);setState(value);setLoading(false);}
  useEffect(()=>{let active=true;request(`/warehouse?projectId=${encodeURIComponent(project.id)}`).then(value=>{if(active){setState(value);setLoading(false);}}).catch(e=>{if(active){setError(e.message);setLoading(false);}});return()=>{active=false;};},[project.id]);
- async function refresh(){if(refreshing||busy)return;setRefreshing(true);setError("");try{await reload();}catch(e){setError(e.message||"Unable to refresh components.");}finally{setRefreshing(false);}}
  async function submit(payload,message){if(busy)return false;setBusy(true);setError("");setNotice("");try{
    await request("/warehouse","POST",{projectId:project.id,...payload});await reload();setEditor(null);setConfirm(null);setNotice(message);return true;
   }catch(e){setError(e.message||"Unable to save.");return false;}finally{setBusy(false);}}
@@ -94,18 +89,10 @@ export default function ProjectMasterComponents({project,proposals,allowed,reque
      productCatalogId:editor.kind==="add"?selectedProduct.id:null,quantity:q,expectedUpdatedAt:editor.row?.updated_at},
      editor.kind==="add"?"Component added to Kit.":"Kit quantity updated.");
  }
- async function saveNewKit(){
-  const name=kitName.trim(),qty=Number(kitFirstQty);
-  if(!name||name.length>160||!kitFirstProduct){setError("Enter a Kit name and select its first product from Products.");return;}
-  if(!Number.isSafeInteger(qty)||qty<1||qty>1000000000){setError("Enter a positive whole-number quantity.");return;}
-  if(groups.some(group=>group.kitName.trim().toLowerCase()===name.toLowerCase())){setError("This Kit already exists. Open it to add components.");return;}
-  const saved=await submit({action:"edit_kit",operation:"add",itemId:null,kitId:"",kitName:name,productCatalogId:kitFirstProduct.id,quantity:qty},"Kit created with its first component.");
-  if(saved){setCreateKit(false);setSearch("");setKitFilter("all");setExpandedGroup(groupKey({kitName:name}));setKitFirstProduct(null);}
- }
 
  return <div className="pr-pbom pr-pbom--modern">
   <div className="pr-manifest-title pr-pbom-title">
-   <div><span className="pr-wh-overline">PROJECT · {project.name}</span><h3>Project Components</h3><p>Manage project Kits and their components (Master BOM).</p></div>
+   <div><span className="pr-wh-overline">PROJECT · {project.name}</span><h3>Project Components</h3></div>
    <button className="pr-pbom-close" type="button" onClick={onClose}><BomIcon name="close" size={17}/> Close</button>
   </div>
   {error&&<div className="pr-alert" role="alert">{error}<button type="button" onClick={()=>setError("")} aria-label="Dismiss">×</button></div>}
@@ -120,19 +107,12 @@ export default function ProjectMasterComponents({project,proposals,allowed,reque
    {needsKitCapture&&<div className="pr-pbom-import"><div><strong>Load Kit Groups from Proposal</strong><small>One-time organization of the existing Master BOM. Warehouse receipts and allocation amounts stay unchanged.</small></div>{allowed&&<button type="button" className="pr-primary" disabled={busy} onClick={()=>submit({action:"init_kits"},"Proposal Kit groups loaded.")}>Load Kit Groups</button>}</div>}
    <div className="pr-pbom-toolbar">
     <label className="pr-search pr-pbom-search"><BomIcon name="search" size={18}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search within Kits or components…" aria-label="Search project components"/>{search&&<button type="button" onClick={()=>setSearch("")} aria-label="Clear search"><BomIcon name="close" size={14}/></button>}</label>
-    <PreparingSelect value={kitFilter} onChange={e=>setKitFilter(e.target.value)} className="pr-pbom-filter" aria-label="Filter Kits"><option value="all">All Kits ({groups.length})</option><option value="with">With Components ({withItems})</option><option value="empty">Empty Kits ({emptyKits})</option><option value="ungrouped">Unassigned Components</option></PreparingSelect>
-    <button type="button" className="pr-pbom-refresh" disabled={busy||refreshing} onClick={refresh}><BomIcon name="refresh" size={17}/>{refreshing?"Refreshing…":"Refresh"}</button>
-    {allowed&&<button type="button" className="pr-pbom-create-trigger" onClick={()=>{setCreateKit(current=>!current);setError("");}} aria-expanded={createKit} aria-controls="pr-pbom-create-kit"><BomIcon name="plus" size={18}/> Add Kit</button>}
+
    </div>
-   {allowed&&createKit&&<div className="pr-pbom-new-kit" id="pr-pbom-create-kit" role="group" aria-label="Create Kit with first component">
-    <div className="pr-pbom-new-kit-head"><div><strong>Create a Kit</strong><small>A new Kit begins with its first component. Quantities are per school.</small></div><button type="button" className="pr-secondary" onClick={()=>setCreateKit(false)}>Cancel</button></div>
-    <div className="pr-pbom-new-kit-fields"><label>Kit name<input maxLength={160} value={kitName} onChange={e=>setKitName(e.target.value)} placeholder="e.g. Electronics Kit"/></label><div className="pr-pbom-product-field"><span>First component</span><ProjectProductPicker value={kitFirstProduct} onChange={setKitFirstProduct} disabled={busy} label="Select first component from Products"/></div><label>Qty / school<input type="number" min="1" max="1000000000" step="1" value={kitFirstQty} onChange={e=>setKitFirstQty(e.target.value)}/></label></div>
-    <button type="button" className="pr-primary" disabled={busy} onClick={saveNewKit}>{busy?"Saving…":"Create Kit"}</button>
-   </div>}
-   <div className="pr-pbom-list-heading"><span>Kit groups <b>{visibleGroups.length}</b></span><small>{search?"Matching your search":"Select a Kit to view or edit its components"}</small></div>
+   <div className="pr-pbom-list-heading"><span>Kit groups <b>{visibleGroups.length}</b></span></div>
    <div className="pr-kit-group-list" aria-label="Project Kit groups">
     {visibleGroups.map((group,index)=>{
-      const isOpen=Boolean(search.trim())||(expandedGroup===null?index===0:expandedGroup===group.key);
+      const isOpen=Boolean(search.trim())||expandedGroup===group.key;
       const groupItemsId=`pr-kit-items-${index}`;
       const appearance=kitAppearance(group.kitName);
       const shownItems=group.items;
@@ -159,8 +139,8 @@ export default function ProjectMasterComponents({project,proposals,allowed,reque
          {!group.items.length&&<p className="pr-pbom-group-empty">No components in this Kit yet.</p>}
          {allowed&&group.key!=="ungrouped"&&<button type="button" className="pr-kit-group-add" onClick={()=>addTo(group)}><BomIcon name="plus" size={16}/> Add Component to {group.kitName}</button>}
          {editor?.kind==="add"&&editor.group.key===group.key&&<div className="pr-kit-inline-editor" role="group" aria-label={`Add component to ${group.kitName}`}>
-          <div className="pr-pbom-form-head"><strong>Add Component to {group.kitName}</strong><button type="button" className="pr-secondary" onClick={()=>setEditor(null)}>Cancel</button></div>
-          <div className="pr-kit-editor-fields"><div className="pr-pbom-product-field"><span>Component</span><ProjectProductPicker value={selectedProduct} onChange={setSelectedProduct} disabled={busy} label="Select component from Products"/></div><label>Kit quantity<input type="number" min="1" max="1000000000" step="1" value={quantity} onChange={e=>setQuantity(e.target.value)}/></label><button className="pr-primary" type="button" disabled={busy} onClick={saveEditor}>{busy?"Saving…":"Save"}</button></div>
+          <div className="pr-pbom-form-head"><strong>Add Component to {group.kitName}</strong></div>
+          <div className="pr-kit-editor-fields"><div className="pr-pbom-product-field"><span>Component</span><ProjectProductPicker value={selectedProduct} onChange={setSelectedProduct} disabled={busy} label="Select component from Products"/></div><label>Kit quantity<input type="number" min="1" max="1000000000" step="1" value={quantity} onChange={e=>setQuantity(e.target.value)}/></label><div className="pr-pbom-add-actions"><button type="button" className="pr-secondary" disabled={busy} onClick={()=>setEditor(null)}>Cancel</button><button className="pr-primary" type="button" disabled={busy} onClick={saveEditor}>{busy?"Saving…":"Save"}</button></div></div>
          </div>}
         </div></div>
        </div>

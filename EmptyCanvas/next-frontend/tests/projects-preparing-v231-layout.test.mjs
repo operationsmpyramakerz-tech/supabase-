@@ -9,7 +9,8 @@ const jsx = read('components/preparing/ProjectMasterComponents.jsx');
 const css = read('public/css/projects-preparing.css');
 test('Kit groups use a controlled, accessible accordion instead of opening all groups', () => {
  assert.match(jsx, /aria-expanded=\{isOpen\}/);
- assert.match(jsx, /expandedGroup===null\?index===0/);
+ assert.match(jsx, /const isOpen=Boolean\(search\.trim\(\)\)\|\|expandedGroup===group\.key/);
+ assert.doesNotMatch(jsx, /expandedGroup===null\?index===0/);
  assert.match(jsx, /<section key=\{group\.key\}/);
  assert.doesNotMatch(jsx, /<details key=\{group\.key\}[^>]*open/);
 });
