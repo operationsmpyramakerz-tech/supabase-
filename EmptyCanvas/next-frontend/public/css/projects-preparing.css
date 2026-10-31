@@ -1960,18 +1960,60 @@
 .pr-pbom--modern .pr-pbom-close:hover {transform:translateY(-1px);border-color:#ccd3df;box-shadow:0 6px 18px rgba(23,32,49,.07);}
 .pr-pbom--modern .pr-pbom-close:focus-visible {outline:2px solid #ec892f;outline-offset:3px;}
 
-/* The three subtly colored KPI cards mimic the approved reference design. */
-.pr-pbom--modern .pr-pbom-summary {display:grid;grid-template-columns:1.22fr 1fr 1fr;gap:14px;}
-.pr-pbom--modern .pr-pbom-summary>.pr-pbom-summary-card {position:relative;display:flex;flex-direction:row;align-items:center;gap:17px;min-height:114px;padding:20px 18px;overflow:hidden;border:1px solid var(--pr-bom-stat-border);background:var(--pr-bom-stat-bg);border-radius:19px;box-shadow:0 5px 18px rgba(22,32,51,.035);isolation:isolate;}
-.pr-pbom--modern .pr-pbom-summary-card::after {content:"";position:absolute;z-index:-1;right:-27px;bottom:-56px;width:170px;height:116px;border-radius:50%;background:var(--pr-bom-stat-deco);opacity:.5;transform:rotate(-20deg);pointer-events:none;}
-.pr-pbom--modern .pr-pbom-summary-card--orange {--pr-bom-stat-bg:#fffaf6;--pr-bom-stat-border:#f7dfca;--pr-bom-stat-deco:#ffe8d3;--pr-bom-stat-icon-bg:#fff0e4;--pr-bom-stat-icon-fg:#e47a27;}
-.pr-pbom--modern .pr-pbom-summary-card--blue {--pr-bom-stat-bg:#f7faff;--pr-bom-stat-border:#dae8ff;--pr-bom-stat-deco:#dcecff;--pr-bom-stat-icon-bg:#eaf2ff;--pr-bom-stat-icon-fg:#2875d6;}
-.pr-pbom--modern .pr-pbom-summary-card--green {--pr-bom-stat-bg:#f6fcf9;--pr-bom-stat-border:#d9efe4;--pr-bom-stat-deco:#d8f4e8;--pr-bom-stat-icon-bg:#e5f7ed;--pr-bom-stat-icon-fg:#199765;}
-.pr-pbom--modern .pr-pbom-stat-icon {display:grid;place-items:center;flex:0 0 52px;width:52px;height:52px;border-radius:15px;background:var(--pr-bom-stat-icon-bg);color:var(--pr-bom-stat-icon-fg);box-shadow:0 4px 10px rgba(19,29,48,.025);}
+/* v275 – Approved Project Components summary: solid black, orange and white.
+   Colors belong to the three cards only; the sheet and Kit rows remain white. */
+.pr-pbom--modern .pr-pbom-summary {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;}
+.pr-pbom--modern .pr-pbom-summary>.pr-pbom-summary-card {
+ position:relative;display:flex;flex-direction:row;align-items:center;gap:30px;
+ min-height:114px;padding:20px 20px;overflow:hidden;
+ border:1px solid var(--pr-bom-stat-border);background:var(--pr-bom-stat-bg);
+ border-radius:19px;box-shadow:0 6px 18px rgba(15,23,42,.08);
+ transition:box-shadow .2s ease,transform .2s ease;
+}
+.pr-pbom--modern .pr-pbom-summary>.pr-pbom-summary-card:hover {
+ transform:translateY(-1px);box-shadow:0 9px 23px rgba(15,23,42,.12);
+}
+/* No washes, decorative circles, gradients or colored sheet backgrounds. */
+.pr-pbom--modern .pr-pbom-summary-card::after {content:none;}
+.pr-pbom--modern .pr-pbom-summary-card--black {
+ --pr-bom-stat-bg:#101010;--pr-bom-stat-border:#101010;
+ --pr-bom-stat-icon-bg:#252525;--pr-bom-stat-icon-fg:#fff;
+ --pr-bom-stat-color:#fff;--pr-bom-stat-muted:rgba(255,255,255,.86);
+ --pr-bom-stat-divider:rgba(255,255,255,.53);
+}
+.pr-pbom--modern .pr-pbom-summary-card--orange {
+ --pr-bom-stat-bg:#ff6900;--pr-bom-stat-border:#ff6900;
+ --pr-bom-stat-icon-bg:rgba(255,255,255,.14);--pr-bom-stat-icon-fg:#fff;
+ --pr-bom-stat-color:#fff;--pr-bom-stat-muted:#fff;
+ --pr-bom-stat-divider:rgba(255,255,255,.72);
+}
+.pr-pbom--modern .pr-pbom-summary-card--white {
+ --pr-bom-stat-bg:#fff;--pr-bom-stat-border:#e1e5ea;
+ --pr-bom-stat-icon-bg:#fff;--pr-bom-stat-icon-fg:#101010;
+ --pr-bom-stat-color:#101010;--pr-bom-stat-muted:#414141;
+ --pr-bom-stat-divider:rgba(16,16,16,.38);
+}
+.pr-pbom--modern .pr-pbom-stat-icon {
+ position:relative;display:grid;place-items:center;flex:0 0 52px;
+ width:52px;height:52px;border-radius:15px;
+ background:var(--pr-bom-stat-icon-bg);color:var(--pr-bom-stat-icon-fg);
+ box-shadow:none;
+}
+.pr-pbom--modern .pr-pbom-stat-icon::after {
+ content:"";position:absolute;right:-16px;top:6px;bottom:6px;width:1px;
+ border-radius:99px;background:var(--pr-bom-stat-divider);
+}
 .pr-pbom--modern .pr-pbom-stat-copy {display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0;}
-.pr-pbom--modern .pr-pbom-stat-copy>span {font-size:11px;font-weight:700;color:#626f83;}
-.pr-pbom--modern .pr-pbom-stat-copy strong {max-width:100%;font-size:clamp(18px,2vw,25px);line-height:1.22;font-weight:850;letter-spacing:-.035em;color:#111c30;overflow-wrap:anywhere;}
-.pr-pbom--modern .pr-pbom-stat-copy small {font-size:10px;font-weight:700;color:#42976f;}
+.pr-pbom--modern .pr-pbom-stat-copy>span {
+ font-size:11px;font-weight:740;color:var(--pr-bom-stat-muted);
+}
+.pr-pbom--modern .pr-pbom-stat-copy strong {
+ max-width:100%;font-size:clamp(18px,2vw,25px);line-height:1.22;
+ font-weight:850;letter-spacing:-.035em;color:var(--pr-bom-stat-color);overflow-wrap:anywhere;
+}
+.pr-pbom--modern .pr-pbom-stat-copy small {
+ font-size:10px;font-weight:720;color:var(--pr-bom-stat-muted);
+}
 
 /* Search, filter, refresh: controls all function and share the same height. */
 .pr-pbom--modern .pr-pbom-toolbar {display:flex;flex-wrap:wrap;justify-content:flex-start;align-items:center;gap:12px;margin:2px 0 0;}
@@ -2059,7 +2101,8 @@
  .pr-pbom--modern .pr-pbom-close {font-size:0;min-width:41px;width:41px;height:41px;justify-content:center;padding:0;}
  .pr-pbom--modern .pr-pbom-close svg {width:18px;height:18px;}
  .pr-pbom--modern .pr-pbom-summary {gap:9px;}
- .pr-pbom--modern .pr-pbom-summary>.pr-pbom-summary-card {padding:13px 12px;min-height:91px;gap:10px;border-radius:15px;}
+ .pr-pbom--modern .pr-pbom-summary>.pr-pbom-summary-card {padding:13px 12px;min-height:91px;gap:14px;border-radius:15px;}
+ .pr-pbom--modern .pr-pbom-stat-icon::after {right:-8px;}
  .pr-pbom--modern .pr-pbom-stat-icon {width:40px;height:40px;flex-basis:40px;border-radius:12px;}
  .pr-pbom--modern .pr-pbom-stat-icon svg {width:20px;height:20px;}
  .pr-pbom--modern .pr-pbom-stat-copy strong {font-size:20px;}

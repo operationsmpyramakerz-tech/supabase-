@@ -8,13 +8,19 @@ const read=name=>readFileSync(new URL('../'+name,import.meta.url),'utf8');
 const jsx=read('components/preparing/ProjectMasterComponents.jsx');
 const css=read('public/css/projects-preparing.css');
 
-test('Master BOM shows three softly colored information cards on a white sheet',()=>{
+test('Master BOM shows solid black, orange and white cards on a white sheet',()=>{
+ assert.match(jsx,/pr-pbom-summary-card--black/);
  assert.match(jsx,/pr-pbom-summary-card--orange/);
- assert.match(jsx,/pr-pbom-summary-card--blue/);
- assert.match(jsx,/pr-pbom-summary-card--green/);
+ assert.match(jsx,/pr-pbom-summary-card--white/);
  assert.match(css,/\.pr-components-sheet\.pr-warehouse-sheet\s*\{[^}]*background:#fff/s);
  assert.match(css,/\.pr-pbom--modern\s*\{[^}]*background:#fff/s);
- assert.match(css,/--pr-bom-stat-bg:#fffaf6/);
+ assert.match(css,/--pr-bom-stat-bg:#101010/);
+ assert.match(css,/--pr-bom-stat-bg:#ff6900/);
+ assert.match(css,/--pr-bom-stat-bg:#fff/);
+ assert.match(css,/--pr-bom-stat-color:#fff/);
+ assert.match(css,/--pr-bom-stat-color:#101010/);
+ assert.match(css,/pr-pbom-stat-icon::after/);
+ assert.match(css,/pr-pbom-summary-card::after\s*\{content:none/);
 });
 
 test('Kit list renders category icons and a controlled animated accordion',()=>{
