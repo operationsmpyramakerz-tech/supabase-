@@ -119,17 +119,16 @@ export default function ProjectMasterComponents({project,proposals,allowed,reque
       return <section key={group.key} className={`pr-kit-group pr-kit-group--${appearance.tone}${isOpen?" is-open":""}`}>
        <button type="button" className="pr-kit-group-head" aria-expanded={isOpen} aria-controls={groupItemsId} onClick={()=>setExpandedGroup(isOpen?"__none__":group.key)}>
         <span className="pr-kit-group-icon" aria-hidden="true"><BomIcon name={appearance.icon} size={22}/></span>
-        <span className="pr-kit-group-title"><strong>{group.kitName}</strong><small><BomIcon name="box" size={13}/> {fmt(group.total)} units / school <span className="pr-kit-group-meta-separator">·</span> <BomIcon name="school" size={13}/> {fmt(schoolCount)} {schoolCount===1?"school":"schools"}</small></span>
+        <span className="pr-kit-group-title"><strong>{group.kitName}</strong><small><BomIcon name="box" size={13}/> {fmt(group.total)} units / school</small></span>
         <span className="pr-kit-group-count"><BomIcon name="box" size={14}/> {fmt(group.items.length)} {group.items.length===1?"component":"components"}</span>
         <span className="pr-kit-group-chevron" aria-hidden="true"><BomIcon name="chevron" size={18}/></span>
        </button>
        <div className={`pr-kit-group-panel${isOpen?" is-expanded":""}`} aria-hidden={!isOpen} inert={!isOpen}>
         <div className="pr-kit-group-panel-inner"><div className="pr-kit-group-body" id={groupItemsId}>
-         <div className="pr-pbom-preview-heading"><span>Components <small>{fmt(group.items.length)} total</small></span></div>
          <div className="pr-kit-group-rows">
           {shownItems.map(({row,qty,kit})=><div key={row.id} className="pr-kit-group-row-shell">
            <div className="pr-kit-group-row">
-            <div className="pr-pbom-name"><strong>{row.product_name}</strong><small>{row.product_id||"No product code"}</small></div>
+            <div className="pr-pbom-name"><strong>{row.product_name}</strong></div>
             <div className="pr-pbom-qty"><span>Kit Qty / School</span>{editor?.kind==="update"&&editor.row?.id===row.id&&editor.group.key===group.key?<input className="pr-pbom-inline-qty" type="number" aria-label={`Kit quantity for ${row.product_name}`} min="1" max="1000000000" step="1" value={quantity} disabled={busy} onChange={e=>setQuantity(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();saveEditor();}else if(e.key==="Escape"){setEditor(null);}}} autoFocus/>:<b>{fmt(qty)}</b>}</div>
             <div className="pr-pbom-qty"><span>Total Required · {schoolCount} {schoolCount===1?"school":"schools"}</span><b>{fmt(editor?.kind==="update"&&editor.row?.id===row.id&&editor.group.key===group.key&&Number.isSafeInteger(Number(quantity))&&Number(quantity)>0?projectRequired(Number(quantity),schoolCount):projectRequired(qty,schoolCount))}</b></div>
             {allowed&&kit&&<div className="pr-pbom-row-actions">{editor?.kind==="update"&&editor.row?.id===row.id&&editor.group.key===group.key?<><button type="button" className="pr-primary" disabled={busy} onClick={saveEditor}>{busy?"Saving…":"Save"}</button><button type="button" className="pr-secondary" disabled={busy} onClick={()=>setEditor(null)}>Cancel</button></>:<><button type="button" className="pr-secondary" disabled={busy} onClick={()=>changeQuantity(group,{row,qty})}>Edit Qty</button><button type="button" className="pr-pbom-delete" disabled={busy} onClick={()=>{setEditor(null);setConfirm({group,row});}}>Remove</button></>}</div>}

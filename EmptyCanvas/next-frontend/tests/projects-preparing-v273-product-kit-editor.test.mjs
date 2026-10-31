@@ -15,7 +15,7 @@ const route=read('app/api/projects-preparing/product-options/route.js');
 test('all kit components are shown; no preview limit or View All toggle',()=>{
  assert.match(main,/const shownItems=group\.items/);
  assert.doesNotMatch(main,/View all components|Show fewer|fullGroups|slice\(0,3\)/);
- assert.match(main,/group\.items\.length\)} total/);
+ assert.doesNotMatch(main,/pr-pbom-preview-heading/);
 });
 test('Edit Qty uses same-row input and Save Cancel replacement, with optimistic total',()=>{
  assert.match(main,/className="pr-pbom-inline-qty"/);
