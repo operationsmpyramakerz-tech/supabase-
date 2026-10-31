@@ -1,4 +1,5 @@
 "use client";
+import PreparingSelect from "./PreparingSelect";
 import { useEffect, useMemo, useState } from "react";
 import { componentTotals } from "../../lib/preparing-workflow";
 
@@ -79,7 +80,7 @@ export default function ComponentsManifest({ schoolId, proposalName, allowed, re
     </div> : <>
       <div className="pr-manifest-snapshot"><span>Snapshot: {new Date(manifest.created_at).toLocaleString("en-GB")}</span><span>{items.length} item rows · read-only baseline</span></div>
       <div className="pr-qty-summary">{[["Required",totals.planned],["Received",totals.received],["Damaged",totals.damaged],["Prepared",totals.prepared],["Missing",totals.missing],["Usable shortage",totals.usableShortage]].map(([title,value])=><div key={title}><small>{title}</small><strong>{value}</strong></div>)}</div>
-      <div className="pr-manifest-actions"><label className="pr-search"><input aria-label="Search components" placeholder="Search components or kit…" value={query} onChange={e=>setQuery(e.target.value)}/></label><select aria-label="Filter components" value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">All items</option><option value="missing">Missing</option><option value="damaged">Damaged</option><option value="pending">Not fully prepared</option></select><button className="pr-secondary" onClick={exportCSV}>CSV</button></div>
+      <div className="pr-manifest-actions"><label className="pr-search"><input aria-label="Search components" placeholder="Search components or kit…" value={query} onChange={e=>setQuery(e.target.value)}/></label><PreparingSelect aria-label="Filter components" value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">All items</option><option value="missing">Missing</option><option value="damaged">Damaged</option><option value="pending">Not fully prepared</option></PreparingSelect><button className="pr-secondary" onClick={exportCSV}>CSV</button></div>
       <div className="pr-component-list">{shown.map(row=>{const d=drafts[row.id]||initialDraft(row);const isEditing=editing===row.id;const missing=Math.max(0,n(row.planned_qty)-n(row.received_qty));const shortage=Math.max(0,n(row.planned_qty)-n(row.received_qty)+n(row.damaged_qty));return <div className="pr-component" key={row.id}>
         <div className="pr-component-head"><div><strong>{row.product_name}</strong><small>{kitNames(row.source_kits)||"Direct proposal item"}</small></div><span className={shortage>0?"pr-component-short":"pr-component-ready"}>{shortage>0?`${shortage} to replenish`:"Usable stock sufficient"}</span></div>
         <div className="pr-component-values"><div><small>Required</small><b>{row.planned_qty}</b></div><div><small>Received</small><b>{row.received_qty}</b></div><div><small>Damaged</small><b>{row.damaged_qty}</b></div><div><small>Prepared</small><b>{row.prepared_qty}</b></div><div><small>Missing</small><b>{missing}</b></div></div>

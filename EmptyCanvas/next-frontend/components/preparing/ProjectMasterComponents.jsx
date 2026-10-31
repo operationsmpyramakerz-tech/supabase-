@@ -1,4 +1,5 @@
 "use client";
+import PreparingSelect from "./PreparingSelect";
 import {useEffect,useMemo,useState} from "react";
 import {warehouseTotals,projectRequired} from "../../lib/preparing-warehouse-math.mjs";
 
@@ -52,7 +53,7 @@ export default function ProjectMasterComponents({project,proposals,allowed,reque
   {notice&&<div className="pr-manifest-success" role="status">{notice}</div>}
   {loading?<p className="pr-muted">Loading Kits…</p>:<>
    <div className="pr-pbom-summary"><div><span>Source Proposal</span><strong>{project.source_proposal_name||"Custom project"}</strong></div><div><span>Unique components</span><strong>{fmt(rows.length)}</strong></div><div><span>Project required · {schoolCount} schools</span><strong>{fmt(total)}</strong></div></div>
-   {!rows.length&&!project.source_proposal_id&&allowed&&!hasMovements&&<div className="pr-pbom-import"><strong>Import source Proposal</strong><div className="pr-pbom-import-action"><select value={sourceId} onChange={e=>setSourceId(e.target.value)} aria-label="Source Proposal"><option value="">Select Proposal…</option>{(proposals||[]).map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select><button className="pr-primary" disabled={!sourceId||busy} onClick={()=>submit({action:"attach_proposal",proposalId:sourceId},"Proposal imported.")}>Import Proposal</button></div></div>}
+   {!rows.length&&!project.source_proposal_id&&allowed&&!hasMovements&&<div className="pr-pbom-import"><strong>Import source Proposal</strong><div className="pr-pbom-import-action"><PreparingSelect value={sourceId} onChange={e=>setSourceId(e.target.value)} aria-label="Source Proposal"><option value="">Select Proposal…</option>{(proposals||[]).map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</PreparingSelect><button className="pr-primary" disabled={!sourceId||busy} onClick={()=>submit({action:"attach_proposal",proposalId:sourceId},"Proposal imported.")}>Import Proposal</button></div></div>}
    {needsKitCapture&&<div className="pr-pbom-import"><div><strong>Load Kit Groups from Proposal</strong><small>One-time organization of the existing Master BOM. Warehouse receipts and allocation amounts stay unchanged.</small></div>{allowed&&<button type="button" className="pr-primary" disabled={busy} onClick={()=>submit({action:"init_kits"},"Proposal Kit groups loaded.")}>Load Kit Groups</button>}</div>}
    <div className="pr-pbom-toolbar"><label className="pr-search"><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search within Kits…" aria-label="Search project components"/></label><button type="button" className="pr-secondary" disabled={busy} onClick={()=>{setLoading(true);reload().catch(e=>{setError(e.message);setLoading(false);});}}>Refresh</button></div>
    <div className="pr-kit-group-list" aria-label="Project Kit groups">
@@ -64,7 +65,7 @@ export default function ProjectMasterComponents({project,proposals,allowed,reque
           <span className="pr-kit-group-icon" aria-hidden="true">▤</span>
           <span className="pr-kit-group-title"><strong>{group.kitName}</strong><small>{fmt(group.total)} units / school · {schoolCount} schools</small></span>
           <span className="pr-kit-group-count">{group.items.length} components</span>
-          <span className="pr-kit-group-chevron" aria-hidden="true">⌄</span>
+          <span className="pr-kit-group-chevron" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
         </button>
         {isOpen&&<div className="pr-kit-group-body" id={groupItemsId}>
           <div className="pr-kit-group-rows">

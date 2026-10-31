@@ -1,4 +1,5 @@
 "use client";
+import PreparingSelect from "./PreparingSelect";
 import { useEffect, useMemo, useState } from "react";
 import { CLOSING_CHECKS, CLOSING_STATES, closingSummary } from "../../lib/preparing-closing";
 const EMPTY={checks:[],approval:null,audit:[],lastDelivery:null,technicalAcceptance:null};
@@ -26,7 +27,7 @@ function ClosingCheck({item,record,disabled,busy,onSave,earliestGrace}){
   return <article className="pr-closing-check">
     <div className="pr-closing-check-head"><div><strong>{item.title}</strong><p>{item.description}</p></div><span className={`pr-status ${status==="verified"?"completed":status==="blocked"?"blocked":"not_started"}`}>{friendly(status)}</span></div>
     <div className="pr-closing-check-fields">
-      <label className="pr-field">Status<select value={status} disabled={disabled} onChange={e=>setStatus(e.target.value)}>{CLOSING_STATES.map(v=><option key={v} value={v}>{friendly(v)}</option>)}</select></label>
+      <label className="pr-field">Status<PreparingSelect value={status} disabled={disabled} onChange={e=>setStatus(e.target.value)}>{CLOSING_STATES.map(v=><option key={v} value={v}>{friendly(v)}</option>)}</PreparingSelect></label>
       <label className="pr-field">Document / approval reference<input value={reference} maxLength={160} disabled={disabled} placeholder="Reference from the actual signed record" onChange={e=>setReference(e.target.value)}/></label>
       <label className="pr-field">{item.key==="signed_handover"?"Signed handover date":"Verified on"}<input type="date" max={today()} min={item.key==="grace_review"?earliestGrace||undefined:undefined} value={verifiedOn} disabled={disabled} onChange={e=>setVerifiedOn(e.target.value)}/></label>
       <label className="pr-field">Evidence URL (HTTPS, optional)<input value={evidenceUrl} maxLength={2048} disabled={disabled} placeholder="https://..." onChange={e=>setEvidenceUrl(e.target.value)}/></label>

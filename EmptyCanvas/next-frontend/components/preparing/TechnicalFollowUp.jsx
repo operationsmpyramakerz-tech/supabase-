@@ -1,4 +1,5 @@
 "use client";
+import PreparingSelect from "./PreparingSelect";
 import { useEffect, useMemo, useState } from "react";
 import { TECHNICAL_CHECKPOINTS, TECHNICAL_STATES, ISSUE_STATES, ISSUE_SEVERITIES, technicalSummary } from "../../lib/preparing-technical";
 const blankIssue={title:"",description:"",severity:"medium",status:"open",ownerName:"",dueDate:"",resolutionNotes:"",evidenceUrl:""};
@@ -20,8 +21,8 @@ function EditIssue({issue,disabled,busy,onSave,onCancel}) {
   return <div className="pr-technical-form">
     <div className="pr-technical-grid">
       <label className="pr-field">Issue title<input maxLength={180} value={form.title} disabled={disabled} onChange={e=>set("title",e.target.value)} placeholder="Describe the issue"/></label>
-      <label className="pr-field">Severity<select value={form.severity} disabled={disabled} onChange={e=>set("severity",e.target.value)}>{ISSUE_SEVERITIES.map(v=><option key={v} value={v}>{v}</option>)}</select></label>
-      {issue&&<label className="pr-field">Status<select value={form.status} disabled={disabled} onChange={e=>set("status",e.target.value)}>{ISSUE_STATES.map(v=><option key={v} value={v}>{displayStatus(v)}</option>)}</select></label>}
+      <label className="pr-field">Severity<PreparingSelect value={form.severity} disabled={disabled} onChange={e=>set("severity",e.target.value)}>{ISSUE_SEVERITIES.map(v=><option key={v} value={v}>{v}</option>)}</PreparingSelect></label>
+      {issue&&<label className="pr-field">Status<PreparingSelect value={form.status} disabled={disabled} onChange={e=>set("status",e.target.value)}>{ISSUE_STATES.map(v=><option key={v} value={v}>{displayStatus(v)}</option>)}</PreparingSelect></label>}
       <label className="pr-field">Responsible technical person / team<input maxLength={160} value={form.ownerName} disabled={disabled} onChange={e=>set("ownerName",e.target.value)} placeholder="Owner / contractor"/></label>
       <label className="pr-field">Target date<input type="date" value={form.dueDate} disabled={disabled} onChange={e=>set("dueDate",e.target.value)}/></label>
       {issue&&<label className="pr-field">Resolution evidence URL (optional)<input type="url" maxLength={2048} value={form.evidenceUrl} disabled={disabled} placeholder="https://" onChange={e=>set("evidenceUrl",e.target.value)}/></label>}
@@ -47,7 +48,7 @@ function Milestone({item,record,disabled,busy,onSave}){
     {!disabled&&!editing&&<button className="pr-link pr-technical-edit" type="button" onClick={()=>setEditing(true)}>Update checkpoint</button>}
     {editing&&<div className="pr-technical-form">
       <div className="pr-technical-grid">
-        <label className="pr-field">Status<select value={draft.status} onChange={e=>set("status",e.target.value)}>{TECHNICAL_STATES.map(v=><option value={v} key={v}>{displayStatus(v)}</option>)}</select></label>
+        <label className="pr-field">Status<PreparingSelect value={draft.status} onChange={e=>set("status",e.target.value)}>{TECHNICAL_STATES.map(v=><option value={v} key={v}>{displayStatus(v)}</option>)}</PreparingSelect></label>
         <label className="pr-field">Responsible technical person / team<input value={draft.ownerName} maxLength={160} onChange={e=>set("ownerName",e.target.value)} placeholder="Technical team"/></label>
         <label className="pr-field">Target date<input type="date" value={draft.dueDate} onChange={e=>set("dueDate",e.target.value)}/></label>
         <label className="pr-field">Evidence URL (optional)<input type="url" value={draft.evidenceUrl} maxLength={2048} onChange={e=>set("evidenceUrl",e.target.value)} placeholder="https://"/></label>
@@ -105,7 +106,7 @@ export default function TechnicalFollowUp({schoolId,schoolName,stageStatuses=[],
       {tab==="issues"&&<div className="pr-technical-checkpoints">
         <div className="pr-delivery-toolbar"><div><h4>Snag / issue register</h4></div>
           <div className="pr-carton-actions"><button className="pr-secondary" type="button" onClick={()=>downloadIssues(data.issues,schoolId)}>Export CSV</button>{canEdit&&<button type="button" className="pr-primary" onClick={()=>setEditIssue("new")}>+ Add Issue</button>}</div></div>
-        <label className="pr-field">Filter<select value={issueFilter} onChange={e=>setIssueFilter(e.target.value)}><option value="all">All issues</option>{ISSUE_STATES.map(v=><option key={v} value={v}>{displayStatus(v)}</option>)}</select></label>
+        <label className="pr-field">Filter<PreparingSelect value={issueFilter} onChange={e=>setIssueFilter(e.target.value)}><option value="all">All issues</option>{ISSUE_STATES.map(v=><option key={v} value={v}>{displayStatus(v)}</option>)}</PreparingSelect></label>
         {editIssue==="new"&&<EditIssue key="new" disabled={!canEdit} busy={busy} onSave={form=>saveIssue(form,null)} onCancel={()=>setEditIssue("")}/>}
         {!filteredIssues.length&&<div className="pr-manifest-empty"><p>No technical issues in this view.</p></div>}
         {filteredIssues.map(issue=><article key={issue.id} className="pr-technical-item">

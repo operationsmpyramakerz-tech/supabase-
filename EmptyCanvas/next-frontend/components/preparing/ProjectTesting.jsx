@@ -1,4 +1,5 @@
 "use client";
+import PreparingSelect from "./PreparingSelect";
 import {useEffect,useMemo,useState} from "react";
 import {testingChange} from "../../lib/preparing-project-testing-math.mjs";
 import {testingGroups,testingRemaining,TESTING_EXPORT_COLUMNS,testingExportValue} from "../../lib/preparing-project-testing-grouping.mjs";
@@ -138,13 +139,13 @@ export default function ProjectTesting({projectId,projectName,canTest,request,on
     <button type="button" className="pr-wh-export pr-pt-export-open" onClick={()=>setShowExport(true)} disabled={!data.items.length}>Export <span aria-hidden="true">⌄</span></button>
    </div>
    {tab==="testing"&&<>
-     <div className="pr-wh-toolbar pr-pt-toolbar"><label className="pr-search"><input type="search" aria-label="Search testing components" placeholder="Search component or code…" value={search} onChange={e=>setSearch(e.target.value)}/></label><select aria-label="Filter testing components" value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">All components</option><option value="pending">Remaining to pass</option><option value="failed">Has failed units</option><option value="done">Fully received for testing</option></select><button type="button" className="pr-secondary" disabled={busy} onClick={()=>{setLoading(true);load().catch(e=>setError(e.message)).finally(()=>setLoading(false));}}>Refresh</button></div>
+     <div className="pr-wh-toolbar pr-pt-toolbar"><label className="pr-search"><input type="search" aria-label="Search testing components" placeholder="Search component or code…" value={search} onChange={e=>setSearch(e.target.value)}/></label><PreparingSelect aria-label="Filter testing components" value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">All components</option><option value="pending">Remaining to pass</option><option value="failed">Has failed units</option><option value="done">Fully received for testing</option></PreparingSelect><button type="button" className="pr-secondary" disabled={busy} onClick={()=>{setLoading(true);load().catch(e=>setError(e.message)).finally(()=>setLoading(false));}}>Refresh</button></div>
     <div className="pr-wh-list pr-pt-list pr-pt-kit-list" aria-label="Project component testing">{groupedShown.map((group,index)=>{
      const open=!!search.trim()||(expandedKit===null?index===0:expandedKit===group.key);
      return <section className={`pr-pt-kit-group${open?" is-open":""}`} key={group.key}>
       <button type="button" className="pr-pt-kit-heading" onClick={()=>setExpandedKit(open?"__none__":group.key)} aria-expanded={open}>
        <span className="pr-pt-kit-emblem" aria-hidden="true">▤</span><span className="pr-pt-kit-title"><strong>{group.name}</strong><small>{group.items.length} components</small></span>
-       <span className="pr-pt-kit-arrow" aria-hidden="true">{open?"⌃":"⌄"}</span>
+       <span className="pr-pt-kit-arrow" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
       </button>
       {open&&<div className="pr-pt-kit-body">{group.items.map(r=>{
      const isEditing=!!editing[r.id],v=draft[r.id]||{};
@@ -185,7 +186,7 @@ export default function ProjectTesting({projectId,projectName,canTest,request,on
   {showExport&&<div className="pr-pt-export-overlay" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget&&!exportBusy)setShowExport(false);}}>
    <section className="pr-pt-export-modal" role="dialog" aria-modal="true" aria-label="Export components testing">
     <header className="pr-pt-export-head"><div><strong>Export Testing</strong><small>Choose columns, Kits and report format</small></div><button type="button" className="pr-secondary" disabled={exportBusy} onClick={()=>setShowExport(false)} aria-label="Close export">×</button></header>
-    <div className="pr-pt-export-body">
+    <div className="pr-pt-export-body"><div className="pr-pt-export-summary">{exportColumns.length} columns selected <span aria-hidden="true">·</span> {exportGroups.length||allGroups.length} kit groups</div>
      <div className="pr-pt-export-section-head"><strong>Columns</strong><button type="button" className="pr-pt-export-link" onClick={()=>setExportColumns(TESTING_EXPORT_COLUMNS.map(c=>c.key))}>Select all</button></div>
      <div className="pr-pt-export-checks">{TESTING_EXPORT_COLUMNS.map(col=><label key={col.key} className="pr-pt-export-check"><input type="checkbox" checked={exportColumns.includes(col.key)} disabled={col.fixed} onChange={()=>toggleColumn(col.key)}/><span>{col.label}</span></label>)}</div>
      <div className="pr-pt-export-section-head"><strong>Kit groups</strong><button type="button" className="pr-pt-export-link" onClick={()=>setExportGroups([])}>All Kits</button></div>

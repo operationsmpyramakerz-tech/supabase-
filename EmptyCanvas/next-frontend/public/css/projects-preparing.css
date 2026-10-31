@@ -1684,3 +1684,116 @@
   .pr-root--project .pr-dashboard-schools .pr-add-school-tile {width:174px;height:168px;min-height:168px;}
   .pr-root--project .pr-dashboard-schools--list {grid-template-columns:1fr;}
 }
+
+/* v126 UI refresh — restrained, accessible preparation-stage styling. */
+/* Single-color timeline with consistent contrast on all five indices. */
+.pr-project-step-timeline::before {background:#141b2b;box-shadow:none;}
+.pr-project-step-index,
+.pr-project-step-row:nth-child(2) .pr-project-step-index,
+.pr-project-step-row:nth-child(3) .pr-project-step-index,
+.pr-project-step-row:nth-child(4) .pr-project-step-index,
+.pr-project-step-row:nth-child(5) .pr-project-step-index,
+.pr-project-step-index.is-done {
+  background:#141b2b;color:#fff;border:1px solid #141b2b;
+  box-shadow:0 2px 6px rgba(17,24,39,.09);
+}
+/* Matte progress: retain the genuine conic percentage and fill, remove glossy waves. */
+.pr-liquid-gauge {--pr-liquid-color:#b58b6b;--pr-liquid-color-light:#dfc5ae;box-shadow:none;border:1px solid #ecedf0;}
+.pr-liquid-gauge--low {--pr-liquid-color:#c7857d;--pr-liquid-color-light:#c7857d;}
+.pr-liquid-gauge--medium {--pr-liquid-color:#c2a36d;--pr-liquid-color-light:#c2a36d;}
+.pr-liquid-gauge--high {--pr-liquid-color:#78a592;--pr-liquid-color-light:#78a592;}
+.pr-liquid-gauge--empty {--pr-liquid-color:#dce1e7;--pr-liquid-color-light:#eef0f3;}
+.pr-liquid-gauge--summary {--pr-liquid-color:#c79c75;--pr-liquid-color-light:#c79c75;}
+.pr-liquid-gauge__inside {background:#f9fafb;}
+.pr-liquid-gauge__water {background:var(--pr-liquid-color);opacity:.76;transition:height .26s ease;}
+.pr-liquid-gauge__water::before,.pr-liquid-gauge__water::after {content:none;animation:none;}
+.pr-liquid-gauge__inside>strong {text-shadow:none;letter-spacing:-.03em;color:#172033;}
+.pr-project-step-card {box-shadow:none;border-color:#e7eaf0;}
+.pr-project-step-card:hover {box-shadow:0 6px 18px rgba(17,24,39,.045);border-color:#d5dbe4;}
+.pr-project-step-icon {background:#fbf4ee;color:#bf7947;}
+
+/* Shared dropdowns for every native selector migrated in Projects Preparing. */
+.pr-modern-select {display:inline-flex;position:relative;min-width:0;width:100%;max-width:100%;font:inherit;vertical-align:middle;}
+.pr-modern-select-trigger {display:flex;align-items:center;justify-content:space-between;gap:9px;width:100%;min-height:44px;min-width:0;padding:10px 13px;border:1px solid #dfe4eb;border-radius:13px;background:#fff;color:#273346;font:inherit;font-size:12px;font-weight:670;text-align:left;cursor:pointer;box-shadow:0 1px 3px rgba(17,24,39,.025);transition:border-color .16s,box-shadow .16s,background-color .16s;}
+.pr-modern-select-trigger:hover:not(:disabled) {border-color:#cad2df;background:#fcfcfd;}
+.pr-modern-select.is-open .pr-modern-select-trigger,.pr-modern-select-trigger:focus-visible {outline:none;border-color:#d3975f;box-shadow:0 0 0 3px rgba(213,151,95,.13);}
+.pr-modern-select.is-disabled {opacity:.56;}
+.pr-modern-select-trigger:disabled {cursor:not-allowed;}
+.pr-modern-select-value {flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.pr-modern-select-trigger>svg {color:#728095;flex-shrink:0;transition:transform .16s;}
+.pr-modern-select.is-open .pr-modern-select-trigger>svg {transform:rotate(180deg);}
+.pr-modern-select-backdrop {position:fixed;inset:0;z-index:99990;background:transparent;}
+.pr-modern-select-menu {position:fixed;z-index:99991;display:flex;flex-direction:column;gap:3px;overflow-y:auto;overscroll-behavior:contain;padding:6px;background:#fff;border:1px solid #dfe4ec;border-radius:16px;box-shadow:0 18px 48px rgba(18,27,42,.17);scrollbar-width:thin;}
+.pr-modern-select-menu.is-above {transform:translateY(-100%);}
+.pr-modern-select-option {display:flex;gap:12px;align-items:center;justify-content:space-between;width:100%;min-height:44px;padding:11px 12px;border:0;border-radius:10px;background:transparent;font:inherit;font-size:12px;font-weight:670;color:#2d384a;text-align:left;cursor:pointer;line-height:1.45;}
+.pr-modern-select-option>span {min-width:0;overflow-wrap:anywhere;}
+.pr-modern-select-option:hover:not(:disabled),.pr-modern-select-option:focus-visible {outline:none;background:#f3f5f8;}
+.pr-modern-select-option.is-selected {background:#f6f0e9;color:#936136;}
+.pr-modern-select-option:disabled {opacity:.39;cursor:not-allowed;}
+.pr-modern-select-check {flex-shrink:0;color:#ae7546;opacity:0;}
+.pr-modern-select-option.is-selected .pr-modern-select-check {opacity:1;}
+.pr-wh-toolbar .pr-modern-select,.pr-manifest-actions .pr-modern-select {width:min(270px,100%);flex:0 1 260px;}
+.pr-pt-toolbar .pr-modern-select {width:min(270px,100%);}
+.pr-pbom-import-action .pr-modern-select {min-width:195px;max-width:320px;}
+.pr-box-create .pr-modern-select {flex:1 1 135px;width:min(190px,100%);}
+.pr-box-editor .pr-modern-select {width:100%;}
+@media (max-width:600px) {
+  .pr-wh-toolbar .pr-modern-select,.pr-manifest-actions .pr-modern-select {width:100%;flex:1 1 190px;}
+  .pr-modern-select-trigger {min-height:46px;font-size:13px;}
+  .pr-modern-select-menu {max-height:min(50vh,360px)!important;}
+}
+
+/* Clear group accordions with consistent chevrons instead of typographic arrows. */
+.pr-pt-kit-group,.pr-production .pr-pt-kit,.pr-kit-group {border-color:#e4e7ed;box-shadow:0 2px 8px rgba(17,24,39,.025);border-radius:17px;}
+.pr-pt-kit-heading,.pr-production .pr-pt-kit-toggle,.pr-pbom .pr-kit-group-head {background:#fff;transition:background-color .17s;}
+.pr-pt-kit-heading:hover,.pr-production .pr-pt-kit-toggle:hover,.pr-pbom .pr-kit-group-head:hover {background:#fbf8f4;}
+.pr-pt-kit-group.is-open .pr-pt-kit-heading,.pr-kit-group.is-open .pr-kit-group-head {background:#fbf8f3;}
+.pr-pt-kit-emblem,.pr-kit-group-icon {background:#f8f1e9;color:#b88150;}
+.pr-pt-kit-arrow,.pr-kit-group-chevron {display:grid;place-items:center;flex:0 0 31px;width:31px;height:31px;border:1px solid #e8ebef;border-radius:10px;background:#f5f7f9;color:#687587;transition:transform .18s,border-color .18s,background-color .18s;}
+.pr-pt-kit-arrow svg,.pr-kit-group-chevron svg {width:17px;height:17px;transition:transform .18s;}
+.pr-pt-kit-group.is-open .pr-pt-kit-arrow svg,.pr-kit-group.is-open .pr-kit-group-chevron svg,.pr-production .pr-pt-kit-toggle[aria-expanded="true"] .pr-pt-kit-arrow svg {transform:rotate(180deg);}
+.pr-production .pr-pt-kit-toggle>span.pr-pt-kit-arrow:last-child {font-size:initial;}
+.pr-pt-kit-body,.pr-pbom .pr-kit-group-body {border-top-color:#e9ecf0;background:#f9fafc;}
+
+/* Same report export dialog for Testing, Warehouse and Production. */
+.pr-pt-export-overlay {background:rgba(17,24,39,.52);backdrop-filter:blur(3px);}
+.pr-pt-export-modal {width:min(700px,100%);max-height:min(92dvh,850px);border:1px solid #e7ebf1;border-radius:23px;box-shadow:0 28px 76px rgba(12,20,35,.2);}
+.pr-pt-export-head {padding:22px 24px;background:#fff;border-bottom:1px solid #edf0f4;}
+.pr-pt-export-head strong {font-size:19px;font-weight:840;letter-spacing:-.02em;}
+.pr-pt-export-head small {font-size:12px;line-height:1.5;color:#7d8797;}
+.pr-pt-export-head>button {display:grid;place-items:center;width:39px;height:39px;min-width:39px;border-radius:12px!important;border:1px solid #e5e9ef!important;background:#fff!important;color:#5b6779;font-size:22px!important;line-height:1;}
+.pr-pt-export-head>button:hover {background:#f3f5f7!important;color:#182337;}
+.pr-pt-export-body {gap:13px;padding:19px 24px 23px;background:#fff;}
+.pr-pt-export-section-head {margin:12px 0 0;}
+.pr-pt-export-section-head strong {font-size:13px;color:#182337;}
+.pr-pt-export-link {font-size:12px;border:1px solid #eadbcc;border-radius:999px;background:#fff8f1;padding:7px 12px;color:#95643d;}
+.pr-pt-export-link:hover {background:#fdefe1;}
+.pr-pt-export-checks,.pr-pt-export-kits {grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;}
+.pr-pt-export-kits {max-height:210px;padding-right:3px;}
+.pr-pt-export-check {min-height:48px;padding:11px 13px;background:#fff;border:1px solid #e6eaf0;border-radius:13px;color:#303d50;font-size:12px;line-height:1.35;transition:border-color .16s,background-color .16s,box-shadow .16s;}
+.pr-pt-export-check:hover {border-color:#cdd5df;background:#fafbfc;}
+.pr-pt-export-check:has(input:checked) {border-color:#dfc4ab;background:#fffaf5;}
+.pr-pt-export-check:has(input:disabled) {opacity:.75;}
+.pr-pt-export-check input {width:17px;height:17px;accent-color:#cb8651;}
+.pr-pt-export-check:focus-within {outline:2px solid rgba(203,134,81,.36);outline-offset:2px;}
+.pr-pt-export-info {border:1px solid #e8e2d8;background:#faf8f5;color:#79624f;border-radius:14px;padding:14px 16px;font-size:12px;}
+.pr-pt-export-actions {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:17px 24px 22px;background:#fbfcfd;border-top:1px solid #e8ebf0;}
+.pr-pt-export-actions button {min-height:45px;padding:11px 14px;border-radius:13px;font-size:12px;font-weight:800;}
+.pr-pt-export-actions .pr-secondary {border:1px solid #dde2e9;background:#fff;color:#1b263a;}
+.pr-pt-export-actions .pr-primary {background:#ef8729;border:1px solid #ef8729;box-shadow:none;}
+@media(max-width:480px) {
+  .pr-pt-export-modal {border-radius:19px;max-height:92dvh;}
+  .pr-pt-export-head {padding:18px 17px;}
+  .pr-pt-export-body {padding:15px 17px 18px;}
+  .pr-pt-export-kits {max-height:175px;}
+  .pr-pt-export-check {padding:10px;min-height:48px;}
+  .pr-pt-export-actions {padding:14px 17px 18px;grid-template-columns:repeat(2,minmax(0,1fr));}
+}
+@media(prefers-reduced-motion:reduce) {
+  .pr-modern-select-trigger,.pr-modern-select-trigger>svg,.pr-pt-kit-arrow svg,.pr-project-step-card,.pr-liquid-gauge__water {transition:none!important;animation:none!important;}
+}
+.pr-pt-export-summary {display:flex;gap:9px;align-items:center;flex-wrap:wrap;align-self:flex-start;width:fit-content;margin:0;padding:8px 12px;border-radius:10px;background:#f5f6f8;color:#657183;font-size:11px;font-weight:750;}
+.pr-pt-export-summary>span {color:#bac1cb;}
+.pr-pt-export-body>.pr-muted {margin:0;padding:14px 16px;border:1px solid #e8e2d8;background:#faf8f5;color:#79624f;border-radius:14px;font-size:12px;line-height:1.6;}
+/* Avoid double-rotation: older PBOM rules rotate the wrapper itself. */
+.pr-pbom .pr-kit-group.is-open .pr-kit-group-chevron {transform:none;}

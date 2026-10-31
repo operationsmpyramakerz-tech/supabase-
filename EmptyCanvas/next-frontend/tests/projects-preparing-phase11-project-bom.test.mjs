@@ -11,7 +11,7 @@ const ui=read("components/preparing/PreparingClient.jsx"),bomUI=read("components
 const route=read("app/api/projects-preparing/warehouse/route.js");
 
 test("new projects require Proposal and capture it with project in one transaction",()=>{
- assert.match(ui,/Source Proposal<select required/);
+ assert.match(ui,/Source Proposal<PreparingSelect required/);
  assert.match(ui,/disabled=\{busy \|\| projectName\.trim\(\)\.length < 2 \|\| !projectSourceId\}/);
  assert.match(service,/erp_preparing_create_project_with_bom/);
  assert.match(service,/assembleProjectProposalItems\(source\.items\)/);

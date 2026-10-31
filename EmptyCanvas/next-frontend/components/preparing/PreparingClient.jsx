@@ -1,5 +1,6 @@
 "use client";
 
+import PreparingSelect from "./PreparingSelect";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { featureAllowed } from "../../lib/feature-permissions-registry";
 import ComponentsManifest from "./ComponentsManifest";
@@ -489,7 +490,7 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
     {sheet === "project" && <Sheet title="New Project" onClose={()=>setSheet("")}
       footer={<><button className="pr-secondary" onClick={()=>setSheet("")}>Cancel</button><button className="pr-primary" disabled={busy || projectName.trim().length < 2 || !projectSourceId} onClick={()=>save(async()=>api("", "POST", {action:"create_project", name:projectName, description:projectDescription, proposalId:projectSourceId}))}>{busy ? "Saving…" : "Save Project"}</button></> }>
       <label className="pr-field">Project name<input autoFocus maxLength={160} value={projectName} placeholder="30 June Schools" onChange={event=>setProjectName(event.target.value)}/></label>
-      <label className="pr-field">Source Proposal<select required value={projectSourceId} onChange={event=>setProjectSourceId(event.target.value)}><option value="">Select project Proposal…</option>{asArray(data.proposals).map(row=><option key={row.id} value={row.id}>{row.name} ({row.itemsCount} components)</option>)}</select><span className="pr-form-meta">The selected Proposal creates the project's component list and warehouse required quantities immediately.</span></label>
+      <label className="pr-field">Source Proposal<PreparingSelect required value={projectSourceId} onChange={event=>setProjectSourceId(event.target.value)}><option value="">Select project Proposal…</option>{asArray(data.proposals).map(row=><option key={row.id} value={row.id}>{row.name} ({row.itemsCount} components)</option>)}</PreparingSelect><span className="pr-form-meta">The selected Proposal creates the project's component list and warehouse required quantities immediately.</span></label>
       <label className="pr-field">Description<textarea rows={4} maxLength={1000} value={projectDescription} placeholder="STEAM Labs · 11 schools" onChange={event=>setProjectDescription(event.target.value)}/></label>
     </Sheet>}
     {sheet === "rename_project" && <Sheet title="Rename Project" onClose={()=>setSheet("")}
@@ -511,7 +512,7 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
     </Sheet>}
     {sheet === "stage" && currentStage && <Sheet title={currentStage.title} onClose={()=>setSheet("")}
       footer={<><button className="pr-secondary" onClick={()=>setSheet("")}>Cancel</button>{canStage && currentStage.key !== "final_closing" && <button className="pr-primary" disabled={busy} onClick={()=>save(async()=>api("/stages","PATCH",{schoolId,stageKey,status:stageStatus,notes:stageNotes}))}>{busy ? "Saving…" : "Save Status"}</button>}</>}>
-      <label className="pr-field">Stage status<select value={stageStatus} disabled={!canStage || currentStage.key === "final_closing"} onChange={event=>setStageStatus(event.target.value)}>{PREPARING_STATES.map(status=><option key={status} value={status} disabled={currentStage.key === "final_closing" || (status === "completed" && !canCompleteStage(currentStage.key, schoolStages))}>{stateLabels[status]}</option>)}</select></label>
+      <label className="pr-field">Stage status<PreparingSelect value={stageStatus} disabled={!canStage || currentStage.key === "final_closing"} onChange={event=>setStageStatus(event.target.value)}>{PREPARING_STATES.map(status=><option key={status} value={status} disabled={currentStage.key === "final_closing" || (status === "completed" && !canCompleteStage(currentStage.key, schoolStages))}>{stateLabels[status]}</option>)}</PreparingSelect></label>
       {!canCompleteStage(currentStage.key, schoolStages) && <p className="pr-hint">Previous stages must be completed before this stage can be marked completed.</p>}
       {currentStage.key === "final_closing" && <p className="pr-hint">Use Open Closing to verify the checklist, approve and close, or reopen. Stage status is read-only here.</p>}
       {["installation","testing"].includes(currentStage.key) && <p className="pr-hint">Use Open Technical to complete the technical checkpoints, resolve issues, and record acceptance before marking this stage completed.</p>}

@@ -42,7 +42,7 @@ test('Add Schools UI has school selection only; Create Project still chooses the
   assert.match(schoolSheet, /projectId,beneficiaryIds:selectedMembers/);
   assert.match(schoolSheet, /!project\?\.source_proposal_id/);
   assert.match(schoolSheet, /Beneficiary users \/ schools/);
-  assert.match(ui, /Source Proposal<select required value={projectSourceId}/);
+  assert.match(ui, /Source Proposal<PreparingSelect required value={projectSourceId}/);
   assert.doesNotMatch(ui, /const \[proposalId, setProposalId\]/);
 });
 
