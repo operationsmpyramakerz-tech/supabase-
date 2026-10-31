@@ -42,7 +42,7 @@ test('responsive layout, permissioned avatars and component-card semantics remai
   assert.match(css,/@media\(max-width:590px\)/);
   assert.match(ui,/StepAccessAvatars access=\{stepAccess\?\.\[step.key\]\}/);
   assert.match(ui,/pr-project-report-link/);
-  assert.match(read('app/projects-preparing/page.jsx'),/projects-preparing\.css\?v=271/);
+  assert.match(read('app/projects-preparing/page.jsx'),/projects-preparing\.css\?v=272/);
   const file=ts.createSourceFile('PreparingClient.jsx',ui,ts.ScriptTarget.Latest,true,ts.ScriptKind.JSX);
   assert.deepEqual(file.parseDiagnostics,[]);
 });

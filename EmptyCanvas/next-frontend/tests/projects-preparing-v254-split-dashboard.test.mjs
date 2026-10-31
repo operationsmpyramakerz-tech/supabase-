@@ -52,7 +52,7 @@ test('dashboard KPI bars support live percentages, reduced motion, small screens
  assert.match(css,/\.pr-project-split \{grid-template-columns:1fr;/);
  assert.match(ui,/pr-step-kpi-track/);
  assert.match(ui,/pr-step-kpi-fill/);
- assert.match(read('app/projects-preparing/page.jsx'),/projects-preparing\.css\?v=271/);
+ assert.match(read('app/projects-preparing/page.jsx'),/projects-preparing\.css\?v=272/);
  const parsed=ts.createSourceFile('PreparingClient.jsx',ui,ts.ScriptTarget.Latest,true,ts.ScriptKind.JSX);
  assert.deepEqual(parsed.parseDiagnostics,[]);
 });

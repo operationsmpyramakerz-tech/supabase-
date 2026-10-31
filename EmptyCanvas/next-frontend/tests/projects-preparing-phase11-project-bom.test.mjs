@@ -35,7 +35,7 @@ test("project BOM is independent from school demand, receipt, and delivery",()=>
  assert.match(sql,/IF history_exists THEN RAISE EXCEPTION 'Cannot delete/);
  assert.match(sql,/p_required_qty<reserved/);
  assert.doesNotMatch(sql,/UPDATE public\.erp_preparing_(components|shipments|manifests)|TRUNCATE|DROP TABLE/i);
- assert.match(bomUI,/Project required ·/);
+ assert.match(bomUI,/Project Required/);
  assert.match(bomUI,/Source Proposal/);
  assert.match(bomUI,/Confirm Remove/);
  const rows=assembleSchoolProposalItems([{productId:"M1",productName:"Motor",quantity:5},{productId:"M1",productName:"Motor",quantity:3}]);
