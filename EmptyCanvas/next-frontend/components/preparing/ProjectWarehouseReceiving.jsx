@@ -8,6 +8,39 @@ const pretty=v=>number(v).toLocaleString("en-US");
 const safeCSV=v=>{const raw=String(v??"");const safe=/^[\s]*[=+@-]/.test(raw)?`'${raw}`:raw;return `"${safe.replaceAll('"','""')}"`;};
 const date=v=>new Date(v).toLocaleString("en-GB",{dateStyle:"medium",timeStyle:"short"});
 const empty={schools:[],items:[],demands:[],receipts:[],receiptLines:[],allocations:[],testingBalances:[]};
+// Mirror the solid, category-specific Kit icons in Project Components.
+// Icons are presentation-only; Kit identity and quantities remain untouched.
+function warehouseKitAppearance(name){
+ const label=String(name||"").toLowerCase();
+ if(/electronic|arduino|sensor|circuit|robot/.test(label))return {icon:"cpu",tone:"blue"};
+ if(/stationary|stationery|writing/.test(label))return {icon:"pencil",tone:"green"};
+ if(/laser|cutter/.test(label))return {icon:"laser",tone:"red"};
+ if(/filament|printer/.test(label))return {icon:"spool",tone:"amber"};
+ if(/addon|add.on/.test(label))return {icon:"puzzle",tone:"purple"};
+ if(/tool|hand.held/.test(label))return {icon:"wrench",tone:"sky"};
+ if(/project/.test(label))return {icon:"layers",tone:"purple"};
+ return {icon:"box",tone:"orange"};
+}
+function WarehouseIcon({name="box",size=20}){
+ const shapes={
+  layers:<><path d="m12 2 8.5 4.5L12 11 3.5 6.5 12 2Z"/><path d="m3.5 11 8.5 4.5 8.5-4.5M3.5 15.5 12 20l8.5-4.5"/></>,
+  box:<><path d="M12 2 3.5 6.7 12 11.5l8.5-4.8L12 2Z"/><path d="M3.5 6.7v10L12 22l8.5-5.3v-10M12 11.5V22"/></>,
+  cpu:<><rect x="6" y="6" width="12" height="12" rx="2"/><rect x="9.5" y="9.5" width="5" height="5" rx=".8"/><path d="M9 2v4m6-4v4M9 18v4m6-4v4M2 9h4m-4 6h4m12-6h4m-4 6h4"/></>,
+  pencil:<><path d="m4 20 4.5-1.1L20 7.4a2.2 2.2 0 0 0-3.1-3.1L5.4 15.8 4 20ZM14.6 6.6l2.8 2.8M4 20h16"/></>,
+  laser:<><circle cx="12" cy="12" r="3"/><path d="M12 2v5m0 10v5M2 12h5m10 0h5M4.9 4.9l3.5 3.5m7.2 7.2 3.5 3.5M19.1 4.9l-3.5 3.5m-7.2 7.2-3.5 3.5"/></>,
+  spool:<><rect x="5" y="3" width="14" height="18" rx="3"/><path d="M5 7h14M5 17h14M9 11c2-1 4-1 6 0m-6 3c2-1 4-1 6 0"/></>,
+  puzzle:<path d="M10 3H4a1 1 0 0 0-1 1v6h2a3 3 0 0 1 0 6H3v4a1 1 0 0 0 1 1h6v-2a3 3 0 0 1 6 0v2h4a1 1 0 0 0 1-1v-6h-2a3 3 0 0 1 0-6h2V4a1 1 0 0 0-1-1h-4v2a3 3 0 0 1-6 0V3Z"/>,
+  wrench:<path d="M21 7.5a6 6 0 0 1-8 5.7L6.4 20a2 2 0 0 1-2.8-2.8l6.7-6.6a6 6 0 0 1 6-8l-3.8 3.8 3.1 3.1L19.5 6 21 7.5Z"/>,
+  close:<path d="M5 5 19 19M19 5 5 19"/>,
+  search:<><circle cx="10.8" cy="10.8" r="7"/><path d="m16 16 5 5"/></>,
+  history:<><path d="M3 12a9 9 0 1 0 2.3-6"/><path d="M3 4v5h5M12 7v5l3.5 2"/></>,
+  download:<><path d="M12 3v12m-5-5 5 5 5-5"/><path d="M4 17v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></>,
+  clock:<><circle cx="12" cy="12" r="9"/><path d="M12 6.5V12l3.5 2"/></>,
+  inbox:<><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 13h5l2 3h4l2-3h5"/></>,
+ };
+ return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{shapes[name]||shapes.box}</svg>;
+}
+
 export default function ProjectWarehouseReceiving({projectId,projectName,hasProjectProposal=false,canReceive,canAllocate,request,onClose}) {
  const [state,setState]=useState(empty),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false);
  const [tab,setTab]=useState("receiving"),[search,setSearch]=useState(""),[filter,setFilter]=useState("all");
@@ -109,26 +142,32 @@ export default function ProjectWarehouseReceiving({projectId,projectName,hasProj
  }
  const toggleColumn=key=>{if(key==="name")return;setExportColumns(old=>old.includes(key)?old.filter(v=>v!==key):WAREHOUSE_COLUMNS.filter(c=>old.includes(c.key)||c.key===key).map(c=>c.key));};
  const toggleGroup=key=>setExportGroups(old=>{const all=allGroups.map(g=>g.key),current=old.length?old:all,updated=current.includes(key)?current.filter(k=>k!==key):all.filter(k=>current.includes(k)||k===key);return !updated.length?old:updated.length===all.length?[]:updated;});
- return <div className="pr-wh pr-wr-modern">
-  <header className="pr-manifest-title pr-wh-title"><div><span className="pr-wh-overline">PROJECT INVENTORY · {projectName}</span><h3>Warehouse Receiving</h3></div><button type="button" className="pr-secondary" onClick={onClose}>Close</button></header>
+ return <div className="pr-wh pr-wr-modern pr-pt-modern pr-warehouse-parity">
+  <header className="pr-manifest-title pr-wh-title pr-pt-title"><div><span className="pr-wh-overline">PROJECT INVENTORY · {projectName}</span><h3>Warehouse Receiving</h3></div><button type="button" className="pr-pt-close" aria-label="Close Warehouse Receiving" title="Close" onClick={onClose}><WarehouseIcon name="close" size={19}/></button></header>
   {error&&<div className="pr-alert" role="alert">{error}<button type="button" onClick={()=>setError("")} aria-label="Dismiss">×</button></div>}
   {success&&<div className="pr-manifest-success" role="status">{success}</div>}
   {loading?<p className="pr-muted">Loading warehouse records…</p>:<>
-   <div className="pr-wh-stats">{[["Project Required",totals.required],["Received",totals.accepted],["Available to Receive",totals.readyToReceive]].map(([label,value])=><div key={label}><span>{label}</span><strong>{pretty(value)}</strong></div>)}</div>
-   <div className="pr-wh-navigation" role="group" aria-label="Warehouse view">
-    {[["receiving","Warehouse Receiving"],["allocation","School Allocation"],["history","Movement History"]].map(([key,label])=><button type="button" key={key} className={tab===key?"is-active":""} onClick={()=>{setTab(key);setError("");}}>{label}</button>)}
-    <button type="button" className="pr-wh-export" onClick={()=>setShowExport(true)} disabled={!state.items.length}>Export <span aria-hidden="true">⌄</span></button>
+   <div className="pr-wh-stats pr-pt-stat-grid" aria-label="Warehouse summary">{[["Project Required",totals.required,"required","◆"],["Received",totals.accepted,"received","↓"],["Available to Receive",totals.readyToReceive,"available","inbox"]].map(([label,value,key,mark])=><div className={`pr-pt-stat pr-pt-stat--${key}`} key={key}><span className="pr-pt-stat-icon" aria-hidden="true">{mark==="inbox"?<WarehouseIcon name="inbox" size={23}/>:mark}</span><span className="pr-pt-stat-copy"><span>{label}</span><strong>{pretty(value)}</strong></span></div>)}</div>
+   <div className="pr-wh-navigation pr-pt-navigation" role="group" aria-label="Warehouse view">
+    <div className="pr-warehouse-tab-links" role="tablist" aria-label="Warehouse views">
+     {[["receiving","Warehouse Receiving"],["allocation","School Allocation"]].map(([key,label])=><button role="tab" type="button" aria-selected={tab===key} key={key} className={tab===key?"is-active":""} onClick={()=>{setTab(key);setError("");}}>{label}</button>)}
+    </div>
+    <div className="pr-warehouse-actions">
+     <button type="button" aria-pressed={tab==="history"} className={`pr-pt-history-button${tab==="history"?" is-active":""}`} aria-label={`Movement History (${historyEntries.length} changes)`} title={`Movement History (${historyEntries.length})`} onClick={()=>{setTab("history");setError("");}}><WarehouseIcon name="history" size={19}/></button>
+     <button type="button" className="pr-pt-download-button" aria-label="Download warehouse report" onClick={()=>setShowExport(true)} disabled={!state.items.length}><WarehouseIcon name="download" size={18}/><span>Download</span></button>
+    </div>
    </div>
    {uncaptured.length>0&&<div className="pr-wh-notice"><div><strong>{uncaptured.length} school(s) need requirement capture</strong><small>{hasProjectProposal?"Capture each school’s Proposal for school allocation limits. This does not modify the project Master BOM or warehouse receipts.":"Capture linked school Proposals to calculate legacy project requirements. Existing school baselines stay frozen."}</small></div>{canReceive&&<button className="pr-primary" disabled={busy} onClick={()=>execute("capture",{})}>{busy?"Capturing…":hasProjectProposal?"Capture School Requirements":"Capture Project BOM"}</button>}</div>}
-   {!!state.items.length&&<div className="pr-wh-toolbar"><label className="pr-search"><input aria-label="Search warehouse components" placeholder="Search component or code…" value={search} onChange={e=>setSearch(e.target.value)}/></label><PreparingSelect aria-label="Warehouse filter" value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">All components</option><option value="short">Warehouse shortage</option><option value="available">Available to Receive</option></PreparingSelect><button type="button" className="pr-secondary" disabled={busy} onClick={()=>{setLoading(true);reload().catch(e=>{setLoading(false);setError(e.message);});}}>Refresh</button></div>}
-   {tab==="receiving"&&<div className="pr-wh-list pr-wr-list" aria-label="Master project components by Kit">{shownGroups.map((group,index)=>{
-    const open=!!search.trim()||(expandedKit===null?index===0:expandedKit===group.key);
-    return <section className={`pr-pt-kit-group${open?" is-open":""}`} key={group.key}>
-     <button type="button" className="pr-pt-kit-heading" aria-expanded={open} onClick={()=>setExpandedKit(open?"__none__":group.key)}><span className="pr-pt-kit-emblem" aria-hidden="true">▤</span><span className="pr-pt-kit-title"><strong>{group.name}</strong><small>{group.items.length} components</small></span><span className="pr-pt-kit-arrow" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg></span></button>
+   {!!state.items.length&&tab!=="history"&&<div className="pr-wh-toolbar pr-pt-toolbar"><label className="pr-search pr-pt-search"><WarehouseIcon name="search" size={18}/><input type="search" aria-label="Search warehouse components" placeholder="Search component or code…" value={search} onChange={e=>setSearch(e.target.value)}/>{search&&<button type="button" className="pr-pt-clear-search" onClick={()=>setSearch("")} aria-label="Clear search" title="Clear search"><WarehouseIcon name="close" size={16}/></button>}</label><PreparingSelect iconOnly className={`pr-pt-filter-select${filter!=="all"?" is-filtered":""}`} aria-label="Filter warehouse components" value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">All components</option><option value="short">Warehouse shortage</option><option value="available">Available to Receive</option></PreparingSelect></div>}
+   {tab==="receiving"&&<div className="pr-wh-list pr-wr-list pr-pt-kit-list" aria-label="Master project components by Kit">{shownGroups.map(group=>{
+    const open=!!search.trim()||expandedKit===group.key;
+    const appearance=warehouseKitAppearance(group.name);
+    return <section className={`pr-pt-kit-group pr-pt-kit--${appearance.tone}${open?" is-open":""}`} key={group.key}>
+     <button type="button" className="pr-pt-kit-heading" aria-expanded={open} onClick={()=>setExpandedKit(open?"__none__":group.key)}><span className="pr-pt-kit-emblem" aria-hidden="true"><WarehouseIcon name={appearance.icon} size={21}/></span><span className="pr-pt-kit-title"><strong>{group.name}</strong><small>{group.items.length} components</small></span><span className="pr-pt-kit-arrow" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg></span></button>
      {open&&<div className="pr-pt-kit-body">{group.items.map(row=>{
       const active=!!editing[row.id],people=[...(receivedById.get(row.id)?.values()||[])];
       return <article className={`pr-wr-row${active?" is-editing":""}`} key={`${group.key}-${row.id}`}>
-       <div className="pr-wr-heading"><div className="pr-wr-name"><strong>{row.product_name}</strong><small>{row.product_id?`#${row.product_id}`:"No component code"}{row.kitQuantity>0?` · Kit Qty: ${pretty(row.kitQuantity)}`:""}</small></div><span className="pr-wr-required">Required <b>{pretty(row.required_qty)}</b></span></div>
+       <div className="pr-wr-heading"><div className="pr-wr-name"><strong title={row.product_id?`Product code: ${row.product_id}`:undefined}>{row.product_name}</strong>{row.kitQuantity>0&&<small>Kit Qty: {pretty(row.kitQuantity)}</small>}</div><span className="pr-wr-required">Required <b>{pretty(row.required_qty)}</b></span></div>
        <div className="pr-wr-metrics">
         <div className="pr-wr-stat pr-wr-stat-available"><span>Available to Receive</span><strong>{pretty(active?Math.max(0,row.passed-(Number(draft[row.id])||0)):row.readyToReceive)}</strong></div>
         <div className="pr-wr-stat pr-wr-stat-received"><span>Received</span>{active?<input type="number" step="1" min="0" aria-label={`Received ${row.product_name}`} disabled={busy} value={draft[row.id]??""} max={Math.max(row.accepted,row.passed)} onChange={e=>{setDraft(prev=>({...prev,[row.id]:e.target.value}));setRowError(prev=>({...prev,[row.id]:""}));}}/>:<strong>{pretty(row.accepted)}</strong>}</div>

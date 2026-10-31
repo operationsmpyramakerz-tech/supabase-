@@ -17,7 +17,9 @@ test('Warehouse component summary shows just Available to Receive, Received and 
  assert.doesNotMatch(block,/>Passed Testing</);
  assert.doesNotMatch(block,/>Allocated</);
  assert.equal((block.match(/className="pr-wr-stat/g)||[]).length,3);
- assert.match(ui, /\["Project Required",totals.required\],\["Received",totals.accepted\],\["Available to Receive",totals.readyToReceive\]/);
+ assert.match(ui, /\["Project Required",totals.required,"required","◆"\]/);
+ assert.match(ui, /\["Received",totals.accepted,"received","↓"\]/);
+ assert.match(ui, /\["Available to Receive",totals.readyToReceive,"available","inbox"\]/);
 });
 
 test('Edit toggles the same Received value into an input and requires warehouse receiving permission',()=>{
