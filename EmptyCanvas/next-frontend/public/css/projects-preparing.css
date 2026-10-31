@@ -2557,3 +2557,34 @@
 /* Above-trigger popovers retain their exact positioning transform. */
 .pr-modern-select-menu--filter.is-above {animation:none;transform:translateY(-100%);}
 @media (prefers-reduced-motion:reduce) {.pr-modern-select-menu--filter{animation:none;}}
+
+/* v281 · Align the Testing filter pictogram to the true center of its square.
+   The shared select uses justify-content:space-between (appropriate for text
+   selects, not a single icon), which previously pushed the funnel off-center. */
+.pr-pt-modern .pr-pt-toolbar .pr-pt-filter-select .pr-modern-select-trigger {
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:0;
+}
+.pr-pt-modern .pr-pt-toolbar .pr-pt-filter-select .pr-modern-select-trigger>svg {
+  display:block;
+  flex:0 0 21px;
+  width:21px;
+  height:21px;
+  margin:0;
+  transform:none;
+}
+/* Use a slightly larger vector clock in the Remaining tile so it stays
+   legible without enlarging the tile or changing the other metrics. */
+.pr-pt-modern .pr-pt-stat-grid>.pr-pt-stat--remaining .pr-pt-stat-icon svg {
+  display:block;
+  width:25px;
+  height:25px;
+}
+@media(max-width:580px){
+  .pr-pt-modern .pr-pt-stat-grid>.pr-pt-stat--remaining .pr-pt-stat-icon svg {
+    width:23px;
+    height:23px;
+  }
+}

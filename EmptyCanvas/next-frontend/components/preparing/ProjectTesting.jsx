@@ -45,6 +45,7 @@ function TestingIcon({name="box",size=20}){
   search:<><circle cx="10.8" cy="10.8" r="7"/><path d="m16 16 5 5"/></>,
   history:<><path d="M3 12a9 9 0 1 0 2.3-6"/><path d="M3 4v5h5M12 7v5l3.5 2"/></>,
   download:<><path d="M12 3v12m-5-5 5 5 5-5"/><path d="M4 17v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></>,
+  clock:<><circle cx="12" cy="12" r="9"/><path d="M12 6.5V12l3.5 2"/></>,
  };
  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{shapes[name]||shapes.box}</svg>;
 }
@@ -162,7 +163,7 @@ export default function ProjectTesting({projectId,projectName,canTest,request,on
     {key:"failed",label:"Failed",value:totals.failed,mark:"!"},
     {key:"remaining",label:"Remaining",value:totals.remaining,mark:"◷"},
    ].map(stat=><div className={`pr-pt-stat pr-pt-stat--${stat.key}`} key={stat.key}>
-    <span className="pr-pt-stat-icon" aria-hidden="true">{stat.mark}</span><span className="pr-pt-stat-copy"><span>{stat.label}</span><strong>{pretty(stat.value)}</strong></span>
+    <span className="pr-pt-stat-icon" aria-hidden="true">{stat.key==="remaining"?<TestingIcon name="clock" size={25}/>:stat.mark}</span><span className="pr-pt-stat-copy"><span>{stat.label}</span><strong>{pretty(stat.value)}</strong></span>
    </div>)}</div>
    <div className="pr-wh-navigation pr-pt-navigation">
     <div className="pr-pt-view-tabs" role="tablist" aria-label="Project testing views">
