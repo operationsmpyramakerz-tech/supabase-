@@ -3039,3 +3039,143 @@
 @media(prefers-reduced-motion:reduce) {
   .pr-root--index .pr-index-stat,.pr-root--index .pr-index-add-project {transition:none;}
 }
+
+/* v290 — compact Projects Preparing index.
+   Intentionally scoped to the folder index; do not scale inner project steps,
+   bottom sheets or app shell, and keep native button hit targets usable. */
+.pr-root.pr-root--index {padding-top:0;padding-bottom:75px;}
+.pr-root--index .pr-header {margin-bottom:15px;}
+.pr-root--index .pr-index-hero {
+  min-height:88px;padding:14px 19px;gap:14px;margin-bottom:15px;border-radius:19px;
+}
+.pr-root--index .pr-index-hero::after {width:240px;height:165px;bottom:-115px;}
+.pr-root--index .pr-index-hero-icon {
+  width:55px;height:55px;flex-basis:55px;border-radius:16px;
+}
+.pr-root--index .pr-index-hero-icon svg {width:23px;height:23px;}
+.pr-root--index .pr-index-hero-copy {gap:3px;}
+.pr-root--index .pr-index-hero-copy>span {font-size:11px;}
+.pr-root--index .pr-index-hero-copy>strong {font-size:clamp(15px,1.55vw,18px);line-height:1.28;}
+.pr-root--index .pr-index-hero-parcels {
+  width:176px;height:90px;right:38px;bottom:-8px;transform:scale(.8);transform-origin:bottom right;
+}
+.pr-root--index .pr-index-stats {gap:12px;margin-bottom:15px;}
+.pr-root--index .pr-index-stat {
+  min-height:80px;gap:12px;padding:12px 14px;border-radius:17px;
+}
+.pr-root--index .pr-index-stat-icon {
+  width:49px;height:49px;flex-basis:49px;border-radius:15px;
+}
+.pr-root--index .pr-index-stat-icon svg {width:23px;height:23px;}
+.pr-root--index .pr-index-stat-copy {gap:3px;}
+.pr-root--index .pr-index-stat-copy>span {font-size:12px;}
+.pr-root--index .pr-index-stat-copy>strong {font-size:25px;}
+.pr-root--index .pr-index-controls {
+  margin-bottom:25px;padding:4px;gap:10px;border-radius:17px;
+}
+.pr-root--index .pr-project-tabs {gap:3px;border-radius:13px;}
+.pr-root--index .pr-project-tab {
+  min-height:43px;min-width:92px;padding:0 16px;border-radius:12px;font-size:13px;
+}
+.pr-root--index .pr-index-result-count {
+  min-height:38px;padding:0 13px;border-radius:12px;font-size:12px;
+}
+/* Smaller but still legible add-project tile and project folders. */
+.pr-root.pr-root--index .pr-folders.pr-index-folder-grid {
+  grid-template-columns:repeat(auto-fill,minmax(195px,235px));
+  gap:16px;padding-bottom:20px;
+}
+.pr-root--index .pr-index-add-project {
+  height:214px;min-height:214px;gap:9px;padding:16px 12px;
+  border-width:1.5px;border-radius:21px;
+}
+.pr-root--index .pr-index-add-icon {
+  width:59px;height:59px;border-radius:19px;margin-bottom:2px;
+}
+.pr-root--index .pr-index-add-icon svg {width:30px;height:30px;}
+.pr-root--index .pr-index-add-project>strong {font-size:17px;}
+.pr-root--index .pr-index-add-project>span:last-child {
+  max-width:205px;font-size:11.5px;line-height:1.45;
+}
+.pr-root.pr-root--index .pr-folder-card {
+  height:214px;min-height:214px;border-width:5px;border-radius:21px;
+  box-shadow:0 12px 22px rgba(13,18,25,.12);
+}
+.pr-root.pr-root--index .pr-folder-main {border-radius:15px;}
+.pr-root.pr-root--index .pr-folder-main::before {
+  height:143px;border-radius:0 0 15px 15px;
+}
+.pr-root.pr-root--index .pr-folder-main::after {
+  top:62px;width:155px;height:26px;border-radius:0 11px 0 0;
+}
+.pr-root.pr-root--index .pr-folder-figure {top:20px;width:166px;height:89px;}
+.pr-root.pr-root--index .pr-folder-paper {width:67px;height:78px;border-radius:8px;}
+.pr-root.pr-root--index .pr-folder-paper::before {
+  top:14px;left:10px;right:10px;height:4px;
+  box-shadow:0 13px 0 rgba(203,213,225,.42),0 26px 0 rgba(203,213,225,.32);
+}
+.pr-root.pr-root--index .pr-folder-paper.left {left:16px;}
+.pr-root.pr-root--index .pr-folder-paper.middle {left:49px;top:-4px;}
+.pr-root.pr-root--index .pr-folder-paper.right {right:16px;}
+.pr-root.pr-root--index .pr-folder-copy {top:119px;left:14px;right:42px;}
+.pr-root.pr-root--index .pr-folder-copy strong {font-size:14px;margin-bottom:5px;}
+.pr-root.pr-root--index .pr-folder-copy em {font-size:11px;}
+.pr-root.pr-root--index .pr-folder-foot {
+  left:14px;right:9px;bottom:17px;font-size:11px;gap:5px;
+}
+.pr-root.pr-root--index .pr-folder-foot svg {width:14px;height:14px;}
+.pr-root.pr-root--index .pr-folder-menu-trigger {
+  top:116px;right:11px;width:33px;height:33px;min-width:33px;min-height:33px;
+}
+.pr-root.pr-root--index .pr-folder-menu-trigger svg {width:16px;height:16px;}
+.pr-root.pr-root--index .pr-folder-menu {top:152px;right:5px;}
+.pr-root--index .pr-index-no-projects {min-height:110px;padding:15px;}
+@media(max-width:1100px) {
+  .pr-root--index .pr-index-stats {gap:9px;}
+  .pr-root--index .pr-index-stat {gap:9px;padding:11px 12px;}
+  .pr-root--index .pr-index-stat-icon {width:43px;height:43px;flex-basis:43px;border-radius:13px;}
+  .pr-root--index .pr-index-stat-icon svg {width:21px;height:21px;}
+  .pr-root--index .pr-index-stat-copy>span {font-size:11px;}
+  .pr-root--index .pr-index-stat-copy>strong {font-size:23px;}
+  .pr-root--index .pr-project-tab {min-width:0;padding:0 13px;font-size:12px;}
+}
+@media(max-width:900px) {
+  .pr-root--index .pr-index-stats {grid-template-columns:repeat(2,minmax(0,1fr));}
+}
+@media(max-width:760px) {
+  .pr-root--index .pr-index-hero {min-height:78px;padding:12px;gap:11px;border-radius:16px;}
+  .pr-root--index .pr-index-hero-icon {width:47px;height:47px;flex-basis:47px;border-radius:13px;}
+  .pr-root--index .pr-index-hero-icon svg {width:21px;height:21px;}
+  .pr-root--index .pr-index-hero-copy>strong {font-size:15px;}
+  .pr-root--index .pr-index-hero-parcels {right:-45px;opacity:.22;}
+  .pr-root--index .pr-index-stat {min-height:72px;border-radius:14px;}
+  .pr-root--index .pr-index-controls {margin-bottom:17px;gap:7px;border-radius:13px;}
+  .pr-root--index .pr-project-tab {min-height:42px;padding:0 12px;font-size:12px;}
+  .pr-root--index .pr-index-result-count {min-height:36px;}
+  .pr-root.pr-root--index .pr-folders.pr-index-folder-grid {
+    grid-template-columns:repeat(auto-fill,minmax(min(100%,185px),1fr));gap:12px;
+  }
+  .pr-root--index .pr-index-add-project,
+  .pr-root.pr-root--index .pr-folder-card {height:204px;min-height:204px;}
+  .pr-root.pr-root--index .pr-folder-main::before {height:134px;}
+  .pr-root.pr-root--index .pr-folder-copy {top:110px;}
+  .pr-root.pr-root--index .pr-folder-menu-trigger {top:108px;}
+  .pr-root.pr-root--index .pr-folder-menu {top:144px;}
+}
+@media(max-width:520px) {
+  .pr-root--index .pr-index-stats {gap:8px;margin-bottom:12px;}
+  .pr-root--index .pr-index-stat {min-height:70px;padding:10px;gap:9px;}
+  .pr-root--index .pr-index-stat-icon {width:38px;height:38px;flex-basis:38px;border-radius:11px;}
+  .pr-root--index .pr-index-stat-icon svg {width:20px;height:20px;}
+  .pr-root--index .pr-index-stat-copy>span {font-size:10.5px;}
+  .pr-root--index .pr-index-stat-copy>strong {font-size:21px;}
+  .pr-root--index .pr-index-controls {margin-bottom:15px;}
+  .pr-root--index .pr-project-tabs {width:100%;}
+  .pr-root--index .pr-project-tab {min-width:0;padding:0 11px;font-size:11.5px;}
+  .pr-root--index .pr-index-result-count {min-height:29px;font-size:11px;}
+  .pr-root.pr-root--index .pr-folders.pr-index-folder-grid {
+    grid-template-columns:repeat(auto-fill,minmax(min(100%,170px),1fr));gap:11px;
+  }
+  .pr-root--index .pr-index-add-project>strong {font-size:16px;}
+  .pr-root--index .pr-index-add-project>span:last-child {font-size:11px;}
+}
