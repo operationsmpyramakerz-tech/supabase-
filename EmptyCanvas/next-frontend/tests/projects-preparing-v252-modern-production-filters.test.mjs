@@ -27,8 +27,9 @@ test("All Components permits review and correction of fully packed items without
 test("Box filter and Production filter share modern dropdown and remain separate state",()=>{
  const boxes=read("components/preparing/ProjectBoxDistribution.jsx");
  const production=read("components/preparing/ProjectProductionReceiving.jsx");
- assert.match(boxes,/import PreparingStatusFilter from/);
- assert.match(boxes,/<PreparingStatusFilter/);
+ assert.match(boxes,/import PreparingSelect from/);
+ assert.match(boxes,/<PreparingSelect iconOnly/);
+ assert.doesNotMatch(boxes,/PreparingStatusFilter/);
  assert.match(production,/import PreparingSelect from/);
  assert.match(production,/<PreparingSelect iconOnly/);
  assert.match(boxes,/\[filter,setFilter\]=useState\("available"\)/);
