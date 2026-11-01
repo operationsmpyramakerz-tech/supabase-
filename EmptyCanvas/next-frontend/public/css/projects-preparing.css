@@ -2869,3 +2869,173 @@
  .pr-box-labels-box-grid {grid-template-columns:1fr;}
 }
 @media(prefers-reduced-motion:reduce){.pr-box-labels-group-body{animation:none;}.pr-box-labels-chevron{transition:none;}}
+
+/* v289 — Projects Preparing index redesign. Scope every rule to the index so
+   project preparation, school panels, dialogs and their functionality stay intact. */
+.pr-root.pr-root--index {
+  padding-top:4px;
+  --pr-index-ink:#0d1526;
+  --pr-index-orange:#ff6900;
+}
+.pr-root--index .pr-index-hero {
+  position:relative;isolation:isolate;display:flex;align-items:center;gap:20px;
+  width:100%;min-height:115px;padding:20px 24px;margin-bottom:22px;
+  border-radius:24px;overflow:hidden;
+  background:linear-gradient(105deg,#fff0e4 0%,#fff5ee 45%,#ffe0cc 100%);
+  box-shadow:0 7px 22px rgba(163,89,37,.045);
+}
+.pr-root--index .pr-index-hero::after {
+  content:"";position:absolute;z-index:-1;width:320px;height:220px;
+  right:7%;bottom:-156px;border-radius:50%;background:rgba(252,141,65,.10);
+}
+.pr-root--index .pr-index-hero-icon {
+  display:grid;place-items:center;flex:0 0 73px;width:73px;height:73px;
+  border-radius:22px;background:#ff9006;color:white;
+  box-shadow:0 8px 17px rgba(236,100,12,.13);
+}
+.pr-root--index .pr-index-hero-copy {display:flex;flex-direction:column;gap:5px;min-width:0;position:relative;z-index:2;}
+.pr-root--index .pr-index-hero-copy>span {font-size:15px;font-weight:900;color:#a83d0a;letter-spacing:.02em;}
+.pr-root--index .pr-index-hero-copy>strong {font-size:clamp(17px,2vw,23px);font-weight:880;line-height:1.25;letter-spacing:-.035em;color:#0d1526;}
+/* Decorative shipping cartons, CSS-only: no asset requests or background watermark. */
+.pr-root--index .pr-index-hero-parcels {position:absolute;right:55px;bottom:-8px;height:113px;width:230px;pointer-events:none;}
+.pr-root--index .pr-index-parcel {position:absolute;display:block;border-radius:3px;
+  background:linear-gradient(115deg,#ffb24f 0%,#f99c32 65%,#f5881e 100%);
+  box-shadow:inset -12px 0 0 rgba(194,100,22,.1),0 10px 20px rgba(225,118,42,.08);
+}
+.pr-root--index .pr-index-parcel::before {content:"";position:absolute;top:0;left:50%;width:18%;height:100%;transform:translateX(-50%);background:rgba(255,221,161,.5);}
+.pr-root--index .pr-index-parcel::after {content:"";position:absolute;top:0;left:0;width:100%;height:11px;background:rgba(255,232,191,.26);}
+.pr-root--index .pr-index-parcel--back {width:102px;height:93px;left:70px;bottom:12px;transform:skewY(-5deg);}
+.pr-root--index .pr-index-parcel--left {width:90px;height:67px;left:25px;bottom:0;transform:skewY(4deg);}
+.pr-root--index .pr-index-parcel--right {width:95px;height:64px;right:1px;bottom:0;transform:skewY(-4deg);}
+.pr-root--index .pr-index-stats {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px;margin-bottom:23px;}
+.pr-root--index .pr-index-stat {
+  display:flex;align-items:center;gap:20px;min-width:0;min-height:106px;
+  text-align:left;padding:19px 22px;border:1px solid transparent;border-radius:22px;
+  box-shadow:0 8px 18px rgba(17,24,39,.055);color:#fff;
+  transition:transform .18s ease,box-shadow .18s ease;
+}
+.pr-root--index .pr-index-stat:hover {transform:translateY(-2px);box-shadow:0 15px 28px rgba(17,24,39,.11);}
+.pr-root--index .pr-index-stat:focus-visible,
+.pr-root--index .pr-index-add-project:focus-visible {outline:3px solid #ff920e;outline-offset:3px;}
+.pr-root--index .pr-index-stat--all {background:linear-gradient(125deg,#0d1423,#050b1b);}
+.pr-root--index .pr-index-stat--active {background:linear-gradient(115deg,#ff720a,#ff6200);}
+.pr-root--index .pr-index-stat--delivered {background:linear-gradient(115deg,#f7f4f1,#ece8e4);color:#0e172b;border-color:#f0ece9;}
+.pr-root--index .pr-index-stat--closed {background:linear-gradient(125deg,#606b7e,#505a6b);}
+.pr-root--index .pr-index-stat-icon {display:grid;place-items:center;flex:0 0 68px;width:68px;height:68px;
+  color:inherit;background:rgba(255,255,255,.12);border-radius:20px;}
+.pr-root--index .pr-index-stat--delivered .pr-index-stat-icon {background:rgba(20,30,50,.06);}
+.pr-root--index .pr-index-stat-copy {display:flex;flex-direction:column;min-width:0;gap:5px;}
+.pr-root--index .pr-index-stat-copy>span {font-size:15px;font-weight:810;white-space:nowrap;letter-spacing:-.025em;}
+.pr-root--index .pr-index-stat-copy>strong {font-size:32px;font-weight:900;line-height:1.05;letter-spacing:-.05em;}
+.pr-root--index .pr-index-controls {display:flex;justify-content:space-between;align-items:center;
+  gap:14px;padding:5px;margin:0 0 48px;border:1px solid #f0f1f3;border-radius:23px;background:#fff;
+  box-shadow:0 4px 16px rgba(17,24,39,.025);}
+.pr-root--index .pr-project-tabs {display:flex;flex-wrap:nowrap;gap:4px;padding:0;
+  background:#f1f2f5;border:0;border-radius:18px;max-width:100%;overflow-x:auto;scrollbar-width:none;}
+.pr-root--index .pr-project-tabs::-webkit-scrollbar {display:none;}
+.pr-root--index .pr-project-tab {min-height:57px;min-width:119px;padding:0 26px;
+  color:#596171;font-weight:820;font-size:16px;border-radius:17px;white-space:nowrap;}
+.pr-root--index .pr-project-tab:hover:not(.is-active) {background:#fff;color:#222b3a;}
+.pr-root--index .pr-project-tab.is-active {background:#050c1c;color:#fff;box-shadow:0 6px 16px rgba(5,12,28,.13);}
+.pr-root--index .pr-index-result-count {display:inline-flex;align-items:center;justify-content:center;
+  padding:0 20px;min-height:53px;white-space:nowrap;border-radius:20px;
+  background:#f0f1f5;color:#131b2b;font-size:15px;font-weight:860;}
+/* The add tile is first in DOM and always sits to the left of projects. */
+.pr-root.pr-root--index .pr-folders.pr-index-folder-grid {
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,320px));
+  align-items:start;justify-content:start;justify-items:stretch;gap:24px;
+  padding:0 0 30px;margin:0;
+}
+.pr-root--index .pr-index-add-project {
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+  width:100%;min-width:0;height:300px;padding:24px 18px;
+  text-align:center;border:2px dashed #22c76c;border-radius:29px;
+  background:radial-gradient(circle at 80% 8%,rgba(183,239,208,.16),transparent 48%),
+    linear-gradient(130deg,#f9fffb,#f3fbf6);color:#101010;
+  transition:transform .2s ease,box-shadow .2s ease,border-color .2s ease;
+}
+.pr-root--index .pr-index-add-project:hover {transform:translateY(-3px);border-color:#05a34c;box-shadow:0 15px 30px rgba(29,144,79,.085);}
+.pr-root--index .pr-index-add-icon {width:84px;height:84px;display:grid;place-items:center;
+  border-radius:27px;background:linear-gradient(145deg,#06bc51,#08a639);color:#fff;
+  box-shadow:0 10px 20px rgba(18,169,79,.1);margin-bottom:7px;}
+.pr-root--index .pr-index-add-project>strong {font-size:23px;letter-spacing:-.045em;font-weight:900;line-height:1.15;}
+.pr-root--index .pr-index-add-project>span:last-child {max-width:278px;font-size:15px;
+  font-weight:690;line-height:1.45;color:#697284;}
+/* Override the legacy miniature folder only on the index view. */
+.pr-root.pr-root--index .pr-folder-card {width:100%;height:300px;min-height:300px;
+  border:6px solid #0d0d0d;border-radius:29px;
+  background:linear-gradient(135deg,#ff951c,#ff750a 70%,#f26506);
+  box-shadow:0 17px 30px rgba(13,18,25,.13);}
+.pr-root.pr-root--index .pr-folder-main {inset:0;width:100%;height:100%;border-radius:22px;}
+.pr-root.pr-root--index .pr-folder-main::before {height:196px;border-radius:0 0 22px 22px;background:linear-gradient(#171717,#161616);}
+.pr-root.pr-root--index .pr-folder-main::after {top:82px;width:200px;height:34px;
+  border-radius:0 16px 0 0;clip-path:polygon(0 0,72% 0,100% 100%,0 100%);background:#171717;}
+.pr-root.pr-root--index .pr-folder-figure {top:30px;width:224px;height:117px;z-index:3;}
+.pr-root.pr-root--index .pr-folder-paper {top:0;width:91px;height:102px;border-radius:11px;}
+.pr-root.pr-root--index .pr-folder-paper::before {top:20px;left:14px;right:14px;height:5px;box-shadow:0 17px 0 rgba(203,213,225,.42),0 34px 0 rgba(203,213,225,.32);}
+.pr-root.pr-root--index .pr-folder-paper.left {left:23px;}
+.pr-root.pr-root--index .pr-folder-paper.middle {left:67px;top:-5px;}
+.pr-root.pr-root--index .pr-folder-paper.right {right:22px;}
+.pr-root.pr-root--index .pr-folder-copy {top:169px;left:20px;right:48px;}
+.pr-root.pr-root--index .pr-folder-copy strong {font-size:18px;line-height:1.14;margin-bottom:8px;}
+.pr-root.pr-root--index .pr-folder-copy em {font-size:14px;line-height:1.3;font-weight:650;}
+.pr-root.pr-root--index .pr-folder-foot {left:20px;right:14px;bottom:29px;font-size:14px;gap:8px;}
+.pr-root.pr-root--index .pr-folder-foot svg {width:17px;height:17px;}
+.pr-root.pr-root--index .pr-folder-menu-trigger {top:160px;right:17px;width:42px;height:42px;min-width:42px;min-height:42px;
+  opacity:1;display:grid;place-items:center;background:#353941;color:#fff;}
+.pr-root.pr-root--index .pr-folder-menu-trigger:hover,
+.pr-root.pr-root--index .pr-folder-menu-trigger[aria-expanded="true"] {background:#596171;}
+.pr-root.pr-root--index .pr-folder-menu-trigger svg {width:19px;height:19px;}
+.pr-root.pr-root--index .pr-folder-menu {top:207px;right:6px;}
+.pr-root--index .pr-index-no-projects {display:flex;align-items:center;justify-content:center;
+  min-height:140px;padding:22px;color:#788392;border:1px dashed #e1e6ed;
+  border-radius:21px;background:#fbfcfe;font-size:13px;font-weight:650;text-align:center;}
+@media(max-width:1100px) {
+  .pr-root--index .pr-index-stats {gap:11px;}
+  .pr-root--index .pr-index-stat {padding:16px 14px;gap:12px;}
+  .pr-root--index .pr-index-stat-icon {width:50px;height:50px;flex-basis:50px;border-radius:16px;}
+  .pr-root--index .pr-index-stat-icon svg {width:26px;height:26px;}
+  .pr-root--index .pr-index-stat-copy>span {font-size:12px;}
+  .pr-root--index .pr-index-stat-copy>strong {font-size:27px;}
+  .pr-root--index .pr-project-tab {min-width:0;font-size:13px;padding:0 17px;}
+}
+@media(max-width:760px) {
+  .pr-root.pr-root--index {padding-top:3px;}
+  .pr-root--index .pr-index-hero {min-height:102px;padding:18px;gap:14px;border-radius:20px;}
+  .pr-root--index .pr-index-hero-icon {width:56px;height:56px;flex-basis:56px;border-radius:16px;}
+  .pr-root--index .pr-index-hero-icon svg {width:24px;height:24px;}
+  .pr-root--index .pr-index-hero-copy>span {font-size:11px;}
+  .pr-root--index .pr-index-hero-copy>strong {font-size:17px;max-width:330px;}
+  .pr-root--index .pr-index-hero-parcels {right:-48px;opacity:.23;}
+  .pr-root--index .pr-index-stats {grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:18px;}
+  .pr-root--index .pr-index-stat {min-height:85px;border-radius:17px;}
+  .pr-root--index .pr-index-controls {margin-bottom:25px;gap:8px;border-radius:16px;}
+  .pr-root--index .pr-project-tabs {flex:1;min-width:0;border-radius:12px;}
+  .pr-root--index .pr-project-tab {min-height:46px;padding:0 13px;border-radius:11px;font-size:12px;}
+  .pr-root--index .pr-index-result-count {min-height:44px;padding:0 10px;font-size:11px;border-radius:12px;}
+  .pr-root.pr-root--index .pr-folders.pr-index-folder-grid {grid-template-columns:repeat(auto-fill,minmax(225px,1fr));gap:14px;}
+  .pr-root--index .pr-index-add-project,.pr-root.pr-root--index .pr-folder-card {height:275px;min-height:275px;}
+  .pr-root.pr-root--index .pr-folder-main::before {height:179px;}
+  .pr-root.pr-root--index .pr-folder-copy {top:150px;}
+  .pr-root.pr-root--index .pr-folder-menu-trigger {top:148px;}
+  .pr-root.pr-root--index .pr-folder-menu {top:194px;}
+}
+@media(max-width:520px) {
+  .pr-root--index .pr-index-stats {gap:9px;}
+  .pr-root--index .pr-index-stat {padding:12px;gap:9px;min-height:81px;}
+  .pr-root--index .pr-index-stat-icon {width:38px;height:38px;flex-basis:38px;border-radius:12px;}
+  .pr-root--index .pr-index-stat-icon svg {width:21px;height:21px;}
+  .pr-root--index .pr-index-stat-copy>span {font-size:11px;white-space:normal;}
+  .pr-root--index .pr-index-stat-copy>strong {font-size:24px;}
+  .pr-root--index .pr-index-hero-parcels {display:none;}
+  .pr-root--index .pr-index-hero-copy>strong {font-size:15px;}
+  .pr-root--index .pr-index-controls {align-items:stretch;flex-direction:column;}
+  .pr-root--index .pr-project-tabs {width:100%;}
+  .pr-root--index .pr-index-result-count {align-self:flex-end;min-height:30px;}
+  .pr-root.pr-root--index .pr-folders.pr-index-folder-grid {grid-template-columns:repeat(auto-fill,minmax(min(100%,240px),1fr));}
+  .pr-root--index .pr-index-add-project>strong {font-size:19px;}
+  .pr-root--index .pr-index-add-project>span:last-child {font-size:12px;}
+}
+@media(prefers-reduced-motion:reduce) {
+  .pr-root--index .pr-index-stat,.pr-root--index .pr-index-add-project {transition:none;}
+}

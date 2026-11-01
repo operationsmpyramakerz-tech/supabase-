@@ -26,6 +26,8 @@ const fmtDate = value => { try { return value ? new Date(value).toLocaleDateStri
 function Ico({ name, size = 20 }) {
   const paths = {
     folder: <><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10H3z"/><path d="M3 12h18"/></>,
+    layers: <><path d="m12 2 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5M3 17l9 5 9-5"/></>,
+    play: <path d="m8 5 11 7-11 7V5Z"/>,
     plus: <path d="M12 5v14M5 12h14"/>,
     more: <><circle cx="5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.4" fill="currentColor" stroke="none"/></>,
     back: <path d="M20 12H4m7-7-7 7 7 7"/>,
@@ -324,25 +326,43 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
     `${stage.title} ${stage.team} ${stage.description || ""}`.toLowerCase().includes(query.trim().toLowerCase()));
   const schoolPercent = progress ? Math.round(progress.completed * 100 / (progress.total || 1)) : 0;
   return <div className={`pr-root ${!project ? "pr-root--index" : school ? "pr-root--school" : "pr-root--project"}`}>
-    <div className="pr-header">
+    {project && <div className="pr-header">
       <div className="pr-headline">
-        {project && <button type="button" className="pr-back" onClick={backToParent}><Ico name="back" size={18}/>{school ? project.name : "Projects"}</button>}
-        <h1>{school ? school.beneficiary_name : project ? project.name : "Projects"}</h1>
+        <button type="button" className="pr-back" onClick={backToParent}><Ico name="back" size={18}/>{school ? project.name : "Projects"}</button>
+        <h1>{school ? school.beneficiary_name : project.name}</h1>
       </div>
       <div className="pr-top-actions">
-        {!project && canCreate && <button type="button" className="pr-primary pr-create-project" onClick={openNewProject}><Ico name="plus" size={18}/> New Project</button>}
-        {project && !school && canManage && <button type="button" className="pr-primary" onClick={openSchools}><Ico name="plus" size={17}/> Add Schools</button>}
-      </div>
-    </div>
-    {error && <div className="pr-alert" role="alert"><span>{error}</span><button onClick={() => setError("")} aria-label="Dismiss"><Ico name="close" size={16}/></button></div>}
-    {!project && <div className="pr-index-controls">
-      <div className="pr-project-tabs" role="group" aria-label="Filter project folders">
-        {projectTabs.map(tab => <button key={tab.key} type="button" className={`pr-project-tab ${projectFilter === tab.key ? "is-active" : ""}`}
-          aria-pressed={projectFilter === tab.key} onClick={() => setProjectFilter(tab.key)}>
-          <span>{tab.label}</span><span className="pr-tab-count">{tab.count}</span>
-        </button>)}
+        {!school && canManage && <button type="button" className="pr-primary" onClick={openSchools}><Ico name="plus" size={17}/> Add Schools</button>}
       </div>
     </div>}
+    {error && <div className="pr-alert" role="alert"><span>{error}</span><button onClick={() => setError("")} aria-label="Dismiss"><Ico name="close" size={16}/></button></div>}
+    {!project && <>
+      <section className="pr-index-hero" aria-label="Projects workflow">
+        <div className="pr-index-hero-icon" aria-hidden="true"><Ico name="layers" size={30}/></div>
+        <div className="pr-index-hero-copy"><span>PROJECTS WORKFLOW</span><strong>Prepare, Test, Receive, Produce &amp; Pack</strong></div>
+        <div className="pr-index-hero-parcels" aria-hidden="true"><span className="pr-index-parcel pr-index-parcel--back"/><span className="pr-index-parcel pr-index-parcel--left"/><span className="pr-index-parcel pr-index-parcel--right"/></div>
+      </section>
+      <section className="pr-index-stats" aria-label="Project status overview">
+        {[
+          { key:"all", label:"Total Projects", icon:"folder", count:projectTabs[0].count },
+          { key:"active", label:"Active", icon:"play", count:projectTabs[1].count },
+          { key:"delivered", label:"Delivered", icon:"truck", count:projectTabs[2].count },
+          { key:"closed", label:"Closed", icon:"check", count:projectTabs[3].count },
+        ].map(stat => <button key={stat.key} type="button" className={`pr-index-stat pr-index-stat--${stat.key}`}
+            onClick={()=>setProjectFilter(stat.key)} aria-pressed={projectFilter === stat.key} aria-label={`Show ${stat.label.toLowerCase()}: ${stat.count} projects`}>
+          <span className="pr-index-stat-icon" aria-hidden="true"><Ico name={stat.icon} size={30}/></span>
+          <span className="pr-index-stat-copy"><span>{stat.label}</span><strong>{stat.count}</strong></span>
+        </button>)}
+      </section>
+      <div className="pr-index-controls">
+        <div className="pr-project-tabs" role="group" aria-label="Filter project folders">
+          {projectTabs.map(tab => <button key={tab.key} type="button" className={`pr-project-tab ${projectFilter === tab.key ? "is-active" : ""}`}
+            aria-pressed={projectFilter === tab.key} onClick={() => setProjectFilter(tab.key)}>{tab.label}
+          </button>)}
+        </div>
+        <span className="pr-index-result-count" role="status">{projectFiltered.length} {projectFiltered.length === 1 ? "project" : "projects"}</span>
+      </div>
+    </>}
     {project && !school && <section className="pr-summary-card pr-summary-card--project pr-summary-card--overview" aria-label="Project overview">
       <div className="pr-summary-lead pr-overview-lead">
         <span className="pr-overview-icon" aria-hidden="true"><Ico name="components" size={26}/></span>
@@ -481,9 +501,13 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
         </button>;
       })}</div>
     </> : !project ? <>
-      <div className="pr-section-bar"><div><h2>{project ? "Schools" : "Project Folders"}</h2>{project && <span className="pr-section-count">{projectSchools.length} schools</span>}</div>{project ? null : <span className="pr-visible-count">{projectFiltered.length} {projectFiltered.length === 1 ? "folder" : "folders"}</span>}</div>
-      <div className="pr-folders" aria-label={project ? "School folders" : "Project folders"}>
-        {!project ? projectFiltered.map(row => {
+      <div className="pr-folders pr-index-folder-grid" aria-label="Project folders">
+        {canCreate && <button type="button" className="pr-index-add-project" onClick={openNewProject}>
+          <span className="pr-index-add-icon" aria-hidden="true"><Ico name="plus" size={42}/></span>
+          <strong>Add New Project</strong>
+          <span>Create a new project and start<br className="pr-index-add-break"/> its preparation workflow</span>
+        </button>}
+        {projectFiltered.map(row => {
           const summary = projectSummaries.get(row.id) || { total:0,closed:0,delivered:0 };
           const key = `project:${row.id}`;
           const menuOpen = folderMenu === key;
@@ -504,34 +528,10 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
               <button type="button" role="menuitem" className="pr-folder-menu-danger" onClick={()=>deleteProjectFolder(row)}><Ico name="trash" size={15}/> Delete</button>
             </div>}
           </article>;
-        }) : schoolFiltered.map(row => {
-          const progress = schoolProgress(stages.filter(stage=>stage.school_id===row.id));
-          const key = `school:${row.id}`;
-          const menuOpen = folderMenu === key;
-          return <article className={`pr-folder-card pr-folder-card--school ${menuOpen ? "is-menu-open" : ""}`} key={row.id}>
-            <button type="button" className="pr-folder-main" onPointerDown={event=>startFolderHold(event,key)} onPointerMove={moveFolderHold}
-              onPointerUp={cancelFolderHold} onPointerCancel={cancelFolderHold} onPointerLeave={cancelFolderHold}
-              onContextMenu={event=>folderContextMenu(event,key)} onKeyDown={event=>folderKeyDown(event,key)}
-              onClick={()=>{ if(suppressFolderClick.current){suppressFolderClick.current=false;return;}openSchoolFolder(row.id); }}
-              aria-label={`Open school ${row.beneficiary_name}. Press and hold for actions.`} aria-haspopup="menu" aria-expanded={menuOpen}>
-              <span className="pr-folder-figure" aria-hidden="true"><span className="pr-folder-paper left"/><span className="pr-folder-paper middle"/><span className="pr-folder-paper right"/></span>
-              <span className="pr-folder-copy"><strong>{row.beneficiary_name}</strong><em>{row.proposal_name}</em></span>
-              <span className="pr-folder-foot"><Ico name="school" size={15}/>{progress.completed} / {progress.total} stages <span className="pr-folder-foot-date">{progress.closed ? "Closed" : progress.delivered ? "Delivered" : "Preparing"}</span></span>
-            </button>
-            <button type="button" className="pr-folder-menu-trigger" aria-label={`Actions for ${row.beneficiary_name}`} aria-haspopup="menu" aria-expanded={menuOpen}
-              onClick={()=>{cancelFolderHold();suppressFolderClick.current=false;setFolderMenu(menuOpen ? "" : key);}}><Ico name="more" size={14}/></button>
-            {menuOpen && <div className="pr-folder-menu" role="menu" aria-label={`${row.beneficiary_name} actions`}>
-              <button type="button" role="menuitem" onClick={()=>openSchoolFolder(row.id)}>Open School</button>
-              <button type="button" role="menuitem" onClick={()=>openSchoolFolder(row.id,"components")}>Components & QC</button>
-              <button type="button" role="menuitem" onClick={()=>openSchoolFolder(row.id,"delivery")}>Packing & Delivery</button>
-              <button type="button" role="menuitem" onClick={()=>openSchoolFolder(row.id,"technical")}>Technical Follow-up</button>
-              <button type="button" role="menuitem" onClick={()=>openSchoolFolder(row.id,"returns")}>Returns & Replacements</button>
-              <button type="button" role="menuitem" onClick={()=>openSchoolFolder(row.id,"closing")}>Final Closing</button>
-            </div>}
-          </article>;
         })}
-        {project && !projectSchools.length && <div className="pr-empty"><Ico name="school" size={36}/><h3>No schools assigned</h3>{canManage && <button className="pr-primary" onClick={openSchools}>Add Schools</button>}</div>}
-        {!project && !projectFiltered.length && <div className="pr-empty"><Ico name="folder" size={36}/><h3>{projects.length ? "No matching projects" : "No project folders yet"}</h3>{canCreate && !projects.length && <button className="pr-primary" onClick={openNewProject}>Create first project</button>}</div>}
+        {!projectFiltered.length && <div className="pr-index-no-projects" role="status">
+          {projects.length ? "No projects match this filter or search." : "No projects yet. Create your first project to get started."}
+        </div>}
       </div>
     </> : null}
     {sheet === "project" && <Sheet title="New Project" onClose={()=>setSheet("")}
