@@ -3,6 +3,7 @@ import { getLegacyAccountGate } from "../../../../../lib/products-auth";
 import { featureGate } from "../../../../../lib/feature-permissions-server";
 import { assertOrderIdsInScope } from "../../../../../lib/order-data-scope";
 import { prStorageIdentityFromIds, savePurchaseRequisition } from "../../../../../lib/purchase-requisition-storage";
+import { prRefreshItemsFromOrder } from "../../../../../lib/purchase-requisition-live";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,7 +24,8 @@ export async function POST(request) {
   try {
     await assertOrderIdsInScope(gate.account, "orders.operations.export", ids);
     const identity = await prStorageIdentityFromIds(ids);
-    const saved = await savePurchaseRequisition(identity, body.form, gate.account);
-    return NextResponse.json({ ok: true, updatedAt: saved.updatedAt, updatedBy: saved.updatedBy }, { headers: { "Cache-Control": "private, no-store" } });
+    const refreshedForm = await prRefreshItemsFromOrder(ids, body.form, gate.account);
+    const saved = await savePurchaseRequisition(identity, refreshedForm, gate.account);
+    return NextResponse.json({ ok: true, updatedAt: saved.updatedAt, updatedBy: saved.updatedBy, form: refreshedForm }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) { return errorResponse(error); }
 }

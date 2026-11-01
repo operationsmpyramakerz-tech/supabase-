@@ -5,7 +5,20 @@ const string = (value, limit = 240) => String(value ?? "").replace(/[\u0000-\u00
 export function normalizePrForm(raw = {}) {
   const fields = ["prNumber","requestDate","department","costCenter","requester","workOrder","requestType","priority","requiredDate","deliveryPlace","minShelfLife","inspection","attachments","alternative","stockAvailable","purchaseReason","notes"];
   const form = Object.fromEntries(fields.map(key => [key, string(raw[key], key === "notes" ? 1800 : 250)]));
-  form.items = (Array.isArray(raw.items) ? raw.items : []).slice(0, 1000).map(item => Object.fromEntries(PR_COLUMNS.map(key => [key, key === "url" ? safePrProductUrl(item?.url) : key === "quantity" ? string(item?.[key], 30) : string(item?.[key], key === "description" ? 280 : 120)])));
+  form.items = (Array.isArray(raw.items) ? raw.items : []).slice(0, 1000).map(item => ({
+    ...Object.fromEntries(PR_COLUMNS.map(key => [key, key === "url" ? safePrProductUrl(item?.url) : key === "quantity" ? string(item?.[key], 30) : string(item?.[key], key === "description" ? 280 : 120)])),
+    // Persist the originating Operations Order row so later product edits,
+    // reordering and duplicate components can be reconciled safely.
+    sourceRowId: string(item?.sourceRowId, 120),
+    manual: item?.manual === true,
+    sourceSnapshot: item?.sourceSnapshot && typeof item.sourceSnapshot === "object" && !Array.isArray(item.sourceSnapshot)
+      ? {
+          code: string(item.sourceSnapshot.code, 120),
+          description: string(item.sourceSnapshot.description, 280),
+          quantity: string(item.sourceSnapshot.quantity, 30),
+          url: safePrProductUrl(item.sourceSnapshot.url),
+        } : null,
+  }));
   form.signatures = Object.fromEntries(PR_SIGNERS.map(role => [role, {
     name: string(raw.signatures?.[role]?.name, 100),
     signature: string(raw.signatures?.[role]?.signature, 100),
@@ -68,17 +81,114 @@ export function prInitialForm(items = [], account = {}, products = []) {
     workOrder: orderLabel,
     purchaseReason: first?.reason || "",
     items: items.map(item => ({
+      sourceRowId: item?.id == null ? "" : String(item.id),
+      manual: false,
       code: item?.productIdCode || item?.effectiveIdCode || item?.customizeId || item?.productCode || "",
       url: item?.productUrl || "",
       description: item?.productName || "",
       unit: "قطعة",
       // A purchase request uses requested quantity, not already-received quantity.
-      quantity: item?.quantityRequested ?? item?.quantity ?? "",
+      quantity: item?.quantityEditedBySupervisor ?? item?.quantityRequested ?? item?.quantity ?? "",
       model: "", warranty: "", expiry: "",
     })),
     signatures: { requester: { name: first?.createdByName || first?.assignedToName || "" } },
   });
-  return prApplyProductCatalog(initial, items, products);
+  const withProducts = prApplyProductCatalog(initial, items, products);
+  return normalizePrForm({ ...withProducts, items: withProducts.items.map(item => ({
+    ...item,
+    sourceSnapshot: {
+      code: item.code,
+      description: item.description,
+      quantity: item.quantity,
+      url: item.url,
+    },
+  })) });
+}
+
+// The Operations Order is the source of truth for product names, Products ID
+// Codes, links and requested quantities. Never replace the live order items
+// with an old PR snapshot when loading a saved requisition. Keep PR-only form
+// fields, signatures and technical columns, and explicitly added manual rows.
+// This is intentionally dependency-free for server-side and regression tests.
+export function prSyncSavedWithLiveOrder(savedForm, liveForm) {
+  const saved = normalizePrForm(savedForm);
+  const live = normalizePrForm(liveForm);
+  const used = new Set();
+  const oldRows = saved.items;
+  const liveRows = live.items;
+  const comparable = value => String(value ?? "").trim().toLocaleLowerCase();
+
+  // Source row IDs from the last save are definitive even when a product
+  // changes, rows are reordered, or the same product appears more than once.
+  const byRowId = new Map();
+  oldRows.forEach((item, index) => {
+    if (item.sourceRowId && !item.manual) {
+      const key = item.sourceRowId;
+      if (!byRowId.has(key)) byRowId.set(key, index);
+    }
+  });
+  const legacyIndexes = oldRows.map((row, index) => (!row.sourceRowId && !row.manual ? index : -1)).filter(index => index >= 0);
+  const findLegacyMatch = (fresh, freshIndex) => {
+    const candidates = legacyIndexes.filter(index => !used.has(index));
+    // Match exact name and code first. Product codes are not guaranteed to be
+    // unique (e.g. a series of books can share an ID Code).
+    const exact = candidates.find(index => comparable(oldRows[index].description) === comparable(fresh.description)
+      && comparable(oldRows[index].code) === comparable(fresh.code));
+    if (exact !== undefined) return exact;
+    const sameName = candidates.find(index => comparable(oldRows[index].description) === comparable(fresh.description));
+    if (sameName !== undefined) return sameName;
+    const sameUrl = candidates.find(index => fresh.url && oldRows[index].url === fresh.url && comparable(oldRows[index].code) === comparable(fresh.code));
+    if (sameUrl !== undefined) return sameUrl;
+    // Migration from legacy PRs with no row provenance: a product can have
+    // been changed in-place. Pair remaining rows by position after matching
+    // known products, but never bring stale item descriptions into the result.
+    if (oldRows.length === liveRows.length && candidates.includes(freshIndex)) return freshIndex;
+    return -1;
+  };
+
+  const items = liveRows.map((fresh, freshIndex) => {
+    let matched = fresh.sourceRowId ? byRowId.get(fresh.sourceRowId) : undefined;
+    if (matched !== undefined && used.has(matched)) matched = undefined;
+    if (matched === undefined) matched = findLegacyMatch(fresh, freshIndex);
+    const prior = matched !== undefined && matched >= 0 ? oldRows[matched] : null;
+    if (prior) used.add(matched);
+    const snapshot = prior?.sourceSnapshot;
+    // Compare against the last live order snapshot, *not* a manually edited
+    // PR description. User overrides in the PR are retained until that source
+    // field changes in Operations Orders; changes upstream always win.
+    const sourceChanged = key => !snapshot || comparable(snapshot[key]) !== comparable(fresh[key]);
+    const sameProduct = prior && (snapshot
+      ? (comparable(snapshot.description) === comparable(fresh.description)
+        || (snapshot.code && comparable(snapshot.code) === comparable(fresh.code)))
+      : (comparable(prior.description) === comparable(fresh.description)
+        || (prior.code && comparable(prior.code) === comparable(fresh.code))));
+    return {
+      ...fresh,
+      code: prior && !sourceChanged("code") ? prior.code : fresh.code,
+      description: prior && !sourceChanged("description") ? prior.description : fresh.description,
+      quantity: prior && !sourceChanged("quantity") ? prior.quantity : fresh.quantity,
+      url: prior && !sourceChanged("url") ? prior.url : fresh.url,
+      unit: sameProduct ? (prior.unit || fresh.unit) : fresh.unit,
+      model: sameProduct ? prior.model : fresh.model,
+      warranty: sameProduct ? prior.warranty : fresh.warranty,
+      expiry: sameProduct ? prior.expiry : fresh.expiry,
+      // Always store the latest source values for the next comparison.
+      sourceSnapshot: fresh.sourceSnapshot,
+    };
+  });
+  // An item added with the PR's “Add item” control is independent of the
+  // Operations Order, so retaining it must not prevent upstream sync.
+  const manualItems = oldRows.filter(item => item.manual && !item.sourceRowId);
+  return normalizePrForm({ ...live, ...saved, items: [...items, ...manualItems] });
+}
+
+// Detect user-visible changes after syncing a previously saved PR. Metadata
+// such as row provenance alone must not create a false “unsaved” warning.
+export function prVisibleItemsDiffer(beforeForm, afterForm) {
+  const before = normalizePrForm(beforeForm).items;
+  const after = normalizePrForm(afterForm).items;
+  if (before.length !== after.length) return true;
+  return before.some((row, index) => ["code", "description", "quantity", "url"].some(key => row[key] !== after[index][key]));
 }
 
 // Migration compatibility: legacy forms were prefilled with PR-ORD-NNN.

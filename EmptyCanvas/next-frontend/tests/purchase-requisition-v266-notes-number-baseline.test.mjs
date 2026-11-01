@@ -21,10 +21,12 @@ test('only isolated numeric tokens are moved, not ordinary words or mixed codes'
 });
 
 test('numeric alignment is opt-in exclusively in Notes drawing; dates and table cells retain baselines',()=>{
-  assert.match(source,/numeralBaselineDrop > 0/);
-  assert.match(source,/doc\.text\(token,xx,yy\+numeralBaselineDrop,\{lineBreak:false\}\)/);
-  assert.match(source,/opts\.notesNumeralAlignment\?prNotesNumeralBaselineDrop\(token,size\):0/);
-  assert.equal((source.match(/notesNumeralAlignment:true/g)||[]).length,1);
-  assert.match(source,/valign:"top",padding:11,notesNumeralAlignment:true/);
+  // The newer token renderer keeps the Notes baseline options isolated from
+  // general cells, rather than using the old notesNumeralAlignment flag.
+  assert.match(source,/lowerAsciiDigitsInArabic:true,digitBaselineDrop:4\.9/);
+  assert.equal((source.match(/lowerAsciiDigitsInArabic:true/g)||[]).length,1);
+  assert.match(source,/lowerInlineSymbolsInArabic:true,symbolBaselineDrop:4\.2/);
+  assert.match(source,/const lowerAsciiDigits=Boolean\(opts\.lowerAsciiDigitsInArabic\)/);
+  assert.match(source,/doc\.text\(printed,xx,yy\+baselineDrop,\{lineBreak:false\}\)/);
   assert.match(source,/doc\.text\(token,xx,yy,\{lineBreak:false\}\)/);
 });

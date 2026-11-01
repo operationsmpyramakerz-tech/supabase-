@@ -6,7 +6,7 @@ import { featureGate } from "../../../lib/feature-permissions-server";
 import { assertOrderIdsInScope } from "../../../lib/order-data-scope";
 import { loadOperationsOrderDetails } from "../../../lib/operations-orders-data";
 import { getProductsForOrderDetails } from "../../../lib/products-service";
-import { prApplyProductCatalog, prInitialForm, prClearLegacyAutofilledNumber } from "../../../lib/purchase-requisition-data.mjs";
+import { prInitialForm, prClearLegacyAutofilledNumber, prSyncSavedWithLiveOrder, prVisibleItemsDiffer } from "../../../lib/purchase-requisition-data.mjs";
 import { prStorageIdentityFromRows, readSavedPurchaseRequisition } from "../../../lib/purchase-requisition-storage";
 
 export const dynamic = "force-dynamic";
@@ -20,6 +20,7 @@ export default async function PurchaseRequisitionPage({searchParams}){
   if(!ids.length||ids.length>1000)return <ErrorState message="Select one order from Operations Orders to prepare a purchase requisition."/>;
   let form;
   let savedAt = null;
+  let updatedFromOrder = false;
   let loadError = "";
   try{
     await assertOrderIdsInScope(gate.account,"orders.operations.export",ids);
@@ -33,7 +34,10 @@ export default async function PurchaseRequisitionPage({searchParams}){
     try {
       const saved = await readSavedPurchaseRequisition(prStorageIdentityFromRows(items));
       if (saved) {
-        form = prApplyProductCatalog(prClearLegacyAutofilledNumber(saved.form, form.workOrder), items, products);
+        const savedForm = prClearLegacyAutofilledNumber(saved.form, form.workOrder);
+        const currentForm = prSyncSavedWithLiveOrder(savedForm, form);
+        updatedFromOrder = prVisibleItemsDiffer(savedForm, currentForm);
+        form = currentForm;
         savedAt = saved.updatedAt;
       }
     } catch (err) {
@@ -42,6 +46,6 @@ export default async function PurchaseRequisitionPage({searchParams}){
     }
   }catch(error){return <ErrorState message={error?.message||"Could not read this order"}/>;}
   return <AppShell account={gate.account} title="Purchase Requisition" eyebrow="Operations Orders" activePath="/next/operations-orders" bodyClass="operations-orders-page purchase-requisition-page">
-    <PurchaseRequisitionClient initialForm={form} orderIds={ids} initialSavedAt={savedAt} initialLoadError={loadError}/>
+    <PurchaseRequisitionClient initialForm={form} orderIds={ids} initialSavedAt={savedAt} initialOrderSync={updatedFromOrder} initialLoadError={loadError}/>
   </AppShell>;
 }

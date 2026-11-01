@@ -8,9 +8,9 @@ const itemFields=[['code','كود الصنف'],['description','اسم الصنف
 function Field({label,value,onChange,type="text",placeholder="",span=false}){return <label className={`pr-field ${span?'pr-field--wide':''}`}><span>{label}</span><input type={type} value={value||""} placeholder={placeholder} onChange={e=>onChange(e.target.value)} dir={/^[\u0600-\u06ff]/.test(String(value||""))?'rtl':'auto'}/></label>}
 function Choice({label,value,onChange,values}){return <div className="pr-field"><span>{label}</span><div className="pr-choice">{values.map(v=><label key={v} className={value===v?'is-selected':''}><input type="radio" checked={value===v} onChange={()=>onChange(v)}/>{v}</label>)}</div></div>}
 function MultiChoice({label,value,onChange,values}){const selected=String(value||" ").split(/[,،;]/).map(v=>v.trim()).filter(Boolean);return <div className="pr-field"><span>{label}</span><div className="pr-choice">{values.map(v=><label key={v} className={selected.includes(v)?"is-selected":""}><input type="checkbox" checked={selected.includes(v)} onChange={()=>onChange(selected.includes(v)?selected.filter(a=>a!==v).join(","):selected.concat(v).join(","))}/>{v}</label>)}</div></div>}
-export default function PurchaseRequisitionClient({initialForm,orderIds,initialSavedAt=null,initialLoadError=""}){
+export default function PurchaseRequisitionClient({initialForm,orderIds,initialSavedAt=null,initialOrderSync=false,initialLoadError=""}){
  const [form,setFormState]=useState(initialForm);const [busy,setBusy]=useState("");const [error,setError]=useState("");
- const [savedAt,setSavedAt]=useState(initialSavedAt);const [dirty,setDirty]=useState(false);
+ const [savedAt,setSavedAt]=useState(initialSavedAt);const [dirty,setDirty]=useState(initialOrderSync);
  const revision=useRef(0);
  const setForm=updater=>{revision.current+=1;setDirty(true);setFormState(updater)};
  const set=(key,value)=>setForm(old=>({...old,[key]:value}));
@@ -25,7 +25,10 @@ export default function PurchaseRequisitionClient({initialForm,orderIds,initialS
    const data=await response.json().catch(()=>({}));
    if(!response.ok||!data.ok)throw new Error(data.error||"Failed to save Purchase Requisition");
    setSavedAt(data.updatedAt||new Date().toISOString());
-   if(revision.current===revisionAtSave)setDirty(false);
+   if(revision.current===revisionAtSave){
+    if(data.form)setFormState(data.form);
+    setDirty(false);
+   }
   }catch(e){setError(e.message||"Save failed")}
   finally{setBusy("")}
  };
@@ -55,7 +58,7 @@ export default function PurchaseRequisitionClient({initialForm,orderIds,initialS
     <Choice label="نوع الطلب" value={form.requestType} onChange={v=>set('requestType',v)} values={["مخزني","خدمة","أصل ثابت"]}/>
     <Choice label="درجة الأولوية" value={form.priority} onChange={v=>set('priority',v)} values={["عادي","عاجل","طارئ"]}/>
    </div></section>
-   <section><div className="pr-items-head"><div><h3>ثانياً | الأصناف / الخدمات المطلوبة</h3><p>يُكتب لكل صنف وصف فني واضح؛ ويمكن إرفاق كشف تكميلي مع الإشارة إلى رقم الطلب نفسه.</p></div><button type="button" onClick={()=>setForm(old=>({...old,items:[...old.items,{code:'',description:'',unit:'قطعة',quantity:'',model:'',warranty:'',expiry:'',url:''}]}))}>+ إضافة صنف</button></div>
+   <section><div className="pr-items-head"><div><h3>ثانياً | الأصناف / الخدمات المطلوبة</h3><p>يُكتب لكل صنف وصف فني واضح؛ ويمكن إرفاق كشف تكميلي مع الإشارة إلى رقم الطلب نفسه.</p></div><button type="button" onClick={()=>setForm(old=>({...old,items:[...old.items,{code:'',description:'',unit:'قطعة',quantity:'',model:'',warranty:'',expiry:'',url:'',manual:true,sourceRowId:''}]}))}>+ إضافة صنف</button></div>
     <div className="pr-table-scroll"><table className="pr-items"><thead><tr><th>م</th>{itemFields.map(([k,l])=><th key={k}>{l}</th>)}<th></th></tr></thead><tbody>{form.items.map((r,i)=><tr key={i}><td>{i+1}</td>{itemFields.map(([k])=><td key={k}><input aria-label={`${itemFields.find(([key])=>key===k)?.[1]} ${i+1}`} value={r[k]??''} onChange={e=>item(i,k,e.target.value)}/>{k==='description'&&/^https?:\/\//i.test(r.url||'')&&<a className="pr-product-link" href={r.url} target="_blank" rel="noopener noreferrer" title="Open product link">↗ Open product</a>}</td>)}<td><button type="button" className="pr-remove" onClick={()=>setForm(old=>({...old,items:old.items.filter((_,j)=>j!==i)}))} aria-label={`Remove item ${i+1}`}>×</button></td></tr>)}</tbody></table></div>
    </section>
    <section><h3>ثالثاً | المتطلبات الفنية والتسليم</h3><div className="pr-fields">
@@ -72,7 +75,7 @@ export default function PurchaseRequisitionClient({initialForm,orderIds,initialS
    <section><h3>خامساً | التوقيعات والاعتمادات</h3><div className="pr-signatures">{signatures.map(([role,label])=><div key={role} className="pr-signer"><h4>{label}</h4>{[['name','الاسم'],['signature','التوقيع'],['date','التاريخ']].map(([key,label])=><Field key={key} label={label} value={form.signatures[role][key]} onChange={v=>sign(role,key,v)} type={key==='date'?'date':'text'}/>)}</div>)}</div></section>
   </div>
   {initialLoadError&&<div role="alert" className="pr-alert">{initialLoadError}</div>}
-  <div className={`pr-save-status ${dirty?'is-unsaved':'is-saved'}`} role="status" dir="ltr">{dirty ? "Unsaved changes" : savedAt ? `Saved · ${new Date(savedAt).toLocaleString("en-GB",{timeZone:"Africa/Cairo"})}` : "Not saved yet"}</div>
+  <div className={`pr-save-status ${dirty?'is-unsaved':'is-saved'}`} role="status" dir="ltr">{dirty ? (initialOrderSync && revision.current===0 ? "Order components updated · Save to persist" : "Unsaved changes") : savedAt ? `Saved · ${new Date(savedAt).toLocaleString("en-GB",{timeZone:"Africa/Cairo"})}` : "Not saved yet"}</div>
   {error&&<div role="alert" className="pr-alert">{error}</div>}
   <div className="pr-bottom" dir="ltr"><span>{form.items.length} items · {orderIds.length} order rows</span><button type="button" className="pr-save" disabled={!!busy} onClick={saveForm}>{busy==="save"?"Saving…":"Save"}</button><button type="button" disabled={!!busy} onClick={()=>exportFile('pdf')}>{busy==='pdf'?'Preparing…':'Download PDF'}</button><button type="button" disabled={!!busy} onClick={()=>exportFile('word')}>{busy==='word'?'Preparing…':'Download Word'}</button></div>
  </div>

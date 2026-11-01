@@ -3,7 +3,7 @@ import { getLegacyAccountGate } from "../../../../lib/products-auth";
 import { featureGate } from "../../../../lib/feature-permissions-server";
 import { assertOrderIdsInScope } from "../../../../lib/order-data-scope";
 import { renderPrWord, renderPrPdf, prDownloadName } from "../../../../lib/purchase-requisition-render";
-import { normalizePrForm } from "../../../../lib/purchase-requisition-data.mjs";
+import { prRefreshItemsFromOrder } from "../../../../lib/purchase-requisition-live";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,7 +20,7 @@ export async function POST(request){
   if(JSON.stringify(body).length>600_000)return respondError("Purchase Requisition is too large.",413);
   try{
     await assertOrderIdsInScope(gate.account,"orders.operations.export",ids);
-    const form=normalizePrForm(body.form||{});
+    const form=await prRefreshItemsFromOrder(ids,body.form||{},gate.account);
     if(form.items.length>1000)return respondError("Too many items.",400);
     const blob=body.kind==="word"?await renderPrWord(form):await renderPrPdf(form);
     const name=prDownloadName(form,body.kind==="word"?"docx":"pdf");
