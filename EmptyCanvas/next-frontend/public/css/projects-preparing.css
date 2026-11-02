@@ -3257,8 +3257,9 @@
   border-radius:11px 13px 0 0;background:#272727;
   clip-path:polygon(0 0, 88px 0, 118px 34px, 0 34px);
 }
+/* Keep the papers BEHIND the black front panel, exactly like Kits folders. */
 .pr-root.pr-root--index .pr-folder-figure {
-  top:18px;width:118px;height:68px;transform:translateX(-50%);
+  top:18px;width:118px;height:68px;transform:translateX(-50%);z-index:1;
 }
 .pr-root.pr-root--index .pr-folder-paper {
   width:50px;height:54px;border-radius:7px;
