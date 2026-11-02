@@ -326,10 +326,10 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
     return !used.has(member.id) && `${member.name} ${member.school}`.toLowerCase().includes(memberQuery.toLowerCase());
   });
   const projectTabs = [
-    { key: "all", label: "All Projects", count: totals.projects },
-    { key: "active", label: "Active", count: projects.filter(row => { const summary=projectSummaries.get(row.id); return summary && summary.total > summary.closed; }).length },
-    { key: "delivered", label: "Delivered", count: projects.filter(row => (projectSummaries.get(row.id)?.delivered || 0) > 0).length },
-    { key: "closed", label: "Closed", count: projects.filter(row => { const summary=projectSummaries.get(row.id); return summary && summary.total > 0 && summary.closed === summary.total; }).length },
+    { key: "all", label: "All Projects", icon: "folder", count: totals.projects },
+    { key: "active", label: "Active", icon: "play", count: projects.filter(row => { const summary=projectSummaries.get(row.id); return summary && summary.total > summary.closed; }).length },
+    { key: "delivered", label: "Delivered", icon: "truck", count: projects.filter(row => (projectSummaries.get(row.id)?.delivered || 0) > 0).length },
+    { key: "closed", label: "Closed", icon: "check", count: projects.filter(row => { const summary=projectSummaries.get(row.id); return summary && summary.total > 0 && summary.closed === summary.total; }).length },
   ];
   const projectFiltered = projects.filter(row => {
     if (!`${row.name} ${row.description}`.toLowerCase().includes(query.toLowerCase())) return false;
@@ -377,10 +377,10 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
           <span className="pr-index-stat-copy"><span>{stat.label}</span><strong>{stat.count}</strong></span>
         </button>)}
       </section>
-      <div className="pr-index-controls">
+      <div className="pr-index-controls pr-project-detail-tabs">
         <div className="pr-project-tabs" role="group" aria-label="Filter project folders">
-          {projectTabs.map(tab => <button key={tab.key} type="button" className={`pr-project-tab ${projectFilter === tab.key ? "is-active" : ""}`}
-            aria-pressed={projectFilter === tab.key} onClick={() => setProjectFilter(tab.key)}>{tab.label}
+          {projectTabs.map(tab => <button key={tab.key} type="button" className={`pr-project-tab pr-project-detail-tab ${projectFilter === tab.key ? "is-active" : ""}`}
+            aria-pressed={projectFilter === tab.key} onClick={() => setProjectFilter(tab.key)}><Ico name={tab.icon} size={17}/>{tab.label}
           </button>)}
         </div>
         <span className="pr-index-result-count" role="status">{projectFiltered.length} {projectFiltered.length === 1 ? "project" : "projects"}</span>

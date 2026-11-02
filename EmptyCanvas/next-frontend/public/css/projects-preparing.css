@@ -3595,3 +3595,57 @@
   .pr-root--project .pr-project-steps-panel--tab {padding:16px 12px;border-radius:16px;}
   .pr-root--project .pr-project-steps-panel--tab .pr-project-step-card--compact {padding:10px 9px;}
 }
+
+
+/* v299 — the index filter bar shares the project-detail tabs' exact visual language.
+   Keep filtering semantics and the result count; adjust only the index presentation. */
+.pr-root--index .pr-index-controls.pr-project-detail-tabs {
+  display:flex;align-items:center;justify-content:space-between;flex-wrap:nowrap;
+  gap:5px;min-height:59px;padding:5px;margin:0 0 21px;
+  border:1px solid #e8eaf0;border-radius:18px;background:#f7f8fa;
+  box-shadow:0 3px 14px rgba(20,30,46,.025);overflow:visible;
+}
+.pr-root--index .pr-project-tabs {
+  display:flex;align-items:center;flex:1 1 auto;min-width:0;width:auto;max-width:none;
+  flex-wrap:nowrap;gap:5px;padding:0;margin:0;background:transparent;border:0;
+  border-radius:0;overflow-x:auto;scrollbar-width:none;
+}
+.pr-root--index .pr-project-tabs::-webkit-scrollbar {display:none;}
+.pr-root--index .pr-project-tab.pr-project-detail-tab {
+  position:relative;display:inline-flex;align-items:center;justify-content:center;
+  flex:0 0 auto;gap:10px;min-width:126px;min-height:47px;padding:0 17px;
+  border:0;border-radius:13px;background:transparent;color:#475269;
+  font-size:12px;font-weight:800;line-height:1;white-space:nowrap;
+  transition:background .16s ease,color .16s ease;
+}
+.pr-root--index .pr-project-tab.pr-project-detail-tab svg {flex:none;}
+.pr-root--index .pr-project-tab.pr-project-detail-tab:hover:not(.is-active) {
+  background:#fff;color:#475269;
+}
+.pr-root--index .pr-project-tab.pr-project-detail-tab.is-active {
+  background:#0b1426;color:#fff;box-shadow:0 6px 15px rgba(11,20,38,.14);
+}
+.pr-root--index .pr-project-tab.pr-project-detail-tab.is-active::after {
+  content:"";position:absolute;left:18px;right:18px;bottom:0;height:3px;
+  border-radius:4px 4px 0 0;background:#ff7819;
+}
+.pr-root--index .pr-project-tab.pr-project-detail-tab:focus-visible {
+  outline:2px solid #fb832c;outline-offset:2px;
+}
+.pr-root--index .pr-index-result-count {
+  flex:0 0 auto;min-height:34px;padding:0 12px;border-radius:11px;
+  font-size:11px;background:#f0f1f5;
+}
+@media(max-width:760px) {
+  .pr-root--index .pr-index-controls.pr-project-detail-tabs {
+    min-height:52px;margin-bottom:15px;padding:4px;border-radius:14px;
+  }
+  .pr-root--index .pr-project-tabs {width:auto;min-width:0;}
+  .pr-root--index .pr-project-tab.pr-project-detail-tab {
+    min-height:43px;min-width:auto;padding:0 12px;font-size:11px;gap:6px;
+  }
+}
+@media(max-width:480px) {
+  .pr-root--index .pr-project-tab.pr-project-detail-tab {padding:0 10px;font-size:10px;}
+  .pr-root--index .pr-project-tab.pr-project-detail-tab svg {width:15px;height:15px;}
+}
