@@ -10,11 +10,13 @@ const dashboard = read('components/preparing/ProjectDashboard.jsx');
 const css = read('public/css/projects-preparing.css');
 const page = read('app/projects-preparing/page.jsx');
 
-test('Reports tab embeds the Master Dashboard without an intermediary card or dialog', () => {
-  const reportSection = ui.split('{projectTab === "reports" &&')[1]?.split('{project && !school && showWarehouse &&')[0] || '';
-  assert.match(reportSection, /id="pr-detail-panel-reports" role="tabpanel"/);
-  assert.match(reportSection, /<ProjectDashboard key=\{projectId\}[^>]* inline/);
-  assert.doesNotMatch(reportSection, /pr-project-report-card|pr-components-overlay|role="dialog"/);
+test('Overview embeds the full Master Dashboard; Reports tab and overlay are removed', () => {
+  const overview = ui.split('{projectTab === "overview" &&')[1]?.split('{projectTab === "stages" &&')[0] || '';
+  assert.match(overview, /id="pr-detail-panel-overview" role="tabpanel"/);
+  assert.match(overview, /className="pr-project-tab-pane pr-project-overview-reports"/);
+  assert.match(overview, /<ProjectDashboard key=\{projectId\}[^>]* inline/);
+  assert.doesNotMatch(overview, /pr-project-report-card|pr-components-overlay|role="dialog"/);
+  assert.doesNotMatch(ui, /projectTab === "reports"|pr-detail-panel-reports/);
   assert.doesNotMatch(ui, /showDashboard|setShowDashboard/);
   assert.match(ui, /setSchoolId\(id\);setProjectTab\("schools"\)/);
 });
@@ -32,11 +34,11 @@ test('Inline report preserves report tabs, CSV exports, refresh, school drill-do
   assert.match(dashboard, /Retry/);
 });
 
-test('Report is full-width with native page scrolling and responsive matrix overflow', () => {
-  assert.match(css, /\.pr-root--project \.pr-project-tab-pane--reports \.pr-report-root--inline/);
+test('Embedded Overview report is full-width with page scrolling and responsive matrix overflow', () => {
+  assert.match(css, /\.pr-root--project \.pr-project-overview-reports \.pr-report-root--inline/);
   assert.match(css, /pr-report-table-scroll \{\s*overflow-x:auto;/);
   assert.match(css, /max-width:980px/);
-  assert.match(page, /v297-inline-reports-tab/);
+  assert.match(page, /v298-stages-overview-reports/);
   for (const [filename, source] of [['PreparingClient.jsx', ui], ['ProjectDashboard.jsx', dashboard]]) {
     const ast = ts.createSourceFile(filename, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.JSX);
     assert.deepEqual(ast.parseDiagnostics.map(d => d.messageText), [], filename);

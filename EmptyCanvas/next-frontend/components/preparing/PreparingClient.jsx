@@ -301,7 +301,7 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
   useEffect(() => () => { if (longPressTimer.current !== null) clearTimeout(longPressTimer.current); }, []);
   function switchProjectTab(nextTab) { setProjectTab(nextTab); setQuery(""); setFolderMenu(""); }
   function onProjectTabKeyDown(event, currentKey) {
-    const keys = ["overview", "components", "schools", "reports"];
+    const keys = ["overview", "stages", "components", "schools"];
     let next = -1;
     if (event.key === "ArrowRight") next = (keys.indexOf(currentKey) + 1) % keys.length;
     if (event.key === "ArrowLeft") next = (keys.indexOf(currentKey) + keys.length - 1) % keys.length;
@@ -390,9 +390,9 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
       <nav className="pr-project-detail-tabs" role="tablist" aria-label="Project sections">
         {[
           {key:"overview",label:"Overview",icon:"grid"},
+          {key:"stages",label:"Stages",icon:"clipboard"},
           {key:"components",label:"Components",icon:"components"},
           {key:"schools",label:"Schools",icon:"school"},
-          {key:"reports",label:"Reports",icon:"chart"},
         ].map(tab => <button key={tab.key} id={`pr-detail-tab-${tab.key}`} role="tab" type="button"
           aria-selected={projectTab === tab.key} aria-controls={projectTab === tab.key ? `pr-detail-panel-${tab.key}` : undefined}
           tabIndex={projectTab === tab.key ? 0 : -1} onKeyDown={event=>onProjectTabKeyDown(event,tab.key)}
@@ -418,7 +418,15 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
               <span style={{width:`${overallPercent ?? 0}%`}}/></div>
           </section>
         </div>
-        <section className="pr-project-steps-panel pr-project-steps-panel--detail" aria-label="Project Steps">
+        <section className="pr-project-tab-pane pr-project-overview-reports" aria-label="Master Project Dashboard">
+        <ProjectDashboard key={projectId} projectId={projectId} request={api} inline onOpenSchool={id=>{
+          setSchoolId(id);setProjectTab("schools");setQuery("");setWorkflowFilter("all");
+          setShowComponents(false);setShowDelivery(false);setShowReconciliation(false);
+          setShowTechnical(false);setShowClosing(false);
+        }}/>
+        </section>
+      </div>}
+      {projectTab === "stages" && <section id="pr-detail-panel-stages" role="tabpanel" aria-labelledby="pr-detail-tab-stages" className="pr-project-steps-panel pr-project-steps-panel--detail pr-project-steps-panel--tab" aria-label="Project Steps">
           <div className="pr-project-panel-heading"><div className="pr-project-panel-title"><h2>Project Steps</h2><span className="pr-section-count">5 stages</span></div></div>
           <p className="pr-project-steps-subtitle">These five stages determine the overall project completion.</p>
           {projectStageError && <div className="pr-project-step-error" role="alert"><span>Progress unavailable: {projectStageError}</span><button type="button" onClick={()=>setProjectStageRevision(n=>n+1)}>Retry</button></div>}
@@ -445,8 +453,7 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
               </li>;
             })}
           </ol>
-        </section>
-      </div>}
+      </section>}
       {projectTab === "components" && <section id="pr-detail-panel-components" role="tabpanel" aria-labelledby="pr-detail-tab-components" className="pr-project-tab-pane pr-project-tab-pane--components">
         <ProjectMasterComponents key={projectId} project={project} proposals={data.proposals} allowed={canManage} request={api} inline
           onChanged={()=>{setProjectStageRevision(value=>value+1);reload().catch(err=>setError(err.message));}}/>
@@ -496,13 +503,7 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
         </div>
       </section>
       </div>}
-      {projectTab === "reports" && <section id="pr-detail-panel-reports" role="tabpanel" aria-labelledby="pr-detail-tab-reports" className="pr-project-tab-pane pr-project-tab-pane--reports">
-        <ProjectDashboard key={projectId} projectId={projectId} request={api} inline onOpenSchool={id=>{
-          setSchoolId(id);setProjectTab("schools");setQuery("");setWorkflowFilter("all");
-          setShowComponents(false);setShowDelivery(false);setShowReconciliation(false);
-          setShowTechnical(false);setShowClosing(false);
-        }}/>
-      </section>}
+
     </>}
     {project && !school && showWarehouse && <div className="pr-components-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setShowWarehouse(false);}}><section className="pr-components-sheet pr-warehouse-sheet" role="dialog" aria-modal="true" aria-label="Project Warehouse Receiving"><ProjectWarehouseReceiving key={projectId} projectId={projectId} projectName={project.name} hasProjectProposal={!!project.source_proposal_id} canReceive={canWarehouseReceive} canAllocate={canWarehouseAllocate} request={api} onClose={()=>{setShowWarehouse(false);setProjectStageRevision(n=>n+1);}}/></section></div>}
     {project && !school && showProjectTesting && <div className="pr-components-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setShowProjectTesting(false);}}><section className="pr-components-sheet pr-warehouse-sheet" role="dialog" aria-modal="true" aria-label="Project Testing"><ProjectTesting key={projectId} projectId={projectId} projectName={project.name} canTest={canStage} request={api} onClose={()=>{setShowProjectTesting(false);setProjectStageRevision(n=>n+1);}}/></section></div>}

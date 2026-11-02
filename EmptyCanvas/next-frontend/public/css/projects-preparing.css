@@ -3324,9 +3324,8 @@
 }
 
 
-/* v294 — project detail refresh: real Overview / Components / Schools / Reports tabs.
-   Only the Overview shows the five physical preparation steps. The school
-   grid lives exclusively inside its dedicated Schools tab. */
+/* Project detail styling: Overview, Stages, Components and Schools.
+   The school grid remains exclusively inside the dedicated Schools tab. */
 .pr-root--project .pr-project-heading-line {display:flex;align-items:center;gap:13px;flex-wrap:wrap;}
 .pr-root--project .pr-project-heading-line h1 {margin:0;font-size:clamp(24px,2.4vw,32px);letter-spacing:-.045em;font-weight:880;}
 .pr-project-heading-icon {display:grid;place-items:center;width:49px;height:49px;flex:0 0 49px;border-radius:14px;background:#fff0e4;color:#f36f16;}
@@ -3507,49 +3506,92 @@
 }
 
 
-/* v297 — Master Project Dashboard is part of the Reports tab, not an overlay.
+/* v297 layout — reused for the embedded report in the v298 Overview tab; no overlay.
    Keep the page's natural scroll and the dashboard's native filtering/export UI. */
-.pr-root--project .pr-project-tab-pane--reports {
+.pr-root--project .pr-project-overview-reports {
   width:100%;min-width:0;padding:22px;overflow:visible;
 }
-.pr-root--project .pr-project-tab-pane--reports .pr-report-root--inline {
+.pr-root--project .pr-project-overview-reports .pr-report-root--inline {
   width:100%;min-width:0;max-width:100%;padding:0;margin:0;gap:18px;
   background:transparent;overflow:visible;
 }
-.pr-root--project .pr-project-tab-pane--reports .pr-report-root--inline .pr-report-top {
+.pr-root--project .pr-project-overview-reports .pr-report-root--inline .pr-report-top {
   display:flex;flex-direction:row;align-items:center;justify-content:space-between;
   flex-wrap:wrap;gap:12px;min-width:0;
 }
-.pr-root--project .pr-project-tab-pane--reports .pr-report-top h3 {
+.pr-root--project .pr-project-overview-reports .pr-report-top h3 {
   font-size:21px;font-weight:850;letter-spacing:-.035em;color:#172035;
 }
-.pr-root--project .pr-project-tab-pane--reports .pr-report-top p {
+.pr-root--project .pr-project-overview-reports .pr-report-top p {
   font-size:12px;line-height:1.5;margin:5px 0 0;color:#8792a4;
 }
-.pr-root--project .pr-project-tab-pane--reports .pr-report-metrics,
-.pr-root--project .pr-project-tab-pane--reports .pr-report-columns,
-.pr-root--project .pr-project-tab-pane--reports .pr-report-exports,
-.pr-root--project .pr-project-tab-pane--reports .pr-report-table-scroll {min-width:0;width:100%;}
-.pr-root--project .pr-project-tab-pane--reports .pr-report-table-scroll {
+.pr-root--project .pr-project-overview-reports .pr-report-metrics,
+.pr-root--project .pr-project-overview-reports .pr-report-columns,
+.pr-root--project .pr-project-overview-reports .pr-report-exports,
+.pr-root--project .pr-project-overview-reports .pr-report-table-scroll {min-width:0;width:100%;}
+.pr-root--project .pr-project-overview-reports .pr-report-table-scroll {
   overflow-x:auto;overscroll-behavior-x:contain;
 }
 @media (max-width:980px) {
-  .pr-root--project .pr-project-tab-pane--reports .pr-report-metrics {
+  .pr-root--project .pr-project-overview-reports .pr-report-metrics {
     grid-template-columns:repeat(2,minmax(0,1fr));
   }
-  .pr-root--project .pr-project-tab-pane--reports .pr-report-columns {grid-template-columns:1fr;}
+  .pr-root--project .pr-project-overview-reports .pr-report-columns {grid-template-columns:1fr;}
 }
 @media (max-width:760px) {
-  .pr-root--project .pr-project-tab-pane--reports {padding:15px 12px;}
-  .pr-root--project .pr-project-tab-pane--reports .pr-report-root--inline {gap:15px;}
-  .pr-root--project .pr-project-tab-pane--reports .pr-report-top {align-items:flex-start;}
-  .pr-root--project .pr-project-tab-pane--reports .pr-report-top h3 {font-size:19px;}
-  .pr-root--project .pr-project-tab-pane--reports .pr-report-metrics {gap:9px;}
-  .pr-root--project .pr-project-tab-pane--reports .pr-report-exports {gap:12px;}
+  .pr-root--project .pr-project-overview-reports {padding:15px 12px;}
+  .pr-root--project .pr-project-overview-reports .pr-report-root--inline {gap:15px;}
+  .pr-root--project .pr-project-overview-reports .pr-report-top {align-items:flex-start;}
+  .pr-root--project .pr-project-overview-reports .pr-report-top h3 {font-size:19px;}
+  .pr-root--project .pr-project-overview-reports .pr-report-metrics {gap:9px;}
+  .pr-root--project .pr-project-overview-reports .pr-report-exports {gap:12px;}
 }
 @media (max-width:480px) {
-  .pr-root--project .pr-project-tab-pane--reports .pr-report-metric {padding:11px;}
-  .pr-root--project .pr-project-tab-pane--reports .pr-report-metric strong {font-size:19px;}
-  .pr-root--project .pr-project-tab-pane--reports .pr-report-quantities {grid-template-columns:repeat(2,minmax(0,1fr));}
-  .pr-root--project .pr-project-tab-pane--reports .pr-report-panel {padding:13px;}
+  .pr-root--project .pr-project-overview-reports .pr-report-metric {padding:11px;}
+  .pr-root--project .pr-project-overview-reports .pr-report-metric strong {font-size:19px;}
+  .pr-root--project .pr-project-overview-reports .pr-report-quantities {grid-template-columns:repeat(2,minmax(0,1fr));}
+  .pr-root--project .pr-project-overview-reports .pr-report-panel {padding:13px;}
+}
+
+
+/* v298 — combine the full Master Project Dashboard with Overview, and move
+   all five operational step cards into their own accessible Stages tab.
+   Scoped only to project detail; the Kits-like folder index is unchanged. */
+.pr-root--project .pr-project-detail-overview {
+  display:flex;flex-direction:column;align-items:stretch;gap:18px;
+  min-width:0;width:100%;
+}
+.pr-root--project .pr-project-detail-overview .pr-project-detail-left {
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+  align-items:stretch;gap:16px;min-width:0;width:100%;
+}
+.pr-root--project .pr-project-detail-left .pr-project-overall-card {
+  justify-content:space-between;min-width:0;
+}
+.pr-root--project .pr-project-detail-overview .pr-project-overview-reports {
+  width:100%;min-width:0;max-width:100%;
+  background:#fff;
+}
+.pr-root--project .pr-project-steps-panel--tab {
+  width:100%;max-width:100%;min-width:0;margin:0;
+  border:1px solid #e5e9ee;background:#fff;
+  border-radius:20px;padding:22px;
+  box-shadow:0 8px 22px rgba(17,24,39,.026);
+}
+.pr-root--project .pr-project-steps-panel--tab .pr-project-step-timeline {
+  max-width:1050px;margin:0 auto;
+}
+.pr-root--project .pr-project-steps-panel--tab .pr-project-step-card--compact {
+  min-height:78px;padding:12px 15px 10px;
+}
+@media(max-width:980px) {
+  .pr-root--project .pr-project-detail-overview .pr-project-detail-left {
+    grid-template-columns:1fr;
+  }
+}
+@media(max-width:760px) {
+  .pr-root--project .pr-project-detail-overview {gap:13px;}
+  .pr-root--project .pr-project-detail-overview .pr-project-detail-left {gap:12px;}
+  .pr-root--project .pr-project-steps-panel--tab {padding:16px 12px;border-radius:16px;}
+  .pr-root--project .pr-project-steps-panel--tab .pr-project-step-card--compact {padding:10px 9px;}
 }

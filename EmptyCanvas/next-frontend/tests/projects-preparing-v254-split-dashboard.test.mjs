@@ -31,7 +31,8 @@ test('dashboard renders five project steps and an inline Components tab',()=>{
  assert.match(ui,/className="pr-project-detail-overview"/);
  assert.match(ui,/className="pr-project-step-timeline"/);
  assert.match(ui,/pr-dashboard-schools/);
- assert.match(ui,/projectTab === "reports"/);
+ assert.match(ui,/projectTab === "stages"/);
+ assert.match(ui,/pr-project-overview-reports/);
  assert.match(ui,/projectTab === "schools"/);
  assert.match(ui,/pr-project-tab-pane--schools/);
  assert.match(ui,/<ProjectDashboard key=\{projectId\}[^>]* inline/);

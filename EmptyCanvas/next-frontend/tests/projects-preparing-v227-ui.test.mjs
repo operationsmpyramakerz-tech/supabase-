@@ -30,7 +30,8 @@ test('stage filters preserve all stages by default and distinguish execution fro
 test('all five school workspaces still launch their original functional sheet',()=>{
   for(const name of ['setShowComponents(true)','setShowDelivery(true)','setShowTechnical(true)','setShowReconciliation(true)','setShowClosing(true)']) assert.ok(ui.includes(name),name);
   assert.match(ui,/showProjectCartons &&/);
-  assert.match(ui,/projectTab === "reports" && <section/);
+  assert.match(ui,/projectTab === "stages" && <section/);
+  assert.match(ui,/pr-project-overview-reports/);
   assert.match(ui,/<ProjectDashboard key=\{projectId\}[^>]* inline/);
   assert.doesNotMatch(ui,/showDashboard &&/);
   assert.match(ui,/\bcanStage\b/);
