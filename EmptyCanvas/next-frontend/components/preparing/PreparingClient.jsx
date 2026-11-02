@@ -28,6 +28,11 @@ function Ico({ name, size = 20 }) {
     folder: <><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10H3z"/><path d="M3 12h18"/></>,
     layers: <><path d="m12 2 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5M3 17l9 5 9-5"/></>,
     play: <path d="m8 5 11 7-11 7V5Z"/>,
+    grid: <><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></>,
+    flask: <><path d="M9 3h6M10 3v6l-5.2 9a2 2 0 0 0 1.8 3h10.8a2 2 0 0 0 1.8-3L14 9V3"/><path d="M8 15h8"/></>,
+    warehouse: <><path d="m3 10 9-7 9 7v11H3V10Z"/><path d="M7 21v-8h10v8M7 16h10"/></>,
+    package: <><path d="m12 2-9 5 9 5 9-5-9-5Z"/><path d="M3 7v10l9 5 9-5V7M12 12v10"/></>,
+    packageCheck: <><path d="m3 7 9-5 9 5v10l-9 5-9-5V7ZM3 7l9 5 9-5M12 12v10"/><path d="m7.5 11.5 1.5 1.5 2.6-2.6"/></>,
     plus: <path d="M12 5v14M5 12h14"/>,
     more: <><circle cx="5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.4" fill="currentColor" stroke="none"/></>,
     back: <path d="M20 12H4m7-7-7 7 7 7"/>,
@@ -83,6 +88,7 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
   const [sheet, setSheet] = useState("");
   const [query, setQuery] = useState("");
   const [projectFilter, setProjectFilter] = useState("all");
+  const [projectTab, setProjectTab] = useState("overview");
   const [workflowFilter, setWorkflowFilter] = useState("all");
   const [projectName, setProjectName] = useState("");
   const [projectDescription, setProjectDescription] = useState("");
@@ -125,7 +131,7 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
     const input = document.querySelector(".classic-app-shell .main-header .system-header-search__input");
     if (!input) return undefined;
     const previousPlaceholder = input.placeholder;
-    input.placeholder = schoolId ? "Search preparing stages..." : projectId ? "Search schools..." : "Search projects...";
+    input.placeholder = schoolId ? "Search preparing stages..." : projectId ? projectTab === "schools" ? "Search schools..." : "Search preparing..." : "Search projects...";
     input.value = "";
     const onInput = event => setQuery(event.target.value || "");
     input.addEventListener("input", onInput);
@@ -134,7 +140,7 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
       input.placeholder = previousPlaceholder;
       input.value = "";
     };
-  }, [projectId, schoolId]);
+  }, [projectId, schoolId, projectTab]);
   const canCreate = featureAllowed(account, "preparing.create");
   const canManage = featureAllowed(account, "preparing.manage");
   const canStage = featureAllowed(account, "preparing.stage_update");
@@ -202,13 +208,17 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
       testing: projectStageData.testing, warehouse: projectStageData.warehouse, production: projectStageData.production })
     : null, [projectStageData]);
   const projectStepPercents = projectStageProgress?.stages ?? null;
+  const overallPercent = projectStageProgress?.overall ?? null;
+  const projectSummary = project ? projectSummaries.get(project.id) : null;
+  const projectStatus = projectSummary?.total > 0 && projectSummary.closed === projectSummary.total ? "Closed"
+    : projectSummary?.total > 0 && projectSummary.delivered === projectSummary.total ? "Delivered" : "Preparing";
   // Project Components is the Master BOM, not a preparation stage.
   const projectStepCards = [
-    { key:"testing", icon:"shield", title:"Project Testing", subtitle:"01 · Components QC", detail:"Component testing and quality checks", open:()=>setShowProjectTesting(true) },
-    { key:"warehouse", icon:"clipboard", title:"Warehouse Receiving", subtitle:"02 · Warehouse handover", detail:"Warehouse receiving and handover", open:()=>setShowWarehouse(true) },
+    { key:"testing", icon:"flask", title:"Project Testing", subtitle:"01 · Components QC", detail:"Component testing and quality checks", open:()=>setShowProjectTesting(true) },
+    { key:"warehouse", icon:"warehouse", title:"Warehouse Receiving", subtitle:"02 · Warehouse handover", detail:"Warehouse receiving and handover", open:()=>setShowWarehouse(true) },
     { key:"production", icon:"truck", title:"Production Receiving", subtitle:"03 · Production handover", detail:"Transfer tested stock into Production", open:()=>setShowProduction(true) },
-    { key:"boxes", icon:"box", title:"Box Distribution", subtitle:"04 · Packing", detail:"Pack received units into project boxes", open:()=>setShowBoxDistribution(true) },
-    { key:"cartons", icon:"folder", title:"Project Kit Cartons", subtitle:"05 · Carton preparation", detail:"Seal completed cartons and prepare allocation", open:()=>setShowProjectCartons(true) },
+    { key:"boxes", icon:"package", title:"Box Distribution", subtitle:"04 · Packing", detail:"Pack received units into project boxes", open:()=>setShowBoxDistribution(true) },
+    { key:"cartons", icon:"packageCheck", title:"Project Kit Cartons", subtitle:"05 · Carton preparation", detail:"Seal completed cartons and prepare allocation", open:()=>setShowProjectCartons(true) },
   ];
   const tools = [
     { key:"components", name:"Components & QC", icon:"box", open:()=>setShowComponents(true) },
@@ -268,7 +278,7 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
   function folderKeyDown(event, key) {
     if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) folderContextMenu(event, key);
   }
-  function openProjectFolder(id) { cancelFolderHold(); suppressFolderClick.current = false; setFolderMenu(""); setProjectId(id); setSchoolId(""); setWorkflowFilter("all"); setQuery(""); }
+  function openProjectFolder(id) { cancelFolderHold(); suppressFolderClick.current = false; setFolderMenu(""); setProjectId(id); setSchoolId(""); setProjectTab("overview"); setWorkflowFilter("all"); setQuery(""); }
   function openSchoolFolder(id, view = "") {
     cancelFolderHold(); suppressFolderClick.current = false; setFolderMenu(""); setSchoolId(id); setQuery("");
     setShowComponents(view === "components"); setShowDelivery(view === "delivery");
@@ -291,13 +301,27 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
     return () => { document.removeEventListener("pointerdown", closeOutside); document.removeEventListener("keydown", closeEscape); };
   }, [folderMenu]);
   useEffect(() => () => { if (longPressTimer.current !== null) clearTimeout(longPressTimer.current); }, []);
+  function switchProjectTab(nextTab) { setProjectTab(nextTab); setQuery(""); setFolderMenu(""); }
+  function onProjectTabKeyDown(event, currentKey) {
+    const keys = ["overview", "components", "schools", "reports"];
+    let next = -1;
+    if (event.key === "ArrowRight") next = (keys.indexOf(currentKey) + 1) % keys.length;
+    if (event.key === "ArrowLeft") next = (keys.indexOf(currentKey) + keys.length - 1) % keys.length;
+    if (event.key === "Home") next = 0;
+    if (event.key === "End") next = keys.length - 1;
+    if (next < 0) return;
+    event.preventDefault();
+    const nextKey = keys[next];
+    switchProjectTab(nextKey);
+    document.getElementById(`pr-detail-tab-${nextKey}`)?.focus();
+  }
   function openNewProject() { setProjectName(""); setProjectDescription(""); setProjectSourceId(""); setSheet("project"); }
   function openSchools() { setSelectedMembers([]); setMemberQuery(""); setSheet("schools"); }
   function openStage(stage) { const record = schoolStages.find(row => row.stage_key === stage.key); setStageKey(stage.key); setStageStatus(record?.status || "not_started"); setStageNotes(record?.notes || ""); setSheet("stage"); }
   function backToParent() {
     cancelFolderHold(); setFolderMenu("");
-    if (school) { setSchoolId(""); setQuery(""); setShowComponents(false); setShowDelivery(false); setShowReconciliation(false); setShowTechnical(false); setShowClosing(false); return; }
-    setProjectId(""); setQuery(""); setShowDashboard(false); setShowProjectCartons(false); setShowWarehouse(false); setShowProduction(false); setShowBoxDistribution(false); setShowProjectBOM(false);
+    if (school) { setSchoolId(""); setProjectTab("schools"); setQuery(""); setShowComponents(false); setShowDelivery(false); setShowReconciliation(false); setShowTechnical(false); setShowClosing(false); return; }
+    setProjectId(""); setProjectTab("overview"); setQuery(""); setShowDashboard(false); setShowProjectCartons(false); setShowWarehouse(false); setShowProduction(false); setShowBoxDistribution(false); setShowProjectBOM(false);
   }
   const filteredMembers = asArray(data.members).filter(member => {
     const used = new Set(projectSchools.map(row => clean(row.beneficiary_id)));
@@ -329,7 +353,11 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
     {project && <div className="pr-header">
       <div className="pr-headline">
         <button type="button" className="pr-back" onClick={backToParent}><Ico name="back" size={18}/>{school ? project.name : "Projects"}</button>
-        <h1>{school ? school.beneficiary_name : project.name}</h1>
+        <div className="pr-project-heading-line">
+          {!school && <span className="pr-project-heading-icon" aria-hidden="true"><Ico name="folder" size={24}/></span>}
+          <h1>{school ? school.beneficiary_name : project.name}</h1>
+          {!school && <span className={`pr-project-status-chip pr-project-status-chip--${projectStatus.toLowerCase()}`}>{projectStatus}</span>}
+        </div>
       </div>
       <div className="pr-top-actions">
         {!school && canManage && <button type="button" className="pr-primary" onClick={openSchools}><Ico name="plus" size={17}/> Add Schools</button>}
@@ -363,25 +391,78 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
         <span className="pr-index-result-count" role="status">{projectFiltered.length} {projectFiltered.length === 1 ? "project" : "projects"}</span>
       </div>
     </>}
-    {project && !school && <section className="pr-summary-card pr-summary-card--project pr-summary-card--overview" aria-label="Project overview">
-      <div className="pr-summary-lead pr-overview-lead">
-        <span className="pr-overview-icon" aria-hidden="true"><Ico name="components" size={26}/></span>
-        <div className="pr-overview-title"><strong>Project Overview</strong><span>Key project information and status.</span></div>
-      </div>
-      <div className="pr-summary-metrics">
-        {[["Schools", projectSchools.length], ["Delivered", projectSummaries.get(project.id)?.delivered || 0], ["Closed", projectSummaries.get(project.id)?.closed || 0]].map(([name,count]) =>
-          <div className="pr-summary-metric" key={name}><span className="pr-summary-metric-icon"><Ico name={name === "Schools" ? "school" : name === "Delivered" ? "truck" : "shield"} size={23}/></span><span className="pr-summary-metric-copy"><span>{name}</span><strong>{count}</strong></span></div>)}
-      </div>
-    </section>}
-    {project && !school && <div className="pr-project-split" aria-label="Project components, schools and five preparation stages">
-      <div className="pr-project-left-column">
+    {project && !school && <>
+      <nav className="pr-project-detail-tabs" role="tablist" aria-label="Project sections">
+        {[
+          {key:"overview",label:"Overview",icon:"grid"},
+          {key:"components",label:"Components",icon:"components"},
+          {key:"schools",label:"Schools",icon:"school"},
+          {key:"reports",label:"Reports",icon:"chart"},
+        ].map(tab => <button key={tab.key} id={`pr-detail-tab-${tab.key}`} role="tab" type="button"
+          aria-selected={projectTab === tab.key} aria-controls={projectTab === tab.key ? `pr-detail-panel-${tab.key}` : undefined}
+          tabIndex={projectTab === tab.key ? 0 : -1} onKeyDown={event=>onProjectTabKeyDown(event,tab.key)}
+          className={`pr-project-detail-tab ${projectTab === tab.key ? "is-active" : ""}`}
+          onClick={()=>switchProjectTab(tab.key)}><Ico name={tab.icon} size={17}/>{tab.label}</button>)}
+      </nav>
+      {projectTab === "overview" && <div id="pr-detail-panel-overview" role="tabpanel" aria-labelledby="pr-detail-tab-overview" className="pr-project-detail-overview">
+        <div className="pr-project-detail-left">
+          <section className="pr-summary-card pr-summary-card--project pr-summary-card--overview pr-project-overview-tile" aria-label="Project overview">
+            <div className="pr-overview-intro">
+              <div><h2>Project Overview</h2><p>Key project information and status.</p></div>
+              <span className="pr-overview-parcels" aria-hidden="true"><span/><span/><span/></span>
+            </div>
+            <div className="pr-summary-metrics">
+              {[["Schools", projectSchools.length], ["Delivered", projectSummaries.get(project.id)?.delivered || 0], ["Closed", projectSummaries.get(project.id)?.closed || 0]].map(([name,count]) =>
+                <div className="pr-summary-metric" key={name}><span className="pr-summary-metric-icon"><Ico name={name === "Schools" ? "school" : name === "Delivered" ? "truck" : "shield"} size={23}/></span><span className="pr-summary-metric-copy"><span>{name}</span><strong>{count}</strong></span></div>)}
+            </div>
+          </section>
+          <section className="pr-project-overall-card" aria-label="Overall preparation progress">
+            <div className="pr-project-overall-head"><div><h2>Overall Progress</h2><p>Project completion across all five preparation stages.</p></div>
+              <strong aria-label={overallPercent === null ? "Progress not available" : `${overallPercent}% complete`}>{overallPercent === null ? "—" : `${overallPercent}%`}</strong></div>
+            <div className="pr-project-overall-track" role="progressbar" aria-label="Overall project completion" aria-valuemin={0} aria-valuemax={100} aria-valuenow={overallPercent === null ? undefined : overallPercent} aria-valuetext={overallPercent === null ? "Unavailable" : `${overallPercent}%`}>
+              <span style={{width:`${overallPercent ?? 0}%`}}/></div>
+          </section>
+        </div>
+        <section className="pr-project-steps-panel pr-project-steps-panel--detail" aria-label="Project Steps">
+          <div className="pr-project-panel-heading"><div className="pr-project-panel-title"><h2>Project Steps</h2><span className="pr-section-count">5 stages</span></div></div>
+          <p className="pr-project-steps-subtitle">These five stages determine the overall project completion.</p>
+          {projectStageError && <div className="pr-project-step-error" role="alert"><span>Progress unavailable: {projectStageError}</span><button type="button" onClick={()=>setProjectStageRevision(n=>n+1)}>Retry</button></div>}
+          {projectStageLoading && <span className="pr-project-step-loading" role="status">Updating project stage progress…</span>}
+          <ol className="pr-project-step-timeline">
+            {projectStepCards.map((step,index) => {
+              const value = projectStepPercents?.[index];
+              const percent = value === null || value === undefined ? null : Math.min(100, Math.max(0, Math.round(Number(value) || 0)));
+              return <li key={step.key} className="pr-project-step-row">
+                <span className="pr-project-step-index" aria-hidden="true">{index+1}</span>
+                <button type="button" className="pr-project-step-card pr-project-step-card--kpi pr-project-step-card--compact" onClick={step.open} aria-label={`Open ${step.title}${percent === null ? "" : `, ${percent}% complete`}`}>
+                  <span className="pr-step-kpi-top">
+                    <span className={`pr-step-kpi-stage-icon pr-step-tone--${step.key}`} aria-hidden="true"><Ico name={step.icon} size={22}/></span>
+                    <span className="pr-step-kpi-title"><strong>{step.title}</strong><small>{step.subtitle}</small></span>
+                    <StepAccessAvatars access={stepAccess?.[step.key]} loading={stepAccessLoading} unavailable={stepAccessError}/>
+                    <strong className="pr-step-kpi-percent">{percent === null ? "—" : `${percent}%`}</strong>
+                    <span className="pr-step-kpi-arrow"><Ico name="arrow" size={17}/></span>
+                  </span>
+                  <span className="pr-step-kpi-track" role="progressbar" aria-label={`${step.title} completion`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent === null ? undefined : percent} aria-valuetext={percent === null ? "Loading" : `${percent}%`}>
+                    <span className="pr-step-kpi-fill" style={{ width: `${percent ?? 0}%` }}/>
+                  </span>
+                  <span className="pr-step-kpi-note">{percent === 100 ? "Stage completed" : step.detail}</span>
+                </button>
+              </li>;
+            })}
+          </ol>
+        </section>
+      </div>}
+      {projectTab === "components" && <section id="pr-detail-panel-components" role="tabpanel" aria-labelledby="pr-detail-tab-components" className="pr-project-tab-pane pr-project-tab-pane--components">
+        <div className="pr-project-tab-heading"><div><h2>Project Components</h2><p>Manage the Master BOM and its source proposal.</p></div></div>
         <button type="button" className="pr-project-components-card" onClick={()=>setShowProjectBOM(true)} aria-label="Open Project Components master bill of materials">
           <span className="pr-project-components-icon" aria-hidden="true"><Ico name="components" size={27}/></span>
           <span className="pr-project-components-copy"><strong>Project Components</strong><small>Master BOM · {project.source_proposal_name || "Custom project"}</small></span>
           <StepAccessAvatars access={stepAccess?.components} loading={stepAccessLoading} unavailable={stepAccessError}/>
           <span className="pr-project-components-arrow" aria-hidden="true"><Ico name="arrow" size={18}/></span>
         </button>
-      <section className="pr-project-schools-panel" aria-label="Schools">
+      </section>}
+      {projectTab === "schools" && <div id="pr-detail-panel-schools" role="tabpanel" aria-labelledby="pr-detail-tab-schools" className="pr-project-tab-pane pr-project-tab-pane--schools">
+      <section className="pr-project-schools-panel pr-project-schools-panel--tab" aria-label="Schools">
         <div className="pr-project-panel-heading pr-project-schools-heading">
           <div className="pr-project-panel-title"><h2>Schools</h2><span className="pr-section-count">{projectSchools.length} {projectSchools.length === 1 ? "school" : "schools"}</span></div>
           <div className="pr-project-schools-controls">
@@ -424,39 +505,16 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
           {!projectSchools.length && !canManage && <div className="pr-dashboard-empty">No schools assigned yet.</div>}
         </div>
       </section>
-      </div>
-      <section className="pr-project-steps-panel" aria-label="Project Steps">
-        <div className="pr-project-panel-heading">
-          <div className="pr-project-panel-title"><h2>Project Steps</h2><span className="pr-section-count">5 stages</span></div>
-          <button type="button" className="pr-project-report-link" onClick={()=>setShowDashboard(true)} aria-label="Open Project Dashboard" title="Project Dashboard"><Ico name="chart" size={17}/> Reports</button>
-        </div>
-        <p className="pr-project-steps-subtitle">These five stages determine the overall project completion.</p>
-        {projectStageError && <div className="pr-project-step-error" role="alert"><span>Progress unavailable: {projectStageError}</span><button type="button" onClick={()=>setProjectStageRevision(n=>n+1)}>Retry</button></div>}
-        {projectStageLoading && <span className="pr-project-step-loading" role="status">Updating project stage progress…</span>}
-        <ol className="pr-project-step-timeline">
-          {projectStepCards.map((step,index) => {
-            const value = projectStepPercents?.[index];
-            const percent = value === null || value === undefined ? null : Math.min(100, Math.max(0, Math.round(Number(value) || 0)));
-            return <li key={step.key} className="pr-project-step-row">
-              <span className="pr-project-step-index" aria-hidden="true">{index+1}</span>
-              <button type="button" className="pr-project-step-card pr-project-step-card--kpi" onClick={step.open} aria-label={`Open ${step.title}${percent === null ? "" : `, ${percent}% complete`}`}>
-                <span className="pr-step-kpi-top">
-                  <span className="pr-step-kpi-stage-icon" aria-hidden="true"><Ico name={step.icon} size={19}/></span>
-                  <span className="pr-step-kpi-title"><strong>{step.title}</strong><small>{step.subtitle}</small></span>
-                  <StepAccessAvatars access={stepAccess?.[step.key]} loading={stepAccessLoading} unavailable={stepAccessError}/>
-                  <span className="pr-step-kpi-arrow"><Ico name="arrow" size={17}/></span>
-                </span>
-                <strong className="pr-step-kpi-percent">{percent === null ? "—" : `${percent}%`}</strong>
-                <span className="pr-step-kpi-track" role="progressbar" aria-label={`${step.title} completion`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent === null ? undefined : percent} aria-valuetext={percent === null ? "Loading" : `${percent}%`}>
-                  <span className="pr-step-kpi-fill" style={{ width: `${percent ?? 0}%` }}/>
-                </span>
-                <span className="pr-step-kpi-note">{percent === 100 ? "Stage completed" : step.detail}</span>
-              </button>
-            </li>;
-          })}
-        </ol>
-      </section>
-    </div>}
+      </div>}
+      {projectTab === "reports" && <section id="pr-detail-panel-reports" role="tabpanel" aria-labelledby="pr-detail-tab-reports" className="pr-project-tab-pane pr-project-tab-pane--reports">
+        <div className="pr-project-tab-heading"><div><h2>Project Reports</h2><p>Review school handovers, open issues, quantities and project status.</p></div></div>
+        <button type="button" className="pr-project-report-card" onClick={()=>setShowDashboard(true)}>
+          <span className="pr-project-report-card-icon" aria-hidden="true"><Ico name="chart" size={27}/></span>
+          <span><strong>Open Master Project Dashboard</strong><small>Reports, school matrix, risks and export files</small></span>
+          <Ico name="arrow" size={19}/>
+        </button>
+      </section>}
+    </>}
     {project && !school && showProjectBOM && <div className="pr-components-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setShowProjectBOM(false);}}><section className="pr-components-sheet pr-warehouse-sheet" role="dialog" aria-modal="true" aria-label="Project Components"><ProjectMasterComponents key={projectId} project={project} proposals={data.proposals} allowed={canManage} request={api} onClose={()=>{setShowProjectBOM(false);setProjectStageRevision(n=>n+1);reload().catch(err=>setError(err.message));}}/></section></div>}
     {project && !school && showWarehouse && <div className="pr-components-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setShowWarehouse(false);}}><section className="pr-components-sheet pr-warehouse-sheet" role="dialog" aria-modal="true" aria-label="Project Warehouse Receiving"><ProjectWarehouseReceiving key={projectId} projectId={projectId} projectName={project.name} hasProjectProposal={!!project.source_proposal_id} canReceive={canWarehouseReceive} canAllocate={canWarehouseAllocate} request={api} onClose={()=>{setShowWarehouse(false);setProjectStageRevision(n=>n+1);}}/></section></div>}
     {project && !school && showProjectTesting && <div className="pr-components-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setShowProjectTesting(false);}}><section className="pr-components-sheet pr-warehouse-sheet" role="dialog" aria-modal="true" aria-label="Project Testing"><ProjectTesting key={projectId} projectId={projectId} projectName={project.name} canTest={canStage} request={api} onClose={()=>{setShowProjectTesting(false);setProjectStageRevision(n=>n+1);}}/></section></div>}

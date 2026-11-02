@@ -13,7 +13,8 @@ test('project summary shows overview and school retains its progress card',()=>{
   assert.match(ui,/pr-summary-card--school/);
   assert.doesNotMatch(ui,/className="pr-metrics"/);
   assert.doesNotMatch(ui,/className="pr-school-info"/);
-  assert.match(ui,/pr-overview-title/);
+  assert.match(ui,/pr-overview-intro/);
+  assert.match(ui,/pr-project-overall-track/);
   assert.match(ui,/schoolPercent/);
   assert.match(ui,/progress\.delivered/);
   assert.match(ui,/progress\.closed/);

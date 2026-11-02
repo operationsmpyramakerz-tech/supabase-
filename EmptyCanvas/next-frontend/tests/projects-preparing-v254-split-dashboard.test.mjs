@@ -28,10 +28,13 @@ test('empty, partial and excessive balances are clamped safely',()=>{
  assert.equal(full.completed,5);
 });
 test('dashboard renders exactly five project step routes and a standalone master BOM card',()=>{
- assert.match(ui,/className="pr-project-split"/);
+ assert.match(ui,/className="pr-project-detail-overview"/);
  assert.match(ui,/className="pr-project-step-timeline"/);
  assert.match(ui,/pr-dashboard-schools/);
- assert.match(ui,/className="pr-project-report-link"/);
+ assert.match(ui,/projectTab === "reports"/);
+ assert.match(ui,/projectTab === "schools"/);
+ assert.match(ui,/pr-project-tab-pane--schools/);
+ assert.match(ui,/setShowDashboard\(true\)/);
  for (const name of ['Project Testing','Warehouse Receiving','Production Receiving','Box Distribution','Project Kit Cartons'])
   assert.match(ui,new RegExp(`title:"${name}"`));
  assert.match(ui,/calculateProjectPreparationProgress/);

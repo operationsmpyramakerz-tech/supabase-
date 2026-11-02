@@ -8,8 +8,13 @@ const read=p=>readFileSync(new URL(`../${p}`,import.meta.url),'utf8');
 const ui=read('components/preparing/PreparingClient.jsx');
 const css=read('public/css/projects-preparing.css');
 
-test('Project Components is above Schools as a clickable, independent Master BOM, without stage gauge',()=>{
-  assert.match(ui,/className="pr-project-left-column"[\s\S]*className="pr-project-components-card"[\s\S]*className="pr-project-schools-panel"/);
+test('Components and Schools have separate functional tabs; Master BOM remains independent of the five progress steps',()=>{
+  const overview = ui.split('{projectTab === "overview" &&')[1].split('{projectTab === "components" &&')[0];
+  const schools = ui.split('{projectTab === "schools" &&')[1].split('{projectTab === "reports" &&')[0];
+  assert.ok(overview && schools);
+  assert.doesNotMatch(overview,/pr-project-schools-panel/);
+  assert.match(schools,/className="pr-project-schools-panel pr-project-schools-panel--tab"/);
+  assert.match(ui,/projectTab === "components"/);
   assert.match(ui,/className="pr-project-components-card" onClick=\{\(\)=>setShowProjectBOM\(true\)\}/);
   assert.match(ui,/Master BOM · \{project\.source_proposal_name/);
   assert.match(ui,/StepAccessAvatars access=\{stepAccess\?\.components\}/);
@@ -41,7 +46,7 @@ test('responsive layout, permissioned avatars and component-card semantics remai
   assert.match(css,/\.pr-project-components-card:focus-visible/);
   assert.match(css,/@media\(max-width:590px\)/);
   assert.match(ui,/StepAccessAvatars access=\{stepAccess\?\.\[step.key\]\}/);
-  assert.match(ui,/pr-project-report-link/);
+  assert.match(ui,/pr-project-report-card/);
   assert.match(read('app/projects-preparing/page.jsx'),/projects-preparing\.css\?v=274/);
   const file=ts.createSourceFile('PreparingClient.jsx',ui,ts.ScriptTarget.Latest,true,ts.ScriptKind.JSX);
   assert.deepEqual(file.parseDiagnostics,[]);
