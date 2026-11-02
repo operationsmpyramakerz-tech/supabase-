@@ -15,9 +15,9 @@ test('Components and Schools have separate functional tabs; Master BOM remains i
   assert.doesNotMatch(overview,/pr-project-schools-panel/);
   assert.match(schools,/className="pr-project-schools-panel pr-project-schools-panel--tab"/);
   assert.match(ui,/projectTab === "components"/);
-  assert.match(ui,/className="pr-project-components-card" onClick=\{\(\)=>setShowProjectBOM\(true\)\}/);
-  assert.match(ui,/Master BOM · \{project\.source_proposal_name/);
-  assert.match(ui,/StepAccessAvatars access=\{stepAccess\?\.components\}/);
+  assert.match(ui,/<ProjectMasterComponents key=\{projectId\}[^>]* inline/);
+  assert.doesNotMatch(ui,/setShowProjectBOM/);
+  assert.match(ui,/onChanged=\{\(\)=>\{setProjectStageRevision/);
   const cards=ui.split('const projectStepCards = [')[1].split('];')[0];
   assert.doesNotMatch(cards,/key:"components"/);
   assert.equal((cards.match(/key:"(?:testing|warehouse|production|boxes|cartons)"/g)||[]).length,5);
@@ -41,9 +41,9 @@ test('progress math excludes Master BOM even when source proposal changes',()=>{
   assert.equal(a.overall,20);
   assert.equal(a.completed,0);
 });
-test('responsive layout, permissioned avatars and component-card semantics remain sound',()=>{
+test('responsive layout, permissioned avatars and embedded component semantics remain sound',()=>{
   assert.match(css,/\.pr-project-left-column/);
-  assert.match(css,/\.pr-project-components-card:focus-visible/);
+  assert.match(css,/\.pr-project-tab-pane--components \.pr-pbom--inline/);
   assert.match(css,/@media\(max-width:590px\)/);
   assert.match(ui,/StepAccessAvatars access=\{stepAccess\?\.\[step.key\]\}/);
   assert.match(ui,/pr-project-report-card/);

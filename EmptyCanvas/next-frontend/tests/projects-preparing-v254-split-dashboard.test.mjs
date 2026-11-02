@@ -27,7 +27,7 @@ test('empty, partial and excessive balances are clamped safely',()=>{
  assert.deepEqual(full.stages,[100,100,100,100,100]);
  assert.equal(full.completed,5);
 });
-test('dashboard renders exactly five project step routes and a standalone master BOM card',()=>{
+test('dashboard renders five project steps and an inline Components tab',()=>{
  assert.match(ui,/className="pr-project-detail-overview"/);
  assert.match(ui,/className="pr-project-step-timeline"/);
  assert.match(ui,/pr-dashboard-schools/);
@@ -39,8 +39,9 @@ test('dashboard renders exactly five project step routes and a standalone master
   assert.match(ui,new RegExp(`title:"${name}"`));
  assert.match(ui,/calculateProjectPreparationProgress/);
  assert.match(ui,/projectStepCards.map/);
- assert.match(ui,/pr-project-components-card/);
- assert.match(ui,/setShowProjectBOM\(true\)/);
+ assert.match(ui,/pr-project-tab-pane--components/);
+ assert.match(ui,/<ProjectMasterComponents key=\{projectId\}[^>]* inline/);
+ assert.doesNotMatch(ui,/setShowProjectBOM/);
  assert.match(ui,/5 stages/);
  assert.match(ui,/setShowProjectTesting\(true\)/);
  assert.match(ui,/setShowWarehouse\(true\)/);
@@ -48,7 +49,7 @@ test('dashboard renders exactly five project step routes and a standalone master
  assert.doesNotMatch(ui,/title:"Project Dashboard", subtitle:/);
 });
 test('dashboard KPI bars support live percentages, reduced motion, small screens and readable labels',()=>{
- assert.match(ui,/pr-project-components-card/);
+ assert.match(ui,/pr-project-tab-pane--components/);
  assert.match(css,/\.pr-liquid-gauge__water/);
  assert.match(css,/@keyframes pr-liquid-wave/);
  assert.match(css,/@media\(prefers-reduced-motion:reduce\)/);

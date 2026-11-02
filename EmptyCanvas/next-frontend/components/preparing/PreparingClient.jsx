@@ -114,7 +114,6 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
   const [showProjectTesting, setShowProjectTesting] = useState(false);
   const [showProduction, setShowProduction] = useState(false);
   const [showBoxDistribution, setShowBoxDistribution] = useState(false);
-  const [showProjectBOM, setShowProjectBOM] = useState(false);
   const [projectSourceId, setProjectSourceId] = useState("");
   const [schoolView, setSchoolView] = useState("grid");
   const [projectStageData, setProjectStageData] = useState(null);
@@ -321,7 +320,7 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
   function backToParent() {
     cancelFolderHold(); setFolderMenu("");
     if (school) { setSchoolId(""); setProjectTab("schools"); setQuery(""); setShowComponents(false); setShowDelivery(false); setShowReconciliation(false); setShowTechnical(false); setShowClosing(false); return; }
-    setProjectId(""); setProjectTab("overview"); setQuery(""); setShowDashboard(false); setShowProjectCartons(false); setShowWarehouse(false); setShowProduction(false); setShowBoxDistribution(false); setShowProjectBOM(false);
+    setProjectId(""); setProjectTab("overview"); setQuery(""); setShowDashboard(false); setShowProjectCartons(false); setShowWarehouse(false); setShowProduction(false); setShowBoxDistribution(false);
   }
   const filteredMembers = asArray(data.members).filter(member => {
     const used = new Set(projectSchools.map(row => clean(row.beneficiary_id)));
@@ -450,13 +449,8 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
         </section>
       </div>}
       {projectTab === "components" && <section id="pr-detail-panel-components" role="tabpanel" aria-labelledby="pr-detail-tab-components" className="pr-project-tab-pane pr-project-tab-pane--components">
-        <div className="pr-project-tab-heading"><div><h2>Project Components</h2><p>Manage the Master BOM and its source proposal.</p></div></div>
-        <button type="button" className="pr-project-components-card" onClick={()=>setShowProjectBOM(true)} aria-label="Open Project Components master bill of materials">
-          <span className="pr-project-components-icon" aria-hidden="true"><Ico name="components" size={27}/></span>
-          <span className="pr-project-components-copy"><strong>Project Components</strong><small>Master BOM · {project.source_proposal_name || "Custom project"}</small></span>
-          <StepAccessAvatars access={stepAccess?.components} loading={stepAccessLoading} unavailable={stepAccessError}/>
-          <span className="pr-project-components-arrow" aria-hidden="true"><Ico name="arrow" size={18}/></span>
-        </button>
+        <ProjectMasterComponents key={projectId} project={project} proposals={data.proposals} allowed={canManage} request={api} inline
+          onChanged={()=>{setProjectStageRevision(value=>value+1);reload().catch(err=>setError(err.message));}}/>
       </section>}
       {projectTab === "schools" && <div id="pr-detail-panel-schools" role="tabpanel" aria-labelledby="pr-detail-tab-schools" className="pr-project-tab-pane pr-project-tab-pane--schools">
       <section className="pr-project-schools-panel pr-project-schools-panel--tab" aria-label="Schools">
@@ -512,7 +506,6 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
         </button>
       </section>}
     </>}
-    {project && !school && showProjectBOM && <div className="pr-components-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setShowProjectBOM(false);}}><section className="pr-components-sheet pr-warehouse-sheet" role="dialog" aria-modal="true" aria-label="Project Components"><ProjectMasterComponents key={projectId} project={project} proposals={data.proposals} allowed={canManage} request={api} onClose={()=>{setShowProjectBOM(false);setProjectStageRevision(n=>n+1);reload().catch(err=>setError(err.message));}}/></section></div>}
     {project && !school && showWarehouse && <div className="pr-components-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setShowWarehouse(false);}}><section className="pr-components-sheet pr-warehouse-sheet" role="dialog" aria-modal="true" aria-label="Project Warehouse Receiving"><ProjectWarehouseReceiving key={projectId} projectId={projectId} projectName={project.name} hasProjectProposal={!!project.source_proposal_id} canReceive={canWarehouseReceive} canAllocate={canWarehouseAllocate} request={api} onClose={()=>{setShowWarehouse(false);setProjectStageRevision(n=>n+1);}}/></section></div>}
     {project && !school && showProjectTesting && <div className="pr-components-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setShowProjectTesting(false);}}><section className="pr-components-sheet pr-warehouse-sheet" role="dialog" aria-modal="true" aria-label="Project Testing"><ProjectTesting key={projectId} projectId={projectId} projectName={project.name} canTest={canStage} request={api} onClose={()=>{setShowProjectTesting(false);setProjectStageRevision(n=>n+1);}}/></section></div>}
     {project && !school && showProduction && <div className="pr-components-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setShowProduction(false);}}><section className="pr-components-sheet pr-warehouse-sheet" role="dialog" aria-modal="true" aria-label="Production Receiving"><ProjectProductionReceiving key={projectId} projectId={projectId} projectName={project.name} stageRecords={stages} allowed={canStage} cartonsAllowed={canStage} request={api} onClose={()=>{setShowProduction(false);setProjectStageRevision(n=>n+1);}}/></section></div>}

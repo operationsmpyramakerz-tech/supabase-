@@ -12,9 +12,10 @@ test('four preparation stage indices use one dark accessible number color',()=>{
  assert.match(css,/\.pr-root--project \.pr-project-step-row:nth-child\(n\) \.pr-project-step-index/);
  assert.match(css,/background:#141b2b;color:#fff/);
 });
-test('Master BOM card has no progress; four operational cards keep muted horizontal bars',()=>{
+test('Inline Master BOM tab has no progress; five operational stages keep horizontal bars',()=>{
  const src=read('components/preparing/PreparingClient.jsx');
- assert.match(src,/pr-project-components-card/);
+ assert.match(src,/<ProjectMasterComponents key=\{projectId\}[^>]* inline/);
+ assert.doesNotMatch(src,/setShowProjectBOM/);
  assert.doesNotMatch(src,/--pr-liquid-pct/);
  assert.match(src,/pr-step-kpi-track/);
  assert.match(css,/\.pr-step-kpi-fill/);

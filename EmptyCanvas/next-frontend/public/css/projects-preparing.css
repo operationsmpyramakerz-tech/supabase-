@@ -3482,3 +3482,26 @@
 @media(prefers-reduced-motion:reduce) {
   .pr-project-detail-tab,.pr-project-overall-track>span {transition:none!important;}
 }
+
+
+/* v296 — render the Master BOM directly inside the Components tab.
+   No dialog overlay, fixed-height sub-scroll, or repeated tab title. */
+.pr-root--project .pr-project-tab-pane--components {
+  min-width:0;overflow:visible;padding:22px;border-radius:20px;
+}
+.pr-root--project .pr-project-tab-pane--components .pr-pbom--inline {
+  width:100%;min-width:0;max-width:100%;gap:18px;background:transparent;
+}
+.pr-root--project .pr-project-tab-pane--components .pr-pbom--inline .pr-pbom-title {
+  padding:0;margin:0;align-items:flex-start;
+}
+.pr-root--project .pr-project-tab-pane--components .pr-pbom--inline .pr-pbom-summary {
+  min-width:0;width:100%;
+}
+.pr-root--project .pr-project-tab-pane--components .pr-pbom--inline .pr-kit-group-list {
+  max-height:none;overflow:visible;
+}
+@media(max-width:760px) {
+  .pr-root--project .pr-project-tab-pane--components {padding:15px 12px;}
+  .pr-root--project .pr-project-tab-pane--components .pr-pbom--inline {gap:15px;}
+}

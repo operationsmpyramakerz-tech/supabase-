@@ -42,7 +42,7 @@ function kitAppearance(name) {
  return {icon:"box",tone:"orange"};
 }
 
-export default function ProjectMasterComponents({project,proposals,allowed,request,onClose}) {
+export default function ProjectMasterComponents({project,proposals,allowed,request,onClose,inline=false,onChanged}) {
  const [state,setState]=useState(empty),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false);
  const [error,setError]=useState(""),[notice,setNotice]=useState(""),[search,setSearch]=useState("");
  const [sourceId,setSourceId]=useState("");
@@ -78,7 +78,7 @@ export default function ProjectMasterComponents({project,proposals,allowed,reque
  async function reload(){const value=await request(`/warehouse?projectId=${encodeURIComponent(project.id)}`);setState(value);setLoading(false);}
  useEffect(()=>{let active=true;request(`/warehouse?projectId=${encodeURIComponent(project.id)}`).then(value=>{if(active){setState(value);setLoading(false);}}).catch(e=>{if(active){setError(e.message);setLoading(false);}});return()=>{active=false;};},[project.id]);
  async function submit(payload,message){if(busy)return false;setBusy(true);setError("");setNotice("");try{
-   await request("/warehouse","POST",{projectId:project.id,...payload});await reload();setEditor(null);setConfirm(null);setNotice(message);return true;
+   await request("/warehouse","POST",{projectId:project.id,...payload});await reload();setEditor(null);setConfirm(null);setNotice(message);onChanged?.();return true;
   }catch(e){setError(e.message||"Unable to save.");return false;}finally{setBusy(false);}}
  function addTo(group){setExpandedGroup(group.key);setEditor({kind:"add",group,row:null});setSelectedProduct(null);setQuantity("1");setError("");}
  function changeQuantity(group,item){setExpandedGroup(group.key);setEditor({kind:"update",group,row:item.row});setQuantity(String(item.qty));setError("");}
@@ -90,10 +90,10 @@ export default function ProjectMasterComponents({project,proposals,allowed,reque
      editor.kind==="add"?"Component added to Kit.":"Kit quantity updated.");
  }
 
- return <div className="pr-pbom pr-pbom--modern">
+ return <div className={`pr-pbom pr-pbom--modern${inline?" pr-pbom--inline":""}`}>
   <div className="pr-manifest-title pr-pbom-title">
    <div><span className="pr-wh-overline">PROJECT · {project.name}</span><h3>Project Components</h3></div>
-   <button className="pr-pbom-close" type="button" onClick={onClose} aria-label="Close Project Components" title="Close"><BomIcon name="close" size={19}/></button>
+   {!inline&&<button className="pr-pbom-close" type="button" onClick={onClose} aria-label="Close Project Components" title="Close"><BomIcon name="close" size={19}/></button>}
   </div>
   {error&&<div className="pr-alert" role="alert">{error}<button type="button" onClick={()=>setError("")} aria-label="Dismiss">×</button></div>}
   {notice&&<div className="pr-manifest-success" role="status">{notice}</div>}
