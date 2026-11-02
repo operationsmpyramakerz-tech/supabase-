@@ -3353,13 +3353,19 @@
 .pr-project-detail-overview {display:grid;grid-template-columns:minmax(0,1.06fr) minmax(0,.94fr);align-items:stretch;gap:16px;}
 .pr-project-detail-left {display:flex;flex-direction:column;gap:15px;min-width:0;}
 .pr-root--project .pr-project-overview-tile {
-  position:relative;display:flex;flex-direction:column;gap:17px;
-  min-height:207px;padding:20px 17px 17px;margin:0;
+  position:relative;display:flex;flex-direction:column;align-items:stretch;gap:17px;
+  min-width:0;min-height:207px;padding:20px 17px 17px;margin:0;
   overflow:hidden;border:1px solid #f5e6dc;border-left:4px solid #ff7b21;
   border-radius:20px;background:linear-gradient(105deg,#fff5ed,#fff9f5);
   box-shadow:0 6px 18px rgba(20,30,46,.03);
 }
-.pr-project-overview-tile .pr-overview-intro {position:relative;display:flex;justify-content:space-between;min-height:66px;z-index:1;}
+.pr-project-overview-tile .pr-overview-intro {
+  position:relative;display:flex;align-items:flex-start;justify-content:space-between;
+  flex:0 0 auto;width:100%;min-width:0;min-height:66px;z-index:1;
+}
+.pr-project-overview-tile .pr-overview-intro>div {
+  position:relative;z-index:2;min-width:0;max-width:calc(100% - 142px);text-align:left;
+}
 .pr-project-overview-tile .pr-overview-intro h2 {font-size:20px;color:#131f32;font-weight:860;letter-spacing:-.04em;margin:0 0 5px;}
 .pr-project-overview-tile .pr-overview-intro p {font-size:11.5px;color:#7a8799;margin:0;line-height:1.45;}
 .pr-project-overview-tile .pr-overview-parcels {position:absolute;top:-7px;right:15px;width:120px;height:77px;pointer-events:none;opacity:.76;}
@@ -3369,7 +3375,8 @@
 .pr-project-overview-tile .pr-overview-parcels span:nth-child(2) {left:4px;top:30px;}
 .pr-project-overview-tile .pr-overview-parcels span:nth-child(3) {left:69px;top:32px;}
 .pr-root--project .pr-project-overview-tile .pr-summary-metrics {
-  position:relative;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+  position:relative;align-self:stretch;width:100%;min-width:0;
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
   gap:0;padding:13px 8px;background:#fff;border:1px solid #f3eeec;border-radius:14px;
   box-shadow:0 5px 13px rgba(17,24,39,.04);z-index:2;
 }
@@ -3451,6 +3458,8 @@
   .pr-project-tab-pane--schools .pr-project-schools-panel--tab {padding:16px 12px;}
 }
 @media(max-width:480px) {
+  .pr-project-overview-tile .pr-overview-intro>div {max-width:100%;}
+  .pr-project-overview-tile .pr-overview-parcels {display:none;}
   .pr-project-detail-tab svg {width:15px;height:15px;}
   .pr-project-detail-tab {padding:0 10px;font-size:10px;}
   .pr-project-overview-tile .pr-overview-parcels {opacity:.38;right:-25px;}

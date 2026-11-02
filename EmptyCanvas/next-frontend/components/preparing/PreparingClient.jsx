@@ -359,9 +359,6 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
           {!school && <span className={`pr-project-status-chip pr-project-status-chip--${projectStatus.toLowerCase()}`}>{projectStatus}</span>}
         </div>
       </div>
-      <div className="pr-top-actions">
-        {!school && canManage && <button type="button" className="pr-primary" onClick={openSchools}><Ico name="plus" size={17}/> Add Schools</button>}
-      </div>
     </div>}
     {error && <div className="pr-alert" role="alert"><span>{error}</span><button onClick={() => setError("")} aria-label="Dismiss"><Ico name="close" size={16}/></button></div>}
     {!project && <>

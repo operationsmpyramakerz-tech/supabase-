@@ -20,10 +20,19 @@ test('long press shows exactly Rename and Delete on project folders, never proje
   assert.doesNotMatch(menu,/Open Project|Project Dashboard|Kit Cartons|Edit Project/);
   assert.match(folderArea,/if\(canManage\)startFolderHold/);
 });
-test('project header has only Add Schools for managers, no Edit shortcut',()=>{
-  const header=ui.split('<div className="pr-top-actions">')[1].split('</div>')[0];
-  assert.match(header,/Add Schools/);
-  assert.doesNotMatch(header,/Edit|openEditProject/);
+test('project header has no Add Schools action; add school remains in Schools tab for managers',()=>{
+  const header=ui.split('{project && <div className="pr-header">')[1].split('{error && <div className="pr-alert"')[0];
+  assert.doesNotMatch(header,/Add Schools|openSchools|openEditProject/);
+  const schoolsTab=ui.split('{projectTab === "schools" &&')[1].split('{projectTab === "reports" &&')[0];
+  assert.match(schoolsTab,/canManage && <button type="button" className="pr-add-school-tile" onClick={openSchools}/);
+});
+test('project overview stretches header and metrics to full width, keeping decorative parcels clear of text',()=>{
+  const css=read('public/css/projects-preparing.css');
+  assert.match(css,/\.pr-root--project \.pr-project-overview-tile \{[\s\S]*?align-items:stretch/);
+  assert.match(css,/\.pr-project-overview-tile \.pr-overview-intro \{[\s\S]*?width:100%/);
+  assert.match(css,/\.pr-project-overview-tile \.pr-overview-intro>div \{[\s\S]*?max-width:calc\(100% - 142px\)/);
+  assert.match(css,/\.pr-root--project \.pr-project-overview-tile \.pr-summary-metrics \{[\s\S]*?align-self:stretch;width:100%/);
+  assert.match(css,/\.pr-project-overview-tile \.pr-overview-parcels \{display:none/);
 });
 test('rename changes only the name in a locked transaction, preserving project metadata',()=>{
   const section=sql.split('CREATE OR REPLACE FUNCTION public.erp_preparing_rename_project(')[1].split('REVOKE ALL ON FUNCTION public.erp_preparing_rename_project')[0];
