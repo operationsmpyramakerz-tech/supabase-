@@ -23,7 +23,7 @@ function Metric({ label, value, warning = false }) {
 function Qty({ value }) { return value === null || value === undefined ? <span className="pr-report-na">N/A</span> : number(value); }
 function Status({ phase }) { return <span className={`pr-report-pill ${phase}`}>{nice(phase)}</span>; }
 
-export default function ProjectDashboard({ projectId, request, onClose, onOpenSchool }) {
+export default function ProjectDashboard({ projectId, request, onClose, onOpenSchool, inline = false }) {
   const [report, setReport] = useState(null), [error, setError] = useState(""), [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all"), [query, setQuery] = useState(""), [sort, setSort] = useState("name");
   const [tab, setTab] = useState("overview");
@@ -56,9 +56,9 @@ export default function ProjectDashboard({ projectId, request, onClose, onOpenSc
   }, [report, filter, query, sort]);
   const risky = useMemo(() => report ? report.schools.filter(row => row.blocked || row.overdueIssues || row.anomalies.length || !row.hasManifest || row.openIssues).sort((a, b) => b.overdueIssues - a.overdueIssues || b.openIssues - a.openIssues) : [], [report]);
   const safeFileName = (report?.project?.name || "Preparing_Project").replace(/[^a-zA-Z0-9_-]+/g, "_").slice(0, 65);
-  return <div className="pr-report-root">
-    <div className="pr-manifest-title pr-report-top"><div><h3>Master Project Dashboard</h3></div>
-      <div className="pr-report-actions"><button className="pr-secondary" type="button" onClick={load} disabled={loading}>Refresh</button><button className="pr-secondary" type="button" onClick={onClose}>Close</button></div>
+  return <div className={`pr-report-root${inline ? " pr-report-root--inline" : ""}`}>
+    <div className="pr-manifest-title pr-report-top"><div><h3>Master Project Dashboard</h3>{inline && <p>Review school handovers, open issues, quantities and project status.</p>}</div>
+      <div className="pr-report-actions"><button className="pr-secondary" type="button" onClick={load} disabled={loading}>Refresh</button>{!inline && <button className="pr-secondary" type="button" onClick={onClose}>Close</button>}</div>
     </div>
     {error && <div className="pr-alert" role="alert">{error} <button className="pr-link" onClick={load} type="button">Retry</button></div>}
     {loading ? <div className="pr-report-loading" role="status">Loading project reports and checking all school records…</div> : !report ? <p className="pr-muted">No project report is available.</p> : <>

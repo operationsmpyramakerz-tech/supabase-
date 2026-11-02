@@ -3505,3 +3505,51 @@
   .pr-root--project .pr-project-tab-pane--components {padding:15px 12px;}
   .pr-root--project .pr-project-tab-pane--components .pr-pbom--inline {gap:15px;}
 }
+
+
+/* v297 — Master Project Dashboard is part of the Reports tab, not an overlay.
+   Keep the page's natural scroll and the dashboard's native filtering/export UI. */
+.pr-root--project .pr-project-tab-pane--reports {
+  width:100%;min-width:0;padding:22px;overflow:visible;
+}
+.pr-root--project .pr-project-tab-pane--reports .pr-report-root--inline {
+  width:100%;min-width:0;max-width:100%;padding:0;margin:0;gap:18px;
+  background:transparent;overflow:visible;
+}
+.pr-root--project .pr-project-tab-pane--reports .pr-report-root--inline .pr-report-top {
+  display:flex;flex-direction:row;align-items:center;justify-content:space-between;
+  flex-wrap:wrap;gap:12px;min-width:0;
+}
+.pr-root--project .pr-project-tab-pane--reports .pr-report-top h3 {
+  font-size:21px;font-weight:850;letter-spacing:-.035em;color:#172035;
+}
+.pr-root--project .pr-project-tab-pane--reports .pr-report-top p {
+  font-size:12px;line-height:1.5;margin:5px 0 0;color:#8792a4;
+}
+.pr-root--project .pr-project-tab-pane--reports .pr-report-metrics,
+.pr-root--project .pr-project-tab-pane--reports .pr-report-columns,
+.pr-root--project .pr-project-tab-pane--reports .pr-report-exports,
+.pr-root--project .pr-project-tab-pane--reports .pr-report-table-scroll {min-width:0;width:100%;}
+.pr-root--project .pr-project-tab-pane--reports .pr-report-table-scroll {
+  overflow-x:auto;overscroll-behavior-x:contain;
+}
+@media (max-width:980px) {
+  .pr-root--project .pr-project-tab-pane--reports .pr-report-metrics {
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+  .pr-root--project .pr-project-tab-pane--reports .pr-report-columns {grid-template-columns:1fr;}
+}
+@media (max-width:760px) {
+  .pr-root--project .pr-project-tab-pane--reports {padding:15px 12px;}
+  .pr-root--project .pr-project-tab-pane--reports .pr-report-root--inline {gap:15px;}
+  .pr-root--project .pr-project-tab-pane--reports .pr-report-top {align-items:flex-start;}
+  .pr-root--project .pr-project-tab-pane--reports .pr-report-top h3 {font-size:19px;}
+  .pr-root--project .pr-project-tab-pane--reports .pr-report-metrics {gap:9px;}
+  .pr-root--project .pr-project-tab-pane--reports .pr-report-exports {gap:12px;}
+}
+@media (max-width:480px) {
+  .pr-root--project .pr-project-tab-pane--reports .pr-report-metric {padding:11px;}
+  .pr-root--project .pr-project-tab-pane--reports .pr-report-metric strong {font-size:19px;}
+  .pr-root--project .pr-project-tab-pane--reports .pr-report-quantities {grid-template-columns:repeat(2,minmax(0,1fr));}
+  .pr-root--project .pr-project-tab-pane--reports .pr-report-panel {padding:13px;}
+}

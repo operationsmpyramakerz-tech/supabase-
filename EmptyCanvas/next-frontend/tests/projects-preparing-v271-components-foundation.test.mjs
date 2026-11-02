@@ -46,7 +46,8 @@ test('responsive layout, permissioned avatars and embedded component semantics r
   assert.match(css,/\.pr-project-tab-pane--components \.pr-pbom--inline/);
   assert.match(css,/@media\(max-width:590px\)/);
   assert.match(ui,/StepAccessAvatars access=\{stepAccess\?\.\[step.key\]\}/);
-  assert.match(ui,/pr-project-report-card/);
+  assert.match(ui,/<ProjectDashboard key=\{projectId\}[^>]* inline/);
+  assert.doesNotMatch(ui,/pr-project-report-card/);
   assert.match(read('app/projects-preparing/page.jsx'),/projects-preparing\.css\?v=274/);
   const file=ts.createSourceFile('PreparingClient.jsx',ui,ts.ScriptTarget.Latest,true,ts.ScriptKind.JSX);
   assert.deepEqual(file.parseDiagnostics,[]);

@@ -21,7 +21,9 @@ test('Proposals-style cards keep both project and school drill-down actions', ()
   assert.match(preparing, /onPointerDown=\{event=>\{if\(canManage\)startFolderHold/);
   assert.match(preparing, /onContextMenu=\{event=>\{if\(canManage\)folderContextMenu/);
   assert.match(preparing, /event\.key === "ContextMenu"/);
-  for (const action of ['Project Dashboard','Project Kit Cartons','Rename','Delete','Packing & Delivery','Technical Follow-up','Final Closing'])
+  assert.match(preparing, /<ProjectDashboard key=\{projectId\}[^>]* inline/);
+  assert.match(read('components/preparing/ProjectDashboard.jsx'), /Master Project Dashboard/);
+  for (const action of ['Project Kit Cartons','Rename','Delete','Packing & Delivery','Technical Follow-up','Final Closing'])
     assert.ok(preparing.includes(action), action);
 });
 test('project folder shows Rename/Delete only and deletion uses explicit server action', () => {

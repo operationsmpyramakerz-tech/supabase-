@@ -34,7 +34,8 @@ test('dashboard renders five project steps and an inline Components tab',()=>{
  assert.match(ui,/projectTab === "reports"/);
  assert.match(ui,/projectTab === "schools"/);
  assert.match(ui,/pr-project-tab-pane--schools/);
- assert.match(ui,/setShowDashboard\(true\)/);
+ assert.match(ui,/<ProjectDashboard key=\{projectId\}[^>]* inline/);
+ assert.doesNotMatch(ui,/setShowDashboard\(true\)/);
  for (const name of ['Project Testing','Warehouse Receiving','Production Receiving','Box Distribution','Project Kit Cartons'])
   assert.match(ui,new RegExp(`title:"${name}"`));
  assert.match(ui,/calculateProjectPreparationProgress/);

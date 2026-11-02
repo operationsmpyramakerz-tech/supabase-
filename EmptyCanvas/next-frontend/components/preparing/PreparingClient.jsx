@@ -108,7 +108,6 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
   const [showReconciliation,setShowReconciliation] = useState(false);
   const [showTechnical, setShowTechnical] = useState(false);
   const [showClosing, setShowClosing] = useState(false);
-  const [showDashboard, setShowDashboard] = useState(false);
   const [showProjectCartons, setShowProjectCartons] = useState(false);
   const [showWarehouse, setShowWarehouse] = useState(false);
   const [showProjectTesting, setShowProjectTesting] = useState(false);
@@ -320,7 +319,7 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
   function backToParent() {
     cancelFolderHold(); setFolderMenu("");
     if (school) { setSchoolId(""); setProjectTab("schools"); setQuery(""); setShowComponents(false); setShowDelivery(false); setShowReconciliation(false); setShowTechnical(false); setShowClosing(false); return; }
-    setProjectId(""); setProjectTab("overview"); setQuery(""); setShowDashboard(false); setShowProjectCartons(false); setShowWarehouse(false); setShowProduction(false); setShowBoxDistribution(false);
+    setProjectId(""); setProjectTab("overview"); setQuery(""); setShowProjectCartons(false); setShowWarehouse(false); setShowProduction(false); setShowBoxDistribution(false);
   }
   const filteredMembers = asArray(data.members).filter(member => {
     const used = new Set(projectSchools.map(row => clean(row.beneficiary_id)));
@@ -498,12 +497,11 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
       </section>
       </div>}
       {projectTab === "reports" && <section id="pr-detail-panel-reports" role="tabpanel" aria-labelledby="pr-detail-tab-reports" className="pr-project-tab-pane pr-project-tab-pane--reports">
-        <div className="pr-project-tab-heading"><div><h2>Project Reports</h2><p>Review school handovers, open issues, quantities and project status.</p></div></div>
-        <button type="button" className="pr-project-report-card" onClick={()=>setShowDashboard(true)}>
-          <span className="pr-project-report-card-icon" aria-hidden="true"><Ico name="chart" size={27}/></span>
-          <span><strong>Open Master Project Dashboard</strong><small>Reports, school matrix, risks and export files</small></span>
-          <Ico name="arrow" size={19}/>
-        </button>
+        <ProjectDashboard key={projectId} projectId={projectId} request={api} inline onOpenSchool={id=>{
+          setSchoolId(id);setProjectTab("schools");setQuery("");setWorkflowFilter("all");
+          setShowComponents(false);setShowDelivery(false);setShowReconciliation(false);
+          setShowTechnical(false);setShowClosing(false);
+        }}/>
       </section>}
     </>}
     {project && !school && showWarehouse && <div className="pr-components-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setShowWarehouse(false);}}><section className="pr-components-sheet pr-warehouse-sheet" role="dialog" aria-modal="true" aria-label="Project Warehouse Receiving"><ProjectWarehouseReceiving key={projectId} projectId={projectId} projectName={project.name} hasProjectProposal={!!project.source_proposal_id} canReceive={canWarehouseReceive} canAllocate={canWarehouseAllocate} request={api} onClose={()=>{setShowWarehouse(false);setProjectStageRevision(n=>n+1);}}/></section></div>}
@@ -511,7 +509,6 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
     {project && !school && showProduction && <div className="pr-components-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setShowProduction(false);}}><section className="pr-components-sheet pr-warehouse-sheet" role="dialog" aria-modal="true" aria-label="Production Receiving"><ProjectProductionReceiving key={projectId} projectId={projectId} projectName={project.name} stageRecords={stages} allowed={canStage} cartonsAllowed={canStage} request={api} onClose={()=>{setShowProduction(false);setProjectStageRevision(n=>n+1);}}/></section></div>}
     {project && !school && showBoxDistribution && <div className="pr-components-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setShowBoxDistribution(false);}}><section className="pr-components-sheet pr-warehouse-sheet" role="dialog" aria-modal="true" aria-label="Box Distribution"><ProjectProductionReceiving key={`${projectId}-boxes`} view="boxes" projectId={projectId} projectName={project.name} stageRecords={stages} allowed={canStage} cartonsAllowed={canStage} request={api} onClose={()=>{setShowBoxDistribution(false);setProjectStageRevision(n=>n+1);}}/></section></div>}
     {project && !school && showProjectCartons && <div className="pr-components-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setShowProjectCartons(false);}}><section className="pr-components-sheet" role="dialog" aria-modal="true" aria-label="Project Kit Cartons"><ProjectKitCartons key={projectId} projectId={projectId} projectName={project?.name||""} stageRecords={stages} allowed={canStage} request={api} onClose={()=>{setShowProjectCartons(false);setProjectStageRevision(n=>n+1);reload().catch(err=>setError(err.message));}}/></section></div>}
-    {project && !school && showDashboard && <div className="pr-components-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setShowDashboard(false);}}><section className="pr-components-sheet pr-report-sheet" role="dialog" aria-modal="true" aria-label="Master project dashboard"><ProjectDashboard key={projectId} projectId={projectId} request={api} onClose={()=>setShowDashboard(false)} onOpenSchool={id=>{setShowDashboard(false);setSchoolId(id);setWorkflowFilter("all");setShowComponents(false);setShowDelivery(false);setShowReconciliation(false);setShowTechnical(false);setShowClosing(false);}}/></section></div>}
     {school ? <>
       <section className="pr-summary-card pr-summary-card--school" aria-label="School progress overview">
         <div className="pr-summary-lead">
