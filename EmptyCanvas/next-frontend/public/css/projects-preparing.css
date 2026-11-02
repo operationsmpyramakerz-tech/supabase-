@@ -3179,3 +3179,141 @@
   .pr-root--index .pr-index-add-project>strong {font-size:16px;}
   .pr-root--index .pr-index-add-project>span:last-child {font-size:11px;}
 }
+
+
+/* v291 — extra compact index + project folders matched to Kits card language. */
+.pr-root.pr-root--index {padding-top:0;padding-bottom:64px;}
+.pr-root--index .pr-header {margin-bottom:12px;}
+.pr-root--index .pr-index-hero {
+  min-height:72px;padding:11px 16px;gap:12px;margin-bottom:12px;border-radius:17px;
+}
+.pr-root--index .pr-index-hero-icon {
+  width:45px;height:45px;flex-basis:45px;border-radius:13px;
+}
+.pr-root--index .pr-index-hero-icon svg {width:20px;height:20px;}
+.pr-root--index .pr-index-hero-copy>span {font-size:10px;}
+.pr-root--index .pr-index-hero-copy>strong {font-size:clamp(13px,1.35vw,16px);line-height:1.22;}
+.pr-root--index .pr-index-hero-parcels {
+  width:146px;height:74px;right:28px;bottom:-8px;transform:scale(.7);transform-origin:bottom right;
+}
+.pr-root--index .pr-index-stats {gap:10px;margin-bottom:12px;}
+.pr-root--index .pr-index-stat {
+  min-height:68px;gap:10px;padding:10px 12px;border-radius:15px;
+}
+.pr-root--index .pr-index-stat-icon {
+  width:42px;height:42px;flex-basis:42px;border-radius:13px;
+}
+.pr-root--index .pr-index-stat-icon svg {width:20px;height:20px;}
+.pr-root--index .pr-index-stat-copy>span {font-size:11px;}
+.pr-root--index .pr-index-stat-copy>strong {font-size:21px;}
+.pr-root--index .pr-index-controls {margin-bottom:16px;padding:4px;gap:8px;border-radius:15px;}
+.pr-root--index .pr-project-tabs {gap:3px;border-radius:12px;}
+.pr-root--index .pr-project-tab {
+  min-height:39px;min-width:82px;padding:0 14px;border-radius:11px;font-size:12px;
+}
+.pr-root--index .pr-index-result-count {min-height:34px;padding:0 12px;border-radius:11px;font-size:11px;}
+
+.pr-root.pr-root--index .pr-folders.pr-index-folder-grid {
+  grid-template-columns:repeat(auto-fill, minmax(154px, 154px));
+  justify-content:start;justify-items:start;gap:18px 16px;padding-top:4px;padding-bottom:16px;
+}
+.pr-root--index .pr-index-add-project {
+  width:154px;height:144px;min-height:144px;gap:6px;padding:14px 10px;
+  border-width:1.5px;border-radius:20px;align-items:center;text-align:center;
+}
+.pr-root--index .pr-index-add-icon {
+  width:48px;height:48px;border-radius:15px;margin-bottom:0;
+}
+.pr-root--index .pr-index-add-icon svg {width:24px;height:24px;}
+.pr-root--index .pr-index-add-project>strong {font-size:11px;line-height:1.15;letter-spacing:-.02em;}
+.pr-root--index .pr-index-add-project>span:last-child {
+  max-width:126px;font-size:9px;line-height:1.3;font-weight:700;
+}
+.pr-root--index .pr-index-add-break {display:none;}
+
+/* Match Kits page folder card proportions and visual treatment. */
+.pr-root.pr-root--index .pr-folder-card {
+  width:154px;height:144px;min-height:144px;
+  border:5px solid #101217;border-radius:20px;
+  background:
+    radial-gradient(circle at 23% 5%, rgba(255,255,255,.42) 0 14%, rgba(255,255,255,0) 36%),
+    radial-gradient(circle at 82% 0%, rgba(255,255,255,.18) 0 11%, rgba(255,255,255,0) 32%),
+    linear-gradient(135deg, #ff8a1f 0%, #f97316 46%, #e45512 100%);
+  box-shadow:0 14px 26px rgba(15,23,42,.12);
+}
+.pr-root.pr-root--index .pr-folder-card:hover,
+.pr-root.pr-root--index .pr-folder-card:focus-within {
+  transform:translateY(-2px);box-shadow:0 20px 34px rgba(15,23,42,.16);
+}
+.pr-root.pr-root--index .pr-folder-main {
+  inset:0;width:100%;height:100%;border-radius:15px;
+}
+.pr-root.pr-root--index .pr-folder-main::before {
+  height:88px;left:0;right:0;bottom:0;border-radius:0 0 15px 15px;
+  background:#272727;box-shadow:inset 0 1px 0 rgba(255,255,255,.07);
+}
+.pr-root.pr-root--index .pr-folder-main::after {
+  top:48px;left:0;width:118px;height:34px;
+  border-radius:11px 13px 0 0;background:#272727;
+  clip-path:polygon(0 0, 88px 0, 118px 34px, 0 34px);
+}
+.pr-root.pr-root--index .pr-folder-figure {
+  top:18px;width:118px;height:68px;transform:translateX(-50%);
+}
+.pr-root.pr-root--index .pr-folder-paper {
+  width:50px;height:54px;border-radius:7px;
+}
+.pr-root.pr-root--index .pr-folder-paper::before {
+  left:8px;right:8px;top:10px;height:3px;
+  box-shadow:0 10px 0 rgba(203,213,225,.42), 0 20px 0 rgba(203,213,225,.32);
+}
+.pr-root.pr-root--index .pr-folder-paper.left {left:9px;}
+.pr-root.pr-root--index .pr-folder-paper.middle {left:34px;top:-4px;}
+.pr-root.pr-root--index .pr-folder-paper.right {right:9px;}
+.pr-root.pr-root--index .pr-folder-copy {left:11px;right:31px;top:72px;}
+.pr-root.pr-root--index .pr-folder-copy strong {
+  font-size:.72rem;line-height:1.03;margin-bottom:3px;letter-spacing:-.015em;
+}
+.pr-root.pr-root--index .pr-folder-copy em {
+  font-size:.55rem;line-height:1.05;
+}
+.pr-root.pr-root--index .pr-folder-foot {
+  left:11px;right:7px;bottom:10px;gap:4px;font-size:.58rem;line-height:1;
+}
+.pr-root.pr-root--index .pr-folder-foot svg {width:10px;height:10px;stroke-width:2.5;}
+.pr-root.pr-root--index .pr-folder-menu-trigger {
+  top:67px;right:7px;width:28px;height:28px;min-width:28px;min-height:28px;
+  background:rgba(255,255,255,.12);
+}
+.pr-root.pr-root--index .pr-folder-menu-trigger svg {width:14px;height:14px;}
+.pr-root.pr-root--index .pr-folder-menu {top:95px;right:6px;}
+
+@media(max-width:760px) {
+  .pr-root--index .pr-index-hero {min-height:66px;padding:10px 12px;gap:10px;border-radius:15px;}
+  .pr-root--index .pr-index-hero-icon {width:42px;height:42px;flex-basis:42px;border-radius:12px;}
+  .pr-root--index .pr-index-hero-icon svg {width:18px;height:18px;}
+  .pr-root--index .pr-index-hero-copy>strong {font-size:14px;}
+  .pr-root--index .pr-index-hero-parcels {right:-32px;opacity:.2;}
+  .pr-root--index .pr-index-stats {grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
+  .pr-root--index .pr-index-stat {min-height:64px;padding:9px 10px;gap:8px;border-radius:13px;}
+  .pr-root--index .pr-index-stat-icon {width:38px;height:38px;flex-basis:38px;border-radius:11px;}
+  .pr-root--index .pr-index-stat-copy>span {font-size:10px;}
+  .pr-root--index .pr-index-stat-copy>strong {font-size:19px;}
+  .pr-root--index .pr-index-controls {margin-bottom:13px;gap:6px;border-radius:13px;}
+  .pr-root--index .pr-project-tab {min-height:36px;padding:0 12px;font-size:11.5px;}
+  .pr-root.pr-root--index .pr-folders.pr-index-folder-grid {
+    grid-template-columns:repeat(auto-fill, minmax(154px, 154px));
+    gap:14px 12px;
+  }
+}
+@media(max-width:520px) {
+  .pr-root--index .pr-index-result-count {font-size:10.5px;}
+  .pr-root.pr-root--index .pr-folders.pr-index-folder-grid {
+    grid-template-columns:repeat(auto-fill, minmax(146px, 146px));
+    gap:12px 10px;
+  }
+  .pr-root--index .pr-index-add-project,
+  .pr-root.pr-root--index .pr-folder-card {
+    width:146px;height:138px;min-height:138px;
+  }
+}
