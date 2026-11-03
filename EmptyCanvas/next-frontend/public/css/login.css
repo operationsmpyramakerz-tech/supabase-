@@ -1474,3 +1474,67 @@ html[data-theme] body.next-classic-login-active .login-container {
     background-attachment: scroll !important;
   }
 }
+
+
+/* v304 — Keep the password visibility eye visible above the login input.
+   Scoped to the login card: no effect on account editors or authenticated pages. */
+.login-container .password-wrapper input[type="password"],
+.login-container .password-wrapper input[type="text"] {
+  padding-right: 3.5rem;
+}
+.login-container .password-wrapper .toggle-password {
+  position: absolute;
+  z-index: 5;
+  top: 50%;
+  right: 9px;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0;
+  box-sizing: border-box;
+  border: 1px solid #dde2e8;
+  border-radius: 10px;
+  background: #fff;
+  color: #475467;
+  appearance: none;
+  -webkit-appearance: none;
+  opacity: 1;
+  visibility: visible;
+  cursor: pointer;
+  line-height: 0;
+}
+.login-container .password-wrapper .toggle-password .login-password-eye-icon {
+  display: block !important;
+  width: 20px !important;
+  height: 20px !important;
+  min-width: 20px;
+  min-height: 20px;
+  flex: 0 0 20px;
+  fill: none !important;
+  stroke: #475467 !important;
+  stroke-width: 2 !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  pointer-events: none;
+}
+.login-container .password-wrapper .toggle-password:hover {
+  border-color: #ed9e5b;
+  background: #fff7ed;
+  color: #b45309;
+}
+.login-container .password-wrapper .toggle-password:hover .login-password-eye-icon {
+  stroke: #b45309 !important;
+}
+.login-container .password-wrapper .toggle-password:focus-visible {
+  outline: 2px solid #ea580c;
+  outline-offset: 2px;
+}
+.login-container .password-wrapper .toggle-password:active {
+  transform: translateY(-50%) scale(.97);
+}
