@@ -2,6 +2,7 @@
 
 import PreparingSelect from "./PreparingSelect";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { featureAllowed } from "../../lib/feature-permissions-registry";
 import ComponentsManifest from "./ComponentsManifest";
 import PackingDelivery from "./PackingDelivery";
@@ -79,6 +80,29 @@ function Sheet({ title, onClose, children, footer }) {
   </div>;
 }
 
+
+// Display the active folder path in the existing shared AppShell title.
+// Portal keeps the shared header unchanged for other ERP pages and avoids a
+// second, oversized project title inside this workspace.
+function ProjectHeaderPath({ project, school, onProjects, onProject }) {
+  const [titleContainer, setTitleContainer] = useState(null);
+  useEffect(() => {
+    const node = document.querySelector(".classic-app-shell .main-header .dash-title");
+    setTitleContainer(node);
+  }, []);
+  if (!project || !titleContainer) return null;
+  return createPortal(
+    <nav className="pr-header-path" aria-label="Project folder path">
+      <button type="button" className="pr-header-path-segment pr-header-path-root" onClick={onProjects} title="All projects">Projects Preparing</button>
+      <Ico name="arrow" size={15}/>
+      {school ? <button type="button" className="pr-header-path-segment pr-header-path-project" onClick={onProject} title={`Back to ${project.name}`}>{project.name}</button>
+        : <span className="pr-header-path-segment pr-header-path-current" title={project.name} aria-current="page">{project.name}</span>}
+      {school && <><Ico name="arrow" size={15}/><span className="pr-header-path-segment pr-header-path-current" title={school.beneficiary_name} aria-current="page">{school.beneficiary_name}</span></>}
+    </nav>,
+    titleContainer
+  );
+}
+
 export default function PreparingClient({ account, initialData = EMPTY_DATA, bootstrapError = "" }) {
   const [data, setData] = useState(initialData);
   const [error, setError] = useState(bootstrapError);
@@ -114,7 +138,6 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
   const [showProduction, setShowProduction] = useState(false);
   const [showBoxDistribution, setShowBoxDistribution] = useState(false);
   const [projectSourceId, setProjectSourceId] = useState("");
-  const [schoolView, setSchoolView] = useState("grid");
   const [projectStageData, setProjectStageData] = useState(null);
   const [projectStageLoading, setProjectStageLoading] = useState(false);
   const [projectStageError, setProjectStageError] = useState("");
@@ -207,9 +230,6 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
     : null, [projectStageData]);
   const projectStepPercents = projectStageProgress?.stages ?? null;
   const overallPercent = projectStageProgress?.overall ?? null;
-  const projectSummary = project ? projectSummaries.get(project.id) : null;
-  const projectStatus = projectSummary?.total > 0 && projectSummary.closed === projectSummary.total ? "Closed"
-    : projectSummary?.total > 0 && projectSummary.delivered === projectSummary.total ? "Delivered" : "Preparing";
   // Project Components is the Master BOM, not a preparation stage.
   const projectStepCards = [
     { key:"testing", icon:"flask", title:"Project Testing", subtitle:"01 · Components QC", detail:"Component testing and quality checks", open:()=>setShowProjectTesting(true) },
@@ -316,6 +336,14 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
   function openNewProject() { setProjectName(""); setProjectDescription(""); setProjectSourceId(""); setSheet("project"); }
   function openSchools() { setSelectedMembers([]); setMemberQuery(""); setSheet("schools"); }
   function openStage(stage) { const record = schoolStages.find(row => row.stage_key === stage.key); setStageKey(stage.key); setStageStatus(record?.status || "not_started"); setStageNotes(record?.notes || ""); setSheet("stage"); }
+  function goToProjectsIndex() {
+    cancelFolderHold(); setFolderMenu("");
+    setSchoolId(""); setProjectId(""); setProjectTab("overview"); setQuery("");
+    setShowComponents(false); setShowDelivery(false); setShowReconciliation(false);
+    setShowTechnical(false); setShowClosing(false);
+    setShowProjectCartons(false); setShowWarehouse(false); setShowProjectTesting(false);
+    setShowProduction(false); setShowBoxDistribution(false);
+  }
   function backToParent() {
     cancelFolderHold(); setFolderMenu("");
     if (school) { setSchoolId(""); setProjectTab("schools"); setQuery(""); setShowComponents(false); setShowDelivery(false); setShowReconciliation(false); setShowTechnical(false); setShowClosing(false); return; }
@@ -348,16 +376,7 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
     `${stage.title} ${stage.team} ${stage.description || ""}`.toLowerCase().includes(query.trim().toLowerCase()));
   const schoolPercent = progress ? Math.round(progress.completed * 100 / (progress.total || 1)) : 0;
   return <div className={`pr-root ${!project ? "pr-root--index" : school ? "pr-root--school" : "pr-root--project"}`}>
-    {project && <div className="pr-header">
-      <div className="pr-headline">
-        <button type="button" className="pr-back" onClick={backToParent}><Ico name="back" size={18}/>{school ? project.name : "Projects"}</button>
-        <div className="pr-project-heading-line">
-          {!school && <span className="pr-project-heading-icon" aria-hidden="true"><Ico name="folder" size={24}/></span>}
-          <h1>{school ? school.beneficiary_name : project.name}</h1>
-          {!school && <span className={`pr-project-status-chip pr-project-status-chip--${projectStatus.toLowerCase()}`}>{projectStatus}</span>}
-        </div>
-      </div>
-    </div>}
+    <ProjectHeaderPath project={project} school={school} onProjects={goToProjectsIndex} onProject={backToParent}/>
     {error && <div className="pr-alert" role="alert"><span>{error}</span><button onClick={() => setError("")} aria-label="Dismiss"><Ico name="close" size={16}/></button></div>}
     {!project && <>
       <section className="pr-index-hero" aria-label="Projects workflow">
@@ -462,15 +481,13 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
       <section className="pr-project-schools-panel pr-project-schools-panel--tab" aria-label="Schools">
         <div className="pr-project-panel-heading pr-project-schools-heading">
           <div className="pr-project-panel-title"><h2>Schools</h2><span className="pr-section-count">{projectSchools.length} {projectSchools.length === 1 ? "school" : "schools"}</span></div>
-          <div className="pr-project-schools-controls">
-            <label className="pr-project-school-search"><Ico name="search" size={16}/><input type="search" aria-label="Search schools" placeholder="Search schools..." value={query} onChange={event=>setQuery(event.target.value)}/></label>
-            <div className="pr-project-view-switch" role="group" aria-label="School folder view">
-              <button type="button" aria-label="Grid view" aria-pressed={schoolView === "grid"} className={schoolView === "grid" ? "is-selected" : ""} onClick={()=>setSchoolView("grid")}>▦</button>
-              <button type="button" aria-label="List view" aria-pressed={schoolView === "list"} className={schoolView === "list" ? "is-selected" : ""} onClick={()=>setSchoolView("list")}>☷</button>
-            </div>
-          </div>
         </div>
-        <div className={`pr-folders pr-dashboard-schools ${schoolView === "list" ? "pr-dashboard-schools--list" : ""}`} aria-label="School folders">
+        <div className="pr-folders pr-dashboard-schools" aria-label="School folders">
+          {canManage && <button type="button" className="pr-add-school-tile" onClick={openSchools} aria-label="Add School">
+            <span className="pr-index-add-icon" aria-hidden="true"><Ico name="plus" size={27}/></span>
+            <strong>Add School</strong>
+            <span className="pr-add-school-description">Add a school to this project</span>
+          </button>}
           {schoolFiltered.map(row => {
             const rowProgress = schoolProgress(stages.filter(stage=>stage.school_id===row.id));
             const key = `school:${row.id}`;
@@ -497,7 +514,6 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
               </div>}
             </article>;
           })}
-          {canManage && <button type="button" className="pr-add-school-tile" onClick={openSchools}><span><Ico name="plus" size={28}/></span>Add School</button>}
           {!schoolFiltered.length && projectSchools.length > 0 && <div className="pr-dashboard-empty">No schools match your search.</div>}
           {!projectSchools.length && !canManage && <div className="pr-dashboard-empty">No schools assigned yet.</div>}
         </div>

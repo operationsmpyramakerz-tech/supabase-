@@ -11,7 +11,7 @@ const service=read('lib/preparing-service.js');
 const sql=read('sql/2026-10-28-preparing-folder-rename-archive-v233.sql');
 
 test('long press shows exactly Rename and Delete on project folders, never project shortcuts',()=>{
-  const folderArea=ui.split('!project ? projectFiltered.map')[1].split(': schoolFiltered.map')[0];
+  const folderArea=ui.split('{projectFiltered.map(row => {')[1].split('!projectFiltered.length &&')[0];
   const menu=folderArea.split('aria-label={`${row.name} actions`}')[1].split('</div>}')[0];
   const actions=[...menu.matchAll(/role="menuitem"/g)];
   assert.equal(actions.length,2);
@@ -21,10 +21,11 @@ test('long press shows exactly Rename and Delete on project folders, never proje
   assert.match(folderArea,/if\(canManage\)startFolderHold/);
 });
 test('project header has no Add Schools action; add school remains in Schools tab for managers',()=>{
-  const header=ui.split('{project && <div className="pr-header">')[1].split('{error && <div className="pr-alert"')[0];
-  assert.doesNotMatch(header,/Add Schools|openSchools|openEditProject/);
-  const schoolsTab=ui.split('{projectTab === "schools" &&')[1].split('{projectTab === "reports" &&')[0];
+  assert.doesNotMatch(ui, /\{project && <div className="pr-header">/);
+  const schoolsTab=ui.split('{projectTab === "schools" &&')[1].split('{project && !school && showWarehouse')[0];
   assert.match(schoolsTab,/canManage && <button type="button" className="pr-add-school-tile" onClick={openSchools}/);
+  assert.match(ui,/onProjects={goToProjectsIndex}/);
+  assert.doesNotMatch(ui,/pr-project-heading-line/);
 });
 test('project overview stretches header and metrics to full width, keeping decorative parcels clear of text',()=>{
   const css=read('public/css/projects-preparing.css');

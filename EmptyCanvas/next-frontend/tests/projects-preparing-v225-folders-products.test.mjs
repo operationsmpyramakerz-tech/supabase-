@@ -27,7 +27,9 @@ test('Proposals-style cards keep both project and school drill-down actions', ()
     assert.ok(preparing.includes(action), action);
 });
 test('project folder shows Rename/Delete only and deletion uses explicit server action', () => {
-  const folderArea = preparing.split('<div className="pr-folders"')[1].split('        {project && !projectSchools.length')[0];
+  // The index folder grid is now a dedicated projectFiltered map, rather than
+  // the former mixed schools/projects grid.
+  const folderArea = preparing.split('{projectFiltered.map(row => {')[1].split('!projectFiltered.length &&')[0];
   const projectMenu = folderArea.split('aria-label={`${row.name} actions`}')[1].split('</div>}')[0];
   assert.match(projectMenu,/renameProjectFolder\(row\)/);
   assert.match(projectMenu,/deleteProjectFolder\(row\)/);

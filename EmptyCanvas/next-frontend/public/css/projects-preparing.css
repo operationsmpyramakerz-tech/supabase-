@@ -3649,3 +3649,80 @@
   .pr-root--index .pr-project-tab.pr-project-detail-tab {padding:0 10px;font-size:10px;}
   .pr-root--index .pr-project-tab.pr-project-detail-tab svg {width:15px;height:15px;}
 }
+
+
+/* v300 — clean workspace navigation + school tile parity with Add New Project. */
+/* The header breadcrumb is portaled inside AppShell's existing title only
+   while a project folder is open; other app pages retain their own title. */
+body.next-classic-shell-active .classic-app-shell .main-header .dash-title:has(> .pr-header-path) {
+  font-size:0!important;
+  max-width:min(67vw,820px)!important;
+  text-overflow:clip!important;
+  overflow:hidden!important;
+}
+.pr-header-path {
+  display:inline-flex;align-items:center;gap:7px;min-width:0;max-width:100%;
+  font-size:clamp(14px,1.5vw,21px);font-weight:850;line-height:1.2;
+  letter-spacing:-.025em;white-space:nowrap;overflow:hidden;
+}
+.pr-header-path>svg {flex:0 0 auto;color:#a0a7b2;stroke-width:2.5;}
+.pr-header-path-segment {
+  display:inline-flex;align-items:center;justify-content:center;flex:0 1 auto;min-width:0;
+  padding:5px 7px;border:1px solid transparent;border-radius:9px;
+  font:inherit;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.pr-header-path button {cursor:pointer;color:#394255;background:transparent;transition:background .15s,color .15s;}
+.pr-header-path button:hover {background:#fff2e8;color:#c75812;}
+.pr-header-path button:focus-visible {outline:2px solid #f97316;outline-offset:1px;}
+.pr-header-path .pr-header-path-current {color:#101828;background:#fff2e7;border-color:#fde6d4;}
+.pr-root--project,.pr-root--school {padding-top:8px;}
+.pr-root--project>.pr-project-detail-tabs {margin-top:0;}
+
+/* Identical mint, dashed border, green rounded-square plus icon and type
+   used by Add New Project, sized to the existing school folder grid. */
+.pr-root--project .pr-dashboard-schools .pr-add-school-tile {
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:7px;width:174px;height:168px;min-height:168px;min-width:0;
+  padding:15px 10px;text-align:center;
+  border:1.5px dashed #22c76c;border-radius:20px;
+  background:radial-gradient(circle at 80% 8%,rgba(183,239,208,.16),transparent 48%),linear-gradient(130deg,#f9fffb,#f3fbf6);
+  color:#101010;box-shadow:none;transition:transform .2s,border-color .2s,box-shadow .2s;
+}
+.pr-root--project .pr-dashboard-schools .pr-add-school-tile .pr-index-add-icon {
+  display:grid;place-items:center;flex:0 0 47px;width:47px;height:47px;
+  margin:0 0 2px;border-radius:15px;
+  background:linear-gradient(145deg,#06bc51,#08a639);color:#fff;
+  box-shadow:0 8px 16px rgba(18,169,79,.1);
+}
+.pr-root--project .pr-dashboard-schools .pr-add-school-tile .pr-index-add-icon svg {width:25px;height:25px;}
+.pr-root--project .pr-dashboard-schools .pr-add-school-tile strong {
+  font-size:13px;font-weight:900;letter-spacing:-.025em;line-height:1.2;
+}
+.pr-root--project .pr-dashboard-schools .pr-add-school-tile .pr-add-school-description {
+  display:block;max-width:130px;font-size:10px;font-weight:690;line-height:1.4;color:#697284;
+}
+.pr-root--project .pr-dashboard-schools .pr-add-school-tile:hover {
+  transform:translateY(-2px);border-color:#05a34c;
+  background:linear-gradient(130deg,#f9fffb,#f3fbf6);box-shadow:0 12px 24px rgba(29,144,79,.085);
+}
+.pr-root--project .pr-dashboard-schools .pr-add-school-tile:focus-visible {
+  outline:3px solid #ff920e;outline-offset:3px;
+}
+@media(max-width:768px) {
+  body.next-classic-shell-active .classic-app-shell .main-header .dash-title:has(> .pr-header-path) {
+    max-width:min(66vw,480px)!important;
+  }
+  .pr-header-path {font-size:clamp(12px,2vw,17px);gap:3px;}
+  .pr-header-path-segment {padding:5px 3px;}
+  .pr-header-path>svg {width:13px;height:13px;}
+}
+@media(max-width:480px) {
+  .pr-header-path {font-size:12px;}
+  .pr-header-path-root {max-width:116px;}
+  .pr-header-path-project {max-width:70px;}
+  .pr-header-path-current {max-width:83px;}
+}
+@media(prefers-reduced-motion:reduce){
+  .pr-root--project .pr-dashboard-schools .pr-add-school-tile,
+  .pr-header-path button {transition:none;}
+}
