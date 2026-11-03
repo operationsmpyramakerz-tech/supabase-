@@ -58,5 +58,5 @@ test('updated JSX parses and project stylesheet version refreshes',()=>{
     assert.deepEqual(parsed.parseDiagnostics.map(err=>err.messageText),[],file);
   }
   assert.doesNotThrow(()=>postcss.parse(css));
-  assert.match(read('app/projects-preparing/page.jsx'),/v302-loading-clean-tabs/);
+  assert.match(read('app/projects-preparing/page.jsx'),/v303-granular-stage-permissions/);
 });

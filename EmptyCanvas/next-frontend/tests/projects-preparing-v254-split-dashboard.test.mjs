@@ -39,7 +39,8 @@ test('dashboard renders five project steps and an inline Components tab',()=>{
  assert.doesNotMatch(ui,/setShowDashboard\(true\)/);
  for (const name of ['Project Testing','Warehouse Receiving','Production Receiving','Box Distribution','Project Kit Cartons'])
   assert.match(ui,new RegExp(`title:"${name}"`));
- assert.match(ui,/calculateProjectPreparationProgress/);
+ assert.match(ui,/api\(`\/progress\$\{suffix\}`\)/);
+ assert.match(read("app/api/projects-preparing/progress/route.js"),/calculateProjectPreparationProgress/);
  assert.match(ui,/projectStepCards.map/);
  assert.match(ui,/pr-project-tab-pane--components/);
  assert.match(ui,/<ProjectMasterComponents key=\{projectId\}[^>]* inline/);

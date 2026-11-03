@@ -1,3 +1,4 @@
+import { preparingStageReadGate } from "../../../../../lib/preparing-stage-access";
 import PDFDocument from "pdfkit";
 import {getDirectAccountGate} from "../../../../../lib/products-auth";
 import {featureGate} from "../../../../../lib/feature-permissions-server";
@@ -13,7 +14,7 @@ const widths={name:214,code:66,required:66,received:92,passed:63,failed:63,remai
 function collect(doc){return new Promise((resolve,reject)=>{const chunks=[];doc.on("data",chunk=>chunks.push(chunk));doc.on("end",()=>resolve(Buffer.concat(chunks)));doc.on("error",reject);});}
 
 export async function POST(request){
- const gate=featureGate(await getDirectAccountGate(["Projects Preparing"]),"preparing.view");
+ const gate=preparingStageReadGate(featureGate(await getDirectAccountGate(["Projects Preparing"]),"preparing.view"),"testing");
  if(!gate.ok)return reply(gate.error||"Access denied.",gate.status||403);
  try{
   const body=await request.json();

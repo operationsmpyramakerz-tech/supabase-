@@ -1,3 +1,4 @@
+import { preparingStageReadGate } from "../../../../../lib/preparing-stage-access";
 import PDFDocument from "pdfkit";
 import {getDirectAccountGate} from "../../../../../lib/products-auth";
 import {featureGate} from "../../../../../lib/feature-permissions-server";
@@ -15,6 +16,8 @@ export async function POST(req){
  try{
   const body=await req.json(),columns=body?.columns;
   const scope=body?.scope==="boxes"?"boxes":"receiving";
+  const stage=preparingStageReadGate(gate,scope==="boxes"?"boxes":"production");
+  if(!stage.ok)return fail(stage.error||"Access denied.",stage.status||403);
   const receiveKeys=new Set(["name","code","required","warehouse","production","available","receivedBy","signature"]);
   const boxKeys=new Set(["name","code","required","production","packed","unpacked","signature"]);
   const permitted=scope==="boxes"?boxKeys:receiveKeys;

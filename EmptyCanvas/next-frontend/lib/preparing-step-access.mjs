@@ -3,11 +3,11 @@
 // allowed to update that stage, never beneficiaries or fabricated avatars.
 export const PREPARING_STEP_PERMISSIONS = Object.freeze({
   components: "preparing.manage",
-  testing: "preparing.stage_update",
-  warehouse: "preparing.warehouse_receive",
-  production: "preparing.stage_update",
-  boxes: "preparing.stage_update",
-  cartons: "preparing.stage_update",
+  testing: "preparing.stage.testing",
+  warehouse: "preparing.stage.warehouse",
+  production: "preparing.stage.production",
+  boxes: "preparing.stage.boxes",
+  cartons: "preparing.stage.cartons",
 });
 
 const canonical = value => String(value ?? "").normalize("NFKC").toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -41,9 +41,13 @@ export function membersWithPreparingStageAccess({ members = [], pages = [], page
     const can = permission => {
       if (!migrated.has(id)) return true; // verified legacy page access
       const view = memberGrants?.get("preparing.view");
-      const grant = memberGrants?.get(permission);
-      return view?.is_allowed === true && (view?.data_scope || "all") === "all"
-        && grant?.is_allowed === true && (grant?.data_scope || "all") === "all";
+      if (view?.is_allowed !== true || (view?.data_scope || "all") !== "all") return false;
+      const granular = memberGrants?.get("preparing.stages.__granular")?.is_allowed === true;
+      const effectivePermission = granular ? permission
+        : permission === "preparing.stage.warehouse" ? "preparing.warehouse_receive"
+        : permission.startsWith("preparing.stage.") ? "preparing.stage_update" : permission;
+      const grant = memberGrants?.get(effectivePermission);
+      return grant?.is_allowed === true && (grant?.data_scope || "all") === "all";
     };
     for (const [step, permission] of Object.entries(PREPARING_STEP_PERMISSIONS)) {
       if (can(permission)) list[step].push({ id, name: String(person.name || "Team member") });

@@ -3934,3 +3934,14 @@ html[data-theme="dark"] .ua-feature-module-toggle { color:inherit; }
 .ua-team-scope-actions > span { margin-right:auto; font-size:11px; color:#737e8c; }
 
 .ua-feature-count-note { display:block; margin:-5px 0 6px; font-size:10px; color:#687584; line-height:1.4; }
+
+/* v303 — stage access is explicit and opt-in for each Projects Preparing user. */
+.ua-feature-stage-hint {
+  margin:12px 14px 8px;padding:11px 13px;border:1px solid #e8eaf0;border-radius:12px;
+  background:#f8f9fb;color:#485467;font-size:11px;font-weight:600;line-height:1.55;
+}
+.ua-feature-stage-hint strong {color:#172033;font-weight:800;}
+.ua-feature-stage-row {padding-left:22px!important;background:#fcfcfd;}
+.ua-feature-stage-row .ua-page-access-name strong {font-size:11px;}
+.ua-feature-stage-row:has(input:disabled) {opacity:.58;}
+@media(max-width:630px) { .ua-feature-stage-hint {margin:9px 8px;padding:10px;} .ua-feature-stage-row {padding-left:12px!important;} }

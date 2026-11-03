@@ -29,7 +29,7 @@ test("the route validates actual user, three quantity deltas and technician",()=
  assert.match(api,/receivedDelta/);
  assert.match(api,/expectedReceived/);
  assert.match(api,/p_actor_name:actorName/);
- assert.match(read("app/api/projects-preparing/testing/route.js"),/gate\("stage_update"\)/);
+ assert.match(read("app/api/projects-preparing/testing/route.js"),/preparingStage(?:Gate|Allowed)/);
 });
 test("test fields remain inline and responsive",()=>{
  assert.match(view,/isEditing&&!isRemaining/);

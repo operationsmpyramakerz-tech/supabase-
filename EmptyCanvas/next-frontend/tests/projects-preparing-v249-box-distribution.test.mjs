@@ -31,7 +31,7 @@ test("Independent carton movement audit and verified ERP actor are protected by 
  assert.match(sql,/changed_by_name=btrim\(p_actor_name\)/);
  assert.match(sql,/Cannot unpack units already allocated to a school/);
  assert.match(sql,/GRANT EXECUTE ON FUNCTION public\.erp_preparing_production_pack_v249/);
- assert.match(api,/gate\("stage_update"\)/);
+ assert.match(api,/preparingStage(?:Gate|Allowed)/);
  assert.match(helper,/identity\(account\)/);assert.match(helper,/p_actor_name:name/);
  assert.match(carton,/"box audit"/);
 });

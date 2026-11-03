@@ -15,7 +15,7 @@ test("Production totals are separate from warehouse and physical carton counts",
 });
 test("Production API enforces ERP feature authorization and verified receiver identity",()=>{
  const api=read("app/api/projects-preparing/production/route.js"),server=read("lib/preparing-production.js");
- assert.match(api,/gate\("stage_update"\)/);assert.match(api,/gate\("view"\)/);
+ assert.match(api,/preparingStage(?:Gate|Allowed)/);assert.match(api,/gate\("view"\)/);
  assert.match(server,/identity\(account\)/);assert.match(server,/p_actor_name:name/);
  assert.match(server,/p_expected_total:expected/);
 });

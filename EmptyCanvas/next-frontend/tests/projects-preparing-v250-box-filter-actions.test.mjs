@@ -26,7 +26,7 @@ test("Project carton rename permission and concurrency are validated server-side
  const api=read("app/api/projects-preparing/project-cartons/route.js");
  const lib=read("lib/preparing-project-cartons.js");
  const sql=read("sql/2026-10-29-preparing-box-folder-actions-v250.sql");
- assert.match(api,/gate\("stage_update"\)/);
+ assert.match(api,/preparingStage(?:Gate|Allowed)/);
  assert.match(api,/rename:renameProjectCarton/);
  assert.match(lib,/erp_preparing_rename_project_carton_v250/);
  assert.match(sql,/FOR UPDATE/);

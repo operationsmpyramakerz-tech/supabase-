@@ -1,3 +1,4 @@
+import { preparingStageReadGate } from "../../../../../lib/preparing-stage-access";
 import PDFDocument from "pdfkit";
 import {getDirectAccountGate} from "../../../../../lib/products-auth";
 import {featureGate} from "../../../../../lib/feature-permissions-server";
@@ -13,7 +14,7 @@ const labels=Object.fromEntries(WAREHOUSE_COLUMNS.map(col=>[col.key,col.label]))
 const widths={name:215,code:69,required:70,passed:70,accepted:70,allocated:70,available:75,remaining:75,receivedBy:120,signature:114};
 function collect(doc){return new Promise((resolve,reject)=>{const chunks=[];doc.on("data",chunk=>chunks.push(chunk));doc.on("end",()=>resolve(Buffer.concat(chunks)));doc.on("error",reject);});}
 export async function POST(request){
- const gate=featureGate(await getDirectAccountGate(["Projects Preparing"]),"preparing.view");
+ const gate=preparingStageReadGate(featureGate(await getDirectAccountGate(["Projects Preparing"]),"preparing.view"),"warehouse");
  if(!gate.ok)return reply(gate.error||"Access denied.",gate.status||403);
  try{
   const body=await request.json();

@@ -74,7 +74,7 @@ test('old stage 4-6 gates still read school shipment tables',()=>{
 test('both project carton routes use page access and feature-level write permissions',()=>{
   assert.match(api,/getDirectAccountGate\(\["Projects Preparing"\]\)/);
   assert.match(api,/gate\("view"\)/);
-  assert.match(api,/gate\("stage_update"\)/);
+  assert.match(api,/preparingStage(?:Gate|Allowed)/);
   assert.match(service,/SUPABASE_SERVICE_ROLE_KEY/);
   assert.match(service,/requireService\(\)/);
 });

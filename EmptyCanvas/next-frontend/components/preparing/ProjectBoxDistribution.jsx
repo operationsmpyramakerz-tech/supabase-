@@ -71,8 +71,8 @@ export default function ProjectBoxDistribution({projectId,rows,kitGroups,request
   return()=>{document.removeEventListener("keydown",onKey);previous?.focus?.();};
  },[boxesOpen]);
  const holdTimer=useRef(null),holdStart=useRef(null),suppressBoxClick=useRef(false);
- async function refresh(){const result=await request(`/project-cartons?projectId=${encodeURIComponent(projectId)}`);setData(result);setLoading(false);return result;}
- useEffect(()=>{let active=true;request(`/project-cartons?projectId=${encodeURIComponent(projectId)}`).then(r=>{if(active){setData(r);setLoading(false);}}).catch(e=>{if(active){setError(e.message||"Could not load boxes.");setLoading(false);}});return()=>{active=false;};},[projectId]);
+ async function refresh(){const result=await request(`/project-cartons?projectId=${encodeURIComponent(projectId)}&scope=boxes`);setData(result);setLoading(false);return result;}
+ useEffect(()=>{let active=true;request(`/project-cartons?projectId=${encodeURIComponent(projectId)}&scope=boxes`).then(r=>{if(active){setData(r);setLoading(false);}}).catch(e=>{if(active){setError(e.message||"Could not load boxes.");setLoading(false);}});return()=>{active=false;};},[projectId]);
  const activeCartons=useMemo(()=>(data?.cartons||[]).filter(c=>c.status!=="cancelled"),[data]);
  const boxGroups=useMemo(()=>groupBoxLabels(data?.kits,data?.cartons),[data]);
  const openBoxLabels=()=>{setExpandedBoxKit(boxGroups.find(g=>g.cartons.length)?.name||boxGroups[0]?.name||"");setBoxesOpen(true);};

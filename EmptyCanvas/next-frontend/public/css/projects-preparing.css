@@ -3925,3 +3925,6 @@ body.next-classic-shell-active .classic-app-shell .main-header .dash-title:has(>
 .pr-root.pr-root--project .pr-project-tab-pane--schools .pr-folders.pr-dashboard-schools {
   margin-top:0;
 }
+
+/* v303 — only stage cards assigned through Users Center appear when granular stage access is ON. */
+.pr-project-stage-restricted {margin:14px 0;padding:17px;border:1px dashed #d6dae3;border-radius:12px;background:#fafafa;color:#677185;font-size:12px;line-height:1.55;}

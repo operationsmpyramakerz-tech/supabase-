@@ -32,7 +32,7 @@ test("testing persists append-only reports independent from school deliveries",(
  assert.doesNotMatch(migration,/DROP TABLE|TRUNCATE|UPDATE public\.erp_preparing_warehouse_receipt_lines|UPDATE public\.erp_preparing_schools|UPDATE public\.stocktaking/i);
 });
 test("project testing route is strictly feature-gated",()=>{
- assert.match(route,/gate\("view"\)/);assert.match(route,/gate\("stage_update"\)/);
+ assert.match(route,/gate\("view"\)/);assert.match(route,/preparingStage(?:Gate|Allowed)/);
  assert.match(route,/getDirectAccountGate\(\["Projects Preparing"\]\)/);
  assert.match(server,/SUPABASE_SERVICE_ROLE_KEY/);
  assert.match(route,/"Cache-Control":"private, no-store"/);

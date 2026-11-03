@@ -20,7 +20,7 @@ test('Box Distribution is an independent fourth step; cartons move to fifth',()=
  assert.match(main,/view="boxes"/);
  assert.match(main,/aria-label="Box Distribution"/);
  assert.match(main,/aria-label="Production Receiving"/);
- assert.equal(PREPARING_STEP_PERMISSIONS.boxes,'preparing.stage_update');
+ assert.equal(PREPARING_STEP_PERMISSIONS.boxes,'preparing.stage.boxes');
 });
 test('production and boxes are isolated to their own modal tabs and preserve existing actions',()=>{
  assert.match(production,/view="receiving"/);

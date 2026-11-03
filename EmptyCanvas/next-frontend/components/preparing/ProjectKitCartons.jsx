@@ -24,11 +24,11 @@ export default function ProjectKitCartons({projectId,projectName,stageRecords=[]
     return [...byKey.values()].filter(c=>c.product_name.toLowerCase().includes(search.toLowerCase())).sort((a,b)=>a.product_name.localeCompare(b.product_name));
   },[data,active,search]);
   async function refresh(nextId="") {
-    const v=await request(`/project-cartons?projectId=${encodeURIComponent(projectId)}`);
+    const v=await request(`/project-cartons?projectId=${encodeURIComponent(projectId)}&scope=cartons`);
     setData(v);setActiveId(old=>nextId||(v.cartons.some(c=>c.id===old)?old:(v.cartons.find(c=>c.status!=="cancelled")?.id||"")));
     return v;
   }
-  useEffect(()=>{let active=true;request(`/project-cartons?projectId=${encodeURIComponent(projectId)}`)
+  useEffect(()=>{let active=true;request(`/project-cartons?projectId=${encodeURIComponent(projectId)}&scope=cartons`)
     .then(v=>{if(active){setData(v);setActiveId(v.cartons.find(c=>c.status!=="cancelled")?.id||"");}})
     .catch(e=>{if(active)setError(e.message);});return()=>{active=false;};},[projectId]);
   useEffect(()=>{setChosenLine("");setChosenSchool("");setChosenComponent("");setSearch("");setQuantities({});},[activeId]);
