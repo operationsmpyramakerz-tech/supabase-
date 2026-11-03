@@ -18,7 +18,7 @@ test('testing row shows component, code and project required on the same header 
 });
 test('editing swaps each displayed metric for an input in the exact same metric slot',()=>{
  assert.match(ui,/metrics\.map\(field=>/);
- assert.match(ui,/isEditing&&!isRemaining\?<input/);
+ assert.match(ui,/isEditing&&!isRemaining\?<StageQuantityInput/);
  assert.match(ui,/pr-pt-metric-value/);
  assert.doesNotMatch(ui,/className="pr-pt-controls"/);
  assert.doesNotMatch(ui,/className="pr-pt-figures"/);

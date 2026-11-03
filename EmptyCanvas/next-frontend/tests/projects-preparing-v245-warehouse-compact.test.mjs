@@ -24,7 +24,7 @@ test('Warehouse component summary shows just Available to Receive, Received and 
 
 test('Edit toggles the same Received value into an input and requires warehouse receiving permission',()=>{
  assert.match(ui, /setDraft\(prev=>\(\{\.\.\.prev,\[row\.id\]:String\(row\.accepted\)\}\)\)/);
- assert.match(ui, /active\?<input type="number"/);
+ assert.match(ui, /active\?<StageQuantityInput step="1" min="0"/);
  assert.match(ui, /aria-label=\{`Received \$\{row.product_name\}`\}/);
  assert.match(ui, /disabled=\{busy\} title=\{!canReceive/);
  assert.match(ui, /Enable Warehouse Receiving permission in Users Center/);

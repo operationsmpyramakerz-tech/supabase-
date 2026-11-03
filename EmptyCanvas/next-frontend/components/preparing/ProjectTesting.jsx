@@ -1,5 +1,6 @@
 "use client";
 import PreparingSelect from "./PreparingSelect";
+import StageQuantityInput from "./StageQuantityInput";
 import {useEffect,useMemo,useState} from "react";
 import {testingChange} from "../../lib/preparing-project-testing-math.mjs";
 import {testingGroups,testingRemaining,TESTING_EXPORT_COLUMNS,testingExportValue} from "../../lib/preparing-project-testing-grouping.mjs";
@@ -195,7 +196,7 @@ export default function ProjectTesting({projectId,projectName,canTest,request,on
         const current=isRemaining?Math.max(0,n(isEditing?v.received:r.received)-n(isEditing?v.passed:r.passed)):r[field.key];
         return <label key={field.key} className={`pr-pt-metric pr-pt-metric--${field.key}`}>
          <span>{field.label}</span>
-         {isEditing&&!isRemaining?<input type="number" min="0" step="1" aria-label={`${field.aria} ${r.name}`} disabled={busy} value={v[field.key]??""} onChange={e=>change(r.id,field.key,e.target.value)}/>
+         {isEditing&&!isRemaining?<StageQuantityInput min="0" step="1" aria-label={`${field.aria} ${r.name}`} disabled={busy} value={v[field.key]??""} onValueChange={value=>change(r.id,field.key,value)}/>
          :<strong className={`pr-pt-metric-value pr-pt-number${field.key==="passed"?" pr-pt-pass":field.key==="failed"?" pr-pt-fail":""}`}>{pretty(current)}</strong>}
         </label>;
        })}
