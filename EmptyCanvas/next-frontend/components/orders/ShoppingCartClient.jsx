@@ -102,6 +102,7 @@ function normalizeDraftItem(item) {
     issueDescription: text(item?.issueDescription),
     schoolId: text(item?.schoolId),
     expectedSparePartId: text(item?.expectedSparePartId),
+    kitSourceIds: [...new Set((Array.isArray(item?.kitSourceIds) ? item.kitSourceIds : []).map(text).filter(Boolean))].slice(0, 15),
   };
 }
 
@@ -616,6 +617,8 @@ export default function ShoppingCartClient({
   const meta = orderTypeMeta(selectedType);
   const maintenance = isMaintenance(selectedType);
   const withdraw = isWithdraw(selectedType);
+  const allowComponents = maintenance || permissions.components !== false;
+  const allowKits = !maintenance && permissions.kits !== false;
   const itemCount = cart.length;
 
   useEffect(() => {
@@ -642,6 +645,7 @@ export default function ShoppingCartClient({
     issueDescription: isMaintenance(type) ? text(item.issueDescription) : "",
     schoolId: text(item.schoolId),
     expectedSparePartId: "",
+    kitSourceIds: item.kitSourceIds,
   }));
 
   const persistDraft = async (items = cart, type = selectedType, globalReason = reason, { quiet = false, editTransfer = null } = {}) => {
@@ -837,6 +841,7 @@ export default function ShoppingCartClient({
     }
 
     if (selection?.mode === "kit") {
+      if (!allowKits) throw new Error("Your account is not allowed to add Kits.");
       const entries = Array.isArray(selection?.selections) ? selection.selections : [];
       if (!entries.length) throw new Error("Choose at least one kit.");
       const next = [...cart];
@@ -864,12 +869,14 @@ export default function ShoppingCartClient({
               next[targetIndex] = {
                 ...next[targetIndex],
                 quantity: quantity(next[targetIndex].quantity, 1) + sourceQuantity,
+                kitSourceIds: [...new Set([...(next[targetIndex].kitSourceIds || []), kitId])],
               };
             }
           } else {
             next.push(normalizeDraftItem({
               id: productId,
               quantity: maintenance ? 1 : sourceQuantity,
+              kitSourceIds: [kitId],
               reason,
               issueDescription: maintenance ? text(selection?.issueDescription) : "",
             }));
@@ -885,6 +892,7 @@ export default function ShoppingCartClient({
       return;
     }
 
+    if (!allowComponents && !picker?.item) throw new Error("Your account is not allowed to select individual Components.");
     const draftItem = selection?.item || selection;
     const next = [...cart];
     const previousId = text(picker?.item?.id);
@@ -892,7 +900,9 @@ export default function ShoppingCartClient({
       const previousIndex = next.findIndex((item) => item.id === previousId);
       if (previousIndex >= 0) next.splice(previousIndex, 1);
     }
-    const normalized = normalizeDraftItem({ ...draftItem, reason });
+    const normalized = normalizeDraftItem({ ...draftItem, reason,
+      kitSourceIds: !allowComponents ? (picker?.item?.kitSourceIds || []) : (draftItem?.kitSourceIds || []),
+    });
     const targetIndex = next.findIndex((item) => item.id === normalized.id);
     if (targetIndex >= 0) next[targetIndex] = normalized;
     else next.push(normalized);
@@ -945,6 +955,10 @@ export default function ShoppingCartClient({
     }
     if (maintenance && cart.some((item) => !text(item.issueDescription))) {
       setNotice({ type: "error", title: "Issue Description required", message: "The maintenance component must include an Issue Description." });
+      return false;
+    }
+    if (!maintenance && !allowComponents && !allowKits) {
+      setNotice({ type: "error", title: "Source not allowed", message: "Contact your administrator to enable Components or Kits." });
       return false;
     }
     // Warm the post-submit confirmation chunk while the network request is in flight.
@@ -1107,6 +1121,7 @@ export default function ShoppingCartClient({
                   className={`classic-cart-add-new ${typeTheme}${validationFeedback.cart ? " is-validation-error" : ""}`}
                   type="button"
                   onClick={() => setPicker({ item: null })}
+                  disabled={!allowComponents && !allowKits}
                   aria-label={`Add new item to ${selectedType}`}
                 >
                   <span className="classic-cart-add-new-copy">
@@ -1117,9 +1132,10 @@ export default function ShoppingCartClient({
               </div>
             )}
 
+            {!maintenance && !allowComponents && !allowKits ? <p className="classic-cart-source-denied" role="status">Your account cannot select Components or Kits. Contact your administrator.</p> : null}
             {cart.length && !maintenance ? (
               <div className="classic-cart-footer">
-                <button className="classic-cart-update-btn" type="button" onClick={() => setPicker({ item: null })}>
+                <button className="classic-cart-update-btn" type="button" onClick={() => setPicker({ item: null })} disabled={!allowComponents && !allowKits}>
                   <CartSvgIcon name="plus" size={17}/>
                   <span>{withdraw ? "Add to Withdraw Cart" : "Add to Cart"}</span>
                 </button>
@@ -1155,7 +1171,7 @@ export default function ShoppingCartClient({
 
           {canSubmit ? <SlideToSubmit
             label="Slide to submit"
-            disabled={busy || loadingDraft}
+            disabled={busy || loadingDraft || (!maintenance && !allowComponents && !allowKits)}
             onSubmit={checkout}
           /> : null}
         </aside>
@@ -1168,6 +1184,8 @@ export default function ShoppingCartClient({
           item={picker.item}
           onClose={() => setPicker(null)}
           onSave={savePickerSelection}
+          allowComponents={allowComponents}
+          allowKits={allowKits}
         />
       ) : null}
 

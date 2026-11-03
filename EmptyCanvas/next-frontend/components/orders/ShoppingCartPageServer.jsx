@@ -4,7 +4,7 @@ import ShoppingCartClient from "./ShoppingCartClient";
 import { getLegacyAccountGate } from "../../lib/products-auth";
 import { getDirectAccountGateFromSessionContext } from "../../lib/direct-session-account";
 import { featureGate } from "../../lib/feature-permissions-server";
-import { featureAllowed } from "../../lib/feature-permissions-registry";
+import { featureAllowed, shoppingSourceAllowed } from "../../lib/feature-permissions-registry";
 import { loadShoppingCartInitialData } from "../../lib/shopping-cart-data";
 
 function StateCard({ title, message, publicPath, retry = false }) {
@@ -119,7 +119,7 @@ export default async function ShoppingCartPageServer({
     >
       <ShoppingCartClient
         key={`${flow}:${editMode ? "edit" : "new"}:${editKey}`}
-        permissions={Object.fromEntries(["view", "submit", "edit_submit", "undo"].map(action => [action, featureAllowed(gate.account, `orders.shopping.${action}`)]))}
+        permissions={{ ...Object.fromEntries(["view", "submit", "edit_submit", "undo"].map(action => [action, featureAllowed(gate.account, `orders.shopping.${action}`)])), components: shoppingSourceAllowed(gate.account, "components"), kits: shoppingSourceAllowed(gate.account, "kits") }}
         initialOrderTypes={initial.orderTypes}
         initialComponents={initial.components}
         initialDraft={null}

@@ -227,6 +227,10 @@ export const FEATURE_DEFINITIONS = Object.freeze(
     "key": "orders.maintenance.export",
     "label": "Download maintenance reports/templates"
   },
+  // Opt-in: source selection is unchanged for existing Shopping Cart users.
+  { "module": "orders.shopping", "key": "orders.shopping.sources.__granular", "label": "Enable individual Shopping Cart source permissions" },
+  { "module": "orders.shopping", "key": "orders.shopping.source.components", "label": "Select individual Components (Request / Withdraw)" },
+  { "module": "orders.shopping", "key": "orders.shopping.source.kits", "label": "Select Kits (Request / Withdraw)" },
   {
     "module": "orders.shopping",
     "key": "orders.shopping.view",
@@ -1134,6 +1138,16 @@ export function featureAllowed(account, key, { legacyAllowed = true, scopes = ["
   return grant?.allowed === true && scopes.includes(grant.scope || "all");
 }
 
+// Extra source restrictions apply ONLY when the admin enables this marker.
+// Keep all existing users (legacy and advanced) on their previous cart behavior.
+export function shoppingSourceAllowed(account, source) {
+  if (source !== "components" && source !== "kits") return false;
+  if (!featureAllowed(account, "orders.shopping.view")) return false;
+  const state = account?.featureAccess;
+  if (state?.mode !== "enforced" || state.grants?.["orders.shopping.sources.__granular"]?.allowed !== true) return true;
+  return featureAllowed(account, `orders.shopping.source.${source}`);
+}
+
 export const PILOT_FEATURE_MODULES = Object.freeze(["products", "orders.operations", "orders.my", "orders.maintenance", "orders.shopping", "tasks", "events.requests", "events.calendar", "events.components", "events.team", "kits", "proposals", "preparing", "orders.review", "stocktaking", "expenses", "expenses.users", "users", "b2c.database", "b2c.forms", "backup", "history", "kpis", "sla", "home", "notifications", "account"]);
 
 // Permissions with audited server-side gates and corresponding administrator controls.
@@ -1169,6 +1183,7 @@ export const ACTIVE_PILOT_FEATURE_KEYS = Object.freeze([
   "orders.maintenance.mark_arrived", "orders.maintenance.edit", "orders.maintenance.archive",
   "orders.maintenance.delete", "orders.maintenance.checklist_view", "orders.maintenance.checklist_manage", "orders.maintenance.export",
   "orders.shopping.view", "orders.shopping.submit", "orders.shopping.edit_submit", "orders.shopping.undo",
+  "orders.shopping.sources.__granular", "orders.shopping.source.components", "orders.shopping.source.kits",
   "orders.documents.view_receipts", "orders.documents.download_instructions", "orders.documents.manage_instructions",
   "tasks.view", "tasks.project_create", "tasks.project_edit", "tasks.project_archive",
   "tasks.project_delete", "tasks.mark_delivered", "tasks.workflow_save",

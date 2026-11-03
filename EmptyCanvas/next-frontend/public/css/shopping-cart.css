@@ -2758,3 +2758,15 @@ body.shopping-cart-page .main-content > main::-webkit-scrollbar{
     animation:none;
   }
 }
+
+/* v306 — readable, non-editable kit item identity for Kits-only shopping profiles. */
+.classic-cart-picker-readonly-component {
+  display:flex;align-items:center;min-height:57px;padding:12px 15px;
+  border:1px solid #dfe5ec;border-radius:15px;background:#f8fafc;
+  color:#111827;font-size:.88rem;font-weight:750;
+}
+.classic-cart-source-denied {
+  margin:12px 0;padding:12px 15px;border:1px solid #fee2e2;
+  border-radius:12px;background:#fff7f7;color:#a52b2b;
+  font-size:.82rem;font-weight:650;
+}

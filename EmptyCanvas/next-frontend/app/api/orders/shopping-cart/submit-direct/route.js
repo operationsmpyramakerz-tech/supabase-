@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { getLegacyAccountGate } from "../../../../../lib/products-auth";
 import { featureGate } from "../../../../../lib/feature-permissions-server";
+import { shoppingSourceAllowed } from "../../../../../lib/feature-permissions-registry";
+import { assertShoppingCartSources } from "../../../../../lib/shopping-cart-source-policy.mjs";
+import { getKit } from "../../../../../lib/proposal-kit-service";
 import { submitShoppingCartOrderDirect } from "../../../../../lib/shopping-cart-order-service";
 
 export const dynamic = "force-dynamic";
@@ -29,6 +32,13 @@ export async function POST(request) {
   }
 
   try {
+    await assertShoppingCartSources({
+      orderType: body?.orderType,
+      products: body?.products,
+      allowComponents: shoppingSourceAllowed(gate.account, "components"),
+      allowKits: shoppingSourceAllowed(gate.account, "kits"),
+      getKit: id => getKit(id, gate.account),
+    });
     const result = await submitShoppingCartOrderDirect({
       account: gate.account,
       products: body?.products,

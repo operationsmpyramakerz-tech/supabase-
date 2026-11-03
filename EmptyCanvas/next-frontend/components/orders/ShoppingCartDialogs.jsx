@@ -664,10 +664,10 @@ function KitBrowserDialog({ kits, folders, selectedKits, onToggleKit, onQuantity
   );
 }
 
-export function ProductPicker({ products, type, item, onClose, onSave }) {
+export function ProductPicker({ products, type, item, onClose, onSave, allowComponents = true, allowKits = true }) {
   const maintenance = isMaintenance(type);
   const withdraw = isWithdraw(type);
-  const [mode, setMode] = useState("product");
+  const [mode, setMode] = useState(!item && !maintenance && !allowComponents && allowKits ? "kit" : "product");
   const [selectedId, setSelectedId] = useState(text(item?.id));
   const [qty, setQty] = useState(item?.quantity || 1);
   const [issueDescription, setIssueDescription] = useState(text(item?.issueDescription));
@@ -757,6 +757,7 @@ export function ProductPicker({ products, type, item, onClose, onSave }) {
   const submit = async () => {
     setError("");
     if (mode === "product") {
+      if (!allowComponents && !item) return setError("Your account is not allowed to select individual Components.");
       if (!selected) return setError("Select a component first.");
       if (maintenance && !text(issueDescription)) return setError("Issue Description is required for maintenance requests.");
       if (!maintenance && quantity(qty, 0) <= 0) return setError("Quantity must be greater than zero.");
@@ -773,6 +774,7 @@ export function ProductPicker({ products, type, item, onClose, onSave }) {
       return;
     }
 
+    if (!allowKits) return setError("Your account is not allowed to select Kits.");
     const selections = Object.entries(selectedKits).map(([kitId, kitQty]) => ({ id: kitId, quantity: Math.max(1, Math.round(number(kitQty, 1) || 1)) }));
     if (!selections.length) return setError("Choose at least one kit.");
     if (maintenance && !text(issueDescription)) return setError("Issue Description is required for maintenance requests.");
@@ -801,7 +803,7 @@ export function ProductPicker({ products, type, item, onClose, onSave }) {
           <button className="classic-cart-picker-close" type="button" onClick={onClose} disabled={submitting} aria-label="Close"><CartSvgIcon name="x" size={22}/></button>
         </header>
 
-        {!item && !maintenance ? (
+        {!item && !maintenance && allowComponents && allowKits ? (
           <div className="classic-cart-picker-tabs" role="tablist" aria-label="Add source">
             <button type="button" className={mode === "product" ? "is-active" : ""} onClick={() => switchMode("product")} role="tab" aria-selected={mode === "product"}>
               <CartSvgIcon name="package" size={18}/><span><strong>Component</strong><small>Select one product</small></span>
@@ -816,7 +818,9 @@ export function ProductPicker({ products, type, item, onClose, onSave }) {
           {mode === "product" ? (
             <div className="classic-cart-picker-section">
               <div className="classic-cart-picker-label-row"><span>Component <em>*</em></span></div>
-              <ProductCombobox products={products} value={selectedId} onChange={(id) => { setSelectedId(id); setError(""); }} disabled={submitting}/>
+              {!allowComponents && item
+                ? <div className="classic-cart-picker-readonly-component" aria-label="Kit component">{selected?.name || "Kit component"}</div>
+                : <ProductCombobox products={products} value={selectedId} onChange={(id) => { setSelectedId(id); setError(""); }} disabled={submitting}/> }
 
               {!maintenance ? (
                 <div className="classic-cart-picker-qty-row">
