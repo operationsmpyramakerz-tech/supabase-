@@ -44,7 +44,8 @@ test('dashboard renders five project steps and an inline Components tab',()=>{
  assert.match(ui,/pr-project-tab-pane--components/);
  assert.match(ui,/<ProjectMasterComponents key=\{projectId\}[^>]* inline/);
  assert.doesNotMatch(ui,/setShowProjectBOM/);
- assert.match(ui,/5 stages/);
+ const cards=ui.split('const projectStepCards = [')[1].split('];')[0];
+ assert.equal((cards.match(/key:"(?:testing|warehouse|production|boxes|cartons)"/g)||[]).length,5);
  assert.match(ui,/setShowProjectTesting\(true\)/);
  assert.match(ui,/setShowWarehouse\(true\)/);
  assert.match(ui,/setShowProduction\(true\)/);

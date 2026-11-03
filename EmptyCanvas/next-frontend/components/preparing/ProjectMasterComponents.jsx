@@ -91,10 +91,10 @@ export default function ProjectMasterComponents({project,proposals,allowed,reque
  }
 
  return <div className={`pr-pbom pr-pbom--modern${inline?" pr-pbom--inline":""}`}>
-  <div className="pr-manifest-title pr-pbom-title">
+  {!inline&&<div className="pr-manifest-title pr-pbom-title">
    <div><span className="pr-wh-overline">PROJECT · {project.name}</span><h3>Project Components</h3></div>
    {!inline&&<button className="pr-pbom-close" type="button" onClick={onClose} aria-label="Close Project Components" title="Close"><BomIcon name="close" size={19}/></button>}
-  </div>
+  </div>}
   {error&&<div className="pr-alert" role="alert">{error}<button type="button" onClick={()=>setError("")} aria-label="Dismiss">×</button></div>}
   {notice&&<div className="pr-manifest-success" role="status">{notice}</div>}
   {loading?<div className="pr-pbom-skeleton" role="status" aria-label="Loading Kits"><span/><span/><span/><span/></div>:<>

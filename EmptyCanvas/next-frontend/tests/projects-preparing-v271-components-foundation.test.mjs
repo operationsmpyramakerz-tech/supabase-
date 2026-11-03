@@ -26,8 +26,10 @@ test('top overview and step timeline show five-stage logic without component pro
   assert.match(ui,/pr-summary-card--overview/);
   assert.match(ui,/Project Overview/);
   assert.doesNotMatch(ui,/PROJECT PROGRESS/);
-  assert.match(ui,/<span className="pr-section-count">5 stages<\/span>/);
-  assert.match(ui,/These five stages determine the overall project completion/);
+  const stageTab=ui.split('{projectTab === "stages" &&')[1].split('{projectTab === "components" &&')[0];
+  assert.match(stageTab,/<h2>Project Steps<\/h2>/);
+  assert.doesNotMatch(stageTab,/5 stages|These five stages determine the overall project completion/);
+  assert.match(stageTab,/projectStepCards\.map/);
   assert.match(ui,/projectStepPercents\?\.\[index\]/);
   assert.match(ui,/pr-step-kpi-stage-icon/);
   assert.match(ui,/pr-step-kpi-track/);

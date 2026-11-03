@@ -1,0 +1,106 @@
+/* Self-contained route-loading skeleton; independent of the async page CSS. */
+.root {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 14px clamp(14px, 3vw, 38px) 48px;
+  color: #121827;
+  font-family: inherit;
+}
+.root *, .root *::before, .root *::after { box-sizing: border-box; }
+.screenReaderOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+.skeleton {
+  display: block;
+  flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+  background: rgba(133, 145, 164, .18);
+  border-radius: 8px;
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.55), transparent);
+  animation: loadingShimmer 1.8s ease-in-out infinite;
+}
+@keyframes loadingShimmer { 100% { transform: translateX(100%); } }
+.hero {
+  display: flex;
+  align-items: center;
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  gap: 12px;
+  padding: 11px 16px;
+  min-height: 72px;
+  margin-bottom: 12px;
+  border-radius: 17px;
+  background: #fff4ea;
+  border: 1px solid #ffede2;
+}
+.heroIcon {
+  width: 45px;
+  height: 45px;
+  border-radius: 13px;
+  background: #ffb16c;
+}
+.heroCopy { display: flex; flex-direction: column; gap: 8px; min-width: 0; z-index: 1; }
+.heroEyebrow { width: 105px; height: 9px; background: #eab597; }
+.heroTitle { width: min(310px, 46vw); height: 15px; background: #e6bba6; }
+.parcels { position: absolute; right: 34px; bottom: -8px; width: 125px; height: 62px; opacity: .43; }
+.parcels span { position: absolute; width: 48px; height: 44px; background: #ffb46c; border: 2px solid #ffcb95; border-radius: 3px; }
+.parcels span:first-child { left: 35px; top: 0; }
+.parcels span:nth-child(2) { left: 2px; top: 21px; }
+.parcels span:nth-child(3) { right: 0; top: 20px; }
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
+.stat { display: flex; align-items: center; gap: 10px; min-height: 68px; padding: 10px 12px; border-radius: 15px; overflow: hidden; }
+.stat0 { background: #101827; }
+.stat1 { background: #fc7315; }
+.stat2 { background: #f4f1ee; border: 1px solid #eeeae6; }
+.stat3 { background: #616b7c; }
+.statIcon { width: 42px; height: 42px; border-radius: 12px; background: rgba(255,255,255,.2); }
+.stat2 .statIcon { background: #e9e5e1; }
+.statCopy { display: flex; min-width: 0; flex-direction: column; gap: 7px; }
+.statLabel { width: clamp(44px, 6.2vw, 98px); height: 9px; background: rgba(255,255,255,.38); }
+.statValue { width: 24px; height: 17px; background: rgba(255,255,255,.51); }
+.stat2 .statLabel, .stat2 .statValue { background: #d7d8da; }
+.tabs { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 50px; padding: 4px; margin-bottom: 16px; border-radius: 16px; background: #f7f8fa; border: 1px solid #e9ebef; }
+.tabGroup { display: flex; flex-wrap: nowrap; gap: 8px; min-width: 0; overflow: hidden; align-items: center; }
+.tabActive { height: 40px; width: 130px; background: #141b29; border-radius: 12px; }
+.tab { height: 12px; width: clamp(48px, 7vw, 80px); }
+.count { width: 64px; height: 30px; background: #e8eaef; border-radius: 11px; }
+.folders { display: flex; flex-wrap: wrap; gap: 16px; }
+.addFolder { width: 154px; height: 144px; flex: 0 0 154px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; border-radius: 20px; border: 1.5px dashed #91d1af; background: #f8fefa; }
+.addIcon { width: 48px; height: 48px; background: #b5dfc6; border-radius: 15px; }
+.addTitle { width: 100px; height: 10px; background: #d7e9dd; }
+.addCaption { width: 118px; height: 8px; background: #e0eee6; }
+.folder { width: 154px; height: 144px; flex: 0 0 154px; border-radius: 20px; position: relative; overflow: hidden; background: #ff8b3b; border: 5px solid #101217; }
+.folderPaper { position: absolute; width: 84px; height: 53px; left: 30px; top: 14px; background: #fff9f3; border-radius: 8px; }
+.folderFront { position: absolute; inset: 59px 0 0; padding: 14px 11px 8px; display: flex; flex-direction: column; gap: 7px; background: #282828; border-radius: 12px 12px 0 0; }
+.folderName { width: 66px; height: 10px; background: #a3a4a6; }
+.folderDetails { width: 83px; height: 8px; background: #77797b; }
+@media (max-width: 850px) { .stats { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+@media (max-width: 520px) {
+  .root { padding: 12px 14px 36px; }
+  .hero { gap: 9px; padding: 10px 12px; min-height: 64px; }
+  .heroIcon { width: 40px; height: 40px; }
+  .heroTitle { width: min(200px, 50vw); }
+  .parcels { display: none; }
+  .stat { min-height: 64px; padding: 9px; }
+  .statIcon { width: 36px; height: 36px; }
+  .tabActive { width: 96px; }
+  .tab { width: 34px; }
+  .count { display: none; }
+  .folders { gap: 10px; }
+  .addFolder, .folder { width: 146px; height: 138px; flex-basis: 146px; }
+}
+@media (prefers-reduced-motion: reduce) { .skeleton::after { animation: none; } }

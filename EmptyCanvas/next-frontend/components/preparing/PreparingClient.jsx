@@ -446,8 +446,7 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
         </section>
       </div>}
       {projectTab === "stages" && <section id="pr-detail-panel-stages" role="tabpanel" aria-labelledby="pr-detail-tab-stages" className="pr-project-steps-panel pr-project-steps-panel--detail pr-project-steps-panel--tab" aria-label="Project Steps">
-          <div className="pr-project-panel-heading"><div className="pr-project-panel-title"><h2>Project Steps</h2><span className="pr-section-count">5 stages</span></div></div>
-          <p className="pr-project-steps-subtitle">These five stages determine the overall project completion.</p>
+          <div className="pr-project-panel-heading"><div className="pr-project-panel-title"><h2>Project Steps</h2></div></div>
           {projectStageError && <div className="pr-project-step-error" role="alert"><span>Progress unavailable: {projectStageError}</span><button type="button" onClick={()=>setProjectStageRevision(n=>n+1)}>Retry</button></div>}
           {projectStageLoading && <span className="pr-project-step-loading" role="status">Updating project stage progress…</span>}
           <ol className="pr-project-step-timeline">
@@ -479,9 +478,6 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
       </section>}
       {projectTab === "schools" && <div id="pr-detail-panel-schools" role="tabpanel" aria-labelledby="pr-detail-tab-schools" className="pr-project-tab-pane pr-project-tab-pane--schools">
       <section className="pr-project-schools-panel pr-project-schools-panel--tab" aria-label="Schools">
-        <div className="pr-project-panel-heading pr-project-schools-heading">
-          <div className="pr-project-panel-title"><h2>Schools</h2><span className="pr-section-count">{projectSchools.length} {projectSchools.length === 1 ? "school" : "schools"}</span></div>
-        </div>
         <div className="pr-folders pr-dashboard-schools" aria-label="School folders">
           {canManage && <button type="button" className="pr-add-school-tile" onClick={openSchools} aria-label="Add School">
             <span className="pr-index-add-icon" aria-hidden="true"><Ico name="plus" size={27}/></span>

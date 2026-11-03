@@ -3917,3 +3917,11 @@ body.next-classic-shell-active .classic-app-shell .main-header .dash-title:has(>
   .pr-root--project .pr-project-detail-tab,
   .pr-root--project .pr-dashboard-schools .pr-folder-card {transition:none;}
 }
+
+/* v302 — tab labels already identify the sections; use that space for content. */
+.pr-root--project .pr-project-steps-panel--tab > .pr-project-panel-heading {
+  margin-bottom:14px;
+}
+.pr-root.pr-root--project .pr-project-tab-pane--schools .pr-folders.pr-dashboard-schools {
+  margin-top:0;
+}

@@ -15,7 +15,7 @@ test('Box Distribution is an independent fourth step; cartons move to fifth',()=
  assert.match(cards,/key:"production"[\s\S]*title:"Production Receiving"/);
  assert.match(cards,/key:"boxes"[\s\S]*title:"Box Distribution"[\s\S]*subtitle:"04 · Packing"/);
  assert.match(cards,/key:"cartons"[\s\S]*title:"Project Kit Cartons"[\s\S]*subtitle:"05 · Carton preparation"/);
- assert.match(main,/5 stages/);
+ assert.equal((cards.match(/key:"(?:testing|warehouse|production|boxes|cartons)"/g)||[]).length,5);
  assert.match(main,/showBoxDistribution &&/);
  assert.match(main,/view="boxes"/);
  assert.match(main,/aria-label="Box Distribution"/);
