@@ -6,6 +6,7 @@ import ClassicOrderIcon from "./ClassicOrderIcon";
 import { groupOrderItems, OrderSortButton } from "./OrderGrouping";
 import ProgressiveOrderGroups from "./ProgressiveOrderGroups";
 import OrderComponentSearch, { matchesOrderComponentSearch } from "./OrderComponentSearch";
+import { MaintenanceComponentCards } from "./MaintenanceComponentCards";
 import { DeleteConfirmDialog, DeleteVerificationDialog } from "../shared/SystemDeleteDialogs";
 
 const OrderDownloadModal = dynamic(() => import("./OrderDownloadModal"), { ssr: false });
@@ -331,7 +332,9 @@ function OrderDetailsModal({ group, tab, busy, onClose, onAction, onReason, onEx
   const typeMeta = orderTypeMeta(group.orderType, group.orderTypeColor);
   // Grouping can be expensive on long orders. Opening menus or receipt panels
   // must not re-sort every item unless the selected order/filter actually changes.
-  const tabItems = useMemo(() => itemsForCurrentTab(group.items, tab), [group.items, tab]);
+  // Maintenance has no stock receiving quantity. In Shipping it must display
+  // the whole maintenance report, not the stock-oriented received-qty subset.
+  const tabItems = useMemo(() => maintenance ? group.items : itemsForCurrentTab(group.items, tab), [group.items, tab, maintenance]);
   const groupedItems = useMemo(() => {
     const matches = componentSearch.trim()
       ? tabItems.filter((item) => matchesOrderComponentSearch(item, componentSearch))
@@ -448,12 +451,14 @@ function OrderDetailsModal({ group, tab, busy, onClose, onAction, onReason, onEx
           <div className="co-modal-actions ro-actions ro-actions--right order-group-sort-actions order-modal-search-actions order-detail-toolkit">
             <OrderComponentSearch key={`${group.key}:${tab}`} value={componentSearch} onChange={setComponentSearch} disabled={busy} />
             {may("export") ? <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => setDownloadOpen(true)} disabled={busy}><ClassicOrderIcon name="download" /><span>Download</span></button> : null}
-            <OrderSortButton value={sortMode} onChange={setSortMode} />
+            {!maintenance ? <OrderSortButton value={sortMode} onChange={setSortMode} /> : null}
           </div>
           <div className="co-modal-meta co-modal-meta--after-actions">
             <div className="co-meta-row co-meta-row--reason"><span>Reason</span><strong>{group.reason}</strong></div>
           </div>
-          <ProgressiveOrderGroups
+          {maintenance ? <div className="next-maintenance-parity next-maintenance-details-embed">
+            <MaintenanceComponentCards items={tabItems} query={componentSearch} onClearSearch={() => setComponentSearch("")} />
+          </div> : <ProgressiveOrderGroups
             groups={groupedItems}
             mode={sortMode}
             query={componentSearch}
@@ -461,7 +466,7 @@ function OrderDetailsModal({ group, tab, busy, onClose, onAction, onReason, onEx
             onClearSearch={() => setComponentSearch("")}
             resetKey={JSON.stringify([group?.key, tab, sortMode, componentSearch])}
             renderItem={renderItem}
-          />
+          />}
         </div>
         </div>
         {may("export") ? <OrderDownloadModal

@@ -11,6 +11,7 @@ import { DeleteConfirmDialog, DeleteVerificationDialog } from "../shared/SystemD
 import { groupOrderItems, OrderSortButton } from "./OrderGrouping";
 import ProgressiveOrderGroups from "./ProgressiveOrderGroups";
 import OrderComponentSearch, { matchesOrderComponentSearch } from "./OrderComponentSearch";
+import { MaintenanceComponentCards } from "./MaintenanceComponentCards";
 
 const OrderDownloadModal = dynamic(() => import("./OrderDownloadModal"), { ssr: false });
 
@@ -659,7 +660,9 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, orderOption
   // changes. Toggling a menu or download sheet must not re-expand 100+ rows.
   const effectiveSortMode = isEditing ? editSortModeRef.current : sortMode;
   const { tabItems, displayTabItems, groupedItems } = useMemo(() => {
-    const baseTabItems = itemsForOperationsTab(group.items, tab).map(applyEditDraft);
+    // Maintenance orders do not use stock receiving quantities. Keep their
+    // complete logs visible in Received/Shipping instead of filtering to zero.
+    const baseTabItems = (maintenance ? group.items : itemsForOperationsTab(group.items, tab)).map(applyEditDraft);
   const editAdditions = isEditing
     ? (Array.isArray(editMode?.additions) ? editMode.additions : []).map((addition, index) => {
         const draftKey = text(addition?.draftKey) || `new-${index + 1}`;
@@ -693,7 +696,7 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, orderOption
     : displayTabItems;
   const groupedItems = groupOrderItems(searchedDisplayItems, effectiveSortMode);
     return { tabItems, displayTabItems, groupedItems };
-  }, [group.key, group.items, tab, editMode, isEditing, componentSearch, sortMode]);
+  }, [group.key, group.items, tab, editMode, isEditing, componentSearch, sortMode, maintenance]);
 
   const menuAction = (action) => {
     if (action === "edit") editSortModeRef.current = sortMode;
@@ -869,7 +872,7 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, orderOption
           {!isEditing ? <div className="co-modal-actions ro-actions ro-actions--right order-modal-search-actions order-detail-toolkit">
             <OrderComponentSearch key={`${group.key}:${tab}`} value={componentSearch} onChange={setComponentSearch} disabled={busy} collapseOnToggle />
             {showDownload && permitted("export") ? <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => setDownloadOpen(true)} disabled={busy}><ClassicOrderIcon name="download" /><span>Download</span></button> : null}
-            <OrderSortButton value={sortMode} onChange={setSortMode} />
+            {!maintenance ? <OrderSortButton value={sortMode} onChange={setSortMode} /> : null}
           </div> : null}
           {!isEditing && ((canReceive && permitted("ship")) || (canDeliver && permitted("receive")) || (canCreateWithdrawal && permitted("withdrawal")) || (canCreateDelivery && permitted("delivery")) || (maintenance && tab === "approved" && group.stage === 2 && !archived && permitted("maintenance_log"))) ? (
           <div className="co-modal-actions ro-actions order-detail-workflow-actions">
@@ -893,7 +896,9 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, orderOption
             <div className="co-meta-row co-meta-row--reason"><span>Reason</span><strong>{group.reason}</strong></div>
           </div>
 
-          <ProgressiveOrderGroups
+          {maintenance && !isEditing ? <div className="next-maintenance-parity next-maintenance-details-embed">
+            <MaintenanceComponentCards items={tabItems} query={componentSearch} onClearSearch={() => setComponentSearch("")} />
+          </div> : <ProgressiveOrderGroups
             groups={groupedItems}
             mode={effectiveSortMode}
             query={componentSearch}
@@ -901,7 +906,7 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, orderOption
             onClearSearch={() => setComponentSearch("")}
             resetKey={JSON.stringify([group?.key, tab, effectiveSortMode, componentSearch])}
             renderItem={renderItem}
-          />
+          />}
           {isEditing ? (
             <div className="next-operations-edit-footer">
               <button

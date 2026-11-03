@@ -28,6 +28,7 @@ function routePerformanceStyles(localPath) {
       "/next/css/orders-performance.css?v=current-orders-pure-white-v6",
       "/next/css/order-mobile-performance.css?v=floating-order-type-desktop-v4",
       "/next/css/orders-workspace.css?v=orders-workspace-v9-modern-sort",
+      "/next/css/maintenance-orders.css?v=maintenance-shared-details-v306",
     ];
   }
   if (localPath === "/maintenance-orders") {

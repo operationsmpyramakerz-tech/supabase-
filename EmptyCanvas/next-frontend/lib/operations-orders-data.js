@@ -7,6 +7,7 @@ import { isTrustedLegacyAdmin } from "./admin-identity-policy.mjs";
 import { performance } from "node:perf_hooks";
 import { deleteById, deleteByIds, getSupabaseConfig, insert, isSupabaseConfigured, select, selectAll, supabaseRequest, updateById, updateByIds, uploadStorageObject } from "./supabase-rest";
 import { enrichOrderDetailGrouping, loadRawOrderRowsByIds, serializeOperationsOrderDetail } from "./order-details-data";
+import { enrichMaintenanceDetailProducts } from "./maintenance-detail-enrichment";
 import { getProductsCatalog } from "./products-service";
 import { loadFastOrderDetailsBundle } from "./order-details-fast-path";
 import { listTeamMembersLite } from "./team-members-service";
@@ -797,6 +798,15 @@ export async function loadOperationsOrdersInitialPage({ account = {}, limit = PA
     await loadOperationsOrdersPage({ account, tab: "all", type: "all", query: "", cursor: null, limit }),
   );
 }
+async function enrichOperationsMaintenanceRows(details, timings = null) {
+  const maintenanceRows = details.filter((item) => text(item?.orderType).toLowerCase().replace(/[^a-z0-9]/g, "") === "requestmaintenance");
+  if (!maintenanceRows.length) return details;
+  const enriched = await enrichMaintenanceDetailProducts(maintenanceRows, { timings });
+  const byId = new Map(enriched.map((item) => [text(item?.id), item]));
+  // Preserve source-kit grouping and the already verified Operations scope.
+  return details.map((item) => byId.get(text(item?.id)) || item);
+}
+
 export async function loadOperationsOrderDetails(orderIds = [], { timings = null, productsSink = null } = {}) {
   if (!isSupabaseConfigured()) return null;
   // Try a single live PostgreSQL bundle first. It reads all components and
@@ -815,7 +825,7 @@ export async function loadOperationsOrderDetails(orderIds = [], { timings = null
       timings.enrich = timings.prepare;
       timings.fastPath = 1;
     }
-    return details;
+    return await enrichOperationsMaintenanceRows(details, timings);
   }
 
   const dbStartedAt = performance.now();
@@ -825,7 +835,7 @@ export async function loadOperationsOrderDetails(orderIds = [], { timings = null
   const serialized = rows.map(serializeOperationsOrderDetail);
   const details = await enrichOrderDetailGrouping(serialized, { timings, productsSink });
   if (timings) timings.enrich = performance.now() - enrichStartedAt;
-  return details;
+  return await enrichOperationsMaintenanceRows(details, timings);
 }
 
 

@@ -5,6 +5,7 @@ import { performance } from "node:perf_hooks";
 import { deleteByIds, isSupabaseConfigured, select, updateById, updateByIds } from "./supabase-rest";
 import { invalidateLegacyOperationsCaches, serializeOperationsCompactSummaryRow } from "./operations-orders-data";
 import { loadRawOrderRowsByIds, serializeOperationsOrderDetail } from "./order-details-data";
+import { enrichMaintenanceDetailProducts } from "./maintenance-detail-enrichment";
 import { loadFastRawOrderRows } from "./order-details-fast-path";
 import { consumeOrderSummaryWindows, loadOrderRowsByNumbers, scanOrderNumberCandidates } from "./order-pagination";
 import { applyOrderSearchPlan, canUseOrderSearchText, createOrderSearchPlan, noteOrderSearchTextError } from "./order-search-hotpath";
@@ -514,8 +515,13 @@ export async function loadCurrentOrderDetails({ account = {}, orderIds = [], tim
   }
 
   const details = visible.map(serializeOperationsOrderDetail);
+  // Maintenance reports use the same product / spare-part enrichment as
+  // Maintenance Orders, after the My Orders ownership/scope check above.
+  const maintenanceDetails = details.filter((item) => text(item?.orderType).toLowerCase().replace(/[^a-z0-9]/g, "") === "requestmaintenance");
+  const enrichedMaintenance = maintenanceDetails.length ? await enrichMaintenanceDetailProducts(maintenanceDetails, { timings }) : [];
+  const enrichedById = new Map(enrichedMaintenance.map((item) => [text(item?.id), item]));
   if (timings) timings.prepare = performance.now() - prepareStartedAt;
-  return details;
+  return details.map((item) => enrichedById.get(text(item?.id)) || item);
 }
 
 export async function markCurrentOrderReceivedDirect({ account = {}, orderPageId = "" } = {}) {

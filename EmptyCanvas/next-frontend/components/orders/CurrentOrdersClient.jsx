@@ -920,6 +920,8 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
 
   async function exportOrder(options, group) {
     const kind = options?.kind === "excel" ? "excel" : "pdf";
+    // Use the same detailed maintenance report PDF as Maintenance Orders.
+    const exportKind = kind === "pdf" && isMaintenanceOrder(group.orderType) ? "maintenance-pdf" : kind;
     const endpoint = `${DIRECT_API_BASE}/orders/export-direct`;
     const response = await fetch(endpoint, {
       method: "POST",
@@ -927,7 +929,7 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
       credentials: "include",
       body: JSON.stringify({
         scope: "current",
-        kind,
+        kind: exportKind,
         orderIds: group.orderIds,
         columns: options?.columns || [],
         instruction: options?.instruction || null,

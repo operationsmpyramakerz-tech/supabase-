@@ -3,11 +3,11 @@
 
 /* Maintenance Orders — compact Operations Orders card parity + clearer details
    ------------------------------------------------------------------------- */
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-card {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-order-card {
   padding: 10px 13px !important;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-card .co-top {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-order-card .co-top {
   display: grid !important;
   grid-template-columns: auto minmax(0, 1fr) auto !important;
   align-items: center !important;
@@ -15,22 +15,22 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   min-height: 66px !important;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-card .co-main {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-order-card .co-main {
   min-width: 0;
   align-self: center !important;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-card .co-qty,
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-card .co-divider,
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-card .co-bottom {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-order-card .co-qty,
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-order-card .co-divider,
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-order-card .co-bottom {
   display: none !important;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-meta {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-order-meta {
   margin-top: 5px;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-card-head-actions {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-card-head-actions {
   min-width: 112px;
   display: flex;
   flex-direction: column;
@@ -40,14 +40,14 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   margin-left: auto;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-card-status {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-card-status {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   min-width: 0;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-card-head-actions .co-status-btn {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-card-head-actions .co-status-btn {
   flex: 0 0 auto;
   min-height: 30px;
   margin: 0;
@@ -62,7 +62,7 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   box-shadow: none;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-card .next-maintenance-creator-btn {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-order-card .next-maintenance-creator-btn {
   display: inline-flex !important;
   align-items: center !important;
   justify-content: flex-end !important;
@@ -79,7 +79,7 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   box-shadow: none !important;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-creator-label {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-creator-label {
   display: flex;
   align-items: center;
   height: 30px;
@@ -98,7 +98,7 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   box-shadow: 0 7px 16px rgba(2, 6, 23, .12);
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-creator-icon {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-creator-icon {
   position: relative;
   z-index: 1;
   width: 34px;
@@ -114,7 +114,7 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   box-shadow: 0 7px 16px rgba(2, 6, 23, .16);
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-creator-icon svg {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-creator-icon svg {
   display: block;
   width: 15px !important;
   height: 15px !important;
@@ -122,16 +122,16 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   transform: none !important;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-details-dialog {
   width: min(720px, calc(100vw - 24px));
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-items {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-modal-items {
   display: grid;
   gap: 10px;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-modal-item {
   display: block !important;
   padding: 12px !important;
   border: 1px solid #e7ebf1;
@@ -140,14 +140,14 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   box-shadow: 0 8px 20px rgba(15, 23, 42, .045);
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__head {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-modal-item__head {
   display: flex;
   align-items: center;
   gap: 11px;
   min-width: 0;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__icon {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-modal-item__icon {
   width: 40px;
   min-width: 40px;
   height: 40px;
@@ -159,12 +159,12 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   color: #92400e;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__icon svg {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-modal-item__icon svg {
   width: 19px;
   height: 19px;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__identity {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-modal-item__identity {
   min-width: 0;
   display: flex;
   flex: 1 1 auto;
@@ -172,9 +172,9 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   gap: 2px;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__kicker,
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__issue > span,
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__log > span {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-modal-item__kicker,
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-modal-item__issue > span,
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-modal-item__log > span {
   color: #94a3b8;
   font-size: 9px;
   font-weight: 850;
@@ -182,7 +182,7 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   text-transform: uppercase;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__name {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-modal-item__name {
   min-width: 0;
   overflow: hidden;
   color: #0f172a;
@@ -193,13 +193,13 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   white-space: nowrap;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__id {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-modal-item__id {
   color: #64748b;
   font-size: 10px;
   font-weight: 700;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__issue {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-modal-item__issue {
   margin-top: 11px;
   padding: 11px 12px;
   border: 1px solid #f3dfb2;
@@ -207,11 +207,11 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   background: #fffaf0;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__issue > span {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-modal-item__issue > span {
   color: #b45309;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__issue p {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-modal-item__issue p {
   margin: 5px 0 0;
   color: #334155;
   font-size: 11.5px;
@@ -221,14 +221,14 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   white-space: pre-wrap;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__log-grid {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-modal-item__log-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
   margin-top: 9px;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__log {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-modal-item__log {
   min-width: 0;
   min-height: 56px;
   display: flex;
@@ -240,7 +240,7 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   background: #f8fafc;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__log strong {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-modal-item__log strong {
   color: #334155;
   font-size: 10.5px;
   font-weight: 750;
@@ -250,35 +250,35 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
 }
 
 @media (max-width: 720px) {
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-card {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-order-card {
     padding: 9px 10px !important;
     border-radius: 18px !important;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-card .co-top {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-order-card .co-top {
     grid-template-columns: 46px minmax(0, 1fr) auto !important;
     gap: 9px !important;
     min-height: 62px !important;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-card .co-thumb {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-order-card .co-thumb {
     width: 46px !important;
     height: 46px !important;
     border-radius: 14px !important;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-card .co-thumb svg {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-order-card .co-thumb svg {
     width: 21px !important;
     height: 21px !important;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-card-head-actions {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-card-head-actions {
     min-width: 92px;
     max-width: 138px;
     gap: 4px;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-creator-label {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-creator-label {
     height: 27px;
     max-width: 112px;
     margin-right: -10px;
@@ -286,74 +286,74 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
     font-size: 8.5px;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-creator-icon {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-creator-icon {
     width: 31px;
     min-width: 31px;
     height: 31px;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__log-grid {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-modal-item__log-grid {
     grid-template-columns: 1fr;
   }
 }
 
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item {
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-modal-item {
   border-color: #2b3544;
   background: rgba(17, 22, 31, .96);
   box-shadow: 0 10px 26px rgba(0, 0, 0, .2);
 }
 
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__name {
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-modal-item__name {
   color: #f8fafc;
 }
 
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__id,
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__issue p,
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__log strong {
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-modal-item__id,
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-modal-item__issue p,
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-modal-item__log strong {
   color: #cbd5e1;
 }
 
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__issue {
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-modal-item__issue {
   border-color: #60491f;
   background: #201b12;
 }
 
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__log {
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-modal-item__log {
   border-color: #2b3544;
   background: #151b25;
 }
 
 /* Maintenance Orders — destructive action confirmation from the order details menu. */
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-delete-confirm {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-order-delete-confirm {
   z-index: 1400;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-delete-confirm .co-confirm-icon {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-order-delete-confirm .co-confirm-icon {
   background: #fef2f2;
   border-color: #fecaca;
   color: #dc2626;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-delete-confirm__danger {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-order-delete-confirm__danger {
   background: #dc2626;
   color: #fff;
   border-color: #dc2626;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-delete-confirm__danger:hover {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-order-delete-confirm__danger:hover {
   background: #b91c1c;
 }
 
 
 /* Maintenance PDF options + dual spare-parts / checklist logger. */
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spare-frame,
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-checklist-frame {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-spare-frame,
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-checklist-frame {
   border: 1px solid #dfe6ee;
   background: #fff;
   box-shadow: 0 8px 22px rgba(15, 23, 42, .035);
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spare-frame__head {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-spare-frame__head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -361,7 +361,7 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   margin-bottom: 9px;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spare-frame__head small {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-spare-frame__head small {
   max-width: 55%;
   color: #94a3b8;
   font-size: 9px;
@@ -369,7 +369,7 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   text-align: right;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-checklist-options {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-checklist-options {
   display: grid;
   gap: 7px;
   max-height: 190px;
@@ -377,7 +377,7 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   padding: 2px;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-checklist-option {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-checklist-option {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -392,7 +392,7 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   line-height: 1.45;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-checklist-option__select {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-checklist-option__select {
   min-width: 0;
   flex: 1 1 auto;
   display: flex;
@@ -401,12 +401,12 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   cursor: pointer;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-checklist-option__select span {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-checklist-option__select span {
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-checklist-option__select input[type="checkbox"] {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-checklist-option__select input[type="checkbox"] {
   width: 16px;
   height: 16px;
   margin: 1px 0 0;
@@ -414,7 +414,7 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   flex: 0 0 auto;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-checklist-empty {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-checklist-empty {
   padding: 12px;
   border: 1px dashed #dbe2ea;
   border-radius: 12px;
@@ -423,7 +423,7 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   text-align: center;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-checklist-add,
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-checklist-add,
 body.page-maintenance-orders .next-maintenance-download-dialog .next-maintenance-checklist-add {
   display: grid;
   grid-template-columns: minmax(0,1fr) auto;
@@ -584,16 +584,16 @@ body.page-maintenance-orders .next-maintenance-download-dialog .next-maintenance
 }
 
 @media (max-width: 640px) {
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spare-frame__head {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-spare-frame__head {
     display: block;
   }
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spare-frame__head small {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-spare-frame__head small {
     display: block;
     max-width: none;
     margin-top: 3px;
     text-align: left;
   }
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-checklist-add,
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-checklist-add,
   body.page-maintenance-orders .next-maintenance-download-dialog .next-maintenance-checklist-add {
     grid-template-columns: 1fr;
   }
@@ -601,7 +601,7 @@ body.page-maintenance-orders .next-maintenance-download-dialog .next-maintenance
 
 /* Maintenance Orders — edit maintenance log flow
    -------------------------------------------------------------- */
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-dialog {
   width: min(900px, calc(100vw - 28px));
   max-height: min(92dvh, 940px);
   overflow: hidden;
@@ -611,14 +611,14 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   box-shadow: 0 30px 80px rgba(15, 23, 42, .18);
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-header {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-header {
   align-items: flex-start;
   gap: 14px;
   padding: 20px 66px 18px 20px !important;
   background: linear-gradient(180deg, #ffffff 0%, #fbfcfe 100%);
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-header .req-edit-icon {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-header .req-edit-icon {
   width: 46px;
   height: 46px;
   flex: 0 0 46px;
@@ -629,18 +629,18 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   box-shadow: 0 8px 18px rgba(180, 83, 9, .08);
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-header__copy {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-header__copy {
   min-width: 0;
   flex: 1 1 auto;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-header__copy .co-submodal-title {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-header__copy .co-submodal-title {
   font-size: 21px;
   font-weight: 900;
   letter-spacing: -.025em;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-header__copy .co-submodal-sub {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-header__copy .co-submodal-sub {
   max-width: 650px;
   margin-top: 4px;
   color: #64748b;
@@ -649,14 +649,14 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   line-height: 1.5;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-header__meta {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-header__meta {
   display: flex;
   flex-wrap: wrap;
   gap: 7px;
   margin-top: 10px;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-header__meta > span {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-header__meta > span {
   min-height: 28px;
   display: inline-flex;
   align-items: center;
@@ -670,17 +670,17 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   font-weight: 800;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-header__meta svg {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-header__meta svg {
   width: 13px;
   height: 13px;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog .req-maintenance-log-body {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-dialog .req-maintenance-log-body {
   padding: 16px 18px 18px !important;
   background: #f6f8fb;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog .next-maintenance-log-card {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-dialog .next-maintenance-log-card {
   padding: 16px !important;
   border: 1px solid #e3e8ef !important;
   border-radius: 20px !important;
@@ -688,7 +688,7 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   box-shadow: 0 10px 28px rgba(15, 23, 42, .045) !important;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-card__head {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-card__head {
   display: grid;
   grid-template-columns: 42px minmax(0, 1fr) auto;
   align-items: center;
@@ -700,7 +700,7 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   background: linear-gradient(135deg, #fffaf0 0%, #fff 78%) !important;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-card__icon {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-card__icon {
   width: 42px;
   height: 42px;
   display: grid;
@@ -711,22 +711,22 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   color: #92400e;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-card__icon svg {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-card__icon svg {
   width: 18px;
   height: 18px;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-card__identity {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-card__identity {
   min-width: 0;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-card__identity .req-maintenance-log-card__title {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-card__identity .req-maintenance-log-card__title {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-card__mode {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-card__mode {
   min-height: 27px;
   display: inline-flex;
   align-items: center;
@@ -741,35 +741,35 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   white-space: nowrap;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-card__mode.is-edit {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-card__mode.is-edit {
   border-color: #bfdbfe;
   background: #eff6ff;
   color: #1d4ed8;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-card__head .req-maintenance-log-card__issue {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-card__head .req-maintenance-log-card__issue {
   grid-column: 1 / -1;
   width: 100%;
   margin: 0;
   padding-top: 9px;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog .co-submodal-input,
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog .co-submodal-textarea,
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog .next-maintenance-modern-select__trigger {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-dialog .co-submodal-input,
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-dialog .co-submodal-textarea,
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-dialog .next-maintenance-modern-select__trigger {
   border-color: #dde4ec;
   background: #fbfcfe;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog .co-submodal-input:focus,
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog .co-submodal-textarea:focus,
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog .next-maintenance-modern-select.is-open .next-maintenance-modern-select__trigger {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-dialog .co-submodal-input:focus,
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-dialog .co-submodal-textarea:focus,
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-dialog .next-maintenance-modern-select.is-open .next-maintenance-modern-select__trigger {
   border-color: #94a3b8;
   background: #fff;
   box-shadow: 0 0 0 4px rgba(15, 23, 42, .055);
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-actions {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-actions {
   position: sticky;
   bottom: 0;
   z-index: 4;
@@ -779,160 +779,160 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   backdrop-filter: blur(14px);
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-actions .ro-action-btn {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-actions .ro-action-btn {
   min-height: 44px;
   border-radius: 13px;
 }
 
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog {
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-dialog {
   border-color: #2a3442;
   background: #0f141c;
   box-shadow: 0 32px 90px rgba(0, 0, 0, .48);
 }
 
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-header {
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-header {
   border-bottom-color: #273140;
   background: linear-gradient(180deg, #111821 0%, #0f141c 100%);
 }
 
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-header__copy .co-submodal-title,
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-card__identity .req-maintenance-log-card__title {
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-header__copy .co-submodal-title,
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-card__identity .req-maintenance-log-card__title {
   color: #f8fafc;
 }
 
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-header__copy .co-submodal-sub {
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-header__copy .co-submodal-sub {
   color: #94a3b8;
 }
 
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-header__meta > span,
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-card__mode {
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-header__meta > span,
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-card__mode {
   border-color: #2c3746;
   background: #151c26;
   color: #cbd5e1;
 }
 
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-card__mode.is-edit {
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-card__mode.is-edit {
   border-color: #1e4b80;
   background: #10233d;
   color: #93c5fd;
 }
 
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog .req-maintenance-log-body {
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-dialog .req-maintenance-log-body {
   background: #0b1017;
 }
 
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog .next-maintenance-log-card {
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-dialog .next-maintenance-log-card {
   border-color: #2a3442 !important;
   background: #111821 !important;
   box-shadow: 0 10px 28px rgba(0, 0, 0, .22) !important;
 }
 
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-card__head {
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-card__head {
   border-color: #56451f !important;
   background: linear-gradient(135deg, #201a10 0%, #111821 80%) !important;
 }
 
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog .co-submodal-input,
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog .co-submodal-textarea,
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog .next-maintenance-modern-select__trigger {
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-dialog .co-submodal-input,
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-dialog .co-submodal-textarea,
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-dialog .next-maintenance-modern-select__trigger {
   border-color: #303b4a;
   background: #151c26;
   color: #e5e7eb;
 }
 
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-actions {
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-actions {
   border-top-color: #273140;
   background: rgba(15, 20, 28, .96);
 }
 
 @media (max-width: 720px) {
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-dialog {
     width: calc(100vw - 16px) !important;
     max-height: 94dvh !important;
     border-radius: 21px !important;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-header {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-header {
     gap: 10px;
     padding: 14px 48px 13px 13px !important;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-header .req-edit-icon {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-header .req-edit-icon {
     width: 38px;
     height: 38px;
     flex-basis: 38px;
     border-radius: 12px;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-header__copy .co-submodal-title {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-header__copy .co-submodal-title {
     font-size: 17px;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-header__copy .co-submodal-sub {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-header__copy .co-submodal-sub {
     font-size: 10px;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-header__meta {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-header__meta {
     gap: 5px;
     margin-top: 8px;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-header__meta > span {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-header__meta > span {
     min-height: 25px;
     padding: 4px 7px;
     font-size: 8.5px;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog .req-maintenance-log-body {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-dialog .req-maintenance-log-body {
     padding: 9px !important;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog .next-maintenance-log-card {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-dialog .next-maintenance-log-card {
     padding: 11px !important;
     border-radius: 16px !important;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-card__head {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-card__head {
     grid-template-columns: 36px minmax(0, 1fr) auto;
     gap: 8px;
     padding: 9px !important;
     border-radius: 13px !important;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-card__icon {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-card__icon {
     width: 36px;
     height: 36px;
     border-radius: 11px;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-card__mode {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-card__mode {
     min-height: 24px;
     padding: 4px 7px;
     font-size: 8px;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-actions {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-actions {
     padding: 9px 10px 11px !important;
   }
 }
 
 /* Maintenance order details — grouped report-style card (2026-09-21). */
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-details-dialog {
   width: min(860px, calc(100vw - 24px));
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-modal-summary {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-order-modal-summary {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-modal-item {
   padding: 14px !important;
   border-color: #e5eaf1;
   border-radius: 20px;
   box-shadow: 0 12px 30px rgba(15, 23, 42, .055);
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__name-link {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-modal-item__name-link {
   width: fit-content;
   max-width: 100%;
   display: inline-flex;
@@ -941,21 +941,21 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   text-decoration: none;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__name-link:hover,
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-field__product:hover,
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spare-row__name:hover {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-modal-item__name-link:hover,
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-detail-field__product:hover,
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-spare-row__name:hover {
   color: #2563eb;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__name-link svg,
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-field__product svg,
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spare-row__name svg {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-modal-item__name-link svg,
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-detail-field__product svg,
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-spare-row__name svg {
   width: 13px;
   height: 13px;
   flex: 0 0 auto;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-group {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-detail-group {
   margin-top: 10px;
   padding: 11px;
   border: 1px solid #e7ebf1;
@@ -963,17 +963,17 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   background: #fff;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-group--machine,
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-group--action {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-detail-group--machine,
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-detail-group--action {
   border-color: #f2c98b;
   background: linear-gradient(180deg, #fffdf9 0%, #ffffff 48%);
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-group--spares {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-detail-group--spares {
   background: #fbfcfe;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-group__title {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-detail-group__title {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -984,16 +984,16 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   letter-spacing: .01em;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-grid {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-detail-grid {
   display: grid;
   gap: 8px;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-grid--two {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-detail-grid--two {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-field {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-detail-field {
   min-width: 0;
   min-height: 62px;
   display: flex;
@@ -1005,7 +1005,7 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   background: #f8fafc;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-field > span:first-child {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-detail-field > span:first-child {
   color: #94a3b8;
   font-size: 8.5px;
   font-weight: 850;
@@ -1013,9 +1013,9 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   text-transform: uppercase;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-field > strong,
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-field__product,
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-checklist-view__item strong {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-detail-field > strong,
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-detail-field__product,
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-checklist-view__item strong {
   color: #334155;
   font-size: 10.5px;
   font-weight: 800;
@@ -1024,13 +1024,13 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   white-space: pre-wrap;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-field > strong[dir="auto"],
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-checklist-view__item strong[dir="auto"],
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__issue p[dir="auto"] {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-detail-field > strong[dir="auto"],
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-checklist-view__item strong[dir="auto"],
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-modal-item__issue p[dir="auto"] {
   unicode-bidi: plaintext;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-field__product {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-detail-field__product {
   width: fit-content;
   max-width: 100%;
   display: inline-flex;
@@ -1040,32 +1040,32 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   text-decoration: none;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-field small {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-detail-field small {
   color: #94a3b8;
   font-size: 8.5px;
   font-weight: 700;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-field--text {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-detail-field--text {
   min-height: 86px;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-field--checklist {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-detail-field--checklist {
   min-height: 86px;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-checklist-view {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-checklist-view {
   display: grid;
   gap: 5px;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-checklist-view__item {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-checklist-view__item {
   display: flex;
   align-items: flex-start;
   gap: 6px;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-checklist-view__item svg {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-checklist-view__item svg {
   width: 13px;
   height: 13px;
   flex: 0 0 13px;
@@ -1073,25 +1073,25 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   color: #16a34a;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-field__empty {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-detail-field__empty {
   margin: auto 0;
   color: #94a3b8;
   font-size: 9.5px;
   font-weight: 700;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item__issue--grouped {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-modal-item__issue--grouped {
   margin-top: 10px;
   border-radius: 14px;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spares-grid {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-spares-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spares-card {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-spares-card {
   min-width: 0;
   overflow: hidden;
   border: 1px solid #e5eaf1;
@@ -1099,7 +1099,7 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   background: #fff;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spares-card__head {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-spares-card__head {
   min-height: 38px;
   display: flex;
   align-items: center;
@@ -1110,7 +1110,7 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   background: #fff7ed;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spares-card__title {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-spares-card__title {
   min-width: 0;
   display: inline-flex;
   align-items: center;
@@ -1120,12 +1120,12 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   font-weight: 900;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spares-card__title svg {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-spares-card__title svg {
   width: 14px;
   height: 14px;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spares-card__count {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-spares-card__count {
   min-width: 22px;
   height: 22px;
   display: grid;
@@ -1139,11 +1139,11 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   font-weight: 900;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spares-list {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-spares-list {
   display: grid;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spare-row {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-spare-row {
   min-width: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -1153,14 +1153,14 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   border-bottom: 1px solid #edf1f5;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spare-row__main {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-spare-row__main {
   min-width: 0;
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spare-row__index {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-spare-row__index {
   width: 23px;
   height: 23px;
   flex: 0 0 23px;
@@ -1173,14 +1173,14 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   font-weight: 900;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spare-row__identity {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-spare-row__identity {
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spare-row__name {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-spare-row__name {
   min-width: 0;
   display: inline-flex;
   align-items: center;
@@ -1193,19 +1193,19 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   text-decoration: none;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spare-row__id {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-spare-row__id {
   color: #94a3b8;
   font-size: 8px;
   font-weight: 700;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spare-row__stats {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-spare-row__stats {
   display: flex;
   align-items: stretch;
   gap: 4px;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spare-row__stats > span {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-spare-row__stats > span {
   min-width: 44px;
   display: flex;
   flex-direction: column;
@@ -1217,21 +1217,21 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   text-align: right;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spare-row__stats small {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-spare-row__stats small {
   color: #94a3b8;
   font-size: 7px;
   font-weight: 800;
   text-transform: uppercase;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spare-row__stats strong {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-spare-row__stats strong {
   color: #334155;
   font-size: 8.5px;
   font-weight: 900;
   white-space: nowrap;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spares-card__total {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-spares-card__total {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1243,7 +1243,7 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   font-weight: 900;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spares-empty {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-spares-empty {
   min-height: 58px;
   display: grid;
   place-items: center;
@@ -1254,84 +1254,84 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   text-align: center;
 }
 
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-group,
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spares-card {
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-detail-group,
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-spares-card {
   border-color: #2b3544;
   background: #11161f;
 }
 
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-group--machine,
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-group--action {
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-detail-group--machine,
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-detail-group--action {
   border-color: #60491f;
   background: #17150f;
 }
 
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-group__title,
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spare-row__name,
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-field__product {
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-detail-group__title,
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-spare-row__name,
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-detail-field__product {
   color: #f8fafc;
 }
 
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-field,
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spare-row__stats > span {
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-detail-field,
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-spare-row__stats > span {
   border-color: #2b3544;
   background: #151b25;
 }
 
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-field > strong,
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-checklist-view__item strong,
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spare-row__stats strong {
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-detail-field > strong,
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-checklist-view__item strong,
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-spare-row__stats strong {
   color: #cbd5e1;
 }
 
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spares-card__head,
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spares-card__total {
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-spares-card__head,
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-spares-card__total {
   border-color: #60491f;
   background: #201b12;
 }
 
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spare-row {
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-spare-row {
   border-bottom-color: #273140;
 }
 
 @media (max-width: 760px) {
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-modal-summary {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-order-modal-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-order-modal-summary > div:first-child {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-order-modal-summary > div:first-child {
     grid-column: 1 / -1;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spares-grid {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-spares-grid {
     grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 620px) {
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-item {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-modal-item {
     padding: 10px !important;
     border-radius: 17px;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-grid--two {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-detail-grid--two {
     grid-template-columns: 1fr;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-detail-group {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-detail-group {
     padding: 9px;
     border-radius: 13px;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spare-row {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-spare-row {
     grid-template-columns: 1fr;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spare-row__stats {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-spare-row__stats {
     padding-left: 31px;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-spare-row__stats > span {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-spare-row__stats > span {
     flex: 1 1 0;
     text-align: left;
   }
@@ -1339,13 +1339,13 @@ html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-p
 
 
 /* Maintenance second-log history (2026-10-05). */
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-history {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-history {
   display: grid;
   gap: 16px;
   margin-top: 12px;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-frame {
   min-width: 0;
   margin: 0;
   padding: 12px;
@@ -1355,25 +1355,25 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   box-shadow: 0 10px 28px rgba(148, 92, 20, .06);
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame--one {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-frame--one {
   border-color: #f2b35c;
   background: linear-gradient(180deg, rgba(255, 251, 244, .78), #fff 22%);
   box-shadow: 0 10px 28px rgba(148, 92, 20, .065);
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame--two {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-frame--two {
   border-color: #b9a1f4;
   background: linear-gradient(180deg, rgba(247, 244, 255, .82), #fff 22%);
   box-shadow: 0 10px 28px rgba(109, 74, 191, .065);
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame--more {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-frame--more {
   border-color: #8fc8bd;
   background: linear-gradient(180deg, rgba(242, 251, 249, .82), #fff 22%);
   box-shadow: 0 10px 28px rgba(36, 116, 101, .06);
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame > legend {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-frame > legend {
   margin-left: 10px;
   padding: 0 7px;
   color: #a64b08;
@@ -1383,7 +1383,7 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   letter-spacing: .035em;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame > legend > span {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-frame > legend > span {
   display: inline-flex;
   align-items: center;
   min-height: 24px;
@@ -1393,23 +1393,23 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   background: #fff7ed;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame--one > legend { color: #a64b08; }
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame--one > legend > span { border-color: #fed7aa; background: #fff7ed; }
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-frame--one > legend { color: #a64b08; }
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-frame--one > legend > span { border-color: #fed7aa; background: #fff7ed; }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame--two > legend { color: #6d42b8; }
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame--two > legend > span { border-color: #d9cff8; background: #f4f0ff; }
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-frame--two > legend { color: #6d42b8; }
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-frame--two > legend > span { border-color: #d9cff8; background: #f4f0ff; }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame--more > legend { color: #236f63; }
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame--more > legend > span { border-color: #bfe2db; background: #effaf7; }
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-frame--more > legend { color: #236f63; }
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-frame--more > legend > span { border-color: #bfe2db; background: #effaf7; }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame__meta {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-frame__meta {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   margin: 0 0 8px;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame__meta > div {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-frame__meta > div {
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -1420,7 +1420,7 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   background: #f8fafc;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame__meta span {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-frame__meta span {
   color: #94a3b8;
   font-size: 8px;
   font-weight: 850;
@@ -1428,7 +1428,7 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   text-transform: uppercase;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame__meta strong {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-frame__meta strong {
   min-width: 0;
   overflow: hidden;
   color: #334155;
@@ -1438,82 +1438,82 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   white-space: nowrap;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame .next-maintenance-detail-group:first-of-type {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-frame .next-maintenance-detail-group:first-of-type {
   margin-top: 8px;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-second-log-btn {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-second-log-btn {
   border-color: #fdba74 !important;
   background: #fff7ed !important;
   color: #9a3412 !important;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-second-log-btn:hover {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-second-log-btn:hover {
   background: #ffedd5 !important;
 }
 
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame {
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-frame {
   border-color: #7c4a15;
   background: linear-gradient(180deg, rgba(56, 35, 13, .72), #111827 22%);
 }
 
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame > legend {
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-frame > legend {
   background: #111827;
 }
 
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame > legend > span {
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-frame > legend > span {
   border-color: #7c4a15;
   background: #2b1b0c;
   color: #fdba74;
 }
 
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame--one {
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-frame--one {
   border-color: #8a5519;
   background: linear-gradient(180deg, rgba(56, 35, 13, .72), #111827 22%);
 }
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame--one > legend > span { border-color: #8a5519; background: #2b1b0c; color: #fdba74; }
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-frame--one > legend > span { border-color: #8a5519; background: #2b1b0c; color: #fdba74; }
 
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame--two {
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-frame--two {
   border-color: #6650a4;
   background: linear-gradient(180deg, rgba(39, 29, 66, .74), #111827 22%);
 }
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame--two > legend { color: #c4b5fd; }
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame--two > legend > span { border-color: #6650a4; background: #251d3d; color: #c4b5fd; }
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-frame--two > legend { color: #c4b5fd; }
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-frame--two > legend > span { border-color: #6650a4; background: #251d3d; color: #c4b5fd; }
 
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame--more {
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-frame--more {
   border-color: #387d72;
   background: linear-gradient(180deg, rgba(20, 56, 51, .72), #111827 22%);
 }
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame--more > legend { color: #99e1d5; }
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame--more > legend > span { border-color: #387d72; background: #143833; color: #99e1d5; }
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-frame--more > legend { color: #99e1d5; }
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-frame--more > legend > span { border-color: #387d72; background: #143833; color: #99e1d5; }
 
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame__meta > div {
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-frame__meta > div {
   border-color: #273140;
   background: #151d29;
 }
 
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame__meta strong {
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-frame__meta strong {
   color: #e2e8f0;
 }
 
 @media (max-width: 760px) {
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-frame {
     padding: 9px;
     border-radius: 15px;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-frame__meta {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-frame__meta {
     grid-template-columns: 1fr;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-modal-actions {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-modal-actions {
     gap: 7px;
   }
 }
 
 /* Maintenance modal polish — sample-style controls + mobile dock clearance (2026-10-06). */
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog > .co-modal-close,
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog > .co-submodal-close {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-details-dialog > .co-modal-close,
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-dialog > .co-submodal-close {
   border: 0 !important;
   background: #c8cbd2 !important;
   color: #fff !important;
@@ -1521,17 +1521,17 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   transition: background-color .18s ease, transform .18s ease;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog > .co-modal-close:hover,
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog > .co-modal-close:focus-visible,
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog > .co-submodal-close:hover,
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog > .co-submodal-close:focus-visible {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-details-dialog > .co-modal-close:hover,
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-details-dialog > .co-modal-close:focus-visible,
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-dialog > .co-submodal-close:hover,
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-dialog > .co-submodal-close:focus-visible {
   background: #aeb2bb !important;
   outline: none;
   transform: scale(.97);
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog > .co-modal-close::before,
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog > .co-submodal-close::before {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-details-dialog > .co-modal-close::before,
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-dialog > .co-submodal-close::before {
   font-size: 25px !important;
   font-weight: 900 !important;
   line-height: 1 !important;
@@ -1539,42 +1539,42 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
 }
 
 /* Sample reference: the left action is a quiet icon-only control, not a raised chip. */
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog .co-modal-more-btn {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-details-dialog .co-modal-more-btn {
   border: 0 !important;
   background: transparent !important;
   color: #9aa0aa !important;
   box-shadow: none !important;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog .co-modal-more-btn:hover,
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog .co-modal-more-btn:focus-visible {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-details-dialog .co-modal-more-btn:hover,
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-details-dialog .co-modal-more-btn:focus-visible {
   background: rgba(148, 163, 184, .10) !important;
   outline: none;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog .co-modal-more-dots {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-details-dialog .co-modal-more-dots {
   background: #9aa0aa !important;
   box-shadow: 0 -7px 0 #9aa0aa, 0 7px 0 #9aa0aa !important;
 }
 
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog > .co-modal-close,
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog > .co-submodal-close {
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-details-dialog > .co-modal-close,
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-dialog > .co-submodal-close {
   background: #5e6570 !important;
   color: #fff !important;
 }
 
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog .co-modal-more-dots {
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-details-dialog .co-modal-more-dots {
   background: #aab1bc !important;
   box-shadow: 0 -7px 0 #aab1bc, 0 7px 0 #aab1bc !important;
 }
 
 @media (max-width: 720px) {
   /* Keep the maintenance log sheet above the dock/background safe zone. */
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-overlay {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-overlay {
     align-items: stretch !important;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-dialog {
     position: absolute !important;
     top: clamp(82px, 7.7dvh, 118px) !important;
     right: 8px !important;
@@ -1585,7 +1585,7 @@ html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-p
     margin: 0 !important;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog > .co-submodal-close {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-dialog > .co-submodal-close {
     top: 14px !important;
     right: 14px !important;
     width: 42px !important;
@@ -1593,8 +1593,8 @@ html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-p
     min-width: 42px !important;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog > .co-modal-close,
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog .co-modal-more-btn {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-details-dialog > .co-modal-close,
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-details-dialog .co-modal-more-btn {
     width: 40px !important;
     height: 40px !important;
     min-width: 40px !important;
@@ -1625,8 +1625,8 @@ html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-p
 /* Maintenance modal controls + dock-attached log sheet — 2026-10-06 v7
    Match the close control to the quiet three-dot action and let the log form
    terminate at the mobile viewport edge like the Request Products sheet. */
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog > .co-modal-close,
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog > .co-submodal-close {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-details-dialog > .co-modal-close,
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-dialog > .co-submodal-close {
   width: 38px !important;
   min-width: 38px !important;
   height: 38px !important;
@@ -1639,45 +1639,45 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   box-shadow: none !important;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog > .co-modal-close:hover,
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog > .co-modal-close:focus-visible,
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog > .co-submodal-close:hover,
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog > .co-submodal-close:focus-visible {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-details-dialog > .co-modal-close:hover,
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-details-dialog > .co-modal-close:focus-visible,
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-dialog > .co-submodal-close:hover,
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-dialog > .co-submodal-close:focus-visible {
   background: rgba(148, 163, 184, .10) !important;
   color: #7d8490 !important;
   outline: none !important;
   transform: none !important;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog > .co-modal-close::before,
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog > .co-submodal-close::before {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-details-dialog > .co-modal-close::before,
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-dialog > .co-submodal-close::before {
   font-size: 23px !important;
   font-weight: 850 !important;
   line-height: 1 !important;
   color: currentColor !important;
 }
 
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog > .co-modal-close,
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog > .co-submodal-close {
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-details-dialog > .co-modal-close,
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-dialog > .co-submodal-close {
   background: transparent !important;
   color: #aab1bc !important;
 }
 
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog > .co-modal-close:hover,
-html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog > .co-submodal-close:hover {
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-details-dialog > .co-modal-close:hover,
+html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-dialog > .co-submodal-close:hover {
   background: rgba(148, 163, 184, .12) !important;
   color: #c2c8d0 !important;
 }
 
 @media (max-width: 720px) {
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-overlay {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-overlay {
     align-items: flex-end !important;
     justify-content: center !important;
     padding: clamp(76px, 7.5dvh, 108px) 8px 0 !important;
     overflow: hidden !important;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-dialog {
     position: relative !important;
     inset: auto !important;
     width: min(100%, 680px) !important;
@@ -1690,7 +1690,7 @@ html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-p
     box-shadow: 0 -18px 56px rgba(15, 23, 42, .20) !important;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog > .co-submodal-close {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-dialog > .co-submodal-close {
     top: 12px !important;
     right: 12px !important;
     width: 38px !important;
@@ -1699,7 +1699,7 @@ html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-p
     min-height: 38px !important;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-actions {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-actions {
     padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)) !important;
   }
 }
@@ -1710,20 +1710,20 @@ html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-p
    Keep the long form internally scrollable, but make the mobile sheet occupy
    the exact available viewport from its top gap through the bottom dock edge.
    ======================================================================== */
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog,
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog *,
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog,
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog * {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-details-dialog,
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-details-dialog *,
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-dialog,
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-dialog * {
   scrollbar-width: none !important;
   scrollbar-color: transparent transparent !important;
   scrollbar-gutter: auto !important;
   -ms-overflow-style: none !important;
 }
 
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog::-webkit-scrollbar,
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-details-dialog *::-webkit-scrollbar,
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog::-webkit-scrollbar,
-body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog *::-webkit-scrollbar {
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-details-dialog::-webkit-scrollbar,
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-details-dialog *::-webkit-scrollbar,
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-dialog::-webkit-scrollbar,
+:is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-dialog *::-webkit-scrollbar {
   width: 0 !important;
   height: 0 !important;
   display: none !important;
@@ -1731,7 +1731,7 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
 }
 
 @media (max-width: 720px) {
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-overlay {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-overlay {
     --next-maintenance-sheet-top-gap: clamp(76px, 7.5dvh, 108px);
     box-sizing: border-box !important;
     width: 100vw !important;
@@ -1746,7 +1746,7 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
   /* Same visual continuation used by the Shopping Cart add-component sheet:
      the area touching the mobile gesture/navigation dock stays white instead
      of exposing the dimmed page behind the sheet. */
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-overlay::after {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-overlay::after {
     content: "";
     position: fixed;
     z-index: 0;
@@ -1758,7 +1758,7 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
     pointer-events: none;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-dialog {
     position: relative !important;
     z-index: 1 !important;
     inset: auto !important;
@@ -1774,7 +1774,7 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
     border-radius: 22px 22px 0 0 !important;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog .req-maintenance-log-body {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-dialog .req-maintenance-log-body {
     flex: 1 1 auto !important;
     min-height: 0 !important;
     overflow-x: hidden !important;
@@ -1782,7 +1782,7 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
     overscroll-behavior: contain;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-actions {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-actions {
     position: relative !important;
     bottom: auto !important;
     flex: 0 0 auto !important;
@@ -1791,8 +1791,8 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
     background: #fff !important;
   }
 
-  html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-overlay::after,
-  html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-actions {
+  html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-overlay::after,
+  html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-actions {
     background: #0f141c !important;
   }
 }
@@ -1806,18 +1806,18 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
    fixed header + scrollable body + always-visible action footer.
    ======================================================================== */
 @media (max-width: 720px) {
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-dialog {
     display: flex !important;
     flex-direction: column !important;
     min-height: 0 !important;
     overflow: hidden !important;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-header {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-header {
     flex: 0 0 auto !important;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog .req-maintenance-log-body {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-dialog .req-maintenance-log-body {
     flex: 1 1 0 !important;
     min-height: 0 !important;
     height: auto !important;
@@ -1827,7 +1827,7 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
     overscroll-behavior: contain;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-actions {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-actions {
     position: relative !important;
     z-index: 5 !important;
     flex: 0 0 auto !important;
@@ -1840,11 +1840,11 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
     box-shadow: 0 -10px 26px rgba(15, 23, 42, .04) !important;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-actions .ro-action-btn {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-actions .ro-action-btn {
     min-height: 52px !important;
   }
 
-  html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-actions {
+  html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-actions {
     border-top-color: #273140 !important;
     background: #0f141c !important;
   }
@@ -1860,7 +1860,7 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
    remaining dynamic viewport height and anchor it to the bottom edge.
    ======================================================================== */
 @media (max-width: 720px) {
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-overlay {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-overlay {
     --next-maintenance-sheet-top-gap: clamp(76px, 7.5dvh, 108px);
     box-sizing: border-box !important;
     width: 100vw !important;
@@ -1872,7 +1872,7 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
     overflow: hidden !important;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-dialog {
     box-sizing: border-box !important;
     width: min(100%, 680px) !important;
     height: calc(100dvh - var(--next-maintenance-sheet-top-gap)) !important;
@@ -1883,7 +1883,7 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
     overflow: hidden !important;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog .req-maintenance-log-body {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-dialog .req-maintenance-log-body {
     flex: 1 1 0 !important;
     min-height: 0 !important;
     max-height: none !important;
@@ -1891,7 +1891,7 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
     overflow-x: hidden !important;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-actions {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-actions {
     position: relative !important;
     inset: auto !important;
     z-index: 20 !important;
@@ -1905,12 +1905,12 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
     background: #fff !important;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-actions .ro-action-btn {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-actions .ro-action-btn {
     height: 52px !important;
     min-height: 52px !important;
   }
 
-  html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-actions {
+  html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-actions {
     background: #0f141c !important;
   }
 }
@@ -1923,7 +1923,7 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
    body, and enough bottom clearance for Android/iOS navigation areas.
    ======================================================================== */
 @media (max-width: 720px) {
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-overlay {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-overlay {
     box-sizing: border-box !important;
     width: 100vw !important;
     height: 100dvh !important;
@@ -1934,7 +1934,7 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
     overflow: hidden !important;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-overlay::after {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-overlay::after {
     content: "";
     position: fixed;
     z-index: 0;
@@ -1946,7 +1946,7 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
     pointer-events: none;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-dialog {
     position: relative !important;
     z-index: 1 !important;
     inset: auto !important;
@@ -1964,11 +1964,11 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
     box-shadow: 0 -18px 56px rgba(15, 23, 42, .20) !important;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-header {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-header {
     flex: 0 0 auto !important;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-dialog .req-maintenance-log-body {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-dialog .req-maintenance-log-body {
     flex: 1 1 auto !important;
     min-height: 0 !important;
     height: auto !important;
@@ -1979,7 +1979,7 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
     overscroll-behavior: contain;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-actions {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-actions {
     position: relative !important;
     inset: auto !important;
     z-index: 20 !important;
@@ -1999,7 +1999,7 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
     box-shadow: none !important;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-actions .ro-action-btn {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-actions .ro-action-btn {
     width: 100% !important;
     min-width: 0 !important;
     height: 46px !important;
@@ -2011,23 +2011,23 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
     box-shadow: none !important;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-actions .ro-action-btn--dark {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-actions .ro-action-btn--dark {
     background: linear-gradient(135deg, #0b1220, #151e31) !important;
     box-shadow: 0 16px 30px -24px rgba(15, 23, 42, .65) !important;
   }
 
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-actions .ro-action-btn--light {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-actions .ro-action-btn--light {
     border-color: #e5e7eb !important;
     background: #fff !important;
     color: #111827 !important;
   }
 
-  html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-overlay::after,
-  html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-actions {
+  html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-overlay::after,
+  html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-actions {
     background: #0f141c !important;
   }
 
-  html[data-theme="dark"] body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-actions {
+  html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-actions {
     border-top-color: #273140 !important;
   }
 }
@@ -2039,7 +2039,7 @@ body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-
    space below Cancel / Confirm so both controls stay fully visible on Android.
    ======================================================================== */
 @media (max-width: 720px) {
-  body.page-maintenance-orders .next-classic-maintenance-parity .next-maintenance-log-actions {
+  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-log-actions {
     padding-bottom: calc(3rem + env(safe-area-inset-bottom, 0px)) !important;
   }
 }
