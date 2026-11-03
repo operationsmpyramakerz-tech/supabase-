@@ -234,7 +234,7 @@ export default function LoginClient({ requestedNext = "/next/home", backendAvail
 
   return (
     <>
-      <link rel="stylesheet" href="/next/css/login.css?v=login-password-eye-visible-v304" precedence="erp-detail" />
+      <link rel="stylesheet" href="/next/css/login.css?v=login-password-eye-plain-v305" precedence="erp-detail" />
       <div className="login-container">
         <div className="login-card" aria-live="polite">
           <div className="login-header">
@@ -270,7 +270,7 @@ export default function LoginClient({ requestedNext = "/next/home", backendAvail
                 <div className="password-wrapper input-with-icon">
                   <span className="input-icon" aria-hidden="true"><FieldIcon type="lock" /></span>
                   <input type={showPassword ? "text" : "password"} name="password" required placeholder="Password" autoComplete="current-password" />
-                  <button type="button" className="toggle-password" title={showPassword ? "Hide password" : "Show password"} aria-label={showPassword ? "Hide password" : "Show password"} aria-pressed={showPassword} onClick={() => setShowPassword((value) => !value)}>
+                  <button type="button" className="toggle-password" aria-label={showPassword ? "Hide password" : "Show password"} aria-pressed={showPassword} onClick={() => setShowPassword((value) => !value)}>
                     <EyeIcon off={showPassword} />
                   </button>
                 </div>

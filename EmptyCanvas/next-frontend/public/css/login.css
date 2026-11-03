@@ -1476,7 +1476,7 @@ html[data-theme] body.next-classic-login-active .login-container {
 }
 
 
-/* v304 — Keep the password visibility eye visible above the login input.
+/* v305 — Display only the password visibility eye, with an invisible click target.
    Scoped to the login card: no effect on account editors or authenticated pages. */
 .login-container .password-wrapper input[type="password"],
 .login-container .password-wrapper input[type="text"] {
@@ -1498,9 +1498,10 @@ html[data-theme] body.next-classic-login-active .login-container {
   min-height: 36px;
   padding: 0;
   box-sizing: border-box;
-  border: 1px solid #dde2e8;
-  border-radius: 10px;
-  background: #fff;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: none;
   color: #475467;
   appearance: none;
   -webkit-appearance: none;
@@ -1524,12 +1525,13 @@ html[data-theme] body.next-classic-login-active .login-container {
   pointer-events: none;
 }
 .login-container .password-wrapper .toggle-password:hover {
-  border-color: #ed9e5b;
-  background: #fff7ed;
-  color: #b45309;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  color: #344054;
 }
 .login-container .password-wrapper .toggle-password:hover .login-password-eye-icon {
-  stroke: #b45309 !important;
+  stroke: #344054 !important;
 }
 .login-container .password-wrapper .toggle-password:focus-visible {
   outline: 2px solid #ea580c;

@@ -25,6 +25,14 @@ test('visibility eye is explicitly layered and contrasted in login CSS', () => {
 });
 
 test('login and login loading route request fresh css after the fix', () => {
-  assert.match(login, /login\.css\?v=login-password-eye-visible-v304/);
-  assert.match(loading, /login\.css\?v=login-password-eye-visible-v304/);
+  assert.match(login, /login\.css\?v=login-password-eye-plain-v305/);
+  assert.match(loading, /login\.css\?v=login-password-eye-plain-v305/);
+});
+
+
+test('eye-only toggle has no visible label, frame, or hover tile', () => {
+  assert.doesNotMatch(login, /className="toggle-password"\s+title=/);
+  assert.match(login, /className="toggle-password" aria-label=/);
+  assert.match(css, /\.login-container \.password-wrapper \.toggle-password\s*\{[^}]*border:\s*0;[^}]*background:\s*transparent;[^}]*box-shadow:\s*none;/s);
+  assert.match(css, /\.login-container \.password-wrapper \.toggle-password:hover\s*\{[^}]*background:\s*transparent;[^}]*box-shadow:\s*none;/s);
 });
