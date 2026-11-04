@@ -26,10 +26,19 @@ function AdditionIcon({ name, size = 19 }) {
 function AdditionSelect({ label, name, value, options, onChange, icon, placeholder, disabled }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [customMode, setCustomMode] = useState(false);
   const root = useRef(null);
   const searchInput = useRef(null);
-  const list = useMemo(() => unique([...(options || []), ...(value ? [value] : [])]), [options, value]);
-  const filtered = list.filter(option => option.toLowerCase().includes(query.toLowerCase()));
+  // "Unit" is a generic placeholder, not a real unit choice. "Other" is an
+  // action that reveals a text input; it is never stored as a catalog value.
+  const catalogOptions = useMemo(() => unique((options || []).filter(option => {
+    const normalized = clean(option).toLowerCase();
+    return normalized !== "other" && !(name === "unit" && normalized === "unit");
+  })), [options, name]);
+  const customValue = !!clean(value) && !catalogOptions.some(option => option.toLowerCase() === clean(value).toLowerCase()) && !(name === "unit" && clean(value).toLowerCase() === "unit");
+  const enteringOther = customMode || customValue;
+  const filtered = catalogOptions.filter(option => option.toLowerCase().includes(query.toLowerCase()));
+  const showOther = "other".includes(query.trim().toLowerCase());
   useEffect(() => {
     if (!open) return undefined;
     const outside = event => { if (!root.current?.contains(event.target)) setOpen(false); };
@@ -40,20 +49,25 @@ function AdditionSelect({ label, name, value, options, onChange, icon, placehold
     return () => { document.removeEventListener("pointerdown", outside); document.removeEventListener("keydown", escape); };
   }, [open]);
   const toggle = () => { setQuery(""); setOpen(previous => !previous); };
+  const selectCatalogOption = option => { setCustomMode(false); onChange(option); setOpen(false); setQuery(""); };
+  const selectOther = () => { setCustomMode(true); onChange(""); setOpen(false); setQuery(""); };
   return <div className="addition-field addition-select" ref={root}>
-    <label id={`addition-${name}-label`} htmlFor={`addition-${name}-value`}>{label} <b>*</b></label>
-    <input id={`addition-${name}-value`} type="text" className="addition-select__value" required value={value} readOnly tabIndex={-1} aria-hidden="true" />
-    <button type="button" className={`addition-select__trigger ${open ? "is-open" : ""} ${value ? "has-value" : ""}`} aria-labelledby={`addition-${name}-label`} aria-expanded={open} aria-haspopup="listbox" onClick={toggle} disabled={disabled}>
+    <label id={`addition-${name}-label`} htmlFor={`addition-${name}-trigger`}>{label} <b>*</b></label>
+    <input type="hidden" name={name} value={value} readOnly />
+    <button id={`addition-${name}-trigger`} type="button" className={`addition-select__trigger ${open ? "is-open" : ""} ${value ? "has-value" : ""}`} aria-labelledby={`addition-${name}-label`} aria-expanded={open} aria-haspopup="listbox" onClick={toggle} disabled={disabled}>
       <span className="addition-select__icon"><AdditionIcon name={icon}/></span>
-      <span className="addition-select__text">{value || placeholder}</span>
+      <span className="addition-select__text">{enteringOther ? `Other${value ? `: ${value}` : ""}` : value || placeholder}</span>
       <AdditionIcon name="chevron" size={17}/>
     </button>
     {open ? <div className="addition-select__panel">
       <div className="addition-select__search"><AdditionIcon name="search" size={16}/><input ref={searchInput} type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder={`Search ${name}s...`} aria-label={`Search ${name}s`} /></div>
       <div className="addition-select__options" role="listbox" aria-labelledby={`addition-${name}-label`}>
-        {filtered.length ? filtered.map(option => <button key={option} type="button" role="option" aria-selected={value === option} className={value === option ? "is-selected" : ""} onClick={() => { onChange(option); setOpen(false); setQuery(""); }}><span>{option}</span>{value === option ? <AdditionIcon name="check" size={16}/> : null}</button>) : <p className="addition-select__empty">No matching {name}s</p>}
+        {filtered.map(option => <button key={option} type="button" role="option" aria-selected={value === option && !enteringOther} className={value === option && !enteringOther ? "is-selected" : ""} onClick={() => selectCatalogOption(option)}><span>{option}</span>{value === option && !enteringOther ? <AdditionIcon name="check" size={16}/> : null}</button>)}
+        {showOther ? <button type="button" role="option" aria-selected={enteringOther} className={`addition-select__other-option ${enteringOther ? "is-selected" : ""}`} onClick={selectOther}><span>Other <small>Enter a custom {name === "unit" ? "unit" : "tag"}</small></span>{enteringOther ? <AdditionIcon name="check" size={16}/> : <AdditionIcon name="plus" size={16}/>}</button> : null}
+        {!filtered.length && !showOther ? <p className="addition-select__empty">No matching {name}s</p> : null}
       </div>
     </div> : null}
+    {enteringOther ? <input className="addition-select__custom" type="text" required disabled={disabled} maxLength={name === "unit" ? 80 : 120} placeholder={`Enter other ${name === "unit" ? "unit of measurement" : "tag"}`} aria-label={`Other ${label}`} value={value} onChange={event => onChange(event.target.value)} /> : null}
   </div>;
 }
 

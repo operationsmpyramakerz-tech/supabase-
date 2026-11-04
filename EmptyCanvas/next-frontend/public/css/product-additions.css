@@ -316,3 +316,53 @@
 }
 .addition-dialog,.addition-dialog *{box-sizing:border-box}
 .addition-dialog button:disabled,.addition-dialog input:disabled{cursor:not-allowed;opacity:.62}
+
+/* v314 — keyboard-safe mobile actions, black raised add icon, editable Other,
+   and no duplicate browser focus outline in the unit-price control. */
+.addition-dialog__icon{
+  border:0;
+  background:linear-gradient(160deg,#293548 0%,#101b2d 52%,#050a13 100%);
+  box-shadow:inset 0 2px 1px rgba(255,255,255,.19),inset 0 -5px 8px rgba(0,0,0,.36),
+    0 4px 0 #080f1d,0 15px 22px -10px rgba(4,9,20,.55);
+}
+.addition-dialog__icon svg{filter:drop-shadow(0 1px 1px rgba(0,0,0,.6))}
+.addition-field__price,.addition-field__price:focus-within{
+  border-color:#e1e6ee;
+  background:#fafbfc;
+  box-shadow:none;
+  outline:0;
+}
+.addition-field__price input,.addition-field__price input:focus,.addition-field__price input:focus-visible{
+  border:0 !important;
+  border-radius:0;
+  outline:0 !important;
+  box-shadow:none !important;
+  background:transparent !important;
+  -webkit-appearance:none;
+  appearance:textfield;
+}
+.addition-select__other-option{border-top:1px solid #edf0f4 !important;border-radius:0 0 10px 10px !important}
+.addition-select__other-option small{display:block;margin-top:3px;font-size:.72rem;font-weight:550;color:#8290a1}
+.addition-select__custom{
+  width:100%;min-height:45px;padding:10px 13px;border:1px solid #cdd6e2;
+  border-radius:12px;background:#fff;color:#192336;font:inherit;font-size:.83rem;
+}
+.addition-select__custom:focus{outline:0;border-color:#64748b;box-shadow:0 0 0 3px rgba(100,116,139,.1)}
+@media(max-width:760px){
+  /* Leave clearance for Android gesture/browser navigation bars. The body,
+     not the action footer, scrolls when the keyboard reduces viewport height. */
+  .addition-dialog-overlay{padding:38px 10px calc(34px + env(safe-area-inset-bottom,0px))}
+  .addition-dialog{
+    max-height:calc(100dvh - 86px - env(safe-area-inset-bottom,0px));
+    border-bottom:1px solid #e2e8f0;
+    border-radius:24px;
+  }
+  .addition-dialog__footer{
+    padding:11px 14px 13px;
+    border-radius:0 0 24px 24px;
+  }
+}
+@media(max-width:380px){
+  .addition-dialog-overlay{padding-bottom:calc(27px + env(safe-area-inset-bottom,0px))}
+  .addition-dialog{max-height:calc(100dvh - 79px - env(safe-area-inset-bottom,0px))}
+}
