@@ -116,7 +116,7 @@ export default async function ShoppingCartPageServer({
       eyebrow="Create, withdraw, or maintain products"
       activePath={publicPath}
       bodyClass="shopping-cart-page"
-      pageStyles={["/next/css/product-additions.css?v=v309"]}
+      pageStyles={["/next/css/product-additions.css?v=v310"]}
     >
       <ShoppingCartClient
         key={`${flow}:${editMode ? "edit" : "new"}:${editKey}`}

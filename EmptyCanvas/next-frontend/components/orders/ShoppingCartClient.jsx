@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { confirmDelete } from "../../lib/client-confirm";
 import dynamic from "next/dynamic";
 import { navigateWithinApp } from "../../lib/client-navigation";
+import { ShoppingCartPrioritySelect, ShoppingCartDeliveryDate } from "./ShoppingCartMetaControls";
 
 const ProductPicker = dynamic(() => import("./ShoppingCartDialogs").then((module) => module.ProductPicker), { ssr: false });
 const ProductAdditionForm = dynamic(() => import("./ProductAdditionForm"), { ssr: false });
@@ -1168,7 +1169,7 @@ export default function ShoppingCartClient({
         <span className={`classic-cart-save-state ${saveState === "Save failed" ? "is-error" : ""}`}>{saveState}</span>
       </div>
 
-      <div className="classic-cart-grid">
+      <div className={`classic-cart-grid${!cart.length && !loadingDraft ? " is-empty" : ""}`}>
         <section className="classic-cart-main">
           <div className="classic-cart-card" aria-label="Shopping cart items">
             {loadingDraft ? (
@@ -1207,7 +1208,7 @@ export default function ShoppingCartClient({
                   aria-label={`Select existing product for ${selectedType}`}
                 >
                   <span className="classic-cart-add-new-copy">
-                    <strong>Select</strong>
+                    <strong>Select Component</strong>
                     <small>Choose from Products or Kits</small>
                   </span>
                   <span className="classic-cart-add-new-plus"><CartSvgIcon name="list-check" size={22}/></span>
@@ -1227,7 +1228,7 @@ export default function ShoppingCartClient({
               <div className="classic-cart-footer">
                 <button className="classic-cart-update-btn" type="button" onClick={() => setPicker({ item: null })} disabled={!allowComponents && !allowKits}>
                   <CartSvgIcon name="list-check" size={15}/>
-                  <span>Select</span>
+                  <span>Select Component</span>
                 </button>
                 {!editMode && !withdraw && key(selectedType) === "requestproducts" && allowComponents ? (
                   <button className="classic-cart-update-btn classic-cart-update-btn--new" type="button" onClick={() => setAdditionEditor({ item: null })}>
@@ -1262,16 +1263,14 @@ export default function ShoppingCartClient({
                 />
               </label>
               <div className="classic-cart-request-meta-fields">
-                <label className="classic-cart-summary-field">
+                <div className="classic-cart-summary-field">
                   <span>Priority Level</span>
-                  <select value={priorityLevel} onChange={(event) => updatePriority(event.target.value)} aria-label="Priority Level">
-                    {ORDER_PRIORITIES.map((option) => <option key={option} value={option}>{option}</option>)}
-                  </select>
-                </label>
-                <label className="classic-cart-summary-field">
+                  <ShoppingCartPrioritySelect value={priorityLevel} onChange={updatePriority}/>
+                </div>
+                <div className="classic-cart-summary-field">
                   <span>Delivery Date</span>
-                  <input type="date" value={requestedDeliveryDate} onChange={(event) => updateDeliveryDate(event.target.value)} aria-label="Requested delivery date" />
-                </label>
+                  <ShoppingCartDeliveryDate value={requestedDeliveryDate} onChange={updateDeliveryDate}/>
+                </div>
               </div>
             </div>
           ) : null}
