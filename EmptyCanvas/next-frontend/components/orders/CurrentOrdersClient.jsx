@@ -414,12 +414,16 @@ function writeEditTransfer(data, group) {
     if (!products.length) return "";
     const reason = text(data?.reason || group?.reason);
     const orderType = text(data?.orderType || group?.orderType);
+    const priorityLevel = text(data?.priorityLevel) || "Normal";
+    const requestedDeliveryDate = text(data?.requestedDeliveryDate);
     const patched = products.map((item) => ({ ...item, reason: text(item?.reason) || reason }));
     const editKey = `current-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
     const payload = JSON.stringify({
       products: patched,
       reason,
       orderType,
+      priorityLevel,
+      requestedDeliveryDate,
       editToken: text(data?.editToken),
       source: text(data?.source) || "current-orders-next",
       ts: Date.now(),

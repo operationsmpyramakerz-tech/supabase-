@@ -894,6 +894,8 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, orderOption
 
           <div className="co-modal-meta co-modal-meta--after-actions">
             <div className="co-meta-row co-meta-row--reason"><span>Reason</span><strong>{group.reason}</strong></div>
+            {!maintenance && group.items?.some((item) => item.priorityLevel) ? <div className="co-meta-row"><span>Priority Level</span><strong>{group.items.find((item) => item.priorityLevel)?.priorityLevel}</strong></div> : null}
+            {!maintenance && group.items?.some((item) => item.requestedDeliveryDate) ? <div className="co-meta-row"><span>Delivery Date</span><strong>{group.items.find((item) => item.requestedDeliveryDate)?.requestedDeliveryDate}</strong></div> : null}
           </div>
 
           {maintenance && !isEditing ? <div className="next-maintenance-parity next-maintenance-details-embed">

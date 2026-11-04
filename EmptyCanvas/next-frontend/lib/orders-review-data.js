@@ -182,6 +182,8 @@ function serializeReviewSummary(row = {}) {
     orderIdPrefix: Number.isFinite(orderNumber) ? "ORD" : null,
     orderIdNumber: Number.isFinite(orderNumber) ? orderNumber : null,
     reason: text(valueFor(row, ["reason", "Reason"])) || "No Reason",
+    priorityLevel: text(valueFor(row, ["priority_level", "Priority Level"])) || "",
+    requestedDeliveryDate: text(valueFor(row, ["requested_delivery_date", "Requested Delivery Date"])).slice(0, 10),
     issueDescription: text(valueFor(row, ["issue_description", "Issue Description", "actual_issue_description", "Actual Issue Description"])) || "",
     productName: text(valueFor(row, ["product_name", "Product Name", "product", "Product"])) || "Unknown Product",
     productImage: null,

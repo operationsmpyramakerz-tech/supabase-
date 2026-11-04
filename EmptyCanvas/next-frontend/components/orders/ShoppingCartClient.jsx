@@ -63,6 +63,18 @@ function formatQuantity(value) {
   return parsed.toFixed(3).replace(/\.0+$/, "").replace(/(\.\d*[1-9])0+$/, "$1");
 }
 
+const ORDER_PRIORITIES = ["Low", "Normal", "High", "Urgent"];
+
+function safePriority(value) {
+  const clean = text(value);
+  return ORDER_PRIORITIES.find((option) => option.toLowerCase() === clean.toLowerCase()) || "Normal";
+}
+
+function safeDeliveryDate(value) {
+  const clean = text(value);
+  return /^\d{4}-\d{2}-\d{2}$/.test(clean) ? clean : "";
+}
+
 function formatMoney(value) {
   return new Intl.NumberFormat("en-EG", {
     style: "currency",
@@ -271,7 +283,7 @@ function readCartDraft(options = {}) {
   return candidates[0] || null;
 }
 
-function writeCartDraft({ draftScope = "account", type = "", editMode = false, editKey = "", products = [], reason = "", editToken = "" } = {}) {
+function writeCartDraft({ draftScope = "account", type = "", editMode = false, editKey = "", products = [], reason = "", priorityLevel = "Normal", requestedDeliveryDate = "", editToken = "" } = {}) {
   const storageKey = cartDraftStorageKey({ draftScope, type, editMode, editKey });
   const cleanProducts = normalizeDraft(products);
   const stores = storageAreas();
@@ -286,6 +298,8 @@ function writeCartDraft({ draftScope = "account", type = "", editMode = false, e
     ts: Date.now(),
     orderType: text(type),
     reason: text(reason),
+    priorityLevel: safePriority(priorityLevel),
+    requestedDeliveryDate: safeDeliveryDate(requestedDeliveryDate),
     products: cleanProducts,
     editToken: editMode ? text(editToken) : "",
   });
@@ -317,6 +331,7 @@ function CartSvgIcon({ name, size = 18 }) {
     "arrow-right": <><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></>,
     "arrow-left": <><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></>,
     "external-link": <><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></>,
+    "list-check": <><path d="M9 6h12M9 12h12M9 18h12"/><path d="m2 6 2 2 3-4m-5 10 2 2 3-4"/></>,
     plus: <><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></>,
     minus: <line x1="5" y1="12" x2="19" y2="12"/>,
     search: <><circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16.65" y2="16.65"/></>,
@@ -391,8 +406,8 @@ function CartItem({ item, product, type, index, onEdit, onDelete, onQuantityChan
           <span>Issue Description</span><strong className={!item.issueDescription ? "is-empty" : ""}>{item.issueDescription || "—"}</strong>
         </button>
         <div className="classic-cart-card-actions">
-          {product.url ? <a className="classic-cart-action classic-cart-action--open" href={product.url} target="_blank" rel="noopener noreferrer"><CartSvgIcon name="external-link" size={16}/><span>Open</span></a> : <button className="classic-cart-action classic-cart-action--open" type="button" disabled><CartSvgIcon name="external-link" size={16}/><span>Open</span></button>}
-          <button className="classic-cart-action classic-cart-action--delete" type="button" onClick={() => onDelete(item)}>Delete</button>
+          {product.url ? <a className="classic-cart-action classic-cart-action--open" href={product.url} target="_blank" rel="noopener noreferrer" title="Open product" aria-label={`Open ${product.name}`}><CartSvgIcon name="external-link" size={17}/></a> : <button className="classic-cart-action classic-cart-action--open" type="button" disabled title="No product link" aria-label="No product link"><CartSvgIcon name="external-link" size={17}/></button>}
+          <button className="classic-cart-action classic-cart-action--delete" type="button" onClick={() => onDelete(item)} title="Delete product" aria-label={`Delete ${product.name}`}><CartSvgIcon name="trash" size={17}/></button>
         </div>
       </article>
     );
@@ -410,8 +425,8 @@ function CartItem({ item, product, type, index, onEdit, onDelete, onQuantityChan
           </span>
         </div>
         <div className="classic-cart-card-actions classic-cart-card-actions--compact">
-          {product.url ? <a className="classic-cart-action classic-cart-action--open" href={product.url} target="_blank" rel="noopener noreferrer" aria-label={`Open ${product.name}`} title="Open product"><CartSvgIcon name="external-link" size={17}/><span>Open</span></a> : <button className="classic-cart-action classic-cart-action--open" type="button" disabled aria-label="No product link" title="No product link"><CartSvgIcon name="external-link" size={17}/><span>Open</span></button>}
-          <button className="classic-cart-action classic-cart-action--delete" type="button" onClick={() => onDelete(item)} aria-label={`Delete ${product.name}`} title="Delete product"><CartSvgIcon name="trash" size={17}/><span>Delete</span></button>
+          {product.url ? <a className="classic-cart-action classic-cart-action--open" href={product.url} target="_blank" rel="noopener noreferrer" aria-label={`Open ${product.name}`} title="Open product"><CartSvgIcon name="external-link" size={17}/></a> : <button className="classic-cart-action classic-cart-action--open" type="button" disabled aria-label="No product link" title="No product link"><CartSvgIcon name="external-link" size={17}/></button>}
+          <button className="classic-cart-action classic-cart-action--delete" type="button" onClick={() => onDelete(item)} aria-label={`Delete ${product.name}`} title="Delete product"><CartSvgIcon name="trash" size={17}/></button>
         </div>
       </div>
       <div className="classic-cart-card-metrics">
@@ -605,6 +620,8 @@ export default function ShoppingCartClient({
   const [selectedType, setSelectedType] = useState(text(initialType));
   const [cart, setCart] = useState(() => normalizeDraft(initialDraft?.products));
   const [reason, setReason] = useState(() => text(initialDraft?.reason) || normalizeDraft(initialDraft?.products).find((item) => item.reason)?.reason || "");
+  const [priorityLevel, setPriorityLevel] = useState(() => safePriority(initialDraft?.priorityLevel));
+  const [requestedDeliveryDate, setRequestedDeliveryDate] = useState(() => safeDeliveryDate(initialDraft?.requestedDeliveryDate));
   const [picker, setPicker] = useState(null);
   const [additionEditor, setAdditionEditor] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -656,7 +673,7 @@ export default function ShoppingCartClient({
     ...(item.customProduct ? { customProduct: item.customProduct } : {}),
   }));
 
-  const persistDraft = async (items = cart, type = selectedType, globalReason = reason, { quiet = false, editTransfer = null } = {}) => {
+  const persistDraft = async (items = cart, type = selectedType, globalReason = reason, { quiet = false, editTransfer = null, priorityValue = priorityLevel, deliveryDateValue = requestedDeliveryDate } = {}) => {
     const cleanType = text(type);
     if (!cleanType) return true;
     const cleanItems = normalizeDraft(items);
@@ -669,6 +686,8 @@ export default function ShoppingCartClient({
         editKey,
         products: cleanItems,
         reason: globalReason,
+        priorityLevel: priorityValue,
+        requestedDeliveryDate: deliveryDateValue,
         editToken: text(editTransfer?.editToken || activeEditTransfer?.editToken),
       });
       if (!saved && cleanItems.length) throw new Error("Browser storage is unavailable.");
@@ -709,7 +728,13 @@ export default function ShoppingCartClient({
           setActiveEditTransfer(transfer);
           setCart(patched);
           setReason(isMaintenance(cleanType) ? "" : transferReason);
-          await persistDraft(patched, cleanType, transferReason, { quiet: true, editTransfer: transfer });
+          setPriorityLevel(safePriority(transfer?.priorityLevel));
+          setRequestedDeliveryDate(safeDeliveryDate(transfer?.requestedDeliveryDate));
+          await persistDraft(patched, cleanType, transferReason, {
+            quiet: true, editTransfer: transfer,
+            priorityValue: safePriority(transfer?.priorityLevel),
+            deliveryDateValue: safeDeliveryDate(transfer?.requestedDeliveryDate),
+          });
           return;
         }
       }
@@ -738,17 +763,25 @@ export default function ShoppingCartClient({
         }
       }
 
+      const nextPriority = safePriority(draft?.priorityLevel || (editMode ? readEditTransfer(editKey)?.priorityLevel : ""));
+      const nextDeliveryDate = safeDeliveryDate(draft?.requestedDeliveryDate || (editMode ? readEditTransfer(editKey)?.requestedDeliveryDate : ""));
       setCart(items);
       setReason(isMaintenance(cleanType) ? "" : nextReason);
+      setPriorityLevel(nextPriority);
+      setRequestedDeliveryDate(nextDeliveryDate);
       if (items.length && (!draft?.products?.length || (editMode && !text(draft?.reason) && nextReason))) {
         await persistDraft(items, cleanType, nextReason, {
           quiet: true,
           editTransfer: text(draft?.editToken) ? { editToken: text(draft.editToken) } : null,
+          priorityValue: nextPriority,
+          deliveryDateValue: nextDeliveryDate,
         });
       }
     } catch (error) {
       setCart([]);
       setReason("");
+      setPriorityLevel("Normal");
+      setRequestedDeliveryDate("");
       setNotice({ type: "error", title: "Draft unavailable", message: error?.message || "The saved cart could not be loaded." });
     } finally {
       setLoadingDraft(false);
@@ -838,6 +871,8 @@ export default function ShoppingCartClient({
     setBrowserType("");
     setCart([]);
     setReason("");
+    setPriorityLevel("Normal");
+    setRequestedDeliveryDate("");
   };
 
   const savePickerSelection = async (selection) => {
@@ -960,6 +995,18 @@ export default function ShoppingCartClient({
     }, 550);
   };
 
+  const updatePriority = (value) => {
+    const next = safePriority(value);
+    setPriorityLevel(next);
+    if (cart.length) void persistDraft(cart, selectedType, reason, { quiet: true, priorityValue: next });
+  };
+
+  const updateDeliveryDate = (value) => {
+    const next = safeDeliveryDate(value);
+    setRequestedDeliveryDate(next);
+    if (cart.length) void persistDraft(cart, selectedType, reason, { quiet: true, deliveryDateValue: next });
+  };
+
   const clearCart = async () => {
     if (!cart.length) return;
     const confirmed = await confirmDelete({ title: "Clear cart?", itemType: "cart", message: "All products currently added to this cart will be removed." });
@@ -1002,6 +1049,8 @@ export default function ShoppingCartClient({
         body: JSON.stringify({
           products: payloadFor(cart, selectedType, reason),
           orderType: selectedType,
+          priorityLevel: maintenance ? null : priorityLevel,
+          requestedDeliveryDate: maintenance ? null : requestedDeliveryDate || null,
           editMode,
           editToken: text(activeEditTransfer?.editToken),
         }),
@@ -1016,6 +1065,8 @@ export default function ShoppingCartClient({
       setActiveEditTransfer(null);
       setCart([]);
       setReason("");
+      setPriorityLevel("Normal");
+      setRequestedDeliveryDate("");
 
       if (editMode) {
         setNotice({
@@ -1159,12 +1210,12 @@ export default function ShoppingCartClient({
                     <strong>Select</strong>
                     <small>Choose from Products or Kits</small>
                   </span>
-                  <span className="classic-cart-add-new-plus"><CartSvgIcon name="plus" size={30}/></span>
+                  <span className="classic-cart-add-new-plus"><CartSvgIcon name="list-check" size={22}/></span>
                 </button>
                 {!editMode && !maintenance && !withdraw && key(selectedType) === "requestproducts" && allowComponents ? (
                   <button className={`classic-cart-add-new classic-cart-add-new--requested ${typeTheme}`} type="button" onClick={() => setAdditionEditor({ item: null })} aria-label="Request a product not in Products">
                     <span className="classic-cart-add-new-copy"><strong>Add New</strong><small>Request a component not in Products</small></span>
-                    <span className="classic-cart-add-new-plus"><CartSvgIcon name="plus" size={30}/></span>
+                    <span className="classic-cart-add-new-plus"><CartSvgIcon name="plus" size={22}/></span>
                   </button>
                 ) : null}
                 </div>
@@ -1175,7 +1226,7 @@ export default function ShoppingCartClient({
             {cart.length && !maintenance ? (
               <div className="classic-cart-footer">
                 <button className="classic-cart-update-btn" type="button" onClick={() => setPicker({ item: null })} disabled={!allowComponents && !allowKits}>
-                  <CartSvgIcon name="plus" size={17}/>
+                  <CartSvgIcon name="list-check" size={15}/>
                   <span>Select</span>
                 </button>
                 {!editMode && !withdraw && key(selectedType) === "requestproducts" && allowComponents ? (
@@ -1210,6 +1261,18 @@ export default function ShoppingCartClient({
                   aria-invalid={validationFeedback.reason || undefined}
                 />
               </label>
+              <div className="classic-cart-request-meta-fields">
+                <label className="classic-cart-summary-field">
+                  <span>Priority Level</span>
+                  <select value={priorityLevel} onChange={(event) => updatePriority(event.target.value)} aria-label="Priority Level">
+                    {ORDER_PRIORITIES.map((option) => <option key={option} value={option}>{option}</option>)}
+                  </select>
+                </label>
+                <label className="classic-cart-summary-field">
+                  <span>Delivery Date</span>
+                  <input type="date" value={requestedDeliveryDate} onChange={(event) => updateDeliveryDate(event.target.value)} aria-label="Requested delivery date" />
+                </label>
+              </div>
             </div>
           ) : null}
 

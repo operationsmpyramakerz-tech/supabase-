@@ -309,7 +309,11 @@ function ReviewDetailsModal({ group, activeTab, busyIds, onClose, onQuantitySave
           <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => setDownloadOpen(true)}><ClassicOrderIcon name="download" /><span>Download</span></button>
           <OrderSortButton value={sortMode} onChange={setSortMode} />
         </div>
-        <div className="co-modal-meta co-modal-meta--after-actions"><div className="co-meta-row co-meta-row--reason"><span>Reason</span><strong>{group.reason}</strong></div></div>
+        <div className="co-modal-meta co-modal-meta--after-actions">
+          <div className="co-meta-row co-meta-row--reason"><span>Reason</span><strong>{group.reason}</strong></div>
+          {!maintenance && group.items?.some((item) => item.priorityLevel) ? <div className="co-meta-row"><span>Priority Level</span><strong>{group.items.find((item) => item.priorityLevel)?.priorityLevel}</strong></div> : null}
+          {!maintenance && group.items?.some((item) => item.requestedDeliveryDate) ? <div className="co-meta-row"><span>Delivery Date</span><strong>{group.items.find((item) => item.requestedDeliveryDate)?.requestedDeliveryDate}</strong></div> : null}
+        </div>
         {canAct && permissions.bulk_approve ? <div className="next-review-bulk-actions"><div><span>Review all components</span><strong>{componentSearch.trim() ? `Applies to ALL ${group.items.length} components, including hidden search results.` : "Apply one decision to every item in this order."}</strong></div><div className="next-classic-review-actions"><button className="btn btn-success btn-xs" type="button" disabled={group.items.some((item) => busyIds.has(text(item?.id)))} onClick={() => onBulkDecision(group, "Approved")}><ClassicOrderIcon name="check" /> Approve all</button><button className="btn btn-danger btn-xs" type="button" disabled={group.items.some((item) => busyIds.has(text(item?.id)))} onClick={() => onBulkDecision(group, "Rejected")}><ClassicOrderIcon name="x" /> Reject all</button></div></div> : null}
         <ProgressiveOrderGroups
           groups={groupedItems}

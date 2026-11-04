@@ -43,6 +43,8 @@ export async function POST(request) {
       account: gate.account,
       products: body?.products,
       orderType: body?.orderType,
+      priorityLevel: body?.priorityLevel,
+      requestedDeliveryDate: body?.requestedDeliveryDate,
       editMode: body?.editMode === true,
       editToken: body?.editToken,
     });
