@@ -35,18 +35,29 @@ export function validateProductAddition(value = {}, quantityOverride) {
     throw new Error("Qty must be at least 0.01 and at most 100,000 (up to three decimal places).");
   }
   const rawPrice = body.unitPrice;
-  const unitPrice = rawPrice === null || rawPrice === undefined || clean(rawPrice) === "" ? null : Number(rawPrice);
-  if (unitPrice !== null && (!Number.isFinite(unitPrice) || unitPrice < 0 || unitPrice > 100000000)) {
+  if (rawPrice === null || rawPrice === undefined || clean(rawPrice) === "") {
+    throw new Error("Unit Price is required.");
+  }
+  const unitPrice = Number(rawPrice);
+  if (!Number.isFinite(unitPrice) || unitPrice < 0 || unitPrice > 100000000) {
     throw new Error("Unit Price must be zero or a positive amount.");
   }
+  const unit = bounded("unit", 80);
+  if (!unit) throw new Error("Unit of Measurement is required.");
+  const tag = bounded("tag", 120);
+  if (!tag) throw new Error("Tag is required.");
+  const url = optionalUrl(body.url);
+  if (!url) throw new Error("Product URL is required.");
+  const imageUrl = allowedImage(body.imageUrl);
+  if (!imageUrl) throw new Error("Product Image is required.");
   return {
     name,
     idCode: bounded("idCode", 80),
     unitPrice,
-    unit: bounded("unit", 80),
-    tag: bounded("tag", 120),
-    url: optionalUrl(body.url),
-    imageUrl: allowedImage(body.imageUrl),
+    unit,
+    tag,
+    url,
+    imageUrl,
     quantity,
   };
 }

@@ -116,13 +116,15 @@ export default async function ShoppingCartPageServer({
       eyebrow="Create, withdraw, or maintain products"
       activePath={publicPath}
       bodyClass="shopping-cart-page"
-      pageStyles={["/next/css/product-additions.css?v=v312"]}
+      pageStyles={["/next/css/product-additions.css?v=v313"]}
     >
       <ShoppingCartClient
         key={`${flow}:${editMode ? "edit" : "new"}:${editKey}`}
         permissions={{ ...Object.fromEntries(["view", "submit", "edit_submit", "undo"].map(action => [action, featureAllowed(gate.account, `orders.shopping.${action}`)])), components: shoppingSourceAllowed(gate.account, "components"), kits: shoppingSourceAllowed(gate.account, "kits") }}
         initialOrderTypes={initial.orderTypes}
         initialComponents={initial.components}
+        initialTags={initial.tagsCatalog}
+        initialUnits={initial.unitsCatalog}
         initialDraft={null}
         initialType={initialType}
         editMode={editMode}

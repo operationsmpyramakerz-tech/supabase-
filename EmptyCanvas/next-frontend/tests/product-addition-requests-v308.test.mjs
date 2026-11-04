@@ -10,17 +10,18 @@ const custom = { id: 'new:123e4567-e89b-42d3-a456-426614174000', customProduct: 
 test('validates new component fields, pricing, qty, links and identifier', () => {
   assert.equal(isCustomCartItem(custom), true);
   assert.equal(isCustomCartItem({ ...custom, id: '1' }), false);
-  const result = validateProductAddition({ name: ' Demo sensor ', unitPrice: '25.50', quantity: '1.005', url: 'https://example.org/item', tag: 'Electronic components' });
+  const required = { name: ' Demo sensor ', unitPrice: '25.50', quantity: '1.005', unit: 'Piece', url: 'https://example.org/item', tag: 'Electronic components', imageUrl: 'https://example.org/product.webp' };
+  const result = validateProductAddition(required);
   assert.equal(result.name, 'Demo sensor');
   assert.equal(result.unitPrice, 25.5);
   assert.equal(result.quantity, 1.005);
   for (const [data, pattern] of [
-    [{ quantity: 0, name: 'A' }, /Qty/],
-    [{ quantity: -2, name: 'A' }, /Qty/],
-    [{ quantity: 1, name: '' }, /Name/],
-    [{ quantity: 1, name: 'A', url: 'javascript:alert(1)' }, /HTTP/],
-    [{ quantity: 1, name: 'A', imageUrl: 'data:image/png;base64,test' }, /HTTPS/],
-    [{ quantity: 1, name: 'A', unitPrice: -1 }, /Unit Price/],
+    [{ ...required, quantity: 0 }, /Qty/],
+    [{ ...required, quantity: -2 }, /Qty/],
+    [{ ...required, name: '' }, /Name/],
+    [{ ...required, url: 'javascript:alert(1)' }, /HTTP/],
+    [{ ...required, imageUrl: 'data:image/png;base64,test' }, /HTTPS/],
+    [{ ...required, unitPrice: -1 }, /Unit Price/],
   ]) assert.throws(() => validateProductAddition(data), pattern);
 });
 
@@ -38,7 +39,7 @@ test('request items are added to an order, but Products creation is reserved for
   const ui = read('../components/products/ProductAdditionReviewClient.jsx');
   const api = read('../app/api/products/addition-requests/route.js');
   const sql = read('../sql/2026-11-04-product-addition-requests-v308.sql');
-  assert.match(cart, /<strong>Select<\/strong>|<strong>\{maintenance \? "Select" : "Select"\}<\/strong>/);
+  assert.match(cart, /<strong>Select Component<\/strong>/);
   assert.match(cart, /<strong>Add New<\/strong>/);
   assert.match(cart, /customProduct: item\.customProduct/);
   assert.match(checkout, /await ensureProductAdditionRequestsTable\(\)/);

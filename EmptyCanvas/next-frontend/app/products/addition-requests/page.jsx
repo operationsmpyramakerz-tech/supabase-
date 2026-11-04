@@ -4,19 +4,25 @@ import ProductAdditionReviewClient from "../../../components/products/ProductAdd
 import { getDirectAccountGate } from "../../../lib/products-auth";
 import { featureGate } from "../../../lib/feature-permissions-server";
 import { featureAllowed } from "../../../lib/feature-permissions-registry";
+import { getProductsCatalog } from "../../../lib/products-service";
 
 export const dynamic = "force-dynamic";
 export default async function ProductAdditionReviewPage() {
   const gate = featureGate(await getDirectAccountGate("Products"), "products.create");
   if (gate.status === 401) redirect("/login?next=/next/products/addition-requests");
   if (!gate.ok) return <main className="standalone-state"><section className="state-card"><h1>Product requests unavailable</h1><p>{gate.error || "Products creation permission is required."}</p><a href="/next/products" className="primary-button">Back to Products</a></section></main>;
+  const catalog = await getProductsCatalog().catch(() => ({ tagsCatalog: [], unitsCatalog: [] }));
   return <AppShell
     account={gate.account}
     title="Product Addition Requests"
     activePath="/next/products"
     bodyClass="products-page"
-    pageStyles={["/next/css/products.css?v=v308", "/next/css/product-additions.css?v=v308"]}
+    pageStyles={["/next/css/products.css?v=v308", "/next/css/product-additions.css?v=v313"]}
   >
-    <ProductAdditionReviewClient canUploadImage={featureAllowed(gate.account, "products.image_upload")}/>
+    <ProductAdditionReviewClient
+      canUploadImage={featureAllowed(gate.account, "products.image_upload")}
+      tagsCatalog={catalog.tagsCatalog}
+      unitsCatalog={catalog.unitsCatalog}
+    />
   </AppShell>;
 }

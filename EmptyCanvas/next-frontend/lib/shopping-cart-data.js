@@ -1,6 +1,6 @@
 import "server-only";
 
-import { getProductsList } from "./products-service";
+import { getProductsCatalog } from "./products-service";
 import { CREATE_ORDER_TYPES } from "./shopping-cart-support";
 
 function componentItems(payload) {
@@ -11,11 +11,15 @@ function componentItems(payload) {
 }
 
 export async function loadShoppingCartInitialData() {
-  const products = await getProductsList();
+  // The same Products catalog supplies the official Unit and Tag options.
+  // Read it once, instead of fetching separate lists as the form opens.
+  const catalog = await getProductsCatalog();
   return {
     source: "supabase-next",
     orderTypes: [...CREATE_ORDER_TYPES],
-    components: componentItems(products),
+    components: componentItems(catalog.products),
+    tagsCatalog: catalog.tagsCatalog || [],
+    unitsCatalog: catalog.unitsCatalog || [],
   };
 }
 

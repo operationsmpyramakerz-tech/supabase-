@@ -16,7 +16,7 @@ async function requestJson(url, options = {}) {
   return body;
 }
 
-export default function ProductAdditionReviewClient({ canUploadImage = false }) {
+export default function ProductAdditionReviewClient({ canUploadImage = false, tagsCatalog = [], unitsCatalog = [] }) {
   const [requests, setRequests] = useState([]);
   const [status, setStatus] = useState("pending");
   const [loading, setLoading] = useState(true);
@@ -92,8 +92,8 @@ export default function ProductAdditionReviewClient({ canUploadImage = false }) 
       review
       canUploadImage={canUploadImage}
       initial={editing}
-      tags={[...new Set(requests.map(item => text(item.tag)).filter(Boolean))]}
-      units={[...new Set(requests.map(item => text(item.unit)).filter(Boolean))]}
+      tags={[...new Set([...tagsCatalog, ...requests.map(item => text(item.tag))].filter(Boolean))]}
+      units={[...new Set([...unitsCatalog, "Piece", "Pack", "Kilogram", "Metre", "Inch", ...requests.map(item => text(item.unit))].filter(Boolean))]}
       uploadEndpoint="/next/api/products/image-upload"
       onClose={() => setEditing(null)}
       onSave={product => mutate(editing.id, "save", product)}

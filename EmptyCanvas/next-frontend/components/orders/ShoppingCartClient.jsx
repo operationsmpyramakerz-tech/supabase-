@@ -598,6 +598,8 @@ export default function ShoppingCartClient({
   permissions = {},
   initialOrderTypes = [],
   initialComponents = [],
+  initialTags = [],
+  initialUnits = [],
   initialDraft = {},
   initialType = "",
   editMode = false,
@@ -618,8 +620,14 @@ export default function ShoppingCartClient({
     .map(normalizeProduct)
     .filter((product) => product.id && product.name), [initialComponents]);
   const productMap = useMemo(() => new Map(products.map((product) => [product.id, product])), [products]);
-  const tags = useMemo(() => [...new Set(products.flatMap(product => product.tags))], [products]);
-  const units = useMemo(() => [...new Set(products.map(product => product.unit).filter(Boolean))], [products]);
+  const tags = useMemo(() => [...new Set([
+    ...(Array.isArray(initialTags) ? initialTags : []), ...products.flatMap(product => product.tags),
+  ].map(text).filter(Boolean))], [initialTags, products]);
+  const units = useMemo(() => [...new Set([
+    ...(Array.isArray(initialUnits) ? initialUnits : []),
+    "Piece", "Pack", "Kilogram", "Metre", "Inch",
+    ...products.map(product => product.unit),
+  ].map(text).filter(Boolean))], [initialUnits, products]);
 
   const [selectedType, setSelectedType] = useState(text(initialType));
   const [cart, setCart] = useState(() => normalizeDraft(initialDraft?.products));
