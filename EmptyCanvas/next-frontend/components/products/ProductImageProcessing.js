@@ -94,10 +94,10 @@ export async function prepareProductImage(file) {
   }
 }
 
-export async function uploadPreparedProductImage(image) {
+export async function uploadPreparedProductImage(image, ticketEndpoint = "/next/api/products/image-upload") {
   if (!image?.blob || !image?.size) return "";
 
-  const ticket = await requestJson("/next/api/products/image-upload", {
+  const ticket = await requestJson(ticketEndpoint, {
     method: "POST",
     body: JSON.stringify({
       filename: image.name || "product-image.webp",

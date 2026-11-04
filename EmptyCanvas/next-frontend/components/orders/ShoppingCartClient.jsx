@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 import { navigateWithinApp } from "../../lib/client-navigation";
 
 const ProductPicker = dynamic(() => import("./ShoppingCartDialogs").then((module) => module.ProductPicker), { ssr: false });
+const ProductAdditionForm = dynamic(() => import("./ProductAdditionForm"), { ssr: false });
 const OrderSubmissionBar = dynamic(() => import("./ShoppingCartDialogs").then((module) => module.OrderSubmissionBar), { ssr: false });
 
 const DEFAULT_ORDER_TYPES = ["Request Products", "Withdraw Products", "Request Maintenance"];
@@ -102,6 +103,7 @@ function normalizeDraftItem(item) {
     issueDescription: text(item?.issueDescription),
     schoolId: text(item?.schoolId),
     expectedSparePartId: text(item?.expectedSparePartId),
+    customProduct: item?.customProduct && typeof item.customProduct === "object" ? { ...item.customProduct } : null,
     kitSourceIds: [...new Set((Array.isArray(item?.kitSourceIds) ? item.kitSourceIds : []).map(text).filter(Boolean))].slice(0, 15),
   };
 }
@@ -404,6 +406,7 @@ function CartItem({ item, product, type, index, onEdit, onDelete, onQuantityChan
           <span className="classic-cart-prod-meta">
             <strong>{product.name}</strong>
             {product.displayId ? <small className="part">Part No: {product.displayId}</small> : null}
+            {item.customProduct ? <small className="classic-cart-new-item-badge">New · Pending Catalog Approval</small> : null}
           </span>
         </div>
         <div className="classic-cart-card-actions classic-cart-card-actions--compact">
@@ -596,11 +599,14 @@ export default function ShoppingCartClient({
     .map(normalizeProduct)
     .filter((product) => product.id && product.name), [initialComponents]);
   const productMap = useMemo(() => new Map(products.map((product) => [product.id, product])), [products]);
+  const tags = useMemo(() => [...new Set(products.flatMap(product => product.tags))], [products]);
+  const units = useMemo(() => [...new Set(products.map(product => product.unit).filter(Boolean))], [products]);
 
   const [selectedType, setSelectedType] = useState(text(initialType));
   const [cart, setCart] = useState(() => normalizeDraft(initialDraft?.products));
   const [reason, setReason] = useState(() => text(initialDraft?.reason) || normalizeDraft(initialDraft?.products).find((item) => item.reason)?.reason || "");
   const [picker, setPicker] = useState(null);
+  const [additionEditor, setAdditionEditor] = useState(null);
   const [busy, setBusy] = useState(false);
   const [loadingDraft, setLoadingDraft] = useState(false);
   const [notice, setNotice] = useState(null);
@@ -633,7 +639,8 @@ export default function ShoppingCartClient({
   }, [selectedType, editMode]);
 
   const total = cart.reduce((sum, item) => {
-    const product = productMap.get(item.id);
+    const product = item.customProduct
+      ? normalizeProduct({ id: item.id, ...item.customProduct }) : productMap.get(item.id);
     if (!product || maintenance) return sum;
     return sum + product.unitPrice * quantity(item.quantity, 1) * (withdraw ? -1 : 1);
   }, 0);
@@ -646,6 +653,7 @@ export default function ShoppingCartClient({
     schoolId: text(item.schoolId),
     expectedSparePartId: "",
     kitSourceIds: item.kitSourceIds,
+    ...(item.customProduct ? { customProduct: item.customProduct } : {}),
   }));
 
   const persistDraft = async (items = cart, type = selectedType, globalReason = reason, { quiet = false, editTransfer = null } = {}) => {
@@ -811,6 +819,7 @@ export default function ShoppingCartClient({
     setSelectedType(clean);
     setBrowserType(clean);
     setPicker(null);
+    setAdditionEditor(null);
     await loadDraft(clean);
   };
 
@@ -909,6 +918,25 @@ export default function ShoppingCartClient({
     setCart(next);
     await persistDraft(next);
     setPicker(null);
+  };
+
+  const saveAddition = async (customProduct) => {
+    if (editMode || maintenance || withdraw || !allowComponents || key(selectedType) !== "requestproducts") {
+      throw new Error("New components require Request Products and Components permission.");
+    }
+    const oldItem = additionEditor?.item;
+    const id = oldItem?.id || `new:${crypto.randomUUID()}`;
+    const nextItem = normalizeDraftItem({
+      ...oldItem, id, quantity: customProduct.quantity, customProduct,
+      reason,
+    });
+    const next = oldItem
+      ? cart.map(item => item.id === id ? nextItem : item)
+      : [...cart, nextItem];
+    setCart(next);
+    await persistDraft(next);
+    setAdditionEditor(null);
+    setValidationFeedback(current => ({ ...current, cart: false }));
   };
 
   const deleteItem = async (item) => {
@@ -1100,7 +1128,9 @@ export default function ShoppingCartClient({
             ) : cart.length ? (
               <div className={`classic-cart-body ${maintenance ? "classic-cart-body--maintenance-cards" : "classic-cart-body--request-cards"}`}>
                 {cart.map((item, index) => {
-                  const product = productMap.get(item.id) || normalizeProduct({ id: item.id, name: "Unavailable product" });
+                  const product = item.customProduct
+                    ? normalizeProduct({ id: item.id, ...item.customProduct })
+                    : (productMap.get(item.id) || normalizeProduct({ id: item.id, name: "Unavailable product" }));
                   return (
                     <CartItem
                       key={item.id}
@@ -1108,7 +1138,7 @@ export default function ShoppingCartClient({
                       product={product}
                       type={selectedType}
                       index={index}
-                      onEdit={(selected) => setPicker({ item: selected })}
+                      onEdit={(selected) => selected.customProduct ? setAdditionEditor({ item: selected }) : setPicker({ item: selected })}
                       onDelete={deleteItem}
                       onQuantityChange={updateQuantity}
                     />
@@ -1117,18 +1147,27 @@ export default function ShoppingCartClient({
               </div>
             ) : (
               <div className="classic-cart-empty">
+                <div className="classic-cart-empty-actions">
                 <button
                   className={`classic-cart-add-new ${typeTheme}${validationFeedback.cart ? " is-validation-error" : ""}`}
                   type="button"
                   onClick={() => setPicker({ item: null })}
                   disabled={!allowComponents && !allowKits}
-                  aria-label={`Add new item to ${selectedType}`}
+                  aria-label={`Select existing product for ${selectedType}`}
                 >
                   <span className="classic-cart-add-new-copy">
-                    <strong>Add new</strong>
+                    <strong>Select</strong>
+                    <small>Choose from Products or Kits</small>
                   </span>
                   <span className="classic-cart-add-new-plus"><CartSvgIcon name="plus" size={30}/></span>
                 </button>
+                {!editMode && !maintenance && !withdraw && key(selectedType) === "requestproducts" && allowComponents ? (
+                  <button className={`classic-cart-add-new classic-cart-add-new--requested ${typeTheme}`} type="button" onClick={() => setAdditionEditor({ item: null })} aria-label="Request a product not in Products">
+                    <span className="classic-cart-add-new-copy"><strong>Add New</strong><small>Request a component not in Products</small></span>
+                    <span className="classic-cart-add-new-plus"><CartSvgIcon name="plus" size={30}/></span>
+                  </button>
+                ) : null}
+                </div>
               </div>
             )}
 
@@ -1137,8 +1176,13 @@ export default function ShoppingCartClient({
               <div className="classic-cart-footer">
                 <button className="classic-cart-update-btn" type="button" onClick={() => setPicker({ item: null })} disabled={!allowComponents && !allowKits}>
                   <CartSvgIcon name="plus" size={17}/>
-                  <span>{withdraw ? "Add to Withdraw Cart" : "Add to Cart"}</span>
+                  <span>Select</span>
                 </button>
+                {!editMode && !withdraw && key(selectedType) === "requestproducts" && allowComponents ? (
+                  <button className="classic-cart-update-btn classic-cart-update-btn--new" type="button" onClick={() => setAdditionEditor({ item: null })}>
+                    <CartSvgIcon name="plus" size={17}/><span>Add New</span>
+                  </button>
+                ) : null}
               </div>
             ) : null}
           </div>
@@ -1176,6 +1220,14 @@ export default function ShoppingCartClient({
           /> : null}
         </aside>
       </div>
+
+      {additionEditor ? <ProductAdditionForm
+        initial={additionEditor.item ? { ...additionEditor.item.customProduct, quantity: additionEditor.item.quantity } : {}}
+        units={units}
+        tags={tags}
+        onClose={() => setAdditionEditor(null)}
+        onSave={saveAddition}
+      /> : null}
 
       {picker ? (
         <ProductPicker

@@ -13,6 +13,8 @@ import {
   updateById,
 } from "./supabase-rest";
 import { getProductsList } from "./products-service";
+import { isCustomCartItem, validateProductAddition } from "./product-addition-request-payload.mjs";
+import { ensureProductAdditionRequestsTable, createProductAdditionRequests, cancelProductAdditionRequestsForOrderRows } from "./product-addition-requests-service";
 import { listTeamMembersLite } from "./team-members-service";
 import { loadRawOrderRowsByIds } from "./order-details-data";
 import { directPageMutationAccess, verifyPageAdminPasswordDirect } from "./order-action-auth";
@@ -214,9 +216,22 @@ function cleanSubmittedProducts(products = [], orderType = "") {
     reason: text(item?.reason),
     issueDescription: text(item?.issueDescription),
     schoolId: text(item?.schoolId),
+    customProduct: item?.customProduct || null,
   })).filter((item) => item.id && (maintenance || (Number.isFinite(item.quantity) && item.quantity > 0)));
 
   if (!clean.length) throw directError("Missing products.", 400);
+  if (source.length > 150 || clean.length !== source.length) throw directError("Invalid order items or too many products.", 400);
+  for (const item of clean) {
+    if (item.customProduct) {
+      if (maintenance || withdraw || orderTypeKey(orderType) !== "requestproducts" || !isCustomCartItem(item)) {
+        throw directError("New components are allowed only in Request Products.", 400);
+      }
+      try { item.customProduct = validateProductAddition(item.customProduct, item.quantity); }
+      catch (error) { throw directError(error.message, 400); }
+    } else if (/^new:/i.test(item.id)) {
+      throw directError("A new component is missing its details.", 400);
+    }
+  }
   if (maintenance && clean.length > 1) throw directError("Request Maintenance supports one component only.", 400);
   if (maintenance && clean.some((item) => !item.issueDescription)) {
     throw directError("Each product must include an Issue Description.", 400);
@@ -324,6 +339,7 @@ export async function initializeCurrentOrderEditDirect({
     });
   }
 
+  if (rows.length !== draft.length) throw directError("This order contains a component that is not yet in Products. Add the requested component to Products before editing this order.", 409);
   if (!draft.length) throw directError("No editable products found for this order.", 400);
   if (!orderType) {
     if (draft.some((item) => item.issueDescription)) orderType = "Request Maintenance";
@@ -358,22 +374,27 @@ async function createNewOrderDirect({ account = {}, products = [], orderType = "
   const cleanProducts = cleanSubmittedProducts(products, finalType);
   const catalog = await getProductsList({ fresh: true });
   const maps = productMaps(catalog);
-  const unknown = cleanProducts.find((item) => !maps.byId.has(item.id));
+  const unknown = cleanProducts.find((item) => !item.customProduct && !maps.byId.has(item.id));
   if (unknown) throw directError("One or more selected products no longer exist.", 400);
+  if (cleanProducts.some((item) => item.customProduct)) await ensureProductAdditionRequestsTable();
 
   const orderNumber = await nextOrderNumber();
   const now = new Date().toISOString();
   const creatorName = accountUsername(account) || null;
   const rows = cleanProducts.map((item) => {
-    const product = maps.byId.get(item.id) || {};
+    const product = item.customProduct
+      ? { name: item.customProduct.name, unitPrice: item.customProduct.unitPrice,
+          url: item.customProduct.url, tags: item.customProduct.tag ? [item.customProduct.tag] : [] }
+      : (maps.byId.get(item.id) || {});
     return {
       reason: item.reason || null,
       order_number: orderNumber,
       order_type: finalType || null,
       notion_created_time: now,
+      ...(item.customProduct ? { product_id: null } : {}),
       product_name: text(product?.name) || item.id,
       product_url: text(product?.url) || null,
-      unit_price: Number.isFinite(Number(product?.unitPrice)) ? Number(product.unitPrice) : null,
+      unit_price: product?.unitPrice === null || product?.unitPrice === undefined ? null : (Number.isFinite(Number(product.unitPrice)) ? Number(product.unitPrice) : null),
       quantity_requested: item.quantity,
       quantity_progress: item.quantity,
       quantity_received_by_operations: 0,
@@ -394,6 +415,18 @@ async function createNewOrderDirect({ account = {}, products = [], orderType = "
   try {
     mutationStarted = true;
     created = await insertMany(orderTable(), rows);
+    if (cleanProducts.some((item) => item.customProduct)) {
+      try {
+        await createProductAdditionRequests(cleanProducts, created, account, orderNumber);
+      } catch (requestError) {
+        const createdIds = (Array.isArray(created) ? created : []).map((row) => text(row?.id)).filter(Boolean);
+        if (createdIds.length) {
+          try { await deleteByIds(orderTable(), createdIds); }
+          catch (rollbackError) { console.error("Failed to roll back order after product-request error:", rollbackError); }
+        }
+        throw requestError;
+      }
+    }
   } catch (error) {
     throw directError(error?.message || "Failed to save order to Supabase.", Number(error?.status) || 500, mutationStarted);
   }
@@ -402,7 +435,7 @@ async function createNewOrderDirect({ account = {}, products = [], orderType = "
   if (!createdRows.length) throw directError("Failed to save order to Supabase.", 500, true);
   await invalidateLegacyOperationsCaches(account).catch(() => {});
 
-  const items = createdRows.map((row, index) => rowResponse(row, cleanProducts[index]?.id));
+  const items = createdRows.map((row, index) => rowResponse(row, cleanProducts[index]?.customProduct ? "" : cleanProducts[index]?.id));
   const uid = identityKey(accountUsername(account)) || accountMemberId(account);
   const ids = items.map((item) => item.id).filter(Boolean);
   const undoToken = signPayload({
@@ -440,6 +473,7 @@ async function updateExistingOrderDirect({ account = {}, products = [], orderTyp
   const cleanProducts = cleanSubmittedProducts(products, finalType);
   const catalog = await getProductsList({ fresh: true });
   const maps = productMaps(catalog);
+  if (cleanProducts.some((item) => item.customProduct)) throw directError("Pending components cannot be added while editing an existing order.", 409);
   const unknown = cleanProducts.find((item) => !maps.byId.has(item.id));
   if (unknown) throw directError("One or more selected products no longer exist.", 400);
 
@@ -563,6 +597,7 @@ export async function undoShoppingCartOrderDirect({ account = {}, undoToken = ""
   } catch (error) {
     throw directError(error?.message || "Failed to undo order.", Number(error?.status) || 500, true);
   }
+  await cancelProductAdditionRequestsForOrderRows(ids).catch(error => console.error("Could not cancel pending product addition requests:", error));
   await invalidateLegacyOperationsCaches(account).catch(() => {});
   return {
     success: true,

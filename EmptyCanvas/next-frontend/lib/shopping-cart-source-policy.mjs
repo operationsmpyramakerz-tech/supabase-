@@ -16,8 +16,14 @@ export async function assertShoppingCartSources({
     error.status = 403;
     throw error;
   }
-  if (allowComponents && allowKits) return;
   const rows = Array.isArray(products) ? products : [];
+  const hasCustom = rows.some(row => row?.customProduct || /^new:/i.test(clean(row?.id)));
+  if (hasCustom && (orderKey(orderType) !== "requestproducts" || !allowComponents)) {
+    const error = new Error("Requesting a new product requires Request Products and Components permission.");
+    error.status = 403;
+    throw error;
+  }
+  if (allowComponents && allowKits) return;
   if (!rows.length) return; // Existing submission validation handles empty orders.
   if (!allowKits) {
     if (rows.some(row => Array.isArray(row?.kitSourceIds) && row.kitSourceIds.length)) {
