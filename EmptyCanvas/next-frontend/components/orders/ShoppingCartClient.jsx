@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { confirmDelete } from "../../lib/client-confirm";
 import dynamic from "next/dynamic";
 import { navigateWithinApp } from "../../lib/client-navigation";
-import { ShoppingCartPrioritySelect, ShoppingCartDeliveryDate } from "./ShoppingCartMetaControls";
+import { ShoppingCartPrioritySelect } from "./ShoppingCartMetaControls";
 
 const ProductPicker = dynamic(() => import("./ShoppingCartDialogs").then((module) => module.ProductPicker), { ssr: false });
 const ProductAdditionForm = dynamic(() => import("./ProductAdditionForm"), { ssr: false });
@@ -1267,10 +1267,10 @@ export default function ShoppingCartClient({
                   <span>Priority Level</span>
                   <ShoppingCartPrioritySelect value={priorityLevel} onChange={updatePriority}/>
                 </div>
-                <div className="classic-cart-summary-field">
+                <label className="classic-cart-summary-field">
                   <span>Delivery Date</span>
-                  <ShoppingCartDeliveryDate value={requestedDeliveryDate} onChange={updateDeliveryDate}/>
-                </div>
+                  <input type="date" value={requestedDeliveryDate} onChange={(event) => updateDeliveryDate(event.target.value)} aria-label="Requested delivery date" />
+                </label>
               </div>
             </div>
           ) : null}

@@ -32,21 +32,16 @@ test('priority selection uses custom dropdown, not native select', () => {
   assert.doesNotMatch(cart, /<select value=\{priorityLevel\}/);
 });
 
-test('date picker supports valid ISO dates, month navigation, today, clear, and close', () => {
-  assert.match(cart, /<ShoppingCartDeliveryDate value=\{requestedDeliveryDate\} onChange=\{updateDeliveryDate\}\/>/);
-  assert.match(controls, /aria-haspopup="dialog"/);
-  assert.match(controls, /shiftMonth\(-1\)/);
-  assert.match(controls, /shiftMonth\(1\)/);
-  assert.match(controls, /choose\(null\)/);
-  assert.match(controls, /choose\(new Date\(\)\)/);
-  assert.match(controls, /onChange\?\.\(date \? isoDate\(date\) : ""\)/);
-  assert.match(controls, /event\.key === "Escape"/);
-  assert.doesNotMatch(cart, /<input type="date"/);
+test('delivery date returns to native date input without a floating calendar', () => {
+  assert.match(cart, /<input type="date" value=\{requestedDeliveryDate\} onChange=\{\(event\) => updateDeliveryDate\(event\.target\.value\)\} aria-label="Requested delivery date" \/>/);
+  assert.doesNotMatch(cart, /ShoppingCartDeliveryDate/);
+  assert.doesNotMatch(controls, /ShoppingCartDeliveryDate|classic-cart-date-grid|aria-haspopup="dialog"/);
+  assert.doesNotMatch(css, /\.classic-cart-date-menu|\.classic-cart-date-grid/);
 });
 
 test('CSS version bump ensures modern controls load on the order page', () => {
   const page = read('components/orders/ShoppingCartPageServer.jsx');
-  assert.match(page, /product-additions\.css\?v=v310/);
+  assert.match(page, /product-additions\.css\?v=v311/);
   assert.match(css, /\.classic-cart-meta-popover\{/);
-  assert.match(css, /\.classic-cart-date-grid\{/);
+  assert.match(css, /\.classic-cart-priority-option\{/);
 });
