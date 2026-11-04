@@ -341,6 +341,9 @@ function CartSvgIcon({ name, size = 18 }) {
     folder: <path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>,
     check: <polyline points="20 6 9 17 4 12"/>,
     x: <><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>,
+    "file-text": <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></>,
+    flag: <><path d="M4 22V4"/><path d="M4 4c3-3 6 3 10 0s6 0 6 0v12c-3-3-6 0-10 0s-6 0-6 0"/></>,
+    calendar: <><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></>,
     trash: <><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M8 6V4h8v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></>,
   };
   return <svg {...common}>{icons[name] || icons.grid}</svg>;
@@ -1245,14 +1248,14 @@ export default function ShoppingCartClient({
             <div className="classic-cart-summary-title">{withdraw ? "Withdrawal Summary" : "Order Summary"}</div>
             <div className="classic-cart-summary-lines">
               <div><span>Entry count</span><strong>{itemCount}</strong></div>
-              {!maintenance ? <div className="classic-cart-summary-total"><span>Total</span><strong>{formatMoney(total)}</strong></div> : null}
+              {!maintenance ? <div className={`classic-cart-summary-total${withdraw ? " is-withdrawal" : ""}`}><span>Total</span><strong>{formatMoney(total)}</strong></div> : null}
             </div>
           </div>
 
           {!maintenance ? (
             <div className={`classic-cart-reason-card${validationFeedback.reason ? " is-validation-error" : ""}`}>
               <label className="classic-cart-summary-field">
-                <span>Reason</span>
+                <span className="classic-cart-field-label"><CartSvgIcon name="file-text" size={15}/><span>Reason</span></span>
                 <input
                   ref={reasonInputRef}
                   value={reason}
@@ -1264,11 +1267,11 @@ export default function ShoppingCartClient({
               </label>
               <div className="classic-cart-request-meta-fields">
                 <div className="classic-cart-summary-field">
-                  <span>Priority Level</span>
+                  <span className="classic-cart-field-label"><CartSvgIcon name="flag" size={15}/><span>Priority Level</span></span>
                   <ShoppingCartPrioritySelect value={priorityLevel} onChange={updatePriority}/>
                 </div>
                 <label className="classic-cart-summary-field">
-                  <span>Delivery Date</span>
+                  <span className="classic-cart-field-label"><CartSvgIcon name="calendar" size={15}/><span>Delivery Date</span></span>
                   <input type="date" value={requestedDeliveryDate} onChange={(event) => updateDeliveryDate(event.target.value)} aria-label="Requested delivery date" />
                 </label>
               </div>

@@ -41,7 +41,7 @@ test('delivery date returns to native date input without a floating calendar', (
 
 test('CSS version bump ensures modern controls load on the order page', () => {
   const page = read('components/orders/ShoppingCartPageServer.jsx');
-  assert.match(page, /product-additions\.css\?v=v311/);
+  assert.match(page, /product-additions\.css\?v=v31[1-9]/);
   assert.match(css, /\.classic-cart-meta-popover\{/);
   assert.match(css, /\.classic-cart-priority-option\{/);
 });

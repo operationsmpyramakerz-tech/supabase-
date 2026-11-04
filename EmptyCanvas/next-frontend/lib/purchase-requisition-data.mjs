@@ -2,9 +2,46 @@
 export const PR_SIGNERS = ["requester", "manager", "technical", "approver"];
 export const PR_COLUMNS = ["code", "description", "unit", "quantity", "model", "warranty", "expiry", "url"];
 const string = (value, limit = 240) => String(value ?? "").replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "").trim().slice(0, limit);
+// Existing PR option labels must not change. Convert Shopping Cart priority
+// levels to their current Arabic PR equivalents without changing the PR form.
+export function prPriorityFromOrder(value) {
+  const priority = String(value ?? "").trim().toLowerCase();
+  if (priority === "urgent") return "طارئ";
+  if (priority === "high") return "عاجل";
+  if (priority === "normal" || priority === "low") return "عادي";
+  return ""; // Legacy orders may not have request metadata yet.
+}
+
+export function prDeliveryDateFromOrder(value) {
+  const date = String(value ?? "").trim().slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return "";
+  const parsed = new Date(`${date}T00:00:00.000Z`);
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === date ? date : "";
+}
+
+// Multi-row PRs normally belong to the same order. Avoid silently choosing a
+// conflicting priority/date when the selected order rows disagree.
+export function prMetadataFromOrders(items = []) {
+  const values = Array.isArray(items) ? items : [];
+  const unified = (extract) => {
+    const candidates = [...new Set(values.map(extract).filter(Boolean))];
+    return candidates.length === 1 ? candidates[0] : "";
+  };
+  return {
+    priority: unified(item => prPriorityFromOrder(item?.priorityLevel ?? item?.priority_level)),
+    requiredDate: unified(item => prDeliveryDateFromOrder(item?.requestedDeliveryDate ?? item?.requested_delivery_date)),
+  };
+}
+
 export function normalizePrForm(raw = {}) {
   const fields = ["prNumber","requestDate","department","costCenter","requester","workOrder","requestType","priority","requiredDate","deliveryPlace","minShelfLife","inspection","attachments","alternative","stockAvailable","purchaseReason","notes"];
   const form = Object.fromEntries(fields.map(key => [key, string(raw[key], key === "notes" ? 1800 : 250)]));
+  // A stored source snapshot lets later order changes update linked PR fields
+  // while leaving manual PR edits intact if the order has not changed.
+  const source = raw.orderMetadataSnapshot;
+  form.orderMetadataSnapshot = source && typeof source === "object" && !Array.isArray(source)
+    ? { priority: string(source.priority, 30), requiredDate: prDeliveryDateFromOrder(source.requiredDate) }
+    : null;
   form.items = (Array.isArray(raw.items) ? raw.items : []).slice(0, 1000).map(item => ({
     ...Object.fromEntries(PR_COLUMNS.map(key => [key, key === "url" ? safePrProductUrl(item?.url) : key === "quantity" ? string(item?.[key], 30) : string(item?.[key], key === "description" ? 280 : 120)])),
     // Persist the originating Operations Order row so later product edits,
@@ -73,6 +110,7 @@ export function prInitialForm(items = [], account = {}, products = []) {
   const numbers = [...new Set(items.map(item => Number(item?.orderIdNumber || item?.orderNumber || item?.order_number)).filter(Number.isFinite))];
   const orderLabel = numbers.length === 1 ? `ORD-${numbers[0]}` : numbers.length ? `ORD-${numbers.join(", ")}` : "";
   const date = new Date().toLocaleDateString("sv-SE", { timeZone: "Africa/Cairo" });
+  const orderMetadata = prMetadataFromOrders(items);
   const initial = normalizePrForm({
     // PR numbers are assigned independently; never copy the Operations Order number.
     prNumber: "",
@@ -80,6 +118,9 @@ export function prInitialForm(items = [], account = {}, products = []) {
     requester: first?.createdByName || first?.assignedToName || "",
     workOrder: orderLabel,
     purchaseReason: first?.reason || "",
+    priority: orderMetadata.priority,
+    requiredDate: orderMetadata.requiredDate,
+    orderMetadataSnapshot: orderMetadata,
     items: items.map(item => ({
       sourceRowId: item?.id == null ? "" : String(item.id),
       manual: false,
@@ -179,15 +220,32 @@ export function prSyncSavedWithLiveOrder(savedForm, liveForm) {
   // An item added with the PR's “Add item” control is independent of the
   // Operations Order, so retaining it must not prevent upstream sync.
   const manualItems = oldRows.filter(item => item.manual && !item.sourceRowId);
-  return normalizePrForm({ ...live, ...saved, items: [...items, ...manualItems] });
+  const merged = { ...live, ...saved, items: [...items, ...manualItems] };
+  const oldMetadata = saved.orderMetadataSnapshot;
+  const newMetadata = live.orderMetadataSnapshot;
+  for (const field of ["priority", "requiredDate"]) {
+    if (oldMetadata) {
+      // The order is authoritative after an upstream metadata change.
+      if (oldMetadata[field] !== newMetadata?.[field]) merged[field] = live[field];
+    } else if (!saved[field]) {
+      // Upgrade saved PRs written before this linkage, without erasing manually
+      // completed fields in older documents.
+      merged[field] = live[field];
+    }
+  }
+  merged.orderMetadataSnapshot = newMetadata;
+  return normalizePrForm(merged);
 }
 
-// Detect user-visible changes after syncing a previously saved PR. Metadata
-// such as row provenance alone must not create a false “unsaved” warning.
+// Detect user-visible changes after syncing a previously saved PR. Include
+// the mapped priority/date, but exclude internal source/provenance metadata.
 export function prVisibleItemsDiffer(beforeForm, afterForm) {
   const before = normalizePrForm(beforeForm).items;
   const after = normalizePrForm(afterForm).items;
   if (before.length !== after.length) return true;
+  const previous = normalizePrForm(beforeForm);
+  const updated = normalizePrForm(afterForm);
+  if (previous.priority !== updated.priority || previous.requiredDate !== updated.requiredDate) return true;
   return before.some((row, index) => ["code", "description", "quantity", "url"].some(key => row[key] !== after[index][key]));
 }
 

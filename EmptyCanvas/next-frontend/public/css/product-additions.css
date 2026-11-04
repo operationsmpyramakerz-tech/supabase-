@@ -162,3 +162,39 @@
   }
   .classic-cart-page[class*="theme-"] .classic-cart-grid.is-empty .classic-cart-empty-actions .classic-cart-add-new-copy strong{font-size:.88rem;white-space:normal}
 }
+
+/* v312 — red withdrawal totals, compact icons for order metadata labels. */
+.classic-cart-page.theme-withdraw-products .classic-cart-summary-lines>div.classic-cart-summary-total{
+  background:linear-gradient(145deg,#fff6f6 0%,#ffe9eb 100%);
+  border-color:#f5c5cb;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.95),0 13px 30px -24px rgba(184,32,52,.24);
+}
+.classic-cart-page.theme-withdraw-products .classic-cart-summary-lines>div.classic-cart-summary-total span{
+  color:#ac4654;
+}
+.classic-cart-page.theme-withdraw-products .classic-cart-summary-lines>div.classic-cart-summary-total strong{
+  color:#c12538;
+}
+.classic-cart-page.theme-withdraw-products .classic-cart-row--request-card .classic-cart-card-metric--total{
+  background:#fff3f4;
+  border-color:#f4ced2 !important;
+}
+.classic-cart-page.theme-withdraw-products .classic-cart-row--request-card .classic-cart-card-metric--total>strong{
+  color:#c12538;
+}
+.classic-cart-page[class*="theme-"] .classic-cart-reason-card .classic-cart-summary-field>span.classic-cart-field-label{
+  display:inline-flex;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:7px;
+  color:#334155;
+}
+.classic-cart-page[class*="theme-"] .classic-cart-reason-card .classic-cart-field-label>svg{
+  flex:0 0 auto;
+  color:var(--cart-accent-dark,#111827);
+  stroke-width:1.8;
+}
+.classic-cart-page[class*="theme-"] .classic-cart-reason-card .classic-cart-field-label>span{
+  font:inherit;
+  color:inherit;
+}

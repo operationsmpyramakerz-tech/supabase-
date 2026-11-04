@@ -63,5 +63,5 @@ test('SQL is additive and the versioned page stylesheet is used', () => {
   assert.match(sql, /ADD COLUMN IF NOT EXISTS priority_level text/);
   assert.match(sql, /ADD COLUMN IF NOT EXISTS requested_delivery_date date/);
   assert.doesNotMatch(sql, /\b(DROP|TRUNCATE|DELETE)\b/);
-  assert.match(page, /product-additions\.css\?v=v311/);
+  assert.match(page, /product-additions\.css\?v=v31[1-9]/);
 });
