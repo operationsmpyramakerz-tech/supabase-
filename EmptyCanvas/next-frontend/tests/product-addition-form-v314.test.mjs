@@ -29,7 +29,7 @@ test('generic Unit entry is excluded from units while real units remain selectab
 });
 
 test('mobile footer leaves safe space from browser navigation bar and scrolls content separately', () => {
-  assert.match(css, /\.addition-dialog-overlay\{padding:38px 10px calc\(34px \+ env\(safe-area-inset-bottom,0px\)\)\}/);
+  assert.match(css, /\.addition-dialog-overlay\{padding:38px 0 calc\(34px \+ env\(safe-area-inset-bottom,0px\)\)\}/);
   assert.match(css, /max-height:calc\(100dvh - 86px/);
   assert.match(css, /\.addition-dialog__body\{[\s\S]*?overflow-y:auto/);
 });
@@ -44,6 +44,6 @@ test('black raised icon has no external light border and price has no inner focu
 });
 
 test('new CSS version used consistently by cart and review pages', () => {
-  assert.match(read('../components/orders/ShoppingCartPageServer.jsx'), /product-additions\.css\?v=v314/);
-  assert.match(read('../app/products/addition-requests/page.jsx'), /product-additions\.css\?v=v314/);
+  assert.match(read('../components/orders/ShoppingCartPageServer.jsx'), /product-additions\.css\?v=v315/);
+  assert.match(read('../app/products/addition-requests/page.jsx'), /product-additions\.css\?v=v315/);
 });

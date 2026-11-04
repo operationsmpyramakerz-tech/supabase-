@@ -351,8 +351,11 @@
 @media(max-width:760px){
   /* Leave clearance for Android gesture/browser navigation bars. The body,
      not the action footer, scrolls when the keyboard reduces viewport height. */
-  .addition-dialog-overlay{padding:38px 10px calc(34px + env(safe-area-inset-bottom,0px))}
+  /* Match the edge-to-edge width of Select Component on mobile while keeping the footer clear of browser navigation. */
+  .addition-dialog-overlay{padding:38px 0 calc(34px + env(safe-area-inset-bottom,0px))}
   .addition-dialog{
+    width:100%;
+    max-width:none;
     max-height:calc(100dvh - 86px - env(safe-area-inset-bottom,0px));
     border-bottom:1px solid #e2e8f0;
     border-radius:24px;

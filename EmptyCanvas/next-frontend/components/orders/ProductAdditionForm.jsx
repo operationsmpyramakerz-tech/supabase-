@@ -120,7 +120,7 @@ export default function ProductAdditionForm({ initial = {}, units = [], tags = [
         <button className="addition-dialog__close" type="button" disabled={busy} onClick={onClose} aria-label="Close"><AdditionIcon name="x" size={21}/></button>
       </header>
       <div className="addition-dialog__body">
-        <div className="addition-dialog__intro"><h2 id="addition-dialog-heading">{review ? "Review New Product" : "Add New Product Request"}</h2><p>{review ? "Review the details before adding this item to Products." : "This item will be sent for review. It will not appear in Products automatically."}</p></div>
+        <div className="addition-dialog__intro"><h2 id="addition-dialog-heading">{review ? "Review New Product" : "Add New Product Request"}</h2>{review ? <p>Review the details before adding this item to Products.</p> : null}</div>
         <div className="addition-dialog__grid">
           <label className="addition-field addition-field--full"><span>Product Name <b>*</b></span><input required maxLength={250} disabled={busy} placeholder="Example: Arduino Nano Type-C USB" value={form.name} onChange={event => update("name", event.target.value)}/></label>
           <label className="addition-field"><span>ID Code <small>(Optional)</small></span><input maxLength={80} disabled={busy} placeholder="Optional" value={form.idCode} onChange={event => update("idCode", event.target.value)} /></label>
