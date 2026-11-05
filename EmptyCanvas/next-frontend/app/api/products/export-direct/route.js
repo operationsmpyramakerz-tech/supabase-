@@ -3,6 +3,7 @@ import { getDirectAccountGate } from "../../../../lib/products-auth";
 import { featureGate } from "../../../../lib/feature-permissions-server";
 import { validateProductExportParams } from "../../../../lib/export-access-policy.mjs";
 import { renderProposalKitExport } from "../../../../lib/proposal-kit-export-service";
+import { exportDocumentOrigin } from "../../../../lib/export-product-resource.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -57,6 +58,7 @@ export async function GET(request) {
       repeatedComponents: url.searchParams.get("repeatedComponents") || url.searchParams.get("repeatedComponentMode") || "separate",
       logic: url.searchParams.get("logic") || url.searchParams.get("combineLogic") || "add",
       totalQty: boolParam(url.searchParams.get("totalQty")),
+      publicOrigin: exportDocumentOrigin(request, process.env.ERP_PUBLIC_APP_ORIGIN),
     });
     const buffer = Buffer.isBuffer(result?.buffer) ? result.buffer : Buffer.from(result?.buffer || []);
     return new Response(buffer, {

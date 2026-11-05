@@ -6,6 +6,7 @@ import pdfPageNumbersModule from "./pdfPageNumbers";
 import pdfHeaderModule from "./pdfHeader";
 import pdfArabicSupportModule from "./pdfArabicSupport";
 import { getProductsList } from "./products-service";
+import { exportProductResourceUrl } from "./export-product-resource.mjs";
 import {
   getKit,
   getProposal,
@@ -254,7 +255,7 @@ async function membershipHierarchy(account) {
   return { byProduct, kitMeta };
 }
 
-function rowFromItem(item, product, { kitScope = null } = {}) {
+function rowFromItem(item, product, { kitScope = null, publicOrigin = "" } = {}) {
   const quantity = positiveQuantity(item?.quantity, 1);
   const unitPrice = Number(product?.unitPrice);
   const cleanUnitPrice = Number.isFinite(unitPrice) ? unitPrice : null;
@@ -263,7 +264,7 @@ function rowFromItem(item, product, { kitScope = null } = {}) {
     productId: pid,
     idCode: text(product?.displayId || product?.idCode || product?.id_code),
     name: text(product?.name || item?.productName || item?.product_name) || "Untitled Product",
-    url: text(product?.url || item?.url || item?.productUrl || item?.product_url),
+    url: exportProductResourceUrl(product, { origin: publicOrigin, fallbackUrl: product?.url || item?.url || item?.productUrl || item?.product_url }),
     tag: firstProductTag(product),
     quantity,
     sourceKits: kitScope
@@ -527,7 +528,7 @@ function totalsFor(rows = []) {
   }, { items: 0, quantity: 0, total: 0 });
 }
 
-async function singleContext({ account, scope, id, groupBy, repeatedComponents }) {
+async function singleContext({ account, scope, id, groupBy, repeatedComponents, publicOrigin }) {
   const cleanScope = scope === "kit" ? "kit" : "proposal";
   const [products, detail] = await Promise.all([
     productMap(),
@@ -539,7 +540,7 @@ async function singleContext({ account, scope, id, groupBy, repeatedComponents }
     error.status = 404;
     throw error;
   }
-  const rows = (detail?.items || []).map((item) => rowFromItem(item, products.get(text(item?.productId)) || {}, { kitScope: cleanScope === "kit" ? parent : null }));
+  const rows = (detail?.items || []).map((item) => rowFromItem(item, products.get(text(item?.productId)) || {}, { kitScope: cleanScope === "kit" ? parent : null, publicOrigin }));
   const mode = groupMode(groupBy);
   const membership = mode === "kit-tag" ? await membershipHierarchy(account) : null;
   return {
@@ -560,7 +561,7 @@ function combinedQuantity(values, logic) {
   return quantities.reduce((sum, value) => sum + value, 0);
 }
 
-async function combinedContext({ account, proposalIds, logic, groupBy, repeatedComponents }) {
+async function combinedContext({ account, proposalIds, logic, groupBy, repeatedComponents, publicOrigin }) {
   const ids = idsList(proposalIds);
   if (ids.length < 2) {
     const error = new Error("Please select at least two proposals to combine.");
@@ -577,7 +578,7 @@ async function combinedContext({ account, proposalIds, logic, groupBy, repeatedC
     const sourceId = text(detail?.proposal?.id);
     for (const item of detail?.items || []) {
       const product = products.get(text(item?.productId)) || {};
-      const base = rowFromItem(item, product);
+      const base = rowFromItem(item, product, { publicOrigin });
       const key = base.productId ? `id:${base.productId}` : `name:${norm(base.name)}`;
       if (!rowsMap.has(key)) rowsMap.set(key, { ...base, quantity: 0, totalPrice: base.unitPrice === null ? null : 0, sourceQuantities: {}, sourceKitQuantities: {} });
       const row = rowsMap.get(key);
@@ -1090,6 +1091,7 @@ export async function renderProposalKitExport({
   repeatedComponents = "separate",
   logic = "add",
   totalQty = false,
+  publicOrigin = "",
 } = {}) {
   const cleanKind = text(kind).toLowerCase() === "excel" ? "excel" : "pdf";
   const cleanScope = text(scope).toLowerCase();
@@ -1100,8 +1102,8 @@ export async function renderProposalKitExport({
     throw error;
   }
   const context = cleanScope === "combined"
-    ? await combinedContext({ account, proposalIds, logic, groupBy, repeatedComponents })
-    : await singleContext({ account, scope: cleanScope === "kit" ? "kit" : "proposal", id: text(id), groupBy, repeatedComponents });
+    ? await combinedContext({ account, proposalIds, logic, groupBy, repeatedComponents, publicOrigin })
+    : await singleContext({ account, scope: cleanScope === "kit" ? "kit" : "proposal", id: text(id), groupBy, repeatedComponents, publicOrigin });
 
   const date = new Date().toISOString().slice(0, 10);
   if (cleanKind === "excel") {

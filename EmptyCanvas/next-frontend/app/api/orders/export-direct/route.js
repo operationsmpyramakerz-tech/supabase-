@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getLegacyAccountGate } from "../../../../lib/products-auth";
 import { featureGate } from "../../../../lib/feature-permissions-server";
 import { renderOrderExport } from "../../../../lib/order-export-service";
+import { exportDocumentOrigin } from "../../../../lib/export-product-resource.mjs";
 import { loadCurrentOrderDetails } from "../../../../lib/current-orders-data";
 import { loadOrdersReviewDetails } from "../../../../lib/orders-review-data";
 import { loadMaintenanceOrderDetails } from "../../../../lib/maintenance-orders-data";
@@ -89,6 +90,7 @@ export async function POST(request) {
       template: body?.template,
       sparePartColumns: body?.sparePartColumns,
       checklist: body?.checklist,
+      publicOrigin: exportDocumentOrigin(request, process.env.ERP_PUBLIC_APP_ORIGIN),
     });
 
     const fileName = safeDownloadName(result?.fileName, body?.kind === "excel" ? "order.xlsx" : "order.pdf");

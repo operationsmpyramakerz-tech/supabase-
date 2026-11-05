@@ -22,14 +22,26 @@ export async function GET(request) {
   if (!catalogAllowed) {
     // Shopping Cart can legitimately list Products without granting Kits.
     const shoppingGate = await getDirectAccountGate(["Create New Order"]);
-    if (!shoppingGate.ok) {
-      const status = shoppingGate.status === 401 || kitsGate.status === 401 ? 401
-        : shoppingGate.status === 403 && kitsGate.status === 403 ? 403
-        : shoppingGate.status || 403;
-      return NextResponse.json({ ok: false, error: shoppingGate.error || "Access denied." }, { status });
-    }
-    if (!featureAllowed(shoppingGate.account, "orders.shopping.view") || !shoppingSourceAllowed(shoppingGate.account, "components")) {
-      return NextResponse.json({ ok: false, error: "Product file download is not permitted." }, { status: 403 });
+    const shoppingAllowed = shoppingGate.ok &&
+      featureAllowed(shoppingGate.account, "orders.shopping.view") &&
+      shoppingSourceAllowed(shoppingGate.account, "components");
+    if (!shoppingAllowed) {
+      // Links embedded in downloaded Orders PDF/Excel files may be opened later
+      // outside the ERP UI. Preserve the specific order-export permissions.
+      const ordersGate = await getDirectAccountGate(["Current Orders", "Operations Orders", "Orders Review", "Maintenance Orders"]);
+      const ordersAllowed = ordersGate.ok && (
+        featureAllowed(ordersGate.account, "orders.my.export") ||
+        featureAllowed(ordersGate.account, "orders.operations.export") ||
+        featureAllowed(ordersGate.account, "orders.review.view_details") ||
+        featureAllowed(ordersGate.account, "orders.maintenance.export")
+      );
+      if (!ordersAllowed) {
+        const denied = [kitsGate, shoppingGate, ordersGate];
+        const status = denied.some((gate) => gate.status === 401) ? 401
+          : denied.every((gate) => gate.status === 403) ? 403
+          : denied.find((gate) => gate.status && gate.status !== 403)?.status || 403;
+        return NextResponse.json({ ok: false, error: "Product file download is not permitted." }, { status });
+      }
     }
   }
 

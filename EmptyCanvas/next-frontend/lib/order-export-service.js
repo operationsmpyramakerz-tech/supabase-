@@ -5,6 +5,7 @@ import ExcelJS from "exceljs";
 import deliveryReceiptPdfModule from "./deliveryReceiptPdf";
 import maintenanceReceiptPdfModule from "./maintenanceReceiptPdf";
 import { getProductsCatalog } from "./products-service";
+import { exportProductResourceUrl } from "./export-product-resource.mjs";
 import { loadOperationsOrderDetails } from "./operations-orders-data";
 import { COMBINED_ORDER_METRIC_KEYS, combinedMetricColumnKey, mergeCombinedOrderRows } from "./combined-order-rows.mjs";
 import { mapSelectedCombinedOrderItems } from "./combined-order-groups.mjs";
@@ -211,6 +212,7 @@ async function buildOrderExportPayload(orderIds = [], account = {}, {
   repeatedComponentMode = "merge",
   preparedItems = null,
   preparedProductMaps = null,
+  publicOrigin = "",
 } = {}) {
   const items = Array.isArray(preparedItems) ? preparedItems : await loadOperationsOrderDetails(orderIds);
   if (!Array.isArray(items) || !items.length) {
@@ -237,7 +239,7 @@ async function buildOrderExportPayload(orderIds = [], account = {}, {
   let grandQty = 0;
   let grandTotal = 0;
   for (const item of items) {
-    const product = productMaps.byName.get(normKey(item?.productName)) || null;
+    const product = productMaps.byId.get(text(item?.productId)) || productMaps.byName.get(normKey(item?.productName)) || null;
     const qtyCandidate = item?.quantityReceived !== null && typeof item?.quantityReceived !== "undefined"
       ? item.quantityReceived
       : (item?.quantityProgress !== null && typeof item?.quantityProgress !== "undefined" ? item.quantityProgress : item?.quantity);
@@ -279,7 +281,7 @@ async function buildOrderExportPayload(orderIds = [], account = {}, {
       sparePartsReplacedIds: Array.isArray(item?.sparePartsReplacedIds) ? item.sparePartsReplacedIds : [],
       sparePartsReplacedNames: Array.isArray(item?.sparePartsReplacedNames) ? item.sparePartsReplacedNames : [],
       sparePartsReplacedName: item?.sparePartsReplacedName || null,
-      link: text(item?.productUrl || product?.url),
+      link: exportProductResourceUrl(product, { origin: publicOrigin, fallbackUrl: item?.productUrl || product?.url }),
       productTag: text(item?.productTag || item?.productTags?.[0]) || "Uncategorized",
       kitTag: text(item?.kitTag) || "Unassigned kit",
       kitFolderName: text(item?.kitFolderName) || "Unfiled Kits",
@@ -336,7 +338,7 @@ function normalizeCombinedOrders(value = []) {
   return groups;
 }
 
-async function buildCombinedOrderExportPayload(combinedOrders = [], account = {}) {
+async function buildCombinedOrderExportPayload(combinedOrders = [], account = {}, publicOrigin = "") {
   const groups = normalizeCombinedOrders(combinedOrders);
   if (groups.length < 2) return null;
 
@@ -365,6 +367,7 @@ async function buildCombinedOrderExportPayload(combinedOrders = [], account = {}
     repeatedComponentMode: "merge",
     preparedItems: items,
     preparedProductMaps: productMaps,
+    publicOrigin,
   }));
   const resolvedOrderPayloads = await Promise.all(orderPayloads);
 
@@ -679,7 +682,7 @@ function placeholderSparePartName(value) {
   return /^(?:none|no\s+spare\s+parts?|n\/?a|—|-)?$/i.test(text(value));
 }
 
-function resolveSparePartsForItem(item = {}, productMaps = {}) {
+function resolveSparePartsForItem(item = {}, productMaps = {}, publicOrigin = "") {
   const out = [];
   const seen = new Set();
   const add = (entry = {}) => {
@@ -707,7 +710,7 @@ function resolveSparePartsForItem(item = {}, productMaps = {}) {
       name: name || "Spare part",
       unit,
       qty,
-      link: text(entry?.url || entry?.link || product?.url),
+      link: exportProductResourceUrl(product, { origin: publicOrigin, fallbackUrl: entry?.url || entry?.link || product?.url }),
     });
   };
 
@@ -718,8 +721,8 @@ function resolveSparePartsForItem(item = {}, productMaps = {}) {
   return out;
 }
 
-function resolveSpareEntries(entries = [], productMaps = {}) {
-  return resolveSparePartsForItem({ sparePartsReplacedEntries: Array.isArray(entries) ? entries : [] }, productMaps);
+function resolveSpareEntries(entries = [], productMaps = {}, publicOrigin = "") {
+  return resolveSparePartsForItem({ sparePartsReplacedEntries: Array.isArray(entries) ? entries : [] }, productMaps, publicOrigin);
 }
 
 function normalizeMaintenanceSpareColumns(value) {
@@ -729,7 +732,7 @@ function normalizeMaintenanceSpareColumns(value) {
   return selected.length ? [...new Set(selected)] : allowed;
 }
 
-async function renderMaintenancePdf({ payload, template = false, sparePartColumns, checklist }) {
+async function renderMaintenancePdf({ payload, template = false, sparePartColumns, checklist, publicOrigin = "" }) {
   if (orderTypeKey(payload?.first?.orderType) !== orderTypeKey("Request Maintenance")) {
     const error = new Error("This export is only available for maintenance orders.");
     error.status = 400;
@@ -791,10 +794,13 @@ async function renderMaintenancePdf({ payload, template = false, sparePartColumn
       actualIssueDescription: template ? "" : (log?.actualIssueDescription || "—"),
       repairAction: template ? "" : (log?.repairAction || "—"),
       resolutionMethod: template ? "" : (log?.resolutionMethod || "—"),
-      sparePartsNeeded: template ? [] : resolveSpareEntries(log?.sparePartsNeededEntries || [], payload.productMaps),
-      spareParts: template ? [] : resolveSpareEntries(log?.sparePartsReplacedEntries || [], payload.productMaps),
+      sparePartsNeeded: template ? [] : resolveSpareEntries(log?.sparePartsNeededEntries || [], payload.productMaps, publicOrigin),
+      spareParts: template ? [] : resolveSpareEntries(log?.sparePartsReplacedEntries || [], payload.productMaps, publicOrigin),
       maintenanceChecklist: checklistProvided && itemHistory.length <= 1 ? selectedChecklist : (template ? [] : (Array.isArray(log?.maintenanceChecklist) ? log.maintenanceChecklist : [])),
-      link: item?.productUrl || payload.rows?.[index]?.link || "",
+      link: exportProductResourceUrl(
+        payload.productMaps?.byId?.get(text(item?.productId)) || payload.productMaps?.byName?.get(normKey(item?.productName)),
+        { origin: publicOrigin, fallbackUrl: item?.productUrl || payload.rows?.[index]?.link || "" },
+      ),
       logIndex,
       logLabel: logIndex === 0 ? "Log One" : logIndex === 1 ? "Log Two" : `Log ${logIndex + 1}`,
       loggedAt: log?.loggedAt || null,
@@ -1043,7 +1049,7 @@ async function renderProposalStyleExcel(payload, { selectedColumns = [], exportI
   return Buffer.from(buffer);
 }
 
-async function renderMaintenanceExcel(payload, { selectedColumns = [], exportInstruction } = {}) {
+async function renderMaintenanceExcel(payload, { selectedColumns = [], exportInstruction, publicOrigin = "" } = {}) {
   const columnCount = Math.max(1, selectedColumns.length);
   const lastCol = excelColumnName(columnCount);
   const workbook = new ExcelJS.Workbook();
@@ -1156,7 +1162,7 @@ async function renderMaintenanceExcel(payload, { selectedColumns = [], exportIns
   };
   const items = (payload.items || []).slice().sort((a, b) => text(a?.productName).localeCompare(text(b?.productName)));
   for (const item of items) {
-    const spareParts = resolveSparePartsForItem(item, payload.productMaps);
+    const spareParts = resolveSparePartsForItem(item, payload.productMaps, publicOrigin);
     const itemIssue = item?.actualIssueDescription || item?.issueDescription || item?.reason || "No Issue";
     const rows = spareParts.length ? spareParts : [{ name: "No spare parts replaced", idCode: "", unit: 0, qty: 1, link: "" }];
     for (const part of rows) {
@@ -1187,7 +1193,7 @@ async function renderMaintenanceExcel(payload, { selectedColumns = [], exportIns
   return Buffer.from(await workbook.xlsx.writeBuffer());
 }
 
-async function renderExcel({ payload, tab, columns, instruction, sortMode }) {
+async function renderExcel({ payload, tab, columns, instruction, sortMode, publicOrigin = "" }) {
   const isCombined = Array.isArray(payload?.combinedOrders) && payload.combinedOrders.length > 1;
   const selectedColumns = isCombined
     ? selectedCombinedColumnDefs(columns, payload, { tab })
@@ -1199,7 +1205,7 @@ async function renderExcel({ payload, tab, columns, instruction, sortMode }) {
   const exportSortMode = normalizeSortMode(sortMode);
   const isMaintenance = orderTypeKey(exportPayload?.first?.orderType) === orderTypeKey("Request Maintenance");
   const buffer = isMaintenance
-    ? await renderMaintenanceExcel(exportPayload, { selectedColumns, exportInstruction })
+    ? await renderMaintenanceExcel(exportPayload, { selectedColumns, exportInstruction, publicOrigin })
     : await renderProposalStyleExcel(exportPayload, { selectedColumns, exportInstruction, exportSortMode });
   return {
     buffer,
@@ -1222,6 +1228,7 @@ export async function renderOrderExport({
   template = false,
   sparePartColumns = null,
   checklist = null,
+  publicOrigin = "",
 } = {}) {
   const ids = [...new Set((Array.isArray(orderIds) ? orderIds : []).map((id) => text(id)).filter(Boolean))];
   if (ids.length > 5000) {
@@ -1252,11 +1259,11 @@ export async function renderOrderExport({
     }
   }
   const payload = normalizedCombinedOrders.length > 1
-    ? await buildCombinedOrderExportPayload(normalizedCombinedOrders, account)
-    : await buildOrderExportPayload(ids, account, { repeatedComponentMode });
+    ? await buildCombinedOrderExportPayload(normalizedCombinedOrders, account, publicOrigin)
+    : await buildOrderExportPayload(ids, account, { repeatedComponentMode, publicOrigin });
   const cleanKind = text(kind).toLowerCase();
-  if (cleanKind === "maintenance-pdf") return await renderMaintenancePdf({ payload, template, sparePartColumns, checklist });
-  if (cleanKind === "excel") return await renderExcel({ payload, tab, columns, instruction, sortMode });
+  if (cleanKind === "maintenance-pdf") return await renderMaintenancePdf({ payload, template, sparePartColumns, checklist, publicOrigin });
+  if (cleanKind === "excel") return await renderExcel({ payload, tab, columns, instruction, sortMode, publicOrigin });
   return await renderDeliveryPdf({ payload, tab, columns, instruction, sortMode, signatureLabels });
 }
 
