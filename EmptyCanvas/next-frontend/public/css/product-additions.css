@@ -369,3 +369,24 @@
   .addition-dialog-overlay{padding-bottom:calc(27px + env(safe-area-inset-bottom,0px))}
   .addition-dialog{max-height:calc(100dvh - 79px - env(safe-area-inset-bottom,0px))}
 }
+
+/* v316 — continuous white bottom-sheet corners on mobile, like Select Component. */
+@media(max-width:760px){
+  .addition-dialog-overlay::after{
+    content:"";
+    position:fixed;
+    z-index:0;
+    left:0;
+    right:0;
+    bottom:0;
+    height:max(96px,env(safe-area-inset-bottom,0px));
+    background:#fff;
+    pointer-events:none;
+  }
+  .addition-dialog{
+    z-index:1;
+    border-radius:24px 24px 0 0;
+    border-bottom:0;
+  }
+  .addition-dialog__footer{border-radius:0;background:#fff}
+}

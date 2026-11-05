@@ -23,6 +23,6 @@ test("new request has same edge-to-edge mobile width as Select Component", () =>
 });
 
 test("updated style revision is loaded by both cart and review", () => {
-  assert.match(read("../components/orders/ShoppingCartPageServer.jsx"), /product-additions\.css\?v=v315/);
-  assert.match(read("../app/products/addition-requests/page.jsx"), /product-additions\.css\?v=v315/);
+  assert.match(read("../components/orders/ShoppingCartPageServer.jsx"), /product-additions\.css\?v=v3(?:1[6-9]|[2-9][0-9])/);
+  assert.match(read("../app/products/addition-requests/page.jsx"), /product-additions\.css\?v=v3(?:1[6-9]|[2-9][0-9])/);
 });

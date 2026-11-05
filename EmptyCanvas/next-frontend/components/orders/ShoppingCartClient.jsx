@@ -5,6 +5,7 @@ import { confirmDelete } from "../../lib/client-confirm";
 import dynamic from "next/dynamic";
 import { navigateWithinApp } from "../../lib/client-navigation";
 import { ShoppingCartPrioritySelect } from "./ShoppingCartMetaControls";
+import { parseCartQuantityInput, stepCartQuantityInput } from "../../lib/shopping-cart-quantity-input.mjs";
 
 const ProductPicker = dynamic(() => import("./ShoppingCartDialogs").then((module) => module.ProductPicker), { ssr: false });
 const ProductAdditionForm = dynamic(() => import("./ProductAdditionForm"), { ssr: false });
@@ -394,6 +395,65 @@ function CartThumb({ product, index }) {
   );
 }
 
+// Allow direct quantity entry without saving an incomplete number on each keystroke.
+// The existing +/- controls still work, including for fractional quantities.
+function CartQuantityEditor({ item, product, withdraw, onQuantityChange }) {
+  const qty = quantity(item.quantity, 1);
+  const [draft, setDraft] = useState(() => formatQuantity(qty));
+  const [editing, setEditing] = useState(false);
+  const stepping = useRef(false);
+  const cancelled = useRef(false);
+
+  useEffect(() => {
+    if (!editing) setDraft(formatQuantity(qty));
+  }, [qty, editing]);
+
+  const parseDraft = () => parseCartQuantityInput(draft, qty);
+  const commit = () => {
+    if (stepping.current) return;
+    if (cancelled.current) { cancelled.current = false; setEditing(false); return; }
+    const next = parseDraft();
+    setDraft(formatQuantity(next));
+    setEditing(false);
+    if (next !== qty) onQuantityChange(item.id, next);
+  };
+  const adjust = (delta) => {
+    stepping.current = false;
+    const next = stepCartQuantityInput(draft, qty, delta);
+    setDraft(formatQuantity(next));
+    setEditing(false);
+    if (next !== qty) onQuantityChange(item.id, next);
+  };
+  const onInput = (event) => {
+    const next = event.target.value;
+    if (/^\d*(?:[.,]\d{0,3})?$/.test(next)) setDraft(next);
+  };
+
+  return <div className="classic-cart-qty-control">
+    <button className="classic-cart-qty-step classic-cart-qty-step--minus" type="button"
+      onPointerDown={() => { stepping.current = true; }} onPointerCancel={() => { stepping.current = false; }}
+      onClick={() => adjust(-1)} aria-label={`Decrease ${product.name} quantity`}>
+      <CartSvgIcon name="minus" size={15}/>
+    </button>
+    <span className="classic-cart-qty-editable">
+      {withdraw ? <span className="classic-cart-qty-sign" aria-hidden="true">−</span> : null}
+      <input type="text" inputMode="decimal" autoComplete="off" spellCheck={false}
+        aria-label={`Quantity for ${product.name}`} value={draft}
+        onFocus={event => { cancelled.current = false; setEditing(true); event.currentTarget.select(); }}
+        onChange={onInput} onBlur={commit}
+        onKeyDown={event => {
+          if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); }
+          if (event.key === "Escape") { cancelled.current = true; setDraft(formatQuantity(qty)); event.currentTarget.blur(); }
+        }}/>
+    </span>
+    <button className="classic-cart-qty-step classic-cart-qty-step--plus" type="button"
+      onPointerDown={() => { stepping.current = true; }} onPointerCancel={() => { stepping.current = false; }}
+      onClick={() => adjust(1)} aria-label={`Increase ${product.name} quantity`}>
+      <CartSvgIcon name="plus" size={15}/>
+    </button>
+  </div>;
+}
+
 function CartItem({ item, product, type, index, onEdit, onDelete, onQuantityChange }) {
   const maintenance = isMaintenance(type);
   const withdraw = isWithdraw(type);
@@ -437,15 +497,7 @@ function CartItem({ item, product, type, index, onEdit, onDelete, onQuantityChan
         <div className="classic-cart-card-metric classic-cart-card-metric--qty">
           <span>Qty</span>
           <div className="classic-cart-card-qty-unit-row">
-            <div className="classic-cart-qty-control">
-              <button className="classic-cart-qty-step classic-cart-qty-step--minus" type="button" onClick={() => onQuantityChange(item.id, Math.max(0.01, qty - 1))} aria-label={`Decrease ${product.name} quantity`}>
-                <CartSvgIcon name="minus" size={15}/>
-              </button>
-              <b aria-live="polite">{withdraw ? `-${formatQuantity(qty)}` : formatQuantity(qty)}</b>
-              <button className="classic-cart-qty-step classic-cart-qty-step--plus" type="button" onClick={() => onQuantityChange(item.id, qty + 1)} aria-label={`Increase ${product.name} quantity`}>
-                <CartSvgIcon name="plus" size={15}/>
-              </button>
-            </div>
+            <CartQuantityEditor item={item} product={product} withdraw={withdraw} onQuantityChange={onQuantityChange}/>
             <strong className="classic-cart-unit-badge" title={product.unit}>{product.unit}</strong>
           </div>
         </div>

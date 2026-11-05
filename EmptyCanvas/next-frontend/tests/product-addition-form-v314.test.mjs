@@ -44,6 +44,6 @@ test('black raised icon has no external light border and price has no inner focu
 });
 
 test('new CSS version used consistently by cart and review pages', () => {
-  assert.match(read('../components/orders/ShoppingCartPageServer.jsx'), /product-additions\.css\?v=v315/);
-  assert.match(read('../app/products/addition-requests/page.jsx'), /product-additions\.css\?v=v315/);
+  assert.match(read('../components/orders/ShoppingCartPageServer.jsx'), /product-additions\.css\?v=v3(?:1[6-9]|[2-9][0-9])/);
+  assert.match(read('../app/products/addition-requests/page.jsx'), /product-additions\.css\?v=v3(?:1[6-9]|[2-9][0-9])/);
 });
