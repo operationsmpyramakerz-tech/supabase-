@@ -7,6 +7,7 @@ import ActionLoadingModal, { useActionLoading } from "../ActionLoadingModal";
 import { confirmDelete } from "../../lib/client-confirm";
 import { featureAllowed } from "../../lib/feature-permissions-registry";
 import { removeSourceKitFromDraft } from "../../lib/proposal-source-kit-management.mjs";
+import { cartProductResource } from "../../lib/shopping-cart-product-resource.mjs";
 
 const NameModal = dynamic(() => import("./ProposalDialogs").then((module) => module.NameModal), { ssr: false });
 const PasswordModal = dynamic(() => import("./ProposalDialogs").then((module) => module.PasswordModal), { ssr: false });
@@ -32,6 +33,7 @@ const COMBINE_LOGICS = [
 
 const PROPOSAL_ICON_PATHS = {
   download: [<path key="p1" d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />, <polyline key="p2" points="7 10 12 15 17 10" />, <line key="l" x1="12" y1="15" x2="12" y2="3" />],
+  externalLink: [<path key="p1" d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />, <polyline key="p2" points="15 3 21 3 21 9" />, <line key="l" x1="10" y1="14" x2="21" y2="3" />],
   shoppingBag: [<path key="p1" d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z" />, <line key="l" x1="3" y1="6" x2="21" y2="6" />, <path key="p2" d="M16 10a4 4 0 0 1-8 0" />],
   folder: [<path key="p" d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />],
   archive: [<polyline key="p1" points="21 8 21 21 3 21 3 8" />, <rect key="r" x="1" y="3" width="22" height="5" rx="1" />, <line key="l" x1="10" y1="12" x2="14" y2="12" />],
@@ -110,6 +112,12 @@ function normalizeProduct(product, index = 0) {
     unitPrice: product?.unitPrice === null || typeof product?.unitPrice === "undefined" ? null : number(product.unitPrice),
     unit: text(product?.unit),
     url: normalizedUrl(product?.url),
+    // Keep the complete uploaded-file list; product.url is only the legacy first link.
+    attachments: Array.isArray(product?.attachments)
+      ? product.attachments.filter((file) => file?.url && file?.name).map((file) => ({
+          name: text(file.name), url: text(file.url), size: Number(file.size) || 0,
+        }))
+      : [],
     imageUrl: normalizedUrl(product?.imageUrl),
     tags: Array.isArray(product?.tags) ? product.tags.map(text).filter(Boolean) : [],
   };
@@ -1297,6 +1305,7 @@ export default function ProposalsClient({
   };
 
   const renderComponentCard = (row, proposalForCard = activeDetail?.proposal) => {
+    const resource = cartProductResource(row.product);
     const matrixRow = Array.isArray(proposalForCard?.combinedMatrix)
       ? proposalForCard.combinedMatrix.find((entry) => {
           const entryProductId = text(entry?.productId || entry?.product_id);
@@ -1361,9 +1370,14 @@ export default function ProposalsClient({
         </div>
 
         <footer className="kit-component-card__actions proposal-component-card__actions">
-          {row.product?.url ? (
-            <a className="kit-component-card__action kit-component-card__action--link" href={row.product.url} target="_blank" rel="noreferrer" aria-label={`Open product link for ${row.name}`}>
-              <span aria-hidden="true">↗</span><span>Open link</span>
+          {resource.href ? (
+            <a className="kit-component-card__action kit-component-card__action--link" href={resource.href}
+              target={resource.isZip ? undefined : "_blank"}
+              rel={resource.isZip ? undefined : "noreferrer"}
+              aria-label={resource.isZip ? `Download all ${resource.fileCount} files for ${row.name} as ZIP` : `Open product link for ${row.name}`}
+              title={resource.isZip ? `Download ${resource.fileCount} files as ZIP` : "Open link"}>
+              <ProposalIcon name={resource.isZip ? "download" : "externalLink"} />
+              <span>{resource.isZip ? `Download ZIP (${resource.fileCount} files)` : "Open link"}</span>
             </a>
           ) : (
             <span className="kit-component-card__action kit-component-card__action--disabled" aria-label="No product link">

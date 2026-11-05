@@ -11,14 +11,15 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET(request) {
-  // Used by Kits and by component cards in Shopping Cart. Preserve Kits
-  // access, and allow component-enabled Shopping Cart users to download even
-  // when they don't have the Kits page permission.
-  // Page-access checks stay independent: a legacy user with Create New
-  // Order access must not implicitly gain Kits access (or vice versa).
+  // Kits, Proposals and component-enabled Shopping Cart all display these
+  // product attachments. Check each module's explicit feature permissions:
+  // permission to open one module must not silently grant access to another.
   const kitsGate = await getDirectAccountGate(["Kits", "Proposals", "Products"]);
-  const kitsAllowed = kitsGate.ok && featureAllowed(kitsGate.account, "kits.view");
-  if (!kitsAllowed) {
+  const catalogAllowed = kitsGate.ok && (
+    featureAllowed(kitsGate.account, "kits.view") ||
+    featureAllowed(kitsGate.account, "proposals.view")
+  );
+  if (!catalogAllowed) {
     // Shopping Cart can legitimately list Products without granting Kits.
     const shoppingGate = await getDirectAccountGate(["Create New Order"]);
     if (!shoppingGate.ok) {
