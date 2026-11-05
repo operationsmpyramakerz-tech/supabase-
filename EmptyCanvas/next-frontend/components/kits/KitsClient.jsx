@@ -160,6 +160,11 @@ function normalizeProduct(product, index = 0) {
     unitPrice: product?.unitPrice === null || typeof product?.unitPrice === "undefined" ? null : number(product.unitPrice),
     unit: text(product?.unit),
     url: normalizedUrl(product?.url),
+    attachments: Array.isArray(product?.attachments)
+      ? product.attachments.filter((file) => file?.url && file?.name).map((file) => ({
+          name: text(file.name), url: text(file.url), size: Number(file.size) || 0,
+        }))
+      : [],
     imageUrl: normalizedUrl(product?.imageUrl),
     tags: Array.isArray(product?.tags) ? product.tags.map(text).filter(Boolean) : [],
   };
@@ -1132,60 +1137,70 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
     );
   };
 
-  const renderDetailComponentCard = (row) => (
-    <article className={`kit-component-card ${detailEdit ? "is-editable" : "is-view"}`} key={row.id}>
-      <header className="kit-component-card__head">
-        <div className="kit-component-card__title">
-          <span>Component</span>
-          <h4>{row.name}</h4>
+  const renderDetailComponentCard = (row) => {
+    const files = row.product?.attachments || [];
+    const multiFile = files.length > 1 && Boolean(row.product?.id);
+    const resourceUrl = multiFile
+      ? `/next/api/products/files-download?id=${encodeURIComponent(row.product.id)}`
+      : files[0]?.url || row.product?.url;
+    return (
+      <article className={`kit-component-card ${detailEdit ? "is-editable" : "is-view"}`} key={row.id}>
+        <header className="kit-component-card__head">
+          <div className="kit-component-card__title">
+            <span>Component</span>
+            <h4>{row.name}</h4>
+          </div>
+        </header>
+  
+        <div className="kit-component-card__metrics">
+          <div className="kit-component-card__metric kit-component-card__metric--qty">
+            <span>Qty</span>
+            {detailEdit && (createMode || can("item_edit")) ? (
+              <input
+                className="proposal-item-qty kit-component-card__qty-input"
+                type="number"
+                min="1"
+                step="1"
+                defaultValue={row.quantity}
+                key={`${row.id}-${row.quantity}`}
+                onChange={(event) => createMode ? updateQuantity(row, event.target.value) : undefined}
+                onBlur={(event) => !createMode ? updateQuantity(row, event.target.value) : undefined}
+                aria-label={`Quantity for ${row.name}`}
+              />
+            ) : <strong>{formatNumber(row.quantity)}</strong>}
+          </div>
+          <div className="kit-component-card__metric">
+            <span>Unit price</span>
+            <strong>{formatMoney(row.unitPrice)}</strong>
+          </div>
+          <div className="kit-component-card__metric kit-component-card__metric--total">
+            <span>Total price</span>
+            <strong>{formatMoney(row.totalPrice)}</strong>
+          </div>
         </div>
-      </header>
-
-      <div className="kit-component-card__metrics">
-        <div className="kit-component-card__metric kit-component-card__metric--qty">
-          <span>Qty</span>
-          {detailEdit && (createMode || can("item_edit")) ? (
-            <input
-              className="proposal-item-qty kit-component-card__qty-input"
-              type="number"
-              min="1"
-              step="1"
-              defaultValue={row.quantity}
-              key={`${row.id}-${row.quantity}`}
-              onChange={(event) => createMode ? updateQuantity(row, event.target.value) : undefined}
-              onBlur={(event) => !createMode ? updateQuantity(row, event.target.value) : undefined}
-              aria-label={`Quantity for ${row.name}`}
-            />
-          ) : <strong>{formatNumber(row.quantity)}</strong>}
-        </div>
-        <div className="kit-component-card__metric">
-          <span>Unit price</span>
-          <strong>{formatMoney(row.unitPrice)}</strong>
-        </div>
-        <div className="kit-component-card__metric kit-component-card__metric--total">
-          <span>Total price</span>
-          <strong>{formatMoney(row.totalPrice)}</strong>
-        </div>
-      </div>
-
-      <footer className="kit-component-card__actions">
-        {row.product?.url ? (
-          <a className="kit-component-card__action kit-component-card__action--link" href={row.product.url} target="_blank" rel="noreferrer" aria-label={`Open product link for ${row.name}`}>
-            <FeatherIcon name="externalLink" /><span>Open link</span>
-          </a>
-        ) : (
-          <span className="kit-component-card__action kit-component-card__action--disabled" aria-label="No product link">
-            <FeatherIcon name="minus" /><span>No link</span>
-          </span>
-        )}
-        {detailEdit && (createMode || can("item_delete")) ? (
-          <button type="button" className="kit-component-card__action kit-component-card__action--remove" onClick={() => removeItem(row)} aria-label={`Delete ${row.name}`} title="Delete">
-            <FeatherIcon name="trash" /><span>Remove</span>
-          </button>
-        ) : null}
-      </footer>
-    </article>
-  );
+  
+        <footer className="kit-component-card__actions">
+          {resourceUrl ? (
+            <a className="kit-component-card__action kit-component-card__action--link" href={resourceUrl}
+              target={multiFile ? undefined : "_blank"} rel={multiFile ? undefined : "noreferrer"}
+              aria-label={multiFile ? `Download all ${files.length} files for ${row.name} as ZIP` : `Open product link for ${row.name}`}
+              title={multiFile ? `Download ${files.length} files as ZIP` : "Open link"}>
+              <FeatherIcon name={multiFile ? "download" : "externalLink"} /><span>{multiFile ? `Download ZIP (${files.length} files)` : "Open link"}</span>
+            </a>
+          ) : (
+            <span className="kit-component-card__action kit-component-card__action--disabled" aria-label="No product link">
+              <FeatherIcon name="minus" /><span>No link</span>
+            </span>
+          )}
+          {detailEdit && (createMode || can("item_delete")) ? (
+            <button type="button" className="kit-component-card__action kit-component-card__action--remove" onClick={() => removeItem(row)} aria-label={`Delete ${row.name}`} title="Delete">
+              <FeatherIcon name="trash" /><span>Remove</span>
+            </button>
+          ) : null}
+        </footer>
+      </article>
+    );
+  };
 
   const renderLibraryFolder = (folder) => {
     const menuKey = `folder:${folder.id}`;
