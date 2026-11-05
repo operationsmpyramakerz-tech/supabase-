@@ -28,7 +28,8 @@ test('shopping cart displays compact select and add buttons with correct icons a
   assert.match(ui, /CartSvgIcon name="list-check" size=\{22\}/);
   assert.match(ui, /CartSvgIcon name="list-check" size=\{15\}/);
   assert.match(ui, /title="Delete product" aria-label=\{`Delete \$\{product\.name\}`\}/);
-  assert.match(ui, /aria-label=\{`Open \$\{product\.name\}`\}/);
+  assert.match(ui, /`Open \$\{product\.name\}`/);
+  assert.match(ui, /`Download all \$\{resource\.fileCount\} files for \$\{product\.name\} as ZIP`/);
   assert.doesNotMatch(ui, /<span>Delete<\/span>/);
   assert.doesNotMatch(ui, /<span>Open<\/span>/);
   assert.match(css, /v309.*compact Select\/Add actions/);

@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 import { navigateWithinApp } from "../../lib/client-navigation";
 import { ShoppingCartPrioritySelect } from "./ShoppingCartMetaControls";
 import { parseCartQuantityInput, stepCartQuantityInput } from "../../lib/shopping-cart-quantity-input.mjs";
+import { cartProductResource } from "../../lib/shopping-cart-product-resource.mjs";
 
 const ProductPicker = dynamic(() => import("./ShoppingCartDialogs").then((module) => module.ProductPicker), { ssr: false });
 const ProductAdditionForm = dynamic(() => import("./ProductAdditionForm"), { ssr: false });
@@ -104,6 +105,11 @@ function normalizeProduct(product, index = 0) {
     unitPrice: product?.unitPrice === null || typeof product?.unitPrice === "undefined" ? 0 : number(product.unitPrice),
     unit: text(product?.unit) || "Unit",
     url: normalizedUrl(product?.url),
+    attachments: Array.isArray(product?.attachments)
+      ? product.attachments.filter((file) => file?.url && file?.name).map((file) => ({
+          name: text(file.name), url: normalizedUrl(file.url), size: Number(file.size) || 0,
+        })).filter((file) => file.url)
+      : [],
     imageUrl: normalizedUrl(product?.imageUrl),
     tags: Array.isArray(product?.tags) ? product.tags.map(text).filter(Boolean) : [],
   };
@@ -332,6 +338,7 @@ function CartSvgIcon({ name, size = 18 }) {
     layers: <><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></>,
     "arrow-right": <><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></>,
     "arrow-left": <><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></>,
+    download: <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></>,
     "external-link": <><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></>,
     "list-check": <><path d="M9 6h12M9 12h12M9 18h12"/><path d="m2 6 2 2 3-4m-5 10 2 2 3-4"/></>,
     plus: <><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></>,
@@ -454,6 +461,22 @@ function CartQuantityEditor({ item, product, withdraw, onQuantityChange }) {
   </div>;
 }
 
+function CartProductResourceLink({ product }) {
+  const resource = cartProductResource(product);
+  if (!resource.href) {
+    return <button className="classic-cart-action classic-cart-action--open" type="button" disabled
+      aria-label="No product link" title="No product link"><CartSvgIcon name="external-link" size={17}/></button>;
+  }
+  return (
+    <a className="classic-cart-action classic-cart-action--open" href={resource.href}
+      target={resource.isZip ? undefined : "_blank"} rel={resource.isZip ? undefined : "noopener noreferrer"}
+      title={resource.isZip ? `Download ZIP (${resource.fileCount} files)` : "Open product"}
+      aria-label={resource.isZip ? `Download all ${resource.fileCount} files for ${product.name} as ZIP` : `Open ${product.name}`}>
+      <CartSvgIcon name={resource.isZip ? "download" : "external-link"} size={17}/>
+    </a>
+  );
+}
+
 function CartItem({ item, product, type, index, onEdit, onDelete, onQuantityChange }) {
   const maintenance = isMaintenance(type);
   const withdraw = isWithdraw(type);
@@ -470,7 +493,7 @@ function CartItem({ item, product, type, index, onEdit, onDelete, onQuantityChan
           <span>Issue Description</span><strong className={!item.issueDescription ? "is-empty" : ""}>{item.issueDescription || "—"}</strong>
         </button>
         <div className="classic-cart-card-actions">
-          {product.url ? <a className="classic-cart-action classic-cart-action--open" href={product.url} target="_blank" rel="noopener noreferrer" title="Open product" aria-label={`Open ${product.name}`}><CartSvgIcon name="external-link" size={17}/></a> : <button className="classic-cart-action classic-cart-action--open" type="button" disabled title="No product link" aria-label="No product link"><CartSvgIcon name="external-link" size={17}/></button>}
+          <CartProductResourceLink product={product}/>
           <button className="classic-cart-action classic-cart-action--delete" type="button" onClick={() => onDelete(item)} title="Delete product" aria-label={`Delete ${product.name}`}><CartSvgIcon name="trash" size={17}/></button>
         </div>
       </article>
@@ -489,7 +512,7 @@ function CartItem({ item, product, type, index, onEdit, onDelete, onQuantityChan
           </span>
         </div>
         <div className="classic-cart-card-actions classic-cart-card-actions--compact">
-          {product.url ? <a className="classic-cart-action classic-cart-action--open" href={product.url} target="_blank" rel="noopener noreferrer" aria-label={`Open ${product.name}`} title="Open product"><CartSvgIcon name="external-link" size={17}/></a> : <button className="classic-cart-action classic-cart-action--open" type="button" disabled aria-label="No product link" title="No product link"><CartSvgIcon name="external-link" size={17}/></button>}
+          <CartProductResourceLink product={product}/>
           <button className="classic-cart-action classic-cart-action--delete" type="button" onClick={() => onDelete(item)} aria-label={`Delete ${product.name}`} title="Delete product"><CartSvgIcon name="trash" size={17}/></button>
         </div>
       </div>

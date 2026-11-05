@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import JSZip from "jszip";
 import { Readable } from "node:stream";
 import { getDirectAccountGate } from "../../../../lib/products-auth";
-import { featureGate } from "../../../../lib/feature-permissions-server";
+import { featureAllowed, shoppingSourceAllowed } from "../../../../lib/feature-permissions-registry";
 import { getProduct, getProductsStorageBucket } from "../../../../lib/products-service";
 import { getSupabaseConfig } from "../../../../lib/supabase-rest";
 import { archiveEntries, fetchArchiveEntries, productArchiveName } from "../../../../lib/product-attachments-archive.mjs";
@@ -11,9 +11,26 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET(request) {
-  // The link is displayed in Kits; retain its existing view permission here.
-  const gate = featureGate(await getDirectAccountGate(["Kits", "Proposals", "Products"]), "kits.view");
-  if (!gate.ok) return NextResponse.json({ ok: false, error: gate.error }, { status: gate.status || 403 });
+  // Used by Kits and by component cards in Shopping Cart. Preserve Kits
+  // access, and allow component-enabled Shopping Cart users to download even
+  // when they don't have the Kits page permission.
+  // Page-access checks stay independent: a legacy user with Create New
+  // Order access must not implicitly gain Kits access (or vice versa).
+  const kitsGate = await getDirectAccountGate(["Kits", "Proposals", "Products"]);
+  const kitsAllowed = kitsGate.ok && featureAllowed(kitsGate.account, "kits.view");
+  if (!kitsAllowed) {
+    // Shopping Cart can legitimately list Products without granting Kits.
+    const shoppingGate = await getDirectAccountGate(["Create New Order"]);
+    if (!shoppingGate.ok) {
+      const status = shoppingGate.status === 401 || kitsGate.status === 401 ? 401
+        : shoppingGate.status === 403 && kitsGate.status === 403 ? 403
+        : shoppingGate.status || 403;
+      return NextResponse.json({ ok: false, error: shoppingGate.error || "Access denied." }, { status });
+    }
+    if (!featureAllowed(shoppingGate.account, "orders.shopping.view") || !shoppingSourceAllowed(shoppingGate.account, "components")) {
+      return NextResponse.json({ ok: false, error: "Product file download is not permitted." }, { status: 403 });
+    }
+  }
 
   try {
     const productId = String(new URL(request.url).searchParams.get("id") || "").trim();
