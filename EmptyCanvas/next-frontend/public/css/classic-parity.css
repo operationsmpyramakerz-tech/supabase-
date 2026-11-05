@@ -9960,3 +9960,30 @@ html[data-theme="dark"] body.operations-orders-page .next-operations-component-e
 .order-download-btn--purchase:hover{background:#d85907;border-color:#d85907}
 @media(max-width:750px){.order-download-actions:has(.order-download-btn--purchase){grid-template-columns:1fr 1fr}.order-download-btn--purchase{grid-column:1/-1}}
 @media(max-width:420px){.order-download-actions:has(.order-download-btn--purchase){grid-template-columns:1fr}}
+
+
+/* v326: Minimal sidebar — one divider directly below Home only. */
+/* Scope to the vertical sidebar: the mobile horizontal dock stays unchanged.
+   Home is the only nav item with sidebar-workspace-boundary. */
+@media (min-width: 769px) {
+  body.next-classic-shell-active .classic-app-shell > .sidebar
+  .sidebar-nav > .nav-list > li.sidebar-workspace-boundary {
+    position: relative !important;
+    margin-bottom: 14px !important;
+  }
+
+  body.next-classic-shell-active .classic-app-shell > .sidebar
+  .sidebar-nav > .nav-list > li.sidebar-workspace-boundary::after {
+    content: "" !important;
+    display: block !important;
+    position: absolute !important;
+    left: 50% !important;
+    bottom: -12px !important;
+    width: 48px !important;
+    height: 1px !important;
+    border-radius: 999px !important;
+    background: rgba(255, 255, 255, 0.28) !important;
+    transform: translateX(-50%) !important;
+    pointer-events: none !important;
+  }
+}
