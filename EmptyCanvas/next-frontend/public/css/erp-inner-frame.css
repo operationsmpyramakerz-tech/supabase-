@@ -1,0 +1,40 @@
+/* ERP v327 — restore the original inset black shell, without touching icons.
+ * This is deliberately loaded AFTER unified-white-workspace.css so the white
+ * main panel remains intact while the space around it becomes a black frame.
+ * The mobile bottom dock keeps its existing full-screen layout.
+ */
+@media (min-width: 769px) {
+  html[data-theme="light"] body.next-classic-shell-active:not(.login-page):not(.pwa-offline):not(.pwa-start)
+  .classic-app-shell:not([class*="-loading"]) {
+    background: #0b0c10 !important;
+    background-color: #0b0c10 !important;
+    background-image: none !important;
+    border-radius: 40px !important;
+    box-shadow: 0 22px 55px rgba(15, 23, 42, .13) !important;
+  }
+
+  /* Main area is the white inset panel within the existing black rail.
+     Widths, icon styling, header and page padding stay unchanged. */
+  html[data-theme="light"] body.next-classic-shell-active:not(.login-page):not(.pwa-offline):not(.pwa-start)
+  .classic-app-shell:not([class*="-loading"]) > .main-content {
+    border-radius: 32px !important;
+    background: #fff !important;
+    background-color: #fff !important;
+    overflow: hidden !important;
+  }
+}
+
+/* Retain scrolling, only hide its painted track and thumb. Neither changing
+   overflow-y nor clipping the page scroller is necessary. */
+body.next-classic-shell-active .classic-app-shell > .main-content > main,
+body.next-classic-shell-active .classic-app-shell > .sidebar > .sidebar-nav {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+body.next-classic-shell-active .classic-app-shell > .main-content > main::-webkit-scrollbar,
+body.next-classic-shell-active .classic-app-shell > .sidebar > .sidebar-nav::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  background: transparent !important;
+}
