@@ -1783,6 +1783,14 @@ body.products-page .products-grid.is-empty{
 .products-resource-remove-all{min-height:38px;display:flex;justify-content:center;align-items:center;gap:7px;width:100%;border:0;border-radius:11px;background:#f0f0f1;color:#373a41;font-size:12px;font-weight:800;cursor:pointer}
 .products-resource-remove-all:hover{background:#e5e7eb}
 .products-resource-remove-all svg{width:15px;height:15px}
+/* v320: keep file action glyphs perfectly centered inside their round backgrounds. */
+.products-resource-file__actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex:0 0 auto;min-width:0}
+.products-resource-file__actions>button{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;flex:0 0 39px;width:39px;height:39px;min-width:39px;min-height:39px;margin:0;padding:0;line-height:0;border:0;border-radius:50%;background:#f1f2f4;color:#252b34;cursor:pointer;vertical-align:middle}
+.products-resource-file__actions>button svg{display:block;position:static;margin:0;width:18px;height:18px;flex:0 0 auto;vertical-align:middle}
+.products-resource-file__actions>button:hover{background:#e8ebf0}
+.products-resource-file__actions>button:focus-visible{outline:2px solid #243145;outline-offset:2px}
+.products-resource-file__actions>button:disabled{opacity:.5;cursor:not-allowed}
+@media(max-width:640px){.products-resource-file__actions{gap:6px}.products-resource-file__actions>button{width:34px;height:34px;min-width:34px;min-height:34px;flex-basis:34px}}
 /* Stronger specificity than the shared .products-field span rule: white upload glyph. */
 .products-field .products-upload-field__icon{color:#fff!important}
 .products-field .products-upload-field__icon svg{color:#fff!important;stroke:#fff!important;opacity:1!important}

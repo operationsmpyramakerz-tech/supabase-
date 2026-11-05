@@ -46,10 +46,11 @@ test('Attachment upload route enforces Products create/edit feature access', () 
   assert.match(upload, /createProductFileUploadTicket/);
 });
 
-test('Server validates file extension, size, count and storage origin', () => {
+test('Server validates file size, count and storage origin without a file-extension whitelist', () => {
   assert.match(service, /MAX_PRODUCT_FILE_BYTES = 10 \* 1024 \* 1024/);
   assert.match(service, /MAX_PRODUCT_FILES = 10/);
-  assert.match(service, /PRODUCT_FILE_EXTENSIONS\.has\(extension\)/);
+  assert.doesNotMatch(service, /PRODUCT_FILE_EXTENSIONS/);
+  assert.match(service, /A valid product filename is required/);
   assert.match(service, /parsed\.origin !== origin\.origin/);
   assert.match(service, /products\/files\//);
   assert.match(service, /crypto\.randomBytes\(12\)/);

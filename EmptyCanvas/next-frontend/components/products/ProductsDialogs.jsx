@@ -125,15 +125,14 @@ export function ProductModal({ product, activeTag, tags, units, onClose, onSaved
     }
   };
 
-  const allowedResourceExt = new Set(["pdf", "zip", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "csv", "txt", "png", "jpg", "jpeg", "webp", "stl", "step", "stp", "dxf", "obj", "gcode", "ino"]);
   const addResourceFiles = (list) => {
     const incoming = Array.from(list || []);
     if (!incoming.length) return;
     setError("");
     const selected = [];
     for (const file of incoming) {
-      const ext = file.name.split(".").pop()?.toLowerCase();
-      if (!allowedResourceExt.has(ext)) { setError(`Unsupported file type: ${file.name}`); return; }
+      // Any filename/extension is accepted; size and count limits still apply.
+      if (!file.name?.trim()) { setError("Choose a file with a valid name."); return; }
       if (!file.size || file.size > 10 * 1024 * 1024) { setError(`File must be 1 byte–10 MB: ${file.name}`); return; }
       selected.push(file);
     }
@@ -168,7 +167,12 @@ export function ProductModal({ product, activeTag, tags, units, onClose, onSaved
     if (!upload?.signedUrl || !upload?.publicUrl) throw new Error("Could not prepare file upload.");
     const formData = new FormData();
     formData.append("cacheControl", String(upload.cacheControl || "3600"));
-    formData.append("", file, file.name);
+    // Preserve normal MIME types (e.g. PDFs) while making executable web
+    // documents download as binary rather than run in a browser.
+    const activeWebFile = /\.(?:html?|xhtml|svg|js|mjs|cjs|jsx|xml)$/i.test(file.name);
+    const uploadMime = activeWebFile ? "application/octet-stream" : (file.type || "application/octet-stream");
+    const downloadFile = new File([file], file.name, { type: uploadMime, lastModified: file.lastModified });
+    formData.append("", downloadFile, file.name);
     const response = await fetch(upload.signedUrl, {
       method: upload.method || "PUT", credentials: "omit", cache: "no-store",
       headers: upload.headers || { "x-upsert": "false" }, body: formData,
@@ -325,16 +329,20 @@ export function ProductModal({ product, activeTag, tags, units, onClose, onSaved
                       <div className="products-resource-file" key={`saved-${entry.url}`}>
                         <span className="products-resource-file__icon"><ClassicIcon name="file" /></span>
                         <span className="products-resource-file__details"><b title={entry.name}>{entry.name}</b><small>{entry.name.split(".").pop()?.toUpperCase()} | {fileSize(entry.size)}</small></span>
-                        <button type="button" title="Open/download file" aria-label={`Download ${entry.name}`} onClick={() => downloadResource(entry)}><ClassicIcon name="download" /></button>
-                        <button type="button" title="Remove file" aria-label={`Remove ${entry.name}`} onClick={() => setAttachments((current) => current.filter((_, i) => i !== index))} disabled={busy}><ClassicIcon name="trash" /></button>
+                        <span className="products-resource-file__actions">
+                          <button type="button" title="Open/download file" aria-label={`Download ${entry.name}`} onClick={() => downloadResource(entry)}><ClassicIcon name="download" /></button>
+                          <button type="button" title="Remove file" aria-label={`Remove ${entry.name}`} onClick={() => setAttachments((current) => current.filter((_, i) => i !== index))} disabled={busy}><ClassicIcon name="trash" /></button>
+                        </span>
                       </div>
                     ))}
                     {pendingFiles.map((file, index) => (
                       <div className="products-resource-file" key={`pending-${index}-${file.name}-${file.size}`}>
                         <span className="products-resource-file__icon"><ClassicIcon name="file" /></span>
                         <span className="products-resource-file__details"><b title={file.name}>{file.name}</b><small>{file.name.split(".").pop()?.toUpperCase()} | {fileSize(file.size)} · Pending upload</small></span>
-                        <button type="button" title="Download selected file" aria-label={`Download ${file.name}`} onClick={() => downloadResource({ file })}><ClassicIcon name="download" /></button>
-                        <button type="button" title="Remove file" aria-label={`Remove ${file.name}`} onClick={() => setPendingFiles((current) => current.filter((_, i) => i !== index))} disabled={busy}><ClassicIcon name="trash" /></button>
+                        <span className="products-resource-file__actions">
+                          <button type="button" title="Download selected file" aria-label={`Download ${file.name}`} onClick={() => downloadResource({ file })}><ClassicIcon name="download" /></button>
+                          <button type="button" title="Remove file" aria-label={`Remove ${file.name}`} onClick={() => setPendingFiles((current) => current.filter((_, i) => i !== index))} disabled={busy}><ClassicIcon name="trash" /></button>
+                        </span>
                       </div>
                     ))}
                     <button className="products-resource-remove-all" type="button" onClick={() => { setAttachments([]); setPendingFiles([]); }} disabled={busy}><ClassicIcon name="trash" /> Remove all uploaded files</button>
