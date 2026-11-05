@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 const ProductModal = dynamic(() => import("./ProductsDialogs").then((module) => module.ProductModal), { ssr: false });
 const TagModal = dynamic(() => import("./ProductsDialogs").then((module) => module.TagModal), { ssr: false });
 const ProductImageViewer = dynamic(() => import("./ProductsDialogs").then((module) => module.ProductImageViewer), { ssr: false });
+const ProductFilesViewer = dynamic(() => import("./ProductsDialogs").then((module) => module.ProductFilesViewer), { ssr: false });
 
 function preloadProductsDialogs() {
   void import("./ProductsDialogs");
@@ -67,6 +68,7 @@ function normalizeProduct(product, index = 0) {
     unitPrice: product?.unitPrice === null || typeof product?.unitPrice === "undefined" ? null : number(product.unitPrice),
     unit: text(product?.unit),
     url: normalizedUrl(product?.url),
+    attachments: Array.isArray(product?.attachments) ? product.attachments.filter((file) => file?.url && file?.name) : [],
     imageUrl: normalizedUrl(product?.imageUrl),
     tags: Array.isArray(product?.tags) ? product.tags.map(text).filter(Boolean) : [],
   };
@@ -130,7 +132,7 @@ function Toast({ toast, onClose }) {
   );
 }
 
-function ProductCard({ product, menuOpen, onMenu, onEdit, onDelete, onImage, canEdit = true, canDelete = true }) {
+function ProductCard({ product, menuOpen, onMenu, onEdit, onDelete, onImage, onFiles, canEdit = true, canDelete = true }) {
   const proxyImageUrl = product.id ? `/next/api/products/image?id=${encodeURIComponent(product.id)}` : "";
   const primaryImageUrl = product.imageUrl || proxyImageUrl;
   const [imagePreviewUrl, setImagePreviewUrl] = useState(primaryImageUrl);
@@ -174,6 +176,7 @@ function ProductCard({ product, menuOpen, onMenu, onEdit, onDelete, onImage, can
         <div className="product-card__details"><span className="product-card__code">{product.displayId || "No ID"}</span></div>
         <div className="product-card__bottom">
           <div className="product-card__price-wrap"><strong className="product-card__price">{formatMoney(product.unitPrice)}</strong>{product.unit ? <span className="product-card__unit"><ClassicIcon name="unit" />{product.unit}</span> : null}</div>
+          {product.attachments?.length > 1 ? <button type="button" className="product-card__files" title="View product files" onClick={() => onFiles(product)}>{product.attachments.length} files</button> : null}
           {product.url ? <a className="product-card__url" href={product.url} target="_blank" rel="noopener noreferrer" aria-label="Open product URL" title="Open product URL"><ClassicIcon name="external" /></a> : <span className="product-card__url is-disabled" title="No product URL"><ClassicIcon name="link" /></span>}
         </div>
       </div>
@@ -194,6 +197,7 @@ export default function ProductsClient({ initialCatalog = {}, bootstrapWarnings 
   const [modal, setModal] = useState(null);
   const [tagModal, setTagModal] = useState(null);
   const [imageViewer, setImageViewer] = useState(null);
+  const [filesViewer, setFilesViewer] = useState(null);
   const [toast, setToast] = useState(null);
   const filterRef = useRef(null);
 
@@ -372,7 +376,7 @@ export default function ProductsClient({ initialCatalog = {}, bootstrapWarnings 
               </div>
             </header>
             <div className={`products-grid ${group.items.length ? "" : "is-empty"}`}>
-              {group.items.length ? group.items.map((product) => <ProductCard product={product} menuOpen={productMenu === product.id} onMenu={(id) => setProductMenu((value) => value === id ? "" : id)} onEdit={(item) => { preloadProductsDialogs(); setProductMenu(""); setModal({ product: item, tag: firstTag(item) }); }} onDelete={deleteProduct} canEdit={permitted.edit} canDelete={permitted.delete} onImage={(url, name) => { preloadProductsDialogs(); setImageViewer({ url, name }); }} key={product.id} />) : <div className="products-group-empty"><span className="products-group-empty__icon"><ClassicIcon name="package" /></span><div><strong>No products in this tag yet</strong>{permitted.create ? <small>Use Add Product to create the first product in this group.</small> : null}</div></div>}
+              {group.items.length ? group.items.map((product) => <ProductCard product={product} menuOpen={productMenu === product.id} onMenu={(id) => setProductMenu((value) => value === id ? "" : id)} onEdit={(item) => { preloadProductsDialogs(); setProductMenu(""); setModal({ product: item, tag: firstTag(item) }); }} onDelete={deleteProduct} canEdit={permitted.edit} canDelete={permitted.delete} onImage={(url, name) => { preloadProductsDialogs(); setImageViewer({ url, name }); }} onFiles={(item) => { preloadProductsDialogs(); setFilesViewer(item); }} key={product.id} />) : <div className="products-group-empty"><span className="products-group-empty__icon"><ClassicIcon name="package" /></span><div><strong>No products in this tag yet</strong>{permitted.create ? <small>Use Add Product to create the first product in this group.</small> : null}</div></div>}
             </div>
           </section>
         ))}
@@ -381,6 +385,7 @@ export default function ProductsClient({ initialCatalog = {}, bootstrapWarnings 
       {modal ? <ProductModal product={modal.product} activeTag={modal.tag || activeTag} tags={tags} units={unitCatalog} canAddUnit={permitted.units} canUploadImage={permitted.imageUpload} onClose={() => setModal(null)} onSaved={productSaved} onUnitAdded={(unit) => setUnitCatalog((current) => mergeUnique([...current, unit]))} /> : null}
       {tagModal ? <TagModal mode={tagModal.mode} tag={tagModal.tag} onClose={() => setTagModal(null)} onSaved={tagSaved} /> : null}
       {imageViewer ? <ProductImageViewer image={imageViewer} onClose={() => setImageViewer(null)} /> : null}
+      {filesViewer ? <ProductFilesViewer product={filesViewer} onClose={() => setFilesViewer(null)} /> : null}
       <Toast toast={toast} onClose={() => setToast(null)} />
     </section>
   );

@@ -1753,3 +1753,48 @@ body.products-page .products-grid.is-empty{
 .product-card__unit{min-height:25px;padding:4px 8px;border:1px solid rgba(196,90,18,.13);border-radius:999px;background:#fff4e8;color:#a7460c;display:inline-flex;align-items:center;gap:5px;font-size:.68rem;font-weight:900;line-height:1;white-space:nowrap}
 .product-card__unit svg{width:12px;height:12px;stroke-width:2.4}
 @media(max-width:640px){.products-unit-add{grid-template-columns:1fr}.products-unit-add button{justify-content:center}.product-card__price-wrap{gap:5px}.product-card__unit{font-size:.62rem;padding:4px 6px}}
+
+/* v318 — Product URL OR uploaded reference files */
+.products-resource-field{min-width:0}
+.products-resource-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.products-resource-modes{display:inline-flex;align-items:center;padding:4px;gap:4px;border:1px solid #e4e7eb;border-radius:12px;background:#f7f8fa}
+.products-resource-modes button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:34px;padding:6px 12px;border:0;border-radius:9px;background:transparent;color:#69717f;font-size:12px;font-weight:850;cursor:pointer}
+.products-resource-modes button svg{width:15px;height:15px}
+.products-resource-modes button.is-active{color:#101827;background:#fff;box-shadow:0 2px 8px rgba(15,23,42,.09)}
+.products-resource-uploader{width:100%;padding:19px 19px 18px;border:1px solid #e9eaed;border-radius:20px;background:#fff;display:grid;gap:14px}
+.products-resource-uploader h3{margin:0;color:#101828;font-size:20px;font-weight:900;letter-spacing:-.025em}
+.products-resource-uploader__input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.products-resource-dropzone{display:flex;min-height:156px;width:100%;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:18px;border:2px dotted #c3c6cb;border-radius:19px;background:#fff;color:#414650;cursor:pointer;transition:background .18s,border-color .18s}
+.products-resource-dropzone:hover,.products-resource-dropzone.is-dragging{background:#f7f9fc;border-color:#687284}
+.products-resource-dropzone__plus{width:44px;height:44px;display:grid;place-items:center;color:#111;border:2px solid #111;border-radius:50%;margin-bottom:4px}
+.products-resource-dropzone__plus svg{width:26px;height:26px;stroke-width:2}
+.products-resource-dropzone>span:not(.products-resource-dropzone__plus){font-size:15px;font-weight:600;text-align:center}
+.products-resource-dropzone small{color:#777f8c;font-size:12px;font-weight:600;text-align:center}
+.products-resource-list{display:grid;gap:10px}
+.products-resource-file{display:flex;align-items:center;gap:12px;min-height:74px;padding:10px 12px;border:1px solid #d6d8dd;border-radius:16px;background:#fff;text-decoration:none;color:#151a24}
+.products-resource-file__icon{color:#cc536b!important;flex:0 0 auto;display:grid;place-items:center;width:35px;height:40px}
+.products-resource-file__icon svg{width:29px;height:29px;stroke-width:1.7}
+.products-resource-file__details{display:grid;gap:4px;min-width:0;flex:1}
+.products-resource-file__details b{font-size:14px;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#1c2535}
+.products-resource-file__details small{color:#878e9a;font-size:12px;font-weight:600}
+.products-resource-file>button,.products-resource-file__download{width:39px;height:39px;flex:0 0 auto;border:0;border-radius:50%;background:#f1f2f4;color:#252b34;display:grid;place-items:center;cursor:pointer}
+.products-resource-file>button:hover,.products-resource-file:hover .products-resource-file__download{background:#e8ebf0}
+.products-resource-file>button svg,.products-resource-file__download svg{width:18px;height:18px}
+.products-resource-remove-all{min-height:38px;display:flex;justify-content:center;align-items:center;gap:7px;width:100%;border:0;border-radius:11px;background:#f0f0f1;color:#373a41;font-size:12px;font-weight:800;cursor:pointer}
+.products-resource-remove-all:hover{background:#e5e7eb}
+.products-resource-remove-all svg{width:15px;height:15px}
+/* Stronger specificity than the shared .products-field span rule: white upload glyph. */
+.products-field .products-upload-field__icon{color:#fff!important}
+.products-field .products-upload-field__icon svg{color:#fff!important;stroke:#fff!important;opacity:1!important}
+.product-card__files{padding:4px 6px;border:1px solid #e1e5eb;border-radius:7px;background:#f7f9fc;color:#334155;font-size:10px;font-weight:800;white-space:nowrap;cursor:pointer}
+.product-card__files:hover{background:#e5eaf3}
+.products-files-viewer{max-width:640px}
+.products-files-viewer h2{margin:10px 58px 24px 0;line-height:1.25;font-size:23px}
+.products-files-viewer .products-resource-list{max-height:55vh;overflow:auto}
+@media(max-width:640px){
+  .products-resource-uploader{padding:12px;border-radius:15px}
+  .products-resource-dropzone{min-height:140px}
+  .products-resource-file{gap:7px;padding:9px}
+  .products-resource-file__details b{font-size:12px}
+  .products-resource-file>button{width:34px;height:34px}
+}

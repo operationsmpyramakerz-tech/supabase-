@@ -1,4 +1,5 @@
 import "server-only";
+import crypto from "node:crypto";
 import { parseStrictImageDataUrl } from "./strict-upload-image.mjs";
 import {
   createSignedUploadUrl,
@@ -24,7 +25,7 @@ let productProjectionSupported = null;
 // Product cards/pickers only use this compact projection. Full rows are still
 // available through the mutation/detail paths when needed. Legacy/custom
 // schemas automatically fall back to select=* once per warm process.
-const PRODUCT_LIST_SELECT = "id,name,id_code,unit_price,unit,url,image_url,tags";
+const PRODUCT_LIST_SELECT = "id,name,id_code,unit_price,unit,url,image_url,tags,attachments";
 
 function productReadCacheGet(key) {
   const entry = _productReadCache.get(key);
@@ -277,7 +278,16 @@ function productRowImageCandidates(row = {}) {
 
   for (const alias of exactAliases) {
     if (Object.prototype.hasOwnProperty.call(row || {}, alias)) {
-      collectImageLikeUrls(row[alias], urls);
+      if (alias.toLowerCase() === "attachments" && Array.isArray(row[alias])) {
+        for (const item of row[alias]) {
+          // Product reference files (PDF/ZIP/CAD/etc.) are not product thumbnails.
+          const filename = text(item?.name || "").toLowerCase();
+          if (filename && !/\.(?:png|jpe?g|webp|gif)$/i.test(filename)) continue;
+          collectImageLikeUrls(item, urls);
+        }
+      } else {
+        collectImageLikeUrls(row[alias], urls);
+      }
     }
   }
 
@@ -287,6 +297,7 @@ function productRowImageCandidates(row = {}) {
   for (const [key, value] of Object.entries(row || {})) {
     const normalized = norm(key).replace(/[^a-z0-9]+/g, "");
     if (!/(image|photo|picture|thumbnail|cover|attachment|file)/.test(normalized)) continue;
+    if (normalized === "attachments") continue; // handled above with file-type filtering
     collectImageLikeUrls(value, urls);
   }
 
@@ -307,14 +318,91 @@ export async function getProductImageSources(productId) {
     imageUrls: productRowImageCandidates(row),
   };
 }
+// Product resource uploads are intentionally stored separately from the legacy
+// single URL. Only URLs issued for our product attachments bucket are accepted.
+const PRODUCT_FILE_EXTENSIONS = new Set([
+  "pdf", "zip", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "csv", "txt",
+  "png", "jpg", "jpeg", "webp", "stl", "step", "stp", "dxf", "obj", "gcode", "ino",
+]);
+const MAX_PRODUCT_FILE_BYTES = 10 * 1024 * 1024;
+const MAX_PRODUCT_FILES = 10;
+
+function productAttachmentUrl(value) {
+  const url = text(value);
+  const { url: base } = getSupabaseConfig();
+  const bucket = getProductsStorageBucket();
+  try {
+    const parsed = new URL(url);
+    const origin = new URL(base);
+    const pathname = decodeURIComponent(parsed.pathname);
+    const prefix = `/storage/v1/object/public/${bucket}/products/files/`;
+    if (parsed.origin !== origin.origin || !pathname.startsWith(prefix) || pathname.includes("..") || parsed.search || parsed.hash) return "";
+    return parsed.toString();
+  } catch { return ""; }
+}
+
+function normalizedProductAttachments(value, { strict = false } = {}) {
+  let items = value;
+  if (typeof items === "string") { try { items = JSON.parse(items); } catch { items = null; } }
+  if (!Array.isArray(items) || items.length > MAX_PRODUCT_FILES) {
+    if (!strict) return [];
+    const error = new Error(`Choose up to ${MAX_PRODUCT_FILES} product files.`);
+    error.status = 400;
+    throw error;
+  }
+  const result = [];
+  for (const entry of items) {
+    const url = productAttachmentUrl(entry?.url);
+    const name = text(entry?.name).replace(/[\r\n\0]/g, "").slice(0, 180);
+    const size = Number(entry?.size);
+    const type = text(entry?.type).slice(0, 120);
+    const ext = name.split(".").pop()?.toLowerCase();
+    if (!url || !name || !PRODUCT_FILE_EXTENSIONS.has(ext) || !Number.isInteger(size) || size < 1 || size > MAX_PRODUCT_FILE_BYTES) {
+      if (!strict) continue;
+      const error = new Error("A product file reference is invalid. Upload the file again.");
+      error.status = 400;
+      throw error;
+    }
+    if (!result.some((item) => item.url === url)) result.push({ name, url, size, type });
+  }
+  return result;
+}
+
+export async function createProductFileUploadTicket({ filename, mime, size } = {}) {
+  const name = text(filename).replace(/[\r\n\0]/g, "").slice(0, 180);
+  const extension = name.split(".").pop()?.toLowerCase();
+  const bytes = Number(size);
+  if (!name || !PRODUCT_FILE_EXTENSIONS.has(extension)) {
+    const error = new Error("Unsupported file type. Choose a document, archive, image, or design file.");
+    error.status = 400;
+    throw error;
+  }
+  if (!Number.isInteger(bytes) || bytes < 1 || bytes > MAX_PRODUCT_FILE_BYTES) {
+    const error = new Error("Each product file must be between 1 byte and 10 MB.");
+    error.status = bytes > MAX_PRODUCT_FILE_BYTES ? 413 : 400;
+    throw error;
+  }
+  const safeName = name.replace(/[^a-zA-Z0-9._-]/g, "-") || `attachment.${extension}`;
+  const uniquePath = `products/files/${Date.now()}-${crypto.randomBytes(12).toString("hex")}-${safeName}`;
+  const ticket = await createSignedUploadUrl(uniquePath, { bucketName: getProductsStorageBucket() });
+  if (!ticket?.signedUrl || !ticket?.publicUrl) throw new Error("Failed to create file upload URL.");
+  return {
+    method: "PUT", signedUrl: ticket.signedUrl, publicUrl: ticket.publicUrl,
+    headers: { "x-upsert": "false" }, cacheControl: "3600",
+    name, size: bytes, type: text(mime).slice(0, 120) || "application/octet-stream",
+  };
+}
+
 export function serializeProduct(row = {}) {
+  const attachments = normalizedProductAttachments(pick(row, ["attachments", "Attachments"]));
   return {
     id: text(pick(row, ["id", "ID"])),
     name: text(pick(row, ["name", "Name", "product_name", "Product Name", "product", "Product"])) || "Untitled Product",
     displayId: text(pick(row, ["id_code", "ID Code", "id code", "code", "Code"])) || null,
     unitPrice: numberOrNull(pick(row, ["unit_price", "Unity Price", "Unit price", "Unit Price", "price", "Price"])),
     unit: text(pick(row, ["unit", "unit_name", "measurement_unit", "Unit", "Unit Name"])) || null,
-    url: cleanUrl(pick(row, ["url", "URL", "product_url", "Product URL", "link", "Link", "website", "Website"])),
+    url: cleanUrl(pick(row, ["url", "URL", "product_url", "Product URL", "link", "Link", "website", "Website"])) || attachments[0]?.url || null,
+    attachments,
     imageUrl: cleanImageUrl(pick(row, ["image_url", "Image URL", "image", "Image", "photo", "Photo", "picture", "Picture", "thumbnail", "Thumbnail"])),
     tags: parseTags(pick(row, ["tags", "Tags", "tag", "Tag"])),
     source: "supabase",
@@ -540,6 +628,9 @@ function normalizeProductPayload(body = {}, { partial = false } = {}) {
 
   if (has("url") || has("productUrl") || has("product_url") || has("link")) {
     out.url = cleanUrl(body.url ?? body.productUrl ?? body.product_url ?? body.link);
+  }
+  if (has("attachments")) {
+    out.attachments = normalizedProductAttachments(body.attachments, { strict: true });
   }
   if (has("imageUrl") || has("image_url")) {
     out.image_url = cleanUrl(body.imageUrl ?? body.image_url);

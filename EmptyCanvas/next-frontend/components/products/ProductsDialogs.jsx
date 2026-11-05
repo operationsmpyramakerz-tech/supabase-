@@ -64,6 +64,10 @@ function ClassicIcon({ name }) {
     box: <><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /></>,
     unit: <><polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" /><line x1="21" y1="3" x2="14" y2="10" /><line x1="3" y1="21" x2="10" y2="14" /></>,
     upload: <><path d="M16 16l-4-4-4 4" /><path d="M12 12v9" /><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3" /><polyline points="16 16 12 12 8 16" /></>,
+    file: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M8 13h8M8 17h6"/></>,
+    download: <><path d="M12 3v12m-5-5 5 5 5-5"/><path d="M4 17v4h16v-4"/></>,
+    trash: <><path d="M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15M10 10v7M14 10v7"/></>,
+    link: <><path d="M10 13a5 5 0 0 0 7.07.07l2-2A5 5 0 0 0 12 4l-1.15 1.15"/><path d="M14 11a5 5 0 0 0-7.07-.07l-2 2A5 5 0 0 0 12 20l1.15-1.15"/></>,
     eye: <><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z" /><circle cx="12" cy="12" r="3" /></>,
   };
   return <svg {...common}>{paths[name] || paths.box}</svg>;
@@ -89,6 +93,11 @@ export function ProductModal({ product, activeTag, tags, units, onClose, onSaved
     size: 0,
     removed: false,
   }));
+  const [sourceMode, setSourceMode] = useState(() => product?.attachments?.length ? "files" : "url");
+  const [attachments, setAttachments] = useState(() => Array.isArray(product?.attachments) ? [...product.attachments] : []);
+  const [pendingFiles, setPendingFiles] = useState([]);
+  const [draggingFile, setDraggingFile] = useState(false);
+  const resourceFileRef = useRef(null);
   const [newUnit, setNewUnit] = useState("");
   const [showUnitInput, setShowUnitInput] = useState(false);
   const [openSelect, setOpenSelect] = useState("");
@@ -114,6 +123,61 @@ export function ProductModal({ product, activeTag, tags, units, onClose, onSaved
     } finally {
       setImageBusy(false);
     }
+  };
+
+  const allowedResourceExt = new Set(["pdf", "zip", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "csv", "txt", "png", "jpg", "jpeg", "webp", "stl", "step", "stp", "dxf", "obj", "gcode", "ino"]);
+  const addResourceFiles = (list) => {
+    const incoming = Array.from(list || []);
+    if (!incoming.length) return;
+    setError("");
+    const selected = [];
+    for (const file of incoming) {
+      const ext = file.name.split(".").pop()?.toLowerCase();
+      if (!allowedResourceExt.has(ext)) { setError(`Unsupported file type: ${file.name}`); return; }
+      if (!file.size || file.size > 10 * 1024 * 1024) { setError(`File must be 1 byte–10 MB: ${file.name}`); return; }
+      selected.push(file);
+    }
+    if (attachments.length + pendingFiles.length + selected.length > 10) {
+      setError("A product can have up to 10 uploaded files.");
+      return;
+    }
+    setPendingFiles((current) => [...current, ...selected]);
+  };
+
+  const downloadResource = (entry) => {
+    if (entry.file) {
+      const url = URL.createObjectURL(entry.file);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = entry.file.name;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 2000);
+    } else if (entry.url) {
+      window.open(entry.url, "_blank", "noopener,noreferrer");
+    }
+  };
+
+  const uploadResource = async (file) => {
+    const ticket = await requestJson("/next/api/products/file-upload", {
+      method: "POST",
+      body: JSON.stringify({ filename: file.name, mime: file.type || "application/octet-stream", size: file.size }),
+    });
+    const upload = ticket?.upload;
+    if (!upload?.signedUrl || !upload?.publicUrl) throw new Error("Could not prepare file upload.");
+    const formData = new FormData();
+    formData.append("cacheControl", String(upload.cacheControl || "3600"));
+    formData.append("", file, file.name);
+    const response = await fetch(upload.signedUrl, {
+      method: upload.method || "PUT", credentials: "omit", cache: "no-store",
+      headers: upload.headers || { "x-upsert": "false" }, body: formData,
+    });
+    if (!response.ok) {
+      const message = await response.text().catch(() => "");
+      throw new Error(message.slice(0, 250) || `File upload failed (${response.status}).`);
+    }
+    return { name: file.name, size: file.size, type: file.type || "application/octet-stream", url: upload.publicUrl };
   };
 
   const removeImage = () => {
@@ -158,13 +222,23 @@ export function ProductModal({ product, activeTag, tags, units, onClose, onSaved
         const { uploadPreparedProductImage } = await import("./ProductImageProcessing");
         uploadedImageUrl = await uploadPreparedProductImage(image);
       }
+      let savedAttachments = [...attachments];
+      if (sourceMode === "files") {
+        for (const file of pendingFiles) {
+          const uploaded = await uploadResource(file);
+          savedAttachments.push(uploaded);
+          setAttachments([...savedAttachments]);
+          setPendingFiles((current) => current.filter((item) => item !== file));
+        }
+      }
       const payload = {
         name,
         idCode: text(form.idCode) || null,
         unitPrice: text(form.unitPrice) === "" ? null : number(form.unitPrice),
         unit: text(form.unit) || null,
         tags: text(form.tag) || null,
-        url: text(form.url) || null,
+        url: sourceMode === "url" ? (text(form.url) || null) : null,
+        attachments: sourceMode === "files" ? savedAttachments : [],
         ...(uploadedImageUrl ? { imageUrl: uploadedImageUrl } : {}),
         removeImage: !uploadedImageUrl && !!image.removed,
       };
@@ -226,7 +300,49 @@ export function ProductModal({ product, activeTag, tags, units, onClose, onSaved
             </div>
           ) : <input type="hidden" value={form.tag} readOnly />}
 
-          <label className="products-field products-field--wide"><span>Product URL</span><input type="url" value={form.url} onChange={(event) => update("url", event.target.value)} placeholder="https://supplier.com/product" /></label>
+          <div className="products-field products-field--wide products-resource-field">
+            <div className="products-resource-heading">
+              <span>Product URL / Files</span>
+              <div className="products-resource-modes" role="group" aria-label="Product link type">
+                <button type="button" className={sourceMode === "url" ? "is-active" : ""} onClick={() => setSourceMode("url")} disabled={busy}><ClassicIcon name="link" /> URL</button>
+                <button type="button" className={sourceMode === "files" ? "is-active" : ""} onClick={() => setSourceMode("files")} disabled={busy}><ClassicIcon name="file" /> Upload Files</button>
+              </div>
+            </div>
+            {sourceMode === "url" ? (
+              <input aria-label="Product URL" type="url" value={form.url} onChange={(event) => update("url", event.target.value)} placeholder="https://supplier.com/product" disabled={busy} />
+            ) : (
+              <div className="products-resource-uploader">
+                <h3>Upload Files</h3>
+                <input ref={resourceFileRef} type="file" multiple className="products-resource-uploader__input" aria-label="Choose product files" onChange={(event) => { addResourceFiles(event.target.files); event.target.value = ""; }} disabled={busy} />
+                <button type="button" className={`products-resource-dropzone ${draggingFile ? "is-dragging" : ""}`} onClick={() => resourceFileRef.current?.click()} onDragOver={(event) => { event.preventDefault(); setDraggingFile(true); }} onDragLeave={(event) => { event.preventDefault(); setDraggingFile(false); }} onDrop={(event) => { event.preventDefault(); setDraggingFile(false); addResourceFiles(event.dataTransfer.files); }} disabled={busy}>
+                  <span className="products-resource-dropzone__plus"><ClassicIcon name="plus" /></span>
+                  <span>Drag &amp; Drop or click to choose files</span>
+                  <small>ⓘ Max file size: 10 MB · Up to 10 files</small>
+                </button>
+                {(attachments.length || pendingFiles.length) ? (
+                  <div className="products-resource-list">
+                    {attachments.map((entry, index) => (
+                      <div className="products-resource-file" key={`saved-${entry.url}`}>
+                        <span className="products-resource-file__icon"><ClassicIcon name="file" /></span>
+                        <span className="products-resource-file__details"><b title={entry.name}>{entry.name}</b><small>{entry.name.split(".").pop()?.toUpperCase()} | {fileSize(entry.size)}</small></span>
+                        <button type="button" title="Open/download file" aria-label={`Download ${entry.name}`} onClick={() => downloadResource(entry)}><ClassicIcon name="download" /></button>
+                        <button type="button" title="Remove file" aria-label={`Remove ${entry.name}`} onClick={() => setAttachments((current) => current.filter((_, i) => i !== index))} disabled={busy}><ClassicIcon name="trash" /></button>
+                      </div>
+                    ))}
+                    {pendingFiles.map((file, index) => (
+                      <div className="products-resource-file" key={`pending-${index}-${file.name}-${file.size}`}>
+                        <span className="products-resource-file__icon"><ClassicIcon name="file" /></span>
+                        <span className="products-resource-file__details"><b title={file.name}>{file.name}</b><small>{file.name.split(".").pop()?.toUpperCase()} | {fileSize(file.size)} · Pending upload</small></span>
+                        <button type="button" title="Download selected file" aria-label={`Download ${file.name}`} onClick={() => downloadResource({ file })}><ClassicIcon name="download" /></button>
+                        <button type="button" title="Remove file" aria-label={`Remove ${file.name}`} onClick={() => setPendingFiles((current) => current.filter((_, i) => i !== index))} disabled={busy}><ClassicIcon name="trash" /></button>
+                      </div>
+                    ))}
+                    <button className="products-resource-remove-all" type="button" onClick={() => { setAttachments([]); setPendingFiles([]); }} disabled={busy}><ClassicIcon name="trash" /> Remove all uploaded files</button>
+                  </div>
+                ) : null}
+              </div>
+            )}
+          </div>
 
           <div className="products-field products-field--wide">
             <span>Product Image</span>
@@ -304,6 +420,24 @@ export function ProductImageViewer({ image, onClose }) {
       <section role="dialog" aria-modal="true">
         <header><strong>{image.name}</strong><button type="button" onClick={onClose}>×</button></header>
         <img src={image.url} alt={image.name || "Product image"} />
+      </section>
+    </div>
+  );
+}
+
+export function ProductFilesViewer({ product, onClose }) {
+  return (
+    <div className="products-modal-overlay" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <section className="products-modal products-files-viewer" role="dialog" aria-modal="true" aria-label="Product files">
+        <button type="button" className="products-modal__close" onClick={onClose} aria-label="Close"><span aria-hidden="true">×</span></button>
+        <h2>{product?.name || "Product"} — Files</h2>
+        <div className="products-resource-list">
+          {(product?.attachments || []).map((entry) => <a key={entry.url} className="products-resource-file" href={entry.url} target="_blank" rel="noopener noreferrer" title={`Open ${entry.name}`}>
+            <span className="products-resource-file__icon"><ClassicIcon name="file" /></span>
+            <span className="products-resource-file__details"><b>{entry.name}</b><small>{fileSize(entry.size)}</small></span>
+            <span className="products-resource-file__download"><ClassicIcon name="download" /></span>
+          </a>)}
+        </div>
       </section>
     </div>
   );
