@@ -7,12 +7,14 @@ const style = readFileSync(new URL('../public/css/erp-inner-frame.css', import.m
 const sidebar = readFileSync(new URL('../public/css/classic-parity.css', import.meta.url), 'utf8');
 
 test('persistent and non-persistent shells both load the new frame after scrollbar styles', () => {
-  const links = [...shell.matchAll(/<link rel="stylesheet" href="\/next\/css\/erp-inner-frame\.css\?v=v327-classic-black-frame" precedence="erp-inner-frame" \/>/g)];
+  const links = [...shell.matchAll(/<link rel="stylesheet" href="\/next\/css\/erp-inner-frame\.css\?v=v328-frame-restored" precedence="erp-inner-frame" \/>/g)];
   assert.equal(links.length, 2);
   for (const line of shell.split('\n').filter(s => s.includes('erp-inner-frame.css'))) {
     assert.match(line, /erp-inner-frame/);
   }
   assert.ok(shell.indexOf('scrollbar-hidden.css') < shell.indexOf('erp-inner-frame.css'));
+  assert.match(shell, /if \(persistentShell\?\.persistent\)[\s\S]*?erp-inner-frame\.css/);
+  assert.equal(shell.split('\n').filter(line => line.includes('erp-inner-frame.css') && line.includes('precedence="erp-inner-frame"')).length, 2);
 });
 
 test('frame is inside authenticated light desktop shell and never paints the mobile dock', () => {
