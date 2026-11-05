@@ -7,9 +7,13 @@ const source = (path) => fs.readFileSync(new URL(path, import.meta.url), 'utf8')
 const file = (name) => ({ name, url: `https://supabase.example.test/storage/v1/object/public/Data/products/files/${name}`, size: 1024 });
 const origin = 'https://operation.propyramakerz.com';
 
-test('multiple uploaded attachments use an absolute authenticated ZIP link suitable for Excel/PDF', () => {
+test('multiple uploaded attachments use an absolute public signed ZIP link suitable for Excel/PDF', () => {
   const product = { id: 'Robot 42/ش', name: 'Robot', url: file('first.stl').url, attachments: [file('first.stl'), file('second.lbrn2')] };
-  assert.equal(exportProductResourceUrl(product, { origin }), `${origin}/next/api/products/files-download?id=Robot%2042%2F%D8%B4`);
+  const link = new URL(exportProductResourceUrl(product, { origin, shareSecret: 'test-secret-strong-enough-for-hmac-signing' }));
+  assert.equal(link.origin, origin);
+  assert.equal(link.pathname, '/next/api/products/files-download');
+  assert.equal(link.searchParams.get('id'), product.id);
+  assert.match(link.searchParams.get('share') || '', /^[A-Za-z0-9_-]{43}$/);
 });
 
 test('one uploaded attachment keeps its original file URL; no files keeps legacy link', () => {
@@ -21,7 +25,7 @@ test('one uploaded attachment keeps its original file URL; no files keeps legacy
 
 test('a broken or missing public origin is rejected for a ZIP link, not exported as a broken relative URL', () => {
   const product = { id: '99', attachments: [file('x.zip'), file('y.stl')] };
-  assert.throws(() => exportProductResourceUrl(product, { origin: '' }), /public ERP URL/);
+  assert.throws(() => exportProductResourceUrl(product, { origin: '', shareSecret: 'test-secret-strong-enough-for-hmac-signing' }), /public ERP URL/);
   assert.throws(() => exportDocumentOrigin({ url: 'javascript:alert(1)' }), /public ERP URL/);
   assert.equal(exportDocumentOrigin({ url: `${origin}/next/api/products/export-direct?kind=excel` }), origin);
   assert.equal(exportDocumentOrigin({ url: 'http://localhost:3001/next/api/foo' }, origin), origin);
@@ -37,7 +41,7 @@ test('Kits, Proposals and combined Proposals render both PDF and Excel hyperlink
   assert.match(source('../app/api/products/export-direct/route.js'), /publicOrigin: exportDocumentOrigin\(request,/);
 });
 
-test('Order exports from Shopping Cart resolve product ZIP links in PDF/Excel; links remain permission-checked', () => {
+test('Order exports from Shopping Cart resolve product ZIP links in PDF/Excel; unsigned internal requests remain permission-checked', () => {
   const exporter = source('../lib/order-export-service.js');
   assert.match(exporter, /link: exportProductResourceUrl\(product, \{ origin: publicOrigin/);
   assert.match(exporter, /const product = productMaps\.byId\.get\(text\(item\?\.productId\)\)/);
@@ -52,4 +56,6 @@ test('Order exports from Shopping Cart resolve product ZIP links in PDF/Excel; l
   assert.match(zipRoute, /featureAllowed\(ordersGate\.account, "orders\.my\.export"\)/);
   assert.match(zipRoute, /featureAllowed\(ordersGate\.account, "orders\.operations\.export"\)/);
   assert.match(zipRoute, /archiveEntries\(product\.attachments,/);
+  assert.match(zipRoute, /verifyProductFileShareToken\(product, shareToken\)/);
+  assert.match(zipRoute, /if \(!hasPublicShare\)/);
 });
