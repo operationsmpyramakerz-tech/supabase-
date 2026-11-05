@@ -348,6 +348,9 @@ function getDesktopPanelPosition(root) {
 function ProductCombobox({ products, value, onChange, disabled = false }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [imagePreview, setImagePreview] = useState(null);
+  const imagePreviewRef = useRef(null);
+  imagePreviewRef.current = imagePreview;
   const [viewport, setViewport] = useState({ top: 0, height: 0, mobile: false });
   const rootRef = useRef(null);
   const panelRef = useRef(null);
@@ -377,10 +380,17 @@ function ProductCombobox({ products, value, onChange, disabled = false }) {
       setDesktopPanelStyle(mobile ? null : getDesktopPanelPosition(rootRef.current));
     };
     const close = (event) => {
+      if (imagePreviewRef.current) return; // Keep the list open behind the image preview.
       if (!rootRef.current?.contains(event.target) && !panelRef.current?.contains(event.target)) setOpen(false);
     };
     const escape = (event) => {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key !== "Escape") return;
+      if (imagePreviewRef.current) {
+        event.preventDefault();
+        setImagePreview(null);
+      } else {
+        setOpen(false);
+      }
     };
 
     updateViewport();
@@ -470,24 +480,39 @@ function ProductCombobox({ products, value, onChange, disabled = false }) {
         {filtered.map((product) => {
           const active = product.id === value;
           return (
-            <button
-              type="button"
+            <div
               className={`classic-cart-combobox-option ${active ? "is-selected" : ""}`}
               key={product.id}
               onClick={() => { onChange(product.id); setOpen(false); setQuery(""); }}
+              onKeyDown={(event) => {
+                if (event.target !== event.currentTarget || (event.key !== "Enter" && event.key !== " ")) return;
+                event.preventDefault();
+                onChange(product.id); setOpen(false); setQuery("");
+              }}
               role="option"
+              tabIndex={0}
               aria-selected={active}
             >
-              <span className="classic-cart-combobox-option-media">
-                {product.imageUrl ? <img src={product.imageUrl} alt="" /> : <CartSvgIcon name="package" size={18}/>} 
-              </span>
+              {product.imageUrl ? (
+                <button
+                  type="button"
+                  className="classic-cart-combobox-option-media classic-cart-combobox-option-media--preview"
+                  onClick={(event) => {
+                    event.stopPropagation(); // Preview must never select the component.
+                    searchInputRef.current?.blur();
+                    setImagePreview({ imageUrl: product.imageUrl, name: product.name });
+                  }}
+                  aria-label={`View larger image of ${product.name}`}
+                  title="View product image"
+                ><img src={product.imageUrl} alt="" /></button>
+              ) : <span className="classic-cart-combobox-option-media"><CartSvgIcon name="package" size={18}/></span>}
               <span className="classic-cart-combobox-option-copy">
                 <strong>{product.name}</strong>
                 <small>{[product.displayId || "No ID", product.unit || "Unit"].join(" · ")}</small>
               </span>
               <span className="classic-cart-combobox-option-price">{formatMoney(product.unitPrice)}</span>
               {active ? <span className="classic-cart-combobox-option-check"><CartSvgIcon name="check" size={16}/></span> : null}
-            </button>
+            </div>
           );
         })}
         {!filtered.length ? <div className="classic-cart-combobox-empty">No components match “{query}”.</div> : null}
@@ -519,6 +544,17 @@ function ProductCombobox({ products, value, onChange, disabled = false }) {
           <button className="classic-cart-combobox-backdrop" type="button" aria-label="Close component selector" onClick={() => setOpen(false)} />
           {portalTarget ? createPortal(optionsPanel, portalTarget) : optionsPanel}
         </>
+      ) : null}
+      {imagePreview && typeof document !== "undefined" ? createPortal(
+        <div className="classic-cart-product-preview-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget) setImagePreview(null); }}>
+          <section className="classic-cart-product-preview" role="dialog" aria-modal="true" aria-label={`Product image: ${imagePreview.name}`}>
+            <header className="classic-cart-product-preview-header">
+              <strong>{imagePreview.name}</strong>
+              <button type="button" autoFocus aria-label="Close image preview" onClick={() => setImagePreview(null)}><CartSvgIcon name="x" size={20}/></button>
+            </header>
+            <img src={imagePreview.imageUrl} alt={imagePreview.name} />
+          </section>
+        </div>, document.body
       ) : null}
     </div>
   );

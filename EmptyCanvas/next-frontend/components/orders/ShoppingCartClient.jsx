@@ -1332,7 +1332,10 @@ export default function ShoppingCartClient({
                 </div>
                 <label className="classic-cart-summary-field">
                   <span className="classic-cart-field-label"><CartSvgIcon name="calendar" size={15}/><span>Delivery Date</span></span>
-                  <input type="date" value={requestedDeliveryDate} onChange={(event) => updateDeliveryDate(event.target.value)} aria-label="Requested delivery date" />
+                  <span className="classic-cart-delivery-date-control">
+                    <input type="date" value={requestedDeliveryDate} onChange={(event) => updateDeliveryDate(event.target.value)} aria-label="Requested delivery date" />
+                    <span className="classic-cart-delivery-date-chevron" aria-hidden="true"><CartSvgIcon name="chevron-down" size={16}/></span>
+                  </span>
                 </label>
               </div>
             </div>

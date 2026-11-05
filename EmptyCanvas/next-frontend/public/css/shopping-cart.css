@@ -2789,3 +2789,65 @@ body.shopping-cart-page .main-content > main::-webkit-scrollbar{
 .classic-cart-row--request-card .classic-cart-qty-control .classic-cart-qty-sign{
   flex:none;font-weight:900;font-size:.84rem;color:#101828;
 }
+
+/* v317 — Match the date arrow to the priority menu without replacing the native date picker. */
+.classic-cart-page[class*="theme-"] .classic-cart-reason-card .classic-cart-delivery-date-control{
+  position:relative;display:block;width:100%;min-width:0;
+}
+.classic-cart-page[class*="theme-"] .classic-cart-reason-card .classic-cart-request-meta-fields .classic-cart-delivery-date-control input[type="date"]{
+  width:100%;padding-right:36px;appearance:none;-webkit-appearance:none;
+}
+.classic-cart-page .classic-cart-delivery-date-control input[type="date"]::-webkit-calendar-picker-indicator{
+  position:absolute;right:0;top:0;box-sizing:border-box;width:36px;height:100%;margin:0;
+  opacity:0;cursor:pointer;z-index:2;
+}
+.classic-cart-page .classic-cart-delivery-date-chevron{
+  position:absolute;right:12px;top:50%;display:grid;place-items:center;
+  transform:translateY(-50%);color:#64748b;pointer-events:none;
+}
+
+/* v317 — Remove the focus ring from the component search in desktop and mobile pickers. */
+.classic-cart-combobox-panel .classic-cart-combobox-search,
+.classic-cart-combobox-panel .classic-cart-combobox-search:focus-within{
+  border-color:#e4e7ec!important;background:#f7f9fb!important;
+  box-shadow:none!important;outline:none!important;
+}
+.classic-cart-combobox-panel .classic-cart-combobox-search input,
+.classic-cart-combobox-panel .classic-cart-combobox-search input:focus,
+.classic-cart-combobox-panel .classic-cart-combobox-search input:focus-visible{
+  border:0!important;outline:0!important;box-shadow:none!important;
+  background:transparent!important;-webkit-appearance:none;appearance:none;
+}
+
+/* v317 — A thumbnail opens a separate image preview; the rest of the row selects. */
+.classic-cart-combobox-option-media--preview{
+  padding:0;cursor:zoom-in;flex-shrink:0;
+}
+.classic-cart-combobox-option-media--preview:focus-visible{
+  outline:2px solid #2563eb;outline-offset:2px;
+}
+.classic-cart-combobox-option:focus-visible{outline:2px solid #94a3b8;outline-offset:-2px}
+.classic-cart-product-preview-overlay{
+  position:fixed;inset:0;z-index:30000;display:grid;place-items:center;
+  padding:calc(16px + env(safe-area-inset-top,0px)) 16px calc(16px + env(safe-area-inset-bottom,0px));
+  background:rgba(3,10,24,.84);backdrop-filter:blur(5px);
+}
+.classic-cart-product-preview{
+  box-sizing:border-box;width:min(860px,100%);max-height:100%;display:flex;flex-direction:column;
+  gap:12px;padding:14px;border-radius:20px;background:#fff;
+  box-shadow:0 30px 85px rgba(0,0,0,.36);
+}
+.classic-cart-product-preview-header{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+}
+.classic-cart-product-preview-header strong{
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#101828;font-size:1rem;font-weight:850;
+}
+.classic-cart-product-preview-header button{
+  flex:0 0 40px;width:40px;height:40px;display:grid;place-items:center;
+  border:0;border-radius:12px;background:#f2f4f7;color:#101828;cursor:pointer;
+}
+.classic-cart-product-preview>img{
+  display:block;max-width:100%;max-height:min(75dvh,720px);width:auto;height:auto;
+  margin:auto;object-fit:contain;border-radius:12px;
+}
