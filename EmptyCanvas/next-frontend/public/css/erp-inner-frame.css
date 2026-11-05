@@ -24,6 +24,38 @@
   }
 }
 
+/* v329: The same inset frame in dark mode, but with a white surround.
+   Do not change the sidebar's own palette, active icon, header or page cards. */
+@media (min-width: 769px) {
+  html[data-theme="dark"] body.next-classic-shell-active:not(.login-page):not(.pwa-offline):not(.pwa-start)
+  .classic-app-shell:not([class*="-loading"]) {
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    background-image: none !important;
+    border-radius: 40px !important;
+    box-shadow: 0 22px 55px rgba(0, 0, 0, .22) !important;
+  }
+
+  /* Preserve the existing dark canvas; the shell's white background is
+     visible only as the inner border around this rounded dark panel. */
+  html[data-theme="dark"] body.next-classic-shell-active:not(.login-page):not(.pwa-offline):not(.pwa-start)
+  .classic-app-shell:not([class*="-loading"]) > .main-content {
+    border-radius: 32px !important;
+    background: #000000 !important;
+    background-color: #000000 !important;
+    background-image: none !important;
+    overflow: hidden !important;
+  }
+
+  /* The dark-theme sidebar is white, so its Home divider must be dark enough
+     to show. Only the divider changes; never recolor navigation icons. */
+  html[data-theme="dark"] body.next-classic-shell-active
+  .classic-app-shell > .sidebar:not(.mobile-dock-structured-host)
+  .sidebar-nav > .nav-list > li.sidebar-workspace-boundary::after {
+    background: rgba(15, 23, 42, .30) !important;
+  }
+}
+
 /* Retain scrolling, only hide its painted track and thumb. Neither changing
    overflow-y nor clipping the page scroller is necessary. */
 body.next-classic-shell-active .classic-app-shell > .main-content > main,
