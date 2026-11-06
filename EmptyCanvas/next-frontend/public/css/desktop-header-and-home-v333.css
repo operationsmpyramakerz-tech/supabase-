@@ -1,0 +1,85 @@
+/* v333 — Desktop home / branding corrections, independent of legacy sidebar.
+   The mobile dock and permission-filtered navigation are untouched. */
+@media (min-width: 769px) {
+  /* The old menu-toggle hides whenever the sidebar is not collapsed. With the
+     horizontal dock there is no desktop sidebar, so use a persistent Home mark
+     instead of the collapsing toggle. */
+  body.next-classic-shell-active .classic-app-shell .main-header #menu-toggle,
+  body.next-classic-shell-active.sidebar-collapsed .classic-app-shell .main-header #menu-toggle {
+    display: none !important;
+  }
+  body.next-classic-shell-active .classic-app-shell .main-header .desktop-header-brand {
+    display: inline-flex !important;
+    flex: 0 0 43px !important;
+    align-items: center !important;
+    justify-content: center !important;
+    box-sizing: border-box !important;
+    width: 43px !important;
+    height: 43px !important;
+    min-width: 43px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 1px solid #ebedf0 !important;
+    border-radius: 14px !important;
+    background: #fff !important;
+    box-shadow: 0 7px 20px rgba(15,23,42,.045) !important;
+    text-decoration: none !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body.next-classic-shell-active .classic-app-shell .main-header a.desktop-header-brand:hover {
+    border-color: #fed7aa !important;
+    background: #fffaf5 !important;
+  }
+  body.next-classic-shell-active .classic-app-shell .main-header a.desktop-header-brand:focus-visible {
+    outline: 2px solid #f97316 !important;
+    outline-offset: 2px !important;
+  }
+  body.next-classic-shell-active .classic-app-shell .main-header .desktop-header-brand img {
+    display: block !important;
+    width: 24px !important;
+    height: 24px !important;
+    object-fit: contain !important;
+    opacity: 1 !important;
+  }
+  body.next-classic-shell-active .classic-app-shell .main-header .header-row1 .left {
+    gap: 13px !important;
+  }
+
+  /* Home is detached from the other pages: only its icon should become the
+     orange selected square, not the entire wide Home rail. A legacy rule was
+     making the SVG white on a white circle, leaving the house invisible. */
+  html[data-theme] body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host
+  .mobile-dock-home-rail > li > a.nav-link.active {
+    background: transparent !important;
+    color: #fff !important;
+    border-color: transparent !important;
+    box-shadow: none !important;
+  }
+  html[data-theme] body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host
+  .mobile-dock-home-rail > li > a.nav-link.active > svg {
+    display: block !important;
+    width: 26px !important;
+    height: 26px !important;
+    padding: 12px !important;
+    box-sizing: content-box !important;
+    background: #f45108 !important;
+    border-radius: 18px !important;
+    color: #fff !important;
+    stroke: #fff !important;
+    opacity: 1 !important;
+    box-shadow: 0 10px 22px rgba(244,81,8,.3) !important;
+  }
+  html[data-theme] body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host
+  .mobile-dock-home-rail > li > a.nav-link.active > svg :is(path, line, polyline, polygon, circle, rect) {
+    stroke: #fff !important;
+  }
+}
+@media (max-width: 768px) {
+  .classic-app-shell .main-header .desktop-header-brand { display: none !important; }
+}
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell .main-header .desktop-header-brand {
+  border-color: #323741 !important;
+  background: #fff !important;
+}

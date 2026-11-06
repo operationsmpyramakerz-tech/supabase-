@@ -252,6 +252,12 @@ export default function AppShell({
             <div className="header-row1">
               <div className="left">
                 <HeaderMenuToggle />
+                {/* Desktop dock has no vertical sidebar to collapse. Keep the
+                    company mark next to the orange page divider on every page,
+                    including Home; clicking it navigates without hiding it. */}
+                <Link className="desktop-header-brand" href="/home" aria-label="Go to Home" title="Home" prefetch={true}>
+                  <img src="/next/images/logo.png" alt="" aria-hidden="true" />
+                </Link>
                 <div className="dash-title"><PageTitleChevron title={title} activePath={activePath} /></div>
               </div>
               <div className="right topbar-right">

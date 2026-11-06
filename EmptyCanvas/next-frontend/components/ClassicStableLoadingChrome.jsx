@@ -168,6 +168,10 @@ export async function ClassicStableLoadingHeader({ title = "Home" }) {
     <header className="main-header dash-header dash-hide-row2 next-stable-loading-header">
       <div className="header-row1">
         <div className="left">
+          {/* Match the desktop live header during route-loading transitions. */}
+          <span className="desktop-header-brand desktop-header-brand--loading" aria-hidden="true">
+            <img src="/next/images/logo.png" alt="" />
+          </span>
           <div className="dash-title">{title}</div>
         </div>
         <div className="right topbar-right">
