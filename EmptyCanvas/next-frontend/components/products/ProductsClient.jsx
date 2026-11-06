@@ -336,8 +336,6 @@ export default function ProductsClient({ initialCatalog = {}, bootstrapWarnings 
       {bootstrapWarnings.length ? <div className="dashboard-notice" role="status"><strong>Some catalogue data may be temporarily unavailable.</strong><span>The loaded catalogue remains available while the missing resource recovers.</span></div> : null}
 
       <section className="products-filter-panel" aria-label="Product tag filter">
-        {permitted.create ? <a className="products-group-add-product" href="/next/products/addition-requests" style={{ marginInlineEnd: 12, textDecoration: "none" }}><ClassicIcon name="plus-circle"/><span>Addition Requests</span></a> : null}
-        {permitted.export ? <a className="products-group-add-product" href="/next/api/products/catalog-export" download="products-catalog.csv" style={{ marginInlineEnd: 12, textDecoration: "none" }}><ClassicIcon name="download" /><span>Export CSV</span></a> : null}
         <div className="products-tag-filter-wrap" ref={filterRef} onClick={(event) => event.stopPropagation()}>
           <button type="button" className="products-tag-filter-btn" aria-expanded={filterOpen} onClick={() => setFilterOpen((value) => !value)}>
             <span className="products-tag-filter-btn__icon"><ClassicIcon name="filter" /></span>
@@ -354,6 +352,10 @@ export default function ProductsClient({ initialCatalog = {}, bootstrapWarnings 
             </button>
             {tags.map((tag) => <button type="button" className={`products-tag-option ${activeTag === tag ? "is-active" : ""}`} onClick={() => { setActiveTag(tag); setFilterOpen(false); }} key={tag}><span className="products-tag-option__icon"><ClassicIcon name="tag" /></span><span><strong>{tag}</strong><small>{(tagCounts.get(tag) || 0).toLocaleString("en-EG")} products</small></span>{activeTag === tag ? <ClassicIcon name="check" /> : null}</button>)}
           </div>
+        </div>
+        <div className="products-filter-actions">
+          {permitted.create ? <a className="products-group-add-product" href="/next/products/addition-requests"><ClassicIcon name="plus-circle"/><span>Addition Requests</span></a> : null}
+          {permitted.export ? <a className="products-group-add-product" href="/next/api/products/catalog-export" download="products-catalog.csv"><ClassicIcon name="download" /><span>Export CSV</span></a> : null}
         </div>
       </section>
 

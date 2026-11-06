@@ -55,6 +55,6 @@ test('Filter selected-state dot is dark, scoped to orders pages', () => {
 });
 
 test('Route style links use cache-busted versions for production', () => {
-  assert.equal((shell.match(/orders-workspace-v9-modern-sort/g) || []).length, 2);
+  assert.equal((shell.match(/orders-workspace-v334-sort-by-filter/g) || []).length, 2);
   assert.match(layout, /ui-redesign\.css\?v=orders-filter-dot-black-251/);
 });

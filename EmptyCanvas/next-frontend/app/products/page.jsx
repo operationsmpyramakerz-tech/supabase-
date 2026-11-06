@@ -68,7 +68,7 @@ export default async function ProductsPage() {
       eyebrow="Live product catalogue"
       activePath="/next/products"
       bodyClass="products-page"
-      pageStyles={["/next/css/products.css?v=products-files-v320"]}
+      pageStyles={["/next/css/products.css?v=products-toolbar-v334"]}
     >
       <ProductsClient
         initialCatalog={catalog}

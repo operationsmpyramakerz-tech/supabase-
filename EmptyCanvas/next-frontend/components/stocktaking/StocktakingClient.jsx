@@ -1216,7 +1216,7 @@ export default function StocktakingClient({ account, initialStock = [], initialC
         <section className="card stocktaking-folder-workspace">
           <div className="stocktaking-folder-toolbar">
             <div className="stocktaking-folder-title">
-              <button className="stocktaking-folder-back" type="button" onClick={closeFolder} aria-label="Back to stock folders"><Icon name="arrowLeft" /></button>
+              
               <span className="stocktaking-folder-title-icon"><Icon name="folder" /></span>
               <div><span>STOCKTAKING</span><h2>{activeColumn.label}</h2></div>
             </div>

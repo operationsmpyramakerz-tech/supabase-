@@ -42,7 +42,7 @@ export default async function ProposalsPage() {
   if (kitFoldersResult.status === "rejected") warnings.push({ url: "/next/api/products/kit-folders", error: kitFoldersResult.reason?.message || "Kit folders could not load." });
 
   return (
-    <AppShell account={gate.account} title="Proposals" eyebrow="Reusable quotation workspace" activePath="/next/proposals" bodyClass="products-page proposals-page" pageStyles={["/next/css/products.css?v=products-manual-image-v1", "/next/css/proposals.css?v=source-kits-manager-61"]}>
+    <AppShell account={gate.account} title="Proposals" eyebrow="Reusable quotation workspace" activePath="/next/proposals" bodyClass="products-page proposals-page" pageStyles={["/next/css/products.css?v=products-toolbar-v334", "/next/css/proposals.css?v=source-kits-manager-61"]}>
       <ProposalsClient account={gate.account} initialCatalog={catalog} initialProposals={proposals} initialKits={kits} initialKitFolders={kitFolders} bootstrapWarnings={warnings} />
     </AppShell>
   );

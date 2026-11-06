@@ -1516,14 +1516,6 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
         )}
       </div>
 
-      {activeFolder ? (
-        <div className="kit-folder-context">
-          <button type="button" className="products-back-btn" onClick={backToFolderRoot} aria-label="Back to kit folders"><FeatherIcon name="arrowLeft" /></button>
-          <div className="kit-folder-context__icon"><FeatherIcon name="folder" /></div>
-          <div><span>Kit folder</span><h2>{activeFolder.name}</h2><p>{formatNumber(folderKitCounts.get(activeFolder.id) || 0)} kit{(folderKitCounts.get(activeFolder.id) || 0) === 1 ? "" : "s"}</p></div>
-        </div>
-      ) : null}
-
       {bootstrapWarnings.length ? <div className="proposal-view-note"><span aria-hidden="true">!</span><span>Some startup resources were delayed. The page remains usable; refresh if a kit or folder is missing.</span></div> : null}
 
       <section className="products-proposals-view proposals-workspace proposals-folders-card" aria-live="polite">

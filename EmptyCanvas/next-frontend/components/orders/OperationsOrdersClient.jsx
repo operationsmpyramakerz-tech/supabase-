@@ -1493,12 +1493,13 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
             </div>
           </div>
           <div className="orders-toolbar__divider" aria-hidden="true" />
+          <OrdersListHeader sortMode={sortMode} onSortChange={setSortMode} hasMore={pageInfo?.hasMore} />
           <TypeFilter value={type} options={typeOptions} onChange={setType} onOpen={completeTypes.refresh} loading={completeTypes.loading} error={completeTypes.error} />
         </div>
       </div>
 
       <section className="operations-orders-list-surface" id="operations-orders-list">
-        <OrdersListHeader count={visibleGroups.length} hasMore={pageInfo?.hasMore} busy={listLoading} sortMode={sortMode} onSortChange={setSortMode} />
+        
         <div className="co-cards" id="requested-list">
           {visibleGroups.length ? sortedVisibleGroups.map((group) => <OperationsOrderCard group={group} canOpen={permissions?.details !== false && orderCardAllows(scopePolicy, "details", group)} tab={tab} onOpen={openOrderDetails} onPrefetch={prefetchOrderDetails} onCreator={openCreatorProfile} key={group.key} />) : listLoading ? <div className="ops-no-data-state" role="status" aria-live="polite"><div className="ops-no-data-state__text">Loading orders…</div></div> : <OrdersEmptyState filtered={tab !== "all" || type !== "all" || !!query.trim()} context={"orders"} onReset={() => { setTab("all"); setType("all"); setQuery(""); }} />}
         </div>

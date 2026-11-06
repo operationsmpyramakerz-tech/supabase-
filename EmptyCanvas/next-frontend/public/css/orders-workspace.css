@@ -1012,3 +1012,37 @@ body .orders-workspace .orders-workspace-perf-toggle:focus-visible {
 .orders-perf-panel__server .orders-perf-panel__sql,
 .orders-perf-panel__server .orders-perf-panel__raw { word-break: normal; }
 .orders-perf-panel__server .orders-perf-panel__raw code { white-space: normal; }
+
+/* ERP v334: Sort is beside the filter; no duplicate Orders heading row. */
+body .orders-workspace.orders-workspace .orders-workspace-toolbar-sort {
+  display: inline-flex !important;
+  align-items: center !important;
+  flex: 0 0 auto !important;
+  min-width: 0 !important;
+  position: relative !important;
+  z-index: 90 !important;
+  order: 1 !important;
+}
+body .orders-workspace.orders-workspace .orders-workspace-toolbar-sort .orders-workspace-list-head__tools {
+  width: auto !important;
+}
+body .orders-workspace.orders-workspace .orders-toolbar .orders-type-filter,
+body .orders-workspace.orders-workspace .orders-toolbar .maintenance-type-filter {
+  order: 2 !important;
+}
+body .orders-workspace.orders-workspace .orders-toolbar .orders-workspace-sort {
+  min-width: 130px;
+}
+body .orders-workspace.orders-workspace .orders-toolbar .orders-workspace-sort__trigger {
+  min-height: 52px;
+  border-radius: 17px;
+}
+@media (max-width: 768px) {
+  body .orders-workspace.orders-workspace .orders-toolbar .orders-workspace-sort { min-width: 110px; }
+  body .orders-workspace.orders-workspace .orders-toolbar .orders-workspace-sort__trigger {
+    min-height: 48px;
+    padding: 0 8px;
+    gap: 5px;
+    font-size: 11px;
+  }
+}

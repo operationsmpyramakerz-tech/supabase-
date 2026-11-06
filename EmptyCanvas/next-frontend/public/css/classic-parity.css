@@ -9987,3 +9987,27 @@ html[data-theme="dark"] body.operations-orders-page .next-operations-component-e
     pointer-events: none !important;
   }
 }
+
+/* ERP v334: Desktop secondary flyouts anchor above the pressed bottom-dock icon.
+   Keep the pre-existing 768px-and-below positioning/animation untouched. */
+@media (min-width: 769px) {
+  body.next-classic-shell-active .task-management-secondary-sidebar {
+    z-index: 260 !important;
+    width: 212px;
+    min-height: 0;
+    padding: 12px;
+    border-radius: 20px;
+    box-shadow: 0 16px 46px rgba(8, 13, 24, .24);
+    transform: translateY(13px) scale(.97);
+    transform-origin: center bottom;
+    transition: transform .2s cubic-bezier(.2, 1, .32, 1), opacity .16s ease;
+  }
+  body.next-classic-shell-active .task-management-secondary-sidebar.is-open {
+    transform: translateY(0) scale(1);
+  }
+  body.next-classic-shell-active .task-management-secondary-sidebar__rail {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 5px;
+  }
+}

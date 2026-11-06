@@ -79,8 +79,7 @@ export function OrdersListHeader({ sortMode = "latest", onSortChange, hasMore = 
   };
 
   return (
-    <div className="orders-workspace-list-head">
-      <span className="orders-workspace-list-head__title">Orders</span>
+    <div className="orders-workspace-toolbar-sort">
       {typeof onSortChange === "function" ? (
         <div className="orders-workspace-list-head__tools">
           <div className={`orders-workspace-sort ${sortOpen ? "is-open" : ""}`} ref={sortRef}>

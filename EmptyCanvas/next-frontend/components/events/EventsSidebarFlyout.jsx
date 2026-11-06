@@ -143,7 +143,6 @@ export default function EventsSidebarFlyout({ allowedPages = [], account = {}, a
 
     const positionPanel = () => {
       const rect = parent.getBoundingClientRect();
-      const sidebar = parent.closest(".sidebar");
       const isMobileDock = window.matchMedia("(max-width: 768px)").matches;
 
       if (isMobileDock) {
@@ -153,14 +152,19 @@ export default function EventsSidebarFlyout({ allowedPages = [], account = {}, a
         return;
       }
 
-      const sidebarRect = sidebar instanceof HTMLElement ? sidebar.getBoundingClientRect() : rect;
-      const panelHeight = Math.max(156, panel.offsetHeight || (pages.length * 52 + 28));
-      const viewportPadding = 14;
-      const idealTop = rect.top + (rect.height / 2) - (panelHeight / 2);
-      const top = Math.min(window.innerHeight - panelHeight - viewportPadding, Math.max(viewportPadding, idealTop));
-
-      panel.style.left = `${Math.round(sidebarRect.right - 18)}px`;
+      // Desktop uses the bottom dock, not the former vertical sidebar.
+      // Anchor each flyout above the *clicked page icon*, including when
+      // the pages rail has been horizontally scrolled.
+      const panelWidth = panel.getBoundingClientRect().width || 206;
+      const panelHeight = panel.getBoundingClientRect().height || Math.max(164, pages.length * 52 + 28);
+      const gap = 10;
+      const padding = 12;
+      const availableLeft = window.innerWidth - panelWidth - padding;
+      const left = Math.min(Math.max(padding, (rect.left + rect.right - panelWidth) / 2), Math.max(padding, availableLeft));
+      const top = Math.max(padding, Math.min(rect.top - panelHeight - gap, window.innerHeight - panelHeight - padding));
+      panel.style.left = `${Math.round(left)}px`;
       panel.style.top = `${Math.round(top)}px`;
+      panel.style.removeProperty("height");
     };
 
     const closePanel = () => {

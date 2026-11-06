@@ -1806,3 +1806,42 @@ body.products-page .products-grid.is-empty{
   .products-resource-file__details b{font-size:12px}
   .products-resource-file>button{width:34px;height:34px}
 }
+
+/* ERP v334: One consistent product filter/action toolbar.
+   On wide layouts the filter stays left and permitted actions align right. */
+body.products-page .products-filter-panel {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  flex-wrap: wrap !important;
+  gap: 12px !important;
+  min-height: 0 !important;
+  padding: 14px 18px !important;
+}
+body.products-page .products-filter-panel .products-tag-filter-wrap {
+  flex: 0 1 360px;
+  width: min(360px,100%);
+}
+body.products-page .products-filter-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-inline-start: auto;
+}
+body.products-page .products-filter-actions .products-group-add-product {
+  margin: 0 !important;
+  text-decoration: none !important;
+  white-space: nowrap;
+}
+@media (max-width: 700px) {
+  body.products-page .products-filter-panel { align-items: stretch !important; padding: 12px !important; }
+  body.products-page .products-filter-panel .products-tag-filter-wrap { flex: 1 1 100%; max-width: 100%; }
+  body.products-page .products-filter-actions {
+    flex: 1 1 100%;
+    margin-inline-start: 0;
+    justify-content: flex-start;
+  }
+}

@@ -226,7 +226,7 @@ export default async function RootLayout({ children }) {
         <link rel="stylesheet" href="/next/css/style.css?v=boot-main51-v1" precedence="erp-shell" />
         <link rel="stylesheet" href="/next/css/ui-redesign.css?v=orders-filter-dot-black-251" precedence="erp-shell" />
         <link rel="stylesheet" href="/next/css/page-canvas-fix.css?v=boot-main51-v1" precedence="erp-shell" />
-        <link rel="stylesheet" href="/next/css/classic-parity.css?v=sidebar-home-divider-v326" precedence="erp-shell" />
+        <link rel="stylesheet" href="/next/css/classic-parity.css?v=desktop-flyouts-v334" precedence="erp-shell" />
         <link rel="stylesheet" href="/next/css/dark-mode.css?v=theme-v2-white-nav" precedence="erp-theme" />
         <link rel="stylesheet" href="/next/css/desktop-bottom-dock.css?v=desktop-dock-v332" precedence="erp-desktop-dock" />
         <link rel="stylesheet" href="/next/css/desktop-header-and-home-v333.css?v=333" precedence="erp-desktop-dock-v333" />
