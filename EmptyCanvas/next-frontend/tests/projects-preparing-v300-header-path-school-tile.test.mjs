@@ -12,7 +12,8 @@ const page = read('app/projects-preparing/page.jsx');
 test('project folder path appears in shared title with working client-side navigation', () => {
   assert.match(ui, /createPortal\(/);
   assert.match(ui, /document\.querySelector\("\.classic-app-shell \.main-header \.dash-title"\)/);
-  assert.match(ui, /onClick=\{onProjects\} title="All projects">Projects Preparing/);
+  assert.match(ui, /onClick=\{onProjects\} title="All projects">\s*<Ico name="folder"/);
+  assert.match(ui, /<span className="pr-header-path-label">Projects Preparing<\/span>/);
   assert.match(ui, /onClick=\{onProject\}/);
   assert.match(ui, /title=\{school\.beneficiary_name\}/);
   assert.match(ui, /function goToProjectsIndex\(\)/);

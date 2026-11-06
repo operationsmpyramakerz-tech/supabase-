@@ -3928,3 +3928,131 @@ body.next-classic-shell-active .classic-app-shell .main-header .dash-title:has(>
 
 /* v303 — only stage cards assigned through Users Center appear when granular stage access is ON. */
 .pr-project-stage-restricted {margin:14px 0;padding:17px;border:1px dashed #d6dae3;border-radius:12px;background:#fafafa;color:#677185;font-size:12px;line-height:1.55;}
+
+
+/* v330 — connected chevron breadcrumb, based on the approved Home > ... > G1
+   reference. The actual Projects Preparing/project/school path is preserved;
+   this only changes the appearance of the existing clickable header path. */
+body.next-classic-shell-active .classic-app-shell .main-header .dash-title:has(> .pr-header-path--chevrons) {
+  max-width:min(69vw, 900px)!important;
+  gap:0!important;
+  min-height:46px!important;
+  overflow:visible!important;
+}
+body.next-classic-shell-active .classic-app-shell .main-header .dash-title:has(> .pr-header-path--chevrons)::before {
+  display:none!important;
+  content:none!important;
+}
+.pr-header-path--chevrons {
+  display:inline-flex;
+  align-items:center;
+  gap:3px;
+  max-width:100%;
+  min-width:0;
+  height:46px;
+  overflow:hidden;
+  font-size:15px;
+  font-weight:800;
+  letter-spacing:-.016em;
+  white-space:nowrap;
+}
+.pr-header-path--chevrons > .pr-header-path-segment {
+  display:inline-flex;
+  flex:0 1 auto;
+  align-items:center;
+  justify-content:flex-start;
+  gap:11px;
+  height:44px;
+  min-width:0;
+  max-width:260px;
+  padding:0 30px 0 21px;
+  margin:0;
+  border:0;
+  border-radius:0;
+  box-shadow:none;
+  background:#eceef3;
+  color:#596579;
+  font:inherit;
+  line-height:1;
+  clip-path:polygon(0 0, calc(100% - 17px) 0, 100% 50%, calc(100% - 17px) 100%, 0 100%, 17px 50%);
+  transition:background-color .15s ease, color .15s ease;
+}
+.pr-header-path--chevrons > .pr-header-path-segment:first-child {
+  padding-left:18px;
+  border-radius:14px 0 0 14px;
+  clip-path:polygon(0 0, calc(100% - 17px) 0, 100% 50%, calc(100% - 17px) 100%, 0 100%);
+}
+.pr-header-path--chevrons > .pr-header-path-segment:last-child {
+  padding-right:22px;
+  border-radius:0 14px 14px 0;
+  clip-path:polygon(0 0, 100% 0, 100% 100%, 0 100%, 17px 50%);
+}
+.pr-header-path--chevrons > .pr-header-path-segment:first-child:last-child {
+  border-radius:14px;
+  clip-path:none;
+}
+.pr-header-path--chevrons > .pr-header-path-current,
+.pr-header-path--chevrons > .pr-header-path-current:last-child {
+  background:#f97316;
+  color:#fff;
+}
+.pr-header-path--chevrons > button:hover {
+  background:#dce1e9;
+  color:#25324a;
+}
+.pr-header-path--chevrons > button:focus-visible {
+  outline:2px solid #ea580c;
+  outline-offset:-2px;
+}
+.pr-header-path--chevrons > .pr-header-path-segment > svg {
+  flex:none;
+  width:17px;
+  height:17px;
+  stroke-width:2.1;
+}
+.pr-header-path--chevrons .pr-header-path-label {
+  display:block;
+  min-width:0;
+  overflow:hidden;
+  white-space:nowrap;
+  text-overflow:ellipsis;
+}
+html[data-theme="dark"] .pr-header-path--chevrons > .pr-header-path-segment:not(.pr-header-path-current) {
+  background:#292e37;
+  color:#e5e7eb;
+}
+html[data-theme="dark"] .pr-header-path--chevrons > button:not(.pr-header-path-current):hover {
+  background:#394353;
+  color:#fff;
+}
+@media (max-width:768px) {
+  body.next-classic-shell-active .classic-app-shell .main-header .dash-title:has(> .pr-header-path--chevrons) {
+    max-width:min(63vw,490px)!important;
+  }
+  .pr-header-path--chevrons {height:41px;font-size:12px;gap:2px;}
+  .pr-header-path--chevrons > .pr-header-path-segment {
+    height:39px;gap:6px;max-width:170px;
+    padding:0 22px 0 17px;
+    clip-path:polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%, 12px 50%);
+  }
+  .pr-header-path--chevrons > .pr-header-path-segment:first-child {
+    padding-left:12px;
+    clip-path:polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%);
+  }
+  .pr-header-path--chevrons > .pr-header-path-segment:last-child {
+    padding-right:12px;
+    clip-path:polygon(0 0,100% 0,100% 100%,0 100%,12px 50%);
+  }
+  .pr-header-path--chevrons > .pr-header-path-segment > svg {width:14px;height:14px;}
+}
+@media (max-width:480px) {
+  body.next-classic-shell-active .classic-app-shell .main-header .dash-title:has(> .pr-header-path--chevrons) {
+    max-width:min(61vw,310px)!important;
+  }
+  .pr-header-path--chevrons {font-size:11px;}
+  .pr-header-path--chevrons > .pr-header-path-segment {max-width:118px;}
+  .pr-header-path--chevrons > .pr-header-path-root {max-width:136px;}
+}
+@media (prefers-reduced-motion:reduce) {
+  .pr-header-path--chevrons > .pr-header-path-segment {transition:none;}
+}

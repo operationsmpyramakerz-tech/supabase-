@@ -92,12 +92,22 @@ function ProjectHeaderPath({ project, school, onProjects, onProject }) {
   }, []);
   if (!project || !titleContainer) return null;
   return createPortal(
-    <nav className="pr-header-path" aria-label="Project folder path">
-      <button type="button" className="pr-header-path-segment pr-header-path-root" onClick={onProjects} title="All projects">Projects Preparing</button>
-      <Ico name="arrow" size={15}/>
-      {school ? <button type="button" className="pr-header-path-segment pr-header-path-project" onClick={onProject} title={`Back to ${project.name}`}>{project.name}</button>
-        : <span className="pr-header-path-segment pr-header-path-current" title={project.name} aria-current="page">{project.name}</span>}
-      {school && <><Ico name="arrow" size={15}/><span className="pr-header-path-segment pr-header-path-current" title={school.beneficiary_name} aria-current="page">{school.beneficiary_name}</span></>}
+    <nav className="pr-header-path pr-header-path--chevrons" aria-label="Project folder path">
+      <button type="button" className="pr-header-path-segment pr-header-path-root" onClick={onProjects} title="All projects">
+        <Ico name="folder" size={17}/><span className="pr-header-path-label">Projects Preparing</span>
+      </button>
+      {school ? (
+        <button type="button" className="pr-header-path-segment pr-header-path-project" onClick={onProject} title={`Back to ${project.name}`}>
+          <Ico name="layers" size={17}/><span className="pr-header-path-label">{project.name}</span>
+        </button>
+      ) : (
+        <span className="pr-header-path-segment pr-header-path-current" title={project.name} aria-current="page">
+          <Ico name="layers" size={17}/><span className="pr-header-path-label">{project.name}</span>
+        </span>
+      )}
+      {school && <span className="pr-header-path-segment pr-header-path-current" title={school.beneficiary_name} aria-current="page">
+        <Ico name="school" size={17}/><span className="pr-header-path-label">{school.beneficiary_name}</span>
+      </span>}
     </nav>,
     titleContainer
   );
