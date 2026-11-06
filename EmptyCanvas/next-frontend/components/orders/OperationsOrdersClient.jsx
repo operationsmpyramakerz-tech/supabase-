@@ -13,7 +13,8 @@ import { cancelOrderOpenTimer, loadOrderAndModalWithMetrics, markOrderOpenStarte
 import OrderDetailsLoadingOverlay from "./OrderDetailsLoadingOverlay";
 import OrdersPerformancePanel from "./OrdersPerformancePanel";
 import OrderTypeBadge from "./OrderTypeBadge";
-import OrdersEmptyState, { OrdersListHeader, sortOrderGroups } from "./OrdersEmptyState";
+import OrdersEmptyState, { sortOrderGroups } from "./OrdersEmptyState";
+import OrdersPreferencesControl from "./OrdersPreferencesControl";
 import ActionLoadingModal, { useActionLoading } from "../ActionLoadingModal";
 import { loadTeamMemberPublicProfile } from "../../lib/team-member-public-client";
 
@@ -1493,8 +1494,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
             </div>
           </div>
           <div className="orders-toolbar__divider" aria-hidden="true" />
-          <OrdersListHeader sortMode={sortMode} onSortChange={setSortMode} hasMore={pageInfo?.hasMore} />
-          <TypeFilter value={type} options={typeOptions} onChange={setType} onOpen={completeTypes.refresh} loading={completeTypes.loading} error={completeTypes.error} />
+          <OrdersPreferencesControl sortMode={sortMode} onSortChange={setSortMode} hasMore={pageInfo?.hasMore} filterValue={type} onFilterChange={setType} onFilterOpen={completeTypes.refresh} loading={completeTypes.loading} error={completeTypes.error} filterOptions={typeOptions.map(option => { const meta = orderTypeMeta(option.raw || option.label); return { ...option, icon: meta.icon, bg: meta.bg, fg: meta.fg, bd: meta.bd }; })} />
         </div>
       </div>
 

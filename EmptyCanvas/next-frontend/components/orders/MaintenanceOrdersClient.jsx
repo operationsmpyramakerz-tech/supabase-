@@ -9,7 +9,8 @@ import { cancelOrderOpenTimer, loadOrderAndModalWithMetrics, markOrderOpenStarte
 import OrderDetailsLoadingOverlay from "./OrderDetailsLoadingOverlay";
 import OrdersPerformancePanel from "./OrdersPerformancePanel";
 import OrderTypeBadge from "./OrderTypeBadge";
-import OrdersEmptyState, { OrdersListHeader, sortOrderGroups } from "./OrdersEmptyState";
+import OrdersEmptyState, { sortOrderGroups } from "./OrdersEmptyState";
+import OrdersPreferencesControl from "./OrdersPreferencesControl";
 import { loadTeamMemberPublicProfile } from "../../lib/team-member-public-client";
 import { orderCardAllows } from "../../lib/order-data-scope.mjs";
 
@@ -1171,8 +1172,7 @@ export default function MaintenanceOrdersClient({ initialOrders = [], initialOpt
         <div className="orders-toolbar" aria-label="Maintenance orders tools">
           <div className="orders-toolbar__scroll"><div className="portfolio-tabs portfolio-tabs--iconic" role="tablist" aria-label="Maintenance Orders status">{STATUS_TABS.map((item) => <button type="button" className={`tab-portfolio order-status-tab ${tab === item.key ? "active" : ""}`} onClick={() => setTab(item.key)} role="tab" aria-selected={tab === item.key} key={item.key}><span className="order-status-tab__icon"><ClassicOrderIcon name={item.icon} /></span><span className="order-status-tab__label">{item.label}</span></button>)}</div></div>
           <div className="orders-toolbar__divider" aria-hidden="true" />
-          <OrdersListHeader sortMode={sortMode} onSortChange={setSortMode} hasMore={pageInfo?.hasMore} />
-          <MaintenanceFilter value={type} onChange={setType} count={completeTypes.counts?.total ?? null} onOpen={completeTypes.refresh} loading={completeTypes.loading} error={completeTypes.error} />
+          <OrdersPreferencesControl sortMode={sortMode} onSortChange={setSortMode} hasMore={pageInfo?.hasMore} filterValue={type} onFilterChange={setType} onFilterOpen={completeTypes.refresh} loading={completeTypes.loading} error={completeTypes.error} filterOptions={[{ key: "requestmaintenance", label: "Request Maintenance", count: completeTypes.counts?.total ?? null, icon: "tool", bg: "#FEF3C7", fg: "#92400E", bd: "#FDE68A" }]} />
         </div>
       </div>
 

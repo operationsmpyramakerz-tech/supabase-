@@ -45,13 +45,12 @@ test('incomplete and repeating pages fail rather than display misleading totals'
   await assert.rejects(() => collectOrderTypeCounts(async () => ({ items: [], pageInfo: { hasMore: true, nextCursor: 1 } })), /did not advance/);
 });
 
-test('every orders filter loses the dot and uses a complete dataset hook', () => {
+test('every orders page feeds complete type counts to the combined preferences control', () => {
   for (const name of pageNames) {
     const source = read(`components/orders/${name}`);
     assert.match(source, /useCompleteOrderTypeCounts\(\{ endpoint:/, name);
-    assert.match(source, /onOpen=\{completeTypes\.refresh\}/, name);
-    assert.doesNotMatch(source, /className="orders-type-filter__button-dot"/, name);
-    assert.match(source, /className=\{`orders-type-filter .*is-filtered/, name);
+    assert.match(source, /onFilterOpen=\{completeTypes\.refresh\}/, name);
+    assert.match(source, /<OrdersPreferencesControl /, name);
   }
 });
 
@@ -68,5 +67,5 @@ test('aggregate request uses existing authorized routes with type=all and page s
 test('maintenance counts are not derived from the loaded groups', () => {
   const source = read('components/orders/MaintenanceOrdersClient.jsx');
   assert.doesNotMatch(source, /<MaintenanceFilter[^>]*count=\{groups\.length\}/);
-  assert.match(source, /count=\{completeTypes\.counts\?\.total \?\? null\}/);
+  assert.match(source, /count: completeTypes\.counts\?\.total \?\? null/);
 });

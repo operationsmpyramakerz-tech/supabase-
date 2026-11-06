@@ -8,19 +8,20 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = file => readFileSync(path.join(root, file), 'utf8');
 const toolbar = read('components/orders/OrdersEmptyState.jsx');
 const workspaceCss = read('public/css/orders-workspace.css');
-const redesignCss = read('public/css/ui-redesign.css');
+const preferences = read('components/orders/OrdersPreferencesControl.jsx');
 const shell = read('components/PersistentAppShell.jsx');
-const layout = read('app/layout.jsx');
 const pages = [
   'OperationsOrdersClient.jsx', 'CurrentOrdersClient.jsx',
   'OrdersReviewClient.jsx', 'MaintenanceOrdersClient.jsx',
 ];
 
-test('All four orders pages render the same shared OrdersListHeader', () => {
+test('All four orders pages use the single shared icon-only Preferences button', () => {
   for (const page of pages) {
     const source = read(`components/orders/${page}`);
-    assert.match(source, /import OrdersEmptyState,\s*\{ OrdersListHeader, sortOrderGroups \} from "\.\/OrdersEmptyState"/);
-    assert.match(source, /<OrdersListHeader[^>]+sortMode=\{sortMode\}[^>]+onSortChange=\{setSortMode\}/);
+    assert.match(source, /import OrdersPreferencesControl from "\.\/OrdersPreferencesControl"/);
+    assert.match(source, /<OrdersPreferencesControl[^>]+sortMode=\{sortMode\}[^>]+onSortChange=\{setSortMode\}/);
+    assert.match(source, /onFilterChange=\{setType\}/);
+    assert.doesNotMatch(source, /<OrdersListHeader /);
   }
 });
 
@@ -39,22 +40,20 @@ test('Sort dropdown preserves existing sort modes exactly', () => {
   assert.match(toolbar, /onSortChange\(option\.value\)/);
 });
 
-test('Modern sort dropdown has accessible states and supports keyboard navigation', () => {
-  for (const needle of ['aria-haspopup="menu"', 'aria-expanded={sortOpen}', 'role="menuitemradio"', 'aria-checked={sortMode === option.value}', 'ArrowDown', 'ArrowUp', 'Home', 'End', 'Escape', 'closeOnOutsideClick']) {
-    assert.ok(toolbar.includes(needle), needle);
+test('Combined Preferences popover has Filter and Sort tabs with accessible controls', () => {
+  for (const needle of ['aria-haspopup="dialog"', 'aria-expanded={open}', 'role="dialog"', 'role="tablist"', 'role="tabpanel"', 'aria-pressed=', 'Escape', 'pointerdown', 'ArrowRight', 'ArrowLeft']) {
+    assert.ok(preferences.includes(needle), needle);
   }
-  assert.match(workspaceCss, /orders-workspace-sort__menu\s*\{/);
-  assert.match(workspaceCss, /orders-workspace-sort__option\.is-active/);
-});
-
-test('Filter selected-state dot is dark, scoped to orders pages', () => {
-  const rule = redesignCss.match(/:where\(body\.current-orders-page, body\.operations-orders-page, body\.orders-review-page, body\[data-orders-view="maintenance"\], body\.page-orders-maintenance-orders\) \.orders-type-filter__button-dot\s*\{([^}]+)\}/)?.[1];
-  assert.ok(rule, 'orders-only indicator selector');
-  assert.match(rule, /background:\s*#111827\s*!important/);
-  assert.doesNotMatch(rule, /#FF5A1F|255,90,31/);
+  for (const key of ['latest', 'oldest', 'number-desc', 'number-asc', 'creator']) {
+    assert.ok(preferences.includes(`value: "${key}"`), key);
+  }
+  assert.match(workspaceCss, /orders-preferences__panel\s*\{/);
+  assert.match(workspaceCss, /orders-preferences__tabs/);
+  assert.match(workspaceCss, /orders-preferences__active-dot/);
+  assert.match(preferences, /<ClassicOrderIcon name="preferences"/);
+  assert.doesNotMatch(preferences, /orders-workspace-sort__value/);
 });
 
 test('Route style links use cache-busted versions for production', () => {
-  assert.equal((shell.match(/orders-workspace-v334-sort-by-filter/g) || []).length, 2);
-  assert.match(layout, /ui-redesign\.css\?v=orders-filter-dot-black-251/);
+  assert.equal((shell.match(/orders-workspace-v336-combined-preferences/g) || []).length, 2);
 });

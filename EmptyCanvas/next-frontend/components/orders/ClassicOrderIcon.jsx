@@ -11,6 +11,11 @@ export default function ClassicOrderIcon({ name, className = "" }) {
   };
 
   const paths = {
+    preferences: <><path d="M3 6h9m4 0h5M3 12h3m4 0h11M3 18h12m4 0h2"/><rect x="12" y="3.5" width="4" height="5" rx="1.5"/><rect x="6" y="9.5" width="4" height="5" rx="1.5"/><rect x="15" y="15.5" width="4" height="5" rx="1.5"/></>,
+    "sort-asc": <><path d="M4 7h6M4 12h10M4 17h13"/><path d="M19 19V5m-3 3 3-3 3 3"/></>,
+    "sort-numeric-desc": <><path d="M3 6h4m-2-2v9m-2 0h5"/><path d="M12 8h5m-5 4h5m-5 4h3"/><path d="M20 5v14m-3-3 3 3 3-3"/></>,
+    "sort-numeric-asc": <><path d="M3 6h4m-2-2v9m-2 0h5"/><path d="M12 8h5m-5 4h5m-5 4h3"/><path d="M20 19V5m-3 3 3-3 3 3"/></>,
+    "sort-alpha": <><path d="m3 16 4-11 4 11M4 13h6M14 7h6l-6 9h6"/><path d="M22 5v14m-3-3 3 3 3-3"/></>,
     "sort-desc": <><path d="M4 7h12"/><path d="M4 12h9"/><path d="M4 17h6"/><path d="m16 16 3 3 3-3"/><path d="M19 5v14"/></>,
     layers: <><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></>,
     eye: <><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></>,

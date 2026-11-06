@@ -9,17 +9,15 @@ const read = file => readFileSync(path.join(root, file), 'utf8');
 
 const orders = ['CurrentOrdersClient', 'OperationsOrdersClient', 'OrdersReviewClient', 'MaintenanceOrdersClient'];
 
-test('Orders title is removed and Sort sits immediately beside Filter for all four orders pages', () => {
+test('Orders title is removed and Filter plus Sort share one Preferences control across four pages', () => {
   const shared = read('components/orders/OrdersEmptyState.jsx');
   assert.ok(!shared.includes('orders-workspace-list-head__title">Orders</span>'));
   for (const name of orders) {
     const source = read(`components/orders/${name}.jsx`);
-    const filter = name === 'MaintenanceOrdersClient' ? '<MaintenanceFilter value={type}' : '<TypeFilter value={type}';
-    const sort = '<OrdersListHeader sortMode={sortMode} onSortChange={setSortMode} hasMore={pageInfo?.hasMore} />';
-    assert.ok(source.includes(sort), `${name} includes sort control`);
-    const pos = source.indexOf(sort);
-    assert.ok(pos > 0 && source.indexOf(filter, pos) > pos, `${name} keeps Sort before Filter`);
-    assert.ok(!source.slice(source.indexOf('list-surface')).includes('<OrdersListHeader'), `${name} has no extra list heading`);
+    assert.ok(source.includes('<OrdersPreferencesControl sortMode={sortMode}'), `${name} renders a combined Preferences control`);
+    assert.ok(source.includes('onFilterChange={setType}'), `${name} preserves type filtering`);
+    assert.ok(source.includes('onSortChange={setSortMode}'), `${name} preserves sorting`);
+    assert.ok(!source.includes('<OrdersListHeader '), `${name} has no second Sort control`);
   }
 });
 
