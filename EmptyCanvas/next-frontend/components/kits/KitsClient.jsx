@@ -1288,7 +1288,6 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
                     </header>
                   ) : (
                     <header className="products-proposal-detail__head proposal-detail-head--compact">
-                      <button type="button" className="products-back-btn" onClick={backToKits} aria-label="Back to kits"><FeatherIcon name="arrowLeft" /></button>
                       <div className="proposal-detail-actions proposal-detail-actions--classic">
                         <div className="proposal-download-menu-wrap">
                           <button type="button" className="btn b2b-download-primary proposal-download-btn" onClick={() => { setDownloadMenuOpen(true); setSortMenuOpen(false); }}>
