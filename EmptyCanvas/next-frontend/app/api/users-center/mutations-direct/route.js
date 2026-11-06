@@ -4,8 +4,9 @@ import { featureAllowed } from "../../../../lib/feature-permissions-registry";
 import { directPageAccessLevel } from "../../../../lib/order-action-auth";
 
 import { getDirectAccountGate } from "../../../../lib/products-auth";
-import { featureGate, replaceMemberFeatureAccess } from "../../../../lib/feature-permissions-server";
-import { rpc, selectById } from "../../../../lib/supabase-rest";
+import { featureGate, replaceMemberFeatureAccess, getMemberFeatureAccessForAdmin } from "../../../../lib/feature-permissions-server";
+import { ACTIVE_PILOT_FEATURE_KEYS, isKnownFeature } from "../../../../lib/feature-permissions-registry";
+import { rpc, select, selectById } from "../../../../lib/supabase-rest";
 import { normalizeTeamLinks } from "../../../../lib/team-scope-management.mjs";
 import { verifyUsersCenterAuthorizationToken } from "../../../../lib/users-center-action-auth";
 import {
@@ -21,6 +22,8 @@ import {
   savePageAccess,
   saveSvAccess,
   updateMember,
+  setMemberArchived,
+  bulkUpdatePageAccess,
 } from "../../../../lib/users-center-mutations";
 
 export const dynamic = "force-dynamic";
@@ -49,6 +52,9 @@ export async function POST(request) {
       "member-create": "users.member_create",
       "member-update": "users.member_edit",
       "member-delete": "users.member_delete",
+      "member-archive": "users.member_edit",
+      "page-access-bulk": "users.page_access_manage",
+      "feature-access-bulk": "users.feature_access_manage",
       "page-access-save": "users.page_access_manage",
       "feature-access-save": "users.feature_access_manage",
       "team-scope-save": "users.feature_access_manage",
@@ -137,6 +143,48 @@ export async function POST(request) {
     if (action === "member-update") {
       const member = await updateMember(body?.memberId, body?.fields || {});
       return json({ ok: true, member, source: "supabase-next" });
+    }
+    if (action === "member-archive") {
+      const memberId = text(body?.memberId);
+      if (!memberId || typeof body?.archived !== "boolean") return json({ ok: false, error: "Invalid account status request." }, 400);
+      if (body.archived && memberId === text(gate.account?.teamMemberId || gate.account?.userSupabaseId || gate.account?.id))
+        return json({ ok: false, error: "You cannot archive your own account." }, 403);
+      const result = await setMemberArchived(memberId, body.archived);
+      return json({ ok: true, result, message: result.archived ? "User archived." : "User restored.", source: "supabase-next" });
+    }
+    if (action === "page-access-bulk") {
+      const result = await bulkUpdatePageAccess(body?.memberIds, body?.changes, { grantedBy: reviewedBy });
+      return json({ ok: true, ...result, source: "supabase-next" });
+    }
+    if (action === "feature-access-bulk") {
+      const memberIds = Array.isArray(body?.memberIds) ? body.memberIds.map(text) : [];
+      const changes = Array.isArray(body?.changes) ? body.changes : [];
+      if (!memberIds.length || memberIds.length > 100 || memberIds.some((id) => !id) || new Set(memberIds).size !== memberIds.length)
+        return json({ ok: false, error: "Select 1–100 distinct accounts." }, 400);
+      if (!changes.length || changes.length > 250 || changes.some((change) => !ACTIVE_PILOT_FEATURE_KEYS.includes(text(change?.key)) || typeof change?.allowed !== "boolean") || new Set(changes.map((change) => text(change.key))).size !== changes.length)
+        return json({ ok: false, error: "Invalid advanced feature changes." }, 400);
+      const successes = [], failures = [];
+      for (const id of memberIds) {
+        try {
+          const target = await selectById(text(process.env.SUPABASE_TEAM_MEMBERS_TABLE) || "team_members", id, { select: "id" });
+          if (!target) throw new Error("User no longer exists.");
+          const profile = await getMemberFeatureAccessForAdmin(id);
+          if (!profile.available) throw new Error("Advanced Permissions are not configured on this server.");
+          if (!profile.enabled) throw new Error("Advanced Permissions are disabled for this account. Enable them individually before using bulk feature changes.");
+          // Avoid dropping legacy or future grant keys that the current editor cannot represent.
+          const originalKeys = await select("erp_member_feature_grants", { select: "permission_key", team_member_id: `eq.${id}`, limit: "1000" });
+          if ((originalKeys || []).some((entry) => !isKnownFeature(entry.permission_key))) throw new Error("This account has unrecognized legacy grants; review them individually before bulk editing.");
+          const grants = new Map((profile.grants || []).map((entry) => [entry.key, entry]));
+          for (const change of changes) {
+            const key = text(change.key);
+            const previous = grants.get(key);
+            grants.set(key, { key, allowed: change.allowed, scope: previous?.scope || "all" });
+          }
+          await replaceMemberFeatureAccess(id, [...grants.values()], { enabled: true });
+          successes.push(id);
+        } catch (error) { failures.push({ id, error: text(error?.message || "Could not save feature access.") }); }
+      }
+      return json({ ok: true, successes, failures, changedFeatures: changes.length, source: "supabase-next" });
     }
     if (action === "member-delete") {
       const result = await deleteMember(body?.memberId);

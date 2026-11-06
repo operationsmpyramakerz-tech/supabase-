@@ -14,7 +14,7 @@ test("All Users is the default tab and Departments is the second tab", () => {
   assert.match(client, /\[\{id:"users",label:"All Users",icon:"users"\},\{id:"departments",label:"Departments",icon:"grid"\}/);
   assert.match(client, /aria-pressed=\{directoryTab === item\.id\}/);
   assert.match(client, /changeDirectoryTab\(item\.id\)/);
-  assert.match(client, /function navigateDepartment\(id, push = true\) \{ setDepartmentActions\(""\); setDirectoryTab\("departments"\)/);
+  assert.match(client, /function navigateDepartment\(id, push = true\) \{[^\n]*setDirectoryTab\("departments"\)/);
 });
 
 test("All Users pulls actual members from every department and deduplicates by ID", () => {
@@ -52,7 +52,7 @@ test("mobile, tablet, dark-mode and updated CSS cache key are included", () => {
   assert.match(css, /html\[data-theme="dark"\] body\.user-access-page \.ua-directory-v339 \.ua-directory-user-card/);
   assert.match(css, /@media \(max-width: 640px\)/);
   assert.match(css, /ua-directory-tabs \{grid-template-columns: repeat\(5/);
-  assert.match(page, /users-center-directory-v339\.css\?v=340/);
+  assert.match(page, /users-center-directory-v339\.css\?v=341/);
 });
 
 test("edited JSX files parse", () => {

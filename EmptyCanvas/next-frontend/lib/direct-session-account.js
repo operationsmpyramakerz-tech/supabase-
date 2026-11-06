@@ -29,7 +29,7 @@ const MEMBER_ROW_CACHE_TTL_MS = boundedCacheTtl(process.env.DIRECT_AUTH_MEMBER_C
 
 const APP_PAGES_COMPACT_SELECT = "id,page_key,page_name,route_path,sort_order";
 const MEMBER_ACCESS_COMPACT_SELECT = "team_member_id,page_id,access_level,is_enabled";
-const MEMBER_ROW_COMPACT_SELECT = "id,name,position,department,profile_picture,phone,email,employee_code";
+const MEMBER_ROW_COMPACT_SELECT = "id,name,position,department,profile_picture,phone,email,employee_code,is_active";
 
 let appPagesCache = null;
 let appPagesInflight = null;
@@ -869,6 +869,9 @@ export async function getDirectAccountGateFromSessionContext(context = {}, requi
       };
     }
 
+    if (valueFor(memberRow, ["is_active", "isActive"]) === false) {
+      return { ok: false, status: 403, account: null, memberId, sessionBackend, error: "This account has been archived.", diagnosticCode: "AUTH_MEMBER_ARCHIVED" };
+    }
     const freshBaseAccount = accountFromFreshMember(baseAccount, memberRow, session);
     const freshPageAccess = directPageAccessRows(pages, accessRows);
     const isAdmin = builtInAdmin(freshBaseAccount, session);

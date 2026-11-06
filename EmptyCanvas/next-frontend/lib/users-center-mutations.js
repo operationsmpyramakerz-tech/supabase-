@@ -284,6 +284,33 @@ export async function savePageAccess(memberIdValue = "", entries = [], { granted
   const payload = await usersCenterPageAccess(id); const enabled = payload.pages.filter((row) => row.isEnabled); return { ...payload, summary: { allowedPages: enabled.map((row) => row.pageName).filter(Boolean), accessCount: enabled.length, adminCount: enabled.filter((row) => row.accessLevel === "admin").length } };
 }
 
+export async function bulkUpdatePageAccess(memberIds = [], changes = [], { grantedBy = "Admin" } = {}) {
+  const ids = (Array.isArray(memberIds) ? memberIds : []).map(text);
+  if (!ids.length || ids.length > 100 || ids.some((id) => !id) || new Set(ids).size !== ids.length)
+    throw httpError("Select between 1 and 100 unique users.", 400);
+  const operations = Array.isArray(changes) ? changes : [];
+  if (!operations.length || operations.length > 250) throw httpError("Choose at least one page to change.", 400);
+  const keys = operations.map((row) => text(row?.pageId || row?.pageKey));
+  if (keys.some((key) => !key) || new Set(keys).size !== keys.length || operations.some((row) => typeof row?.isEnabled !== "boolean" || !["view", "edit", "admin"].includes(text(row?.accessLevel || "view").toLowerCase())))
+    throw httpError("Invalid page-access changes.", 400);
+  const pages = await usersCenterAppPages({ assignableOnly: true });
+  const allowed = new Set(pages.flatMap((page) => [text(page.pageId || page.id), text(page.pageKey)]).filter(Boolean));
+  if (keys.some((key) => !allowed.has(key))) throw httpError("An unknown page was selected. Refresh and try again.", 400);
+  const team = await teamRows();
+  const known = new Set(team.map(memberId).filter(Boolean));
+  if (ids.some((id) => !known.has(id))) throw httpError("One or more selected users no longer exist.", 409);
+  const successes = [], failures = [];
+  for (const id of ids) {
+    try {
+      await savePageAccess(id, operations, { grantedBy, suppliedRows: team });
+      successes.push(id);
+    } catch (error) {
+      failures.push({ id, error: text(error?.message || "Could not save permissions.") });
+    }
+  }
+  return { successes, failures, changedPages: operations.length };
+}
+
 export async function saveSvAccess(memberIdValue = "", members = [], { suppliedRows = null } = {}) {
   const id = text(memberIdValue); if (!id) throw httpError("Missing team member ID.", 400); const rows = Array.isArray(suppliedRows) && suppliedRows.length ? suppliedRows : await teamRows(); const target = rows.find((row) => memberId(row) === id); if (!target) throw httpError("Team member was not found.", 404);
   const requested = new Set((Array.isArray(members) ? members : []).map((item) => text(item?.memberId || item?.id || item?.visible_team_member_id)).filter(Boolean)); const enabledRows = rows.filter((row) => requested.has(memberId(row)));
@@ -309,6 +336,24 @@ export async function updateMember(memberIdValue = "", fields = {}) {
   const newName = updatesName ? (text(valueForLabel(updated || writeRow, "Name")) || oldName) : oldName; const newPassword = updatesPassword ? text(valueForLabel(updated || writeRow, "Password")) : oldPassword;
   if ((updatesName && newName !== oldName) || (updatesPassword && newPassword !== oldPassword)) { try { await setDirectUserAuthRevokedAt(id, Date.now()); } catch {} }
   clearUsersCenterReadCaches(); clearDirectSessionAccountCaches(id); return (await usersCenterMemberDetails(id)).member;
+}
+
+// Archive is a reversible account-status change, not a deletion.
+export async function setMemberArchived(memberIdValue = "", archived = true) {
+  const id = text(memberIdValue);
+  if (!id) throw httpError("Missing team member ID.", 400);
+  const existing = await selectById(teamMembersTable(), id);
+  if (!existing) throw httpError("Team member was not found.", 404);
+  const statusColumn = findKey(Object.keys(existing), ["is_active", "isActive"]);
+  if (!statusColumn) throw httpError("This database has no is_active column for team_members. Account archiving is not configured.", 409);
+  const previouslyActive = bool(existing[statusColumn], true);
+  if (previouslyActive === !archived) return { id, name: memberName(existing), archived, unchanged: true };
+  await updateById(teamMembersTable(), id, { [statusColumn]: !archived });
+  // Sign out any archived account immediately by revoking sessions.
+  // Re-activation never restores a previously revoked session.
+  if (archived) await setDirectUserAuthRevokedAt(id, Date.now());
+  clearUsersCenterReadCaches(); clearDirectSessionAccountCaches(id);
+  return { id, name: memberName(existing), archived };
 }
 
 export async function deleteMember(memberIdValue = "") {

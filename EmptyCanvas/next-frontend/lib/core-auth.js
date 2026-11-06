@@ -305,6 +305,10 @@ export async function loginDirect({ username = "", password = "" } = {}) {
   if (!row) { const error = new Error("Invalid username or password."); error.status = 401; throw error; }
   const storedPassword = text(valueFor(row, ["password", "Password", "passcode", "pin"]));
   if (!storedPassword || storedPassword !== providedPassword) { const error = new Error("Invalid username or password."); error.status = 401; throw error; }
+  // Reversible Users Center archival must block new sign-ins as well as hide accounts.
+  if (valueFor(row, ["is_active", "isActive"]) === false) {
+    const error = new Error("This account is archived. Contact your administrator."); error.status = 403; throw error;
+  }
 
   const id = text(valueFor(row, ["id", "ID"]));
   if (!id) { const error = new Error("This account does not have a valid Supabase ID."); error.status = 500; throw error; }
