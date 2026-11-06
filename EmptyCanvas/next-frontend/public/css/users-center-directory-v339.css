@@ -511,3 +511,208 @@ html[data-theme="dark"] body.user-access-page .ua-directory-v339 .ua-empty--fold
  .user-access-page .ua-directory-v339 .ua-folder,
  .user-access-page .ua-directory-v339 .ua-directory-metric {transition:none !important;}
 }
+
+/* v340: user-first directory (default All Users, Departments second).
+   Reuse the existing dialogs/authorization actions; only the directory display
+   changes. Keep the same matte palette as the v339 department cards. */
+.user-access-page .ua-directory-v339 .ua-directory-users {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.user-access-page .ua-directory-v339 .ua-directory-users__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+.user-access-page .ua-directory-v339 .ua-directory-users__heading h3 {
+  margin: 0;
+  color: #161e2d;
+  font-size: 19px;
+  font-weight: 850;
+}
+.user-access-page .ua-directory-v339 .ua-directory-users__heading p {
+  margin: 3px 0 0;
+  color: #788294;
+  font-size: 12px;
+}
+.user-access-page .ua-directory-v339 .ua-directory-users__heading > span {
+  flex: 0 0 auto;
+  padding: 7px 12px;
+  border-radius: 14px;
+  color: #485366;
+  background: #f1f3f6;
+  font-size: 12px;
+  font-weight: 750;
+}
+.user-access-page .ua-directory-v339 .ua-directory-users__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 290px), 1fr));
+  align-items: stretch;
+  gap: 13px 16px;
+}
+.user-access-page .ua-directory-v339 .ua-directory-user-card {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid #e2e6ed;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 5px 12px rgba(15,23,42,.045);
+}
+.user-access-page .ua-directory-v339 .ua-directory-user-card__head {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+}
+.user-access-page .ua-directory-v339 .ua-directory-user-card .ua-avatar {
+  flex: 0 0 48px;
+  width: 48px;
+  height: 48px;
+  border: 1px solid #e6eaf0;
+  box-shadow: none;
+  background: #eef1f5;
+  font-size: 13px;
+}
+.user-access-page .ua-directory-v339 .ua-directory-user-card__identity {
+  display: grid;
+  flex: 1 1 auto;
+  min-width: 0;
+  gap: 4px;
+}
+.user-access-page .ua-directory-v339 .ua-directory-user-card__identity strong {
+  color: #121a29;
+  font-size: 14px;
+  font-weight: 850;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.user-access-page .ua-directory-v339 .ua-directory-user-card__identity span {
+  color: #727e90;
+  font-size: 12px;
+  font-weight: 550;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.user-access-page .ua-directory-v339 .ua-directory-user-card .ua-member-menu-wrap {
+  position: relative;
+  flex: 0 0 auto;
+}
+.user-access-page .ua-directory-v339 .ua-directory-user-card .ua-member-menu-btn {
+  min-width: 32px;
+  min-height: 32px;
+  border-radius: 10px;
+}
+.user-access-page .ua-directory-v339 .ua-directory-user-card__department {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: #6c5a4e;
+  font-size: 12px;
+  font-weight: 720;
+}
+.user-access-page .ua-directory-v339 .ua-directory-user-card__department > svg {
+  flex: 0 0 auto;
+  height: 15px;
+  width: 15px;
+  color: #e97722;
+}
+.user-access-page .ua-directory-v339 .ua-directory-user-card__department > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.user-access-page .ua-directory-v339 .ua-directory-user-card__department small {
+  margin-left: auto;
+  border-radius: 8px;
+  padding: 4px 7px;
+  font-size: 10px;
+  font-weight: 730;
+}
+.user-access-page .ua-directory-v339 .ua-directory-user-card__department small.is-active {
+  color: #17663a;
+  background: #e9f7ee;
+}
+.user-access-page .ua-directory-v339 .ua-directory-user-card__department small.is-inactive {
+  color: #7b8595;
+  background: #f0f1f3;
+}
+.user-access-page .ua-directory-v339 .ua-directory-user-card__details {
+  display: grid;
+  gap: 9px;
+  min-width: 0;
+  padding: 12px;
+  background: #f7f8fa;
+  border-radius: 12px;
+}
+.user-access-page .ua-directory-v339 .ua-directory-user-card__details > span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: #667185;
+  font-size: 12px;
+  font-weight: 580;
+}
+.user-access-page .ua-directory-v339 .ua-directory-user-card__details svg {
+  width: 15px;
+  height: 15px;
+  color: #909bad;
+  flex: 0 0 auto;
+}
+.user-access-page .ua-directory-v339 .ua-directory-user-card__edit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 38px;
+  background: #121827;
+  border: 0;
+  border-radius: 11px;
+  color: white;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 750;
+  cursor: pointer;
+}
+.user-access-page .ua-directory-v339 .ua-directory-user-card__edit svg {width: 15px; height: 15px;}
+.user-access-page .ua-directory-v339 .ua-directory-user-card__edit:hover {background:#263349;}
+.user-access-page .ua-directory-v339 .ua-directory-user-card__edit:focus-visible,
+.user-access-page .ua-directory-v339 .ua-directory-user-card .ua-member-menu-btn:focus-visible {
+  outline: 3px solid #ffb472;
+  outline-offset: 2px;
+}
+.user-access-page .ua-directory-v339 .ua-directory-users__empty {padding: 32px;}
+html[data-theme="dark"] body.user-access-page .ua-directory-v339 .ua-directory-users__heading h3 {color:#eff2f6;}
+html[data-theme="dark"] body.user-access-page .ua-directory-v339 .ua-directory-users__heading p {color:#adb6c5;}
+html[data-theme="dark"] body.user-access-page .ua-directory-v339 .ua-directory-users__heading > span {color:#c6cfdd;background:#232a36;}
+html[data-theme="dark"] body.user-access-page .ua-directory-v339 .ua-directory-user-card {background:#191d26;border-color:#343b48;}
+html[data-theme="dark"] body.user-access-page .ua-directory-v339 .ua-directory-user-card__identity strong {color:#edf0f7;}
+html[data-theme="dark"] body.user-access-page .ua-directory-v339 .ua-directory-user-card__identity span {color:#aab5c6;}
+html[data-theme="dark"] body.user-access-page .ua-directory-v339 .ua-directory-user-card__department {color:#d5ac8b;}
+html[data-theme="dark"] body.user-access-page .ua-directory-v339 .ua-directory-user-card__details {background:#222834;}
+html[data-theme="dark"] body.user-access-page .ua-directory-v339 .ua-directory-user-card__details > span {color:#b5bdc9;}
+html[data-theme="dark"] body.user-access-page .ua-directory-v339 .ua-directory-user-card__edit {background:#313b50;}
+@media (max-width: 640px) {
+  .user-access-page .ua-directory-v339 .ua-directory-tabs {grid-template-columns: repeat(5, minmax(0,1fr));}
+  .user-access-page .ua-directory-v339 .ua-directory-tab {gap:3px; min-width:0; padding:0 2px; font-size:10px;}
+  .user-access-page .ua-directory-v339 .ua-directory-tab svg {height:14px;width:14px;flex:0 0 auto;}
+  .user-access-page .ua-directory-v339 .ua-directory-users__grid {grid-template-columns:1fr;}
+}
+@media (max-width: 420px) {
+  .user-access-page .ua-directory-v339 .ua-directory-tabs {display:flex;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;}
+  .user-access-page .ua-directory-v339 .ua-directory-tabs::-webkit-scrollbar {display:none;}
+  .user-access-page .ua-directory-v339 .ua-directory-tab {min-width:max-content;padding:0 8px;}
+}

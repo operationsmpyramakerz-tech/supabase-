@@ -35,7 +35,7 @@ test('department navigation, long press edit/delete, and member permissions rema
   assert.match(client, /<AddDepartmentFolder onClick=\{openDepartmentCreate\}/);
 });
 test('search, sort and responsive columns are present', () => {
-  assert.match(client, /aria-label="Sort departments"/);
+  assert.match(client, /aria-label=\{isMemberDirectoryTab \? "Sort users" : "Sort departments"\}/);
   assert.match(client, /onChange=\{\(event\) => setSearch\(event\.target\.value\)\}/);
   assert.match(client, /visibleDepartments\.map/);
   assert.match(css, /grid-template-columns: repeat\(2,minmax\(0,1fr\)\) !important;/);

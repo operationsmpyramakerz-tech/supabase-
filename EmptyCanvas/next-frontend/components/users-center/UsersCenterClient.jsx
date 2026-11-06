@@ -210,6 +210,35 @@ function AddDepartmentFolder({ onClick }) {
 }
 
 
+/* A compact, user-first card for the default directory view. The existing
+   department member editor/permissions remain the only mutation path. */
+function UserDirectoryCard({ member, access, menuOpen, onMenuToggle, onEdit, onMove, onDelete }) {
+  const departmentLabel = text(member.directoryDepartment || member.department) || "No Department";
+  return <article className="ua-directory-user-card">
+    <div className="ua-directory-user-card__head">
+      <Avatar member={member}/>
+      <div className="ua-directory-user-card__identity">
+        <strong title={member.name || "Unnamed user"}>{member.name || "Unnamed user"}</strong>
+        <span title={member.position || "Team Member"}>{member.position || "Team Member"}</span>
+      </div>
+      {(access.memberMove || access.memberDelete) ? <div className="ua-member-menu-wrap">
+        <button type="button" className="ua-member-menu-btn" aria-label={`More actions for ${member.name || "user"}`} aria-expanded={menuOpen} onClick={(event) => { event.stopPropagation(); onMenuToggle(); }}><span className="ua-member-menu-dots">•••</span></button>
+        <div className="ua-member-menu" hidden={!menuOpen}>
+          {access.memberMove ? <button type="button" onClick={onMove}><UAIcon name="move"/><span>Move</span></button> : null}
+          {access.memberDelete ? <button type="button" className="is-danger" onClick={onDelete}><UAIcon name="trash"/><span>Delete</span></button> : null}
+        </div>
+      </div> : null}
+    </div>
+    <div className="ua-directory-user-card__department"><UAIcon name="folder"/><span title={departmentLabel}>{departmentLabel}</span>{typeof member.isActive === "boolean" ? <small className={member.isActive ? "is-active" : "is-inactive"}>{member.isActive ? "Active" : "Inactive"}</small> : null}</div>
+    <div className="ua-directory-user-card__details">
+      <span title={member.email || "No email"}><UAIcon name="mail"/>{member.email || "No email"}</span>
+      <span title={member.phone || "No phone"}><UAIcon name="phone"/>{member.phone || "No phone"}</span>
+    </div>
+    {access.memberEdit ? <button className="ua-directory-user-card__edit" type="button" onClick={onEdit}><UAIcon name="edit"/><span>Edit</span></button> : null}
+  </article>;
+}
+
+
 export default function UsersCenterClient({ account, initialDirectory, initialSignupRequests, bootstrapWarnings = [] }) {
   const can = (key) => featureAllowed(account, `users.${key}`);
   const access = {
@@ -219,9 +248,34 @@ export default function UsersCenterClient({ account, initialDirectory, initialSi
     signupApprove: can("signup_approve"), signupReject: can("signup_reject"),
   };
   const [directory, setDirectory] = useState(() => normalizeDirectory(initialDirectory));
-  const [selectedDepartmentId, setSelectedDepartmentId] = useState(""); const [search, setSearch] = useState(""); const [directoryTab, setDirectoryTab] = useState("departments"); const [sortMode, setSortMode] = useState("name"); const [departmentActions, setDepartmentActions] = useState(""); const [toast, setToast] = useState(null); const [passwordAction, setPasswordAction] = useState(null); const [confirm, setConfirm] = useState(null); const [departmentForm, setDepartmentForm] = useState(null); const [memberForm, setMemberForm] = useState(null); const [memberDetailLoading, setMemberDetailLoading] = useState(false); const [moveMember, setMoveMember] = useState(null); const [signupOpen, setSignupOpen] = useState(false); const [pendingSignupCount, setPendingSignupCount] = useState((initialSignupRequests?.requests || []).length); const [memberMenu, setMemberMenu] = useState(""); const [pageAccessOpen, setPageAccessOpen] = useState(false); const [svAccessOpen, setSvAccessOpen] = useState(false); const [pageAccessRows, setPageAccessRows] = useState([]); const [svRows, setSvRows] = useState([]);
+  const [selectedDepartmentId, setSelectedDepartmentId] = useState(""); const [search, setSearch] = useState(""); const [directoryTab, setDirectoryTab] = useState("users"); const [sortMode, setSortMode] = useState("name"); const [departmentActions, setDepartmentActions] = useState(""); const [toast, setToast] = useState(null); const [passwordAction, setPasswordAction] = useState(null); const [confirm, setConfirm] = useState(null); const [departmentForm, setDepartmentForm] = useState(null); const [memberForm, setMemberForm] = useState(null); const [memberDetailLoading, setMemberDetailLoading] = useState(false); const [moveMember, setMoveMember] = useState(null); const [signupOpen, setSignupOpen] = useState(false); const [pendingSignupCount, setPendingSignupCount] = useState((initialSignupRequests?.requests || []).length); const [memberMenu, setMemberMenu] = useState(""); const [pageAccessOpen, setPageAccessOpen] = useState(false); const [svAccessOpen, setSvAccessOpen] = useState(false); const [pageAccessRows, setPageAccessRows] = useState([]); const [svRows, setSvRows] = useState([]);
   const selectedDepartment = directory.departments.find((department) => department.id === selectedDepartmentId) || null;
   const allMembers = useMemo(() => directory.departments.flatMap((department) => department.members || []), [directory]);
+  const membersWithDepartments = useMemo(() => {
+    const seen = new Set();
+    return directory.departments.flatMap((department) => (department.members || []).map((member) => ({ ...member, directoryDepartment: department.name }))).filter((member) => {
+      // A user can be referenced from more than one department in legacy data.
+      // Prefer the immutable account ID, not the display name, for deduplication.
+      const key = text(member.id) || `${lower(member.name)}|${lower(member.email)}|${lower(member.directoryDepartment)}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [directory.departments]);
+  const isMemberDirectoryTab = directoryTab === "users" || directoryTab === "active" || directoryTab === "archived";
+  const visibleUsers = useMemo(() => {
+    const q = lower(search);
+    const rows = membersWithDepartments.filter((member) => {
+      if (directoryTab === "active" && member.isActive !== true) return false;
+      if (directoryTab === "archived" && member.isActive !== false) return false;
+      return !q || lower(`${member.name} ${member.position} ${member.directoryDepartment} ${member.email} ${member.phone} ${member.employeeCode}`).includes(q);
+    });
+    if (sortMode === "name-desc") rows.sort((a, b) => text(b.name).localeCompare(text(a.name)));
+    else if (sortMode === "department") rows.sort((a, b) => text(a.directoryDepartment).localeCompare(text(b.directoryDepartment)) || text(a.name).localeCompare(text(b.name)));
+    else rows.sort((a, b) => text(a.name).localeCompare(text(b.name)));
+    return rows;
+  }, [membersWithDepartments, directoryTab, search, sortMode]);
+  function changeDirectoryTab(nextTab) { setDirectoryTab(nextTab); setSearch(""); setSortMode("name"); setDepartmentActions(""); setMemberMenu(""); }
   const positionOptions = useMemo(() => unique(allMembers.map((member) => member.position)).sort((a, b) => a.localeCompare(b)), [allMembers]);
   const filteredDepartments = useMemo(() => { const q = lower(search); if (!q) return directory.departments; return directory.departments.filter((department) => lower(`${department.name} ${(department.members || []).map((member) => `${member.name} ${member.email} ${member.phone} ${member.employeeCode}`).join(" ")}`).includes(q)); }, [directory, search]);
   const filteredMembers = useMemo(() => { if (!selectedDepartment) return []; const q = lower(search); return sortByName((selectedDepartment.members || []).filter((member) => !q || lower(`${member.name} ${member.position} ${member.email} ${member.phone} ${member.employeeCode}`).includes(q))); }, [selectedDepartment, search]);
@@ -265,7 +319,7 @@ export default function UsersCenterClient({ account, initialDirectory, initialSi
   }
 
   function writeDepartmentUrl(id, push = true) { if (typeof window === "undefined") return; const url = new URL(window.location.href); if (id) url.searchParams.set("department", id); else url.searchParams.delete("department"); const next = `${url.pathname}${url.search}${url.hash}`; if (push) window.history.pushState({}, "", next); else window.history.replaceState({}, "", next); }
-  function navigateDepartment(id, push = true) { setDepartmentActions(""); setSelectedDepartmentId(id || ""); setSearch(""); writeDepartmentUrl(id, push); window.setTimeout(() => document.querySelector(".ua-members-panel")?.scrollIntoView({ behavior: "smooth", block: "start" }), 20); }
+  function navigateDepartment(id, push = true) { setDepartmentActions(""); setDirectoryTab("departments"); setSelectedDepartmentId(id || ""); setSearch(""); writeDepartmentUrl(id, push); window.setTimeout(() => document.querySelector(".ua-members-panel")?.scrollIntoView({ behavior: "smooth", block: "start" }), 20); }
   function backDepartments(push = true) { setDepartmentActions(""); setSelectedDepartmentId(""); setSearch(""); writeDepartmentUrl("", push); }
 
   useEffect(() => { const read = () => { const id = new URLSearchParams(window.location.search).get("department") || ""; if (id && directory.departments.some((department) => department.id === id)) setSelectedDepartmentId(id); else setSelectedDepartmentId(""); }; read(); window.addEventListener("popstate", read); return () => window.removeEventListener("popstate", read); }, [directory.departments.length]);
@@ -335,15 +389,27 @@ export default function UsersCenterClient({ account, initialDirectory, initialSi
       <section className="ua-folders-panel" aria-label="Departments">
         <div className="ua-directory-toolbar">
           <div className="ua-directory-tabs" role="group" aria-label="Directory view">
-            {[{id:"departments",label:"Departments",icon:"grid"},{id:"teams",label:"Teams",icon:"users"},{id:"active",label:"Active",icon:"checkCircle"},{id:"archived",label:"Archived",icon:"archive"}].map((item) => <button key={item.id} type="button" className={`ua-directory-tab${directoryTab === item.id ? " is-active" : ""}`} onClick={() => setDirectoryTab(item.id)} aria-pressed={directoryTab === item.id} disabled={(item.id === "active" || item.id === "archived") && !statusAvailable} title={(item.id === "active" || item.id === "archived") && !statusAvailable ? "Account status isn't available in this directory" : undefined}><UAIcon name={item.icon}/><span>{item.label}</span></button>)}
+            {[{id:"users",label:"All Users",icon:"users"},{id:"departments",label:"Departments",icon:"grid"},{id:"teams",label:"Teams",icon:"folder"},{id:"active",label:"Active",icon:"checkCircle"},{id:"archived",label:"Archived",icon:"archive"}].map((item) => <button key={item.id} type="button" className={`ua-directory-tab${directoryTab === item.id ? " is-active" : ""}`} onClick={() => changeDirectoryTab(item.id)} aria-pressed={directoryTab === item.id} disabled={(item.id === "active" || item.id === "archived") && !statusAvailable} title={(item.id === "active" || item.id === "archived") && !statusAvailable ? "Account status isn't available in this directory" : undefined}><UAIcon name={item.icon}/><span>{item.label}</span></button>)}
           </div>
-          {access.departmentCreate ? <AddDepartmentFolder onClick={openDepartmentCreate}/> : null}
+          {isMemberDirectoryTab ? (access.memberCreate ? <button type="button" className="ua-directory-add" onClick={() => protectedOpen({ title: "Add team member", message: "Create a new user account?" }, () => openMember("create"))}><UAIcon name="addUser"/><span>Add Member</span></button> : null) : (access.departmentCreate ? <AddDepartmentFolder onClick={openDepartmentCreate}/> : null)}
         </div>
         <div className="ua-directory-filter-row">
-          <label className="ua-directory-search"><UAIcon name="search"/><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search departments..." aria-label="Search departments or members" /></label>
-          <label className="ua-directory-sort"><UAIcon name="filter"/><span>Sort</span><select value={sortMode} onChange={(event) => setSortMode(event.target.value)} aria-label="Sort departments"><option value="name">Name A–Z</option><option value="members">Most members</option><option value="fewest">Fewest members</option></select><UAIcon name="chevronDown"/></label>
+          <label className="ua-directory-search"><UAIcon name="search"/><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={isMemberDirectoryTab ? "Search users, departments or emails..." : "Search departments..."} aria-label={isMemberDirectoryTab ? "Search all users" : "Search departments or members"} /></label>
+          <label className="ua-directory-sort"><UAIcon name="filter"/><span>Sort</span><select value={sortMode} onChange={(event) => setSortMode(event.target.value)} aria-label={isMemberDirectoryTab ? "Sort users" : "Sort departments"}><option value="name">Name A–Z</option>{isMemberDirectoryTab ? <><option value="name-desc">Name Z–A</option><option value="department">Department A–Z</option></> : <><option value="members">Most members</option><option value="fewest">Fewest members</option></>}</select><UAIcon name="chevronDown"/></label>
         </div>
-        <div className="ua-folders">
+        {isMemberDirectoryTab ? <div className="ua-directory-users" aria-label={directoryTab === "users" ? "All users" : directoryTab === "active" ? "Active users" : "Archived users"}>
+          <div className="ua-directory-users__heading"><div><h3>{directoryTab === "users" ? "All Users" : directoryTab === "active" ? "Active Users" : "Archived Users"}</h3><p>Browse and manage individual accounts</p></div><span>{visibleUsers.length} {visibleUsers.length === 1 ? "user" : "users"}</span></div>
+          {visibleUsers.length ? <div className="ua-directory-users__grid">{visibleUsers.map((member) => <UserDirectoryCard
+            key={member.id || `${member.name}-${member.directoryDepartment}`}
+            member={member}
+            access={access}
+            menuOpen={memberMenu === member.id}
+            onMenuToggle={() => setMemberMenu((current) => current === member.id ? "" : member.id)}
+            onEdit={() => protectedOpen({ title: "Edit team member", message: `Edit ${member.name}'s account record?` }, () => openMember("edit", member))}
+            onMove={() => { setMemberMenu(""); protectedOpen({ title: "Move team member", message: `Move ${member.name} to another department?` }, () => setMoveMember(member)); }}
+            onDelete={() => { setMemberMenu(""); deleteMember(member); }}
+          />)}</div> : <div className="ua-empty ua-directory-users__empty">{search ? "No matching users" : "No users in this view"}</div>}
+        </div> : <div className="ua-folders">
           {visibleDepartments.map((department) => <DepartmentFolder
             key={department.id}
             department={department}
@@ -354,7 +420,7 @@ export default function UsersCenterClient({ account, initialDirectory, initialSi
             onDelete={access.departmentDelete ? (item) => { setDepartmentActions(""); deleteDepartment(item); } : undefined}
           />)}
           {!visibleDepartments.length ? <div className="ua-empty ua-empty--folders">{search ? "No matching departments" : "No departments in this view"}</div> : null}
-        </div>
+        </div>}
       </section>
     </> : <section className="ua-members-panel"><div className="ua-section-head ua-section-head--members ua-section-head--members-actions-only"><div className="ua-members-title"><h3>{selectedDepartment.name}</h3><p>{selectedDepartment.count} {selectedDepartment.count === 1 ? "member" : "members"}</p></div><div className="ua-members-actions">{access.memberCreate ? <button type="button" className="ua-add-member-btn" onClick={() => protectedOpen({ title: "Add team member", message: `Create a new account in ${selectedDepartment.name}?` }, () => openMember("create"))}><UAIcon name="addUser"/><span>Add Member</span></button> : null}</div></div>{!filteredMembers.length ? <div className="ua-empty">Sorry, No data available</div> : <div className="ua-members-grid">{filteredMembers.map((member) => <article className="ua-member-card" key={member.id}><div className="ua-member-card__top"><Avatar member={member}/><div className="ua-member-card__identity"><h4 title={member.name || "Unnamed"}>{member.name || "Unnamed"}</h4><p title={member.position || "Team Member"}>{member.position || "Team Member"}</p></div>{(access.memberMove || access.memberDelete) ? <div className="ua-member-menu-wrap"><button type="button" className="ua-member-menu-btn" aria-expanded={memberMenu === member.id} onClick={(event) => { event.stopPropagation(); setMemberMenu((current) => current === member.id ? "" : member.id); }} aria-label={`More actions for ${member.name || "user"}`}><span className="ua-member-menu-dots">•••</span></button><div className="ua-member-menu" hidden={memberMenu !== member.id}>{access.memberMove ? <button type="button" onClick={() => { setMemberMenu(""); protectedOpen({ title: "Move team member", message: `Move ${member.name} to another department?` }, () => setMoveMember(member)); }}><UAIcon name="move"/><span>Move</span></button> : null}{access.memberDelete ? <button type="button" className="is-danger" onClick={() => { setMemberMenu(""); deleteMember(member); }}><UAIcon name="trash"/><span>Delete</span></button> : null}</div></div> : null}</div><div className="ua-member-card__meta"><div className="ua-meta-line" title={member.employeeCode || "No employee code"}><UAIcon name="hash"/><span>{member.employeeCode || "No employee code"}</span></div><div className="ua-meta-line" title={member.phone || "No phone"}><UAIcon name="phone"/><span>{member.phone || "No phone"}</span></div><div className="ua-meta-line" title={member.email || "No email"}><UAIcon name="mail"/><span>{member.email || "No email"}</span></div></div>{access.memberEdit ? <div className="ua-member-card__actions"><button type="button" className="ua-btn ua-btn--dark" onClick={() => protectedOpen({ title: "Edit team member", message: `Edit ${member.name}'s account record?` }, () => openMember("edit", member))}><UAIcon name="edit"/><span>Edit</span></button></div> : null}</article>)}</div>}</section>}
 
