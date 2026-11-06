@@ -195,6 +195,7 @@ function compactDirectorySelect(sample = {}) {
     ["allowed_pages", "Allowed Pages", "Pages", "pages", "access_pages"],
     ["sv_school_member_ids", "sv_school_ids", "sv_member_ids"],
     ["sv_school_member_names", "sv_schools", "S.V Schools", "SV Schools"],
+    ["is_active", "isActive"],
   ];
   const keys = unique(groups.map((aliases) => exactColumnKey(sample, aliases)).filter(Boolean));
   const idKey = exactColumnKey(sample, ["id", "ID"]);
@@ -439,6 +440,7 @@ function serializeMemberSummary(row = {}) {
     email: text(valueForLabel(row, "Email")),
     employeeCode: text(valueForLabel(row, "Employee Code")),
     photoUrl: extractUrl(valueForLabel(row, "Profile picture")),
+    isActive: valueFor(row, ["is_active", "isActive"]) == null ? null : bool(valueFor(row, ["is_active", "isActive"])),
     // Keep the legacy column only as a zero-cost summary for directory cards.
     // The authoritative access matrix is loaded on demand when one member is opened.
     pageAccessSummary: {

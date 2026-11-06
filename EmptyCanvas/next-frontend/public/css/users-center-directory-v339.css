@@ -1,0 +1,513 @@
+/* Users Center – flat department directory, v339.
+   Scope all declarations to this page. Existing dialogs, access checks, modal
+   handlers and the surrounding ERP shell remain unchanged. */
+.user-access-page .ua-directory-v339 {
+  --ua-ink: #101624;
+  --ua-muted: #667185;
+  --ua-orange: #f47617;
+  --ua-line: #e6e9ef;
+  --ua-white: #fff;
+  gap: 21px;
+  padding-bottom: 32px;
+  color: var(--ua-ink);
+}
+.user-access-page .ua-directory-v339 .ua-directory-hero {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 148px;
+  border: 1px solid #343a44;
+  border-radius: 19px;
+  background: #272c34;
+  color: #fff;
+  overflow: hidden;
+  padding: 28px clamp(24px, 4.2vw, 48px);
+  box-shadow: 0 10px 25px rgba(13,18,27,.09);
+}
+.user-access-page .ua-directory-v339 .ua-directory-hero::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  right: -58px;
+  top: -30px;
+  width: 220px;
+  height: 250px;
+  transform: rotate(37deg);
+  background: linear-gradient(90deg, transparent 5%, rgba(244,118,23,.13) 5%, rgba(244,118,23,.13) 21%, transparent 21%, transparent 34%, rgba(244,118,23,.07) 34%, rgba(244,118,23,.07) 52%, transparent 52%);
+}
+.user-access-page .ua-directory-v339 .ua-directory-hero__copy {
+  position: relative;
+  padding-left: 19px;
+  max-width: 69%;
+}
+.user-access-page .ua-directory-v339 .ua-directory-hero__copy::before {
+  content: "";
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 0;
+  width: 4px;
+  border-radius: 6px;
+  background: #ff9c42;
+}
+.user-access-page .ua-directory-v339 .ua-directory-hero h2 {
+  margin: 0 0 7px;
+  color: #fff;
+  font-size: clamp(24px, 2.5vw, 34px);
+  font-weight: 850;
+  line-height: 1.1;
+  letter-spacing: -.035em;
+}
+.user-access-page .ua-directory-v339 .ua-directory-hero p {
+  margin: 0;
+  color: #cbd0d8;
+  font-size: clamp(12px, 1.25vw, 15px);
+  font-weight: 550;
+  line-height: 1.55;
+  max-width: 430px;
+}
+.user-access-page .ua-directory-v339 .ua-directory-hero__art {
+  display: grid;
+  place-items: center;
+  width: 175px;
+  height: 100px;
+  color: #e4e8ee;
+  opacity: .93;
+}
+.user-access-page .ua-directory-v339 .ua-directory-hero__art svg {
+  width: 128px;
+  height: 97px;
+  stroke-width: 1.35;
+  filter: drop-shadow(0 5px 1px rgba(0,0,0,.07));
+}
+.user-access-page .ua-directory-v339 .ua-directory-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0,1fr));
+  gap: 14px;
+  align-items: stretch;
+}
+.user-access-page .ua-directory-v339 .ua-directory-metric {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  min-height: 106px;
+  padding: 17px 18px;
+  border: 1px solid var(--ua-line);
+  border-radius: 19px;
+  background: var(--ua-white);
+  box-shadow: 0 8px 20px rgba(18,24,38,.065);
+  color: #263043;
+  text-align: left;
+  font: inherit;
+  cursor: default;
+}
+.user-access-page .ua-directory-v339 .ua-directory-metric > svg:first-child {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  stroke-width: 1.8;
+}
+.user-access-page .ua-directory-v339 .ua-directory-metric > svg:last-child:not(:first-child) {
+  margin-left: auto;
+  flex: 0 0 auto;
+  width: 17px;
+  height: 17px;
+}
+.user-access-page .ua-directory-v339 .ua-directory-metric > div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+.user-access-page .ua-directory-v339 .ua-directory-metric span {
+  color: #3c4453;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.2;
+}
+.user-access-page .ua-directory-v339 .ua-directory-metric strong {
+  color: #111827;
+  font-size: clamp(24px, 2.5vw, 34px);
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -.035em;
+}
+.user-access-page .ua-directory-v339 .ua-directory-metric--primary {
+  background: #272c34;
+  border-color: #272c34;
+  color: #f47617;
+}
+.user-access-page .ua-directory-v339 .ua-directory-metric--primary span,
+.user-access-page .ua-directory-v339 .ua-directory-metric--primary strong {
+  color: white;
+}
+.user-access-page .ua-directory-v339 .ua-directory-metric--clickable {cursor:pointer;}
+.user-access-page .ua-directory-v339 .ua-directory-metric--clickable:hover {border-color: #edb990; box-shadow: 0 8px 23px rgba(18,24,38,.105);}
+.user-access-page .ua-directory-v339 .ua-directory-metric--clickable:focus-visible,
+.user-access-page .ua-directory-v339 .ua-directory-tab:focus-visible,
+.user-access-page .ua-directory-v339 .ua-directory-add:focus-visible,
+.user-access-page .ua-directory-v339 .ua-folder:focus-visible {
+  outline: 3px solid #ffb472 !important;
+  outline-offset: 3px !important;
+}
+/* Directory area replaces the legacy square, dark, folder artwork. */
+.user-access-page .ua-directory-v339 .ua-folders-panel {
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.user-access-page .ua-directory-v339 .ua-directory-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 0 0 18px;
+}
+.user-access-page .ua-directory-v339 .ua-directory-tabs {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1px;
+  padding: 4px;
+  border-radius: 17px;
+  background: #f0f1f4;
+  min-width: 0;
+}
+.user-access-page .ua-directory-v339 .ua-directory-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 41px;
+  padding: 0 15px;
+  border: none;
+  border-radius: 13px;
+  background: transparent;
+  color: #272e3a;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 750;
+  cursor: pointer;
+}
+.user-access-page .ua-directory-v339 .ua-directory-tab svg {width:18px;height:18px;stroke-width:2;}
+.user-access-page .ua-directory-v339 .ua-directory-tab.is-active {
+  background: #101522;
+  color: #fff;
+  box-shadow: 0 5px 12px rgba(9,16,27,.1);
+  position: relative;
+}
+.user-access-page .ua-directory-v339 .ua-directory-tab.is-active::after {
+  content: "";
+  position: absolute;
+  bottom: -4px;
+  left: 12px;
+  right: 12px;
+  height: 3px;
+  border-radius: 5px;
+  background: var(--ua-orange);
+}
+.user-access-page .ua-directory-v339 .ua-directory-tab:disabled {opacity:.4;cursor:not-allowed;}
+.user-access-page .ua-directory-v339 .ua-directory-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  flex: 0 0 auto;
+  height: 46px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 15px;
+  background: #ff7416;
+  color: white;
+  box-shadow: 0 8px 20px rgba(244,118,23,.17);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  cursor:pointer;
+}
+.user-access-page .ua-directory-v339 .ua-directory-add:hover {background:#e9610d;}
+.user-access-page .ua-directory-v339 .ua-directory-add svg {width:21px;height:21px;}
+.user-access-page .ua-directory-v339 .ua-directory-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 0 0 19px;
+}
+.user-access-page .ua-directory-v339 .ua-directory-search {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  gap: 12px;
+  min-height: 53px;
+  padding: 0 18px;
+  border: 1px solid #e9ebf0;
+  border-radius: 22px;
+  background: #f3f4f7;
+  cursor: text;
+}
+.user-access-page .ua-directory-v339 .ua-directory-search > svg {width:21px;height:21px;color:#101827;flex:0 0 auto;}
+.user-access-page .ua-directory-v339 .ua-directory-search input {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  color: #182131;
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+  box-shadow:none;
+}
+.user-access-page .ua-directory-v339 .ua-directory-search input::placeholder {color:#838da0;opacity:1;}
+.user-access-page .ua-directory-v339 .ua-directory-search:focus-within {border-color:#c9ced8;box-shadow: 0 0 0 3px rgba(232,235,242,.65);}
+.user-access-page .ua-directory-v339 .ua-directory-sort {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  height: 53px;
+  min-width: 123px;
+  padding: 0 12px;
+  border: 1px solid #e4e7ed;
+  border-radius: 17px;
+  background: white;
+  box-shadow: 0 7px 17px rgba(16,24,40,.065);
+  cursor: pointer;
+  color: #1a2231;
+  font-size: 13px;
+  font-weight: 750;
+}
+.user-access-page .ua-directory-v339 .ua-directory-sort > svg {width:19px;height:19px;flex:0 0 auto;}
+.user-access-page .ua-directory-v339 .ua-directory-sort > svg:last-child {width:15px;height:15px;}
+.user-access-page .ua-directory-v339 .ua-directory-sort select {
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  opacity:0;
+  cursor:pointer;
+  appearance:none;
+}
+.user-access-page .ua-directory-v339 .ua-folders {
+  display:grid !important;
+  grid-template-columns: repeat(2,minmax(0,1fr)) !important;
+  align-items: stretch !important;
+  gap: 13px 16px !important;
+}
+.user-access-page .ua-directory-v339 .ua-folder:not(.ua-folder--add) {
+  display:flex !important;
+  align-items:center !important;
+  flex-direction:row !important;
+  grid-template-columns:none !important;
+  grid-template-rows:none !important;
+  gap:14px !important;
+  min-width:0 !important;
+  min-height:96px !important;
+  width:100% !important;
+  aspect-ratio:auto !important;
+  margin:0 !important;
+  padding:13px 15px !important;
+  border:1px solid #e2e6ed !important;
+  border-radius:19px !important;
+  background:#fff !important;
+  background-image:none !important;
+  color:#101827 !important;
+  box-shadow:0 5px 12px rgba(15,23,42,.045) !important;
+  transform:none !important;
+}
+.user-access-page .ua-directory-v339 .ua-folder:not(.ua-folder--add):hover {
+  border-color:#f4a16e !important;
+  box-shadow:0 9px 18px rgba(15,23,42,.07) !important;
+  transform:translateY(-1px) !important;
+}
+.user-access-page .ua-directory-v339 .ua-folder:not(.ua-folder--add)::before,
+.user-access-page .ua-directory-v339 .ua-folder:not(.ua-folder--add)::after {content:none !important;display:none !important;}
+.user-access-page .ua-directory-v339 .ua-folder:not(.ua-folder--add) .ua-folder__icon {
+  display:grid !important;
+  place-items:center !important;
+  flex:0 0 56px !important;
+  width:56px !important;
+  height:56px !important;
+  min-height:56px !important;
+  margin:0 !important;
+  padding:0 !important;
+  border:none !important;
+  border-radius:14px !important;
+  background:#fff0e3 !important;
+  color:#bd6a18 !important;
+  box-shadow:none !important;
+}
+.user-access-page .ua-directory-v339 .ua-folder:not(.ua-folder--add) .ua-folder__icon--slate {background:#eef0f5 !important;color:#526075 !important;}
+.user-access-page .ua-directory-v339 .ua-folder:not(.ua-folder--add) .ua-folder__icon--violet {background:#f1ecff !important;color:#6b53ac !important;}
+.user-access-page .ua-directory-v339 .ua-folder:not(.ua-folder--add) .ua-folder__icon--blue {background:#e6f3fd !important;color:#2c7bae !important;}
+.user-access-page .ua-directory-v339 .ua-folder:not(.ua-folder--add) .ua-folder__icon--green {background:#eaf7ed !important;color:#27934b !important;}
+.user-access-page .ua-directory-v339 .ua-folder:not(.ua-folder--add) .ua-folder__icon--orange {background:#fff1e4 !important;color:#ed731d !important;}
+.user-access-page .ua-directory-v339 .ua-folder:not(.ua-folder--add) .ua-folder__icon::before,
+.user-access-page .ua-directory-v339 .ua-folder:not(.ua-folder--add) .ua-folder__icon::after {content:none !important;display:none !important;}
+.user-access-page .ua-directory-v339 .ua-folder:not(.ua-folder--add) .ua-folder__icon svg {
+  width:30px !important;
+  height:30px !important;
+  stroke-width:1.8 !important;
+}
+.user-access-page .ua-directory-v339 .ua-folder:not(.ua-folder--add) .ua-folder__text {
+  display:grid !important;
+  align-content:center !important;
+  flex:1 1 auto !important;
+  gap:5px !important;
+  min-width:0 !important;
+  padding:0 !important;
+}
+.user-access-page .ua-directory-v339 .ua-folder:not(.ua-folder--add) .ua-folder__name {
+  display:block !important;
+  margin:0 !important;
+  color:#121a2a !important;
+  font-size:15px !important;
+  font-weight:830 !important;
+  line-height:1.25 !important;
+  overflow:hidden !important;
+  text-overflow:ellipsis !important;
+  white-space:nowrap !important;
+}
+.user-access-page .ua-directory-v339 .ua-folder:not(.ua-folder--add) .ua-folder__count {
+  display:flex !important;
+  align-items:center !important;
+  gap:5px !important;
+  margin:0 !important;
+  color:#657185 !important;
+  font-size:12px !important;
+  font-weight:650 !important;
+}
+.user-access-page .ua-directory-v339 .ua-folder__count svg {width:15px;height:15px;flex:0 0 auto;}
+.user-access-page .ua-directory-v339 .ua-folder__people {
+  display:flex;
+  align-items:center;
+  flex:0 0 auto;
+  padding-left:5px;
+  min-width:0;
+}
+.user-access-page .ua-directory-v339 .ua-folder__person,
+.user-access-page .ua-directory-v339 .ua-folder__overflow {
+  display:grid;
+  place-items:center;
+  flex:0 0 24px;
+  width:24px;
+  height:24px;
+  border:2px solid white;
+  border-radius:50%;
+  margin-left:-7px;
+  background:#e3e7ed;
+  color:#788295;
+  font-weight:750;
+  font-size:10px;
+}
+.user-access-page .ua-directory-v339 .ua-folder__person svg {width:14px;height:14px;stroke-width:2.5;}
+.user-access-page .ua-directory-v339 .ua-folder__overflow {background:#f47617;color:#fff;}
+.user-access-page .ua-directory-v339 .ua-folder__chevron {
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex:0 0 18px;
+  width:18px;
+  height:24px;
+  color:#171e2e;
+}
+.user-access-page .ua-directory-v339 .ua-folder__chevron svg {width:18px;height:18px;}
+.user-access-page .ua-directory-v339 .ua-folder__menu {
+  top:10px !important;
+  right:10px !important;
+  z-index:70 !important;
+  width:156px !important;
+  border:1px solid #e5e7ee !important;
+  background:#fff !important;
+  box-shadow:0 16px 38px rgba(20,27,40,.20) !important;
+}
+.user-access-page .ua-directory-v339 .ua-folder__menu button {color:#111827 !important;}
+.user-access-page .ua-directory-v339 .ua-folder__menu button:hover {background:#f5f6f9 !important;}
+.user-access-page .ua-directory-v339 .ua-folder__menu button.is-danger {color:#d92d20 !important;}
+.user-access-page .ua-directory-v339 .ua-folder.is-actions-open:not(.ua-folder--add) {
+  z-index:30;
+  background:#fff !important;
+  border-color:#faad83 !important;
+}
+.user-access-page .ua-directory-v339 .ua-empty--folders {
+  grid-column:1/-1;
+  padding:28px;
+  color:#697386;
+  border:1px dashed #d9dee6;
+  background:#fff;
+}
+.user-access-page .ua-directory-v339 .ua-members-panel .ua-members-title h3 {margin:0;font-size:20px;color:#141d2c;}
+.user-access-page .ua-directory-v339 .ua-members-panel .ua-members-title p {margin:4px 0 0;font-size:13px;color:#718096;}
+/* Dark theme: maintain a matte, accessible treatment, independent of other sections. */
+html[data-theme="dark"] body.user-access-page .ua-directory-v339 {
+  --ua-ink:#f0f2f7;--ua-muted:#adb5c5;--ua-line:#343a47;--ua-white:#151922;
+}
+html[data-theme="dark"] body.user-access-page .ua-directory-v339 .ua-directory-metric:not(.ua-directory-metric--primary),
+html[data-theme="dark"] body.user-access-page .ua-directory-v339 .ua-directory-sort {
+  background:#181c25;
+  border-color:#323846;
+  color:#f5f7fa;
+}
+html[data-theme="dark"] body.user-access-page .ua-directory-v339 .ua-directory-metric:not(.ua-directory-metric--primary) :is(span,strong) {color:#edf0f7;}
+html[data-theme="dark"] body.user-access-page .ua-directory-v339 .ua-directory-tabs {background:#222733;}
+html[data-theme="dark"] body.user-access-page .ua-directory-v339 .ua-directory-tab:not(.is-active) {color:#c4cad6;}
+html[data-theme="dark"] body.user-access-page .ua-directory-v339 .ua-directory-search {background:#202630;border-color:#333948;}
+html[data-theme="dark"] body.user-access-page .ua-directory-v339 .ua-directory-search :is(input,svg) {color:#edf1f7;}
+html[data-theme="dark"] body.user-access-page .ua-directory-v339 .ua-folder:not(.ua-folder--add) {
+  background:#191d26 !important;
+  border-color:#353b46 !important;
+  color:#f5f7fa !important;
+}
+html[data-theme="dark"] body.user-access-page .ua-directory-v339 .ua-folder:not(.ua-folder--add) .ua-folder__name {color:#edf0f6 !important;}
+html[data-theme="dark"] body.user-access-page .ua-directory-v339 .ua-folder:not(.ua-folder--add) .ua-folder__count {color:#aeb8c8 !important;}
+html[data-theme="dark"] body.user-access-page .ua-directory-v339 .ua-folder__person {border-color:#191d26;}
+html[data-theme="dark"] body.user-access-page .ua-directory-v339 .ua-folder__overflow {border-color:#191d26;}
+html[data-theme="dark"] body.user-access-page .ua-directory-v339 .ua-folder__chevron {color:#edf0f6;}
+html[data-theme="dark"] body.user-access-page .ua-directory-v339 .ua-empty--folders {background:#191d26;color:#d5dae4;border-color:#394150;}
+@media (max-width: 1070px) {
+  .user-access-page .ua-directory-v339 .ua-directory-metric {gap:10px;padding:14px 12px;}
+  .user-access-page .ua-directory-v339 .ua-directory-metric > svg:first-child {width:29px;height:29px;}
+  .user-access-page .ua-directory-v339 .ua-folder:not(.ua-folder--add) {gap:9px !important;padding:11px 12px !important;}
+  .user-access-page .ua-directory-v339 .ua-folder__people {gap:0;}
+}
+@media (max-width: 800px) {
+  .user-access-page .ua-directory-v339 .ua-directory-hero {min-height:122px;padding:20px 23px;}
+  .user-access-page .ua-directory-v339 .ua-directory-hero__art {width:110px;}
+  .user-access-page .ua-directory-v339 .ua-directory-hero__art svg {width:95px;height:78px;}
+  .user-access-page .ua-directory-v339 .ua-directory-tab {padding:0 10px;font-size:12px;}
+  .user-access-page .ua-directory-v339 .ua-directory-metrics {gap:8px;}
+  .user-access-page .ua-directory-v339 .ua-directory-metric {min-height:86px;padding:12px 10px;gap:7px;}
+  .user-access-page .ua-directory-v339 .ua-directory-metric span {font-size:11px;}
+  .user-access-page .ua-directory-v339 .ua-directory-metric strong {font-size:24px;}
+}
+@media (max-width: 640px) {
+  .user-access-page .ua-directory-v339 {gap:15px;}
+  .user-access-page .ua-directory-v339 .ua-directory-hero {border-radius:16px;}
+  .user-access-page .ua-directory-v339 .ua-directory-hero__copy {max-width:83%;}
+  .user-access-page .ua-directory-v339 .ua-directory-hero__art {position:absolute;right:3px;opacity:.2;}
+  .user-access-page .ua-directory-v339 .ua-directory-metrics {grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
+  .user-access-page .ua-directory-v339 .ua-directory-metric {min-height:80px;padding:12px;}
+  .user-access-page .ua-directory-v339 .ua-directory-toolbar {align-items:stretch;flex-wrap:wrap;}
+  .user-access-page .ua-directory-v339 .ua-directory-tabs {width:100%;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));}
+  .user-access-page .ua-directory-v339 .ua-directory-tab {padding:0 4px;gap:4px;font-size:11px;}
+  .user-access-page .ua-directory-v339 .ua-directory-tab svg {width:15px;height:15px;}
+  .user-access-page .ua-directory-v339 .ua-directory-add {margin-left:auto;height:42px;}
+  .user-access-page .ua-directory-v339 .ua-directory-filter-row {gap:8px;}
+  .user-access-page .ua-directory-v339 .ua-directory-sort {min-width:79px;padding:0 9px;gap:5px;}
+  .user-access-page .ua-directory-v339 .ua-directory-sort svg:first-child {display:none;}
+  .user-access-page .ua-directory-v339 .ua-folders {grid-template-columns:1fr !important;gap:10px !important;}
+  .user-access-page .ua-directory-v339 .ua-folder:not(.ua-folder--add) {min-height:83px !important;}
+}
+@media (prefers-reduced-motion:reduce) {
+ .user-access-page .ua-directory-v339 .ua-folder,
+ .user-access-page .ua-directory-v339 .ua-directory-metric {transition:none !important;}
+}
