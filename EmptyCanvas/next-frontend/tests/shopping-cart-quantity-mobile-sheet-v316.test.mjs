@@ -47,6 +47,6 @@ test("Add New Product mobile sheet has continuous white bottom without cut-out c
   assert.match(styles, /\.addition-dialog__footer\{border-radius:0;background:#fff\}/);
   const cartPage = read("../components/orders/ShoppingCartPageServer.jsx");
   const reviewPage = read("../app/products/addition-requests/page.jsx");
-  assert.match(cartPage, /product-additions\.css\?v=v316/);
+  assert.match(cartPage, /product-additions\.css\?v=v338-required-fields/);
   assert.match(reviewPage, /product-additions\.css\?v=v316/);
 });

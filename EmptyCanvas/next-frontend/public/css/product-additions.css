@@ -134,6 +134,11 @@
 .classic-cart-page .classic-cart-request-meta-fields .classic-cart-meta-trigger.is-open{
   outline:0;border-color:#52647c;background:#fff;box-shadow:0 0 0 3px rgba(100,116,139,.14);
 }
+.classic-cart-page .classic-cart-request-meta-fields .classic-cart-meta-placeholder{color:#697586;font-weight:650}
+.classic-cart-page .classic-cart-request-meta-fields .classic-cart-meta-trigger.is-validation-error,
+.classic-cart-page .classic-cart-request-meta-fields .classic-cart-summary-field.is-validation-error .classic-cart-meta-trigger{
+  border-color:#dc3545;box-shadow:0 0 0 3px rgba(220,53,69,.11);background:#fffafa;
+}
 .classic-cart-priority-dot{display:inline-block;width:9px;height:9px;flex:0 0 9px;border-radius:50%;background:#64748b}
 .classic-cart-priority-dot.is-low{background:#94a3b8}
 .classic-cart-priority-dot.is-normal{background:#22a06b}

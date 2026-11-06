@@ -70,7 +70,7 @@ const ORDER_PRIORITIES = ["Low", "Normal", "High", "Urgent"];
 
 function safePriority(value) {
   const clean = text(value);
-  return ORDER_PRIORITIES.find((option) => option.toLowerCase() === clean.toLowerCase()) || "Normal";
+  return ORDER_PRIORITIES.find((option) => option.toLowerCase() === clean.toLowerCase()) || "";
 }
 
 function safeDeliveryDate(value) {
@@ -291,7 +291,7 @@ function readCartDraft(options = {}) {
   return candidates[0] || null;
 }
 
-function writeCartDraft({ draftScope = "account", type = "", editMode = false, editKey = "", products = [], reason = "", priorityLevel = "Normal", requestedDeliveryDate = "", editToken = "" } = {}) {
+function writeCartDraft({ draftScope = "account", type = "", editMode = false, editKey = "", products = [], reason = "", priorityLevel = "", requestedDeliveryDate = "", editToken = "" } = {}) {
   const storageKey = cartDraftStorageKey({ draftScope, type, editMode, editKey });
   const cleanProducts = normalizeDraft(products);
   const stores = storageAreas();
@@ -718,7 +718,7 @@ export default function ShoppingCartClient({
   const [saveState, setSaveState] = useState("");
   const [checkoutCommitted, setCheckoutCommitted] = useState(false);
   const [activeEditTransfer, setActiveEditTransfer] = useState(null);
-  const [validationFeedback, setValidationFeedback] = useState({ cart: false, reason: false });
+  const [validationFeedback, setValidationFeedback] = useState({ cart: false, reason: false, priority: false, deliveryDate: false });
   const reasonTimer = useRef(null);
   const validationTimer = useRef(null);
   const reasonInputRef = useRef(null);
@@ -868,7 +868,7 @@ export default function ShoppingCartClient({
     } catch (error) {
       setCart([]);
       setReason("");
-      setPriorityLevel("Normal");
+      setPriorityLevel("");
       setRequestedDeliveryDate("");
       setNotice({ type: "error", title: "Draft unavailable", message: error?.message || "The saved cart could not be loaded." });
     } finally {
@@ -901,8 +901,8 @@ export default function ShoppingCartClient({
     if (validationTimer.current) window.clearTimeout(validationTimer.current);
   }, []);
 
-  const showValidationFeedback = ({ cart: cartMissing = false, reason: reasonMissing = false } = {}) => {
-    if (!cartMissing && !reasonMissing) return;
+  const showValidationFeedback = ({ cart: cartMissing = false, reason: reasonMissing = false, priority: priorityMissing = false, deliveryDate: deliveryDateMissing = false } = {}) => {
+    if (!cartMissing && !reasonMissing && !priorityMissing && !deliveryDateMissing) return;
 
     setNotice(null);
     if (validationTimer.current) window.clearTimeout(validationTimer.current);
@@ -914,22 +914,27 @@ export default function ShoppingCartClient({
     } catch {}
 
     // Remove the state for one frame so repeated invalid slides replay the pulse.
-    setValidationFeedback({ cart: false, reason: false });
+    setValidationFeedback({ cart: false, reason: false, priority: false, deliveryDate: false });
     window.requestAnimationFrame(() => {
       window.requestAnimationFrame(() => {
-        setValidationFeedback({ cart: cartMissing, reason: reasonMissing });
+        setValidationFeedback({ cart: cartMissing, reason: reasonMissing, priority: priorityMissing, deliveryDate: deliveryDateMissing });
 
         const target = cartMissing
           ? document.querySelector(".classic-cart-add-new")
-          : document.querySelector(".classic-cart-reason-card");
+          : (reasonMissing ? document.querySelector(".classic-cart-reason-card")
+            : document.querySelector(".classic-cart-request-meta-fields"));
         target?.scrollIntoView?.({ behavior: "smooth", block: "center" });
 
         if (!cartMissing && reasonMissing) {
           window.setTimeout(() => reasonInputRef.current?.focus?.({ preventScroll: true }), 220);
+        } else if (!cartMissing && priorityMissing) {
+          window.setTimeout(() => document.querySelector(".classic-cart-meta-trigger")?.focus?.({ preventScroll: true }), 220);
+        } else if (!cartMissing && deliveryDateMissing) {
+          window.setTimeout(() => document.querySelector(".classic-cart-delivery-date-control input")?.focus?.({ preventScroll: true }), 220);
         }
 
         validationTimer.current = window.setTimeout(() => {
-          setValidationFeedback({ cart: false, reason: false });
+          setValidationFeedback({ cart: false, reason: false, priority: false, deliveryDate: false });
         }, 1150);
       });
     });
@@ -959,7 +964,7 @@ export default function ShoppingCartClient({
     setBrowserType("");
     setCart([]);
     setReason("");
-    setPriorityLevel("Normal");
+    setPriorityLevel("");
     setRequestedDeliveryDate("");
   };
 
@@ -1086,12 +1091,14 @@ export default function ShoppingCartClient({
   const updatePriority = (value) => {
     const next = safePriority(value);
     setPriorityLevel(next);
+    if (next) setValidationFeedback((current) => ({ ...current, priority: false }));
     if (cart.length) void persistDraft(cart, selectedType, reason, { quiet: true, priorityValue: next });
   };
 
   const updateDeliveryDate = (value) => {
     const next = safeDeliveryDate(value);
     setRequestedDeliveryDate(next);
+    if (next) setValidationFeedback((current) => ({ ...current, deliveryDate: false }));
     if (cart.length) void persistDraft(cart, selectedType, reason, { quiet: true, deliveryDateValue: next });
   };
 
@@ -1108,8 +1115,12 @@ export default function ShoppingCartClient({
     if (!canSubmit) return false;
     const cartMissing = !cart.length;
     const reasonMissing = !maintenance && !text(reason);
-    if (cartMissing || reasonMissing) {
-      showValidationFeedback({ cart: cartMissing, reason: reasonMissing });
+    const priorityMissing = !maintenance && !text(priorityLevel);
+    const deliveryDateMissing = !maintenance && !text(requestedDeliveryDate);
+    if (cartMissing || reasonMissing || priorityMissing || deliveryDateMissing) {
+      showValidationFeedback({ cart: cartMissing, reason: reasonMissing, priority: priorityMissing, deliveryDate: deliveryDateMissing });
+      const missing = [reasonMissing && "Reason", priorityMissing && "Priority Level", deliveryDateMissing && "Delivery Date"].filter(Boolean);
+      if (missing.length) setNotice({ type: "error", title: "Required fields missing", message: `Please complete ${missing.join(", ")} before submitting the order.` });
       return false;
     }
     if (maintenance && cart.length > 1) {
@@ -1153,7 +1164,7 @@ export default function ShoppingCartClient({
       setActiveEditTransfer(null);
       setCart([]);
       setReason("");
-      setPriorityLevel("Normal");
+      setPriorityLevel("");
       setRequestedDeliveryDate("");
 
       if (editMode) {
@@ -1350,14 +1361,14 @@ export default function ShoppingCartClient({
                 />
               </label>
               <div className="classic-cart-request-meta-fields">
-                <div className="classic-cart-summary-field">
-                  <span className="classic-cart-field-label"><CartSvgIcon name="flag" size={15}/><span>Priority Level</span></span>
-                  <ShoppingCartPrioritySelect value={priorityLevel} onChange={updatePriority}/>
+                <div className={`classic-cart-summary-field${validationFeedback.priority ? " is-validation-error" : ""}`}>
+                  <span className="classic-cart-field-label"><CartSvgIcon name="flag" size={15}/><span>Priority Level</span><span className="classic-cart-required-mark" aria-hidden="true">*</span></span>
+                  <ShoppingCartPrioritySelect value={priorityLevel} onChange={updatePriority} invalid={validationFeedback.priority}/>
                 </div>
-                <label className="classic-cart-summary-field">
-                  <span className="classic-cart-field-label"><CartSvgIcon name="calendar" size={15}/><span>Delivery Date</span></span>
+                <label className={`classic-cart-summary-field${validationFeedback.deliveryDate ? " is-validation-error" : ""}`}>
+                  <span className="classic-cart-field-label"><CartSvgIcon name="calendar" size={15}/><span>Delivery Date</span><span className="classic-cart-required-mark" aria-hidden="true">*</span></span>
                   <span className="classic-cart-delivery-date-control">
-                    <input type="date" value={requestedDeliveryDate} onChange={(event) => updateDeliveryDate(event.target.value)} aria-label="Requested delivery date" />
+                    <input type="date" value={requestedDeliveryDate} onChange={(event) => updateDeliveryDate(event.target.value)} aria-label="Requested delivery date" aria-invalid={validationFeedback.deliveryDate || undefined} required />
                     <span className="classic-cart-delivery-date-chevron" aria-hidden="true"><CartSvgIcon name="chevron-down" size={16}/></span>
                   </span>
                 </label>

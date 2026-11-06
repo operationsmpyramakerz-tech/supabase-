@@ -59,7 +59,7 @@ function useFloatingMenu({ width, estimatedHeight }) {
   return { open, setOpen, position, triggerRef, menuRef, close, updatePosition };
 }
 
-export function ShoppingCartPrioritySelect({ value = "Normal", onChange }) {
+export function ShoppingCartPrioritySelect({ value = "", onChange, invalid = false }) {
   const listId = useId();
   const menu = useFloatingMenu({ width: 190, estimatedHeight: 230 });
   const optionRefs = useRef([]);
@@ -78,8 +78,8 @@ export function ShoppingCartPrioritySelect({ value = "Normal", onChange }) {
     menu.close();
   };
   return <div className="classic-cart-meta-picker">
-    <button type="button" ref={menu.triggerRef} className={`classic-cart-meta-trigger${menu.open ? " is-open" : ""}`} aria-label={`Priority Level: ${value}`} aria-haspopup="listbox" aria-controls={menu.open ? listId : undefined} aria-expanded={menu.open} onClick={() => { if (!menu.open) menu.updatePosition(); menu.setOpen((current) => !current); }}>
-      <span className={`classic-cart-priority-dot is-${String(value).toLowerCase()}`}/><strong>{value}</strong><Chevron/>
+    <button type="button" ref={menu.triggerRef} className={`classic-cart-meta-trigger${menu.open ? " is-open" : ""}${invalid ? " is-validation-error" : ""}`} aria-label={`Priority Level: ${value || "Not selected"}`} aria-required="true" aria-invalid={invalid || undefined} aria-haspopup="listbox" aria-controls={menu.open ? listId : undefined} aria-expanded={menu.open} onClick={() => { if (!menu.open) menu.updatePosition(); menu.setOpen((current) => !current); }}>
+      {value ? <span className={`classic-cart-priority-dot is-${String(value).toLowerCase()}`}/> : null}<strong className={!value ? "classic-cart-meta-placeholder" : ""}>{value || "Select priority"}</strong><Chevron/>
     </button>
     {menu.open && typeof document !== "undefined" ? createPortal(
       <div ref={menu.menuRef} id={listId} className="classic-cart-meta-popover classic-cart-priority-menu" role="listbox" aria-label="Priority Level" style={menu.position}>

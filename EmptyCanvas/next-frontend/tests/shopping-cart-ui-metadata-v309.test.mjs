@@ -53,7 +53,7 @@ test('metadata is preserved across draft, submit API, create, edit, and order de
   assert.match(service, /priorityLevel,\s*requestedDeliveryDate,\s*products: draft/);
   for (const file of ['CurrentOrdersHeavyModals.jsx','OperationsOrdersHeavyModals.jsx','OrdersReviewHeavyModals.jsx']) {
     const modal = read(`components/orders/${file}`);
-    assert.match(modal, /<span>Priority Level<\/span>/);
+    assert.match(modal, /<span>Priority(?: Level)?<\/span>/);
     assert.match(modal, /<span>Delivery Date<\/span>/);
   }
 });
@@ -64,5 +64,5 @@ test('SQL is additive and the versioned page stylesheet is used', () => {
   assert.match(sql, /ADD COLUMN IF NOT EXISTS priority_level text/);
   assert.match(sql, /ADD COLUMN IF NOT EXISTS requested_delivery_date date/);
   assert.doesNotMatch(sql, /\b(DROP|TRUNCATE|DELETE)\b/);
-  assert.match(page, /product-additions\.css\?v=v31[1-9]/);
+  assert.match(page, /product-additions\.css\?v=v338-required-fields/);
 });

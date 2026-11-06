@@ -14,7 +14,7 @@ import {
 } from "./supabase-rest";
 import { getProductsList } from "./products-service";
 import { isCustomCartItem, validateProductAddition } from "./product-addition-request-payload.mjs";
-import { normalizeOrderRequestMetadata } from "./order-request-metadata.mjs";
+import { requireOrderRequestMetadata } from "./order-request-metadata.mjs";
 import { ensureProductAdditionRequestsTable, createProductAdditionRequests, cancelProductAdditionRequestsForOrderRows } from "./product-addition-requests-service";
 import { listTeamMembersLite } from "./team-members-service";
 import { loadRawOrderRowsByIds } from "./order-details-data";
@@ -374,11 +374,11 @@ export async function initializeCurrentOrderEditDirect({
   };
 }
 
-async function createNewOrderDirect({ account = {}, products = [], orderType = "", priorityLevel = "Normal", requestedDeliveryDate = null } = {}) {
+async function createNewOrderDirect({ account = {}, products = [], orderType = "", priorityLevel = "", requestedDeliveryDate = null } = {}) {
   const finalType = canonicalOrderType(orderType);
   let requestMetadata = { priorityLevel: null, requestedDeliveryDate: null };
   if (orderTypeKey(finalType) !== "requestmaintenance") {
-    try { requestMetadata = normalizeOrderRequestMetadata({ priorityLevel, requestedDeliveryDate }); }
+    try { requestMetadata = requireOrderRequestMetadata({ priorityLevel, requestedDeliveryDate }); }
     catch (error) { throw directError(error.message, 400); }
   }
   const cleanProducts = cleanSubmittedProducts(products, finalType);
@@ -477,7 +477,7 @@ async function createNewOrderDirect({ account = {}, products = [], orderType = "
   };
 }
 
-async function updateExistingOrderDirect({ account = {}, products = [], orderType = "", priorityLevel = "Normal", requestedDeliveryDate = null, editToken = "" } = {}) {
+async function updateExistingOrderDirect({ account = {}, products = [], orderType = "", priorityLevel = "", requestedDeliveryDate = null, editToken = "" } = {}) {
   const signed = verifySignedPayload(editToken, "edit-order", account);
   const ids = cleanIds(signed?.ids);
   if (!ids.length || !ids.every((id) => /^\d+$/.test(id))) throw directError("Edit session expired. Please reopen the order and try again.", 400);
@@ -486,7 +486,7 @@ async function updateExistingOrderDirect({ account = {}, products = [], orderTyp
   const finalType = canonicalOrderType(orderType || signed?.orderType || rawOrderType(rows[0]));
   let requestMetadata = { priorityLevel: null, requestedDeliveryDate: null };
   if (orderTypeKey(finalType) !== "requestmaintenance") {
-    try { requestMetadata = normalizeOrderRequestMetadata({ priorityLevel, requestedDeliveryDate }); }
+    try { requestMetadata = requireOrderRequestMetadata({ priorityLevel, requestedDeliveryDate }); }
     catch (error) { throw directError(error.message, 400); }
   }
   const cleanProducts = cleanSubmittedProducts(products, finalType);
@@ -596,7 +596,7 @@ export async function submitShoppingCartOrderDirect({
   account = {},
   products = [],
   orderType = "",
-  priorityLevel = "Normal",
+  priorityLevel = "",
   requestedDeliveryDate = null,
   editMode = false,
   editToken = "",

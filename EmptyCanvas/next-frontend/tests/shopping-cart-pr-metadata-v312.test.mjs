@@ -75,5 +75,5 @@ test('UI uses withdrawal-red totals and displays icons beside reason, priority a
   assert.match(css, /theme-withdraw-products[^\n]*classic-cart-summary-total strong/);
   assert.match(css, /theme-withdraw-products[^\n]*classic-cart-card-metric--total>strong/);
   const page = read('../components/orders/ShoppingCartPageServer.jsx');
-  assert.match(page, /product-additions\.css\?v=v31[2-9]/);
+  assert.match(page, /product-additions\.css\?v=v338-required-fields/);
 });

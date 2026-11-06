@@ -28,3 +28,11 @@ export function normalizeOrderRequestMetadata({ priorityLevel, requestedDelivery
     requestedDeliveryDate: normalizeRequestedDeliveryDate(requestedDeliveryDate),
   };
 }
+
+// Orders cannot be created or updated without both fields. The permissive
+// normalizer above stays available for reading legacy orders and drafts.
+export function requireOrderRequestMetadata({ priorityLevel, requestedDeliveryDate } = {}) {
+  if (!String(priorityLevel ?? "").trim()) throw new Error("Priority Level is required.");
+  if (!String(requestedDeliveryDate ?? "").trim()) throw new Error("Delivery Date is required.");
+  return normalizeOrderRequestMetadata({ priorityLevel, requestedDeliveryDate });
+}

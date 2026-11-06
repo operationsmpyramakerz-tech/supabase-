@@ -25,7 +25,7 @@ test('empty cart container sizes to its buttons without impacting filled carts',
 });
 
 test('priority selection uses custom dropdown, not native select', () => {
-  assert.match(cart, /<ShoppingCartPrioritySelect value=\{priorityLevel\} onChange=\{updatePriority\}\/>/);
+  assert.match(cart, /<ShoppingCartPrioritySelect value=\{priorityLevel\} onChange=\{updatePriority\} invalid=\{validationFeedback\.priority\}\/>/);
   assert.match(controls, /aria-haspopup="listbox"/);
   assert.match(controls, /role="option" aria-selected/);
   assert.match(controls, /onChange\?\.\(priority\)/);
@@ -33,7 +33,7 @@ test('priority selection uses custom dropdown, not native select', () => {
 });
 
 test('delivery date returns to native date input without a floating calendar', () => {
-  assert.match(cart, /<input type="date" value=\{requestedDeliveryDate\} onChange=\{\(event\) => updateDeliveryDate\(event\.target\.value\)\} aria-label="Requested delivery date" \/>/);
+  assert.match(cart, /<input type="date" value=\{requestedDeliveryDate\} onChange=\{\(event\) => updateDeliveryDate\(event\.target\.value\)\} aria-label="Requested delivery date"[^>]*required \/>/);
   assert.doesNotMatch(cart, /ShoppingCartDeliveryDate/);
   assert.doesNotMatch(controls, /ShoppingCartDeliveryDate|classic-cart-date-grid|aria-haspopup="dialog"/);
   assert.doesNotMatch(css, /\.classic-cart-date-menu|\.classic-cart-date-grid/);
@@ -41,7 +41,7 @@ test('delivery date returns to native date input without a floating calendar', (
 
 test('CSS version bump ensures modern controls load on the order page', () => {
   const page = read('components/orders/ShoppingCartPageServer.jsx');
-  assert.match(page, /product-additions\.css\?v=v31[1-9]/);
+  assert.match(page, /product-additions\.css\?v=v338-required-fields/);
   assert.match(css, /\.classic-cart-meta-popover\{/);
   assert.match(css, /\.classic-cart-priority-option\{/);
 });
