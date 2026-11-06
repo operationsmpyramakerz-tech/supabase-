@@ -17,7 +17,7 @@ test('shared AppShell renders one accessible active page chevron with title and 
 });
 
 test('new stylesheet is included in both AppShell paths after the frame styles', () => {
-  const link = '/next/css/erp-global-title-chevron.css?v=v331-all-page-headers';
+  const link = '/next/css/erp-global-title-chevron.css?v=v332-folder-paths';
   assert.equal(shell.split(link).length - 1, 2);
   for (const segment of shell.split('erp-inner-frame.css').slice(1)) {
     assert.match(segment.slice(0, 250), /erp-global-title-chevron\.css/);

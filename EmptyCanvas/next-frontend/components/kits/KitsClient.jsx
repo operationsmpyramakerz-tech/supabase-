@@ -1,5 +1,7 @@
 "use client";
 
+import HeaderFolderBreadcrumb from "../HeaderFolderBreadcrumb";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import SaveProgressModal, { useSaveProgress } from "../SaveProgressModal";
@@ -1256,8 +1258,14 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
 
   if (activeDetail || detailBusy) {
     const kit = activeDetail?.kit;
+    const breadcrumbFolder = activeFolder || folders.find((folder) => folder.id === kit?.folderId) || null;
     return (
       <main className="products-shell proposals-shell next-proposals-classic-parity next-kits-classic-parity">
+        {activeDetail ? <HeaderFolderBreadcrumb segments={[
+          {label:"Kits",icon:"briefcase",onClick:() => { backToKits(); backToFolderRoot(); }},
+          ...(breadcrumbFolder ? [{label:breadcrumbFolder.name,icon:"folder-check",onClick:() => { setActiveFolder(breadcrumbFolder); backToKits(); }}] : []),
+          {label:createMode ? "Create New Kit" : activeDetail.kit?.name || "Kit",icon:"briefcase"}
+        ]}/> : null}
         <Toast toast={toast} onClose={() => setToast(null)} />
         <SaveProgressModal state={saveProgress} />
         <ActionLoadingModal state={actionLoading} />
@@ -1488,6 +1496,10 @@ export default function KitsClient({ account, initialCatalog, initialKits, initi
 
   return (
     <main className="products-shell proposals-shell next-proposals-classic-parity next-kits-classic-parity">
+      {activeFolder ? <HeaderFolderBreadcrumb segments={[
+        {label:"Kits",icon:"briefcase",onClick:backToFolderRoot},
+        {label:activeFolder.name,icon:"folder-check"}
+      ]}/> : null}
       <Toast toast={toast} onClose={() => setToast(null)} />
 
       <div className="proposals-floating-actions kit-library-actions">

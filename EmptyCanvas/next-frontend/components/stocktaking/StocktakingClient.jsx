@@ -1,5 +1,7 @@
 "use client";
 
+import HeaderFolderBreadcrumb from "../HeaderFolderBreadcrumb";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { featureAllowed } from "../../lib/feature-permissions-registry";
@@ -1166,6 +1168,10 @@ export default function StocktakingClient({ account, initialStock = [], initialC
 
   return (
     <section className="next-stocktaking-classic-parity next-stocktaking-folders-page">
+      {activeColumn ? <HeaderFolderBreadcrumb segments={[
+        {label:"Stocktaking",icon:"archive",onClick:closeFolder},
+        {label:activeColumn.label,icon:"folder-check"}
+      ]}/> : null}
       {!activeColumn ? (
         <section className="card stocktaking-folders-card">
           <div className="stocktaking-folders-head">

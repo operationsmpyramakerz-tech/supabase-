@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import ActionLoadingModal from "../ActionLoadingModal";
+import HeaderFolderBreadcrumb from "../HeaderFolderBreadcrumb";
 import { featureAllowed } from "../../lib/feature-permissions-registry";
 import { cacheUsersCenterAuthorization, currentUsersCenterAuthorizationToken, requestJson, usersCenterMutation } from "./usersCenterClientShared";
 
@@ -261,6 +262,10 @@ export default function UsersCenterClient({ account, initialDirectory, initialSi
   function deleteMember(member) { protectedOpen({ title: "Delete team member", message: `Delete ${member.name}?` }, () => setConfirm({ danger: true, title: "Delete Team Member", message: `Delete ${member.name || "this user"} permanently from Team Members? This action cannot be undone.`, confirmLabel: "Delete Member", onConfirm: async () => { const body = await usersCenterMutation("member-delete", { memberId: member.id }); await refresh(); notify("success", "Member deleted", body.message || "Team member deleted."); setConfirm(null); } })); }
 
   return <section className="ua-page-body">
+    {selectedDepartment ? <HeaderFolderBreadcrumb segments={[
+      {label:"Users Center",icon:"shield",onClick:backDepartments},
+      {label:selectedDepartment.name,icon:"users"}
+    ]}/> : null}
     <Toast value={toast} onClose={() => setToast(null)}/>
     <ActionLoadingModal state={memberDetailLoading ? { open: true, status: "loading", title: "Loading team member", message: "Loading the full account record…" } : null} zIndex={12040}/>
     {bootstrapWarnings.length ? <div className="ua-error">Some optional Users Center data loaded after the page opened. Refresh the page if a section looks incomplete.</div> : null}

@@ -1,5 +1,7 @@
 "use client";
 
+import HeaderFolderBreadcrumb from "../HeaderFolderBreadcrumb";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import SaveProgressModal, { useSaveProgress } from "../SaveProgressModal";
@@ -1398,6 +1400,10 @@ export default function ProposalsClient({
     const proposal = activeDetail?.proposal;
     return (
       <main className="products-shell proposals-shell next-proposals-classic-parity">
+        {activeDetail ? <HeaderFolderBreadcrumb segments={[
+          {label:"Proposals",icon:"file-text",onClick:backToProposals},
+          {label:createMode ? "Create New Proposal" : activeDetail.proposal?.name || "Proposal",icon:"file-text"}
+        ]}/> : null}
         <Toast toast={toast} onClose={() => setToast(null)} />
         <SaveProgressModal state={saveProgress} />
         <ActionLoadingModal state={actionLoading} zIndex={13000} />
