@@ -737,7 +737,8 @@ export default function ShoppingCartClient({
       : "Shopping Cart";
     const titleEl = document.querySelector(".classic-app-shell .dash-title");
     const searchEl = document.querySelector(".classic-app-shell .searchbar input");
-    if (titleEl) titleEl.textContent = editMode && selectedType ? `Edit ${heading}` : heading;
+    const titleLabel = titleEl?.querySelector(".erp-title-chevron-label");
+    if (titleLabel) titleLabel.textContent = editMode && selectedType ? `Edit ${heading}` : heading;
     if (searchEl) searchEl.setAttribute("placeholder", `Search in ${heading}`);
     document.title = `${editMode && selectedType ? "Edit " : ""}${heading}`;
   }, [selectedType, editMode]);

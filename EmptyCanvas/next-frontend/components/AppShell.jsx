@@ -95,6 +95,41 @@ export function ClassicIcon({ name }) {
   return <svg {...common}>{paths[name] || paths.home}</svg>;
 }
 
+
+// All authenticated routes share this compact active chevron. Subfolder
+// breadcrumbs in Projects Preparing continue to own their complete path.
+const HEADER_ICON_BY_TITLE = Object.freeze({
+  "Home": "home", "My Orders": "list", "Orders Review": "award",
+  "Operations Orders": "users", "Maintenance Orders": "tool",
+  "Products": "package", "Stocktaking": "archive",
+  "Kits": "briefcase", "Proposals": "file-text",
+  "Projects Preparing": "folder-check", "Shopping Cart": "shopping-cart",
+  "Request Products": "shopping-cart", "Withdraw Products": "shopping-cart",
+  "Request Maintenance": "tool", "Events": "calendar",
+  "New Event Request": "calendar", "Task Management": "git-branch",
+  "All Tasks": "git-branch", "My Tasks": "git-branch", "Delegated Tasks": "git-branch",
+  "Expenses": "dollar-sign", "Expenses by User": "credit-card",
+  "KPIs": "bar-chart-2", "Users Center": "shield",
+  "B2C": "user-plus", "B2C Table": "user-plus", "Forms": "file-text",
+  "Database": "archive", "Database Table": "archive",
+  "Notifications": "file-text", "History": "archive",
+  "User Profile": "users", "How it works": "book-open",
+});
+
+function PageTitleChevron({ title, activePath }) {
+  const knownIcon = HEADER_ICON_BY_TITLE[title];
+  const matchingNav = CLASSIC_MAIN_LINKS
+    .filter((link) => isActive(activePath, link.href))
+    .sort((a, b) => b.href.length - a.href.length)[0];
+  const icon = knownIcon || matchingNav?.icon || "file-text";
+  return (
+    <span className="erp-title-chevron" title={title}>
+      <span className="erp-title-chevron-icon"><ClassicIcon name={icon} /></span>
+      <span className="erp-title-chevron-label">{title}</span>
+    </span>
+  );
+}
+
 export default function AppShell({
   account,
   children,
@@ -154,6 +189,7 @@ export default function AppShell({
         <link rel="stylesheet" href="/next/css/unified-white-workspace.css?v=sidebar-inner-ring-main47-v2" precedence="erp-workspace" />
         <link rel="stylesheet" href="/next/css/scrollbar-hidden.css?v=global-hidden-v1" precedence="erp-workspace" />
         <link rel="stylesheet" href="/next/css/erp-inner-frame.css?v=v329-white-frame-dark-divider" precedence="erp-inner-frame" />
+        <link rel="stylesheet" href="/next/css/erp-global-title-chevron.css?v=v331-all-page-headers" precedence="erp-page-title" />
         <BodyClassSync className={combinedBodyClass} />
         <ClassicChromeAccessSync account={account} />
         {children}
@@ -168,6 +204,7 @@ export default function AppShell({
       <link rel="stylesheet" href="/next/css/unified-white-workspace.css?v=sidebar-inner-ring-main47-v2" precedence="erp-workspace" />
       <link rel="stylesheet" href="/next/css/scrollbar-hidden.css?v=global-hidden-v1" precedence="erp-workspace" />
       <link rel="stylesheet" href="/next/css/erp-inner-frame.css?v=v329-white-frame-dark-divider" precedence="erp-inner-frame" />
+      <link rel="stylesheet" href="/next/css/erp-global-title-chevron.css?v=v331-all-page-headers" precedence="erp-page-title" />
       <BodyClassSync className={combinedBodyClass} />
       <ClassicChromeAccessSync account={account} />
       <ClassicSidebarBootstrap />
@@ -215,7 +252,7 @@ export default function AppShell({
             <div className="header-row1">
               <div className="left">
                 <HeaderMenuToggle />
-                <div className="dash-title">{title}</div>
+                <div className="dash-title"><PageTitleChevron title={title} activePath={activePath} /></div>
               </div>
               <div className="right topbar-right">
                 <HeaderSearch title={title} />

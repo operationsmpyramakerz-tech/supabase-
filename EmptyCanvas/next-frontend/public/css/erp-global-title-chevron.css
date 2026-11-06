@@ -1,0 +1,126 @@
+/* ERP v331 - global connected-chevron page names.
+   Keep the existing orange vertical accent, navigation, and inner frame.
+   The multi-level Projects Preparing breadcrumb keeps its own clickable segments. */
+body.next-classic-shell-active .classic-app-shell .main-header .dash-title {
+  gap: 12px !important;
+  max-width: min(67vw, 910px) !important;
+  min-height: 46px !important;
+  overflow: hidden !important;
+  text-overflow: clip !important;
+}
+body.next-classic-shell-active .classic-app-shell .main-header .dash-title::before {
+  content: "" !important;
+  display: block !important;
+  flex: 0 0 4px !important;
+  width: 4px !important;
+  height: 27px !important;
+  background: #ea580c !important;
+  border-radius: 999px !important;
+}
+body.next-classic-shell-active .classic-app-shell .main-header .erp-title-chevron {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 1 auto;
+  gap: 10px;
+  min-width: 0;
+  max-width: 100%;
+  height: 44px;
+  padding: 0 34px 0 16px;
+  box-sizing: border-box;
+  background: #f97316;
+  color: #fff;
+  border-radius: 14px 0 0 14px;
+  clip-path: polygon(0 0, calc(100% - 17px) 0, 100% 50%, calc(100% - 17px) 100%, 0 100%);
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -.016em;
+  white-space: nowrap;
+}
+body.next-classic-shell-active .classic-app-shell .main-header .erp-title-chevron-icon {
+  display: inline-flex;
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  color: inherit;
+}
+body.next-classic-shell-active .classic-app-shell .main-header .erp-title-chevron-icon svg {
+  display: block;
+  width: 18px;
+  height: 18px;
+}
+body.next-classic-shell-active .classic-app-shell .main-header .erp-title-chevron-label {
+  min-width: 0;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The Projects Preparing project/school pages already have a multi-step
+   chevron. Hide the generic page label so there is one breadcrumb only. */
+body.next-classic-shell-active .classic-app-shell .main-header
+.dash-title:has(> .pr-header-path--chevrons) > .erp-title-chevron {
+  display: none !important;
+}
+body.next-classic-shell-active .classic-app-shell .main-header
+.dash-title:has(> .pr-header-path--chevrons) {
+  gap: 10px !important;
+  max-width: min(72vw, 940px) !important;
+  overflow: visible !important;
+}
+html[data-theme] body.next-classic-shell-active .classic-app-shell .main-header
+.dash-title:has(> .pr-header-path--chevrons)::before {
+  display: block !important;
+  content: "" !important;
+  flex: 0 0 4px !important;
+  width: 4px !important;
+  height: 27px !important;
+}
+/* All active single-page chevrons remain orange in dark mode. */
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell .main-header .erp-title-chevron {
+  background: #f97316 !important;
+  color: #fff !important;
+}
+@media (max-width: 768px) {
+  body.next-classic-shell-active .classic-app-shell .main-header .dash-title {
+    max-width: min(64vw, 510px) !important;
+    min-height: 41px !important;
+    gap: 8px !important;
+    padding: 0 !important;
+  }
+  body.next-classic-shell-active .classic-app-shell .main-header .erp-title-chevron {
+    height: 39px;
+    padding: 0 25px 0 11px;
+    gap: 6px;
+    font-size: 12px;
+    border-radius: 10px 0 0 10px;
+    clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%);
+  }
+  body.next-classic-shell-active .classic-app-shell .main-header .erp-title-chevron-icon,
+  body.next-classic-shell-active .classic-app-shell .main-header .erp-title-chevron-icon svg {
+    flex-basis: 15px;
+    width: 15px;
+    height: 15px;
+  }
+  body.next-classic-shell-active .classic-app-shell .main-header .dash-title:has(> .pr-header-path--chevrons) {
+    max-width: min(63vw, 490px) !important;
+  }
+  html[data-theme] body.next-classic-shell-active .classic-app-shell .main-header
+  .dash-title:has(> .pr-header-path--chevrons)::before {height: 24px !important;}
+}
+@media (max-width: 480px) {
+  body.next-classic-shell-active .classic-app-shell .main-header .dash-title {
+    max-width: min(54vw, 270px) !important;
+  }
+  body.next-classic-shell-active .classic-app-shell .main-header .dash-title:has(> .pr-header-path--chevrons) {
+    max-width: min(61vw, 310px) !important;
+  }
+}
+/* When global search expands, titles yield space without covering controls. */
+body.next-classic-shell-active .classic-app-shell .main-header
+.header-row1:has(.system-header-search.is-expanded) .dash-title {
+  max-width: min(118px, 30vw) !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  body.next-classic-shell-active .classic-app-shell .main-header .erp-title-chevron {transition: none;}
+}
