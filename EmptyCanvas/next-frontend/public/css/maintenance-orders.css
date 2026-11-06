@@ -922,7 +922,7 @@ html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenan
 }
 
 :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-order-modal-summary {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-modal-item {
@@ -1299,9 +1299,6 @@ html[data-theme="dark"] :is(body.page-maintenance-orders .next-classic-maintenan
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-order-modal-summary > div:first-child {
-    grid-column: 1 / -1;
-  }
 
   :is(body.page-maintenance-orders .next-classic-maintenance-parity, body.current-orders-page .next-maintenance-parity, body.operations-orders-page .next-maintenance-parity) .next-maintenance-spares-grid {
     grid-template-columns: 1fr;

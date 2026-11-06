@@ -132,7 +132,7 @@ export function OrderSortButton({ value = "product-tag", onChange, align = "righ
           }
         }}
       >
-        <ClassicOrderIcon name="filter" /><span>Sort</span>
+        <ClassicOrderIcon name="sort-desc" /><span>Sort</span>
       </button>
       {open && position && typeof document !== "undefined" ? createPortal(
         <div className="next-classic-orders-parity order-sort-portal-scope" style={position} ref={popupRef}>

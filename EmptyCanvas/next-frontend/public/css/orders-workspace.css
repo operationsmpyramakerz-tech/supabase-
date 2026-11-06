@@ -1127,3 +1127,59 @@ html[data-theme="dark"] body .orders-workspace.orders-workspace .orders-preferen
 html[data-theme="dark"] body .orders-workspace.orders-workspace .orders-preferences__tabs button { color: #c9d1dc; }
 html[data-theme="dark"] body .orders-workspace.orders-workspace .orders-preferences__tabs button.is-selected { background: #f45b17; color: #fff; }
 html[data-theme="dark"] body .orders-workspace.orders-workspace .orders-preferences__close { color: #fff; background: #253147; border-color: #384459; }
+
+/* ERP v337 — centering and compact copy in the unified Filter/Sort menu. */
+body .orders-workspace.orders-workspace .orders-preferences__heading { align-items: center !important; }
+body .orders-workspace.orders-workspace .orders-preferences__close,
+body .orders-workspace.orders-workspace .orders-preferences__choice-icon {
+  display: flex !important; align-items: center !important; justify-content: center !important;
+  padding: 0 !important; box-sizing: border-box !important; line-height: 1 !important;
+}
+body .orders-workspace.orders-workspace .orders-preferences__close {
+  flex: 0 0 34px !important; width: 34px !important; height: 34px !important;
+}
+body .orders-workspace.orders-workspace .orders-preferences__close svg {
+  display: block !important; flex: none !important; width: 18px !important; height: 18px !important;
+  margin: 0 !important; padding: 0 !important; transform: none !important; vertical-align: middle !important;
+  stroke-width: 2.2 !important;
+}
+body .orders-workspace.orders-workspace .orders-preferences__choice-icon svg,
+body .orders-workspace.orders-workspace .orders-preferences__tabs button svg {
+  display: block !important; flex: none !important; margin: 0 !important;
+  padding: 0 !important; transform: none !important; vertical-align: middle !important;
+  stroke-width: 2 !important;
+}
+body .orders-workspace.orders-workspace .orders-preferences__choice-text { justify-content: center !important; }
+body .orders-workspace.orders-workspace .orders-preferences__choice { min-height: 49px; }
+body .orders-workspace.orders-workspace .orders-preferences__section-title { padding-top: 13px; }
+/* Priority appears in place of the former status tile on order details. */
+.order-summary-priority-badge {
+  display: inline-flex !important; align-items: center !important; justify-content: center !important;
+  align-self: flex-start !important; width: fit-content !important;
+  max-width: 100% !important; min-height: 24px; padding: 4px 9px;
+  border-radius: 999px; border: 1px solid #e2e8f0;
+  background: #f1f5f9; color: #475569 !important;
+  font-size: 10px !important; font-weight: 850 !important;
+  line-height: 1.15; white-space: nowrap;
+}
+.order-summary-priority-badge.is-low { background: #eff6ff; border-color: #bfdbfe; color: #1d4ed8 !important; }
+.order-summary-priority-badge.is-normal { background: #dcfce7; border-color: #a7f3d0; color: #166534 !important; }
+.order-summary-priority-badge.is-high { background: #ffedd5; border-color: #fed7aa; color: #9a3412 !important; }
+.order-summary-priority-badge.is-urgent { background: #fee2e2; border-color: #fecaca; color: #b91c1c !important; }
+
+/* v337: keep the detail-sheet Sort and Close icons aligned as well. */
+body .orders-workspace .co-modal-dialog .order-sort-trigger {
+  display: inline-flex !important; align-items: center !important; justify-content: center !important;
+}
+body .orders-workspace .co-modal-dialog .order-sort-trigger > svg {
+  display: block !important; flex-shrink: 0 !important;
+  margin: 0 !important; padding: 0 !important; transform: none !important;
+}
+body .orders-workspace .co-modal-dialog .co-modal-close {
+  display: flex !important; align-items: center !important; justify-content: center !important;
+  padding: 0 !important;
+}
+body .orders-workspace .co-modal-dialog .co-modal-close::before {
+  display: block !important; margin: 0 !important; padding: 0 !important;
+  line-height: 1 !important; transform: translateY(-1px) !important;
+}

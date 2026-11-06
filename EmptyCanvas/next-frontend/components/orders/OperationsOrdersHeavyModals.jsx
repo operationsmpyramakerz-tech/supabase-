@@ -5,6 +5,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import ClassicOrderIcon from "./ClassicOrderIcon";
+import OrderPriorityBadge from "./OrderPriorityBadge";
+import { orderCreatedDate, orderDeliveryDate, orderPriority } from "./order-summary-meta.mjs";
 import { withSingleOrderSourceAttribution } from "../../lib/order-kit-attribution.mjs";
 import { confirmDelete as confirmDeleteAction } from "../../lib/client-confirm";
 import { DeleteConfirmDialog, DeleteVerificationDialog } from "../shared/SystemDeleteDialogs";
@@ -832,10 +834,10 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, orderOption
         <div className="co-modal-header"><div className="co-modal-head-left"><div className="co-modal-status" id="operations-order-title">{type.label}</div><div className="co-modal-status-sub" hidden /></div></div>
         <div className="co-modal-scroll-region">
         <div className="next-operations-order-modal-summary" aria-label="Order summary">
-          <div><span>Order</span><strong>{group.orderIdLabel}</strong></div>
-          <div><span>Date</span><strong>{formatDate(group.latestCreated)}</strong></div>
+          <div><span>Created Date</span><strong>{formatDate(orderCreatedDate(group))}</strong></div>
+          <div><span>Delivery Date</span><strong>{formatDate(orderDeliveryDate(group))}</strong></div>
           <div><span>Components</span><strong>{displayTabItems.length}</strong></div>
-          {isMaintenance(group.orderType) ? <div className="next-operations-order-modal-summary__status"><span>Status</span>{(() => { const key = statusClass(group).replace(/^status-/, ""); const vars = STATUS_COLORS[key] || STATUS_COLORS["under-supervision"]; return <span className="co-status-btn" style={{ "--tag-bg": vars.bg, "--tag-fg": vars.fg, "--tag-border": vars.bd }}>{statusLabel(group)}</span>; })()}</div> : <div className="next-operations-order-modal-summary__total"><span>Estimate Total</span><strong>{formatMoney(group.total)}</strong></div>}
+          <div><span>Priority</span><OrderPriorityBadge value={orderPriority(group)} /></div>
         </div>
         <Progress stage={group.stage} />
         <div className="co-modal-body">
@@ -894,8 +896,7 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, orderOption
 
           <div className="co-modal-meta co-modal-meta--after-actions">
             <div className="co-meta-row co-meta-row--reason"><span>Reason</span><strong>{group.reason}</strong></div>
-            {!maintenance && group.items?.some((item) => item.priorityLevel) ? <div className="co-meta-row"><span>Priority Level</span><strong>{group.items.find((item) => item.priorityLevel)?.priorityLevel}</strong></div> : null}
-            {!maintenance && group.items?.some((item) => item.requestedDeliveryDate) ? <div className="co-meta-row"><span>Delivery Date</span><strong>{group.items.find((item) => item.requestedDeliveryDate)?.requestedDeliveryDate}</strong></div> : null}
+            {!maintenance ? <div className="co-meta-row"><span>Estimate Total</span><strong>{formatMoney(group.total)}</strong></div> : null}
           </div>
 
           {maintenance && !isEditing ? <div className="next-maintenance-parity next-maintenance-details-embed">

@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import ClassicOrderIcon from "./ClassicOrderIcon";
+import OrderPriorityBadge from "./OrderPriorityBadge";
+import { orderCreatedDate, orderDeliveryDate, orderPriority } from "./order-summary-meta.mjs";
 import OrderComponentSearch from "./OrderComponentSearch";
-import { text, lower, finite, formatMoney, dateValue, formatDate, splitNames, normalizeMaintenanceSpareEntry, normalizeSpareEntries, normalizeNeededSpareEntries, normalizeMaintenanceChecklist, issueText, maintenanceLogsForItem, MaintenanceComponentCards } from "./MaintenanceComponentCards";
+import { text, lower, finite, formatMoney, dateValue, formatDate, splitNames, normalizeMaintenanceSpareEntry, normalizeSpareEntries, normalizeNeededSpareEntries, normalizeMaintenanceChecklist, issueText, MaintenanceComponentCards } from "./MaintenanceComponentCards";
 import { DeleteConfirmDialog, DeleteVerificationDialog } from "../shared/SystemDeleteDialogs";
 import { confirmDelete as confirmDeleteAction } from "../../lib/client-confirm";
 
@@ -272,12 +274,6 @@ export function MaintenanceDetailsModal({ group, busy, onClose, onLog, onSecondL
   const canSecondLog = group.state.key === "in-progress" && Number(group.maxLogCount || 1) < 2;
   const canDownload = ["in-progress", "done"].includes(group.state.key);
   const showDoneMeta = group.state.key === "done";
-  const latestGroupLog = useMemo(() => {
-    const logs = (group.items || []).flatMap(maintenanceLogsForItem);
-    return [...logs].filter((entry) => entry?.loggedAt).sort((a, b) => new Date(b.loggedAt).getTime() - new Date(a.loggedAt).getTime())[0] || logs[logs.length - 1] || null;
-  }, [group.key, group.items]);
-  const summaryDate = latestGroupLog?.loggedAt || group.latestCreated;
-
 
   return (
     <>
@@ -299,8 +295,9 @@ export function MaintenanceDetailsModal({ group, busy, onClose, onLog, onSecondL
           <div className="co-modal-scroll-region">
           <div className="next-maintenance-order-modal-summary" aria-label="Maintenance order summary">
             <div><span>Team member</span><strong title={group.createdByName || "—"}>{group.createdByName || "—"}</strong></div>
-            <div><span>Order</span><strong>{group.orderIdLabel}</strong></div>
-            <div><span>Date</span><strong>{formatDate(summaryDate)}</strong></div>
+            <div><span>Created Date</span><strong>{formatDate(orderCreatedDate(group))}</strong></div>
+            <div><span>Delivery Date</span><strong>{formatDate(orderDeliveryDate(group))}</strong></div>
+            <div><span>Priority</span><OrderPriorityBadge value={orderPriority(group)} /></div>
           </div>
           <Progress stage={group.stage} />
           <div className="co-modal-body">

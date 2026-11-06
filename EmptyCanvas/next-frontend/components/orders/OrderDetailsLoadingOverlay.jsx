@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import ClassicOrderIcon from "./ClassicOrderIcon";
+import { orderCreatedDate, orderDeliveryDate, orderPriority } from "./order-summary-meta.mjs";
 
 const ORDER_TYPES = {
   requestproducts: { title: "Request Products", icon: "shopping-cart", accent: "#22c55e", dark: "#15803d" },
@@ -94,7 +95,9 @@ export default function OrderDetailsLoadingOverlay({ group, onCancel, variant = 
     : review ? "next-review-order-modal-summary"
     : current ? "next-current-order-modal-summary"
     : "next-operations-order-modal-summary";
-  const date = formatDate(group.latestCreated || group.createdTime || group.createdAt);
+  const createdDate = formatDate(orderCreatedDate(group));
+  const deliveryDate = formatDate(orderDeliveryDate(group));
+  const priority = orderPriority(group);
   const orderCode = group.orderIdLabel || group.orderId || "";
 
   return (
@@ -107,10 +110,10 @@ export default function OrderDetailsLoadingOverlay({ group, onCancel, variant = 
         <div className="co-modal-scroll-region">
           <div className={`${summaryClass} orders-detail-loading-summary`} aria-label="Order summary loading">
             {maintenance ? <SummaryCell label="Team member" value={group.createdByName} width="80%" /> : null}
-            <SummaryCell label="Order" value={orderCode} width="72%" />
-            <SummaryCell label="Date" value={date} width="75%" />
+            <SummaryCell label="Created Date" value={createdDate} width="75%" />
+            <SummaryCell label="Delivery Date" value={deliveryDate} width="75%" />
             {!maintenance ? <SummaryCell label="Components" width="52%" /> : null}
-            {!maintenance && !review ? <SummaryCell label={current || typeKey === "requestmaintenance" ? "Status" : "Estimate Total"} width="82%" /> : null}
+            <SummaryCell label="Priority" value={priority !== "—" ? priority : "—"} width="65%" />
           </div>
           {!review ? <LoadingProgress stage={group.stage} /> : null}
           <div className="co-modal-body orders-detail-loading-body">

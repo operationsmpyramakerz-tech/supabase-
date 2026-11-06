@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import ClassicOrderIcon from "./ClassicOrderIcon";
+import OrderPriorityBadge from "./OrderPriorityBadge";
+import { orderCreatedDate, orderDeliveryDate, orderPriority } from "./order-summary-meta.mjs";
 import { groupOrderItems, OrderSortButton } from "./OrderGrouping";
 import ProgressiveOrderGroups from "./ProgressiveOrderGroups";
 import OrderComponentSearch, { matchesOrderComponentSearch } from "./OrderComponentSearch";
@@ -184,9 +186,10 @@ function ReviewDetailsLoadState({ group, loading, error, onRetry, onClose }) {
       <div className="co-modal-header"><div className="co-modal-head-left"><div className="co-modal-status">Order review</div></div></div>
       <div className="co-modal-scroll-region">
       <div className="next-review-order-modal-summary" aria-label="Review order summary">
-        <div><span>Order</span><strong>{group.orderIdLabel}</strong></div>
-        <div><span>Date</span><strong>{formatDate(group.latestCreated)}</strong></div>
+        <div><span>Created Date</span><strong>{formatDate(orderCreatedDate(group))}</strong></div>
+        <div><span>Delivery Date</span><strong>{formatDate(orderDeliveryDate(group))}</strong></div>
         <div><span>Components</span><strong>{group.items.length}</strong></div>
+        <div><span>Priority</span><OrderPriorityBadge value={orderPriority(group)} /></div>
       </div>
       <div className="co-modal-body">
         <div className={`creator-profile-state ${error ? "creator-profile-state--error" : ""}`}>
@@ -296,10 +299,10 @@ function ReviewDetailsModal({ group, activeTab, busyIds, onClose, onQuantitySave
 
       <div className="co-modal-scroll-region">
       <div className="next-review-order-modal-summary" aria-label="Review order summary">
-        <div><span>Order</span><strong>{group.orderIdLabel}</strong></div>
-        <div><span>Date</span><strong>{formatDate(group.latestCreated)}</strong></div>
+        <div><span>Created Date</span><strong>{formatDate(orderCreatedDate(group))}</strong></div>
+        <div><span>Delivery Date</span><strong>{formatDate(orderDeliveryDate(group))}</strong></div>
         <div><span>Components</span><strong>{group.items.length}</strong></div>
-        <div className="next-review-order-modal-summary__status"><span>Review</span>{approval === "mixed" && !archived ? <MixedStatusPill /> : <ApprovalPill approval={state} />}</div>
+        <div><span>Priority</span><OrderPriorityBadge value={orderPriority(group)} /></div>
       </div>
 
       <ProgressTrack value={archived ? 4 : workflowProgress(group)} />
@@ -311,8 +314,6 @@ function ReviewDetailsModal({ group, activeTab, busyIds, onClose, onQuantitySave
         </div>
         <div className="co-modal-meta co-modal-meta--after-actions">
           <div className="co-meta-row co-meta-row--reason"><span>Reason</span><strong>{group.reason}</strong></div>
-          {!maintenance && group.items?.some((item) => item.priorityLevel) ? <div className="co-meta-row"><span>Priority Level</span><strong>{group.items.find((item) => item.priorityLevel)?.priorityLevel}</strong></div> : null}
-          {!maintenance && group.items?.some((item) => item.requestedDeliveryDate) ? <div className="co-meta-row"><span>Delivery Date</span><strong>{group.items.find((item) => item.requestedDeliveryDate)?.requestedDeliveryDate}</strong></div> : null}
         </div>
         {canAct && permissions.bulk_approve ? <div className="next-review-bulk-actions"><div><span>Review all components</span><strong>{componentSearch.trim() ? `Applies to ALL ${group.items.length} components, including hidden search results.` : "Apply one decision to every item in this order."}</strong></div><div className="next-classic-review-actions"><button className="btn btn-success btn-xs" type="button" disabled={group.items.some((item) => busyIds.has(text(item?.id)))} onClick={() => onBulkDecision(group, "Approved")}><ClassicOrderIcon name="check" /> Approve all</button><button className="btn btn-danger btn-xs" type="button" disabled={group.items.some((item) => busyIds.has(text(item?.id)))} onClick={() => onBulkDecision(group, "Rejected")}><ClassicOrderIcon name="x" /> Reject all</button></div></div> : null}
         <ProgressiveOrderGroups

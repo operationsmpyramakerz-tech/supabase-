@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import ClassicOrderIcon from "./ClassicOrderIcon";
+import OrderPriorityBadge from "./OrderPriorityBadge";
+import { orderCreatedDate, orderDeliveryDate, orderPriority } from "./order-summary-meta.mjs";
 import { groupOrderItems, OrderSortButton } from "./OrderGrouping";
 import ProgressiveOrderGroups from "./ProgressiveOrderGroups";
 import OrderComponentSearch, { matchesOrderComponentSearch } from "./OrderComponentSearch";
@@ -341,8 +343,6 @@ function OrderDetailsModal({ group, tab, busy, onClose, onAction, onReason, onEx
       : tabItems;
     return groupOrderItems(matches, sortMode);
   }, [group.key, tabItems, componentSearch, sortMode]);
-  const reasons = [...new Set(group.items.map(rejectedReason).filter(Boolean))].join("\n");
-  const modalStatus = tab === "remaining" ? "remaining" : tab === "shipped" ? "shipped" : group.status;
 
   const menuAction = (action) => {
     setMoreOpen(false);
@@ -411,10 +411,10 @@ function OrderDetailsModal({ group, tab, busy, onClose, onAction, onReason, onEx
         <div className="co-modal-header"><div className="co-modal-head-left"><div className="co-modal-status">{headerTitle}</div><div className="co-modal-status-sub" hidden /></div></div>
         <div className="co-modal-scroll-region">
         <div className="next-current-order-modal-summary" aria-label="Order summary">
-          <div><span>Order</span><strong>{group.orderIdLabel}</strong></div>
-          <div><span>Date</span><strong>{formatDate(group.latestCreated)}</strong></div>
+          <div><span>Created Date</span><strong>{formatDate(orderCreatedDate(group))}</strong></div>
+          <div><span>Delivery Date</span><strong>{formatDate(orderDeliveryDate(group))}</strong></div>
           <div><span>Components</span><strong>{tabItems.length}</strong></div>
-          <div className="next-current-order-modal-summary__status"><span>Status</span>{tab === "all" && group.stage === 2 && hasMixedApprovedRejected(group.items) ? <MixedStatusPill /> : <StatusPill status={modalStatus} reason={reasons} onReason={onReason} />}</div>
+          <div><span>Priority</span><OrderPriorityBadge value={orderPriority(group)} /></div>
         </div>
         <ProgressTrack value={archived ? 4 : progressIndex(group)} />
 
@@ -455,8 +455,6 @@ function OrderDetailsModal({ group, tab, busy, onClose, onAction, onReason, onEx
           </div>
           <div className="co-modal-meta co-modal-meta--after-actions">
             <div className="co-meta-row co-meta-row--reason"><span>Reason</span><strong>{group.reason}</strong></div>
-            {!maintenance && group.items?.some((item) => item.priorityLevel) ? <div className="co-meta-row"><span>Priority Level</span><strong>{group.items.find((item) => item.priorityLevel)?.priorityLevel}</strong></div> : null}
-            {!maintenance && group.items?.some((item) => item.requestedDeliveryDate) ? <div className="co-meta-row"><span>Delivery Date</span><strong>{group.items.find((item) => item.requestedDeliveryDate)?.requestedDeliveryDate}</strong></div> : null}
           </div>
           {maintenance ? <div className="next-maintenance-parity next-maintenance-details-embed">
             <MaintenanceComponentCards items={tabItems} query={componentSearch} onClearSearch={() => setComponentSearch("")} />

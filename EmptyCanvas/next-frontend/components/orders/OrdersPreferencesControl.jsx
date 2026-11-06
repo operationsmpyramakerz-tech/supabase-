@@ -4,11 +4,11 @@ import { useEffect, useId, useRef, useState } from "react";
 import ClassicOrderIcon from "./ClassicOrderIcon";
 
 const SORT_OPTIONS = [
-  { value: "latest", label: "Newest first", detail: "Recently created orders", icon: "sort-desc" },
-  { value: "oldest", label: "Oldest first", detail: "Earliest created orders", icon: "sort-asc" },
-  { value: "number-desc", label: "Order number: high to low", detail: "Descending order number", icon: "sort-numeric-desc" },
-  { value: "number-asc", label: "Order number: low to high", detail: "Ascending order number", icon: "sort-numeric-asc" },
-  { value: "creator", label: "Creator A–Z", detail: "Alphabetical by creator", icon: "sort-alpha" },
+  { value: "latest", label: "Newest first", icon: "sort-desc" },
+  { value: "oldest", label: "Oldest first", icon: "sort-asc" },
+  { value: "number-desc", label: "Order number: high to low", icon: "sort-numeric-desc" },
+  { value: "number-asc", label: "Order number: low to high", icon: "sort-numeric-asc" },
+  { value: "creator", label: "Creator A–Z", icon: "sort-alpha" },
 ];
 
 /** Single preference trigger for type filtering and sorting on the four orders pages.
@@ -66,11 +66,10 @@ export default function OrdersPreferencesControl({
   };
 
   const filterList = [
-    { key: "all", label: "All order types", icon: "layers", sub: "Show every order type" },
+    { key: "all", label: "All order types", icon: "layers" },
     ...filterOptions.filter(item => item?.key && item.key !== "all").map(item => ({
       key: item.key,
       label: item.label,
-      sub: loading ? "Counting…" : error ? "Counts unavailable" : item.count == null ? "Open to count" : `${item.count} order${item.count === 1 ? "" : "s"}`,
       icon: item.icon || "package",
       bg: item.bg,
       fg: item.fg,
@@ -99,7 +98,6 @@ export default function OrdersPreferencesControl({
           <div className="orders-preferences__heading">
             <div>
               <strong>Preferences</strong>
-              <small>Filter and sort your orders</small>
             </div>
             <button type="button" className="orders-preferences__close" onClick={() => { setOpen(false); triggerRef.current?.focus(); }} aria-label="Close preferences">
               <ClassicOrderIcon name="x" />
@@ -116,12 +114,12 @@ export default function OrdersPreferencesControl({
           <div className="orders-preferences__content" id={`${tabPrefix}-body`} role="tabpanel" aria-labelledby={`${tabPrefix}-${section}`}>
             {section === "filter" ? (
               <>
-                <div className="orders-preferences__section-title"><b>Order type</b><small>{loading ? "Updating counts…" : "Choose one type"}</small></div>
-                <div className="orders-preferences__options">
+                <div className="orders-preferences__section-title"><b>Order type</b></div>
+                <div className="orders-preferences__options" aria-label={loading ? "Order type counts updating" : error ? "Order type counts unavailable" : "Order types"}>
                   {filterList.map(option => (
                     <button key={option.key} type="button" className={`orders-preferences__choice ${filterValue === option.key ? "is-selected" : ""}`} aria-pressed={filterValue === option.key} onClick={() => selectFilter(option.key)}>
                       <span className="orders-preferences__choice-icon" style={option.bg ? { backgroundColor: option.bg, color: option.fg || "#162033", borderColor: option.bd || option.bg } : undefined}><ClassicOrderIcon name={option.icon} /></span>
-                      <span className="orders-preferences__choice-text"><strong>{option.label}</strong><small>{option.sub}</small></span>
+                      <span className="orders-preferences__choice-text"><strong>{option.label}</strong></span>
                       {filterValue === option.key ? <ClassicOrderIcon name="check" /> : null}
                     </button>
                   ))}
@@ -129,12 +127,12 @@ export default function OrdersPreferencesControl({
               </>
             ) : (
               <>
-                <div className="orders-preferences__section-title"><b>Sort by</b><small>{hasMore ? "Loaded orders only" : "Choose an order"}</small></div>
-                <div className="orders-preferences__options">
+                <div className="orders-preferences__section-title"><b>Sort by</b></div>
+                <div className="orders-preferences__options" aria-label={hasMore ? "Sorting applies to loaded orders only" : "Sort options"}>
                   {SORT_OPTIONS.map(option => (
                     <button key={option.value} type="button" className={`orders-preferences__choice ${sortMode === option.value ? "is-selected" : ""}`} aria-pressed={sortMode === option.value} onClick={() => selectSort(option.value)}>
                       <span className="orders-preferences__choice-icon"><ClassicOrderIcon name={option.icon} /></span>
-                      <span className="orders-preferences__choice-text"><strong>{option.label}</strong><small>{option.detail}</small></span>
+                      <span className="orders-preferences__choice-text"><strong>{option.label}</strong></span>
                       {sortMode === option.value ? <ClassicOrderIcon name="check" /> : null}
                     </button>
                   ))}
