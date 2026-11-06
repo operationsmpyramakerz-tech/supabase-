@@ -321,31 +321,14 @@ export function ClassicMobileDockStructure({ activePath = "" }) {
     const nav = sidebar?.querySelector(":scope > .sidebar-nav");
     if (!(sidebar instanceof HTMLElement) || !(nav instanceof HTMLElement)) return undefined;
 
-    const MOBILE_QUERY = "(max-width: 768px)";
-    const media = window.matchMedia(MOBILE_QUERY);
+    // Desktop and mobile now share the same detached-Home bottom dock.
+    // Do not change the navigation items or feature permissions themselves.
     const HIDDEN_CLASS = MOBILE_DOCK_HIDDEN_CLASS;
 
     const structure = () => {
       const directList = nav.querySelector(":scope > .nav-list");
       const existingHome = nav.querySelector(":scope > .mobile-dock-home-rail");
       const existingClip = nav.querySelector(":scope > .mobile-dock-pages-clip");
-
-      if (!media.matches) {
-        if (existingHome && existingClip) {
-          const list = existingClip.querySelector(":scope > .nav-list");
-          const homeLi = existingHome.querySelector(":scope > li");
-          if (list) {
-            if (homeLi) list.insertBefore(homeLi, list.firstChild);
-            nav.insertBefore(list, existingHome);
-            list.classList.remove("mobile-dock-pages-list");
-          }
-          existingHome.remove();
-          existingClip.remove();
-        }
-        nav.classList.remove("mobile-dock-structured");
-        sidebar.classList.remove("mobile-dock-structured-host");
-        return;
-      }
 
       if (existingHome && existingClip) {
         nav.classList.add("mobile-dock-structured");
@@ -377,7 +360,20 @@ export function ClassicMobileDockStructure({ activePath = "" }) {
 
     structure();
 
-    // Pinterest-style mobile dock behavior: the page gets the full viewport
+    // The desktop rail may contain more authorized pages than fit at once.
+    // A mouse wheel over that rail should pan its icons instead of trapping
+    // hidden pages that are otherwise reachable only by a trackpad.
+    const pagesClip = nav.querySelector(":scope > .mobile-dock-pages-clip");
+    const handleDockWheel = (event) => {
+      if (!(pagesClip instanceof HTMLElement) || window.innerWidth <= 768) return;
+      if (event.ctrlKey || event.shiftKey || Math.abs(event.deltaX) >= Math.abs(event.deltaY)) return;
+      if (pagesClip.scrollWidth <= pagesClip.clientWidth + 1) return;
+      event.preventDefault();
+      pagesClip.scrollLeft += event.deltaY;
+    };
+    pagesClip?.addEventListener("wheel", handleDockWheel, { passive: false });
+
+    // Shared dock auto-hide: the page gets the full viewport
     // while the user is intentionally scrolling down, then the dock glides
     // back as soon as they reverse direction.  The persistent shell owns one
     // scrollable <main>, so this applies consistently to every authenticated
@@ -393,7 +389,7 @@ export function ClassicMobileDockStructure({ activePath = "" }) {
     let scrollFrame = 0;
 
     const setDockHidden = (hidden) => {
-      const nextHidden = Boolean(hidden && media.matches);
+      const nextHidden = Boolean(hidden);
       sidebar.classList.toggle(HIDDEN_CLASS, nextHidden);
     };
 
@@ -401,7 +397,7 @@ export function ClassicMobileDockStructure({ activePath = "" }) {
     setDockHidden(false);
 
     const handlePageScroll = () => {
-      if (!(pageScroller instanceof HTMLElement) || !media.matches) {
+      if (!(pageScroller instanceof HTMLElement)) {
         setDockHidden(false);
         return;
       }
@@ -459,16 +455,15 @@ export function ClassicMobileDockStructure({ activePath = "" }) {
     if (pageScroller instanceof HTMLElement) {
       pageScroller.addEventListener("scroll", handlePageScroll, { passive: true });
     }
-    if (typeof media.addEventListener === "function") media.addEventListener("change", onChange);
-    else media.addListener?.(onChange);
+    window.addEventListener("resize", onChange, { passive: true });
     window.addEventListener("orientationchange", onChange);
 
     return () => {
       if (scrollFrame) window.cancelAnimationFrame(scrollFrame);
       setDockHidden(false);
+      pagesClip?.removeEventListener("wheel", handleDockWheel);
       pageScroller?.removeEventListener?.("scroll", handlePageScroll);
-      if (typeof media.removeEventListener === "function") media.removeEventListener("change", onChange);
-      else media.removeListener?.(onChange);
+      window.removeEventListener("resize", onChange);
       window.removeEventListener("orientationchange", onChange);
     };
   }, [activePath]);
@@ -482,13 +477,11 @@ export function ClassicMobileDockQuickOpen() {
     const sidebar = document.querySelector('.classic-app-shell > .sidebar');
     if (!(sidebar instanceof HTMLElement)) return undefined;
 
-    const media = window.matchMedia('(max-width: 768px)');
     let frame = 0;
 
     const sync = () => {
       frame = 0;
-      const hidden = media.matches
-        && !sidebar.classList.contains(MOBILE_DOCK_FORCED_OPEN_CLASS)
+      const hidden = !sidebar.classList.contains(MOBILE_DOCK_FORCED_OPEN_CLASS)
         && (
           sidebar.classList.contains(MOBILE_DOCK_HIDDEN_CLASS)
           || sidebar.classList.contains(SMALL_WINDOW_SIDEBAR_HIDDEN_CLASS)
@@ -506,16 +499,12 @@ export function ClassicMobileDockQuickOpen() {
     const observer = new MutationObserver(scheduleSync);
     observer.observe(sidebar, { attributes: true, attributeFilter: ['class'] });
 
-    if (typeof media.addEventListener === 'function') media.addEventListener('change', scheduleSync);
-    else media.addListener?.(scheduleSync);
     window.addEventListener('orientationchange', scheduleSync);
 
     return () => {
       observer.disconnect();
       if (frame) window.cancelAnimationFrame(frame);
       sidebar.classList.remove(MOBILE_DOCK_FORCED_OPEN_CLASS);
-      if (typeof media.removeEventListener === 'function') media.removeEventListener('change', scheduleSync);
-      else media.removeListener?.(scheduleSync);
       window.removeEventListener('orientationchange', scheduleSync);
     };
   }, []);
@@ -684,11 +673,11 @@ export function ClassicSidebarActiveIndicator({ activePath = "" }) {
     let navigationTimer = 0;
     let frame = 0;
 
-    const isMobile = () => window.matchMedia("(max-width: 768px)").matches;
+    const isDock = () => Boolean(nav.querySelector(":scope > .mobile-dock-pages-clip"));
     const reduceMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     const hostForLink = (link) => {
-      if (!(link instanceof HTMLElement) || !isMobile()) return sidebar;
+      if (!(link instanceof HTMLElement) || !isDock()) return sidebar;
       const pagesClip = nav.querySelector(":scope > .mobile-dock-pages-clip");
       if (pagesClip instanceof HTMLElement && pagesClip.contains(link)) return pagesClip;
       const homeRail = nav.querySelector(":scope > .mobile-dock-home-rail");
@@ -708,7 +697,7 @@ export function ClassicSidebarActiveIndicator({ activePath = "" }) {
 
     const syncIndicatorIcon = (link) => {
       indicator.replaceChildren();
-      if (!isMobile()) return;
+      if (!isDock()) return;
       const sourceIcon = link instanceof HTMLElement ? link.querySelector("svg") : null;
       if (!(sourceIcon instanceof SVGElement)) return;
       const clone = sourceIcon.cloneNode(true);
@@ -728,7 +717,7 @@ export function ClassicSidebarActiveIndicator({ activePath = "" }) {
       // On the mobile dock Home uses the padded SVG's rounded-square surface,
       // while page items use the rounded-square active link. Measure the
       // exact visual surface rather than the much wider Home link container.
-      if (isMobile()) {
+      if (isDock()) {
         const href = String(link.getAttribute("href") || "");
         if (href === "/next/home") {
           const icon = link.querySelector("svg");
@@ -740,7 +729,7 @@ export function ClassicSidebarActiveIndicator({ activePath = "" }) {
           // Inactive mobile page links are slightly smaller than the active
           // surface. Animate the white tile to the final active footprint so it
           // does not shrink while travelling to the destination icon.
-          const activeSize = window.innerWidth <= 390 ? 42 : 44;
+          const activeSize = window.innerWidth > 768 ? 52 : (window.innerWidth <= 390 ? 42 : 44);
           const cx = targetRect.left + (targetRect.width / 2);
           const cy = targetRect.top + (targetRect.height / 2);
           targetRect = {
@@ -749,7 +738,7 @@ export function ClassicSidebarActiveIndicator({ activePath = "" }) {
             width: activeSize,
             height: activeSize,
           };
-          radius = window.innerWidth <= 390 ? "14px" : "15px";
+          radius = window.innerWidth > 768 ? "18px" : (window.innerWidth <= 390 ? "14px" : "15px");
         }
       }
 
@@ -855,7 +844,7 @@ export function ClassicSidebarActiveIndicator({ activePath = "" }) {
       if (destination.pathname === window.location.pathname && destination.search === window.location.search) return;
 
       const currentActive = nav.querySelector(".nav-link.active");
-      if (isMobile() && currentActive instanceof HTMLElement && hostForLink(currentActive) !== hostForLink(link)) {
+      if (isDock() && currentActive instanceof HTMLElement && hostForLink(currentActive) !== hostForLink(link)) {
         // Home is intentionally isolated from the horizontally scrolling pages rail.
         // Do not animate a tile across those two different clipped containers.
         return;
