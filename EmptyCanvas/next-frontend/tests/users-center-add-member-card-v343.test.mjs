@@ -11,7 +11,7 @@ const page = read("app/users-center/page.jsx");
 
 test("Add Member is the first grid card, with the same width as users, not a toolbar action", () => {
   assert.match(client, /function AddMemberCard\(\{ onClick \}\)/);
-  assert.match(client, /className="ua-add-member-card" onClick=\{onClick\}/);
+  assert.match(client, /className="ua-add-member-card ua-add-member-card--centered" onClick=\{onClick\}/);
   assert.match(client, /<strong>Add Member<\/strong>/);
   assert.match(client, /Create a new user account/);
   assert.match(client, /<div className="ua-directory-users__grid">\s*\{access\.memberCreate[^\n]+<AddMemberCard[^\n]+\s*\{visibleUsers\.map/);
@@ -40,7 +40,7 @@ test("Flat card has white/dark mode support, accessible focus, compact mobile an
   assert.match(css, /\.ua-add-member-card:focus-visible/);
   assert.match(css, /html\[data-theme="dark"\] body\.user-access-page \.ua-directory-v339 \.ua-add-member-card/);
   assert.match(css, /@media \(max-width: 640px\)/);
-  assert.match(page, /users-center-directory-v339\.css\?v=344/);
+  assert.match(page, /users-center-directory-v339\.css\?v=345/);
 });
 
 test("Updated Users Center JSX parses", () => {

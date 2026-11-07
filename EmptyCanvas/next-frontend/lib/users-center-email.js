@@ -2,6 +2,7 @@ import "server-only";
 
 import net from "node:net";
 import tls from "node:tls";
+import { renderUsersCenterMemberInviteEmail } from "./users-center-invite-template";
 
 function text(value) { return String(value ?? "").trim(); }
 function escapeHtml(value) { return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[char])); }
@@ -160,7 +161,14 @@ export async function sendUsersCenterMemberInviteEmail({ to, name, username, pas
     `Application: ${loginUrl}`, `Username: ${text(username)}`, `Password: ${text(password)}`, "",
     "Keep these login details confidential. Contact your administrator to change the password if the message reached an unexpected mailbox.",
   ].join("\n");
-  const html = `<div style="font-family:Arial,sans-serif;line-height:1.6;color:#172033;max-width:560px;margin:0 auto;padding:24px"><div style="border:1px solid #e6e8ed;border-radius:16px;padding:24px"><div style="height:4px;width:42px;background:#f4771c;border-radius:4px;margin-bottom:18px"></div><h2 style="margin:0 0 10px">Welcome to Pyramakerz ERP</h2><p>Hello ${escapeHtml(safeName)},</p><p>Your account is ready. Use the details below to sign in.</p><p><strong>Application:</strong> <a href="${escapeHtml(loginUrl)}">${escapeHtml(loginUrl)}</a></p><p><strong>Username:</strong> ${escapeHtml(username)}</p><p><strong>Password:</strong> ${escapeHtml(password)}</p><p style="font-size:13px;color:#6b7280;margin-top:24px">Keep these login details confidential. If you did not expect this invitation, contact your administrator.</p></div></div>`;
+  const imageBaseUrl = `${new URL(base).origin}/next/images`;
+  const html = renderUsersCenterMemberInviteEmail({
+    name: safeName,
+    username: text(username),
+    password: text(password),
+    loginUrl,
+    imageBaseUrl,
+  });
   const email = { to: recipient, subject, text: plainText, html };
   const resend = await sendWithResend(email);
   if (resend) return { provider: "resend" };

@@ -64,7 +64,7 @@ export default async function UsersCenterPage() {
       eyebrow="Manage team access and member records"
       activePath="/next/users-center"
       bodyClass="user-access-page"
-      pageStyles={["/next/css/user-access.css?v=permissions-v303-preparing-stages", "/next/css/users-center-directory-v339.css?v=344"]}
+      pageStyles={["/next/css/user-access.css?v=permissions-v303-preparing-stages", "/next/css/users-center-directory-v339.css?v=345"]}
     >
       <UsersCenterClient
         account={gate.account}

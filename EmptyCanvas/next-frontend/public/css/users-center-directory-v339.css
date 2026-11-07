@@ -1083,3 +1083,137 @@ html[data-theme="dark"] body.user-access-page .ua-directory-v339 .ua-member-card
  .user-access-page .ua-directory-v339 .ua-directory-preferences__trigger > svg:last-child { display:none; }
  .user-access-page .ua-directory-v339 .ua-folders .ua-add-department-card { min-height:90px; }
 }
+
+
+/* v345 — flat, centered Add Member tile approved in the Users Center mockup.
+   Scope to the member card: the Add Department tile keeps its v344 design. */
+.user-access-page .ua-directory-v339 .ua-add-member-card--centered {
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 17px 13px;
+  background: #fbfcfe;
+  border-color: #c6ccd6;
+  text-align: center;
+}
+.user-access-page .ua-directory-v339 .ua-add-member-card--centered::before {
+  top: -83px;
+  right: -64px;
+  width: 126px;
+  height: 126px;
+  background: #fff5ea;
+}
+.user-access-page .ua-directory-v339 .ua-add-member-card--centered::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  bottom: -71px;
+  left: -69px;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: #fff5ea;
+  pointer-events: none;
+}
+.user-access-page .ua-directory-v339 .ua-add-member-card--centered .ua-add-member-card__plus {
+  align-self: center;
+  margin: 0;
+  width: 49px;
+  height: 49px;
+  border: 1.6px solid #ff7a16;
+  border-radius: 50%;
+  background: transparent;
+  color: #ff7a16;
+}
+.user-access-page .ua-directory-v339 .ua-add-member-card--centered .ua-add-member-card__plus svg {
+  width: 26px;
+  height: 26px;
+  stroke-width: 2.6;
+}
+.user-access-page .ua-directory-v339 .ua-add-member-card--centered .ua-add-member-card__copy {
+  justify-items: center;
+  gap: 3px;
+  width: 100%;
+}
+.user-access-page .ua-directory-v339 .ua-add-member-card--centered .ua-add-member-card__copy strong {
+  font-size: 16px;
+  font-weight: 800;
+  color: #111827;
+}
+.user-access-page .ua-directory-v339 .ua-add-member-card--centered .ua-add-member-card__copy > span {
+  font-size: 11.5px;
+  line-height: 1.4;
+  font-weight: 520;
+  color: #657187;
+}
+.user-access-page .ua-directory-v339 .ua-add-member-card--centered:hover {
+  background: #fffdfb;
+  border-color: #ff922e;
+}
+html[data-theme="dark"] body.user-access-page .ua-directory-v339 .ua-add-member-card--centered {
+  background: #1b212b;
+  border-color: #647184;
+}
+html[data-theme="dark"] body.user-access-page .ua-directory-v339 .ua-add-member-card--centered::before,
+html[data-theme="dark"] body.user-access-page .ua-directory-v339 .ua-add-member-card--centered::after {
+  background: #33291f;
+}
+html[data-theme="dark"] body.user-access-page .ua-directory-v339 .ua-add-member-card--centered .ua-add-member-card__plus {
+  color: #ff9441;
+  border-color: #ff9441;
+  background: transparent;
+}
+html[data-theme="dark"] body.user-access-page .ua-directory-v339 .ua-add-member-card--centered .ua-add-member-card__copy strong {color: #f5f6fa;}
+html[data-theme="dark"] body.user-access-page .ua-directory-v339 .ua-add-member-card--centered .ua-add-member-card__copy > span {color: #b6c1d1;}
+html[data-theme="dark"] body.user-access-page .ua-directory-v339 .ua-add-member-card--centered:hover {background: #242b36;}
+@media (max-width: 640px) {
+  .user-access-page .ua-directory-v339 .ua-add-member-card--centered {min-height: 160px;}
+}
+
+
+/* v345 — Users Center compact icon-only Preferences button and aligned actions. */
+.user-access-page .ua-directory-v339 .ua-directory-preferences__trigger {
+  width: 49px;
+  min-width: 49px;
+  height: 49px;
+  padding: 0;
+  border-radius: 14px;
+}
+.user-access-page .ua-directory-v339 .ua-directory-preferences__trigger > svg,
+.user-access-page .ua-directory-v339 .ua-directory-preferences__trigger > svg:last-child {
+  display: block;
+  width: 19px;
+  height: 19px;
+  margin: 0;
+}
+.user-access-page .ua-directory-v339 .ua-directory-preferences__tabs button > svg,
+.user-access-page .ua-directory-v339 .ua-directory-preferences__options button > svg {
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  display: block;
+  margin: 0;
+  stroke-width: 2;
+}
+.user-access-page .ua-directory-v339 .ua-member-card__dual-actions > button,
+.user-access-page .ua-directory-v339 .ua-member-menu button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+.user-access-page .ua-directory-v339 .ua-member-card__dual-actions > button > svg,
+.user-access-page .ua-directory-v339 .ua-member-menu button > svg {
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  display: block;
+  margin: 0;
+}
+@media(max-width:640px) {
+  .user-access-page .ua-directory-v339 .ua-directory-preferences__trigger {
+    min-width: 46px;
+    width: 46px;
+    height: 46px;
+  }
+}

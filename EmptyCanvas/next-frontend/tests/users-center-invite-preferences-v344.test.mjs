@@ -66,7 +66,7 @@ test('Menus anchor to their triggers and new controls are dark/mobile ready', ()
   assert.match(css, /\.ua-directory-preferences__panel/);
   assert.match(css, /html\[data-theme="dark"\] body\.user-access-page \.ua-directory-v339 \.ua-directory-preferences__trigger/);
   assert.match(css, /@media\(max-width:640px\)/);
-  assert.match(page, /users-center-directory-v339\.css\?v=344/);
+  assert.match(page, /users-center-directory-v339\.css\?v=345/);
 });
 test('all changed JSX and JS files parse', () => {
   for (const name of ['components/users-center/UsersCenterClient.jsx','lib/users-center-email.js','lib/users-center-mutations.js','app/api/users-center/mutations-direct/route.js','app/users-center/page.jsx']) {

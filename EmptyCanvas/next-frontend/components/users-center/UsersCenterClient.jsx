@@ -217,12 +217,12 @@ function AddDepartmentFolder({ onClick }) {
    member, rather than a second toolbar button. The caller retains the existing
    permission gate, password protection and department context. */
 function AddMemberCard({ onClick }) {
-  return <button type="button" className="ua-add-member-card" onClick={onClick} aria-label="Add Member — create a new user account">
+  return <button type="button" className="ua-add-member-card ua-add-member-card--centered" onClick={onClick} aria-label="Add Member — create a new user account">
+    <span className="ua-add-member-card__plus" aria-hidden="true"><UAIcon name="plus"/></span>
     <span className="ua-add-member-card__copy">
       <strong>Add Member</strong>
       <span>Create a new user account</span>
     </span>
-    <span className="ua-add-member-card__plus" aria-hidden="true"><UAIcon name="plus"/></span>
   </button>;
 }
 
@@ -243,14 +243,14 @@ function DirectoryPreferences({ sortMode, onSortChange, sortOptions, canSelect, 
     return () => { document.removeEventListener("pointerdown", closeOutside); document.removeEventListener("keydown", closeEscape); };
   }, [open]);
   return <div className={`ua-directory-preferences${open ? " is-open" : ""}`} ref={rootRef}>
-    <button type="button" className="ua-directory-preferences__trigger" onClick={() => setOpen((value) => !value)} aria-label="Preferences: select and sort" aria-haspopup="dialog" aria-expanded={open}>
-      <UAIcon name="preferences"/><span>Preferences</span><UAIcon name="chevronDown"/>
+    <button type="button" className="ua-directory-preferences__trigger" onClick={() => setOpen((value) => !value)} aria-label="Preferences: select and sort" title="Preferences" aria-haspopup="dialog" aria-expanded={open}>
+      <UAIcon name="preferences"/>
     </button>
     {open ? <div className="ua-directory-preferences__panel" role="dialog" aria-label="Select and sort preferences">
       <div className="ua-directory-preferences__heading"><strong>Preferences</strong><button type="button" aria-label="Close preferences" onClick={() => setOpen(false)}><UAIcon name="close"/></button></div>
       <div className="ua-directory-preferences__tabs" role="group" aria-label="Preferences category">
-        <button type="button" className={section === "select" ? "is-active" : ""} onClick={() => setSection("select")}><UAIcon name="checkCircle"/>Select</button>
-        <button type="button" className={section === "sort" ? "is-active" : ""} onClick={() => setSection("sort")}><UAIcon name="filter"/>Sort</button>
+        <button type="button" className={section === "select" ? "is-active" : ""} aria-pressed={section === "select"} onClick={() => setSection("select")}><UAIcon name="checkCircle"/>Select</button>
+        <button type="button" className={section === "sort" ? "is-active" : ""} aria-pressed={section === "sort"} onClick={() => setSection("sort")}><UAIcon name="filter"/>Sort</button>
       </div>
       {section === "select" ? <div className="ua-directory-preferences__options">
         {canSelect ? <button type="button" onClick={() => { onToggleSelect?.(); setOpen(false); }}><UAIcon name="checkCircle"/><span>{selecting ? "Cancel selection" : "Select users"}</span>{selecting ? <UAIcon name="check"/> : null}</button>
