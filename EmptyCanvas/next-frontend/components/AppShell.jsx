@@ -162,6 +162,13 @@ export default function AppShell({
     if (link.href === "/next/events") return ["events.calendar.view", "events.requests.view", "events.components.view", "events.team.view"].some(key => featureAllowed(account, key));
     return true;
   });
+  // The desktop bottom dock must occupy only as much space as the links
+  // authorized for this account. ClassicMobileDockStructure lifts the first
+  // (Home) item into its own rail; remaining items use 52px tiles, 10px gaps
+  // and the current list's intrinsic horizontal padding. CSS caps the total width at 960px and
+  // leaves horizontal scrolling available whenever the links overflow.
+  const dockPageCount = Math.max(0, classicLinks.length - 1);
+  const desktopDockPagesWidth = `${Math.max(64, dockPageCount * 62 + 22)}px`;
   const combinedBodyClass = [bodyClass, "next-classic-shell-active"].filter(Boolean).join(" ");
   const pageMainClass = [
     "container-full-width",
@@ -218,7 +225,7 @@ export default function AppShell({
       <ShoppingCartSidebarFlyout allowedPages={allowedPages} activePath={activePath} />
 
       <div className="app-container classic-app-shell">
-        <aside className="sidebar">
+        <aside className="sidebar" style={{ "--desktop-dock-pages-width": desktopDockPagesWidth }}>
           <div className="sidebar-header">
             <h2 aria-label="Dashboard">Dashboard</h2>
             <SidebarBrandToggle />

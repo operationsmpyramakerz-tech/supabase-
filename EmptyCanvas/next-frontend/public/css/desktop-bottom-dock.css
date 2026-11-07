@@ -38,7 +38,9 @@
     bottom: 26px !important;
     left: 50% !important;
     right: auto !important;
-    width: min(960px, calc(100% - 64px)) !important;
+    /* Match the rail to the user's permitted pages instead of keeping a
+       960px black strip when only a few pages are available. */
+    width: min(960px, calc(100% - 64px), calc(var(--desktop-dock-home-width) + var(--desktop-dock-gap) + var(--desktop-dock-pages-width, 766px))) !important;
     min-width: 0 !important;
     height: var(--desktop-dock-height) !important;
     min-height: var(--desktop-dock-height) !important;
@@ -176,7 +178,9 @@
     align-items: center !important;
     gap: 10px !important;
     width: max-content !important;
-    min-width: 100% !important;
+    /* 100% min-width + 16px side padding adds artificial overflow even for
+       three visible icons. Let the list keep its true max-content width. */
+    min-width: 0 !important;
     min-height: var(--desktop-dock-height) !important;
     height: var(--desktop-dock-height) !important;
     margin: 0 !important;
@@ -387,7 +391,7 @@
   body.next-classic-shell-active .classic-app-shell > .sidebar,
   body.next-classic-shell-active.sidebar-collapsed .classic-app-shell > .sidebar {
     bottom: 20px !important;
-    width: calc(100% - 44px) !important;
+    width: min(calc(100% - 44px), calc(var(--desktop-dock-home-width) + var(--desktop-dock-gap) + var(--desktop-dock-pages-width, 766px))) !important;
   }
 }
 
