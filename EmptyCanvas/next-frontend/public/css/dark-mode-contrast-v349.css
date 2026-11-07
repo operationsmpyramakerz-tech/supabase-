@@ -1,14 +1,13 @@
-/* ERP v349 — Dark mode visual repairs, scoped exclusively to dark theme.
-   Keep the established white inset frame, orange active-page colour, page
-   spacing, per-user navigation sizing and light-mode design unchanged. */
+/* ERP v350 — White bottom sidebar in Dark Mode, based on v349.
+   Preserve the black outer frame, dark page surfaces, orange selection,
+   responsive/permission-aware dock width and all light-theme styles. */
 
-/* 1. Bottom dock: the old dark-theme inversion painted a conspicuous white
-   rectangle beneath the black navigation. Match the application's dark shell
-   without changing the dock geometry or the 347 auto-fit calculation. */
+/* 1. Bottom dock: keep the hosting aside clear, and turn ONLY its two
+   visible navigation rails white. Do not style a full-width backdrop. */
 html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell {
-  --desktop-dock-bg: #0b0c10;
-  --desktop-dock-foreground: #d0d5dd;
-  --desktop-dock-shadow: 0 15px 34px rgba(0, 0, 0, .38);
+  --desktop-dock-bg: #ffffff;
+  --desktop-dock-foreground: #172033;
+  --desktop-dock-shadow: 0 13px 30px rgba(0, 0, 0, .24);
 }
 html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host,
 html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host .sidebar-nav {
@@ -18,46 +17,52 @@ html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sid
   box-shadow: none !important;
 }
 html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host :is(.mobile-dock-pages-clip, .mobile-dock-home-rail) {
-  background: #0b0c10 !important;
+  background: #ffffff !important;
   background-image: none !important;
-  border-color: #0b0c10 !important;
-  box-shadow: 0 15px 34px rgba(0,0,0,.38) !important;
+  border-color: #e5e7eb !important;
+  box-shadow: 0 13px 30px rgba(0, 0, 0, .24) !important;
 }
 html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host .mobile-dock-home-rail::after {
-  background: #0b0c10 !important;
+  background: #ffffff !important;
 }
 html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host .mobile-dock-pages-list {
   background: transparent !important;
   border-color: transparent !important;
   box-shadow: none !important;
 }
-html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host :is(.mobile-dock-pages-list, .mobile-dock-home-rail) .nav-link:not(.active):not(.is-indicator-target) {
+
+/* Dark icons are readable on the light rail; leave the orange active state. */
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host :is(.mobile-dock-pages-list, .mobile-dock-home-rail) .nav-link:not(.active) {
   background: transparent !important;
   border-color: transparent !important;
-  color: #d0d5dd !important;
+  color: #172033 !important;
   box-shadow: none !important;
 }
-html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host :is(.mobile-dock-pages-list, .mobile-dock-home-rail) .nav-link:not(.active):not(.is-indicator-target):hover {
-  background: rgba(255,255,255,.11) !important;
-  color: #fff !important;
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host :is(.mobile-dock-pages-list, .mobile-dock-home-rail) .nav-link:not(.active) svg {
+  color: #172033 !important;
+  stroke: currentColor !important;
+}
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host :is(.mobile-dock-pages-list, .mobile-dock-home-rail) .nav-link:not(.active):hover {
+  background: #f0f2f6 !important;
+  color: #101827 !important;
 }
 html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host .mobile-dock-home-rail .nav-link:not(.active) svg {
-  background: rgba(255,255,255,.1) !important;
-  color: #fff !important;
-  stroke: #fff !important;
+  background: #edf0f5 !important;
 }
 html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host .mobile-dock-pages-list .nav-link.active,
 html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host :is(.mobile-dock-pages-clip, .mobile-dock-home-rail) > .sidebar-active-indicator {
   background: #f45108 !important;
-  border-color: rgba(255,255,255,.12) !important;
-  color: #fff !important;
+  border-color: rgba(255, 255, 255, .12) !important;
+  color: #ffffff !important;
+  box-shadow: 0 10px 22px rgba(244, 81, 8, .24) !important;
 }
 html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host .mobile-dock-home-rail .nav-link.active > svg {
   background: #f45108 !important;
-  color: #fff !important;
-  stroke: #fff !important;
+  color: #ffffff !important;
+  stroke: #ffffff !important;
 }
-/* The travelling indicator draws the fill when its position has been measured. */
+/* When the shared travelling indicator renders, it supplies the fill while
+   the active link remains transparent, including the Home SVG surface. */
 html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready.mobile-dock-structured-host :is(.mobile-dock-pages-list, .mobile-dock-home-rail) .nav-link.active {
   background: transparent !important;
   border-color: transparent !important;
@@ -69,8 +74,8 @@ html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sid
 }
 html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host :is(.mobile-dock-pages-list, .mobile-dock-home-rail) .nav-link.active svg,
 html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host .sidebar-active-indicator__icon {
-  color: #fff !important;
-  stroke: #fff !important;
+  color: #ffffff !important;
+  stroke: #ffffff !important;
 }
 
 /* 2. Homepage: old light-only inner text declarations turned titles black

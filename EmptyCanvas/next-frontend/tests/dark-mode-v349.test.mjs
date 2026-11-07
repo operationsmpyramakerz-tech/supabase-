@@ -9,14 +9,17 @@ const css = readFileSync(resolve(root, "public/css/dark-mode-contrast-v349.css")
 const layout = readFileSync(resolve(root, "app/layout.jsx"), "utf8");
 
 test("dark-mode contrast patch is loaded by the shared root layout", () => {
-  assert.match(layout, /dark-mode-contrast-v349\.css\?v=349/);
+  assert.match(layout, /dark-mode-contrast-v349\.css\?v=350-white-dock/);
 });
 
-test("dock uses a dark rail in dark mode, without altering the auto-fit width", () => {
-  assert.match(css, /--desktop-dock-bg:\s*#0b0c10/);
+test("dark mode uses white rails, dark icons, and orange selected icon without changing dock sizing", () => {
+  assert.match(css, /--desktop-dock-bg:\s*#ffffff/);
   assert.match(css, /\.mobile-dock-pages-clip, \.mobile-dock-home-rail/);
-  assert.match(css, /background:\s*#0b0c10\s*!important/);
-  assert.match(css, /\.mobile-dock-pages-list\s*\{/);
+  assert.match(css, /background:\s*#ffffff\s*!important/);
+  assert.match(css, /\.nav-link:not\(\.active\) svg/);
+  assert.match(css, /color:\s*#172033\s*!important/);
+  assert.match(css, /background:\s*#f45108\s*!important/);
+  assert.match(css, /sidebar-active-indicator-ready/);
   assert.doesNotMatch(css, /--desktop-dock-pages-width\s*:/);
   assert.doesNotMatch(css, /width:\s*960px/);
 });
