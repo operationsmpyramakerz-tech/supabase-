@@ -171,6 +171,15 @@ function Icon({ name }) {
     x: <><path d="M18 6 6 18" /><path d="m6 6 12 12" /></>,
     plus: <><path d="M12 5v14" /><path d="M5 12h14" /></>,
     search: <><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></>,
+    cubes: <><path d="m12 2 5 3v6l-5 3-5-3V5l5-3z" /><path d="m7 11-5 3v6l5 3 5-3v-6M17 11l5 3v6l-5 3-5-3v-6M12 14v6M2 14l5 3 5-3 5 3 5-3" /></>,
+    box: <><path d="m12 2 9 5-9 5-9-5 9-5z" /><path d="M3 7v10l9 5 9-5V7M12 12v10" /></>,
+    layers: <><path d="m12 2 9 5-9 5-9-5 9-5zM3 12l9 5 9-5M3 17l9 5 9-5" /></>,
+    file: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6M8 13h8M8 17h8" /></>,
+    images: <><rect x="2" y="3" width="20" height="18" rx="2" /><circle cx="8" cy="9" r="1.5" /><path d="m21 16-5-5L5 21" /></>,
+    clipboard: <><rect x="5" y="4" width="14" height="18" rx="2" /><rect x="9" y="2" width="6" height="5" rx="1" /><path d="m9 14 2 2 4-4" /></>,
+    more: <><circle cx="12" cy="5" r="1.5" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" /><circle cx="12" cy="19" r="1.5" fill="currentColor" stroke="none" /></>,
+    chevronRight: <path d="m9 18 6-6-6-6" />,
+    upDown: <><path d="m7 16 4 4 4-4M11 20V4M7 8l4-4 4 4" /></>,
   };
   return <svg {...common}>{paths[name] || paths.download}</svg>;
 }
@@ -443,6 +452,10 @@ export default function StocktakingClient({ account, initialStock = [], initialC
   const [inventorySaveError, setInventorySaveError] = useState("");
   const [sortMode, setSortMode] = useState("kit");
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
+  const [groupOptionsOpen, setGroupOptionsOpen] = useState(false);
+  const [groupExpandedOverrides, setGroupExpandedOverrides] = useState({});
+  const [selectedRowKeys, setSelectedRowKeys] = useState(() => new Set());
+  const [openRowActions, setOpenRowActions] = useState("");
   const [editRowId, setEditRowId] = useState("");
   const [editDraft, setEditDraft] = useState({ productId: "", quantity: "" });
   const [editBusy, setEditBusy] = useState(false);
@@ -513,6 +526,20 @@ export default function StocktakingClient({ account, initialStock = [], initialC
       document.removeEventListener("keydown", onKeyDown);
     };
   }, [sortMenuOpen]);
+
+  useEffect(() => {
+    if (!openRowActions) return undefined;
+    const handlePointer = (event) => {
+      if (!event.target.closest?.(".stocktaking-inline-actions")) setOpenRowActions("");
+    };
+    const handleEscape = (event) => { if (event.key === "Escape") setOpenRowActions(""); };
+    document.addEventListener("pointerdown", handlePointer, true);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointer, true);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [openRowActions]);
 
   useEffect(() => {
     const input = document.querySelector(".classic-app-shell .main-header .searchbar input");
@@ -910,6 +937,10 @@ export default function StocktakingClient({ account, initialStock = [], initialC
     setExportOpen(false);
     setSortMode("kit");
     setSortMenuOpen(false);
+    setGroupOptionsOpen(false);
+    setGroupExpandedOverrides({});
+    setSelectedRowKeys(new Set());
+    setOpenRowActions("");
     setEditRowId("");
     setEditDraft({ productId: "", quantity: "" });
     setNewRowOpen(false);
@@ -944,6 +975,10 @@ export default function StocktakingClient({ account, initialStock = [], initialC
     setExportOpen(false);
     setSortMode("kit");
     setSortMenuOpen(false);
+    setGroupOptionsOpen(false);
+    setGroupExpandedOverrides({});
+    setSelectedRowKeys(new Set());
+    setOpenRowActions("");
     setEditRowId("");
     setEditDraft({ productId: "", quantity: "" });
     setNewRowOpen(false);
@@ -1051,28 +1086,64 @@ export default function StocktakingClient({ account, initialStock = [], initialC
   const kitTagGroups = useMemo(() => groupRows(filteredRows, "component", "kit"), [filteredRows]);
   const receiptGroups = useMemo(() => groupRowsByReceipt(filteredRows), [filteredRows]);
   const orderGroups = useMemo(() => groupRowsByOrderNumber(filteredRows), [filteredRows]);
-  const tableColumnCount = 4 + (canEditColumn ? 1 : 0) + (inventorySession?.inventoryColumn ? 1 : 0) + (inventorySession?.defectedColumn ? 1 : 0);
+  const tableColumnCount = 5 + (canEditColumn ? 1 : 0) + (inventorySession?.inventoryColumn ? 1 : 0) + (inventorySession?.defectedColumn ? 1 : 0);
+  const kitTagCount = kitTagGroups.length;
+  const visibleQuantity = filteredRows.reduce((total, row) => total + row.quantity, 0);
+  const receiptsCount = filteredRows.filter((row) => Boolean(row.receiptNumber) || row.receiptPhotos.length > 0).length;
+  const selectedVisibleRows = filteredRows.filter((row) => selectedRowKeys.has(row.key));
+  const allVisibleSelected = filteredRows.length > 0 && selectedVisibleRows.length === filteredRows.length;
+  const selectedQuantity = selectedVisibleRows.reduce((total, row) => total + row.quantity, 0);
 
-  const toneForTag = (name) => TAG_TONES[tagToneMap.get(lower(name)) || "default"] || TAG_TONES.default;
+  const toggleRowSelection = (key) => {
+    setSelectedRowKeys((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+  const toggleAllVisible = () => {
+    setSelectedRowKeys((current) => {
+      const next = new Set(current);
+      if (filteredRows.length && filteredRows.every((row) => next.has(row.key))) filteredRows.forEach((row) => next.delete(row.key));
+      else filteredRows.forEach((row) => next.add(row.key));
+      return next;
+    });
+  };
+  const isGroupExpanded = (key, defaultOpen) => {
+    if (Object.prototype.hasOwnProperty.call(groupExpandedOverrides, key)) return groupExpandedOverrides[key];
+    return search.trim() ? true : defaultOpen;
+  };
+  const toggleGroupExpanded = (key, currentlyOpen) => setGroupExpandedOverrides((current) => ({ ...current, [key]: !currentlyOpen }));
 
-  const renderTagHeader = (group, keyPrefix = "tag", label = "TAG") => {
-    const tone = toneForTag(group.name);
+  const renderTagHeader = (group, keyPrefix = "tag", label = "KIT TAG", defaultOpen = false) => {
+    const groupId = `${keyPrefix}-${group.key}`;
+    const isExpanded = isGroupExpanded(groupId, defaultOpen);
+    const groupQty = group.items.reduce((sum, row) => sum + row.quantity, 0);
     return (
-      <tr className="stocktaking-tag-group-row" key={`${keyPrefix}-${group.key}`}>
+      <tr className={`stocktaking-tag-group-row ${isExpanded ? "is-expanded" : "is-collapsed"}`} key={groupId}>
         <td colSpan={tableColumnCount}>
-          <div className="stocktaking-tag-group-head" style={{ background: tone.background, color: tone.color, borderColor: tone.border }}>
-            <span><small>{label}</small><strong>{group.name || "Untagged"}</strong></span>
-            <em>{group.items.length} item{group.items.length === 1 ? "" : "s"}</em>
-          </div>
+          <button type="button" className="stocktaking-tag-group-head" onClick={() => toggleGroupExpanded(groupId, isExpanded)} aria-expanded={isExpanded} aria-label={`${isExpanded ? "Collapse" : "Expand"} ${group.name}`}>
+            <span className="stocktaking-tag-head-main"><span className="stocktaking-tag-chevron"><Icon name={isExpanded ? "chevron" : "chevronRight"} /></span><small>{label}</small><strong>{group.name || "Untagged"}</strong></span>
+            <span className="stocktaking-tag-head-stats"><span><Icon name="box" />{group.items.length} item{group.items.length === 1 ? "" : "s"}</span><span className="stocktaking-tag-qty"><Icon name="layers" />Σ {groupQty.toLocaleString("en-US")}</span></span>
+          </button>
         </td>
       </tr>
     );
+  };
+  const renderGroup = (group, prefix, label, defaultOpen) => {
+    const groupId = `${prefix}-${group.key}`;
+    return [
+      renderTagHeader(group, prefix, label, defaultOpen),
+      ...(isGroupExpanded(groupId, defaultOpen) ? group.items.map((row) => renderStockRow(row)) : []),
+    ];
   };
 
   const renderStockRow = (row) => {
     const isEditing = String(editRowId) === String(row.id);
     return (
-      <tr key={row.key} className={isEditing ? "is-editing" : ""}>
+      <tr key={row.key} className={`${isEditing ? "is-editing" : ""} ${selectedRowKeys.has(row.key) ? "is-selected" : ""}`}>
+        <td className="stocktaking-row-select-cell"><input type="checkbox" checked={selectedRowKeys.has(row.key)} onChange={() => toggleRowSelection(row.key)} aria-label={`Select ${row.name}`} /></td>
         <td className="stocktaking-data-component">
           {isEditing ? (
             <StockProductPicker
@@ -1084,7 +1155,7 @@ export default function StocktakingClient({ account, initialStock = [], initialC
               disabled={editBusy || productsLoading}
             />
           ) : (
-            row.url ? <a href={row.url} target="_blank" rel="noopener noreferrer" className="component-link">{row.name}</a> : row.name
+            <span className="stocktaking-component-identity"><span className="stocktaking-component-thumbnail"><Icon name="box" /></span><span className="stocktaking-component-name">{row.url ? <a href={row.url} target="_blank" rel="noopener noreferrer" className="component-link">{row.name}</a> : row.name}</span></span>
           )}
         </td>
         <td className="stocktaking-data-qty">
@@ -1099,7 +1170,7 @@ export default function StocktakingClient({ account, initialStock = [], initialC
               disabled={editBusy}
               aria-label={`Quantity for ${row.name}`}
             />
-          ) : row.quantity}
+          ) : <span className="stocktaking-qty-pill">{row.quantity.toLocaleString("en-US")}</span>}
         </td>
         <td className="stocktaking-data-receipt"><span>{row.receiptNumber || "—"}</span></td>
         <td className="stocktaking-data-photos">
@@ -1149,16 +1220,10 @@ export default function StocktakingClient({ account, initialStock = [], initialC
               </button>
             </div>
           ) : canEditRow ? (
-            <button
-              type="button"
-              className="is-edit is-icon-only"
-              onClick={() => requestEditAccess(editAdminPassword, { target: { type: "row", rowId: row.id } })}
-              disabled={editBusy || productsLoading || !row.id || Boolean(editRowId) || newRowOpen}
-              aria-label={`Edit ${row.name}`}
-              title="Edit"
-            >
-              <Icon name="edit" />
-            </button>
+            <div className="stocktaking-inline-actions">
+              <button type="button" className="stocktaking-row-more" onClick={() => setOpenRowActions((current) => current === row.key ? "" : row.key)} disabled={editBusy || productsLoading || !row.id || Boolean(editRowId) || newRowOpen} aria-expanded={openRowActions === row.key} aria-label={`Actions for ${row.name}`} title="Row actions"><Icon name="more" /></button>
+              {openRowActions === row.key ? <div className="stocktaking-row-actions-menu"><button type="button" onClick={() => { setOpenRowActions(""); requestEditAccess(editAdminPassword, { target: { type: "row", rowId: row.id } }); }}><Icon name="edit" /><span>Edit component</span></button></div> : null}
+            </div>
           ) : null}
         </td> : null}
       </tr>
@@ -1213,44 +1278,38 @@ export default function StocktakingClient({ account, initialStock = [], initialC
           </div>
         </section>
       ) : (
-        <section className="card stocktaking-folder-workspace">
-          <div className="stocktaking-folder-toolbar">
+        <section className="card stocktaking-folder-workspace stocktaking-industrial-workspace">
+          <div className="stocktaking-folder-toolbar stocktaking-industrial-heading">
             <div className="stocktaking-folder-title">
-              
-              <span className="stocktaking-folder-title-icon"><Icon name="folder" /></span>
-              <div><span>STOCKTAKING</span><h2>{activeColumn.label}</h2></div>
+              <span className="stocktaking-folder-title-icon"><Icon name="cubes" /></span>
+              <div><span>STOCKTAKING</span><h2>{activeColumn.label}</h2><p>Manage components, quantities and receipts.</p></div>
             </div>
-            <div className="stocktaking-folder-actions">
-              {(inventorySession ? canUpdateInventory : canStartInventory) ? <button className={`btn stocktaking-make-inventory-btn ${inventorySession ? "is-active" : ""}`} type="button" onClick={() => inventorySession ? setInventoryFinishOpen(true) : setInventorySetupOpen(true)} disabled={loading || Boolean(error) || Boolean(editRowId) || newRowOpen}>
-                <span>{inventorySession ? "Finish inventory" : "Make inventory"}</span>
-              </button> : null}
-              {can("export") ? <button className="btn b2b-download-primary" type="button" onClick={() => { setExportOpen(true); setSortMenuOpen(false); }} disabled={loading || Boolean(error)}><Icon name="download" /><span>Download</span></button> : null}
-              <div className="stocktaking-sort-menu-wrap" ref={sortMenuRef}>
-                <button className="btn stocktaking-sort-btn" type="button" onClick={() => { setSortMenuOpen((open) => !open); setExportOpen(false); }} disabled={loading || Boolean(error)} aria-expanded={sortMenuOpen}>
-                  <Icon name="sort" /><span>Grouped</span><Icon name="chevron" />
+            <div className="stocktaking-folder-actions" ref={sortMenuRef}>
+              <div className="stocktaking-sort-menu-wrap">
+                <button className="btn stocktaking-sort-btn stocktaking-main-actions-btn" type="button" onClick={() => { setSortMenuOpen((open) => !open); setGroupOptionsOpen(false); setExportOpen(false); }} disabled={loading || Boolean(error)} aria-expanded={sortMenuOpen} aria-haspopup="menu">
+                  <Icon name="layers" /><span>Actions</span><Icon name="chevron" />
                 </button>
-                {sortMenuOpen ? (
-                  <div className="stocktaking-sort-menu" role="menu">
-                    <button type="button" className={sortMode === "tag" ? "is-active" : ""} onClick={() => { setSortMode("tag"); setSortMenuOpen(false); }}>
-                      <span className="stocktaking-sort-menu__check">{sortMode === "tag" ? "✓" : ""}</span>
-                      <span><strong>By components tag</strong><small>Component tag → components.</small></span>
-                    </button>
-                    <button type="button" className={sortMode === "kit" ? "is-active" : ""} onClick={() => { setSortMode("kit"); setSortMenuOpen(false); }}>
-                      <span className="stocktaking-sort-menu__check">{sortMode === "kit" ? "✓" : ""}</span>
-                      <span><strong>By kit tag</strong><small>Kit tag → components.</small></span>
-                    </button>
-                    <button type="button" className={sortMode === "receipt" ? "is-active" : ""} onClick={() => { setSortMode("receipt"); setSortMenuOpen(false); }}>
-                      <span className="stocktaking-sort-menu__check">{sortMode === "receipt" ? "✓" : ""}</span>
-                      <span><strong>By receipt number</strong><small>Receipt → component tag → components.</small></span>
-                    </button>
-                    <button type="button" className={sortMode === "order" ? "is-active" : ""} onClick={() => { setSortMode("order"); setSortMenuOpen(false); }}>
-                      <span className="stocktaking-sort-menu__check">{sortMode === "order" ? "✓" : ""}</span>
-                      <span><strong>By order number</strong><small>Order → kit tag → components.</small></span>
-                    </button>
-                  </div>
-                ) : null}
+                {sortMenuOpen ? <div className="stocktaking-sort-menu stocktaking-main-actions-menu" role="menu">
+                  {(inventorySession ? canUpdateInventory : canStartInventory) ? <button type="button" onClick={() => { setSortMenuOpen(false); inventorySession ? setInventoryFinishOpen(true) : setInventorySetupOpen(true); }} disabled={loading || Boolean(error) || Boolean(editRowId) || newRowOpen}><Icon name="clipboard" /><span><strong>{inventorySession ? "Finish Inventory" : "Make Inventory"}</strong></span></button> : null}
+                  {can("export") ? <button type="button" onClick={() => { setSortMenuOpen(false); setExportOpen(true); }} disabled={loading || Boolean(error)}><Icon name="download" /><span><strong>Download</strong></span></button> : null}
+                  <button type="button" onClick={() => setGroupOptionsOpen((open) => !open)} aria-expanded={groupOptionsOpen}><Icon name="layers" /><span><strong>Grouped</strong><small>{sortMode === "kit" ? "By kit tag" : sortMode === "tag" ? "By components tag" : sortMode === "receipt" ? "By receipt number" : "By order number"}</small></span><Icon name="chevron" /></button>
+                  {groupOptionsOpen ? <div className="stocktaking-action-group-options">
+                    {[
+                      { value: "kit", title: "By kit tag" },
+                      { value: "tag", title: "By components tag" },
+                      { value: "receipt", title: "By receipt number" },
+                      { value: "order", title: "By order number" },
+                    ].map((option) => <button key={option.value} type="button" className={sortMode === option.value ? "is-active" : ""} onClick={() => { setSortMode(option.value); setSortMenuOpen(false); setGroupOptionsOpen(false); setGroupExpandedOverrides({}); }} role="menuitemradio" aria-checked={sortMode === option.value}><span className="stocktaking-sort-menu__check">{sortMode === option.value ? "✓" : ""}</span>{option.title}</button>)}
+                  </div> : null}
+                </div> : null}
               </div>
             </div>
+          </div>
+          <div className="stocktaking-industrial-stats" aria-label="Stocktaking summary">
+            <div><Icon name="box" /><strong>{kitTagCount.toLocaleString("en-US")}</strong><span>Kit tags</span></div>
+            <div><Icon name="layers" /><strong>{filteredRows.length.toLocaleString("en-US")}</strong><span>Components</span></div>
+            <div><Icon name="cubes" /><strong>{visibleQuantity.toLocaleString("en-US")}</strong><span>Total qty</span></div>
+            <div><Icon name="file" /><strong>{receiptsCount.toLocaleString("en-US")}</strong><span>With receipts</span></div>
           </div>
 
           {loading ? (
@@ -1265,13 +1324,14 @@ export default function StocktakingClient({ account, initialStock = [], initialC
                 <table className={`stocktaking-data-table ${editRowId || newRowOpen ? "is-edit-mode" : ""}`}>
                   <thead>
                     <tr>
-                      <th>Components</th>
-                      <th className="stocktaking-data-qty">Qty</th>
-                      <th className="stocktaking-data-receipt">Receipt no.</th>
-                      <th className="stocktaking-data-photos">Receipt photos</th>
+                      <th className="stocktaking-row-select-head"><input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} aria-label={allVisibleSelected ? "Deselect all visible components" : "Select all visible components"} disabled={!filteredRows.length} /></th>
+                      <th><span className="stocktaking-th-label"><Icon name="box" />Component</span></th>
+                      <th className="stocktaking-data-qty"><span className="stocktaking-th-label"><Icon name="layers" />Qty</span></th>
+                      <th className="stocktaking-data-receipt"><span className="stocktaking-th-label"><Icon name="file" />Receipt no.</span></th>
+                      <th className="stocktaking-data-photos"><span className="stocktaking-th-label"><Icon name="images" />Receipt photos</span></th>
                       {inventorySession?.inventoryColumn ? <th className="stocktaking-data-inventory">Inventory{inventorySession.date ? ` (${inventorySession.date})` : ""}</th> : null}
                       {inventorySession?.defectedColumn ? <th className="stocktaking-data-inventory">Defecated{inventorySession.date ? ` (${inventorySession.date})` : ""}</th> : null}
-                      {canEditColumn ? <th className="stocktaking-row-edit-head">Edit</th> : null}
+                      {canEditColumn ? <th className="stocktaking-row-edit-head"><span className="stocktaking-visually-hidden">Actions</span></th> : null}
                     </tr>
                   </thead>
                   <tbody>
@@ -1286,8 +1346,7 @@ export default function StocktakingClient({ account, initialStock = [], initialC
                           </td>
                         </tr>,
                         ...receiptGroup.tagGroups.flatMap((group) => [
-                          renderTagHeader(group, `receipt-${receiptGroup.key}`, "COMPONENT TAG"),
-                          ...group.items.map((row) => renderStockRow(row)),
+                          ...renderGroup(group, `receipt-${receiptGroup.key}`, "COMPONENT TAG", true),
                         ]),
                       ])
                     ) : sortMode === "order" ? (
@@ -1301,25 +1360,19 @@ export default function StocktakingClient({ account, initialStock = [], initialC
                           </td>
                         </tr>,
                         ...orderGroup.kitGroups.flatMap((group) => [
-                          renderTagHeader(group, `order-${orderGroup.key}`, "KIT TAG"),
-                          ...group.items.map((row) => renderStockRow(row)),
+                          ...renderGroup(group, `order-${orderGroup.key}`, "KIT TAG", true),
                         ]),
                       ])
                     ) : sortMode === "kit" ? (
-                      kitTagGroups.flatMap((group) => [
-                        renderTagHeader(group, "kit", "KIT TAG"),
-                        ...group.items.map((row) => renderStockRow(row)),
-                      ])
+                      kitTagGroups.flatMap((group, index) => renderGroup(group, "kit", "KIT TAG", index === 0))
                     ) : (
-                      componentTagGroups.flatMap((group) => [
-                        renderTagHeader(group, "component", "COMPONENT TAG"),
-                        ...group.items.map((row) => renderStockRow(row)),
-                      ])
+                      componentTagGroups.flatMap((group, index) => renderGroup(group, "component", "COMPONENT TAG", index === 0))
                     )}
                   </tbody>
                   <tfoot>
                     {newRowOpen && canAddRow ? (
                       <tr className="stocktaking-new-row-editor">
+                        <td className="stocktaking-row-select-cell" />
                         <td className="stocktaking-data-component">
                           <div className="stocktaking-new-row-component-stack">
                             <StockProductPicker
@@ -1356,6 +1409,10 @@ export default function StocktakingClient({ account, initialStock = [], initialC
                   </tfoot>
                 </table>
                 {!filteredRows.length && !newRowOpen ? <div className="empty-block empty-block--no-data stocktaking-empty-under-table">Sorry, No data available</div> : null}
+              </div>
+              <div className="stocktaking-industrial-footer">
+                <span>{selectedVisibleRows.length ? `${selectedVisibleRows.length} selected · ${filteredRows.length} components shown` : `Showing ${filteredRows.length.toLocaleString("en-US")} components`}</span>
+                <strong><Icon name="box" />{selectedVisibleRows.length ? "Selected Qty:" : "Total Qty:"}<b>{(selectedVisibleRows.length ? selectedQuantity : visibleQuantity).toLocaleString("en-US")}</b></strong>
               </div>
             </>
           )}

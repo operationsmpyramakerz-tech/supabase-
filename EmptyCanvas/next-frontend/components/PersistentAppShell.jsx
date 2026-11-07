@@ -50,6 +50,7 @@ function routePerformanceStyles(localPath) {
       "/next/css/stocktaking-performance.css?v=css-phase2",
       "/next/css/stocktaking-proposals-performance.css?v=css-phase2",
       "/next/css/stocktaking-after-shared-performance.css?v=stocktaking-folders-polish-v3",
+      "/next/css/stocktaking-industrial-v354.css?v=industrial-navy-v354",
     ];
   }
   if (localPath === "/kits") {
