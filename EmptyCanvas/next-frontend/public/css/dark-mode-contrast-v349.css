@@ -1,0 +1,189 @@
+/* ERP v349 — Dark mode visual repairs, scoped exclusively to dark theme.
+   Keep the established white inset frame, orange active-page colour, page
+   spacing, per-user navigation sizing and light-mode design unchanged. */
+
+/* 1. Bottom dock: the old dark-theme inversion painted a conspicuous white
+   rectangle beneath the black navigation. Match the application's dark shell
+   without changing the dock geometry or the 347 auto-fit calculation. */
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell {
+  --desktop-dock-bg: #0b0c10;
+  --desktop-dock-foreground: #d0d5dd;
+  --desktop-dock-shadow: 0 15px 34px rgba(0, 0, 0, .38);
+}
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host,
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host .sidebar-nav {
+  background: transparent !important;
+  background-image: none !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host :is(.mobile-dock-pages-clip, .mobile-dock-home-rail) {
+  background: #0b0c10 !important;
+  background-image: none !important;
+  border-color: #0b0c10 !important;
+  box-shadow: 0 15px 34px rgba(0,0,0,.38) !important;
+}
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host .mobile-dock-home-rail::after {
+  background: #0b0c10 !important;
+}
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host .mobile-dock-pages-list {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host :is(.mobile-dock-pages-list, .mobile-dock-home-rail) .nav-link:not(.active):not(.is-indicator-target) {
+  background: transparent !important;
+  border-color: transparent !important;
+  color: #d0d5dd !important;
+  box-shadow: none !important;
+}
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host :is(.mobile-dock-pages-list, .mobile-dock-home-rail) .nav-link:not(.active):not(.is-indicator-target):hover {
+  background: rgba(255,255,255,.11) !important;
+  color: #fff !important;
+}
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host .mobile-dock-home-rail .nav-link:not(.active) svg {
+  background: rgba(255,255,255,.1) !important;
+  color: #fff !important;
+  stroke: #fff !important;
+}
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host .mobile-dock-pages-list .nav-link.active,
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host :is(.mobile-dock-pages-clip, .mobile-dock-home-rail) > .sidebar-active-indicator {
+  background: #f45108 !important;
+  border-color: rgba(255,255,255,.12) !important;
+  color: #fff !important;
+}
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host .mobile-dock-home-rail .nav-link.active > svg {
+  background: #f45108 !important;
+  color: #fff !important;
+  stroke: #fff !important;
+}
+/* The travelling indicator draws the fill when its position has been measured. */
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready.mobile-dock-structured-host :is(.mobile-dock-pages-list, .mobile-dock-home-rail) .nav-link.active {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.sidebar-active-indicator-ready.mobile-dock-structured-host .mobile-dock-home-rail .nav-link.active svg {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host :is(.mobile-dock-pages-list, .mobile-dock-home-rail) .nav-link.active svg,
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host .sidebar-active-indicator__icon {
+  color: #fff !important;
+  stroke: #fff !important;
+}
+
+/* 2. Homepage: old light-only inner text declarations turned titles black
+   after their cards were switched to dark backgrounds. */
+html[data-theme="dark"] body.page-home .home-list-card :is(.home-item__title, .home-item__eyebrow, .home-action__title),
+html[data-theme="dark"] body.page-home .home-panel :is(.home-action__title, .home-scope-v),
+html[data-theme="dark"] body.page-home .home-actions-grid .home-action__title {
+  color: #f8fafc !important;
+  opacity: 1 !important;
+}
+html[data-theme="dark"] body.page-home :is(.home-item__sub, .home-item__meta, .home-action__sub, .home-scope-k),
+html[data-theme="dark"] body.page-home .home-list-card--orders .home-item__meta {
+  color: #aab6c8 !important;
+  opacity: 1 !important;
+}
+html[data-theme="dark"] body.page-home :is(.home-actions-grid .home-action, .home-list-card .home-item, .home-panel .home-scope-row) {
+  background: #161d28 !important;
+  border-color: #313c4d !important;
+}
+html[data-theme="dark"] body.page-home .home-list-card--orders :is(.home-badge, .home-arrow) {
+  background: #263243 !important;
+  border-color: #394558 !important;
+  color: #f8fafc !important;
+}
+html[data-theme="dark"] body.page-home .home-actions-grid .home-action__right,
+html[data-theme="dark"] body.page-home .home-actions-grid .home-action__right svg {
+  color: #e5eaf2 !important;
+  stroke: currentColor !important;
+}
+
+/* 3. Stocktaking: restore readable title/text and make the containing cards
+   consistently dark while leaving the original orange folder artwork intact. */
+html[data-theme="dark"] body.stocktaking-page :is(.stocktaking-folders-card, .stocktaking-folder-workspace) {
+  background: #11161f !important;
+  border-color: #303a49 !important;
+  color: #f8fafc !important;
+}
+html[data-theme="dark"] body.stocktaking-page :is(.stocktaking-folders-head h2, .stocktaking-folder-title h2, .stocktaking-folders-title) {
+  color: #f8fafc !important;
+}
+html[data-theme="dark"] body.stocktaking-page .stocktaking-folders-count {
+  background: #252e3d !important;
+  color: #e2e8f0 !important;
+}
+html[data-theme="dark"] body.stocktaking-page :is(.stocktaking-folder-card, .stocktaking-folder-back) {
+  background: #19222e !important;
+  border-color: #344052 !important;
+  color: #f8fafc !important;
+}
+html[data-theme="dark"] body.stocktaking-page .stocktaking-folder-copy strong {
+  color: #f8fafc !important;
+}
+html[data-theme="dark"] body.stocktaking-page :is(.stocktaking-folder-state, .stocktaking-folder-copy small) {
+  color: #abb7c7 !important;
+}
+/* Tables stay readable even when newer stocktaking styles hardcode white rows. */
+html[data-theme="dark"] body.stocktaking-page :is(.stocktaking-folder-workspace .groups-grid, .stocktaking-folder-workspace .group-card) {
+  background: #11161f !important;
+  color: #f8fafc !important;
+}
+
+/* 4. Notification feed — headings, preview text, filters and cards must share
+   the same contrast even where the Notifications v5 stylesheet loads later. */
+html[data-theme="dark"] body .next-notifications-appfeed :is(.next-notifications-row__main h3, .next-notifications-row__main h3 button, .next-notifications-section__head h2),
+html[data-theme="dark"] body .next-notifications-commandbar__status strong {
+  color: #f8fafc !important;
+}
+html[data-theme="dark"] body .next-notifications-appfeed .next-notifications-row__main > p {
+  color: #b7c3d3 !important;
+}
+html[data-theme="dark"] body .next-notifications-appfeed .next-notifications-row__main h3 time {
+  color: #a4b2c4 !important;
+}
+html[data-theme="dark"] body .next-notifications-appfeed :is(.next-notifications-row, .next-notifications-list) {
+  color: #f8fafc !important;
+}
+html[data-theme="dark"] body .next-notifications-appfeed .next-notifications-row {
+  border-bottom-color: #303a49 !important;
+}
+html[data-theme="dark"] body .next-notifications-appfeed :is(.next-notifications-search, .next-notifications-filter-popover > summary, .next-notifications-quickfilters button) {
+  background: #161d28 !important;
+  border-color: #303a49 !important;
+  color: #e3ebf5 !important;
+}
+html[data-theme="dark"] body .next-notifications-appfeed .next-notifications-search input {
+  color: #f8fafc !important;
+}
+
+/* 5. Request/withdraw/maintenance: cards have white content by default;
+   keep that design, but avoid black input boxes interrupting the white cards. */
+html[data-theme="dark"] body.shopping-cart-page .classic-cart-page[class*="theme-"] :is(.classic-cart-reason-card, .classic-cart-summary-card, .classic-cart-card) {
+  background: #141b26 !important;
+  border-color: #313b49 !important;
+  color: #f8fafc !important;
+}
+html[data-theme="dark"] body.shopping-cart-page .classic-cart-page[class*="theme-"] :is(.classic-cart-summary-title, .classic-cart-summary-field > span, .classic-cart-prod-meta strong) {
+  color: #f8fafc !important;
+}
+html[data-theme="dark"] body.shopping-cart-page .classic-cart-page[class*="theme-"] :is(.classic-cart-summary-field input, .classic-cart-voucher-row input) {
+  background: #202a37 !important;
+  color: #f8fafc !important;
+  border-color: #394558 !important;
+}
+html[data-theme="dark"] body.shopping-cart-page .classic-cart-page[class*="theme-"] :is(.classic-cart-summary-field input, .classic-cart-voucher-row input)::placeholder {
+  color: #aab4c4 !important;
+}
+html[data-theme="dark"] body.shopping-cart-page .classic-cart-page[class*="theme-"] .classic-cart-empty {
+  background: #141b26 !important;
+}
+/* The accent-coloured step tiles and header stay intentionally coloured. */
+
+/* Keyboard-focus accessibility in dark mode (not an always-on orange box). */
+html[data-theme="dark"] body.next-classic-shell-active :is(button,a,input,select,textarea):focus-visible {
+  outline: 2px solid #fb923c;
+  outline-offset: 2px;
+}
