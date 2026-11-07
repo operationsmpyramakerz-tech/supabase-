@@ -40,7 +40,7 @@ test("Flat card has white/dark mode support, accessible focus, compact mobile an
   assert.match(css, /\.ua-add-member-card:focus-visible/);
   assert.match(css, /html\[data-theme="dark"\] body\.user-access-page \.ua-directory-v339 \.ua-add-member-card/);
   assert.match(css, /@media \(max-width: 640px\)/);
-  assert.match(page, /users-center-directory-v339\.css\?v=343/);
+  assert.match(page, /users-center-directory-v339\.css\?v=344/);
 });
 
 test("Updated Users Center JSX parses", () => {

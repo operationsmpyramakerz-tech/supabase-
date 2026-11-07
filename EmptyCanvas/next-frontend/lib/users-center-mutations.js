@@ -21,7 +21,7 @@ import {
   usersCenterAppPages,
 } from "./users-center-data";
 import { clearDirectSessionAccountCaches, setDirectUserAuthRevokedAt } from "./direct-session-account";
-import { sendUsersCenterSignupStatusEmail } from "./users-center-email";
+import { sendUsersCenterSignupStatusEmail, sendUsersCenterMemberInviteEmail } from "./users-center-email";
 
 function text(value) {
   if (value === null || typeof value === "undefined") return "";
@@ -354,6 +354,24 @@ export async function setMemberArchived(memberIdValue = "", archived = true) {
   if (archived) await setDirectUserAuthRevokedAt(id, Date.now());
   clearUsersCenterReadCaches(); clearDirectSessionAccountCaches(id);
   return { id, name: memberName(existing), archived };
+}
+
+/** Send an explicit admin-authorized invitation to the address saved on the member.
+ * The directory deliberately does not expose passwords. */
+export async function inviteMemberByEmail(memberIdValue = "") {
+  const id = text(memberIdValue);
+  if (!id) throw httpError("Missing member ID.", 400);
+  const row = await selectById(teamMembersTable(), id);
+  if (!row) throw httpError("Team member was not found.", 404);
+  const name = memberName(row);
+  const email = text(valueForLabel(row, "Email"));
+  const username = text(valueForLabel(row, "Name"));
+  const password = text(valueForLabel(row, "Password"));
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw httpError("Add a valid email address to this member first.", 400);
+  if (!password) throw httpError("This member has no saved password. Set one in Edit before inviting.", 409);
+  if (!bool(valueFor(row, ["is_active", "isActive"]), true)) throw httpError("Activate this user before sending an invitation.", 409);
+  await sendUsersCenterMemberInviteEmail({ to: email, name, username, password });
+  return { emailed: true, message: `Invitation sent to ${email}.` };
 }
 
 export async function deleteMember(memberIdValue = "") {

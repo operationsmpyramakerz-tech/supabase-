@@ -63,6 +63,8 @@ function UAIcon({ name }) {
     hash: <><line x1="4" y1="9" x2="20" y2="9"/><line x1="3" y1="15" x2="19" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></>,
     phone: <path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 2 .7 2.9a2 2 0 0 1-.5 2.1L8 10a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.5c.9.3 1.9.6 2.9.7a2 2 0 0 1 1.7 2z"/>,
     mail: <><path d="M4 4h16v16H4z"/><polyline points="22,6 12,13 2,6"/></>,
+    invite: <><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/><path d="M17 2v6M14 5h6"/></>,
+    preferences: <><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3" fill="currentColor" stroke="none"/><circle cx="16" cy="17" r="3" fill="currentColor" stroke="none"/></>,
     move: <><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></>,
     shield: <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>,
     users: <><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></>,
@@ -205,8 +207,9 @@ function DepartmentFolder({ department, actionsOpen = false, onOpen, onActionsOp
 }
 
 function AddDepartmentFolder({ onClick }) {
-  return <button type="button" className="ua-directory-add" onClick={onClick} aria-label="Add new department">
-    <UAIcon name="plus"/><span>Add Group</span>
+  return <button type="button" className="ua-add-member-card ua-add-department-card" onClick={onClick} aria-label="Add Department — create a department">
+    <span className="ua-add-member-card__copy"><strong>Add Department</strong><span>Create a new department</span></span>
+    <span className="ua-add-member-card__plus" aria-hidden="true"><UAIcon name="plus"/></span>
   </button>;
 }
 
@@ -224,11 +227,46 @@ function AddMemberCard({ onClick }) {
 }
 
 
+/* Shared menu for selecting members and sorting both All Users and departments.
+   Unlike a native select dropdown, this keeps every option inside the same
+   Preferences surface, matching the orders control. */
+function DirectoryPreferences({ sortMode, onSortChange, sortOptions, canSelect, selecting, onToggleSelect, selectionHint = "" }) {
+  const [open, setOpen] = useState(false);
+  const [section, setSection] = useState("sort");
+  const rootRef = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    function closeOutside(event) { if (!rootRef.current?.contains(event.target)) setOpen(false); }
+    function closeEscape(event) { if (event.key === "Escape") setOpen(false); }
+    document.addEventListener("pointerdown", closeOutside);
+    document.addEventListener("keydown", closeEscape);
+    return () => { document.removeEventListener("pointerdown", closeOutside); document.removeEventListener("keydown", closeEscape); };
+  }, [open]);
+  return <div className={`ua-directory-preferences${open ? " is-open" : ""}`} ref={rootRef}>
+    <button type="button" className="ua-directory-preferences__trigger" onClick={() => setOpen((value) => !value)} aria-label="Preferences: select and sort" aria-haspopup="dialog" aria-expanded={open}>
+      <UAIcon name="preferences"/><span>Preferences</span><UAIcon name="chevronDown"/>
+    </button>
+    {open ? <div className="ua-directory-preferences__panel" role="dialog" aria-label="Select and sort preferences">
+      <div className="ua-directory-preferences__heading"><strong>Preferences</strong><button type="button" aria-label="Close preferences" onClick={() => setOpen(false)}><UAIcon name="close"/></button></div>
+      <div className="ua-directory-preferences__tabs" role="group" aria-label="Preferences category">
+        <button type="button" className={section === "select" ? "is-active" : ""} onClick={() => setSection("select")}><UAIcon name="checkCircle"/>Select</button>
+        <button type="button" className={section === "sort" ? "is-active" : ""} onClick={() => setSection("sort")}><UAIcon name="filter"/>Sort</button>
+      </div>
+      {section === "select" ? <div className="ua-directory-preferences__options">
+        {canSelect ? <button type="button" onClick={() => { onToggleSelect?.(); setOpen(false); }}><UAIcon name="checkCircle"/><span>{selecting ? "Cancel selection" : "Select users"}</span>{selecting ? <UAIcon name="check"/> : null}</button>
+          : <p>{selectionHint || "Open a department to select and edit access for its members."}</p>}
+      </div> : <div className="ua-directory-preferences__options" aria-label="Sort options">
+        {sortOptions.map((option) => <button type="button" key={option.value} className={sortMode === option.value ? "is-active" : ""} onClick={() => { onSortChange(option.value); setOpen(false); }}><UAIcon name="filter"/><span>{option.label}</span>{sortMode === option.value ? <UAIcon name="check"/> : null}</button>)}
+      </div>}
+    </div> : null}
+  </div>;
+}
+
 /* A compact, user-first card for the default directory view. The existing
    department member editor/permissions remain the only mutation path. */
-function UserDirectoryCard({ member, access, menuOpen, onMenuToggle, onEdit, onMove, onDelete, onArchive, selectionMode, selected, onSelect }) {
+function UserDirectoryCard({ member, access, menuOpen, onMenuToggle, onEdit, onInvite, onMove, onDelete, onArchive, selectionMode, selected, onSelect }) {
   const departmentLabel = text(member.directoryDepartment || member.department) || "No Department";
-  return <article className={`ua-directory-user-card${selected ? " is-selected" : ""}${member.isActive === false ? " is-archived" : ""}`}>
+  return <article className={`ua-directory-user-card${selected ? " is-selected" : ""}${member.isActive === false ? " is-archived" : ""}${menuOpen ? " is-menu-open" : ""}`}>
     <div className="ua-directory-user-card__head">
       {selectionMode ? <label className="ua-directory-user-card__select" title={`Select ${member.name || "user"}`}><input type="checkbox" checked={selected} onChange={(event) => onSelect(event.target.checked)} aria-label={`Select ${member.name || "user"}`}/></label> : null}
       <Avatar member={member}/>
@@ -250,7 +288,7 @@ function UserDirectoryCard({ member, access, menuOpen, onMenuToggle, onEdit, onM
       <span title={member.email || "No email"}><UAIcon name="mail"/>{member.email || "No email"}</span>
       <span title={member.phone || "No phone"}><UAIcon name="phone"/>{member.phone || "No phone"}</span>
     </div>
-    {access.memberEdit ? <button className="ua-directory-user-card__edit" type="button" onClick={onEdit}><UAIcon name="edit"/><span>Edit</span></button> : null}
+    {access.memberEdit ? <div className="ua-member-card__dual-actions"><button className="ua-directory-user-card__edit" type="button" onClick={onEdit}><UAIcon name="edit"/><span>Edit</span></button><button className="ua-directory-user-card__invite" type="button" onClick={onInvite} disabled={!text(member.email) || member.isActive === false} title={!text(member.email) ? "Add the user's email before inviting" : member.isActive === false ? "Activate this account before inviting" : "Send the user their ERP invitation"}><UAIcon name="invite"/><span>Invite</span></button></div> : null}
   </article>;
 }
 
@@ -302,7 +340,7 @@ export default function UsersCenterClient({ account, initialDirectory, initialSi
   function changeDirectoryTab(nextTab) { setSelectionMode(false); setSelectedMemberIds([]); setDirectoryTab(nextTab); setSearch(""); setSortMode("name"); setDepartmentActions(""); setMemberMenu(""); }
   const positionOptions = useMemo(() => unique(allMembers.map((member) => member.position)).sort((a, b) => a.localeCompare(b)), [allMembers]);
   const filteredDepartments = useMemo(() => { const q = lower(search); if (!q) return directory.departments; return directory.departments.filter((department) => lower(`${department.name} ${(department.members || []).map((member) => `${member.name} ${member.email} ${member.phone} ${member.employeeCode}`).join(" ")}`).includes(q)); }, [directory, search]);
-  const filteredMembers = useMemo(() => { if (!selectedDepartment) return []; const q = lower(search); return sortByName((selectedDepartment.members || []).filter((member) => !q || lower(`${member.name} ${member.position} ${member.email} ${member.phone} ${member.employeeCode}`).includes(q))); }, [selectedDepartment, search]);
+  const filteredMembers = useMemo(() => { if (!selectedDepartment) return []; const q = lower(search); const rows = (selectedDepartment.members || []).filter((member) => !q || lower(`${member.name} ${member.position} ${member.email} ${member.phone} ${member.employeeCode}`).includes(q)); return sortMode === "name-desc" ? rows.sort((a,b) => text(b.name).localeCompare(text(a.name))) : sortByName(rows); }, [selectedDepartment, search, sortMode]);
   const statusAvailable = allMembers.length > 0 && allMembers.every((member) => typeof member.isActive === "boolean");
   const activeUsersCount = statusAvailable ? allMembers.filter((member) => member.isActive).length : null;
   const visibleDepartments = useMemo(() => {
@@ -385,6 +423,23 @@ export default function UsersCenterClient({ account, initialDirectory, initialSi
     }
   }
 
+  function inviteMember(member) {
+    if (!access.memberEdit) return;
+    const email = text(member.email);
+    if (!email) { notify("error", "Email required", "Edit this user and add a valid email first."); return; }
+    if (member.isActive === false) { notify("error", "Inactive account", "Activate this account before inviting."); return; }
+    setMemberMenu("");
+    protectedOpen({ title: "Invite team member", message: `Invite ${member.name} by email?` }, () => setConfirm({
+      title: "Send Invitation",
+      message: `Send an ERP invitation to ${email} for ${member.name}? The message includes the login link and username. The server will send the account password directly to that address. Make sure this mailbox belongs to the intended user.`,
+      confirmLabel: "Send Invite",
+      onConfirm: async () => {
+        const response = await usersCenterMutation("member-invite", { memberId: member.id });
+        setConfirm(null);
+        notify("success", "Invitation sent", response?.message || `Invitation delivered to ${email}.`);
+      },
+    }));
+  }
   function setArchived(member) {
     // Keep the existing member-archive mutation (is_active plus session revocation).
     // The public-facing action is a status change: Active <-> Inactive.
@@ -436,14 +491,13 @@ export default function UsersCenterClient({ account, initialDirectory, initialSi
           <div className="ua-directory-tabs" role="group" aria-label="Directory view">
             {[{id:"users",label:"All Users",icon:"users"},{id:"departments",label:"Departments",icon:"grid"},{id:"teams",label:"Teams",icon:"folder"},{id:"active",label:"Active",icon:"checkCircle"},{id:"archived",label:"Inactive",icon:"lock"}].map((item) => <button key={item.id} type="button" className={`ua-directory-tab${directoryTab === item.id ? " is-active" : ""}`} onClick={() => changeDirectoryTab(item.id)} aria-pressed={directoryTab === item.id} disabled={(item.id === "active" || item.id === "archived") && !statusAvailable} title={(item.id === "active" || item.id === "archived") && !statusAvailable ? "Account status isn't available in this directory" : undefined}><UAIcon name={item.icon}/><span>{item.label}</span></button>)}
           </div>
-          {!isMemberDirectoryTab && access.departmentCreate ? <AddDepartmentFolder onClick={openDepartmentCreate}/> : null}
         </div>
         <div className="ua-directory-filter-row">
           <label className="ua-directory-search"><UAIcon name="search"/><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={isMemberDirectoryTab ? "Search users, departments or emails..." : "Search departments..."} aria-label={isMemberDirectoryTab ? "Search all users" : "Search departments or members"} /></label>
-          <label className="ua-directory-sort"><UAIcon name="filter"/><span>Sort</span><select value={sortMode} onChange={(event) => setSortMode(event.target.value)} aria-label={isMemberDirectoryTab ? "Sort users" : "Sort departments"}><option value="name">Name A–Z</option>{isMemberDirectoryTab ? <><option value="name-desc">Name Z–A</option><option value="department">Department A–Z</option></> : <><option value="members">Most members</option><option value="fewest">Fewest members</option></>}</select><UAIcon name="chevronDown"/></label>
+          <DirectoryPreferences key={directoryTab} sortMode={sortMode} onSortChange={setSortMode} sortOptions={isMemberDirectoryTab ? [{value:"name",label:"Name A–Z"},{value:"name-desc",label:"Name Z–A"},{value:"department",label:"Department A–Z"}] : [{value:"name",label:"Name A–Z"},{value:"members",label:"Most members"},{value:"fewest",label:"Fewest members"}]} canSelect={isMemberDirectoryTab && (access.pageAccess || access.featureAccess)} selecting={selectionMode} onToggleSelect={() => { setSelectionMode((current) => !current); setSelectedMemberIds([]); setMemberMenu(""); }} selectionHint="Open a department to select and edit access for members in that department."/>
         </div>
         {isMemberDirectoryTab ? <div className="ua-directory-users" aria-label={directoryTab === "users" ? "All users" : directoryTab === "active" ? "Active users" : "Inactive users"}>
-          <div className="ua-directory-users__heading"><div><h3>{directoryTab === "users" ? "All Users" : directoryTab === "active" ? "Active Users" : "Inactive Users"}</h3><p>Browse and manage individual accounts</p></div><div className="ua-directory-users__heading-actions"><span className="ua-directory-users__count">{visibleUsers.length} {visibleUsers.length === 1 ? "user" : "users"}</span>{(access.pageAccess || access.featureAccess) ? <button type="button" className={`ua-directory-select-btn${selectionMode ? " is-active" : ""}`} onClick={() => { setSelectionMode((current) => !current); setSelectedMemberIds([]); }}><UAIcon name="checkCircle"/><span>{selectionMode ? "Cancel Select" : "Select Users"}</span></button> : null}</div></div>
+          <div className="ua-directory-users__heading"><div><h3>{directoryTab === "users" ? "All Users" : directoryTab === "active" ? "Active Users" : "Inactive Users"}</h3><p>Browse and manage individual accounts</p></div><div className="ua-directory-users__heading-actions"><span className="ua-directory-users__count">{visibleUsers.length} {visibleUsers.length === 1 ? "user" : "users"}</span></div></div>
           {selectionMode && (access.pageAccess || access.featureAccess) ? <div className="ua-directory-bulkbar"><label><input type="checkbox" checked={visibleUsers.length > 0 && visibleUsers.every((member) => selectedMemberSet.has(member.id))} onChange={(event) => { const ids = visibleUsers.map((member) => member.id).filter(Boolean); setSelectedMemberIds((current) => event.target.checked ? [...new Set([...current, ...ids])] : current.filter((id) => !ids.includes(id))); }} disabled={!visibleUsers.length}/> Select all visible</label><strong>{selectedMemberIds.length} selected</strong><button type="button" disabled={!selectedMemberIds.length} onClick={() => protectedOpen({ title: "Bulk access editing", message: `Edit access for ${selectedMemberIds.length} selected users?` }, () => setBulkAccessOpen(true))}><UAIcon name="shield"/> Edit Access</button></div> : null}
           {(visibleUsers.length || (access.memberCreate && directoryTab !== "archived" && !selectionMode)) ? <div className="ua-directory-users__grid">
             {access.memberCreate && directoryTab !== "archived" && !selectionMode ? <AddMemberCard onClick={() => protectedOpen({ title: "Add team member", message: "Create a new user account?" }, () => openMember("create"))}/> : null}
@@ -454,6 +508,7 @@ export default function UsersCenterClient({ account, initialDirectory, initialSi
             menuOpen={memberMenu === member.id}
             onMenuToggle={() => setMemberMenu((current) => current === member.id ? "" : member.id)}
             onEdit={() => protectedOpen({ title: "Edit team member", message: `Edit ${member.name}'s account record?` }, () => openMember("edit", member))}
+            onInvite={() => inviteMember(member)}
             onMove={() => { setMemberMenu(""); protectedOpen({ title: "Move team member", message: `Move ${member.name} to another department?` }, () => setMoveMember(member)); }}
             onDelete={() => { setMemberMenu(""); deleteMember(member); }}
             onArchive={() => setArchived(member)}
@@ -462,6 +517,7 @@ export default function UsersCenterClient({ account, initialDirectory, initialSi
             onSelect={(checked) => toggleMemberSelection(member.id, checked)}
           />)}</div> : <div className="ua-empty ua-directory-users__empty">{search ? "No matching users" : "No users in this view"}</div>}
         </div> : <div className="ua-folders">
+          {access.departmentCreate && directoryTab === "departments" && !search ? <AddDepartmentFolder onClick={openDepartmentCreate}/> : null}
           {visibleDepartments.map((department) => <DepartmentFolder
             key={department.id}
             department={department}
@@ -481,10 +537,7 @@ export default function UsersCenterClient({ account, initialDirectory, initialSi
           <p>{selectedDepartment.count} {selectedDepartment.count === 1 ? "member" : "members"}</p>
         </div>
         <div className="ua-members-actions">
-          {(access.pageAccess || access.featureAccess) ? <button type="button" className={`ua-directory-select-btn${selectionMode ? " is-active" : ""}`} aria-pressed={selectionMode} onClick={() => { setSelectionMode((current) => !current); setSelectedMemberIds([]); setMemberMenu(""); }}>
-            <UAIcon name="checkCircle"/><span>{selectionMode ? "Cancel Select" : "Select Users"}</span>
-          </button> : null}
-
+          <DirectoryPreferences key={selectedDepartment.id} sortMode={sortMode} onSortChange={setSortMode} sortOptions={[{value:"name",label:"Name A–Z"},{value:"name-desc",label:"Name Z–A"}]} canSelect={access.pageAccess || access.featureAccess} selecting={selectionMode} onToggleSelect={() => { setSelectionMode((current) => !current); setSelectedMemberIds([]); setMemberMenu(""); }}/>
         </div>
       </div>
       {selectionMode && (access.pageAccess || access.featureAccess) ? <div className="ua-directory-bulkbar ua-directory-bulkbar--department">
@@ -523,7 +576,7 @@ export default function UsersCenterClient({ account, initialDirectory, initialSi
           <div className="ua-meta-line" title={member.phone || "No phone"}><UAIcon name="phone"/><span>{member.phone || "No phone"}</span></div>
           <div className="ua-meta-line" title={member.email || "No email"}><UAIcon name="mail"/><span>{member.email || "No email"}</span></div>
         </div>
-        {access.memberEdit ? <div className="ua-member-card__actions"><button type="button" className="ua-btn ua-btn--dark" onClick={() => protectedOpen({ title: "Edit team member", message: `Edit ${member.name}'s account record?` }, () => openMember("edit", member))}><UAIcon name="edit"/><span>Edit</span></button></div> : null}
+        {access.memberEdit ? <div className="ua-member-card__actions ua-member-card__dual-actions"><button type="button" className="ua-btn ua-btn--dark" onClick={() => protectedOpen({ title: "Edit team member", message: `Edit ${member.name}'s account record?` }, () => openMember("edit", member))}><UAIcon name="edit"/><span>Edit</span></button><button type="button" className="ua-btn ua-btn--invite" onClick={() => inviteMember(member)} disabled={!text(member.email) || member.isActive === false} title={!text(member.email) ? "Add an email before inviting" : member.isActive === false ? "Activate before inviting" : "Send ERP invite"}><UAIcon name="invite"/><span>Invite</span></button></div> : null}
       </article>)}</div> : <div className="ua-empty">{search ? "No matching users" : "Sorry, No data available"}</div>}
     </section>}
 

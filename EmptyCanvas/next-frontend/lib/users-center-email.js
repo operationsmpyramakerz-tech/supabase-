@@ -130,3 +130,41 @@ export async function sendPasswordRecoveryEmail(args = {}) {
   error.status = 500;
   throw error;
 }
+
+
+/** Explicitly administrator-confirmed account invitation. Credentials are read
+ * exclusively on the server; never return, log or embed them in client data.
+ * This matches the legacy direct-auth account schema until a password-reset
+ * workflow replaces password-in-email delivery. */
+export async function sendUsersCenterMemberInviteEmail({ to, name, username, password }) {
+  const recipient = text(to);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient) || /[\r\n]/.test(recipient)) {
+    const error = new Error("The member needs a valid email address before inviting."); error.status = 400; throw error;
+  }
+  if (!text(username) || !text(password)) {
+    const error = new Error("The member needs a saved username and password before inviting."); error.status = 409; throw error;
+  }
+  const base = text(process.env.ERP_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || "https://operation.propyramakerz.com");
+  let loginUrl;
+  try {
+    const url = new URL(base);
+    if (url.protocol !== "https:") throw new Error("HTTPS required");
+    loginUrl = new URL("/next/login", url.origin).toString();
+  } catch {
+    const error = new Error("ERP_PUBLIC_APP_URL must be an HTTPS address."); error.status = 500; throw error;
+  }
+  const subject = "Your Pyramakerz Operations ERP Invitation";
+  const safeName = text(name) || "Team Member";
+  const plainText = [
+    `Hello ${safeName},`, "", "You have been invited to Pyramakerz Operations ERP.", "",
+    `Application: ${loginUrl}`, `Username: ${text(username)}`, `Password: ${text(password)}`, "",
+    "Keep these login details confidential. Contact your administrator to change the password if the message reached an unexpected mailbox.",
+  ].join("\n");
+  const html = `<div style="font-family:Arial,sans-serif;line-height:1.6;color:#172033;max-width:560px;margin:0 auto;padding:24px"><div style="border:1px solid #e6e8ed;border-radius:16px;padding:24px"><div style="height:4px;width:42px;background:#f4771c;border-radius:4px;margin-bottom:18px"></div><h2 style="margin:0 0 10px">Welcome to Pyramakerz ERP</h2><p>Hello ${escapeHtml(safeName)},</p><p>Your account is ready. Use the details below to sign in.</p><p><strong>Application:</strong> <a href="${escapeHtml(loginUrl)}">${escapeHtml(loginUrl)}</a></p><p><strong>Username:</strong> ${escapeHtml(username)}</p><p><strong>Password:</strong> ${escapeHtml(password)}</p><p style="font-size:13px;color:#6b7280;margin-top:24px">Keep these login details confidential. If you did not expect this invitation, contact your administrator.</p></div></div>`;
+  const email = { to: recipient, subject, text: plainText, html };
+  const resend = await sendWithResend(email);
+  if (resend) return { provider: "resend" };
+  const smtp = await sendWithSmtp(email);
+  if (smtp) return { provider: "smtp" };
+  const error = new Error("Email is not configured. Configure RESEND_API_KEY or SMTP_HOST, SMTP_USER and SMTP_PASS."); error.status = 503; throw error;
+}

@@ -949,3 +949,137 @@ html[data-theme="dark"] body.user-access-page .ua-directory-v339 .ua-add-member-
 @media (prefers-reduced-motion: reduce) {
   .user-access-page .ua-directory-v339 .ua-add-member-card {transition:none;}
 }
+
+
+/* v344: anchored member actions, one Preferences control, and inline creation cards. */
+.user-access-page .ua-directory-v339 .ua-directory-user-card,
+.user-access-page .ua-directory-v339 .ua-member-card { overflow: visible !important; position: relative; }
+.user-access-page .ua-directory-v339 .ua-directory-user-card.is-menu-open,
+.user-access-page .ua-directory-v339 .ua-member-card:has(.ua-member-menu-btn[aria-expanded="true"]) { z-index: 35 !important; }
+.user-access-page .ua-directory-v339 .ua-directory-user-card__head { position: relative; overflow: visible; }
+.user-access-page .ua-directory-v339 .ua-directory-user-card .ua-member-menu-wrap {
+  position: relative !important;
+  top: auto !important;
+  right: auto !important;
+  align-self: flex-start;
+  z-index: 50;
+}
+.user-access-page .ua-directory-v339 .ua-member-menu {
+  top: calc(100% + 5px) !important;
+  right: 0 !important;
+  left: auto !important;
+  transform: none !important;
+  margin: 0 !important;
+  width: max-content;
+  min-width: 145px;
+  max-width: min(220px, 80vw);
+  z-index: 100 !important;
+  padding: 6px;
+  border-radius: 13px;
+  box-shadow: 0 12px 30px rgba(12, 18, 32, .17);
+}
+.user-access-page .ua-directory-v339 .ua-member-menu button {
+  min-height: 37px;
+  font-size: 12px;
+  white-space: nowrap;
+  font-weight: 750;
+}
+.user-access-page .ua-directory-v339 .ua-member-menu-wrap { isolation: isolate; }
+
+/* Edit & Invite split the card footer without compromising the original editor. */
+.user-access-page .ua-directory-v339 .ua-member-card__dual-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 7px;
+  width: 100%;
+}
+.user-access-page .ua-directory-v339 .ua-member-card__dual-actions button { min-width: 0; }
+.user-access-page .ua-directory-v339 .ua-directory-user-card__invite,
+.user-access-page .ua-directory-v339 .ua-member-card__actions .ua-btn--invite {
+  min-height: 31px;
+  border: 1px solid #d5dce5;
+  border-radius: 11px;
+  background: #fff;
+  color: #162033;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 790;
+  cursor: pointer;
+}
+.user-access-page .ua-directory-v339 .ua-directory-user-card__invite svg,
+.user-access-page .ua-directory-v339 .ua-member-card__actions .ua-btn--invite svg { height: 15px; width: 15px; }
+.user-access-page .ua-directory-v339 .ua-directory-user-card__invite:not(:disabled):hover,
+.user-access-page .ua-directory-v339 .ua-member-card__actions .ua-btn--invite:not(:disabled):hover { background: #f3f5f8; border-color: #c0c9d6; }
+.user-access-page .ua-directory-v339 .ua-directory-user-card__invite:disabled,
+.user-access-page .ua-directory-v339 .ua-member-card__actions .ua-btn--invite:disabled { cursor: not-allowed; opacity: .43; }
+.user-access-page .ua-directory-v339 .ua-directory-user-card__invite:focus-visible,
+.user-access-page .ua-directory-v339 .ua-member-card__actions .ua-btn--invite:focus-visible { outline: 3px solid #ffc58a; outline-offset: 2px; }
+
+/* Department creation appears as the first member-sized card in the folder grid. */
+.user-access-page .ua-directory-v339 .ua-folders .ua-add-department-card {
+  min-height: 96px;
+  border-radius: 17px;
+  align-self: stretch;
+  justify-content: space-between;
+  flex-direction: row;
+  padding: 16px 19px;
+  align-items: center;
+  gap: 12px;
+}
+.user-access-page .ua-directory-v339 .ua-folders .ua-add-department-card::before { top: -120px; right: -60px; }
+.user-access-page .ua-directory-v339 .ua-folders .ua-add-department-card .ua-add-member-card__plus { margin-top: 0; width: 37px; height: 37px; flex-shrink: 0; }
+.user-access-page .ua-directory-v339 .ua-folders .ua-add-department-card .ua-add-member-card__copy > strong { font-size: 14px; }
+
+/* Preferences menu: Select / Sort, directly beside search, matched to orders. */
+.user-access-page .ua-directory-v339 .ua-directory-preferences { position: relative; flex: 0 0 auto; z-index: 42; }
+.user-access-page .ua-directory-v339 .ua-directory-preferences__trigger {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  height: 53px; min-width: 135px; padding: 0 13px;
+  background: #fff; color: #182133; border: 1px solid #e0e4eb;
+  border-radius: 17px; box-shadow: 0 7px 17px rgba(16,24,40,.065);
+  font: inherit; font-size: 12px; font-weight: 800; cursor: pointer;
+}
+.user-access-page .ua-directory-v339 .ua-directory-preferences__trigger > svg { width: 18px; height: 18px; flex: 0 0 auto; }
+.user-access-page .ua-directory-v339 .ua-directory-preferences__trigger > svg:last-child { width: 14px; height: 14px; }
+.user-access-page .ua-directory-v339 .ua-directory-preferences__trigger[aria-expanded="true"] { border-color: #d1d7df; }
+.user-access-page .ua-directory-v339 .ua-directory-preferences__panel {
+  position: absolute; right: 0; top: calc(100% + 8px); z-index: 180;
+  width: min(320px, 85vw); border: 1px solid #e1e5ec; border-radius: 17px;
+  box-shadow: 0 24px 50px rgba(16,24,40,.16); background: #fff; padding: 11px;
+}
+.user-access-page .ua-directory-v339 .ua-directory-preferences__heading { display: flex; justify-content: space-between; align-items: center; padding: 3px 3px 10px; }
+.user-access-page .ua-directory-v339 .ua-directory-preferences__heading strong { font-size: 14px; color:#192234; }
+.user-access-page .ua-directory-v339 .ua-directory-preferences__heading button { background:#f3f5f8; width:29px; height:29px; border:0; border-radius:9px; cursor:pointer; display:grid; place-items:center; }
+.user-access-page .ua-directory-v339 .ua-directory-preferences__heading svg { width: 15px; height: 15px; }
+.user-access-page .ua-directory-v339 .ua-directory-preferences__tabs { display: grid; grid-template-columns:repeat(2,1fr); background: #f2f3f6; padding: 4px; gap: 4px; border-radius: 12px; }
+.user-access-page .ua-directory-v339 .ua-directory-preferences__tabs button { min-height: 36px; display:flex; align-items:center; justify-content:center; gap:7px; border:0; background:transparent; border-radius:9px; font: inherit; font-size:12px; font-weight:750; cursor:pointer; }
+.user-access-page .ua-directory-v339 .ua-directory-preferences__tabs button.is-active { background: #111827; color: #fff; }
+.user-access-page .ua-directory-v339 .ua-directory-preferences__tabs svg { width: 15px; height: 15px; }
+.user-access-page .ua-directory-v339 .ua-directory-preferences__options { display:grid; gap:5px; padding-top:10px; }
+.user-access-page .ua-directory-v339 .ua-directory-preferences__options button { display:flex; align-items:center; justify-content:flex-start; gap:9px; background:transparent; border:0; border-radius:10px; padding:11px; color:#2a3344; text-align:left; font:inherit; font-size:12px; font-weight:700; cursor:pointer; }
+.user-access-page .ua-directory-v339 .ua-directory-preferences__options button:hover,
+.user-access-page .ua-directory-v339 .ua-directory-preferences__options button.is-active { background:#f3f4f6; }
+.user-access-page .ua-directory-v339 .ua-directory-preferences__options button > svg { width:16px; height:16px; flex-shrink:0; }
+.user-access-page .ua-directory-v339 .ua-directory-preferences__options button > span { flex:1; }
+.user-access-page .ua-directory-v339 .ua-directory-preferences__options p { font-size:12px; color:#6b7280; margin:0; padding:11px; }
+.user-access-page .ua-directory-v339 .ua-members-actions { overflow:visible; }
+html[data-theme="dark"] body.user-access-page .ua-directory-v339 .ua-directory-preferences__trigger,
+html[data-theme="dark"] body.user-access-page .ua-directory-v339 .ua-directory-preferences__panel { color:#f4f6fa; background:#1c222e; border-color:#3d4657; }
+html[data-theme="dark"] body.user-access-page .ua-directory-v339 .ua-directory-preferences__heading strong,
+html[data-theme="dark"] body.user-access-page .ua-directory-v339 .ua-directory-preferences__options button { color:#eff2f7; }
+html[data-theme="dark"] body.user-access-page .ua-directory-v339 .ua-directory-preferences__tabs,
+html[data-theme="dark"] body.user-access-page .ua-directory-v339 .ua-directory-preferences__heading button { background:#2b3342; color:#fff; }
+html[data-theme="dark"] body.user-access-page .ua-directory-v339 .ua-directory-preferences__options button:hover,
+html[data-theme="dark"] body.user-access-page .ua-directory-v339 .ua-directory-preferences__options button.is-active { background:#30394b; }
+html[data-theme="dark"] body.user-access-page .ua-directory-v339 .ua-directory-user-card__invite,
+html[data-theme="dark"] body.user-access-page .ua-directory-v339 .ua-member-card__actions .ua-btn--invite { background:#202838; border-color:#455066; color:#eef2f9; }
+@media(max-width:640px) {
+ .user-access-page .ua-directory-v339 .ua-directory-preferences__trigger { min-width:44px; width:44px; height:49px; border-radius:13px; padding:0; }
+ .user-access-page .ua-directory-v339 .ua-directory-preferences__trigger > span,
+ .user-access-page .ua-directory-v339 .ua-directory-preferences__trigger > svg:last-child { display:none; }
+ .user-access-page .ua-directory-v339 .ua-folders .ua-add-department-card { min-height:90px; }
+}

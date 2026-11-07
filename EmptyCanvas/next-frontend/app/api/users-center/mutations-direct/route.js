@@ -23,6 +23,7 @@ import {
   saveSvAccess,
   updateMember,
   setMemberArchived,
+  inviteMemberByEmail,
   bulkUpdatePageAccess,
 } from "../../../../lib/users-center-mutations";
 
@@ -53,6 +54,7 @@ export async function POST(request) {
       "member-update": "users.member_edit",
       "member-delete": "users.member_delete",
       "member-archive": "users.member_edit",
+      "member-invite": "users.member_edit",
       "page-access-bulk": "users.page_access_manage",
       "feature-access-bulk": "users.feature_access_manage",
       "page-access-save": "users.page_access_manage",
@@ -143,6 +145,10 @@ export async function POST(request) {
     if (action === "member-update") {
       const member = await updateMember(body?.memberId, body?.fields || {});
       return json({ ok: true, member, source: "supabase-next" });
+    }
+    if (action === "member-invite") {
+      const result = await inviteMemberByEmail(body?.memberId);
+      return json({ ok: true, ...result, source: "supabase-next" });
     }
     if (action === "member-archive") {
       const memberId = text(body?.memberId);
