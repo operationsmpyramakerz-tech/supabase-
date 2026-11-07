@@ -52,7 +52,7 @@ test("mobile, tablet, dark-mode and updated CSS cache key are included", () => {
   assert.match(css, /html\[data-theme="dark"\] body\.user-access-page \.ua-directory-v339 \.ua-directory-user-card/);
   assert.match(css, /@media \(max-width: 640px\)/);
   assert.match(css, /ua-directory-tabs \{grid-template-columns: repeat\(5/);
-  assert.match(page, /users-center-directory-v339\.css\?v=341/);
+  assert.match(page, /users-center-directory-v339\.css\?v=342/);
 });
 
 test("edited JSX files parse", () => {

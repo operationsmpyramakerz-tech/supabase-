@@ -13,11 +13,12 @@ const mutations = file("lib/users-center-mutations.js");
 const login = file("lib/core-auth.js");
 const session = file("lib/direct-session-account.js");
 
-test("archive/unarchive displayed in member actions, not deleting records", () => {
-  assert.match(client, /Archive User/);
-  assert.match(client, /Unarchive User/);
+test("Active/Inactive status actions retain safe underlying member-archive mutation", () => {
+  assert.match(client, /Set User Inactive/);
+  assert.match(client, /Set User Active/);
+  assert.match(client, /member.isActive \? "Inactive" : "Active"/);
   assert.match(client, /member-archive/);
-  assert.match(client, /member\.isActive \? "archive" : "unlock"/);
+  assert.match(client, /member\.isActive \? "lock" : "unlock"/);
   assert.match(client, /onArchive=\{\(\) => setArchived\(member\)\}/);
   assert.match(mutations, /export async function setMemberArchived/);
   assert.match(mutations, /updateById\(teamMembersTable\(\), id, \{ \[statusColumn\]: !archived \}\)/);

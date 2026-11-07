@@ -790,3 +790,77 @@ html[data-theme="dark"] body.user-access-page .ua-directory-v339 .ua-directory-b
 .ua-bulk-modal__modes button.is-active {background:#111827;color:#fff;box-shadow:0 2px 7px rgba(14,23,40,.1);}
 html[data-theme="dark"] .ua-bulk-modal__modes {background:#252d39;}
 @media(max-width:640px){.ua-bulk-modal__modes {margin:4px 16px 6px;}}
+
+
+/* v342 — smaller, calmer member cards in both directory and department views. */
+.user-access-page .ua-directory-v339 .ua-directory-users__grid {
+  gap: 9px 11px;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr));
+}
+.user-access-page .ua-directory-v339 .ua-directory-user-card {
+  gap: 6px;
+  padding: 10px 11px;
+  border-radius: 13px;
+}
+.user-access-page .ua-directory-v339 .ua-directory-user-card .ua-avatar {
+  width: 35px;
+  height: 35px;
+  flex-basis: 35px;
+}
+.user-access-page .ua-directory-v339 .ua-directory-user-card__head { gap: 7px; }
+.user-access-page .ua-directory-v339 .ua-directory-user-card__identity strong { font-size: 13px; }
+.user-access-page .ua-directory-v339 .ua-directory-user-card__identity span { font-size: 11px; }
+.user-access-page .ua-directory-v339 .ua-directory-user-card__department { font-size: 10.5px; }
+.user-access-page .ua-directory-v339 .ua-directory-user-card__department small { padding: 3px 6px; font-size: 9.5px; }
+.user-access-page .ua-directory-v339 .ua-directory-user-card__details {
+  padding: 7px 9px;
+  gap: 4px;
+}
+.user-access-page .ua-directory-v339 .ua-directory-user-card__details > span { font-size: 11px; }
+.user-access-page .ua-directory-v339 .ua-directory-user-card__edit { min-height: 31px; }
+
+/* Department member list also supports selecting individual users for bulk access. */
+.user-access-page .ua-directory-v339 .ua-members-grid {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr));
+  gap: 11px;
+}
+.user-access-page .ua-directory-v339 .ua-member-card {
+  padding: 13px;
+  border-radius: 16px;
+  box-shadow: 0 6px 18px rgba(15,23,42,.055);
+}
+.user-access-page .ua-directory-v339 .ua-member-card__top { gap: 9px; }
+.user-access-page .ua-directory-v339 .ua-member-card__top .ua-avatar {
+  width: 42px;
+  height: 42px;
+  flex-basis: 42px;
+  border-width: 2px;
+  box-shadow: none;
+}
+.user-access-page .ua-directory-v339 .ua-member-card__identity h4 { font-size: 14px; }
+.user-access-page .ua-directory-v339 .ua-member-card__identity p { margin-top: 2px; font-size: 11px; }
+.user-access-page .ua-directory-v339 .ua-member-card__meta { gap: 6px; margin: 11px 0; }
+.user-access-page .ua-directory-v339 .ua-meta-line { gap: 7px; font-size: 11px; }
+.user-access-page .ua-directory-v339 .ua-member-card__actions .ua-btn {
+  min-height: 35px;
+  border-radius: 10px;
+  font-size: 12px;
+}
+.user-access-page .ua-directory-v339 .ua-member-card.is-selected {
+  border-color: #f47b21;
+  box-shadow: 0 0 0 2px rgba(244,123,33,.12);
+}
+.user-access-page .ua-directory-v339 .ua-member-card__select {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+.user-access-page .ua-directory-v339 .ua-member-card__select input { width: 18px; height: 18px; accent-color: #f47b21; cursor: pointer; }
+.user-access-page .ua-directory-v339 .ua-members-actions .ua-directory-select-btn { min-height: 39px; }
+.user-access-page .ua-directory-v339 .ua-directory-bulkbar--department { margin: 0 0 14px; }
+html[data-theme="dark"] body.user-access-page .ua-directory-v339 .ua-member-card.is-selected { border-color: #ed893e; }
+@media (max-width:640px) {
+  .user-access-page .ua-directory-v339 .ua-members-grid,
+  .user-access-page .ua-directory-v339 .ua-directory-users__grid { grid-template-columns: 1fr; }
+}

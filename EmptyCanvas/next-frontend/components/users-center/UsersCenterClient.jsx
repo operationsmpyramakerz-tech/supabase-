@@ -227,12 +227,12 @@ function UserDirectoryCard({ member, access, menuOpen, onMenuToggle, onEdit, onM
         <button type="button" className="ua-member-menu-btn" aria-label={`More actions for ${member.name || "user"}`} aria-expanded={menuOpen} onClick={(event) => { event.stopPropagation(); onMenuToggle(); }}><span className="ua-member-menu-dots">•••</span></button>
         <div className="ua-member-menu" hidden={!menuOpen}>
           {access.memberMove ? <button type="button" onClick={onMove}><UAIcon name="move"/><span>Move</span></button> : null}
-          {access.memberEdit && typeof member.isActive === "boolean" ? <button type="button" onClick={onArchive}><UAIcon name={member.isActive ? "archive" : "unlock"}/><span>{member.isActive ? "Archive" : "Unarchive"}</span></button> : null}
+          {access.memberEdit && typeof member.isActive === "boolean" ? <button type="button" onClick={onArchive}><UAIcon name={member.isActive ? "lock" : "unlock"}/><span>{member.isActive ? "Inactive" : "Active"}</span></button> : null}
           {access.memberDelete ? <button type="button" className="is-danger" onClick={onDelete}><UAIcon name="trash"/><span>Delete</span></button> : null}
         </div>
       </div> : null}
     </div>
-    <div className="ua-directory-user-card__department"><UAIcon name="folder"/><span title={departmentLabel}>{departmentLabel}</span>{typeof member.isActive === "boolean" ? <small className={member.isActive ? "is-active" : "is-inactive"}>{member.isActive ? "Active" : "Archived"}</small> : null}</div>
+    <div className="ua-directory-user-card__department"><UAIcon name="folder"/><span title={departmentLabel}>{departmentLabel}</span>{typeof member.isActive === "boolean" ? <small className={member.isActive ? "is-active" : "is-inactive"}>{member.isActive ? "Active" : "Inactive"}</small> : null}</div>
     <div className="ua-directory-user-card__details">
       <span title={member.email || "No email"}><UAIcon name="mail"/>{member.email || "No email"}</span>
       <span title={member.phone || "No phone"}><UAIcon name="phone"/>{member.phone || "No phone"}</span>
@@ -331,9 +331,9 @@ export default function UsersCenterClient({ account, initialDirectory, initialSi
 
   function writeDepartmentUrl(id, push = true) { if (typeof window === "undefined") return; const url = new URL(window.location.href); if (id) url.searchParams.set("department", id); else url.searchParams.delete("department"); const next = `${url.pathname}${url.search}${url.hash}`; if (push) window.history.pushState({}, "", next); else window.history.replaceState({}, "", next); }
   function navigateDepartment(id, push = true) { setSelectionMode(false); setSelectedMemberIds([]); setDepartmentActions(""); setDirectoryTab("departments"); setSelectedDepartmentId(id || ""); setSearch(""); writeDepartmentUrl(id, push); window.setTimeout(() => document.querySelector(".ua-members-panel")?.scrollIntoView({ behavior: "smooth", block: "start" }), 20); }
-  function backDepartments(push = true) { setDepartmentActions(""); setSelectedDepartmentId(""); setSearch(""); writeDepartmentUrl("", push); }
+  function backDepartments(push = true) { setSelectionMode(false); setSelectedMemberIds([]); setMemberMenu(""); setDepartmentActions(""); setSelectedDepartmentId(""); setSearch(""); writeDepartmentUrl("", push); }
 
-  useEffect(() => { const read = () => { const id = new URLSearchParams(window.location.search).get("department") || ""; if (id && directory.departments.some((department) => department.id === id)) setSelectedDepartmentId(id); else setSelectedDepartmentId(""); }; read(); window.addEventListener("popstate", read); return () => window.removeEventListener("popstate", read); }, [directory.departments.length]);
+  useEffect(() => { const read = () => { const id = new URLSearchParams(window.location.search).get("department") || ""; setSelectionMode(false); setSelectedMemberIds([]); if (id && directory.departments.some((department) => department.id === id)) setSelectedDepartmentId(id); else setSelectedDepartmentId(""); }; read(); window.addEventListener("popstate", read); return () => window.removeEventListener("popstate", read); }, [directory.departments.length]);
   useEffect(() => { const input = document.querySelector(".classic-app-shell .main-header .searchbar input"); if (!input) return undefined; input.value = search; input.placeholder = selectedDepartment ? "Search users inside this department..." : "Search departments, users, emails..."; const handle = (event) => setSearch(event.target.value || ""); input.addEventListener("input", handle); return () => input.removeEventListener("input", handle); }, [selectedDepartmentId]);
   useEffect(() => { function close(event) { if (!event.target.closest(".ua-member-menu-wrap")) setMemberMenu(""); } document.addEventListener("click", close); return () => document.removeEventListener("click", close); }, []);
   useEffect(() => { function closeDepartmentActions(event) { if (!event.target.closest(".ua-folder")) setDepartmentActions(""); } document.addEventListener("pointerdown", closeDepartmentActions); return () => document.removeEventListener("pointerdown", closeDepartmentActions); }, []);
@@ -373,14 +373,25 @@ export default function UsersCenterClient({ account, initialDirectory, initialSi
   }
 
   function setArchived(member) {
-    const archived = member.isActive !== false;
+    // Keep the existing member-archive mutation (is_active plus session revocation).
+    // The public-facing action is a status change: Active <-> Inactive.
+    const makeInactive = member.isActive !== false;
     setMemberMenu("");
-    protectedOpen({ title: archived ? "Archive user" : "Unarchive user", message: `${archived ? "Archive" : "Restore"} ${member.name}?` },
-      () => setConfirm({ danger: archived, title: archived ? "Archive User" : "Unarchive User", message: archived
-        ? `Archive ${member.name}? This blocks sign-in and ends their existing sessions. The account and permissions are retained for restoring later.`
-        : `Restore ${member.name}? Their existing permissions will be kept; they will need to sign in again.`,
-        confirmLabel: archived ? "Archive User" : "Unarchive User",
-        onConfirm: async () => { const body = await usersCenterMutation("member-archive", { memberId: member.id, archived }); await refresh(); notify("success", archived ? "User archived" : "User restored", body.message); setConfirm(null); } }));
+    protectedOpen({ title: makeInactive ? "Set user inactive" : "Set user active", message: `Set ${member.name} to ${makeInactive ? "Inactive" : "Active"}?` },
+      () => setConfirm({
+        danger: makeInactive,
+        title: makeInactive ? "Set User Inactive" : "Set User Active",
+        message: makeInactive
+          ? `Set ${member.name} to Inactive? This prevents sign-in and ends existing sessions. Account information and permissions stay saved.`
+          : `Set ${member.name} to Active? Their saved permissions will be restored and they can sign in again.`,
+        confirmLabel: makeInactive ? "Set Inactive" : "Set Active",
+        onConfirm: async () => {
+          const body = await usersCenterMutation("member-archive", { memberId: member.id, archived: makeInactive });
+          await refresh();
+          notify("success", makeInactive ? "User inactive" : "User active", body.message || "Account status updated.");
+          setConfirm(null);
+        },
+      }));
   }
   function deleteDepartment(department) { protectedOpen({ title: "Delete department", message: `Delete ${department.name}?` }, () => setConfirm({ danger: true, title: "Delete Department", message: Number(department.count || 0) ? `Delete ${department.name} department? ${department.count} user${Number(department.count) === 1 ? "" : "s"} will be moved to No Department.` : `Delete ${department.name} department?`, confirmLabel: "Delete Department", onConfirm: async () => { const body = await usersCenterMutation("department-delete", { departmentId: department.id }); backDepartments(false); await refresh(); notify("success", "Department deleted", body.message || "Department deleted."); setConfirm(null); } })); }
   function deleteMember(member) { protectedOpen({ title: "Delete team member", message: `Delete ${member.name}?` }, () => setConfirm({ danger: true, title: "Delete Team Member", message: `Delete ${member.name || "this user"} permanently from Team Members? This action cannot be undone.`, confirmLabel: "Delete Member", onConfirm: async () => { const body = await usersCenterMutation("member-delete", { memberId: member.id }); await refresh(); notify("success", "Member deleted", body.message || "Team member deleted."); setConfirm(null); } })); }
@@ -410,7 +421,7 @@ export default function UsersCenterClient({ account, initialDirectory, initialSi
       <section className="ua-folders-panel" aria-label="Departments">
         <div className="ua-directory-toolbar">
           <div className="ua-directory-tabs" role="group" aria-label="Directory view">
-            {[{id:"users",label:"All Users",icon:"users"},{id:"departments",label:"Departments",icon:"grid"},{id:"teams",label:"Teams",icon:"folder"},{id:"active",label:"Active",icon:"checkCircle"},{id:"archived",label:"Archived",icon:"archive"}].map((item) => <button key={item.id} type="button" className={`ua-directory-tab${directoryTab === item.id ? " is-active" : ""}`} onClick={() => changeDirectoryTab(item.id)} aria-pressed={directoryTab === item.id} disabled={(item.id === "active" || item.id === "archived") && !statusAvailable} title={(item.id === "active" || item.id === "archived") && !statusAvailable ? "Account status isn't available in this directory" : undefined}><UAIcon name={item.icon}/><span>{item.label}</span></button>)}
+            {[{id:"users",label:"All Users",icon:"users"},{id:"departments",label:"Departments",icon:"grid"},{id:"teams",label:"Teams",icon:"folder"},{id:"active",label:"Active",icon:"checkCircle"},{id:"archived",label:"Inactive",icon:"lock"}].map((item) => <button key={item.id} type="button" className={`ua-directory-tab${directoryTab === item.id ? " is-active" : ""}`} onClick={() => changeDirectoryTab(item.id)} aria-pressed={directoryTab === item.id} disabled={(item.id === "active" || item.id === "archived") && !statusAvailable} title={(item.id === "active" || item.id === "archived") && !statusAvailable ? "Account status isn't available in this directory" : undefined}><UAIcon name={item.icon}/><span>{item.label}</span></button>)}
           </div>
           {isMemberDirectoryTab ? (access.memberCreate ? <button type="button" className="ua-directory-add" onClick={() => protectedOpen({ title: "Add team member", message: "Create a new user account?" }, () => openMember("create"))}><UAIcon name="addUser"/><span>Add Member</span></button> : null) : (access.departmentCreate ? <AddDepartmentFolder onClick={openDepartmentCreate}/> : null)}
         </div>
@@ -418,8 +429,8 @@ export default function UsersCenterClient({ account, initialDirectory, initialSi
           <label className="ua-directory-search"><UAIcon name="search"/><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={isMemberDirectoryTab ? "Search users, departments or emails..." : "Search departments..."} aria-label={isMemberDirectoryTab ? "Search all users" : "Search departments or members"} /></label>
           <label className="ua-directory-sort"><UAIcon name="filter"/><span>Sort</span><select value={sortMode} onChange={(event) => setSortMode(event.target.value)} aria-label={isMemberDirectoryTab ? "Sort users" : "Sort departments"}><option value="name">Name A–Z</option>{isMemberDirectoryTab ? <><option value="name-desc">Name Z–A</option><option value="department">Department A–Z</option></> : <><option value="members">Most members</option><option value="fewest">Fewest members</option></>}</select><UAIcon name="chevronDown"/></label>
         </div>
-        {isMemberDirectoryTab ? <div className="ua-directory-users" aria-label={directoryTab === "users" ? "All users" : directoryTab === "active" ? "Active users" : "Archived users"}>
-          <div className="ua-directory-users__heading"><div><h3>{directoryTab === "users" ? "All Users" : directoryTab === "active" ? "Active Users" : "Archived Users"}</h3><p>Browse and manage individual accounts</p></div><div className="ua-directory-users__heading-actions"><span className="ua-directory-users__count">{visibleUsers.length} {visibleUsers.length === 1 ? "user" : "users"}</span>{(access.pageAccess || access.featureAccess) ? <button type="button" className={`ua-directory-select-btn${selectionMode ? " is-active" : ""}`} onClick={() => { setSelectionMode((current) => !current); setSelectedMemberIds([]); }}><UAIcon name="checkCircle"/><span>{selectionMode ? "Cancel Select" : "Select Users"}</span></button> : null}</div></div>
+        {isMemberDirectoryTab ? <div className="ua-directory-users" aria-label={directoryTab === "users" ? "All users" : directoryTab === "active" ? "Active users" : "Inactive users"}>
+          <div className="ua-directory-users__heading"><div><h3>{directoryTab === "users" ? "All Users" : directoryTab === "active" ? "Active Users" : "Inactive Users"}</h3><p>Browse and manage individual accounts</p></div><div className="ua-directory-users__heading-actions"><span className="ua-directory-users__count">{visibleUsers.length} {visibleUsers.length === 1 ? "user" : "users"}</span>{(access.pageAccess || access.featureAccess) ? <button type="button" className={`ua-directory-select-btn${selectionMode ? " is-active" : ""}`} onClick={() => { setSelectionMode((current) => !current); setSelectedMemberIds([]); }}><UAIcon name="checkCircle"/><span>{selectionMode ? "Cancel Select" : "Select Users"}</span></button> : null}</div></div>
           {selectionMode && (access.pageAccess || access.featureAccess) ? <div className="ua-directory-bulkbar"><label><input type="checkbox" checked={visibleUsers.length > 0 && visibleUsers.every((member) => selectedMemberSet.has(member.id))} onChange={(event) => { const ids = visibleUsers.map((member) => member.id).filter(Boolean); setSelectedMemberIds((current) => event.target.checked ? [...new Set([...current, ...ids])] : current.filter((id) => !ids.includes(id))); }} disabled={!visibleUsers.length}/> Select all visible</label><strong>{selectedMemberIds.length} selected</strong><button type="button" disabled={!selectedMemberIds.length} onClick={() => protectedOpen({ title: "Bulk access editing", message: `Edit access for ${selectedMemberIds.length} selected users?` }, () => setBulkAccessOpen(true))}><UAIcon name="shield"/> Edit Access</button></div> : null}
           {visibleUsers.length ? <div className="ua-directory-users__grid">{visibleUsers.map((member) => <UserDirectoryCard
             key={member.id || `${member.name}-${member.directoryDepartment}`}
@@ -448,9 +459,58 @@ export default function UsersCenterClient({ account, initialDirectory, initialSi
           {!visibleDepartments.length ? <div className="ua-empty ua-empty--folders">{search ? "No matching departments" : "No departments in this view"}</div> : null}
         </div>}
       </section>
-    </> : <section className="ua-members-panel"><div className="ua-section-head ua-section-head--members ua-section-head--members-actions-only"><div className="ua-members-title"><h3>{selectedDepartment.name}</h3><p>{selectedDepartment.count} {selectedDepartment.count === 1 ? "member" : "members"}</p></div><div className="ua-members-actions">{access.memberCreate ? <button type="button" className="ua-add-member-btn" onClick={() => protectedOpen({ title: "Add team member", message: `Create a new account in ${selectedDepartment.name}?` }, () => openMember("create"))}><UAIcon name="addUser"/><span>Add Member</span></button> : null}</div></div>{!filteredMembers.length ? <div className="ua-empty">Sorry, No data available</div> : <div className="ua-members-grid">{filteredMembers.map((member) => <article className="ua-member-card" key={member.id}><div className="ua-member-card__top"><Avatar member={member}/><div className="ua-member-card__identity"><h4 title={member.name || "Unnamed"}>{member.name || "Unnamed"}</h4><p title={member.position || "Team Member"}>{member.position || "Team Member"}</p></div>{(access.memberMove || access.memberDelete || (access.memberEdit && typeof member.isActive === "boolean")) ? <div className="ua-member-menu-wrap"><button type="button" className="ua-member-menu-btn" aria-expanded={memberMenu === member.id} onClick={(event) => { event.stopPropagation(); setMemberMenu((current) => current === member.id ? "" : member.id); }} aria-label={`More actions for ${member.name || "user"}`}><span className="ua-member-menu-dots">•••</span></button><div className="ua-member-menu" hidden={memberMenu !== member.id}>{access.memberMove ? <button type="button" onClick={() => { setMemberMenu(""); protectedOpen({ title: "Move team member", message: `Move ${member.name} to another department?` }, () => setMoveMember(member)); }}><UAIcon name="move"/><span>Move</span></button> : null}{access.memberEdit && typeof member.isActive === "boolean" ? <button type="button" onClick={() => setArchived(member)}><UAIcon name={member.isActive ? "archive" : "unlock"}/><span>{member.isActive ? "Archive" : "Unarchive"}</span></button> : null}{access.memberDelete ? <button type="button" className="is-danger" onClick={() => { setMemberMenu(""); deleteMember(member); }}><UAIcon name="trash"/><span>Delete</span></button> : null}</div></div> : null}</div><div className="ua-member-card__meta"><div className="ua-meta-line" title={member.employeeCode || "No employee code"}><UAIcon name="hash"/><span>{member.employeeCode || "No employee code"}</span></div><div className="ua-meta-line" title={member.phone || "No phone"}><UAIcon name="phone"/><span>{member.phone || "No phone"}</span></div><div className="ua-meta-line" title={member.email || "No email"}><UAIcon name="mail"/><span>{member.email || "No email"}</span></div></div>{access.memberEdit ? <div className="ua-member-card__actions"><button type="button" className="ua-btn ua-btn--dark" onClick={() => protectedOpen({ title: "Edit team member", message: `Edit ${member.name}'s account record?` }, () => openMember("edit", member))}><UAIcon name="edit"/><span>Edit</span></button></div> : null}</article>)}</div>}</section>}
+    </> : <section className="ua-members-panel">
+      <div className="ua-section-head ua-section-head--members ua-section-head--members-actions-only">
+        <div className="ua-members-title">
+          <h3>{selectedDepartment.name}</h3>
+          <p>{selectedDepartment.count} {selectedDepartment.count === 1 ? "member" : "members"}</p>
+        </div>
+        <div className="ua-members-actions">
+          {(access.pageAccess || access.featureAccess) ? <button type="button" className={`ua-directory-select-btn${selectionMode ? " is-active" : ""}`} aria-pressed={selectionMode} onClick={() => { setSelectionMode((current) => !current); setSelectedMemberIds([]); setMemberMenu(""); }}>
+            <UAIcon name="checkCircle"/><span>{selectionMode ? "Cancel Select" : "Select Users"}</span>
+          </button> : null}
+          {access.memberCreate ? <button type="button" className="ua-add-member-btn" onClick={() => protectedOpen({ title: "Add team member", message: `Create a new account in ${selectedDepartment.name}?` }, () => openMember("create"))}><UAIcon name="addUser"/><span>Add Member</span></button> : null}
+        </div>
+      </div>
+      {selectionMode && (access.pageAccess || access.featureAccess) ? <div className="ua-directory-bulkbar ua-directory-bulkbar--department">
+        <label>
+          <input type="checkbox" checked={filteredMembers.length > 0 && filteredMembers.every((member) => selectedMemberSet.has(member.id))} onChange={(event) => {
+            const ids = filteredMembers.map((member) => member.id).filter(Boolean);
+            setSelectedMemberIds((current) => event.target.checked ? [...new Set([...current, ...ids])] : current.filter((id) => !ids.includes(id)));
+          }} disabled={!filteredMembers.length}/>
+          Select all visible in {selectedDepartment.name}
+        </label>
+        <strong>{selectedMemberIds.length} selected</strong>
+        <button type="button" disabled={!selectedMemberIds.length} onClick={() => protectedOpen({ title: "Bulk access editing", message: `Edit access for ${selectedMemberIds.length} selected users in ${selectedDepartment.name}?` }, () => setBulkAccessOpen(true))}>
+          <UAIcon name="shield"/> Edit Access
+        </button>
+      </div> : null}
+      {!filteredMembers.length ? <div className="ua-empty">Sorry, No data available</div> : <div className="ua-members-grid">{filteredMembers.map((member) => <article className={`ua-member-card${selectedMemberSet.has(member.id) && selectionMode ? " is-selected" : ""}`} key={member.id}>
+        <div className="ua-member-card__top">
+          {selectionMode && (access.pageAccess || access.featureAccess) ? <label className="ua-directory-user-card__select ua-member-card__select" title={`Select ${member.name || "user"}`}>
+            <input type="checkbox" checked={selectedMemberSet.has(member.id)} onChange={(event) => toggleMemberSelection(member.id, event.target.checked)} aria-label={`Select ${member.name || "user"}`}/>
+          </label> : null}
+          <Avatar member={member}/>
+          <div className="ua-member-card__identity"><h4 title={member.name || "Unnamed"}>{member.name || "Unnamed"}</h4><p title={member.position || "Team Member"}>{member.position || "Team Member"}</p></div>
+          {(access.memberMove || access.memberDelete || (access.memberEdit && typeof member.isActive === "boolean")) ? <div className="ua-member-menu-wrap">
+            <button type="button" className="ua-member-menu-btn" aria-expanded={memberMenu === member.id} onClick={(event) => { event.stopPropagation(); setMemberMenu((current) => current === member.id ? "" : member.id); }} aria-label={`More actions for ${member.name || "user"}`}><span className="ua-member-menu-dots">•••</span></button>
+            <div className="ua-member-menu" hidden={memberMenu !== member.id}>
+              {access.memberMove ? <button type="button" onClick={() => { setMemberMenu(""); protectedOpen({ title: "Move team member", message: `Move ${member.name} to another department?` }, () => setMoveMember(member)); }}><UAIcon name="move"/><span>Move</span></button> : null}
+              {access.memberEdit && typeof member.isActive === "boolean" ? <button type="button" onClick={() => setArchived(member)}><UAIcon name={member.isActive ? "lock" : "unlock"}/><span>{member.isActive ? "Inactive" : "Active"}</span></button> : null}
+              {access.memberDelete ? <button type="button" className="is-danger" onClick={() => { setMemberMenu(""); deleteMember(member); }}><UAIcon name="trash"/><span>Delete</span></button> : null}
+            </div>
+          </div> : null}
+        </div>
+        <div className="ua-member-card__meta">
+          <div className="ua-meta-line" title={member.employeeCode || "No employee code"}><UAIcon name="hash"/><span>{member.employeeCode || "No employee code"}</span></div>
+          <div className="ua-meta-line" title={member.phone || "No phone"}><UAIcon name="phone"/><span>{member.phone || "No phone"}</span></div>
+          <div className="ua-meta-line" title={member.email || "No email"}><UAIcon name="mail"/><span>{member.email || "No email"}</span></div>
+        </div>
+        {access.memberEdit ? <div className="ua-member-card__actions"><button type="button" className="ua-btn ua-btn--dark" onClick={() => protectedOpen({ title: "Edit team member", message: `Edit ${member.name}'s account record?` }, () => openMember("edit", member))}><UAIcon name="edit"/><span>Edit</span></button></div> : null}
+      </article>)}</div>}
+    </section>}
 
-    {bulkAccessOpen && (access.pageAccess || access.featureAccess) ? <BulkPageAccessModal members={membersWithDepartments.filter((member) => selectedMemberSet.has(member.id))} allowPages={access.pageAccess} allowFeatures={access.featureAccess} protect={protect} onClose={() => setBulkAccessOpen(false)} onComplete={async (result) => {
+    {bulkAccessOpen && (access.pageAccess || access.featureAccess) ? <BulkPageAccessModal members={membersWithDepartments.filter((member) => selectedMemberSet.has(member.id) && (!selectedDepartment || selectedDepartment.members.some((departmentMember) => departmentMember.id === member.id)))} allowPages={access.pageAccess} allowFeatures={access.featureAccess} protect={protect} onClose={() => setBulkAccessOpen(false)} onComplete={async (result) => {
       let refreshError = null;
       try { await refresh(); } catch (error) { refreshError = error; }
       if (!result.failures?.length) {
