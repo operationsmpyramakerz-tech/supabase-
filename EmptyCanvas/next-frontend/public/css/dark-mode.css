@@ -322,7 +322,9 @@ html[data-theme="dark"] body :is(input, select, textarea) {
   accent-color: var(--ops-theme-accent-strong);
 }
 
-html[data-theme="dark"] body :is(input, select, textarea):not([type="range"]):not([type="checkbox"]):not([type="radio"]):not([type="file"]) {
+/* v352: the Shopping Cart product-addition/component picker sheets stay light;
+   do not apply the universal dark-input rule inside their light surfaces. */
+html[data-theme="dark"] body :is(input, select, textarea):not([type="range"]):not([type="checkbox"]):not([type="radio"]):not([type="file"]):where(:not(.addition-dialog input, .classic-cart-picker-overlay input, .classic-cart-combobox-panel input, .classic-cart-kit-browser input)) {
   background-color: #151b25 !important;
   border-color: #303a49 !important;
   color: #f7f9fc !important;

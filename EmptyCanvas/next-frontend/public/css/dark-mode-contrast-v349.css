@@ -202,3 +202,243 @@ html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sid
 html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host .nav-link:focus:not(:focus-visible) {
   outline: none !important;
 }
+
+/* ========================================================================
+   v352 | Shopping Cart + Withdraw Products dark-mode contrast repair
+
+   Product-request and component-picker dialogs intentionally keep their
+   LIGHT surfaces, even when the surrounding ERP uses dark mode. The global
+   dark input rule was overriding those dialogs' children, leaving black
+   input rectangles, illegible headings and invisible Cancel button labels.
+   Scope corrections to these overlays; never change Light Mode or the dark
+   cards in the surrounding order workflow.
+   ======================================================================== */
+html[data-theme="dark"] body .addition-dialog,
+html[data-theme="dark"] body .classic-cart-picker-overlay .classic-cart-modal-card--modern,
+html[data-theme="dark"] body .classic-cart-kit-browser-overlay .classic-cart-kit-browser,
+html[data-theme="dark"] body .classic-cart-product-preview {
+  color-scheme: light;
+  background: #ffffff !important;
+  color: #111827 !important;
+}
+
+/* Add New Product Request (also used by product-addition review). */
+html[data-theme="dark"] body .addition-dialog :is(.addition-dialog__body, .addition-dialog__footer) {
+  background: #ffffff !important;
+  color: #111827 !important;
+}
+html[data-theme="dark"] body .addition-dialog .addition-dialog__intro h2 {
+  color: #101827 !important;
+  opacity: 1 !important;
+}
+html[data-theme="dark"] body .addition-dialog :is(.addition-dialog__intro p, .addition-field>span:first-child small) {
+  color: #778294 !important;
+}
+html[data-theme="dark"] body .addition-dialog :is(.addition-field>span:first-child, .addition-field>label) {
+  color: #344054 !important;
+}
+html[data-theme="dark"] body .addition-dialog .addition-field>input:not([type="hidden"]),
+html[data-theme="dark"] body .addition-dialog .addition-field__price,
+html[data-theme="dark"] body .addition-dialog .addition-select__custom {
+  background: #f8f9fb !important;
+  border-color: #dce2e9 !important;
+  color: #172033 !important;
+  -webkit-text-fill-color: #172033;
+}
+html[data-theme="dark"] body .addition-dialog .addition-field>input:not([type="hidden"]):focus,
+html[data-theme="dark"] body .addition-dialog .addition-select__custom:focus {
+  background: #ffffff !important;
+  border-color: #94a3b8 !important;
+  box-shadow: 0 0 0 3px rgba(148,163,184,.16) !important;
+}
+html[data-theme="dark"] body .addition-dialog .addition-field__price:focus-within {
+  background: #f8f9fb !important;
+  border-color: #dce2e9 !important;
+  box-shadow: none !important;
+}
+html[data-theme="dark"] body .addition-dialog .addition-field__price input,
+html[data-theme="dark"] body .addition-dialog .addition-field__price input:focus {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  outline: 0 !important;
+  color: #172033 !important;
+  -webkit-text-fill-color: #172033;
+}
+html[data-theme="dark"] body .addition-dialog :is(.addition-field>input, .addition-field__price input, .addition-select__custom)::placeholder {
+  color: #788392 !important;
+  -webkit-text-fill-color: #788392;
+  opacity: 1;
+}
+html[data-theme="dark"] body .addition-dialog .addition-field__price b {
+  color: #667085 !important;
+}
+html[data-theme="dark"] body .addition-dialog .addition-select__trigger {
+  background: #f8f9fb !important;
+  border-color: #dce2e9 !important;
+  color: #8590a0 !important;
+}
+html[data-theme="dark"] body .addition-dialog .addition-select__trigger.has-value {
+  color: #172033 !important;
+}
+html[data-theme="dark"] body .addition-dialog .addition-select__trigger:is(:hover,.is-open) {
+  background: #ffffff !important;
+  border-color: #94a3b8 !important;
+}
+html[data-theme="dark"] body .addition-dialog .addition-select__panel {
+  background: #ffffff !important;
+  border-color: #dce2e9 !important;
+  color: #172033 !important;
+}
+html[data-theme="dark"] body .addition-dialog .addition-select__search {
+  background: #f8f9fb !important;
+  border-color: #e4e8ef !important;
+}
+html[data-theme="dark"] body .addition-dialog .addition-select__search input,
+html[data-theme="dark"] body .addition-dialog .addition-select__search input:focus {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  color: #172033 !important;
+  -webkit-text-fill-color: #172033;
+}
+html[data-theme="dark"] body .addition-dialog .addition-select__options button {
+  color: #344054 !important;
+}
+html[data-theme="dark"] body .addition-dialog .addition-select__options button:hover {
+  background: #f2f5f9 !important;
+}
+html[data-theme="dark"] body .addition-dialog .addition-image-upload {
+  background: #f9fafc !important;
+  border-color: #cbd5e1 !important;
+  color: #172033 !important;
+}
+html[data-theme="dark"] body .addition-dialog .addition-image-upload__copy strong {
+  color: #172033 !important;
+}
+html[data-theme="dark"] body .addition-dialog .addition-dialog__footer>button:not(.addition-dialog__save) {
+  background: #ffffff !important;
+  border-color: #dce2e9 !important;
+  color: #172033 !important;
+  -webkit-text-fill-color: #172033;
+}
+html[data-theme="dark"] body .addition-dialog .addition-dialog__footer>.addition-dialog__save {
+  background: #101827 !important;
+  border-color: #101827 !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff;
+}
+
+/* Select Component / Kit modal: a light sheet over a dark page. */
+html[data-theme="dark"] body .classic-cart-picker-overlay :is(.classic-cart-picker-body, .classic-cart-picker-actions) {
+  background: #ffffff !important;
+  color: #111827 !important;
+}
+html[data-theme="dark"] body .classic-cart-picker-overlay :is(.classic-cart-picker-label-row>span, .classic-cart-modern-field>span, .classic-cart-combobox-copy strong, .classic-cart-picker-head-copy h3) {
+  color: #111827 !important;
+}
+html[data-theme="dark"] body .classic-cart-picker-overlay .classic-cart-modern-qty {
+  background: #f8f9fb !important;
+  border-color: #dce2e9 !important;
+  color: #111827 !important;
+}
+html[data-theme="dark"] body .classic-cart-picker-overlay .classic-cart-modern-qty input,
+html[data-theme="dark"] body .classic-cart-picker-overlay .classic-cart-modern-qty input:focus {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  color: #111827 !important;
+  -webkit-text-fill-color: #111827;
+}
+html[data-theme="dark"] body .classic-cart-picker-overlay .classic-cart-modern-qty b {
+  background: #edf1f5 !important;
+  color: #667085 !important;
+}
+html[data-theme="dark"] body .classic-cart-picker-overlay :is(.classic-cart-combobox-trigger, .classic-cart-kit-trigger, .classic-cart-picker-product-summary, .classic-cart-picker-readonly-component) {
+  background: #fbfcfd !important;
+  color: #111827 !important;
+  border-color: #dce2e9 !important;
+}
+html[data-theme="dark"] body .classic-cart-picker-overlay .classic-cart-modern-field textarea {
+  background: #fbfcfd !important;
+  border-color: #dce2e9 !important;
+  color: #111827 !important;
+  -webkit-text-fill-color: #111827;
+}
+html[data-theme="dark"] body .classic-cart-picker-overlay :is(.classic-cart-picker-tabs button.is-active, .classic-cart-kit-trigger-copy strong) {
+  color: #111827 !important;
+}
+html[data-theme="dark"] body .classic-cart-picker-overlay .classic-cart-picker-actions .classic-cart-btn-ghost {
+  background: #ffffff !important;
+  color: #111827 !important;
+  border-color: #dce2e9 !important;
+}
+html[data-theme="dark"] body .classic-cart-picker-overlay .classic-cart-picker-actions .classic-cart-btn-solid {
+  background: #101827 !important;
+  color: #ffffff !important;
+}
+
+/* Product search is inside the WHITE component picker dropdown. Previous
+   generic dark-input styling turned just the search input black. Keep the
+   neutral grey search bar and fully transparent inner input. */
+html[data-theme="dark"] body .classic-cart-combobox-panel,
+html[data-theme="dark"] body .classic-cart-combobox-panel .classic-cart-combobox-list {
+  background: #ffffff !important;
+  color: #111827 !important;
+}
+html[data-theme="dark"] body .classic-cart-combobox-panel .classic-cart-combobox-search,
+html[data-theme="dark"] body .classic-cart-combobox-panel .classic-cart-combobox-search:focus-within {
+  background: #f7f9fb !important;
+  border-color: #e4e7ec !important;
+  box-shadow: none !important;
+}
+html[data-theme="dark"] body .classic-cart-combobox-panel .classic-cart-combobox-search input,
+html[data-theme="dark"] body .classic-cart-combobox-panel .classic-cart-combobox-search input:focus {
+  background: transparent !important;
+  border: 0 !important;
+  color: #172033 !important;
+  -webkit-text-fill-color: #172033;
+  box-shadow: none !important;
+  outline: none !important;
+}
+html[data-theme="dark"] body .classic-cart-combobox-panel .classic-cart-combobox-search input::placeholder {
+  color: #778294 !important;
+  -webkit-text-fill-color: #778294;
+}
+html[data-theme="dark"] body .classic-cart-combobox-panel .classic-cart-combobox-option {
+  color: #111827 !important;
+}
+html[data-theme="dark"] body .classic-cart-combobox-panel .classic-cart-combobox-option:hover {
+  background: #f4f6f9 !important;
+}
+html[data-theme="dark"] body .classic-cart-combobox-panel .classic-cart-combobox-option-price {
+  color: #475467 !important;
+}
+
+/* Same issue for kit browsing in the same Shopping Cart picker flow. */
+html[data-theme="dark"] body .classic-cart-kit-browser :is(.classic-cart-kit-browser-toolbar, .classic-cart-kit-browser-grid, .classic-cart-kit-browser-footer) {
+  background: #ffffff !important;
+  color: #344054 !important;
+}
+html[data-theme="dark"] body .classic-cart-kit-browser .classic-cart-kit-browser-search input,
+html[data-theme="dark"] body .classic-cart-kit-browser .classic-cart-kit-browser-search input:focus {
+  background: transparent !important;
+  border: 0 !important;
+  color: #111827 !important;
+  box-shadow: none !important;
+  -webkit-text-fill-color: #111827;
+}
+html[data-theme="dark"] body .classic-cart-kit-browser :is(.classic-cart-kit-card-qty input, .classic-cart-kit-library-selected-panel input) {
+  background: #ffffff !important;
+  border-color: #dce2e9 !important;
+  color: #111827 !important;
+}
+
+/* The dark Withdraw / Request order cards deliberately REMAIN dark. Give
+   labels and field hints enough contrast against the slate backgrounds. */
+html[data-theme="dark"] body.shopping-cart-page .classic-cart-page[class*="theme-"] .classic-cart-reason-card .classic-cart-field-label {
+  color: #e2e8f0 !important;
+}
+html[data-theme="dark"] body.shopping-cart-page .classic-cart-page[class*="theme-"] .classic-cart-reason-card .classic-cart-field-label svg {
+  color: #a9b6c6 !important;
+}
