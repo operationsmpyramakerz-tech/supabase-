@@ -192,3 +192,13 @@ html[data-theme="dark"] body.next-classic-shell-active :is(button,a,input,select
   outline: 2px solid #fb923c;
   outline-offset: 2px;
 }
+
+/* v351 — Prevent Android's temporary tap highlight from painting a second
+   coloured rectangle behind the selected dark-mode dock icon. Keyboard focus
+   remains available via :focus-visible; this only removes touch flash. */
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host .nav-link {
+  -webkit-tap-highlight-color: transparent !important;
+}
+html[data-theme="dark"] body.next-classic-shell-active .classic-app-shell > .sidebar.mobile-dock-structured-host .nav-link:focus:not(:focus-visible) {
+  outline: none !important;
+}

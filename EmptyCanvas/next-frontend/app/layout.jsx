@@ -230,7 +230,7 @@ export default async function RootLayout({ children }) {
         <link rel="stylesheet" href="/next/css/dark-mode.css?v=theme-v2-white-nav" precedence="erp-theme" />
         <link rel="stylesheet" href="/next/css/desktop-bottom-dock.css?v=desktop-dock-v347-fit-pages" precedence="erp-desktop-dock" />
         <link rel="stylesheet" href="/next/css/desktop-header-and-home-v333.css?v=333" precedence="erp-desktop-dock-v333" />
-        <link rel="stylesheet" href="/next/css/dark-mode-contrast-v349.css?v=350-white-dock" precedence="erp-theme-contrast-v349" />
+        <link rel="stylesheet" href="/next/css/dark-mode-contrast-v349.css?v=351-stable-dark-dock" precedence="erp-theme-contrast-v349" />
         <style dangerouslySetInnerHTML={{ __html: coldStartCss }} />
         <style dangerouslySetInnerHTML={{ __html: authTransitionCss }} />
         <script dangerouslySetInnerHTML={{ __html: coldStartBootstrap }} />

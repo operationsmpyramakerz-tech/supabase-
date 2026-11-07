@@ -843,6 +843,36 @@ export function ClassicSidebarActiveIndicator({ activePath = "" }) {
       if (destination.origin !== window.location.origin) return;
       if (destination.pathname === window.location.pathname && destination.search === window.location.search) return;
 
+      // Dark-mode docks use a white rail and an orange selected tile. The
+      // legacy travelling indicator temporarily overlaps that tile with a
+      // second SVG and an older dark-theme target state. On a slow route this
+      // produces the pale/brown tile and stray blue focus rectangle seen
+      // during navigation. Select the destination immediately instead; let
+      // the persistent AppShell reconcile .active from activePath on commit.
+      // Keep the existing travelling indicator in light mode unchanged.
+      const darkDock = isDock() && (
+        document.documentElement.dataset.theme === "dark"
+        || document.documentElement.classList.contains("ops-theme-dark")
+      );
+      if (darkDock) {
+        event.preventDefault();
+        clearTargets();
+        sidebar.classList.remove("sidebar-active-indicator-ready", "sidebar-active-indicator-animating");
+        indicator.style.opacity = "0";
+        nav.querySelectorAll(".nav-link.active").forEach((item) => item.classList.remove("active"));
+        link.classList.add("active");
+        const pathname = destination.pathname === "/next"
+          ? "/"
+          : destination.pathname.startsWith("/next/")
+            ? destination.pathname.slice(5) || "/"
+            : destination.pathname;
+        const nextHref = `${pathname}${destination.search}${destination.hash}`;
+        if (navigationTimer) window.clearTimeout(navigationTimer);
+        try { router.prefetch(nextHref); } catch {}
+        router.push(nextHref);
+        return;
+      }
+
       const currentActive = nav.querySelector(".nav-link.active");
       if (isDock() && currentActive instanceof HTMLElement && hostForLink(currentActive) !== hostForLink(link)) {
         // Home is intentionally isolated from the horizontally scrolling pages rail.
