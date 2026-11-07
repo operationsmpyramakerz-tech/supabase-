@@ -441,7 +441,7 @@ export default function StocktakingClient({ account, initialStock = [], initialC
   const [inventoryBusy, setInventoryBusy] = useState(false);
   const [inventorySession, setInventorySession] = useState(null);
   const [inventorySaveError, setInventorySaveError] = useState("");
-  const [sortMode, setSortMode] = useState("tag");
+  const [sortMode, setSortMode] = useState("kit");
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
   const [editRowId, setEditRowId] = useState("");
   const [editDraft, setEditDraft] = useState({ productId: "", quantity: "" });
@@ -908,7 +908,7 @@ export default function StocktakingClient({ account, initialStock = [], initialC
     setActiveColumn(column);
     setSearch("");
     setExportOpen(false);
-    setSortMode("tag");
+    setSortMode("kit");
     setSortMenuOpen(false);
     setEditRowId("");
     setEditDraft({ productId: "", quantity: "" });
@@ -942,7 +942,7 @@ export default function StocktakingClient({ account, initialStock = [], initialC
     setSearch("");
     setError("");
     setExportOpen(false);
-    setSortMode("tag");
+    setSortMode("kit");
     setSortMenuOpen(false);
     setEditRowId("");
     setEditDraft({ productId: "", quantity: "" });
@@ -977,7 +977,7 @@ export default function StocktakingClient({ account, initialStock = [], initialC
         setStock([]);
         setSearch("");
         setError("");
-        setSortMode("tag");
+        setSortMode("kit");
         setSortMenuOpen(false);
         setEditRowId("");
         setEditDraft({ productId: "", quantity: "" });
@@ -1227,7 +1227,7 @@ export default function StocktakingClient({ account, initialStock = [], initialC
               {can("export") ? <button className="btn b2b-download-primary" type="button" onClick={() => { setExportOpen(true); setSortMenuOpen(false); }} disabled={loading || Boolean(error)}><Icon name="download" /><span>Download</span></button> : null}
               <div className="stocktaking-sort-menu-wrap" ref={sortMenuRef}>
                 <button className="btn stocktaking-sort-btn" type="button" onClick={() => { setSortMenuOpen((open) => !open); setExportOpen(false); }} disabled={loading || Boolean(error)} aria-expanded={sortMenuOpen}>
-                  <Icon name="sort" /><span>Sort</span><Icon name="chevron" />
+                  <Icon name="sort" /><span>Grouped</span><Icon name="chevron" />
                 </button>
                 {sortMenuOpen ? (
                   <div className="stocktaking-sort-menu" role="menu">
