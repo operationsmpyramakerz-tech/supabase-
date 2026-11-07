@@ -36,7 +36,7 @@ test("user list search, sorting and status filters operate on people, not depart
 });
 
 test("member actions remain behind the existing feature/password authorization", () => {
-  assert.match(client, /access\.memberCreate \? <button/);
+  assert.match(client, /access\.memberCreate && directoryTab !== "archived" && !selectionMode \? <AddMemberCard/);
   assert.match(client, /access\.memberEdit \? <button/);
   assert.match(client, /access\.memberMove \? <button/);
   assert.match(client, /access\.memberDelete \? <button/);
@@ -52,7 +52,7 @@ test("mobile, tablet, dark-mode and updated CSS cache key are included", () => {
   assert.match(css, /html\[data-theme="dark"\] body\.user-access-page \.ua-directory-v339 \.ua-directory-user-card/);
   assert.match(css, /@media \(max-width: 640px\)/);
   assert.match(css, /ua-directory-tabs \{grid-template-columns: repeat\(5/);
-  assert.match(page, /users-center-directory-v339\.css\?v=342/);
+  assert.match(page, /users-center-directory-v339\.css\?v=343/);
 });
 
 test("edited JSX files parse", () => {

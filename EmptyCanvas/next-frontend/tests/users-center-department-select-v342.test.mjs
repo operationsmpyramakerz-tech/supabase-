@@ -41,7 +41,7 @@ test("both layouts have smaller cards with responsive styling and a fresh styles
   assert.match(css, /\.ua-member-card \{\s*padding: 13px;/);
   assert.match(css, /\.ua-member-card\.is-selected/);
   assert.match(css, /@media \(max-width:640px\)/);
-  assert.match(page, /users-center-directory-v339\.css\?v=342/);
+  assert.match(page, /users-center-directory-v339\.css\?v=343/);
 });
 
 test("all changed JSX syntax parses", () => {

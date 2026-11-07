@@ -210,6 +210,19 @@ function AddDepartmentFolder({ onClick }) {
   </button>;
 }
 
+/* Inline add action: share the same card footprint and grid placement as a
+   member, rather than a second toolbar button. The caller retains the existing
+   permission gate, password protection and department context. */
+function AddMemberCard({ onClick }) {
+  return <button type="button" className="ua-add-member-card" onClick={onClick} aria-label="Add Member — create a new user account">
+    <span className="ua-add-member-card__copy">
+      <strong>Add Member</strong>
+      <span>Create a new user account</span>
+    </span>
+    <span className="ua-add-member-card__plus" aria-hidden="true"><UAIcon name="plus"/></span>
+  </button>;
+}
+
 
 /* A compact, user-first card for the default directory view. The existing
    department member editor/permissions remain the only mutation path. */
@@ -423,7 +436,7 @@ export default function UsersCenterClient({ account, initialDirectory, initialSi
           <div className="ua-directory-tabs" role="group" aria-label="Directory view">
             {[{id:"users",label:"All Users",icon:"users"},{id:"departments",label:"Departments",icon:"grid"},{id:"teams",label:"Teams",icon:"folder"},{id:"active",label:"Active",icon:"checkCircle"},{id:"archived",label:"Inactive",icon:"lock"}].map((item) => <button key={item.id} type="button" className={`ua-directory-tab${directoryTab === item.id ? " is-active" : ""}`} onClick={() => changeDirectoryTab(item.id)} aria-pressed={directoryTab === item.id} disabled={(item.id === "active" || item.id === "archived") && !statusAvailable} title={(item.id === "active" || item.id === "archived") && !statusAvailable ? "Account status isn't available in this directory" : undefined}><UAIcon name={item.icon}/><span>{item.label}</span></button>)}
           </div>
-          {isMemberDirectoryTab ? (access.memberCreate ? <button type="button" className="ua-directory-add" onClick={() => protectedOpen({ title: "Add team member", message: "Create a new user account?" }, () => openMember("create"))}><UAIcon name="addUser"/><span>Add Member</span></button> : null) : (access.departmentCreate ? <AddDepartmentFolder onClick={openDepartmentCreate}/> : null)}
+          {!isMemberDirectoryTab && access.departmentCreate ? <AddDepartmentFolder onClick={openDepartmentCreate}/> : null}
         </div>
         <div className="ua-directory-filter-row">
           <label className="ua-directory-search"><UAIcon name="search"/><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={isMemberDirectoryTab ? "Search users, departments or emails..." : "Search departments..."} aria-label={isMemberDirectoryTab ? "Search all users" : "Search departments or members"} /></label>
@@ -432,7 +445,9 @@ export default function UsersCenterClient({ account, initialDirectory, initialSi
         {isMemberDirectoryTab ? <div className="ua-directory-users" aria-label={directoryTab === "users" ? "All users" : directoryTab === "active" ? "Active users" : "Inactive users"}>
           <div className="ua-directory-users__heading"><div><h3>{directoryTab === "users" ? "All Users" : directoryTab === "active" ? "Active Users" : "Inactive Users"}</h3><p>Browse and manage individual accounts</p></div><div className="ua-directory-users__heading-actions"><span className="ua-directory-users__count">{visibleUsers.length} {visibleUsers.length === 1 ? "user" : "users"}</span>{(access.pageAccess || access.featureAccess) ? <button type="button" className={`ua-directory-select-btn${selectionMode ? " is-active" : ""}`} onClick={() => { setSelectionMode((current) => !current); setSelectedMemberIds([]); }}><UAIcon name="checkCircle"/><span>{selectionMode ? "Cancel Select" : "Select Users"}</span></button> : null}</div></div>
           {selectionMode && (access.pageAccess || access.featureAccess) ? <div className="ua-directory-bulkbar"><label><input type="checkbox" checked={visibleUsers.length > 0 && visibleUsers.every((member) => selectedMemberSet.has(member.id))} onChange={(event) => { const ids = visibleUsers.map((member) => member.id).filter(Boolean); setSelectedMemberIds((current) => event.target.checked ? [...new Set([...current, ...ids])] : current.filter((id) => !ids.includes(id))); }} disabled={!visibleUsers.length}/> Select all visible</label><strong>{selectedMemberIds.length} selected</strong><button type="button" disabled={!selectedMemberIds.length} onClick={() => protectedOpen({ title: "Bulk access editing", message: `Edit access for ${selectedMemberIds.length} selected users?` }, () => setBulkAccessOpen(true))}><UAIcon name="shield"/> Edit Access</button></div> : null}
-          {visibleUsers.length ? <div className="ua-directory-users__grid">{visibleUsers.map((member) => <UserDirectoryCard
+          {(visibleUsers.length || (access.memberCreate && directoryTab !== "archived" && !selectionMode)) ? <div className="ua-directory-users__grid">
+            {access.memberCreate && directoryTab !== "archived" && !selectionMode ? <AddMemberCard onClick={() => protectedOpen({ title: "Add team member", message: "Create a new user account?" }, () => openMember("create"))}/> : null}
+            {visibleUsers.map((member) => <UserDirectoryCard
             key={member.id || `${member.name}-${member.directoryDepartment}`}
             member={member}
             access={access}
@@ -469,7 +484,7 @@ export default function UsersCenterClient({ account, initialDirectory, initialSi
           {(access.pageAccess || access.featureAccess) ? <button type="button" className={`ua-directory-select-btn${selectionMode ? " is-active" : ""}`} aria-pressed={selectionMode} onClick={() => { setSelectionMode((current) => !current); setSelectedMemberIds([]); setMemberMenu(""); }}>
             <UAIcon name="checkCircle"/><span>{selectionMode ? "Cancel Select" : "Select Users"}</span>
           </button> : null}
-          {access.memberCreate ? <button type="button" className="ua-add-member-btn" onClick={() => protectedOpen({ title: "Add team member", message: `Create a new account in ${selectedDepartment.name}?` }, () => openMember("create"))}><UAIcon name="addUser"/><span>Add Member</span></button> : null}
+
         </div>
       </div>
       {selectionMode && (access.pageAccess || access.featureAccess) ? <div className="ua-directory-bulkbar ua-directory-bulkbar--department">
@@ -485,7 +500,9 @@ export default function UsersCenterClient({ account, initialDirectory, initialSi
           <UAIcon name="shield"/> Edit Access
         </button>
       </div> : null}
-      {!filteredMembers.length ? <div className="ua-empty">Sorry, No data available</div> : <div className="ua-members-grid">{filteredMembers.map((member) => <article className={`ua-member-card${selectedMemberSet.has(member.id) && selectionMode ? " is-selected" : ""}`} key={member.id}>
+      {(filteredMembers.length || (access.memberCreate && !selectionMode)) ? <div className="ua-members-grid">
+        {access.memberCreate && !selectionMode ? <AddMemberCard onClick={() => protectedOpen({ title: "Add team member", message: `Create a new account in ${selectedDepartment.name}?` }, () => openMember("create"))}/> : null}
+        {filteredMembers.map((member) => <article className={`ua-member-card${selectedMemberSet.has(member.id) && selectionMode ? " is-selected" : ""}`} key={member.id}>
         <div className="ua-member-card__top">
           {selectionMode && (access.pageAccess || access.featureAccess) ? <label className="ua-directory-user-card__select ua-member-card__select" title={`Select ${member.name || "user"}`}>
             <input type="checkbox" checked={selectedMemberSet.has(member.id)} onChange={(event) => toggleMemberSelection(member.id, event.target.checked)} aria-label={`Select ${member.name || "user"}`}/>
@@ -507,7 +524,7 @@ export default function UsersCenterClient({ account, initialDirectory, initialSi
           <div className="ua-meta-line" title={member.email || "No email"}><UAIcon name="mail"/><span>{member.email || "No email"}</span></div>
         </div>
         {access.memberEdit ? <div className="ua-member-card__actions"><button type="button" className="ua-btn ua-btn--dark" onClick={() => protectedOpen({ title: "Edit team member", message: `Edit ${member.name}'s account record?` }, () => openMember("edit", member))}><UAIcon name="edit"/><span>Edit</span></button></div> : null}
-      </article>)}</div>}
+      </article>)}</div> : <div className="ua-empty">{search ? "No matching users" : "Sorry, No data available"}</div>}
     </section>}
 
     {bulkAccessOpen && (access.pageAccess || access.featureAccess) ? <BulkPageAccessModal members={membersWithDepartments.filter((member) => selectedMemberSet.has(member.id) && (!selectedDepartment || selectedDepartment.members.some((departmentMember) => departmentMember.id === member.id)))} allowPages={access.pageAccess} allowFeatures={access.featureAccess} protect={protect} onClose={() => setBulkAccessOpen(false)} onComplete={async (result) => {
