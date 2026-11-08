@@ -46,7 +46,7 @@ export default async function StocktakingPage() {
     <AppShell
       account={gate.account}
       title="Stocktaking"
-      eyebrow="Live inventory overview"
+      eyebrow=""
       activePath="/next/stocktaking"
       bodyClass="stocktaking-page"
     >

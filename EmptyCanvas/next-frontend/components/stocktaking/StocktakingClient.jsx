@@ -454,8 +454,6 @@ export default function StocktakingClient({ account, initialStock = [], initialC
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
   const [groupOptionsOpen, setGroupOptionsOpen] = useState(false);
   const [groupExpandedOverrides, setGroupExpandedOverrides] = useState({});
-  const [selectedRowKeys, setSelectedRowKeys] = useState(() => new Set());
-  const [openRowActions, setOpenRowActions] = useState("");
   const [editRowId, setEditRowId] = useState("");
   const [editDraft, setEditDraft] = useState({ productId: "", quantity: "" });
   const [editBusy, setEditBusy] = useState(false);
@@ -526,20 +524,6 @@ export default function StocktakingClient({ account, initialStock = [], initialC
       document.removeEventListener("keydown", onKeyDown);
     };
   }, [sortMenuOpen]);
-
-  useEffect(() => {
-    if (!openRowActions) return undefined;
-    const handlePointer = (event) => {
-      if (!event.target.closest?.(".stocktaking-inline-actions")) setOpenRowActions("");
-    };
-    const handleEscape = (event) => { if (event.key === "Escape") setOpenRowActions(""); };
-    document.addEventListener("pointerdown", handlePointer, true);
-    document.addEventListener("keydown", handleEscape);
-    return () => {
-      document.removeEventListener("pointerdown", handlePointer, true);
-      document.removeEventListener("keydown", handleEscape);
-    };
-  }, [openRowActions]);
 
   useEffect(() => {
     const input = document.querySelector(".classic-app-shell .main-header .searchbar input");
@@ -1086,30 +1070,10 @@ export default function StocktakingClient({ account, initialStock = [], initialC
   const kitTagGroups = useMemo(() => groupRows(filteredRows, "component", "kit"), [filteredRows]);
   const receiptGroups = useMemo(() => groupRowsByReceipt(filteredRows), [filteredRows]);
   const orderGroups = useMemo(() => groupRowsByOrderNumber(filteredRows), [filteredRows]);
-  const tableColumnCount = 5 + (canEditColumn ? 1 : 0) + (inventorySession?.inventoryColumn ? 1 : 0) + (inventorySession?.defectedColumn ? 1 : 0);
+  const tableColumnCount = 4 + (canEditColumn ? 1 : 0) + (inventorySession?.inventoryColumn ? 1 : 0) + (inventorySession?.defectedColumn ? 1 : 0);
   const kitTagCount = kitTagGroups.length;
   const visibleQuantity = filteredRows.reduce((total, row) => total + row.quantity, 0);
   const receiptsCount = filteredRows.filter((row) => Boolean(row.receiptNumber) || row.receiptPhotos.length > 0).length;
-  const selectedVisibleRows = filteredRows.filter((row) => selectedRowKeys.has(row.key));
-  const allVisibleSelected = filteredRows.length > 0 && selectedVisibleRows.length === filteredRows.length;
-  const selectedQuantity = selectedVisibleRows.reduce((total, row) => total + row.quantity, 0);
-
-  const toggleRowSelection = (key) => {
-    setSelectedRowKeys((current) => {
-      const next = new Set(current);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  };
-  const toggleAllVisible = () => {
-    setSelectedRowKeys((current) => {
-      const next = new Set(current);
-      if (filteredRows.length && filteredRows.every((row) => next.has(row.key))) filteredRows.forEach((row) => next.delete(row.key));
-      else filteredRows.forEach((row) => next.add(row.key));
-      return next;
-    });
-  };
   const isGroupExpanded = (key, defaultOpen) => {
     if (Object.prototype.hasOwnProperty.call(groupExpandedOverrides, key)) return groupExpandedOverrides[key];
     return search.trim() ? true : defaultOpen;
@@ -1139,52 +1103,95 @@ export default function StocktakingClient({ account, initialStock = [], initialC
     ];
   };
 
+  const renderReceiptPhotos = (row) => (
+    row.receiptPhotos.length ? (
+      <div className="stocktaking-receipt-photo-list">
+        {row.receiptPhotos.slice(0, 3).map((photo, index) => (
+          <a href={photo.url} target="_blank" rel="noopener noreferrer" key={`${photo.url}-${index}`} title={photo.name}>
+            <img src={photo.url} alt={photo.name || `Receipt ${index + 1}`} />
+          </a>
+        ))}
+        {row.receiptPhotos.length > 3 ? <span>+{row.receiptPhotos.length - 3}</span> : null}
+      </div>
+    ) : <span className="stocktaking-no-photo">—</span>
+  );
+
   const renderStockRow = (row) => {
     const isEditing = String(editRowId) === String(row.id);
-    return (
-      <tr key={row.key} className={`${isEditing ? "is-editing" : ""} ${selectedRowKeys.has(row.key) ? "is-selected" : ""}`}>
-        <td className="stocktaking-row-select-cell"><input type="checkbox" checked={selectedRowKeys.has(row.key)} onChange={() => toggleRowSelection(row.key)} aria-label={`Select ${row.name}`} /></td>
-        <td className="stocktaking-data-component">
-          {isEditing ? (
-            <StockProductPicker
-              value={editDraft.productId}
-              products={products}
-              currentLabel={row.name}
-              placeholder="Select component"
-              onChange={(productId) => { setEditDraft((current) => ({ ...current, productId })); setEditError(""); }}
-              disabled={editBusy || productsLoading}
-            />
-          ) : (
-            <span className="stocktaking-component-identity"><span className="stocktaking-component-thumbnail"><Icon name="box" /></span><span className="stocktaking-component-name">{row.url ? <a href={row.url} target="_blank" rel="noopener noreferrer" className="component-link">{row.name}</a> : row.name}</span></span>
-          )}
-        </td>
-        <td className="stocktaking-data-qty">
-          {isEditing ? (
-            <input
-              className="stocktaking-edit-qty-input"
-              type="number"
-              step="1"
-              inputMode="numeric"
-              value={editDraft.quantity}
-              onChange={(event) => { setEditDraft((current) => ({ ...current, quantity: event.target.value })); setEditError(""); }}
-              disabled={editBusy}
-              aria-label={`Quantity for ${row.name}`}
-            />
-          ) : <span className="stocktaking-qty-pill">{row.quantity.toLocaleString("en-US")}</span>}
-        </td>
-        <td className="stocktaking-data-receipt"><span>{row.receiptNumber || "—"}</span></td>
-        <td className="stocktaking-data-photos">
-          {row.receiptPhotos.length ? (
-            <div className="stocktaking-receipt-photo-list">
-              {row.receiptPhotos.slice(0, 3).map((photo, index) => (
-                <a href={photo.url} target="_blank" rel="noopener noreferrer" key={`${photo.url}-${index}`} title={photo.name}>
-                  <img src={photo.url} alt={photo.name || `Receipt ${index + 1}`} />
-                </a>
-              ))}
-              {row.receiptPhotos.length > 3 ? <span>+{row.receiptPhotos.length - 3}</span> : null}
+    if (isEditing) {
+      return (
+        <tr key={row.key} className="stocktaking-row-editor-shell">
+          <td colSpan={tableColumnCount}>
+            <div className="stocktaking-inline-editor">
+              <div className="stocktaking-inline-editor__header">
+                <div>
+                  <small>Edit component</small>
+                  <strong>{row.name}</strong>
+                </div>
+                <div className="stocktaking-inline-editor__header-actions">
+                  <button
+                    type="button"
+                    className="stocktaking-primary-action"
+                    onClick={() => saveEditedRow(row)}
+                    disabled={editBusy}
+                  >
+                    <Icon name="save" />
+                    <span>{editBusy ? "Saving..." : "Save changes"}</span>
+                  </button>
+                  <button type="button" className="stocktaking-secondary-action" onClick={cancelRowEdit} disabled={editBusy}>
+                    <Icon name="x" />
+                    <span>Cancel</span>
+                  </button>
+                </div>
+              </div>
+              <div className="stocktaking-inline-editor__grid">
+                <label className="stocktaking-inline-field stocktaking-inline-field--wide">
+                  <span>Component</span>
+                  <StockProductPicker
+                    value={editDraft.productId}
+                    products={products}
+                    currentLabel={row.name}
+                    placeholder="Select component"
+                    onChange={(productId) => { setEditDraft((current) => ({ ...current, productId })); setEditError(""); }}
+                    disabled={editBusy || productsLoading}
+                  />
+                </label>
+                <label className="stocktaking-inline-field">
+                  <span>Qty</span>
+                  <input
+                    className="stocktaking-edit-qty-input"
+                    type="number"
+                    step="1"
+                    inputMode="numeric"
+                    value={editDraft.quantity}
+                    onChange={(event) => { setEditDraft((current) => ({ ...current, quantity: event.target.value })); setEditError(""); }}
+                    disabled={editBusy}
+                    aria-label={`Quantity for ${row.name}`}
+                  />
+                </label>
+                <div className="stocktaking-inline-field">
+                  <span>Receipt no.</span>
+                  <div className="stocktaking-inline-field__static">{row.receiptNumber || "—"}</div>
+                </div>
+                <div className="stocktaking-inline-field stocktaking-inline-field--photos">
+                  <span>Receipt photos</span>
+                  <div className="stocktaking-inline-field__static stocktaking-inline-field__static--photos">{renderReceiptPhotos(row)}</div>
+                </div>
+              </div>
             </div>
-          ) : <span className="stocktaking-no-photo">—</span>}
+          </td>
+        </tr>
+      );
+    }
+
+    return (
+      <tr key={row.key}>
+        <td className="stocktaking-data-component">
+          <span className="stocktaking-component-identity"><span className="stocktaking-component-thumbnail"><Icon name="box" /></span><span className="stocktaking-component-name">{row.url ? <a href={row.url} target="_blank" rel="noopener noreferrer" className="component-link">{row.name}</a> : row.name}</span></span>
         </td>
+        <td className="stocktaking-data-qty"><span className="stocktaking-qty-pill">{row.quantity.toLocaleString("en-US")}</span></td>
+        <td className="stocktaking-data-receipt"><span>{row.receiptNumber || "—"}</span></td>
+        <td className="stocktaking-data-photos">{renderReceiptPhotos(row)}</td>
         {inventorySession?.inventoryColumn ? (
           <td className={`stocktaking-data-inventory ${row.inventory !== null && Number(row.inventory) !== Number(row.quantity) ? "is-mismatch" : ""}`}>
             {canUpdateInventory ? <input type="number" min="0" step="1" inputMode="numeric" value={row.inventory ?? ""} onChange={(event) => saveInventoryCell(row, "inventory", event.target.value)} placeholder="—" disabled={isEditing} /> : <span>{row.inventory ?? "—"}</span>}
@@ -1195,40 +1202,27 @@ export default function StocktakingClient({ account, initialStock = [], initialC
             {canUpdateInventory ? <input type="number" min="0" step="1" inputMode="numeric" value={row.defected ?? ""} onChange={(event) => saveInventoryCell(row, "defected", event.target.value)} placeholder="—" disabled={isEditing} /> : <span>{row.defected ?? "—"}</span>}
           </td>
         ) : null}
-        {canEditColumn ? <td className="stocktaking-row-edit-cell">
-          {canEditRow && isEditing ? (
-            <div className="stocktaking-row-edit-actions">
+        {canEditColumn ? (
+          <td className="stocktaking-row-edit-cell">
+            {canEditRow ? (
               <button
                 type="button"
-                className="is-save is-icon-only"
-                onClick={() => saveEditedRow(row)}
-                disabled={editBusy}
-                aria-label={editBusy ? "Saving row" : "Save row"}
-                title={editBusy ? "Saving..." : "Save"}
+                className="stocktaking-row-edit-trigger"
+                onClick={() => requestEditAccess(editAdminPassword, { target: { type: "row", rowId: row.id } })}
+                disabled={editBusy || productsLoading || !row.id || Boolean(editRowId) || newRowOpen}
+                aria-label={`Edit ${row.name}`}
+                title="Edit"
               >
-                <Icon name="save" />
+                <Icon name="edit" />
+                <span>Edit</span>
               </button>
-              <button
-                type="button"
-                className="is-cancel is-icon-only"
-                onClick={cancelRowEdit}
-                disabled={editBusy}
-                aria-label="Cancel row edit"
-                title="Cancel"
-              >
-                <Icon name="x" />
-              </button>
-            </div>
-          ) : canEditRow ? (
-            <div className="stocktaking-inline-actions">
-              <button type="button" className="stocktaking-row-more" onClick={() => setOpenRowActions((current) => current === row.key ? "" : row.key)} disabled={editBusy || productsLoading || !row.id || Boolean(editRowId) || newRowOpen} aria-expanded={openRowActions === row.key} aria-label={`Actions for ${row.name}`} title="Row actions"><Icon name="more" /></button>
-              {openRowActions === row.key ? <div className="stocktaking-row-actions-menu"><button type="button" onClick={() => { setOpenRowActions(""); requestEditAccess(editAdminPassword, { target: { type: "row", rowId: row.id } }); }}><Icon name="edit" /><span>Edit component</span></button></div> : null}
-            </div>
-          ) : null}
-        </td> : null}
+            ) : null}
+          </td>
+        ) : null}
       </tr>
     );
   };
+
 
 
   return (
@@ -1282,7 +1276,7 @@ export default function StocktakingClient({ account, initialStock = [], initialC
           <div className="stocktaking-folder-toolbar stocktaking-industrial-heading">
             <div className="stocktaking-folder-title">
               <span className="stocktaking-folder-title-icon"><Icon name="cubes" /></span>
-              <div><span>STOCKTAKING</span><h2>{activeColumn.label}</h2><p>Manage components, quantities and receipts.</p></div>
+              <div><span>STOCKTAKING</span><h2>{activeColumn.label}</h2></div>
             </div>
             <div className="stocktaking-folder-actions" ref={sortMenuRef}>
               <div className="stocktaking-sort-menu-wrap">
@@ -1290,16 +1284,23 @@ export default function StocktakingClient({ account, initialStock = [], initialC
                   <Icon name="layers" /><span>Actions</span><Icon name="chevron" />
                 </button>
                 {sortMenuOpen ? <div className="stocktaking-sort-menu stocktaking-main-actions-menu" role="menu">
-                  {(inventorySession ? canUpdateInventory : canStartInventory) ? <button type="button" onClick={() => { setSortMenuOpen(false); inventorySession ? setInventoryFinishOpen(true) : setInventorySetupOpen(true); }} disabled={loading || Boolean(error) || Boolean(editRowId) || newRowOpen}><Icon name="clipboard" /><span><strong>{inventorySession ? "Finish Inventory" : "Make Inventory"}</strong></span></button> : null}
-                  {can("export") ? <button type="button" onClick={() => { setSortMenuOpen(false); setExportOpen(true); }} disabled={loading || Boolean(error)}><Icon name="download" /><span><strong>Download</strong></span></button> : null}
-                  <button type="button" onClick={() => setGroupOptionsOpen((open) => !open)} aria-expanded={groupOptionsOpen}><Icon name="layers" /><span><strong>Grouped</strong><small>{sortMode === "kit" ? "By kit tag" : sortMode === "tag" ? "By components tag" : sortMode === "receipt" ? "By receipt number" : "By order number"}</small></span><Icon name="chevron" /></button>
+                  {(inventorySession ? canUpdateInventory : canStartInventory) ? <button type="button" className="stocktaking-main-menu-item" onClick={() => { setSortMenuOpen(false); inventorySession ? setInventoryFinishOpen(true) : setInventorySetupOpen(true); }} disabled={loading || Boolean(error) || Boolean(editRowId) || newRowOpen}><Icon name="clipboard" /><span><strong>{inventorySession ? "Finish Inventory" : "Make Inventory"}</strong></span></button> : null}
+                  {can("export") ? <button type="button" className="stocktaking-main-menu-item" onClick={() => { setSortMenuOpen(false); setExportOpen(true); }} disabled={loading || Boolean(error)}><Icon name="download" /><span><strong>Download</strong></span></button> : null}
+                  <button type="button" className={`stocktaking-main-menu-item stocktaking-main-menu-item--grouped ${groupOptionsOpen ? "is-open" : ""}`} onClick={() => setGroupOptionsOpen((open) => !open)} aria-expanded={groupOptionsOpen}>
+                    <Icon name="layers" />
+                    <span><strong>Grouped</strong><small>{sortMode === "kit" ? "By kit tag" : sortMode === "tag" ? "By components tag" : sortMode === "receipt" ? "By receipt number" : "By order number"}</small></span>
+                    <Icon name="chevron" />
+                  </button>
                   {groupOptionsOpen ? <div className="stocktaking-action-group-options">
-                    {[
-                      { value: "kit", title: "By kit tag" },
-                      { value: "tag", title: "By components tag" },
-                      { value: "receipt", title: "By receipt number" },
-                      { value: "order", title: "By order number" },
-                    ].map((option) => <button key={option.value} type="button" className={sortMode === option.value ? "is-active" : ""} onClick={() => { setSortMode(option.value); setSortMenuOpen(false); setGroupOptionsOpen(false); setGroupExpandedOverrides({}); }} role="menuitemradio" aria-checked={sortMode === option.value}><span className="stocktaking-sort-menu__check">{sortMode === option.value ? "✓" : ""}</span>{option.title}</button>)}
+                    <span className="stocktaking-action-group-options__label">Group by</span>
+                    <div className="stocktaking-action-group-options__list">
+                      {[
+                        { value: "kit", title: "By kit tag" },
+                        { value: "tag", title: "By components tag" },
+                        { value: "receipt", title: "By receipt number" },
+                        { value: "order", title: "By order number" },
+                      ].map((option) => <button key={option.value} type="button" className={`stocktaking-group-option ${sortMode === option.value ? "is-active" : ""}`} onClick={() => { setSortMode(option.value); setSortMenuOpen(false); setGroupOptionsOpen(false); setGroupExpandedOverrides({}); }} role="menuitemradio" aria-checked={sortMode === option.value}><span className="stocktaking-group-option__check">{sortMode === option.value ? <Icon name="check" /> : null}</span><span className="stocktaking-group-option__text">{option.title}</span></button>)}
+                    </div>
                   </div> : null}
                 </div> : null}
               </div>
@@ -1324,7 +1325,6 @@ export default function StocktakingClient({ account, initialStock = [], initialC
                 <table className={`stocktaking-data-table ${editRowId || newRowOpen ? "is-edit-mode" : ""}`}>
                   <thead>
                     <tr>
-                      <th className="stocktaking-row-select-head"><input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} aria-label={allVisibleSelected ? "Deselect all visible components" : "Select all visible components"} disabled={!filteredRows.length} /></th>
                       <th><span className="stocktaking-th-label"><Icon name="box" />Component</span></th>
                       <th className="stocktaking-data-qty"><span className="stocktaking-th-label"><Icon name="layers" />Qty</span></th>
                       <th className="stocktaking-data-receipt"><span className="stocktaking-th-label"><Icon name="file" />Receipt no.</span></th>
@@ -1372,37 +1372,53 @@ export default function StocktakingClient({ account, initialStock = [], initialC
                   <tfoot>
                     {newRowOpen && canAddRow ? (
                       <tr className="stocktaking-new-row-editor">
-                        <td className="stocktaking-row-select-cell" />
-                        <td className="stocktaking-data-component">
-                          <div className="stocktaking-new-row-component-stack">
-                            <StockProductPicker
-                              value={newRowDraft.productId}
-                              products={products}
-                              placeholder="Select component"
-                              onChange={updateNewRowProduct}
-                              disabled={editBusy || productsLoading}
-                            />
-                            <StockTagPicker value={newRowDraft.tag} tags={availableTagNames} disabled={editBusy} onChange={(tag) => { setNewRowDraft((current) => ({ ...current, tag })); setEditError(""); }} />
+                        <td colSpan={tableColumnCount}>
+                          <div className="stocktaking-inline-editor stocktaking-inline-editor--new">
+                            <div className="stocktaking-inline-editor__header">
+                              <div>
+                                <small>Add row</small>
+                                <strong>Manual stock entry</strong>
+                              </div>
+                              <div className="stocktaking-inline-editor__header-actions">
+                                <button type="button" className="stocktaking-primary-action" onClick={saveNewStockRow} disabled={editBusy || productsLoading}><Icon name="save" /><span>{editBusy ? "Saving..." : "Save row"}</span></button>
+                                <button type="button" className="stocktaking-secondary-action" onClick={cancelNewRow} disabled={editBusy}><Icon name="x" /><span>Cancel</span></button>
+                              </div>
+                            </div>
+                            <div className="stocktaking-inline-editor__grid stocktaking-inline-editor__grid--new">
+                              <label className="stocktaking-inline-field stocktaking-inline-field--wide">
+                                <span>Component</span>
+                                <StockProductPicker
+                                  value={newRowDraft.productId}
+                                  products={products}
+                                  placeholder="Select component"
+                                  onChange={updateNewRowProduct}
+                                  disabled={editBusy || productsLoading}
+                                />
+                              </label>
+                              <label className="stocktaking-inline-field">
+                                <span>Qty</span>
+                                <input className="stocktaking-edit-qty-input" type="number" step="1" inputMode="numeric" value={newRowDraft.quantity} onChange={(event) => setNewRowDraft((current) => ({ ...current, quantity: event.target.value }))} disabled={editBusy} />
+                              </label>
+                              <label className="stocktaking-inline-field">
+                                <span>Receipt no.</span>
+                                <input className="stocktaking-new-row-input" type="text" value={newRowDraft.receiptNumber} onChange={(event) => setNewRowDraft((current) => ({ ...current, receiptNumber: event.target.value }))} placeholder="Receipt no." />
+                              </label>
+                              <label className="stocktaking-inline-field">
+                                <span>Tag</span>
+                                <StockTagPicker value={newRowDraft.tag} tags={availableTagNames} disabled={editBusy} onChange={(tag) => { setNewRowDraft((current) => ({ ...current, tag })); setEditError(""); }} />
+                              </label>
+                              <div className="stocktaking-inline-field stocktaking-inline-field--full stocktaking-inline-field--photos">
+                                <span>Receipt photos</span>
+                                {canUploadReceipt ? <StockReceiptUploadPicker files={newRowReceiptFiles} disabled={editBusy} onChange={setNewRowReceiptFiles} onError={setEditError} /> : <span className="stocktaking-no-photo">—</span>}
+                              </div>
+                            </div>
                           </div>
                         </td>
-                        <td className="stocktaking-data-qty"><input className="stocktaking-edit-qty-input" type="number" step="1" inputMode="numeric" value={newRowDraft.quantity} onChange={(event) => setNewRowDraft((current) => ({ ...current, quantity: event.target.value }))} disabled={editBusy} /></td>
-                        <td className="stocktaking-data-receipt"><input className="stocktaking-new-row-input" type="text" value={newRowDraft.receiptNumber} onChange={(event) => setNewRowDraft((current) => ({ ...current, receiptNumber: event.target.value }))} placeholder="Receipt no." /></td>
-                        <td className="stocktaking-data-photos">{canUploadReceipt ? <StockReceiptUploadPicker files={newRowReceiptFiles} disabled={editBusy} onChange={setNewRowReceiptFiles} onError={setEditError} /> : <span className="stocktaking-no-photo">—</span>}</td>
-                        {inventorySession?.inventoryColumn ? <td className="stocktaking-data-inventory"><span className="stocktaking-no-photo">—</span></td> : null}
-                        {inventorySession?.defectedColumn ? <td className="stocktaking-data-inventory"><span className="stocktaking-no-photo">—</span></td> : null}
-                        {canAddRow ? <td className="stocktaking-row-edit-cell">
-                          <div className="stocktaking-row-edit-actions">
-                            <button type="button" className="is-save is-icon-only" onClick={saveNewStockRow} disabled={editBusy || productsLoading} aria-label={editBusy ? "Saving new row" : "Save new row"} title={editBusy ? "Saving..." : "Save"}><Icon name="save" /></button>
-                            <button type="button" className="is-cancel is-icon-only" onClick={cancelNewRow} disabled={editBusy} aria-label="Cancel new row" title="Cancel"><Icon name="x" /></button>
-                          </div>
-                        </td> : null}
                       </tr>
                     ) : canAddRow ? (
                       <tr className="stocktaking-new-row-button-row">
                         <td colSpan={tableColumnCount}>
-                          <button type="button" className="stocktaking-new-row-btn" onClick={() => requestEditAccess(editAdminPassword, { target: { type: "new" } })} disabled={editBusy || productsLoading || Boolean(editRowId)}>
-                            <Icon name="plus" /><span>{productsLoading ? "Loading components..." : "New Row"}</span>
-                          </button>
+                          <button type="button" className="stocktaking-new-row-btn" onClick={() => requestEditAccess(editAdminPassword, { target: { type: "new" } })} disabled={editBusy || productsLoading || Boolean(editRowId)}><Icon name="plus" /><span><strong>{productsLoading ? "Loading components..." : "Add row"}</strong><small>Insert a manual stock line</small></span></button>
                         </td>
                       </tr>
                     ) : null}
@@ -1411,8 +1427,7 @@ export default function StocktakingClient({ account, initialStock = [], initialC
                 {!filteredRows.length && !newRowOpen ? <div className="empty-block empty-block--no-data stocktaking-empty-under-table">Sorry, No data available</div> : null}
               </div>
               <div className="stocktaking-industrial-footer">
-                <span>{selectedVisibleRows.length ? `${selectedVisibleRows.length} selected · ${filteredRows.length} components shown` : `Showing ${filteredRows.length.toLocaleString("en-US")} components`}</span>
-                <strong><Icon name="box" />{selectedVisibleRows.length ? "Selected Qty:" : "Total Qty:"}<b>{(selectedVisibleRows.length ? selectedQuantity : visibleQuantity).toLocaleString("en-US")}</b></strong>
+                <strong><Icon name="box" />Total Qty:<b>{visibleQuantity.toLocaleString("en-US")}</b></strong>
               </div>
             </>
           )}
