@@ -10,6 +10,7 @@ import {
   markOperationsShipped,
   performOperationsProtectedAction,
   saveOperationsEditDetails,
+  sendOperationsDeliveredToStock,
   updateOperationsApproval,
 } from "../../../../../lib/operations-orders-data";
 
@@ -46,7 +47,7 @@ function directErrorResponse(error) {
 export async function POST(request) {
   const body = await request.json().catch(() => ({}));
   const action = actionKey(body?.action);
-  if (!["approval", "mark-shipped", "mark-arrived", "archive", "unarchive", "delete", "edit-init", "edit-save", "create-withdrawal", "create-delivery"].includes(action)) {
+  if (!["approval", "mark-shipped", "mark-arrived", "archive", "unarchive", "delete", "edit-init", "edit-save", "create-withdrawal", "create-delivery", "send-to-stock"].includes(action)) {
     return noStore({ error: "Unsupported Operations Orders action." }, { status: 400 });
   }
 
@@ -59,6 +60,7 @@ export async function POST(request) {
     approval: "orders.operations.approve",
     "mark-shipped": "orders.operations.ship",
     "mark-arrived": "orders.operations.receive",
+    "send-to-stock": "orders.operations.send_to_stock",
     "create-withdrawal": "orders.operations.withdrawal",
     "create-delivery": "orders.operations.delivery",
     "edit-init": "orders.operations.edit",
@@ -121,6 +123,11 @@ export async function POST(request) {
         orderReceiptDataUrls: body?.orderReceiptDataUrls,
         orderReceiptFilenames: body?.orderReceiptFilenames,
         receiptNumbers: body?.receiptNumbers ?? body?.receiptNumber,
+      });
+    } else if (action === "send-to-stock") {
+      result = await sendOperationsDeliveredToStock({
+        account: gate.account,
+        orderIds: body?.orderIds,
       });
     } else if (action === "create-withdrawal" || action === "create-delivery") {
       result = await createOperationsRepeatOrder({

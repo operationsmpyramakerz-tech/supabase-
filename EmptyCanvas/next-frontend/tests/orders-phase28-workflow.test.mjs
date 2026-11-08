@@ -35,6 +35,7 @@ const makeOps = (rows, { maintenanceAllowed = true, operationsAllowed = true } =
     splitReceiptNumbers: value => (Array.isArray(value) ? value : [value]).flatMap(item => String(item ?? '').split(',')).map(item => item.trim()).filter(Boolean),
     opsHasColumn: () => true,
     opsSupportedStockOrderType: () => false,
+    opsOrderTypeKey: value => text(value).toLowerCase().replace(/[^a-z0-9]/g, ''),
     getSupabaseConfig: () => ({ storageBucket: 'test' }),
     uploadStorageObject: async () => { calls.uploads += 1; return { publicUrl: 'https://example.test/file.jpg' }; },
     opsReceiptStoragePath: () => 'receipt.jpg',

@@ -149,6 +149,11 @@ export const FEATURE_DEFINITIONS = Object.freeze(
   },
   {
     "module": "orders.operations",
+    "key": "orders.operations.send_to_stock",
+    "label": "Send delivered products to requester stock"
+  },
+  {
+    "module": "orders.operations",
     "key": "orders.operations.withdrawal",
     "label": "Create withdrawal order"
   },
@@ -973,6 +978,7 @@ export const OPTIONAL_FEATURE_FALLBACKS = Object.freeze({
   "orders.tracking.view": "orders.my.view",
   "orders.my.update_received": "orders.my.edit",
   "orders.operations.upload_receipt": "orders.operations.receive",
+  "orders.operations.send_to_stock": "orders.operations.receive",
   "orders.maintenance.checklist_view": "orders.maintenance.view",
   // Existing Home users continue to see SLA metrics until a separate deny is saved.
   "home.sla_view": "home.view",
@@ -1177,7 +1183,7 @@ export const ACTIVE_PILOT_FEATURE_KEYS = Object.freeze([
   "products.view", "products.create", "products.edit", "products.delete", "products.export",
   "products.tag_manage", "products.unit_create", "products.image_upload",
   "orders.operations.view", "orders.operations.details", "orders.operations.approve", "orders.operations.ship",
-  "orders.operations.receive", "orders.operations.withdrawal",
+  "orders.operations.receive", "orders.operations.send_to_stock", "orders.operations.withdrawal",
   "orders.operations.delivery", "orders.operations.edit", "orders.operations.delete", "orders.operations.export", "orders.operations.upload_receipt",
   "orders.maintenance.view", "orders.maintenance.details", "orders.maintenance.log",
   "orders.maintenance.mark_arrived", "orders.maintenance.edit", "orders.maintenance.archive",

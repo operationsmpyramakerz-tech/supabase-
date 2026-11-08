@@ -46,7 +46,7 @@ export default async function OperationsOrdersPage() {
 
   const scopePolicy = await orderUiScopePolicy(gate.account, {
     details: "orders.operations.details", approve: "orders.operations.approve", ship: "orders.operations.ship",
-    receive: "orders.operations.receive", withdrawal: "orders.operations.withdrawal",
+    receive: "orders.operations.receive", send_to_stock: "orders.operations.send_to_stock", withdrawal: "orders.operations.withdrawal",
     delivery: "orders.operations.delivery", edit: "orders.operations.edit",
     delete: "orders.operations.delete",
     upload_receipt: "orders.operations.upload_receipt", export: "orders.operations.export",
@@ -76,6 +76,7 @@ export default async function OperationsOrdersPage() {
           ["approve", "orders.operations.approve"],
           ["ship", "orders.operations.ship"],
           ["receive", "orders.operations.receive"],
+          ["send_to_stock", "orders.operations.send_to_stock"],
           ["withdrawal", "orders.operations.withdrawal"],
           ["delivery", "orders.operations.delivery"],
           ["edit", "orders.operations.edit"],

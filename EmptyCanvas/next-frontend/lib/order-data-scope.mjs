@@ -19,7 +19,7 @@ export function orderScopeFor(account = {}, key = "") {
   const fallback = key === "orders.my.view_details" ? "orders.my.view"
     : key === "orders.operations.details" ? "orders.operations.view"
     : key === "orders.my.update_received" ? "orders.my.edit"
-    : key === "orders.operations.upload_receipt" ? "orders.operations.receive" : "";
+    : key === "orders.operations.upload_receipt" || key === "orders.operations.send_to_stock" ? "orders.operations.receive" : "";
   const grant = state.grants?.[key] ?? (fallback ? state.grants?.[fallback] : undefined);
   if (view?.allowed !== true || grant?.allowed !== true) return "none";
   const a = clean(view.scope || "all");

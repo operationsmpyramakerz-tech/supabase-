@@ -2113,12 +2113,12 @@ function opsResolveOwnerMember(row = {}, members = []) {
     || null;
 }
 
-async function opsPrepareStockContext(plannedFinalRows = [], rowsBefore = [], products = []) {
-  const relevantAfter = (plannedFinalRows || []).filter((row) => {
+async function opsPrepareStockContext(plannedFinalRows = [], rowsBefore = [], products = [], { existingOnly = false } = {}) {
+  let relevantAfter = (plannedFinalRows || []).filter((row) => {
     const serialized = serializeOperationsOrderDetail(row || {});
     return opsFinalStatus(serialized?.status) && opsSupportedStockOrderType(serialized?.orderType);
   });
-  const relevantBefore = (rowsBefore || []).filter((row) => {
+  let relevantBefore = (rowsBefore || []).filter((row) => {
     const serialized = serializeOperationsOrderDetail(row || {});
     return opsFinalStatus(serialized?.status) && opsSupportedStockOrderType(serialized?.orderType);
   });
@@ -2153,6 +2153,18 @@ async function opsPrepareStockContext(plannedFinalRows = [], rowsBefore = [], pr
     );
   }
   const sourceOrderColumn = opsStockFindKey(keys, ["source_order_id", "Source Order ID", "source_order", "Source Order", "order_row_id", "Order Row ID"]);
+  // A delivered Request Products order is only sent on explicit confirmation.
+  // Editing one which was never sent must not trigger a first-time stock transfer.
+  if (existingOnly) {
+    const syncedIds = new Set(sourceOrderColumn ? stockRows.map((row) => text(row?.[sourceOrderColumn])).filter(Boolean) : []);
+    const previouslySynced = relevantBefore.filter((row) => syncedIds.has(text(operationsValueFor(row, ["id", "ID"]))));
+    if (!previouslySynced.length) return { needed: false };
+    const syncedOrderNumbers = new Set(previouslySynced.map((row) => text(operationsValueFor(row, ["order_number", "Order Number", "Order - ID", "Order ID"]))).filter(Boolean));
+    relevantBefore = previouslySynced;
+    relevantAfter = relevantAfter.filter((row) => syncedIds.has(text(operationsValueFor(row, ["id", "ID"])))
+      || syncedOrderNumbers.has(text(operationsValueFor(row, ["order_number", "Order Number", "Order - ID", "Order ID"]))));
+    if (!relevantAfter.length && !relevantBefore.length) return { needed: false };
+  }
   if (!sourceOrderColumn) {
     throw directOperationsMutationError(
       "Stocktaking is missing source_order_id. Run supabase_operations_delivery_stocktaking.sql in Supabase SQL Editor before marking this order delivered.", 409,
@@ -2179,7 +2191,11 @@ async function opsPrepareStockContext(plannedFinalRows = [], rowsBefore = [], pr
       quantityColumnBySchool.set(school, quantityColumn);
     }
   }
-  return { needed: true, stockRows, keys, members, sourceOrderColumn, quantityColumnBySchool, productMaps: operationsProductMaps(products) };
+  return { needed: true, stockRows, keys, members, sourceOrderColumn, quantityColumnBySchool,
+    productMaps: operationsProductMaps(products), eligibleAfterOrderNumbers: existingOnly
+      ? new Set(relevantAfter.map((row) => text(operationsValueFor(row, ["order_number", "Order Number", "Order - ID", "Order ID"]))).filter(Boolean)) : null,
+    eligibleAfterIds: existingOnly ? new Set(relevantAfter.map((row) => text(operationsValueFor(row, ["id", "ID"]))).filter(Boolean)) : null,
+  };
 }
 
 async function opsStockInsertSafe(row = {}, requiredColumns = []) {
@@ -2277,6 +2293,11 @@ async function opsSyncStocktakingAfterEdit(rowsBefore = [], rowsAfter = [], cont
   let synced = 0;
   let skipped = 0;
   for (const row of rowsAfter || []) {
+    if (context.eligibleAfterIds && !context.eligibleAfterIds.has(text(operationsValueFor(row, ["id", "ID"])))
+      && !context.eligibleAfterOrderNumbers?.has(text(operationsValueFor(row, ["order_number", "Order Number", "Order - ID", "Order ID"])))) {
+      skipped += 1;
+      continue;
+    }
     const serialized = serializeOperationsOrderDetail(row || {});
     if (!opsFinalStatus(serialized?.status) || !opsSupportedStockOrderType(serialized?.orderType)) { skipped += 1; continue; }
     const prepared = opsBuildStockRow(row, context);
@@ -2287,6 +2308,71 @@ async function opsSyncStocktakingAfterEdit(rowsBefore = [], rowsAfter = [], cont
   invalidateStocktakingReadCaches();
   await upstashDeleteOperationsKeys(["cache:api:b2b:school-stock:supabase:v1"]).catch(() => false);
   return { synced, skipped };
+}
+
+
+// Explicit transfer from a Delivered Request Products order. The persisted
+// source_order_id ties each stock row to one order component, so retries and
+// older orders that were already auto-synced do not increment stock twice.
+export async function sendOperationsDeliveredToStock({ account = {}, orderIds = [] } = {}) {
+  ensureOperationsMutationAccess(account);
+  const loaded = await loadOperationRowsByIds(orderIds);
+  if (!loaded) throw directOperationsMutationError("Could not load the order components. Refresh and retry.", 503);
+  if (loaded.clean.some((id) => !loaded.byId.has(id))) throw directOperationsMutationError("One or more order components were not found.", 404);
+  const rows = loaded.clean.map((id) => loaded.byId.get(id));
+  // Do not accept partial/mixed/still-shipping orders just because the UI
+  // displayed a Delivered badge for one component.
+  if (rows.some((row) => {
+    const item = serializeOperationsOrderDetail(row || {});
+    return !opsFinalStatus(item?.status) || opsOrderTypeKey(item?.orderType) !== "requestproducts";
+  })) throw directOperationsMutationError("Only delivered Request Products orders can be sent to Stock.", 409);
+  const orderNumbers = new Set(rows.map((row) => text(operationsValueFor(row, ["order_number", "Order Number", "Order - ID", "Order ID"]))).filter(Boolean));
+  if (orderNumbers.size > 1) throw directOperationsMutationError("Select one delivered order at a time.", 400);
+
+  const catalog = await getProductsCatalog({ fresh: true });
+  const products = Array.isArray(catalog?.products) ? catalog.products : [];
+  const context = await opsPrepareStockContext(rows, [], products);
+  if (!context?.needed) throw directOperationsMutationError("No eligible components were found for Stocktaking.", 409);
+
+  // Build/validate every missing component before the first insert. Any
+  // partial insert failure is safe to retry: the next call skips committed IDs.
+  const already = new Set((context.stockRows || []).map((row) => text(row?.[context.sourceOrderColumn])).filter(Boolean));
+  const pending = rows.filter((row) => !already.has(text(operationsValueFor(row, ["id", "ID"]))));
+  const prepared = pending.map((row) => opsBuildStockRow(row, context));
+  let synced = 0;
+  try {
+    // Large proposal-based orders may contain hundreds of components. Insert in
+    // small, settled batches rather than serially timing out or returning while
+    // earlier writes are still in flight (which would make retries unsafe).
+    for (let offset = 0; offset < prepared.length; offset += 8) {
+      const batch = prepared.slice(offset, offset + 8);
+      const results = await Promise.allSettled(batch.map(async (item) => {
+        if (!item) throw directOperationsMutationError("A delivered component could not be transferred to Stock.", 409);
+        await opsStockInsertSafe(item.row, item.required);
+      }));
+      synced += results.filter((result) => result.status === "fulfilled").length;
+      const failed = results.find((result) => result.status === "rejected");
+      if (failed) throw failed.reason;
+    }
+  } catch (error) {
+    if (synced) {
+      invalidateStocktakingReadCaches();
+      await upstashDeleteOperationsKeys(["cache:api:b2b:school-stock:supabase:v1"]).catch(() => false);
+      throw directOperationsCommittedError(`${synced} components were added; the remaining items were not. Retry Send to Stock to add only the missing items. ${error?.message || ""}`.trim(), 500, error);
+    }
+    throw error;
+  }
+  if (synced) {
+    invalidateStocktakingReadCaches();
+    await upstashDeleteOperationsKeys(["cache:api:b2b:school-stock:supabase:v1"]).catch(() => false);
+  }
+  return {
+    success: true,
+    stocktakingSyncedCount: synced,
+    stocktakingSkippedCount: rows.length - pending.length,
+    alreadySynced: pending.length === 0,
+    source: "supabase-direct",
+  };
 }
 
 
@@ -2391,23 +2477,25 @@ export async function markOperationsArrived({
   }
 
   const plannedRows = loaded.rows.map((row) => ({ ...row, status: "Arrived" }));
-  const needsStocktaking = plannedRows.some((row) => {
-    const serialized = serializeOperationsOrderDetail(row || {});
-    return opsSupportedStockOrderType(serialized?.orderType);
-  });
+  // Request Products are sent manually from Delivered > Send to Stock.
+  // Withdraw Products continue to synchronize automatically (negative quantity).
+  const autoStockRows = plannedRows.filter((row) =>
+    opsOrderTypeKey(serializeOperationsOrderDetail(row || {})?.orderType) === "withdrawproducts");
+  const needsStocktaking = autoStockRows.length > 0;
   let products = [];
   let stockContext = { needed: false };
   if (needsStocktaking) {
     const catalog = await getProductsCatalog({ fresh: true });
     products = Array.isArray(catalog?.products) ? catalog.products : [];
-    stockContext = await opsPrepareStockContext(plannedRows, loaded.rows, products);
+    stockContext = await opsPrepareStockContext(autoStockRows,
+      loaded.rows.filter((row) => opsOrderTypeKey(serializeOperationsOrderDetail(row || {})?.orderType) === "withdrawproducts"), products);
     if (!stockContext) throw directOperationsMutationError("Stocktaking prerequisites could not be verified; delivery was not started.", 503);
     // Validate every Stocktaking record before uploading any receipts or
     // changing an order status. For example an order with zero received
     // quantity must not be marked delivered and then fail halfway through sync.
     for (const row of plannedRows) {
       const serialized = serializeOperationsOrderDetail(row || {});
-      if (opsSupportedStockOrderType(serialized?.orderType)) opsBuildStockRow(row, stockContext);
+      if (opsOrderTypeKey(serialized?.orderType) === "withdrawproducts") opsBuildStockRow(row, stockContext);
     }
   }
 
@@ -2442,7 +2530,9 @@ export async function markOperationsArrived({
     });
 
     let stock = { synced: 0, skipped: 0 };
-    if (stockContext?.needed) stock = await opsSyncStocktakingAfterEdit(loaded.rows, updatedRows, stockContext);
+    if (stockContext?.needed) stock = await opsSyncStocktakingAfterEdit(
+      loaded.rows.filter((row) => opsOrderTypeKey(serializeOperationsOrderDetail(row || {})?.orderType) === "withdrawproducts"),
+      updatedRows.filter((row) => opsOrderTypeKey(serializeOperationsOrderDetail(row || {})?.orderType) === "withdrawproducts"), stockContext);
 
     await invalidateLegacyOperationsCaches(account || {});
     return {
@@ -2666,7 +2756,7 @@ export async function saveOperationsEditDetails({
     ...plans.flatMap((plan) => plan.delete ? [] : (plan.split ? plan.materialized.map((entry) => entry.finalRow) : [plan.finalRow])),
     ...additionPlans.map((plan) => plan.finalRow),
   ];
-  const stockContext = await opsPrepareStockContext(plannedFinalRows, loaded.rows, products);
+  const stockContext = await opsPrepareStockContext(plannedFinalRows, loaded.rows, products, { existingOnly: true });
   if (stockContext === null) return null;
 
   let mutationStarted = false;

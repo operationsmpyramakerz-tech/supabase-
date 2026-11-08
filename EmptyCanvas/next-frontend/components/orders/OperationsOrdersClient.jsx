@@ -1006,7 +1006,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
   }
 
   async function beginAction(action, group) {
-    const permissionAction = ({ reject: "approve", "technical-visit": "ship", deliver: "receive",
+    const permissionAction = ({ reject: "approve", "technical-visit": "ship", "send-to-stock": "send_to_stock", deliver: "receive",
       "maintenance-deliver": "receive", archive: "edit", unarchive: "edit", delete: "delete" })[action] || action;
     if (permissions?.[permissionAction] === false || !orderCardAllows(scopePolicy, permissionAction, group)) return;
     if (["deliver", "maintenance-deliver"].includes(action)
@@ -1072,12 +1072,13 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
       "technical-visit": { title: "Saving technical visit", message: "Saving the technical visit details…" },
       "maintenance-log": { title: "Saving maintenance log", message: "Saving maintenance details…" },
       "maintenance-deliver": { title: "Marking maintenance delivered", message: "Uploading the signed maintenance report…" },
-      deliver: { title: "Marking order delivered", message: "Uploading receipt photos and syncing Stocktaking…" },
+      deliver: { title: "Marking order delivered", message: "Uploading receipt photos and completing delivery…" },
       archive: { title: "Archiving order", message: "Moving the order to Archive…" },
       unarchive: { title: "Restoring order", message: "Restoring the order to the active workflow…" },
       delete: { title: "Deleting order", message: "Permanently deleting every component of this order…" },
       withdrawal: { title: "Creating withdrawal order", message: "Creating the withdrawal order…" },
       delivery: { title: "Creating delivery order", message: "Creating the delivery order…" },
+      "send-to-stock": { title: "Sending products to Stock", message: "Adding delivered components to the requester's Stocktaking folder…" },
     };
     return configs[action] || null;
   }
@@ -1220,7 +1221,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
           orderReceiptDataUrls: dataUrls,
           orderReceiptFilenames: files.map((file, index) => text(file?.name) || `receipt-photo-${index + 1}.jpg`),
         });
-        loadingSuccessMessage = "Order marked as delivered and Stocktaking was synchronized.";
+        loadingSuccessMessage = "Order marked as delivered. Use Send to Stock to add its components to Stocktaking.";
         await completeAction("Order marked as delivered.", "delivered");
       } else if (action === "archive") {
         const password = text(payload);
@@ -1232,6 +1233,16 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
         await postJson(`${DIRECT_API_BASE}/orders/operations/mutations-direct`, { action: "unarchive", orderIds: group.orderIds });
         loadingSuccessMessage = "Order restored from Archive.";
         await completeAction("Order restored from Archive.", "approved");
+      } else if (action === "send-to-stock") {
+        const result = await postJson(`${DIRECT_API_BASE}/orders/operations/mutations-direct`, {
+          action: "send-to-stock", orderIds: group.orderIds,
+        });
+        const added = Number(result?.stocktakingSyncedCount || 0);
+        const already = Number(result?.stocktakingSkippedCount || 0);
+        loadingSuccessMessage = added
+          ? `${added} component${added === 1 ? "" : "s"} sent to Stock${already ? ` · ${already} already synced` : ""}.`
+          : "All components are already in Stock. Nothing was duplicated.";
+        await completeAction(loadingSuccessMessage, "delivered");
       } else if (action === "withdrawal") {
         await postJson(`${DIRECT_API_BASE}/orders/operations/mutations-direct`, { action: "create-withdrawal", orderIds: group.orderIds });
         loadingSuccessMessage = "Withdrawal order created.";
