@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { getDirectAccountGate } from "../../../../lib/products-auth";
 import { featureGate } from "../../../../lib/feature-permissions-server";
+import { stocktakingAccessLevel } from "../../../../lib/stocktaking-data";
 import {
   addStocktakingRow,
   authorizeStocktakingEdit,
+  deleteStocktakingFolder,
   startStocktakingInventory,
   updateStocktakingInventoryValue,
   updateStocktakingRows,
@@ -40,7 +42,7 @@ export async function POST(request) {
 
   const body = await request.json().catch(() => ({}));
   const action = actionKey(body?.action);
-  if (!["edit-access", "add-row", "update-rows", "inventory-start", "inventory-value"].includes(action)) {
+  if (!["edit-access", "add-row", "update-rows", "inventory-start", "inventory-value", "delete-folder"].includes(action)) {
     return noStore({ ok: false, error: "Unsupported Stocktaking action." }, { status: 400 });
   }
 
@@ -50,9 +52,14 @@ export async function POST(request) {
     "update-rows": "stocktaking.edit_rows",
     "inventory-start": "stocktaking.start_inventory",
     "inventory-value": "stocktaking.update_inventory",
+    "delete-folder": "stocktaking.delete_folder",
   };
   const actionGate = featureGate(gate, permissionByAction[action]);
   if (!actionGate.ok) return noStore({ ok: false, error: actionGate.error || "Permission denied." }, { status: actionGate.status || 403 });
+  // Deleting an entire folder is admin-only even if a user has edit rights.
+  if (action === "delete-folder" && stocktakingAccessLevel(gate.account || {}) !== "admin") {
+    return noStore({ ok: false, error: "Only Stocktaking administrators can delete stock folders." }, { status: 403 });
+  }
   if (["add-row", "update-rows"].includes(action)) {
     const columnGate = featureGate(gate, "stocktaking.authorize_column");
     if (!columnGate.ok) return noStore({ ok: false, error: columnGate.error || "Permission denied." }, { status: columnGate.status || 403 });
@@ -76,6 +83,8 @@ export async function POST(request) {
       result = await updateStocktakingRows(gate.account || {}, body?.payload || body);
     } else if (action === "inventory-start") {
       result = await startStocktakingInventory(gate.account || {}, body?.payload || body);
+    } else if (action === "delete-folder") {
+      result = await deleteStocktakingFolder(gate.account || {}, body?.column || body?.stockColumn);
     } else {
       result = await updateStocktakingInventoryValue(gate.account || {}, body?.payload || body);
     }

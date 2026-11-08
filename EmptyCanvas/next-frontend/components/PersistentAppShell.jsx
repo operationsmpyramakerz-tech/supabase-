@@ -47,7 +47,7 @@ function routePerformanceStyles(localPath) {
   if (localPath === "/stocktaking") {
     return [
       "/next/css/products-stocktaking-performance.css?v=css-phase2",
-      "/next/css/stocktaking-performance.css?v=css-phase2",
+      "/next/css/stocktaking-performance.css?v=stocktaking-folder-delete-v358",
       "/next/css/stocktaking-proposals-performance.css?v=css-phase2",
       "/next/css/stocktaking-after-shared-performance.css?v=stocktaking-folders-polish-v3",
       "/next/css/stocktaking-industrial-v354.css?v=stocktaking-editor-v355",

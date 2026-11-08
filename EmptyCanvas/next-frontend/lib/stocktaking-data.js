@@ -963,6 +963,59 @@ function validReceiptPhotos(value) {
   return out;
 }
 
+/**
+ * Empty one stock folder without deleting stocktaking rows shared by other
+ * schools. Folders are *quantity columns* in a shared stocktaking matrix.
+ * Setting this column to zero makes the folder disappear from the folder list
+ * (which only shows non-empty columns), but preserves the user's mapping,
+ * receipt documents and all other users' inventories.
+ */
+export async function deleteStocktakingFolder(account = {}, requestedColumn = "") {
+  if (stocktakingAccessLevel(account) !== "admin") {
+    throw stocktakingMutationError("Only Stocktaking administrators can delete stock folders.", 403);
+  }
+  const requested = text(requestedColumn);
+  if (!requested) throw stocktakingMutationError("Choose a Stocktaking folder to delete.", 400);
+
+  // Match an existing visible stock folder using its exact server-resolved key.
+  // Never allow arbitrary user-supplied query parameter names in PATCH.
+  const folders = await listStocktakingFolders({ fresh: true });
+  const folder = folders.find((entry) => entry.key === requested);
+  if (!folder) throw stocktakingMutationError("This Stocktaking folder is empty or no longer exists. Refresh the page.", 404);
+  const schemaKeys = await loadStockSchemaKeys({ fresh: true });
+  const column = resolveRequestedColumnFromKeys(schemaKeys, requested);
+  if (column !== requested) throw stocktakingMutationError("Invalid Stocktaking folder column.", 400);
+
+  const filter = `${encodeURIComponent(column)}=neq.0`;
+  await supabaseRequest(`/${encodeURIComponent(stocktakingTable())}?${filter}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=minimal" },
+    body: { [column]: 0 },
+    profileName: "stocktaking.folder-delete",
+    timeoutMs: 45000,
+  });
+  invalidateStocktakingReadCaches();
+
+  // Check the actual remaining values before reporting completion, including
+  // records outside the first PostgREST page. A concurrent stock write may
+  // legitimately require the admin to retry instead of a false success.
+  const remaining = await select(stocktakingTable(), {
+    select: "id",
+    [column]: "neq.0",
+    limit: "1",
+  }, { profileName: "stocktaking.folder-delete-verify" });
+  if (Array.isArray(remaining) && remaining.length) {
+    throw stocktakingMutationError("New stock was recorded while deleting. Refresh and try again.", 409);
+  }
+  return {
+    ok: true,
+    source: "supabase-next",
+    column,
+    folder: folder.label,
+    clearedItems: folder.itemsCount,
+  };
+}
+
 export async function addStocktakingRow(account = {}, payload = {}) {
   const column = text(payload?.column || payload?.stockColumn);
   const productId = text(payload?.productId || payload?.product_id);

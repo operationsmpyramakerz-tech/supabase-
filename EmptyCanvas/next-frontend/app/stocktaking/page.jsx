@@ -3,7 +3,8 @@ import AppShell from "../../components/AppShell";
 import StocktakingClient from "../../components/stocktaking/StocktakingClient";
 import { getDirectAccountGate } from "../../lib/products-auth";
 import { featureGate } from "../../lib/feature-permissions-server";
-import { listStocktakingFolders } from "../../lib/stocktaking-data";
+import { listStocktakingFolders, stocktakingAccessLevel } from "../../lib/stocktaking-data";
+import { featureAllowed } from "../../lib/feature-permissions-registry";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -50,7 +51,11 @@ export default async function StocktakingPage() {
       activePath="/next/stocktaking"
       bodyClass="stocktaking-page"
     >
-      <StocktakingClient account={gate.account} initialColumns={columns} />
+      <StocktakingClient
+        account={gate.account}
+        initialColumns={columns}
+        canDeleteFolders={stocktakingAccessLevel(gate.account) === "admin" && featureAllowed(gate.account, "stocktaking.delete_folder")}
+      />
     </AppShell>
   );
 }

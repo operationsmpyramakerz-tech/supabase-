@@ -462,3 +462,161 @@ body.stocktaking-page .stocktaking-data-receipt span{
   body.stocktaking-page .stocktaking-folder-grid{gap:16px 12px !important;}
   body.stocktaking-page .stocktaking-data-table{min-width:540px;}
 }
+
+/* Stocktaking v358 — hold a folder for destructive actions. */
+body.stocktaking-page .stocktaking-proposal-folder.is-menu-open {
+  z-index: 48 !important;
+}
+body.stocktaking-page .stocktaking-proposal-folder__main {
+  touch-action: manipulation;
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+body.stocktaking-page .stocktaking-folder-context-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 50;
+  min-width: 160px;
+  padding: 6px;
+  border: 1px solid #e2e8f0;
+  border-radius: 13px;
+  background: #fff;
+  box-shadow: 0 18px 44px rgba(15,23,42,.2);
+}
+body.stocktaking-page .stocktaking-folder-context-menu button {
+  width: 100%;
+  min-height: 41px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 11px;
+  border: 0;
+  border-radius: 9px;
+  color: #b91c1c;
+  background: transparent;
+  font-size: .8rem;
+  font-weight: 850;
+  cursor: pointer;
+  white-space: nowrap;
+}
+body.stocktaking-page .stocktaking-folder-context-menu button:hover,
+body.stocktaking-page .stocktaking-folder-context-menu button:focus-visible {
+  background: #fef2f2;
+  outline: none;
+}
+body.stocktaking-page .stocktaking-folder-context-menu svg {
+  width: 17px;
+  height: 17px;
+}
+.stocktaking-folder-delete-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(8, 15, 28, .56);
+  backdrop-filter: blur(4px);
+}
+.stocktaking-folder-delete-dialog {
+  width: min(100%, 445px);
+  padding: 27px;
+  border: 1px solid #e2e8f0;
+  border-radius: 22px;
+  background: #fff;
+  color: #111827;
+  box-shadow: 0 30px 90px rgba(0,0,0,.23);
+  text-align: center;
+}
+.stocktaking-folder-delete-icon {
+  width: 62px;
+  height: 62px;
+  margin: 0 auto 14px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #fecaca;
+  border-radius: 19px;
+  background: #fff1f2;
+  color: #b91c1c;
+}
+.stocktaking-folder-delete-icon.is-done {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #047857;
+}
+.stocktaking-folder-delete-icon svg {
+  width: 29px;
+  height: 29px;
+}
+.stocktaking-folder-delete-dialog h3 {
+  margin: 0 0 10px;
+  font-size: 1.25rem;
+  font-weight: 900;
+  line-height: 1.35;
+}
+.stocktaking-folder-delete-dialog p {
+  margin: 0;
+  color: #64748b;
+  font-size: .89rem;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.stocktaking-folder-delete-dialog .stocktaking-folder-delete-error {
+  margin-top: 12px;
+  color: #b91c1c;
+  font-weight: 700;
+}
+.stocktaking-folder-delete-footer {
+  display: flex;
+  gap: 10px;
+  margin-top: 24px;
+}
+.stocktaking-folder-delete-footer button {
+  min-height: 45px;
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+  color: #111827;
+  font-size: .85rem;
+  font-weight: 850;
+  cursor: pointer;
+}
+.stocktaking-folder-delete-footer button:disabled {
+  opacity: .65;
+  cursor: wait;
+}
+.stocktaking-folder-delete-footer .stocktaking-folder-delete-confirm {
+  border-color: #b91c1c;
+  background: #b91c1c;
+  color: #fff;
+}
+.stocktaking-folder-delete-footer .stocktaking-folder-delete-confirm.is-complete {
+  background: #047857;
+  border-color: #047857;
+}
+.stocktaking-folder-delete-footer svg {
+  width: 17px;
+  height: 17px;
+}
+.stocktaking-folder-delete-spinner {
+  width: 17px;
+  height: 17px;
+  border: 2px solid rgba(255,255,255,.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: stocktaking-folder-delete-spin .7s linear infinite;
+}
+@keyframes stocktaking-folder-delete-spin {
+  to { transform: rotate(360deg); }
+}
+@media (max-width: 480px) {
+  .stocktaking-folder-delete-dialog { padding: 22px 18px; }
+  .stocktaking-folder-delete-dialog h3 { font-size: 1.1rem; }
+}

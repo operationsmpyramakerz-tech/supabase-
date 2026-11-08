@@ -178,6 +178,7 @@ function Icon({ name }) {
     file: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6M8 13h8M8 17h8" /></>,
     images: <><rect x="2" y="3" width="20" height="18" rx="2" /><circle cx="8" cy="9" r="1.5" /><path d="m21 16-5-5L5 21" /></>,
     clipboard: <><rect x="5" y="4" width="14" height="18" rx="2" /><rect x="9" y="2" width="6" height="5" rx="1" /><path d="m9 14 2 2 4-4" /></>,
+    trash: <><path d="M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15M10 10v7M14 10v7" /></>,
     more: <><circle cx="12" cy="5" r="1.5" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" /><circle cx="12" cy="19" r="1.5" fill="currentColor" stroke="none" /></>,
     chevronRight: <path d="m9 18 6-6-6-6" />,
     upDown: <><path d="m7 16 4 4 4-4M11 20V4M7 8l4-4 4 4" /></>,
@@ -450,7 +451,7 @@ function StockReceiptUploadPicker({ files = [], disabled = false, onChange, onEr
   );
 }
 
-export default function StocktakingClient({ account, initialStock = [], initialColumns = [] }) {
+export default function StocktakingClient({ account, initialStock = [], initialColumns = [], canDeleteFolders = false }) {
   const fallbackColumn = useMemo(() => {
     const first = (Array.isArray(initialStock) ? initialStock : []).find((item) => text(item?.quantityColumn));
     const key = text(first?.quantityColumn);
@@ -482,6 +483,15 @@ export default function StocktakingClient({ account, initialStock = [], initialC
   const [search, setSearch] = useState("");
   const [exportOpen, setExportOpen] = useState(false);
   const [activeColumn, setActiveColumn] = useState(null);
+  const [folderMenu, setFolderMenu] = useState("");
+  const [deletedFolderKeys, setDeletedFolderKeys] = useState([]);
+  const [deleteFolderTarget, setDeleteFolderTarget] = useState(null);
+  const [deleteFolderBusy, setDeleteFolderBusy] = useState(false);
+  const [deleteFolderError, setDeleteFolderError] = useState("");
+  const [deleteFolderDone, setDeleteFolderDone] = useState(false);
+  const folderPressTimerRef = useRef(null);
+  const folderPressStartRef = useRef(null);
+  const suppressFolderClickRef = useRef(false);
   const [stock, setStock] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -508,6 +518,82 @@ export default function StocktakingClient({ account, initialStock = [], initialC
   const [newRowOpen, setNewRowOpen] = useState(false);
   const [newRowDraft, setNewRowDraft] = useState({ productId: "", quantity: "", tag: "", receiptNumber: "" });
   const [newRowReceiptFiles, setNewRowReceiptFiles] = useState([]);
+  function cancelFolderLongPress() {
+    if (folderPressTimerRef.current !== null) window.clearTimeout(folderPressTimerRef.current);
+    folderPressTimerRef.current = null;
+    folderPressStartRef.current = null;
+  }
+  function startFolderLongPress(event, key) {
+    if (!canDeleteFolders || (event.pointerType === "mouse" && event.button !== 0)) return;
+    cancelFolderLongPress();
+    suppressFolderClickRef.current = false;
+    folderPressStartRef.current = { x: event.clientX, y: event.clientY, pointerId: event.pointerId };
+    folderPressTimerRef.current = window.setTimeout(() => {
+      folderPressTimerRef.current = null;
+      folderPressStartRef.current = null;
+      suppressFolderClickRef.current = true;
+      setFolderMenu(key);
+      try { navigator.vibrate?.(25); } catch {}
+    }, 550);
+  }
+  function moveFolderLongPress(event) {
+    const start = folderPressStartRef.current;
+    if (start && start.pointerId === event.pointerId
+        && Math.hypot(event.clientX - start.x, event.clientY - start.y) > 12) cancelFolderLongPress();
+  }
+  function requestFolderDelete(folder) {
+    cancelFolderLongPress();
+    setFolderMenu("");
+    setDeleteFolderTarget(folder);
+    setDeleteFolderError("");
+    setDeleteFolderDone(false);
+  }
+  async function confirmFolderDelete() {
+    if (deleteFolderBusy || !deleteFolderTarget || !canDeleteFolders) return;
+    setDeleteFolderBusy(true);
+    setDeleteFolderError("");
+    try {
+      const response = await fetch("/next/api/stock/mutations-direct", {
+        method: "POST",
+        credentials: "include",
+        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "delete-folder", column: deleteFolderTarget.key }),
+      });
+      if (response.status === 401) {
+        window.location.href = "/login?next=/next/stocktaking";
+        return;
+      }
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok || body?.ok === false) throw new Error(body?.error || "Could not delete this Stocktaking folder.");
+      setDeletedFolderKeys((current) => [...new Set([...current, deleteFolderTarget.key])]);
+      setDeleteFolderDone(true);
+    } catch (deleteError) {
+      setDeleteFolderError(deleteError?.message || "Could not delete this Stocktaking folder.");
+    } finally {
+      setDeleteFolderBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!folderMenu) return undefined;
+    const onPointer = (event) => {
+      if (!event.target.closest?.(".stocktaking-folder-context-menu")) setFolderMenu("");
+    };
+    const onKey = (event) => {
+      if (event.key === "Escape") setFolderMenu("");
+    };
+    document.addEventListener("pointerdown", onPointer, true);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointer, true);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [folderMenu]);
+
+  useEffect(() => () => {
+    if (folderPressTimerRef.current !== null) window.clearTimeout(folderPressTimerRef.current);
+  }, []);
   const inventorySaveTimers = useRef(new Map());
   const sortMenuRef = useRef(null);
   const tableScrollRef = useRef(null);
@@ -984,6 +1070,7 @@ export default function StocktakingClient({ account, initialStock = [], initialC
   }
 
   function openFolder(column, options = {}) {
+    setFolderMenu("");
     setActiveColumn(column);
     setSearch("");
     setExportOpen(false);
@@ -1088,9 +1175,9 @@ export default function StocktakingClient({ account, initialStock = [], initialC
 
   const visibleFolders = useMemo(() => {
     const query = lower(search);
-    if (!query) return columns;
-    return columns.filter((item) => lower(item.label).includes(query) || lower(item.key).includes(query));
-  }, [columns, search]);
+    return columns.filter((item) => !deletedFolderKeys.includes(item.key)
+      && (!query || lower(item.label).includes(query) || lower(item.key).includes(query)));
+  }, [columns, search, deletedFolderKeys]);
 
   const rows = useMemo(() => (Array.isArray(stock) ? stock : [])
     .map(normalizedRow)
@@ -1231,8 +1318,45 @@ export default function StocktakingClient({ account, initialStock = [], initialC
 
           <div className="stocktaking-folder-grid" aria-live="polite">
             {visibleFolders.length ? visibleFolders.map((column) => (
-              <article className="products-proposal-folder stocktaking-proposal-folder" key={column.key}>
-                <button className="products-proposal-folder__main stocktaking-proposal-folder__main" type="button" onClick={() => openFolder(column)} aria-label={`Open ${column.label}`}>
+              <article className={`products-proposal-folder stocktaking-proposal-folder ${folderMenu === column.key ? "is-menu-open" : ""}`} key={column.key}>
+                {canDeleteFolders && folderMenu === column.key ? (
+                  <div className="stocktaking-folder-context-menu" role="menu" aria-label={`Actions for ${column.label}`}>
+                    <button type="button" role="menuitem" onClick={() => requestFolderDelete(column)}><Icon name="trash" /><span>Delete stock</span></button>
+                  </div>
+                ) : null}
+                <button
+                  className="products-proposal-folder__main stocktaking-proposal-folder__main"
+                  type="button"
+                  onPointerDown={(event) => startFolderLongPress(event, column.key)}
+                  onPointerMove={moveFolderLongPress}
+                  onPointerUp={cancelFolderLongPress}
+                  onPointerCancel={cancelFolderLongPress}
+                  onPointerLeave={cancelFolderLongPress}
+                  onContextMenu={(event) => {
+                    if (!canDeleteFolders) return;
+                    event.preventDefault();
+                    cancelFolderLongPress();
+                    suppressFolderClickRef.current = true;
+                    setFolderMenu(column.key);
+                  }}
+                  onKeyDown={(event) => {
+                    if (!canDeleteFolders || !((event.shiftKey && event.key === "F10") || event.key === "ContextMenu")) return;
+                    event.preventDefault();
+                    cancelFolderLongPress();
+                    suppressFolderClickRef.current = true;
+                    setFolderMenu(column.key);
+                  }}
+                  onClick={() => {
+                    if (suppressFolderClickRef.current) {
+                      suppressFolderClickRef.current = false;
+                      return;
+                    }
+                    openFolder(column);
+                  }}
+                  aria-label={`Open ${column.label}${canDeleteFolders ? ". Press and hold for actions" : ""}`}
+                  aria-haspopup={canDeleteFolders ? "menu" : undefined}
+                  aria-expanded={canDeleteFolders ? folderMenu === column.key : undefined}
+                >
                   <span className="proposal-folder-figure stocktaking-proposal-folder-figure" aria-hidden="true">
                     <span className="proposal-folder-figure__paper proposal-folder-figure__paper--left" />
                     <span className="proposal-folder-figure__paper proposal-folder-figure__paper--middle" />
@@ -1409,6 +1533,33 @@ export default function StocktakingClient({ account, initialStock = [], initialC
                 <button type="submit" className="stocktaking-editor-save" disabled={editBusy || productsLoading}><Icon name="save" />{editBusy ? "Saving..." : newRowOpen ? "Add component" : "Save changes"}</button>
               </footer>
             </form>
+          </section>
+        </div>, document.body
+      ) : null}
+      {deleteFolderTarget && typeof document !== "undefined" ? createPortal(
+        <div className="stocktaking-folder-delete-overlay" onMouseDown={(event) => {
+          if (event.target === event.currentTarget && !deleteFolderBusy) setDeleteFolderTarget(null);
+        }}>
+          <section className="stocktaking-folder-delete-dialog" role="alertdialog" aria-modal="true" aria-labelledby="stocktaking-folder-delete-title" aria-describedby="stocktaking-folder-delete-description">
+            <span className={`stocktaking-folder-delete-icon ${deleteFolderDone ? "is-done" : ""}`} aria-hidden="true">
+              {deleteFolderDone ? <Icon name="check" /> : <Icon name="trash" />}
+            </span>
+            <h3 id="stocktaking-folder-delete-title">{deleteFolderDone ? "Stock cleared" : `Delete ${deleteFolderTarget.label} stock?`}</h3>
+            <p id="stocktaking-folder-delete-description">
+              {deleteFolderDone
+                ? `All stock quantities in ${deleteFolderTarget.label} were cleared. The folder is no longer shown.`
+                : `This will permanently clear all ${deleteFolderTarget.itemsCount ?? ""} component quantities in ${deleteFolderTarget.label} and remove the folder from the list. Other stock folders will not be affected.`}
+            </p>
+            {deleteFolderError ? <p className="stocktaking-folder-delete-error" role="alert">{deleteFolderError}</p> : null}
+            <footer className="stocktaking-folder-delete-footer">
+              {deleteFolderDone ? <button type="button" className="stocktaking-folder-delete-confirm is-complete" onClick={() => setDeleteFolderTarget(null)}><Icon name="check" /> Done</button> : <>
+                <button type="button" className="stocktaking-folder-delete-cancel" onClick={() => setDeleteFolderTarget(null)} disabled={deleteFolderBusy}>Cancel</button>
+                <button type="button" className="stocktaking-folder-delete-confirm" onClick={confirmFolderDelete} disabled={deleteFolderBusy}>
+                  {deleteFolderBusy ? <span className="stocktaking-folder-delete-spinner" /> : <Icon name="trash" />}
+                  {deleteFolderBusy ? "Deleting..." : "Delete stock"}
+                </button>
+              </>}
+            </footer>
           </section>
         </div>, document.body
       ) : null}

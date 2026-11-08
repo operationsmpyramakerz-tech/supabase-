@@ -317,6 +317,11 @@ export const FEATURE_DEFINITIONS = Object.freeze(
     "label": "Upload stock receipt"
   },
   {
+    "module": "stocktaking",
+    "key": "stocktaking.delete_folder",
+    "label": "Clear a Stocktaking folder (admin only)"
+  },
+  {
     "module": "products",
     "key": "products.view",
     "label": "View product catalog"
@@ -1174,7 +1179,7 @@ export const ACTIVE_PILOT_FEATURE_KEYS = Object.freeze([
   "b2c.database.fields", "b2c.database.record_edit", "b2c.database.record_delete", "b2c.database.export",
   "b2c.forms.view", "b2c.forms.create", "b2c.forms.edit", "b2c.forms.builder", "b2c.forms.submit",
   "stocktaking.view", "stocktaking.export", "stocktaking.add_row", "stocktaking.edit_rows",
-  "stocktaking.start_inventory", "stocktaking.update_inventory", "stocktaking.authorize_column", "stocktaking.upload_receipt",
+  "stocktaking.start_inventory", "stocktaking.update_inventory", "stocktaking.authorize_column", "stocktaking.upload_receipt", "stocktaking.delete_folder",
   "expenses.view", "expenses.cash_in", "expenses.cash_out", "expenses.settle", "expenses.export", "expenses.screenshot",
   "expenses.users.view", "expenses.users.edit", "expenses.users.delete", "expenses.users.export",
   "kits.view", "kits.create", "kits.edit", "kits.delete", "kits.copy", "kits.item_add", "kits.item_edit", "kits.item_delete", "kits.folder_create", "kits.folder_manage", "kits.send_stock", "proposals.view", "proposals.create", "proposals.edit", "proposals.delete", "proposals.copy", "proposals.item_add", "proposals.item_edit", "proposals.item_delete", "proposals.combine", "proposals.make_order", "proposals.send_stock", "proposals.receipt_upload", "orders.review.view", "orders.review.view_details", "orders.review.approve", "orders.review.bulk_approve", "orders.review.quantity", "orders.review.archive", "orders.review.unarchive", "orders.review.update_approval",
