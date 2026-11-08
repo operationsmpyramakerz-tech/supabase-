@@ -494,7 +494,6 @@ export default function StocktakingClient({ account, initialStock = [], initialC
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
   const [groupOptionsOpen, setGroupOptionsOpen] = useState(false);
   const [groupExpandedOverrides, setGroupExpandedOverrides] = useState({});
-  const [selectedRowKeys, setSelectedRowKeys] = useState(() => new Set());
   const [openRowActions, setOpenRowActions] = useState("");
   const [editRowId, setEditRowId] = useState("");
   const [editDraft, setEditDraft] = useState({ productId: "", quantity: "" });
@@ -992,7 +991,6 @@ export default function StocktakingClient({ account, initialStock = [], initialC
     setSortMenuOpen(false);
     setGroupOptionsOpen(false);
     setGroupExpandedOverrides({});
-    setSelectedRowKeys(new Set());
     setOpenRowActions("");
     setEditRowId("");
     setEditDraft({ productId: "", quantity: "" });
@@ -1030,7 +1028,6 @@ export default function StocktakingClient({ account, initialStock = [], initialC
     setSortMenuOpen(false);
     setGroupOptionsOpen(false);
     setGroupExpandedOverrides({});
-    setSelectedRowKeys(new Set());
     setOpenRowActions("");
     setEditRowId("");
     setEditDraft({ productId: "", quantity: "" });
@@ -1139,55 +1136,10 @@ export default function StocktakingClient({ account, initialStock = [], initialC
   const kitTagGroups = useMemo(() => groupRows(filteredRows, "component", "kit"), [filteredRows]);
   const receiptGroups = useMemo(() => groupRowsByReceipt(filteredRows), [filteredRows]);
   const orderGroups = useMemo(() => groupRowsByOrderNumber(filteredRows), [filteredRows]);
-  const tableColumnCount = 4 + (can("export") ? 1 : 0) + (canEditColumn ? 1 : 0) + (inventorySession?.inventoryColumn ? 1 : 0) + (inventorySession?.defectedColumn ? 1 : 0);
+  const tableColumnCount = 4 + (canEditColumn ? 1 : 0) + (inventorySession?.inventoryColumn ? 1 : 0) + (inventorySession?.defectedColumn ? 1 : 0);
   const kitTagCount = kitTagGroups.length;
   const visibleQuantity = filteredRows.reduce((total, row) => total + row.quantity, 0);
   const receiptsCount = filteredRows.filter((row) => Boolean(row.receiptNumber) || row.receiptPhotos.length > 0).length;
-  const selectedVisibleRows = filteredRows.filter((row) => selectedRowKeys.has(row.key));
-  const allVisibleSelected = filteredRows.length > 0 && selectedVisibleRows.length === filteredRows.length;
-  const selectedQuantity = selectedVisibleRows.reduce((total, row) => total + row.quantity, 0);
-  const selectionEnabled = can("export");
-
-  function downloadSelectedCsv() {
-    if (!selectionEnabled || !selectedVisibleRows.length || typeof document === "undefined") return;
-    const headings = ["Product code", "Component", "Kit tag", "Component tag", "Quantity", "Receipt number", "Order number", "Inventory", "Defected"];
-    const safeCell = (value) => {
-      let cell = String(value ?? "");
-      // Keep spreadsheet apps from executing formulas in user-supplied labels.
-      if (/^[\s]*[=+@-]/.test(cell) && !/^-?\d+(\.\d+)?$/.test(cell.trim())) cell = `'${cell}`;
-      return `"${cell.replace(/"/g, '""')}"`;
-    };
-    const content = [headings, ...selectedVisibleRows.map((row) => [
-      row.idCode, row.name, row.kitTag, row.componentTag, row.quantity,
-      row.receiptNumber, row.orderNumber, row.inventory ?? "", row.defected ?? "",
-    ])].map((fields) => fields.map(safeCell).join(",")).join("\r\n");
-    const blob = new Blob(["\uFEFF", content], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `${text(activeColumn?.label).replace(/[^a-z0-9_-]+/gi, "-") || "Stocktaking"}-selected.csv`;
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }
-
-  const toggleRowSelection = (key) => {
-    setSelectedRowKeys((current) => {
-      const next = new Set(current);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  };
-  const toggleAllVisible = () => {
-    setSelectedRowKeys((current) => {
-      const next = new Set(current);
-      if (filteredRows.length && filteredRows.every((row) => next.has(row.key))) filteredRows.forEach((row) => next.delete(row.key));
-      else filteredRows.forEach((row) => next.add(row.key));
-      return next;
-    });
-  };
   const isGroupExpanded = (key, defaultOpen) => {
     if (Object.prototype.hasOwnProperty.call(groupExpandedOverrides, key)) return groupExpandedOverrides[key];
     return search.trim() ? true : defaultOpen;
@@ -1220,8 +1172,7 @@ export default function StocktakingClient({ account, initialStock = [], initialC
   const renderStockRow = (row) => {
     const isEditing = String(editRowId) === String(row.id);
     return (
-      <tr key={row.key} className={`${isEditing ? "is-editing" : ""} ${selectedRowKeys.has(row.key) ? "is-selected" : ""}`}>
-        {selectionEnabled ? <td className="stocktaking-row-select-cell"><input type="checkbox" checked={selectedRowKeys.has(row.key)} onChange={() => toggleRowSelection(row.key)} aria-label={`Select ${row.name}`} /></td> : null}
+      <tr key={row.key} className={isEditing ? "is-editing" : ""}>
         <td className="stocktaking-data-component">
           <span className="stocktaking-component-identity"><span className="stocktaking-component-thumbnail"><Icon name="box" /></span><span className="stocktaking-component-name">{row.url ? <a href={row.url} target="_blank" rel="noopener noreferrer" className="component-link">{row.name}</a> : row.name}</span></span>
         </td>
@@ -1352,18 +1303,10 @@ export default function StocktakingClient({ account, initialStock = [], initialC
             <>
               {inventorySaveError ? <div className="stocktaking-inventory-inline-error">{inventorySaveError}</div> : null}
               {editError && !editRowId && !newRowOpen ? <div className="stocktaking-edit-inline-error" role="alert">{editError}</div> : null}
-              {selectionEnabled && selectedVisibleRows.length ? <div className="stocktaking-selection-toolbar" role="region" aria-label="Selected components actions">
-                <div className="stocktaking-selection-toolbar__details"><span className="stocktaking-selection-toolbar__mark"><Icon name="check" /></span><div><strong>{selectedVisibleRows.length} selected</strong><small>{selectedQuantity.toLocaleString("en-US")} total units</small></div></div>
-                <div className="stocktaking-selection-toolbar__buttons">
-                  <button type="button" className="stocktaking-selection-toolbar__download" onClick={downloadSelectedCsv}><Icon name="download" />Download CSV</button>
-                  <button type="button" className="stocktaking-selection-toolbar__clear" onClick={() => setSelectedRowKeys(new Set())}><Icon name="x" />Clear</button>
-                </div>
-              </div> : null}
               <div ref={tableScrollRef} className="stocktaking-data-table-wrap" aria-live="polite" onScroll={updateTableScrollState}>
                 <table className="stocktaking-data-table">
                   <thead>
                     <tr>
-                      {selectionEnabled ? <th className="stocktaking-row-select-head"><input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} aria-label={allVisibleSelected ? "Deselect all matching components" : "Select all matching components"} disabled={!filteredRows.length} /></th> : null}
                       <th><span className="stocktaking-th-label"><Icon name="box" />Component</span></th>
                       <th className="stocktaking-data-qty"><span className="stocktaking-th-label"><Icon name="layers" />Qty</span></th>
                       <th className="stocktaking-data-receipt"><span className="stocktaking-th-label"><Icon name="file" />Receipt no.</span></th>
@@ -1423,8 +1366,8 @@ export default function StocktakingClient({ account, initialStock = [], initialC
                 {!filteredRows.length && !newRowOpen ? <div className="empty-block empty-block--no-data stocktaking-empty-under-table">Sorry, No data available</div> : null}
               </div>
               <div className="stocktaking-industrial-footer">
-                <span>{selectedVisibleRows.length ? `${selectedVisibleRows.length} selected · ${filteredRows.length} components shown` : `Showing ${filteredRows.length.toLocaleString("en-US")} components`}</span>
-                <strong><Icon name="box" />{selectedVisibleRows.length ? "Selected Qty:" : "Total Qty:"}<b>{(selectedVisibleRows.length ? selectedQuantity : visibleQuantity).toLocaleString("en-US")}</b></strong>
+                <span>Showing {filteredRows.length.toLocaleString("en-US")} components</span>
+                <strong><Icon name="box" />Total Qty:<b>{visibleQuantity.toLocaleString("en-US")}</b></strong>
               </div>
             </>
           )}

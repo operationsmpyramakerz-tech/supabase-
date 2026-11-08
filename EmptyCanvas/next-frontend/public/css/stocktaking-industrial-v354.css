@@ -237,7 +237,7 @@ body.stocktaking-page .stocktaking-industrial-workspace .stocktaking-data-table-
   scrollbar-width: none;
 }
 body.stocktaking-page .stocktaking-industrial-workspace .stocktaking-data-table {
-  min-width: 850px !important;
+  min-width: 800px !important;
   width: 100% !important;
   border-collapse: separate !important;
   border-spacing: 0 4px !important;
@@ -269,24 +269,6 @@ body.stocktaking-page .stocktaking-industrial-workspace .stocktaking-th-label {
   white-space: nowrap;
 }
 body.stocktaking-page .stocktaking-industrial-workspace .stocktaking-th-label svg { width: 19px; height: 19px; stroke-width: 1.8; }
-body.stocktaking-page .stocktaking-industrial-workspace .stocktaking-data-table .stocktaking-row-select-head,
-body.stocktaking-page .stocktaking-industrial-workspace .stocktaking-data-table .stocktaking-row-select-cell {
-  width: 50px !important;
-  min-width: 50px !important;
-  max-width: 50px !important;
-  padding-left: 11px !important;
-  padding-right: 8px !important;
-  text-align: center !important;
-}
-body.stocktaking-page .stocktaking-industrial-workspace .stocktaking-data-table input[type="checkbox"] {
-  appearance: auto;
-  width: 18px;
-  height: 18px;
-  margin: 0;
-  vertical-align: middle;
-  cursor: pointer;
-  accent-color: #f97316;
-}
 body.stocktaking-page .stocktaking-industrial-workspace .stocktaking-data-component {
   min-width: 310px !important;
   width: auto !important;
@@ -313,8 +295,7 @@ body.stocktaking-page .stocktaking-industrial-workspace .stocktaking-data-table 
   border-right: 1px solid #e2e7ef !important;
   border-radius: 0 9px 9px 0 !important;
 }
-body.stocktaking-page .stocktaking-industrial-workspace .stocktaking-data-table tbody > tr:not(.stocktaking-tag-group-row):not(.stocktaking-receipt-group-row):hover > td,
-body.stocktaking-page .stocktaking-industrial-workspace .stocktaking-data-table tbody > tr.is-selected > td {
+body.stocktaking-page .stocktaking-industrial-workspace .stocktaking-data-table tbody > tr:not(.stocktaking-tag-group-row):not(.stocktaking-receipt-group-row):hover > td {
   background: #f0f4f9 !important;
   border-top-color: #b9cbdc !important;
   border-bottom-color: #b9cbdc !important;
@@ -451,7 +432,6 @@ body.stocktaking-page .stocktaking-industrial-workspace .stocktaking-data-table 
 }
 body.stocktaking-page .stocktaking-industrial-workspace .stocktaking-data-table .stocktaking-row-edit-head {background: #213c56 !important;}
 body.stocktaking-page .stocktaking-industrial-workspace .stocktaking-data-table .stocktaking-row-edit-cell {background: #fff !important;overflow: visible;}
-body.stocktaking-page .stocktaking-industrial-workspace .stocktaking-data-table tbody tr.is-selected .stocktaking-row-edit-cell {background: #f0f4f9 !important;}
 body.stocktaking-page .stocktaking-industrial-workspace .stocktaking-inline-actions {position: relative;display: flex;align-items: center;justify-content: center;}
 body.stocktaking-page .stocktaking-industrial-workspace .stocktaking-row-more {
   display: grid;
@@ -550,7 +530,7 @@ body.stocktaking-page .stocktaking-industrial-workspace .stocktaking-industrial-
   body.stocktaking-page .stocktaking-industrial-workspace .stocktaking-industrial-stats strong {font-size: .95rem;}
   body.stocktaking-page .stocktaking-industrial-workspace .stocktaking-industrial-stats span {font-size: .61rem;}
   body.stocktaking-page .stocktaking-industrial-workspace .stocktaking-data-table,
-  body.stocktaking-page .stocktaking-industrial-workspace .stocktaking-data-table.is-edit-mode {min-width: 965px !important;width: 965px !important;}
+  body.stocktaking-page .stocktaking-industrial-workspace .stocktaking-data-table.is-edit-mode {min-width: 915px !important;width: 915px !important;}
   body.stocktaking-page .stocktaking-industrial-workspace .stocktaking-data-component {min-width: 330px !important;}
   body.stocktaking-page .stocktaking-industrial-workspace .stocktaking-industrial-footer {padding: 9px 10px;gap: 8px;}
   body.stocktaking-page .stocktaking-industrial-workspace .stocktaking-industrial-footer > strong {padding: 8px;gap: 6px;font-size: .7rem;}
@@ -577,8 +557,7 @@ html[data-theme="dark"] body.stocktaking-page .stocktaking-industrial-workspace 
 html[data-theme="dark"] body.stocktaking-page .stocktaking-industrial-workspace .stocktaking-industrial-stats span {color: #f0f4fa;}
 html[data-theme="dark"] body.stocktaking-page .stocktaking-industrial-workspace .stocktaking-data-table-wrap {background: #131e2b !important;border-color: #35455a !important;}
 html[data-theme="dark"] body.stocktaking-page .stocktaking-industrial-workspace .stocktaking-data-table tbody > tr:not(.stocktaking-tag-group-row):not(.stocktaking-receipt-group-row) > td {background: #202b39 !important;border-color: #35455a !important;color: #f0f4fa !important;}
-html[data-theme="dark"] body.stocktaking-page .stocktaking-industrial-workspace .stocktaking-data-table tbody > tr:not(.stocktaking-tag-group-row):not(.stocktaking-receipt-group-row):hover > td,
-html[data-theme="dark"] body.stocktaking-page .stocktaking-industrial-workspace .stocktaking-data-table tbody tr.is-selected > td {background: #293b50 !important;}
+html[data-theme="dark"] body.stocktaking-page .stocktaking-industrial-workspace .stocktaking-data-table tbody > tr:not(.stocktaking-tag-group-row):not(.stocktaking-receipt-group-row):hover > td {background: #293b50 !important;}
 html[data-theme="dark"] body.stocktaking-page .stocktaking-industrial-workspace .stocktaking-data-table tr.is-editing > td {background: #312c29 !important;}
 html[data-theme="dark"] body.stocktaking-page .stocktaking-industrial-workspace .stocktaking-data-table .component-link {color: #f3f7fa !important;}
 html[data-theme="dark"] body.stocktaking-page .stocktaking-industrial-workspace .stocktaking-data-receipt span {color: #bdc9d8;}
@@ -587,7 +566,6 @@ html[data-theme="dark"] body.stocktaking-page .stocktaking-industrial-workspace 
 html[data-theme="dark"] body.stocktaking-page .stocktaking-industrial-workspace .stocktaking-tag-group-head {background: #2e3c4e !important;color: #f1f5f9 !important;border-color: #42546a !important;}
 html[data-theme="dark"] body.stocktaking-page .stocktaking-industrial-workspace .stocktaking-tag-group-row.is-expanded .stocktaking-tag-group-head {background: #203a54 !important;}
 html[data-theme="dark"] body.stocktaking-page .stocktaking-industrial-workspace .stocktaking-data-table .stocktaking-row-edit-cell {background: #202b39 !important;}
-html[data-theme="dark"] body.stocktaking-page .stocktaking-industrial-workspace .stocktaking-data-table tbody tr.is-selected .stocktaking-row-edit-cell {background: #293b50 !important;}
 html[data-theme="dark"] body.stocktaking-page .stocktaking-industrial-workspace .stocktaking-row-more {background: #28394b;border-color: #3d536b;color: #f8fafc;}
 html[data-theme="dark"] body.stocktaking-page .stocktaking-industrial-workspace .stocktaking-inline-actions .stocktaking-row-actions-menu {background: #1b2939;border-color: #405269;}
 html[data-theme="dark"] body.stocktaking-page .stocktaking-industrial-workspace .stocktaking-row-actions-menu > button {background: #29394c;color: #fff;}
@@ -678,33 +656,6 @@ body.stocktaking-page .stocktaking-group-option-copy {display: grid;gap: 2px;min
 body.stocktaking-page .stocktaking-industrial-workspace .stocktaking-group-option-copy strong {font-size:.74rem;font-weight:850;}
 body.stocktaking-page .stocktaking-industrial-workspace .stocktaking-group-option-copy small {font-size:.62rem;font-weight:650;color:#78889a;}
 body.stocktaking-page .stocktaking-action-group-options > button > svg:last-child {width:16px;height:16px;flex:0 0 16px;color:#f97316;}
-
-/* Actual actions for the component selection checkboxes. */
-body.stocktaking-page .stocktaking-industrial-workspace .stocktaking-selection-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin: 0 0 12px;
-  padding: 10px 13px;
-  border: 1px solid #cdd9e6;
-  border-radius: 14px;
-  background: #eff4f9;
-}
-body.stocktaking-page .stocktaking-selection-toolbar__details {display:flex;align-items:center;gap:10px;}
-body.stocktaking-page .stocktaking-selection-toolbar__details > div {display:grid;gap:2px;}
-body.stocktaking-page .stocktaking-selection-toolbar__mark {display:grid;place-items:center;width:34px;height:34px;border-radius:10px;color:#fff;background:#203a54;}
-body.stocktaking-page .stocktaking-selection-toolbar__mark svg {width:18px;height:18px;}
-body.stocktaking-page .stocktaking-selection-toolbar__details strong {font-size:.79rem;font-weight:900;color:#192d43;}
-body.stocktaking-page .stocktaking-selection-toolbar__details small {font-size:.67rem;font-weight:700;color:#63778c;}
-body.stocktaking-page .stocktaking-selection-toolbar__buttons {display:flex;align-items:center;gap:7px;flex-wrap:wrap;}
-body.stocktaking-page .stocktaking-selection-toolbar__buttons button {display:flex;align-items:center;justify-content:center;gap:7px;min-height:35px;padding:6px 12px;border-radius:9px;font-size:.71rem;font-weight:850;cursor:pointer;}
-body.stocktaking-page .stocktaking-selection-toolbar__buttons svg {width:15px;height:15px;}
-body.stocktaking-page .stocktaking-selection-toolbar__download {border:1px solid #203a54;background:#203a54;color:#fff;}
-body.stocktaking-page .stocktaking-selection-toolbar__download:hover {background:#14263b;}
-body.stocktaking-page .stocktaking-selection-toolbar__clear {border:1px solid #cdd9e6;background:#fff;color:#324960;}
-body.stocktaking-page .stocktaking-selection-toolbar__clear:hover {background:#e5ebf2;}
 
 /* Fixed-position picker layers live in document.body, away from table cells,
    overflow containers and the editors' scroll areas. */
@@ -805,9 +756,6 @@ body.stocktaking-page .stocktaking-editor-cancel:hover:not(:disabled) {backgroun
   body.stocktaking-page .stocktaking-editor-field--wide {grid-column:auto;}
   body.stocktaking-page .stocktaking-editor-footer {padding:13px 17px calc(13px + env(safe-area-inset-bottom));}
   body.stocktaking-page .stocktaking-editor-footer button {flex:1;min-width:0;padding:10px 8px;}
-  body.stocktaking-page .stocktaking-industrial-workspace .stocktaking-selection-toolbar {padding:9px;}
-  body.stocktaking-page .stocktaking-selection-toolbar__buttons {width:100%;}
-  body.stocktaking-page .stocktaking-selection-toolbar__buttons button {flex:1;}
 }
 
 html[data-theme="dark"] body.stocktaking-page .stocktaking-editor-panel,
@@ -819,9 +767,6 @@ html[data-theme="dark"] body.stocktaking-page .stocktaking-editor-field > label 
 html[data-theme="dark"] body.stocktaking-page .stocktaking-editor-field > input,
 html[data-theme="dark"] body.stocktaking-page .stocktaking-editor-field .stocktaking-product-picker__trigger,
 html[data-theme="dark"] body.stocktaking-page .stocktaking-editor-field .stocktaking-tag-picker__trigger {background:#25374c;color:#f4f7fa;border-color:#466079;}
-html[data-theme="dark"] body.stocktaking-page .stocktaking-industrial-workspace .stocktaking-selection-toolbar {background:#223548;border-color:#456078;}
-html[data-theme="dark"] body.stocktaking-page .stocktaking-selection-toolbar__details strong {color:#f4f7fa;}
-html[data-theme="dark"] body.stocktaking-page .stocktaking-selection-toolbar__details small {color:#c3d0de;}
 html[data-theme="dark"] body.stocktaking-page .stocktaking-industrial-workspace .stocktaking-group-control__toggle {background:#24364a;color:#f4f7fa;border-color:#42576d;}
 html[data-theme="dark"] body.stocktaking-page .stocktaking-industrial-workspace .stocktaking-group-control__copy small {color:#c1d0df;}
 html[data-theme="dark"] body.stocktaking-page .stocktaking-industrial-workspace .stocktaking-action-group-options {background:#1d2b3c;border-color:#42576d;}
