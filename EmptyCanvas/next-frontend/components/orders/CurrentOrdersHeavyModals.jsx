@@ -10,6 +10,7 @@ import ProgressiveOrderGroups from "./ProgressiveOrderGroups";
 import OrderComponentSearch, { matchesOrderComponentSearch } from "./OrderComponentSearch";
 import { MaintenanceComponentCards } from "./MaintenanceComponentCards";
 import { DeleteConfirmDialog, DeleteVerificationDialog } from "../shared/SystemDeleteDialogs";
+import { hasOutstandingOrderItem } from "../../lib/order-partial-delivery.mjs";
 
 const OrderDownloadModal = dynamic(() => import("./OrderDownloadModal"), { ssr: false });
 
@@ -53,6 +54,7 @@ const STATUS_COLORS = {
   remaining: { bg: "#FEF3C7", fg: "#92400E", bd: "#FDE68A" },
   shipped: { bg: "#DBEAFE", fg: "#1D4ED8", bd: "#BFDBFE" },
   arrived: { bg: "#D1FAE5", fg: "#065F46", bd: "#A7F3D0" },
+  "partially-delivered": { bg: "#FEF3C7", fg: "#92400E", bd: "#FDE68A" },
   archive: { bg: "#EDE9FE", fg: "#6D28D9", bd: "#DDD6FE" },
 };
 
@@ -134,7 +136,8 @@ function itemTotal(item) {
 }
 
 function hasPartialRemaining(item) {
-  if (statusIndex(item?.status) !== 3) return false;
+  const stage = statusIndex(item?.status);
+  if (stage < 3 || stage >= 5) return false;
   const base = Math.abs(baseQuantity(item));
   const received = Math.abs(receivedQuantity(item));
   const remaining = Math.abs(remainingQuantity(item));
@@ -225,6 +228,7 @@ function statusLabel(tab) {
     remaining: "Remaining",
     shipped: "Shipping",
     arrived: "Arrived",
+    "partially-delivered": "Partially Delivered",
     archive: "Archive",
   };
   return labels[tab] || "Order";
@@ -362,7 +366,7 @@ function OrderDetailsModal({ group, tab, busy, onClose, onAction, onReason, onEx
       ? "remaining"
       : tab === "shipped" && stage === 3
         ? "shipped"
-        : tab === "all" && stage === 3 && !maintenance && Math.abs(remaining) > 1e-9
+        : (tab === "all" || tab === "arrived") && hasOutstandingOrderItem({ stage, remaining, maintenance })
           ? "remaining"
           : statusTabForItem(item);
     const itemReason = rejectedReason(item);

@@ -15,6 +15,7 @@ import OrdersPreferencesControl from "./OrdersPreferencesControl";
 import CurrentOrderCreatorPopover from "./CurrentOrderCreatorPopover";
 import { creatorPopoverPlacement } from "./UnifiedOrderCreatorPopover";
 import { orderCardAllows } from "../../lib/order-data-scope.mjs";
+import { isPartiallyDeliveredOrder } from "../../lib/order-partial-delivery.mjs";
 
 const loadCurrentOrdersHeavyModals = () => import("./CurrentOrdersHeavyModals");
 const CurrentOrdersHeavyModals = dynamic(loadCurrentOrdersHeavyModals, { ssr: false });
@@ -79,6 +80,7 @@ const STATUS_COLORS = {
   remaining: { bg: "#FEF3C7", fg: "#92400E", bd: "#FDE68A" },
   shipped: { bg: "#DBEAFE", fg: "#1D4ED8", bd: "#BFDBFE" },
   arrived: { bg: "#D1FAE5", fg: "#065F46", bd: "#A7F3D0" },
+  "partially-delivered": { bg: "#FEF3C7", fg: "#92400E", bd: "#FDE68A" },
   archive: { bg: "#EDE9FE", fg: "#6D28D9", bd: "#DDD6FE" },
 };
 
@@ -251,6 +253,7 @@ function statusLabel(tab) {
     remaining: "Remaining",
     shipped: "Shipping",
     arrived: "Arrived",
+    "partially-delivered": "Partially Delivered",
     archive: "Archive",
   };
   return labels[tab] || "Order";
@@ -358,6 +361,9 @@ function buildGroups(rows) {
     });
     let status = dominantStatus(group.items);
     if (stage === 3) status = hasRemaining && !isMaintenanceOrder(group.orderType) ? "remaining" : "shipped";
+    if (isPartiallyDeliveredOrder({ stage, hasRemaining, hasReceived, maintenance: isMaintenanceOrder(group.orderType) })) {
+      status = "partially-delivered";
+    }
     return {
       ...group,
       reason,
@@ -390,16 +396,22 @@ function itemsForCurrentTab(items, tab) {
   const source = Array.isArray(items) ? items : [];
   if (tab === "remaining") return source.filter((item) => Math.abs(remainingQuantity(item)) > 1e-9);
   if (tab === "shipped") return source.filter((item) => Math.abs(receivedQuantity(item)) > 1e-9);
+  if (tab === "arrived") return source.filter((item) => statusTabForItem(item) === "arrived");
   return source;
 }
 
 function groupsForCurrentTab(groups, orders, tab) {
   if (tab === "all") return groups;
   if (tab === "remaining") {
-    return groups.filter((group) => group.stage === 3 && !isMaintenanceOrder(group.orderType) && group.hasRemaining);
+    return groups.filter((group) => (group.stage === 3 || group.stage === 4) && !isMaintenanceOrder(group.orderType) && group.hasRemaining);
   }
   if (tab === "shipped") {
     return groups.filter((group) => group.stage === 3 && (isMaintenanceOrder(group.orderType) || group.hasReceived));
+  }
+  if (tab === "arrived") {
+    // Keep the full order summary for a mixed delivery, while the detail modal
+    // still scopes component rows to their original Arrived status.
+    return groups.filter((group) => group.items.some((item) => statusTabForItem(item) === "arrived"));
   }
   const scopedRows = (Array.isArray(orders) ? orders : []).filter((item) => statusTabForItem(item) === tab);
   return buildGroups(scopedRows);

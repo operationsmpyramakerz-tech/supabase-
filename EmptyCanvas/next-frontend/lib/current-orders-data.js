@@ -203,7 +203,7 @@ function groupMatchesTab(items = [], tab = "all") {
     const hasRemaining = items.some((item) => Math.abs(remainingQuantity(item)) > 1e-9);
     const hasReceived = items.some((item) => Math.abs(receivedQuantity(item)) > 1e-9);
     const maintenance = isMaintenanceOrder(items?.[0]?.orderType);
-    if (cleanTab === "remaining") return stage === 3 && !maintenance && hasRemaining;
+    if (cleanTab === "remaining") return (stage === 3 || stage === 4) && !maintenance && hasRemaining;
     return stage === 3 && (maintenance || hasReceived);
   }
   return items.some((item) => statusTabForItem(item) === cleanTab);

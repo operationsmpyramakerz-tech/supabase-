@@ -2,6 +2,7 @@
 
 import { operationsArrivedItemVisible, operationsHasOutstandingQuantity, operationsMatchesTab } from "../../lib/operations-remaining-status.mjs";
 import { orderCardAllows } from "../../lib/order-data-scope.mjs";
+import { isPartiallyDeliveredOrder } from "../../lib/order-partial-delivery.mjs";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
@@ -607,7 +608,12 @@ function statusVars(group) {
 
 function StatusPill({ group, tab = "", className = "co-status-btn" }) {
   const forceShipping = tab === "received" && group.stage === 3;
-  const partialDelivered = tab === "delivered" && group.stage === 4 && group.hasRemaining && !isMaintenance(group.orderType);
+  const partialDelivered = (tab === "all" || tab === "delivered") && isPartiallyDeliveredOrder({
+    stage: group.stage,
+    hasRemaining: group.hasRemaining,
+    hasReceived: group.hasReceived,
+    maintenance: isMaintenance(group.orderType),
+  });
   const vars = forceShipping ? STATUS_COLORS.received : partialDelivered ? STATUS_COLORS.remaining : statusVars(group);
   const label = forceShipping ? "Shipping" : partialDelivered ? "Partially Delivered" : statusLabel(group);
   return <span className={className} style={{ "--tag-bg": vars.bg, "--tag-fg": vars.fg, "--tag-border": vars.bd }}>{label}</span>;
