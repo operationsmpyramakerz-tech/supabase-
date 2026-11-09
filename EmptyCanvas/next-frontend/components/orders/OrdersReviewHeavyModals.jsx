@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import ClassicOrderIcon from "./ClassicOrderIcon";
+import UnifiedOrderCreatorPopover from "./UnifiedOrderCreatorPopover";
+
 import OrderPriorityBadge from "./OrderPriorityBadge";
 import { orderCreatedDate, orderDeliveryDate, orderPriority } from "./order-summary-meta.mjs";
 import { groupOrderItems, OrderSortButton } from "./OrderGrouping";
@@ -424,48 +426,6 @@ function RejectedReasonModal({ reason, onClose }) {
   return <div className="co-submodal-overlay is-open" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><div className="co-submodal-dialog reject-reason-dialog" role="dialog" aria-modal="true"><button type="button" className="co-submodal-close" onClick={onClose} aria-label="Close rejected reason"/><div className="co-submodal-header req-edit-header"><div className="req-edit-icon req-edit-icon--danger"><ClassicOrderIcon name="x-circle"/></div><div><div className="co-submodal-title">Rejected reason</div><div className="co-submodal-sub">Reason saved with this rejected component.</div></div></div><div className="co-submodal-body"><div className="rejected-reason-view-text">{reason}</div></div><div className="co-submodal-actions"><button type="button" className="ro-action-btn ro-action-btn--dark" onClick={onClose}>Done</button></div></div></div>;
 }
 
-function profileFieldValue(profile, aliases = []) {
-  const wanted = new Set(aliases.map((value) => lower(value).replace(/[^a-z0-9]/g, "")));
-  const topLevel = Object.entries(profile || {}).find(([key, value]) => wanted.has(lower(key).replace(/[^a-z0-9]/g, "")) && text(value));
-  if (topLevel) return text(topLevel[1]);
-  const field = (Array.isArray(profile?.fields) ? profile.fields : []).find((item) => wanted.has(lower(item?.label || item?.name || item?.key).replace(/[^a-z0-9]/g, "")) && text(item?.value));
-  return text(field?.value);
-}
-function safeHttpUrl(value) {
-  const url = text(value);
-  return /^https?:\/\//i.test(url) ? url : "";
-}
-function CreatorProfilePopover({ state, onClose }) {
-  if (!state) return null;
-  const profile = state.profile || {};
-  const name = profileFieldValue(profile, ["name", "full name", "username"]) || text(state.name) || "Creator";
-  const department = profileFieldValue(profile, ["department", "dept"]);
-  const position = profileFieldValue(profile, ["position", "job title", "title"]);
-  const phone = profileFieldValue(profile, ["phone", "mobile", "phone number"]);
-  const email = profileFieldValue(profile, ["email", "email address"]);
-  const employeeCode = profileFieldValue(profile, ["employee code", "employee id", "code"]);
-  const photoUrl = safeHttpUrl(profile?.photoUrl || profile?.profilePicture || profile?.profile_picture);
-  const files = (Array.isArray(profile?.filesMedia) ? profile.filesMedia : Array.isArray(profile?.files_media) ? profile.files_media : []).map((file) => ({
-    name: text(file?.name || file?.filename || file?.title) || "File",
-    url: safeHttpUrl(file?.url || file?.href),
-  }));
-  const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "U";
-  const subtitle = [position, department].filter(Boolean).join(" • ") || "Team member";
-  const details = [
-    ["Department", department], ["Position", position], ["Phone", phone], ["Email", email], ["Employee code", employeeCode],
-  ].filter(([, value]) => value);
-
-  return <div className="creator-profile-popover is-open next-review-creator-popover" style={{ left: state.left, top: state.top }} aria-hidden="false"><div className="creator-profile-window" role="dialog" aria-modal="false" aria-label="Created by profile">
-    <button type="button" className="creator-profile-close" onClick={onClose} aria-label="Close"><span className="creator-profile-close-x">×</span></button>
-    <div className="creator-profile-head"><div className={`creator-profile-avatar ${photoUrl ? "has-image" : ""}`}>{photoUrl ? <img src={photoUrl} alt={name}/> : <span>{initials}</span>}</div><div className="creator-profile-title-wrap"><div className="creator-profile-kicker">Created by</div><div className="creator-profile-name">{name}</div><div className="creator-profile-subtitle">{subtitle}</div></div></div>
-    {state.loading ? <div className="creator-profile-state"><span>Loading user details...</span></div> : state.error ? <div className="creator-profile-state creator-profile-state--error"><span>Could not load this user details.</span></div> : <>
-      <div className="creator-profile-section-title">Profile details</div>
-      {details.length ? <div className="creator-profile-fields next-review-creator-fields">{details.map(([label, value]) => <div className="creator-profile-field" key={label}><span>{label}</span><strong>{value}</strong></div>)}</div> : <div className="creator-profile-empty creator-profile-empty--fields"><span>No profile details available.</span></div>}
-      <div className="creator-profile-section-title creator-profile-section-title--files">Files &amp; media</div>
-      {files.length ? <div className="creator-profile-files">{files.map((file, index) => file.url ? <a className="creator-profile-file" href={file.url} target="_blank" rel="noopener noreferrer" key={`${file.name}-${index}`}><span className="creator-profile-file-icon"><ClassicOrderIcon name="clipboard" /></span><span className="creator-profile-file-body"><span className="creator-profile-file-name">{file.name}</span></span><span className="creator-profile-file-open"><ClassicOrderIcon name="external-link" /></span></a> : <div className="creator-profile-file creator-profile-file--disabled" key={`${file.name}-${index}`}><span className="creator-profile-file-icon"><ClassicOrderIcon name="clipboard" /></span><span className="creator-profile-file-body"><span className="creator-profile-file-name">{file.name}</span></span></div>)}</div> : <div className="creator-profile-empty"><span>No files or media.</span></div>}
-    </>}
-  </div></div>;
-}
 export default function OrdersReviewHeavyModals({
   selectedKey,
   selected,
@@ -549,7 +509,7 @@ export default function OrdersReviewHeavyModals({
         onSubmit={onSubmitEditor}
       />
       <RejectedReasonModal reason={reasonView} onClose={onCloseReason} />
-      <CreatorProfilePopover state={creatorState} onClose={onCloseCreator} />
+      <UnifiedOrderCreatorPopover state={creatorState} onClose={onCloseCreator} />
     </>
   );
 }

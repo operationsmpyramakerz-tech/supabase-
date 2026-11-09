@@ -13,6 +13,7 @@ import OrderTypeBadge from "./OrderTypeBadge";
 import OrdersEmptyState, { sortOrderGroups } from "./OrdersEmptyState";
 import OrdersPreferencesControl from "./OrdersPreferencesControl";
 import CurrentOrderCreatorPopover from "./CurrentOrderCreatorPopover";
+import { creatorPopoverPlacement } from "./UnifiedOrderCreatorPopover";
 import { orderCardAllows } from "../../lib/order-data-scope.mjs";
 
 const loadCurrentOrdersHeavyModals = () => import("./CurrentOrdersHeavyModals");
@@ -991,7 +992,7 @@ export default function CurrentOrdersClient({ initialOrders = [], initialPageInf
       <section className="card" id="current-orders">
         
         <div className="co-cards" id="orders-list">
-          {visibleGroups.length ? sortedVisibleGroups.map((group) => <OrderCard group={group} canOpen={permissions?.view_details !== false && orderCardAllows(scopePolicy, "details", group)} activeTab={tab} onOpen={openOrderDetails} onPrefetch={prefetchOrderDetails} onReason={(reason) => { void loadCurrentOrdersHeavyModals(); setReasonView(reason); }} onCreator={(anchor, selectedGroup) => { const bounds = anchor.getBoundingClientRect(); setCreatorPreview({ id: selectedGroup.createdById, name: selectedGroup.createdByName, left: Math.max(12, Math.min(bounds.right - 320, window.innerWidth - 332)), top: bounds.bottom + 8, above: bounds.top }); }} key={group.key} />) : listLoading ? (
+          {visibleGroups.length ? sortedVisibleGroups.map((group) => <OrderCard group={group} canOpen={permissions?.view_details !== false && orderCardAllows(scopePolicy, "details", group)} activeTab={tab} onOpen={openOrderDetails} onPrefetch={prefetchOrderDetails} onReason={(reason) => { void loadCurrentOrdersHeavyModals(); setReasonView(reason); }} onCreator={(anchor, selectedGroup) => { setCreatorPreview({ id: selectedGroup.createdById, name: selectedGroup.createdByName, placement: creatorPopoverPlacement(anchor) }); }} key={group.key} />) : listLoading ? (
             <div className="ops-no-data-state" role="status" aria-live="polite"><div className="ops-no-data-state__text">Loading orders…</div></div>
           ) : (
             <OrdersEmptyState filtered={tab !== "all" || type !== "all" || !!query.trim()} context={"my-orders"} onReset={() => { setTab("all"); setType("all"); setQuery(""); }} />

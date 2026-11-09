@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { featureAllowed } from "../../lib/feature-permissions-registry";
 import dynamic from "next/dynamic";
 import ClassicOrderIcon from "./ClassicOrderIcon";
+import { creatorPopoverPlacement } from "./UnifiedOrderCreatorPopover";
 import useCompleteOrderTypeCounts from "./useCompleteOrderTypeCounts";
 import { createOrderDetailsLoader } from "./orderDetailsLoader";
 import { cancelOrderOpenTimer, loadOrderAndModalWithMetrics, markOrderOpenStarted, reportOrderVisibleAfterPaint, warmOrderModalOnIdle } from "./orderOpeningPerformance";
@@ -702,14 +703,8 @@ export default function OrdersReviewClient({ initialOrders = [], initialPageInfo
   }
   async function openCreatorProfile(anchor, group) {
     void loadOrdersReviewHeavyModals();
-    const rect = anchor.getBoundingClientRect();
-    const width = Math.min(330, window.innerWidth - 28);
-    const estimatedHeight = Math.min(500, Math.max(240, window.innerHeight - 28));
-    const left = Math.min(Math.max(14, rect.right - width), Math.max(14, window.innerWidth - width - 14));
-    const below = rect.bottom + 10;
-    const above = rect.top - estimatedHeight - 10;
-    const top = below + estimatedHeight <= window.innerHeight - 14 ? below : Math.max(14, above);
-    const base = { left, top, name: group.createdByName || "Creator", loading: true, profile: null, error: false };
+    const placement = creatorPopoverPlacement(anchor);
+    const base = { placement, name: group.createdByName || "Creator", loading: true, profile: null, error: false };
     setCreatorState(base);
     const key = text(group.createdById || group.createdByName);
     if (!key) { setCreatorState({ ...base, loading: false, error: true }); return; }

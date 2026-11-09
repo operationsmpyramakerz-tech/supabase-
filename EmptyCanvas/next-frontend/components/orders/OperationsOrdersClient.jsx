@@ -6,6 +6,8 @@ import { orderCardAllows } from "../../lib/order-data-scope.mjs";
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import ClassicOrderIcon from "./ClassicOrderIcon";
+import UnifiedOrderCreatorPopover, { creatorPopoverPlacement } from "./UnifiedOrderCreatorPopover";
+
 import useCompleteOrderTypeCounts from "./useCompleteOrderTypeCounts";
 import { withSingleOrderSourceAttribution } from "../../lib/order-kit-attribution.mjs";
 import { createOrderDetailsLoader } from "./orderDetailsLoader";
@@ -606,51 +608,6 @@ function StatusPill({ group, tab = "", className = "co-status-btn" }) {
 
 function MixedStatusPill() {
   return <span className="co-status-btn sv-mixed-approval-pill" aria-label="Approved and Rejected"><span className="sv-mixed-approval-pill__part sv-mixed-approval-pill__part--approved">Approved</span><span className="sv-mixed-approval-pill__part sv-mixed-approval-pill__part--rejected">Rejected</span></span>;
-}
-
-function profileFieldValue(profile, aliases) {
-  const wanted = new Set((Array.isArray(aliases) ? aliases : [aliases]).map((value) => lower(value).replace(/[^a-z0-9]/g, "")));
-  const topLevel = Object.entries(profile || {}).find(([key, value]) => wanted.has(lower(key).replace(/[^a-z0-9]/g, "")) && text(value));
-  if (topLevel) return text(topLevel[1]);
-  const field = (Array.isArray(profile?.fields) ? profile.fields : []).find((item) => wanted.has(lower(item?.label || item?.name || item?.key).replace(/[^a-z0-9]/g, "")) && text(item?.value));
-  return text(field?.value);
-}
-
-function safeHttpUrl(value) {
-  const url = text(value);
-  return /^https?:\/\//i.test(url) ? url : "";
-}
-
-function CreatorProfilePopover({ state, onClose }) {
-  if (!state) return null;
-  const profile = state.profile || {};
-  const name = profileFieldValue(profile, ["name", "full name", "username"]) || text(state.name) || "Creator";
-  const department = profileFieldValue(profile, ["department", "dept"]);
-  const position = profileFieldValue(profile, ["position", "job title", "title"]);
-  const phone = profileFieldValue(profile, ["phone", "mobile", "phone number"]);
-  const email = profileFieldValue(profile, ["email", "email address"]);
-  const employeeCode = profileFieldValue(profile, ["employee code", "employee id", "code"]);
-  const photoUrl = safeHttpUrl(profile?.photoUrl || profile?.profilePicture || profile?.profile_picture);
-  const files = (Array.isArray(profile?.filesMedia) ? profile.filesMedia : Array.isArray(profile?.files_media) ? profile.files_media : []).map((file) => ({
-    name: text(file?.name || file?.filename || file?.title) || "File",
-    url: safeHttpUrl(file?.url || file?.href),
-  }));
-  const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "U";
-  const subtitle = [position, department].filter(Boolean).join(" • ") || "Team member";
-  const details = [
-    ["Department", department], ["Position", position], ["Phone", phone], ["Email", email], ["Employee code", employeeCode],
-  ].filter(([, value]) => value);
-
-  return <div className="creator-profile-popover is-open next-operations-creator-popover" style={{ left: state.left, top: state.top }} aria-hidden="false"><div className="creator-profile-window" style={state.maxHeight ? { maxHeight: `${state.maxHeight}px` } : undefined} role="dialog" aria-modal="false" aria-label="Created by profile">
-    <button type="button" className="creator-profile-close" onClick={onClose} aria-label="Close"><span className="creator-profile-close-x">×</span></button>
-    <div className="creator-profile-head"><div className={`creator-profile-avatar ${photoUrl ? "has-image" : ""}`}>{photoUrl ? <img src={photoUrl} alt={name}/> : <span>{initials}</span>}</div><div className="creator-profile-title-wrap"><div className="creator-profile-kicker">Created by</div><div className="creator-profile-name">{name}</div><div className="creator-profile-subtitle">{subtitle}</div></div></div>
-    {state.loading ? <div className="creator-profile-state"><span>Loading user details...</span></div> : state.error ? <div className="creator-profile-state creator-profile-state--error"><span>Could not load this user details.</span></div> : <>
-      <div className="creator-profile-section-title">Profile details</div>
-      {details.length ? <div className="creator-profile-fields next-operations-creator-fields">{details.map(([label, value]) => <div className="creator-profile-field" key={label}><span>{label}</span><strong>{value}</strong></div>)}</div> : <div className="creator-profile-empty creator-profile-empty--fields"><span>No profile details available.</span></div>}
-      <div className="creator-profile-section-title creator-profile-section-title--files">Files &amp; media</div>
-      {files.length ? <div className="creator-profile-files">{files.map((file, index) => file.url ? <a className="creator-profile-file" href={file.url} target="_blank" rel="noopener noreferrer" key={`${file.name}-${index}`}><span className="creator-profile-file-icon"><ClassicOrderIcon name="clipboard" /></span><span className="creator-profile-file-body"><span className="creator-profile-file-name">{file.name}</span></span><span className="creator-profile-file-open"><ClassicOrderIcon name="external-link" /></span></a> : <div className="creator-profile-file creator-profile-file--disabled" key={`${file.name}-${index}`}><span className="creator-profile-file-icon"><ClassicOrderIcon name="clipboard" /></span><span className="creator-profile-file-body"><span className="creator-profile-file-name">{file.name}</span></span></div>)}</div> : <div className="creator-profile-empty"><span>No files or media.</span></div>}
-    </>}
-  </div></div>;
 }
 
 function writeOperationsEditTransfer(data, group) {
@@ -1465,18 +1422,8 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
   }
 
   async function openCreatorProfile(anchor, group) {
-    const rect = anchor.getBoundingClientRect();
-    const width = Math.min(330, window.innerWidth - 28);
-    // Keep the profile visually attached to the clicked creator button.
-    const left = Math.min(Math.max(14, rect.right - width), Math.max(14, window.innerWidth - width - 14));
-    const gap = 8;
-    const belowTop = rect.bottom + gap;
-    const belowAvailable = Math.max(0, window.innerHeight - belowTop - 14);
-    const aboveAvailable = Math.max(0, rect.top - gap - 14);
-    const preferBelow = belowAvailable >= 220 || belowAvailable >= aboveAvailable;
-    const maxHeight = Math.max(180, Math.min(520, preferBelow ? belowAvailable : aboveAvailable));
-    const top = preferBelow ? belowTop : Math.max(14, rect.top - gap - maxHeight);
-    const base = { left, top, maxHeight, name: group.createdByName || "Creator", loading: true, profile: null, error: false };
+    const placement = creatorPopoverPlacement(anchor);
+    const base = { placement, name: group.createdByName || "Creator", loading: true, profile: null, error: false };
     setCreatorState(base);
     const key = text(group.createdById || group.createdByName);
     if (!key) { setCreatorState({ ...base, loading: false, error: true }); return; }
@@ -1548,7 +1495,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
           onConfirmDelete={confirmDeleteOrder}
         />
       ) : null}
-      <CreatorProfilePopover state={creatorState} onClose={() => setCreatorState(null)} />
+      <UnifiedOrderCreatorPopover state={creatorState} onClose={() => setCreatorState(null)} />
       <OrdersPerformancePanel />
     </section>
   );

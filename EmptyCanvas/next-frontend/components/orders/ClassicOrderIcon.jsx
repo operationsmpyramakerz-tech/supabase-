@@ -11,6 +11,8 @@ export default function ClassicOrderIcon({ name, className = "" }) {
   };
 
   const paths = {
+    mail: <><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m2 6 10 7 10-7"/></>,
+    phone: <path d="M22 16.9v3a2 2 0 0 1-2.2 2A19.7 19.7 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7l.5 3a2 2 0 0 1-.6 1.7L7.1 10a16 16 0 0 0 6.9 6.9l1.6-1.9a2 2 0 0 1 1.7-.6l3 .5A2 2 0 0 1 22 16.9z"/>,
     preferences: <><path d="M3 6h9m4 0h5M3 12h3m4 0h11M3 18h12m4 0h2"/><rect x="12" y="3.5" width="4" height="5" rx="1.5"/><rect x="6" y="9.5" width="4" height="5" rx="1.5"/><rect x="15" y="15.5" width="4" height="5" rx="1.5"/></>,
     "sort-asc": <><path d="M4 7h6M4 12h10M4 17h13"/><path d="M19 19V5m-3 3 3-3 3 3"/></>,
     "sort-numeric-desc": <><path d="M3 6h4m-2-2v9m-2 0h5"/><path d="M12 8h5m-5 4h5m-5 4h3"/><path d="M20 5v14m-3-3 3 3 3-3"/></>,
