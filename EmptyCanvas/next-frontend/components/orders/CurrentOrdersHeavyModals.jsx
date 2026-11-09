@@ -458,9 +458,9 @@ function OrderDetailsModal({ group, tab, busy, onClose, onAction, onReason, onEx
             {may("export") ? <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => setDownloadOpen(true)} disabled={busy}><ClassicOrderIcon name="download" /><span>Download</span></button> : null}
             {!maintenance ? <OrderSortButton value={sortMode} onChange={setSortMode} /> : null}
           </div>
-          <div className="co-modal-meta co-modal-meta--after-actions">
+          {!maintenance ? <div className="co-modal-meta co-modal-meta--after-actions">
             <div className="co-meta-row co-meta-row--reason"><span>Reason</span><strong>{group.reason}</strong></div>
-          </div>
+          </div> : null}
           {maintenance ? <div className="next-maintenance-parity next-maintenance-details-embed">
             <MaintenanceComponentCards items={tabItems} query={componentSearch} onClearSearch={() => setComponentSearch("")} />
           </div> : <ProgressiveOrderGroups

@@ -3,6 +3,7 @@ import { isTrustedLegacyAdmin } from "./admin-identity-policy.mjs";
 import { performance } from "node:perf_hooks";
 import { isSupabaseConfigured, select, selectAll, selectById, updateById, updateByIds } from "./supabase-rest";
 import { enrichOrderDetailGrouping, loadRawOrderRowsByIds, serializeReviewOrderDetail } from "./order-details-data";
+import { enrichMaintenanceDetailProducts } from "./maintenance-detail-enrichment";
 import { loadFastOrderDetailsBundle } from "./order-details-fast-path";
 import { consumeOrderSummaryWindows, loadOrderRowsByNumbers, scanOrderNumberCandidates } from "./order-pagination";
 import { applyOrderSearchPlan, canUseOrderSearchText, createOrderSearchPlan, noteOrderSearchTextError } from "./order-search-hotpath";
@@ -734,16 +735,30 @@ export async function loadOrdersReviewDetails({ account, orderIds = [], timings 
   }
 
   const enrichStartedAt = performance.now();
-  const details = await enrichOrderDetailGrouping(allowed.map(serializeReviewOrderDetail), {
+  const serialized = allowed.map(serializeReviewOrderDetail);
+  const hasMaintenance = serialized.some((item) => text(item?.orderType).toLowerCase().replace(/[^a-z0-9]/g, "") === "requestmaintenance");
+  const resolvedProducts = [];
+  const details = await enrichOrderDetailGrouping(serialized, {
     timings,
+    ...(hasMaintenance ? { productsSink: resolvedProducts } : {}),
     references: fast?.references || null,
     recoverProposalSources: Boolean(fast?.proposalRecovery),
   });
+  // Maintenance detail cards need saved issue, logs and product ID codes.
+  // Preserve supervisor approval metadata and avoid changing non-maintenance items.
+  const maintenanceItems = details.filter((item) => text(item?.orderType).toLowerCase().replace(/[^a-z0-9]/g, "") === "requestmaintenance");
+  let enrichedDetails = details;
+  if (maintenanceItems.length) {
+    const knownProducts = fast?.references?.products || resolvedProducts;
+    const maintained = await enrichMaintenanceDetailProducts(maintenanceItems, { knownProducts });
+    const byId = new Map(maintained.map((item) => [text(item?.id), item]));
+    enrichedDetails = details.map((item) => byId.get(text(item?.id)) || item);
+  }
   if (timings) {
     timings.enrich = performance.now() - enrichStartedAt;
     if (fast) timings.fastPath = 1;
   }
-  return details;
+  return enrichedDetails;
 }
 
 

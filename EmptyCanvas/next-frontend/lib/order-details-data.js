@@ -544,6 +544,9 @@ export function serializeReviewOrderDetail(row = {}) {
   const createdByName = text(valueFor(row, ["team_member_name", "teams_members", "Teams Members", "created_by_name", "created_by", "Created By"]));
   const createdById = text(valueFor(row, ["team_member_id", "team_members_id", "created_by_id", "owner_id"]));
   const sources = sourceKits(valueFor(row, ["source_kits", "Source Kits", "proposal_source_kits", "Proposal Source Kits"]));
+  const maintenance = norm(orderType).replace(/[^a-z0-9]/g, "") === "requestmaintenance"
+    ? serializeOperationsOrderDetail(row)
+    : null;
   return {
     id,
     teamMemberId: createdById || createdByName || null,
@@ -578,6 +581,20 @@ export function serializeReviewOrderDetail(row = {}) {
     sourceProposalId: text(valueFor(row, ["source_proposal_id", "Source Proposal ID", "proposal_id", "Proposal ID"])) || null,
     sourceProposalName: text(valueFor(row, ["source_proposal_name", "Source Proposal Name", "proposal_name", "Proposal Name"])) || null,
     sourceKits: sources,
+    ...(maintenance ? {
+      // Keep the review approval fields untouched; only reuse maintenance-specific details.
+      issueDescription: maintenance.issueDescription,
+      serialNumber: maintenance.serialNumber,
+      resolutionMethod: maintenance.resolutionMethod,
+      actualIssueDescription: maintenance.actualIssueDescription,
+      repairAction: maintenance.repairAction,
+      maintenanceLogs: maintenance.maintenanceLogs,
+      sparePartsNeededEntries: maintenance.sparePartsNeededEntries,
+      sparePartsReplacedEntries: maintenance.sparePartsReplacedEntries,
+      maintenanceChecklist: maintenance.maintenanceChecklist,
+      maintenanceLoggedAt: maintenance.maintenanceLoggedAt,
+      maintenanceTechnicianName: maintenance.maintenanceTechnicianName,
+    } : {}),
     source: "supabase",
   };
 }

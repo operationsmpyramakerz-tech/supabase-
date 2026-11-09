@@ -31,7 +31,7 @@ test('all three maintenance detail views use one shared log/component renderer',
 });
 
 test('maintenance-specific CSS is scoped to the embedded UI and loaded on order routes', () => {
-  assert.match(shell, /maintenance-orders\.css\?v=maintenance-summary-v337/);
+  assert.match(shell, /maintenance-orders\.css\?v=maintenance-review-parity-v368/);
   assert.match(css, /body\.current-orders-page \.next-maintenance-parity/);
   assert.match(css, /body\.operations-orders-page \.next-maintenance-parity/);
   assert.match(css, /body\.page-maintenance-orders \.next-classic-maintenance-parity/);

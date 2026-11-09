@@ -906,10 +906,10 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, orderOption
             <div className="next-operations-edit-mode-note"><ClassicOrderIcon name="info" /><span>Tap any component to edit its product, status and quantities.</span></div>
           </> : null}
 
-          <div className="co-modal-meta co-modal-meta--after-actions">
+          {!maintenance ? <div className="co-modal-meta co-modal-meta--after-actions">
             <div className="co-meta-row co-meta-row--reason"><span>Reason</span><strong>{group.reason}</strong></div>
-            {!maintenance ? <div className="co-meta-row"><span>Estimate Total</span><strong>{formatMoney(group.total)}</strong></div> : null}
-          </div>
+            <div className="co-meta-row"><span>Estimate Total</span><strong>{formatMoney(group.total)}</strong></div>
+          </div> : null}
 
           {maintenance && !isEditing ? <div className="next-maintenance-parity next-maintenance-details-embed">
             <MaintenanceComponentCards items={tabItems} query={componentSearch} onClearSearch={() => setComponentSearch("")} />

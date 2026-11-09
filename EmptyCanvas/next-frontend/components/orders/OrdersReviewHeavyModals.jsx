@@ -10,6 +10,7 @@ import { orderCreatedDate, orderDeliveryDate, orderPriority } from "./order-summ
 import { groupOrderItems, OrderSortButton } from "./OrderGrouping";
 import ProgressiveOrderGroups from "./ProgressiveOrderGroups";
 import OrderComponentSearch, { matchesOrderComponentSearch } from "./OrderComponentSearch";
+import { MaintenanceComponentCards } from "./MaintenanceComponentCards";
 
 const OrderDownloadModal = dynamic(() => import("./OrderDownloadModal"), { ssr: false });
 
@@ -286,7 +287,7 @@ function ReviewDetailsModal({ group, activeTab, busyIds, onClose, onQuantitySave
   };
 
   return <div className="co-modal-overlay is-open" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <div className="co-modal-dialog next-review-order-modal" role="dialog" aria-modal="true" aria-label={`${group.orderIdLabel} review details`}>
+    <div className={`co-modal-dialog next-review-order-modal${maintenance ? " next-maintenance-review-modal" : ""}`} role="dialog" aria-modal="true" aria-label={`${group.orderIdLabel} review details`}>
       <span className="co-modal-type-badge" style={{ "--co-order-type-accent": typeMeta.accent, "--co-order-type-accent-dark": typeMeta.accentDark }} aria-hidden="true"><ClassicOrderIcon name={typeMeta.icon} /></span>
       {(showEdit || showArchive || showUnarchive) ? <div className="co-modal-more" ref={moreRef}>
         <button type="button" className="co-modal-more-btn" aria-label="Order review actions" aria-haspopup="menu" aria-expanded={moreOpen} onClick={() => setMoreOpen((stateValue) => !stateValue)}><span className="co-modal-more-dots">⋮</span></button>
@@ -312,13 +313,15 @@ function ReviewDetailsModal({ group, activeTab, busyIds, onClose, onQuantitySave
         <div className="co-modal-actions ro-actions ro-actions--right order-group-sort-actions order-modal-search-actions order-detail-toolkit">
           <OrderComponentSearch key={`${group.key}:${activeTab}`} value={componentSearch} onChange={setComponentSearch} />
           <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => setDownloadOpen(true)}><ClassicOrderIcon name="download" /><span>Download</span></button>
-          <OrderSortButton value={sortMode} onChange={setSortMode} />
+          {!maintenance ? <OrderSortButton value={sortMode} onChange={setSortMode} /> : null}
         </div>
-        <div className="co-modal-meta co-modal-meta--after-actions">
+        {!maintenance ? <div className="co-modal-meta co-modal-meta--after-actions">
           <div className="co-meta-row co-meta-row--reason"><span>Reason</span><strong>{group.reason}</strong></div>
-        </div>
-        {canAct && permissions.bulk_approve ? <div className="next-review-bulk-actions"><div><span>Review all components</span><strong>{componentSearch.trim() ? `Applies to ALL ${group.items.length} components, including hidden search results.` : "Apply one decision to every item in this order."}</strong></div><div className="next-classic-review-actions"><button className="btn btn-success btn-xs" type="button" disabled={group.items.some((item) => busyIds.has(text(item?.id)))} onClick={() => onBulkDecision(group, "Approved")}><ClassicOrderIcon name="check" /> Approve all</button><button className="btn btn-danger btn-xs" type="button" disabled={group.items.some((item) => busyIds.has(text(item?.id)))} onClick={() => onBulkDecision(group, "Rejected")}><ClassicOrderIcon name="x" /> Reject all</button></div></div> : null}
-        <ProgressiveOrderGroups
+        </div> : null}
+        {canAct && !maintenance && permissions.bulk_approve ? <div className="next-review-bulk-actions"><div><span>Review all components</span><strong>{componentSearch.trim() ? `Applies to ALL ${group.items.length} components, including hidden search results.` : "Apply one decision to every item in this order."}</strong></div><div className="next-classic-review-actions"><button className="btn btn-success btn-xs" type="button" disabled={group.items.some((item) => busyIds.has(text(item?.id)))} onClick={() => onBulkDecision(group, "Approved")}><ClassicOrderIcon name="check" /> Approve all</button><button className="btn btn-danger btn-xs" type="button" disabled={group.items.some((item) => busyIds.has(text(item?.id)))} onClick={() => onBulkDecision(group, "Rejected")}><ClassicOrderIcon name="x" /> Reject all</button></div></div> : null}
+        {maintenance ? <div className="next-maintenance-parity next-maintenance-details-embed">
+          <MaintenanceComponentCards items={group.items} query={componentSearch} onClearSearch={() => setComponentSearch("")} />
+        </div> : <ProgressiveOrderGroups
           groups={groupedItems}
           mode={sortMode}
           query={componentSearch}
@@ -326,7 +329,7 @@ function ReviewDetailsModal({ group, activeTab, busyIds, onClose, onQuantitySave
           onClearSearch={() => setComponentSearch("")}
           resetKey={JSON.stringify([group?.key, activeTab, sortMode, componentSearch])}
           renderItem={renderItem}
-        />
+        />}
       </div>
       </div>
       <OrderDownloadModal
