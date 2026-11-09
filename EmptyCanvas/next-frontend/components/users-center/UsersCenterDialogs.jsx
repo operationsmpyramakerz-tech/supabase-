@@ -10,6 +10,7 @@ import { cacheUsersCenterAuthorization, currentUsersCenterAuthorizationToken, re
 import { TASK_SCOPE_MARKER } from "../../lib/task-data-scope.mjs";
 import { FEATURE_DEFINITIONS, ACTIVE_PILOT_FEATURE_KEYS, OPTIONAL_FEATURE_FALLBACKS, LEGACY_DEFAULT_FEATURE_KEYS, MY_ORDERS_ENFORCEMENT_MARKER, PHASE2A_LEGACY_MARKERS, ORDER_SCOPE_MARKERS } from "../../lib/feature-permissions-registry";
 import { permissionDraft, permissionDraftChanges, modulePermissionStatus } from "../../lib/feature-permissions-ui.mjs";
+import { resolveExternalMediaLink } from "../../lib/user-media-external-link.mjs";
 
 function text(value) { return String(value ?? "").trim(); }
 function lower(value) { return text(value).toLowerCase(); }
@@ -333,11 +334,10 @@ function FileLinksField({ field, value, onChange, notify }) {
   }
 
   function insert() {
-    const cleanUrl = text(link);
-    if (!cleanUrl) return notify("warning", "Missing link", "Paste the external link first.");
-    if (!/^https?:\/\//i.test(cleanUrl)) return notify("warning", "Invalid link", "Use a full link starting with http:// or https://.");
-    const displayName = text(linkName) || fileLabel(cleanUrl, entries.length);
-    saveEntries([...entries, { name: displayName, url: cleanUrl }]);
+    const resolved = resolveExternalMediaLink(link, linkName);
+    if (!resolved.ok) return notify("warning", resolved.reason === "missing" ? "Missing link" : "Invalid link", resolved.reason === "missing" ? "Paste the external link first." : "Use a valid full link starting with http:// or https://.");
+    const displayName = resolved.name || fileLabel(resolved.url, entries.length);
+    saveEntries([...entries, { name: displayName, url: resolved.url }]);
     setLink("");
     setLinkName("");
     setStatus("Link added. Save changes to apply it.");
@@ -363,9 +363,9 @@ function FileLinksField({ field, value, onChange, notify }) {
         <label className="ua-file-pick ua-file-pick--small ua-file-pick--wide"><UAIcon name="paperclip"/><span>{uploading ? "Uploading..." : "Choose file"}</span><input type="file" multiple disabled={uploading} onChange={(event) => { choose(event.target.files); event.target.value = ""; }}/></label>
       </div>
       <div className="ua-media-add-card">
-        <div className="ua-media-add-card__heading"><UAIcon name="paperclip"/><div><strong>External link</strong><small>Name links like Location, Drive folder, Contract, etc.</small></div></div>
-        <input type="text" value={linkName} onChange={(event) => setLinkName(event.target.value)} placeholder="Link name (e.g. Location)"/>
-        <div className="ua-media-link-row"><input type="url" value={link} onChange={(event) => setLink(event.target.value)} placeholder="https://..."/><button type="button" className="ua-mini-btn" onClick={insert}>Add link</button></div>
+        <div className="ua-media-add-card__heading"><UAIcon name="paperclip"/><div><strong>External link</strong><small>Paste a full link, then give it a display name.</small></div></div>
+        <input type="url" aria-label="External link URL" value={link} onChange={(event) => setLink(event.target.value)} placeholder="Link URL (https://...)"/>
+        <div className="ua-media-link-row"><input type="text" aria-label="External link display name" value={linkName} onChange={(event) => setLinkName(event.target.value)} placeholder="Link name (e.g. Location)"/><button type="button" className="ua-mini-btn" onClick={insert}>Add link</button></div>
       </div>
     </div>
     <small>{status}</small>
