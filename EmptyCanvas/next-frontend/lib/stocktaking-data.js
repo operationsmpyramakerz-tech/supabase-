@@ -2,6 +2,7 @@ import "server-only";
 import { isTrustedLegacyAdmin } from "./admin-identity-policy.mjs";
 import { assertSessionColumnOwner, assertWritableSessionColumn } from "./stocktaking-session-access.mjs";
 import { readAllStocktakingPages } from "./stocktaking-pagination.mjs";
+import { planStocktakingFolderRowDeletion, stocktakingFolderDeletePath } from "./stocktaking-folder-delete.mjs";
 import { getProductsCatalog } from "./products-service";
 import { listTeamMembersLite } from "./team-members-service";
 import { getReviewerVisibility } from "./reviewer-visibility-service";
@@ -964,11 +965,16 @@ function validReceiptPhotos(value) {
 }
 
 /**
- * Empty one stock folder without deleting stocktaking rows shared by other
- * schools. Folders are *quantity columns* in a shared stocktaking matrix.
- * Setting this column to zero makes the folder disappear from the folder list
- * (which only shows non-empty columns), but preserves the user's mapping,
- * receipt documents and all other users' inventories.
+ * Permanently delete the physical Stocktaking records owned by one folder.
+ *
+ * Each delivered order component occupies its own row, with its owner's
+ * quantity column populated. Clearing only the quantity leaves source_order_id
+ * in the table, causing Send to Stock to incorrectly skip a subsequent import.
+ * Removing the row also removes the obsolete source-order marker.
+ *
+ * The matrix supports shared rows, so ALWAYS check all other folder columns
+ * before writing. Reject a mixed-owner row rather than deleting another
+ * school's stock or silently leaving an order marker behind.
  */
 export async function deleteStocktakingFolder(account = {}, requestedColumn = "") {
   if (stocktakingAccessLevel(account) !== "admin") {
@@ -977,42 +983,86 @@ export async function deleteStocktakingFolder(account = {}, requestedColumn = ""
   const requested = text(requestedColumn);
   if (!requested) throw stocktakingMutationError("Choose a Stocktaking folder to delete.", 400);
 
-  // Match an existing visible stock folder using its exact server-resolved key.
-  // Never allow arbitrary user-supplied query parameter names in PATCH.
+  // Only allow exact visible folders, never arbitrary user-controlled columns.
   const folders = await listStocktakingFolders({ fresh: true });
   const folder = folders.find((entry) => entry.key === requested);
   if (!folder) throw stocktakingMutationError("This Stocktaking folder is empty or no longer exists. Refresh the page.", 404);
   const schemaKeys = await loadStockSchemaKeys({ fresh: true });
   const column = resolveRequestedColumnFromKeys(schemaKeys, requested);
   if (column !== requested) throw stocktakingMutationError("Invalid Stocktaking folder column.", 400);
+  if (!schemaKeys.includes("id")) throw stocktakingMutationError("Stocktaking table has no id column. Cannot safely delete records.", 409);
 
-  const filter = `${encodeURIComponent(column)}=neq.0`;
-  await supabaseRequest(`/${encodeURIComponent(stocktakingTable())}?${filter}`, {
-    method: "PATCH",
-    headers: { Prefer: "return=minimal" },
-    body: { [column]: 0 },
-    profileName: "stocktaking.folder-delete",
-    timeoutMs: 45000,
-  });
-  invalidateStocktakingReadCaches();
+  // Every other owner's stock quantity AND inventory-session column must
+  // remain untouched. A shared row cannot safely be deleted. The target
+  // owner's inventory/defected session values are deleted with its own row.
+  const targetBase = ownerBase(column);
+  const ownSessionPrefixes = ["inventory", "defected", "defecated"]
+    .map((kind) => `${targetBase}_${kind}_`);
+  const otherColumns = schemaKeys.filter((key) => key !== column && (
+    (usefulStockFolderColumn(key) && !isInventoryMetaColumn(key))
+    || (isInventoryMetaColumn(key) && !ownSessionPrefixes.some((prefix) => stockColumnKey(key).startsWith(prefix)))
+  ));
+  const projection = ["id", column, ...otherColumns];
+  const selectExpr = projection.map(quoteStockSelectColumn).join(",");
+  const rows = await readAllStocktakingPages(({ limit, offset }) => select(stocktakingTable(), {
+    select: selectExpr,
+    [column]: "not.is.null", // also delete rows previously zeroed by the old action
+    order: "id.asc",
+    limit: String(limit),
+    offset: String(offset),
+  }, { profileName: "stocktaking.folder-delete-read" }));
+  const plan = planStocktakingFolderRowDeletion(rows, column, otherColumns);
+  if (plan.sharedIds.length) {
+    throw stocktakingMutationError(
+      `${plan.sharedIds.length} stock rows also belong to other folders. No records were deleted. Contact the administrator to separate these shared rows first.`,
+      409,
+    );
+  }
+  if (!plan.ids.length) {
+    throw stocktakingMutationError("The Stocktaking folder has no records left to delete. Refresh the page.", 409);
+  }
 
-  // Check the actual remaining values before reporting completion, including
-  // records outside the first PostgREST page. A concurrent stock write may
-  // legitimately require the admin to retry instead of a false success.
+  // Restrict DELETE by both row IDs and a database-side check that no other
+  // folder column has been populated since our preflight query.
+  // Chunk so the confirmed result can be checked against expected row IDs.
+  let deleted = 0;
+  try {
+    for (let offset = 0; offset < plan.ids.length; offset += 100) {
+      const ids = plan.ids.slice(offset, offset + 100);
+      const path = stocktakingFolderDeletePath(stocktakingTable(), ids, column, otherColumns);
+      const removed = await supabaseRequest(path, {
+        method: "DELETE",
+        headers: { Prefer: "return=representation" },
+        profileName: "stocktaking.folder-delete-rows",
+        timeoutMs: 45000,
+      });
+      const actualIds = new Set((Array.isArray(removed) ? removed : []).map((row) => String(row?.id ?? "")));
+      deleted += actualIds.size;
+      if (actualIds.size !== ids.length || ids.some((id) => !actualIds.has(String(id)))) {
+        throw stocktakingMutationError("Stock changed during deletion. Some rows may already be deleted; refresh and retry.", 409);
+      }
+    }
+  } finally {
+    // Clear stale folder summaries even if deletion fails partway through.
+    invalidateStocktakingReadCaches();
+  }
+
+  // Include old zero-quantity rows in the verification. A concurrent insert
+  // must not be reported as a successful full deletion.
   const remaining = await select(stocktakingTable(), {
     select: "id",
-    [column]: "neq.0",
+    [column]: "not.is.null",
     limit: "1",
   }, { profileName: "stocktaking.folder-delete-verify" });
   if (Array.isArray(remaining) && remaining.length) {
-    throw stocktakingMutationError("New stock was recorded while deleting. Refresh and try again.", 409);
+    throw stocktakingMutationError("New stock was recorded during deletion. Refresh and retry.", 409);
   }
   return {
     ok: true,
     source: "supabase-next",
     column,
     folder: folder.label,
-    clearedItems: folder.itemsCount,
+    deletedRows: deleted,
   };
 }
 

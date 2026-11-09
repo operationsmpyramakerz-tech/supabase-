@@ -1544,11 +1544,11 @@ export default function StocktakingClient({ account, initialStock = [], initialC
             <span className={`stocktaking-folder-delete-icon ${deleteFolderDone ? "is-done" : ""}`} aria-hidden="true">
               {deleteFolderDone ? <Icon name="check" /> : <Icon name="trash" />}
             </span>
-            <h3 id="stocktaking-folder-delete-title">{deleteFolderDone ? "Stock cleared" : `Delete ${deleteFolderTarget.label} stock?`}</h3>
+            <h3 id="stocktaking-folder-delete-title">{deleteFolderDone ? "Stock deleted" : `Delete ${deleteFolderTarget.label} stock?`}</h3>
             <p id="stocktaking-folder-delete-description">
               {deleteFolderDone
-                ? `All stock quantities in ${deleteFolderTarget.label} were cleared. The folder is no longer shown.`
-                : `This will permanently clear all ${deleteFolderTarget.itemsCount ?? ""} component quantities in ${deleteFolderTarget.label} and remove the folder from the list. Other stock folders will not be affected.`}
+                ? `All ${deleteFolderTarget.label} stock records were permanently deleted, including their order links.`
+                : `This permanently deletes all stock records from ${deleteFolderTarget.label}, including zero-quantity entries and linked order IDs. You can send delivered orders to this stock again afterward. This action cannot be undone. Other stock folders are protected.`}
             </p>
             {deleteFolderError ? <p className="stocktaking-folder-delete-error" role="alert">{deleteFolderError}</p> : null}
             <footer className="stocktaking-folder-delete-footer">
