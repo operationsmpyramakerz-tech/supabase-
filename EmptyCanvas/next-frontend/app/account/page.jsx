@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import AppShell from "../../components/AppShell";
 import AccountClient from "../../components/account/AccountClient";
 import { featureAllowed } from "../../lib/feature-permissions-registry";
+import { accountWithOwnFilesMedia } from "../../lib/account-direct";
 import { getDirectAccountGate } from "../../lib/products-auth";
 
 export const dynamic = "force-dynamic";
@@ -31,16 +32,24 @@ export default async function AccountPage() {
     return <main className="standalone-state"><section className="state-card"><h1>Profile access denied</h1><p>You do not have permission to view your profile.</p><a className="secondary-button" href="/next/home">Return to Home</a></section></main>;
   }
 
+  let displayAccount;
+  try {
+    displayAccount = await accountWithOwnFilesMedia(gate.account);
+  } catch (error) {
+    console.error("[account] Unable to load own files and media:", error?.message || error);
+    displayAccount = { ...gate.account, filesMedia: [], filesMediaLoadError: true };
+  }
+
   return (
     <AppShell
-      account={gate.account}
+      account={displayAccount}
       title="User Profile"
       eyebrow="Profile, security and personal workspace"
       activePath="/next/account"
       bodyClass="page-account"
       pageStyles={["/next/css/account-classic-inline.css?v=profile-edit-20261016", "/next/css/notification-preferences.css?v=1"]}
     >
-      <AccountClient initialAccount={gate.account} />
+      <AccountClient initialAccount={displayAccount} />
     </AppShell>
   );
 }

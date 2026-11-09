@@ -3,7 +3,7 @@
 
 export const MODULE_LINKS = [
   { label: "Notifications", href: "/next/notifications", permissions: [], alwaysVisible: true },
-  { label: "How it works", href: "/next/how-it-works", permissions: [], alwaysVisible: true },
+  { label: "How it works", href: "/next/how-it-works", permissions: ["How it works", "/how-it-works", "/next/how-it-works"] },
   { label: "My Orders", href: "/next/orders", permissions: ["Current Orders", "/orders"] },
   { label: "Orders Review", href: "/next/orders-review", permissions: ["Orders Review", "/orders-review"] },
   { label: "Operations Orders", href: "/next/operations-orders", permissions: ["Requested Orders", "Operations Orders", "/operations-orders", "/orders/requested"] },

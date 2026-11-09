@@ -1,11 +1,12 @@
 import AppShell from "../../components/AppShell";
 import HowItWorksClient from "../../components/how-it-works/HowItWorksClient";
-import { getLegacyAccountGate } from "../../lib/products-auth";
+import { getDirectAccountGate } from "../../lib/products-auth";
+import { featureAllowed } from "../../lib/feature-permissions-registry";
 
 export const dynamic = "force-dynamic";
 
 export default async function HowItWorksPage() {
-  const gate = await getLegacyAccountGate([]);
+  const gate = await getDirectAccountGate(["How it works"]);
 
   if (gate.status === 401) {
     return (
@@ -18,6 +19,10 @@ export default async function HowItWorksPage() {
         </section>
       </main>
     );
+  }
+
+  if (gate.status === 403 || (gate.ok && !featureAllowed(gate.account, "guide.view"))) {
+    return <main className="standalone-state"><section className="state-card"><h1>Guide access denied</h1><p>You do not have permission to open How it works.</p><a className="secondary-button" href="/next/home">Return to Home</a></section></main>;
   }
 
   if (!gate.ok || !gate.account) {

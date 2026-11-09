@@ -15,6 +15,7 @@ import {
 } from "./supabase-rest";
 import { clearDirectSessionAccountCaches } from "./direct-session-account";
 import { clearUsersCenterReadCaches } from "./users-center-data";
+import { getTeamMemberPublicProfile } from "./team-members-service";
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
@@ -385,6 +386,18 @@ export async function removeAccountImage(account = {}, kindValue = "") {
   clearAccountCaches(id);
 
   return { ok: true, success: true, photoUrl: "", source: "supabase-next" };
+}
+
+// Account gate uses a deliberately compact member projection for fast navigation;
+// its payload does not contain files_media. Fetch the signed-in member's full
+// profile only on Account page/API requests, using the same media parser as
+// the Users Center/created-by cards. Never trust a member ID from the client.
+export async function accountWithOwnFilesMedia(account = {}) {
+  const id = memberId(account);
+  if (!id) throw httpError("The signed-in Team Member ID is unavailable.", 503);
+  const profile = await getTeamMemberPublicProfile(id, { fresh: true });
+  if (text(profile?.id) !== id) throw httpError("The signed-in profile could not be verified.", 403);
+  return { ...account, filesMedia: Array.isArray(profile.filesMedia) ? profile.filesMedia : [] };
 }
 
 export function normalizeAccountPayload(account = {}) {

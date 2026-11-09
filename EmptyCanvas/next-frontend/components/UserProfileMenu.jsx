@@ -209,6 +209,8 @@ export default function UserProfileMenu({ account }) {
   }, [photoUrl]);
   const canSeeHistory = useMemo(() => hasPermission(allowedPages, HISTORY_PERMISSIONS), [allowedPages]);
   const canSeeBackup = useMemo(() => hasPermission(allowedPages, BACKUP_PERMISSIONS), [allowedPages]);
+  const canSeeGuide = hasPermission(allowedPages, ["How it works", "/how-it-works", "/next/how-it-works"])
+    && featureAllowed(profileAccount, "guide.view");
 
   function positionPanel() {
     const trigger = triggerRef.current;
@@ -389,9 +391,9 @@ export default function UserProfileMenu({ account }) {
           </button>
         ) : null}
 
-        <button type="button" className="user-menu-item" role="menuitem" onClick={() => navigate("/next/how-it-works")}>
+        {canSeeGuide ? <button type="button" className="user-menu-item" role="menuitem" onClick={() => navigate("/next/how-it-works")}>
           <span className="umi-ico"><MenuIcon name="activity" /></span><span className="umi-label">How it works</span>
-        </button>
+        </button> : null}
 
         <button type="button" className="user-menu-item user-menu-item--app" role="menuitem" onClick={() => navigate("/next/app-install")}>
           <span className="umi-ico"><MenuIcon name="smartphone" /></span><span className="umi-label">App</span>

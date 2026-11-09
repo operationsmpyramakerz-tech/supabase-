@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { featureAllowed } from "../../../lib/feature-permissions-registry";
 import { getDirectAccountGate } from "../../../lib/products-auth";
-import { normalizeAccountPayload, updateAccountDirect } from "../../../lib/account-direct";
+import { normalizeAccountPayload, accountWithOwnFilesMedia, updateAccountDirect } from "../../../lib/account-direct";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -25,7 +25,13 @@ export async function GET() {
     return json({ error: gate.error || "Authentication required." }, gate.status || 503);
   }
   if (!featureAllowed(gate.account, "account.view")) return json({ error: "Permission account.view is not allowed." }, 403);
-  return json(normalizeAccountPayload(gate.account));
+  try {
+    const account = await accountWithOwnFilesMedia(gate.account);
+    return json(normalizeAccountPayload(account));
+  } catch (error) {
+    console.error("[account] Unable to load own files and media:", error?.message || error);
+    return json({ error: "Unable to load account attachments. Please try again." }, 503);
+  }
 }
 
 export async function PATCH(request) {

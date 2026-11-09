@@ -135,6 +135,7 @@ function normalizeAccount(account = {}) {
     photoUrl: safeUrl(account?.photoUrl),
     passwordSet: account?.passwordSet === true,
     filesMedia: normalizeFiles(account?.filesMedia),
+    filesMediaLoadError: account?.filesMediaLoadError === true,
   };
 }
 
@@ -453,7 +454,7 @@ export default function AccountClient({ initialAccount }) {
                 <span className="profile-settings-row-icon" aria-hidden="true"><Icon name="paperclip" size={19} /></span>
                 <span className="profile-settings-row-copy">
                   <strong>Files &amp; media</strong>
-                  <small>{files.length ? `${files.length} attachment${files.length === 1 ? "" : "s"}` : "No attachments"}</small>
+                  <small>{files.length ? `${files.length} attachment${files.length === 1 ? "" : "s"}` : (account.filesMediaLoadError ? "Unable to load attachments" : "No attachments")}</small>
                 </span>
                 <span className="profile-settings-chevron" aria-hidden="true"><Icon name="chevron" size={18} /></span>
               </button>
@@ -473,7 +474,7 @@ export default function AccountClient({ initialAccount }) {
                   </>
                 );
                 return file.url ? <a className="profile-settings-file" href={file.url} target="_blank" rel="noopener noreferrer" key={`${file.name}-${index}`}>{content}</a> : <div className="profile-settings-file" key={`${file.name}-${index}`}>{content}</div>;
-              }) : <div className="profile-settings-empty"><Icon name="folder" size={20} /><span>No files or links added yet.</span></div>}
+              }) : <div className="profile-settings-empty"><Icon name="folder" size={20} /><span>{account.filesMediaLoadError ? "Unable to load files and links. Please refresh the page." : "No files or links added yet."}</span></div>}
             </div>
           </section>
         </div>

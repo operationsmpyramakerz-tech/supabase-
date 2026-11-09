@@ -941,6 +941,7 @@ export const FEATURE_DEFINITIONS = Object.freeze(
     "key": "notifications.preferences",
     "label": "Set notification channel preferences"
   },
+  { "module": "guide", "key": "guide.view", "label": "Open How it works" },
   {
     "module": "account",
     "key": "account.view",
@@ -1001,6 +1002,7 @@ export const LEGACY_DEFAULT_FEATURE_KEYS = Object.freeze([
   // until the administrator explicitly records a grant or deny.
   "notifications.view", "notifications.read_manage", "notifications.preferences",
   "account.view", "account.edit", "account.avatar", "account.password",
+  "guide.view",
 ]);
 
 export const TASK_SCOPE_MARKER = "tasks.__scoped";
@@ -1082,8 +1084,9 @@ export function featureAllowed(account, key, { legacyAllowed = true, scopes = ["
   // Personal modules have never had an opt-in migration switch. All missing
   // grants keep legacy behavior, but a saved OFF is authoritative. An explicit
   // View denial also blocks sub-actions (even when their grant is ON).
-  if (key.startsWith("notifications.") || key.startsWith("account.")) {
-    const viewKey = key.startsWith("notifications.") ? "notifications.view" : "account.view";
+  if (key.startsWith("notifications.") || key.startsWith("account.") || key === "guide.view") {
+    const viewKey = key.startsWith("notifications.") ? "notifications.view"
+      : key === "guide.view" ? "guide.view" : "account.view";
     if (key !== viewKey && state.grants?.[viewKey]?.allowed === false) return false;
     const personalGrant = state.grants?.[key];
     return !personalGrant ? !!legacyAllowed
@@ -1159,7 +1162,7 @@ export function shoppingSourceAllowed(account, source) {
   return featureAllowed(account, `orders.shopping.source.${source}`);
 }
 
-export const PILOT_FEATURE_MODULES = Object.freeze(["products", "orders.operations", "orders.my", "orders.maintenance", "orders.shopping", "tasks", "events.requests", "events.calendar", "events.components", "events.team", "kits", "proposals", "preparing", "orders.review", "stocktaking", "expenses", "expenses.users", "users", "b2c.database", "b2c.forms", "backup", "history", "kpis", "sla", "home", "notifications", "account"]);
+export const PILOT_FEATURE_MODULES = Object.freeze(["products", "orders.operations", "orders.my", "orders.maintenance", "orders.shopping", "tasks", "events.requests", "events.calendar", "events.components", "events.team", "kits", "proposals", "preparing", "orders.review", "stocktaking", "expenses", "expenses.users", "users", "b2c.database", "b2c.forms", "backup", "history", "kpis", "sla", "home", "notifications", "account", "guide"]);
 
 // Permissions with audited server-side gates and corresponding administrator controls.
 // Do not expose unprotected actions; that would imply false security.
@@ -1211,4 +1214,5 @@ export const ACTIVE_PILOT_FEATURE_KEYS = Object.freeze([
   "events.team.member_delete", "events.team.attendance_manage", "events.team.photo_upload",
   "notifications.view", "notifications.read_manage", "notifications.preferences",
   "account.view", "account.edit", "account.avatar", "account.password",
+  "guide.view",
 ]);
