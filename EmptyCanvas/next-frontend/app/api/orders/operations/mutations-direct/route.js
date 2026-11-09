@@ -128,6 +128,7 @@ export async function POST(request) {
       result = await sendOperationsDeliveredToStock({
         account: gate.account,
         orderIds: body?.orderIds,
+        restoreZeroedRows: body?.restoreZeroedRows === true,
       });
     } else if (action === "create-withdrawal" || action === "create-delivery") {
       result = await createOperationsRepeatOrder({

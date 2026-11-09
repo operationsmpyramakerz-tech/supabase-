@@ -6,7 +6,7 @@ const SHELL_STYLES = Object.freeze([
   "/next/css/style.css?v=boot-main51-v1",
   "/next/css/ui-redesign.css?v=boot-main51-v1",
   "/next/css/page-canvas-fix.css?v=boot-main51-v1",
-  "/next/css/classic-parity.css?v=sidebar-home-divider-v326",
+  "/next/css/classic-parity.css?v=stock-restore-v360",
 ]);
 
 export default function ShellStyleLinks() {

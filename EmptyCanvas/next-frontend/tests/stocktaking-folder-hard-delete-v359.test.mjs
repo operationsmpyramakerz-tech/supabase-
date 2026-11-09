@@ -54,7 +54,8 @@ test('production handler performs true DELETE and not a zero-quantity PATCH', ()
   assert.match(handler, /method: "DELETE"/);
   assert.doesNotMatch(handler, /method: "PATCH"/);
   assert.match(handler, /not\.is\.null/);
-  assert.match(handler, /ownSessionPrefixes/);
+  assert.match(handler, /stocktakingOtherOwnerColumns/);
+  assert.match(impl, /const ownSessionPrefixes/);
   assert.match(impl, /Removing the row also removes the obsolete source-order marker/);
   assert.match(handler, /stocktakingAccessLevel\(account\) !== "admin"/);
 });

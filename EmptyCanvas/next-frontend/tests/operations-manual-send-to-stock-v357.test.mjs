@@ -22,9 +22,9 @@ const secondOrder = { id:2, order_number:121, status:'Arrived', order_type:'Requ
 
 function harness({ rows = [firstOrder,secondOrder], existing = [], failAfter = null } = {}) {
   const stock = existing.map(r => ({ ...r }));
-  const calls = { inserted:0, invalidated:0 };
+  const calls = { inserted:0, invalidated:0, restored:0 };
   const context = () => ({
-    needed:true, sourceOrderColumn:'source_order_id',stockRows:stock.map(r => ({...r})),
+    needed:true, sourceOrderColumn:'source_order_id',stockRows:stock.map(r => ({...r})), keys:['id','source_order_id','user_a','other_stock'],
     members:[{id:'u1',name:'User A',stocktakingColumn:'user_a'}],
     quantityColumnBySchool:new Map([['user_a','user_a']]),
   });
@@ -44,8 +44,19 @@ function harness({ rows = [firstOrder,secondOrder], existing = [], failAfter = n
     operationsValueFor: (row,aliases) => aliases.map(alias=>row[alias]).find(v => v!==undefined) ?? null,
     getProductsCatalog: async () => ({products:[]}),
     opsPrepareStockContext: async () => context(),
+    opsResolveOwnerMember: row => ({id:'u1',name:'User A',stocktakingColumn:'user_a'}),
+    stocktakingOtherOwnerColumns: () => ['other_stock'],
     opsBuildStockRow: row => ({row:{source_order_id:row.id,user_a:3},required:['source_order_id','user_a']}),
     opsStockInsertSafe: async row => {if (calls.inserted === failAfter) throw makeError('Simulated write failure',503);stock.push(row);calls.inserted++;},
+    opsStockTableName: () => 'stocktaking',
+    supabaseRequest: async (url, options) => {
+      assert.equal(options.method,'PATCH');
+      const id = decodeURIComponent(url.match(/id=eq\.([^&]+)/)?.[1] || '');
+      const row=stock.find(item=>text(item.id)===id);
+      if (!row || row.other_stock != null || Number(row.user_a)!==0) return [];
+      row.user_a=options.body.user_a; calls.restored=(calls.restored||0)+1;
+      return [{id:row.id}];
+    },
     invalidateStocktakingReadCaches:() => { calls.invalidated++; },
     upstashDeleteOperationsKeys: async () => true,
   };
@@ -127,4 +138,44 @@ test('New Send to Stock access inherits Receive only when no explicit grant exis
   assert.equal(featureAllowed(profile({'orders.operations.receive':{allowed:true,scope:'all'}}),'orders.operations.send_to_stock'),true);
   assert.equal(featureAllowed(profile({'orders.operations.receive':{allowed:false,scope:'all'}}),'orders.operations.send_to_stock'),false);
   assert.equal(featureAllowed(profile({'orders.operations.receive':{allowed:true,scope:'all'},'orders.operations.send_to_stock':{allowed:false,scope:'all'}}),'orders.operations.send_to_stock'),false);
+});
+
+
+test('legacy zeroed stock requires explicit opt-in and never returns a misleading Done', async () => {
+  const h=harness({rows:[firstOrder], existing:[{id:10,source_order_id:1,user_a:'0',other_stock:null}]});
+  await assert.rejects(h.run({orderIds:['1']}), e => e.status===409 && /zero stock/.test(e.message));
+  assert.equal(h.stock[0].user_a,'0');
+  assert.equal(h.calls.invalidated,0);
+  const result=await h.run({orderIds:['1'],restoreZeroedRows:true});
+  assert.equal(result.stocktakingRestoredCount,1);
+  assert.equal(result.stocktakingSyncedCount,0);
+  assert.equal(h.calls.restored,1);
+  assert.equal(h.stock[0].user_a,3);
+  const retry=await h.run({orderIds:['1']});
+  assert.equal(retry.alreadySynced,true);
+  assert.equal(h.calls.restored,1);
+});
+
+test('restoring one old Princeton order does not prevent restoration of the next', async () => {
+  const h=harness({existing:[
+    {id:101,source_order_id:1,user_a:'0',other_stock:null},
+    {id:102,source_order_id:2,user_a:'0',other_stock:null},
+  ]});
+  const a=await h.run({orderIds:['1'],restoreZeroedRows:true});
+  assert.equal(a.stocktakingRestoredCount,1);
+  const b=await h.run({orderIds:['2'],restoreZeroedRows:true});
+  assert.equal(b.stocktakingRestoredCount,1);
+  assert.deepEqual(h.stock.map(row=>row.user_a),[3,3]);
+});
+
+test('a zero stock row belonging to another school is blocked before writes', async () => {
+  const h=harness({rows:[firstOrder],existing:[{id:3,source_order_id:1,user_a:'0',other_stock:'0'}]});
+  await assert.rejects(h.run({orderIds:['1'],restoreZeroedRows:true}), e => e.status===409 && /another folder/.test(e.message));
+  assert.equal(h.calls.restored,0);
+});
+
+test('wrong school order linkage is never treated as successful stock sync', async () => {
+  const h=harness({rows:[firstOrder],existing:[{id:5,source_order_id:1,user_a:null,other_stock:2}]});
+  await assert.rejects(h.run({orderIds:['1'],restoreZeroedRows:true}), e => e.status===409 && /correct folder/.test(e.message));
+  assert.equal(h.calls.restored,0);
 });

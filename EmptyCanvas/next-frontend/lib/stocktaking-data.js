@@ -964,6 +964,17 @@ function validReceiptPhotos(value) {
   return out;
 }
 
+/** Resolve other owners' stock/inventory columns, shared by deletion and safe re-import. */
+export function stocktakingOtherOwnerColumns(schemaKeys = [], column = "") {
+  const targetBase = ownerBase(column);
+  const ownSessionPrefixes = ["inventory", "defected", "defecated"]
+    .map((kind) => `${targetBase}_${kind}_`);
+  return schemaKeys.filter((key) => key !== column && (
+    (usefulStockFolderColumn(key) && !isInventoryMetaColumn(key))
+    || (isInventoryMetaColumn(key) && !ownSessionPrefixes.some((prefix) => stockColumnKey(key).startsWith(prefix)))
+  ));
+}
+
 /**
  * Permanently delete the physical Stocktaking records owned by one folder.
  *
@@ -995,13 +1006,7 @@ export async function deleteStocktakingFolder(account = {}, requestedColumn = ""
   // Every other owner's stock quantity AND inventory-session column must
   // remain untouched. A shared row cannot safely be deleted. The target
   // owner's inventory/defected session values are deleted with its own row.
-  const targetBase = ownerBase(column);
-  const ownSessionPrefixes = ["inventory", "defected", "defecated"]
-    .map((kind) => `${targetBase}_${kind}_`);
-  const otherColumns = schemaKeys.filter((key) => key !== column && (
-    (usefulStockFolderColumn(key) && !isInventoryMetaColumn(key))
-    || (isInventoryMetaColumn(key) && !ownSessionPrefixes.some((prefix) => stockColumnKey(key).startsWith(prefix)))
-  ));
+  const otherColumns = stocktakingOtherOwnerColumns(schemaKeys, column);
   const projection = ["id", column, ...otherColumns];
   const selectExpr = projection.map(quoteStockSelectColumn).join(",");
   const rows = await readAllStocktakingPages(({ limit, offset }) => select(stocktakingTable(), {

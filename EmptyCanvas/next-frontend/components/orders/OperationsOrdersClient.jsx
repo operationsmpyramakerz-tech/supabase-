@@ -1236,12 +1236,14 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
       } else if (action === "send-to-stock") {
         const result = await postJson(`${DIRECT_API_BASE}/orders/operations/mutations-direct`, {
           action: "send-to-stock", orderIds: group.orderIds,
+          restoreZeroedRows: payload?.restoreZeroedRows === true,
         });
         const added = Number(result?.stocktakingSyncedCount || 0);
+        const restored = Number(result?.stocktakingRestoredCount || 0);
         const already = Number(result?.stocktakingSkippedCount || 0);
-        loadingSuccessMessage = added
-          ? `${added} component${added === 1 ? "" : "s"} sent to Stock${already ? ` · ${already} already synced` : ""}.`
-          : "All components are already in Stock. Nothing was duplicated.";
+        loadingSuccessMessage = added || restored
+          ? `${added} new component${added === 1 ? "" : "s"} added${restored ? ` · ${restored} zeroed component${restored === 1 ? "" : "s"} restored` : ""}${already ? ` · ${already} already synced` : ""}.`
+          : "All components are already in Stock with non-zero quantities. Nothing was duplicated.";
         await completeAction(loadingSuccessMessage, "delivered");
       } else if (action === "withdrawal") {
         await postJson(`${DIRECT_API_BASE}/orders/operations/mutations-direct`, { action: "create-withdrawal", orderIds: group.orderIds });

@@ -11,7 +11,7 @@ import { enrichMaintenanceDetailProducts } from "./maintenance-detail-enrichment
 import { getProductsCatalog } from "./products-service";
 import { loadFastOrderDetailsBundle } from "./order-details-fast-path";
 import { listTeamMembersLite } from "./team-members-service";
-import { invalidateStocktakingReadCaches } from "./stocktaking-data";
+import { invalidateStocktakingReadCaches, stocktakingOtherOwnerColumns } from "./stocktaking-data";
 import { consumeOrderSummaryWindows, loadOrderRowsByNumbers, scanOrderNumberCandidates } from "./order-pagination";
 import { applyOrderSearchPlan, canUseOrderSearchText, createOrderSearchPlan, noteOrderSearchTextError } from "./order-search-hotpath";
 import { canUseOrderCandidateRpc, loadOrderCandidateNumbersRpc, noteOrderCandidateRpcError } from "./order-candidate-rpc";
@@ -2314,7 +2314,7 @@ async function opsSyncStocktakingAfterEdit(rowsBefore = [], rowsAfter = [], cont
 // Explicit transfer from a Delivered Request Products order. The persisted
 // source_order_id ties each stock row to one order component, so retries and
 // older orders that were already auto-synced do not increment stock twice.
-export async function sendOperationsDeliveredToStock({ account = {}, orderIds = [] } = {}) {
+export async function sendOperationsDeliveredToStock({ account = {}, orderIds = [], restoreZeroedRows = false } = {}) {
   ensureOperationsMutationAccess(account);
   const loaded = await loadOperationRowsByIds(orderIds);
   if (!loaded) throw directOperationsMutationError("Could not load the order components. Refresh and retry.", 503);
@@ -2334,16 +2334,98 @@ export async function sendOperationsDeliveredToStock({ account = {}, orderIds = 
   const context = await opsPrepareStockContext(rows, [], products);
   if (!context?.needed) throw directOperationsMutationError("No eligible components were found for Stocktaking.", 409);
 
-  // Build/validate every missing component before the first insert. Any
-  // partial insert failure is safe to retry: the next call skips committed IDs.
-  const already = new Set((context.stockRows || []).map((row) => text(row?.[context.sourceOrderColumn])).filter(Boolean));
-  const pending = rows.filter((row) => !already.has(text(operationsValueFor(row, ["id", "ID"]))));
+  // Every order line must be tied to the correct owner's column, not just to
+  // a source_order_id somewhere in the matrix. Previous versions cleared a
+  // stock folder by writing zero while leaving the source-order link behind.
+  // Never mistake such a row for successfully present stock.
+  const stockBySource = new Map();
+  for (const stockRow of context.stockRows || []) {
+    const key = text(stockRow?.[context.sourceOrderColumn]);
+    if (!key) continue;
+    if (!stockBySource.has(key)) stockBySource.set(key, []);
+    stockBySource.get(key).push(stockRow);
+  }
+  const pending = [];
+  const restore = [];
+  let skipped = 0;
+  for (const orderRow of rows) {
+    const key = text(operationsValueFor(orderRow, ["id", "ID"]));
+    const matches = stockBySource.get(key) || [];
+    const member = opsResolveOwnerMember(orderRow, context.members || []);
+    const quantityColumn = context.quantityColumnBySchool.get(text(member?.stocktakingColumn));
+    if (!quantityColumn) throw directOperationsMutationError("Could not identify this order's Stocktaking folder.", 409);
+    if (matches.length > 1) {
+      throw directOperationsMutationError(`Duplicate Stocktaking records exist for order component ${key}. Resolve the duplicates before retrying.`, 409);
+    }
+    if (!matches.length) { pending.push(orderRow); continue; }
+    const old = matches[0];
+    const raw = old[quantityColumn];
+    if (raw === null || typeof raw === "undefined" || String(raw).trim() === "") {
+      throw directOperationsMutationError(`Order component ${key} is linked to Stocktaking but not to the correct folder. No stock was changed.`, 409);
+    }
+    const value = Number(raw);
+    if (!Number.isFinite(value)) {
+      throw directOperationsMutationError(`Stocktaking quantity for order component ${key} is invalid. No stock was changed.`, 409);
+    }
+    if (value !== 0) { skipped += 1; continue; }
+    const otherOwnerColumns = stocktakingOtherOwnerColumns(context.keys, quantityColumn);
+    if (otherOwnerColumns.some((column) => old[column] !== null && typeof old[column] !== "undefined")) {
+      throw directOperationsMutationError(`Zeroed Stocktaking component ${key} also belongs to another folder. No stock was changed.`, 409);
+    }
+    restore.push({ orderRow, old, quantityColumn, otherOwnerColumns });
+  }
+  if (restore.length && restoreZeroedRows !== true) {
+    throw directOperationsMutationError(
+      `${restore.length} components have zero stock but still have old order links. To restore them, confirm Send to Stock again and tick 'Restore zero-quantity entries'. No stock was changed.`,
+      409,
+    );
+  }
+  // Validate all quantities before any database writes. The re-import option
+  // is deliberately opt-in: a legitimate zero may mean stock was consumed.
   const prepared = pending.map((row) => opsBuildStockRow(row, context));
+  const preparedRestore = restore.map((item) => ({
+    ...item,
+    sourceId: text(operationsValueFor(item.orderRow, ["id", "ID"])),
+    prepared: opsBuildStockRow(item.orderRow, context),
+  }));
   let synced = 0;
+  let restored = 0;
   try {
-    // Large proposal-based orders may contain hundreds of components. Insert in
-    // small, settled batches rather than serially timing out or returning while
-    // earlier writes are still in flight (which would make retries unsafe).
+    // PATCH only the owner's zero quantity with guarded row ID/source ID and
+    // all other folders NULL. If the data changed meanwhile, stop and retry.
+    // This preserves receipts and order links and never duplicates rows.
+    for (let offset = 0; offset < preparedRestore.length; offset += 8) {
+      const batch = preparedRestore.slice(offset, offset + 8);
+      const results = await Promise.allSettled(batch.map(async (item) => {
+        const id = text(item.old?.id);
+        const quantity = item.prepared?.row?.[item.quantityColumn];
+        if (!id || !Number.isFinite(Number(quantity)) || Number(quantity) <= 0) {
+          throw directOperationsMutationError("Cannot safely restore a zeroed Stocktaking component.", 409);
+        }
+        const guards = [
+          `select=id`,
+          `id=eq.${encodeURIComponent(id)}`,
+          `${encodeURIComponent(context.sourceOrderColumn)}=eq.${encodeURIComponent(item.sourceId)}`,
+          `${encodeURIComponent(item.quantityColumn)}=eq.${encodeURIComponent(String(item.old[item.quantityColumn]))}`,
+          ...item.otherOwnerColumns.map((column) => `${encodeURIComponent(column)}=is.null`),
+        ];
+        const result = await supabaseRequest(`/${encodeURIComponent(opsStockTableName())}?${guards.join("&")}`, {
+          method: "PATCH",
+          headers: { Prefer: "return=representation" },
+          body: { [item.quantityColumn]: quantity },
+          profileName: "orders.operations.restore-zeroed-stock",
+          timeoutMs: 45000,
+        });
+        if (!Array.isArray(result) || result.length !== 1 || text(result[0]?.id) !== id) {
+          throw directOperationsMutationError(`Stocktaking component ${item.sourceId} changed during restoration; refresh and retry.`, 409);
+        }
+      }));
+      restored += results.filter((result) => result.status === "fulfilled").length;
+      const failed = results.find((result) => result.status === "rejected");
+      if (failed) throw failed.reason;
+    }
+    // New rows are inserted in bounded batches. Retrying after a partial
+    // failure skips committed rows and restored rows.
     for (let offset = 0; offset < prepared.length; offset += 8) {
       const batch = prepared.slice(offset, offset + 8);
       const results = await Promise.allSettled(batch.map(async (item) => {
@@ -2355,22 +2437,23 @@ export async function sendOperationsDeliveredToStock({ account = {}, orderIds = 
       if (failed) throw failed.reason;
     }
   } catch (error) {
-    if (synced) {
+    if (synced || restored) {
       invalidateStocktakingReadCaches();
       await upstashDeleteOperationsKeys(["cache:api:b2b:school-stock:supabase:v1"]).catch(() => false);
-      throw directOperationsCommittedError(`${synced} components were added; the remaining items were not. Retry Send to Stock to add only the missing items. ${error?.message || ""}`.trim(), 500, error);
+      throw directOperationsCommittedError(`${synced} new and ${restored} cleared components restored; some items could not be completed. Retry Send to Stock using the same restore option. ${error?.message || ""}`.trim(), 500, error);
     }
     throw error;
   }
-  if (synced) {
+  if (synced || restored) {
     invalidateStocktakingReadCaches();
     await upstashDeleteOperationsKeys(["cache:api:b2b:school-stock:supabase:v1"]).catch(() => false);
   }
   return {
     success: true,
     stocktakingSyncedCount: synced,
-    stocktakingSkippedCount: rows.length - pending.length,
-    alreadySynced: pending.length === 0,
+    stocktakingRestoredCount: restored,
+    stocktakingSkippedCount: skipped,
+    alreadySynced: synced === 0 && restored === 0,
     source: "supabase-direct",
   };
 }
