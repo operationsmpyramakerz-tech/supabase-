@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import { operationsDeliveredTransferQuantity } from '../lib/operations-delivered-transfer.mjs';
 
 const source = fs.readFileSync(new URL('../lib/operations-orders-data.js', import.meta.url), 'utf8');
 function excerpt(start, end) {
@@ -73,14 +74,15 @@ test('School quantity cannot silently fall back to a different generic quantity 
   assert.equal(sandbox.run(['id','source_order_id','total_quantity'], 'school_a'), '');
 });
 
-test('Request Products delivery stays available when Stocktaking is not set up; manual transfer validates it later', async () => {
+test('Request Products delivery rejects missing Stocktaking prerequisites before uploading receipt or changing status', async () => {
   const calls = {uploads:0, updates:0};
   const sandbox = {
     text, directOperationsMutationError, calls,
     directPageMutationAccess: () => true,
     ensureOperationsMutationAccess: () => true,
-    loadOperationRowsByIds: async ids => ({clean: ids, rows:[{...order,status:'Shipped',order_receipt:null}],byId:new Map([['1',{...order,status:'Shipped',order_receipt:null}]])}),
-    serializeOperationsOrderDetail: row => ({status:row.status,orderType:row.order_type,maintenanceLogs:[]}),
+    loadOperationRowsByIds: async ids => ({clean: ids, rows:[{...order,status:'Shipped',order_receipt:null,quantityReceived:4,quantityRemaining:2,quantity:6}],byId:new Map([['1',{...order,status:'Shipped',order_receipt:null,quantityReceived:4,quantityRemaining:2,quantity:6}]])}),
+    serializeOperationsOrderDetail: row => ({...row,status:row.status,orderType:row.order_type,maintenanceLogs:[]}),
+    operationsDeliveredTransferQuantity,
     statusIndex: value => value === 'Shipped' ? 3 : value === 'Arrived' ? 4 : 2,
     featureAllowed: () => true,
     splitReceiptNumbers: () => [], mergeReceiptNumbers: () => '',
@@ -100,8 +102,6 @@ test('Request Products delivery stays available when Stocktaking is not set up; 
     getSupabaseConfig: () => ({storageBucket:'operations-files'}),
   };
   vm.runInNewContext(excerpt('export async function markOperationsArrived(', '\nexport async function saveOperationsEditDetails(') + '\nthis.run=markOperationsArrived;', sandbox);
-  const result = await sandbox.run({orderIds:['1']});
-  assert.equal(result.success, true);
-  assert.equal(result.stocktakingSyncedCount, 0);
-  assert.deepEqual(calls, {uploads:1,updates:1});
+  await assert.rejects(sandbox.run({orderIds:['1']}), error => error.status === 409 && /source_order_id/.test(error.message));
+  assert.deepEqual(calls, {uploads:0,updates:0});
 });

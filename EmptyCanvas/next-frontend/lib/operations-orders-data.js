@@ -2158,8 +2158,9 @@ async function opsPrepareStockContext(plannedFinalRows = [], rowsBefore = [], pr
     );
   }
   const sourceOrderColumn = opsStockFindKey(keys, ["source_order_id", "Source Order ID", "source_order", "Source Order", "order_row_id", "Order Row ID"]);
-  // A delivered Request Products order is only sent on explicit confirmation.
-  // Editing one which was never sent must not trigger a first-time stock transfer.
+  // For edit reconciliation, only touch stock rows that were synchronized
+  // previously. Editing a legacy delivered order must not import it for the
+  // first time; delivery and manual Send to Stock handle those transfers.
   if (existingOnly) {
     const syncedIds = new Set(sourceOrderColumn ? stockRows.map((row) => text(row?.[sourceOrderColumn])).filter(Boolean) : []);
     const previouslySynced = relevantBefore.filter((row) => syncedIds.has(text(operationsValueFor(row, ["id", "ID"]))));
@@ -2320,10 +2321,10 @@ async function opsSyncStocktakingAfterEdit(rowsBefore = [], rowsAfter = [], cont
 }
 
 
-// Explicit transfer from a Delivered Request Products order. The persisted
-// source_order_id ties each stock row to one order component, so retries and
-// older orders that were already auto-synced do not increment stock twice.
-export async function sendOperationsDeliveredToStock({ account = {}, orderIds = [], restoreZeroedRows = false } = {}) {
+// Idempotent transfer shared by automatic Mark as Delivered and the manual
+// Send to Stock action. The persisted source_order_id links each stock row
+// to its order component, so sequential retries do not create extra entries.
+export async function sendOperationsDeliveredToStock({ account = {}, orderIds = [], restoreZeroedRows = false, automaticDelivery = false } = {}) {
   ensureOperationsMutationAccess(account);
   const loaded = await loadOperationRowsByIds(orderIds);
   if (!loaded) throw directOperationsMutationError("Could not load the order components. Refresh and retry.", 503);
@@ -2386,6 +2387,13 @@ export async function sendOperationsDeliveredToStock({ account = {}, orderIds = 
       throw directOperationsMutationError(`Zeroed Stocktaking component ${key} also belongs to another folder. No stock was changed.`, 409);
     }
     restore.push({ orderRow, old, quantityColumn, otherOwnerColumns });
+  }
+  // An automatically delivered line may have an existing stock link whose
+  // balance reached zero through legitimate consumption. Never replenish that
+  // balance automatically. The manual restore option stays explicit.
+  if (automaticDelivery && restore.length) {
+    skipped += restore.length;
+    restore.length = 0;
   }
   if (restore.length && restoreZeroedRows !== true) {
     throw directOperationsMutationError(
@@ -2573,11 +2581,24 @@ export async function markOperationsArrived({
   }
 
   const plannedRows = loaded.rows.map((row) => ({ ...row, status: "Arrived" }));
-  // Request Products are sent manually from Delivered > Send to Stock.
-  // Withdraw Products continue to synchronize automatically (negative quantity).
-  const autoStockRows = plannedRows.filter((row) =>
-    opsOrderTypeKey(serializeOperationsOrderDetail(row || {})?.orderType) === "withdrawproducts");
+  // Delivery and stock synchronization are one server-side workflow. A
+  // Request Products delivery adds *received* quantities automatically; the
+  // manual Send to Stock action remains available for older/unlinked rows.
+  // Withdraw Products keep their existing negative-quantity synchronization.
+  const autoStockRows = plannedRows.filter((row) => {
+    const detail = serializeOperationsOrderDetail(row || {});
+    const type = opsOrderTypeKey(detail?.orderType);
+    return type === "withdrawproducts" || (type === "requestproducts"
+      && operationsDeliveredTransferQuantity(detail) > 1e-9);
+  });
   const needsStocktaking = autoStockRows.length > 0;
+  // Never silently mark a Request Products delivery complete when none of its
+  // lines has a recorded deliverable quantity. Otherwise the order appears
+  // delivered but nothing can be transferred to the correct Stock folder.
+  if (plannedRows.some((row) => opsOrderTypeKey(serializeOperationsOrderDetail(row || {})?.orderType) === "requestproducts")
+    && !autoStockRows.some((row) => opsOrderTypeKey(serializeOperationsOrderDetail(row || {})?.orderType) === "requestproducts")) {
+    throw directOperationsMutationError("No received quantities were recorded for this Request Products order. Receive the components before marking it delivered.", 409);
+  }
   let products = [];
   let stockContext = { needed: false };
   if (needsStocktaking) {
@@ -2585,13 +2606,13 @@ export async function markOperationsArrived({
     products = Array.isArray(catalog?.products) ? catalog.products : [];
     stockContext = await opsPrepareStockContext(autoStockRows,
       loaded.rows.filter((row) => opsOrderTypeKey(serializeOperationsOrderDetail(row || {})?.orderType) === "withdrawproducts"), products);
-    if (!stockContext) throw directOperationsMutationError("Stocktaking prerequisites could not be verified; delivery was not started.", 503);
-    // Validate every Stocktaking record before uploading any receipts or
-    // changing an order status. For example an order with zero received
-    // quantity must not be marked delivered and then fail halfway through sync.
-    for (const row of plannedRows) {
-      const serialized = serializeOperationsOrderDetail(row || {});
-      if (opsOrderTypeKey(serialized?.orderType) === "withdrawproducts") opsBuildStockRow(row, stockContext);
+    if (!stockContext?.needed) throw directOperationsMutationError("Stocktaking prerequisites could not be verified; delivery was not started.", 503);
+    // Fail before saving delivery/receipt when the Stocktaking schema, owner
+    // mapping or quantity is invalid. A mixed order transfers only lines with
+    // a positive received quantity; unreceived lines do not enter Stock.
+    for (const row of autoStockRows) {
+      const type = opsOrderTypeKey(serializeOperationsOrderDetail(row || {})?.orderType);
+      opsBuildStockRow(row, stockContext, { deliveredOnly: type === "requestproducts" });
     }
   }
 
@@ -2626,9 +2647,28 @@ export async function markOperationsArrived({
     });
 
     let stock = { synced: 0, skipped: 0 };
-    if (stockContext?.needed) stock = await opsSyncStocktakingAfterEdit(
-      loaded.rows.filter((row) => opsOrderTypeKey(serializeOperationsOrderDetail(row || {})?.orderType) === "withdrawproducts"),
-      updatedRows.filter((row) => opsOrderTypeKey(serializeOperationsOrderDetail(row || {})?.orderType) === "withdrawproducts"), stockContext);
+    if (stockContext?.needed) {
+      const withdrawalBefore = loaded.rows.filter((row) => opsOrderTypeKey(serializeOperationsOrderDetail(row || {})?.orderType) === "withdrawproducts");
+      const withdrawalAfter = updatedRows.filter((row) => opsOrderTypeKey(serializeOperationsOrderDetail(row || {})?.orderType) === "withdrawproducts");
+      if (withdrawalAfter.length) {
+        const result = await opsSyncStocktakingAfterEdit(withdrawalBefore, withdrawalAfter, stockContext);
+        stock.synced += Number(result?.synced || 0);
+        stock.skipped += Number(result?.skipped || 0);
+      }
+      // Reuse the same idempotent import as the manual button. It checks
+      // source_order_id before every insertion so a later manual Send to Stock
+      // does not duplicate components delivered automatically.
+      const requestIds = updatedRows.filter((row) => {
+        const detail = serializeOperationsOrderDetail(row || {});
+        return opsOrderTypeKey(detail?.orderType) === "requestproducts"
+          && operationsDeliveredTransferQuantity(detail) > 1e-9;
+      }).map((row) => text(operationsValueFor(row, ["id", "ID"]))).filter(Boolean);
+      if (requestIds.length) {
+        const result = await sendOperationsDeliveredToStock({ account, orderIds: requestIds, automaticDelivery: true });
+        stock.synced += Number(result?.stocktakingSyncedCount || 0);
+        stock.skipped += Number(result?.stocktakingSkippedCount || 0);
+      }
+    }
 
     await invalidateLegacyOperationsCaches(account || {});
     return {

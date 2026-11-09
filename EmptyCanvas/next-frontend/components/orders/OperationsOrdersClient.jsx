@@ -1185,14 +1185,16 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
         const files = Array.isArray(payload?.files) ? payload.files : [];
         if (!files.length) throw new Error("Receipt photos are required.");
         const dataUrls = await Promise.all(files.map((file) => fileToOptimizedDataUrl(file)));
-        await postJson(`${DIRECT_API_BASE}/orders/operations/mutations-direct`, {
+        const result = await postJson(`${DIRECT_API_BASE}/orders/operations/mutations-direct`, {
           action: "mark-arrived",
           orderIds: group.orderIds,
           orderReceiptDataUrls: dataUrls,
           orderReceiptFilenames: files.map((file, index) => text(file?.name) || `receipt-photo-${index + 1}.jpg`),
         });
-        loadingSuccessMessage = "Order marked as delivered. Use Send to Stock to add its components to Stocktaking.";
-        await completeAction("Order marked as delivered.", "delivered");
+        const synced = Number(result?.stocktakingSyncedCount || 0);
+        const alreadySynced = Number(result?.stocktakingSkippedCount || 0);
+        loadingSuccessMessage = `Order marked as delivered. ${synced} component${synced === 1 ? "" : "s"} added to Stocktaking automatically${alreadySynced ? ` · ${alreadySynced} already synced` : ""}.`;
+        await completeAction(loadingSuccessMessage, "delivered");
       } else if (action === "archive") {
         const password = text(payload);
         if (!password) throw new Error("Admin password is required.");

@@ -4,6 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import { operationsDeliveredTransferQuantity } from '../lib/operations-delivered-transfer.mjs';
 
 function excerpt(file, start, end) {
   const source = fs.readFileSync(new URL(file, import.meta.url), 'utf8');
@@ -35,13 +36,18 @@ const makeOps = (rows, { maintenanceAllowed = true, operationsAllowed = true } =
     splitReceiptNumbers: value => (Array.isArray(value) ? value : [value]).flatMap(item => String(item ?? '').split(',')).map(item => item.trim()).filter(Boolean),
     opsHasColumn: () => true,
     opsSupportedStockOrderType: () => false,
+    operationsDeliveredTransferQuantity,
+    getProductsCatalog: async () => ({ products: [] }),
+    opsPrepareStockContext: async () => ({ needed: true }),
+    opsBuildStockRow: () => ({ row: {}, required: [] }),
+    sendOperationsDeliveredToStock: async () => ({ stocktakingSyncedCount: 1, stocktakingSkippedCount: 0 }),
     opsOrderTypeKey: value => text(value).toLowerCase().replace(/[^a-z0-9]/g, ''),
     getSupabaseConfig: () => ({ storageBucket: 'test' }),
     uploadStorageObject: async () => { calls.uploads += 1; return { publicUrl: 'https://example.test/file.jpg' }; },
     opsReceiptStoragePath: () => 'receipt.jpg',
     mapWithConcurrency: async (ids, count, fn) => Promise.all(ids.map(fn)),
     updateById: async (_table, id, patch) => { calls.writes += 1; return { ...rows.find(r => text(r.id) === text(id)), ...patch }; },
-    operationsValueFor: () => null,
+    operationsValueFor: (row, aliases) => aliases.map(alias => row?.[alias]).find(value => value !== undefined) ?? null,
     tableName: () => 'orders',
     invalidateLegacyOperationsCaches: async () => {},
   };
@@ -53,7 +59,7 @@ const makeOps = (rows, { maintenanceAllowed = true, operationsAllowed = true } =
 const maintRow = (id, status = 'In progress', logs = [{ repairAction: 'Fixed', loggedAt: '2026-10-01' }]) => ({
   id, order_type: 'Request Maintenance', status, order_receipt: null, maintenanceLogs: logs,
 });
-const productRow = (id, status = 'Shipped') => ({ id, order_type: 'Request Products', status, order_receipt: null });
+const productRow = (id, status = 'Shipped') => ({ id, order_type: 'Request Products', status, order_receipt: null, quantity: 1, quantityReceived: 1, quantityRemaining: 0 });
 
 test('maintenance-only editor can deliver logged in-progress maintenance (without Operations edit)', async () => {
   const { run, calls } = makeOps([maintRow(1)], { operationsAllowed: false });
