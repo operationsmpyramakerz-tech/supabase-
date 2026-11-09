@@ -1,6 +1,6 @@
 "use client";
 
-import { operationsHasOutstandingQuantity, operationsMatchesTab } from "../../lib/operations-remaining-status.mjs";
+import { operationsArrivedItemVisible, operationsHasOutstandingQuantity, operationsMatchesTab } from "../../lib/operations-remaining-status.mjs";
 import { orderCardAllows } from "../../lib/order-data-scope.mjs";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -379,6 +379,12 @@ function itemsForOperationsTab(items, tab) {
   const source = Array.isArray(items) ? items : [];
   if (tab === "remaining") return source.filter((item) => Math.abs(remainingQuantity(item)) > 1e-9);
   if (tab === "received") return source.filter((item) => Math.abs(receivedQuantity(item)) > 1e-9);
+  if (tab === "delivered") return source.filter((item) => operationsArrivedItemVisible({
+    stage: statusIndex(item?.status),
+    received: receivedQuantity(item),
+    delivered: deliveredQuantity(item),
+    remaining: remainingQuantity(item),
+  }));
   return source;
 }
 
@@ -601,8 +607,9 @@ function statusVars(group) {
 
 function StatusPill({ group, tab = "", className = "co-status-btn" }) {
   const forceShipping = tab === "received" && group.stage === 3;
-  const vars = forceShipping ? STATUS_COLORS.received : statusVars(group);
-  const label = forceShipping ? "Shipping" : statusLabel(group);
+  const partialDelivered = tab === "delivered" && group.stage === 4 && group.hasRemaining && !isMaintenance(group.orderType);
+  const vars = forceShipping ? STATUS_COLORS.received : partialDelivered ? STATUS_COLORS.remaining : statusVars(group);
+  const label = forceShipping ? "Shipping" : partialDelivered ? "Partially Delivered" : statusLabel(group);
   return <span className={className} style={{ "--tag-bg": vars.bg, "--tag-fg": vars.fg, "--tag-border": vars.bd }}>{label}</span>;
 }
 

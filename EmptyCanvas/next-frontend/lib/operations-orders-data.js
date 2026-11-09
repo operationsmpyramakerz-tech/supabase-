@@ -489,7 +489,7 @@ function logicalParams({ query = "", tab = "all", type = "all", searchMode = "fa
 
 async function candidateNumbers({ cursor = null, scanGroups = 90, filters = {}, searchMode = "", rpcOptions = null, signal = null } = {}) {
   const suffix = searchMode ? `.search-${searchMode}` : "";
-  if (rpcOptions && rpcOptions.tab !== "remaining" && canUseOrderCandidateRpc()) {
+  if (rpcOptions && !["remaining", "delivered"].includes(rpcOptions.tab) && canUseOrderCandidateRpc()) {
     try {
       return await loadOrderCandidateNumbersRpc({
         ...rpcOptions,
@@ -571,7 +571,7 @@ function operationsCardSummaryItem(row = {}, tab = "all") {
 async function rowsByNumbers(numbers = [], signal = null, includeLocalSearchFields = false, { tab = "all", scoped = false } = {}) {
   // Card-summary RPC may aggregate mixed owners into one card. Never trust it
   // for row-scoped lists: fetch component owners before filtering groups.
-  if (tab !== "remaining" && !scoped && !includeLocalSearchFields && canUseOrderCardSummaryRpc()) {
+  if (!["remaining", "delivered"].includes(tab) && !scoped && !includeLocalSearchFields && canUseOrderCardSummaryRpc()) {
     try {
       const rows = await loadOrderCardSummariesRpc({
         numbers,

@@ -1,6 +1,6 @@
 "use client";
 
-import { operationsHasOutstandingQuantity, operationsMatchesTab } from "../../lib/operations-remaining-status.mjs";
+import { operationsArrivedItemVisible, operationsHasOutstandingQuantity, operationsMatchesTab } from "../../lib/operations-remaining-status.mjs";
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
@@ -360,6 +360,12 @@ function itemsForOperationsTab(items, tab) {
   const source = Array.isArray(items) ? items : [];
   if (tab === "remaining") return source.filter((item) => Math.abs(remainingQuantity(item)) > 1e-9);
   if (tab === "received") return source.filter((item) => Math.abs(receivedQuantity(item)) > 1e-9);
+  if (tab === "delivered") return source.filter((item) => operationsArrivedItemVisible({
+    stage: statusIndex(item?.status),
+    received: receivedQuantity(item),
+    delivered: deliveredQuantity(item),
+    remaining: remainingQuantity(item),
+  }));
   return source;
 }
 
@@ -581,9 +587,10 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, orderOption
   );
   const canRejectComponents = tab === "approved" && group.stage === 2 && !maintenance;
   const canDeliver = tab === "received" && shipping;
-  const canSendToStock = tab === "delivered" && delivered && orderTypeKey(group.orderType) === "requestproducts";
-  const canCreateWithdrawal = tab === "delivered" && delivered && orderTypeKey(group.orderType) === "requestproducts";
-  const canCreateDelivery = tab === "delivered" && delivered && orderTypeKey(group.orderType) === "withdrawproducts";
+  const completedDelivery = tab === "delivered" && delivered && !group.hasRemaining;
+  const canSendToStock = completedDelivery && orderTypeKey(group.orderType) === "requestproducts";
+  const canCreateWithdrawal = completedDelivery && orderTypeKey(group.orderType) === "requestproducts";
+  const canCreateDelivery = completedDelivery && orderTypeKey(group.orderType) === "withdrawproducts";
   const showDownload = !(maintenance && tab === "approved");
   const isEditing = Boolean(editMode && editMode.groupKey === group.key);
   const editItemsById = editMode?.itemsById || {};
@@ -695,7 +702,8 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, orderOption
       })
     : [];
   const tabItems = isEditing ? [...baseTabItems, ...editAdditions] : baseTabItems;
-  const displayTabItems = expandOrderItemsForDisplay(tabItems).map(applyEditDraft).filter((item) => !isEditItemDeleted(item));
+  const displayTabItems = itemsForOperationsTab(expandOrderItemsForDisplay(tabItems).map(applyEditDraft), tab)
+    .filter((item) => !isEditItemDeleted(item));
   const searchedDisplayItems = componentSearch.trim()
     ? displayTabItems.filter((item) => matchesOrderComponentSearch(item, componentSearch))
     : displayTabItems;

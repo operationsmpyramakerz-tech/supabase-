@@ -121,7 +121,8 @@ test('Permission-gated API, visible workflow button, confirmation and animations
   assert.match(route,/"send-to-stock": "orders\.operations\.send_to_stock"/);
   assert.match(route,/assertOrderIdsInScope\(gate\.account, actionPermission/);
   assert.match(route,/sendOperationsDeliveredToStock\(/);
-  assert.match(modal,/const canSendToStock = tab === "delivered" && delivered && orderTypeKey\(group\.orderType\) === "requestproducts"/);
+  assert.match(modal,/const completedDelivery = tab === "delivered" && delivered && !group\.hasRemaining/);
+  assert.match(modal,/const canSendToStock = completedDelivery && orderTypeKey\(group\.orderType\) === "requestproducts"/);
   assert.match(modal,/onAction\("send-to-stock", group\)/);
   assert.match(modal,/"send-to-stock": \["Send to Stock\?"/);
   assert.match(modal,/"send-to-stock"\].includes\(actionState\?\.action\)/);

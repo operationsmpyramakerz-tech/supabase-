@@ -12,13 +12,13 @@ const arrivedPartial = { stage: 4, hasRemaining: true, hasReceived: true, mainte
 const arrivedComplete = { stage: 4, hasRemaining: false, hasReceived: true, maintenance: false };
 const shippedPartial = { stage: 3, hasRemaining: true, hasReceived: true, maintenance: false };
 
-test('Arrived partial receipt (35 requested / 14 received / 21 outstanding) stays in Remaining, not fully Delivered', () => {
+test('Arrived partial receipt (35 requested / 14 received / 21 outstanding) appears in both tabs', () => {
   const requested = 35;
   const received = 14;
   assert.equal(requested - received, 21);
   assert.equal(operationsHasOutstandingQuantity(arrivedPartial), true);
   assert.equal(operationsMatchesTab(arrivedPartial, 'remaining'), true);
-  assert.equal(operationsMatchesTab(arrivedPartial, 'delivered'), false);
+  assert.equal(operationsMatchesTab(arrivedPartial, 'delivered'), true);
   assert.equal(operationsMatchesTab(arrivedPartial, 'all'), true);
 });
 
@@ -41,8 +41,8 @@ test('pending orders, archived orders and maintenance retain their existing stat
 test('remaining list retrieves Arrived rows and bypasses old stage-only RPC filters', () => {
   const server = source('lib/operations-orders-data.js');
   assert.match(server, /status\.ilike\.\*arrived\*/);
-  assert.match(server, /rpcOptions\.tab !== "remaining"/);
-  assert.match(server, /tab !== "remaining" && !scoped/);
+  assert.match(server, /!\["remaining", "delivered"\]\.includes\(rpcOptions\.tab\)/);
+  assert.match(server, /!\["remaining", "delivered"\]\.includes\(tab\)/);
   assert.match(server, /operationsMatchesTab\(meta, cleanTab\)/);
 });
 
