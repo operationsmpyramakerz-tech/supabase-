@@ -6,7 +6,7 @@ const SHELL_STYLES = Object.freeze([
   "/next/css/style.css?v=boot-main51-v1",
   "/next/css/ui-redesign.css?v=boot-main51-v1",
   "/next/css/page-canvas-fix.css?v=boot-main51-v1",
-  "/next/css/classic-parity.css?v=creator-unified-v361",
+  "/next/css/classic-parity.css?v=creator-compact-v363",
 ]);
 
 export default function ShellStyleLinks() {

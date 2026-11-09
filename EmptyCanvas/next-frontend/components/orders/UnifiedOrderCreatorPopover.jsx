@@ -27,19 +27,19 @@ export function creatorPopoverPlacement(anchor) {
   const rect = anchor.getBoundingClientRect();
   const viewportWidth = window.innerWidth;
   const viewportHeight = window.innerHeight;
-  const width = Math.min(366, viewportWidth - 24);
+  const width = Math.min(322, viewportWidth - 24);
   const mobile = viewportWidth <= 600;
   if (mobile) return { mobile: true };
   const left = Math.max(12, Math.min(rect.left + rect.width / 2 - width / 2, viewportWidth - width - 12));
   const roomBelow = viewportHeight - rect.bottom - 23;
   const roomAbove = rect.top - 23;
-  const above = roomBelow < 340 && roomAbove > roomBelow;
+  const above = roomBelow < 305 && roomAbove > roomBelow;
   const available = above ? roomAbove : roomBelow;
   const maxHeight = Math.max(150, Math.min(520, available));
   // Use bottom anchoring when opening upward so short profiles still touch the trigger.
-  const top = above ? undefined : rect.bottom + 10;
-  const bottom = above ? viewportHeight - rect.top + 10 : undefined;
-  const arrowX = Math.max(22, Math.min(width - 22, rect.left + rect.width / 2 - left));
+  const top = above ? undefined : rect.bottom + 8;
+  const bottom = above ? viewportHeight - rect.top + 8 : undefined;
+  const arrowX = Math.max(17, Math.min(width - 17, rect.left + rect.width / 2 - left));
   return { left, top, bottom, maxHeight, above, arrowX, mobile: false };
 }
 
@@ -48,7 +48,7 @@ function CreatorRow({ label, value, icon, href }) {
   return <div className="unified-creator__row">
     <span className="unified-creator__row-icon"><ClassicOrderIcon name={icon} /></span>
     <span className="unified-creator__row-label">{label}</span>
-    {href ? <a href={href} className="unified-creator__row-value">{value}</a> : <strong className="unified-creator__row-value">{value}</strong>}
+    {href ? <a href={href} className="unified-creator__row-value" title={value}>{value}</a> : <strong className="unified-creator__row-value" title={value}>{value}</strong>}
   </div>;
 }
 
@@ -59,7 +59,11 @@ export default function UnifiedOrderCreatorPopover({ state, onClose }) {
     const onOutside = (event) => {
       if (!event.target.closest?.(".unified-creator, .co-creator-btn, .next-current-creator-chip")) onClose();
     };
-    const onMove = () => onClose();
+    // Scrolling inside a long attachment list must not dismiss the popup.
+    const onMove = (event) => {
+      if (event?.target?.closest?.(".unified-creator")) return;
+      onClose();
+    };
     document.addEventListener("keydown", onKey);
     document.addEventListener("pointerdown", onOutside, true);
     window.addEventListener("scroll", onMove, true);
@@ -90,14 +94,12 @@ export default function UnifiedOrderCreatorPopover({ state, onClose }) {
     top: placement.above ? "auto" : (placement.top ?? state.top),
     bottom: placement.above ? placement.bottom : "auto",
     maxHeight: placement.maxHeight ?? state.maxHeight ?? 520,
-    "--creator-arrow-x": `${placement.arrowX ?? 300}px`,
+    "--creator-arrow-x": `${placement.arrowX ?? 161}px`,
   };
   return <div
     className={`creator-profile-popover is-open unified-creator${placement.above ? " unified-creator--above" : ""}${placement.mobile ? " unified-creator--mobile" : ""}`}
     style={style} role="dialog" aria-modal="false" aria-label={`Created by ${name}`}>
-    {!placement.mobile ? <svg className="unified-creator__pointer" viewBox="0 0 36 19" aria-hidden="true">
-      <path d="M1 19 C8 19 11 8 15 4 C17.5 1.2 19.5 1.2 22 4 C26 8 29 19 35 19 Z" />
-    </svg> : null}
+    {!placement.mobile ? <span className="unified-creator__pointer" aria-hidden="true" /> : null}
     <div className="unified-creator__surface">
       <div className="unified-creator__header">
         <div className={`unified-creator__avatar${photoUrl ? " unified-creator__avatar--photo" : ""}`}>
@@ -118,11 +120,10 @@ export default function UnifiedOrderCreatorPopover({ state, onClose }) {
           <CreatorRow icon="mail" label="Email" value={email} href={email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? `mailto:${email}` : undefined} />
           <CreatorRow icon="phone" label="Phone" value={phone} href={phone && /^[+\d()\s-]{6,25}$/.test(phone) ? `tel:${phone.replace(/[^+\d]/g, "")}` : undefined} />
           <CreatorRow icon="file-text" label="Employee code" value={employeeCode} />
-          {files.length ? <div className="unified-creator__files">
-            <div className="unified-creator__files-title"><ClassicOrderIcon name="clipboard" />Files &amp; media <span>{files.length}</span></div>
-            {files.map((file, index) => file.url ? <a key={`${index}-${file.name}`} className="unified-creator__file" href={file.url} target="_blank" rel="noopener noreferrer"><ClassicOrderIcon name="file-text" /><span>{file.name}</span><ClassicOrderIcon name="external-link" /></a> : <div className="unified-creator__file unified-creator__file--disabled" key={`${index}-${file.name}`}><ClassicOrderIcon name="file-text" /><span>{file.name}</span></div>)}
-          </div> : null}
-          {!department && !position && !email && !phone && !employeeCode && !files.length ? <div className="unified-creator__status">No additional profile information available.</div> : null}
+          <div className="unified-creator__files">
+            <div className="unified-creator__files-title"><ClassicOrderIcon name="clipboard" /><span>Files &amp; media</span><span className="unified-creator__files-count">{files.length}</span></div>
+            {files.length ? <div className="unified-creator__files-list">{files.map((file, index) => file.url ? <a key={`${index}-${file.name}`} className="unified-creator__file" href={file.url} target="_blank" rel="noopener noreferrer" title={file.name}><ClassicOrderIcon name="file-text" /><span>{file.name}</span><ClassicOrderIcon name="external-link" /></a> : <div className="unified-creator__file unified-creator__file--disabled" key={`${index}-${file.name}`}><ClassicOrderIcon name="file-text" /><span>{file.name}</span></div>)}</div> : <div className="unified-creator__files-empty">No files attached</div>}
+          </div>
         </div>}
     </div>
   </div>;

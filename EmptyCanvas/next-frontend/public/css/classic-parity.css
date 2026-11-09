@@ -10041,106 +10041,142 @@ html[data-theme="dark"] body.operations-orders-page .next-operations-component-e
 .next-operations-stock-restore-option small { font-size: 11px; color: #536176; line-height: 1.55; }
 
 
-/* v361 — Unified creator popover. Shared by My, Review, Operations and Maintenance orders. */
+/* v363 — Compact shared creator details for My, Review, Operations and Maintenance orders. */
 body .creator-profile-popover.unified-creator {
   position: fixed !important;
   z-index: 12050 !important;
   display: block !important;
   box-sizing: border-box;
-  width: min(366px, calc(100vw - 24px)) !important;
+  width: min(322px, calc(100vw - 24px)) !important;
   min-width: 0;
+  margin: 0;
   padding: 0;
   overflow: visible !important;
-  color: #142034;
-  filter: drop-shadow(0 16px 26px rgba(12, 22, 40, .12));
+  color: #101828;
+  filter: drop-shadow(0 10px 24px rgba(14, 22, 39, .11));
 }
 body .unified-creator__surface {
   position: relative;
   z-index: 1;
   max-height: inherit;
-  overflow: auto;
-  border: 1px solid #e2e7ef;
-  border-radius: 24px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  border: 1px solid #e3e7ee;
+  border-radius: 17px;
   background: #fff;
-  box-shadow: 0 8px 22px rgba(12, 22, 40, .07);
+  box-shadow: 0 3px 12px rgba(14, 22, 39, .045);
   scrollbar-width: thin;
 }
-/* A curved, rounded attachment instead of the standard sharp triangle. */
+/* A tiny, softly rounded connector replaces the large curved arrow. */
 body .unified-creator__pointer {
   position: absolute;
   z-index: 0;
-  top: -14px;
-  left: clamp(18px, calc(var(--creator-arrow-x, 300px) - 18px), calc(100% - 54px));
-  width: 36px;
-  height: 19px;
-  fill: #fff;
-  filter: drop-shadow(0 -1px 0 #e2e7ef);
+  top: -5px;
+  left: var(--creator-arrow-x, 161px);
+  width: 12px;
+  height: 12px;
+  border: 1px solid #e3e7ee;
+  border-radius: 4px;
+  background: #fff;
+  transform: translateX(-50%) rotate(45deg);
   pointer-events: none;
 }
 body .unified-creator--above .unified-creator__pointer {
   top: auto;
-  bottom: -14px;
-  transform: rotate(180deg);
+  bottom: -5px;
 }
 body .unified-creator__header {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 12px;
-  min-height: 108px;
-  padding: 20px 50px 18px 18px;
-  border-radius: 22px 22px 18px 18px;
-  background: linear-gradient(111deg, #fff7ee, #fff 72%);
-  border-bottom: 1px solid #f2ede8;
+  gap: 10px;
+  min-height: 78px;
+  padding: 12px 37px 12px 13px;
+  border-bottom: 1px solid #edf0f4;
+  border-radius: 16px 16px 0 0;
+  background: #fafbfc;
 }
 body .unified-creator__avatar {
-  flex: 0 0 59px;
-  width: 59px;
-  height: 59px;
   display: grid;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
   place-items: center;
   overflow: hidden;
-  border: 3px solid #fff;
-  border-radius: 19px;
-  background: linear-gradient(135deg, #ffab64, #f0641d);
+  border: 2px solid #fff;
+  border-radius: 13px;
+  background: linear-gradient(135deg, #f8994b, #ed641c);
+  box-shadow: 0 2px 8px rgba(17, 24, 39, .09);
   color: #fff;
-  font-weight: 900;
-  font-size: 19px;
-  box-shadow: 0 5px 14px rgba(240, 100, 29, .15);
+  font-size: 16px;
+  font-weight: 800;
 }
-body .unified-creator__avatar--photo { background: #fff; border-radius: 50%; }
+body .unified-creator__avatar--photo { border-radius: 50%; background: #fff; }
 body .unified-creator__avatar img { width: 100%; height: 100%; object-fit: cover; }
-body .unified-creator__identity { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 4px; }
-body .unified-creator__eyebrow { color: #d45c18; font-size: 10px; font-weight: 900; letter-spacing: .075em; }
-body .unified-creator__name { overflow-wrap: anywhere; color: #101828; font-size: 18px; line-height: 1.2; font-weight: 900; }
-body .unified-creator__role { align-self: flex-start; max-width: 100%; padding: 4px 9px; border-radius: 40px; background: #eef1f5; color: #344054; font-size: 11px; font-weight: 700; }
+body .unified-creator__identity { display: flex; flex: 1; min-width: 0; flex-direction: column; align-items: flex-start; gap: 2px; }
+body .unified-creator__eyebrow { color: #c85b20; font-size: 9px; line-height: 1.2; font-weight: 850; letter-spacing: .07em; }
+body .unified-creator__name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #141c2c; font-size: 15px; line-height: 1.3; font-weight: 850; }
+body .unified-creator__role { align-self: flex-start; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 2px 7px; border-radius: 7px; background: #ecf0f4; color: #485469; font-size: 10px; line-height: 1.5; font-weight: 750; }
 body .unified-creator__close {
-  position: absolute; top: 14px; right: 14px; display: grid; place-items: center;
-  width: 32px; height: 32px; border: 1px solid #e6e9ef; border-radius: 12px;
-  background: #fff; color: #475467; cursor: pointer;
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  min-height: 24px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid #e5e9ef;
+  border-radius: 8px;
+  background: #fff;
+  color: #596579;
+  cursor: pointer;
+  line-height: 1;
 }
-body .unified-creator__close svg { width: 16px; height: 16px; }
-body .unified-creator__close:hover { background: #fff0e7; color: #d45c18; }
-body .unified-creator__body { padding: 7px 18px 17px; }
+body .unified-creator__close svg { display: block; width: 12px; height: 12px; stroke-width: 2.2px; }
+body .unified-creator__close:hover { border-color: #ffc8a3; background: #fff5ec; color: #d45c18; }
+body .unified-creator__close:focus-visible { outline: 2px solid #ed7226; outline-offset: 2px; }
+body .unified-creator__body { padding: 4px 13px 12px; }
 body .unified-creator__row {
-  display: grid; grid-template-columns: 20px 74px minmax(0, 1fr);
-  align-items: center; column-gap: 9px; min-height: 43px;
-  border-bottom: 1px solid #edf0f4; padding: 8px 0;
+  display: grid;
+  grid-template-columns: 16px 67px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  min-height: 35px;
+  padding: 6px 0;
+  border-bottom: 1px solid #edf0f4;
 }
-body .unified-creator__row-icon { display: grid; place-items: center; color: #182b46; }
-body .unified-creator__row-icon svg { width: 16px; height: 16px; }
-body .unified-creator__row-label { color: #667085; font-size: 11px; font-weight: 650; }
-body .unified-creator__row-value { color: #162136; overflow-wrap: anywhere; text-align: end; text-decoration: none; font-size: 11.5px; line-height: 1.45; font-weight: 800; }
+body .unified-creator__row-icon { display: grid; place-items: center; color: #475569; }
+body .unified-creator__row-icon svg { width: 14px; height: 14px; stroke-width: 1.8px; }
+body .unified-creator__row-label { color: #697588; font-size: 10px; font-weight: 650; }
+body .unified-creator__row-value {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #182236;
+  text-align: right;
+  text-decoration: none;
+  font-size: 10.5px;
+  line-height: 1.4;
+  font-weight: 750;
+}
 body a.unified-creator__row-value:hover { color: #e86719; text-decoration: underline; }
-body .unified-creator__files { padding-top: 13px; }
-body .unified-creator__files-title { display: flex; align-items: center; gap: 8px; color: #465266; font-size: 11px; font-weight: 850; margin-bottom: 10px; }
-body .unified-creator__files-title svg { width: 16px; height: 16px; }
-body .unified-creator__files-title span { margin-left: auto; background: #f2f4f7; padding: 3px 8px; border-radius: 20px; }
-body .unified-creator__file { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 13px; border: 1px solid #e7ebf2; background: #f8fafc; color: #142034; text-decoration: none; margin-top: 7px; font-size: 11.5px; font-weight: 750; }
-body .unified-creator__file > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-body .unified-creator__file svg { width: 17px; height: 17px; flex: 0 0 17px; }
-body .unified-creator__file:not(.unified-creator__file--disabled):hover { border-color: #f8b184; background: #fff8f2; }
-body .unified-creator__status { padding: 17px 18px; font-size: 12px; color: #667085; }
+body .unified-creator__files { padding-top: 10px; }
+body .unified-creator__files-title { display: flex; align-items: center; gap: 7px; color: #364152; font-size: 10.5px; font-weight: 800; }
+body .unified-creator__files-title > svg { flex: 0 0 14px; width: 14px; height: 14px; }
+body .unified-creator__files-title .unified-creator__files-count { margin-left: auto; padding: 2px 7px; border-radius: 20px; background: #f0f2f6; color: #526073; font-size: 10px; font-weight: 750; }
+body .unified-creator__files-list { display: grid; gap: 5px; padding-top: 7px; }
+body .unified-creator__file { display: flex; align-items: center; gap: 8px; min-height: 33px; margin: 0; padding: 6px 9px; border: 1px solid #e8ebf0; border-radius: 9px; background: #f8fafc; color: #273449; text-decoration: none; font-size: 10.5px; font-weight: 720; }
+body .unified-creator__file > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body .unified-creator__file svg { flex: 0 0 14px; width: 14px; height: 14px; }
+body .unified-creator__file:not(.unified-creator__file--disabled):hover { border-color: #f5b17f; background: #fff8f2; }
+body .unified-creator__files-empty { padding: 7px 0 1px 21px; color: #97a0ad; font-size: 10px; line-height: 1.3; }
+body .unified-creator__status { padding: 14px 13px; font-size: 11px; color: #667085; }
 /* Ensure Maintenance Orders displays the user action consistently with other order types. */
 body.page-maintenance-orders .orders-workspace .co-cards .next-maintenance-card-head-actions .next-maintenance-creator-btn {
   display: inline-flex !important; visibility: visible !important; opacity: 1 !important;
@@ -10149,15 +10185,32 @@ body.page-maintenance-orders .orders-workspace .co-cards .next-maintenance-card-
 }
 @media (max-width: 600px) {
   body .creator-profile-popover.unified-creator.unified-creator--mobile {
-    inset: auto 12px 14px 12px !important;
+    inset: auto 12px 12px 12px !important;
     width: calc(100vw - 24px) !important;
-    max-height: min(76dvh, 540px) !important;
+    max-height: min(72dvh, 480px) !important;
   }
-  body .unified-creator--mobile .unified-creator__surface { max-height: min(76dvh, 540px); }
-  body .unified-creator__header { padding: 17px 48px 17px 14px; min-height: 94px; }
-  body .unified-creator__body { padding: 6px 14px 16px; }
-  body .unified-creator__row { grid-template-columns: 18px 66px minmax(0, 1fr); gap: 8px; }
+  body .unified-creator--mobile .unified-creator__surface { max-height: min(72dvh, 480px); }
+  body .unified-creator__header { min-height: 76px; }
+  body .unified-creator__row { grid-template-columns: 16px 64px minmax(0, 1fr); gap: 6px; }
 }
+/* Keep the compact card legible when ERP dark mode is enabled. */
+html[data-theme="dark"] body .creator-profile-popover.unified-creator { color: #f2f5fb; }
+html[data-theme="dark"] body .unified-creator__surface { background: #171e2a; border-color: #354052; }
+html[data-theme="dark"] body .unified-creator__pointer { background: #222b38; border-color: #354052; }
+html[data-theme="dark"] body .unified-creator__header { background: #222b38; border-color: #354052; }
+html[data-theme="dark"] body .unified-creator__name { color: #f4f7fb; }
+html[data-theme="dark"] body .unified-creator__eyebrow { color: #ffa164; }
+html[data-theme="dark"] body .unified-creator__role { background: #344155; color: #dce5f2; }
+html[data-theme="dark"] body .unified-creator__close { background: #2c3748; border-color: #455267; color: #d9e1ed; }
+html[data-theme="dark"] body .unified-creator__row { border-color: #303b4c; }
+html[data-theme="dark"] body .unified-creator__row-icon,
+html[data-theme="dark"] body .unified-creator__row-label { color: #a7b4c6; }
+html[data-theme="dark"] body .unified-creator__row-value { color: #f1f4f9; }
+html[data-theme="dark"] body .unified-creator__files-title { color: #e6ecf4; }
+html[data-theme="dark"] body .unified-creator__files-count { background: #303b4c; color: #d4dde9; }
+html[data-theme="dark"] body .unified-creator__file { border-color: #374256; background: #222c3b; color: #eaf0f8; }
+html[data-theme="dark"] body .unified-creator__files-empty,
+html[data-theme="dark"] body .unified-creator__status { color: #a7b4c6; }
 @media (prefers-reduced-motion: reduce) {
   body .unified-creator__surface { scroll-behavior: auto; }
 }
