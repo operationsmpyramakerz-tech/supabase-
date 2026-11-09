@@ -519,6 +519,8 @@ function Progress({ stage }) {
 function OrderModal({ group, tab, busy, onClose, onAction, onExport, orderOptions = [], editMode, onPatchEditItem, onUpsertEditAddition, onDeleteEditItem, onSaveEdit, onCancelEdit, permissions = {} }) {
   const router = useRouter();
   const permitted = (key) => permissions[key] !== false;
+  const canEditMenu = permissions.edit === true;
+  const canDeleteMenu = permissions.delete === true;
   const [moreOpen, setMoreOpen] = useState(false);
   const [downloadOpen, setDownloadOpen] = useState(false);
   const [sortMode, setSortMode] = useState("product-tag");
@@ -819,17 +821,17 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, orderOption
     <div className="co-modal-overlay is-open" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget && !isEditing) onClose(); }}>
       <div className="co-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="operations-order-title">
         <span className="co-modal-type-badge" style={{ "--co-order-type-accent": type.accent, "--co-order-type-accent-dark": type.accentDark }} aria-hidden="true"><ClassicOrderIcon name={type.icon} /></span>
-        {!isEditing && (permitted("edit") || permitted("delete")) ? <div className="co-modal-more" ref={moreRef}>
+        {!isEditing && (canEditMenu || canDeleteMenu) ? <div className="co-modal-more" ref={moreRef}>
           <button type="button" className="co-modal-more-btn" aria-label="Order actions" aria-haspopup="menu" aria-expanded={moreOpen} onClick={() => setMoreOpen((value) => !value)}>
             <span className="co-modal-more-dots" aria-hidden="true">⋮</span>
           </button>
           {moreOpen ? <div className="co-modal-more-panel" role="menu" aria-label="Order actions">
-            {!archived && permitted("edit") ? <button type="button" className="co-modal-more-item" role="menuitem" onClick={() => menuAction("edit")}><ClassicOrderIcon name="edit-2" /><span>Edit</span></button> : null}
-            {!archived && permitted("edit") ? <button type="button" className="co-modal-more-item" role="menuitem" onClick={() => menuAction("archive")}><ClassicOrderIcon name="archive" /><span>Archive</span></button> : null}
-            {archived && permitted("edit") ? <button type="button" className="co-modal-more-item" role="menuitem" onClick={() => menuAction("unarchive")}><ClassicOrderIcon name="rotate-ccw" /><span>UnArchive</span></button> : null}
-            {permitted("delete") ? <button type="button" className="co-modal-more-item co-modal-more-item--danger" role="menuitem" onClick={() => menuAction("delete")}><ClassicOrderIcon name="trash-2" /><span>Delete</span></button> : null}
+            {!archived && canEditMenu ? <button type="button" className="co-modal-more-item" role="menuitem" onClick={() => menuAction("edit")}><ClassicOrderIcon name="edit-2" /><span>Edit</span></button> : null}
+            {!archived && canEditMenu ? <button type="button" className="co-modal-more-item" role="menuitem" onClick={() => menuAction("archive")}><ClassicOrderIcon name="archive" /><span>Archive</span></button> : null}
+            {archived && canEditMenu ? <button type="button" className="co-modal-more-item" role="menuitem" onClick={() => menuAction("unarchive")}><ClassicOrderIcon name="rotate-ccw" /><span>UnArchive</span></button> : null}
+            {canDeleteMenu ? <button type="button" className="co-modal-more-item co-modal-more-item--danger" role="menuitem" onClick={() => menuAction("delete")}><ClassicOrderIcon name="trash-2" /><span>Delete</span></button> : null}
           </div> : null}
-        </div> : <div className="next-operations-edit-mode-badge"><ClassicOrderIcon name="edit-2" /><span>Edit mode</span></div>}
+        </div> : isEditing ? <div className="next-operations-edit-mode-badge"><ClassicOrderIcon name="edit-2" /><span>Edit mode</span></div> : null}
 
         <button type="button" className="co-modal-close" onClick={onClose} aria-label="Close order details" />
         <div className="co-modal-header"><div className="co-modal-head-left"><div className="co-modal-status" id="operations-order-title">{type.label}</div><div className="co-modal-status-sub" hidden /></div></div>

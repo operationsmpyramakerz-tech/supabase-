@@ -280,14 +280,14 @@ export function MaintenanceDetailsModal({ group, busy, onClose, onLog, onSecondL
       <div className="co-modal-overlay is-open" aria-hidden="false" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
         <div className="co-modal-dialog next-maintenance-details-dialog" role="dialog" aria-modal="true" aria-label={`${group.orderIdLabel} maintenance details`}>
           <span className="co-modal-type-badge" style={{ "--co-order-type-accent": "#f2b705", "--co-order-type-accent-dark": "#a16207" }} aria-hidden="true"><ClassicOrderIcon name="tool" /></span>
-          {(permissions.edit !== false || permissions.archive !== false || permissions.delete !== false) ? <div className="co-modal-more" ref={moreRef}>
+          {(permissions.edit === true || permissions.archive === true || permissions.delete === true) ? <div className="co-modal-more" ref={moreRef}>
             <button type="button" className="co-modal-more-btn" aria-label="Order actions" aria-haspopup="menu" aria-expanded={moreOpen} onClick={() => setMoreOpen((value) => !value)}>
               <span className="co-modal-more-dots" aria-hidden="true">⋮</span>
             </button>
             {moreOpen ? <div className="co-modal-more-panel" role="menu" aria-label="Order actions">
-              {permissions.edit !== false ? <button type="button" className="co-modal-more-item" role="menuitem" onClick={() => menuAction("edit")}><ClassicOrderIcon name="edit-2" /><span>Edit</span></button> : null}
-              {permissions.archive !== false ? <button type="button" className="co-modal-more-item" role="menuitem" onClick={() => menuAction("archive")}><ClassicOrderIcon name="archive" /><span>Archive</span></button> : null}
-              {permissions.delete !== false ? <button type="button" className="co-modal-more-item co-modal-more-item--danger" role="menuitem" onClick={() => menuAction("delete")}><ClassicOrderIcon name="trash-2" /><span>Delete</span></button> : null}
+              {permissions.edit === true ? <button type="button" className="co-modal-more-item" role="menuitem" onClick={() => menuAction("edit")}><ClassicOrderIcon name="edit-2" /><span>Edit</span></button> : null}
+              {permissions.archive === true ? <button type="button" className="co-modal-more-item" role="menuitem" onClick={() => menuAction("archive")}><ClassicOrderIcon name="archive" /><span>Archive</span></button> : null}
+              {permissions.delete === true ? <button type="button" className="co-modal-more-item co-modal-more-item--danger" role="menuitem" onClick={() => menuAction("delete")}><ClassicOrderIcon name="trash-2" /><span>Delete</span></button> : null}
             </div> : null}
           </div> : null}
           <button type="button" className="co-modal-close" onClick={onClose} aria-label="Close order details" />

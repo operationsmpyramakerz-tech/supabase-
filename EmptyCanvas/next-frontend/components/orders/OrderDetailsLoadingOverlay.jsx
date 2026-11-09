@@ -104,7 +104,7 @@ export default function OrderDetailsLoadingOverlay({ group, onCancel, variant = 
     <div className="co-modal-overlay is-open orders-detail-loading-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget) onCancel(); }}>
       <div className={`co-modal-dialog orders-detail-loading-dialog ${maintenance ? "next-maintenance-details-dialog" : review ? "next-review-order-modal" : ""}`} role="dialog" aria-modal="true" aria-label={`Loading ${orderCode || "order"} details`} aria-busy="true">
         <span className="co-modal-type-badge" style={{ "--co-order-type-accent": type.accent, "--co-order-type-accent-dark": type.dark }} aria-hidden="true"><ClassicOrderIcon name={maintenance ? "tool" : type.icon} /></span>
-        {!review ? <div className="co-modal-more" aria-hidden="true"><span className="co-modal-more-btn orders-detail-loading-more"><span className="co-modal-more-dots">⋮</span></span></div> : null}
+        {/* Do not render an actions-menu placeholder before permissions are verified. */}
         <button type="button" className="co-modal-close" onClick={onCancel} aria-label="Cancel opening order" />
         <div className="co-modal-header"><div className="co-modal-head-left"><div className="co-modal-status">{modalTitle}</div></div></div>
         <div className="co-modal-scroll-region">

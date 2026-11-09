@@ -328,7 +328,8 @@ function OrderDetailsModal({ group, tab, busy, onClose, onAction, onReason, onEx
 
   const archived = group.status === "archive";
   const may = (action) => permissions?.[action] !== false;
-  const hasMenuAction = archived ? (may("unarchive") || may("delete")) : (may("edit") || may("archive") || may("delete"));
+  const canUseMenu = (action) => permissions?.[action] === true;
+  const hasMenuAction = archived ? (canUseMenu("unarchive") || canUseMenu("delete")) : (canUseMenu("edit") || canUseMenu("archive") || canUseMenu("delete"));
   const maintenance = isMaintenanceOrder(group.orderType);
   const headerTitle = orderTypeHeaderTitle(group.orderType, group.orderTypeColor, statusLabel(group.status));
   const typeMeta = orderTypeMeta(group.orderType, group.orderTypeColor);
@@ -399,10 +400,10 @@ function OrderDetailsModal({ group, tab, busy, onClose, onAction, onReason, onEx
           <button type="button" className="co-modal-more-btn" aria-label="Order actions" aria-haspopup="menu" aria-expanded={moreOpen} onClick={() => setMoreOpen((state) => !state)}><span className="co-modal-more-dots" aria-hidden="true">⋮</span></button>
           {moreOpen ? (
             <div className="co-modal-more-panel" role="menu" aria-label="Order actions">
-              {!archived && may("edit") ? <button type="button" className="co-modal-more-item" onClick={() => menuAction("edit")}><ClassicOrderIcon name="edit-2" /><span>Edit</span></button> : null}
-              {!archived && may("archive") ? <button type="button" className="co-modal-more-item" onClick={() => menuAction("archive")}><ClassicOrderIcon name="archive" /><span>Archive</span></button> : null}
-              {archived && may("unarchive") ? <button type="button" className="co-modal-more-item" onClick={() => menuAction("unarchive")}><ClassicOrderIcon name="rotate-ccw" /><span>UnArchive</span></button> : null}
-              {may("delete") ? <button type="button" className="co-modal-more-item co-modal-more-item--danger" onClick={() => menuAction("delete")}><ClassicOrderIcon name="trash-2" /><span>Delete</span></button> : null}
+              {!archived && canUseMenu("edit") ? <button type="button" className="co-modal-more-item" onClick={() => menuAction("edit")}><ClassicOrderIcon name="edit-2" /><span>Edit</span></button> : null}
+              {!archived && canUseMenu("archive") ? <button type="button" className="co-modal-more-item" onClick={() => menuAction("archive")}><ClassicOrderIcon name="archive" /><span>Archive</span></button> : null}
+              {archived && canUseMenu("unarchive") ? <button type="button" className="co-modal-more-item" onClick={() => menuAction("unarchive")}><ClassicOrderIcon name="rotate-ccw" /><span>UnArchive</span></button> : null}
+              {canUseMenu("delete") ? <button type="button" className="co-modal-more-item co-modal-more-item--danger" onClick={() => menuAction("delete")}><ClassicOrderIcon name="trash-2" /><span>Delete</span></button> : null}
             </div>
           ) : null}
         </div> : null}
