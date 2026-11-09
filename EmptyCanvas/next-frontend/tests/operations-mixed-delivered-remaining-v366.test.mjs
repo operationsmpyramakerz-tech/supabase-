@@ -42,16 +42,16 @@ test('fully received, pending, maintenance and archived orders preserve their ta
 });
 
 test('both client and detail modal scope Delivered to arrived items and show the arrived quantity', () => {
-  for (const filename of ['OperationsOrdersClient.jsx', 'OperationsOrdersHeavyModals.jsx']) {
-    const src = read(`components/orders/${filename}`);
-    assert.match(src, /operationsArrivedItemVisible/);
-    assert.match(src, /if \(tab === "delivered"\) return source\.filter/);
-    assert.match(src, /remaining: remainingQuantity\(item\)/);
-  }
+  const clientSrc = read('components/orders/OperationsOrdersClient.jsx');
+  assert.match(clientSrc, /operationsArrivedItemVisible/);
+  assert.match(clientSrc, /remaining: remainingQuantity\(item\)/);
+  const detailSrc = read('components/orders/OperationsOrdersHeavyModals.jsx');
+  assert.match(detailSrc, /if \(tab === "delivered"\) return source\.filter/);
+  assert.match(detailSrc, /operationsDeliveredTransferQuantity\(item\)/);
   const client = read('components/orders/OperationsOrdersClient.jsx');
   assert.match(client, /Partially Delivered/);
   const modal = read('components/orders/OperationsOrdersHeavyModals.jsx');
-  assert.match(modal, /const completedDelivery = tab === "delivered" && delivered && !group\.hasRemaining/);
+  assert.match(modal, /const canTransferDelivered = tab === "delivered" && delivered && deliveredActionGroup\.orderIds\.length > 0/);
   assert.match(modal, /itemsForOperationsTab\(expandOrderItemsForDisplay\(tabItems\)\.map\(applyEditDraft\), tab\)/);
   assert.match(modal, /showReceivedValue && receivedWasEdited/);
 });

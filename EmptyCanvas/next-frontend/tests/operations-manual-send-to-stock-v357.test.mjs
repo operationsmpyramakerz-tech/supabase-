@@ -4,6 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
+import { operationsDeliveredTransferQuantity } from '../lib/operations-delivered-transfer.mjs';
 
 const data = readFileSync(new URL('../lib/operations-orders-data.js', import.meta.url), 'utf8');
 const route = readFileSync(new URL('../app/api/orders/operations/mutations-direct/route.js', import.meta.url), 'utf8');
@@ -38,7 +39,8 @@ function harness({ rows = [firstOrder,secondOrder], existing = [], failAfter = n
     }),
     directOperationsMutationError:makeError,
     directOperationsCommittedError:makeError,
-    serializeOperationsOrderDetail: row => ({status:row.status,orderType:row.order_type}),
+    serializeOperationsOrderDetail: row => ({status:row.status,orderType:row.order_type, quantityReceived: row.quantity_received_by_operations ?? 3, quantityRemaining: row.quantity_remaining ?? 0, quantity: row.quantity_requested ?? 3}),
+    operationsDeliveredTransferQuantity,
     opsFinalStatus: value => /arrived|delivered|received/i.test(text(value)),
     opsOrderTypeKey: value => text(value).toLowerCase().replace(/[^a-z0-9]/g,''),
     operationsValueFor: (row,aliases) => aliases.map(alias=>row[alias]).find(v => v!==undefined) ?? null,
@@ -46,7 +48,14 @@ function harness({ rows = [firstOrder,secondOrder], existing = [], failAfter = n
     opsPrepareStockContext: async () => context(),
     opsResolveOwnerMember: row => ({id:'u1',name:'User A',stocktakingColumn:'user_a'}),
     stocktakingOtherOwnerColumns: () => ['other_stock'],
-    opsBuildStockRow: row => ({row:{source_order_id:row.id,user_a:3},required:['source_order_id','user_a']}),
+    opsBuildStockRow: (row, _, options) => {
+      assert.equal(options?.deliveredOnly, true);
+      const qty = operationsDeliveredTransferQuantity({ status: row.status,
+        quantityReceived: row.quantity_received_by_operations ?? 3,
+        quantityRemaining: row.quantity_remaining ?? 0,
+        quantity: row.quantity_requested ?? 3 });
+      return {row:{source_order_id:row.id,user_a:qty},required:['source_order_id','user_a']};
+    },
     opsStockInsertSafe: async row => {if (calls.inserted === failAfter) throw makeError('Simulated write failure',503);stock.push(row);calls.inserted++;},
     opsStockTableName: () => 'stocktaking',
     supabaseRequest: async (url, options) => {
@@ -121,9 +130,9 @@ test('Permission-gated API, visible workflow button, confirmation and animations
   assert.match(route,/"send-to-stock": "orders\.operations\.send_to_stock"/);
   assert.match(route,/assertOrderIdsInScope\(gate\.account, actionPermission/);
   assert.match(route,/sendOperationsDeliveredToStock\(/);
-  assert.match(modal,/const completedDelivery = tab === "delivered" && delivered && !group\.hasRemaining/);
-  assert.match(modal,/const canSendToStock = completedDelivery && orderTypeKey\(group\.orderType\) === "requestproducts"/);
-  assert.match(modal,/onAction\("send-to-stock", group\)/);
+  assert.match(modal,/const canTransferDelivered = tab === "delivered" && delivered && deliveredActionGroup\.orderIds\.length > 0/);
+  assert.match(modal,/const canSendToStock = canTransferDelivered && orderTypeKey\(group\.orderType\) === "requestproducts"/);
+  assert.match(modal,/onAction\("send-to-stock", deliveredActionGroup\)/);
   assert.match(modal,/"send-to-stock": \["Send to Stock\?"/);
   assert.match(modal,/"send-to-stock"\].includes\(actionState\?\.action\)/);
   assert.match(client,/"send-to-stock": \{ title: "Sending products to Stock"/);
@@ -179,4 +188,19 @@ test('wrong school order linkage is never treated as successful stock sync', asy
   const h=harness({rows:[firstOrder],existing:[{id:5,source_order_id:1,user_a:null,other_stock:2}]});
   await assert.rejects(h.run({orderIds:['1'],restoreZeroedRows:true}), e => e.status===409 && /correct folder/.test(e.message));
   assert.equal(h.calls.restored,0);
+});
+
+
+test('Mixed order: partial 4 of 6 goes to Stock, unarrived row is rejected and retries do not duplicate', async () => {
+  const arrived = {...firstOrder, quantity_requested:6,quantity_received_by_operations:4,quantity_remaining:2};
+  const pending = {...secondOrder,status:'Shipped',quantity_requested:6,quantity_received_by_operations:0,quantity_remaining:6};
+  const h=harness({rows:[arrived,pending]});
+  await assert.rejects(h.run({orderIds:['1','2']}), {status:409});
+  assert.equal(h.stock.length,0);
+  const result=await h.run({orderIds:['1']});
+  assert.equal(result.stocktakingSyncedCount,1);
+  assert.equal(h.stock[0].user_a,4);
+  const repeated=await h.run({orderIds:['1']});
+  assert.equal(repeated.stocktakingSkippedCount,1);
+  assert.equal(h.stock.length,1);
 });

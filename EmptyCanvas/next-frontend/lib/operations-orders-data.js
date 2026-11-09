@@ -1,3 +1,4 @@
+import { operationsDeliveredTransferQuantity } from "./operations-delivered-transfer.mjs";
 import "server-only";
 import { operationsHasOutstandingQuantity, operationsMatchesTab } from "./operations-remaining-status.mjs";
 import { validateWholeOperationsOrder } from "./operations-whole-order-policy.mjs";
@@ -1101,7 +1102,11 @@ export async function createOperationsRepeatOrder({
   for (let index = 0; index < sourceRows.length; index += 1) {
     const sourceRow = sourceRows[index] || {};
     const item = sourceItems[index] || serializeOperationsOrderDetail(sourceRow);
-    const qtyAbs = repeatOrderEffectiveDeliveredQty(item);
+    // Withdrawal from a mixed order must use the received portion only.
+    // Never repeat the outstanding requested units into a withdrawal order.
+    const qtyAbs = mode === "create-withdrawal"
+      ? operationsDeliveredTransferQuantity(item)
+      : repeatOrderEffectiveDeliveredQty(item);
     if (Math.abs(roundQty(qtyAbs)) <= 1e-9) continue;
 
     const qty = roundQty(sign * qtyAbs);
@@ -2213,7 +2218,7 @@ async function opsStockInsertSafe(row = {}, requiredColumns = []) {
   throw directOperationsCommittedError("Failed to synchronize the Operations order with Stocktaking.", 500);
 }
 
-function opsBuildStockRow(orderRow = {}, context = {}) {
+function opsBuildStockRow(orderRow = {}, context = {}, { deliveredOnly = false } = {}) {
   const serialized = serializeOperationsOrderDetail(orderRow || {});
   const orderType = text(serialized?.orderType);
   if (!opsSupportedStockOrderType(orderType)) return null;
@@ -2222,12 +2227,16 @@ function opsBuildStockRow(orderRow = {}, context = {}) {
   const quantityColumn = context.quantityColumnBySchool?.get(school) || "";
   if (!school || !quantityColumn) throw directOperationsCommittedError("Could not determine the requester Stocktaking column.", 500);
 
-  let quantity = 0;
-  for (const candidate of [serialized?.quantityReceived, serialized?.quantityProgress, serialized?.quantityRequested, serialized?.quantity]) {
-    const value = Number(candidate);
-    if (Number.isFinite(value) && Math.abs(value) > 1e-9) { quantity = roundQty(value); break; }
+  let quantity = deliveredOnly ? operationsDeliveredTransferQuantity(serialized) : 0;
+  if (!deliveredOnly) {
+    for (const candidate of [serialized?.quantityReceived, serialized?.quantityProgress, serialized?.quantityRequested, serialized?.quantity]) {
+      const value = candidate === null || candidate === undefined || candidate === "" ? NaN : Number(candidate);
+      if (Number.isFinite(value) && Math.abs(value) > 1e-9) { quantity = roundQty(value); break; }
+    }
   }
-  if (Math.abs(quantity) < 1e-9) throw directOperationsCommittedError("No delivered quantity was found for Stocktaking sync.", 500);
+  if (Math.abs(quantity) < 1e-9) {
+    throw directOperationsMutationError("No delivered quantity was recorded for this component. Stock was not changed.", 409);
+  }
   quantity = opsOrderTypeKey(orderType) === "withdrawproducts" ? -Math.abs(quantity) : Math.abs(quantity);
 
   const keys = context.keys || [];
@@ -2320,12 +2329,16 @@ export async function sendOperationsDeliveredToStock({ account = {}, orderIds = 
   if (!loaded) throw directOperationsMutationError("Could not load the order components. Refresh and retry.", 503);
   if (loaded.clean.some((id) => !loaded.byId.has(id))) throw directOperationsMutationError("One or more order components were not found.", 404);
   const rows = loaded.clean.map((id) => loaded.byId.get(id));
-  // Do not accept partial/mixed/still-shipping orders just because the UI
-  // displayed a Delivered badge for one component.
+  // The UI sends only arrived component IDs for a mixed order.  Fail closed
+  // if the request includes still-shipping rows, and never transfer requested
+  // quantities when the received/remaining fields show an outstanding balance.
   if (rows.some((row) => {
     const item = serializeOperationsOrderDetail(row || {});
     return !opsFinalStatus(item?.status) || opsOrderTypeKey(item?.orderType) !== "requestproducts";
   })) throw directOperationsMutationError("Only delivered Request Products orders can be sent to Stock.", 409);
+  if (rows.some((row) => operationsDeliveredTransferQuantity(serializeOperationsOrderDetail(row || {})) <= 1e-9)) {
+    throw directOperationsMutationError("Only components with a delivered quantity can be sent to Stock.", 409);
+  }
   const orderNumbers = new Set(rows.map((row) => text(operationsValueFor(row, ["order_number", "Order Number", "Order - ID", "Order ID"]))).filter(Boolean));
   if (orderNumbers.size > 1) throw directOperationsMutationError("Select one delivered order at a time.", 400);
 
@@ -2382,11 +2395,11 @@ export async function sendOperationsDeliveredToStock({ account = {}, orderIds = 
   }
   // Validate all quantities before any database writes. The re-import option
   // is deliberately opt-in: a legitimate zero may mean stock was consumed.
-  const prepared = pending.map((row) => opsBuildStockRow(row, context));
+  const prepared = pending.map((row) => opsBuildStockRow(row, context, { deliveredOnly: true }));
   const preparedRestore = restore.map((item) => ({
     ...item,
     sourceId: text(operationsValueFor(item.orderRow, ["id", "ID"])),
-    prepared: opsBuildStockRow(item.orderRow, context),
+    prepared: opsBuildStockRow(item.orderRow, context, { deliveredOnly: true }),
   }));
   let synced = 0;
   let restored = 0;

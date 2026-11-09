@@ -1,6 +1,7 @@
 "use client";
 
-import { operationsArrivedItemVisible, operationsHasOutstandingQuantity, operationsMatchesTab } from "../../lib/operations-remaining-status.mjs";
+import { operationsHasOutstandingQuantity, operationsMatchesTab } from "../../lib/operations-remaining-status.mjs";
+import { operationsDeliveredTransferQuantity } from "../../lib/operations-delivered-transfer.mjs";
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
@@ -360,12 +361,7 @@ function itemsForOperationsTab(items, tab) {
   const source = Array.isArray(items) ? items : [];
   if (tab === "remaining") return source.filter((item) => Math.abs(remainingQuantity(item)) > 1e-9);
   if (tab === "received") return source.filter((item) => Math.abs(receivedQuantity(item)) > 1e-9);
-  if (tab === "delivered") return source.filter((item) => operationsArrivedItemVisible({
-    stage: statusIndex(item?.status),
-    received: receivedQuantity(item),
-    delivered: deliveredQuantity(item),
-    remaining: remainingQuantity(item),
-  }));
+  if (tab === "delivered") return source.filter((item) => statusIndex(item?.status) === 4 && operationsDeliveredTransferQuantity(item) > 1e-9);
   return source;
 }
 
@@ -588,8 +584,6 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, orderOption
   const canRejectComponents = tab === "approved" && group.stage === 2 && !maintenance;
   const canDeliver = tab === "received" && shipping;
   const completedDelivery = tab === "delivered" && delivered && !group.hasRemaining;
-  const canSendToStock = completedDelivery && orderTypeKey(group.orderType) === "requestproducts";
-  const canCreateWithdrawal = completedDelivery && orderTypeKey(group.orderType) === "requestproducts";
   const canCreateDelivery = completedDelivery && orderTypeKey(group.orderType) === "withdrawproducts";
   const showDownload = !(maintenance && tab === "approved");
   const isEditing = Boolean(editMode && editMode.groupKey === group.key);
@@ -739,6 +733,19 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, orderOption
     && orderTypeKey(option?.orderType) === orderTypeKey(group?.orderType)
     && all.findIndex((candidate) => text(candidate?.key) === text(option?.key)) === index
   );
+  // The Delivered tab is a quantity slice of the order.  Transfer only the
+  // persisted arrived component IDs, not the still-shipping rows in the group.
+  const deliveredActionItems = tab === "delivered"
+    ? tabItems.filter((item) => statusIndex(item?.status) === 4 && operationsDeliveredTransferQuantity(item) > 1e-9)
+    : [];
+  const deliveredActionGroup = {
+    ...group,
+    items: deliveredActionItems,
+    orderIds: [...new Set(deliveredActionItems.map((item) => text(item?.id)).filter(Boolean))],
+  };
+  const canTransferDelivered = tab === "delivered" && delivered && deliveredActionGroup.orderIds.length > 0;
+  const canSendToStock = canTransferDelivered && orderTypeKey(group.orderType) === "requestproducts";
+  const canCreateWithdrawal = canTransferDelivered && orderTypeKey(group.orderType) === "requestproducts";
   const receiveActionGroup = tab === "remaining"
     ? {
         ...group,
@@ -767,16 +774,20 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, orderOption
     const showReceivedValue = tab === "received" || tab === "delivered" || tab === "archive";
     const visibleQty = tab === "remaining"
       ? remaining
-      : showReceivedValue && receivedWasEdited
-        ? received
-        : base;
+      : tab === "delivered"
+        ? operationsDeliveredTransferQuantity(item)
+        : showReceivedValue && receivedWasEdited
+          ? received
+          : base;
     const partialRemainingInAll = tab === "all"
       && stage >= 3 && stage < 5
       && !maintenance
       && Math.abs(received) > 1e-9
       && Math.abs(remaining) > 1e-9
       && Math.abs(remaining) < Math.abs(base) - 1e-9;
-    const showReceivedDiff = (tab === "delivered" || tab === "archive") && receivedWasEdited && Math.abs(received - base) > 1e-9;
+    // Preserve the original strikethrough rules in All/Archive.  Delivered
+    // is an actual-quantity view and must always show one plain received qty.
+    const showReceivedDiff = tab === "archive" && receivedWasEdited && Math.abs(received - base) > 1e-9;
     const qtyMarkup = partialRemainingInAll
       ? <span className="sv-qty-diff"><span className="sv-qty-old">{formatQuantity(base)}</span><strong className="sv-qty-new">{formatQuantity(remaining)}</strong></span>
       : showReceivedDiff
@@ -893,8 +904,8 @@ function OrderModal({ group, tab, busy, onClose, onAction, onExport, orderOption
             {maintenance && tab === "approved" && group.stage === 2 && !archived ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction("technical-visit", group)} disabled={busy}><ClassicOrderIcon name="tool" />Request Technical Visit</button> : null}
             {maintenance && tab === "approved" && group.stage === 2 && !archived && permitted("maintenance_log") ? <button type="button" className="ro-action-btn ro-action-btn--light" onClick={() => onAction("maintenance-log", group)} disabled={busy}><ClassicOrderIcon name="clipboard" />Log Maintenance</button> : null}
             {canDeliver && permitted("receive") && permitted("upload_receipt") && (!maintenance || permitted("maintenance_arrive")) ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction(maintenance ? "maintenance-deliver" : "deliver", group)} disabled={busy}><ClassicOrderIcon name="check-circle" />Mark as Delivered</button> : null}
-            {canSendToStock && permitted("send_to_stock") ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction("send-to-stock", group)} disabled={busy}><ClassicOrderIcon name="package" />Send to Stock</button> : null}
-            {canCreateWithdrawal && permitted("withdrawal") ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction("withdrawal", group)} disabled={busy}><ClassicOrderIcon name="repeat" />Create Withdrawal</button> : null}
+            {canSendToStock && permitted("send_to_stock") ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction("send-to-stock", deliveredActionGroup)} disabled={busy}><ClassicOrderIcon name="package" />Send to Stock</button> : null}
+            {canCreateWithdrawal && permitted("withdrawal") ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction("withdrawal", deliveredActionGroup)} disabled={busy}><ClassicOrderIcon name="repeat" />Create Withdrawal</button> : null}
             {canCreateDelivery && permitted("delivery") ? <button type="button" className="ro-action-btn ro-action-btn--dark" onClick={() => onAction("delivery", group)} disabled={busy}><ClassicOrderIcon name="package" />Create Delivery</button> : null}
           </div>) : null}
           {isEditing ? <>
