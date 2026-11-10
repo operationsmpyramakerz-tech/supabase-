@@ -1,5 +1,9 @@
 "use client";
 
+import { useState } from "react";
+import EventIcon from "./EventIcon";
+import { eventConfirmation, eventConfirmationLabel } from "../../lib/event-confirmation.mjs";
+
 const STATUS_LABELS = {
   submitted: "Pending Confirmation",
   in_progress: "Confirmed",
@@ -92,11 +96,6 @@ function safeUrl(value) {
   }
 }
 
-function StatusPill({ status }) {
-  const key = normalizeStatus(status);
-  return <span className={`events-status events-status--${key} next-events-status next-events-status--${key}`}>{STATUS_LABELS[key]}</span>;
-}
-
 function DetailItem({ label, value, wide = false }) {
   return (
     <div className={`events-detail-item next-events-detail-item${wide ? " wide" : ""}`}>
@@ -106,7 +105,7 @@ function DetailItem({ label, value, wide = false }) {
   );
 }
 
-function ItemList({ items, component = false, empty }) {
+function ItemList({ items, component = false, empty, showCost = true }) {
   if (!Array.isArray(items) || !items.length) return <p className="next-events-empty-copy">{empty}</p>;
   return (
     <ul className="events-detail-list next-events-item-list">
@@ -118,7 +117,7 @@ function ItemList({ items, component = false, empty }) {
         return (
           <li key={`${text(title)}-${index}`}>
             <strong>{text(title) || "Untitled item"}</strong>
-            <small>{quantity || 0} required{notes ? ` · ${notes}` : ""} · {formatMoney(total)}</small>
+            <small>{quantity || 0} required{notes ? ` · ${notes}` : ""}{showCost ? ` · ${formatMoney(total)}` : ""}</small>
           </li>
         );
       })}
@@ -126,113 +125,113 @@ function ItemList({ items, component = false, empty }) {
   );
 }
 
-export function EventsDetailsModal({ event, busy, onClose, onDownload, onWorkflow, onRequestAction, canRequestActions, canEdit=canRequestActions, canCancel=canRequestActions, canWorkflow=canRequestActions, canExport=true }) {
-  if (!event) return null;
-  const mapUrl = safeUrl(event.locationUrl);
+const DETAIL_TABS = [
+  { id: "overview", label: "Overview", icon: "clipboard" },
+  { id: "projects", label: "Projects", icon: "box" },
+  { id: "logistics", label: "Logistics & Venue", icon: "tool" },
+  { id: "marketing", label: "Marketing", icon: "image" },
+];
+
+function DetailPanel({ title, icon, children, wide = false }) {
+  return <section className={`event-detail-panel${wide ? " event-detail-panel--wide" : ""}`}>
+    <h3><EventIcon name={icon} />{title}</h3>
+    <div className="event-detail-panel-body">{children}</div>
+  </section>;
+}
+
+function SummaryItem({ icon, label, value }) {
+  return <div className="event-detail-summary-item"><span className="event-detail-summary-icon"><EventIcon name={icon} /></span><div><strong>{text(value) || "—"}</strong><small>{label}</small></div></div>;
+}
+
+function DetailField({ label, value }) {
+  return <div className="event-detail-field"><small>{label}</small><strong>{text(value) || "—"}</strong></div>;
+}
+
+// Calendar and request pages share the presentation, but keep their own authorization flows.
+export function EventsDetailsModal(props) {
+  if (!props.event) return null;
+  return <EventDetailsContent key={props.event.id} {...props} />;
+}
+
+function EventDetailsContent({ event, busy, onClose, onDownload, onWorkflow, onRequestAction,
+  canRequestActions, canEdit = canRequestActions, canCancel = canRequestActions,
+  canWorkflow = canRequestActions, canExport = true, calendarMode = false,
+  canOpenRequests = true, onConfirmEvent }) {
+  const [activeTab, setActiveTab] = useState("overview");
+  const full = !calendarMode || canOpenRequests;
+  const tab = full ? activeTab : "overview";
+  const mapUrl = full ? safeUrl(event.locationUrl) : "";
   const utilities = [event.requiresPower && "Power points", event.requiresInternet && "Internet", event.requiresSoundSystem && "Sound system"].filter(Boolean).join(" · ") || "No special utilities selected";
   const status = normalizeStatus(event.status);
-  const workflow = status === "submitted"
+  const confirmation = eventConfirmation(event.status);
+  const workflow = confirmation === "pending"
     ? { targetStatus: "in_progress", label: "Confirm Event" }
-    : status === "in_progress"
+    : !calendarMode && status === "in_progress"
       ? { targetStatus: "completed", label: "Mark as completed" }
       : null;
+  const showWorkflow = full && canWorkflow && workflow && (!calendarMode || !event.isArchived);
+  const projects = Array.isArray(event.projects) ? event.projects : [];
+  const marketing = Array.isArray(event.marketingMaterials) ? event.marketingMaterials : [];
+  const requirements = Array.isArray(event.venueRequirements) ? event.venueRequirements : [];
+
+  function venuePanel() {
+    return <DetailPanel title="Venue & Setup" icon="map-pin">
+      <div className="event-detail-fields">
+        {full && <DetailField label="Venue" value={event.venueName} />}
+        <DetailField label="Governorate" value={event.governorate} />
+        {full && <><DetailField label="Venue type" value={event.venueType} /><DetailField label="Setup time" value={formatDateTime(event.venueSetupTime)} /><DetailField label="Utilities" value={utilities} /></>}
+      </div>
+      {mapUrl && <a className="event-detail-map" href={mapUrl} target="_blank" rel="noreferrer">Open map location <EventIcon name="external-link" /></a>}
+    </DetailPanel>;
+  }
 
   return (
-    <div className="events-modal-overlay next-modal-layer" role="presentation" onMouseDown={(mouseEvent) => { if (mouseEvent.target === mouseEvent.currentTarget) onClose(); }}>
-      <section className="events-modal events-modal--detail next-modal next-events-details-modal" role="dialog" aria-modal="true" aria-label="Event request details">
-        <header className="events-modal__header next-events-modal-head">
-          <div>
-            <span className="next-events-kicker">{event.eventCode || "Event request"}</span>
-            <h2>{event.eventName || "Untitled Event"}</h2>
-            <p>{formatDateRange(event)}</p>
+    <div className="events-modal-overlay next-modal-layer event-detail-overlay" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <section className="events-modal next-modal event-detail-v2" role="dialog" aria-modal="true" aria-label="Event details">
+        <header className="event-detail-header">
+          <div className="event-detail-hero">
+            <span className="event-detail-hero-icon"><EventIcon name="calendar" /></span>
+            <div className="event-detail-hero-text"><small>{event.eventCode || "Event request"}</small><h2>{event.eventName || "Untitled Event"}</h2><p><EventIcon name="calendar" />{formatDateRange(event)}</p></div>
           </div>
-          <div><StatusPill status={event.status} /><button type="button" className="events-modal__close next-modal-close" onClick={onClose} aria-label="Close">×</button></div>
+          <div className="event-detail-header-side">
+            <div className="event-detail-status-row"><span className={`event-detail-status event-detail-status--${confirmation}`}><EventIcon name={confirmation === "confirmed" ? "check-circle" : confirmation === "cancelled" ? "x-circle" : "clock"} />{eventConfirmationLabel(event.status)}</span><button type="button" className="event-detail-close" aria-label="Close" onClick={onClose}>×</button></div>
+            <div className="event-detail-actions">
+              {!calendarMode && canEdit && <button type="button" disabled={busy} onClick={() => onRequestAction("edit")}><EventIcon name="edit-3" />Edit</button>}
+              {calendarMode && canOpenRequests && !event.isArchived && <a href={`/next/events?event=${encodeURIComponent(event.id)}`}><EventIcon name="external-link" />Open Event Request</a>}
+              {showWorkflow && <button type="button" className="event-detail-primary" disabled={busy} onClick={() => calendarMode ? onConfirmEvent() : onWorkflow(workflow.targetStatus)}><EventIcon name="check" />{workflow.label}</button>}
+              {full && canExport && (calendarMode ? <a href={`/next/api/events/pdf-direct?id=${encodeURIComponent(event.id)}`} target="_blank" rel="noreferrer"><EventIcon name="download" />PDF</a> : <button type="button" onClick={onDownload}><EventIcon name="download" />PDF</button>)}
+              {!calendarMode && canCancel && status !== "cancelled" && <button type="button" className="event-detail-danger" disabled={busy} onClick={() => onRequestAction("cancel")}>Cancel request</button>}
+            </div>
+          </div>
         </header>
 
-        <div className="events-detail-content next-events-detail-body">
-          <section className="events-detail-block next-events-detail-section">
-            <h3>Overview</h3>
-            <div className="events-detail-grid next-events-detail-grid">
-              <DetailItem label="Type" value={typeLabel(event)} />
-              <DetailItem label="Organization" value={event.organizationName} />
-              <DetailItem label="Expected attendees" value={event.expectedAttendees ? String(event.expectedAttendees) : "—"} />
-              <DetailItem label="Requested by" value={event.requesterName} />
-            </div>
-          </section>
-
-          <section className="events-detail-block next-events-detail-section">
-            <h3>Contact</h3>
-            <div className="events-detail-grid next-events-detail-grid">
-              <DetailItem label="Contact person" value={event.contactPerson} />
-              <DetailItem label="Phone" value={event.contactPhone} />
-              <DetailItem label="Email" value={event.contactEmail} />
-              <DetailItem label="Created" value={formatDateTime(event.createdAt)} />
-            </div>
-          </section>
-
-          <section className="events-detail-block events-detail-block--wide next-events-detail-section next-events-detail-section--wide">
-            <h3>Target audience</h3>
-            <p>{text(event.audience) || "No audience details were added."}</p>
-          </section>
-
-          <section className="events-detail-block next-events-detail-section">
-            <h3>Projects</h3>
-            <ItemList items={event.projects} empty="No projects were added." />
-          </section>
-
-          <section className="events-detail-block next-events-detail-section">
-            <h3>Marketing materials</h3>
-            <ItemList items={event.marketingMaterials} component empty="No marketing materials were added." />
-          </section>
-
-          <section className="events-detail-block next-events-detail-section">
-            <h3>Venue requirements</h3>
-            <ItemList items={event.venueRequirements} component empty="No venue requirements were added." />
-          </section>
-
-          <section className="events-detail-block next-events-detail-section">
-            <h3>Venue & location</h3>
-            <div className="events-detail-grid next-events-detail-grid">
-              <DetailItem label="Venue" value={event.venueName} />
-              <DetailItem label="Venue type" value={event.venueType} />
-              <DetailItem label="Governorate" value={event.governorate} />
-              <DetailItem label="Setup time" value={formatDateTime(event.venueSetupTime)} />
-            </div>
-            {mapUrl ? <a className="next-events-map-link" href={mapUrl} target="_blank" rel="noreferrer">Open map location ↗</a> : null}
-          </section>
-
-          <section className="events-detail-block next-events-detail-section">
-            <h3>Site notes</h3>
-            <div className="events-detail-grid next-events-detail-grid">
-              <DetailItem label="Utilities" value={utilities} wide />
-              <DetailItem label="Venue notes" value={event.venueNotes || "No venue notes were added."} wide />
-            </div>
-          </section>
-
-          <section className="events-detail-block events-detail-block--wide next-events-detail-section next-events-detail-section--wide">
-            <h3>Cost summary</h3>
-            <div className="next-events-cost-grid">
-              <span><small>Working cost</small><strong>{formatMoney(event.workingCost)}</strong></span>
-              <span><small>Transport cost</small><strong>{formatMoney(event.transportCost)}</strong></span>
-              <span><small>Total cost</small><strong>{formatMoney(event.totalCost)}</strong></span>
-            </div>
-          </section>
-
-          {text(event.operationsNotes) ? (
-            <section className="events-detail-block events-detail-block--wide next-events-detail-section next-events-detail-section--wide"><h3>Operations notes</h3><p>{event.operationsNotes}</p></section>
-          ) : null}
+        <div className="event-detail-summary">
+          <SummaryItem icon="layers" label="Event Type" value={typeLabel(event)} />
+          <SummaryItem icon="clipboard" label="Organization" value={event.organizationName} />
+          {full && <><SummaryItem icon="user" label="Expected Attendees" value={event.expectedAttendees ?? "—"} /><SummaryItem icon="box" label="Projects" value={event.summaryFormat ? "—" : projects.length} /></>}
         </div>
 
-        <footer className="events-modal__actions next-events-modal-actions">
-          <div>
-            {canEdit ? <button type="button" className="events-secondary-btn secondary" disabled={busy} onClick={() => onRequestAction("edit")}>Edit</button> : null}
-            {canCancel && status !== "cancelled" ? <button type="button" className="danger" disabled={busy} onClick={() => onRequestAction("cancel")}>Cancel request</button> : null}
-          </div>
-          <div>
-            {canExport?<button type="button" className="events-secondary-btn secondary" onClick={onDownload}>Download PDF</button>:null}
-            {workflow && canWorkflow ? <button type="button" className="events-primary-btn primary" disabled={busy} onClick={() => onWorkflow(workflow.targetStatus)}>{workflow.label}</button> : null}
-          </div>
-        </footer>
+        {full && <nav className="event-detail-tabs" aria-label="Event detail sections">
+          {DETAIL_TABS.map(item => <button key={item.id} type="button" className={tab === item.id ? "is-active" : ""} aria-pressed={tab === item.id} onClick={() => setActiveTab(item.id)}><EventIcon name={item.icon} />{item.label}{item.id === "projects" && !event.summaryFormat ? ` (${projects.length})` : ""}</button>)}
+        </nav>}
+
+        <div className="event-detail-scroll" key={tab}>
+          {tab === "overview" && <div className="event-detail-layout">
+            {full && <DetailPanel title="Contact Information" icon="user"><div className="event-detail-fields">
+              <DetailField label="Contact person" value={event.contactPerson} /><DetailField label="Phone" value={event.contactPhone} /><DetailField label="Email" value={event.contactEmail} /><DetailField label="Requested by" value={event.requesterName} /><DetailField label="Created" value={formatDateTime(event.createdAt)} />
+            </div></DetailPanel>}
+            {venuePanel()}
+            {full && <><DetailPanel title="Target Audience" icon="user"><p className="event-detail-note">{text(event.audience) || "—"}</p></DetailPanel><DetailPanel title="Operations Notes" icon="file-text"><p className="event-detail-note">{text(event.operationsNotes) || "—"}</p></DetailPanel></>}
+          </div>}
+          {full && tab === "projects" && <div className="event-detail-layout"><DetailPanel title={`Projects (${projects.length})`} icon="box" wide><ItemList items={projects} showCost={!calendarMode} empty="No projects were added." /></DetailPanel></div>}
+          {full && tab === "logistics" && <div className="event-detail-layout">
+            {venuePanel()}
+            <DetailPanel title="Venue Requirements" icon="tool"><ItemList items={requirements} component showCost={!calendarMode} empty="No venue requirements were added." /></DetailPanel>
+            <DetailPanel title="Venue Notes" icon="file-text" wide><p className="event-detail-note">{text(event.venueNotes) || "—"}</p></DetailPanel>
+            {!calendarMode && <DetailPanel title="Cost Summary" icon="clipboard" wide><div className="event-detail-costs"><DetailField label="Working cost" value={formatMoney(event.workingCost)} /><DetailField label="Transport cost" value={formatMoney(event.transportCost)} /><DetailField label="Total cost" value={formatMoney(event.totalCost)} /></div></DetailPanel>}
+          </div>}
+          {full && tab === "marketing" && <div className="event-detail-layout"><DetailPanel title={`Marketing Materials (${marketing.length})`} icon="image" wide><ItemList items={marketing} component showCost={!calendarMode} empty="No marketing materials were added." /></DetailPanel></div>}
+        </div>
       </section>
     </div>
   );

@@ -3,19 +3,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { navigateWithinApp } from "../../lib/client-navigation";
 import EventIcon from "./EventIcon";
-import { AuthorizationModal, ConfirmationModal } from "./EventsDialogs";
+import { AuthorizationModal, ConfirmationModal, EventsDetailsModal } from "./EventsDialogs";
 import { featureAllowed } from "../../lib/feature-permissions-registry";
 import { eventRequestScopeFor } from "../../lib/event-request-scope.mjs";
 import { eventConfirmation, eventConfirmationLabel } from "../../lib/event-confirmation.mjs";
-
-const STATUS_LABELS = {
-  submitted: "Pending Confirmation",
-  under_review: "Pending Confirmation",
-  approved: "Pending Confirmation",
-  in_progress: "Confirmed",
-  completed: "Confirmed",
-  cancelled: "Cancelled",
-};
 
 const TYPE_LABELS = {
   tech_day: "Tech Day",
@@ -86,14 +77,6 @@ function formatDate(value, options = { day: "2-digit", month: "short", year: "nu
   return date ? date.toLocaleDateString("en-GB", options) : "—";
 }
 
-function formatDateRange(event) {
-  const start = startDate(event);
-  const end = endDate(event);
-  if (!start) return "Date to be confirmed";
-  if (!end || sameDay(start, end)) return formatDate(start, { weekday: "short", day: "2-digit", month: "short", year: "numeric" });
-  return `${formatDate(start, { day: "2-digit", month: "short", year: "numeric" })} – ${formatDate(end, { day: "2-digit", month: "short", year: "numeric" })}`;
-}
-
 function typeLabel(event) {
   const custom = text(event?.eventTypeCustom);
   if (custom) return custom;
@@ -101,25 +84,8 @@ function typeLabel(event) {
   return TYPE_LABELS[key] || key.replace(/^custom_/, "").replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-function normalizeStatus(value) {
-  const status = lower(value).replace(/[\s-]+/g, "_");
-  return STATUS_LABELS[status] ? status : "submitted";
-}
-
 function allowedSet(account) {
   return new Set((Array.isArray(account?.allowedPages) ? account.allowedPages : []).map(lower));
-}
-
-function safeUrl(value) {
-  const raw = text(value);
-  if (!raw) return "";
-  try {
-    const base = typeof window !== "undefined" ? window.location.origin : "https://operations-hub.invalid";
-    const parsed = new URL(raw, base);
-    return ["http:", "https:"].includes(parsed.protocol) ? parsed.href : "";
-  } catch {
-    return "";
-  }
 }
 
 async function requestJson(url, options = {}) {
@@ -138,121 +104,14 @@ function StatusPill({ status }) {
   return <span className={`agenda-status agenda-status--${key}`}><EventIcon name={key === "confirmed" ? "check-circle" : key === "cancelled" ? "x-circle" : "clock"} />{eventConfirmationLabel(status)}</span>;
 }
 
-function DetailItem({ label, value }) {
-  return (
-    <div className="events-detail-item next-events-detail-item">
-      <small>{label}</small>
-      <strong>{text(value) || "—"}</strong>
-    </div>
-  );
-}
-
-function DetailList({ items, empty }) {
-  if (!Array.isArray(items) || !items.length) return <p className="next-events-empty-copy">{empty}</p>;
-  return (
-    <div className="next-events-item-list">
-      {items.map((item, index) => (
-        <article key={`${text(item?.name || item?.title)}-${index}`}>
-          <div>
-            <strong>{text(item?.name || item?.title) || "Untitled item"}</strong>
-            <small>{Number(item?.quantity || 0)} required{text(item?.notes) ? ` · ${text(item.notes)}` : ""}</small>
-          </div>
-        </article>
-      ))}
-    </div>
-  );
-}
-
-function DetailsModal({ event, canOpenRequests, canExport = true, canConfirm, onConfirmEvent, onClose }) {
+function DetailsModal({ event, canOpenRequests, canExport = true, canConfirm, onConfirmEvent, onClose, busy }) {
   useEffect(() => {
     if (!event) return undefined;
     const onKey = (keyEvent) => { if (keyEvent.key === "Escape") onClose(); };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [event, onClose]);
-
-  if (!event) return null;
-  const mapUrl = safeUrl(event.locationUrl);
-  const utilities = [event.requiresPower && "Power points", event.requiresInternet && "Internet", event.requiresSoundSystem && "Sound system"].filter(Boolean).join(" · ") || "No special utilities selected";
-
-  return (
-    <div className="events-modal-overlay next-modal-layer" role="presentation" onMouseDown={(mouseEvent) => { if (mouseEvent.target === mouseEvent.currentTarget) onClose(); }}>
-      <section className="events-modal events-modal--calendar-detail next-modal next-events-details-modal" role="dialog" aria-modal="true" aria-label="Scheduled event details">
-        <header className="events-modal__header next-events-modal-head">
-          <div>
-            <span className="next-events-kicker">{event.eventCode || "Scheduled event"}</span>
-            <h2>{event.eventName || "Untitled Event"}</h2>
-            <p>{formatDateRange(event)}</p>
-          </div>
-          <div><StatusPill status={event.status} /><button type="button" className="events-modal__close next-modal-close" onClick={onClose} aria-label="Close">×</button></div>
-        </header>
-
-        <div className="events-detail-content next-events-detail-body">
-          <section className="events-detail-block next-events-detail-section">
-            <h3>Overview</h3>
-            <div className="events-detail-grid next-events-detail-grid">
-              <DetailItem label="Type" value={typeLabel(event)} />
-              <DetailItem label="Organization" value={event.organizationName} />
-              {canOpenRequests ? <DetailItem label="Expected attendees" value={event.expectedAttendees ? String(event.expectedAttendees) : "—"} /> : null}
-              {canOpenRequests ? <DetailItem label="Requested by" value={event.requesterName} /> : null}
-            </div>
-          </section>
-
-          <section className="events-detail-block next-events-detail-section">
-            <h3>Venue</h3>
-            <div className="events-detail-grid next-events-detail-grid">
-              {canOpenRequests ? <DetailItem label="Venue" value={event.venueName} /> : null}
-              <DetailItem label="Governorate" value={event.governorate} />
-              {canOpenRequests ? <DetailItem label="Setup time" value={event.venueSetupTime} /> : null}
-              {canOpenRequests ? <DetailItem label="Utilities" value={utilities} /> : null}
-            </div>
-            {canOpenRequests && mapUrl ? <a className="next-events-map-link" href={mapUrl} target="_blank" rel="noreferrer">Open map location ↗</a> : null}
-          </section>
-
-          {canOpenRequests ? <>
-          <section className="events-detail-block next-events-detail-section">
-            <h3>Contact</h3>
-            <div className="events-detail-grid next-events-detail-grid">
-              <DetailItem label="Contact person" value={event.contactPerson} />
-              <DetailItem label="Phone" value={event.contactPhone} />
-              <DetailItem label="Email" value={event.contactEmail} />
-              <DetailItem label="Status" value={STATUS_LABELS[normalizeStatus(event.status)]} />
-            </div>
-          </section>
-
-          <section className="events-detail-block next-events-detail-section">
-            <h3>Projects</h3>
-            <DetailList items={event.projects} empty="No projects were added." />
-          </section>
-
-          <section className="events-detail-block next-events-detail-section">
-            <h3>Marketing Materials</h3>
-            <DetailList items={event.marketingMaterials} empty="No marketing materials were added." />
-          </section>
-
-          <section className="events-detail-block next-events-detail-section">
-            <h3>Venue Requirements</h3>
-            <DetailList items={event.venueRequirements} empty="No venue requirements were added." />
-          </section>
-
-          <section className="events-detail-block events-detail-block--wide next-events-detail-section next-events-detail-section--wide">
-            <h3>Notes</h3>
-            <p>{text(event.venueNotes) || "No venue notes were added."}</p>
-          </section>
-          </> : null}
-        </div>
-
-        <footer className="events-modal__actions next-events-modal-actions">
-          <div>
-            {canExport ? <a className="events-secondary-btn secondary-button" href={`/next/api/events/pdf-direct?id=${encodeURIComponent(event.id)}`} target="_blank" rel="noreferrer">Download PDF</a> : null}
-            {canOpenRequests && !event.isArchived ? <a className="events-secondary-btn secondary-button" href={`/next/events?event=${encodeURIComponent(event.id)}`}>Open Event Request</a> : null}
-            {canConfirm && !event.isArchived && eventConfirmation(event.status) === "pending" ? <button type="button" className="agenda-confirm-button" onClick={onConfirmEvent}>Confirm Event</button> : null}
-          </div>
-          <button type="button" className="events-primary-btn primary-button" onClick={onClose}>Close</button>
-        </footer>
-      </section>
-    </div>
-  );
+  return <EventsDetailsModal event={event} calendarMode canOpenRequests={canOpenRequests} canExport={canExport} canWorkflow={canConfirm} onConfirmEvent={onConfirmEvent} onClose={onClose} busy={busy} />;
 }
 
 export default function EventsCalendarClient({ account, initialEvents = [], canMutateRequests = false }) {
@@ -380,7 +239,7 @@ export default function EventsCalendarClient({ account, initialEvents = [], canM
           <div className="agenda-rows" role="tabpanel">{list.length ? list.map(event => <button type="button" key={event.id} className={`agenda-row agenda-row--${eventConfirmation(event.status)}`} onClick={() => openEventDetails(event)}><span className="agenda-row-date"><small>{formatDate(startDate(event),{weekday:"short"})}</small><strong>{formatDate(startDate(event),{day:"2-digit",month:"short"})}</strong></span><span className="agenda-row-main"><strong>{event.eventName || "Untitled Event"}</strong><span><span><EventIcon name="map-pin"/>{event.venueName || event.organizationName || event.governorate || "Venue to be confirmed"}</span>{event.expectedAttendees != null ? <span><EventIcon name="user"/>{event.expectedAttendees} Attendees</span> : null}</span></span><StatusPill status={event.status}/><span className="agenda-row-more"><EventIcon name="more-horizontal"/></span></button>) : <div className="agenda-empty"><EventIcon name="calendar"/><strong>No {activeList} events</strong><span>{search || filter !== "all" ? "Try changing your search or filter." : "Events will appear here when available."}</span></div>}</div>
         </section>
       </div>
-      {!authorization && !confirmation ? <DetailsModal event={activeEvent} canOpenRequests={canOpenRequests} canExport={canExport} canConfirm={canConfirm} onConfirmEvent={beginConfirmation} onClose={() => {detailRequest.current++;setActiveEvent(null);setActionError("");}} /> : null}
+      {!authorization && !confirmation ? <DetailsModal busy={busy} event={activeEvent} canOpenRequests={canOpenRequests} canExport={canExport} canConfirm={canConfirm} onConfirmEvent={beginConfirmation} onClose={() => {detailRequest.current++;setActiveEvent(null);setActionError("");}} /> : null}
       {authorization ? <AuthorizationModal authorization={authorization} busy={busy} error={actionError} onClose={() => { if (!busy) {setAuthorization(null);setActionError("");} }} onPassword={password=>setAuthorization(current=>({...current,password}))} onSubmit={authorizeConfirmation}/> : null}
       {confirmation ? <ConfirmationModal confirmation={confirmation} busy={busy} onClose={() => {if(!busy)setConfirmation(null);}} onConfirm={confirmEvent}/> : null}
       {actionError && !authorization ? <div className="agenda-action-error" role="alert">{actionError}<button type="button" aria-label="Dismiss error" onClick={()=>setActionError("")}>×</button></div> : null}

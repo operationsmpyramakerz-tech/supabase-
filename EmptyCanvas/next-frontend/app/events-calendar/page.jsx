@@ -43,7 +43,7 @@ export default async function EventsCalendarPage() {
   const events = (Array.isArray(pageData.events) ? pageData.events : []).map(event => ({ ...event, ...requestDetails.get(event.id) }));
 
   return (
-    <AppShell account={pageData.account} title="Events" eyebrow="Event execution schedule" activePath="/next/events-calendar" bodyClass="events-page events-calendar-page" pageStyles={["/next/css/events.css?v=agenda-20261110"]}>
+    <AppShell account={pageData.account} title="Events" eyebrow="Event execution schedule" activePath="/next/events-calendar" bodyClass="events-page events-calendar-page" pageStyles={["/next/css/events.css?v=details-20261111"]}>
       <EventsCalendarClient
         account={pageData.account}
         initialEvents={events}
