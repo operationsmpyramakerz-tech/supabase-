@@ -42,7 +42,7 @@ function WarehouseIcon({name="box",size=20}){
  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{shapes[name]||shapes.box}</svg>;
 }
 
-export default function ProjectWarehouseReceiving({projectId,projectName,hasProjectProposal=false,canReceive,canAllocate,request,onClose}) {
+export default function ProjectWarehouseReceiving({projectId,projectName,hasProjectProposal=false,canReceive,canAllocate,request,onClose,closurePanel}) {
  const [state,setState]=useState(empty),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false);
  const [tab,setTab]=useState("receiving"),[search,setSearch]=useState(""),[filter,setFilter]=useState("all");
  const [showExport,setShowExport]=useState(false),[exportColumns,setExportColumns]=useState(WAREHOUSE_COLUMNS.map(c=>c.key)),[exportGroups,setExportGroups]=useState([]),[exportBusy,setExportBusy]=useState(false);
@@ -145,6 +145,7 @@ export default function ProjectWarehouseReceiving({projectId,projectName,hasProj
  const toggleGroup=key=>setExportGroups(old=>{const all=allGroups.map(g=>g.key),current=old.length?old:all,updated=current.includes(key)?current.filter(k=>k!==key):all.filter(k=>current.includes(k)||k===key);return !updated.length?old:updated.length===all.length?[]:updated;});
  return <div className="pr-wh pr-wr-modern pr-pt-modern pr-warehouse-parity">
   <header className="pr-manifest-title pr-wh-title pr-pt-title"><div><span className="pr-wh-overline">PROJECT INVENTORY · {projectName}</span><h3>Warehouse Receiving</h3></div><button type="button" className="pr-pt-close" aria-label="Close Warehouse Receiving" title="Close" onClick={onClose}><WarehouseIcon name="close" size={19}/></button></header>
+  {closurePanel}
   {error&&<div className="pr-alert" role="alert">{error}<button type="button" onClick={()=>setError("")} aria-label="Dismiss">×</button></div>}
   {success&&<div className="pr-manifest-success" role="status">{success}</div>}
   {loading?<p className="pr-muted">Loading warehouse records…</p>:<>

@@ -44,7 +44,7 @@ function ProductionIcon({name="box",size=20}){
  };
  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{shapes[name]||shapes.box}</svg>;
 }
-export default function ProjectProductionReceiving({projectId,projectName,allowed,cartonsAllowed,request,onClose,view="receiving"}){
+export default function ProjectProductionReceiving({projectId,projectName,allowed,cartonsAllowed,request,onClose,closurePanel,view="receiving"}){
  const boxView=view==="boxes";
  const [data,setData]=useState(initial),[loading,setLoading]=useState(true),[error,setError]=useState(""),[notice,setNotice]=useState(""),[busy,setBusy]=useState(false);
  const [tab,setTab]=useState(boxView?"boxes":"receiving"),[search,setSearch]=useState(""),[filter,setFilter]=useState("available"),[opened,setOpened]=useState(null);
@@ -78,6 +78,7 @@ export default function ProjectProductionReceiving({projectId,projectName,allowe
   const renderBoxNavigation = (openBoxesLabels, boxCount) => boxView ? <div className="pr-pt-navigation pr-production-tabs pr-box-navigation" role="group" aria-label="Box Distribution views"><button type="button" className={tab==="boxes"?"active":""} onClick={()=>setTab("boxes")}>Box Distribution</button><div className="pr-box-actions-top"><button type="button" className="pr-box-label-launch" aria-label="Boxes Label" title="Manage box labels" onClick={openBoxesLabels}><ProductionIcon name="box" size={17}/><span>Boxes Label</span><small>{boxCount}</small></button><button type="button" aria-label="Box History" title="Box History" aria-pressed={tab==="box-history"} className={`pr-pt-history-button${tab==="box-history"?" is-active":""}`} onClick={()=>setTab(tab==="box-history"?"boxes":"box-history")}><ProductionIcon name="history" size={19}/></button><button type="button" className="pr-pt-download-button" aria-label="Download Box Distribution report" onClick={openExport} disabled={!rows.length}><ProductionIcon name="download" size={18}/><span>Download</span></button></div></div> : null;
  return <div className={`pr-delivery pr-production pr-pt-modern${boxView?" pr-box-parity":" pr-production-parity"}`}>
   <header className="pr-manifest-title pr-pt-title"><div><small className="pr-production-kicker">PRODUCTION OPERATIONS · {projectName}</small><h3>{boxView?"Box Distribution":"Production Receiving"}</h3></div>{boxView?<button className="pr-pt-close" type="button" aria-label="Close Box Distribution" title="Close" onClick={onClose}><ProductionIcon name="close" size={19}/></button>:<button className="pr-pt-close" type="button" aria-label="Close Production Receiving" title="Close" onClick={onClose}><ProductionIcon name="close" size={19}/></button>}</header>
+  {closurePanel}
   {error&&<div className="pr-alert" role="alert">{error}</div>}{notice&&<div className="pr-manifest-success" role="status">{notice}</div>}
   {!isBoxTab&&<div className="pr-pt-stat-grid pr-production-summary pr-production-receive-summary" aria-label="Production Receiving summary">{[
    ["Warehouse Received",totals.warehouse,"required","inbox"],

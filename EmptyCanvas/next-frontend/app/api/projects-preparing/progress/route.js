@@ -4,6 +4,7 @@ import { featureGate } from '../../../../lib/feature-permissions-server';
 import { projectTestingOverview } from '../../../../lib/preparing-project-testing';
 import { warehouseWorkspace } from '../../../../lib/preparing-warehouse';
 import { productionWorkspace } from '../../../../lib/preparing-production';
+import { listStageClosures } from '../../../../lib/preparing-stage-closures';
 import { calculateProjectPreparationProgress } from '../../../../lib/preparing-project-progress.mjs';
 
 export const dynamic = 'force-dynamic';
@@ -18,10 +19,10 @@ export async function GET(request) {
   try {
     const projectId = new URL(request.url).searchParams.get('projectId');
     if (!projectId) return reply({ ok: false, error: 'Project is required.' }, 400);
-    const [testing, warehouse, production] = await Promise.all([
-      projectTestingOverview(projectId), warehouseWorkspace(projectId), productionWorkspace(projectId),
+    const [testing, warehouse, production, closures] = await Promise.all([
+      projectTestingOverview(projectId), warehouseWorkspace(projectId), productionWorkspace(projectId), listStageClosures(projectId),
     ]);
-    return reply({ ok: true, progress: calculateProjectPreparationProgress({ testing, warehouse, production }) });
+    return reply({ ok: true, progress: calculateProjectPreparationProgress({ testing, warehouse, production }), closures: Object.fromEntries(closures.map(row => [row.stage_key, true])) });
   } catch (error) {
     console.error('[projects-preparing:progress]', error?.message || error);
     return reply({ ok: false, error: error?.message || 'Unable to load project progress.' }, Number(error?.status) || 500);

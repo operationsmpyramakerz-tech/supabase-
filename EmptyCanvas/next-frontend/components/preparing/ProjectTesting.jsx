@@ -51,7 +51,7 @@ function TestingIcon({name="box",size=20}){
  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{shapes[name]||shapes.box}</svg>;
 }
 
-export default function ProjectTesting({projectId,projectName,canTest,request,onClose}) {
+export default function ProjectTesting({projectId,projectName,canTest,request,onClose,closurePanel}) {
  const [data,setData]=useState(initial),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false);
  const [tab,setTab]=useState("testing"),[search,setSearch]=useState(""),[filter,setFilter]=useState("all");
  const [expandedKit,setExpandedKit]=useState(null),[showExport,setShowExport]=useState(false);
@@ -154,6 +154,7 @@ export default function ProjectTesting({projectId,projectName,canTest,request,on
    <div><span className="pr-wh-overline">PROJECT QUALITY CONTROL <span className="pr-pt-overline-sep">/</span> {projectName}</span><h3>Components Testing</h3></div>
    <button type="button" className="pr-pt-close" onClick={onClose} aria-label="Close Components Testing" title="Close"><TestingIcon name="close" size={19}/></button>
   </header>
+  {closurePanel}
   {error&&<div className="pr-alert" role="alert">{error}<button type="button" onClick={()=>setError("")} aria-label="Dismiss">×</button></div>}
   {success&&<div className="pr-manifest-success" role="status">{success}</div>}
   {loading?<p className="pr-muted">Loading testing records…</p>:<>

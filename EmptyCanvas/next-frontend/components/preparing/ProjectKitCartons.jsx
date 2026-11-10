@@ -7,7 +7,7 @@ const sourceKits=component=>Array.isArray(component?.source_kits)?component.sour
 const matchesKit=(c,kit)=>kit==="General"?!sourceKits(c).length:sourceKits(c).some(x=>x?.kitName===kit);
 const matches=(c,l)=>c.product_id===l.product_id&&String(c.product_name||"").trim().toLowerCase()===String(l.product_name||"").trim().toLowerCase();
 const ident=c=>`${c.product_id||""}\u0000${String(c.product_name||"").trim().toLowerCase()}`;
-export default function ProjectKitCartons({projectId,projectName,stageRecords=[],request,allowed,onClose}) {
+export default function ProjectKitCartons({projectId,projectName,stageRecords=[],request,allowed,onClose,closurePanel}) {
   const [data,setData]=useState(null),[error,setError]=useState(""),[notice,setNotice]=useState(""),[busy,setBusy]=useState(false);
   const [activeId,setActiveId]=useState(""),[newLabel,setNewLabel]=useState(""),[newKit,setNewKit]=useState(""),[newNotes,setNewNotes]=useState("");
   const [search,setSearch]=useState(""),[quantities,setQuantities]=useState({});
@@ -65,6 +65,7 @@ export default function ProjectKitCartons({projectId,projectName,stageRecords=[]
   const activeAllocations=allAllocations.filter(a=>a.carton_id===activeId);
   return <div className="pr-delivery pr-pool">
     <div className="pr-manifest-title"><div><h3>Project Kit Cartons</h3></div><button className="pr-secondary" type="button" onClick={onClose}>Close</button></div>
+    {closurePanel}
     {error&&<div className="pr-alert" role="alert">{error}</div>}{notice&&<div className="pr-manifest-success" role="status">{notice}</div>}
     {!data?<p className="pr-muted">Loading project cartons…</p>:<>
 
