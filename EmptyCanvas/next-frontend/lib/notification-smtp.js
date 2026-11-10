@@ -4,8 +4,8 @@ import net from "node:net";
 import tls from "node:tls";
 import { randomBytes } from "node:crypto";
 
-// No third-party dependency: this server-side sender supports Gmail's implicit
-// TLS (465) and STARTTLS (587), AUTH LOGIN, and UTF-8 multipart HTML/text mail.
+// Shared server-side transport: implicit TLS (465), STARTTLS (587),
+// AUTH LOGIN, and UTF-8 multipart HTML/text mail. No plaintext authentication.
 const DEFAULT_TIMEOUT_MS = 12_000;
 
 function trimmed(value) { return String(value ?? "").trim(); }
@@ -31,7 +31,7 @@ function configuredSender(user) {
 
 export function smtpConfigured() {
   return Boolean(trimmed(process.env.SMTP_HOST) && trimmed(process.env.SMTP_USER) &&
-    trimmed(process.env.SMTP_PASS || process.env.SMTP_PASSWORD));
+    String(process.env.SMTP_PASS || process.env.SMTP_PASSWORD || ""));
 }
 
 function encodedHeader(value) {
@@ -122,7 +122,7 @@ function createSmtpReader(socket) {
 
 function smtpError(code, command) {
   const error = new Error(`SMTP rejected ${command} (${code}).`);
-  error.code = command === "AUTH LOGIN" || command === "AUTH USER" || command === "AUTH PASSWORD" ? "SMTP_AUTH" : "SMTP_REJECTED";
+  error.code = command === "STARTTLS" ? "SMTP_TLS" : command === "AUTH LOGIN" || command === "AUTH USER" || command === "AUTH PASSWORD" ? "SMTP_AUTH" : "SMTP_REJECTED";
   error.smtpStatus = code;
   return error;
 }
@@ -157,16 +157,24 @@ function normalizeEhlo() {
   return /^[a-zA-Z0-9][a-zA-Z0-9.-]*$/.test(name) ? name : "localhost";
 }
 
+// Standard submission ports determine the TLS mode, even when an old Gmail
+// SMTP_SECURE=true variable is left behind. Custom ports can use SMTP_SECURE.
+export function smtpUsesImplicitTls(port, secure = process.env.SMTP_SECURE) {
+  if (port === 465) return true;
+  if (port === 587 || port === 25) return false;
+  return trimmed(secure).toLowerCase() === "true";
+}
+
 export async function sendNotificationViaSmtp({ to, subject, text, html }) {
   if (!smtpConfigured()) throw Object.assign(new Error("SMTP is not configured."), { code: "SMTP_CONFIG" });
   const host = trimmed(process.env.SMTP_HOST);
   const user = trimmed(process.env.SMTP_USER);
-  const pass = trimmed(process.env.SMTP_PASS || process.env.SMTP_PASSWORD);
+  const pass = String(process.env.SMTP_PASS || process.env.SMTP_PASSWORD || "");
   const port = Number(process.env.SMTP_PORT || 465);
   if (!Number.isInteger(port) || port <= 0 || port > 65535 || !host || !emailAddress(user)) {
     throw Object.assign(new Error("Invalid SMTP host, port, or user."), { code: "SMTP_CONFIG" });
   }
-  const implicitTls = port === 465 || trimmed(process.env.SMTP_SECURE).toLowerCase() === "true";
+  const implicitTls = smtpUsesImplicitTls(port);
   const from = configuredSender(user);
   const message = buildMessage({ to, from, subject, text, html });
   let socket;
@@ -174,18 +182,19 @@ export async function sendNotificationViaSmtp({ to, subject, text, html }) {
   try {
     socket = implicitTls ? tls.connect({ host, port, servername: host }) : net.connect({ host, port });
     setTimeoutForSocket(socket);
-    await connected(socket, implicitTls ? "secureConnect" : "connect");
     reader = createSmtpReader(socket);
+    await connected(socket, implicitTls ? "secureConnect" : "connect");
     const hello = await reader.read();
     if (hello.code !== 220) throw smtpError(hello.code, "GREETING");
     await command(socket, reader, `EHLO ${normalizeEhlo()}`, [250], "EHLO");
     if (!implicitTls) {
       await command(socket, reader, "STARTTLS", [220], "STARTTLS");
       reader.dispose();
+      socket.setTimeout(0);
       socket = tls.connect({ socket, servername: host });
       setTimeoutForSocket(socket);
-      await connected(socket, "secureConnect");
       reader = createSmtpReader(socket);
+      await connected(socket, "secureConnect");
       await command(socket, reader, `EHLO ${normalizeEhlo()}`, [250], "EHLO");
     }
     await command(socket, reader, "AUTH LOGIN", [334], "AUTH LOGIN");
@@ -202,7 +211,7 @@ export async function sendNotificationViaSmtp({ to, subject, text, html }) {
     const accepted = await reader.read();
     if (accepted.code !== 250) throw smtpError(accepted.code, "DATA");
     try { await command(socket, reader, "QUIT", [221], "QUIT"); } catch { /* accepted already */ }
-    return { ok: true, provider: "gmail-smtp" };
+    return { ok: true, provider: "smtp" };
   } finally {
     reader?.dispose();
     if (socket) socket.destroy();
@@ -214,6 +223,6 @@ export function smtpFailureReason(error) {
   if (error?.code === "SMTP_TIMEOUT" || error?.code === "ETIMEDOUT") return "smtp-timeout";
   if (error?.code === "SMTP_AUTH" || [534, 535].includes(error?.smtpStatus)) return "smtp-auth-failed";
   if (["ECONNREFUSED", "ECONNRESET", "EHOSTUNREACH", "ENETUNREACH", "EAI_AGAIN", "ENOTFOUND"].includes(error?.code)) return "smtp-connection-failed";
-  if (error?.code?.startsWith("ERR_TLS_") || error?.code?.startsWith("CERT_")) return "smtp-tls-failed";
+  if (error?.code === "SMTP_TLS" || /^(ERR_(?:TLS|SSL|OSSL)_|CERT_|UNABLE_TO_|SELF_SIGNED_CERT|DEPTH_ZERO_SELF_SIGNED_CERT)/.test(error?.code || "")) return "smtp-tls-failed";
   return "smtp-send-failed";
 }

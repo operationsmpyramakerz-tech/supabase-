@@ -20,7 +20,7 @@ async function logReady() {
 export async function logNotificationDelivery({ eventId, recipientId, channel, outcome, reason, provider } = {}) {
   if (!eventId || !recipientId || !DELIVERY_CHANNELS.includes(channel) || !DELIVERY_OUTCOMES.includes(outcome)) return;
   if (!await logReady()) return;
-  const normalizedProvider = ["gmail-smtp", "resend", "web-push", "in-app", "digest"].includes(provider) ? provider : "";
+  const normalizedProvider = ["smtp", "gmail-smtp", "resend", "web-push", "in-app", "digest"].includes(provider) ? provider : "";
   const row = {
     event_id: String(eventId).slice(0, 150), recipient_id: String(recipientId).slice(0, 120),
     channel, outcome, detail: reason ? deliveryReason(reason) : "",

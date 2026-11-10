@@ -49,15 +49,15 @@ export function renderNotificationEmail({ name, title, body, url, category = "Sy
 async function sendRenderedEmail({ to, id, email } = {}) {
   const recipient = validEmail(to);
   if (!recipient) return { ok: false, skipped: true, reason: "no-email-address" };
-  // Prefer the company's Gmail account when SMTP is configured. Never fall
-  // back to another provider after a Gmail attempt: an ambiguous network
+  // Prefer the company's SMTP account when configured. Never fall
+  // back to another provider after an SMTP attempt: an ambiguous network
   // failure could otherwise produce two copies of the same notification.
   if (smtpConfigured()) {
     try {
       return await sendNotificationViaSmtp({ to: recipient, ...email });
     } catch (error) {
       console.error("Notification SMTP delivery failed:", smtpFailureReason(error));
-      return { ok: false, provider: "gmail-smtp", reason: smtpFailureReason(error) };
+      return { ok: false, provider: "smtp", reason: smtpFailureReason(error) };
     }
   }
   const apiKey = String(process.env.RESEND_API_KEY || "").trim();
