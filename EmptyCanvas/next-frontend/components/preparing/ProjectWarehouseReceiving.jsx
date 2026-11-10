@@ -68,7 +68,7 @@ export default function ProjectWarehouseReceiving({projectId,projectName,hasProj
  },[state.receipts,state.receiptLines]);
  const schoolsCaptured=new Set(state.demands.map(row=>row.school_id));
  const uncaptured=state.schools.filter(row=>!schoolsCaptured.has(row.id));
- const totals=useMemo(()=>summaries.reduce((sum,row)=>({required:sum.required+number(row.required_qty),accepted:sum.accepted+row.accepted,damaged:sum.damaged+row.damaged,allocated:sum.allocated+row.allocated,available:sum.available+row.available,passed:sum.passed+row.passed,readyToReceive:sum.readyToReceive+row.readyToReceive}),{required:0,accepted:0,damaged:0,allocated:0,available:0,passed:0,readyToReceive:0}),[summaries]);
+ const totals=useMemo(()=>summaries.reduce((sum,row)=>({required:sum.required+number(row.required_qty),accepted:sum.accepted+row.accepted,damaged:sum.damaged+row.damaged,allocated:sum.allocated+row.allocated,available:sum.available+row.available,tested:sum.tested+row.tested,readyToReceive:sum.readyToReceive+row.readyToReceive}),{required:0,accepted:0,damaged:0,allocated:0,available:0,tested:0,readyToReceive:0}),[summaries]);
  const shown=useMemo(()=>summaries.filter(row=>`${row.product_name} ${row.product_id}`.toLowerCase().includes(search.toLowerCase().trim())).filter(row=>filter==="short"?row.accepted<row.required_qty:filter==="available"?row.readyToReceive>0:true),[summaries,search,filter]);
  const schoolDemands=useMemo(()=>demandsForSchool(state.demands,state.allocations,schoolId),[state.demands,state.allocations,schoolId]);
  const demandsMap=useMemo(()=>new Map(schoolDemands.map(row=>[row.item_id,row])),[schoolDemands]);
@@ -93,7 +93,7 @@ export default function ProjectWarehouseReceiving({projectId,projectName,hasProj
  async function saveReceipt(row){
   if(busy)return;
   let acceptedDelta;
-  try{acceptedDelta=warehouseReceiptLimit(row.accepted,draft[row.id],row.passed,row.allocated);}
+  try{acceptedDelta=warehouseReceiptLimit(row.accepted,draft[row.id],row.tested,row.allocated);}
   catch(e){setRowError(old=>({...old,[row.id]:e.message}));return;}
   if(acceptedDelta===0){setRowError(old=>({...old,[row.id]:"Change the Received amount before saving."}));return;}
   const ok=await execute("receive",{kind:acceptedDelta<0?"adjustment":"receipt",lines:[{itemId:row.id,accepted:acceptedDelta}]});
@@ -171,8 +171,8 @@ export default function ProjectWarehouseReceiving({projectId,projectName,hasProj
       return <article className={`pr-wr-row${active?" is-editing":""}`} key={`${group.key}-${row.id}`}>
        <div className="pr-wr-heading"><div className="pr-wr-name"><strong title={row.product_id?`Product code: ${row.product_id}`:undefined}>{row.product_name}</strong>{row.kitQuantity>0&&<small>Kit Qty: {pretty(row.kitQuantity)}</small>}</div><span className="pr-wr-required">Required <b>{pretty(row.required_qty)}</b></span></div>
        <div className="pr-wr-metrics">
-        <div className="pr-wr-stat pr-wr-stat-available"><span>Available to Receive</span><strong>{pretty(active?Math.max(0,row.passed-(Number(draft[row.id])||0)):row.readyToReceive)}</strong></div>
-        <div className="pr-wr-stat pr-wr-stat-received"><span>Received</span>{active?<StageQuantityInput step="1" min="0" aria-label={`Received ${row.product_name}`} disabled={busy} value={draft[row.id]??""} max={Math.max(row.accepted,row.passed)} onValueChange={value=>{setDraft(prev=>({...prev,[row.id]:value}));setRowError(prev=>({...prev,[row.id]:""}));}}/>:<strong>{pretty(row.accepted)}</strong>}</div>
+        <div className="pr-wr-stat pr-wr-stat-available"><span>Available to Receive</span><strong>{pretty(active?Math.max(0,row.tested-(Number(draft[row.id])||0)):row.readyToReceive)}</strong></div>
+        <div className="pr-wr-stat pr-wr-stat-received"><span>Received</span>{active?<StageQuantityInput step="1" min="0" aria-label={`Received ${row.product_name}`} disabled={busy} value={draft[row.id]??""} max={Math.max(row.accepted,row.tested)} onValueChange={value=>{setDraft(prev=>({...prev,[row.id]:value}));setRowError(prev=>({...prev,[row.id]:""}));}}/>:<strong>{pretty(row.accepted)}</strong>}</div>
         <div className="pr-wr-stat pr-wr-person"><span>Received By</span><div className="pr-wr-people">{people.length?people.map(person=><span key={person.id}>{person.name}</span>):<em>—</em>}</div></div>
         <div className="pr-wr-actions">{active?<><button className="pr-secondary" type="button" disabled={busy} onClick={()=>cancelReceipt(row)}>Cancel</button><button className="pr-primary" type="button" disabled={busy} onClick={()=>saveReceipt(row)}>Save</button></>:<><button className="pr-secondary" type="button" disabled={busy} title={!canReceive?"Enable Warehouse Receiving permission in Users Center":"Edit received quantity"} onClick={()=>{if(!canReceive){setRowError(old=>({...old,[row.id]:"Warehouse Receiving access is required. Ask an administrator to enable preparing.warehouse_receive in Users Center → Advanced Permissions."}));return;}enableReceipt(row);}}>Edit</button>{canReceive&&row.accepted>0&&<button className="pr-wr-erase" type="button" disabled={busy} title="Reverse received balance without deleting audit history" onClick={()=>setClearConfirm(row)}>Clear</button>}</>}</div>
        </div>

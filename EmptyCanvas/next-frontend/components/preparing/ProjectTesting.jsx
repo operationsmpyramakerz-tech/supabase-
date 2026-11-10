@@ -10,9 +10,7 @@ const pretty=value=>n(value).toLocaleString("en-US");
 const csvCell=value=>{const s=String(value??"");return `"${(/^[\s]*[=+@-]/.test(s)?"'":"")+s.replaceAll('"','""')}"`;};
 const initial={items:[],history:[],kitGroups:[]};
 const metrics=[
- {key:"received",label:"Testing Received",aria:"Testing received"},
- {key:"passed",label:"Passed",aria:"Passed testing"},
- {key:"failed",label:"Failed",aria:"Failed testing"},
+ {key:"tested",label:"Tested",aria:"Tested quantity"},
 ];
 const delta=value=>{const x=n(value);return `${x>0?"+":""}${pretty(x)}`;};
 const dateText=value=>{if(!value)return "—";const date=new Date(value);return Number.isNaN(date.getTime())?"—":date.toLocaleString("en-GB",{dateStyle:"medium",timeStyle:"short"});};
@@ -68,13 +66,13 @@ export default function ProjectTesting({projectId,projectName,canTest,request,on
  const totals=useMemo(()=>testingCoverageTotals(data.items||[]),[data.items]);
  const shown=useMemo(()=>(data.items||[])
   .filter(r=>`${r.name||""} ${r.code||""}`.toLowerCase().includes(search.trim().toLowerCase()))
-  .filter(r=>filter==="pending"?testingCoverage(r).remaining>0:filter==="failed"?n(r.failed)>0:filter==="done"?testingCoverage(r).required>0&&testingCoverage(r).remaining===0:true),
+  .filter(r=>filter==="pending"?testingCoverage(r).remaining>0:filter==="done"?testingCoverage(r).required>0&&testingCoverage(r).remaining===0:true),
  [data.items,search,filter]);
  const allGroups=useMemo(()=>testingGroups(data.items,data.kitGroups),[data.items,data.kitGroups]);
  const groupedShown=useMemo(()=>testingGroups(shown,data.kitGroups).filter(group=>group.items.length),[shown,data.kitGroups]);
  const edit=r=>{
   setEditing(old=>({...old,[r.id]:true}));
-  setDraft(old=>({...old,[r.id]:{received:String(r.received),passed:String(r.passed),failed:String(r.failed)}}));
+  setDraft(old=>({...old,[r.id]:{tested:String(testingCoverage(r).tested)}}));
   setError("");setSuccess("");setRowError(old=>({...old,[r.id]:""}));
  };
  const cancel=id=>{
@@ -168,7 +166,7 @@ export default function ProjectTesting({projectId,projectName,canTest,request,on
     <button type="button" className="pr-pt-download-button" aria-label="Download testing report" onClick={()=>setShowExport(true)} disabled={!data.items.length}><TestingIcon name="download" size={18}/><span>Download</span></button>
    </div>
    {tab==="testing"&&<>
-     <div className="pr-wh-toolbar pr-pt-toolbar"><label className="pr-search pr-pt-search"><TestingIcon name="search" size={18}/><input type="search" aria-label="Search testing components" placeholder="Search component or code…" value={search} onChange={e=>setSearch(e.target.value)}/>{search&&<button type="button" className="pr-pt-clear-search" onClick={()=>setSearch("")} aria-label="Clear search" title="Clear search"><TestingIcon name="close" size={16}/></button>}</label><PreparingSelect iconOnly className={`pr-pt-filter-select${filter!=="all"?" is-filtered":""}`} aria-label="Filter testing components" value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">All components</option><option value="pending">Remaining to test</option><option value="failed">Has failed units</option><option value="done">Fully tested</option></PreparingSelect></div>
+     <div className="pr-wh-toolbar pr-pt-toolbar"><label className="pr-search pr-pt-search"><TestingIcon name="search" size={18}/><input type="search" aria-label="Search testing components" placeholder="Search component or code…" value={search} onChange={e=>setSearch(e.target.value)}/>{search&&<button type="button" className="pr-pt-clear-search" onClick={()=>setSearch("")} aria-label="Clear search" title="Clear search"><TestingIcon name="close" size={16}/></button>}</label><PreparingSelect iconOnly className={`pr-pt-filter-select${filter!=="all"?" is-filtered":""}`} aria-label="Filter testing components" value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">All components</option><option value="pending">Remaining to test</option><option value="done">Fully tested</option></PreparingSelect></div>
     <div className="pr-wh-list pr-pt-list pr-pt-kit-list" aria-label="Project component testing">{groupedShown.map(group=>{
      const open=!!search.trim()||expandedKit===group.key;
      const appearance=testingKitAppearance(group.name);
@@ -181,7 +179,7 @@ export default function ProjectTesting({projectId,projectName,canTest,request,on
      const isEditing=!!editing[r.id],v=draft[r.id]||{},coverage=testingCoverage(r);
      return <article key={r.id} className={`pr-pt-row${isEditing?" is-editing":""}`}>
       <div className="pr-pt-heading">
-       <div className="pr-pt-name"><div className="pr-pt-name-inline"><strong title={r.code?`Product code: ${r.code}`:undefined}>{r.name}</strong></div>{r.mismatch&&<small className="pr-pt-warning">Historical warehouse receipt exceeds passed testing; review before handover.</small>}</div>
+       <div className="pr-pt-name"><div className="pr-pt-name-inline"><strong title={r.code?`Product code: ${r.code}`:undefined}>{r.name}</strong></div>{r.mismatch&&<small className="pr-pt-warning">Historical warehouse receipt exceeds tested quantity; review before handover.</small>}</div>
        <div className="pr-pt-required"><span>Required</span><strong>{pretty(coverage.required)}</strong></div>
       </div>
       <div className="pr-pt-metrics">
@@ -207,7 +205,7 @@ export default function ProjectTesting({projectId,projectName,canTest,request,on
     <div className="pr-pt-history-grid">{entries.map(record=><article className="pr-pt-history-card" key={record.key}>
      <div className="pr-pt-history-top"><span className="pr-pt-history-avatar" aria-hidden="true">{record.editor?record.editor.slice(0,1).toUpperCase():"?"}</span><div className="pr-pt-history-person"><strong>{record.editor||"Legacy record (name not recorded)"}</strong><span>{dateText(record.createdAt)}</span></div><span className="pr-pt-history-label">Saved</span></div>
      <div className="pr-pt-history-component"><strong>{record.component}</strong><span title={record.reference}>{record.reference}</span></div>
-     <div className="pr-pt-history-deltas"><span>Testing Received <strong>{delta(record.line.receivedDelta)}</strong></span><span>Passed <strong className="pr-pt-pass">{delta(record.line.passedDelta)}</strong></span><span>Failed <strong className="pr-pt-fail">{delta(record.line.failedDelta)}</strong></span></div>
+     <div className="pr-pt-history-deltas"><span>Tested <strong className="pr-pt-pass">{delta(record.line.testedDelta)}</strong></span></div>
      {record.notes&&<p className="pr-pt-history-note">{record.notes}</p>}
      {record.legacy&&record.line.technicianName&&<p className="pr-pt-history-note">Historical technician entry: {record.line.technicianName}</p>}
     </article>)}{!entries.length&&<div className="pr-wh-empty">No testing records yet.</div>}</div>

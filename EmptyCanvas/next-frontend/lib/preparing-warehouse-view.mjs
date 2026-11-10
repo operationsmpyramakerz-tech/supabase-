@@ -3,7 +3,7 @@ import {testingGroups} from "./preparing-project-testing-grouping.mjs";
 const qty=v=>Number(v)||0;
 export const WAREHOUSE_COLUMNS=[
  {key:"name",label:"Component",fixed:true},{key:"code",label:"Code"},
- {key:"required",label:"Required"},{key:"passed",label:"Passed Testing"},{key:"accepted",label:"Received"},
+ {key:"required",label:"Required"},{key:"tested",label:"Tested"},{key:"accepted",label:"Received"},
  {key:"allocated",label:"Allocated"},{key:"available",label:"Available to Receive"},
  {key:"remaining",label:"Remaining"},{key:"receivedBy",label:"Received By"},
  {key:"signature",label:"Signature"},

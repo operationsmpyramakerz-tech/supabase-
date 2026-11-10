@@ -16,7 +16,7 @@ test('Testing header uses a functional icon-only close button',()=>{
 });
 
 test('Testing KPI cards use approved black, orange, white solid colors and preserve all metrics',()=>{
- for(const key of ['required','received','passed','failed','remaining']){
+ for(const key of ['required','tested','remaining']){
   assert.match(testing,new RegExp(`key:"${key}"`));
   assert.ok(css.includes(`pr-pt-stat--${key}`));
  }

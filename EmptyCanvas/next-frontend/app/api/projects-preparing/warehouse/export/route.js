@@ -11,7 +11,7 @@ export const dynamic="force-dynamic";
 export const revalidate=0;
 const reply=(message,status)=>Response.json({ok:false,error:message},{status,headers:{"Cache-Control":"private, no-store"}});
 const labels=Object.fromEntries(WAREHOUSE_COLUMNS.map(col=>[col.key,col.label]));
-const widths={name:215,code:69,required:70,passed:70,accepted:70,allocated:70,available:75,remaining:75,receivedBy:120,signature:114};
+const widths={name:215,code:69,required:70,tested:70,accepted:70,allocated:70,available:75,remaining:75,receivedBy:120,signature:114};
 function collect(doc){return new Promise((resolve,reject)=>{const chunks=[];doc.on("data",chunk=>chunks.push(chunk));doc.on("end",()=>resolve(Buffer.concat(chunks)));doc.on("error",reject);});}
 export async function POST(request){
  const gate=preparingStageReadGate(featureGate(await getDirectAccountGate(["Projects Preparing"]),"preparing.view"),"warehouse");

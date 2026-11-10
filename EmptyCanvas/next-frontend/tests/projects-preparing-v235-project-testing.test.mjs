@@ -10,16 +10,13 @@ const ui=file("components/preparing/ProjectTesting.jsx");
 const shell=file("components/preparing/PreparingClient.jsx");
 const server=file("lib/preparing-project-testing.js");
 const route=file("app/api/projects-preparing/testing/route.js");
-test("testing intake can be saved before any warehouse receipt, with technician",()=>{
- const row={id:"item-1",required:20,received:0,accepted:0,passed:0,failed:0};
- assert.deepEqual(testingChange(row,{received:"10",passed:"6",failed:"4"}),
-  {itemId:"item-1",receivedDelta:10,passedDelta:6,failedDelta:4,expectedReceived:0,expectedPassed:0,expectedFailed:0});
- assert.equal(testingChange({...row,received:10,passed:6,failed:4},{received:"10",passed:"6",failed:"4"}),null);
- assert.deepEqual(testingChange({...row,received:10,passed:6,failed:4},{received:"10",passed:"8",failed:"2"}).failedDelta,-2);
- assert.throws(()=>testingChange(row,{received:"4",passed:"4",failed:"1"}));
- assert.throws(()=>testingChange(row,{received:"10",passed:"1.5",failed:"0"}));
-
- assert.throws(()=>testingChange({...row,received:10,passed:8,accepted:6},{received:"10",passed:"5",failed:"0"}));
+test('testing intake can be saved before any warehouse receipt, with technician',()=>{
+ const row={id:'item-1',required:20,tested:0,accepted:0};
+ assert.deepEqual(testingChange(row,{tested:'10'}),{itemId:'item-1',testedDelta:10,expectedTested:0});
+ assert.equal(testingChange({...row,tested:10},{tested:'10'}),null);
+ assert.equal(testingChange({...row,tested:10},{tested:'8'}).testedDelta,-2);
+ assert.throws(()=>testingChange(row,{tested:'1.5'}));
+ assert.throws(()=>testingChange({...row,tested:10,accepted:6},{tested:'5'}));
 });
 test("testing persists append-only reports independent from school deliveries",()=>{
  for(const t of ["erp_preparing_project_test_batches","erp_preparing_project_test_lines"])assert.match(migration,new RegExp(`CREATE TABLE IF NOT EXISTS public\\.${t}`));
@@ -41,7 +38,7 @@ test("testing is a separate project-level screen like warehouse receiving",()=>{
  assert.match(shell,/ProjectTesting/);
  assert.ok(shell.indexOf('title:"Project Testing"')<shell.indexOf('title:"Warehouse Receiving"'));
  assert.ok(shell.indexOf('title:"Warehouse Receiving"')<shell.indexOf('title:"Project Kit Cartons"'));
- for(const label of ["Passed","Failed","Remaining","Testing History","Export"]){
+ for(const label of ["Tested","Remaining","Testing History","Export"]){
   assert.ok(ui.includes(label),label);
  }
  assert.doesNotMatch(ui,/Testing Record|Report reference \(optional\)|Save All Changes/);

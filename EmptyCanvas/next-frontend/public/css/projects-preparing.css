@@ -4610,3 +4610,9 @@ html[data-theme="dark"] .pr-sc-full-preview {background:#222833;}
  .pr-pt-modern .pr-pt-row:not(.is-editing) .pr-pt-metrics{grid-template-columns:repeat(2,minmax(0,1fr));}
  .pr-pt-modern .pr-pt-row:not(.is-editing) .pr-pt-metric--testedBy,.pr-pt-modern .pr-pt-row:not(.is-editing) .pr-pt-actions{grid-column:1/-1;}
 }
+
+/* v384 — one editable Tested quantity, with a compact audit card. */
+.pr-pt-modern .pr-pt-row.is-editing .pr-pt-metrics{grid-template-columns:minmax(140px,280px) auto;justify-content:space-between;align-items:end;}
+.pr-pt-modern .pr-pt-row.is-editing .pr-pt-actions{grid-column:auto;}
+.pr-pt-modern .pr-pt-history .pr-pt-history-deltas{grid-template-columns:minmax(0,1fr);}
+@media(max-width:580px){.pr-pt-modern .pr-pt-row.is-editing .pr-pt-metrics{grid-template-columns:minmax(0,1fr);}.pr-pt-modern .pr-pt-row.is-editing .pr-pt-actions{grid-column:1/-1;}}

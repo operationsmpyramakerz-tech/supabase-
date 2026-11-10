@@ -8,19 +8,16 @@ const src=path=>readFileSync(new URL(`../${path}`,import.meta.url),'utf8');
 const ui=src('components/preparing/ProjectTesting.jsx');
 const svc=src('lib/preparing-project-testing.js');
 const sql=src('sql/2026-10-29-preparing-testing-strict-quantities-v240.sql');
-const initial={id:'x',received:0,passed:0,failed:0,accepted:0};
-test('new testing results require Passed + Failed exactly equal Testing Received',()=>{
- const good=testingChange(initial,{received:'8',passed:'5',failed:'3'});
- assert.deepEqual([good.receivedDelta,good.passedDelta,good.failedDelta],[8,5,3]);
- assert.throws(()=>testingChange(initial,{received:'8',passed:'4',failed:'3'}),/Passed \+ Failed must equal Testing Received/);
- assert.throws(()=>testingChange(initial,{received:'8',passed:'6',failed:'3'}),/Passed \+ Failed must equal Testing Received/);
- assert.throws(()=>testingChange(initial,{received:'8',passed:'2.5',failed:'5.5'}),/whole numbers/);
+const initial={id:'x',tested:0,accepted:0};
+test('new testing results require one non-negative whole number',()=>{
+ const good=testingChange(initial,{tested:'8'});
+ assert.equal(good.testedDelta,8);
+ for(const invalid of ['-1','2.5','','abc'])assert.throws(()=>testingChange(initial,{tested:invalid}),/whole number/);
 });
 test('old incomplete quantities can be reviewed and corrected without rewriting history',()=>{
- const old={id:'x',received:4,passed:2,failed:1,accepted:0};
- assert.throws(()=>testingChange(old,{received:'4',passed:'2',failed:'1'}),/Passed \+ Failed must equal/);
- const correction=testingChange(old,{received:'4',passed:'2',failed:'2'});
- assert.deepEqual([correction.receivedDelta,correction.passedDelta,correction.failedDelta],[0,0,1]);
+ const old={id:'x',tested:4,accepted:0};
+ assert.equal(testingChange(old,{tested:'4'}),null);
+ assert.deepEqual(testingChange(old,{tested:'5'}),{itemId:'x',testedDelta:1,expectedTested:4});
 });
 test('testing page removes entire Testing Record panel and only saves inline item edits',()=>{
  for(const gone of ['Testing Record','Report reference (optional)','Save All Changes','Batch, test conditions, or retest details','Saved under your signed-in ERP account']) assert.equal(ui.includes(gone),false,gone);
@@ -29,13 +26,13 @@ test('testing page removes entire Testing Record panel and only saves inline ite
  assert.match(ui,/rowError\[r\.id\]/);
  assert.match(ui,/setEditing\(old=>Object\.fromEntries/);
 });
-test('API and SQL reject mismatched totals without changing previous stored records',()=>{
- assert.match(svc,/newPassed\+newFailed!==newReceived/);
- assert.match(sql,/new_passed\+new_failed<>new_received/);
- assert.match(sql,/Passed \+ Failed must equal Testing Received/);
- assert.match(sql,/FOR UPDATE/);
- assert.match(sql,/REVOKE ALL ON FUNCTION/);
- assert.doesNotMatch(sql,/TRUNCATE|DELETE FROM|DROP TABLE|UPDATE public\.erp_preparing_project_test_lines/i);
+test('API and SQL reject invalid or stale tested totals',()=>{
+ const next=src('sql/2026-11-10-preparing-tested-only-v384.sql');
+ assert.match(svc,/expectedTested/);
+ assert.match(next,/prior_tested<>\(entry->>'expectedTested'\)::bigint/);
+ assert.match(next,/next_tested<0/);
+ assert.match(next,/FOR UPDATE/);
+ assert.match(next,/REVOKE ALL ON FUNCTION/);
  assert.match(svc,/QC-\$\{randomUUID\(\)\}/);
 });
 test('changed JS and JSX files parse cleanly',()=>{

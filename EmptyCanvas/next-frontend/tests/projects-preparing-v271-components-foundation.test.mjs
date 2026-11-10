@@ -35,7 +35,7 @@ test('top overview and step timeline show five-stage logic without component pro
   assert.match(ui,/pr-step-kpi-track/);
 });
 test('progress math excludes Master BOM even when source proposal changes',()=>{
-  const inputs={testing:{items:[{required:10,passed:4}]},warehouse:{receiptLines:[{accepted_delta:3}]},production:{items:[{productionReceived:2,packedQty:1}]}};
+  const inputs={testing:{items:[{required:10,tested:4}]},warehouse:{receiptLines:[{accepted_delta:3}]},production:{items:[{productionReceived:2,packedQty:1}]}};
   const a=calculateProjectPreparationProgress({...inputs,sourceProposalId:null});
   const b=calculateProjectPreparationProgress({...inputs,sourceProposalId:'proposal-id'});
   assert.deepEqual(a,b);

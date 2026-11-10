@@ -1,13 +1,11 @@
 // Shared, side-effect-free helpers for project testing, grouping and printable exports.
 const number=value=>Number(value)||0;
-export function testingRemaining(row){return Math.max(0,number(row?.received)-number(row?.passed));}
+export function testingRemaining(row){return Math.max(0,number(row?.projectTotalRequired??row?.required)-number(row?.tested));}
 export const TESTING_EXPORT_COLUMNS=[
  {key:"name",label:"Component",fixed:true},
  {key:"code",label:"Code"},
  {key:"required",label:"Required"},
- {key:"received",label:"Testing Received"},
- {key:"passed",label:"Passed"},
- {key:"failed",label:"Failed"},
+ {key:"tested",label:"Tested"},
  {key:"remaining",label:"Remaining"},
  {key:"testedBy",label:"Tested By"},
  {key:"signature",label:"Signature"},

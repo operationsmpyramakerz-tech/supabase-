@@ -32,13 +32,13 @@ test('Download is visible labeled button, History is icon-only right beside it',
  assert.match(ui,/onClick=\{\(\)=>setShowExport\(true\)\}/);
 });
 
-test('Refresh is removed, compact icon Filter preserves all four filter values',()=>{
+test('Refresh is removed, compact icon Filter preserves all three filter values',()=>{
  const toolbar=ui.split('pr-wh-toolbar pr-pt-toolbar')[1].split('pr-wh-list pr-pt-list')[0];
  assert.doesNotMatch(toolbar,/>Refresh</);
  assert.match(toolbar,/PreparingSelect iconOnly/);
  assert.match(toolbar,/className=\{`pr-pt-filter-select/);
  assert.match(toolbar,/aria-label="Filter testing components"/);
- for(const value of ['all','pending','failed','done']) assert.ok(toolbar.includes(`<option value="${value}">`));
+ for(const value of ['all','pending','done']) assert.ok(toolbar.includes(`<option value="${value}">`));
  assert.match(select,/iconOnly \? <svg/);
  assert.match(select,/role="listbox"/);
  assert.match(select,/onChange\?\.\(\{target:\{value:item.value,name\}\}\)/);

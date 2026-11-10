@@ -16,7 +16,7 @@ test('testing row shows component, code and project required on the same header 
  assert.match(ui,/pretty\(coverage\.required\)/);
  assert.match(css,/\.pr-pt-heading\{display:flex/);
 });
-test('editing retains quality-control inputs while read-only rows show coverage',()=>{
+test('editing retains the tested input while read-only rows show coverage',()=>{
  assert.match(ui,/metrics\.map\(field=>/);
  assert.match(ui,/isEditing\?metrics\.map/);
  assert.match(ui,/<StageQuantityInput/);
@@ -34,10 +34,8 @@ test('Save per row automatically generates a unique report reference server-side
  assert.match(ui,/Save and refresh are separate/);
 });
 test('testing calculations and validation remain enforced',()=>{
- assert.deepEqual(testingChange({id:'x',received:0,passed:0,failed:0,accepted:0},{received:'4',passed:'3',failed:'1'}),{
-  itemId:'x',receivedDelta:4,passedDelta:3,failedDelta:1,expectedReceived:0,expectedPassed:0,expectedFailed:0
- });
- assert.throws(()=>testingChange({id:'x',received:0,passed:0,failed:0},{received:'2',passed:'3',failed:'0'}));
+ assert.deepEqual(testingChange({id:'x',tested:0,accepted:0},{tested:'4'}),{itemId:'x',testedDelta:4,expectedTested:0});
+ assert.throws(()=>testingChange({id:'x',tested:0},{tested:'-1'}));
 });
 test('responsive layout and syntax remain valid',()=>{
  assert.match(css,/@media\(max-width:580px\)/);

@@ -11,12 +11,12 @@ const migration=src('sql/2026-10-28-preparing-testing-identity-and-remaining-v23
 const css=src('public/css/projects-preparing.css');
 
 test('quantity edit does not accept actor identity or technicianName from the client',()=>{
- const change=testingChange({id:'a',received:0,passed:0,failed:0,accepted:0},{received:'4',passed:'2',failed:'2',technicianName:'spoof'});
- assert.deepEqual(change,{itemId:'a',receivedDelta:4,passedDelta:2,failedDelta:2,expectedReceived:0,expectedPassed:0,expectedFailed:0});
+ const change=testingChange({id:'a',tested:0,accepted:0},{tested:'4',technicianName:'spoof'});
+ assert.deepEqual(change,{itemId:'a',testedDelta:4,expectedTested:0});
  assert.equal('technicianName' in change,false);
  assert.match(api,/account\?\.name\|\|account\?\.username/);
  assert.match(api,/p_actor_name:actorName/);
- assert.match(api,/erp_preparing_project_testing_record_v238/);
+ assert.match(api,/erp_preparing_project_testing_record_v384/);
  assert.doesNotMatch(api,/row\?\.technicianName/);
 });
 test('remaining in the workspace is required minus physically tested units',()=>{

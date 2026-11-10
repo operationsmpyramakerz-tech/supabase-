@@ -10,7 +10,7 @@ const css = read('public/css/projects-preparing.css');
 
 test('project preparation counts five operational quantity balances, not Master BOM or school stage counts',()=>{
  const progress = calculateProjectPreparationProgress({sourceProposalId:'proposal-id',
-  testing:{items:[{required:10,passed:4}]}, warehouse:{items:[{required_qty:10}],receiptLines:[{accepted_delta:3}]},
+  testing:{items:[{required:10,tested:4}]}, warehouse:{items:[{required_qty:10}],receiptLines:[{accepted_delta:3}]},
   production:{items:[{productionReceived:2,packedQty:1}],cartons:[{id:"one",status:"ready"}],cartonLines:[{carton_id:"one",packed_qty:1}]}});
  assert.deepEqual(progress.stages,[40,30,20,10,10]);
  assert.equal(progress.overall,22);
@@ -21,7 +21,7 @@ test('empty, partial and excessive balances are clamped safely',()=>{
  const empty=calculateProjectPreparationProgress({testing:{items:[]},warehouse:{items:[]},production:{items:[]}});
  assert.deepEqual(empty.stages,[0,0,0,0,0]);
  assert.equal(empty.overall,0);
- const full=calculateProjectPreparationProgress({sourceProposalId:'proposal-id', testing:{items:[{required:5,passed:8}]},
+ const full=calculateProjectPreparationProgress({sourceProposalId:'proposal-id', testing:{items:[{required:5,tested:8}]},
   warehouse:{items:[{required_qty:5}],receiptLines:[{accepted_delta:7}]},
   production:{items:[{productionReceived:7,packedQty:7}],cartons:[{id:"ready",status:"ready"}],cartonLines:[{carton_id:"ready",packed_qty:7}]}});
  assert.deepEqual(full.stages,[100,100,100,100,100]);

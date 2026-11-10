@@ -36,7 +36,7 @@ test('production and boxes are isolated to their own modal tabs and preserve exi
  assert.match(read('components/preparing/ProjectBoxDistribution.jsx'),/action:"pack"/);
 });
 test('Box Distribution packing and ready Kit Cartons are separately represented in percent',()=>{
- const base={testing:{items:[{required:10,passed:10}]},warehouse:{receiptLines:[{accepted_delta:10}]},production:{items:[{productionReceived:10,packedQty:6}],cartons:[{id:'a',status:'draft'},{id:'b',status:'ready'},{id:'c',status:'cancelled'}],cartonLines:[{carton_id:'a',packed_qty:4},{carton_id:'b',packed_qty:2},{carton_id:'c',packed_qty:20}]}};
+ const base={testing:{items:[{required:10,tested:10}]},warehouse:{receiptLines:[{accepted_delta:10}]},production:{items:[{productionReceived:10,packedQty:6}],cartons:[{id:'a',status:'draft'},{id:'b',status:'ready'},{id:'c',status:'cancelled'}],cartonLines:[{carton_id:'a',packed_qty:4},{carton_id:'b',packed_qty:2},{carton_id:'c',packed_qty:20}]}};
  const first=calculateProjectPreparationProgress(base);
  assert.deepEqual(first.stages,[100,100,100,60,20]);
  assert.equal(first.overall,76);

@@ -20,14 +20,14 @@ test("testing no longer requires prior warehouse receipt",()=>{
  assert.match(sql,/new_passed<prior_passed AND new_passed<warehouse_accepted/);
  assert.match(sql,/NEW\.accepted_delta>0 AND total_accepted>greatest\(old_accepted,passed_total\)/);
  assert.match(sql,/Test Received must cover Passed and Failed quantities/);
- assert.match(view,/Testing Received/);
- assert.match(view,/Testing Received/);
+ assert.match(view,/Tested/);
+ assert.match(view,/Tested/);
  assert.match(view,/Tested By/);
 });
-test("the route validates actual user, three quantity deltas and technician",()=>{
+test("the route validates actual user, one quantity delta and technician",()=>{
  assert.match(api,/actor=String\(account\?\.id/);
- assert.match(api,/receivedDelta/);
- assert.match(api,/expectedReceived/);
+ assert.match(api,/testedDelta/);
+ assert.match(api,/expectedTested/);
  assert.match(api,/p_actor_name:actorName/);
  assert.match(read("app/api/projects-preparing/testing/route.js"),/preparingStage(?:Gate|Allowed)/);
 });

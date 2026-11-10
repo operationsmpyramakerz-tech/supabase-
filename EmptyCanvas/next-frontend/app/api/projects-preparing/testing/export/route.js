@@ -10,7 +10,7 @@ export const dynamic="force-dynamic";
 export const revalidate=0;
 const reply=(message,status)=>Response.json({ok:false,error:message},{status,headers:{"Cache-Control":"private, no-store"}});
 const labels=Object.fromEntries(TESTING_EXPORT_COLUMNS.map(col=>[col.key,col.label]));
-const widths={name:214,code:66,required:66,received:92,passed:63,failed:63,remaining:73,testedBy:92,signature:104};
+const widths={name:214,code:66,required:66,tested:92,remaining:73,testedBy:92,signature:104};
 function collect(doc){return new Promise((resolve,reject)=>{const chunks=[];doc.on("data",chunk=>chunks.push(chunk));doc.on("end",()=>resolve(Buffer.concat(chunks)));doc.on("error",reject);});}
 
 export async function POST(request){
@@ -63,7 +63,7 @@ export async function POST(request){
     for(const col of specs){
      const value=String(testingExportValue(row,col.key,body.blank));
      doc.fillColor("#263244").font("Helvetica").fontSize(8.8);
-     if(body.blank&&["received","passed","failed","remaining","testedBy","signature"].includes(col.key)){
+     if(body.blank&&["tested","remaining","testedBy","signature"].includes(col.key)){
       doc.strokeColor("#b9c3d0").lineWidth(.55).moveTo(x+7,y+h-12).lineTo(x+col.width-7,y+h-12).stroke();
      }else if(value){doc.text(value,x+5,y+8,{width:col.width-10,height:h-11,ellipsis:true});}
      x+=col.width;

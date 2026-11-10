@@ -14,7 +14,7 @@ export function calculateProjectPreparationProgress({ testing, warehouse, produc
   const tested = rows(testing?.items);
   const productionItems = rows(production?.items);
   const required = tested.reduce((sum, row) => sum + amount(row.required), 0);
-  const passed = tested.reduce((sum, row) => sum + amount(row.passed), 0);
+  const testedTotal = tested.reduce((sum, row) => sum + amount(row.tested), 0);
   const received = rows(warehouse?.receiptLines).reduce((sum, row) => sum + (Number(row.accepted_delta) || 0), 0);
   const handedOff = productionItems.reduce((sum, row) => sum + amount(row.productionReceived), 0);
   const packed = productionItems.reduce((sum, row) => sum + amount(row.packedQty), 0);
@@ -24,7 +24,7 @@ export function calculateProjectPreparationProgress({ testing, warehouse, produc
     sum + (readyCartonIds.has(String(line.carton_id)) ? amount(line.packed_qty) : 0), 0);
   const stageKeys = ["testing", "warehouse", "production", "boxes", "cartons"];
   const stages = [
-    percentage(passed, required),
+    percentage(testedTotal, required),
     percentage(received, required),
     percentage(handedOff, required),
     percentage(packed, required),

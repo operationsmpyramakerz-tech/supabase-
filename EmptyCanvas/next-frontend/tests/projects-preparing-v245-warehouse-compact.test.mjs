@@ -32,7 +32,7 @@ test('Edit toggles the same Received value into an input and requires warehouse 
  assert.match(ui, /enableReceipt\(row\);\}\}>Edit/);
  assert.match(ui, /onClick=\{\(\)=>saveReceipt\(row\)\}>Save/);
  assert.equal(warehouseReceiptLimit(0,'2',2,0),2);
- assert.throws(()=>warehouseReceiptLimit(0,'3',2,0),/Passed/);
+ assert.throws(()=>warehouseReceiptLimit(0,'3',2,0),/Tested/);
  assert.throws(()=>warehouseReceiptLimit(2,'0',2,1),/allocated/);
 });
 
