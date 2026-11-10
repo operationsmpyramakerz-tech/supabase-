@@ -59,6 +59,7 @@ export default function ProjectProductionReceiving({projectId,projectName,allowe
  const filterOptions=useMemo(()=>[
   {value:"available",label:"Available to Receive",hint:"Warehouse stock awaiting Production",count:rows.filter(r=>n(r.availableToProduction)>0).length},
   {value:"not-received",label:"Not Received",hint:"No Production handover recorded",count:rows.filter(r=>n(r.productionReceived)===0).length},
+  {value:"received",label:"Received",hint:"Components with a positive Production receipt",count:rows.filter(r=>n(r.productionReceived)>0).length},
   {value:"all",label:"All Components",hint:"Entire project component list",count:rows.length},
  ],[rows]);
  const totals=useMemo(()=>rows.reduce((o,r)=>({warehouse:o.warehouse+n(r.warehouseReceived),production:o.production+n(r.productionReceived)}),{warehouse:0,production:0}),[rows]);

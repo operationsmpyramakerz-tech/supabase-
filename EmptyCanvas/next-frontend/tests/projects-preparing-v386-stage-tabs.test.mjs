@@ -17,7 +17,8 @@ test('All five project stages use the same status tabs, not a filter popover',()
 test('Stage tab options retain the original filtering rules and display all first',()=>{
  const testing=ui('ProjectTesting'),warehouse=ui('ProjectWarehouseReceiving'),production=ui('ProjectProductionReceiving'),boxes=ui('ProjectBoxDistribution');
  for(const token of ['value:"all",label:"All Components"','value:"pending",label:"Remaining to Test"','value:"done",label:"Fully Tested"','testingCoverage(r).remaining>0'])assert.ok(testing.includes(token));
- for(const token of ['value:"all",label:"All Components"','value:"short",label:"Warehouse Shortage"','value:"available",label:"Available to Receive"','row.accepted<row.required_qty','row.readyToReceive>0'])assert.ok(warehouse.includes(token));
+ for(const token of ['value:"all",label:"All Components"','value:"short",label:"Warehouse Shortage"','value:"available",label:"Available to Receive"','filterWarehouseReceivingRows('])assert.ok(warehouse.includes(token));
+ const warehouseFilter=read("lib/preparing-warehouse-view.mjs");assert.ok(warehouseFilter.includes("row.accepted<row.required_qty"));assert.ok(warehouseFilter.includes("row.readyToReceive>0"));
  assert.match(production,/filterProductionReceivingRows\(/);assert.match(boxes,/filterBoxDistributionRows\(items,filter\)/);
  assert.match(production,/onReturnToBoxes=\{\(\)=>setTab\("boxes"\)\}/);
  for(const token of ['All Cartons','Draft','Ready','c.status!=="cancelled"','c.status===cartonFilter','visibleCartons.map'])assert.ok(ui('ProjectKitCartons').includes(token));

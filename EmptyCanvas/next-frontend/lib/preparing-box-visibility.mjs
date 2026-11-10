@@ -12,5 +12,6 @@ export function filterBoxDistributionRows(rows,filter="available"){
  const items=Array.isArray(rows)?rows:[];
  if(filter==="available")return packableRows(items);
  if(filter==="not-packed")return items.filter(r=>Number(r.productionReceived)>0&&Number(r.packedQty)===0);
+ if(filter==="packed")return items.filter(r=>Number(r.packedQty)>0);
  return items;
 }

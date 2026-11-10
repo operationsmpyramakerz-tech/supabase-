@@ -2,7 +2,7 @@
 import {useRef} from "react";
 
 function TabIcon({value}) {
- const shape=value==="all"?<><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5M3 16l9 5 9-5"/></>: ["done","ready"].includes(value)?<><path d="M21 11.1V12a9 9 0 1 1-5.3-8.2"/><path d="m8 11 4 4 9-9"/></>:value==="available"?<><path d="M4 5h16l2 10v4H2v-4L4 5Z"/><path d="M2 15h6l2 3h4l2-3h6"/></>:<><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></>;
+ const shape=value==="all"?<><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5M3 16l9 5 9-5"/></>: ["done","ready","received","packed"].includes(value)?<><path d="M21 11.1V12a9 9 0 1 1-5.3-8.2"/><path d="m8 11 4 4 9-9"/></>:value==="available"?<><path d="M4 5h16l2 10v4H2v-4L4 5Z"/><path d="M2 15h6l2 3h4l2-3h6"/></>:<><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></>;
  return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{shape}</svg>;
 }
 export default function StageFilterTabs({options,value,onChange,label,disabled=false}) {

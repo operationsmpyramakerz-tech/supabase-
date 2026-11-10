@@ -33,5 +33,6 @@ export function filterProductionReceivingRows(rows,filter="available"){
  const items=Array.isArray(rows)?rows:[];
  if(filter==="available")return items.filter(row=>Number(row.availableToProduction)>0);
  if(filter==="not-received")return items.filter(row=>Number(row.productionReceived??0)===0);
+ if(filter==="received")return items.filter(row=>Number(row.productionReceived)>0);
  return items;
 }

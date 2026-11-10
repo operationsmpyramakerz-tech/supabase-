@@ -8,6 +8,14 @@ export const WAREHOUSE_COLUMNS=[
  {key:"remaining",label:"Remaining"},{key:"receivedBy",label:"Received By"},
  {key:"signature",label:"Signature"},
 ];
+// Received includes any positive net receipt, even when the item is partly received.
+export function filterWarehouseReceivingRows(rows,filter="all"){
+ const items=Array.isArray(rows)?rows:[];
+ if(filter==="short")return items.filter(row=>row.accepted<row.required_qty);
+ if(filter==="available")return items.filter(row=>row.readyToReceive>0);
+ if(filter==="received")return items.filter(row=>Number(row.accepted)>0);
+ return items;
+}
 export function warehouseGroups(rows=[],kitGroups=[]){
  return testingGroups(rows.map(row=>({
   ...row,name:row.product_name,code:row.product_id,required:qty(row.required_qty),

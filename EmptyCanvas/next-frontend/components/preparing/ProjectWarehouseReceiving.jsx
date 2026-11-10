@@ -3,7 +3,7 @@ import StageFilterTabs from "./StageFilterTabs";
 import StageQuantityInput from "./StageQuantityInput";
 import { useEffect, useMemo, useState } from "react";
 import { warehouseTotals,warehouseReceivingBalances,warehouseReceiptLimit,projectRequired } from "../../lib/preparing-warehouse-math.mjs";
-import {WAREHOUSE_COLUMNS,warehouseGroups,warehouseExportValue} from "../../lib/preparing-warehouse-view.mjs";
+import {WAREHOUSE_COLUMNS,warehouseGroups,warehouseExportValue,filterWarehouseReceivingRows} from "../../lib/preparing-warehouse-view.mjs";
 const number=v=>Number(v)||0;
 const pretty=v=>number(v).toLocaleString("en-US");
 const safeCSV=v=>{const raw=String(v??"");const safe=/^[\s]*[=+@-]/.test(raw)?`'${raw}`:raw;return `"${safe.replaceAll('"','""')}"`;};
@@ -68,7 +68,7 @@ export default function ProjectWarehouseReceiving({projectId,projectName,hasProj
  const schoolsCaptured=new Set(state.demands.map(row=>row.school_id));
  const uncaptured=state.schools.filter(row=>!schoolsCaptured.has(row.id));
  const totals=useMemo(()=>summaries.reduce((sum,row)=>({required:sum.required+number(row.required_qty),accepted:sum.accepted+row.accepted,damaged:sum.damaged+row.damaged,allocated:sum.allocated+row.allocated,available:sum.available+row.available,tested:sum.tested+row.tested,readyToReceive:sum.readyToReceive+row.readyToReceive}),{required:0,accepted:0,damaged:0,allocated:0,available:0,tested:0,readyToReceive:0}),[summaries]);
- const shown=useMemo(()=>summaries.filter(row=>`${row.product_name} ${row.product_id}`.toLowerCase().includes(search.toLowerCase().trim())).filter(row=>filter==="short"?row.accepted<row.required_qty:filter==="available"?row.readyToReceive>0:true),[summaries,search,filter]);
+ const shown=useMemo(()=>filterWarehouseReceivingRows(summaries.filter(row=>`${row.product_name} ${row.product_id}`.toLowerCase().includes(search.toLowerCase().trim())),filter),[summaries,search,filter]);
  const allGroups=useMemo(()=>warehouseGroups(summaries,state.kitGroups),[summaries,state.kitGroups]);
  const shownGroups=useMemo(()=>warehouseGroups(shown,state.kitGroups),[shown,state.kitGroups]);
  const historyEntries=useMemo(()=>state.receipts.flatMap(receipt=>state.receiptLines.filter(line=>line.receipt_id===receipt.id).map(line=>({key:line.id,receipt,line,component:nameById.get(line.item_id)||"Component"}))),[state.receipts,state.receiptLines,nameById]);
@@ -128,7 +128,7 @@ export default function ProjectWarehouseReceiving({projectId,projectName,hasProj
   {success&&<div className="pr-manifest-success" role="status">{success}</div>}
   {loading?<p className="pr-muted">Loading warehouse records…</p>:<>
    <div className="pr-wh-stats pr-pt-stat-grid" aria-label="Warehouse summary">{[["Project Required",totals.required,"required","◆"],["Received",totals.accepted,"received","↓"],["Available to Receive",totals.readyToReceive,"available","inbox"]].map(([label,value,key,mark])=><div className={`pr-pt-stat pr-pt-stat--${key}`} key={key}><span className="pr-pt-stat-icon" aria-hidden="true">{mark==="inbox"?<WarehouseIcon name="inbox" size={23}/>:mark}</span><span className="pr-pt-stat-copy"><span>{label}</span><strong>{pretty(value)}</strong></span></div>)}</div>
-   <StageFilterTabs label="Warehouse component status" options={[{value:"all",label:"All Components"},{value:"short",label:"Warehouse Shortage"},{value:"available",label:"Available to Receive"}]} value={tab==="receiving"?filter:""} onChange={value=>{setFilter(value);setTab("receiving");setError("");}}/>
+   <StageFilterTabs label="Warehouse component status" options={[{value:"all",label:"All Components"},{value:"short",label:"Warehouse Shortage"},{value:"available",label:"Available to Receive"},{value:"received",label:"Received"}]} value={tab==="receiving"?filter:""} onChange={value=>{setFilter(value);setTab("receiving");setError("");}}/>
    <div className="pr-stage-filter-toolbar pr-pt-toolbar">{tab==="receiving"?<label className="pr-search pr-pt-search"><WarehouseIcon name="search" size={18}/><input type="search" aria-label="Search warehouse components" placeholder="Search component or code…" value={search} onChange={e=>setSearch(e.target.value)}/>{search&&<button type="button" className="pr-pt-clear-search" onClick={()=>setSearch("")} aria-label="Clear search" title="Clear search"><WarehouseIcon name="close" size={16}/></button>}</label>:<span className="pr-stage-history-label">Receiving History</span>}
     <div className="pr-stage-filter-actions"><button type="button" aria-pressed={tab==="history"} className={`pr-pt-history-button${tab==="history"?" is-active":""}`} aria-label={`Movement History (${historyEntries.length} changes)`} title={`Movement History (${historyEntries.length})`} onClick={()=>{setTab(tab==="history"?"receiving":"history");setError("");}}><WarehouseIcon name="history" size={19}/></button><button type="button" className="pr-pt-download-button" aria-label="Download warehouse report" onClick={()=>setShowExport(true)} disabled={!state.items.length}><WarehouseIcon name="download" size={18}/><span>Download</span></button></div>
    </div>
