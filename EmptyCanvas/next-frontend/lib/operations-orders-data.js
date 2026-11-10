@@ -1,5 +1,6 @@
 import { operationsDeliveredTransferQuantity } from "./operations-delivered-transfer.mjs";
 import "server-only";
+import { normalizeOperationsStatuses, operationsMatchesStatuses } from "./operations-status-filter.mjs";
 import { operationsHasOutstandingQuantity, operationsMatchesTab } from "./operations-remaining-status.mjs";
 import { validateWholeOperationsOrder } from "./operations-whole-order-policy.mjs";
 import { performAtomicOrderAction, useAtomicOrderActions } from "./order-atomic-actions";
@@ -373,22 +374,32 @@ function decision(item = {}) {
   return "not-started";
 }
 
-function groupMeta(items = []) {
+function groupMeta(items = [], forCardFilter = false) {
   const summary = items.find((item) => item?._summaryCard);
   if (summary) {
     return {
       stage: Number(summary._groupStage) || statusIndex(summary.status),
       hasRemaining: Boolean(summary._groupHasRemaining),
       hasReceived: Boolean(summary._groupHasReceived),
+      hasApproved: Boolean(summary._groupHasApproved),
+      hasRejected: Boolean(summary._groupHasRejected),
       maintenance: orderTypeKey(summary.orderType) === "requestmaintenance",
     };
   }
   const stage = Math.max(1, ...items.map((item) => statusIndex(item?.status)));
-  const hasRemaining = items.some((item) => Math.abs(Number(item?.quantityRemaining ?? item?.quantity_remaining ?? 0) || 0) > 1e-9);
+  const hasRemaining = items.some((item) => {
+    const stored = Number(item?.quantityRemaining ?? item?.quantity_remaining ?? 0) || 0;
+    if (!forCardFilter) return Math.abs(stored) > 1e-9;
+    // Match the client's remainingQuantity fallback for legacy zero/zero rows.
+    const received = Number(item?.quantityReceived ?? item?.quantity_received_by_operations ?? 0) || 0;
+    const base = Number(item?.quantityEditedBySupervisor ?? item?.quantityProgress ?? item?.quantityRequested ?? item?.quantity ?? 0) || 0;
+    const edited = Boolean(item?.quantityReceivedEdited ?? item?.quantity_received_edited);
+    return Math.abs(stored) > 1e-9 || (!edited && Math.abs(base) > 1e-9 && Math.abs(received) < 1e-9);
+  });
   const hasReceived = items.some((item) => Math.abs(Number(item?.quantityReceived ?? item?.quantity_received_by_operations ?? 0) || 0) > 1e-9);
   const rawType = text(items?.[0]?.orderType ?? items?.[0]?.order_type);
   const maintenance = orderTypeKey(rawType) === "requestmaintenance";
-  return { stage, hasRemaining, hasReceived, maintenance };
+  return { stage, hasRemaining, hasReceived, maintenance, hasApproved: items.some(item => decision(item) === "approved"), hasRejected: items.some(item => decision(item) === "rejected") };
 }
 
 function groupMatchesTab(items = [], tab = "all") {
@@ -569,10 +580,10 @@ function operationsCardSummaryItem(row = {}, tab = "all") {
   };
 }
 
-async function rowsByNumbers(numbers = [], signal = null, includeLocalSearchFields = false, { tab = "all", scoped = false } = {}) {
+async function rowsByNumbers(numbers = [], signal = null, includeLocalSearchFields = false, { tab = "all", scoped = false, forceRows = false } = {}) {
   // Card-summary RPC may aggregate mixed owners into one card. Never trust it
   // for row-scoped lists: fetch component owners before filtering groups.
-  if (!["remaining", "delivered"].includes(tab) && !scoped && !includeLocalSearchFields && canUseOrderCardSummaryRpc()) {
+  if (!["remaining", "delivered"].includes(tab) && !scoped && !includeLocalSearchFields && !forceRows && canUseOrderCardSummaryRpc()) {
     try {
       const rows = await loadOrderCardSummariesRpc({
         numbers,
@@ -668,6 +679,7 @@ function compactOperationsSummaryItem(item = {}) {
 export async function loadOperationsOrdersPage({
   account = {},
   tab = "all",
+  statuses = [],
   type = "all",
   query = "",
   cursor = null,
@@ -676,6 +688,8 @@ export async function loadOperationsOrdersPage({
 } = {}) {
   if (!isSupabaseConfigured()) return null;
   const resolved = await resolveOrderScope(account, "orders.operations.view");
+  const selectedStatuses = tab === "all" ? normalizeOperationsStatuses(statuses) : [];
+  const includeArchive = selectedStatuses.includes("archive");
   const safeLimit = pageLimit(limit);
   const outputGroups = [];
   let nextCursor = pageCursor(cursor);
@@ -696,7 +710,7 @@ export async function loadOperationsOrdersPage({
         scanGroups: Math.max(safeLimit * 2, 60),
         filters,
         searchMode: hasTextSearch ? (fastSearch ? "fast" : "legacy") : "",
-        rpcOptions: !searchPlan ? {
+        rpcOptions: !searchPlan && !includeArchive ? {
           context: "operations",
           orderType: orderTypeLabel(type),
           tab,
@@ -745,7 +759,7 @@ export async function loadOperationsOrdersPage({
     const windowResult = await consumeOrderSummaryWindows({
       numbers: candidates.numbers,
       remainingGroups: safeLimit - outputGroups.length,
-      loadRows: (numbers, loadSignal) => rowsByNumbers(numbers, loadSignal, localSearchFallback, { tab, scoped: !!resolved }),
+      loadRows: (numbers, loadSignal) => rowsByNumbers(numbers, loadSignal, localSearchFallback, { tab, scoped: !!resolved, forceRows: includeArchive }),
       profileName: "orders.operations.summary-window",
       signal,
       consumeRows: ({ numbers, rows }) => {
@@ -757,7 +771,8 @@ export async function loadOperationsOrdersPage({
           processedCandidates += 1;
           nextCursor = orderNumber;
           const items = groups.get(orderNumber) || [];
-          if (!items.length || !groupMatchesTab(items, tab)) continue;
+          if (!items.length) continue;
+          if (selectedStatuses.length ? !operationsMatchesStatuses(groupMeta(items, true), selectedStatuses) : !groupMatchesTab(items, tab)) continue;
           if (cleanType && cleanType !== "all" && orderTypeKey(items[0]?.orderType || "") !== cleanType) continue;
           if (needle && !groupSearchText(items).includes(needle)) continue;
           outputGroups.push({ orderNumber, items: rowsForTab(items, tab) });

@@ -1183,3 +1183,22 @@ body .orders-workspace .co-modal-dialog .co-modal-close::before {
   display: block !important; margin: 0 !important; padding: 0 !important;
   line-height: 1 !important; transform: translateY(-1px) !important;
 }
+
+/* Operations Orders v381 — multi-select card statuses */
+body .orders-workspace.orders-workspace .orders-preferences__panel--statuses .orders-preferences__content {
+  max-height: min(54vh, 470px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin;
+}
+body .orders-workspace.orders-workspace .orders-preferences__panel--statuses .orders-preferences__options { max-height: none; overflow: visible; }
+body .orders-workspace.orders-workspace .orders-preferences__status-heading { align-items: center; }
+body .orders-workspace.orders-workspace .orders-preferences__status-heading b { display: flex; align-items: center; gap: 7px; }
+body .orders-workspace.orders-workspace .orders-preferences__status-count { display: inline-grid; place-items: center; min-width: 19px; height: 19px; border-radius: 7px; background: #fff0e5; color: #d64e0d; font-size: 11px; }
+body .orders-workspace.orders-workspace .orders-preferences__status-clear { background: transparent; border: 0; color: #e45b15; font-weight: 750; font-size: 12px; cursor: pointer; padding: 4px; }
+body .orders-workspace.orders-workspace .orders-preferences__status-options { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 6px; padding: 0 2px 4px; }
+body .orders-workspace.orders-workspace .orders-preferences__status-choice { display: flex; align-items: center; justify-content: flex-start; gap: 7px; min-height: 40px; padding: 8px; border: 1px solid #e5e7ed; border-radius: 11px; background: #f8f9fb; color: #172033; font-size: 11px; font-weight: 750; line-height: 1.25; text-align: left; cursor: pointer; }
+body .orders-workspace.orders-workspace .orders-preferences__status-choice.is-selected { border-color: #ffbd8a; background: #fff3e9; color: #9a3412; }
+body .orders-workspace.orders-workspace .orders-preferences__status-check { display: grid; place-items: center; width: 17px; height: 17px; flex: 0 0 17px; border: 1px solid #cbd1da; border-radius: 5px; background: #fff; }
+body .orders-workspace.orders-workspace .orders-preferences__status-choice.is-selected .orders-preferences__status-check { background: #f97316; border-color: #f97316; color: #fff; }
+body .orders-workspace.orders-workspace .orders-preferences__status-check svg { display: block; width: 12px; height: 12px; stroke-width: 2.5; }
+html[data-theme="dark"] body .orders-workspace.orders-workspace .orders-preferences__status-choice { background: #222d3d; border-color: #384459; color: #e4eaf4; }
+html[data-theme="dark"] body .orders-workspace.orders-workspace .orders-preferences__status-choice.is-selected { background: #50301d; border-color: #9f602a; color: #ffd6b6; }
+html[data-theme="dark"] body .orders-workspace.orders-workspace .orders-preferences__status-check { background: #171f2d; border-color: #627088; }

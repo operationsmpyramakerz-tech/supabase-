@@ -55,5 +55,5 @@ test('Combined Preferences popover has Filter and Sort tabs with accessible cont
 });
 
 test('Route style links use cache-busted versions for production', () => {
-  assert.equal((shell.match(/orders-workspace-v337-summary-preferences/g) || []).length, 2);
+  assert.equal((shell.match(/orders-workspace-v381-status-filter/g) || []).length, 2);
 });

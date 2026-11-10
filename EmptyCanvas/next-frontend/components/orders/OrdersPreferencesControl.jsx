@@ -16,7 +16,7 @@ const SORT_OPTIONS = [
 export default function OrdersPreferencesControl({
   filterValue = "all", filterOptions = [], onFilterChange, onFilterOpen,
   loading = false, error = false, sortMode = "latest", onSortChange,
-  hasMore = false,
+  hasMore = false, statusOptions = [], statusValues = [], onStatusChange,
 }) {
   const [open, setOpen] = useState(false);
   const [section, setSection] = useState("filter");
@@ -25,7 +25,8 @@ export default function OrdersPreferencesControl({
   const panelId = useId();
   const tabPrefix = useId();
   const activeSort = SORT_OPTIONS.find(option => option.value === sortMode) || SORT_OPTIONS[0];
-  const activeFilter = filterValue !== "all";
+  const activeStatus = statusValues.length > 0;
+  const activeFilter = filterValue !== "all" || activeStatus;
   const preferencesChanged = activeFilter || sortMode !== "latest";
 
   useEffect(() => {
@@ -83,7 +84,7 @@ export default function OrdersPreferencesControl({
         ref={triggerRef}
         className="orders-preferences__trigger"
         type="button"
-        aria-label={`Filter and sort preferences${activeFilter ? ", order type selected" : ""}; sorting: ${activeSort.label}`}
+        aria-label={`Filter and sort preferences${activeFilter ? ", filters active" : ""}; sorting: ${activeSort.label}`}
         title="Filter & sort"
         aria-haspopup="dialog"
         aria-expanded={open}
@@ -94,7 +95,7 @@ export default function OrdersPreferencesControl({
         {preferencesChanged ? <span className="orders-preferences__active-dot" aria-hidden="true" /> : null}
       </button>
       {open ? (
-        <div id={panelId} className="orders-preferences__panel" role="dialog" aria-label="Order filter and sort preferences">
+        <div id={panelId} className={`orders-preferences__panel${statusOptions.length ? " orders-preferences__panel--statuses" : ""}`} role="dialog" aria-label="Order filter and sort preferences">
           <div className="orders-preferences__heading">
             <div>
               <strong>Preferences</strong>
@@ -114,6 +115,21 @@ export default function OrdersPreferencesControl({
           <div className="orders-preferences__content" id={`${tabPrefix}-body`} role="tabpanel" aria-labelledby={`${tabPrefix}-${section}`}>
             {section === "filter" ? (
               <>
+                {statusOptions.length > 0 && <>
+                  <div className="orders-preferences__section-title orders-preferences__status-heading">
+                    <b>Status {activeStatus ? <span className="orders-preferences__status-count">{statusValues.length}</span> : null}</b>
+                    {activeStatus && <button type="button" className="orders-preferences__status-clear" onClick={() => onStatusChange?.([])}>Clear</button>}
+                  </div>
+                  <div className="orders-preferences__status-options" role="group" aria-label="Filter by multiple statuses">
+                    {statusOptions.map(option => {
+                      const checked = statusValues.includes(option.key);
+                      return <button key={option.key} type="button" className={`orders-preferences__status-choice${checked ? " is-selected" : ""}`} aria-pressed={checked} onClick={() => onStatusChange?.(checked ? statusValues.filter(key => key !== option.key) : [...statusValues, option.key])}>
+                        <span className="orders-preferences__status-check">{checked && <ClassicOrderIcon name="check" />}</span>
+                        <span>{option.label}</span>
+                      </button>;
+                    })}
+                  </div>
+                </>}
                 <div className="orders-preferences__section-title"><b>Order type</b></div>
                 <div className="orders-preferences__options" aria-label={loading ? "Order type counts updating" : error ? "Order type counts unavailable" : "Order types"}>
                   {filterList.map(option => (

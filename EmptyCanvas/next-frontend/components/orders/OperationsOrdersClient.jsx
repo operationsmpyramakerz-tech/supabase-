@@ -2,6 +2,7 @@
 
 import { operationsArrivedItemVisible, operationsHasOutstandingQuantity, operationsMatchesTab } from "../../lib/operations-remaining-status.mjs";
 import { orderCardAllows } from "../../lib/order-data-scope.mjs";
+import { OPERATIONS_STATUS_OPTIONS, normalizeOperationsStatuses, operationsMatchesStatuses } from "../../lib/operations-status-filter.mjs";
 import { isPartiallyDeliveredOrder } from "../../lib/order-partial-delivery.mjs";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -734,6 +735,29 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
   const [listLoading, setListLoading] = useState(false);
   const [tab, setTab] = useState("all");
   const [type, setType] = useState("all");
+  const [statusFilters, setStatusFilters] = useState([]);
+  const statusKey = statusFilters.join(",");
+  function changeStatusFilters(values) {
+    const next = normalizeOperationsStatuses(values);
+    if (tab === "all" && next.join(",") === statusKey) return;
+    listAbortRef.current?.abort();
+    ++listRequestRef.current;
+    initialFilterKeyRef.current = "";
+    setListLoading(true);
+    setPageInfo(current => ({ ...current, hasMore: false, nextCursor: null }));
+    setStatusFilters(next);
+    setTab("all");
+  }
+  function changeTab(value) {
+    if (value === tab && !statusFilters.length) return;
+    listAbortRef.current?.abort();
+    ++listRequestRef.current;
+    initialFilterKeyRef.current = "";
+    setListLoading(true);
+    setPageInfo(current => ({ ...current, hasMore: false, nextCursor: null }));
+    setStatusFilters([]);
+    setTab(value);
+  }
   const [query, setQuery] = useState("");
   const completeTypes = useCompleteOrderTypeCounts({ endpoint: `${DIRECT_API_BASE}/orders/requested/paged-summary`, tab, query });
   const [sortMode, setSortMode] = useState("latest");
@@ -762,7 +786,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
   const openRequestRef = useRef(0);
   const listRequestRef = useRef(0);
   const listAbortRef = useRef(null);
-  const initialFilterKeyRef = useRef("all|all|");
+  const initialFilterKeyRef = useRef("all|all||");
   const { actionLoading, startActionLoading, finishActionLoading } = useActionLoading();
 
   // Warm the modal code after the list is interactive. Never request an
@@ -792,7 +816,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
   }, [tab, type, query]);
 
   useEffect(() => {
-    const key = `${tab}|${type}|${query.trim()}`;
+    const key = `${tab}|${type}|${query.trim()}|${statusKey}`;
     if (key === initialFilterKeyRef.current) return undefined;
     initialFilterKeyRef.current = key;
     const timer = window.setTimeout(() => {
@@ -802,7 +826,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
       });
     }, query.trim() ? 300 : 0);
     return () => window.clearTimeout(timer);
-  }, [tab, type, query]);
+  }, [tab, type, query, statusKey]);
 
   useEffect(() => {
     const close = (event) => {
@@ -825,12 +849,12 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
   }, [creatorState]);
 
   const groups = useMemo(() => buildGroups(orders), [orders]);
-  const tabGroups = useMemo(() => groupsForTab(groups, orders, tab), [groups, orders, tab]);
+  const tabGroups = useMemo(() => statusFilters.length ? groups.filter(group => operationsMatchesStatuses({ ...group, maintenance: isMaintenance(group.orderType) }, statusFilters)) : groupsForTab(groups, orders, tab), [groups, orders, tab, statusFilters]);
   const typeOptions = useMemo(() => {
     const full = completeTypes.counts?.options;
     const map = new Map();
     // While checking, expose all known types, including types not yet loaded.
-    if (!full) for (const raw of ["Request Maintenance", "Request Products", "Withdraw Products"]) {
+    if (!full || statusFilters.length) for (const raw of ["Request Maintenance", "Request Products", "Withdraw Products"]) {
       const key = orderTypeKey(raw);
       map.set(key, { key, raw, label: orderTypeMeta(raw).label, count: null });
     }
@@ -847,7 +871,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
       });
     }
     return [...map.values()].sort((a, b) => a.label.localeCompare(b.label));
-  }, [tabGroups, completeTypes.counts]);
+  }, [tabGroups, completeTypes.counts, statusFilters]);
 
   const visibleGroups = useMemo(() => {
     const needle = lower(query);
@@ -889,6 +913,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
         filterType: type,
         limit: String(pageInfo?.limit || 36),
       });
+      if (statusKey) params.set("statuses", statusKey);
       if (query.trim()) params.set("q", query.trim());
       if (!reset && pageInfo?.nextCursor !== null && pageInfo?.nextCursor !== undefined) params.set("cursor", String(pageInfo.nextCursor));
       if (fresh) params.set("_fresh", "1");
@@ -1020,7 +1045,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
     setSelected(null);
     setActionState(null);
     setActionError("");
-    setTab(nextTab);
+    if (nextTab !== tab) changeTab(nextTab);
     setNotice(message);
     window.setTimeout(() => setNotice(""), 3500);
 
@@ -1465,18 +1490,18 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
         <div className="orders-toolbar" aria-label="Operations orders tools">
           <div className="orders-toolbar__scroll">
             <div className="portfolio-tabs portfolio-tabs--iconic" role="tablist" aria-label="Operations Orders status">
-              {STATUS_TABS.map((item) => <button type="button" className={`tab-portfolio order-status-tab ${tab === item.key ? "active" : ""}`} onClick={() => setTab(item.key)} role="tab" aria-selected={tab === item.key} key={item.key}><span className="order-status-tab__icon"><ClassicOrderIcon name={item.icon}/></span><span className="order-status-tab__copy"><span className="order-status-tab__label">{item.label}</span></span></button>)}
+              {STATUS_TABS.map((item) => <button type="button" className={`tab-portfolio order-status-tab ${tab === item.key ? "active" : ""}`} onClick={() => changeTab(item.key)} role="tab" aria-selected={tab === item.key} key={item.key}><span className="order-status-tab__icon"><ClassicOrderIcon name={item.icon}/></span><span className="order-status-tab__copy"><span className="order-status-tab__label">{item.label}</span></span></button>)}
             </div>
           </div>
           <div className="orders-toolbar__divider" aria-hidden="true" />
-          <OrdersPreferencesControl sortMode={sortMode} onSortChange={setSortMode} hasMore={pageInfo?.hasMore} filterValue={type} onFilterChange={setType} onFilterOpen={completeTypes.refresh} loading={completeTypes.loading} error={completeTypes.error} filterOptions={typeOptions.map(option => { const meta = orderTypeMeta(option.raw || option.label); return { ...option, icon: meta.icon, bg: meta.bg, fg: meta.fg, bd: meta.bd }; })} />
+          <OrdersPreferencesControl statusOptions={OPERATIONS_STATUS_OPTIONS} statusValues={statusFilters} onStatusChange={changeStatusFilters} sortMode={sortMode} onSortChange={setSortMode} hasMore={pageInfo?.hasMore} filterValue={type} onFilterChange={setType} onFilterOpen={completeTypes.refresh} loading={completeTypes.loading} error={completeTypes.error} filterOptions={typeOptions.map(option => { const meta = orderTypeMeta(option.raw || option.label); return { ...option, icon: meta.icon, bg: meta.bg, fg: meta.fg, bd: meta.bd }; })} />
         </div>
       </div>
 
       <section className="operations-orders-list-surface" id="operations-orders-list">
         
         <div className="co-cards" id="requested-list">
-          {visibleGroups.length ? sortedVisibleGroups.map((group) => <OperationsOrderCard group={group} canOpen={permissions?.details !== false && orderCardAllows(scopePolicy, "details", group)} tab={tab} onOpen={openOrderDetails} onPrefetch={prefetchOrderDetails} onCreator={openCreatorProfile} key={group.key} />) : listLoading ? <div className="ops-no-data-state" role="status" aria-live="polite"><div className="ops-no-data-state__text">Loading orders…</div></div> : <OrdersEmptyState filtered={tab !== "all" || type !== "all" || !!query.trim()} context={"orders"} onReset={() => { setTab("all"); setType("all"); setQuery(""); }} />}
+          {visibleGroups.length ? sortedVisibleGroups.map((group) => <OperationsOrderCard group={group} canOpen={permissions?.details !== false && orderCardAllows(scopePolicy, "details", group)} tab={tab} onOpen={openOrderDetails} onPrefetch={prefetchOrderDetails} onCreator={openCreatorProfile} key={group.key} />) : listLoading ? <div className="ops-no-data-state" role="status" aria-live="polite"><div className="ops-no-data-state__text">Loading orders…</div></div> : <OrdersEmptyState filtered={tab !== "all" || type !== "all" || !!query.trim() || !!statusFilters.length} context={"orders"} onReset={() => { changeTab("all"); setType("all"); setQuery(""); }} />}
         </div>
         {pageInfo?.hasMore ? <div style={{ display: "flex", justifyContent: "center", padding: "16px 0 4px" }}><button type="button" className="ro-action-btn ro-action-btn--light" disabled={listLoading} onClick={() => fetchOrdersPage({ reset: false }).catch((error) => { setNotice(error?.message || "Failed to load more orders."); window.setTimeout(() => setNotice(""), 4000); })}>{listLoading ? "Loading…" : "Load more orders"}</button></div> : null}
       </section>
@@ -1485,7 +1510,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
       {(selected || actionState || deleteConfirm) ? (
         <OperationsOrdersHeavyModals
           selected={selected}
-          tab={tab}
+          tab={statusFilters.length && selected?.stage >= 5 ? "archive" : tab}
           busy={busy}
           onCloseOrder={closeOrderDetails}
           onAction={beginAction}
