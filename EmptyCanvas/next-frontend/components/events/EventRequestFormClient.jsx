@@ -5,6 +5,8 @@ import { navigateWithinApp } from "../../lib/client-navigation";
 import EventIcon from "./EventIcon";
 import { featureAllowed } from "../../lib/feature-permissions-registry";
 
+const EVENT_FORM_STEPS = ["Event Details", "Projects & Activities", "Logistics & Venue", "Review & Submit"];
+
 const STANDARD_EVENT_TYPES = [
   { code: "tech_day", label: "Tech Day", isCustom: false },
   { code: "seminar", label: "Seminar", isCustom: false },
@@ -321,7 +323,6 @@ function FormSection({ number: sectionNumber, icon, title, description = "", act
           <div className="next-event-form-section__title">
             <span className="events-section-icon next-event-form-section__icon"><EventIcon name={icon} /></span>
             <div className="next-event-form-section__copy">
-              <span className="next-event-section-kicker">Step <b>{String(sectionNumber).padStart(2, "0")}</b></span>
               <h2>{title}</h2>
               {description ? <p>{description}</p> : null}
             </div>
@@ -520,6 +521,8 @@ export default function EventRequestFormClient({
   const viewOnly = accessLevel === "view";
   const editingId = text(initialEvent?.id);
   const [form, setForm] = useState(() => initialForm(initialEvent, initialStartDate));
+  const [step, setStep] = useState(0);
+  const wizardHeadingRef = useRef(null);
   const [types, setTypes] = useState(() => normalizeTypes(initialTypes));
   const [components, setComponents] = useState(() => (Array.isArray(initialComponents) ? initialComponents : []).filter((item) => item?.isActive !== false));
   const [scheduledEvents, setScheduledEvents] = useState(() => Array.isArray(initialEvents) ? initialEvents : []);
@@ -735,18 +738,32 @@ export default function EventRequestFormClient({
     }
   }
 
-  function validate() {
-    if (!text(form.eventName) || !text(form.organizationName) || !text(form.eventStartDate) || !text(form.venueName) || !text(form.governorate) || !text(form.locationUrl)) {
-      return "Complete all required fields before submitting.";
+  function validateStep(index) {
+    if (index === 0) {
+      if (!text(form.eventName) || !text(form.organizationName) || !text(form.eventStartDate)) return "Enter the event name, organization and start date.";
+      if (!text(form.eventType)) return "Choose an event type.";
+      const start = new Date(form.eventStartDate);
+      const end = form.eventEndDate ? new Date(form.eventEndDate) : null;
+      if (Number.isNaN(start.getTime()) || (end && Number.isNaN(end.getTime()))) return "Enter valid event date and time values.";
+      if (end && end.getTime() < start.getTime()) return "End date and time cannot be before the start date and time.";
     }
-    if (!text(form.eventType)) return "Choose an event type.";
-    const start = new Date(form.eventStartDate);
-    const end = form.eventEndDate ? new Date(form.eventEndDate) : null;
-    if (Number.isNaN(start.getTime()) || (end && Number.isNaN(end.getTime()))) return "Enter valid event date and time values.";
-    if (end && end.getTime() < start.getTime()) return "End date and time cannot be before the start date and time.";
-    if (!isGoogleMapsUrl(form.locationUrl)) return "Google Maps / Location URL must be a valid Google Maps link.";
-    if (!selectedRate) return "Transport cost for the selected governorate or area is not configured.";
+    if (index === 2) {
+      if (!text(form.venueName) || !text(form.governorate) || !text(form.locationUrl)) return "Enter the venue name, governorate and Google Maps location.";
+      if (!isGoogleMapsUrl(form.locationUrl)) return "Google Maps / Location URL must be a valid Google Maps link.";
+      if (!selectedRate) return "Transport cost for the selected governorate or area is not configured.";
+    }
     return "";
+  }
+
+  function goToStep(index, message = "") {
+    if (submitting) return;
+    setStep(index);
+    setError(message);
+    // Scroll the actual app scroll container, not just the window.
+    requestAnimationFrame(() => {
+      wizardHeadingRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
+      wizardHeadingRef.current?.focus({ preventScroll: true });
+    });
   }
 
   function payload() {
@@ -809,10 +826,19 @@ export default function EventRequestFormClient({
 
   async function submit(event) {
     event.preventDefault();
+    if (submitting) return;
+    if (step < EVENT_FORM_STEPS.length - 1) {
+      const validationError = viewOnly ? "" : validateStep(step);
+      if (validationError) { setError(validationError); return; }
+      goToStep(step + 1);
+      return;
+    }
     if (viewOnly) return notify("info", "View access", "Your account can review this form but cannot submit changes.");
-    const validationError = validate();
-    setError(validationError);
-    if (validationError) return;
+    for (const index of [0, 2]) {
+      const validationError = validateStep(index);
+      if (validationError) { goToStep(index, validationError); return; }
+    }
+    setError("");
     setSubmitting(true);
     try {
       await requestJson("/next/api/events/mutations-direct", {
@@ -922,14 +948,27 @@ export default function EventRequestFormClient({
   }
 
   return (
-    <section className="events-shell events-shell--form next-event-form-page">
+    <section className="events-shell events-shell--form next-event-form-page event-wizard">
       <Toast toast={toast} onClose={() => setToast(null)} />
 
-      {bootstrapWarnings.length ? <div className="events-stage2k-notice next-event-form-warning">Some optional reference data could not be loaded. Refresh the catalogues before submitting if a list looks incomplete.</div> : null}
+      {bootstrapWarnings.length ? <div className="events-stage2k-notice next-event-form-warning">Some optional reference data could not be loaded. Refresh the catalogues before submitting if a list looks incomplete. <button type="button" className="event-wizard-refresh" disabled={refreshing || submitting} onClick={refreshReferenceData}>{refreshing ? "Refreshing…" : "Refresh catalogues"}</button></div> : null}
       {viewOnly ? <div className="events-stage2k-notice is-info next-event-form-warning">Your Event Requests access is View only. You can inspect the form, but submission and catalogue changes are disabled.</div> : null}
 
+      <header className="event-wizard-intro" ref={wizardHeadingRef} tabIndex={-1}>
+        <div className="event-wizard-intro-icon"><EventIcon name="calendar" /></div>
+        <div><h1>{editingId ? "Edit Event Request" : "Add New Event"}</h1><p>{editingId ? "Update your event details and resources." : "Create an event request for confirmation."}</p></div>
+        <a href="/next/events" className="event-wizard-back" aria-label="Back to Events"><EventIcon name="chevron-left" /> <span>Events</span></a>
+      </header>
+      <nav className="event-wizard-steps" aria-label="Event request progress">
+        {EVENT_FORM_STEPS.map((label, index) => (
+          <button key={label} type="button" className={`event-wizard-step${index === step ? " is-current" : index < step ? " is-done" : ""}`} aria-current={index === step ? "step" : undefined} disabled={index >= step || submitting} onClick={() => goToStep(index)}>
+            <span className="event-wizard-step-number">{index < step ? <EventIcon name="check" /> : index + 1}</span><span>{label}</span>
+          </button>
+        ))}
+      </nav>
       <form className="next-event-form" onSubmit={submit}>
-        <FormSection number="1" icon="clipboard" title="Event Overview" backHref="/next/events-calendar">
+        {step === 0 ? <>
+        <FormSection icon="clipboard" title="Basic Information">
           <div className="events-form-grid next-event-form-grid">
             <Field label="Event Name" required wide><input value={form.eventName} onChange={(event) => updateField("eventName", event.target.value)} maxLength={240} placeholder="Example: Green Valley School Tech Day 2026" disabled={viewOnly} /></Field>
             <Field label="Event Type" required>
@@ -965,14 +1004,24 @@ export default function EventRequestFormClient({
                 <span>i</span><div><strong>Schedule notice</strong><p>{conflicts.length} event{conflicts.length === 1 ? " is" : "s are"} already scheduled across the selected date range: {conflicts.slice(0, 3).map((item) => item.eventCode || item.eventName || "Untitled event").join(", ")}.</p></div>
               </div>
             ) : null}
+          </div>
+        </FormSection>
+        <FormSection icon="map-pin" title="Organization & Contacts">
+          <div className="events-form-grid next-event-form-grid">
             <Field label="School / Organization" required wide><input value={form.organizationName} onChange={(event) => updateField("organizationName", event.target.value)} maxLength={240} placeholder="Example: Green Valley International School" disabled={viewOnly} /></Field>
             <Field label="Contact Person"><input value={form.contactPerson} onChange={(event) => updateField("contactPerson", event.target.value)} maxLength={160} placeholder="Full name" disabled={viewOnly} /></Field>
             <Field label="Contact Phone"><input type="tel" value={form.contactPhone} onChange={(event) => updateField("contactPhone", event.target.value)} maxLength={80} placeholder="01xxxxxxxxx" disabled={viewOnly} /></Field>
             <Field label="Contact Email" wide><input type="email" value={form.contactEmail} onChange={(event) => updateField("contactEmail", event.target.value)} maxLength={200} placeholder="name@school.edu.eg" disabled={viewOnly} /></Field>
-            <Field label="Target Audience" wide><textarea value={form.audience} onChange={(event) => updateField("audience", event.target.value)} rows={4} maxLength={1000} placeholder="Grades, parents, teachers, and expected audience profile…" disabled={viewOnly} /></Field>
+          </div>
+        </FormSection>
+        <FormSection icon="user" title="Target Audience">
+          <div className="events-form-grid next-event-form-grid">
+            <Field label="Audience Profile" wide><textarea value={form.audience} onChange={(event) => updateField("audience", event.target.value)} rows={4} maxLength={1000} placeholder="Grades, parents, teachers, and expected audience profile…" disabled={viewOnly} /></Field>
           </div>
         </FormSection>
 
+        </> : null}
+        {step === 1 ? <>
         <FormSection number="2" icon="cpu" title="Projects" action={<button type="button" className="events-inline-add next-event-inline-add" onClick={addProject} disabled={viewOnly}><EventIcon name="plus-circle" /> Add Project</button>}>
           <div className="events-repeat-list next-event-repeat-list">
             {!projects.length ? <EmptyRows label="projects" /> : projects.map((item) => {
@@ -1005,6 +1054,8 @@ export default function EventRequestFormClient({
           onRemove={(key) => setMarketing((current) => current.filter((item) => item.key !== key))}
         />
 
+        </> : null}
+        {step === 2 ? <>
         <ComponentSection
           number="4"
           icon="tool"
@@ -1041,16 +1092,45 @@ export default function EventRequestFormClient({
           </div>
         </FormSection>
 
+        </> : null}
+        {step === 3 ? <>
+        <div className="event-wizard-review-notice"><EventIcon name="clipboard" /><div><strong>{editingId ? "Review your changes" : "Ready for confirmation"}</strong><p>{editingId ? "Check the event details before saving." : "After submission, the event will appear in the agenda as Pending Confirmation."}</p></div></div>
+        <ReviewSection title="Event Details" icon="calendar" onEdit={() => goToStep(0)} disabled={submitting}>
+          <ReviewFields items={[
+            ["Event Name", form.eventName], ["Event Type", types.find(item => item.code === form.eventType)?.label || form.eventType],
+            ["Start Date & Time", reviewDate(form.eventStartDate)], ["End Date & Time", reviewDate(form.eventEndDate)],
+            ["Expected Attendees", form.expectedAttendees], ["School / Organization", form.organizationName],
+            ["Contact Person", form.contactPerson], ["Contact Phone", form.contactPhone], ["Contact Email", form.contactEmail], ["Target Audience", form.audience],
+          ]} />
+          {conflicts.length ? <div className="event-wizard-review-conflict">Schedule notice: {conflicts.length} event(s) overlap the selected date range.</div> : null}
+        </ReviewSection>
+        <ReviewSection title="Projects & Activities" icon="cpu" onEdit={() => goToStep(1)} disabled={submitting}>
+          <ReviewItems title="Projects" rows={projects} components={components} project />
+          <ReviewItems title="Marketing Materials" rows={marketing} components={components} />
+        </ReviewSection>
+        <ReviewSection title="Logistics & Venue" icon="map-pin" onEdit={() => goToStep(2)} disabled={submitting}>
+          <ReviewFields items={[
+            ["Venue Name", form.venueName], ["Venue Type", form.venueType], ["Governorate / Area", form.governorate],
+            ["Google Maps / Location URL", form.locationUrl], ["Venue Setup Time", reviewDate(form.venueSetupTime)],
+            ["Electricity", form.requiresPower ? "Required" : "Not required"], ["Internet", form.requiresInternet ? "Required" : "Not required"], ["Sound System", form.requiresSoundSystem ? "Required" : "Not required"], ["Venue Notes", form.venueNotes],
+          ]} />
+          <ReviewItems title="Venue Requirements" rows={venueRequirements} components={components} />
+        </ReviewSection>
         <section className="events-cost-summary next-event-cost-summary" aria-label="Event cost summary">
           <article><small>Working Cost</small><strong>{money(workingCost)}</strong><span>Projects, marketing materials, and venue requirements</span></article>
           <article><small>Transport Cost</small><strong>{money(transportCost)}</strong><span>{selectedRate ? `${money(selectedRate.transportCost)} × 2 · ${selectedRate.areaName}` : "Select a governorate to calculate transport"}</span></article>
           <article className="events-cost-summary__total is-total"><small>Total Cost</small><strong>{money(totalCost)}</strong><span>Working cost + round-trip transport</span></article>
         </section>
 
+        </> : null}
         {error ? <div className="events-form-error next-event-form-error" role="alert">{error}</div> : null}
-        <footer className="events-form-submit next-event-form-submit">
-          <a href="/next/events" className="events-secondary-btn secondary-button">Cancel</a>
-          <button type="submit" className="events-primary-btn primary-button" disabled={submitting || viewOnly}>{submitting ? (editingId ? "Updating…" : "Submitting…") : (editingId ? "Update Event Request" : "Submit Event Request")}</button>
+        <footer className="event-wizard-actions">
+          <a href="/next/events" className="event-wizard-cancel">Cancel</a>
+          <span className="event-wizard-step-count">Step {step + 1} of {EVENT_FORM_STEPS.length}</span>
+          <div className="event-wizard-action-buttons">
+            <button type="button" className="event-wizard-previous" disabled={step === 0 || submitting} onClick={() => goToStep(step - 1)}><EventIcon name="chevron-left" /> Previous</button>
+            <button type="submit" className="event-wizard-next" disabled={submitting || (viewOnly && step === 3)}>{step < 3 ? <>Next <EventIcon name="chevron-right" /></> : submitting ? (editingId ? "Updating…" : "Submitting…") : (editingId ? "Update Event" : "Submit Event")}</button>
+          </div>
         </footer>
       </form>
 
@@ -1097,6 +1177,26 @@ export default function EventRequestFormClient({
       ) : null}
     </section>
   );
+}
+
+function reviewDate(value) {
+  const date = value ? new Date(value) : null;
+  return date && !Number.isNaN(date.getTime()) ? date.toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" }) : "";
+}
+
+function ReviewSection({ title, icon, onEdit, disabled, children }) {
+  return <FormSection title={title} icon={icon} action={<button type="button" className="events-inline-add next-event-inline-add" onClick={onEdit} disabled={disabled}><EventIcon name="edit-3" /> Edit</button>}><div className="event-wizard-review-body">{children}</div></FormSection>;
+}
+
+function ReviewFields({ items }) {
+  return <dl className="event-wizard-review-grid">{items.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{text(value) || "—"}</dd></div>)}</dl>;
+}
+
+function ReviewItems({ title, rows, components, project = false }) {
+  return <div className="event-wizard-review-items"><h3>{title} <span>({rows.length})</span></h3>{rows.length ? rows.map(item => {
+    const component = components.find(entry => text(entry.id) === text(item.componentId));
+    return <article key={item.key}><div><strong>{component?.name || "Unavailable component"}</strong><small>Qty: {number(item.quantity)}{text(project ? item.description : item.notes) ? ` · ${text(project ? item.description : item.notes)}` : ""}</small></div><b>{money(project ? item.workingCost : componentTotal(component, item.quantity))}</b></article>;
+  }) : <p>No items added.</p>}</div>;
 }
 
 function ComponentSection({ number: sectionNumber, icon, title, description, kind, rows, source, allComponents, viewOnly, onAdd, onSelect, onUpdate, onRemove }) {
