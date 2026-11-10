@@ -4528,3 +4528,40 @@ html[data-theme="dark"] .pr-sc-confirm.pr-sc-confirm-upload span {color: #e9edf3
   .pr-root .pr-sc-dialog .pr-sc-cancel,
   .pr-root .pr-sc-dialog .pr-sc-submit {width: 100%;}
 }
+
+/* v378 — refined Close Stage upload actions */
+.pr-sc-dialog .pr-sc-upload-head {padding-top:22px;padding-bottom:22px;align-items:center;}
+.pr-sc-dialog .pr-sc-upload-title-wrap {flex:1;min-width:0;gap:12px;}
+.pr-sc-dialog .pr-sc-upload-title-wrap h2 {margin:0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.pr-sc-header-upload-icon {display:grid;place-items:center;flex:none;width:44px;height:44px;border-radius:13px;background:#fff;color:#111;border:1px solid #e4e7eb;}
+.pr-root .pr-sc-dialog .pr-sc-upload-box {border-color:#3b82f6;}
+.pr-root .pr-sc-dialog .pr-sc-upload-box:hover,
+.pr-root .pr-sc-dialog .pr-sc-upload-box.is-dragging {border-color:#2563eb;background:#f5f9ff;}
+.pr-root .pr-sc-dialog .pr-sc-upload-box:focus-within {outline:2px solid #2563eb;outline-offset:3px;}
+.pr-root .pr-sc-dialog .pr-sc-upload-actions {flex-direction:row;align-items:center;justify-content:flex-end;gap:8px;}
+.pr-root .pr-sc-dialog .pr-sc-upload-action.pr-sc-open-file,
+.pr-root .pr-sc-dialog .pr-sc-upload-action.pr-sc-delete-file {display:inline-flex;align-items:center;justify-content:center;flex:none;box-sizing:border-box;height:42px;min-height:42px;padding:0;line-height:1;box-shadow:none;}
+.pr-root .pr-sc-dialog .pr-sc-upload-action.pr-sc-open-file {width:auto;min-width:0;padding:0 14px;gap:7px;border-radius:12px;background:#f3f4f6;color:#171717;border:1px solid #e5e7eb;font-size:13px;font-weight:700;white-space:nowrap;}
+.pr-root .pr-sc-dialog .pr-sc-upload-action.pr-sc-delete-file {width:42px;min-width:42px;border-radius:50%;background:#fff0f0;color:#c92232;border:1px solid #f8d8dc;}
+.pr-root .pr-sc-dialog .pr-sc-upload-action svg,.pr-root .pr-sc-dialog .pr-sc-remove-all svg {display:block;flex:none;margin:0;}
+.pr-root .pr-sc-dialog .pr-sc-upload-action.pr-sc-delete-file:hover {background:#ffe0e3;border-color:#efb1ba;}
+.pr-root .pr-sc-dialog .pr-sc-upload-action.pr-sc-open-file:hover {background:#e5e7eb;}
+.pr-root .pr-sc-dialog .pr-sc-remove-all {display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:48px;padding:10px 16px;border:1px solid #dc2626;border-radius:14px;background:#dc2626;color:#fff;font-size:15px;font-weight:700;box-shadow:none;}
+.pr-root .pr-sc-dialog .pr-sc-remove-all:hover:not(:disabled) {background:#b91c1c;border-color:#b91c1c;}
+.pr-sc-full-preview {display:grid;place-items:center;min-height:160px;background:#f5f6f8;border:1px solid var(--sc-border);border-radius:16px;padding:12px;}
+.pr-sc-full-preview img {display:block;max-width:100%;max-height:60dvh;width:auto;height:auto;object-fit:contain;}
+html[data-theme="dark"] .pr-root .pr-sc-dialog .pr-sc-upload-box {border-color:#60a5fa;}
+html[data-theme="dark"] .pr-root .pr-sc-dialog .pr-sc-upload-box:hover,
+html[data-theme="dark"] .pr-root .pr-sc-dialog .pr-sc-upload-box.is-dragging {background:#202c40;border-color:#93c5fd;}
+html[data-theme="dark"] .pr-root .pr-sc-dialog .pr-sc-upload-action.pr-sc-open-file {background:#303744;color:#f4f6fb;border-color:#414b5b;}
+html[data-theme="dark"] .pr-root .pr-sc-dialog .pr-sc-upload-action.pr-sc-delete-file {background:#402329;color:#ff9da7;border-color:#70333b;}
+html[data-theme="dark"] .pr-sc-full-preview {background:#222833;}
+@media(max-width:700px){
+  .pr-sc-dialog .pr-sc-upload-head {padding-top:16px;padding-bottom:16px;}
+  .pr-sc-header-upload-icon {width:38px;height:38px;border-radius:11px;}
+  .pr-sc-dialog .pr-sc-upload-item {align-items:center;gap:9px;padding:12px;}
+  .pr-sc-dialog .pr-sc-upload-fileinfo {gap:8px;}
+  .pr-sc-dialog .pr-sc-upload-fileicon {width:36px;height:36px;}
+  .pr-root .pr-sc-dialog .pr-sc-upload-action.pr-sc-open-file {height:38px;min-height:38px;padding:0 9px;gap:4px;}
+  .pr-root .pr-sc-dialog .pr-sc-upload-action.pr-sc-delete-file {width:38px;min-width:38px;height:38px;min-height:38px;}
+}

@@ -1,14 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from 'react';
 
-const STAGE_NAMES = {
-  testing: 'Project Testing',
-  warehouse: 'Warehouse Receiving',
-  production: 'Production Receiving',
-  boxes: 'Box Distribution',
-  cartons: 'Project Kit Cartons',
-};
-
 function Icon({ name, size = 22 }) {
   const paths = {
     file: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M8 13h8M8 17h5"/></>,
@@ -92,6 +84,7 @@ export default function ProjectStageClosure({ projectId, stage, allowed, onClose
   const [confirmed, setConfirmed] = useState(false);
   const [retry, setRetry] = useState(0);
   const [dragging, setDragging] = useState(false);
+  const [previewFile, setPreviewFile] = useState(null);
   const dialog = useRef(null);
   const mounted = useRef(true);
   const inFlight = useRef(false);
@@ -104,6 +97,7 @@ export default function ProjectStageClosure({ projectId, stage, allowed, onClose
   }, [open, loading, loadFailed]);
 
   function dismiss() {
+    if (previewFile) { setPreviewFile(null); return; }
     if (busy || preparing) return;
     setOpen(false);
     setDragging(false);
@@ -240,24 +234,23 @@ export default function ProjectStageClosure({ projectId, stage, allowed, onClose
 
       <dialog ref={dialog}
         className="pr-sc-dialog"
-        aria-label={record ? 'Signed documents' : 'Close stage'}
+        aria-label={previewFile ? 'Image preview' : record ? 'Signed documents' : 'Close stage'}
         onCancel={(e) => { e.preventDefault(); dismiss(); }}
         onClick={(e) => { if (e.target === e.currentTarget) dismiss(); }}
       >
         <div className="pr-sc-modal-shell">
           <header className="pr-sc-modal-head pr-sc-upload-head">
             <div className="pr-sc-modal-heading pr-sc-upload-title-wrap">
-              <div>
-                {!record && <h2>Upload Files</h2>}
-                {!!record && <h2>Uploaded Files</h2>}
-                <p className="pr-sc-subtitle">{STAGE_NAMES[stage] || 'Project stage'}{record ? ' · Stage closed' : ' · Close Stage'}</p>
-              </div>
+              <span className="pr-sc-header-upload-icon"><Icon name={previewFile ? 'eye' : 'upload'} size={24} /></span>
+              <h2 title={previewFile?.name}>{previewFile ? previewFile.name : record ? 'Uploaded Files' : 'Upload Files'}</h2>
             </div>
             <button type="button" className="pr-sc-icon-button" onClick={dismiss} disabled={busy || preparing} aria-label="Close dialog"><Icon name="close" size={20} /></button>
           </header>
 
           <div className="pr-sc-modal-body pr-sc-upload-body">
-            {!record && allowed ? (
+            {previewFile ? (
+              <div className="pr-sc-full-preview"><Preview file={previewFile} /></div>
+            ) : !record && allowed ? (
               <>
                 <div className="pr-sc-upload-card">
                   <label
@@ -286,14 +279,14 @@ export default function ProjectStageClosure({ projectId, stage, allowed, onClose
                               </div>
                             </div>
                             <div className="pr-sc-upload-actions">
-                              <div className="pr-sc-upload-thumb"><Preview file={f} /></div>
-                              <button type="button" className="pr-sc-upload-action" aria-label={`Remove ${f.name}`} disabled={busy || preparing} onClick={() => { setFiles((v) => v.filter((_, index) => index !== i)); setConfirmed(false); }}><Icon name="trash" size={16} /></button>
+                              <button type="button" className="pr-sc-upload-action pr-sc-open-file" aria-label={`Open ${f.name}`} disabled={busy || preparing} onClick={() => setPreviewFile(f)}><Icon name="eye" size={17} /> <span>Open</span></button>
+                              <button type="button" className="pr-sc-upload-action pr-sc-delete-file" aria-label={`Remove ${f.name}`} disabled={busy || preparing} onClick={() => { setFiles((v) => v.filter((_, index) => index !== i)); setConfirmed(false); }}><Icon name="trash" size={19} /></button>
                             </div>
                           </article>
                         ))}
                       </div>
 
-                      <button type="button" className="pr-sc-remove-all" disabled={busy || preparing} onClick={() => { setFiles([]); setConfirmed(false); }}>Remove all selected files</button>
+                      <button type="button" className="pr-sc-remove-all" disabled={busy || preparing} onClick={() => { setFiles([]); setConfirmed(false); }}><Icon name="trash" size={17} /> <span>Remove all selected files</span></button>
                     </>
                   )}
                 </div>
@@ -338,8 +331,8 @@ export default function ProjectStageClosure({ projectId, stage, allowed, onClose
           </div>
 
           <footer className="pr-sc-modal-footer pr-sc-upload-footer">
-            <button type="button" className="pr-sc-cancel" disabled={busy || preparing} onClick={dismiss}>{record ? 'Done' : 'Cancel'}</button>
-            {!record && allowed && <button type="button" className="pr-sc-submit" disabled={!files.length || !confirmed || busy || preparing} onClick={closeStage}><Icon name="lock" size={16} />{busy ? 'Closing…' : 'Confirm & Close Stage'}</button>}
+            <button type="button" className="pr-sc-cancel" disabled={busy || preparing} onClick={dismiss}>{previewFile ? 'Back to files' : record ? 'Done' : 'Cancel'}</button>
+            {!previewFile && !record && allowed && <button type="button" className="pr-sc-submit" disabled={!files.length || !confirmed || busy || preparing} onClick={closeStage}><Icon name="lock" size={16} />{busy ? 'Closing…' : 'Confirm & Close Stage'}</button>}
           </footer>
         </div>
       </dialog>
