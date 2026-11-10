@@ -1,17 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { navigateWithinApp } from "../../lib/client-navigation";
 import EventIcon from "./EventIcon";
+import { AuthorizationModal, ConfirmationModal } from "./EventsDialogs";
 import { featureAllowed } from "../../lib/feature-permissions-registry";
 import { eventRequestScopeFor } from "../../lib/event-request-scope.mjs";
+import { eventConfirmation, eventConfirmationLabel } from "../../lib/event-confirmation.mjs";
 
 const STATUS_LABELS = {
-  submitted: "Submitted",
-  under_review: "Under review",
-  approved: "Approved",
-  in_progress: "In progress",
-  completed: "Done",
+  submitted: "Pending Confirmation",
+  under_review: "Pending Confirmation",
+  approved: "Pending Confirmation",
+  in_progress: "Confirmed",
+  completed: "Confirmed",
   cancelled: "Cancelled",
 };
 
@@ -99,10 +101,6 @@ function typeLabel(event) {
   return TYPE_LABELS[key] || key.replace(/^custom_/, "").replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-function typeClass(event) {
-  return (lower(event?.eventType) || "other").replace(/[^a-z0-9_-]/g, "") || "other";
-}
-
 function normalizeStatus(value) {
   const status = lower(value).replace(/[\s-]+/g, "_");
   return STATUS_LABELS[status] ? status : "submitted";
@@ -124,9 +122,9 @@ function safeUrl(value) {
   }
 }
 
-async function requestJson(url) {
-  const response = await fetch(url, { credentials: "include", cache: "no-store" });
-  if (response.status === 401) {
+async function requestJson(url, options = {}) {
+  const response = await fetch(url, { credentials: "include", cache: "no-store", ...options, headers: { ...(options.body ? { "Content-Type": "application/json" } : {}), ...options.headers } });
+  if (response.status === 401 && !options.body) {
     window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`;
     throw new Error("Your session has expired.");
   }
@@ -136,8 +134,8 @@ async function requestJson(url) {
 }
 
 function StatusPill({ status }) {
-  const key = normalizeStatus(status);
-  return <span className={`events-status events-status--${key} next-events-status next-events-status--${key}`}>{STATUS_LABELS[key]}</span>;
+  const key = eventConfirmation(status);
+  return <span className={`agenda-status agenda-status--${key}`}><EventIcon name={key === "confirmed" ? "check-circle" : key === "cancelled" ? "x-circle" : "clock"} />{eventConfirmationLabel(status)}</span>;
 }
 
 function DetailItem({ label, value }) {
@@ -165,7 +163,7 @@ function DetailList({ items, empty }) {
   );
 }
 
-function DetailsModal({ event, canOpenRequests, canExport = true, onClose }) {
+function DetailsModal({ event, canOpenRequests, canExport = true, canConfirm, onConfirmEvent, onClose }) {
   useEffect(() => {
     if (!event) return undefined;
     const onKey = (keyEvent) => { if (keyEvent.key === "Escape") onClose(); };
@@ -247,7 +245,8 @@ function DetailsModal({ event, canOpenRequests, canExport = true, onClose }) {
         <footer className="events-modal__actions next-events-modal-actions">
           <div>
             {canExport ? <a className="events-secondary-btn secondary-button" href={`/next/api/events/pdf-direct?id=${encodeURIComponent(event.id)}`} target="_blank" rel="noreferrer">Download PDF</a> : null}
-            {canOpenRequests ? <a className="events-secondary-btn secondary-button" href="/next/events">Open Event Requests</a> : null}
+            {canOpenRequests && !event.isArchived ? <a className="events-secondary-btn secondary-button" href={`/next/events?event=${encodeURIComponent(event.id)}`}>Open Event Request</a> : null}
+            {canConfirm && !event.isArchived && eventConfirmation(event.status) === "pending" ? <button type="button" className="agenda-confirm-button" onClick={onConfirmEvent}>Confirm Event</button> : null}
           </div>
           <button type="button" className="events-primary-btn primary-button" onClick={onClose}>Close</button>
         </footer>
@@ -256,333 +255,135 @@ function DetailsModal({ event, canOpenRequests, canExport = true, onClose }) {
   );
 }
 
-export default function EventsCalendarClient({ account, initialEvents = [], bootstrapWarnings = [] }) {
+export default function EventsCalendarClient({ account, initialEvents = [], canMutateRequests = false }) {
   const access = useMemo(() => allowedSet(account), [account]);
-  const canCreate = access.has("event requests") && featureAllowed(account, "events.requests.view") && featureAllowed(account, "events.requests.create");
+  const canCreate = canMutateRequests && access.has("event requests") && featureAllowed(account, "events.requests.view") && featureAllowed(account, "events.requests.create");
   const canOpenRequests = access.has("event requests") && featureAllowed(account, "events.requests.view")
     && !["own", "team", "none"].includes(eventRequestScopeFor(account, "events.requests.view"));
   const canExport = canOpenRequests && featureAllowed(account, "events.requests.pdf")
     && !["own", "team", "none"].includes(eventRequestScopeFor(account, "events.requests.pdf"));
-  const [events, setEvents] = useState(Array.isArray(initialEvents) ? initialEvents : []);
+  const canConfirm = canMutateRequests && canOpenRequests && featureAllowed(account, "events.requests.workflow")
+    && !["own", "team", "none"].includes(eventRequestScopeFor(account, "events.requests.workflow"));
+  const [events, setEvents] = useState(initialEvents);
+  const [authorization, setAuthorization] = useState(null);
+  const [confirmation, setConfirmation] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState("");
   const [month, setMonth] = useState(() => startOfMonth(new Date()));
   const [selectedKey, setSelectedKey] = useState(() => dateKey(new Date()));
   const [activeList, setActiveList] = useState("upcoming");
+  const [filter, setFilter] = useState("all");
+  const [search, setSearch] = useState("");
   const [activeEvent, setActiveEvent] = useState(null);
-
-  const selectedDate = useMemo(() => localDay(selectedKey) || startOfDay(new Date()), [selectedKey]);
+  const detailRequest = useRef(0);
   const today = useMemo(() => startOfDay(new Date()), []);
-
-  const datedEvents = useMemo(() => events.filter((event) => startDate(event)), [events]);
-  const eventsForDate = (day) => datedEvents.filter((event) => eventOnDate(event, day));
-
+  const selectedDate = useMemo(() => localDay(selectedKey) || today, [selectedKey, today]);
+  const scheduled = useMemo(() => events.filter(event => !event.isArchived && eventConfirmation(event.status) !== "cancelled"), [events]);
+  const archived = useMemo(() => events.filter(event => event.isArchived), [events]);
+  const upcoming = useMemo(() => scheduled.filter(event => endDate(event) && endDate(event) >= today).sort((a,b) => startDate(a) - startDate(b)), [scheduled,today]);
+  const past = useMemo(() => events.filter(event => !event.isArchived && (eventConfirmation(event.status) === "cancelled" || (endDate(event) && endDate(event) < today))).sort((a,b) => (startDate(b)?.getTime() || 0) - (startDate(a)?.getTime() || 0)), [events,today]);
   const calendarDays = useMemo(() => {
-    const first = new Date(month.getFullYear(), month.getMonth(), 1);
-    const mondayOffset = (first.getDay() + 6) % 7;
-    const gridStart = new Date(first);
-    gridStart.setDate(first.getDate() - mondayOffset);
-    return Array.from({ length: 42 }, (_, index) => {
-      const day = new Date(gridStart);
-      day.setDate(gridStart.getDate() + index);
-      return day;
-    });
+    const first = startOfMonth(month);
+    first.setDate(1 - (first.getDay() + 6) % 7);
+    return Array.from({ length: 42 }, (_, index) => { const day = new Date(first); day.setDate(first.getDate() + index); return day; });
   }, [month]);
-
-  const upcoming = useMemo(() => datedEvents
-    .filter((event) => {
-      const end = endDate(event);
-      return end && end >= selectedDate && normalizeStatus(event.status) !== "cancelled";
-    })
-    .sort((a, b) => (startDate(a)?.getTime() || Infinity) - (startDate(b)?.getTime() || Infinity)), [datedEvents, selectedDate]);
-
-  const past = useMemo(() => datedEvents
-    .filter((event) => endDate(event) && endDate(event) < today)
-    .sort((a, b) => (startDate(b)?.getTime() || -Infinity) - (startDate(a)?.getTime() || -Infinity)), [datedEvents, today]);
-
-  const selectedDayEvents = useMemo(() => eventsForDate(selectedDate), [datedEvents, selectedKey]);
-  const mobileScheduledDayEvents = useMemo(() => selectedDayEvents
-    .filter((event) => normalizeStatus(event.status) !== "cancelled")
-    .sort((a, b) => (startDate(a)?.getTime() || Infinity) - (startDate(b)?.getTime() || Infinity)), [selectedDayEvents]);
-
-  const mobileUpcoming = useMemo(() => datedEvents
-    .filter((event) => {
-      const end = endDate(event);
-      return end && end >= today && normalizeStatus(event.status) !== "cancelled";
-    })
-    .sort((a, b) => (startDate(a)?.getTime() || Infinity) - (startDate(b)?.getTime() || Infinity)), [datedEvents, today]);
-
-  const mobilePast = useMemo(() => datedEvents
-    .filter((event) => {
-      const end = endDate(event);
-      return end && end < today && normalizeStatus(event.status) !== "cancelled";
-    })
-    .sort((a, b) => (startDate(b)?.getTime() || -Infinity) - (startDate(a)?.getTime() || -Infinity)), [datedEvents, today]);
-
-  const currentMonthEvents = useMemo(() => {
-    const currentMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-    const nextMonthStart = new Date(today.getFullYear(), today.getMonth() + 1, 1);
-    return datedEvents.filter((event) => {
-      if (normalizeStatus(event.status) === "cancelled") return false;
-      const start = startDate(event);
-      const end = endDate(event);
-      return Boolean(start && end && end >= currentMonthStart && start < nextMonthStart);
-    });
-  }, [datedEvents, today]);
-
-  const mobileWeekDays = useMemo(() => {
-    const offset = (selectedDate.getDay() + 6) % 7;
-    const first = new Date(selectedDate);
-    first.setDate(selectedDate.getDate() - offset);
-    return Array.from({ length: 7 }, (_, index) => {
-      const day = new Date(first);
-      day.setDate(first.getDate() + index);
-      return day;
-    });
-  }, [selectedKey]);
-
-  const list = activeList === "past" ? past : upcoming;
+  const stats = [
+    { key: "all", label: "Total Events", count: events.length, icon: "calendar" },
+    { key: "pending", label: "Pending Confirmation", count: scheduled.filter(event => eventConfirmation(event.status) === "pending").length, icon: "clock" },
+    { key: "confirmed", label: "Confirmed", count: scheduled.filter(event => eventConfirmation(event.status) === "confirmed").length, icon: "check-circle" },
+    { key: "archived", label: "Archived", count: archived.length, icon: "archive" },
+  ];
+  const lists = { upcoming, past, archived };
+  const list = (lists[activeList] || []).filter(event => {
+    if (filter !== "all" && eventConfirmation(event.status) !== filter) return false;
+    if (activeList === "upcoming" && endDate(event) < selectedDate) return false;
+    return [event.eventName,event.eventCode,event.organizationName,event.venueName,event.governorate,typeLabel(event)].map(lower).join(" ").includes(lower(search));
+  });
   function selectDate(day) {
     setSelectedKey(dateKey(day));
-    if (day.getFullYear() !== month.getFullYear() || day.getMonth() !== month.getMonth()) {
-      setMonth(startOfMonth(day));
-    }
+    setMonth(startOfMonth(day));
+    setActiveList(day < today ? "past" : "upcoming");
   }
-
+  function shiftMonth(direction) {
+    setMonth(current => new Date(current.getFullYear(),current.getMonth()+direction,1));
+  }
   async function openEventDetails(event) {
     if (!event?.id) return;
+    const requestId = ++detailRequest.current;
     setActiveEvent(event);
     try {
       const body = await requestJson(`/next/api/events/${encodeURIComponent(event.id)}?${canOpenRequests ? "" : "view=calendar&"}_ts=${Date.now()}`);
-      if (body?.event) setActiveEvent(body.event);
-    } catch {
-      // Keep the compact summary visible if the detail request is temporarily
-      // unavailable. The list/calendar itself must remain usable.
-    }
+      if (body?.event && detailRequest.current === requestId) setActiveEvent(body.event);
+    } catch { /* Keep the permitted summary visible. */ }
   }
-
   function openNewEvent() {
-    const overlapping = selectedDayEvents.filter((event) => normalizeStatus(event.status) !== "cancelled");
     const params = new URLSearchParams({ startDate: selectedKey });
-    const codes = Array.from(new Set(overlapping.map((event) => text(event.eventCode)).filter(Boolean)));
+    const codes = [...new Set(scheduled.filter(event => eventOnDate(event,selectedDate)).map(event => text(event.eventCode)).filter(Boolean))];
     if (codes.length) params.set("conflictCodes", codes.join(","));
     navigateWithinApp(`/next/events/new?${params.toString()}`);
   }
-
-  function shiftSelectedWeek(direction) {
-    const next = new Date(selectedDate);
-    next.setDate(selectedDate.getDate() + (direction * 7));
-    selectDate(next);
+  function beginConfirmation() {
+    if (!activeEvent || !canConfirm) return;
+    setActionError("");
+    setAuthorization({ title: "Confirm Event", eventId: activeEvent.id, password: "" });
   }
-
+  async function authorizeConfirmation(e) {
+    e.preventDefault();
+    if (!authorization || busy) return;
+    setBusy(true); setActionError("");
+    try {
+      const verified = await requestJson("/next/api/events/admin/verify", { method: "POST", body: JSON.stringify({ intent: "request_workflow", targetStatus: "in_progress", eventId: authorization.eventId, password: authorization.password }) });
+      setConfirmation({ eventId: authorization.eventId, token: verified.authorizationToken, title: "Confirm event?", message: "The event will move from Pending Confirmation to Confirmed.", label: "Confirm Event" });
+      setAuthorization(null);
+    } catch (error) { setActionError(error.message); }
+    finally { setBusy(false); }
+  }
+  async function confirmEvent() {
+    if (!confirmation || busy) return;
+    setBusy(true); setActionError("");
+    try {
+      const body = await requestJson("/next/api/events/mutations-direct", { method: "POST", body: JSON.stringify({ action: "workflow-transition", eventId: confirmation.eventId, targetStatus: "in_progress", authorizationToken: confirmation.token }) });
+      if (!body.event?.id) throw new Error("The event could not be refreshed.");
+      detailRequest.current++;
+      setEvents(current => current.map(event => event.id === body.event.id ? { ...event, status: body.event.status } : event));
+      setActiveEvent(body.event); setConfirmation(null);
+    } catch (error) { setActionError(error.message); setConfirmation(null); }
+    finally { setBusy(false); }
+  }
   return (
-    <section className="events-shell events-calendar-shell">
-      <section className="events-calendar-workspace" aria-label="Event calendar">
-        <section className="events-calendar-mobile-view" aria-label="Mobile event schedule">
-          {canCreate ? (
-            <button type="button" className="events-mobile-add-card" onClick={openNewEvent} aria-label="Add new event">
-              <span className="events-mobile-add-card__copy">
-                <strong>Add new</strong>
-                <small>Create a new event</small>
-              </span>
-              <span className="events-mobile-add-card__plus"><EventIcon name="plus-circle" /></span>
-            </button>
-          ) : null}
-
-          <section className="events-mobile-week-card" aria-label="Weekly event calendar">
-            <div className="events-mobile-week-toolbar">
-              <button type="button" onClick={() => shiftSelectedWeek(-1)} aria-label="Previous week"><EventIcon name="chevron-left" /></button>
-              <button type="button" className="events-mobile-week-month" onClick={() => selectDate(new Date())}>
-                <strong>{selectedDate.toLocaleDateString("en-GB", { month: "long" })}</strong>
-                <span>{selectedDate.getFullYear()} · Today</span>
-              </button>
-              <button type="button" onClick={() => shiftSelectedWeek(1)} aria-label="Next week"><EventIcon name="chevron-right" /></button>
-            </div>
-
-            <div className="events-mobile-week-strip">
-              {mobileWeekDays.map((day) => {
-                const selected = dateKey(day) === selectedKey;
-                const current = sameDay(day, today);
-                const scheduled = eventsForDate(day).filter((event) => normalizeStatus(event.status) !== "cancelled");
-                return (
-                  <button
-                    type="button"
-                    key={dateKey(day)}
-                    className={`events-mobile-week-day${selected ? " is-selected" : ""}${current ? " is-today" : ""}${scheduled.length ? " has-events" : ""}`}
-                    onClick={() => selectDate(day)}
-                    aria-pressed={selected}
-                    aria-label={`${formatDate(day, { weekday: "long", day: "numeric", month: "long" })}${scheduled.length ? `, ${scheduled.length} event${scheduled.length === 1 ? "" : "s"}` : ""}`}
-                  >
-                    <span>{day.toLocaleDateString("en-GB", { weekday: "short" })}</span>
-                    <strong>{day.getDate()}</strong>
-                    <i aria-hidden="true" />
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-
-          <section className="events-mobile-summary-grid" aria-label="Event summary">
-            <article className="events-mobile-summary-card events-mobile-summary-card--past">
-              <span><EventIcon name="archive" /> Past</span>
-              <strong>{mobilePast.length}</strong>
-              <small>all previous events</small>
-            </article>
-            <article className="events-mobile-summary-card events-mobile-summary-card--upcoming">
-              <span><EventIcon name="clock" /> Upcoming</span>
-              <strong>{mobileUpcoming.length}</strong>
-              <small>scheduled ahead</small>
-            </article>
-            <article className="events-mobile-summary-card events-mobile-summary-card--month">
-              <span><EventIcon name="calendar" /> This month</span>
-              <strong>{currentMonthEvents.length}</strong>
-              <small>{today.toLocaleDateString("en-GB", { month: "short", year: "numeric" })}</small>
-            </article>
-          </section>
-
-          <section className="events-mobile-day-feed" aria-labelledby="eventsMobileDayTitle">
-            <div className="events-mobile-day-feed__head">
-              <div>
-                <span>{sameDay(selectedDate, today) ? "TODAY" : selectedDate.toLocaleDateString("en-GB", { weekday: "long" }).toUpperCase()}</span>
-                <h3 id="eventsMobileDayTitle">{formatDate(selectedDate, { day: "numeric", month: "long", year: "numeric" })}</h3>
-              </div>
-              <b>{mobileScheduledDayEvents.length}</b>
-            </div>
-
-            <div className="events-mobile-event-list">
-              {mobileScheduledDayEvents.length ? mobileScheduledDayEvents.map((event) => (
-                <button type="button" className="events-mobile-event-card" key={event.id} onClick={() => openEventDetails(event)}>
-                  <span className="events-mobile-event-card__date">
-                    <strong>{formatDate(startDate(event), { day: "2-digit" })}</strong>
-                    <small>{formatDate(startDate(event), { month: "short" })}</small>
-                  </span>
-                  <span className="events-mobile-event-card__body">
-                    <span>{typeLabel(event)}</span>
-                    <strong>{event.eventName || "Untitled Event"}</strong>
-                    <small>{event.organizationName || event.governorate || "Location to be confirmed"}</small>
-                  </span>
-                  <span className="events-mobile-event-card__side">
-                    <StatusPill status={event.status} />
-                    <EventIcon name="arrow-up-right" />
-                  </span>
-                </button>
-              )) : (
-                <div className="events-mobile-day-empty">
-                  <span><EventIcon name="calendar" /></span>
-                  <strong>No events on this date</strong>
-                  <small>Select another day from the week above{canCreate ? " or use the Add new card above." : "."}</small>
-                </div>
-              )}
-            </div>
-          </section>
+    <section className="events-shell events-calendar-shell agenda-v2" aria-label="Event management">
+      <div className="agenda-top">
+        <section className="agenda-hero">
+          <div><h2>Events Management</h2><p>Plan, organize, and track all school events in one place.</p></div>
+          <div className="agenda-hero-art" aria-hidden="true"><svg viewBox="0 0 220 140" fill="none"><ellipse cx="116" cy="121" rx="94" ry="10" fill="#f6d7ab"/><path d="M29 103C12 83 20 64 43 78C59 86 58 104 61 119M166 116C164 83 184 60 202 69C212 91 190 110 166 116" fill="#8dc58c"/><path d="M180 112C181 85 205 91 209 103C201 116 190 119 180 119" fill="#55a76b"/><path d="M63 30H174L194 118H55Z" fill="#232326"/><path d="M51 30H163L176 112Q177 120 168 120H42Q33 120 35 111L43 40Q44 30 51 30Z" fill="white"/><path d="M51 30H163L168 53H41L43 40Q44 30 51 30Z" fill="#ff7900"/><path d="M67 38V22C67 10 83 10 83 22V32M123 38V22C123 10 139 10 139 22V32" stroke="#262628" strokeWidth="4" strokeLinecap="round"/><g fill="#eeeae5">{Array.from({length:12},(_,i)=><rect key={i} x={53+(i%4)*28} y={61+Math.floor(i/4)*18} width="21" height="13" rx="4"/>)}</g><circle cx="150" cy="92" r="19" fill="#258b3b"/><path d="M141 92L147 98L159 85" stroke="white" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"/><path d="M30 18L18 10M25 33L9 32M43 12L38 1" stroke="#ff7900" strokeWidth="4" strokeLinecap="round"/></svg></div>
         </section>
-
-        <div className="events-calendar-desktop-view">
-        <div className="events-calendar-workspace__top">
-          <div>
-            <span className="events-eyebrow"><EventIcon name="calendar" /> Event schedule</span>
-            <h2 className="events-visually-hidden" id="eventsCalendarTitle">Calendar</h2>
-          </div>
-          <div className="events-calendar-toolbar">
-            <button type="button" className="events-secondary-btn events-calendar-today" onClick={() => selectDate(new Date())}><EventIcon name="crosshair" /><span>Today</span></button>
-            {canCreate ? <button type="button" className="events-primary-btn" onClick={openNewEvent}><EventIcon name="plus-circle" /><span>Add New Event</span></button> : null}
-          </div>
-        </div>
-
-        <div className="events-calendar-layout">
-          <section className="events-calendar-card" aria-label="Monthly event calendar">
-            <div className="events-calendar-card__header">
-              <button type="button" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))} className="events-calendar-nav" aria-label="Previous month"><EventIcon name="chevron-left" /></button>
-              <div className="events-calendar-month-title"><h3>{month.toLocaleDateString("en-GB", { month: "long" })}</h3><span>{month.getFullYear()}</span></div>
-              <button type="button" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))} className="events-calendar-nav" aria-label="Next month"><EventIcon name="chevron-right" /></button>
-            </div>
-
-            <div className="events-calendar-weekdays" aria-hidden="true">
-              {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => <span key={day}>{day}</span>)}
-            </div>
-
-            <div className="events-calendar-grid" aria-live="polite">
-              {calendarDays.map((day) => {
-                const scheduled = eventsForDate(day);
-                const outside = day.getMonth() !== month.getMonth();
-                const selected = dateKey(day) === selectedKey;
-                const current = sameDay(day, today);
-                const markers = scheduled.slice(0, 3);
-                return (
-                  <button
-                    type="button"
-                    key={dateKey(day)}
-                    className={`events-calendar-day${outside ? " is-outside" : ""}${selected ? " is-selected" : ""}${current ? " is-today" : ""}${scheduled.length ? " has-events" : ""}`}
-                    onClick={() => selectDate(day)}
-                    aria-pressed={selected}
-                    aria-label={`${formatDate(day, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}${scheduled.length ? `, ${scheduled.length} scheduled event${scheduled.length === 1 ? "" : "s"}` : ""}`}
-                  >
-                    <span className="events-calendar-day__number">{day.getDate()}</span>
-                    {scheduled.length ? (
-                      <span className="events-calendar-day__markers">
-                        {markers.map((event, index) => <i className={`events-calendar-marker events-calendar-marker--${typeClass(event)}`} key={`${event.id}-${index}`} />)}
-                        {scheduled.length > markers.length ? <span className="events-calendar-more">+{scheduled.length - markers.length}</span> : null}
-                      </span>
-                    ) : null}
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="events-calendar-legend">
-              <span><i className="events-calendar-dot events-calendar-dot--selected" />Selected date</span>
-              <span><i className="events-calendar-dot events-calendar-dot--has-events" />Event scheduled</span>
-            </div>
+        <section className="agenda-stats" aria-label="Event totals">{stats.map(stat => <article key={stat.key} className={`agenda-stat agenda-stat--${stat.key}`}><span className="agenda-stat-icon"><EventIcon name={stat.icon}/></span><span><small>{stat.label}</small><strong>{stat.count}</strong></span></article>)}</section>
+      </div>
+      <div className="agenda-layout">
+        <aside className="agenda-left">
+          <section className="agenda-panel agenda-calendar" aria-label="Monthly event calendar">
+            <div className="agenda-month"><button type="button" aria-label="Previous month" onClick={() => shiftMonth(-1)}><EventIcon name="chevron-left"/></button><h3>{month.toLocaleDateString("en-GB",{month:"long"})} <span>{month.getFullYear()}</span></h3><button type="button" aria-label="Next month" onClick={() => shiftMonth(1)}><EventIcon name="chevron-right"/></button></div>
+            <div className="agenda-weekdays">{["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(day => <span key={day}>{day}</span>)}</div>
+            <div className="agenda-days">{calendarDays.map(day => {
+              const matches = scheduled.filter(event => eventOnDate(event,day));
+              const states = [...new Set(matches.map(event => eventConfirmation(event.status)))];
+              const selected = dateKey(day) === selectedKey;
+              return <button type="button" key={dateKey(day)} className={`agenda-day${day.getMonth() !== month.getMonth() ? " is-outside" : ""}${selected ? " is-selected" : ""}${sameDay(day,today) ? " is-today" : ""}`} aria-pressed={selected} aria-label={`${formatDate(day,{weekday:"long",day:"numeric",month:"long",year:"numeric"})}, ${matches.length} events${states.length ? `, ${states.map(state => state === "pending" ? "Pending Confirmation" : "Confirmed").join(", ")}` : ""}`} onClick={() => selectDate(day)}><strong>{day.getDate()}</strong><span className="agenda-dots">{states.map(state => <i key={state} className={`agenda-dot agenda-dot--${state}`}/>)}</span></button>;
+            })}</div>
+            <div className="agenda-legend"><span><i className="agenda-dot agenda-dot--pending"/>Pending Confirmation</span><span><i className="agenda-dot agenda-dot--confirmed"/>Confirmed</span></div>
+            <button type="button" className="agenda-today" onClick={() => selectDate(today)}>Today</button>
           </section>
-
-          <aside className="events-calendar-sidebar">
-            <section className="events-calendar-events-card" aria-labelledby="eventsCalendarListTitle">
-              <div className="events-calendar-list-tabs" role="tablist" aria-label="Event schedule lists">
-                <button type="button" role="tab" aria-selected={activeList === "upcoming"} className={`events-calendar-list-tab${activeList === "upcoming" ? " is-active" : ""}`} onClick={() => setActiveList("upcoming")}>
-                  <EventIcon name="clock" /><span>Upcoming Events</span><b>{upcoming.length}</b>
-                </button>
-                <button type="button" role="tab" aria-selected={activeList === "past"} className={`events-calendar-list-tab${activeList === "past" ? " is-active" : ""}`} onClick={() => setActiveList("past")}>
-                  <EventIcon name="archive" /><span>Past Events</span><b>{past.length}</b>
-                </button>
-              </div>
-
-              <div className="events-calendar-events-card__body">
-                <div className="events-calendar-section-heading">
-                  <div>
-                    <span className="events-calendar-section-label">{activeList === "past" ? "Before today" : `From ${formatDate(selectedDate, { day: "numeric", month: "short", year: "numeric" })}`}</span>
-                    <h3 id="eventsCalendarListTitle">{activeList === "past" ? "Past Events" : "Upcoming Events"}</h3>
-                  </div>
-                  <span className="events-calendar-count">{list.length}</span>
-                </div>
-
-                <div className="events-calendar-upcoming-list" role="tabpanel">
-                  {list.length ? list.map((event) => (
-                    <button type="button" className="events-calendar-upcoming-item" key={event.id} onClick={() => openEventDetails(event)}>
-                      <span className="events-calendar-upcoming-item__date">
-                        <strong>{formatDate(startDate(event), { day: "2-digit", month: "short" })}</strong>
-                        <small>{String(event.eventStartDate || "").slice(0, 4) || "—"}</small>
-                      </span>
-                      <span className="events-calendar-upcoming-item__body">
-                        <span className="events-calendar-upcoming-item__meta">{event.organizationName || event.governorate || "Event execution"}</span>
-                        <strong>{event.eventName || "Untitled Event"}</strong>
-                        <small>{typeLabel(event)} · {event.governorate || "Location to be confirmed"}</small>
-                      </span>
-                      <EventIcon name="arrow-up-right" />
-                    </button>
-                  )) : (
-                    <div className="events-calendar-empty events-calendar-empty--compact">
-                      <EventIcon name="calendar" />
-                      <strong>{activeList === "past" ? "No past events" : "No upcoming events"}</strong>
-                      <span>{activeList === "past" ? "Completed event history will appear here." : "No active events are scheduled from the selected date onward."}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </section>
-          </aside>
-        </div>
-        </div>
-      </section>
-
-      <DetailsModal event={activeEvent} canOpenRequests={canOpenRequests} canExport={canExport} onClose={() => setActiveEvent(null)} />
+          {canCreate ? <button type="button" className="agenda-add" onClick={openNewEvent}><EventIcon name="plus-circle"/>Add New Event</button> : null}
+        </aside>
+        <section className="agenda-panel agenda-list" aria-label="Event agenda">
+          <div className="agenda-toolbar"><div className="agenda-tabs" role="tablist" aria-label="Event history">{[{key:"upcoming",label:"Upcoming",icon:"calendar"},{key:"past",label:"Past",icon:"clock"},{key:"archived",label:"Archived",icon:"archive"}].map(tab => <button type="button" role="tab" aria-selected={activeList === tab.key} key={tab.key} className={activeList === tab.key ? "is-active" : ""} onClick={() => {setActiveList(tab.key);setFilter("all");if(tab.key === "upcoming" && selectedDate < today) setSelectedKey(dateKey(today));}}><EventIcon name={tab.icon}/>{tab.label} ({lists[tab.key].length})</button>)}</div><div className="agenda-tools"><label className="agenda-search"><EventIcon name="search"/><input type="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search events…" aria-label="Search events"/></label><label className="agenda-filter"><EventIcon name="filter"/><select value={filter} onChange={e=>setFilter(e.target.value)} aria-label="Filter confirmation status"><option value="all">All statuses</option><option value="pending">Pending Confirmation</option><option value="confirmed">Confirmed</option>{activeList !== "upcoming" ? <option value="cancelled">Cancelled</option> : null}</select></label></div></div>
+          <div className="agenda-rows" role="tabpanel">{list.length ? list.map(event => <button type="button" key={event.id} className={`agenda-row agenda-row--${eventConfirmation(event.status)}`} onClick={() => openEventDetails(event)}><span className="agenda-row-date"><small>{formatDate(startDate(event),{weekday:"short"})}</small><strong>{formatDate(startDate(event),{day:"2-digit",month:"short"})}</strong></span><span className="agenda-row-main"><strong>{event.eventName || "Untitled Event"}</strong><span><span><EventIcon name="map-pin"/>{event.venueName || event.organizationName || event.governorate || "Venue to be confirmed"}</span>{event.expectedAttendees != null ? <span><EventIcon name="user"/>{event.expectedAttendees} Attendees</span> : null}</span></span><StatusPill status={event.status}/><span className="agenda-row-more"><EventIcon name="more-horizontal"/></span></button>) : <div className="agenda-empty"><EventIcon name="calendar"/><strong>No {activeList} events</strong><span>{search || filter !== "all" ? "Try changing your search or filter." : "Events will appear here when available."}</span></div>}</div>
+        </section>
+      </div>
+      {!authorization && !confirmation ? <DetailsModal event={activeEvent} canOpenRequests={canOpenRequests} canExport={canExport} canConfirm={canConfirm} onConfirmEvent={beginConfirmation} onClose={() => {detailRequest.current++;setActiveEvent(null);setActionError("");}} /> : null}
+      {authorization ? <AuthorizationModal authorization={authorization} busy={busy} error={actionError} onClose={() => { if (!busy) {setAuthorization(null);setActionError("");} }} onPassword={password=>setAuthorization(current=>({...current,password}))} onSubmit={authorizeConfirmation}/> : null}
+      {confirmation ? <ConfirmationModal confirmation={confirmation} busy={busy} onClose={() => {if(!busy)setConfirmation(null);}} onConfirm={confirmEvent}/> : null}
+      {actionError && !authorization ? <div className="agenda-action-error" role="alert">{actionError}<button type="button" aria-label="Dismiss error" onClick={()=>setActionError("")}>×</button></div> : null}
     </section>
   );
 }

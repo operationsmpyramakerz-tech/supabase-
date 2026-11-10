@@ -15,9 +15,9 @@ const ConfirmationModal = dynamic(() => loadEventsDialogs().then((module) => mod
 const ProfileModal = dynamic(() => loadEventsDialogs().then((module) => module.ProfileModal), { ssr: false });
 
 const STATUS_LABELS = {
-  submitted: "Submitted",
-  in_progress: "In progress",
-  completed: "Done",
+  submitted: "Pending Confirmation",
+  in_progress: "Confirmed",
+  completed: "Confirmed",
   cancelled: "Cancelled",
 };
 
@@ -126,7 +126,7 @@ async function requestJson(url, options = {}) {
     },
   });
 
-  if (response.status === 401) {
+  if (response.status === 401 && !options.body) {
     window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`;
     throw new Error("Your session has expired.");
   }
@@ -215,7 +215,7 @@ export default function EventsClient({ account, initialEvents = [], eventScopePo
     const search = lower(query);
     return events.filter((event) => {
       const eventStatus = normalizeStatus(event.status);
-      if (status !== "all" && eventStatus !== status) return false;
+      if (status !== "all" && (status === "in_progress" ? !["in_progress", "completed"].includes(eventStatus) : eventStatus !== status)) return false;
       if (eventType !== "all" && typeKey(event) !== eventType) return false;
       if (!search) return true;
       return [event.eventCode, event.eventName, event.eventType, event.eventTypeCustom, event.organizationName, event.governorate, event.requesterName, event.contactPerson]
@@ -236,6 +236,12 @@ export default function EventsClient({ account, initialEvents = [], eventScopePo
     }
   };
 
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("event");
+    const event = initialEvents.find(item => item.id === id);
+    if (event) void openDetails(event);
+  }, [initialEvents]);
+
   const updateEvent = (updated) => {
     const normalized = { ...updated, status: normalizeStatus(updated?.status) };
     setEvents((current) => current.map((event) => event.id === normalized.id ? normalized : event));
@@ -247,7 +253,7 @@ export default function EventsClient({ account, initialEvents = [], eventScopePo
     const event = activeEvent;
     if (!event) return;
     const title = kind === "workflow"
-      ? (value === "in_progress" ? "Mark as approved" : "Mark as delivered")
+      ? (value === "in_progress" ? "Confirm Event" : "Mark as completed")
       : (value === "edit" ? "Edit event request" : "Cancel event request");
     setAuthorization({ kind, value, eventId: event.id, password: "", title });
     setAuthorizationError("");
@@ -295,13 +301,13 @@ export default function EventsClient({ account, initialEvents = [], eventScopePo
         kind: authorization.kind,
         value: authorization.value,
         eventId: authorization.eventId,
-        title: isCancel ? "Cancel event request?" : targetStatus === "completed" ? "Mark event as delivered?" : "Approve event request?",
+        title: isCancel ? "Cancel event request?" : targetStatus === "completed" ? "Mark event as completed?" : "Confirm event?",
         message: isCancel
           ? `${activeEvent?.eventCode || "This request"} will be changed to Cancelled.`
           : targetStatus === "completed"
-            ? "The request will move from In progress to Done."
-            : "The request will move from Submitted to In progress.",
-        label: isCancel ? "Confirm cancellation" : targetStatus === "completed" ? "Confirm delivery" : "Confirm approval",
+            ? "The event will be marked as completed and remain Confirmed in the agenda."
+            : "The event will move from Pending Confirmation to Confirmed.",
+        label: isCancel ? "Confirm cancellation" : targetStatus === "completed" ? "Confirm completion" : "Confirm Event",
         danger: isCancel,
         authorizationToken: text(verified?.authorizationToken),
       });
@@ -333,7 +339,7 @@ export default function EventsClient({ account, initialEvents = [], eventScopePo
       });
       updateEvent(body.event);
       setConfirmation(null);
-      setToast({ type: "success", title: "Events", message: isCancel ? "Event request cancelled." : confirmation.value === "completed" ? "Event request marked as Done." : "Event request marked as In progress." });
+      setToast({ type: "success", title: "Events", message: isCancel ? "Event request cancelled." : confirmation.value === "completed" ? "Event marked as completed." : "Event confirmed." });
     } catch (error) {
       setToast({ type: "error", title: "Events", message: error.message });
     } finally {
@@ -369,9 +375,8 @@ export default function EventsClient({ account, initialEvents = [], eventScopePo
             <div className="events-orders-tabs" role="tablist" aria-label="Event request status tabs">
               {[
                 { key: "all", label: "All", icon: "layers" },
-                { key: "submitted", label: "Submitted", icon: "send" },
-                { key: "in_progress", label: "In progress", icon: "activity" },
-                { key: "completed", label: "Done", icon: "check" },
+                { key: "submitted", label: "Pending Confirmation", icon: "clock" },
+                { key: "in_progress", label: "Confirmed", icon: "check-circle" },
                 { key: "cancelled", label: "Cancelled", icon: "x-circle" },
               ].map((item) => (
                 <button

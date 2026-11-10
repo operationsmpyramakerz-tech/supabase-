@@ -1,9 +1,9 @@
 "use client";
 
 const STATUS_LABELS = {
-  submitted: "Submitted",
-  in_progress: "In progress",
-  completed: "Done",
+  submitted: "Pending Confirmation",
+  in_progress: "Confirmed",
+  completed: "Confirmed",
   cancelled: "Cancelled",
 };
 
@@ -132,9 +132,9 @@ export function EventsDetailsModal({ event, busy, onClose, onDownload, onWorkflo
   const utilities = [event.requiresPower && "Power points", event.requiresInternet && "Internet", event.requiresSoundSystem && "Sound system"].filter(Boolean).join(" · ") || "No special utilities selected";
   const status = normalizeStatus(event.status);
   const workflow = status === "submitted"
-    ? { targetStatus: "in_progress", label: "Mark as approved" }
+    ? { targetStatus: "in_progress", label: "Confirm Event" }
     : status === "in_progress"
-      ? { targetStatus: "completed", label: "Mark as delivered" }
+      ? { targetStatus: "completed", label: "Mark as completed" }
       : null;
 
   return (

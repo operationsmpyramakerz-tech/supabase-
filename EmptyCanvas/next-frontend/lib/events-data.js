@@ -3,6 +3,7 @@ import { isTrustedLegacyAdmin } from "./admin-identity-policy.mjs";
 
 import { getDirectAccountGate } from "./products-auth";
 import { featureAllowed } from "./feature-permissions-registry";
+import { eventRequestScopeFor } from "./event-request-scope.mjs";
 import { eventCalendarList } from "./events-read-policy";
 import { scopedEventRequestList, assertEventRequestScope, eventRequestUiScopePolicy } from "./event-request-scope";
 import { deleteById, insert, select, selectAll, selectById, updateById, uploadStorageObject } from "./supabase-rest";
@@ -33,6 +34,8 @@ const EVENT_LIST_SELECT = [
   "is_archived",
   "archived_at",
   "organization_name",
+  "expected_attendees",
+  "venue_name",
   "contact_person",
   "event_start_date",
   "event_end_date",
@@ -295,6 +298,8 @@ function serializeEventSummary(row = {}) {
     isArchived: bool(row?.is_archived ?? row?.isArchived),
     archivedAt: row?.archived_at || row?.archivedAt || null,
     organizationName: text(row?.organization_name, 240),
+    expectedAttendees: row?.expected_attendees == null ? null : number(row.expected_attendees, { min: 0, max: 1000000, fallback: 0, integer: true }),
+    venueName: text(row?.venue_name, 240),
     contactPerson: text(row?.contact_person, 160),
     eventStartDate: row?.event_start_date || null,
     eventEndDate: row?.event_end_date || null,
@@ -1234,8 +1239,19 @@ export async function loadDirectEventsPageData({ mode = "events", editId = "" } 
 
   try {
     if (mode === "events" || mode === "calendar") {
-      const events = await listEvents();
+      const events = await listEvents({ includeArchived: mode === "calendar" });
+      let calendarRequestDetails = [];
+      if (mode === "calendar") {
+        // Calendar-only grants never expose venue/attendee request details.
+        const canViewRequests = (gate.account?.allowedPages || []).some(page => String(page).trim().toLowerCase() === "event requests")
+          && featureAllowed(gate.account, "events.requests.view")
+          && !["own", "team", "none"].includes(eventRequestScopeFor(gate.account, "events.requests.view"));
+        if (canViewRequests) {
+          calendarRequestDetails = (await scopedEventRequestList(gate.account, events)).map(event => ({ id: event.id, expectedAttendees: event.expectedAttendees, venueName: event.venueName }));
+        }
+      }
       return { ok: true, status: 200, account: gate.account, events: mode === "calendar" ? eventCalendarList(events) : await scopedEventRequestList(gate.account, events),
+        calendarRequestDetails,
         eventScopePolicy: mode === "events" ? await eventRequestUiScopePolicy(gate.account) : null,
         warnings: [], source: "supabase-next" };
     }
