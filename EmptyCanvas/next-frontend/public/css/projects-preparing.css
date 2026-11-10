@@ -4643,3 +4643,6 @@ html[data-theme="dark"] .pr-root .pr-stage-filter-actions .pr-pt-history-button.
 @media(max-width:600px){.pr-root .pr-stage-filter-tabs{gap:3px;padding:4px;border-radius:13px;margin-bottom:10px;}.pr-root .pr-stage-filter-tabs>button{min-height:40px;padding:8px 11px;font-size:12px;gap:6px;}.pr-root .pr-stage-filter-tabs>button svg{width:17px;height:17px;}.pr-root .pr-stage-filter-toolbar{flex-wrap:wrap;gap:8px;margin-bottom:12px;}.pr-root .pr-stage-filter-toolbar .pr-pt-search{flex:1 1 100%;}.pr-root .pr-stage-filter-actions{gap:6px;}.pr-root .pr-stage-filter-actions .pr-pt-download-button{min-height:40px;}.pr-root .pr-stage-filter-actions .pr-box-label-launch{padding:8px 10px;}}
 .pr-root .pr-stage-filter-toolbar .pr-pt-search input{min-width:0;width:100%;border:0!important;outline:none!important;box-shadow:none!important;background:transparent!important;padding:0!important;}
 .pr-root .pr-box-distribution>.pr-stage-filter-tabs,.pr-root .pr-box-distribution>.pr-stage-filter-toolbar{margin-bottom:0;}
+
+/* v388: Production intake timeline icon */
+.pr-project-step-card--compact .pr-step-tone--intake {background:#fff0e5;color:#da7b31;}

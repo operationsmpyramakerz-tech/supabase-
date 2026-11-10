@@ -8,8 +8,8 @@ export function productionBalance(warehouseReceived,productionReceived,packedQty
 export function productionReceiptDelta(current,next,warehouse,packed){
  const value=Number(next);
  if(String(next).trim()===""||!Number.isSafeInteger(value)||value<0||value>1000000000)throw Error("Enter a non-negative whole number.");
- if(value>warehouse)throw Error(`Production Received cannot exceed Warehouse Received (${warehouse}).`);
- if(value<packed)throw Error(`Production Received cannot be less than units packed into boxes (${packed}).`);
+ if(value>warehouse)throw Error(`Operations Received cannot exceed Warehouse Received (${warehouse}).`);
+ if(value<packed)throw Error(`Operations Received cannot be less than units packed into boxes (${packed}).`);
  const delta=value-current;
  if(Math.abs(delta)>1000000)throw Error("Change cannot exceed 1,000,000 units.");
  return delta;
@@ -21,13 +21,13 @@ export function boxPackingTarget(productionReceived,totalPacked,packedInSelected
  if(!/^\d+$/.test(raw)||!Number.isSafeInteger(Number(raw))||Number(raw)>1000000)throw Error("Packed must be a non-negative whole number up to 1,000,000.");
  const target=Number(raw);
  const nextTotal=Number(totalPacked)-Number(packedInSelectedBox)+target;
- if(nextTotal>Number(productionReceived))throw Error(`Packed quantity cannot exceed Production Received (${productionReceived}).`);
+ if(nextTotal>Number(productionReceived))throw Error(`Packed quantity cannot exceed Operations Received (${productionReceived}).`);
  if(nextTotal<0)throw Error("Packed total cannot be negative.");
  return {packed:nextTotal,unpacked:Number(productionReceived)-nextTotal};
 }
 
-// Production Receiving filters: available stock from Warehouse is the default.
-// "Not Received" means no Production handover has ever been recorded for the
+// Operations Receiving filters: available stock from Warehouse is the default.
+// "Not Received" means no Operations handover has ever been recorded for the
 // component; it intentionally includes items not yet available from Warehouse.
 export function filterProductionReceivingRows(rows,filter="available"){
  const items=Array.isArray(rows)?rows:[];

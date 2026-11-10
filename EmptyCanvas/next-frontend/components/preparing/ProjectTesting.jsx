@@ -177,13 +177,13 @@ export default function ProjectTesting({projectId,projectName,canTest,request,on
      return <article key={r.id} className={`pr-pt-row${isEditing?" is-editing":""}`}>
       <div className="pr-pt-heading">
        <div className="pr-pt-name"><div className="pr-pt-name-inline"><strong title={r.code?`Product code: ${r.code}`:undefined}>{r.name}</strong></div>{r.mismatch&&<small className="pr-pt-warning">Historical warehouse receipt exceeds tested quantity; review before handover.</small>}</div>
-       <div className="pr-pt-required"><span>Required</span><strong>{pretty(coverage.required)}</strong></div>
+       <div className="pr-pt-required"><span title="Received in the preceding stage">Available to Test: {pretty(Math.max(0,n(r.productionIntakeReceived)-coverage.tested))}</span><span>Required</span><strong>{pretty(coverage.required)}</strong></div>
       </div>
       <div className="pr-pt-metrics">
        {isEditing?metrics.map(field=>{
         return <label key={field.key} className={`pr-pt-metric pr-pt-metric--${field.key}`}>
          <span>{field.label}</span>
-         <StageQuantityInput min="0" step="1" aria-label={`${field.aria} ${r.name}`} disabled={busy} value={v[field.key]??""} onValueChange={value=>change(r.id,field.key,value)}/>
+         <StageQuantityInput min="0" max={r.productionIntakeReceived} step="1" aria-label={`${field.aria} ${r.name}`} disabled={busy} value={v[field.key]??""} onValueChange={value=>change(r.id,field.key,value)}/>
         </label>;
        }):<>
         <div className="pr-pt-metric pr-pt-metric--tested"><span>Tested</span><strong className="pr-pt-metric-value pr-pt-number pr-pt-pass">{pretty(coverage.tested)}</strong></div>

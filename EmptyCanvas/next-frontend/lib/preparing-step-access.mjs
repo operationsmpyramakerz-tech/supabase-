@@ -3,6 +3,7 @@
 // allowed to update that stage, never beneficiaries or fabricated avatars.
 export const PREPARING_STEP_PERMISSIONS = Object.freeze({
   components: "preparing.manage",
+  intake: "preparing.stage.intake",
   testing: "preparing.stage.testing",
   warehouse: "preparing.stage.warehouse",
   production: "preparing.stage.production",

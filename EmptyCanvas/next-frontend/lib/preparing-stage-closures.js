@@ -51,7 +51,7 @@ async function requireProject(id) {
 }
 export async function listStageClosures(projectId) {
   const id = await requireProject(projectId);
-  return await select(TABLE,{select:'stage_key,closed_at',project_id:`eq.${id}`,limit:'5'});
+  return await select(TABLE,{select:'stage_key,closed_at',project_id:`eq.${id}`,limit:String(PREPARING_STAGE_KEYS.length)});
 }
 async function readClosure(id,stage) {
   const rows = await select(TABLE,{select:'*',project_id:`eq.${id}`,stage_key:`eq.${stage}`,limit:'1'});

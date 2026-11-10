@@ -12,11 +12,12 @@ export const FEATURE_DEFINITIONS = Object.freeze(
   // Stage-level access is opt-in for existing Advanced profiles: the marker
   // prevents a deployment from silently revoking pre-existing project access.
   { "module": "preparing", "key": "preparing.stages.__granular", "label": "Enable individual project stage permissions" },
-  { "module": "preparing", "key": "preparing.stage.testing", "label": "Stage 1 · Project Testing — open and update" },
-  { "module": "preparing", "key": "preparing.stage.warehouse", "label": "Stage 2 · Warehouse Receiving — open and update" },
-  { "module": "preparing", "key": "preparing.stage.production", "label": "Stage 3 · Production Receiving — open and update" },
-  { "module": "preparing", "key": "preparing.stage.boxes", "label": "Stage 4 · Box Distribution — open and update" },
-  { "module": "preparing", "key": "preparing.stage.cartons", "label": "Stage 5 · Project Kit Cartons — open and update" },
+  { "module": "preparing", "key": "preparing.stage.intake", "label": "Stage 1 · Production Receiving — open and update" },
+  { "module": "preparing", "key": "preparing.stage.testing", "label": "Stage 2 · Project Testing — open and update" },
+  { "module": "preparing", "key": "preparing.stage.warehouse", "label": "Stage 3 · Warehouse Receiving — open and update" },
+  { "module": "preparing", "key": "preparing.stage.production", "label": "Stage 4 · Operations Receiving — open and update" },
+  { "module": "preparing", "key": "preparing.stage.boxes", "label": "Stage 5 · Box Distribution — open and update" },
+  { "module": "preparing", "key": "preparing.stage.cartons", "label": "Stage 6 · Project Kit Cartons — open and update" },
   {
     "module": "home",
     "key": "home.view",
@@ -1168,7 +1169,7 @@ export const PILOT_FEATURE_MODULES = Object.freeze(["products", "orders.operatio
 // Do not expose unprotected actions; that would imply false security.
 export const ACTIVE_PILOT_FEATURE_KEYS = Object.freeze([
   "preparing.view", "preparing.create", "preparing.manage", "preparing.stage_update", "preparing.close", "preparing.warehouse_receive", "preparing.warehouse_allocate",
-  "preparing.stages.__granular", "preparing.stage.testing", "preparing.stage.warehouse", "preparing.stage.production", "preparing.stage.boxes", "preparing.stage.cartons",
+  "preparing.stages.__granular", "preparing.stage.intake", "preparing.stage.testing", "preparing.stage.warehouse", "preparing.stage.production", "preparing.stage.boxes", "preparing.stage.cartons",
   "home.view", "home.analysis", "home.financial_analysis", "home.sla_view", "home.sla_manage",
   "kpis.view", "kpis.standard_manage", "kpis.review_create", "kpis.scores_edit", "kpis.evidence_upload", "kpis.report",
   "sla.view", "sla.manage",

@@ -57,5 +57,5 @@ test('avatar lookup is gated and returns only permission-holders; CSS uses muted
   assert.match(service,/membersWithPreparingStageAccess/);
   assert.match(css,/\.pr-step-kpi-fill/);
   assert.match(css,/background:#39b99b/);
-  assert.deepEqual(Object.keys(PREPARING_STEP_PERMISSIONS),['components','testing','warehouse','production','boxes','cartons']);
+  assert.deepEqual(Object.keys(PREPARING_STEP_PERMISSIONS),['components','intake','testing','warehouse','production','boxes','cartons']);
 });

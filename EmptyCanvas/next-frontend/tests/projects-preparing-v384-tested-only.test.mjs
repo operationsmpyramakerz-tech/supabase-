@@ -20,8 +20,8 @@ test('tested-only counts drive warehouse availability and open stage progress; c
  assert.equal(row.readyToReceive,2);assert.equal(warehouseReceiptLimit(2,'4',row.tested),2);
  assert.throws(()=>warehouseReceiptLimit(2,'5',row.tested),/Only 2 Tested/);
  const testing={items:[{required:8,tested:4}]};
- assert.equal(calculateProjectPreparationProgress({testing}).stages[0],50);
- assert.equal(calculateProjectPreparationProgress({testing,closures:{testing:true}}).stages[0],100);
+ assert.equal(calculateProjectPreparationProgress({testing}).stages[1],50);
+ assert.equal(calculateProjectPreparationProgress({testing,closures:{testing:true}}).stages[1],100);
 });
 test('history, editor and exports only expose tested quantities',()=>{
  const ui=read('components/preparing/ProjectTesting.jsx');const metrics=ui.split('const metrics=')[1].split('];')[0];

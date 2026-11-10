@@ -16,6 +16,7 @@ import ProjectWarehouseReceiving from "./ProjectWarehouseReceiving";
 import ProjectMasterComponents from "./ProjectMasterComponents";
 import ProjectStageClosure from "./ProjectStageClosure";
 import ProjectTesting from "./ProjectTesting";
+import ProjectProductionIntake from "./ProjectProductionIntake";
 import ProjectProductionReceiving from "./ProjectProductionReceiving";
 import { PREPARING_STAGES, PREPARING_STATES, canCompleteStage, schoolProgress } from "../../lib/preparing-workflow";
 
@@ -195,6 +196,7 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
   const [showClosing, setShowClosing] = useState(false);
   const [showProjectCartons, setShowProjectCartons] = useState(false);
   const [showWarehouse, setShowWarehouse] = useState(false);
+  const [showIntake,setShowIntake]=useState(false);
   const [showProjectTesting, setShowProjectTesting] = useState(false);
   const [showProduction, setShowProduction] = useState(false);
   const [showBoxDistribution, setShowBoxDistribution] = useState(false);
@@ -230,7 +232,7 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
   const canWarehouseReceive = featureAllowed(account, "preparing.warehouse_receive");
   const canWarehouseAllocate = featureAllowed(account, "preparing.warehouse_allocate");
   const stageGranular = preparingStagesGranular(account);
-  const stagePermissions = Object.fromEntries(["testing", "warehouse", "production", "boxes", "cartons"].map(key => [key, preparingStageAllowed(account, key)]));
+  const stagePermissions = Object.fromEntries(["intake", "testing", "warehouse", "production", "boxes", "cartons"].map(key => [key, preparingStageAllowed(account, key)]));
   const projects = asArray(data.projects);
   const schools = asArray(data.schools);
   const stages = asArray(data.stages);
@@ -253,7 +255,7 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
     delivered: schools.filter(school => schoolProgress(stages.filter(row => row.school_id === school.id)).delivered).length,
     closed: schools.filter(school => schoolProgress(stages.filter(row => row.school_id === school.id)).closed).length };
   const progress = school ? schoolProgress(schoolStages) : null;
-  // Load read-only progress data for the five operational preparation stages.
+  // Load read-only progress data for the six operational preparation stages.
   // No percentage is invented while a request is pending or has failed.
   useEffect(() => {
     if (!projectId || schoolId) { setProjectStageData(null); setProjectStageError(""); setProjectStageLoading(false); return; }
@@ -292,11 +294,12 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
   const overallPercent = projectStageProgress?.overall ?? null;
   // Project Components is the Master BOM, not a preparation stage.
   const projectStepCards = [
-    { key:"testing", icon:"flask", title:"Project Testing", subtitle:"01 · Components QC", detail:"Component testing and quality checks", open:()=>{if(preparingStageReadable(account, "testing"))setShowProjectTesting(true);} },
-    { key:"warehouse", icon:"warehouse", title:"Warehouse Receiving", subtitle:"02 · Warehouse handover", detail:"Warehouse receiving and handover", open:()=>{if(preparingStageReadable(account, "warehouse"))setShowWarehouse(true);} },
-    { key:"production", icon:"truck", title:"Production Receiving", subtitle:"03 · Production handover", detail:"Transfer tested stock into Production", open:()=>{if(preparingStageReadable(account, "production"))setShowProduction(true);} },
-    { key:"boxes", icon:"package", title:"Box Distribution", subtitle:"04 · Packing", detail:"Pack received units into project boxes", open:()=>{if(preparingStageReadable(account, "boxes"))setShowBoxDistribution(true);} },
-    { key:"cartons", icon:"packageCheck", title:"Project Kit Cartons", subtitle:"05 · Carton preparation", detail:"Seal completed cartons and prepare allocation", open:()=>{if(preparingStageReadable(account, "cartons"))setShowProjectCartons(true);} },
+    { key:"intake", icon:"truck", title:"Production Receiving", subtitle:"01 · Component intake", detail:"Receive components before testing", open:()=>{if(preparingStageReadable(account, "intake"))setShowIntake(true);} },
+    { key:"testing", icon:"flask", title:"Project Testing", subtitle:"02 · Components QC", detail:"Component testing and quality checks", open:()=>{if(preparingStageReadable(account, "testing"))setShowProjectTesting(true);} },
+    { key:"warehouse", icon:"warehouse", title:"Warehouse Receiving", subtitle:"03 · Warehouse handover", detail:"Warehouse receiving and handover", open:()=>{if(preparingStageReadable(account, "warehouse"))setShowWarehouse(true);} },
+    { key:"production", icon:"truck", title:"Operations Receiving", subtitle:"04 · Operations handover", detail:"Transfer warehouse stock into Operations", open:()=>{if(preparingStageReadable(account, "production"))setShowProduction(true);} },
+    { key:"boxes", icon:"package", title:"Box Distribution", subtitle:"05 · Packing", detail:"Pack received units into project boxes", open:()=>{if(preparingStageReadable(account, "boxes"))setShowBoxDistribution(true);} },
+    { key:"cartons", icon:"packageCheck", title:"Project Kit Cartons", subtitle:"06 · Carton preparation", detail:"Seal completed cartons and prepare allocation", open:()=>{if(preparingStageReadable(account, "cartons"))setShowProjectCartons(true);} },
   ];
   const tools = [
     { key:"components", name:"Components & QC", icon:"box", open:()=>setShowComponents(true) },
@@ -402,13 +405,13 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
     setSchoolId(""); setProjectId(""); setProjectTab("overview"); setQuery("");
     setShowComponents(false); setShowDelivery(false); setShowReconciliation(false);
     setShowTechnical(false); setShowClosing(false);
-    setShowProjectCartons(false); setShowWarehouse(false); setShowProjectTesting(false);
+    setShowProjectCartons(false); setShowWarehouse(false); setShowProjectTesting(false); setShowIntake(false);
     setShowProduction(false); setShowBoxDistribution(false);
   }
   function backToParent() {
     cancelFolderHold(); setFolderMenu("");
     if (school) { setSchoolId(""); setProjectTab("schools"); setQuery(""); setShowComponents(false); setShowDelivery(false); setShowReconciliation(false); setShowTechnical(false); setShowClosing(false); return; }
-    setProjectId(""); setProjectTab("overview"); setQuery(""); setShowProjectCartons(false); setShowWarehouse(false); setShowProduction(false); setShowBoxDistribution(false);
+    setShowIntake(false); setProjectId(""); setProjectTab("overview"); setQuery(""); setShowProjectCartons(false); setShowWarehouse(false); setShowProduction(false); setShowBoxDistribution(false);
   }
   const usedBeneficiaryIds = new Set(projectSchools.map(row => clean(row.beneficiary_id)));
   const availableMembers = asArray(data.members).filter(member => !usedBeneficiaryIds.has(clean(member.id)));
@@ -490,7 +493,7 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
             </div>
           </section>
           <section className="pr-project-overall-card" aria-label="Overall preparation progress">
-            <div className="pr-project-overall-head"><div><h2>Overall Progress</h2><p>Project completion across all five preparation stages.</p></div>
+            <div className="pr-project-overall-head"><div><h2>Overall Progress</h2><p>Project completion across all six preparation stages.</p></div>
               <strong aria-label={overallPercent === null ? "Progress not available" : `${overallPercent}% complete`}>{overallPercent === null ? "—" : `${overallPercent}%`}</strong></div>
             <div className="pr-project-overall-track" role="progressbar" aria-label="Overall project completion" aria-valuemin={0} aria-valuemax={100} aria-valuenow={overallPercent === null ? undefined : overallPercent} aria-valuetext={overallPercent === null ? "Unavailable" : `${overallPercent}%`}>
               <span style={{width:`${overallPercent ?? 0}%`}}/></div>
@@ -577,8 +580,9 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
 
     </>}
     {project && !school && showWarehouse && preparingStageReadable(account, "warehouse") && <div className="pr-components-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setShowWarehouse(false);}}><section className="pr-components-sheet pr-warehouse-sheet" role="dialog" aria-modal="true" aria-label="Project Warehouse Receiving"><ProjectWarehouseReceiving key={projectId} projectId={projectId} projectName={project.name} hasProjectProposal={!!project.source_proposal_id} canReceive={stageGranular ? stagePermissions.warehouse : canWarehouseReceive} canAllocate={stageGranular ? stagePermissions.warehouse : canWarehouseAllocate} closurePanel={<ProjectStageClosure projectId={projectId} stage="warehouse" allowed={stagePermissions.warehouse} onClosed={()=>setProjectStageRevision(n=>n+1)}/>} request={api} onClose={()=>{setShowWarehouse(false);setProjectStageRevision(n=>n+1);}}/></section></div>}
+    {project && !school && showIntake && preparingStageReadable(account, "intake") && <div className="pr-components-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setShowIntake(false);}}><section className="pr-components-sheet pr-warehouse-sheet" role="dialog" aria-modal="true" aria-label="Production Receiving"><ProjectProductionIntake key={`${projectId}-intake`} projectId={projectId} projectName={project.name} canTest={stagePermissions.intake} closurePanel={<ProjectStageClosure projectId={projectId} stage="intake" allowed={stagePermissions.intake} onClosed={()=>setProjectStageRevision(n=>n+1)}/>} request={api} onClose={()=>{setShowIntake(false);setProjectStageRevision(n=>n+1);}}/></section></div>}
     {project && !school && showProjectTesting && preparingStageReadable(account, "testing") && <div className="pr-components-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setShowProjectTesting(false);}}><section className="pr-components-sheet pr-warehouse-sheet" role="dialog" aria-modal="true" aria-label="Project Testing"><ProjectTesting key={projectId} projectId={projectId} projectName={project.name} canTest={stagePermissions.testing} closurePanel={<ProjectStageClosure projectId={projectId} stage="testing" allowed={stagePermissions.testing} onClosed={()=>setProjectStageRevision(n=>n+1)}/>} request={api} onClose={()=>{setShowProjectTesting(false);setProjectStageRevision(n=>n+1);}}/></section></div>}
-    {project && !school && showProduction && preparingStageReadable(account, "production") && <div className="pr-components-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setShowProduction(false);}}><section className="pr-components-sheet pr-warehouse-sheet" role="dialog" aria-modal="true" aria-label="Production Receiving"><ProjectProductionReceiving key={projectId} projectId={projectId} projectName={project.name} stageRecords={stages} allowed={stagePermissions.production} cartonsAllowed={stagePermissions.production} closurePanel={<ProjectStageClosure projectId={projectId} stage="production" allowed={stagePermissions.production} onClosed={()=>setProjectStageRevision(n=>n+1)}/>} request={api} onClose={()=>{setShowProduction(false);setProjectStageRevision(n=>n+1);}}/></section></div>}
+    {project && !school && showProduction && preparingStageReadable(account, "production") && <div className="pr-components-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setShowProduction(false);}}><section className="pr-components-sheet pr-warehouse-sheet" role="dialog" aria-modal="true" aria-label="Operations Receiving"><ProjectProductionReceiving key={projectId} projectId={projectId} projectName={project.name} stageRecords={stages} allowed={stagePermissions.production} cartonsAllowed={stagePermissions.production} closurePanel={<ProjectStageClosure projectId={projectId} stage="production" allowed={stagePermissions.production} onClosed={()=>setProjectStageRevision(n=>n+1)}/>} request={api} onClose={()=>{setShowProduction(false);setProjectStageRevision(n=>n+1);}}/></section></div>}
     {project && !school && showBoxDistribution && preparingStageReadable(account, "boxes") && <div className="pr-components-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setShowBoxDistribution(false);}}><section className="pr-components-sheet pr-warehouse-sheet" role="dialog" aria-modal="true" aria-label="Box Distribution"><ProjectProductionReceiving key={`${projectId}-boxes`} view="boxes" projectId={projectId} projectName={project.name} stageRecords={stages} allowed={stagePermissions.boxes} cartonsAllowed={stagePermissions.boxes} closurePanel={<ProjectStageClosure projectId={projectId} stage="boxes" allowed={stagePermissions.boxes} onClosed={()=>setProjectStageRevision(n=>n+1)}/>} request={api} onClose={()=>{setShowBoxDistribution(false);setProjectStageRevision(n=>n+1);}}/></section></div>}
     {project && !school && showProjectCartons && preparingStageReadable(account, "cartons") && <div className="pr-components-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setShowProjectCartons(false);}}><section className="pr-components-sheet" role="dialog" aria-modal="true" aria-label="Project Kit Cartons"><ProjectKitCartons key={projectId} projectId={projectId} projectName={project?.name||""} stageRecords={stages} allowed={stagePermissions.cartons} closurePanel={<ProjectStageClosure projectId={projectId} stage="cartons" allowed={stagePermissions.cartons} onClosed={()=>setProjectStageRevision(n=>n+1)}/>} request={api} onClose={()=>{setShowProjectCartons(false);setProjectStageRevision(n=>n+1);reload().catch(err=>setError(err.message));}}/></section></div>}
     {school ? <>

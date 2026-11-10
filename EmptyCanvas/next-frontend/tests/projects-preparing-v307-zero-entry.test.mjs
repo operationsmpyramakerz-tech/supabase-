@@ -29,7 +29,7 @@ test('all five project stage quantity editors use the zero-replacement input',()
   const expectations={
     'ProjectTesting.jsx':['Tested quantity'],
     'ProjectWarehouseReceiving.jsx':['Received ${row.product_name}'],
-    'ProjectProductionReceiving.jsx':['Production Received ${r.name}'],
+    'ProjectProductionReceiving.jsx':['Operations Received ${r.name}'],
     'ProjectBoxDistribution.jsx':['Packed ${row.name}'],
     'ProjectKitCartons.jsx':['Packed ${c.product_name}','Quantity to allocate'],
   };

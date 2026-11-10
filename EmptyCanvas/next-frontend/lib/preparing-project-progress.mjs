@@ -1,6 +1,6 @@
 // Dashboard-only read model. School delivery/closing has its own nine-stage tracker.
 // Project Components is the Master BOM and is NOT a preparation stage.
-// Completion is the arithmetic mean of five preparation stages; formal sign-off overrides quantity progress.
+// Completion is the arithmetic mean of six preparation stages; formal sign-off overrides quantity progress.
 // Box Distribution tracks packed units, while Project Kit Cartons tracks sealed (ready) units.
 const rows = value => Array.isArray(value) ? value : [];
 const amount = value => {
@@ -22,8 +22,9 @@ export function calculateProjectPreparationProgress({ testing, warehouse, produc
     .filter(carton => carton?.status === "ready").map(carton => String(carton.id)));
   const sealed = rows(production?.cartonLines).reduce((sum, line) =>
     sum + (readyCartonIds.has(String(line.carton_id)) ? amount(line.packed_qty) : 0), 0);
-  const stageKeys = ["testing", "warehouse", "production", "boxes", "cartons"];
+  const stageKeys = ["intake", "testing", "warehouse", "production", "boxes", "cartons"];
   const stages = [
+    percentage(tested.reduce((sum,row)=>sum+amount(row.productionIntakeReceived),0), required),
     percentage(testedTotal, required),
     percentage(received, required),
     percentage(handedOff, required),

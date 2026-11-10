@@ -8,7 +8,7 @@ const read=p=>readFileSync(new URL(`../${p}`,import.meta.url),'utf8');
 const ui=read('components/preparing/PreparingClient.jsx');
 const css=read('public/css/projects-preparing.css');
 
-test('Components and Schools have separate functional tabs; Master BOM remains independent of the five progress steps',()=>{
+test('Components and Schools have separate functional tabs; Master BOM remains independent of the six progress steps',()=>{
   const overview = ui.split('{projectTab === "overview" &&')[1].split('{projectTab === "components" &&')[0];
   const schools = ui.split('{projectTab === "schools" &&')[1].split('{projectTab === "reports" &&')[0];
   assert.ok(overview && schools);
@@ -20,9 +20,9 @@ test('Components and Schools have separate functional tabs; Master BOM remains i
   assert.match(ui,/onChanged=\{\(\)=>\{setProjectStageRevision/);
   const cards=ui.split('const projectStepCards = [')[1].split('];')[0];
   assert.doesNotMatch(cards,/key:"components"/);
-  assert.equal((cards.match(/key:"(?:testing|warehouse|production|boxes|cartons)"/g)||[]).length,5);
+  assert.equal((cards.match(/key:"(?:intake|testing|warehouse|production|boxes|cartons)"/g)||[]).length,6);
 });
-test('top overview and step timeline show five-stage logic without component progress',()=>{
+test('top overview and step timeline show six-stage logic without component progress',()=>{
   assert.match(ui,/pr-summary-card--overview/);
   assert.match(ui,/Project Overview/);
   assert.doesNotMatch(ui,/PROJECT PROGRESS/);
@@ -35,12 +35,12 @@ test('top overview and step timeline show five-stage logic without component pro
   assert.match(ui,/pr-step-kpi-track/);
 });
 test('progress math excludes Master BOM even when source proposal changes',()=>{
-  const inputs={testing:{items:[{required:10,tested:4}]},warehouse:{receiptLines:[{accepted_delta:3}]},production:{items:[{productionReceived:2,packedQty:1}]}};
+  const inputs={testing:{items:[{required:10,tested:4,productionIntakeReceived:6}]},warehouse:{receiptLines:[{accepted_delta:3}]},production:{items:[{productionReceived:2,packedQty:1}]}};
   const a=calculateProjectPreparationProgress({...inputs,sourceProposalId:null});
   const b=calculateProjectPreparationProgress({...inputs,sourceProposalId:'proposal-id'});
   assert.deepEqual(a,b);
-  assert.deepEqual(a.stages,[40,30,20,10,0]);
-  assert.equal(a.overall,20);
+  assert.deepEqual(a.stages,[60,40,30,20,10,0]);
+  assert.equal(a.overall,27);
   assert.equal(a.completed,0);
 });
 test('responsive layout, permissioned avatars and embedded component semantics remain sound',()=>{

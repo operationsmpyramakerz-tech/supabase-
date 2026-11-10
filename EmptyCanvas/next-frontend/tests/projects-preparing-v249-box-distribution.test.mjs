@@ -5,13 +5,13 @@ import {createRequire} from "node:module";
 import {boxPackingTarget} from "../lib/preparing-production-math.mjs";
 const require=createRequire(import.meta.url);const ts=require("typescript");
 const read=f=>readFileSync(new URL(`../${f}`,import.meta.url),"utf8");
-test("Box arithmetic is derived from Production Received and prevents overpacking",()=>{
+test("Box arithmetic is derived from Operations Received and prevents overpacking",()=>{
  assert.deepEqual(boxPackingTarget(6,4,2,"3"),{packed:5,unpacked:1});
  assert.deepEqual(boxPackingTarget(6,4,2,"0"),{packed:2,unpacked:4});
- assert.throws(()=>boxPackingTarget(6,4,2,"5"),/cannot exceed Production Received/);
+ assert.throws(()=>boxPackingTarget(6,4,2,"5"),/cannot exceed Operations Received/);
  for(const invalid of ["","2.1","-1","Infinity","NaN"])assert.throws(()=>boxPackingTarget(6,2,1,invalid),/whole number/);
 });
-test("Production Received tab has only receiving columns, while box tab owns Packed and Unpacked",()=>{
+test("Operations Received tab has only receiving columns, while box tab owns Packed and Unpacked",()=>{
  const ui=read("components/preparing/ProjectProductionReceiving.jsx");
  const box=read("components/preparing/ProjectBoxDistribution.jsx");
  const receive=ui.match(/pr-production-receipt-metrics[\s\S]*?pr-production-actions/);

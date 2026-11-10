@@ -31,7 +31,7 @@ export async function listPreparingStepAccessUsers() {
     readRows(process.env.SUPABASE_TEAM_MEMBERS_TABLE || "team_members", "id,allowed_pages", "id.asc").catch(() => []),
     advanced ? readRows("erp_member_feature_profiles", "team_member_id,enabled", "team_member_id.asc") : [],
     advanced ? readRows("erp_member_feature_grants", "team_member_id,permission_key,is_allowed,data_scope", "team_member_id.asc,permission_key.asc", {
-      permission_key: "in.(preparing.view,preparing.manage,preparing.stage_update,preparing.warehouse_receive,preparing.stages.__granular,preparing.stage.testing,preparing.stage.warehouse,preparing.stage.production,preparing.stage.boxes,preparing.stage.cartons)",
+      permission_key: "in.(preparing.view,preparing.manage,preparing.stage_update,preparing.warehouse_receive,preparing.stages.__granular,preparing.stage.intake,preparing.stage.testing,preparing.stage.warehouse,preparing.stage.production,preparing.stage.boxes,preparing.stage.cartons)",
     }) : [],
   ]);
   const trustedAdminIds = String(process.env.ERP_TRUSTED_ADMIN_MEMBER_IDS || "").split(",").map(v => v.trim()).filter(Boolean);

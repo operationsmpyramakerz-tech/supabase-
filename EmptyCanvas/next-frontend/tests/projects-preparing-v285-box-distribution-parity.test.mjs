@@ -17,7 +17,7 @@ test('Box Distribution has independent close, icon history and labeled download'
 });
 
 test('Box Distribution solid KPI cards use actual packing totals and semantic color tones',()=>{
- for(const re of [/Production Received/,/Packed/,/Available to Pack \/ Unpacked/,/pr-box-summary pr-pt-stat-grid/,/pr-pt-stat--\$\{tone\}/,/totals\.production/,/totals\.packed/,/totals\.unpacked/])assert.match(boxes,re);
+ for(const re of [/Operations Received/,/Packed/,/Available to Pack \/ Unpacked/,/pr-box-summary pr-pt-stat-grid/,/pr-pt-stat--\$\{tone\}/,/totals\.production/,/totals\.packed/,/totals\.unpacked/])assert.match(boxes,re);
  for(const re of [/\.pr-box-parity \.pr-production-summary\.pr-box-summary\.pr-pt-stat-grid/,/\.pr-box-parity \.pr-box-summary\.pr-pt-stat-grid>\.pr-pt-stat--available/,/--pt-card-bg:#f5c536/,/border-top:1px solid var\(--pt-card-border\)/])assert.match(css,re);
 });
 

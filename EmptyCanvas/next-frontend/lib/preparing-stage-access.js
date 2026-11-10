@@ -2,7 +2,7 @@
 // their existing rights until an administrator enables granular stage access.
 import { featureAllowed } from './feature-permissions-registry.js';
 
-export const PREPARING_STAGE_KEYS = Object.freeze(['testing', 'warehouse', 'production', 'boxes', 'cartons']);
+export const PREPARING_STAGE_KEYS = Object.freeze(['intake', 'testing', 'warehouse', 'production', 'boxes', 'cartons']);
 export const PREPARING_STAGE_MARKER = 'preparing.stages.__granular';
 
 export function preparingStageAllowed(account, stage) {

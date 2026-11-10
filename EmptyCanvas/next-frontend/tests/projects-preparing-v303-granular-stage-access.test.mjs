@@ -10,8 +10,8 @@ const account = grants => ({featureAccess:{mode:'enforced',grants:Object.fromEnt
 const root = new URL('../', import.meta.url);
 const read = path => fs.readFileSync(new URL(path, root),'utf8');
 
-test('Users Center contains a granular marker and individual grants for all five stages',()=>{
-  assert.deepEqual(PREPARING_STAGE_KEYS,['testing','warehouse','production','boxes','cartons']);
+test('Users Center contains a granular marker and individual grants for all six stages',()=>{
+  assert.deepEqual(PREPARING_STAGE_KEYS,['intake','testing','warehouse','production','boxes','cartons']);
   for(const name of PREPARING_STAGE_KEYS){
     const key=`preparing.stage.${name}`;
     assert.equal(isKnownFeature(key),true);
