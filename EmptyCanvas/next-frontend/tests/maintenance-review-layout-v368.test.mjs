@@ -22,7 +22,11 @@ test("Orders Review uses exactly the shared maintenance detail component, not th
   assert.match(source, /<MaintenanceComponentCards items=\{group\.items\} query=\{componentSearch\}/);
   assert.match(source, /: <ProgressiveOrderGroups/);
   assert.match(source, /\{!maintenance \? <OrderSortButton/);
-  assert.match(source, /\{canAct && !maintenance && permissions\.bulk_approve/);
+  // Bulk approval applies to maintenance as well as other order types.
+  assert.match(source, /\{canAct && permissions\.bulk_approve \? <div className="next-review-bulk-actions"/);
+  assert.match(source, /const canAct = !archived && approval === "not-started" && activeTab === "not-started"/);
+  assert.match(source, /onBulkDecision\(group, "Approved"\)/);
+  assert.match(source, /onBulkDecision\(group, "Rejected"\)/);
   assert.match(source, /next-maintenance-review-modal/);
 });
 
