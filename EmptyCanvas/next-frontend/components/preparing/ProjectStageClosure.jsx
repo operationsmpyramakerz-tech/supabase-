@@ -21,8 +21,7 @@ function Icon({ name, size = 22 }) {
 }
 
 const MAX_BYTES = 3500000;
-const MAX_FILES = 10;
-const TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
 
 function formatBytes(value) {
   if (!Number.isFinite(value) || value <= 0) return '0 KB';
@@ -39,7 +38,7 @@ function Preview({ file }) {
     setUrl(next);
     return () => URL.revokeObjectURL(next);
   }, [file]);
-  return url ? <img src={url} alt={file.name} /> : null;
+  return url ? (file.type === 'application/pdf' ? <div className="pr-sc-pdf-preview"><iframe src={url} title={file.name} /><a href={url} target="_blank" rel="noopener noreferrer">Open PDF in new tab</a></div> : <img src={url} alt={file.name} />) : null;
 }
 
 async function fitImage(file, budget) {
@@ -81,13 +80,15 @@ export default function ProjectStageClosure({ projectId, stage, allowed, onClose
   const [files, setFiles] = useState([]);
   const [busy, setBusy] = useState(false);
   const [preparing, setPreparing] = useState(false);
-  const [confirmed, setConfirmed] = useState(false);
+  const [uploadCount, setUploadCount] = useState(0);
   const [retry, setRetry] = useState(0);
   const [dragging, setDragging] = useState(false);
   const [previewFile, setPreviewFile] = useState(null);
   const dialog = useRef(null);
   const mounted = useRef(true);
   const inFlight = useRef(false);
+  const preparingRef = useRef(false);
+  const receipts = useRef(new Map());
 
   useEffect(() => {
     const el = dialog.current;
@@ -145,27 +146,26 @@ export default function ProjectStageClosure({ projectId, stage, allowed, onClose
   }, [endpoint, retry]);
 
   async function stageFiles(added) {
-    if (!added.length) return;
-    if (files.length + added.length > MAX_FILES) {
-      setError('Choose up to 10 document images.');
+    if (!added.length || inFlight.current || preparingRef.current) return;
+    if (added.some(f => !TYPES.includes(f.type) || !f.size)) {
+      setError('Choose JPG, PNG, WEBP or PDF files.');
       return;
     }
-    if (added.some((f) => !TYPES.includes(f.type) || !f.size)) {
-      setError('Choose JPG, PNG or WEBP images.');
+    if (added.some(f => f.type === 'application/pdf' && f.size > MAX_BYTES)) {
+      setError('Each PDF must be 3.5 MB or less.');
       return;
     }
+    preparingRef.current = true;
     setPreparing(true);
     setError('');
-    setConfirmed(false);
     try {
-      const all = [...files, ...added];
-      const next = all.reduce((s, f) => s + f.size, 0) <= MAX_BYTES
-        ? all
-        : await Promise.all(all.map((f) => fitImage(f, Math.floor(MAX_BYTES / all.length))));
-      if (mounted.current) setFiles(next);
+      const next=[];
+      for (const file of added) next.push(file.type === 'application/pdf' ? file : await fitImage(file, MAX_BYTES));
+      if (mounted.current) setFiles(v => [...v, ...next]);
     } catch (e) {
-      if (mounted.current) setError(e.message || 'Unable to prepare images.');
+      if (mounted.current) setError(e.message || 'Unable to prepare files.');
     } finally {
+      preparingRef.current=false;
       if (mounted.current) setPreparing(false);
     }
   }
@@ -184,20 +184,29 @@ export default function ProjectStageClosure({ projectId, stage, allowed, onClose
   }
 
   async function closeStage() {
-    if (inFlight.current || !allowed || !confirmed || !files.length || record || preparing) return;
+    if (inFlight.current || !allowed || !files.length || record || preparing) return;
     inFlight.current = true;
     setBusy(true);
     setError('');
     try {
-      const form = new FormData();
-      files.forEach((f) => form.append('documents', f, f.name));
-      const response = await fetch(endpoint, { method: 'POST', body: form, cache: 'no-store' });
-      const json = await response.json().catch(() => ({}));
-      if (!response.ok || !json.ok) {
-        if (response.status === 409) setRetry((v) => v + 1);
-        throw new Error(json.error || `Closure failed (${response.status}).`);
+      setUploadCount(0);
+      const tokens=[];
+      for(const file of files){
+        let cached=receipts.current.get(file);
+        if(!cached || cached.expires < Date.now()){
+          const form=new FormData();form.append('documents',file,file.name);
+          const response=await fetch(`${endpoint}&action=upload`,{method:'POST',body:form,cache:'no-store'});
+          const json=await response.json().catch(()=>({}));
+          if(!response.ok||!json.ok){if(response.status===409)setRetry(v=>v+1);throw new Error(json.error||`Upload failed (${response.status}).`);}
+          cached={token:json.receipt,expires:Date.now()+23*60*60*1000};receipts.current.set(file,cached);
+        }
+        tokens.push(cached.token);
+        if(mounted.current)setUploadCount(tokens.length);
       }
-      if (mounted.current) { setRecord(json.closure);setFiles([]);setConfirmed(false);setOpen(false); }
+      const response=await fetch(`${endpoint}&action=finalize`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({receipts:tokens}),cache:'no-store'});
+      const json=await response.json().catch(()=>({}));
+      if(!response.ok||!json.ok){if(response.status===409)setRetry(v=>v+1);throw new Error(json.error||`Closure failed (${response.status}).`);}
+      if (mounted.current) { setRecord(json.closure);setFiles([]);setOpen(false);receipts.current.clear(); }
       onClosed?.();
     } catch (e) {
       if (mounted.current) setError(e.message);
@@ -234,7 +243,7 @@ export default function ProjectStageClosure({ projectId, stage, allowed, onClose
 
       <dialog ref={dialog}
         className="pr-sc-dialog"
-        aria-label={previewFile ? 'Image preview' : record ? 'Signed documents' : 'Close stage'}
+        aria-label={previewFile ? 'Document preview' : record ? 'Signed documents' : 'Close stage'}
         onCancel={(e) => { e.preventDefault(); dismiss(); }}
         onClick={(e) => { if (e.target === e.currentTarget) dismiss(); }}
       >
@@ -260,10 +269,10 @@ export default function ProjectStageClosure({ projectId, stage, allowed, onClose
                     onDragLeave={(e) => { if (e.currentTarget === e.target) setDragging(false); }}
                     onDrop={onDrop}
                   >
-                    <input type="file" accept="image/jpeg,image/png,image/webp" multiple disabled={busy || preparing} onChange={addFiles} />
+                    <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf,.pdf" multiple disabled={busy || preparing} onChange={addFiles} />
                     <span className="pr-sc-plus-circle"><Icon name="plus" size={26} /></span>
                     <strong>{preparing ? 'Preparing files…' : 'Drag & Drop or click to choose files'}</strong>
-                    <small>JPG, PNG, WEBP · Up to 10 photos · 3.5 MB total</small>
+                    <small>JPG, PNG, WEBP, PDF · 3.5 MB per file</small>
                   </label>
 
                   {!!files.length && (
@@ -279,27 +288,24 @@ export default function ProjectStageClosure({ projectId, stage, allowed, onClose
                               </div>
                             </div>
                             <div className="pr-sc-upload-actions">
-                              <button type="button" className="pr-sc-upload-action pr-sc-open-file" aria-label={`Open ${f.name}`} disabled={busy || preparing} onClick={() => setPreviewFile(f)}><Icon name="eye" size={17} /> <span>Open</span></button>
-                              <button type="button" className="pr-sc-upload-action pr-sc-delete-file" aria-label={`Remove ${f.name}`} disabled={busy || preparing} onClick={() => { setFiles((v) => v.filter((_, index) => index !== i)); setConfirmed(false); }}><Icon name="trash" size={19} /></button>
+                              <button type="button" className="pr-sc-upload-action pr-sc-open-file" aria-label={`Open ${f.name}`} disabled={busy || preparing} onClick={() => setPreviewFile(f)}><Icon name="eye" size={17} /></button>
+                              <button type="button" className="pr-sc-upload-action pr-sc-delete-file" aria-label={`Remove ${f.name}`} disabled={busy || preparing} onClick={() => { setFiles((v) => v.filter((_, index) => index !== i)); setError(''); }}><Icon name="trash" size={19} /></button>
                             </div>
                           </article>
                         ))}
                       </div>
 
-                      <button type="button" className="pr-sc-remove-all" disabled={busy || preparing} onClick={() => { setFiles([]); setConfirmed(false); }}><Icon name="trash" size={17} /> <span>Remove all selected files</span></button>
+                      <button type="button" className="pr-sc-remove-all" disabled={busy || preparing} onClick={() => { setFiles([]); setError(''); }}><Icon name="trash" size={17} /> <span>Remove all selected files</span></button>
                     </>
                   )}
                 </div>
 
                 <div className="pr-sc-upload-summary">
-                  <span>{files.length} / {MAX_FILES} files</span>
-                  <span>{formatBytes(totalSize)} / {formatBytes(MAX_BYTES)}</span>
+                  <span>{files.length} {files.length === 1 ? 'file' : 'files'}</span>
+                  <span>{formatBytes(totalSize)} total</span>
                 </div>
 
-                <label className="pr-sc-confirm pr-sc-confirm-upload">
-                  <input type="checkbox" checked={confirmed} disabled={busy || preparing || !files.length} onChange={(e) => setConfirmed(e.target.checked)} />
-                  <span>I confirm these signed documents are correct and this stage is ready to close.</span>
-                </label>
+
               </>
             ) : record ? (
               <>
@@ -332,7 +338,7 @@ export default function ProjectStageClosure({ projectId, stage, allowed, onClose
 
           <footer className="pr-sc-modal-footer pr-sc-upload-footer">
             <button type="button" className="pr-sc-cancel" disabled={busy || preparing} onClick={dismiss}>{previewFile ? 'Back to files' : record ? 'Done' : 'Cancel'}</button>
-            {!previewFile && !record && allowed && <button type="button" className="pr-sc-submit" disabled={!files.length || !confirmed || busy || preparing} onClick={closeStage}><Icon name="lock" size={16} />{busy ? 'Closing…' : 'Confirm & Close Stage'}</button>}
+            {!previewFile && !record && allowed && <button type="button" className="pr-sc-submit" disabled={!files.length || busy || preparing} onClick={closeStage}><Icon name="lock" size={16} />{busy ? `Uploading ${uploadCount}/${files.length}…` : 'Close Stage'}</button>}
           </footer>
         </div>
       </dialog>
