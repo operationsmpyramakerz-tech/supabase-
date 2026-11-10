@@ -4134,3 +4134,71 @@ body.next-classic-shell-active .classic-app-shell .main-header .dash-title:has(>
   .pr-header-path--chevrons > .pr-header-path-segment { max-width: 116px !important; font-size: 11px !important; }
   .pr-header-path--chevrons > .pr-header-path-segment:last-child { max-width: 128px !important; }
 }
+
+/* v374: hold-only folders and searchable Add Schools multi-select. */
+.pr-root.pr-root--index .pr-folder-copy,
+.pr-root.pr-root--project .pr-dashboard-schools .pr-folder-copy {right:11px;}
+.pr-root .pr-add-schools-sheet {
+  --school-surface:#fff;--school-soft:#f5f6f8;--school-line:#e5e7eb;--school-text:#172033;--school-muted:#687384;--school-accent:#ef791c;--school-tint:#fff3e8;
+  width:min(100%,640px);max-height:92dvh;overflow:hidden;color:var(--school-text);background:var(--school-surface);
+}
+.pr-root .pr-add-schools-sheet .pr-sheet-head,
+.pr-root .pr-add-schools-sheet .pr-sheet-foot {background:var(--school-surface);border-color:var(--school-line);padding-inline:24px;}
+.pr-root .pr-add-schools-sheet .pr-sheet-head {padding-block:16px;}
+.pr-root .pr-add-schools-sheet .pr-sheet-title-with-icon {display:flex;align-items:center;gap:12px;}
+.pr-root .pr-add-schools-sheet .pr-sheet-title-icon {display:grid;place-items:center;width:42px;height:42px;flex:none;border-radius:13px;background:var(--school-tint);color:var(--school-accent);}
+.pr-root .pr-add-schools-sheet .pr-sheet-body {padding:20px 24px;gap:20px;min-height:0;}
+.pr-school-project-context {display:flex;align-items:center;gap:12px;padding:14px;border-radius:16px;background:#101827;color:#fff;min-width:0;}
+.pr-school-project-icon {display:grid;place-items:center;width:42px;height:42px;flex:none;border-radius:12px;background:#ffffff15;color:#ff9a45;}
+.pr-school-project-context>div {display:flex;flex-direction:column;gap:4px;flex:1;min-width:0;}
+.pr-school-project-context small {font-size:10px;letter-spacing:.1em;color:#a9b5c8;font-weight:700;}
+.pr-school-project-context strong {font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.pr-school-project-count {font-size:11px;padding:7px 9px;border-radius:9px;background:#ffffff15;white-space:nowrap;}
+.pr-school-picker {display:flex;flex-direction:column;gap:9px;min-width:0;}
+.pr-school-picker-label {font-size:12px;font-weight:700;color:var(--school-text);}
+.pr-school-picker-trigger {display:flex;align-items:center;gap:12px;width:100%;min-height:62px;padding:10px 12px;border:1px solid var(--school-line);border-radius:15px;background:var(--school-surface);color:var(--school-text);text-align:left;}
+.pr-school-picker-trigger:hover,.pr-school-picker-trigger.is-open {border-color:var(--school-accent);}
+.pr-school-picker-icon,.pr-school-option-icon {display:grid;place-items:center;flex:none;width:37px;height:37px;border-radius:11px;background:var(--school-soft);color:var(--school-muted);}
+.pr-school-picker-trigger-copy,.pr-school-option-copy {display:flex;flex-direction:column;gap:4px;flex:1;min-width:0;}
+.pr-school-picker-trigger-copy strong,.pr-school-option-copy strong {font-size:13px;font-weight:700;overflow-wrap:anywhere;}
+.pr-school-picker-trigger-copy small,.pr-school-option-copy small {font-size:11px;color:var(--school-muted);overflow-wrap:anywhere;}
+.pr-school-picker-chevron {display:grid;place-items:center;color:var(--school-muted);transform:rotate(90deg);transition:transform .18s;}
+.pr-school-picker-trigger.is-open .pr-school-picker-chevron {transform:rotate(-90deg);color:var(--school-accent);}
+.pr-school-picker-menu {display:flex;flex-direction:column;gap:8px;padding:10px;border:1px solid var(--school-line);border-radius:16px;background:var(--school-surface);box-shadow:0 9px 25px #1720330c;}
+.pr-school-picker-search {display:flex;align-items:center;gap:9px;padding:0 11px;min-height:44px;border:1px solid transparent;border-radius:11px;background:var(--school-soft);color:var(--school-muted);}
+.pr-school-picker-search:focus-within {border-color:var(--school-accent);}
+.pr-root .pr-school-picker-search input {flex:1;min-width:0;width:100%;padding:8px 0;border:0;outline:none;box-shadow:none;background:transparent;color:var(--school-text);font-size:14px;}
+.pr-school-picker-search button {display:grid;place-items:center;background:transparent;border:0;color:var(--school-muted);padding:4px;}
+.pr-school-picker-results {max-height: min(240px,35dvh);min-height:0;overflow:auto;overscroll-behavior:contain;display:flex;flex-direction:column;gap:4px;}
+.pr-school-picker-option {position:relative;display:flex;align-items:center;gap:10px;min-height:58px;padding:9px;border:1px solid transparent;border-radius:11px;cursor:pointer;color:var(--school-text);}
+.pr-school-picker-option:hover {background:var(--school-soft);}
+.pr-school-picker-option.is-selected {background:var(--school-tint);border-color:#ef791c40;}
+.pr-school-picker-option.is-selected .pr-school-option-icon {background:#ef791c20;color:var(--school-accent);}
+.pr-school-picker-option input {position:absolute;right:12px;width:22px;height:22px;opacity:0;margin:0;cursor:pointer;}
+.pr-school-option-check {display:grid;place-items:center;flex:none;width:21px;height:21px;border-radius:7px;border:1px solid var(--school-line);background:var(--school-surface);color:transparent;pointer-events:none;}
+.pr-school-picker-option input:checked + .pr-school-option-check {background:var(--school-accent);border-color:var(--school-accent);color:white;}
+.pr-school-picker-option:focus-within {outline:2px solid var(--school-accent);outline-offset:-2px;}
+.pr-school-picker-empty {display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px;padding:20px 10px;color:var(--school-muted);font-size:12px;}
+.pr-school-picker-empty strong {color:var(--school-text);font-size:13px;}
+.pr-school-picker-menu-foot,.pr-school-selection-head {display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px;color:var(--school-muted);}
+.pr-school-picker-menu-foot {border-top:1px solid var(--school-line);padding:8px 4px 0;}
+.pr-school-picker-menu-foot button,.pr-school-selection-head button {display:inline-flex;align-items:center;gap:5px;border:0;background:transparent;color:var(--school-accent);font-size:12px;font-weight:700;padding:5px;}
+.pr-school-selection {padding:12px;background:var(--school-soft);border-radius:14px;margin-top:3px;}
+.pr-school-selection-head strong {color:var(--school-text);font-size:12px;}
+.pr-school-selection-head strong span {display:inline-flex;align-items:center;justify-content:center;margin-left:4px;min-width:20px;height:20px;border-radius:7px;background:var(--school-surface);color:var(--school-muted);}
+.pr-school-selection-chips {display:flex;flex-wrap:wrap;gap:7px;max-height:106px;overflow:auto;margin-top:9px;}
+.pr-school-selection-chip {display:inline-flex;align-items:center;gap:7px;min-width:0;max-width:100%;padding:7px 9px;background:var(--school-surface);border:1px solid var(--school-line);border-radius:9px;color:var(--school-text);font-size:11px;font-weight:600;}
+.pr-school-selection-chip span {overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
+.pr-school-selection-chip svg {flex:none;color:var(--school-muted);}
+.pr-school-save-error {margin:0;background:#fff1ef;color:#a52f28;border-radius:10px;padding:11px;font-size:12px;overflow-wrap:anywhere;}
+.pr-root .pr-add-schools-sheet .pr-sheet-foot .pr-primary {background:#ef791c;border-color:#ef791c;min-width:148px;min-height:44px;}
+.pr-root .pr-add-schools-sheet .pr-sheet-foot .pr-secondary {min-height:44px;background:var(--school-surface);color:var(--school-text);border-color:var(--school-line);}
+.pr-school-picker button:focus-visible,.pr-school-selection-chip:focus-visible {outline:2px solid var(--school-accent);outline-offset:2px;}
+html[data-theme="dark"] .pr-root .pr-add-schools-sheet {--school-surface:#181c25;--school-soft:#222833;--school-line:#343c4a;--school-text:#eef1f6;--school-muted:#a1adbd;--school-accent:#ff933e;--school-tint:#392a22;}
+@media(max-width:670px) {
+  .pr-root .pr-add-schools-sheet .pr-sheet-head,.pr-root .pr-add-schools-sheet .pr-sheet-foot {padding-inline:16px;}
+  .pr-root .pr-add-schools-sheet .pr-sheet-body {padding:16px;gap:16px;}
+  .pr-root .pr-school-picker-search input {font-size:16px;}
+  .pr-root .pr-add-schools-sheet .pr-sheet-foot .pr-primary {flex:1;min-width:0;}
+  .pr-school-picker-results {max-height:min(210px,32dvh);}
+}

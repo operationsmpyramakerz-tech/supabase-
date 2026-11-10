@@ -71,15 +71,66 @@ function StepAccessAvatars({ access, loading, unavailable }) {
     {access.count > access.users.length && <span className="pr-step-access-extra" title={`${access.count} users have access`}>+{access.count - access.users.length}</span>}
   </span>;
 }
-function Sheet({ title, onClose, children, footer }) {
+function Sheet({ title, onClose, children, footer, className = "", icon }) {
   return <div className="pr-overlay" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
-    <section className="pr-sheet" role="dialog" aria-modal="true" aria-label={title}>
-      <header className="pr-sheet-head"><div><h2>{title}</h2></div><button type="button" className="pr-icon" onClick={onClose} aria-label="Close"><Ico name="close"/></button></header>
+    <section className={`pr-sheet ${className}`} role="dialog" aria-modal="true" aria-label={title}>
+      <header className="pr-sheet-head"><div className={icon ? "pr-sheet-title-with-icon" : undefined}>{icon && <span className="pr-sheet-title-icon"><Ico name={icon} size={21}/></span>}<h2>{title}</h2></div><button type="button" className="pr-icon" onClick={onClose} aria-label="Close"><Ico name="close"/></button></header>
       <div className="pr-sheet-body">{children}</div>{footer && <footer className="pr-sheet-foot">{footer}</footer>}
     </section>
   </div>;
 }
 
+
+// Search and multi-select live inside the expanded dropdown, not in a separate field.
+function SchoolPicker({ members, selected, onChange, disabled, label }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const root = useRef(null);
+  const trigger = useRef(null);
+  const search = useRef(null);
+  const chosen = members.filter(member => selected.includes(member.id));
+  const filtered = members.filter(member => `${clean(member.name)} ${clean(member.school)}`.toLowerCase().includes(query.trim().toLowerCase()));
+  function close(restoreFocus = false) {
+    setOpen(false); setQuery("");
+    if (restoreFocus) trigger.current?.focus();
+  }
+  useEffect(() => {
+    if (!open) return;
+    search.current?.focus();
+    const outside = event => { if (!root.current?.contains(event.target)) close(); };
+    document.addEventListener("pointerdown", outside);
+    return () => document.removeEventListener("pointerdown", outside);
+  }, [open]);
+  function toggle(id) {
+    onChange(previous => previous.includes(id) ? previous.filter(item => item !== id) : [...previous, id]);
+  }
+  return <div className="pr-school-picker" ref={root} onKeyDown={event => {
+    if (event.key === "Escape" && open) { event.preventDefault(); event.stopPropagation(); close(true); }
+  }}>
+    <label className="pr-school-picker-label" htmlFor="pr-school-picker-trigger">{label}</label>
+    <button type="button" id="pr-school-picker-trigger" ref={trigger} className={`pr-school-picker-trigger ${open ? "is-open" : ""}`} aria-expanded={open} aria-controls={open ? "pr-school-picker-menu" : undefined} disabled={disabled} onClick={()=>open ? close() : setOpen(true)}>
+      <span className="pr-school-picker-icon"><Ico name="school" size={19}/></span>
+      <span className="pr-school-picker-trigger-copy"><strong>{chosen.length ? `${chosen.length} ${chosen.length === 1 ? "school" : "schools"} selected` : "Select schools"}</strong><small>{members.length} available</small></span>
+      <span className="pr-school-picker-chevron"><Ico name="arrow" size={17}/></span>
+    </button>
+    {open && <div className="pr-school-picker-menu" id="pr-school-picker-menu">
+      <div className="pr-school-picker-search"><Ico name="search" size={18}/><input ref={search} value={query} onChange={event=>setQuery(event.target.value)} placeholder="Search schools…" aria-label="Search schools" disabled={disabled} autoComplete="off"/>{query && <button type="button" disabled={disabled} aria-label="Clear search" onClick={()=>{setQuery("");search.current?.focus();}}><Ico name="close" size={16}/></button>}</div>
+      <div className="pr-school-picker-results" role="group" aria-label="Available schools">
+        {filtered.map(member => <label key={member.id} className={`pr-school-picker-option ${selected.includes(member.id) ? "is-selected" : ""}`}>
+          <span className="pr-school-option-icon"><Ico name="school" size={17}/></span>
+          <span className="pr-school-option-copy"><strong>{member.name}</strong>{member.school && <small>{member.school}</small>}</span>
+          <input type="checkbox" checked={selected.includes(member.id)} disabled={disabled} onChange={()=>toggle(member.id)} aria-label={`Select ${member.name}${member.school ? `, ${member.school}` : ""}`}/><span className="pr-school-option-check" aria-hidden="true"><Ico name="check" size={15}/></span>
+        </label>)}
+        {!filtered.length && <div className="pr-school-picker-empty"><Ico name="search" size={23}/><strong>{members.length ? "No matching schools" : "No available schools"}</strong><small>{members.length ? "Try another search." : "All eligible users may already be added."}</small></div>}
+      </div>
+      <div className="pr-school-picker-menu-foot"><span>{filtered.length} {filtered.length === 1 ? "result" : "results"}</span><button type="button" onClick={()=>close(true)}>Done <Ico name="check" size={14}/></button></div>
+    </div>}
+    {chosen.length > 0 && <section className="pr-school-selection" aria-label="Selected schools">
+      <div className="pr-school-selection-head"><strong>Selected schools <span>{chosen.length}</span></strong><button type="button" disabled={disabled} onClick={()=>onChange([])}>Clear all</button></div>
+      <div className="pr-school-selection-chips">{chosen.map(member=><button type="button" key={member.id} className="pr-school-selection-chip" disabled={disabled} onClick={()=>toggle(member.id)} aria-label={`Remove ${member.name}`}><span>{member.name}</span><Ico name="close" size={14}/></button>)}</div>
+    </section>}
+  </div>;
+}
 
 // Display the active folder path in the existing shared AppShell title.
 // Portal keeps the shared header unchanged for other ERP pages and avoids a
@@ -129,7 +180,6 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
   const [actionProjectId, setActionProjectId] = useState("");
   const [deleteConfirmName, setDeleteConfirmName] = useState("");
   const [selectedMembers, setSelectedMembers] = useState([]);
-  const [memberQuery, setMemberQuery] = useState("");
   const [stageKey, setStageKey] = useState("");
   const [stageStatus, setStageStatus] = useState("not_started");
   const [stageNotes, setStageNotes] = useState("");
@@ -304,6 +354,7 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
   }
   function folderKeyDown(event, key) {
     if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) folderContextMenu(event, key);
+    else if (event.key === "Enter" || event.key === " ") suppressFolderClick.current = false;
   }
   function openProjectFolder(id) { cancelFolderHold(); suppressFolderClick.current = false; setFolderMenu(""); setProjectId(id); setSchoolId(""); setProjectTab("overview"); setWorkflowFilter("all"); setQuery(""); }
   function openSchoolFolder(id, view = "") {
@@ -343,7 +394,7 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
     document.getElementById(`pr-detail-tab-${nextKey}`)?.focus();
   }
   function openNewProject() { setProjectName(""); setProjectDescription(""); setProjectSourceId(""); setSheet("project"); }
-  function openSchools() { setSelectedMembers([]); setMemberQuery(""); setSheet("schools"); }
+  function openSchools() { setSelectedMembers([]); setError(""); setSheet("schools"); }
   function openStage(stage) { const record = schoolStages.find(row => row.stage_key === stage.key); setStageKey(stage.key); setStageStatus(record?.status || "not_started"); setStageNotes(record?.notes || ""); setSheet("stage"); }
   function goToProjectsIndex() {
     cancelFolderHold(); setFolderMenu("");
@@ -358,10 +409,8 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
     if (school) { setSchoolId(""); setProjectTab("schools"); setQuery(""); setShowComponents(false); setShowDelivery(false); setShowReconciliation(false); setShowTechnical(false); setShowClosing(false); return; }
     setProjectId(""); setProjectTab("overview"); setQuery(""); setShowProjectCartons(false); setShowWarehouse(false); setShowProduction(false); setShowBoxDistribution(false);
   }
-  const filteredMembers = asArray(data.members).filter(member => {
-    const used = new Set(projectSchools.map(row => clean(row.beneficiary_id)));
-    return !used.has(member.id) && `${member.name} ${member.school}`.toLowerCase().includes(memberQuery.toLowerCase());
-  });
+  const usedBeneficiaryIds = new Set(projectSchools.map(row => clean(row.beneficiary_id)));
+  const availableMembers = asArray(data.members).filter(member => !usedBeneficiaryIds.has(clean(member.id)));
   const projectTabs = [
     { key: "all", label: "All Projects", icon: "folder", count: totals.projects },
     { key: "active", label: "Active", icon: "play", count: projects.filter(row => { const summary=projectSummaries.get(row.id); return summary && summary.total > summary.closed; }).length },
@@ -509,8 +558,6 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
                 <span className="pr-folder-copy"><strong>{row.beneficiary_name}</strong><em>{row.proposal_name}</em></span>
                 <span className="pr-folder-foot"><Ico name="school" size={15}/>{rowProgress.completed} / {rowProgress.total} stages<span className="pr-folder-foot-date">{rowProgress.closed ? "Closed" : rowProgress.delivered ? "Delivered" : "Preparing"}</span></span>
               </button>
-              <button type="button" className="pr-folder-menu-trigger" aria-label={`Actions for ${row.beneficiary_name}`} aria-haspopup="menu" aria-expanded={menuOpen}
-                onClick={()=>{cancelFolderHold();suppressFolderClick.current=false;setFolderMenu(menuOpen ? "" : key);}}><Ico name="more" size={14}/></button>
               {menuOpen && <div className="pr-folder-menu" role="menu" aria-label={`${row.beneficiary_name} actions`}>
                 <button type="button" role="menuitem" onClick={()=>openSchoolFolder(row.id)}>Open School</button>
                 <button type="button" role="menuitem" onClick={()=>openSchoolFolder(row.id,"components")}>Components & QC</button>
@@ -590,8 +637,6 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
               <span className="pr-folder-copy"><strong>{row.name}</strong><em>{summary.closed} of {summary.total} closed</em></span>
               <span className="pr-folder-foot"><Ico name="folder" size={11}/>{summary.total} {summary.total === 1 ? "school" : "schools"}</span>
             </button>
-            {canManage && <button type="button" className="pr-folder-menu-trigger" aria-label={`Actions for ${row.name}`} aria-haspopup="menu" aria-expanded={menuOpen}
-              onClick={()=>{cancelFolderHold();suppressFolderClick.current=false;setFolderMenu(menuOpen ? "" : key);}}><Ico name="more" size={14}/></button>}
             {menuOpen && canManage && <div className="pr-folder-menu" role="menu" aria-label={`${row.name} actions`}>
               <button type="button" role="menuitem" onClick={()=>renameProjectFolder(row)}><Ico name="edit" size={15}/> Rename</button>
               <button type="button" role="menuitem" className="pr-folder-menu-danger" onClick={()=>deleteProjectFolder(row)}><Ico name="trash" size={15}/> Delete</button>
@@ -618,13 +663,12 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
       <div className="pr-delete-notice" role="alert"><Ico name="trash" size={20}/><div><strong>Remove this project from your workspace?</strong><p>Its folder will disappear from Projects. Schools, warehouse receipts, allocations, deliveries, and audit records will be preserved for recovery and compliance.</p></div></div>
       <label className="pr-field">Type the project name to confirm: <strong>{projects.find(row=>row.id===actionProjectId)?.name || ""}</strong><input autoComplete="off" autoFocus value={deleteConfirmName} onChange={event=>setDeleteConfirmName(event.target.value)} placeholder="Project name"/></label>
     </Sheet>}
-    {sheet === "schools" && <Sheet title="Add Beneficiaries" onClose={()=>setSheet("")}
-      footer={<><button className="pr-secondary" onClick={()=>setSheet("")}>Cancel</button><button className="pr-primary" disabled={busy || !project?.source_proposal_id || !selectedMembers.length} onClick={()=>save(async()=>api("","POST",{action:"add_schools",projectId,beneficiaryIds:selectedMembers}))}>{busy ? "Adding…" : `Add ${selectedMembers.length} Schools`}</button></>}>
+    {sheet === "schools" && <Sheet title="Add Schools" icon="school" className="pr-add-schools-sheet" onClose={()=>{if(!busy)setSheet("");}}
+      footer={<><button type="button" className="pr-secondary" disabled={busy} onClick={()=>setSheet("")}>Cancel</button><button type="button" className="pr-primary" disabled={busy || !project?.source_proposal_id || !selectedMembers.length} onClick={()=>save(async()=>api("","POST",{action:"add_schools",projectId,beneficiaryIds:selectedMembers}))}><Ico name="plus" size={17}/>{busy ? "Adding…" : selectedMembers.length ? `Add ${selectedMembers.length} ${selectedMembers.length === 1 ? "School" : "Schools"}` : "Add Schools"}</button></> }>
+      <div className="pr-school-project-context"><span className="pr-school-project-icon"><Ico name="layers" size={23}/></span><div><small>PROJECT</small><strong>{project?.name}</strong></div><span className="pr-school-project-count">{projectSchools.length} {projectSchools.length === 1 ? "school" : "schools"}</span></div>
       {!project?.source_proposal_id && <p className="pr-hint" role="alert">Add a source Proposal to this project in Project Components before adding schools.</p>}
-      <label className="pr-field">Beneficiary users / schools<input value={memberQuery} placeholder="Search beneficiaries…" onChange={event=>setMemberQuery(event.target.value)}/></label>
-      <div className="pr-choose-tools"><span>{selectedMembers.length} selected</span><button type="button" className="pr-link" onClick={()=>setSelectedMembers([])}>Clear selection</button></div>
-      <div className="pr-member-list">{filteredMembers.map(member=><label className="pr-member" key={member.id}><input type="checkbox" checked={selectedMembers.includes(member.id)} onChange={event=>setSelectedMembers(previous=>event.target.checked ? [...previous,member.id] : previous.filter(id=>id!==member.id))}/><span><strong>{member.name}</strong>{member.school && <small>{member.school}</small>}</span></label>)}{!filteredMembers.length && <p className="pr-muted">No available users match the search.</p>}</div>
-
+      <SchoolPicker label="Beneficiary users / schools" members={availableMembers} selected={selectedMembers} onChange={setSelectedMembers} disabled={busy || !project?.source_proposal_id}/>
+      {error && <p className="pr-school-save-error" role="alert">{error}</p>}
     </Sheet>}
     {sheet === "stage" && currentStage && <Sheet title={currentStage.title} onClose={()=>setSheet("")}
       footer={<><button className="pr-secondary" onClick={()=>setSheet("")}>Cancel</button>{canStage && currentStage.key !== "final_closing" && <button className="pr-primary" disabled={busy} onClick={()=>save(async()=>api("/stages","PATCH",{schoolId,stageKey,status:stageStatus,notes:stageNotes}))}>{busy ? "Saving…" : "Save Status"}</button>}</>}>
