@@ -22,7 +22,8 @@ export async function GET(request) {
     const [testing, warehouse, production, closures] = await Promise.all([
       projectTestingOverview(projectId), warehouseWorkspace(projectId), productionWorkspace(projectId), listStageClosures(projectId),
     ]);
-    return reply({ ok: true, progress: calculateProjectPreparationProgress({ testing, warehouse, production }), closures: Object.fromEntries(closures.map(row => [row.stage_key, true])) });
+    const closedStages = Object.fromEntries(closures.map(row => [row.stage_key, true]));
+    return reply({ ok: true, progress: calculateProjectPreparationProgress({ testing, warehouse, production, closures: closedStages }), closures: closedStages });
   } catch (error) {
     console.error('[projects-preparing:progress]', error?.message || error);
     return reply({ ok: false, error: error?.message || 'Unable to load project progress.' }, Number(error?.status) || 500);

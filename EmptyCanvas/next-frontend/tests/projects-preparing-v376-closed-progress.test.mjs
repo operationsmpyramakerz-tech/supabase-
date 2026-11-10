@@ -1,0 +1,9 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { calculateProjectPreparationProgress as progress } from '../lib/preparing-project-progress.mjs';
+const base={testing:{items:[{required:100,passed:20}]},warehouse:{receiptLines:[{accepted_delta:10}]},production:{items:[{productionReceived:5,packedQty:2}],cartons:[],cartonLines:[]}};
+const keys=['testing','warehouse','production','boxes','cartons'];
+test('Each persisted closure overrides only its stage, contributes to overall progress',()=>{const original=progress(base);assert.deepEqual(original.stages,[20,10,5,2,0]);for(let i=0;i<keys.length;i++){const result=progress({...base,closures:{[keys[i]]:true}});const expected=original.stages.map((n,j)=>i===j?100:n);assert.deepEqual(result.stages,expected);assert.equal(result.overall,Math.round(expected.reduce((a,b)=>a+b,0)/5));assert.equal(result.completed,1);assert.equal(result.required,100);}});
+test('All closed yields 100 even with zero required quantities; no closures stays zero',()=>{assert.deepEqual(progress({}).stages,[0,0,0,0,0]);const result=progress({closures:Object.fromEntries(keys.map(k=>[k,true]))});assert.deepEqual(result.stages,[100,100,100,100,100]);assert.equal(result.overall,100);assert.equal(result.completed,5);});
+test('Progress route uses persisted closure statuses and UI uses separate modal',()=>{const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');const route=read('app/api/projects-preparing/progress/route.js');assert.match(route,/closures: closedStages/);const ui=read('components/preparing/ProjectStageClosure.jsx');assert.match(ui,/\.showModal\(\)/);assert.match(ui,/<dialog ref=\{dialog\}/);assert.match(ui,/setRecord\(json\.closure\);setFiles\(\[\]\);setConfirmed\(false\);setOpen\(false\)/);assert.match(ui,/onClosed\?\.\(\)/);});

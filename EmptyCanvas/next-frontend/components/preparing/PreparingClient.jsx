@@ -253,7 +253,7 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
     delivered: schools.filter(school => schoolProgress(stages.filter(row => row.school_id === school.id)).delivered).length,
     closed: schools.filter(school => schoolProgress(stages.filter(row => row.school_id === school.id)).closed).length };
   const progress = school ? schoolProgress(schoolStages) : null;
-  // Load read-only progress data for the four operational preparation stages.
+  // Load read-only progress data for the five operational preparation stages.
   // No percentage is invented while a request is pending or has failed.
   useEffect(() => {
     if (!projectId || schoolId) { setProjectStageData(null); setProjectStageError(""); setProjectStageLoading(false); return; }
