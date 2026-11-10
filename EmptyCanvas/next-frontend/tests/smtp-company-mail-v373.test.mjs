@@ -69,9 +69,9 @@ test('local SMTP delivery works with STARTTLS and implicit TLS, with certificate
       server.on('tlsClientError', () => {});
       await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
       try {
-        const env = { ...process.env, NODE_EXTRA_CA_CERTS: certFile, SMTP_HOST: 'localhost', SMTP_PORT: String(server.address().port), SMTP_SECURE: String(implicit), SMTP_USER: 'sender@example.com', SMTP_FROM: 'sender@example.com', SMTP_PASS: 'test-only-password' };
+        const env = { ...process.env, NODE_EXTRA_CA_CERTS: certFile, SMTP_HOST: 'localhost', SMTP_PORT: String(server.address().port), SMTP_SECURE: String(implicit), SMTP_USER: 'sender@example.com', SMTP_FROM: 'sender@example.com', SMTP_PASS: 'test-only-password', IMAP_SAVE_SENT: String(implicit), IMAP_HOST: 'localhost', IMAP_PORT: String(server.address().port) };
         delete env.NODE_TLS_REJECT_UNAUTHORIZED;
-        const script = `import {sendNotificationViaSmtp} from ${JSON.stringify(moduleUrl)}; await sendNotificationViaSmtp({to:'recipient@example.com',subject:'ERP test',text:'Test message',html:'<p>Test</p>'});`;
+        const script = `import {sendNotificationViaSmtp} from ${JSON.stringify(moduleUrl)}; const result = await sendNotificationViaSmtp({to:'recipient@example.com',subject:'ERP test',text:'Test message',html:'<p>Test</p>'}); if (!result.ok || result.sentArchive.status !== ${JSON.stringify(implicit ? 'failed' : 'disabled')}) throw new Error('Unexpected archive/delivery status');`;
         await new Promise((resolve, reject) => {
           const child = spawn(process.execPath, ['--input-type=module','-e',script], { env });
           let stderr = ''; child.stderr.on('data', c => stderr += c);

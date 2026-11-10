@@ -165,6 +165,106 @@ export function smtpUsesImplicitTls(port, secure = process.env.SMTP_SECURE) {
   return trimmed(secure).toLowerCase() === "true";
 }
 
+// Sent archiving is optional. IMAP only runs after SMTP has accepted DATA.
+// Use a bounded, certificate-verified implicit TLS connection and never log
+// credentials, message content or raw server responses.
+function imapError(code) {
+  return Object.assign(new Error(code), { code });
+}
+function imapQuote(value) {
+  const str = String(value);
+  if (!str || /[\x00-\x1f\x7f]/.test(str)) throw imapError("IMAP_CONFIG");
+  return `"${str.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+function imapSentMailbox(lines) {
+  const boxes = [];
+  for (const line of lines) {
+    const match = line.match(/^\* LIST \(([^)]*)\) (?:"(?:[^"\\]|\\.)*"|NIL) ("(?:[^"\\]|\\.)*"|[^ ]+)(?: |$)/i);
+    if (!match || /(?:^|\s)\\(?:Noselect|NonExistent)(?:\s|$)/i.test(match[1])) continue;
+    const raw = match[2];
+    if (raw.startsWith("{")) continue; // Use explicit IMAP_SENT_FOLDER for unusual literal names.
+    const name = raw.startsWith('"') ? raw.slice(1, -1).replace(/\\(.)/g, "$1") : raw;
+    boxes.push({ name, sent: /(?:^|\s)\\Sent(?:\s|$)/i.test(match[1]) });
+  }
+  const special = boxes.filter(box => box.sent);
+  if (special.length === 1) return special[0].name;
+  if (special.length > 1) throw imapError("IMAP_SENT_FOLDER_AMBIGUOUS");
+  const named = boxes.filter(box => /^(?:INBOX[./])?Sent(?: Items| Messages)?$/i.test(box.name));
+  if (named.length === 1) return named[0].name;
+  throw imapError(named.length ? "IMAP_SENT_FOLDER_AMBIGUOUS" : "IMAP_SENT_FOLDER_NOT_FOUND");
+}
+
+export async function archiveSmtpMessage(message) {
+  if (trimmed(process.env.IMAP_SAVE_SENT).toLowerCase() !== "true") return { status: "disabled" };
+  const host = trimmed(process.env.IMAP_HOST || process.env.SMTP_HOST);
+  const port = Number(process.env.IMAP_PORT || 993);
+  const user = trimmed(process.env.IMAP_USER || process.env.SMTP_USER);
+  const pass = String(process.env.IMAP_PASS || process.env.SMTP_PASS || process.env.SMTP_PASSWORD || "");
+  const folder = trimmed(process.env.IMAP_SENT_FOLDER);
+  let socket, timer;
+  try {
+    if (!host || !user || !pass || !Number.isInteger(port) || port < 1 || port > 65535) throw imapError("IMAP_CONFIG");
+    socket = tls.connect({ host, port, servername: host, rejectUnauthorized: true });
+    const queue = [];
+    let buffer = "", failure, waiter;
+    function fail(error) { failure = error; if (waiter) { const w = waiter; waiter = null; w.reject(error); } }
+    socket.on("error", fail);
+    socket.on("close", () => fail(imapError("IMAP_CONNECTION_CLOSED")));
+    socket.on("data", chunk => {
+      buffer += chunk.toString("utf8");
+      if (buffer.length > 65536) { socket.destroy(imapError("IMAP_RESPONSE_TOO_LARGE")); return; }
+      let i;
+      while ((i = buffer.indexOf("\r\n")) >= 0) {
+        const line = buffer.slice(0, i); buffer = buffer.slice(i + 2);
+        if (waiter) { const w = waiter; waiter = null; w.resolve(line); }
+        else queue.push(line);
+        if (queue.length > 10000) { socket.destroy(imapError("IMAP_RESPONSE_TOO_LARGE")); return; }
+      }
+    });
+    timer = setTimeout(() => socket.destroy(imapError("IMAP_TIMEOUT")), 8000);
+    function read() {
+      if (queue.length) return Promise.resolve(queue.shift());
+      if (failure) return Promise.reject(failure);
+      return new Promise((resolve, reject) => { waiter = { resolve, reject }; });
+    }
+    let seq = 0;
+    async function run(cmd, code, literal) {
+      const tag = `A${++seq}`;
+      socket.write(`${tag} ${cmd}\r\n`);
+      const lines = [];
+      let continued = false;
+      for (;;) {
+        const line = await read();
+        if (line.startsWith("+")) {
+          if (!literal || continued) throw imapError(code);
+          continued = true;
+          socket.write(Buffer.concat([literal, Buffer.from("\r\n")]));
+        } else if (line.startsWith(`${tag} `)) {
+          if (!new RegExp(`^${tag} OK(?: |$)`, "i").test(line) || (literal && !continued)) throw imapError(code);
+          return lines;
+        } else if (/^\* BYE(?: |$)/i.test(line) && cmd !== "LOGOUT") throw imapError(code);
+        else lines.push(line);
+      }
+    }
+    const greeting = await read();
+    if (!/^\* OK(?: |$)/i.test(greeting)) throw imapError("IMAP_GREETING");
+    await run(`LOGIN ${imapQuote(user)} ${imapQuote(pass)}`, "IMAP_AUTH_FAILED");
+    const mailbox = folder || imapSentMailbox(await run('LIST "" "*"', "IMAP_LIST_FAILED"));
+    const literal = Buffer.from(message, "utf8");
+    await run(`APPEND ${imapQuote(mailbox)} (\\Seen) {${literal.length}}`, "IMAP_APPEND_FAILED", literal);
+    // APPEND is committed; don't turn a logout failure into an archive failure.
+    socket.write(`A${++seq} LOGOUT\r\n`);
+    return { status: "saved" };
+  } catch (error) {
+    const code = typeof error?.code === "string" && /^[A-Z0-9_]+$/.test(error.code) ? error.code : "IMAP_FAILED";
+    console.warn("SMTP accepted; Sent archive failed:", code);
+    return { status: "failed", code };
+  } finally {
+    clearTimeout(timer);
+    if (socket) socket.destroy();
+  }
+}
+
 export async function sendNotificationViaSmtp({ to, subject, text, html }) {
   if (!smtpConfigured()) throw Object.assign(new Error("SMTP is not configured."), { code: "SMTP_CONFIG" });
   const host = trimmed(process.env.SMTP_HOST);
@@ -211,7 +311,8 @@ export async function sendNotificationViaSmtp({ to, subject, text, html }) {
     const accepted = await reader.read();
     if (accepted.code !== 250) throw smtpError(accepted.code, "DATA");
     try { await command(socket, reader, "QUIT", [221], "QUIT"); } catch { /* accepted already */ }
-    return { ok: true, provider: "smtp" };
+    const sentArchive = await archiveSmtpMessage(message + "\r\n");
+    return { ok: true, provider: "smtp", sentArchive };
   } finally {
     reader?.dispose();
     if (socket) socket.destroy();
