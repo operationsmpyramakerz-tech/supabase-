@@ -24,15 +24,15 @@ test("All Components permits review and correction of fully packed items without
  assert.deepEqual(filterBoxDistributionRows(undefined,"not-packed"),[]);
  assert.deepEqual(records.map(r=>r.packedQty),[0,0,3,2]);
 });
-test("Box filter and Production filter share modern dropdown and remain separate state",()=>{
+test("Box filter and Production filter share stage tabs and remain separate stage views",()=>{
  const boxes=read("components/preparing/ProjectBoxDistribution.jsx");
  const production=read("components/preparing/ProjectProductionReceiving.jsx");
  assert.match(boxes,/import PreparingSelect from/);
- assert.match(boxes,/<PreparingSelect iconOnly/);
+ assert.match(boxes,/<StageFilterTabs/);
  assert.doesNotMatch(boxes,/PreparingStatusFilter/);
- assert.match(production,/import PreparingSelect from/);
- assert.match(production,/<PreparingSelect iconOnly/);
- assert.match(boxes,/\[filter,setFilter\]=useState\("available"\)/);
+ assert.match(production,/import StageFilterTabs from/);
+ assert.match(production,/<StageFilterTabs/);
+ assert.match(production,/\[filter,setFilter\]=useState\("available"\)/);assert.match(production,/filter=\{filter\} setFilter=\{setFilter\}/);
  assert.match(boxes,/filterBoxDistributionRows\(items,filter\)/);
  assert.match(boxes,/value:"not-packed",label:"Not Packed"/);
  assert.match(boxes,/value:"all",label:"All Components"/);

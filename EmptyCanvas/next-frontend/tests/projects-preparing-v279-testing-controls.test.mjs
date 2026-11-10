@@ -28,17 +28,17 @@ test('Download is visible labeled button, History is icon-only right beside it',
  assert.match(ui,/className=\{`pr-pt-history-button/);
  assert.match(ui,/<TestingIcon name="history" size=\{19\}\/>(?:<\/button>)/);
  assert.ok(ui.indexOf('pr-pt-history-button')<ui.indexOf('pr-pt-download-button'));
- assert.match(ui,/onClick=\{\(\)=>setTab\("history"\)\}/);
+ assert.match(ui,/onClick=\{\(\)=>setTab\(tab==="history"\?"testing":"history"\)\}/);
  assert.match(ui,/onClick=\{\(\)=>setShowExport\(true\)\}/);
 });
 
-test('Refresh is removed, compact icon Filter preserves all three filter values',()=>{
- const toolbar=ui.split('pr-wh-toolbar pr-pt-toolbar')[1].split('pr-wh-list pr-pt-list')[0];
+test('Refresh is removed, stage tabs preserves all three filter values',()=>{
+ const toolbar=ui.split('<StageFilterTabs')[1].split('pr-wh-list pr-pt-list')[0];
  assert.doesNotMatch(toolbar,/>Refresh</);
- assert.match(toolbar,/PreparingSelect iconOnly/);
- assert.match(toolbar,/className=\{`pr-pt-filter-select/);
- assert.match(toolbar,/aria-label="Filter testing components"/);
- for(const value of ['all','pending','done']) assert.ok(toolbar.includes(`<option value="${value}">`));
+ assert.doesNotMatch(toolbar,/PreparingSelect iconOnly/);
+ assert.match(toolbar,/pr-stage-filter-toolbar/);
+ assert.match(toolbar,/label="Testing component status"/);
+ for(const value of ['all','pending','done']) assert.ok(toolbar.includes(`value:"${value}"`));
  assert.match(select,/iconOnly \? <svg/);
  assert.match(select,/role="listbox"/);
  assert.match(select,/onChange\?\.\(\{target:\{value:item.value,name\}\}\)/);

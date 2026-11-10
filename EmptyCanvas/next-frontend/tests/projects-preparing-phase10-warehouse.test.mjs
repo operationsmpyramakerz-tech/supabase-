@@ -58,7 +58,7 @@ test("project root links warehouse before project cartons; school component rece
  assert.match(shell,/Warehouse Receiving/);
  assert.ok(shell.indexOf('title:"Warehouse Receiving"') < shell.indexOf('title:"Project Kit Cartons"'));
  assert.doesNotMatch(service,/erp_preparing_update_component|erp_preparing_receive_shipment/);
- assert.match(ui,/School Allocation/);assert.match(ui,/Warehouse Receiving/);assert.match(ui,/Movement History/);
+ assert.doesNotMatch(ui,/School Allocation/);assert.match(ui,/<StageFilterTabs/);assert.match(ui,/Warehouse Receiving/);assert.match(ui,/Movement History/);
 });
 test("new/updated JSX parses without diagnostics",()=>{
  for(const file of ["components/preparing/ProjectWarehouseReceiving.jsx","components/preparing/PreparingClient.jsx","app/projects-preparing/page.jsx"]){

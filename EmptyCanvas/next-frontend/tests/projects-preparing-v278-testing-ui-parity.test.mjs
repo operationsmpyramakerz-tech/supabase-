@@ -40,7 +40,7 @@ test('Testing search has a transparent input and accessible clear action; filter
  assert.match(testing,/aria-label="Clear search"/);
  assert.match(testing,/setSearch\(""\)/);
  assert.match(css,/\.pr-pt-modern \.pr-pt-search input:focus-visible \{[^}]*background:transparent!important;/s);
- assert.match(testing,/Filter testing components/);
+ assert.match(testing,/Testing component status/);
  assert.match(testing,/onClick=\{\(\)=>setShowExport\(true\)\}/);
  assert.match(testing,/onClick=\{\(\)=>save\(\[r.id\]\)\}/);
  assert.match(testing,/groupKeys:exportGroups/);

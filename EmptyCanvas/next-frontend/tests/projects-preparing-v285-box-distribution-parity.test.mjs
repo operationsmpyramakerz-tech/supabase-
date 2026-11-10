@@ -21,8 +21,8 @@ test('Box Distribution solid KPI cards use actual packing totals and semantic co
  for(const re of [/\.pr-box-parity \.pr-production-summary\.pr-box-summary\.pr-pt-stat-grid/,/\.pr-box-parity \.pr-box-summary\.pr-pt-stat-grid>\.pr-pt-stat--available/,/--pt-card-bg:#f5c536/,/border-top:1px solid var\(--pt-card-border\)/])assert.match(css,re);
 });
 
-test('Box filter is an accessible modern icon select, with transparent search and clear control',()=>{
- for(const re of [/<PreparingSelect iconOnly/,/pr-pt-filter-select/,/value=\{filter\}/,/setOpened\(null\)/,/pr-pt-clear-search/,/aria-label="Clear box search"/,/className="pr-search pr-pt-search"/])assert.match(boxes,re);
+test('Box filter is accessible stage status tabs, with transparent search and clear control',()=>{
+ for(const re of [/<StageFilterTabs/,/Box component status/,/value=\{mode==="boxes"\?filter:""\}/,/setOpened\(null\)/,/pr-pt-clear-search/,/aria-label="Clear box search"/,/className="pr-search pr-pt-search"/])assert.match(boxes,re);
  const select=read('components/preparing/PreparingSelect.jsx');
  for(const re of [/createPortal/,/role="listbox"/,/role="option"/,/Escape/,/aria-selected=/,/r\.right - width/])assert.match(select,re);
  assert.match(css,/\.pr-box-parity \.pr-box-search-toolbar \.pr-pt-search input/);

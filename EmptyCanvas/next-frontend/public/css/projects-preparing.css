@@ -4616,3 +4616,30 @@ html[data-theme="dark"] .pr-sc-full-preview {background:#222833;}
 .pr-pt-modern .pr-pt-row.is-editing .pr-pt-actions{grid-column:auto;}
 .pr-pt-modern .pr-pt-history .pr-pt-history-deltas{grid-template-columns:minmax(0,1fr);}
 @media(max-width:580px){.pr-pt-modern .pr-pt-row.is-editing .pr-pt-metrics{grid-template-columns:minmax(0,1fr);}.pr-pt-modern .pr-pt-row.is-editing .pr-pt-actions{grid-column:1/-1;}}
+
+/* v386: shared Orders-style stage status tabs, with actions on the search row. */
+.pr-root .pr-stage-filter-tabs{display:flex;align-items:center;gap:8px;padding:6px;border:1px solid #e4e7ec;border-radius:16px;background:#fff;overflow-x:auto;scrollbar-width:none;flex:none;margin:0 0 14px;min-width:0;}
+.pr-root .pr-stage-filter-tabs::-webkit-scrollbar{display:none;}
+.pr-root .pr-stage-filter-tabs>button{display:inline-flex;align-items:center;justify-content:center;gap:10px;flex:0 0 auto;min-height:43px;padding:10px 17px;border:1px solid transparent;border-radius:11px;background:transparent;color:#172033;font-size:13px;font-weight:750;white-space:nowrap;cursor:pointer;box-shadow:none;line-height:1.25;}
+.pr-root .pr-stage-filter-tabs>button svg{flex:none;display:block;}
+.pr-root .pr-stage-filter-tabs>button.is-active{background:#111827;color:#fff;border-color:#111827;box-shadow:inset 0 -3px #ff6900,0 3px 7px #10182719;}
+.pr-root .pr-stage-filter-tabs>button:hover:not(.is-active):not(:disabled){background:#f3f5f8;}
+.pr-root .pr-stage-filter-tabs>button:focus-visible{outline:2px solid #ff6900;outline-offset:-3px;}
+.pr-root .pr-stage-filter-tabs>button:disabled{opacity:.5;cursor:not-allowed;}
+.pr-root .pr-stage-filter-toolbar{display:flex;align-items:center;gap:10px;margin:0 0 18px;padding:0;min-width:0;flex-wrap:nowrap;}
+.pr-root .pr-stage-filter-toolbar .pr-pt-search{flex:1 1 auto;min-width:0;max-width:none;margin:0;}
+.pr-root .pr-stage-filter-actions{display:flex;align-items:center;gap:8px;flex:0 0 auto;margin-left:auto;}
+.pr-root .pr-stage-filter-actions .pr-pt-history-button{display:grid;place-items:center;flex:none;width:40px;height:40px;min-width:40px;padding:0;margin:0;border:1px solid #e3e7ee;border-radius:11px;background:#fff;color:#263449;cursor:pointer;line-height:0;}
+.pr-root .pr-stage-filter-actions .pr-pt-history-button.is-active{background:#111827;color:#fff;border-color:#111827;}
+.pr-root .pr-stage-filter-actions .pr-pt-download-button{margin:0;flex:none;}
+.pr-root .pr-stage-filter-actions .pr-box-label-launch{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:40px;padding:8px 12px;border:1px solid #e3e7ee;border-radius:11px;background:#fff;color:#263449;font-size:12px;font-weight:750;white-space:nowrap;cursor:pointer;}
+.pr-root .pr-stage-history-label{font-weight:750;color:#647184;flex:1;}
+html[data-theme="dark"] .pr-root .pr-stage-filter-tabs{background:#1c222c;border-color:#343d4b;}
+html[data-theme="dark"] .pr-root .pr-stage-filter-tabs>button{color:#e8edf5;}
+html[data-theme="dark"] .pr-root .pr-stage-filter-tabs>button.is-active{background:#080e19;border-color:#526075;}
+html[data-theme="dark"] .pr-root .pr-stage-filter-tabs>button:hover:not(.is-active):not(:disabled){background:#303848;}
+html[data-theme="dark"] .pr-root .pr-stage-filter-actions .pr-pt-history-button,html[data-theme="dark"] .pr-root .pr-stage-filter-actions .pr-box-label-launch{background:#222936;color:#e8edf5;border-color:#414b5a;}
+html[data-theme="dark"] .pr-root .pr-stage-filter-actions .pr-pt-history-button.is-active{background:#0b111a;color:#fff;border-color:#626e80;}
+@media(max-width:600px){.pr-root .pr-stage-filter-tabs{gap:3px;padding:4px;border-radius:13px;margin-bottom:10px;}.pr-root .pr-stage-filter-tabs>button{min-height:40px;padding:8px 11px;font-size:12px;gap:6px;}.pr-root .pr-stage-filter-tabs>button svg{width:17px;height:17px;}.pr-root .pr-stage-filter-toolbar{flex-wrap:wrap;gap:8px;margin-bottom:12px;}.pr-root .pr-stage-filter-toolbar .pr-pt-search{flex:1 1 100%;}.pr-root .pr-stage-filter-actions{gap:6px;}.pr-root .pr-stage-filter-actions .pr-pt-download-button{min-height:40px;}.pr-root .pr-stage-filter-actions .pr-box-label-launch{padding:8px 10px;}}
+.pr-root .pr-stage-filter-toolbar .pr-pt-search input{min-width:0;width:100%;border:0!important;outline:none!important;box-shadow:none!important;background:transparent!important;padding:0!important;}
+.pr-root .pr-box-distribution>.pr-stage-filter-tabs,.pr-root .pr-box-distribution>.pr-stage-filter-toolbar{margin-bottom:0;}

@@ -10,14 +10,14 @@ const production=source('components/preparing/ProjectProductionReceiving.jsx');
 const boxes=source('components/preparing/ProjectBoxDistribution.jsx');
 const css=source('public/css/projects-preparing.css');
 
-test('Box Distribution navigation is below its three KPI blocks; Production Receiving is unchanged',()=>{
+test('Box Distribution navigation is below its three KPI blocks; Production Receiving uses the same stage tabs',()=>{
  const stats=boxes.indexOf('aria-label="Box Distribution summary"');
- const navigation=boxes.indexOf('navigation(openBoxLabels,activeCartons.length)');
+ const navigation=boxes.indexOf('navigation(openBoxLabels,activeCartons.length,');
  const search=boxes.indexOf('aria-label="Search box distribution"');
  assert.ok(stats>=0 && stats<navigation && navigation<search);
  assert.match(production,/const renderBoxNavigation =/);
  assert.match(production,/navigation=\{renderBoxNavigation\}/);
- assert.match(production,/!boxView&&<div className="pr-pt-navigation pr-production-tabs pr-production-navigation"/);
+ assert.match(production,/!boxView&&<><StageFilterTabs label="Production component status"/);
  assert.match(production,/aria-label="Download Production Receiving report"/);
  assert.match(production,/aria-label="Box History"/);
  assert.match(production,/aria-label="Boxes Label"/);

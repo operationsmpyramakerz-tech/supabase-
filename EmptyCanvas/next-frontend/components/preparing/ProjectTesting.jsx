@@ -1,5 +1,5 @@
 "use client";
-import PreparingSelect from "./PreparingSelect";
+import StageFilterTabs from "./StageFilterTabs";
 import StageQuantityInput from "./StageQuantityInput";
 import {useEffect,useMemo,useState} from "react";
 import {testingChange,testingCoverage,testingCoverageTotals} from "../../lib/preparing-project-testing-math.mjs";
@@ -158,15 +158,12 @@ export default function ProjectTesting({projectId,projectName,canTest,request,on
    ].map(stat=><div className={`pr-pt-stat pr-pt-stat--${stat.key}`} key={stat.key}>
     <span className="pr-pt-stat-icon" aria-hidden="true">{stat.key==="remaining"?<TestingIcon name="clock" size={25}/>:stat.mark}</span><span className="pr-pt-stat-copy"><span>{stat.label}</span><strong>{pretty(stat.value)}</strong></span>
    </div>)}</div>
-   <div className="pr-wh-navigation pr-pt-navigation">
-    <div className="pr-pt-view-tabs" role="tablist" aria-label="Project testing views">
-     <button role="tab" type="button" aria-selected={tab==="testing"} className={tab==="testing"?"is-active":""} onClick={()=>setTab("testing")}>Testing</button>
-     <button role="tab" type="button" aria-selected={tab==="history"} aria-label={`Testing History (${entries.length} changes)`} title={`Testing History (${entries.length})`} className={`pr-pt-history-button${tab==="history"?" is-active":""}`} onClick={()=>setTab("history")}><TestingIcon name="history" size={19}/></button>
-    </div>
-    <button type="button" className="pr-pt-download-button" aria-label="Download testing report" onClick={()=>setShowExport(true)} disabled={!data.items.length}><TestingIcon name="download" size={18}/><span>Download</span></button>
+   <StageFilterTabs label="Testing component status" options={[{value:"all",label:"All Components"},{value:"pending",label:"Remaining to Test"},{value:"done",label:"Fully Tested"}]} value={tab==="testing"?filter:""} onChange={value=>{setFilter(value);setTab("testing");}}/>
+   <div className="pr-stage-filter-toolbar pr-pt-toolbar">
+    {tab==="testing"?<label className="pr-search pr-pt-search"><TestingIcon name="search" size={18}/><input type="search" aria-label="Search testing components" placeholder="Search component or code…" value={search} onChange={e=>setSearch(e.target.value)}/>{search&&<button type="button" className="pr-pt-clear-search" onClick={()=>setSearch("")} aria-label="Clear search" title="Clear search"><TestingIcon name="close" size={16}/></button>}</label>:<span className="pr-stage-history-label">Testing History</span>}
+    <div className="pr-stage-filter-actions"><button type="button" aria-pressed={tab==="history"} aria-label={`Testing History (${entries.length} changes)`} title={`Testing History (${entries.length})`} className={`pr-pt-history-button${tab==="history"?" is-active":""}`} onClick={()=>setTab(tab==="history"?"testing":"history")}><TestingIcon name="history" size={19}/></button><button type="button" className="pr-pt-download-button" aria-label="Download testing report" onClick={()=>setShowExport(true)} disabled={!data.items.length}><TestingIcon name="download" size={18}/><span>Download</span></button></div>
    </div>
    {tab==="testing"&&<>
-     <div className="pr-wh-toolbar pr-pt-toolbar"><label className="pr-search pr-pt-search"><TestingIcon name="search" size={18}/><input type="search" aria-label="Search testing components" placeholder="Search component or code…" value={search} onChange={e=>setSearch(e.target.value)}/>{search&&<button type="button" className="pr-pt-clear-search" onClick={()=>setSearch("")} aria-label="Clear search" title="Clear search"><TestingIcon name="close" size={16}/></button>}</label><PreparingSelect iconOnly className={`pr-pt-filter-select${filter!=="all"?" is-filtered":""}`} aria-label="Filter testing components" value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">All components</option><option value="pending">Remaining to test</option><option value="done">Fully tested</option></PreparingSelect></div>
     <div className="pr-wh-list pr-pt-list pr-pt-kit-list" aria-label="Project component testing">{groupedShown.map(group=>{
      const open=!!search.trim()||expandedKit===group.key;
      const appearance=testingKitAppearance(group.name);

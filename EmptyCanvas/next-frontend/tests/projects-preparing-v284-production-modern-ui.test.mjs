@@ -18,8 +18,8 @@ test('Production header, Download and history controls have accessible icons',()
  for(const pattern of [/aria-label="Close Production Receiving"/,/name="close"/,/aria-pressed=\{tab==="receiving-history"\}/,/name="history"/,/pr-pt-download-button/,/name="download"/,/>Download</])assert.match(jsx,pattern);
  assert.doesNotMatch(jsx,/PreparingStatusFilter/);
 });
-test('Production Receiving has single-layer search and a sheet-clamped icon filter',()=>{
- for(const pattern of [/<PreparingSelect iconOnly/,/pr-pt-filter-select/,/pr-pt-clear-search/,/aria-label="Clear search"/,/value=\{filter\}/])assert.match(jsx,pattern);
+test('Production Receiving has single-layer search and stage status tabs',()=>{
+ for(const pattern of [/<StageFilterTabs/,/pr-stage-filter-toolbar/,/pr-pt-clear-search/,/aria-label="Clear search"/,/value=\{tab==="receiving"\?filter:""\}/])assert.match(jsx,pattern);
  assert.match(css,/\.pr-production-parity \.pr-production-controls \.pr-pt-search input/);
  assert.match(read('components/preparing/PreparingSelect.jsx'),/r\.right - width/);
 });

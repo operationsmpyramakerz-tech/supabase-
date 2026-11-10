@@ -1,4 +1,5 @@
 "use client";
+import StageFilterTabs from "./StageFilterTabs";
 import PreparingSelect from "./PreparingSelect";
 import StageQuantityInput from "./StageQuantityInput";
 import { useEffect,useMemo,useState } from "react";
@@ -12,7 +13,9 @@ export default function ProjectKitCartons({projectId,projectName,stageRecords=[]
   const [activeId,setActiveId]=useState(""),[newLabel,setNewLabel]=useState(""),[newKit,setNewKit]=useState(""),[newNotes,setNewNotes]=useState("");
   const [search,setSearch]=useState(""),[quantities,setQuantities]=useState({});
   const [chosenLine,setChosenLine]=useState(""),[chosenSchool,setChosenSchool]=useState(""),[chosenComponent,setChosenComponent]=useState(""),[allocateQty,setAllocateQty]=useState("1");
-  const active=data?.cartons.find(c=>c.id===activeId);
+  const [cartonFilter,setCartonFilter]=useState("all");
+  const visibleCartons=(data?.cartons||[]).filter(c=>c.status!=="cancelled"&&(cartonFilter==="all"||c.status===cartonFilter));
+  const active=visibleCartons.find(c=>c.id===activeId);
   const cartonLines=useMemo(()=>data?.lines.filter(l=>l.carton_id===activeId)||[],[data,activeId]);
   const allAllocations=data?.allocations||[];
   const availability=line=>Math.max(0,number(line.packed_qty)-allAllocations.filter(a=>a.carton_line_id===line.id&&a.status==="active").reduce((sum,a)=>sum+number(a.allocated_qty),0));
@@ -24,6 +27,12 @@ export default function ProjectKitCartons({projectId,projectName,stageRecords=[]
     for(const c of data?.components||[])if(active&&matchesKit(c,active.kit_name)&&!byKey.has(ident(c)))byKey.set(ident(c),c);
     return [...byKey.values()].filter(c=>c.product_name.toLowerCase().includes(search.toLowerCase())).sort((a,b)=>a.product_name.localeCompare(b.product_name));
   },[data,active,search]);
+  function changeCartonFilter(value){
+    setCartonFilter(value);
+    const matching=(data?.cartons||[]).filter(c=>c.status!=="cancelled"&&(value==="all"||c.status===value));
+    if(!matching.some(c=>c.id===activeId))setActiveId(matching[0]?.id||"");
+  }
+  useEffect(()=>{if(data&&!visibleCartons.some(c=>c.id===activeId))setActiveId(visibleCartons[0]?.id||"");},[data,cartonFilter,activeId]);
   async function refresh(nextId="") {
     const v=await request(`/project-cartons?projectId=${encodeURIComponent(projectId)}&scope=cartons`);
     setData(v);setActiveId(old=>nextId||(v.cartons.some(c=>c.id===old)?old:(v.cartons.find(c=>c.status!=="cancelled")?.id||"")));
@@ -43,7 +52,7 @@ export default function ProjectKitCartons({projectId,projectName,stageRecords=[]
   const write=(action,body)=>request("/project-cartons","PATCH",{action,projectId,...body});
   async function create(){const chosen=newKit.trim();if(!chosen||newLabel.trim().length<2)return;
     await perform(()=>request("/project-cartons","POST",{action:"create",projectId,cartonLabel:newLabel.trim(),kitName:chosen,notes:newNotes}),"Project carton created. Add its contents before sealing.");
-    setNewLabel("");setNewNotes("");
+    setCartonFilter("all");setNewLabel("");setNewNotes("");
   }
   function setLine(c){const existing=cartonLines.find(l=>ident(l)===ident(c));const value=quantities[ident(c)]??String(existing?.packed_qty||0);
     if(!/^\d+$/.test(value)||Number(value)>1000000){setError("Enter an integer quantity from 0 to 1,000,000.");return;}
@@ -70,9 +79,11 @@ export default function ProjectKitCartons({projectId,projectName,stageRecords=[]
     {!data?<p className="pr-muted">Loading project cartons…</p>:<>
 
       <div className="pr-qty-summary">{[["Project cartons",data.cartons.filter(c=>c.status!=="cancelled").length],["Packed units",data.lines.filter(l=>data.cartons.some(c=>c.id===l.carton_id&&c.status!=="cancelled")).reduce((s,l)=>s+number(l.packed_qty),0)],["Allocated",data.allocations.filter(a=>a.status==="active").reduce((s,a)=>s+number(a.allocated_qty),0)],["Captured schools",new Set(data.components.map(c=>c.school_id)).size]].map(([name,n])=><div key={name}><small>{name}</small><strong>{n}</strong></div>)}</div>
+      <StageFilterTabs label="Project Kit Carton status" options={[{value:"all",label:"All Cartons"},{value:"draft",label:"Draft"},{value:"ready",label:"Ready"}]} value={cartonFilter} onChange={changeCartonFilter}/>
       {allowed&&<div className="pr-delivery-create pr-pool-create"><label className="pr-field">Kit type<PreparingSelect value={newKit} onChange={e=>setNewKit(e.target.value)}><option value="">Choose Kit</option>{data.kits.map(k=><option value={k} key={k}>{k}</option>)}</PreparingSelect></label><label className="pr-field">Carton label<input maxLength={100} value={newLabel} onChange={e=>setNewLabel(e.target.value)} placeholder="G2-CARTON-01"/></label><label className="pr-field">Notes (optional)<input maxLength={1000} value={newNotes} onChange={e=>setNewNotes(e.target.value)}/></label><button className="pr-primary" disabled={busy||!newKit||newLabel.trim().length<2} onClick={create}>Create carton</button></div>}
       {!data.kits.length&&<p className="pr-hint">Capture Proposal Components for at least one school to discover the available Kit types.</p>}
-      <div className="pr-carton-pills">{data.cartons.filter(c=>c.status!=="cancelled").map(c=><button key={c.id} className={`pr-carton-pill ${c.id===activeId?"selected":""}`} onClick={()=>setActiveId(c.id)}><strong>{c.carton_label}</strong><small>{c.kit_name} · {c.status}</small></button>)}</div>
+
+      <div className="pr-carton-pills">{visibleCartons.map(c=><button key={c.id} className={`pr-carton-pill ${c.id===activeId?"selected":""}`} onClick={()=>setActiveId(c.id)}><strong>{c.carton_label}</strong><small>{c.kit_name} · {c.status}</small></button>)}</div>
       {!active?<p className="pr-muted">Create or choose a project-level Kit carton to begin.</p>:<div className="pr-carton-detail">
         <div className="pr-delivery-toolbar"><div><h4>{active.carton_label} · {active.kit_name}</h4><p className="pr-muted">{active.status} · {cartonLines.length} item types · {cartonLines.reduce((s,l)=>s+number(l.packed_qty),0)} packed units</p></div><div className="pr-carton-actions">{allowed&&active.status==="draft"&&<button className="pr-primary" disabled={busy||!cartonLines.length} onClick={()=>perform(()=>write("seal",{cartonId:activeId,expectedUpdatedAt:active.updated_at}),"Carton sealed and ready for allocation.",activeId)}>Seal & Ready</button>}{allowed&&<button className="pr-secondary" disabled={busy} onClick={cancel}>Cancel carton</button>}</div></div>
         {active.status==="draft"&&<><label className="pr-search"><input placeholder="Search project components" value={search} onChange={e=>setSearch(e.target.value)}/></label><div className="pr-delivery-lines">{sourceRows.map(c=>{const current=cartonLines.find(l=>ident(l)===ident(c));return <div key={ident(c)} className="pr-delivery-line"><div><strong>{c.product_name}</strong><small>{c.product_id||"Named Proposal item"}</small></div><div className="pr-line-input"><StageQuantityInput aria-label={`Packed ${c.product_name}`} min="0" step="1" max="1000000" disabled={!allowed||busy} value={quantities[ident(c)]??String(current?.packed_qty||0)} onValueChange={value=>setQuantities(v=>({...v,[ident(c)]:value}))}/>{allowed&&<button className="pr-secondary" disabled={busy} onClick={()=>setLine(c)}>Save</button>}</div></div>;})}{!sourceRows.length&&<p className="pr-muted">No matching components in this Kit.</p>}</div></>}

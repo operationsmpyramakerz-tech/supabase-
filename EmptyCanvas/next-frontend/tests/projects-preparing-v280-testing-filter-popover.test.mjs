@@ -10,9 +10,9 @@ const select=read('components/preparing/PreparingSelect.jsx');
 const testing=read('components/preparing/ProjectTesting.jsx');
 const css=read('public/css/projects-preparing.css');
 
-test('Testing filter is icon-only and preserves its three actual filtering modes',()=>{
- assert.match(testing,/PreparingSelect iconOnly/);
- for(const key of ['all','pending','done'])assert.ok(testing.includes(`<option value="${key}">`));
+test('Testing status tabs replace the popover and preserves its three actual filtering modes',()=>{
+ assert.match(testing,/<StageFilterTabs/);assert.doesNotMatch(testing,/PreparingSelect iconOnly/);
+ for(const key of ['all','pending','done'])assert.ok(testing.includes(`value:"${key}"`));
  assert.match(select,/onChange\?\.\(\{target:\{value:item.value,name\}\}\)/);
 });
 test('Filter popup aligns to icon right and cannot extend beyond sheet boundaries',()=>{

@@ -1,8 +1,8 @@
 "use client";
-import PreparingSelect from "./PreparingSelect";
+import StageFilterTabs from "./StageFilterTabs";
 import StageQuantityInput from "./StageQuantityInput";
 import { useEffect, useMemo, useState } from "react";
-import { warehouseTotals,warehouseReceivingBalances,warehouseReceiptLimit,demandsForSchool,projectRequired } from "../../lib/preparing-warehouse-math.mjs";
+import { warehouseTotals,warehouseReceivingBalances,warehouseReceiptLimit,projectRequired } from "../../lib/preparing-warehouse-math.mjs";
 import {WAREHOUSE_COLUMNS,warehouseGroups,warehouseExportValue} from "../../lib/preparing-warehouse-view.mjs";
 const number=v=>Number(v)||0;
 const pretty=v=>number(v).toLocaleString("en-US");
@@ -42,14 +42,13 @@ function WarehouseIcon({name="box",size=20}){
  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{shapes[name]||shapes.box}</svg>;
 }
 
-export default function ProjectWarehouseReceiving({projectId,projectName,hasProjectProposal=false,canReceive,canAllocate,request,onClose,closurePanel}) {
+export default function ProjectWarehouseReceiving({projectId,projectName,hasProjectProposal=false,canReceive,request,onClose,closurePanel}) {
  const [state,setState]=useState(empty),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false);
  const [tab,setTab]=useState("receiving"),[search,setSearch]=useState(""),[filter,setFilter]=useState("all");
  const [showExport,setShowExport]=useState(false),[exportColumns,setExportColumns]=useState(WAREHOUSE_COLUMNS.map(c=>c.key)),[exportGroups,setExportGroups]=useState([]),[exportBusy,setExportBusy]=useState(false);
  const [expandedKit,setExpandedKit]=useState(null);
- const [reference,setReference]=useState(""),[notes,setNotes]=useState("");
  const [editing,setEditing]=useState({}),[clearConfirm,setClearConfirm]=useState(null),[rowError,setRowError]=useState({});
- const [draft,setDraft]=useState({}),[schoolId,setSchoolId]=useState(""),[assignReference,setAssignReference]=useState(""),[assignNotes,setAssignNotes]=useState(""),[assignDraft,setAssignDraft]=useState({});
+ const [draft,setDraft]=useState({});
  const [error,setError]=useState(""),[success,setSuccess]=useState("");
  async function reload(){const response=await request(`/warehouse?projectId=${encodeURIComponent(projectId)}`);setState(response);setLoading(false);}
  useEffect(()=>{let active=true;request(`/warehouse?projectId=${encodeURIComponent(projectId)}`).then(v=>{if(active){setState(v);setLoading(false);}}).catch(e=>{if(active){setError(e.message);setLoading(false);}});return()=>{active=false;};},[projectId]);
@@ -70,15 +69,12 @@ export default function ProjectWarehouseReceiving({projectId,projectName,hasProj
  const uncaptured=state.schools.filter(row=>!schoolsCaptured.has(row.id));
  const totals=useMemo(()=>summaries.reduce((sum,row)=>({required:sum.required+number(row.required_qty),accepted:sum.accepted+row.accepted,damaged:sum.damaged+row.damaged,allocated:sum.allocated+row.allocated,available:sum.available+row.available,tested:sum.tested+row.tested,readyToReceive:sum.readyToReceive+row.readyToReceive}),{required:0,accepted:0,damaged:0,allocated:0,available:0,tested:0,readyToReceive:0}),[summaries]);
  const shown=useMemo(()=>summaries.filter(row=>`${row.product_name} ${row.product_id}`.toLowerCase().includes(search.toLowerCase().trim())).filter(row=>filter==="short"?row.accepted<row.required_qty:filter==="available"?row.readyToReceive>0:true),[summaries,search,filter]);
- const schoolDemands=useMemo(()=>demandsForSchool(state.demands,state.allocations,schoolId),[state.demands,state.allocations,schoolId]);
- const demandsMap=useMemo(()=>new Map(schoolDemands.map(row=>[row.item_id,row])),[schoolDemands]);
- const schoolShown=shown.filter(row=>demandsMap.has(row.id));
  const allGroups=useMemo(()=>warehouseGroups(summaries,state.kitGroups),[summaries,state.kitGroups]);
  const shownGroups=useMemo(()=>warehouseGroups(shown,state.kitGroups),[shown,state.kitGroups]);
  const historyEntries=useMemo(()=>state.receipts.flatMap(receipt=>state.receiptLines.filter(line=>line.receipt_id===receipt.id).map(line=>({key:line.id,receipt,line,component:nameById.get(line.item_id)||"Component"}))),[state.receipts,state.receiptLines,nameById]);
  async function execute(action,payload) {
   if(busy)return;setBusy(true);setError("");setSuccess("");
-  try {await request("/warehouse","POST",{action,projectId,...payload});await reload();setSuccess(action==="capture"?"Project BOM captured.":action==="receive"?"Warehouse voucher recorded.":"School allocation recorded.");return true;}
+  try {await request("/warehouse","POST",{action,projectId,...payload});await reload();setSuccess(action==="capture"?"Project BOM captured.":"Warehouse voucher recorded.");return true;}
   catch(e){setError(e.message||"Unable to save.");return false;}finally{setBusy(false);}
  }
  function enableReceipt(row){
@@ -104,24 +100,6 @@ export default function ProjectWarehouseReceiving({projectId,projectName,hasProj
   if(await execute("receive",{kind:"adjustment",lines:[{itemId:row.id,accepted:-row.accepted}]})){
    cancelReceipt(row);setClearConfirm(null);
   }
- }
- async function allocateBatch(){
-  if(!schoolId||!assignReference.trim()){setError("Select a school and enter the internal allocation reference.");return;}
-  const lines=Object.entries(assignDraft).filter(([,value])=>String(value).trim()!=="" && Number(value)!==0)
-    .map(([itemId,value])=>({itemId,delta:Number(value)}));
-  if(!lines.length){setError("Enter at least one assignment quantity.");return;}
-  if(lines.some(line=>{const row=summaries.find(r=>r.id===line.itemId),d=demandsMap.get(line.itemId);
-   return !row||!d||!Number.isSafeInteger(line.delta)||Math.abs(line.delta)>1000000||d.allocated+line.delta<0||d.allocated+line.delta>d.required_qty||line.delta>row.available;})){
-    setError("One or more assignments exceed available project stock or school requirements.");return;
-  }
-  if(await execute("allocate_batch",{schoolId,reference:assignReference,notes:assignNotes,lines}))setAssignDraft({});
- }
- async function allocateItem(row){
-  const d=Number(assignDraft[row.id]||0),r=demandsMap.get(row.id);
-  if(!schoolId||!assignReference.trim()){setError("Select a school and enter the internal allocation reference.");return;}
-  if(!Number.isSafeInteger(d)||!d||Math.abs(d)>1000000||d>row.available||r.allocated+d>r.required_qty||r.allocated+d<0){setError("Allocation must stay within accepted stock and this school's requirement.");return;}
-  if(await execute("allocate",{schoolId,itemId:row.id,delta:d,reference:assignReference,notes:assignNotes}))
-    setAssignDraft(prev=>({...prev,[row.id]:""}));
  }
  const exportSelected=()=>allGroups.filter(g=>!exportGroups.length||exportGroups.includes(g.key));
  function exportCSV(blank){
@@ -150,17 +128,11 @@ export default function ProjectWarehouseReceiving({projectId,projectName,hasProj
   {success&&<div className="pr-manifest-success" role="status">{success}</div>}
   {loading?<p className="pr-muted">Loading warehouse records…</p>:<>
    <div className="pr-wh-stats pr-pt-stat-grid" aria-label="Warehouse summary">{[["Project Required",totals.required,"required","◆"],["Received",totals.accepted,"received","↓"],["Available to Receive",totals.readyToReceive,"available","inbox"]].map(([label,value,key,mark])=><div className={`pr-pt-stat pr-pt-stat--${key}`} key={key}><span className="pr-pt-stat-icon" aria-hidden="true">{mark==="inbox"?<WarehouseIcon name="inbox" size={23}/>:mark}</span><span className="pr-pt-stat-copy"><span>{label}</span><strong>{pretty(value)}</strong></span></div>)}</div>
-   <div className="pr-wh-navigation pr-pt-navigation" role="group" aria-label="Warehouse view">
-    <div className="pr-warehouse-tab-links" role="tablist" aria-label="Warehouse views">
-     {[["receiving","Warehouse Receiving"],["allocation","School Allocation"]].map(([key,label])=><button role="tab" type="button" aria-selected={tab===key} key={key} className={tab===key?"is-active":""} onClick={()=>{setTab(key);setError("");}}>{label}</button>)}
-    </div>
-    <div className="pr-warehouse-actions">
-     <button type="button" aria-pressed={tab==="history"} className={`pr-pt-history-button${tab==="history"?" is-active":""}`} aria-label={`Movement History (${historyEntries.length} changes)`} title={`Movement History (${historyEntries.length})`} onClick={()=>{setTab("history");setError("");}}><WarehouseIcon name="history" size={19}/></button>
-     <button type="button" className="pr-pt-download-button" aria-label="Download warehouse report" onClick={()=>setShowExport(true)} disabled={!state.items.length}><WarehouseIcon name="download" size={18}/><span>Download</span></button>
-    </div>
+   <StageFilterTabs label="Warehouse component status" options={[{value:"all",label:"All Components"},{value:"short",label:"Warehouse Shortage"},{value:"available",label:"Available to Receive"}]} value={tab==="receiving"?filter:""} onChange={value=>{setFilter(value);setTab("receiving");setError("");}}/>
+   <div className="pr-stage-filter-toolbar pr-pt-toolbar">{tab==="receiving"?<label className="pr-search pr-pt-search"><WarehouseIcon name="search" size={18}/><input type="search" aria-label="Search warehouse components" placeholder="Search component or code…" value={search} onChange={e=>setSearch(e.target.value)}/>{search&&<button type="button" className="pr-pt-clear-search" onClick={()=>setSearch("")} aria-label="Clear search" title="Clear search"><WarehouseIcon name="close" size={16}/></button>}</label>:<span className="pr-stage-history-label">Receiving History</span>}
+    <div className="pr-stage-filter-actions"><button type="button" aria-pressed={tab==="history"} className={`pr-pt-history-button${tab==="history"?" is-active":""}`} aria-label={`Movement History (${historyEntries.length} changes)`} title={`Movement History (${historyEntries.length})`} onClick={()=>{setTab(tab==="history"?"receiving":"history");setError("");}}><WarehouseIcon name="history" size={19}/></button><button type="button" className="pr-pt-download-button" aria-label="Download warehouse report" onClick={()=>setShowExport(true)} disabled={!state.items.length}><WarehouseIcon name="download" size={18}/><span>Download</span></button></div>
    </div>
-   {uncaptured.length>0&&<div className="pr-wh-notice"><div><strong>{uncaptured.length} school(s) need requirement capture</strong><small>{hasProjectProposal?"Capture each school’s Proposal for school allocation limits. This does not modify the project Master BOM or warehouse receipts.":"Capture linked school Proposals to calculate legacy project requirements. Existing school baselines stay frozen."}</small></div>{canReceive&&<button className="pr-primary" disabled={busy} onClick={()=>execute("capture",{})}>{busy?"Capturing…":hasProjectProposal?"Capture School Requirements":"Capture Project BOM"}</button>}</div>}
-   {!!state.items.length&&tab!=="history"&&<div className="pr-wh-toolbar pr-pt-toolbar"><label className="pr-search pr-pt-search"><WarehouseIcon name="search" size={18}/><input type="search" aria-label="Search warehouse components" placeholder="Search component or code…" value={search} onChange={e=>setSearch(e.target.value)}/>{search&&<button type="button" className="pr-pt-clear-search" onClick={()=>setSearch("")} aria-label="Clear search" title="Clear search"><WarehouseIcon name="close" size={16}/></button>}</label><PreparingSelect iconOnly className={`pr-pt-filter-select${filter!=="all"?" is-filtered":""}`} aria-label="Filter warehouse components" value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">All components</option><option value="short">Warehouse shortage</option><option value="available">Available to Receive</option></PreparingSelect></div>}
+   {uncaptured.length>0&&<div className="pr-wh-notice"><div><strong>{uncaptured.length} school(s) need requirement capture</strong><small>{hasProjectProposal?"Capture each school’s Proposal to retain its requirement baseline. This does not modify the project Master BOM or warehouse receipts.":"Capture linked school Proposals to calculate legacy project requirements. Existing school baselines stay frozen."}</small></div>{canReceive&&<button className="pr-primary" disabled={busy} onClick={()=>execute("capture",{})}>{busy?"Capturing…":hasProjectProposal?"Capture School Requirements":"Capture Project BOM"}</button>}</div>}
    {tab==="receiving"&&<div className="pr-wh-list pr-wr-list pr-pt-kit-list" aria-label="Master project components by Kit">{shownGroups.map(group=>{
     const open=!!search.trim()||expandedKit===group.key;
     const appearance=warehouseKitAppearance(group.name);
@@ -182,7 +154,6 @@ export default function ProjectWarehouseReceiving({projectId,projectName,hasProj
      })}</div>}
     </section>;
    })}{!shownGroups.length&&<div className="pr-wh-empty">No matching project components.</div>}</div>}
-   {tab==="allocation"&&<><div className="pr-wh-school-select"><label>Beneficiary school<PreparingSelect value={schoolId} onChange={e=>{setSchoolId(e.target.value);setAssignDraft({});}}><option value="">Select school</option>{state.schools.filter(s=>schoolsCaptured.has(s.id)).map(s=><option value={s.id} key={s.id}>{s.beneficiary_name}</option>)}</PreparingSelect></label>{canAllocate&&<label>Allocation reference<input placeholder="INT-0001" maxLength={160} value={assignReference} onChange={e=>setAssignReference(e.target.value)}/></label>}{canAllocate&&<label>Notes<input placeholder="Optional" maxLength={1000} value={assignNotes} onChange={e=>setAssignNotes(e.target.value)}/></label>}</div>{schoolId&&canAllocate&&<div className="pr-wh-voucher-bottom"><small>Enter quantities below to assign multiple items in one verified transaction.</small><button type="button" className="pr-primary" disabled={busy} onClick={allocateBatch}>Save School Allocation</button></div>}{schoolId?<div className="pr-wh-list" aria-label="School component allocations">{schoolShown.map(row=>{const demand=demandsMap.get(row.id);return <div key={row.id} className="pr-wh-item"><div className="pr-wh-component-name"><strong>{row.product_name}</strong><small>{row.product_id||"Uncoded component"}</small></div><div className="pr-wh-item-figures"><span><small>School required</small><b>{pretty(demand.required_qty)}</b></span><span><small>Assigned</small><b>{pretty(demand.allocated)}</b></span><span><small>Still needed</small><b>{pretty(Math.max(0,demand.required_qty-demand.allocated))}</b></span><span><small>Warehouse available</small><b>{pretty(row.available)}</b></span></div>{canAllocate&&<div className="pr-wh-assign"><StageQuantityInput aria-label={`Allocate ${row.product_name}`} step="1" placeholder="+ / − qty" value={assignDraft[row.id]??""} onValueChange={value=>setAssignDraft(s=>({...s,[row.id]:value}))}/><button type="button" className="pr-secondary" disabled={busy} onClick={()=>allocateItem(row)}>Assign</button></div>}</div>;})}{!schoolShown.length&&<div className="pr-wh-empty">No matching school items.</div>}</div>:<div className="pr-wh-empty">Select a school to view and allocate its component requirements.</div>}</>}
    {tab==="history"&&<section className="pr-wr-history" aria-label="Warehouse movement audit history">
     <div className="pr-pt-history-heading"><div><h4>Receiving History</h4><p>Every change is retained as a separate transaction.</p></div><span className="pr-pt-history-count">{historyEntries.length} changes</span></div>
     <div className="pr-pt-history-grid">{historyEntries.map(({key,receipt,line,component})=><article className="pr-pt-history-card" key={key}>
@@ -192,8 +163,6 @@ export default function ProjectWarehouseReceiving({projectId,projectName,hasProj
      {line.damaged_delta!==0&&<p className="pr-pt-history-note">Historical damaged entry: {pretty(line.damaged_delta)} (read-only)</p>}
      {receipt.notes&&<p className="pr-pt-history-note">{receipt.notes}</p>}
     </article>)}{!historyEntries.length&&<div className="pr-wh-empty">No receiving movements recorded yet.</div>}</div>
-    <div className="pr-pt-history-heading"><h4>School Allocations</h4><span className="pr-pt-history-count">{state.allocations.length} movements</span></div>
-    <div className="pr-pt-history-grid">{state.allocations.map(row=><article key={row.id} className="pr-pt-history-card"><div className="pr-pt-history-component"><strong>{state.schools.find(s=>s.id===row.school_id)?.beneficiary_name||"School"}</strong><span>{date(row.created_at)} · {row.reference}</span></div><div className="pr-pt-history-component"><strong>{nameById.get(row.item_id)||"Component"}</strong><span>{row.delta_qty>0?"+":""}{pretty(row.delta_qty)} allocated</span></div>{row.notes&&<p className="pr-pt-history-note">{row.notes}</p>}</article>)}</div>
    </section>}
   </>}
   {showExport&&<div className="pr-pt-export-overlay" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget&&!exportBusy)setShowExport(false);}}><section className="pr-pt-export-modal" role="dialog" aria-modal="true" aria-label="Export warehouse receiving">

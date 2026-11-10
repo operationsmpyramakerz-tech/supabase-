@@ -26,24 +26,24 @@ test('Warehouse has icon-only close, solid kit icons and initially collapsed gro
  assert.doesNotMatch(wh,/index===0/);
 });
 
-test('Warehouse retains both workflows and shows Download plus accessible history icon',()=>{
- assert.match(wh,/Warehouse Receiving"\],\["allocation","School Allocation/);
- assert.match(wh,/setTab\("history"\)/);
+test('Warehouse retains receiving workflow and shows Download plus accessible history icon',()=>{
+ assert.doesNotMatch(wh,/School Allocation/);assert.match(wh,/<StageFilterTabs/);
+ assert.match(wh,/setTab\(tab==="history"\?"receiving":"history"\)/);
  assert.match(wh,/Movement History \(\$\{historyEntries\.length\} changes\)/);
- assert.match(wh,/className="pr-warehouse-actions"/);
+ assert.match(wh,/className="pr-stage-filter-actions"/);
  assert.match(wh,/className="pr-pt-download-button"/);
  assert.match(wh,/onClick=\{\(\)=>setShowExport\(true\)\}/);
  assert.match(wh,/onClick=\{\(\)=>saveReceipt\(row\)\}/);
- assert.match(wh,/onClick=\{allocateBatch\}/);
+ assert.doesNotMatch(wh,/allocateBatch/);
  assert.match(wh,/exportCSV\(true\)/);
  assert.match(wh,/exportPDF\(true\)/);
 });
 
-test('Search is transparent, filter is icon-only, refresh removed, CSS version bumped',()=>{
+test('Search is transparent, status tabs replace filter, refresh removed, CSS version bumped',()=>{
  assert.match(wh,/pr-search pr-pt-search/);
  assert.match(wh,/pr-pt-clear-search/);
- assert.match(wh,/PreparingSelect iconOnly className=/);
- assert.match(wh,/value=\{filter\} onChange=\{e=>setFilter\(e\.target\.value\)\}/);
+ assert.match(wh,/<StageFilterTabs/);
+ assert.match(wh,/onChange=\{value=>\{setFilter\(value\);setTab\("receiving"\)/);
  assert.doesNotMatch(wh,/\bRefresh<\/button>/);
  assert.match(page,/v282-warehouse-ui/);
  assert.match(css,/\.pr-warehouse-parity \.pr-pt-toolbar/);
