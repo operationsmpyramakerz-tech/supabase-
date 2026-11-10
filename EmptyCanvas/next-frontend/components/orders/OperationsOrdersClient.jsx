@@ -5,12 +5,12 @@ import { orderCardAllows } from "../../lib/order-data-scope.mjs";
 import { OPERATIONS_STATUS_OPTIONS, normalizeOperationsStatuses, operationsMatchesStatuses } from "../../lib/operations-status-filter.mjs";
 import { isPartiallyDeliveredOrder } from "../../lib/order-partial-delivery.mjs";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import ClassicOrderIcon from "./ClassicOrderIcon";
 import UnifiedOrderCreatorPopover, { creatorPopoverPlacement } from "./UnifiedOrderCreatorPopover";
 
-import useCompleteOrderTypeCounts from "./useCompleteOrderTypeCounts";
+import { collectOperationsFilterGroups } from "../../lib/operations-filter-preferences.mjs";
 import { withSingleOrderSourceAttribution } from "../../lib/order-kit-attribution.mjs";
 import { createOrderDetailsLoader } from "./orderDetailsLoader";
 import { cancelOrderOpenTimer, loadOrderAndModalWithMetrics, markOrderOpenStarted, reportOrderVisibleAfterPaint, warmOrderModalOnIdle } from "./orderOpeningPerformance";
@@ -759,7 +759,15 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
     setTab(value);
   }
   const [query, setQuery] = useState("");
-  const completeTypes = useCompleteOrderTypeCounts({ endpoint: `${DIRECT_API_BASE}/orders/requested/paged-summary`, tab, query });
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const loadFilterGroups = useCallback(signal => collectOperationsFilterGroups(async (cursor, requestSignal) => {
+    const params = new URLSearchParams({ tab: "all", filterType: "all", limit: "80", statuses: OPERATIONS_STATUS_OPTIONS.map(option => option.key).join(",") });
+    if (query.trim()) params.set("q", query.trim());
+    if (cursor !== null) params.set("cursor", String(cursor));
+    const response = await fetch(`${DIRECT_API_BASE}/orders/requested/paged-summary?${params}`, { credentials: "include", cache: "no-store", signal: requestSignal });
+    if (!response.ok) throw new Error("Could not count orders.");
+    return await response.json();
+  }, buildGroups, { signal }), [query]);
   const [sortMode, setSortMode] = useState("latest");
   const [selected, setSelected] = useState(null);
   const [actionState, setActionState] = useState(null);
@@ -850,28 +858,20 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
 
   const groups = useMemo(() => buildGroups(orders), [orders]);
   const tabGroups = useMemo(() => statusFilters.length ? groups.filter(group => operationsMatchesStatuses({ ...group, maintenance: isMaintenance(group.orderType) }, statusFilters)) : groupsForTab(groups, orders, tab), [groups, orders, tab, statusFilters]);
-  const typeOptions = useMemo(() => {
-    const full = completeTypes.counts?.options;
-    const map = new Map();
-    // While checking, expose all known types, including types not yet loaded.
-    if (!full || statusFilters.length) for (const raw of ["Request Maintenance", "Request Products", "Withdraw Products"]) {
-      const key = orderTypeKey(raw);
-      map.set(key, { key, raw, label: orderTypeMeta(raw).label, count: null });
+  function applyFilters({ statuses, type: nextType, sort, reset }) {
+    const next = normalizeOperationsStatuses(statuses);
+    // Apply the entire draft in one render. Sorting alone preserves the active status tab.
+    if (reset || next.join(",") !== statusKey) changeStatusFilters(next);
+    if (nextType !== type) {
+      listAbortRef.current?.abort();
+      ++listRequestRef.current;
+      initialFilterKeyRef.current = "";
+      setListLoading(true);
+      setPageInfo(current => ({ ...current, hasMore: false, nextCursor: null }));
+      setType(nextType);
     }
-    const source = full || tabGroups.map((group) => ({
-      key: orderTypeKey(group.orderType) || "other", raw: group.orderType,
-      color: group.orderTypeColor, count: 0,
-    }));
-    for (const entry of source) {
-      const key = entry.key || orderTypeKey(entry.raw) || "other";
-      const meta = orderTypeMeta(entry.raw, entry.color);
-      map.set(key, {
-        key, raw: entry.raw, color: entry.color, label: meta.label,
-        count: full ? entry.count : null,
-      });
-    }
-    return [...map.values()].sort((a, b) => a.label.localeCompare(b.label));
-  }, [tabGroups, completeTypes.counts, statusFilters]);
+    setSortMode(sort);
+  }
 
   const visibleGroups = useMemo(() => {
     const needle = lower(query);
@@ -1481,7 +1481,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
   }
 
   return (
-    <section className="next-classic-orders-parity next-classic-operations-parity orders-workspace">
+    <section className={`next-classic-orders-parity next-classic-operations-parity orders-workspace${filtersOpen ? " ops-filters-open" : ""}`}>
       <ActionLoadingModal state={actionLoading} />
       {bootstrapWarnings.length ? <div className="dashboard-notice"><strong>Partial data</strong><span>One resource was not available during the initial load.</span></div> : null}
       {notice ? <div className="orders-parity-success" role="status"><ClassicOrderIcon name="check-circle" />{notice}</div> : null}
@@ -1494,7 +1494,7 @@ export default function OperationsOrdersClient({ initialOrders = [], initialPage
             </div>
           </div>
           <div className="orders-toolbar__divider" aria-hidden="true" />
-          <OrdersPreferencesControl statusOptions={OPERATIONS_STATUS_OPTIONS} statusValues={statusFilters} onStatusChange={changeStatusFilters} sortMode={sortMode} onSortChange={setSortMode} hasMore={pageInfo?.hasMore} filterValue={type} onFilterChange={setType} onFilterOpen={completeTypes.refresh} loading={completeTypes.loading} error={completeTypes.error} filterOptions={typeOptions.map(option => { const meta = orderTypeMeta(option.raw || option.label); return { ...option, icon: meta.icon, bg: meta.bg, fg: meta.fg, bd: meta.bd }; })} />
+          <OrdersPreferencesControl statusOptions={OPERATIONS_STATUS_OPTIONS} statusValues={statusFilters} sortMode={sortMode} filterValue={type} onApply={applyFilters} loadGroups={loadFilterGroups} onOpenChange={setFiltersOpen} />
         </div>
       </div>
 

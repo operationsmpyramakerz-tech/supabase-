@@ -27,7 +27,7 @@ function routePerformanceStyles(localPath) {
     return [
       "/next/css/orders-performance.css?v=current-orders-pure-white-v6",
       "/next/css/order-mobile-performance.css?v=floating-order-type-desktop-v4",
-      "/next/css/orders-workspace.css?v=orders-workspace-v381-status-filter",
+      "/next/css/orders-workspace.css?v=orders-workspace-v382-filter-panel",
       "/next/css/maintenance-orders.css?v=maintenance-review-parity-v368",
     ];
   }
@@ -35,7 +35,7 @@ function routePerformanceStyles(localPath) {
     return [
       "/next/css/maintenance-orders.css?v=maintenance-review-parity-v368",
       "/next/css/order-mobile-performance.css?v=floating-order-type-desktop-v4",
-      "/next/css/orders-workspace.css?v=orders-workspace-v381-status-filter",
+      "/next/css/orders-workspace.css?v=orders-workspace-v382-filter-panel",
     ];
   }
   if (localPath === "/orders/new" || localPath.startsWith("/orders/new/")) {

@@ -48,8 +48,13 @@ test('incomplete and repeating pages fail rather than display misleading totals'
 test('every orders page feeds complete type counts to the combined preferences control', () => {
   for (const name of pageNames) {
     const source = read(`components/orders/${name}`);
-    assert.match(source, /useCompleteOrderTypeCounts\(\{ endpoint:/, name);
-    assert.match(source, /onFilterOpen=\{completeTypes\.refresh\}/, name);
+    if (name === 'OperationsOrdersClient.jsx') {
+      assert.match(source, /collectOperationsFilterGroups\(/, name);
+      assert.match(source, /loadGroups=\{loadFilterGroups\}/, name);
+    } else {
+      assert.match(source, /useCompleteOrderTypeCounts\(\{ endpoint:/, name);
+      assert.match(source, /onFilterOpen=\{completeTypes\.refresh\}/, name);
+    }
     assert.match(source, /<OrdersPreferencesControl /, name);
   }
 });

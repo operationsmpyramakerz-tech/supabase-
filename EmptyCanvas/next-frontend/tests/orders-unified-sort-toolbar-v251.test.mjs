@@ -19,8 +19,12 @@ test('All four orders pages use the single shared icon-only Preferences button',
   for (const page of pages) {
     const source = read(`components/orders/${page}`);
     assert.match(source, /import OrdersPreferencesControl from "\.\/OrdersPreferencesControl"/);
-    assert.match(source, /<OrdersPreferencesControl[^>]+sortMode=\{sortMode\}[^>]+onSortChange=\{setSortMode\}/);
-    assert.match(source, /onFilterChange=\{setType\}/);
+    if (page === 'OperationsOrdersClient.jsx') {
+      assert.match(source, /<OrdersPreferencesControl[^>]+sortMode=\{sortMode\}[^>]+onApply=\{applyFilters\}/);
+    } else {
+      assert.match(source, /<OrdersPreferencesControl[^>]+sortMode=\{sortMode\}[^>]+onSortChange=\{setSortMode\}/);
+      assert.match(source, /onFilterChange=\{setType\}/);
+    }
     assert.doesNotMatch(source, /<OrdersListHeader /);
   }
 });
@@ -55,5 +59,5 @@ test('Combined Preferences popover has Filter and Sort tabs with accessible cont
 });
 
 test('Route style links use cache-busted versions for production', () => {
-  assert.equal((shell.match(/orders-workspace-v381-status-filter/g) || []).length, 2);
+  assert.equal((shell.match(/orders-workspace-v382-filter-panel/g) || []).length, 2);
 });

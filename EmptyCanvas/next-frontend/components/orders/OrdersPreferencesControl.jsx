@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import ClassicOrderIcon from "./ClassicOrderIcon";
+import OperationsFilterControl from "./OperationsFilterControl";
 
 const SORT_OPTIONS = [
   { value: "latest", label: "Newest first", icon: "sort-desc" },
@@ -13,7 +14,12 @@ const SORT_OPTIONS = [
 
 /** Single preference trigger for type filtering and sorting on the four orders pages.
  * Changes are applied immediately using the page's existing handlers. */
-export default function OrdersPreferencesControl({
+export default function OrdersPreferencesControl(props) {
+  if (props.loadGroups && props.statusOptions?.length) return <OperationsFilterControl {...props} />;
+  return <LegacyOrdersPreferencesControl {...props} />;
+}
+
+function LegacyOrdersPreferencesControl({
   filterValue = "all", filterOptions = [], onFilterChange, onFilterOpen,
   loading = false, error = false, sortMode = "latest", onSortChange,
   hasMore = false, statusOptions = [], statusValues = [], onStatusChange,
