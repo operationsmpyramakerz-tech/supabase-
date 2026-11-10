@@ -39,7 +39,7 @@ test('maintenance-specific CSS is scoped to the embedded UI and loaded on order 
 });
 
 test('detail-only maintenance product enrichment preserves existing page scope checks', () => {
-  assert.match(myData, /visibleOrderRow\(row, resolved\)/);
+  assert.match(myData, /canViewMyOrderRow\(row, account, resolved\)/);
   assert.match(myData, /const enrichedMaintenance = maintenanceDetails\.length \? await enrichMaintenanceDetailProducts/);
   assert.match(operationsData, /return await enrichOperationsMaintenanceRows\(details, timings\);/);
   assert.match(maintenanceData, /import \{ enrichMaintenanceDetailProducts \} from "\.\/maintenance-detail-enrichment"/);

@@ -3,7 +3,8 @@ import "server-only";
 import { isSupabaseConfigured, select, selectById } from "./supabase-rest";
 import { serializeOperationsOrderDetail } from "./order-details-data";
 import { getProductsList } from "./products-service";
-import { resolveOrderScope, visibleOrderRow } from "./order-data-scope";
+import { resolveOrderScope } from "./order-data-scope";
+import { canViewMyOrderRow, legacyMyOrderOwnerMatches } from "./my-orders-owner-visibility.mjs";
 
 function text(value) {
   return String(value ?? "").trim();
@@ -76,18 +77,6 @@ function accountUsername(account = {}) {
   return text(account?.username || account?.name);
 }
 
-function memberMatches(createdByName, username) {
-  const user = norm(username);
-  const by = norm(createdByName);
-  if (!user || !by) return true;
-  return by.includes(user) || user.includes(by);
-}
-
-function visibleRow(row = {}, account = {}) {
-  const item = serializeOperationsOrderDetail(row);
-  return memberMatches(item?.createdByName, accountUsername(account));
-}
-
 async function rowsByOrderNumber(orderNumber, account, resolved = null) {
   const params = {
     order_number: `eq.${Number(orderNumber)}`,
@@ -111,15 +100,14 @@ async function rowsByOrderNumber(orderNumber, account, resolved = null) {
       select: "*",
     }, { profileName: "orders.tracking.rows-fallback" });
   }
-  if (resolved) {
-    if (rows.some(row => !visibleOrderRow(row, resolved))) {
-      const error = new Error("Order is outside your permitted tracking scope.");
-      error.status = 403;
-      throw error;
-    }
-    return rows;
+  // The resolver returns {scope: null} for legacy profiles, not `null`.
+  // Always enforce ownership, including on a shared/copyable tracking link.
+  if (rows.some(row => !canViewMyOrderRow(row, account, resolved))) {
+    const error = new Error("Order is outside your permitted tracking scope.");
+    error.status = 403;
+    throw error;
   }
-  return rows.filter((row) => visibleRow(row, account));
+  return rows;
 }
 
 async function rowById(reference) {
@@ -188,7 +176,7 @@ export async function loadOrderTracking({ account = {}, groupId = "" } = {}) {
   if (!Number.isFinite(targetOrderNumber)) {
     try {
       const row = await rowById(cleanRef);
-      if (row && (resolved ? visibleOrderRow(row, resolved) : visibleRow(row, account))) {
+      if (row && canViewMyOrderRow(row, account, resolved)) {
         baseRow = row;
         const item = serializeOperationsOrderDetail(row);
         if (Number.isFinite(Number(item?.orderIdNumber))) targetOrderNumber = Number(item.orderIdNumber);
@@ -251,6 +239,8 @@ export async function loadOrderTracking({ account = {}, groupId = "" } = {}) {
 }
 
 export const __orderTrackingDataTest = {
-  memberMatches,
+  // Keep the previous test-helper shape while removing partial-name matching.
+  memberMatches: (createdByName, username) => legacyMyOrderOwnerMatches(
+    { team_member_name: createdByName }, { username }),
   normKey,
 };

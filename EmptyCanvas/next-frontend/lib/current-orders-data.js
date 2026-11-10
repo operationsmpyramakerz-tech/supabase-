@@ -13,6 +13,7 @@ import { canUseOrderCandidateRpc, loadOrderCandidateNumbersRpc, noteOrderCandida
 import { measurePerformance, recordPerformanceSample } from "./performance-profiler";
 import { directPageMutationAccess, verifyPageAdminPasswordDirect } from "./order-action-auth";
 import { resolveOrderScope, visibleOrderRow } from "./order-data-scope";
+import { canViewMyOrderRow } from "./my-orders-owner-visibility.mjs";
 import { isCompleteOrderSelection } from "./order-action-selection.mjs";
 
 const PAGE_LIMIT = 36;
@@ -110,25 +111,6 @@ function accountUsername(account = {}) {
 
 function accountMemberId(account = {}) {
   return text(account?.teamMemberId || account?.userSupabaseId);
-}
-
-// IDs are authoritative when both sides provide one. Older orders without an
-// owner ID retain their legacy name check; names must never override a
-// conflicting persisted owner ID.
-function ownedByAccount(row = {}, account = {}) {
-  const ownerId = text(row?.team_member_id ?? row?.teamMemberId ?? row?.createdById);
-  const memberId = accountMemberId(account);
-  if (ownerId && memberId) return ownerId === memberId;
-  const ownerName = text(row?.team_member_name ?? row?.createdByName ?? row?.["Teams Members"] ?? row?.teams_members);
-  const username = accountUsername(account);
-  return Boolean(ownerName && username) && memberMatches(ownerName, username);
-}
-
-function memberMatches(createdByName, username) {
-  const user = norm(username);
-  const by = norm(createdByName);
-  if (!user || !by) return true;
-  return by.includes(user) || user.includes(by);
 }
 
 function statusIndex(value) {
@@ -229,12 +211,10 @@ function searchLogic(query = "") {
 }
 
 function memberCandidateNames(account = {}) {
-  const clean = safeFilterText(accountUsername(account));
-  if (!clean) return [];
-  return Array.from(new Set([
-    clean,
-    clean.split(/\s+/)[0] || "",
-  ].map((value) => String(value || "").trim()).filter((value) => value.length >= 2)));
+  // The candidate query is an optimization, NOT an authorization boundary.
+  // Never use the first word (e.g. "Moon") to select other schools' orders.
+  const name = safeFilterText(accountUsername(account));
+  return name ? [name] : [];
 }
 
 function memberClauses(account = {}, resolved = null) {
@@ -256,7 +236,7 @@ function memberClauses(account = {}, resolved = null) {
   if (!candidates.length) return clauses;
   return [
     ...clauses,
-    ...candidates.map((value) => `team_member_name.ilike.*${value}*`),
+    ...candidates.map((value) => `team_member_name.ilike.${value}`),
     "team_member_name.is.null",
     "team_member_name.eq.",
   ];
@@ -327,12 +307,11 @@ function groupRows(rows = [], account = {}, includeLocalSearchFields = false, re
   const blocked = new Set();
   for (const row of rows) {
     const number = Number(row?.order_number);
-    if (resolved?.scope !== null && resolved && !visibleOrderRow(row, resolved)) {
+    if (!canViewMyOrderRow(row, account, resolved)) {
+      // Never expose an order with a mixture of visible and foreign rows.
       if (Number.isFinite(number)) blocked.add(number);
       continue;
     }
-    // Preserve exact legacy visibility unless row-level scope was enabled.
-    if (!resolved && !ownedByAccount(row, account)) continue;
     const item = serializeOperationsCompactSummaryRow(row, {
       includeSearchText: includeLocalSearchFields,
       includeCreatedById: true,
@@ -504,8 +483,8 @@ export async function loadCurrentOrderDetails({ account = {}, orderIds = [], tim
   }
   const prepareStartedAt = performance.now();
   const resolved = await resolveOrderScope(account, "orders.my.view");
-  const visible = (Array.isArray(rows) ? rows : []).filter((row) => resolved
-    ? visibleOrderRow(row, resolved) : ownedByAccount(row, account));
+  const visible = (Array.isArray(rows) ? rows : []).filter((row) =>
+    canViewMyOrderRow(row, account, resolved));
 
   const visibleIds = new Set(visible.map((row) => text(row?.id)).filter(Boolean));
   if (ids.some((id) => !visibleIds.has(id))) {

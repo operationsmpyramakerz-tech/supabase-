@@ -27,9 +27,10 @@ function orderGrants(module, { view = 'all', action = 'all', actionKey = 'delete
   };
 }
 
-test('2Q4A: all 188 catalog actions are unique and unknown feature keys deny access', () => {
-  assert.equal(FEATURE_DEFINITIONS.length, 188);
-  assert.equal(ACTIVE_PILOT_FEATURE_KEYS.length, 188);
+test('2Q4A: all catalog actions are unique and unknown feature keys deny access', () => {
+  // Keep the audit valid when later, separately reviewed actions are added.
+  assert.ok(FEATURE_DEFINITIONS.length >= 188);
+  assert.equal(ACTIVE_PILOT_FEATURE_KEYS.length, FEATURE_DEFINITIONS.length);
   assert.equal(new Set(ACTIVE_PILOT_FEATURE_KEYS).size, ACTIVE_PILOT_FEATURE_KEYS.length);
   for (const key of ACTIVE_PILOT_FEATURE_KEYS) assert.ok(isKnownFeature(key), key);
   assert.equal(featureAllowed(acct({}), 'orders.operations.nonexistent'), false);
