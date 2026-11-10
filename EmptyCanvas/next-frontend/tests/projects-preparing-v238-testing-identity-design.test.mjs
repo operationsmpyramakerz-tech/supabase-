@@ -19,12 +19,10 @@ test('quantity edit does not accept actor identity or technicianName from the cl
  assert.match(api,/erp_preparing_project_testing_record_v238/);
  assert.doesNotMatch(api,/row\?\.technicianName/);
 });
-test('remaining is testing intake minus passed, including failed units still to pass',()=>{
- assert.match(ui,/const remaining=testingRemaining/);
- assert.match(ui,/Remaining/);
- assert.match(ui,/remaining:a\.remaining\+remaining\(r\)/);
- assert.match(ui,/remaining\(r\)/);
- assert.doesNotMatch(ui,/"Not tested"/);
+test('remaining in the workspace is required minus physically tested units',()=>{
+ assert.match(ui,/testingCoverageTotals\(data.items/);
+ assert.match(ui,/testingCoverage\(r\).remaining/);
+ assert.match(ui,/pretty\(coverage.remaining\)/);
 });
 test('Tested By is read-only and only appears outside edit mode, with multiple participants',()=>{
  assert.match(ui,/!isEditing&&<div className="pr-pt-metric pr-pt-metric--testedBy"/);

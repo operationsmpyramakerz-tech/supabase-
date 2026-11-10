@@ -32,7 +32,7 @@ test("the route validates actual user, three quantity deltas and technician",()=
  assert.match(read("app/api/projects-preparing/testing/route.js"),/preparingStage(?:Gate|Allowed)/);
 });
 test("test fields remain inline and responsive",()=>{
- assert.match(view,/isEditing&&!isRemaining/);
+ assert.match(view,/isEditing\?metrics.map/);
  assert.match(view,/field\.aria/);
  assert.match(css,/@media\(max-width:520px\)/);
  for(const file of ["components/preparing/ProjectTesting.jsx","components/preparing/PreparingClient.jsx","lib/preparing-project-testing.js","app/api/projects-preparing/testing/route.js"]){

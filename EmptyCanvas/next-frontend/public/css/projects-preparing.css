@@ -4598,3 +4598,15 @@ html[data-theme="dark"] .pr-sc-full-preview {background:#222833;}
 .pr-sc-pdf-preview iframe {width:100%;height:min(48dvh,420px);border:0;background:#fff;}
 .pr-sc-pdf-preview a {text-align:center;color:#2563eb;font-weight:700;padding:8px;}
 @media(max-width:480px){.pr-sc-dialog .pr-sc-upload-head,.pr-sc-dialog .pr-sc-upload-body,.pr-sc-dialog .pr-sc-upload-footer{padding-left:12px;padding-right:12px;}.pr-sc-dialog .pr-sc-upload-card{padding:9px;}.pr-sc-dialog .pr-sc-upload-title-wrap h2{font-size:18px;}.pr-sc-dialog .pr-sc-upload-fileinfo{gap:6px;}.pr-sc-dialog .pr-sc-upload-actions{gap:5px;}.pr-sc-dialog .pr-sc-upload-item{padding:8px;}.pr-sc-dialog .pr-sc-upload-fileicon{width:30px;height:30px;}.pr-sc-dialog .pr-sc-upload-footer .pr-sc-submit{flex:1;}}
+
+/* v383 — testing coverage: three project KPIs and three quantities per read-only row. */
+.pr-pt-modern .pr-pt-stat-grid.pr-pt-coverage-grid{grid-template-columns:repeat(3,minmax(0,1fr));}
+.pr-pt-modern .pr-pt-coverage-grid>.pr-pt-stat.pr-pt-stat--tested{--pt-card-bg:#087d53;--pt-card-border:#087d53;--pt-card-text:#fff;--pt-card-muted:#fff;--pt-card-icon-bg:rgba(255,255,255,.16);--pt-card-divider:rgba(255,255,255,.55);}
+.pr-pt-modern .pr-pt-row:not(.is-editing) .pr-pt-metrics{grid-template-columns:repeat(2,minmax(0,1fr)) minmax(120px,1.4fr) auto;}
+.pr-pt-modern .pr-pt-row:not(.is-editing) .pr-pt-metric--testedBy,.pr-pt-modern .pr-pt-row:not(.is-editing) .pr-pt-actions{grid-column:auto;}
+@media(max-width:580px){
+ .pr-pt-modern .pr-pt-stat-grid.pr-pt-coverage-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
+ .pr-pt-modern .pr-pt-coverage-grid>.pr-pt-stat:last-child{grid-column:1/-1;}
+ .pr-pt-modern .pr-pt-row:not(.is-editing) .pr-pt-metrics{grid-template-columns:repeat(2,minmax(0,1fr));}
+ .pr-pt-modern .pr-pt-row:not(.is-editing) .pr-pt-metric--testedBy,.pr-pt-modern .pr-pt-row:not(.is-editing) .pr-pt-actions{grid-column:1/-1;}
+}

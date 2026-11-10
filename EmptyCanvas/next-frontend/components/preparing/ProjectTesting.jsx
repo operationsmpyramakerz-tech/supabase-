@@ -2,19 +2,17 @@
 import PreparingSelect from "./PreparingSelect";
 import StageQuantityInput from "./StageQuantityInput";
 import {useEffect,useMemo,useState} from "react";
-import {testingChange} from "../../lib/preparing-project-testing-math.mjs";
-import {testingGroups,testingRemaining,TESTING_EXPORT_COLUMNS,testingExportValue} from "../../lib/preparing-project-testing-grouping.mjs";
+import {testingChange,testingCoverage,testingCoverageTotals} from "../../lib/preparing-project-testing-math.mjs";
+import {testingGroups,TESTING_EXPORT_COLUMNS,testingExportValue} from "../../lib/preparing-project-testing-grouping.mjs";
 
 const n=value=>Number(value)||0;
 const pretty=value=>n(value).toLocaleString("en-US");
-const remaining=testingRemaining;
 const csvCell=value=>{const s=String(value??"");return `"${(/^[\s]*[=+@-]/.test(s)?"'":"")+s.replaceAll('"','""')}"`;};
 const initial={items:[],history:[],kitGroups:[]};
 const metrics=[
  {key:"received",label:"Testing Received",aria:"Testing received"},
  {key:"passed",label:"Passed",aria:"Passed testing"},
  {key:"failed",label:"Failed",aria:"Failed testing"},
- {key:"remaining",label:"Remaining"},
 ];
 const delta=value=>{const x=n(value);return `${x>0?"+":""}${pretty(x)}`;};
 const dateText=value=>{if(!value)return "—";const date=new Date(value);return Number.isNaN(date.getTime())?"—":date.toLocaleString("en-GB",{dateStyle:"medium",timeStyle:"short"});};
@@ -67,13 +65,10 @@ export default function ProjectTesting({projectId,projectName,canTest,request,on
    .finally(()=>{if(mounted)setLoading(false);});
   return()=>{mounted=false;};
  },[projectId]);
- const totals=useMemo(()=>(data.items||[]).reduce((a,r)=>({
-  required:a.required+n(r.required),received:a.received+n(r.received),passed:a.passed+n(r.passed),
-  failed:a.failed+n(r.failed),remaining:a.remaining+remaining(r)
- }),{required:0,received:0,passed:0,failed:0,remaining:0}),[data.items]);
+ const totals=useMemo(()=>testingCoverageTotals(data.items||[]),[data.items]);
  const shown=useMemo(()=>(data.items||[])
   .filter(r=>`${r.name||""} ${r.code||""}`.toLowerCase().includes(search.trim().toLowerCase()))
-  .filter(r=>filter==="pending"?remaining(r)>0:filter==="failed"?n(r.failed)>0:filter==="done"?n(r.received)>0&&remaining(r)===0:true),
+  .filter(r=>filter==="pending"?testingCoverage(r).remaining>0:filter==="failed"?n(r.failed)>0:filter==="done"?testingCoverage(r).required>0&&testingCoverage(r).remaining===0:true),
  [data.items,search,filter]);
  const allGroups=useMemo(()=>testingGroups(data.items,data.kitGroups),[data.items,data.kitGroups]);
  const groupedShown=useMemo(()=>testingGroups(shown,data.kitGroups).filter(group=>group.items.length),[shown,data.kitGroups]);
@@ -158,11 +153,9 @@ export default function ProjectTesting({projectId,projectName,canTest,request,on
   {error&&<div className="pr-alert" role="alert">{error}<button type="button" onClick={()=>setError("")} aria-label="Dismiss">×</button></div>}
   {success&&<div className="pr-manifest-success" role="status">{success}</div>}
   {loading?<p className="pr-muted">Loading testing records…</p>:<>
-   <div className="pr-wh-stats pr-pt-stat-grid" aria-label="Testing summary">{[
+   <div className="pr-wh-stats pr-pt-stat-grid pr-pt-coverage-grid" aria-label="Testing summary">{[
     {key:"required",label:"Project Required",value:totals.required,mark:"◆"},
-    {key:"received",label:"Testing Received",value:totals.received,mark:"↓"},
-    {key:"passed",label:"Passed",value:totals.passed,mark:"✓"},
-    {key:"failed",label:"Failed",value:totals.failed,mark:"!"},
+    {key:"tested",label:"Tested",value:totals.tested,mark:"✓"},
     {key:"remaining",label:"Remaining",value:totals.remaining,mark:"◷"},
    ].map(stat=><div className={`pr-pt-stat pr-pt-stat--${stat.key}`} key={stat.key}>
     <span className="pr-pt-stat-icon" aria-hidden="true">{stat.key==="remaining"?<TestingIcon name="clock" size={25}/>:stat.mark}</span><span className="pr-pt-stat-copy"><span>{stat.label}</span><strong>{pretty(stat.value)}</strong></span>
@@ -175,7 +168,7 @@ export default function ProjectTesting({projectId,projectName,canTest,request,on
     <button type="button" className="pr-pt-download-button" aria-label="Download testing report" onClick={()=>setShowExport(true)} disabled={!data.items.length}><TestingIcon name="download" size={18}/><span>Download</span></button>
    </div>
    {tab==="testing"&&<>
-     <div className="pr-wh-toolbar pr-pt-toolbar"><label className="pr-search pr-pt-search"><TestingIcon name="search" size={18}/><input type="search" aria-label="Search testing components" placeholder="Search component or code…" value={search} onChange={e=>setSearch(e.target.value)}/>{search&&<button type="button" className="pr-pt-clear-search" onClick={()=>setSearch("")} aria-label="Clear search" title="Clear search"><TestingIcon name="close" size={16}/></button>}</label><PreparingSelect iconOnly className={`pr-pt-filter-select${filter!=="all"?" is-filtered":""}`} aria-label="Filter testing components" value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">All components</option><option value="pending">Remaining to pass</option><option value="failed">Has failed units</option><option value="done">Fully received for testing</option></PreparingSelect></div>
+     <div className="pr-wh-toolbar pr-pt-toolbar"><label className="pr-search pr-pt-search"><TestingIcon name="search" size={18}/><input type="search" aria-label="Search testing components" placeholder="Search component or code…" value={search} onChange={e=>setSearch(e.target.value)}/>{search&&<button type="button" className="pr-pt-clear-search" onClick={()=>setSearch("")} aria-label="Clear search" title="Clear search"><TestingIcon name="close" size={16}/></button>}</label><PreparingSelect iconOnly className={`pr-pt-filter-select${filter!=="all"?" is-filtered":""}`} aria-label="Filter testing components" value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">All components</option><option value="pending">Remaining to test</option><option value="failed">Has failed units</option><option value="done">Fully tested</option></PreparingSelect></div>
     <div className="pr-wh-list pr-pt-list pr-pt-kit-list" aria-label="Project component testing">{groupedShown.map(group=>{
      const open=!!search.trim()||expandedKit===group.key;
      const appearance=testingKitAppearance(group.name);
@@ -185,22 +178,22 @@ export default function ProjectTesting({projectId,projectName,canTest,request,on
        <span className="pr-pt-kit-arrow" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
       </button>
       {open&&<div className="pr-pt-kit-body">{group.items.map(r=>{
-     const isEditing=!!editing[r.id],v=draft[r.id]||{};
+     const isEditing=!!editing[r.id],v=draft[r.id]||{},coverage=testingCoverage(r);
      return <article key={r.id} className={`pr-pt-row${isEditing?" is-editing":""}`}>
       <div className="pr-pt-heading">
-       <div className="pr-pt-name"><div className="pr-pt-name-inline"><strong title={r.code?`Product code: ${r.code}`:undefined}>{r.name}</strong>{r.kitQuantity>0&&<small>Kit Qty: {pretty(r.kitQuantity)}</small>}</div>{r.mismatch&&<small className="pr-pt-warning">Historical warehouse receipt exceeds passed testing; review before handover.</small>}</div>
-       <div className="pr-pt-required"><span>Required</span><strong>{pretty(r.required)}</strong></div>
+       <div className="pr-pt-name"><div className="pr-pt-name-inline"><strong title={r.code?`Product code: ${r.code}`:undefined}>{r.name}</strong></div>{r.mismatch&&<small className="pr-pt-warning">Historical warehouse receipt exceeds passed testing; review before handover.</small>}</div>
+       <div className="pr-pt-required"><span>Required</span><strong>{pretty(coverage.required)}</strong></div>
       </div>
       <div className="pr-pt-metrics">
-       {metrics.map(field=>{
-        const isRemaining=field.key==="remaining";
-        const current=isRemaining?Math.max(0,n(isEditing?v.received:r.received)-n(isEditing?v.passed:r.passed)):r[field.key];
+       {isEditing?metrics.map(field=>{
         return <label key={field.key} className={`pr-pt-metric pr-pt-metric--${field.key}`}>
          <span>{field.label}</span>
-         {isEditing&&!isRemaining?<StageQuantityInput min="0" step="1" aria-label={`${field.aria} ${r.name}`} disabled={busy} value={v[field.key]??""} onValueChange={value=>change(r.id,field.key,value)}/>
-         :<strong className={`pr-pt-metric-value pr-pt-number${field.key==="passed"?" pr-pt-pass":field.key==="failed"?" pr-pt-fail":""}`}>{pretty(current)}</strong>}
+         <StageQuantityInput min="0" step="1" aria-label={`${field.aria} ${r.name}`} disabled={busy} value={v[field.key]??""} onValueChange={value=>change(r.id,field.key,value)}/>
         </label>;
-       })}
+       }):<>
+        <div className="pr-pt-metric pr-pt-metric--tested"><span>Tested</span><strong className="pr-pt-metric-value pr-pt-number pr-pt-pass">{pretty(coverage.tested)}</strong></div>
+        <div className="pr-pt-metric pr-pt-metric--remaining"><span>Remaining</span><strong className="pr-pt-metric-value pr-pt-number">{pretty(coverage.remaining)}</strong></div>
+       </>}
        {!isEditing&&<div className="pr-pt-metric pr-pt-metric--testedBy"><span>Tested By</span><div className="pr-pt-people">{(r.testedBy||[]).length?(r.testedBy||[]).map(person=><span className="pr-pt-person" title={person.name} key={person.id}>{person.name}</span>):<span className="pr-pt-person-empty">—</span>}</div></div>}
        <div className="pr-pt-actions">{canTest&&(isEditing?<><button type="button" className="pr-secondary" disabled={busy} onClick={()=>cancel(r.id)}>Cancel</button><button type="button" className="pr-primary" disabled={busy} onClick={()=>save([r.id])}>{busy?"Saving…":"Save"}</button></>:<button type="button" className="pr-secondary" disabled={busy} onClick={()=>edit(r)}>Edit</button>)}</div>
       </div>

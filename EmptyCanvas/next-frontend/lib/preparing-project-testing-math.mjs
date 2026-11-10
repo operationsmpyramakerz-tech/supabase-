@@ -17,3 +17,17 @@ export function testingChange(row, values) {
  if (!receivedDelta && !passedDelta && !failedDelta) return null;
  return {itemId:row.id,receivedDelta,passedDelta,failedDelta,expectedReceived:oldReceived,expectedPassed:oldPassed,expectedFailed:oldFailed};
 }
+
+// The display tracks physical testing coverage; failed units are tested too.
+// Kit group copies refer to a single project-wide testing ledger.
+export function testingCoverage(row={}) {
+ const required=Math.max(0,Number(row.projectTotalRequired??row.required)||0);
+ const tested=Math.max(0,Number(row.passed)||0)+Math.max(0,Number(row.failed)||0);
+ return {required,tested,remaining:Math.max(0,required-tested)};
+}
+export function testingCoverageTotals(items=[]) {
+ return items.reduce((totals,row)=>{
+  const item=testingCoverage(row);
+  return {required:totals.required+item.required,tested:totals.tested+item.tested,remaining:totals.remaining+item.remaining};
+ },{required:0,tested:0,remaining:0});
+}

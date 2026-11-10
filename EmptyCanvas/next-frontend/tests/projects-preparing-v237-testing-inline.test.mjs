@@ -13,12 +13,13 @@ test('testing row shows component, code and project required on the same header 
  assert.match(ui,/pr-pt-heading/);
  assert.match(ui,/pr-pt-name-inline/);
  assert.match(ui,/pr-pt-required/);
- assert.match(ui,/pretty\(r\.required\)/);
+ assert.match(ui,/pretty\(coverage\.required\)/);
  assert.match(css,/\.pr-pt-heading\{display:flex/);
 });
-test('editing swaps each displayed metric for an input in the exact same metric slot',()=>{
+test('editing retains quality-control inputs while read-only rows show coverage',()=>{
  assert.match(ui,/metrics\.map\(field=>/);
- assert.match(ui,/isEditing&&!isRemaining\?<StageQuantityInput/);
+ assert.match(ui,/isEditing\?metrics\.map/);
+ assert.match(ui,/<StageQuantityInput/);
  assert.match(ui,/pr-pt-metric-value/);
  assert.doesNotMatch(ui,/className="pr-pt-controls"/);
  assert.doesNotMatch(ui,/className="pr-pt-figures"/);
