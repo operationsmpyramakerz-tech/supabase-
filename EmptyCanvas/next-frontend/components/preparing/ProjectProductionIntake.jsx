@@ -43,15 +43,38 @@ function TestingIcon({name="box",size=20}){
   history:<><path d="M3 12a9 9 0 1 0 2.3-6"/><path d="M3 4v5h5M12 7v5l3.5 2"/></>,
   download:<><path d="M12 3v12m-5-5 5 5 5-5"/><path d="M4 17v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></>,
   clock:<><circle cx="12" cy="12" r="9"/><path d="M12 6.5V12l3.5 2"/></>,
+  engineer:<><path d="M4 10h16M7 10V8a5 5 0 0 1 10 0v2M12 3v4M8 11.5a4 4 0 0 0 8 0M8 16l-4 2v4h16v-4l-4-2M9 17l3 3 3-3"/></>,
+  document:<><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Zm0 0v6h6M8 13h8M8 17h6"/></>,
+  edit:<><path d="m4 20 4.5-1.1L20 7.4a2.2 2.2 0 0 0-3.1-3.1L5.4 15.8 4 20ZM14.6 6.6l2.8 2.8"/></>,
+  expand:<><path d="M14 4h6v6M20 4l-8 8M20 14v6H4V4h6"/></>,
+  arrowLeft:<path d="m14 5-7 7 7 7"/>,
+  arrowRight:<path d="m10 5 7 7-7 7"/>,
  };
  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{shapes[name]||shapes.box}</svg>;
 }
 
+function EditorAvatars({people=[]}){
+ if(!people.length)return <span className="pr-intake-no-editors" aria-label="No recorded editors">—</span>;
+ const visible=people.slice(0,3);
+ return <div className="pr-intake-editors" aria-label={`Edited by ${people.map(person=>person.name).join(", ")}`}>
+  {visible.map(person=><span className="pr-intake-avatar" key={person.id} title={person.name}>
+   <span aria-hidden="true">{String(person.name||"?").trim().slice(0,1).toUpperCase()}</span>
+   {person.photoUrl&&<img src={person.photoUrl} alt="" loading="lazy" referrerPolicy="no-referrer" onError={event=>{event.currentTarget.hidden=true;}}/>}
+  </span>)}
+  {people.length>3&&<span className="pr-intake-avatar pr-intake-avatar-more" title={people.slice(3).map(person=>person.name).join(", ")}>+{people.length-3}</span>}
+ </div>;
+}
+function ComponentThumbnail({row,onOpen}){
+ const image=row.imageUrls?.[0];
+ return image?<button type="button" className="pr-intake-thumb" title={`View photo: ${row.name}`} aria-label={`View image of ${row.name}`} onClick={()=>onOpen(row)}><img src={image} alt="" loading="lazy" referrerPolicy="no-referrer" onError={event=>{event.currentTarget.hidden=true;event.currentTarget.parentElement?.classList.add("is-broken");}}/><span className="pr-intake-thumb-expand"><TestingIcon name="expand" size={12}/></span></button>:
+ <span className="pr-intake-thumb pr-intake-thumb-empty" title="No component photo available" aria-label="No component photo available"><TestingIcon name="box" size={18}/></span>;
+}
 export default function ProjectProductionIntake({projectId,projectName,canTest,editTabs={},request,onClose,closurePanel}) {
  const [data,setData]=useState(initial),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false);
  const [tab,setTab]=useState("testing"),[search,setSearch]=useState(""),[filter,setFilter]=useState("all");
  const canEditTab = canTest && editTabs[filter] !== false;
  const [expandedKit,setExpandedKit]=useState(null),[showExport,setShowExport]=useState(false);
+ const [preview,setPreview]=useState(null),[previewIndex,setPreviewIndex]=useState(0);
  const [exportColumns,setExportColumns]=useState(TESTING_EXPORT_COLUMNS.map(c=>c.key));
  const [exportGroups,setExportGroups]=useState([]),[exportBusy,setExportBusy]=useState(false);
  const [draft,setDraft]=useState({}),[editing,setEditing]=useState({});
@@ -137,32 +160,44 @@ export default function ProjectProductionIntake({projectId,projectName,canTest,e
   const updated=current.includes(key)?current.filter(k=>k!==key):all.filter(k=>current.includes(k)||k===key);
   return !updated.length?old:updated.length===all.length?[]:updated;
  });};
+ useEffect(()=>{
+  if(!preview)return;
+  const onKey=event=>{
+   if(event.key==="Escape")setPreview(null);
+   if(event.key==="ArrowRight")setPreviewIndex(index=>(index+1)%(preview.imageUrls?.length||1));
+   if(event.key==="ArrowLeft")setPreviewIndex(index=>(index+(preview.imageUrls?.length||1)-1)%(preview.imageUrls?.length||1));
+  };
+  window.addEventListener("keydown",onKey);
+  return()=>window.removeEventListener("keydown",onKey);
+ },[preview]);
+ const showPreview=row=>{setPreview(row);setPreviewIndex(0);};
+ const percent=totals.required>0?Math.min(100,Math.max(0,(totals.tested/totals.required)*100)):0;
  const byId=useMemo(()=>new Map(data.items.map(r=>[r.id,r.name])),[data.items]);
  const entries=useMemo(()=>(data.history||[]).flatMap(batch=>(batch.lines||[]).map((line,index)=>({
   key:`${batch.id}-${line.itemId}-${index}`,reference:batch.reference,createdAt:batch.createdAt,
   editor:batch.createdByName||"",legacy:!batch.createdByName,notes:batch.notes,
   component:byId.get(line.itemId)||"Component",line,
  }))),[data.history,byId]);
- return <div className="pr-wh pr-pt pr-pt-modern">
+ return <div className="pr-wh pr-pt pr-pt-modern pr-intake-v401">
   <header className="pr-manifest-title pr-wh-title pr-pt-title">
-   <div><span className="pr-wh-overline">PRODUCTION INTAKE <span className="pr-pt-overline-sep">/</span> {projectName}</span><h3>Production Receiving</h3></div>
+   <div className="pr-intake-heading"><TestingIcon name="engineer" size={48}/><div><span className="pr-wh-overline">Projects Preparing <span className="pr-pt-overline-sep">›</span> {projectName} <span className="pr-pt-overline-sep">›</span> Production Receiving</span><h3>Production Receiving</h3><p>Receive components from production to move them to the testing stage.</p></div></div>
    <button type="button" className="pr-pt-close" onClick={onClose} aria-label="Close Production Receiving" title="Close"><TestingIcon name="close" size={19}/></button>
   </header>
-  {closurePanel}
   {error&&<div className="pr-alert" role="alert">{error}<button type="button" onClick={()=>setError("")} aria-label="Dismiss">×</button></div>}
   {success&&<div className="pr-manifest-success" role="status">{success}</div>}
   {loading?<p className="pr-muted">Loading receiving records…</p>:<>
-   <div className="pr-wh-stats pr-pt-stat-grid pr-pt-coverage-grid" aria-label="Receiving summary">{[
-    {key:"required",label:"Project Required",value:totals.required,mark:"◆"},
-    {key:"tested",label:"Received",value:totals.tested,mark:"✓"},
-    {key:"remaining",label:"Remaining",value:totals.remaining,mark:"◷"},
-   ].map(stat=><div className={`pr-pt-stat pr-pt-stat--${stat.key}`} key={stat.key}>
-    <span className="pr-pt-stat-icon" aria-hidden="true">{stat.key==="remaining"?<TestingIcon name="clock" size={25}/>:stat.mark}</span><span className="pr-pt-stat-copy"><span>{stat.label}</span><strong>{pretty(stat.value)}</strong></span>
-   </div>)}</div>
+   <div className="pr-intake-summary">
+    <div className="pr-intake-progress" aria-label={`Project receiving progress ${percent.toFixed(2)}%`}>
+     <div className="pr-intake-progress-title"><span>Project Progress</span><strong>{percent.toFixed(2)}%</strong></div>
+     <div className="pr-intake-progress-track" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Number(percent.toFixed(2))} aria-label="Received quantities"><span style={{width:`${percent}%`}}/></div>
+     <strong className="pr-intake-progress-numbers">{pretty(totals.tested)} / {pretty(totals.required)}</strong>
+    </div>
+    <div className="pr-intake-signoff">{closurePanel}</div>
+   </div>
    <StageFilterTabs label="Receiving component status" options={[{value:"all",label:"All Components"},{value:"pending",label:"Remaining to Receive"},{value:"received",label:"Received"}]} value={tab==="testing"?filter:""} onChange={value=>{setFilter(value);setTab("testing");setEditing({});setDraft({});}}/>
    <div className="pr-stage-filter-toolbar pr-pt-toolbar">
     {tab==="testing"?<label className="pr-search pr-pt-search"><TestingIcon name="search" size={18}/><input type="search" aria-label="Search receiving components" placeholder="Search component or code…" value={search} onChange={e=>setSearch(e.target.value)}/>{search&&<button type="button" className="pr-pt-clear-search" onClick={()=>setSearch("")} aria-label="Clear search" title="Clear search"><TestingIcon name="close" size={16}/></button>}</label>:<span className="pr-stage-history-label">Receiving History</span>}
-    <div className="pr-stage-filter-actions"><button type="button" aria-pressed={tab==="history"} aria-label={`Receiving History (${entries.length} changes)`} title={`Receiving History (${entries.length})`} className={`pr-pt-history-button${tab==="history"?" is-active":""}`} onClick={()=>setTab(tab==="history"?"testing":"history")}><TestingIcon name="history" size={19}/></button><button type="button" className="pr-pt-download-button" aria-label="Download receiving report" onClick={()=>setShowExport(true)} disabled={!data.items.length}><TestingIcon name="download" size={18}/><span>Download</span></button></div>
+    <div className="pr-stage-filter-actions"><button type="button" aria-pressed={tab==="history"} aria-label={`Receiving History (${entries.length} changes)`} title={`Receiving History (${entries.length})`} className={`pr-pt-history-button${tab==="history"?" is-active":""}`} onClick={()=>setTab(tab==="history"?"testing":"history")}><TestingIcon name="history" size={19}/></button><button type="button" className="pr-pt-download-button" aria-label="Download receiving report" onClick={()=>setShowExport(true)} disabled={!data.items.length}><TestingIcon name="download" size={21}/></button></div>
    </div>
    {tab==="testing"&&<>
     <div className="pr-wh-list pr-pt-list pr-pt-kit-list" aria-label="Project component receiving">{groupedShown.map(group=>{
@@ -170,28 +205,24 @@ export default function ProjectProductionIntake({projectId,projectName,canTest,e
      const appearance=testingKitAppearance(group.name);
      return <section className={`pr-pt-kit-group pr-pt-kit--${appearance.tone}${open?" is-open":""}`} key={group.key}>
       <button type="button" className="pr-pt-kit-heading" onClick={()=>setExpandedKit(open?"__none__":group.key)} aria-expanded={open}>
-       <span className="pr-pt-kit-emblem" aria-hidden="true"><TestingIcon name={appearance.icon} size={21}/></span><span className="pr-pt-kit-title"><strong>{group.name}</strong><small>{group.items.length} components</small></span>
+       <span className="pr-pt-kit-emblem" aria-hidden="true"><TestingIcon name={appearance.icon} size={21}/></span><span className="pr-pt-kit-title"><strong>{group.name}</strong></span>
        <span className="pr-pt-kit-arrow" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
       </button>
       {open&&<div className="pr-pt-kit-body">{group.items.map(r=>{
      const isEditing=!!editing[r.id],v=draft[r.id]||{},coverage=testingCoverage(r);
-     return <article key={r.id} className={`pr-pt-row${isEditing?" is-editing":""}`}>
-      <div className="pr-pt-heading">
-       <div className="pr-pt-name"><div className="pr-pt-name-inline"><strong title={r.code?`Product code: ${r.code}`:undefined}>{r.name}</strong></div>{r.mismatch&&<small className="pr-pt-warning">Historical testing exceeds received quantity; review before continuing.</small>}</div>
-       <div className="pr-pt-required"><span>Required</span><strong>{pretty(coverage.required)}</strong></div>
-      </div>
-      <div className="pr-pt-metrics">
-       {isEditing?metrics.map(field=>{
-        return <label key={field.key} className={`pr-pt-metric pr-pt-metric--${field.key}`}>
-         <span>{field.label}</span>
-         <StageQuantityInput min="0" step="1" aria-label={`${field.aria} ${r.name}`} disabled={busy} value={v[field.key]??""} onValueChange={value=>change(r.id,field.key,value)}/>
-        </label>;
-       }):<>
-        <div className="pr-pt-metric pr-pt-metric--tested"><span>Received</span><strong className="pr-pt-metric-value pr-pt-number pr-pt-pass">{pretty(coverage.tested)}</strong></div>
-        <div className="pr-pt-metric pr-pt-metric--remaining"><span>Remaining</span><strong className="pr-pt-metric-value pr-pt-number">{pretty(coverage.remaining)}</strong></div>
+     return <article key={r.id} className={`pr-pt-row pr-intake-component${isEditing?" is-editing":""}`}>
+      <div className="pr-intake-component-main">
+       <div className="pr-intake-component-product">
+        <ComponentThumbnail row={r} onOpen={showPreview}/>
+        <div className="pr-pt-name"><strong title={r.code?`Product code: ${r.code}`:undefined}>{r.name}</strong>{r.code&&<small>{r.code}</small>}{r.mismatch&&<small className="pr-pt-warning">Historical testing exceeds received quantity; review before continuing.</small>}</div>
+       </div>
+       {isEditing?<div className="pr-intake-receive-input"><label htmlFor={`pr-intake-qty-${r.id}`}>Received</label><StageQuantityInput id={`pr-intake-qty-${r.id}`} min="0" step="1" aria-label={`Received quantity ${r.name}`} disabled={busy} value={v.tested??""} onValueChange={value=>change(r.id,"tested",value)}/></div>:<>
+        <div className="pr-intake-cell"><span>Required</span><strong>{pretty(coverage.required)}</strong></div>
+        <div className="pr-intake-cell pr-intake-cell--received"><span>Received</span><strong>{pretty(coverage.tested)}</strong></div>
+        <div className="pr-intake-cell"><span>Remaining</span><strong>{pretty(coverage.remaining)}</strong></div>
+        <EditorAvatars people={r.testedBy||[]}/>
        </>}
-       {!isEditing&&<div className="pr-pt-metric pr-pt-metric--testedBy"><span>Received By</span><div className="pr-pt-people">{(r.testedBy||[]).length?(r.testedBy||[]).map(person=><span className="pr-pt-person" title={person.name} key={person.id}>{person.name}</span>):<span className="pr-pt-person-empty">—</span>}</div></div>}
-       <div className="pr-pt-actions">{canEditTab&&(isEditing?<><button type="button" className="pr-secondary" disabled={busy} onClick={()=>cancel(r.id)}>Cancel</button><button type="button" className="pr-primary" disabled={busy} onClick={()=>save([r.id])}>{busy?"Saving…":"Save"}</button></>:<button type="button" className="pr-secondary" disabled={busy} onClick={()=>edit(r)}>Edit</button>)}</div>
+       <div className="pr-intake-row-actions">{canEditTab&&(isEditing?<><button type="button" className="pr-secondary" disabled={busy} onClick={()=>cancel(r.id)}>Cancel</button><button type="button" className="pr-primary" disabled={busy} onClick={()=>save([r.id])}>{busy?"Saving…":"Save"}</button></>:<button type="button" className="pr-intake-edit-icon" aria-label={`Edit ${r.name}`} title={`Edit ${r.name}`} disabled={busy} onClick={()=>edit(r)}><TestingIcon name="edit" size={19}/></button>)}</div>
       </div>
       {rowError[r.id]&&<p className="pr-pt-inline-error" role="alert">{rowError[r.id]}</p>}
      </article>;
@@ -209,6 +240,16 @@ export default function ProjectProductionIntake({projectId,projectName,canTest,e
     </article>)}{!entries.length&&<div className="pr-wh-empty">No receiving records yet.</div>}</div>
    </section>}
   </>}
+  {preview&&<div className="pr-intake-lightbox" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setPreview(null);}}>
+   <section className="pr-intake-lightbox-dialog" role="dialog" aria-modal="true" aria-label={`Component photo: ${preview.name}`}>
+    <header><div><strong>{preview.name}</strong><small>{preview.code||"Component"} · {previewIndex+1} / {preview.imageUrls?.length||1}</small></div><button type="button" className="pr-intake-lightbox-close" aria-label="Close photo preview" onClick={()=>setPreview(null)}><TestingIcon name="close" size={21}/></button></header>
+    <div className="pr-intake-lightbox-body">
+     {(preview.imageUrls?.length||0)>1&&<button type="button" aria-label="Previous image" onClick={()=>setPreviewIndex(i=>(i+preview.imageUrls.length-1)%preview.imageUrls.length)}><TestingIcon name="arrowLeft" size={22}/></button>}
+     <img src={preview.imageUrls[previewIndex]} alt={`${preview.name} — photo ${previewIndex+1}`}/>
+     {(preview.imageUrls?.length||0)>1&&<button type="button" aria-label="Next image" onClick={()=>setPreviewIndex(i=>(i+1)%preview.imageUrls.length)}><TestingIcon name="arrowRight" size={22}/></button>}
+    </div>
+   </section>
+  </div>}
   {showExport&&<div className="pr-pt-export-overlay" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget&&!exportBusy)setShowExport(false);}}>
    <section className="pr-pt-export-modal" role="dialog" aria-modal="true" aria-label="Export production receiving">
     <header className="pr-pt-export-head"><div><strong>Export Receiving</strong><small>Choose columns, Kits and report format</small></div><button type="button" className="pr-secondary" disabled={exportBusy} onClick={()=>setShowExport(false)} aria-label="Close export">×</button></header>

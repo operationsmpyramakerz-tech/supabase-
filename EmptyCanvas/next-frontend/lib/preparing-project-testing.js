@@ -2,6 +2,8 @@ import "server-only";
 import { select, selectById, rpc } from "./supabase-rest";
 import { testingRemaining } from "./preparing-project-testing-grouping.mjs";
 import { randomUUID } from "node:crypto";
+import { getProductsList } from "./products-service";
+import { getTeamMemberPublicProfile } from "./team-members-service";
 const idPattern=/^[\da-f]{8}-[\da-f]{4}-[1-8][\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/i;
 function fail(message,status=400){const error=new Error(message);error.status=status;throw error;}
 function checkProjectId(value){const id=String(value||"").trim();if(!idPattern.test(id))fail("Invalid project ID.");return id;}
@@ -43,11 +45,42 @@ export async function recordProjectTesting(body,account){
 }
 
 // Separate stage ledger: reuse the BOM and kit projection, not the testing quantities.
+// Presentation enrichment only: never let unavailable product photos/profile photos
+// block the receiving ledger, quantities or write permissions.
+const safePhoto = value => /^https?:\/\//i.test(String(value || "").trim()) ? String(value).trim() : "";
+const productKey = value => String(value || "").trim().toLowerCase();
 export async function productionIntakeOverview(value){
  const id=await projectId(value);
  const [base,snapshot]=await Promise.all([projectTestingOverview(id),rpc("erp_preparing_intake_snapshot_v388",{p_project_id:id},{profileName:"preparing.intake.read"})]);
  const balances=new Map((snapshot.balances||[]).map(row=>[row.itemId,row]));
- return {kitGroups:base.kitGroups,history:snapshot.history||[],items:base.items.map(row=>{const b=balances.get(row.id);const tested=Number(b?.received)||0;return {id:row.id,name:row.name,code:row.code,required:row.required,sourceKits:row.sourceKits,tested,accepted:Number(row.tested)||0,testedBy:b?.people||[],remaining:Math.max(0,Number(row.required)-tested)};})};
+ const items=base.items.map(row=>{const b=balances.get(row.id),tested=Number(b?.received)||0;return {id:row.id,name:row.name,code:row.code,required:row.required,sourceKits:row.sourceKits,tested,accepted:Number(row.tested)||0,testedBy:b?.people||[],remaining:Math.max(0,Number(row.required)-tested)};});
+ // Read only the first 60 distinct editor photos; all unique editors and their
+ // names are still returned even when some profile images are unavailable.
+ const people=[...new Map(items.flatMap(row=>row.testedBy).filter(person=>person?.id&&person?.name).map(person=>[String(person.id),person])).values()];
+ const profiles=new Map();
+ const photoIds=people.filter(person=>person.id!=="migration-v388").slice(0,60);
+ const productsPromise=getProductsList().catch(()=>[]);
+ await Promise.all(Array.from({length:Math.min(6,photoIds.length)},async(_,worker)=>{
+  for(let i=worker;i<photoIds.length;i+=6){const person=photoIds[i];const profile=await getTeamMemberPublicProfile(person.id).catch(()=>null);if(profile)profiles.set(String(person.id),safePhoto(profile.photoUrl));}
+ }));
+ const products=await productsPromise;
+ const byProductId=new Map(),byDisplayCode=new Map(),byProductName=new Map();
+ for(const product of products){
+  byProductId.set(productKey(product.id),product);
+  if(product.displayId)byDisplayCode.set(productKey(product.displayId),product);
+  // Do not choose an unrelated product when multiple catalog entries share a name.
+  const nameKey=productKey(product.name);if(nameKey)byProductName.set(nameKey,byProductName.has(nameKey)?null:product);
+ }
+ return {kitGroups:base.kitGroups,history:snapshot.history||[],items:items.map(row=>{
+  const product=byProductId.get(productKey(row.code))||byDisplayCode.get(productKey(row.code))||byProductName.get(productKey(row.name));
+  // Old product codes can be reused; require matching name when resolving a photo.
+  const matches=product&&productKey(product.name)===productKey(row.name);
+  const photo=matches?safePhoto(product.imageUrl):"";
+  const attachmentImages=matches?(product.attachments||[]).filter(file=>/^image\/(png|jpeg|gif|webp)$/i.test(String(file.type||""))||/\.(?:png|jpe?g|gif|webp)$/i.test(String(file.name||""))).map(file=>safePhoto(file.url)).filter(Boolean):[];
+  const imageUrls=[...new Set([photo,...attachmentImages].filter(Boolean))];
+  const uniquePeople=[...new Map(row.testedBy.filter(person=>person?.id&&person?.name&&String(person.id)!=="migration-v388").map(person=>[String(person.id),{id:String(person.id),name:String(person.name),photoUrl:profiles.get(String(person.id))||""}])).values()];
+  return {...row,imageUrls,testedBy:uniquePeople};
+ })};
 }
 export async function recordProductionIntake(body,account){
  const id=await projectId(body?.projectId);
