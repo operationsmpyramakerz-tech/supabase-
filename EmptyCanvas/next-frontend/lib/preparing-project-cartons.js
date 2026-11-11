@@ -140,3 +140,36 @@ export async function completeSchoolKit(body,account){
   p_expected_updated_at:version(body.expectedUpdatedAt),p_member_id:actor(account),
  },{profileName:"preparing.kit.complete"});
 }
+
+
+// v397: immutable, school-specific outer cartons. Only v396-completed physical Kits
+// can be assigned, exactly once, by a single atomic SQL transaction.
+export async function schoolCartonWorkspace(projectId,loaded=null) {
+  requireService();
+  const project=id(projectId);
+  const [schoolCartons,schoolCartonKits] = await Promise.all([
+    paged("erp_preparing_school_cartons",{project_id:`eq.${project}`},"school cartons",2000,"school_id.asc,label_sequence.asc"),
+    paged("erp_preparing_school_carton_kits",{project_id:`eq.${project}`},"school carton Kits",12000,"created_at.asc"),
+  ]);
+  const workspace=loaded || await projectCartonWorkspace(project);
+  const readyKits=workspace.cartons.filter(c=>c.generated_kit_label && c.status==="ready");
+  const readyIds=new Set(readyKits.map(c=>c.id));
+  return {
+    schoolCartons,schoolCartonKits,readyKits,
+    readyKitLines:workspace.lines.filter(l=>readyIds.has(l.carton_id)),
+    readyKitTargets:workspace.kitTargets.filter(t=>readyIds.has(t.kit_box_id)),
+  };
+}
+
+export async function packSchoolCarton(body,account) {
+  requireService();
+  const kitBoxIds=body.kitBoxIds;
+  if(!Array.isArray(kitBoxIds) || kitBoxIds.length<1 || kitBoxIds.length>80)
+    fail("Select 1 to 80 completed physical Kits.");
+  const ids=kitBoxIds.map(id);
+  if(new Set(ids).size!==ids.length) fail("You cannot select the same Kit twice.");
+  return rpc("erp_preparing_pack_school_carton_v397",{
+    p_project_id:id(body.projectId),p_school_id:id(body.schoolId),
+    p_kit_box_ids:ids,p_member_id:actor(account),
+  },{profileName:"preparing.school-cartons.pack"});
+}

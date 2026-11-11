@@ -30,8 +30,8 @@ export async function requirePreparingTabWrite(account, stage, body, { action = 
     if (tab !== 'all') deny('Warehouse management requires Edit All Components.');
     return;
   }
-  if (stage === 'cartons' && action === 'create') {
-    if (tab !== 'all' && tab !== 'draft') deny('Creating a carton requires Edit All Cartons or Draft.');
+  if (stage === 'cartons' && ['create', 'pack_school_carton'].includes(action)) {
+    if (tab !== 'all' && tab !== 'draft') deny('Packing a school carton requires Edit All Cartons or Draft.');
     return;
   }
   const ids = (Array.isArray(body?.lines) ? body.lines.map(r => r?.itemId) : [body?.itemId]).map(asId).filter(Boolean);

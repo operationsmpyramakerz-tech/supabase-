@@ -14,17 +14,18 @@ async function paged(table,project,label,max=20000,order="created_at.desc"){cons
 export async function productionWorkspace(projectId){
  requireService();const project=id(projectId);
  if(!await selectById("erp_preparing_projects",project))fail("Project not found.",404);
- const [warehouse,handoffs,cartonLines,cartons]=await Promise.all([
+ const [warehouse,handoffs,cartonLines,cartons,schoolCartonKits]=await Promise.all([
   warehouseWorkspace(project),paged("erp_preparing_production_handoffs",project,"handoffs",20000),
   paged("erp_preparing_project_carton_lines",project,"carton-lines",20000,"id.asc"),
-  paged("erp_preparing_project_cartons",project,"cartons",2000)]);
+  paged("erp_preparing_project_cartons",project,"cartons",2000),
+  paged("erp_preparing_school_carton_kits",project,"school-carton-kits",12000,"created_at.asc")]);
  const whReceived=new Map();for(const line of warehouse.receiptLines)whReceived.set(line.item_id,(whReceived.get(line.item_id)||0)+Number(line.accepted_delta||0));
  const received=new Map();for(const row of handoffs)received.set(row.item_id,(received.get(row.item_id)||0)+Number(row.qty_delta||0));
  const packed=new Map();const activeCartons=new Set(cartons.filter(c=>c.status!=="cancelled").map(c=>c.id));
  const mapKey=(id,name)=>`${String(id||"").toLowerCase()}\u0000${String(name||"").trim().toLowerCase()}`;
  for(const line of cartonLines){if(!activeCartons.has(line.carton_id))continue;const key=mapKey(line.product_id,line.product_name);packed.set(key,(packed.get(key)||0)+Number(line.packed_qty||0));}
  const items=warehouse.items.map(item=>{const warehouseReceived=whReceived.get(item.id)||0,productionReceived=received.get(item.id)||0,packedQty=packed.get(mapKey(item.product_id,item.product_name))||0;return {...item,...productionBalance(warehouseReceived,productionReceived,packedQty)};});
- return {projectId:project,schoolsCount:warehouse.schools.length,items,handoffs,kitGroups:warehouse.kitGroups,cartons,cartonLines};
+ return {projectId:project,schoolsCount:warehouse.schools.length,items,handoffs,kitGroups:warehouse.kitGroups,cartons,cartonLines,schoolCartonKits};
 }
 export async function saveProductionHandoff(body,account){
  requireService();const project=id(body?.projectId),item=id(body?.itemId);const {member,name}=identity(account);

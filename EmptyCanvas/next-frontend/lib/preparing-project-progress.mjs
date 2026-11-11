@@ -1,7 +1,7 @@
 // Dashboard-only read model. School delivery/closing has its own nine-stage tracker.
 // Project Components is the Master BOM and is NOT a preparation stage.
 // Completion is the arithmetic mean of six preparation stages; formal sign-off overrides quantity progress.
-// Box Distribution tracks packed units, while Project Kit Cartons tracks sealed (ready) units.
+// Box Distribution tracks physical packed units; Project Kit Cartons tracks Kits actually placed into school cartons (plus sealed legacy cartons).
 const rows = value => Array.isArray(value) ? value : [];
 const amount = value => {
   const quantity = Number(value);
@@ -18,8 +18,15 @@ export function calculateProjectPreparationProgress({ testing, warehouse, produc
   const received = rows(warehouse?.receiptLines).reduce((sum, row) => sum + (Number(row.accepted_delta) || 0), 0);
   const handedOff = productionItems.reduce((sum, row) => sum + amount(row.productionReceived), 0);
   const packed = productionItems.reduce((sum, row) => sum + amount(row.packedQty), 0);
+  // v397: a completed school Kit is NOT yet a carton. Count only Kit IDs
+  // already assigned to immutable outer school cartons. Legacy project cartons
+  // remain counted separately; missing v397 data falls back for old snapshots.
+  const hasSchoolCartonLinks = Array.isArray(production?.schoolCartonKits);
+  const assignedKitIds = new Set(rows(production?.schoolCartonKits).map(link => String(link.kit_box_id)));
   const readyCartonIds = new Set(rows(production?.cartons)
-    .filter(carton => carton?.status === "ready").map(carton => String(carton.id)));
+    .filter(carton => carton?.status === "ready" && (!hasSchoolCartonLinks ||
+      !carton.generated_kit_label || assignedKitIds.has(String(carton.id))))
+    .map(carton => String(carton.id)));
   const sealed = rows(production?.cartonLines).reduce((sum, line) =>
     sum + (readyCartonIds.has(String(line.carton_id)) ? amount(line.packed_qty) : 0), 0);
   const stageKeys = ["intake", "testing", "warehouse", "production", "boxes", "cartons"];

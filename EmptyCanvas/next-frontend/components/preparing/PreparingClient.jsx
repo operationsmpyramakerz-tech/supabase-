@@ -12,7 +12,7 @@ import ReturnsReplacements from "./ReturnsReplacements";
 import TechnicalFollowUp from "./TechnicalFollowUp";
 import FinalSchoolClosing from "./FinalSchoolClosing";
 import ProjectDashboard from "./ProjectDashboard";
-import ProjectKitCartons from "./ProjectKitCartons";
+import ProjectKitCartons from "./SchoolKitCartons";
 import ProjectWarehouseReceiving from "./ProjectWarehouseReceiving";
 import ProjectMasterComponents from "./ProjectMasterComponents";
 import ProjectStageClosure from "./ProjectStageClosure";

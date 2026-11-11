@@ -5,7 +5,7 @@ import { getDirectAccountGate } from "../../../../lib/products-auth";
 import { featureGate } from "../../../../lib/feature-permissions-server";
 import { projectCartonWorkspace,createProjectCarton,setProjectCartonLine,sealProjectCarton,
   allocateProjectCarton,reverseProjectAllocation,cancelProjectCarton,renameProjectCarton,generateSchoolKitLabels,
-  initializeSchoolKitPlan,transferSchoolKitTarget,completeSchoolKit } from "../../../../lib/preparing-project-cartons";
+  initializeSchoolKitPlan,transferSchoolKitTarget,completeSchoolKit,schoolCartonWorkspace,packSchoolCarton } from "../../../../lib/preparing-project-cartons";
 export const dynamic="force-dynamic";
 export const revalidate=0;
 const reply=(payload,status=200)=>NextResponse.json(payload,{status,headers:{"Cache-Control":"private, no-store"}});
@@ -16,14 +16,17 @@ export async function GET(req){const auth=await gate("view");if(!auth.ok)return 
   try{const workspace=await projectCartonWorkspace(params.get("projectId"));
     if(scope==="cartons"){
       const legacy=new Set(workspace.cartons.filter(c=>!c.generated_kit_label).map(c=>c.id));
-      return reply({ok:true,...workspace,kitTargets:[],cartons:workspace.cartons.filter(c=>legacy.has(c.id)),
+      // The new outer cartons and their ready physical Kits are returned only
+      // to users with readable Project Kit Cartons stage access.
+      const schoolCartonData=await schoolCartonWorkspace(params.get("projectId"),workspace);
+      return reply({ok:true,...workspace,...schoolCartonData,kitTargets:[],cartons:workspace.cartons.filter(c=>legacy.has(c.id)),
         lines:workspace.lines.filter(l=>legacy.has(l.carton_id)),
         allocations:workspace.allocations.filter(a=>legacy.has(a.carton_id)),
         audit:workspace.audit.filter(a=>!a.carton_id||legacy.has(a.carton_id))});
     }
     return reply({ok:true,...workspace});}catch(e){return failed(e);}}
 export async function POST(req){const auth=await gate("view");if(!auth.ok)return reply({ok:false,error:auth.error||"Access denied"},auth.status||403);
-  try{const b=await bodyOf(req);if(!["create","generate_school_kits","init_school_kit_plan","transfer_school_kit_target"].includes(b.action))return reply({ok:false,error:"Unknown action"},400);
+  try{const b=await bodyOf(req);if(!["create","generate_school_kits","init_school_kit_plan","transfer_school_kit_target","pack_school_carton"].includes(b.action))return reply({ok:false,error:"Unknown action"},400);
     if(!preparingStageAllowed(auth.account,"boxes")&&!preparingStageAllowed(auth.account,"cartons"))return reply({ok:false,error:"Box Distribution or Cartons access required."},403);
     // A shared create endpoint may be used by either stage; enforce the
     // requesting stage separately so carton rights never open box-only views.
@@ -31,10 +34,11 @@ export async function POST(req){const auth=await gate("view");if(!auth.ok)return
     if(!preparingStageAllowed(auth.account,scope))return reply({ok:false,error:`${scope} stage access required.`},403);
     if((b.action==="generate_school_kits" && scope!=="boxes") || (["init_school_kit_plan","transfer_school_kit_target"].includes(b.action) && scope!=="boxes")) return reply({ok:false,error:"School Kit labels belong to Box Distribution."},403);
     if(b.action==="create" && scope==="boxes") return reply({ok:false,error:"Create school-specific boxes with Generate School Kit Labels."},400);
+    if(b.action==="pack_school_carton" && scope!=="cartons")return reply({ok:false,error:"School cartons belong to Project Kit Cartons."},403);
     await requirePreparingTabWrite(auth.account,scope,b,{action:b.action});
     return reply({ok:true,result:await ({generate_school_kits:generateSchoolKitLabels,
       init_school_kit_plan:initializeSchoolKitPlan,transfer_school_kit_target:transferSchoolKitTarget,
-      create:createProjectCarton})[b.action](b,auth.account)},201);}catch(e){return failed(e);}}
+      create:createProjectCarton,pack_school_carton:packSchoolCarton})[b.action](b,auth.account)},201);}catch(e){return failed(e);}}
 export async function PATCH(req){const auth=await gate("view");if(!auth.ok)return reply({ok:false,error:auth.error||"Access denied"},auth.status||403);
   try{const b=await bodyOf(req);const methods={set_line:setProjectCartonLine,seal:sealProjectCarton,complete_school_kit:completeSchoolKit,
     allocate:allocateProjectCarton,reverse:reverseProjectAllocation,cancel:cancelProjectCarton,rename:renameProjectCarton};
