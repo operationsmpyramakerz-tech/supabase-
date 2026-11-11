@@ -145,14 +145,14 @@ export default function SchoolKitCartons({projectId,projectName,stageRecords=[],
           {!schoolCartons.length&&<p className="pr-school-cartons-empty">No cartons packed yet. Select completed Kits to generate the first one.</p>}
         </div>
         {active&&<div className="pr-school-cartons-manifest">
-          <div className="pr-school-cartons-manifest-title"><div><h4>{active.carton_label}</h4><p className="pr-muted">{schoolName(schools.find(s=>s.id===active.school_id))} · {cartonKits.length} verified Kits</p></div><span className="pr-school-kit-status">Packed &amp; locked</span></div>
+          <div className="pr-school-cartons-manifest-title"><div><h4>{active.carton_label}</h4><p className="pr-muted">{schoolName(schools.find(s=>s.id===active.school_id))} · {cartonKits.length} verified Kits</p></div><div className="pr-label-print-actions"><span className="pr-school-kit-status">Packed &amp; locked</span><a className="pr-primary" href={`/next/api/projects-preparing/label-print?kind=carton&id=${encodeURIComponent(active.id)}&projectId=${encodeURIComponent(projectId)}`} target="_blank" rel="noopener noreferrer" title="Download printable carton QR label">↓ Download Carton Label + QR</a></div></div>
           {cartonKits.map(kit=><details key={kit.id} className="pr-school-cartons-kit-details">
             <summary><strong>{kit.carton_label}</strong><small>{kit.kit_name} · {kitContents(kit).length} component types</small></summary>
             <div className="pr-school-cartons-components"><div className="pr-school-cartons-components-head"><span>Component</span><span>Quantity</span></div>
               {kitContents(kit).map(item=><div className="pr-school-cartons-component" key={item.id}><span>{item.product_name}</span><strong>{item.packed_qty} / {item.expected_qty}</strong></div>)}
             </div>
           </details>)}
-          <p className="pr-hint">Physical Kit content is verified and locked. Printable QR labels and the scan-to-contents page are scheduled for Phase 4.</p>
+          <p className="pr-hint">Kit content is verified and locked. Scan the QR on the printed carton label to view this packing list. Anyone possessing the QR link can view the contents without signing in. Protect physical labels accordingly.</p>
         </div>}
       </>}
     </>}

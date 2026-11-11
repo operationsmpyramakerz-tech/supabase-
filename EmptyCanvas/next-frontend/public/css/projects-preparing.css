@@ -4759,3 +4759,9 @@ html[data-theme="dark"] .pr-root .pr-kit-transfer-grid select{background:#1d232d
 .pr-school-cartons-legacy-nav{display:flex;gap:12px;align-items:center;margin-bottom:15px}.pr-school-cartons-legacy-nav span{font-size:12px;color:var(--pr-muted,#87909e)}
 @media(max-width:750px){.pr-school-cartons-toolbar{grid-template-columns:repeat(3,minmax(0,1fr))}.pr-school-cartons-toolbar .pr-field{grid-column:1/-1}.pr-school-cartons-action{flex-direction:column;align-items:stretch}.pr-school-cartons-action button{width:100%}.pr-school-kit-status{font-size:10px;padding:5px 8px}.pr-school-cartons-head-actions{gap:5px}}
 @media(max-width:420px){.pr-school-cartons-toolbar{gap:6px}.pr-school-cartons-count{padding:7px}.pr-school-cartons-count strong{font-size:18px}.pr-school-cartons-switch button{flex:1;padding:10px 5px;font-size:11px}.pr-school-kit-group-header{padding:9px}.pr-school-kit-option{padding:10px 8px;gap:8px}.pr-school-kit-option-name strong{font-size:11px}.pr-school-carton-row{gap:7px;padding:10px}}
+
+/* v398: printable physical label action, aligned with standard ERP controls. */
+.pr-label-print-actions{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:9px}
+.pr-school-cartons-manifest-title .pr-label-print-actions .pr-primary{font-size:11px!important;min-height:35px;text-decoration:none}
+.pr-school-kit-inspection footer.pr-label-print-actions a.pr-primary{font-size:11px!important;text-decoration:none;min-height:35px}
+@media(max-width:650px){.pr-school-cartons-manifest-title{flex-wrap:wrap;gap:10px}.pr-label-print-actions{justify-content:flex-start}}

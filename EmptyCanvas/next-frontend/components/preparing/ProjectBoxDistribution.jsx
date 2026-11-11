@@ -294,7 +294,7 @@ export default function ProjectBoxDistribution({projectId,rows,kitGroups,request
       <p className="pr-school-kit-help">Packed contents ({inspectedLines.length} item types)</p>
       {inspectedLines.length?<div className="pr-school-kit-lines">{inspectedLines.map(l=><div key={l.id}><span>{l.product_name}</span><strong>{l.packed_qty}</strong></div>)}</div>:<p className="pr-box-labels-empty">No components have been packed into this Kit yet.</p>}
     </>}
-    <footer><button type="button" className="pr-secondary" onClick={()=>setInspectBoxId("")}>Close</button></footer>
+    <footer className="pr-label-print-actions">{inspectedBox.generated_kit_label&&<a className="pr-primary" href={`/next/api/projects-preparing/label-print?kind=kit&id=${encodeURIComponent(inspectedBox.id)}&projectId=${encodeURIComponent(projectId)}`} target="_blank" rel="noopener noreferrer" title="Download a printable PDF with the permanent QR code">↓ Download Kit Label + QR</a>}<button type="button" className="pr-secondary" onClick={()=>setInspectBoxId("")}>Close</button></footer>
    </section></div>}
    {boxDialog&&<div className="pr-box-dialog-backdrop" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget)dismissBoxDialog();}}><section className="pr-box-dialog" role="dialog" aria-modal="true" aria-label={boxActionType==="rename"?"Rename box":"Delete box"}>
     <header><h4>{boxActionType==="rename"?"Rename Box":"Delete Box"}</h4><button type="button" className="pr-secondary" disabled={busy} onClick={dismissBoxDialog} aria-label="Close">×</button></header>

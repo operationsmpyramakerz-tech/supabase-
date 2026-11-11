@@ -1,0 +1,14 @@
+v398 QR & Printable Labels - modified files only
+
+app/api/projects-preparing/label-print/route.js
+app/label/[kind]/[id]/page.jsx
+app/label/[kind]/[id]/label.css
+app/projects-preparing/page.jsx
+lib/preparing-label-token.mjs
+lib/preparing-label-content.js
+components/preparing/ProjectBoxDistribution.jsx
+components/preparing/SchoolKitCartons.jsx
+public/css/projects-preparing.css
+package.json
+README_v398_QR_PRINTING.md
+tests/projects-preparing-v398-qr-labels.test.mjs
