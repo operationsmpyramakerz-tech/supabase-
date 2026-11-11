@@ -2,6 +2,7 @@
 import StageFilterTabs from "./StageFilterTabs";
 import StageQuantityInput from "./StageQuantityInput";
 import {useEffect,useMemo,useState} from "react";
+import {createPortal} from "react-dom";
 import {testingChange,testingCoverage,testingCoverageTotals} from "../../lib/preparing-project-testing-math.mjs";
 import {testingGroups,TESTING_EXPORT_COLUMNS,testingExportValue} from "../../lib/preparing-project-testing-grouping.mjs";
 
@@ -183,7 +184,7 @@ export default function ProjectProductionIntake({projectId,projectName,canTest,e
  }))),[data.history,byId]);
  return <div className="pr-wh pr-pt pr-pt-modern pr-intake-v401">
   <header className="pr-manifest-title pr-wh-title pr-pt-title">
-   <div className="pr-intake-heading"><TestingIcon name="engineer" size={48}/><div><span className="pr-wh-overline">Projects Preparing <span className="pr-pt-overline-sep">›</span> {projectName} <span className="pr-pt-overline-sep">›</span> Production Receiving</span><h3>Production Receiving</h3><p>Receive components from production to move them to the testing stage.</p></div></div>
+   <div className="pr-intake-heading"><TestingIcon name="engineer" size={48}/><div><h3>Production Receiving</h3></div></div>
    <button type="button" className="pr-pt-close" onClick={onClose} aria-label="Close Production Receiving" title="Close"><TestingIcon name="close" size={19}/></button>
   </header>
   {error&&<div className="pr-alert" role="alert">{error}<button type="button" onClick={()=>setError("")} aria-label="Dismiss">×</button></div>}
@@ -213,20 +214,21 @@ export default function ProjectProductionIntake({projectId,projectName,canTest,e
       </button>
       {open&&<div className="pr-pt-kit-body">{group.items.map(r=>{
      const isEditing=!!editing[r.id],v=draft[r.id]||{},coverage=testingCoverage(r);
-     return <article key={r.id} className={`pr-pt-row pr-intake-component${isEditing?" is-editing":""}`}>
-      <div className="pr-intake-component-main">
+     return <article key={r.id} className={`pr-pt-row pr-intake-component pr-intake-item--${filter}${isEditing?" is-editing":""}`}>
+      <div className={`pr-intake-component-main pr-intake-cols--${filter}`}>
        <div className="pr-intake-component-product">
         <ComponentThumbnail row={r} onOpen={showPreview}/>
         <div className="pr-pt-name"><strong title={r.code?`Product code: ${r.code}`:undefined}>{r.name}</strong>{r.code&&<small>{r.code}</small>}{r.mismatch&&<small className="pr-pt-warning">Historical testing exceeds received quantity; review before continuing.</small>}</div>
        </div>
-       <div className="pr-intake-cell"><span>Required</span><strong>{pretty(coverage.required)}</strong></div>
+       {filter!=="pending"&&<div className="pr-intake-cell"><span>Required</span><strong>{pretty(coverage.required)}</strong></div>}
+       {filter==="pending"&&<div className="pr-intake-cell"><span>Remaining</span><strong>{isEditing&&/^(0|[1-9]\d*)$/.test(String(v.tested??""))?pretty(Math.max(0,coverage.required-Number(v.tested))):pretty(coverage.remaining)}</strong></div>}
        <div className={`pr-intake-cell pr-intake-cell--received${isEditing?" is-inline-edit":""}`}>
         {isEditing?<>
          <label htmlFor={`pr-intake-qty-${r.id}`}>Received</label>
          <StageQuantityInput id={`pr-intake-qty-${r.id}`} min="0" step="1" inputMode="numeric" aria-label={`Received quantity ${r.name}`} disabled={busy} value={v.tested??""} onValueChange={value=>change(r.id,"tested",value)} onKeyDown={event=>{if(event.key==="Enter"){event.preventDefault();save([r.id]);}else if(event.key==="Escape"){event.preventDefault();cancel(r.id);}}}/>
         </>:<><span>Received</span><strong>{pretty(coverage.tested)}</strong></>}
        </div>
-       <div className="pr-intake-cell"><span>Remaining</span><strong>{isEditing&&/^(0|[1-9]\d*)$/.test(String(v.tested??""))?pretty(Math.max(0,coverage.required-Number(v.tested))):pretty(coverage.remaining)}</strong></div>
+       {filter==="all"&&<div className="pr-intake-cell"><span>Remaining</span><strong>{pretty(coverage.remaining)}</strong></div>}
        <EditorAvatars people={r.testedBy||[]}/>
        <div className="pr-intake-row-actions">{canEditTab&&(isEditing?<>
         <button type="button" className="pr-intake-action pr-intake-action--cancel" aria-label={`Cancel edit for ${r.name}`} title="Cancel" disabled={busy} onClick={()=>cancel(r.id)}><TestingIcon name="close" size={16}/></button>
@@ -249,16 +251,18 @@ export default function ProjectProductionIntake({projectId,projectName,canTest,e
     </article>)}{!entries.length&&<div className="pr-wh-empty">No receiving records yet.</div>}</div>
    </section>}
   </>}
-  {preview&&<div className="pr-intake-lightbox" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setPreview(null);}}>
-   <section className="pr-intake-lightbox-dialog" role="dialog" aria-modal="true" aria-label={`Component photo: ${preview.name}`}>
-    <header><div><strong>{preview.name}</strong><small>{preview.code||"Component"} · {previewIndex+1} / {preview.imageUrls?.length||1}</small></div><button type="button" className="pr-intake-lightbox-close" aria-label="Close photo preview" onClick={()=>setPreview(null)}><TestingIcon name="close" size={21}/></button></header>
-    <div className="pr-intake-lightbox-body">
-     {(preview.imageUrls?.length||0)>1&&<button type="button" aria-label="Previous image" onClick={()=>setPreviewIndex(i=>(i+preview.imageUrls.length-1)%preview.imageUrls.length)}><TestingIcon name="arrowLeft" size={22}/></button>}
-     <img src={preview.imageUrls[previewIndex]} alt={`${preview.name} — photo ${previewIndex+1}`}/>
-     {(preview.imageUrls?.length||0)>1&&<button type="button" aria-label="Next image" onClick={()=>setPreviewIndex(i=>(i+1)%preview.imageUrls.length)}><TestingIcon name="arrowRight" size={22}/></button>}
-    </div>
-   </section>
-  </div>}
+  {preview&&typeof document!=="undefined"&&createPortal(
+   <div className="pr-intake-image-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setPreview(null);}}>
+    <section className="pr-intake-image-modal" role="dialog" aria-modal="true" aria-label={`Component image: ${preview.name}`}>
+     <header className="pr-intake-image-header"><div><strong>{preview.name}</strong>{(preview.imageUrls?.length||0)>1&&<small>{previewIndex+1} / {preview.imageUrls.length}</small>}</div><button type="button" autoFocus aria-label="Close image preview" onClick={()=>setPreview(null)}><TestingIcon name="close" size={20}/></button></header>
+     <div className="pr-intake-image-content">
+      {(preview.imageUrls?.length||0)>1&&<button type="button" aria-label="Previous image" onClick={()=>setPreviewIndex(i=>(i+preview.imageUrls.length-1)%preview.imageUrls.length)}><TestingIcon name="arrowLeft" size={23}/></button>}
+      <img src={preview.imageUrls[previewIndex]} alt={preview.name} />
+      {(preview.imageUrls?.length||0)>1&&<button type="button" aria-label="Next image" onClick={()=>setPreviewIndex(i=>(i+1)%preview.imageUrls.length)}><TestingIcon name="arrowRight" size={23}/></button>}
+     </div>
+    </section>
+   </div>, document.body
+  )}
   {showExport&&<div className="pr-pt-export-overlay" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget&&!exportBusy)setShowExport(false);}}>
    <section className="pr-pt-export-modal" role="dialog" aria-modal="true" aria-label="Export production receiving">
     <header className="pr-pt-export-head"><div><strong>Export Receiving</strong><small>Choose columns, Kits and report format</small></div><button type="button" className="pr-secondary" disabled={exportBusy} onClick={()=>setShowExport(false)} aria-label="Close export">×</button></header>

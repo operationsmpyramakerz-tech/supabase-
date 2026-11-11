@@ -20,7 +20,7 @@ test('compact kit components use real photos, contributors and safe image dialog
  assert.match(src,/pr-intake-thumb/);
  assert.match(src,/EditorAvatars people=\{r\.testedBy\|\|\[\]\}/);
  assert.match(src,/\{people\.length-3\}/);
- assert.match(src,/pr-intake-lightbox/);
+ assert.match(src,/pr-intake-image-overlay/);
  assert.match(src,/event\.key==="Escape"/);
  assert.match(src,/aria-label=\{`Edit \$\{r\.name\}`\}/);
  assert.doesNotMatch(src,/Received By<\/span>/);
@@ -44,6 +44,6 @@ test('stage-specific colors, black active filter, and lightbox CSS are scoped',(
  assert.match(styles,/\.pr-intake-v401 \.pr-stage-filter-tabs>button\.is-active/);
  assert.match(styles,/\.pr-intake-v401 \.pr-pt-kit-group/);
  assert.match(styles,/\.pr-intake-v401 \.pr-intake-component-main/);
- assert.match(styles,/\.pr-intake-lightbox/);
+ assert.match(styles,/\.pr-intake-image-overlay/);
  assert.match(styles,/\.pr-intake-v401 \.pr-pt-download-button/);
 });

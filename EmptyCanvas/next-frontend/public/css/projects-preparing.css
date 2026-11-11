@@ -4962,3 +4962,63 @@ html[data-theme="dark"] .pr-intake-v401 .pr-intake-cell--received.is-inline-edit
 html[data-theme="dark"] .pr-intake-v401 .pr-intake-edit-icon,
 html[data-theme="dark"] .pr-intake-v401 .pr-intake-action--cancel {background:#28313f;color:#fff;border-color:#505f72;}
 html[data-theme="dark"] .pr-intake-v401 .pr-intake-action--save {background:#080a0f;border-color:#080a0f;color:#fff;}
+
+/* v403 — Production Receiving: simplified heading and tab-specific compact columns. */
+.pr-intake-v401 .pr-intake-heading h3 {margin:0;}
+/* The overview keeps all three measurements; the actionable tabs show only
+   the two measurements relevant to their workflow, without changing data. */
+.pr-intake-v401 .pr-intake-component-main.pr-intake-cols--pending,
+.pr-intake-v401 .pr-intake-component.is-editing .pr-intake-component-main.pr-intake-cols--pending,
+.pr-intake-v401 .pr-intake-component-main.pr-intake-cols--received,
+.pr-intake-v401 .pr-intake-component.is-editing .pr-intake-component-main.pr-intake-cols--received {
+ grid-template-columns:minmax(155px,2fr) minmax(76px,.65fr) minmax(95px,.78fr) minmax(52px,.7fr) auto;
+}
+@media(max-width:1050px) {
+ .pr-intake-v401 .pr-intake-component-main.pr-intake-cols--pending,
+ .pr-intake-v401 .pr-intake-component.is-editing .pr-intake-component-main.pr-intake-cols--pending,
+ .pr-intake-v401 .pr-intake-component-main.pr-intake-cols--received,
+ .pr-intake-v401 .pr-intake-component.is-editing .pr-intake-component-main.pr-intake-cols--received {
+  grid-template-columns:minmax(140px,1.6fr) minmax(68px,.65fr) minmax(90px,.7fr) minmax(50px,.65fr) auto;
+ }
+}
+@media(max-width:720px) {
+ .pr-intake-v401 .pr-pt-kit-body .pr-intake-item--pending,
+ .pr-intake-v401 .pr-pt-kit-body .pr-intake-item--received {min-width:530px;}
+ .pr-intake-v401 .pr-intake-component-main.pr-intake-cols--pending,
+ .pr-intake-v401 .pr-intake-component.is-editing .pr-intake-component-main.pr-intake-cols--pending,
+ .pr-intake-v401 .pr-intake-component-main.pr-intake-cols--received,
+ .pr-intake-v401 .pr-intake-component.is-editing .pr-intake-component-main.pr-intake-cols--received {
+  grid-template-columns:minmax(150px,1.7fr) 78px 92px 56px auto;
+ }
+}
+/* Same full-size lightbox presentation as Shopping Cart. Portal is attached
+   to document.body so the stage modal cannot clip the photograph. */
+.pr-intake-image-overlay {
+ position:fixed;inset:0;z-index:100400;display:grid;place-items:center;
+ padding:calc(16px + env(safe-area-inset-top,0px)) 16px calc(16px + env(safe-area-inset-bottom,0px));
+ background:rgba(3,10,24,.84);backdrop-filter:blur(5px);
+}
+.pr-intake-image-modal {
+ box-sizing:border-box;width:min(860px,100%);max-height:100%;min-height:0;
+ display:flex;flex-direction:column;gap:12px;padding:14px;border-radius:20px;
+ background:#fff;color:#101828;box-shadow:0 30px 85px rgba(0,0,0,.36);
+}
+.pr-intake-image-header {display:flex;align-items:center;justify-content:space-between;gap:12px;}
+.pr-intake-image-header>div {min-width:0;display:grid;gap:3px;}
+.pr-intake-image-header strong {overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:1rem;font-weight:850;}
+.pr-intake-image-header small {font-size:12px;color:#64748b;}
+.pr-intake-image-header button,.pr-intake-image-content>button {
+ flex:0 0 40px;width:40px;height:40px;display:grid;place-items:center;
+ border:0;border-radius:12px;background:#f2f4f7;color:#101828;cursor:pointer;
+}
+.pr-intake-image-header button:focus-visible,.pr-intake-image-content>button:focus-visible {outline:3px solid #94a3b8;outline-offset:2px;}
+.pr-intake-image-content {display:flex;align-items:center;justify-content:center;gap:8px;min-height:0;overflow:hidden;}
+.pr-intake-image-content img {
+ display:block;max-width:100%;max-height:min(75dvh,720px);width:auto;height:auto;
+ min-width:0;margin:auto;object-fit:contain;border-radius:12px;
+}
+@media(max-width:520px){
+ .pr-intake-image-overlay {padding:12px;}
+ .pr-intake-image-modal {border-radius:15px;padding:11px;gap:9px;}
+ .pr-intake-image-content>button {width:30px;height:36px;flex-basis:30px;}
+}
