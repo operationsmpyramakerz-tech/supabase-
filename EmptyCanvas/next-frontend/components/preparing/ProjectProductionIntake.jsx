@@ -1,7 +1,7 @@
 "use client";
 import StageFilterTabs from "./StageFilterTabs";
 import StageQuantityInput from "./StageQuantityInput";
-import {useEffect,useMemo,useState} from "react";
+import {useEffect,useMemo,useRef,useState} from "react";
 import {createPortal} from "react-dom";
 import {testingChange,testingCoverage,testingCoverageTotals} from "../../lib/preparing-project-testing-math.mjs";
 import {testingGroups,TESTING_EXPORT_COLUMNS,testingExportValue} from "../../lib/preparing-project-testing-grouping.mjs";
@@ -74,6 +74,8 @@ function ComponentThumbnail({row,onOpen}){
 export default function ProjectProductionIntake({projectId,projectName,canTest,editTabs={},request,onClose,closurePanel}) {
  const [data,setData]=useState(initial),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false);
  const [tab,setTab]=useState("testing"),[search,setSearch]=useState(""),[filter,setFilter]=useState("all");
+ const [searchOpen,setSearchOpen]=useState(false);
+ const searchInputRef=useRef(null);
  // All Components is a read-only overview. Editing is available in the
  // actionable status tabs only, subject to the existing per-tab permissions.
  const canEditTab = canTest && filter !== "all" && editTabs[filter] !== false;
@@ -83,6 +85,8 @@ export default function ProjectProductionIntake({projectId,projectName,canTest,e
  const [exportGroups,setExportGroups]=useState([]),[exportBusy,setExportBusy]=useState(false);
  const [draft,setDraft]=useState({}),[editing,setEditing]=useState({});
  const [error,setError]=useState(""),[success,setSuccess]=useState(""),[rowError,setRowError]=useState({});
+ useEffect(()=>{if(searchOpen&&tab==="testing")searchInputRef.current?.focus();},[searchOpen,tab]);
+ const closeSearch=()=>{setSearchOpen(false);setSearch("");};
  const load=async()=>{const result=await request(`/intake?projectId=${encodeURIComponent(projectId)}`);setData({items:result.items||[],history:result.history||[],kitGroups:result.kitGroups||[]});};
  useEffect(()=>{let mounted=true;
   request(`/intake?projectId=${encodeURIComponent(projectId)}`)
@@ -198,10 +202,19 @@ export default function ProjectProductionIntake({projectId,projectName,canTest,e
     </div>
     <div className="pr-intake-signoff">{closurePanel}</div>
    </div>
-   <StageFilterTabs label="Receiving component status" options={[{value:"all",label:"All Components"},{value:"pending",label:"Remaining to Receive"},{value:"received",label:"Received"}]} value={tab==="testing"?filter:""} onChange={value=>{setFilter(value);setTab("testing");setEditing({});setDraft({});}}/>
-   <div className="pr-stage-filter-toolbar pr-pt-toolbar">
-    {tab==="testing"?<label className="pr-search pr-pt-search"><TestingIcon name="search" size={18}/><input type="search" aria-label="Search receiving components" placeholder="Search component or code…" value={search} onChange={e=>setSearch(e.target.value)}/>{search&&<button type="button" className="pr-pt-clear-search" onClick={()=>setSearch("")} aria-label="Clear search" title="Clear search"><TestingIcon name="close" size={16}/></button>}</label>:<span className="pr-stage-history-label">Receiving History</span>}
-    <div className="pr-stage-filter-actions"><button type="button" aria-pressed={tab==="history"} aria-label={`Receiving History (${entries.length} changes)`} title={`Receiving History (${entries.length})`} className={`pr-pt-history-button${tab==="history"?" is-active":""}`} onClick={()=>setTab(tab==="history"?"testing":"history")}><TestingIcon name="history" size={19}/></button><button type="button" className="pr-pt-download-button" aria-label="Download receiving report" onClick={()=>setShowExport(true)} disabled={!data.items.length}><TestingIcon name="download" size={21}/></button></div>
+   <div className="pr-intake-tabs-toolbar">
+    <StageFilterTabs label="Receiving component status" options={[{value:"all",label:"All Components"},{value:"pending",label:"Remaining to Receive"},{value:"received",label:"Received"}]} value={tab==="testing"?filter:""} onChange={value=>{setFilter(value);setTab("testing");setEditing({});setDraft({});}}/>
+    <div className="pr-intake-tabs-actions" aria-label="Receiving toolbar">
+     <div className={`pr-intake-search-control${searchOpen?" is-open":""}`}>
+      <button type="button" className="pr-intake-search-toggle" aria-label={searchOpen?"Close component search":"Search components"} aria-controls="pr-intake-component-search" aria-expanded={searchOpen} title={searchOpen?"Close search":"Search components"} onClick={()=>{if(searchOpen)closeSearch();else{setTab("testing");setSearchOpen(true);}}}><TestingIcon name="search" size={19}/></button>
+      <div className="pr-intake-search-expand">
+       <input ref={searchInputRef} id="pr-intake-component-search" type="search" aria-label="Search receiving components" placeholder="Search component or code…" disabled={!searchOpen} tabIndex={searchOpen?0:-1} value={search} onChange={event=>setSearch(event.target.value)} onKeyDown={event=>{if(event.key==="Escape"){event.preventDefault();closeSearch();}}}/>
+       {searchOpen&&search&&<button type="button" className="pr-intake-search-clear" onClick={()=>{setSearch("");searchInputRef.current?.focus();}} title="Clear search" aria-label="Clear component search"><TestingIcon name="close" size={15}/></button>}
+      </div>
+     </div>
+     <button type="button" aria-pressed={tab==="history"} aria-label={`Receiving History (${entries.length} changes)`} title={`Receiving History (${entries.length})`} className={`pr-pt-history-button${tab==="history"?" is-active":""}`} onClick={()=>{setTab(tab==="history"?"testing":"history");if(tab!=="history")closeSearch();}}><TestingIcon name="history" size={19}/></button>
+     <button type="button" className="pr-pt-download-button" aria-label="Download receiving report" title="Download receiving report" onClick={()=>setShowExport(true)} disabled={!data.items.length}><TestingIcon name="download" size={21}/></button>
+    </div>
    </div>
    {tab==="testing"&&<>
     <div className="pr-wh-list pr-pt-list pr-pt-kit-list" aria-label="Project component receiving">{groupedShown.map(group=>{
@@ -224,7 +237,7 @@ export default function ProjectProductionIntake({projectId,projectName,canTest,e
        {filter==="pending"&&<div className="pr-intake-cell"><span>Remaining</span><strong>{isEditing&&/^(0|[1-9]\d*)$/.test(String(v.tested??""))?pretty(Math.max(0,coverage.required-Number(v.tested))):pretty(coverage.remaining)}</strong></div>}
        <div className={`pr-intake-cell pr-intake-cell--received${isEditing?" is-inline-edit":""}`}>
         {isEditing?<>
-         <label htmlFor={`pr-intake-qty-${r.id}`}>Received</label>
+         <span>Received</span>
          <StageQuantityInput id={`pr-intake-qty-${r.id}`} min="0" step="1" inputMode="numeric" aria-label={`Received quantity ${r.name}`} disabled={busy} value={v.tested??""} onValueChange={value=>change(r.id,"tested",value)} onKeyDown={event=>{if(event.key==="Enter"){event.preventDefault();save([r.id]);}else if(event.key==="Escape"){event.preventDefault();cancel(r.id);}}}/>
         </>:<><span>Received</span><strong>{pretty(coverage.tested)}</strong></>}
        </div>
