@@ -30,7 +30,7 @@ test('Box filter is accessible stage status tabs, with transparent search and cl
 });
 
 test('Kit groups have solid category icons, start collapsed, and retain packing tools',()=>{
- for(const re of [/boxKitAppearance/,/pr-pt-kit--\$\{appearance\.tone\}/,/pr-pt-kit-emblem/,/pr-pt-kit-heading/,/opened,setOpened\]=useState\(null\)/,/open=Boolean\(search\.trim\(\)\)\|\|opened===g\.key/,/aria-expanded=\{open\}/,/action:"pack"/,/action:"create"/,/action:"rename"/,/action:"cancel"/,/Create Box/,/Packed in selected box/,/Box Distribution History/])assert.match(boxes,re);
+ for(const re of [/boxKitAppearance/,/pr-pt-kit--\$\{appearance\.tone\}/,/pr-pt-kit-emblem/,/pr-pt-kit-heading/,/opened,setOpened\]=useState\(null\)/,/open=Boolean\(search\.trim\(\)\)\|\|opened===g\.key/,/aria-expanded=\{open\}/,/action:"pack"/,/action:"generate_school_kits"/,/action:"rename"/,/action:"cancel"/,/Generate School Kit Labels/,/Packed in selected box/,/Box Distribution History/])assert.match(boxes,re);
  assert.doesNotMatch(boxes,/groups\[0\]\?\.key===g\.key/);
  assert.match(css,/\.pr-pt-modern \.pr-pt-kit-emblem/);
  assert.match(css,/\.pr-box-parity \.pr-box-kit-list \.pr-pt-kit-group\.is-open \.pr-pt-kit-body/);

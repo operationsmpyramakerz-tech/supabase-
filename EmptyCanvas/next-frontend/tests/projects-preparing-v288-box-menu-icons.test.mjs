@@ -19,7 +19,7 @@ test('box actions trigger uses a vector icon instead of baseline-shifted text gl
 test('Rename and Delete actions show icons and preserve handlers and permission restriction',()=>{
  assert.match(jsx,/rename:<><path/);
  assert.match(jsx,/trash:<><path/);
- assert.match(jsx,/disabled=\{c.status!=="draft"\}[\s\S]*?onClick=\{\(\)=>boxAction\("rename",c\)\}><BoxIcon name="rename" size=\{16\}\/><span>Rename<\/span>/);
+ assert.match(jsx,/disabled=\{c.status!=="draft"\|\|c.generated_kit_label\}[\s\S]*?onClick=\{\(\)=>boxAction\("rename",c\)\}><BoxIcon name="rename" size=\{16\}\/><span>Rename<\/span>/);
  assert.match(jsx,/onClick=\{\(\)=>boxAction\("delete",c\)\}><BoxIcon name="trash" size=\{16\}\/><span>Delete<\/span>/);
  assert.match(css,/\.pr-box-labels-sheet \.pr-box-context-menu button\s*\{[^}]*display:flex;align-items:center;gap:10px;/);
 });

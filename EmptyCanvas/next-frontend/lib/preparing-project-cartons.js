@@ -107,3 +107,14 @@ export async function renameProjectCarton(body,account) {
     p_member_id:actor(account),p_actor_name:sized(account?.name||account?.username||"","ERP user name",160)||actor(account),
   },{profileName:"preparing.pool.rename"});
 }
+
+// v395: generate physical Kit labels scoped to one school without packing any stock.
+export async function generateSchoolKitLabels(body,account) {
+  requireService();
+  const count=body.count;
+  if (!Number.isSafeInteger(count) || count<1 || count>100) fail("Generate between 1 and 100 labels at a time.");
+  return rpc("erp_preparing_generate_school_kits_v395", {
+    p_project_id:id(body.projectId),p_school_id:id(body.schoolId),
+    p_kit_name:sized(body.kitName,"Kit group",160),p_count:count,p_member_id:actor(account),
+  },{profileName:"preparing.pool.school-labels"});
+}

@@ -42,5 +42,12 @@ export async function saveProductionBox(body,account){
  const quantity=body?.quantity,stamp=clean(body?.expectedUpdatedAt);
  if(!Number.isSafeInteger(quantity)||quantity<0||quantity>1000000)fail("Packed must be a whole number from 0 to 1,000,000.");
  if(!stamp||!Number.isFinite(Date.parse(stamp)))fail("Refresh the box before editing its quantities.",409);
+ // Generated school-specific labels must never consume another school's BOM items.
+ const box=await selectById("erp_preparing_project_cartons",carton);
+ if(!box || box.project_id!==project || box.status!=="draft")fail("Box is not a draft in this project.",409);
+ if(box.generated_kit_label){
+   const component=await selectById("erp_preparing_components",source);
+   if(!component || component.school_id!==box.school_id)fail("Select a component from the box's assigned school.",403);
+ }
  return rpc("erp_preparing_production_pack_v249",{p_project_id:project,p_carton_id:carton,p_source_component_id:source,p_item_id:item,p_quantity:quantity,p_expected_updated_at:stamp,p_member_id:member,p_actor_name:name},{profileName:"preparing.production.pack"});
 }

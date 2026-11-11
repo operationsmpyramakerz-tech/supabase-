@@ -23,17 +23,17 @@ test('Box Distribution navigation is below its three KPI blocks; Operations Rece
  assert.match(production,/aria-label="Boxes Label"/);
 });
 
-test('Box labels panel contains Create Box and grouped boxes instead of inline creation',()=>{
+test('Box labels panel generates school-specific Kits in groups instead of inline manual creation',()=>{
  const mainStart=boxes.indexOf('{mode==="boxes"&&<>');
  const modalStart=boxes.indexOf('{boxesOpen&&<div className="pr-box-labels-overlay"');
  assert.ok(mainStart>0 && modalStart>mainStart);
  const main=boxes.slice(mainStart,modalStart);
  assert.doesNotMatch(main,/pr-box-toolbar|pr-box-pills|pr-box-create|New box label|Kit for new box/);
  const modal=boxes.slice(modalStart);
- for(const label of ['role="dialog"','aria-modal="true"','aria-label="Boxes Label"','aria-label="Close Boxes Label"','Create Box','Kit Groups','boxGroups.map','group.cartons.map','New box label','Kit for new box','Rename','Delete'])assert.ok(modal.includes(label),label);
+ for(const label of ['role="dialog"','aria-modal="true"','aria-label="Boxes Label"','aria-label="Close Boxes Label"','Generate School Kit Labels','Kit Groups','boxGroups.map','group.cartons.map','School for new Kit labels','Kit group for new labels','Number of kits for selected school','Rename','Delete'])assert.ok(modal.includes(label),label);
  assert.match(boxes,/groupBoxLabels\(data\?\.kits,data\?\.cartons\)/);
- assert.match(boxes,/allowed&&<section className="pr-box-labels-create"/);
- assert.match(boxes,/allowed&&<button type="button" className="pr-box-labels-box-menu"/);
+ assert.match(boxes,/canManageLabels&&<section className="pr-box-labels-create/);
+ assert.match(boxes,/canManageLabels&&<button type="button" className="pr-box-labels-box-menu"/);
 });
 
 test('box labels are nested by Kit and cancelled boxes are hidden without losing audit records',()=>{
@@ -50,9 +50,9 @@ test('box labels are nested by Kit and cancelled boxes are hidden without losing
  assert.deepEqual(groupBoxLabels([],[]),[]);
 });
 
-test('existing create, rename, delete and pack flows stay connected to server endpoints',()=>{
- for(const re of [/action:"create"/,/action:"rename"/,/action:"cancel"/,/action:"pack"/,/await refresh\(\)/,/onChanged\?\.\(\)/,/Box Distribution History/])assert.match(boxes,re);
- assert.match(boxes,/setExpandedBoxKit\(newKit\)/);
+test('school Kit generation, legacy rename/delete and pack flows stay connected to server endpoints',()=>{
+ for(const re of [/action:"generate_school_kits"/,/action:"rename"/,/action:"cancel"/,/action:"pack"/,/await refresh\(\)/,/onChanged\?\.\(\)/,/Box Distribution History/])assert.match(boxes,re);
+ assert.match(boxes,/setExpandedBoxKit\(labelKit\)/);
  assert.match(boxes,/role="menu"/);
  assert.match(boxes,/boxDialog&&/);
 });
