@@ -46,6 +46,7 @@ function TestingIcon({name="box",size=20}){
   engineer:<><path d="M4 10h16M7 10V8a5 5 0 0 1 10 0v2M12 3v4M8 11.5a4 4 0 0 0 8 0M8 16l-4 2v4h16v-4l-4-2M9 17l3 3 3-3"/></>,
   document:<><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Zm0 0v6h6M8 13h8M8 17h6"/></>,
   edit:<><path d="m4 20 4.5-1.1L20 7.4a2.2 2.2 0 0 0-3.1-3.1L5.4 15.8 4 20ZM14.6 6.6l2.8 2.8"/></>,
+  check:<path d="m5 12 4 4L19 6"/>,
   expand:<><path d="M14 4h6v6M20 4l-8 8M20 14v6H4V4h6"/></>,
   arrowLeft:<path d="m14 5-7 7 7 7"/>,
   arrowRight:<path d="m10 5 7 7-7 7"/>,
@@ -72,7 +73,9 @@ function ComponentThumbnail({row,onOpen}){
 export default function ProjectProductionIntake({projectId,projectName,canTest,editTabs={},request,onClose,closurePanel}) {
  const [data,setData]=useState(initial),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false);
  const [tab,setTab]=useState("testing"),[search,setSearch]=useState(""),[filter,setFilter]=useState("all");
- const canEditTab = canTest && editTabs[filter] !== false;
+ // All Components is a read-only overview. Editing is available in the
+ // actionable status tabs only, subject to the existing per-tab permissions.
+ const canEditTab = canTest && filter !== "all" && editTabs[filter] !== false;
  const [expandedKit,setExpandedKit]=useState(null),[showExport,setShowExport]=useState(false);
  const [preview,setPreview]=useState(null),[previewIndex,setPreviewIndex]=useState(0);
  const [exportColumns,setExportColumns]=useState(TESTING_EXPORT_COLUMNS.map(c=>c.key));
@@ -109,7 +112,7 @@ export default function ProjectProductionIntake({projectId,projectName,canTest,e
   setRowError(old=>({...old,[id]:""}));
  };
  async function save(ids) {
-  if(busy)return;
+  if(busy||!canEditTab)return;
   const rowId=ids.length===1?ids[0]:null;
   const fail=message=>{setError(message);if(rowId)setRowError(old=>({...old,[rowId]:message}));};
   const lines=[];
@@ -216,13 +219,19 @@ export default function ProjectProductionIntake({projectId,projectName,canTest,e
         <ComponentThumbnail row={r} onOpen={showPreview}/>
         <div className="pr-pt-name"><strong title={r.code?`Product code: ${r.code}`:undefined}>{r.name}</strong>{r.code&&<small>{r.code}</small>}{r.mismatch&&<small className="pr-pt-warning">Historical testing exceeds received quantity; review before continuing.</small>}</div>
        </div>
-       {isEditing?<div className="pr-intake-receive-input"><label htmlFor={`pr-intake-qty-${r.id}`}>Received</label><StageQuantityInput id={`pr-intake-qty-${r.id}`} min="0" step="1" aria-label={`Received quantity ${r.name}`} disabled={busy} value={v.tested??""} onValueChange={value=>change(r.id,"tested",value)}/></div>:<>
-        <div className="pr-intake-cell"><span>Required</span><strong>{pretty(coverage.required)}</strong></div>
-        <div className="pr-intake-cell pr-intake-cell--received"><span>Received</span><strong>{pretty(coverage.tested)}</strong></div>
-        <div className="pr-intake-cell"><span>Remaining</span><strong>{pretty(coverage.remaining)}</strong></div>
-        <EditorAvatars people={r.testedBy||[]}/>
-       </>}
-       <div className="pr-intake-row-actions">{canEditTab&&(isEditing?<><button type="button" className="pr-secondary" disabled={busy} onClick={()=>cancel(r.id)}>Cancel</button><button type="button" className="pr-primary" disabled={busy} onClick={()=>save([r.id])}>{busy?"Saving…":"Save"}</button></>:<button type="button" className="pr-intake-edit-icon" aria-label={`Edit ${r.name}`} title={`Edit ${r.name}`} disabled={busy} onClick={()=>edit(r)}><TestingIcon name="edit" size={19}/></button>)}</div>
+       <div className="pr-intake-cell"><span>Required</span><strong>{pretty(coverage.required)}</strong></div>
+       <div className={`pr-intake-cell pr-intake-cell--received${isEditing?" is-inline-edit":""}`}>
+        {isEditing?<>
+         <label htmlFor={`pr-intake-qty-${r.id}`}>Received</label>
+         <StageQuantityInput id={`pr-intake-qty-${r.id}`} min="0" step="1" inputMode="numeric" aria-label={`Received quantity ${r.name}`} disabled={busy} value={v.tested??""} onValueChange={value=>change(r.id,"tested",value)} onKeyDown={event=>{if(event.key==="Enter"){event.preventDefault();save([r.id]);}else if(event.key==="Escape"){event.preventDefault();cancel(r.id);}}}/>
+        </>:<><span>Received</span><strong>{pretty(coverage.tested)}</strong></>}
+       </div>
+       <div className="pr-intake-cell"><span>Remaining</span><strong>{isEditing&&/^(0|[1-9]\d*)$/.test(String(v.tested??""))?pretty(Math.max(0,coverage.required-Number(v.tested))):pretty(coverage.remaining)}</strong></div>
+       <EditorAvatars people={r.testedBy||[]}/>
+       <div className="pr-intake-row-actions">{canEditTab&&(isEditing?<>
+        <button type="button" className="pr-intake-action pr-intake-action--cancel" aria-label={`Cancel edit for ${r.name}`} title="Cancel" disabled={busy} onClick={()=>cancel(r.id)}><TestingIcon name="close" size={16}/></button>
+        <button type="button" className="pr-intake-action pr-intake-action--save" aria-label={`Save received quantity for ${r.name}`} title="Save" disabled={busy} onClick={()=>save([r.id])}><TestingIcon name="check" size={18}/></button>
+       </>:<button type="button" className="pr-intake-edit-icon" aria-label={`Edit ${r.name}`} title={`Edit ${r.name}`} disabled={busy} onClick={()=>edit(r)}><TestingIcon name="edit" size={17}/></button>)}</div>
       </div>
       {rowError[r.id]&&<p className="pr-pt-inline-error" role="alert">{rowError[r.id]}</p>}
      </article>;

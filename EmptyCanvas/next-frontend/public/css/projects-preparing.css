@@ -4894,3 +4894,71 @@ html[data-theme="dark"] .pr-intake-v401 .pr-intake-progress,html[data-theme="dar
 @media(prefers-reduced-motion:reduce){.pr-intake-progress-track>span {transition:none;}}
 
 @media(max-width:780px){.pr-intake-lightbox {place-items:center;padding:18px;background:#080e19b5;backdrop-filter:blur(3px);}}
+
+/* v402 — Production Receiving: read-only overview, compact in-row editing. */
+.pr-intake-v401 .pr-intake-component-main,
+.pr-intake-v401 .pr-intake-component.is-editing .pr-intake-component-main {
+ display:grid;
+ grid-template-columns:minmax(155px,2fr) minmax(55px,.55fr) minmax(94px,.75fr) minmax(60px,.6fr) minmax(52px,.7fr) auto;
+ align-items:center;
+ gap:9px;
+ min-height:66px;
+ padding:9px 12px;
+}
+.pr-intake-v401 .pr-intake-cell--received.is-inline-edit {min-width:0;}
+.pr-intake-v401 .pr-intake-cell--received.is-inline-edit input {
+ display:block;box-sizing:border-box;width:100%;max-width:105px;
+ height:34px;min-height:34px;padding:4px 8px;
+ border:1px solid #a0aab9;border-radius:8px;background:#fff;
+ color:#0b6e38;font-size:16px;font-weight:800;
+ font-variant-numeric:tabular-nums;outline-offset:2px;
+}
+.pr-intake-v401 .pr-intake-cell--received.is-inline-edit input:focus {border-color:#171c27;outline:2px solid #dae0e9;}
+.pr-intake-v401 .pr-intake-component.is-editing {background:#fbfcfe;border-color:#b7bfcb;box-shadow:none;}
+.pr-intake-v401 .pr-intake-row-actions {grid-column:auto;grid-row:auto;display:flex;align-items:center;justify-content:flex-end;gap:5px;flex-wrap:nowrap;white-space:nowrap;min-width:max-content;}
+.pr-intake-v401 .pr-intake-edit-icon,
+.pr-intake-v401 .pr-intake-action {
+ display:grid;place-items:center;flex:none;box-sizing:border-box;
+ width:35px;height:35px;min-width:35px;min-height:35px;padding:0;
+ border:1px solid #d7dce5;border-radius:9px;background:#fff;
+ color:#111827;box-shadow:none;cursor:pointer;
+ transition:background-color .12s,border-color .12s;
+}
+.pr-intake-v401 .pr-intake-edit-icon:hover:not(:disabled),
+.pr-intake-v401 .pr-intake-action--cancel:hover:not(:disabled) {background:#eef1f5;border-color:#9ca9bc;}
+.pr-intake-v401 .pr-intake-action--save {color:white;background:#080a0f;border-color:#080a0f;}
+.pr-intake-v401 .pr-intake-action--save:hover:not(:disabled) {background:#293241;border-color:#293241;}
+.pr-intake-v401 .pr-intake-edit-icon:focus-visible,
+.pr-intake-v401 .pr-intake-action:focus-visible {outline:3px solid #9aa9bd;outline-offset:2px;}
+.pr-intake-v401 .pr-intake-action:disabled,
+.pr-intake-v401 .pr-intake-edit-icon:disabled {opacity:.55;cursor:not-allowed;}
+@media (max-width:1050px) {
+ .pr-intake-v401 .pr-intake-component-main,
+ .pr-intake-v401 .pr-intake-component.is-editing .pr-intake-component-main {
+  grid-template-columns:minmax(140px,1.5fr) minmax(55px,.52fr) minmax(90px,.72fr) minmax(58px,.55fr) minmax(50px,.65fr) auto;
+  gap:7px;
+ }
+ .pr-intake-v401 .pr-intake-edit-icon,.pr-intake-v401 .pr-intake-action {width:32px;height:32px;min-width:32px;min-height:32px;}
+}
+@media (max-width:720px) {
+ /* Keep the field and both action buttons in the same component row. */
+ .pr-intake-v401 .pr-pt-kit-body {overflow-x:auto;overscroll-behavior-inline:contain;}
+ .pr-intake-v401 .pr-pt-kit-body .pr-intake-component {width:100%;min-width:650px;}
+ .pr-intake-v401 .pr-intake-component-main,
+ .pr-intake-v401 .pr-intake-component.is-editing .pr-intake-component-main {
+  grid-template-columns:minmax(155px,1.7fr) 55px 92px 64px 62px auto;
+  gap:7px;min-height:62px;padding:9px;
+ }
+ .pr-intake-v401 .pr-intake-component-product,
+ .pr-intake-v401 .pr-intake-component.is-editing .pr-intake-component-product,
+ .pr-intake-v401 .pr-intake-editors,
+ .pr-intake-v401 .pr-intake-row-actions {grid-column:auto;grid-row:auto;}
+ .pr-intake-v401 .pr-intake-component-product {min-width:0;}
+ .pr-intake-v401 .pr-intake-cell {padding-left:7px;}
+ .pr-intake-v401 .pr-intake-cell--received.is-inline-edit input {max-width:90px;}
+}
+html[data-theme="dark"] .pr-intake-v401 .pr-intake-component.is-editing {background:#252b37;border-color:#657086;}
+html[data-theme="dark"] .pr-intake-v401 .pr-intake-cell--received.is-inline-edit input {background:#202633;color:#8ce9ae;border-color:#657086;}
+html[data-theme="dark"] .pr-intake-v401 .pr-intake-edit-icon,
+html[data-theme="dark"] .pr-intake-v401 .pr-intake-action--cancel {background:#28313f;color:#fff;border-color:#505f72;}
+html[data-theme="dark"] .pr-intake-v401 .pr-intake-action--save {background:#080a0f;border-color:#080a0f;color:#fff;}
