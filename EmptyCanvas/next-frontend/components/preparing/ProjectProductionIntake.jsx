@@ -205,11 +205,13 @@ export default function ProjectProductionIntake({projectId,projectName,canTest,e
    <div className="pr-intake-tabs-toolbar">
     <StageFilterTabs label="Receiving component status" options={[{value:"all",label:"All Components"},{value:"pending",label:"Remaining to Receive"},{value:"received",label:"Received"}]} value={tab==="testing"?filter:""} onChange={value=>{setFilter(value);setTab("testing");setEditing({});setDraft({});}}/>
     <div className="pr-intake-tabs-actions" aria-label="Receiving toolbar">
-     <div className={`pr-intake-search-control${searchOpen?" is-open":""}`}>
-      <button type="button" className="pr-intake-search-toggle" aria-label={searchOpen?"Close component search":"Search components"} aria-controls="pr-intake-component-search" aria-expanded={searchOpen} title={searchOpen?"Close search":"Search components"} onClick={()=>{if(searchOpen)closeSearch();else{setTab("testing");setSearchOpen(true);}}}><TestingIcon name="search" size={19}/></button>
-      <div className="pr-intake-search-expand">
-       <input ref={searchInputRef} id="pr-intake-component-search" type="search" aria-label="Search receiving components" placeholder="Search component or code…" disabled={!searchOpen} tabIndex={searchOpen?0:-1} value={search} onChange={event=>setSearch(event.target.value)} onKeyDown={event=>{if(event.key==="Escape"){event.preventDefault();closeSearch();}}}/>
-       {searchOpen&&search&&<button type="button" className="pr-intake-search-clear" onClick={()=>{setSearch("");searchInputRef.current?.focus();}} title="Clear search" aria-label="Clear component search"><TestingIcon name="close" size={15}/></button>}
+     <div className="pr-intake-search-slot">
+      <div className={`pr-intake-search-control${searchOpen?" is-open":""}`} role="search">
+       <button type="button" className="pr-intake-search-toggle" aria-label={searchOpen?"Close component search":"Search components"} aria-controls="pr-intake-component-search" aria-expanded={searchOpen} title={searchOpen?"Close search":"Search components"} onClick={()=>{if(searchOpen)closeSearch();else{setTab("testing");setSearchOpen(true);}}}><TestingIcon name="search" size={17}/></button>
+       <div className="pr-intake-search-expand">
+        <input ref={searchInputRef} id="pr-intake-component-search" type="search" aria-label="Search receiving components" placeholder="Search component or code…" disabled={!searchOpen} tabIndex={searchOpen?0:-1} value={search} onChange={event=>setSearch(event.target.value)} onKeyDown={event=>{if(event.key==="Escape"){event.preventDefault();closeSearch();}}}/>
+        <button type="button" className="pr-intake-search-clear" onClick={closeSearch} aria-label="Close component search" title="Close search" tabIndex={searchOpen?0:-1} disabled={!searchOpen}><TestingIcon name="close" size={17}/></button>
+       </div>
       </div>
      </div>
      <button type="button" aria-pressed={tab==="history"} aria-label={`Receiving History (${entries.length} changes)`} title={`Receiving History (${entries.length})`} className={`pr-pt-history-button${tab==="history"?" is-active":""}`} onClick={()=>{setTab(tab==="history"?"testing":"history");if(tab!=="history")closeSearch();}}><TestingIcon name="history" size={19}/></button>
