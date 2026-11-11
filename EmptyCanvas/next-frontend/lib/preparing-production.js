@@ -46,9 +46,27 @@ export async function saveProductionBox(body,account){
  // Generated school-specific labels must never consume another school's BOM items.
  const box=await selectById("erp_preparing_project_cartons",carton);
  if(!box || box.project_id!==project || box.status!=="draft")fail("Box is not a draft in this project.",409);
- if(box.generated_kit_label){
-   const component=await selectById("erp_preparing_components",source);
-   if(!component || component.school_id!==box.school_id)fail("Select a component from the box's assigned school.",403);
- }
+ if(box.generated_kit_label)fail("School Kit packing must be distributed equally via Pack by School.",403);
  return rpc("erp_preparing_production_pack_v249",{p_project_id:project,p_carton_id:carton,p_source_component_id:source,p_item_id:item,p_quantity:quantity,p_expected_updated_at:stamp,p_member_id:member,p_actor_name:name},{profileName:"preparing.production.pack"});
+}
+
+// v399: ONE SQL transaction for ALL selected schools. Do not loop HTTP writes:
+// a partial success could leave different quantities in supposedly identical Kits.
+export async function saveEqualSchoolKitPacking(body,account){
+ requireService();const project=id(body?.projectId),item=id(body?.itemId),{member,name}=identity(account);
+ const kitName=clean(body?.kitName);
+ if(!kitName||kitName.length>160)fail("Choose a valid Kit group.");
+ if(!Array.isArray(body?.schools)||!body.schools.length||body.schools.length>50)
+  fail("Select between 1 and 50 schools.");
+ const seen=new Set();const schools=body.schools.map(s=>{
+  const schoolId=id(s?.schoolId);const totalQuantity=s?.totalQuantity;
+  if(seen.has(schoolId))fail("The same school cannot be selected twice.");seen.add(schoolId);
+  if(!Number.isSafeInteger(totalQuantity)||totalQuantity<0||totalQuantity>1000000)
+   fail("Packed total for each school must be a whole number between 0 and 1,000,000.");
+  return {schoolId,totalQuantity};
+ });
+ return rpc("erp_preparing_pack_school_boxes_v399",{
+  p_project_id:project,p_item_id:item,p_kit_name:kitName,
+  p_school_packs:schools,p_member_id:member,p_actor_name:name,
+ },{profileName:"preparing.production.equal-school-pack"});
 }

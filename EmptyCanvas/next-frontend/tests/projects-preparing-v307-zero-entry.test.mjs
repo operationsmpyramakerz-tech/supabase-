@@ -30,7 +30,7 @@ test('all five project stage quantity editors use the zero-replacement input',()
     'ProjectTesting.jsx':['Tested quantity'],
     'ProjectWarehouseReceiving.jsx':['Returned ${row.product_name}'],
     'ProjectProductionReceiving.jsx':['Operations Received ${r.name}'],
-    'ProjectBoxDistribution.jsx':['Packed ${row.name}'],
+    'SchoolEqualPackingEditor.jsx':['Total packed quantity for ${s.schoolName}'],
     'ProjectKitCartons.jsx':['Packed ${c.product_name}','Quantity to allocate'],
   };
   for(const [file,tokens] of Object.entries(expectations)){

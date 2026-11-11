@@ -1,0 +1,21 @@
+v399 — Equal school/group box packing (delta files only)
+
+app/api/projects-preparing/production/route.js
+app/api/projects-preparing/project-cartons/route.js
+app/projects-preparing/page.jsx
+components/preparing/ProjectBoxDistribution.jsx
+components/preparing/SchoolEqualPackingEditor.jsx
+lib/preparing-production.js
+lib/preparing-equal-kit-packing.mjs
+public/css/projects-preparing.css
+sql/2026-11-11-preparing-equal-school-packing-v399.sql
+tests/projects-preparing-v249-box-distribution.test.mjs
+tests/projects-preparing-v283-separated-box-stage.test.mjs
+tests/projects-preparing-v285-box-distribution-parity.test.mjs
+tests/projects-preparing-v287-boxes-label-panel.test.mjs
+tests/projects-preparing-v307-zero-entry.test.mjs
+tests/projects-preparing-v395-school-kit-labels.test.mjs
+tests/projects-preparing-v396-kit-packing.test.mjs
+tests/projects-preparing-v399-equal-school-packing.test.mjs
+README_v399_EQUAL_SCHOOL_BOX_PACKING.md
+MODIFIED_FILES_v399.txt

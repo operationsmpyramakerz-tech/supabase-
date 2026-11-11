@@ -34,8 +34,8 @@ test('no optimistic client IDs: the atomic server RPC owns box creation',()=>{
 });
 test('school-specific boxes cannot pack components from other schools',()=>{
   assert.match(packing,/if\(box\.generated_kit_label\)/);
-  assert.match(packing,/component\.school_id!==box\.school_id/);
-  assert.match(ui,/\(!carton\.school_id\|\|carton\.school_id===c\.school_id\)/);
+  assert.match(packing,/School Kit packing must be distributed equally/);
+  assert.match(ui,/SchoolEqualPackingEditor/);
   assert.match(api,/Generated Kit label codes cannot be renamed/);
   assert.match(api,/School Kit labels must be managed in Box Distribution/);
 });

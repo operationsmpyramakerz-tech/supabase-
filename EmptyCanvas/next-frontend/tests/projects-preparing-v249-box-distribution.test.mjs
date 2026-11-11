@@ -18,8 +18,8 @@ test("Operations Received tab has only receiving columns, while box tab owns Pac
  assert.ok(receive,"Receiving row markup was not found");
  assert.doesNotMatch(receive[0],/<small>Packed<\/small>|<small>Unpacked<\/small>/);
  assert.match(ui,/Receiving History/);assert.match(ui,/Box History/);
- assert.match(box,/Available to Pack/);assert.match(box,/Unpacked/);assert.match(box,/Packed in selected box/);
- assert.match(box,/request\("\/production","POST",\{action:"pack"/);
+ assert.match(box,/Available to Pack/);assert.match(box,/Unpacked/);assert.match(box,/SchoolEqualPackingEditor/);
+ assert.match(box,/request\("\/production","POST",\{action:"pack_schools"/);
  assert.match(box,/changed_by_name/);
 });
 test("Independent carton movement audit and verified ERP actor are protected by server-side SQL",()=>{

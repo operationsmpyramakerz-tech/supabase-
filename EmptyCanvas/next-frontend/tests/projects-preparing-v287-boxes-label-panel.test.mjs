@@ -51,7 +51,7 @@ test('box labels are nested by Kit and cancelled boxes are hidden without losing
 });
 
 test('school Kit generation, legacy rename/delete and pack flows stay connected to server endpoints',()=>{
- for(const re of [/action:"generate_school_kits"/,/action:"rename"/,/action:"cancel"/,/action:"pack"/,/await refresh\(\)/,/onChanged\?\.\(\)/,/Box Distribution History/])assert.match(boxes,re);
+ for(const re of [/action:"generate_school_kits"/,/action:"rename"/,/action:"cancel"/,/action:"pack_schools"/,/await refresh\(\)/,/onChanged\?\.\(\)/,/Box Distribution History/])assert.match(boxes,re);
  assert.match(boxes,/setExpandedBoxKit\(labelKit\)/);
  assert.match(boxes,/role="menu"/);
  assert.match(boxes,/boxDialog&&/);

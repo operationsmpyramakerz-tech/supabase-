@@ -62,12 +62,11 @@ test('API actions scoped to Box Distribution, all-components edit and verified a
  assert.match(svc,/p_member_id:actor\(account\)/);
  assert.match(api,/kitTargets:\[\]/);
 });
-test('Interactive physical packing dialog shows quantities, progress, and completion',()=>{
- assert.match(ui,/Packing manifest · Required \/ Packed \/ Remaining/);
- assert.match(ui,/Prepare Kit Packing Plan/);
+test('v399 simplifies physical packing while keeping verified Kit completion',()=>{
+ assert.match(ui,/Equal school Kit manifest/);
+ assert.match(ui,/SchoolEqualPackingEditor/);
  assert.match(ui,/Mark Kit as Packed/);
- assert.match(ui,/action:"pack"/);
+ assert.match(ui,/action:"pack_schools"/);
  assert.match(ui,/action:"complete_school_kit"/);
- assert.match(ui,/action:"transfer_school_kit_target"/);
- assert.match(ui,/canManageLabels&&inspectedBox\.status==="draft"/);
+ assert.doesNotMatch(ui,/saveManifestLine|transferManifestTarget|Prepare Kit Packing Plan/);
 });

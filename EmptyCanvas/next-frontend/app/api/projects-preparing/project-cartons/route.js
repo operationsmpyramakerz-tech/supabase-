@@ -26,7 +26,7 @@ export async function GET(req){const auth=await gate("view");if(!auth.ok)return 
     }
     return reply({ok:true,...workspace});}catch(e){return failed(e);}}
 export async function POST(req){const auth=await gate("view");if(!auth.ok)return reply({ok:false,error:auth.error||"Access denied"},auth.status||403);
-  try{const b=await bodyOf(req);if(!["create","generate_school_kits","init_school_kit_plan","transfer_school_kit_target","pack_school_carton"].includes(b.action))return reply({ok:false,error:"Unknown action"},400);
+  try{const b=await bodyOf(req);if(["init_school_kit_plan","transfer_school_kit_target"].includes(b.action))return reply({ok:false,error:"Manual Kit planning/transfers are disabled. Use Box Distribution → Pack by School to create equal Kit contents."},409);if(!["create","generate_school_kits","pack_school_carton"].includes(b.action))return reply({ok:false,error:"Unknown action"},400);
     if(!preparingStageAllowed(auth.account,"boxes")&&!preparingStageAllowed(auth.account,"cartons"))return reply({ok:false,error:"Box Distribution or Cartons access required."},403);
     // A shared create endpoint may be used by either stage; enforce the
     // requesting stage separately so carton rights never open box-only views.

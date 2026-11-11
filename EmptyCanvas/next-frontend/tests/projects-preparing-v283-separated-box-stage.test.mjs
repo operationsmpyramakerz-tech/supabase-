@@ -33,7 +33,7 @@ test('production and boxes are isolated to their own modal tabs and preserve exi
  assert.match(production,/isBoxTab&&<ProjectBoxDistribution/);
  assert.match(production,/scope:isBoxTab\?"boxes":"receiving"/);
  assert.match(production,/action:"handoff"/);
- assert.match(read('components/preparing/ProjectBoxDistribution.jsx'),/action:"pack"/);
+ assert.match(read('components/preparing/ProjectBoxDistribution.jsx'),/action:"pack_schools"/);
 });
 test('Box Distribution packing and ready Kit Cartons are separately represented in percent',()=>{
  const base={testing:{items:[{required:10,tested:10,productionIntakeReceived:10}]},warehouse:{receiptLines:[{accepted_delta:10}]},production:{items:[{productionReceived:10,packedQty:6}],cartons:[{id:'a',status:'draft'},{id:'b',status:'ready'},{id:'c',status:'cancelled'}],cartonLines:[{carton_id:'a',packed_qty:4},{carton_id:'b',packed_qty:2},{carton_id:'c',packed_qty:20}]}};
