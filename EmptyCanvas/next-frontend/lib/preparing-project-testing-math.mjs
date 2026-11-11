@@ -5,7 +5,7 @@ export function testingChange(row, values) {
  const tested=Number(values.tested), oldTested=Number(row.tested||0);
  if (![tested,oldTested].every(Number.isSafeInteger)) throw new Error("Invalid tested quantity.");
  if (row.productionIntakeReceived != null && tested>oldTested && tested>Number(row.productionIntakeReceived)) throw new Error(`Tested cannot exceed Production Received (${row.productionIntakeReceived}).`);
- if (tested<oldTested && tested<Number(row.accepted||0)) throw new Error("Tested cannot be lower than the quantity already received by the warehouse.");
+ if (tested<oldTested && tested<Number(row.accepted||0)) throw new Error("Tested cannot be lower than the quantity already returned to the warehouse.");
  const testedDelta=tested-oldTested;
  if (Math.abs(testedDelta)>1000000) throw new Error("Maximum change per component is 1,000,000 units.");
  return testedDelta?{itemId:row.id,testedDelta,expectedTested:oldTested}:null;

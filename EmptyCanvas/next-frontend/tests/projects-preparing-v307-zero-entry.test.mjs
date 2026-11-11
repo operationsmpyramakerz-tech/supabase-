@@ -28,7 +28,7 @@ test('shared numeric component shows a blank on focus only for 0, restores on un
 test('all five project stage quantity editors use the zero-replacement input',()=>{
   const expectations={
     'ProjectTesting.jsx':['Tested quantity'],
-    'ProjectWarehouseReceiving.jsx':['Received ${row.product_name}'],
+    'ProjectWarehouseReceiving.jsx':['Returned ${row.product_name}'],
     'ProjectProductionReceiving.jsx':['Operations Received ${r.name}'],
     'ProjectBoxDistribution.jsx':['Packed ${row.name}'],
     'ProjectKitCartons.jsx':['Packed ${c.product_name}','Quantity to allocate'],

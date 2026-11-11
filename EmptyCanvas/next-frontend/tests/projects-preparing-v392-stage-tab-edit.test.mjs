@@ -20,7 +20,7 @@ test('all tabs have individual registered grants, accepted by the database key c
   }
   assert.ok(ACTIVE_PILOT_FEATURE_KEYS.length<250);
   assert.equal(preparingTabKey('production','not-received'),'preparing.tab.production.not_received');
-  assert.equal(preparingTabKey('boxes','not-packed'),'preparing.tab.boxes.not_packed');
+  assert.equal(Object.hasOwn(PREPARING_EDIT_TAB_LABELS.boxes,'not-packed'),false);
 });
 test('new tab restrictions opt in; existing users retain their current rights',()=>{
   const old=account(baseline);
@@ -46,14 +46,14 @@ test('tab membership exactly matches current row status (including partial recei
   assert.equal(preparingRowMatchesTab('testing','pending',{required:5,tested:4,productionIntakeReceived:4}),false);
   assert.equal(preparingRowMatchesTab('testing','done',{required:5,tested:5}),true);
   assert.equal(preparingRowMatchesTab('testing','done',{required:5,tested:4}),false);
-  assert.equal(preparingRowMatchesTab('warehouse','short',{required_qty:5,accepted:4}),true);
+  assert.equal(preparingRowMatchesTab('warehouse','short',{required_qty:5,accepted:4}),false);
   assert.equal(preparingRowMatchesTab('warehouse','received',{accepted:4}),true);
-  assert.equal(preparingRowMatchesTab('warehouse','available',{readyToReceive:1}),true);
+  assert.equal(preparingRowMatchesTab('warehouse','available',{tested:5,accepted:4}),true);
   assert.equal(preparingRowMatchesTab('production','not-received',{productionReceived:0}),true);
   assert.equal(preparingRowMatchesTab('production','received',{productionReceived:4}),true);
   assert.equal(preparingRowMatchesTab('boxes','available',{productionReceived:4,unpacked:1}),true);
   assert.equal(preparingRowMatchesTab('boxes','packed',{packedQty:1}),true);
-  assert.equal(preparingRowMatchesTab('boxes','not-packed',{productionReceived:4,packedQty:0}),true);
+  assert.equal(preparingRowMatchesTab('boxes','not-packed',{productionReceived:4,packedQty:0}),false);
   assert.equal(preparingRowMatchesTab('cartons','draft',{status:'draft'}),true);
   assert.equal(preparingRowMatchesTab('cartons','ready',{status:'draft'}),false);
   assert.equal(preparingRowMatchesTab('production','unknown',{productionReceived:4}),false);

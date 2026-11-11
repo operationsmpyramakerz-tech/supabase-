@@ -17,8 +17,8 @@ test('All five project stages use the same status tabs, not a filter popover',()
 test('Stage tab options retain the original filtering rules and display all first',()=>{
  const testing=ui('ProjectTesting'),warehouse=ui('ProjectWarehouseReceiving'),production=ui('ProjectProductionReceiving'),boxes=ui('ProjectBoxDistribution');
  for(const token of ['value:"all",label:"All Components"','value:"pending",label:"Remaining to Test"','value:"done",label:"Fully Tested"','testingReadyToTest(r)>0'])assert.ok(testing.includes(token));
- for(const token of ['value:"all",label:"All Components"','value:"short",label:"Warehouse Shortage"','value:"available",label:"Available to Receive"','filterWarehouseReceivingRows('])assert.ok(warehouse.includes(token));
- const warehouseFilter=read("lib/preparing-warehouse-view.mjs");assert.ok(warehouseFilter.includes("row.accepted<row.required_qty"));assert.ok(warehouseFilter.includes("row.readyToReceive>0"));
+ for(const token of ['value:"all",label:"Tested Components"','value:"available",label:"Ready to Return"','value:"received",label:"Returned"','filterWarehouseReceivingRows('])assert.ok(warehouse.includes(token));
+ const warehouseFilter=read("lib/preparing-warehouse-view.mjs");assert.ok(warehouseFilter.includes("qty(row.tested)>0||qty(row.accepted)>0"));assert.ok(warehouseFilter.includes("qty(row.tested)-qty(row.accepted)"));
  assert.match(production,/filterProductionReceivingRows\(/);assert.match(boxes,/filterBoxDistributionRows\(items,filter\)/);
  assert.match(production,/onReturnToBoxes=\{\(\)=>setTab\("boxes"\)\}/);
  for(const token of ['All Cartons','Draft','Ready','c.status!=="cancelled"','c.status===cartonFilter','visibleCartons.map'])assert.ok(ui('ProjectKitCartons').includes(token));
@@ -28,7 +28,7 @@ test('Warehouse allocation screen and new allocation controls are removed withou
  for(const old of ['School Allocation','allocateBatch','allocateItem','assignDraft','tab==="allocation"'])assert.ok(!source.includes(old),old);
  assert.match(source,/warehouseReceiptLimit\(row.accepted,draft\[row.id\],row.tested,row.allocated\)/);
  assert.match(source,/state\.allocations\|\|\[\]/);
- assert.match(source,/Receiving History/);
+ assert.match(source,/Return History/);
  assert.match(ui('ProjectKitCartons'),/function allocate\(/);
 });
 test('Changed JSX parses and shared style supports responsive tabs, dark theme and cache refresh',()=>{

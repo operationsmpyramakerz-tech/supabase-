@@ -18,7 +18,7 @@ test('single tested input: append delta, guard previously received stock, valida
 test('tested-only counts drive warehouse availability and open stage progress; closure still overrides',()=>{
  const [row]=warehouseReceivingBalances([{id:'i',accepted:2}],[{item_id:'i',tested:4}]);
  assert.equal(row.readyToReceive,2);assert.equal(warehouseReceiptLimit(2,'4',row.tested),2);
- assert.throws(()=>warehouseReceiptLimit(2,'5',row.tested),/Only 2 Tested/);
+ assert.throws(()=>warehouseReceiptLimit(2,'5',row.tested),/Only 2 tested/);
  const testing={items:[{required:8,tested:4}]};
  assert.equal(calculateProjectPreparationProgress({testing}).stages[1],50);
  assert.equal(calculateProjectPreparationProgress({testing,closures:{testing:true}}).stages[1],100);

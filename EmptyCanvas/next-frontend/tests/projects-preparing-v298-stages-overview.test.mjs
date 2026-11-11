@@ -43,7 +43,7 @@ test("Stages has all five clickable operational step cards, live percentages, an
   assert.match(stages, /projectStageError/);
   assert.match(stages, /setProjectStageRevision\(n=>n\+1\)/);
   assert.match(stages, /StepAccessAvatars access=\{stepAccess\?\.\[step\.key\]\}/);
-  for (const title of ["Project Testing", "Warehouse Receiving", "Production Receiving", "Box Distribution", "Project Kit Cartons"]) {
+  for (const title of ["Project Testing", "Warehouse Return", "Production Receiving", "Box Distribution", "Project Kit Cartons"]) {
     assert.match(ui, new RegExp(`title:"${title}"`));
   }
 });

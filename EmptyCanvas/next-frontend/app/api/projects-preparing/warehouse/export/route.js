@@ -34,15 +34,15 @@ export async function POST(request){
     members.get(line.item_id).set(receipt.created_by_id,{id:receipt.created_by_id,name:receipt.created_by_name});
    }
   }
-  const groups=warehouseGroups(items.map(row=>({...row,receivedBy:[...(members.get(row.id)?.values()||[])]})),state.kitGroups).filter(g=>!visible.size||visible.has(g.key));
-  const doc=new PDFDocument({size:"A4",layout:"landscape",margin:32,bufferPages:true,info:{Title:body.blank?"Blank Warehouse Receipt":"Project Warehouse Receipts",Creator:"Projects Preparing ERP"}});
+  const groups=warehouseGroups(items.filter(row=>Number(row.tested)>0||Number(row.accepted)>0).map(row=>({...row,receivedBy:[...(members.get(row.id)?.values()||[])]})),state.kitGroups).filter(g=>!visible.size||visible.has(g.key));
+  const doc=new PDFDocument({size:"A4",layout:"landscape",margin:32,bufferPages:true,info:{Title:body.blank?"Blank Warehouse Return":"Project Warehouse Returns",Creator:"Projects Preparing ERP"}});
   const done=collect(doc),left=32,right=doc.page.width-32,available=right-left;
   const base=columns.reduce((sum,key)=>sum+widths[key],0),scale=available/base,specs=columns.map(key=>({key,width:widths[key]*scale}));
   const now=new Date().toISOString().slice(0,10);
   let y=32;
   function title(){doc.rect(left,y,available,4).fill("#ed8729");y+=12;
-   doc.fillColor("#18253b").font("Helvetica-Bold").fontSize(15).text("PROJECT WAREHOUSE RECEIVING",left,y,{width:available});y+=22;
-   doc.fillColor("#647386").font("Helvetica").fontSize(9).text(`${body.blank?"BLANK PHYSICAL RECEIPT - COMPLETE BY HAND":"SAVED RECEIPTS"}  |  ${now}`,left,y,{width:available});y+=17;
+   doc.fillColor("#18253b").font("Helvetica-Bold").fontSize(15).text("PROJECT WAREHOUSE RETURN",left,y,{width:available});y+=22;
+   doc.fillColor("#647386").font("Helvetica").fontSize(9).text(`${body.blank?"BLANK RETURN FORM - COMPLETE BY HAND":"SAVED WAREHOUSE RETURNS"}  |  ${now}`,left,y,{width:available});y+=17;
    doc.strokeColor("#e4e8ef").moveTo(left,y).lineTo(right,y).stroke();y+=12;
   }
   function page(){doc.addPage();y=32;title();}
@@ -70,10 +70,10 @@ export async function POST(request){
    }
    y+=13;
   }
-  if(body.blank){ensure(32);doc.font("Helvetica").fontSize(8).fillColor("#69778b").text("Warehouse voucher number: ______________________  Receiver: ______________________  Signature: ______________________",left,y,{width:available});}
+  if(body.blank){ensure(32);doc.font("Helvetica").fontSize(8).fillColor("#69778b").text("Return reference: ______________________  Warehouse receiver: ______________________  Signature: ______________________",left,y,{width:available});}
   const pages=doc.bufferedPageRange();
   for(let i=pages.start;i<pages.start+pages.count;i++){doc.switchToPage(i);doc.font("Helvetica").fontSize(8).fillColor("#98a2b3").text(`Projects Preparing | ${i+1} / ${pages.count}`,left,doc.page.height-42,{width:available,align:"right",lineBreak:false});}
   doc.end();const buffer=await done;
-  return new Response(buffer,{status:200,headers:{"Content-Type":"application/pdf","Content-Disposition":`attachment; filename="warehouse-${body.blank?"blank":"received"}-${now}.pdf"`,"Cache-Control":"private, no-store","X-Content-Type-Options":"nosniff"}});
- }catch(e){console.error("[preparing:warehouse:export]",e?.message||e);return reply(e?.message||"Warehouse PDF export failed.",Number(e?.status)||500);}
+  return new Response(buffer,{status:200,headers:{"Content-Type":"application/pdf","Content-Disposition":`attachment; filename="warehouse-return-${body.blank?"blank":"values"}-${now}.pdf"`,"Cache-Control":"private, no-store","X-Content-Type-Options":"nosniff"}});
+ }catch(e){console.error("[preparing:warehouse:export]",e?.message||e);return reply(e?.message||"Warehouse Return PDF export failed.",Number(e?.status)||500);}
 }

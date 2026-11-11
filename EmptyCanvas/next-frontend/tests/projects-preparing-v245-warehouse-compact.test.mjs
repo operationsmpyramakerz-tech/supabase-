@@ -11,28 +11,28 @@ const css=read('public/css/projects-preparing.css');
 test('Warehouse component summary shows just Available to Receive, Received and Received By',()=>{
  const block=ui.split('<div className="pr-wr-metrics">')[1]?.split('{rowError[row.id]')[0];
  assert.ok(block);
- assert.match(block,/>Available to Receive</);
- assert.match(block,/>Received</);
- assert.match(block,/>Received By</);
+ assert.match(block,/>Ready to Return</);
+ assert.match(block,/>Returned</);
+ assert.match(block,/>Recorded By</);
  assert.doesNotMatch(block,/>Passed Testing</);
  assert.doesNotMatch(block,/>Allocated</);
  assert.equal((block.match(/className="pr-wr-stat/g)||[]).length,3);
- assert.match(ui, /\["Project Required",totals.required,"required","◆"\]/);
- assert.match(ui, /\["Received",totals.accepted,"received","↓"\]/);
- assert.match(ui, /\["Available to Receive",totals.readyToReceive,"available","inbox"\]/);
+ assert.match(ui, /\["Tested",totals.tested,"required","◆"\]/);
+ assert.match(ui, /\["Returned",totals.accepted,"received","↓"\]/);
+ assert.match(ui, /\["Ready to Return",totals.readyToReceive,"available","inbox"\]/);
 });
 
 test('Edit toggles the same Received value into an input and requires warehouse receiving permission',()=>{
  assert.match(ui, /setDraft\(prev=>\(\{\.\.\.prev,\[row\.id\]:String\(row\.accepted\)\}\)\)/);
  assert.match(ui, /active\?<StageQuantityInput step="1" min="0"/);
- assert.match(ui, /aria-label=\{`Received \$\{row.product_name\}`\}/);
+ assert.match(ui, /aria-label=\{`Returned \$\{row.product_name\}`\}/);
  assert.match(ui, /disabled=\{busy\} title=\{!canReceive/);
- assert.match(ui, /Enable Warehouse Receiving permission in Users Center/);
+ assert.match(ui, /Enable Warehouse Return permission in Users Center/);
  assert.match(ui, /if\(!canReceive\)/);
  assert.match(ui, /enableReceipt\(row\);\}\}>Edit/);
  assert.match(ui, /onClick=\{\(\)=>saveReceipt\(row\)\}>Save/);
  assert.equal(warehouseReceiptLimit(0,'2',2,0),2);
- assert.throws(()=>warehouseReceiptLimit(0,'3',2,0),/Tested/);
+ assert.throws(()=>warehouseReceiptLimit(0,'3',2,0),/tested/);
  assert.throws(()=>warehouseReceiptLimit(2,'0',2,1),/allocated/);
 });
 

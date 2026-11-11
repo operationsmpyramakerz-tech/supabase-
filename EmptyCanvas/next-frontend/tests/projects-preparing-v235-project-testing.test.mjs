@@ -36,8 +36,8 @@ test("project testing route is strictly feature-gated",()=>{
 });
 test("testing is a separate project-level screen like warehouse receiving",()=>{
  assert.match(shell,/ProjectTesting/);
- assert.ok(shell.indexOf('title:"Project Testing"')<shell.indexOf('title:"Warehouse Receiving"'));
- assert.ok(shell.indexOf('title:"Warehouse Receiving"')<shell.indexOf('title:"Project Kit Cartons"'));
+ assert.ok(shell.indexOf('title:"Project Testing"')<shell.indexOf('title:"Warehouse Return"'));
+ assert.ok(shell.indexOf('title:"Warehouse Return"')<shell.indexOf('title:"Project Kit Cartons"'));
  for(const label of ["Tested","Remaining","Testing History","Export"]){
   assert.ok(ui.includes(label),label);
  }

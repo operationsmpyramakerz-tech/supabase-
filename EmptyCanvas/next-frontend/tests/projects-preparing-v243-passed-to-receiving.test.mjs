@@ -13,7 +13,7 @@ test('Tested testing creates available-to-receive even when warehouse received i
  assert.equal(row.accepted,0);
  assert.equal(row.available,0); // separate warehouse stock for school allocation
  assert.equal(warehouseReceiptLimit(0,'2',row.tested,row.allocated),2);
- assert.throws(()=>warehouseReceiptLimit(0,'3',row.tested,row.allocated),/Only 2 Tested/);
+ assert.throws(()=>warehouseReceiptLimit(0,'3',row.tested,row.allocated),/Only 2 tested/);
 });
 
 test('Partial receipt shrinks available to receive, but creates school allocation stock',()=>{
@@ -21,7 +21,7 @@ test('Partial receipt shrinks available to receive, but creates school allocatio
  assert.equal(row.readyToReceive,1);
  assert.equal(row.available,1);
  assert.equal(warehouseReceiptLimit(1,'2',row.tested,row.allocated),1);
- assert.throws(()=>warehouseReceiptLimit(1,'3',row.tested,row.allocated),/Only 1 Tested/);
+ assert.throws(()=>warehouseReceiptLimit(1,'3',row.tested,row.allocated),/Only 1 tested/);
 });
 
 test('School allocation does not spend testing tested availability; corrections may not undo allocated stock',()=>{
@@ -40,10 +40,10 @@ test('UI & CSV/PDF export use Tested to calculate remaining receipt capacity and
  assert.equal(warehouseExportValue(groups[1].items[0],'available'), '2');
  assert.equal(warehouseExportValue(groups[0].items[0],'tested'),'3');
  assert.ok(WAREHOUSE_COLUMNS.some(c=>c.key==='tested'));
- assert.match(WAREHOUSE_COLUMNS.find(c=>c.key==='available').label,/Receive/);
+ assert.match(WAREHOUSE_COLUMNS.find(c=>c.key==='available').label,/Return/);
  const ui=read('components/preparing/ProjectWarehouseReceiving.jsx');
  assert.match(ui,/warehouseReceiptLimit\(row.accepted,draft\[row.id\],row.tested,row.allocated\)/);
- assert.match(ui,/Available to Receive/);
+ assert.match(ui,/Ready to Return/);
  assert.match(read('app/api/projects-preparing/warehouse/export/route.js'),/warehouseReceivingBalances/);
 });
 

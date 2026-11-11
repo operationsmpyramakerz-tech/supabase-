@@ -7,7 +7,7 @@ import {warehouseGroups} from "../../../../../lib/preparing-warehouse-view.mjs";
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
 export const revalidate=0;
-const KEYS={name:"Component",code:"Code",required:"Project Required",warehouse:"Warehouse Received",production:"Operations Received",available:"Available for Operations",packed:"Packed",unpacked:"Unpacked",receivedBy:"Received By",signature:"Signature"};
+const KEYS={name:"Component",code:"Code",required:"Project Required",warehouse:"Warehouse Returned",production:"Operations Received",available:"Available for Operations",packed:"Packed",unpacked:"Unpacked",receivedBy:"Received By",signature:"Signature"};
 const WIDTH={name:210,code:65,required:70,warehouse:90,production:90,available:90,packed:65,unpacked:70,receivedBy:110,signature:105};
 const fail=(message,status=400)=>Response.json({ok:false,error:message},{status,headers:{"Cache-Control":"private, no-store"}});
 const save=doc=>new Promise((resolve,reject)=>{const buffers=[];doc.on("data",d=>buffers.push(d));doc.on("end",()=>resolve(Buffer.concat(buffers)));doc.on("error",reject);});

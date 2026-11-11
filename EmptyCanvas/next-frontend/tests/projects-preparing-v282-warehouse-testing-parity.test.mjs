@@ -13,11 +13,11 @@ test('Warehouse matches Testing KPI tile design without changing quantities',()=
  for(const key of ['required','received','available'])assert.match(wh,new RegExp(`pr-pt-stat--\\$\\{key\\}|pr-pt-stat--`));
  assert.match(css,/\.pr-warehouse-parity \.pr-wh-stats\.pr-pt-stat-grid \{grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
  assert.match(css,/\.pr-warehouse-parity \.pr-wh-stats\.pr-pt-stat-grid>\.pr-pt-stat--available/);
- assert.match(wh,/totals\.required/);assert.match(wh,/totals\.accepted/);assert.match(wh,/totals\.readyToReceive/);
+ assert.match(wh,/totals\.tested/);assert.match(wh,/totals\.accepted/);assert.match(wh,/totals\.readyToReceive/);
 });
 
 test('Warehouse has icon-only close, solid kit icons and initially collapsed groups',()=>{
- assert.match(wh,/aria-label="Close Warehouse Receiving"/);
+ assert.match(wh,/aria-label="Close Warehouse Return"/);
  assert.doesNotMatch(wh,/>Close<\/button>/);
  assert.match(wh,/warehouseKitAppearance\(group\.name\)/);
  assert.match(wh,/pr-pt-kit--\$\{appearance\.tone\}/);
@@ -29,7 +29,7 @@ test('Warehouse has icon-only close, solid kit icons and initially collapsed gro
 test('Warehouse retains receiving workflow and shows Download plus accessible history icon',()=>{
  assert.doesNotMatch(wh,/School Allocation/);assert.match(wh,/<StageFilterTabs/);
  assert.match(wh,/setTab\(tab==="history"\?"receiving":"history"\)/);
- assert.match(wh,/Movement History \(\$\{historyEntries\.length\} changes\)/);
+ assert.match(wh,/Return History \(\$\{historyEntries\.length\} changes\)/);
  assert.match(wh,/className="pr-stage-filter-actions"/);
  assert.match(wh,/className="pr-pt-download-button"/);
  assert.match(wh,/onClick=\{\(\)=>setShowExport\(true\)\}/);

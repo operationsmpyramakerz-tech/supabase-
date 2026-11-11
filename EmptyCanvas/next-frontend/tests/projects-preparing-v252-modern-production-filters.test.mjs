@@ -15,8 +15,8 @@ test("Box Distribution defaults to available inventory, not already packed or ze
  assert.deepEqual(filterBoxDistributionRows(records).map(r=>r.id),["ready","partially-packed"]);
  assert.deepEqual(filterBoxDistributionRows(records,"available").map(r=>r.id),["ready","partially-packed"]);
 });
-test("Not Packed excludes production stock already packed in one or more boxes",()=>{
- assert.deepEqual(filterBoxDistributionRows(records,"not-packed").map(r=>r.id),["ready"]);
+test("Removed Not Packed tab no longer exposes a filter",()=>{
+ assert.deepEqual(filterBoxDistributionRows(records,"not-packed").map(r=>r.id),[]);
 });
 test("All Components permits review and correction of fully packed items without changing ledger",()=>{
  assert.equal(filterBoxDistributionRows(records,"all"),records);
@@ -34,7 +34,7 @@ test("Box filter and Production filter share stage tabs and remain separate stag
  assert.match(production,/<StageFilterTabs/);
  assert.match(production,/\[filter,setFilter\]=useState\("available"\)/);assert.match(production,/filter=\{filter\} setFilter=\{setFilter\}/);
  assert.match(boxes,/filterBoxDistributionRows\(items,filter\)/);
- assert.match(boxes,/value:"not-packed",label:"Not Packed"/);
+ assert.doesNotMatch(boxes,/value:"not-packed",label:"Not Packed"/);
  assert.match(boxes,/value:"all",label:"All Components"/);
  assert.match(boxes,/setEditing\(""\)/);
  assert.match(production,/value:"not-received",label:"Not Received"/);

@@ -5,9 +5,9 @@ import { testingReadyToTest } from "./preparing-project-testing-math.mjs";
 export const PREPARING_EDIT_TAB_LABELS = Object.freeze({
   intake: Object.freeze({'all': 'All Components', 'pending': 'Remaining to Receive', 'received': 'Received'}),
   testing: Object.freeze({'all': 'All Components', 'pending': 'Remaining to Test', 'done': 'Fully Tested'}),
-  warehouse: Object.freeze({'all': 'All Components', 'short': 'Warehouse Shortage', 'available': 'Available to Receive', 'received': 'Received'}),
+  warehouse: Object.freeze({'all': 'Tested Components', 'available': 'Ready to Return', 'received': 'Returned'}),
   production: Object.freeze({'all': 'All Components', 'available': 'Available to Receive', 'not-received': 'Not Received', 'received': 'Received'}),
-  boxes: Object.freeze({'all': 'All Components', 'available': 'Available to Pack', 'not-packed': 'Not Packed', 'packed': 'Packed'}),
+  boxes: Object.freeze({'all': 'All Components', 'available': 'Available to Pack', 'packed': 'Packed'}),
   cartons: Object.freeze({'all': 'All Cartons', 'draft': 'Draft', 'ready': 'Ready'}),
 });
 export const PREPARING_EDIT_TAB_MARKER = 'preparing.tabs.__granular';
@@ -18,7 +18,7 @@ export function preparingTabKnown(stage, tab) {
 const num = value => Number(value) || 0;
 export function preparingRowMatchesTab(stage, tab, row) {
   if (!preparingTabKnown(stage, tab) || !row) return false;
-  if (tab === 'all') return true;
+  if (tab === 'all') return stage !== 'warehouse' || num(row.tested) > 0 || num(row.accepted) > 0;
   if (stage === 'intake' || stage === 'testing') {
     const required = Math.max(0, num(row.projectTotalRequired ?? row.required));
     const received = Math.max(0, num(row.tested));
@@ -27,8 +27,7 @@ export function preparingRowMatchesTab(stage, tab, row) {
     if (tab === 'done') return required > 0 && required <= received;
   }
   if (stage === 'warehouse') {
-    if (tab === 'short') return num(row.accepted) < num(row.required_qty);
-    if (tab === 'available') return num(row.readyToReceive) > 0;
+    if (tab === 'available') return Math.max(0, num(row.tested) - num(row.accepted)) > 0;
     if (tab === 'received') return num(row.accepted) > 0;
   }
   if (stage === 'production') {
@@ -39,7 +38,6 @@ export function preparingRowMatchesTab(stage, tab, row) {
   if (stage === 'boxes') {
     const unpacked = Math.max(0, num(row.unpacked));
     if (tab === 'available') return num(row.productionReceived) > 0 && unpacked > 0;
-    if (tab === 'not-packed') return num(row.productionReceived) > 0 && num(row.packedQty) === 0;
     if (tab === 'packed') return num(row.packedQty) > 0;
   }
   if (stage === 'cartons') return row.status === tab;

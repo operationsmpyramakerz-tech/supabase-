@@ -8,7 +8,7 @@ export function productionBalance(warehouseReceived,productionReceived,packedQty
 export function productionReceiptDelta(current,next,warehouse,packed){
  const value=Number(next);
  if(String(next).trim()===""||!Number.isSafeInteger(value)||value<0||value>1000000000)throw Error("Enter a non-negative whole number.");
- if(value>warehouse)throw Error(`Operations Received cannot exceed Warehouse Received (${warehouse}).`);
+ if(value>warehouse)throw Error(`Operations Received cannot exceed Warehouse Returned (${warehouse}).`);
  if(value<packed)throw Error(`Operations Received cannot be less than units packed into boxes (${packed}).`);
  const delta=value-current;
  if(Math.abs(delta)>1000000)throw Error("Change cannot exceed 1,000,000 units.");

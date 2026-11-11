@@ -13,7 +13,7 @@ const readBody=async req=>{const body=await req.json().catch(()=>null);if(!body|
 export async function GET(req) {
   const auth=await gate("view");if(!auth.ok)return reply({ok:false,error:auth.error||"Access denied."},auth.status||403);
   if(!preparingStageReadable(auth.account,"warehouse") && !(await gate("manage")).ok)
-    return reply({ok:false,error:"Warehouse stage access is not allowed."},403);
+    return reply({ok:false,error:"Warehouse Return stage access is not allowed."},403);
   try{return reply({ok:true,...await warehouseWorkspace(new URL(req.url).searchParams.get("projectId"))});}catch(e){return errorReply(e);}
 }
 export async function POST(req) {

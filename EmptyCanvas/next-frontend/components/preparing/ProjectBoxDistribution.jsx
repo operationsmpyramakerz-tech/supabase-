@@ -90,7 +90,6 @@ export default function ProjectBoxDistribution({projectId,rows,kitGroups,request
  const groups=useMemo(()=>warehouseGroups(filteredItems.filter(r=>`${r.name} ${r.code}`.toLowerCase().includes(search.toLowerCase())),kitGroups),[filteredItems,kitGroups,search]);
  const filterOptions=useMemo(()=>[
   {value:"available",label:"Available to Pack",hint:"Units waiting to be boxed",count:items.filter(r=>r.unpacked>0&&r.productionReceived>0).length},
-  {value:"not-packed",label:"Not Packed",hint:"Production stock with no packed units",count:items.filter(r=>r.productionReceived>0&&r.packedQty===0).length},
   {value:"packed",label:"Packed",hint:"Components with at least one unit in an active box",count:items.filter(r=>r.packedQty>0).length},
   {value:"all",label:"All Components",hint:"Including fully packed items",count:items.length},
  ],[items]);

@@ -11,7 +11,7 @@ test('Operations Receiving retains ledger actions and a separate Box Distributio
  for(const pattern of [/action:"handoff"/,/productionReceiptDelta\(/,/isBoxTab&&<ProjectBoxDistribution/,/scope:isBoxTab\?"boxes":"receiving"/,/view="receiving"/,/Box History/,/mode=\{tab==="box-history"\?"history":"boxes"\}/])assert.match(jsx,pattern);
 });
 test('Production summary is black, orange and yellow Solid without top-line accents',()=>{
- for(const label of ['Warehouse Received','Operations Received','Available to Receive'])assert.ok(jsx.includes(label));
+ for(const label of ['Warehouse Returned','Operations Received','Available to Receive'])assert.ok(jsx.includes(label));
  for(const pattern of [/pr-production-parity/,/pr-pt-stat--\$\{tone\}/,/pr-pt-stat-icon/,/pr-pt-stat-copy/,/--pt-card-bg:#f5c536/,/border-top:1px solid var\(--pt-card-border\)/])assert.match(jsx+css,pattern);
 });
 test('Production header, Download and history controls have accessible icons',()=>{

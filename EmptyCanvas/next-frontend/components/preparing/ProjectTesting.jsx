@@ -178,7 +178,7 @@ export default function ProjectTesting({projectId,projectName,canTest,editTabs={
      const isEditing=!!editing[r.id],v=draft[r.id]||{},coverage=testingCoverage(r);
      return <article key={r.id} className={`pr-pt-row${isEditing?" is-editing":""}`}>
       <div className="pr-pt-heading">
-       <div className="pr-pt-name"><div className="pr-pt-name-inline"><strong title={r.code?`Product code: ${r.code}`:undefined}>{r.name}</strong></div>{r.mismatch&&<small className="pr-pt-warning">Historical warehouse receipt exceeds tested quantity; review before handover.</small>}</div>
+       <div className="pr-pt-name"><div className="pr-pt-name-inline"><strong title={r.code?`Product code: ${r.code}`:undefined}>{r.name}</strong></div>{r.mismatch&&<small className="pr-pt-warning">Historical warehouse return exceeds tested quantity; review before handover.</small>}</div>
        <div className="pr-pt-required"><span title="Received in the preceding stage">Available to Test: {pretty(testingReadyToTest(r))}</span><span>Required</span><strong>{pretty(coverage.required)}</strong></div>
       </div>
       <div className="pr-pt-metrics">

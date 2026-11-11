@@ -3,18 +3,19 @@ import {testingGroups} from "./preparing-project-testing-grouping.mjs";
 const qty=v=>Number(v)||0;
 export const WAREHOUSE_COLUMNS=[
  {key:"name",label:"Component",fixed:true},{key:"code",label:"Code"},
- {key:"required",label:"Required"},{key:"tested",label:"Tested"},{key:"accepted",label:"Received"},
- {key:"allocated",label:"Allocated"},{key:"available",label:"Available to Receive"},
- {key:"remaining",label:"Remaining"},{key:"receivedBy",label:"Received By"},
+ {key:"required",label:"Project Required"},{key:"tested",label:"Tested"},{key:"accepted",label:"Returned"},
+ {key:"available",label:"Ready to Return"},{key:"receivedBy",label:"Recorded By"},
  {key:"signature",label:"Signature"},
 ];
-// Received includes any positive net receipt, even when the item is partly received.
+// Warehouse Return is ONLY for tested components, and the returned balance is
+// the existing append-only warehouse receipt ledger. A partly returned item can
+// be in both Ready to Return and Returned until its whole tested batch is back.
 export function filterWarehouseReceivingRows(rows,filter="all"){
- const items=Array.isArray(rows)?rows:[];
- if(filter==="short")return items.filter(row=>row.accepted<row.required_qty);
- if(filter==="available")return items.filter(row=>row.readyToReceive>0);
- if(filter==="received")return items.filter(row=>Number(row.accepted)>0);
- return items;
+ const items=(Array.isArray(rows)?rows:[]).filter(row=>qty(row.tested)>0||qty(row.accepted)>0);
+ if(filter==="available")return items.filter(row=>Math.max(0,qty(row.tested)-qty(row.accepted))>0);
+ if(filter==="received")return items.filter(row=>qty(row.accepted)>0);
+ if(filter==="all")return items;
+ return [];
 }
 export function warehouseGroups(rows=[],kitGroups=[]){
  return testingGroups(rows.map(row=>({
@@ -27,16 +28,17 @@ export function warehouseExportValue(row,key,blank=false){
  if(key==="name")return row.name||"";
  if(key==="code")return row.code||"";
  if(key==="required")return String(qty(row.required));
+ if(key==="tested")return String(qty(row.tested));
  if(blank)return "";
- if(key==="remaining")return String(Math.max(0,qty(row.projectTotalRequired??row.required)-qty(row.accepted)));
+ if(key==="remaining")return String(Math.max(0,qty(row.tested)-qty(row.accepted)));
  if(key==="receivedBy")return (row.receivedBy||[]).map(person=>person.name).join("; ");
- if(key==="available")return String(qty(row.readyToReceive??row.available));
+ if(key==="available")return String(Math.max(0,qty(row.tested)-qty(row.accepted)));
  return String(qty(row[key]));
 }
 export function warehouseReceiptDelta(current,next){
  const value=Number(next);
  if(String(next).trim()===""||!Number.isSafeInteger(value)||value<0||value>1000000000)
-  throw Error("Received quantity must be a non-negative whole number.");
+  throw Error("Returned quantity must be a non-negative whole number.");
  const diff=value-qty(current);
  if(Math.abs(diff)>1000000)throw Error("Change cannot exceed 1,000,000 units in one transaction.");
  return diff;

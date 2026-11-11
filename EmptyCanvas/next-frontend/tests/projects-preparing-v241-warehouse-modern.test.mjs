@@ -52,7 +52,7 @@ test("Export values/blank CSV and PDF supports columns, kits and signatures, not
  assert.equal(warehouseExportValue(row,"accepted",true),"");
  assert.equal(warehouseExportValue(row,"receivedBy",true),"");
  assert.equal(warehouseExportValue(row,"name",true),"DC Motor");
- assert.match(ui,/Export Warehouse Receiving/);
+ assert.match(ui,/Export Warehouse Return/);
  assert.match(exportRoute,/featureGate\(.*"preparing\.view"/);
  assert.match(exportRoute,/PDFDocument/);
  assert.match(exportRoute,/warehouseWorkspace\(body\.projectId\)/);

@@ -12,14 +12,15 @@ export function warehouseTotals(items, receiptLines, allocations) {
   for (const item of summaries.values()) item.available = item.accepted - item.allocated;
   return [...summaries.values()];
 }
-// Tested quantity is the upper bound for a NEW warehouse receipt. Physical
-// accepted stock remains a separate balance used by school allocations.
+// Tested units are the ONLY units eligible to return to warehouse. Existing
+// accepted receipt totals are the returned warehouse stock available for
+// subsequent Operations Receiving; no audit record is rewritten.
 export function warehouseReceivingBalances(rows, testBalances = []) {
   const testedById = new Map(testBalances.map(item => [item.item_id, n(item.tested)]));
   return rows.map(row => {
     const tested = testedById.get(row.id) || 0;
     const readyToReceive = Math.max(0, tested - n(row.accepted));
-    return { ...row, tested, readyToReceive };
+    return { ...row, tested, readyToReceive, readyToReturn: readyToReceive };
   });
 }
 
@@ -27,13 +28,13 @@ export function warehouseReceiptLimit(current, next, tested, allocated = 0) {
   const change = Number(next);
   const accepted = n(current), approved = n(tested);
   if (String(next).trim() === '' || !Number.isSafeInteger(change) || change < 0 || change > 1000000000)
-    throw new Error('Received quantity must be a non-negative whole number.');
+    throw new Error('Returned quantity must be a non-negative whole number.');
   if (Math.abs(change - accepted) > 1000000)
     throw new Error('Change cannot exceed 1,000,000 units in one transaction.');
   if (change > accepted && change - accepted > Math.max(0, approved - accepted))
-    throw new Error(`Only ${Math.max(0, approved - accepted)} Tested unit(s) are available to receive.`);
+    throw new Error(`Only ${Math.max(0, approved - accepted)} tested unit(s) are ready to return to the warehouse.`);
   if (change < n(allocated))
-    throw new Error('Received cannot be reduced below quantities already allocated to schools.');
+    throw new Error('Warehouse return cannot be reduced below quantities already allocated to schools.');
   return change - accepted;
 }
 
