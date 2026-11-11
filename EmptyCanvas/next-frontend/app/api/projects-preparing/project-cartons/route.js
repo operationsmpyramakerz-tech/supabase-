@@ -1,4 +1,5 @@
 import { preparingStageAllowed, preparingStageReadable } from "../../../../lib/preparing-stage-access";
+import { requirePreparingTabWrite } from "../../../../lib/preparing-tab-write-server";
 import { NextResponse } from "next/server";
 import { getDirectAccountGate } from "../../../../lib/products-auth";
 import { featureGate } from "../../../../lib/feature-permissions-server";
@@ -15,6 +16,11 @@ export async function GET(req){const auth=await gate("view");if(!auth.ok)return 
 export async function POST(req){const auth=await gate("view");if(!auth.ok)return reply({ok:false,error:auth.error||"Access denied"},auth.status||403);
   try{const b=await bodyOf(req);if(b.action!=="create")return reply({ok:false,error:"Unknown action"},400);
     if(!preparingStageAllowed(auth.account,"boxes")&&!preparingStageAllowed(auth.account,"cartons"))return reply({ok:false,error:"Box Distribution or Cartons access required."},403);
+    // A shared create endpoint may be used by either stage; enforce the
+    // requesting stage separately so carton rights never open box-only views.
+    const scope=b.scope==="boxes"?"boxes":"cartons";
+    if(!preparingStageAllowed(auth.account,scope))return reply({ok:false,error:`${scope} stage access required.`},403);
+    await requirePreparingTabWrite(auth.account,scope,b,{action:"create"});
     return reply({ok:true,result:await createProjectCarton(b,auth.account)},201);}catch(e){return failed(e);}}
 export async function PATCH(req){const auth=await gate("view");if(!auth.ok)return reply({ok:false,error:auth.error||"Access denied"},auth.status||403);
   try{const b=await bodyOf(req);const methods={set_line:setProjectCartonLine,seal:sealProjectCarton,
@@ -22,5 +28,9 @@ export async function PATCH(req){const auth=await gate("view");if(!auth.ok)retur
     if(!methods[b.action])return reply({ok:false,error:"Unknown action"},400);
     const shared=b.action==="rename"||b.action==="cancel";
     if(!preparingStageAllowed(auth.account,"cartons")&&!(shared&&preparingStageAllowed(auth.account,"boxes")))return reply({ok:false,error:"Project Kit Cartons access required."},403);
+    const scope=b.scope==="boxes"?"boxes":"cartons";
+    if(!preparingStageAllowed(auth.account,scope))return reply({ok:false,error:`${scope} stage access required.`},403);
+    if(scope==="boxes" && !shared)return reply({ok:false,error:"Only box label actions are available in Box Distribution."},403);
+    await requirePreparingTabWrite(auth.account,scope,b,{action:b.action});
     return reply({ok:true,result:await methods[b.action](b,auth.account)});
   }catch(e){return failed(e);}}

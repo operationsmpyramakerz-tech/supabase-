@@ -1,4 +1,5 @@
 import { preparingStageGate, preparingStageReadable } from "../../../../lib/preparing-stage-access";
+import { requirePreparingTabWrite } from "../../../../lib/preparing-tab-write-server";
 import {NextResponse} from "next/server";
 import {getDirectAccountGate} from "../../../../lib/products-auth";
 import {featureGate} from "../../../../lib/feature-permissions-server";
@@ -15,4 +16,4 @@ export async function GET(req){const auth=await gate("view");if(!auth.ok)return 
   const scoped=stage==="production"?{...data,cartons:[],cartonLines:[]}
     : {...data,handoffs:[]};
   return reply({ok:true,...scoped});}catch(e){return handle(e);}}
-export async function POST(req){const basic=await gate("view");if(!basic.ok)return reply({ok:false,error:basic.error||"Access denied."},basic.status||403);try{const body=await req.json();const target=body?.action==="handoff"?"production":body?.action==="pack"?"boxes":null;const auth=target?preparingStageGate(basic,target):basic;if(target&&!auth.ok)return reply({ok:false,error:auth.error||"Access denied."},auth.status||403);if(body?.action==="handoff")return reply({ok:true,result:await saveProductionHandoff(body,auth.account)});if(body?.action==="pack")return reply({ok:true,result:await saveProductionBox(body,auth.account)});return reply({ok:false,error:"Unknown production action."},400);}catch(e){return handle(e);}}
+export async function POST(req){const basic=await gate("view");if(!basic.ok)return reply({ok:false,error:basic.error||"Access denied."},basic.status||403);try{const body=await req.json();const target=body?.action==="handoff"?"production":body?.action==="pack"?"boxes":null;const auth=target?preparingStageGate(basic,target):basic;if(target&&!auth.ok)return reply({ok:false,error:auth.error||"Access denied."},auth.status||403);if(target)await requirePreparingTabWrite(auth.account,target,body,{action:body.action});if(body?.action==="handoff")return reply({ok:true,result:await saveProductionHandoff(body,auth.account)});if(body?.action==="pack")return reply({ok:true,result:await saveProductionBox(body,auth.account)});return reply({ok:false,error:"Unknown production action."},400);}catch(e){return handle(e);}}

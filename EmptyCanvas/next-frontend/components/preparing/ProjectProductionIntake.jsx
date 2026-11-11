@@ -47,9 +47,10 @@ function TestingIcon({name="box",size=20}){
  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{shapes[name]||shapes.box}</svg>;
 }
 
-export default function ProjectProductionIntake({projectId,projectName,canTest,request,onClose,closurePanel}) {
+export default function ProjectProductionIntake({projectId,projectName,canTest,editTabs={},request,onClose,closurePanel}) {
  const [data,setData]=useState(initial),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false);
  const [tab,setTab]=useState("testing"),[search,setSearch]=useState(""),[filter,setFilter]=useState("all");
+ const canEditTab = canTest && editTabs[filter] !== false;
  const [expandedKit,setExpandedKit]=useState(null),[showExport,setShowExport]=useState(false);
  const [exportColumns,setExportColumns]=useState(TESTING_EXPORT_COLUMNS.map(c=>c.key));
  const [exportGroups,setExportGroups]=useState([]),[exportBusy,setExportBusy]=useState(false);
@@ -95,7 +96,7 @@ export default function ProjectProductionIntake({projectId,projectName,canTest,r
   if(!lines.length){fail("Change at least one received quantity before saving.");return;}
   setBusy(true);setError("");setSuccess("");setRowError({});
   try{
-   await request("/intake","POST",{projectId,lines});
+   await request("/intake","POST",{projectId,editTab:filter,lines});
    // Save and refresh are separate. Never describe a committed save as failed on refresh errors.
    const savedIds=new Set(lines.map(line=>line.itemId));
    setEditing(old=>Object.fromEntries(Object.entries(old).filter(([id])=>!savedIds.has(id))));
@@ -158,7 +159,7 @@ export default function ProjectProductionIntake({projectId,projectName,canTest,r
    ].map(stat=><div className={`pr-pt-stat pr-pt-stat--${stat.key}`} key={stat.key}>
     <span className="pr-pt-stat-icon" aria-hidden="true">{stat.key==="remaining"?<TestingIcon name="clock" size={25}/>:stat.mark}</span><span className="pr-pt-stat-copy"><span>{stat.label}</span><strong>{pretty(stat.value)}</strong></span>
    </div>)}</div>
-   <StageFilterTabs label="Receiving component status" options={[{value:"all",label:"All Components"},{value:"pending",label:"Remaining to Receive"},{value:"received",label:"Received"}]} value={tab==="testing"?filter:""} onChange={value=>{setFilter(value);setTab("testing");}}/>
+   <StageFilterTabs label="Receiving component status" options={[{value:"all",label:"All Components"},{value:"pending",label:"Remaining to Receive"},{value:"received",label:"Received"}]} value={tab==="testing"?filter:""} onChange={value=>{setFilter(value);setTab("testing");setEditing({});setDraft({});}}/>
    <div className="pr-stage-filter-toolbar pr-pt-toolbar">
     {tab==="testing"?<label className="pr-search pr-pt-search"><TestingIcon name="search" size={18}/><input type="search" aria-label="Search receiving components" placeholder="Search component or code…" value={search} onChange={e=>setSearch(e.target.value)}/>{search&&<button type="button" className="pr-pt-clear-search" onClick={()=>setSearch("")} aria-label="Clear search" title="Clear search"><TestingIcon name="close" size={16}/></button>}</label>:<span className="pr-stage-history-label">Receiving History</span>}
     <div className="pr-stage-filter-actions"><button type="button" aria-pressed={tab==="history"} aria-label={`Receiving History (${entries.length} changes)`} title={`Receiving History (${entries.length})`} className={`pr-pt-history-button${tab==="history"?" is-active":""}`} onClick={()=>setTab(tab==="history"?"testing":"history")}><TestingIcon name="history" size={19}/></button><button type="button" className="pr-pt-download-button" aria-label="Download receiving report" onClick={()=>setShowExport(true)} disabled={!data.items.length}><TestingIcon name="download" size={18}/><span>Download</span></button></div>
@@ -190,7 +191,7 @@ export default function ProjectProductionIntake({projectId,projectName,canTest,r
         <div className="pr-pt-metric pr-pt-metric--remaining"><span>Remaining</span><strong className="pr-pt-metric-value pr-pt-number">{pretty(coverage.remaining)}</strong></div>
        </>}
        {!isEditing&&<div className="pr-pt-metric pr-pt-metric--testedBy"><span>Received By</span><div className="pr-pt-people">{(r.testedBy||[]).length?(r.testedBy||[]).map(person=><span className="pr-pt-person" title={person.name} key={person.id}>{person.name}</span>):<span className="pr-pt-person-empty">—</span>}</div></div>}
-       <div className="pr-pt-actions">{canTest&&(isEditing?<><button type="button" className="pr-secondary" disabled={busy} onClick={()=>cancel(r.id)}>Cancel</button><button type="button" className="pr-primary" disabled={busy} onClick={()=>save([r.id])}>{busy?"Saving…":"Save"}</button></>:<button type="button" className="pr-secondary" disabled={busy} onClick={()=>edit(r)}>Edit</button>)}</div>
+       <div className="pr-pt-actions">{canEditTab&&(isEditing?<><button type="button" className="pr-secondary" disabled={busy} onClick={()=>cancel(r.id)}>Cancel</button><button type="button" className="pr-primary" disabled={busy} onClick={()=>save([r.id])}>{busy?"Saving…":"Save"}</button></>:<button type="button" className="pr-secondary" disabled={busy} onClick={()=>edit(r)}>Edit</button>)}</div>
       </div>
       {rowError[r.id]&&<p className="pr-pt-inline-error" role="alert">{rowError[r.id]}</p>}
      </article>;

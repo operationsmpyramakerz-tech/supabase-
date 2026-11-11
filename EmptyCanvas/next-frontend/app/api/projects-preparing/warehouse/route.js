@@ -1,4 +1,5 @@
 import { preparingStageGate, preparingStageReadable, preparingStagesGranular } from "../../../../lib/preparing-stage-access";
+import { requirePreparingTabWrite } from "../../../../lib/preparing-tab-write-server";
 import { NextResponse } from "next/server";
 import { getDirectAccountGate } from "../../../../lib/products-auth";
 import { featureGate } from "../../../../lib/feature-permissions-server";
@@ -26,6 +27,7 @@ export async function POST(req) {
     : await gate(permission);
   if(!auth.ok)return reply({ok:false,error:auth.error||"Access denied."},auth.status||403);
   try{
+    if(body.action==="receive"||body.action==="capture")await requirePreparingTabWrite(auth.account,"warehouse",body,{action:body.action});
     const methods={capture:captureWarehouseBOM,receive:receiveWarehouseComponents,allocate:allocateWarehouseComponents,allocate_batch:allocateWarehouseBatch,attach_proposal:attachProjectProposal,edit_bom:changeProjectBOM,init_kits:initializeProjectKits,edit_kit:editProjectKitItem};
     return reply({ok:true,result:await methods[body.action](body,auth.account)});
   }catch(e){return errorReply(e);}

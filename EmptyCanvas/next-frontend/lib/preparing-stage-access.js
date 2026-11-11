@@ -1,6 +1,7 @@
 // Shared, opt-in stage-level access. Older advanced permission profiles keep
 // their existing rights until an administrator enables granular stage access.
 import { featureAllowed } from './feature-permissions-registry.js';
+import { PREPARING_EDIT_TAB_MARKER, preparingTabKnown, preparingTabKey } from './preparing-tab-permissions.mjs';
 
 export const PREPARING_STAGE_KEYS = Object.freeze(['intake', 'testing', 'warehouse', 'production', 'boxes', 'cartons']);
 export const PREPARING_STAGE_MARKER = 'preparing.stages.__granular';
@@ -24,6 +25,16 @@ export function preparingStagesGranular(account) {
 export function preparingStageReadable(account, stage) {
   if (!PREPARING_STAGE_KEYS.includes(stage) || !featureAllowed(account, 'preparing.view')) return false;
   return !preparingStagesGranular(account) || preparingStageAllowed(account, stage);
+}
+
+// Per-tab controls are opt-in. With them disabled, keep existing stage
+// permissions untouched, including all currently deployed accounts.
+export function preparingTabsGranular(account) {
+  return account?.featureAccess?.mode === 'enforced' && featureAllowed(account, PREPARING_EDIT_TAB_MARKER);
+}
+export function preparingTabEditAllowed(account, stage, tab) {
+  if (!preparingTabKnown(stage, tab) || !preparingStageAllowed(account, stage)) return false;
+  return !preparingTabsGranular(account) || featureAllowed(account, preparingTabKey(stage, tab));
 }
 
 export function preparingStageReadGate(gate, stage) {

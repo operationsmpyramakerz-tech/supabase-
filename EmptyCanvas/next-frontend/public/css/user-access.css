@@ -3944,4 +3944,9 @@ html[data-theme="dark"] .ua-feature-module-toggle { color:inherit; }
 .ua-feature-stage-row {padding-left:22px!important;background:#fcfcfd;}
 .ua-feature-stage-row .ua-page-access-name strong {font-size:11px;}
 .ua-feature-stage-row:has(input:disabled) {opacity:.58;}
-@media(max-width:630px) { .ua-feature-stage-hint {margin:9px 8px;padding:10px;} .ua-feature-stage-row {padding-left:12px!important;} }
+/* v392 — visually nest each status tab beneath its parent preparation stage. */
+.ua-feature-tab-row {padding-left:38px!important;background:#fffaf6;border-left:3px solid #fa7d25;}
+.ua-feature-tab-row .ua-page-access-name strong {font-size:11px;font-weight:700;}
+.ua-feature-tab-row .ua-page-access-name small {color:#a46d4f;}
+
+@media(max-width:630px) { .ua-feature-stage-hint {margin:9px 8px;padding:10px;} .ua-feature-stage-row {padding-left:12px!important;} .ua-feature-tab-row {padding-left:20px!important;} }

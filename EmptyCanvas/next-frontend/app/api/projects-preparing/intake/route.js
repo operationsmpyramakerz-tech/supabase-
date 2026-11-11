@@ -1,4 +1,5 @@
 import { preparingStageGate, preparingStageReadGate } from "../../../../lib/preparing-stage-access";
+import { requirePreparingTabWrite } from "../../../../lib/preparing-tab-write-server";
 import { NextResponse } from "next/server";
 import { getDirectAccountGate } from "../../../../lib/products-auth";
 import { featureGate } from "../../../../lib/feature-permissions-server";
@@ -12,5 +13,6 @@ export async function GET(request){const auth=preparingStageReadGate(await gate(
  try{return reply({ok:true,...await productionIntakeOverview(new URL(request.url).searchParams.get("projectId"))});}catch(e){return fail(e);}}
 export async function POST(request){const auth=preparingStageGate(await gate("view"),"intake");if(!auth.ok)return reply({ok:false,error:auth.error||"Access denied."},auth.status||403);
  try{const body=await request.json();if(!body||typeof body!=="object"||Array.isArray(body))return reply({ok:false,error:"Invalid JSON."},400);
+  await requirePreparingTabWrite(auth.account,"intake",body);
   return reply({ok:true,result:await recordProductionIntake(body,auth.account)});
  }catch(e){return fail(e);}}
