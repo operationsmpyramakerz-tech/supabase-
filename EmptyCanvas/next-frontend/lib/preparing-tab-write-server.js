@@ -21,7 +21,8 @@ export async function requirePreparingTabWrite(account, stage, body, { action = 
   if (!preparingTabEditAllowed(account, stage, tab)) deny();
   // Administrative non-component actions require Edit All Components.
   // Creation of a carton is also allowed in the Draft tab.
-  if (stage === 'boxes' && ['create','generate_school_kits','rename','cancel'].includes(action)) {
+  if (stage === 'boxes' && (['create','generate_school_kits','rename','cancel'].includes(action) ||
+    ['init_school_kit_plan','transfer_school_kit_target','complete_school_kit'].includes(action))) {
     if (tab !== 'all') deny('Managing box labels requires Edit All Components.');
     return;
   }

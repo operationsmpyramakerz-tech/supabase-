@@ -7,6 +7,7 @@ import {warehouseGroups} from "../../lib/preparing-warehouse-view.mjs";
 import {boxPackingTarget} from "../../lib/preparing-production-math.mjs";
 import {filterBoxDistributionRows} from "../../lib/preparing-box-visibility.mjs";
 import {groupBoxLabels} from "../../lib/preparing-box-labels.mjs";
+import {schoolKitPackingProgress} from "../../lib/preparing-school-kit-packing.mjs";
 // The same solid Kit icons as Operations Receiving, without coupling its
 // independent Box Distribution step to the Operations Receiving component.
 function boxKitAppearance(name){
@@ -53,6 +54,9 @@ export default function ProjectBoxDistribution({projectId,rows,kitGroups,request
  const canManageLabels=allowed && editTabs.all !== false;
  const [labelSchool,setLabelSchool]=useState(""),[labelKit,setLabelKit]=useState(""),[labelCount,setLabelCount]=useState("1");
  const [inspectBoxId,setInspectBoxId]=useState("");
+ const [manifestEditId,setManifestEditId]=useState(""),[manifestQty,setManifestQty]=useState("0"),[manifestError,setManifestError]=useState("");
+ const [legacyUnpackConfirm,setLegacyUnpackConfirm]=useState("");
+ const [moveComponentId,setMoveComponentId]=useState(""),[moveToBox,setMoveToBox]=useState(""),[moveQty,setMoveQty]=useState("1");
  const [boxesOpen,setBoxesOpen]=useState(false),[expandedBoxKit,setExpandedBoxKit]=useState("");
  const closeBoxLabels=()=>{if(!busy&&!boxDialog){setBoxesOpen(false);setBoxMenu("");setInspectBoxId("");}};
  const boxesCloseRef=useRef(null),boxesModalRef=useRef(null);
@@ -91,6 +95,17 @@ export default function ProjectBoxDistribution({projectId,rows,kitGroups,request
  const inspectedLines=(data?.lines||[]).filter(l=>l.carton_id===inspectBoxId);
  const inspectedSchool=(data?.schools||[]).find(s=>s.id===inspectedBox?.school_id);
  const expectedSchoolItems=(data?.components||[]).filter(c=>c.school_id===inspectedBox?.school_id&&matchesKit(c,inspectedBox?.kit_name));
+ const manifestTargets=(data?.kitTargets||[]).filter(t=>t.kit_box_id===inspectedBox?.id);
+ const manifestProgress=schoolKitPackingProgress(inspectBoxId,data?.kitTargets||[],data?.lines||[]);
+ const manifestReady=manifestProgress.complete;
+ const manifestPacked=manifestProgress.packed;
+ const manifestRequired=manifestProgress.required;
+ const manifestPeers=(data?.cartons||[]).filter(c=>c.id!==inspectedBox?.id && c.generated_kit_label &&
+  c.school_id===inspectedBox?.school_id && c.kit_name===inspectedBox?.kit_name && c.status==="draft");
+ const groupPlanReady=(data?.kitTargets||[]).some(t=>{
+   const c=(data?.cartons||[]).find(box=>box.id===t.kit_box_id);
+   return c?.school_id===labelSchool&&c?.kit_name===labelKit;
+ });
 
  const openBoxLabels=()=>{setExpandedBoxKit(boxGroups.find(g=>g.cartons.length)?.name||boxGroups[0]?.name||"");setBoxesOpen(true);};
  const draftCartons=useMemo(()=>(data?.cartons||[]).filter(c=>c.status==="draft"),[data]);
@@ -108,9 +123,10 @@ export default function ProjectBoxDistribution({projectId,rows,kitGroups,request
  ],[items]);
  const totals=useMemo(()=>items.reduce((s,r)=>({production:s.production+count(r.productionReceived),packed:s.packed+r.packedQty,unpacked:s.unpacked+r.unpacked}),{production:0,packed:0,unpacked:0}),[items]);
  const currentRow=items.find(r=>r.id===editing);
- const choices=useMemo(()=>draftCartons.filter(c=>currentRow&& (data?.components||[]).some(s=>same(s,currentRow)&&matchesKit(s,c.kit_name)&&(!c.school_id||c.school_id===s.school_id))),[draftCartons,currentRow,data]);
+ const choices=useMemo(()=>draftCartons.filter(c=>currentRow&& (data?.components||[]).some(s=>same(s,currentRow)&&matchesKit(s,c.kit_name)&&(!c.school_id||c.school_id===s.school_id))&&(!c.generated_kit_label||targetFor(currentRow,c.id))),[draftCartons,currentRow,data]);
  function storedLine(row,id){return (data?.lines||[]).find(l=>l.carton_id===id&&same(row,l));}
- function begin(row){const options=draftCartons.filter(c=>(data?.components||[]).some(s=>same(s,row)&&matchesKit(s,c.kit_name)&&(!c.school_id||c.school_id===s.school_id)));const target=options.find(c=>!!storedLine(row,c.id))||options[0];setEditing(row.id);setCartonId(target?.id||"");setQuantity(String(target?count(storedLine(row,target.id)?.packed_qty):0));setRowError("");}
+ function targetFor(row,id){return (data?.kitTargets||[]).find(t=>t.kit_box_id===id&&same(t,row));}
+ function begin(row){const options=draftCartons.filter(c=>(data?.components||[]).some(s=>same(s,row)&&matchesKit(s,c.kit_name)&&(!c.school_id||c.school_id===s.school_id))&&(!c.generated_kit_label||targetFor(row,c.id)));const target=options.find(c=>!!storedLine(row,c.id))||options[0];setEditing(row.id);setCartonId(target?.id||"");setQuantity(String(target?count(storedLine(row,target.id)?.packed_qty):0));setRowError("");}
  function choose(id){setCartonId(id);setQuantity(String(count(currentRow&&storedLine(currentRow,id)?.packed_qty)));setRowError("");}
  function clearHold(){if(holdTimer.current!==null)clearTimeout(holdTimer.current);holdTimer.current=null;holdStart.current=null;}
  function startHold(event,boxId){if(event.pointerType==="mouse"&&event.button!==0)return;clearHold();suppressBoxClick.current=false;holdStart.current={x:event.clientX,y:event.clientY,id:event.pointerId};holdTimer.current=setTimeout(()=>{holdTimer.current=null;holdStart.current=null;suppressBoxClick.current=true;setBoxMenu(boxId);},550);}
@@ -144,11 +160,67 @@ export default function ProjectBoxDistribution({projectId,rows,kitGroups,request
    const response=await request("/project-cartons","POST",{action:"generate_school_kits",projectId,
      scope:"boxes",editTab:"all",schoolId:labelSchool,kitName:labelKit,count:countValue});
    await refresh();setExpandedBoxKit(labelKit);setLabelCount("1");
-   setNotice(`${response?.result?.count||countValue} unique school Kit labels generated. Add physical contents with Edit in Box Distribution.`);
+   setNotice(`${response?.result?.count||countValue} labels generated. Open a label and prepare its packing manifest before packing.`);
   }catch(e){setError(e.message||"Unable to generate school Kit labels.");}
   finally{setBusy(false);}
  }
- async function save(row){const carton=draftCartons.find(c=>c.id===cartonId);if(!carton){setRowError("Create or select a draft box for this component.");return;}
+ async function prepareKitPlan(){
+  if(!inspectedBox?.school_id||busy)return;
+  setBusy(true);setManifestError("");setError("");setNotice("");
+  try{const res=await request("/project-cartons","POST",{action:"init_school_kit_plan",projectId,
+    scope:"boxes",editTab:"all",schoolId:inspectedBox.school_id,kitName:inspectedBox.kit_name});
+   await refresh();setNotice(`Packing plan created for ${res?.result?.labels||0} school Kit labels.`);
+  }catch(e){setManifestError(e.message||"Could not prepare packing plan.");}
+  finally{setBusy(false);}
+ }
+ async function clearPreplanLine(line){
+  if(!inspectedBox||!canManageLabels||busy||inspectedBox.status!=="draft")return;
+  const source=(data?.components||[]).find(c=>c.school_id===inspectedBox.school_id&&same(c,line)&&matchesKit(c,inspectedBox.kit_name));
+  const masterRow=items.find(r=>same(r,line));
+  if(!source||!masterRow){setManifestError("Cannot match this packed line to the school BOM. Contact an administrator.");return;}
+  setBusy(true);setManifestError("");
+  try{await request("/production","POST",{action:"pack",projectId,editTab:"all",
+    cartonId:inspectedBox.id,sourceComponentId:source.id,itemId:masterRow.id,
+    quantity:0,expectedUpdatedAt:inspectedBox.updated_at});
+   await refresh();await onChanged?.();setLegacyUnpackConfirm("");
+   setNotice(`Unpacked ${line.product_name} from ${inspectedBox.carton_label}.`);
+  }catch(e){setManifestError(e.message||"Unable to unpack this Kit component.");}
+  finally{setBusy(false);}
+ }
+ async function saveManifestLine(target){
+  const n=Number(manifestQty);
+  if(!inspectedBox||!Number.isSafeInteger(n)||n<0||n>count(target.expected_qty)){
+    setManifestError(`Packed quantity must be between 0 and ${target.expected_qty}.`);return;}
+  const masterRow=items.find(r=>same(r,target));
+  if(!masterRow){setManifestError(`Master BOM component not found for ${target.product_name}.`);return;}
+  setBusy(true);setManifestError("");setError("");
+  try{await request("/production","POST",{action:"pack",projectId,editTab:"all",
+    cartonId:inspectedBox.id,sourceComponentId:target.source_component_id,itemId:masterRow.id,
+    quantity:n,expectedUpdatedAt:inspectedBox.updated_at});
+   await refresh();await onChanged?.();setManifestEditId("");
+  }catch(e){setManifestError(e.message||"Could not save Kit quantity.");}finally{setBusy(false);}
+ }
+ async function transferManifestTarget(){
+  const n=Number(moveQty);
+  if(!inspectedBox||!moveComponentId||!moveToBox||!Number.isSafeInteger(n)||n<1){
+    setManifestError("Select a component, destination Kit and quantity.");return;}
+  setBusy(true);setManifestError("");
+  try{await request("/project-cartons","POST",{action:"transfer_school_kit_target",projectId,
+    scope:"boxes",editTab:"all",cartonId:inspectedBox.id,toCartonId:moveToBox,
+    sourceComponentId:moveComponentId,quantity:n});
+   await refresh();setMoveComponentId("");setMoveToBox("");setMoveQty("1");
+   setNotice("Kit contents plan updated. School total preserved.");
+  }catch(e){setManifestError(e.message||"Could not transfer Kit requirement.");}finally{setBusy(false);}
+ }
+ async function completeManifestKit(){
+  if(!inspectedBox||!manifestReady||busy)return;
+  setBusy(true);setManifestError("");setError("");
+  try{await request("/project-cartons","PATCH",{action:"complete_school_kit",projectId,
+    scope:"boxes",editTab:"all",cartonId:inspectedBox.id,expectedUpdatedAt:inspectedBox.updated_at});
+   await refresh();await onChanged?.();setNotice(`${inspectedBox.carton_label} completed and locked.`);
+  }catch(e){setManifestError(e.message||"Could not complete Kit.");}finally{setBusy(false);}
+ }
+ async function save(row){const carton=draftCartons.find(c=>c.id===cartonId);if(!carton){setRowError("Generate a school Kit label and prepare its packing plan in Boxes Label, then choose the Kit.");return;}
   const source=(data?.components||[]).find(c=>same(c,row)&&matchesKit(c,carton.kit_name)&&(!carton.school_id||carton.school_id===c.school_id));if(!source){setRowError("This component is not available in the selected box Kit. Check captured school components.");return;}
   try{boxPackingTarget(row.productionReceived,row.packedQty,count(storedLine(row,carton.id)?.packed_qty),quantity);}catch(e){setRowError(e.message);return;}
   if(Number(quantity)===count(storedLine(row,carton.id)?.packed_qty)){setEditing("");return;}
@@ -178,7 +250,7 @@ export default function ProjectBoxDistribution({projectId,rows,kitGroups,request
     <div className="pr-pt-kits pr-pt-kit-list pr-box-kit-list">{groups.map(g=>{const appearance=boxKitAppearance(g.name),open=Boolean(search.trim())||opened===g.key;return <section className={`pr-pt-kit-group pr-pt-kit--${appearance.tone}${open?" is-open":""}`} key={g.key}><button type="button" className="pr-pt-kit-heading" aria-expanded={open} onClick={()=>setOpened(open?"__none__":g.key)}><span className="pr-pt-kit-emblem" aria-hidden="true"><BoxIcon name={appearance.icon} size={21}/></span><span className="pr-pt-kit-title"><strong>{g.name}</strong><small>{g.items.length} components</small></span><span className="pr-pt-kit-arrow" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg></span></button>{open&&<div className="pr-pt-kit-body">{g.items.map(row=><article className="pr-production-row" key={g.key+row.id}><div className="pr-production-item-head"><div><strong>{row.name}</strong></div><span className="pr-production-badge">Operations Received {formatted(row.productionReceived)}</span></div><div className="pr-production-metrics pr-box-metrics"><div><small>Available to Pack</small><strong>{formatted(row.unpacked)}</strong></div><div><small>Packed</small><strong className="pr-box-purple">{formatted(row.packedQty)}</strong></div><div><small>Unpacked</small><strong>{formatted(row.unpacked)}</strong></div><div className="pr-production-actions">{editing===row.id?<button className="pr-secondary" disabled={busy} onClick={()=>{setEditing("");setRowError("");}}>Cancel</button>:<button className="pr-secondary" disabled={!canEditTab||busy} onClick={()=>begin(row)}>Edit</button>}</div></div>{editing===row.id&&<div className="pr-box-editor"><label>Box<PreparingSelect aria-label={`Box for ${row.name}`} value={cartonId} onChange={e=>choose(e.target.value)}><option value="">Choose draft box</option>{choices.map(c=><option key={c.id} value={c.id}>{c.carton_label} · {c.kit_name}</option>)}</PreparingSelect></label><label>Packed in selected box<StageQuantityInput min="0" step="1" aria-label={`Packed ${row.name}`} value={quantity} onValueChange={value=>{setQuantity(value);setRowError("");}}/></label><div className="pr-box-preview"><small>Unpacked after saving</small><strong>{Number.isSafeInteger(Number(quantity))?formatted(Math.max(0,row.productionReceived-row.packedQty+count(storedLine(row,cartonId)?.packed_qty)-Number(quantity))):"—"}</strong></div><button className="pr-primary" disabled={busy||!cartonId} onClick={()=>save(row)}>Save</button>{rowError&&<p className="pr-wr-inline-error" role="alert">{rowError}</p>}</div>}</article>)}</div>}</section>;})}{!groups.length&&<p className="pr-wh-empty">No components match this filter. Try All Components to review previously packed stock.</p>}</div>
    </>}
    {boxesOpen&&<div className="pr-box-labels-overlay" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget)closeBoxLabels();}}><section ref={boxesModalRef} className="pr-box-labels-sheet" role="dialog" aria-modal="true" aria-label="Boxes Label">
-      <header className="pr-box-labels-head"><div className="pr-box-labels-head-icon"><BoxIcon name="box" size={23}/></div><div className="pr-box-labels-heading"><h4>Boxes Label</h4><p>Manage project kit boxes by group</p></div><span className="pr-box-labels-total">{activeCartons.length} boxes</span><button type="button" ref={boxesCloseRef} className="pr-box-labels-close" aria-label="Close Boxes Label" onClick={closeBoxLabels}><BoxIcon name="close" size={19}/></button></header>
+      <header className="pr-box-labels-head"><div className="pr-box-labels-head-icon"><BoxIcon name="box" size={23}/></div><div className="pr-box-labels-heading"><h4>Boxes Label</h4><p>School Kit labels, packing contents and verification</p></div><span className="pr-box-labels-total">{activeCartons.length} boxes</span><button type="button" ref={boxesCloseRef} className="pr-box-labels-close" aria-label="Close Boxes Label" onClick={closeBoxLabels}><BoxIcon name="close" size={19}/></button></header>
       <div className="pr-box-labels-body">
        {error&&<p className="pr-wr-inline-error" role="alert">{error}</p>}{notice&&<p className="pr-manifest-success" role="status">{notice}</p>}
        {canManageLabels&&<section className="pr-box-labels-create pr-school-kit-generator">
@@ -187,20 +259,41 @@ export default function ProjectBoxDistribution({projectId,rows,kitGroups,request
          <PreparingSelect aria-label="School for new Kit labels" value={labelSchool} onChange={e=>{setLabelSchool(e.target.value);setLabelKit("");}}><option value="">Select school</option>{labelSchoolOptions.map(s=><option value={s.id} key={s.id}>{s.beneficiary_name}</option>)}</PreparingSelect>
          <PreparingSelect aria-label="Kit group for new labels" value={labelKit} onChange={e=>setLabelKit(e.target.value)} disabled={!labelSchool}><option value="">Select kit group</option>{labelSchoolKits.map(kit=><option value={kit} key={kit}>{kit}</option>)}</PreparingSelect>
          <input aria-label="Number of kits for selected school" inputMode="numeric" type="number" min="1" max="100" step="1" placeholder="No. of kits" value={labelCount} onChange={e=>setLabelCount(e.target.value)}/>
-         <button type="button" className="pr-primary" disabled={busy||!labelSchool||!labelKit||!/^\d+$/.test(labelCount)||Number(labelCount)<1||Number(labelCount)>100} onClick={generateSchoolLabels}>Generate Labels</button>
+         <button type="button" className="pr-primary" disabled={busy||groupPlanReady||!labelSchool||!labelKit||!/^\d+$/.test(labelCount)||Number(labelCount)<1||Number(labelCount)>100} onClick={generateSchoolLabels}>Generate Labels</button>
         </div>
-        <small className="pr-school-kit-help">One label per physical Kit. Labels are uniquely numbered per school and Kit group. Generating labels does not mark components as packed.</small>
+        <small className="pr-school-kit-help">One label per physical Kit. Labels are uniquely numbered per school and Kit group. Create the full number of labels before preparing the packing plan. After planning or packing starts, label counts are locked. Generating labels does not mark components as packed.</small>
        </section>}
        <div className="pr-box-labels-section-title pr-box-labels-groups-label"><strong>Kit Groups</strong><small>{boxGroups.length} groups</small></div>
-       <div className="pr-box-labels-groups">{boxGroups.map(group=>{const appearance=boxKitAppearance(group.name),open=expandedBoxKit===group.name;return <section key={group.name} className={`pr-box-labels-group pr-pt-kit--${appearance.tone}`}><button type="button" className="pr-box-labels-group-toggle" aria-expanded={open} onClick={()=>{setExpandedBoxKit(open?"":group.name);setBoxMenu("");}}><span className="pr-pt-kit-emblem" aria-hidden="true"><BoxIcon name={appearance.icon} size={21}/></span><span className="pr-box-labels-group-name"><strong>{group.name}</strong><small>{group.cartons.length} {group.cartons.length===1?"box":"boxes"}</small></span><span className={`pr-box-labels-chevron${open?" is-open":""}`} aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg></span></button>{open&&<div className="pr-box-labels-group-body">{group.cartons.length?<div className="pr-box-labels-box-grid">{group.cartons.map(c=><div key={c.id} className="pr-box-pill" onPointerDown={e=>canManageLabels&&startHold(e,c.id)} onPointerMove={moveHold} onPointerUp={clearHold} onPointerCancel={clearHold} onPointerLeave={clearHold} onContextMenu={e=>{if(canManageLabels)showMenu(e,c.id);}}><button type="button" className="pr-box-labels-box-details pr-box-inspect-trigger" onClick={()=>setInspectBoxId(c.id)} aria-label={`View contents of ${c.carton_label}`}><span className="pr-box-labels-box-symbol"><BoxIcon name="box" size={19}/></span><span className="pr-box-labels-card-copy"><strong>{c.carton_label}</strong><small>{(data?.schools||[]).find(s=>s.id===c.school_id)?.beneficiary_name||"Legacy project box"}</small><small className={`pr-box-labels-status${c.status==="draft"?" is-draft":""}`}>{c.status}</small></span></button>{canManageLabels&&<button type="button" className="pr-box-labels-box-menu" title={`Actions for ${c.carton_label}`} aria-label={`Actions for ${c.carton_label}`} aria-expanded={boxMenu===c.id} onClick={()=>{if(suppressBoxClick.current){suppressBoxClick.current=false;return;}setBoxMenu(v=>v===c.id?"":c.id);}}><BoxIcon name="more" size={19}/></button>}{canManageLabels&&boxMenu===c.id&&<div className="pr-box-context-menu" role="menu"><button type="button" role="menuitem" disabled={c.status!=="draft"||c.generated_kit_label} title={c.generated_kit_label?"Generated label IDs cannot be renamed":c.status!=="draft"?"Only draft boxes can be renamed":"Rename box"} onClick={()=>boxAction("rename",c)}><BoxIcon name="rename" size={16}/><span>Rename</span></button><button type="button" role="menuitem" className="danger" onClick={()=>boxAction("delete",c)}><BoxIcon name="trash" size={16}/><span>Delete</span></button></div>}</div>)}</div>:<div className="pr-box-labels-empty">No boxes yet for this kit. {canManageLabels?"Create one above to get started.":""}</div>}</div>}</section>;})}{!boxGroups.length&&<p className="pr-box-labels-empty">No kit groups available for this project.</p>}</div>
+       <div className="pr-box-labels-groups">{boxGroups.map(group=>{const appearance=boxKitAppearance(group.name),open=expandedBoxKit===group.name;return <section key={group.name} className={`pr-box-labels-group pr-pt-kit--${appearance.tone}`}><button type="button" className="pr-box-labels-group-toggle" aria-expanded={open} onClick={()=>{setExpandedBoxKit(open?"":group.name);setBoxMenu("");}}><span className="pr-pt-kit-emblem" aria-hidden="true"><BoxIcon name={appearance.icon} size={21}/></span><span className="pr-box-labels-group-name"><strong>{group.name}</strong><small>{group.cartons.length} {group.cartons.length===1?"box":"boxes"}</small></span><span className={`pr-box-labels-chevron${open?" is-open":""}`} aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg></span></button>{open&&<div className="pr-box-labels-group-body">{group.cartons.length?<div className="pr-box-labels-box-grid">{group.cartons.map(c=><div key={c.id} className="pr-box-pill" onPointerDown={e=>canManageLabels&&startHold(e,c.id)} onPointerMove={moveHold} onPointerUp={clearHold} onPointerCancel={clearHold} onPointerLeave={clearHold} onContextMenu={e=>{if(canManageLabels)showMenu(e,c.id);}}><button type="button" className="pr-box-labels-box-details pr-box-inspect-trigger" onClick={()=>setInspectBoxId(c.id)} aria-label={`View contents of ${c.carton_label}`}><span className="pr-box-labels-box-symbol"><BoxIcon name="box" size={19}/></span><span className="pr-box-labels-card-copy"><strong>{c.carton_label}</strong><small>{(data?.schools||[]).find(s=>s.id===c.school_id)?.beneficiary_name||"Legacy project box"}</small><small className={`pr-box-labels-status${c.status==="draft"?" is-draft":""}`}>{c.generated_kit_label?(c.status==="ready"?"Packed · Verified":"Packing pending"):c.status}</small></span></button>{canManageLabels&&<button type="button" className="pr-box-labels-box-menu" title={`Actions for ${c.carton_label}`} aria-label={`Actions for ${c.carton_label}`} aria-expanded={boxMenu===c.id} onClick={()=>{if(suppressBoxClick.current){suppressBoxClick.current=false;return;}setBoxMenu(v=>v===c.id?"":c.id);}}><BoxIcon name="more" size={19}/></button>}{canManageLabels&&boxMenu===c.id&&<div className="pr-box-context-menu" role="menu"><button type="button" role="menuitem" disabled={c.status!=="draft"||c.generated_kit_label} title={c.generated_kit_label?"Generated label IDs cannot be renamed":c.status!=="draft"?"Only draft boxes can be renamed":"Rename box"} onClick={()=>boxAction("rename",c)}><BoxIcon name="rename" size={16}/><span>Rename</span></button><button type="button" role="menuitem" className="danger" disabled={c.generated_kit_label&&c.status==="ready"} onClick={()=>boxAction("delete",c)}><BoxIcon name="trash" size={16}/><span>Delete</span></button></div>}</div>)}</div>:<div className="pr-box-labels-empty">No boxes yet for this kit. {canManageLabels?"Create one above to get started.":""}</div>}</div>}</section>;})}{!boxGroups.length&&<p className="pr-box-labels-empty">No kit groups available for this project.</p>}</div>
       </div>
      </section></div>}
    {inspectedBox&&boxesOpen&&<div className="pr-box-dialog-backdrop" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget)setInspectBoxId("");}}><section className="pr-box-dialog pr-school-kit-inspection" role="dialog" aria-modal="true" aria-label={`Kit contents ${inspectedBox.carton_label}`}>
     <header><div><h4>{inspectedBox.carton_label}</h4><small>{inspectedSchool?.beneficiary_name||"Legacy project box"} · {inspectedBox.kit_name}</small></div><button type="button" className="pr-secondary" onClick={()=>setInspectBoxId("")} aria-label="Close kit contents">×</button></header>
-    <p className="pr-school-kit-help">Packed contents ({inspectedLines.length} item types)</p>
-    {inspectedLines.length?<div className="pr-school-kit-lines">{inspectedLines.map(l=><div key={l.id}><span>{l.product_name}</span><strong>{l.packed_qty}</strong></div>)}</div>:<p className="pr-box-labels-empty">No components have been packed into this Kit yet.</p>}
-    {inspectedBox.generated_kit_label&&<><p className="pr-school-kit-help">School Proposal components for this Kit group (reference only; not proof of packed contents)</p>
-    <div className="pr-school-kit-lines">{expectedSchoolItems.map(c=><div key={c.id}><span>{c.product_name}</span><small>School required: {c.planned_qty}</small></div>)}</div></>}
+    {inspectedBox.generated_kit_label ? <>
+      <div className="pr-kit-progress-head"><span className={`pr-kit-status-pill${inspectedBox.status==="ready"?" is-complete":""}`}>{inspectedBox.status==="ready"?"Packed · Verified":"Pending Packing"}</span><strong>{manifestPacked} / {manifestRequired} units</strong></div>
+      {manifestError&&<p role="alert" className="pr-wr-inline-error">{manifestError}</p>}
+      {!manifestTargets.length ? <section className="pr-kit-plan-intro">
+        <strong>Packing manifest not prepared</strong>
+        <p>Before packing, create an expected-components snapshot for all labels in this school and Kit group. School BOM quantities are split across the existing labels, with remainder assigned in label order. Previously packed quantities are retained in the plan. Check quantities before continuing.</p>
+        {inspectedLines.length>0&&<div className="pr-kit-preplan-lines"><p>Previously packed contents will be preserved in this plan. If an old quantity prevents planning, unpack it below and try again.</p>{inspectedLines.map(l=><div key={l.id} className="pr-kit-preplan-row"><span>{l.product_name} · {l.packed_qty} packed</span>{canManageLabels&&inspectedBox.status==="draft"&&(legacyUnpackConfirm===l.id?<span><button type="button" className="pr-danger-button" disabled={busy} onClick={()=>clearPreplanLine(l)}>Confirm Unpack</button><button type="button" className="pr-secondary" onClick={()=>setLegacyUnpackConfirm("")}>Cancel</button></span>:<button type="button" className="pr-secondary" disabled={busy} onClick={()=>setLegacyUnpackConfirm(l.id)}>Unpack</button>)}</div>)}</div>}
+        {canManageLabels&&inspectedBox.status==="draft"&&<button type="button" disabled={busy} className="pr-primary" onClick={prepareKitPlan}>{busy?"Preparing…":"Prepare Kit Packing Plan"}</button>}
+      </section> : <>
+       <p className="pr-school-kit-help">Packing manifest · Required / Packed / Remaining</p>
+       <div className="pr-school-kit-lines pr-kit-target-lines">{manifestTargets.map(t=>{const packed=count(inspectedLines.find(l=>same(l,t))?.packed_qty);return <div key={t.id} className="pr-kit-target-line">
+         <span className="pr-kit-target-name"><strong>{t.product_name}</strong><small>{t.product_id||"Component"}</small></span>
+         <span className="pr-kit-target-numbers"><span>Required <b>{t.expected_qty}</b></span><span>Packed <b>{packed}</b></span><span>Remaining <b>{Math.max(0,count(t.expected_qty)-packed)}</b></span></span>
+         {canManageLabels&&inspectedBox.status==="draft"&&(manifestEditId===t.id?<span className="pr-kit-target-editor"><StageQuantityInput aria-label={`Packed quantity for ${t.product_name}`} min="0" max={t.expected_qty} step="1" value={manifestQty} onValueChange={setManifestQty}/><button type="button" className="pr-primary" disabled={busy} onClick={()=>saveManifestLine(t)}>Save</button><button type="button" className="pr-secondary" disabled={busy} onClick={()=>setManifestEditId("")}>Cancel</button></span>:<button type="button" className="pr-secondary" disabled={busy} onClick={()=>{setManifestEditId(t.id);setManifestQty(String(packed));setManifestError("");}}>Edit</button>)}
+       </div>;})}</div>
+       {canManageLabels&&inspectedBox.status==="draft"&&manifestPeers.length>0&&<details className="pr-kit-transfer"><summary>Adjust expected contents between school Kits</summary><p>Move part of a component's required quantity to another draft label in the same school and group. Packed quantities cannot be moved without unpacking first.</p><div className="pr-kit-transfer-grid"><PreparingSelect aria-label="Component to redistribute" value={moveComponentId} onChange={e=>setMoveComponentId(e.target.value)}><option value="">Choose component</option>{manifestTargets.map(t=><option key={t.id} value={t.source_component_id}>{t.product_name} ({t.expected_qty})</option>)}</PreparingSelect><PreparingSelect aria-label="Destination Kit label" value={moveToBox} onChange={e=>setMoveToBox(e.target.value)}><option value="">Destination label</option>{manifestPeers.map(b=><option key={b.id} value={b.id}>{b.carton_label}</option>)}</PreparingSelect><input aria-label="Units to transfer" type="number" inputMode="numeric" min="1" step="1" value={moveQty} onChange={e=>setMoveQty(e.target.value)}/><button type="button" className="pr-secondary" disabled={busy||!moveComponentId||!moveToBox} onClick={transferManifestTarget}>Move Required Units</button></div></details>}
+       {inspectedLines.some(l=>!manifestTargets.some(t=>same(l,t)))&&<p className="pr-wr-inline-error">Unexpected packed component found. Unpack it before completing this Kit.</p>}
+       {canManageLabels&&inspectedBox.status==="draft"&&<button type="button" className="pr-primary pr-kit-complete" disabled={busy||!manifestReady} onClick={completeManifestKit}>Mark Kit as Packed</button>}
+       {inspectedBox.status==="ready"&&<p className="pr-manifest-success">Packing verified. This Kit is locked and eligible for school carton assembly in Phase 3.</p>}
+      </>}
+      <details className="pr-kit-reference"><summary>School Proposal components (reference only; not proof of packed contents)</summary><div className="pr-school-kit-lines">{expectedSchoolItems.map(c=><div key={c.id}><span>{c.product_name}</span><small>School required: {c.planned_qty}</small></div>)}</div></details>
+    </> : <>
+      <p className="pr-school-kit-help">Packed contents ({inspectedLines.length} item types)</p>
+      {inspectedLines.length?<div className="pr-school-kit-lines">{inspectedLines.map(l=><div key={l.id}><span>{l.product_name}</span><strong>{l.packed_qty}</strong></div>)}</div>:<p className="pr-box-labels-empty">No components have been packed into this Kit yet.</p>}
+    </>}
     <footer><button type="button" className="pr-secondary" onClick={()=>setInspectBoxId("")}>Close</button></footer>
    </section></div>}
    {boxDialog&&<div className="pr-box-dialog-backdrop" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget)dismissBoxDialog();}}><section className="pr-box-dialog" role="dialog" aria-modal="true" aria-label={boxActionType==="rename"?"Rename box":"Delete box"}>

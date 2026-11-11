@@ -4666,3 +4666,51 @@ html[data-theme="dark"] .pr-root .pr-stage-filter-actions .pr-pt-history-button.
 @media(max-width:520px){.pr-box-labels-create .pr-school-kit-create{grid-template-columns:minmax(0,1fr)}}
 html[data-theme="dark"] .pr-school-kit-lines>div{border-color:#374151;color:#f5f5f5}
 html[data-theme="dark"] .pr-school-kit-help,html[data-theme="dark"] .pr-box-labels-card-copy small{color:#a9b2c1}
+
+/* v396 — per-physical school Kit packing manifest. */
+.pr-root .pr-school-kit-inspection{width:min(720px,calc(100vw - 24px));max-width:100%;max-height:min(86dvh,820px);overflow-y:auto;overscroll-behavior:contain;}
+.pr-root .pr-school-kit-inspection .pr-kit-progress-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:12px 0;padding:12px 14px;border:1px solid #e5e7eb;border-radius:12px;background:#fafafa;}
+.pr-root .pr-kit-status-pill{display:inline-flex;border-radius:20px;padding:7px 12px;background:#fff0d8;color:#9a4a03;font-size:12px;font-weight:800;}
+.pr-root .pr-kit-status-pill.is-complete{background:#dcfce7;color:#166534;}
+.pr-root .pr-kit-plan-intro{display:grid;gap:10px;margin-top:14px;padding:16px;border:1px dashed #ffab7b;background:#fff8f3;border-radius:15px;}
+.pr-root .pr-kit-plan-intro>strong{color:#111827;font-size:14px;}
+.pr-root .pr-kit-plan-intro p{font-size:12px;color:#4b5563;line-height:1.65;margin:0;}
+.pr-root .pr-kit-plan-intro .pr-primary{justify-self:start;}
+.pr-root .pr-kit-target-lines{display:grid;gap:8px;max-height:min(43dvh,380px);overflow-y:auto;padding:2px;}
+.pr-root .pr-kit-target-lines .pr-kit-target-line{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 13px;border:1px solid #eceef1;background:#fff;border-radius:12px;}
+.pr-root .pr-kit-target-name{display:grid;gap:4px;flex:1 1 160px;min-width:100px;}
+.pr-root .pr-kit-target-name strong{font-size:13px;color:#111827;overflow-wrap:anywhere;}
+.pr-root .pr-kit-target-name small{font-size:10px;color:#6b7280;}
+.pr-root .pr-kit-target-numbers{display:flex;align-items:center;gap:9px;flex-wrap:wrap;}
+.pr-root .pr-kit-target-numbers>span{display:grid;gap:3px;color:#6b7280;font-size:10px;}
+.pr-root .pr-kit-target-numbers b{font-size:14px;color:#111827;}
+.pr-root .pr-kit-target-numbers>span:last-child b{color:#f97316;}
+.pr-root .pr-kit-target-line>button{flex:none;}
+.pr-root .pr-kit-target-editor{display:flex;gap:6px;align-items:center;flex:1 1 100%;}
+.pr-root .pr-kit-target-editor input{min-width:75px;flex:1 1 110px;border:1px solid #e5e7eb;border-radius:10px;padding:9px 10px;background:#fff;color:#111827;}
+.pr-root .pr-kit-transfer,.pr-root .pr-kit-reference{margin-top:14px;padding:12px 14px;border:1px solid #e5e7eb;border-radius:12px;background:#fafafa;}
+.pr-root .pr-kit-transfer summary,.pr-root .pr-kit-reference summary{cursor:pointer;font-size:12px;font-weight:800;color:#111827;}
+.pr-root .pr-kit-transfer p{font-size:11px;color:#6b7280;line-height:1.5;}
+.pr-root .pr-kit-transfer-grid{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) 90px auto;gap:8px;align-items:center;}
+.pr-root .pr-kit-transfer-grid input,.pr-root .pr-kit-transfer-grid select{width:100%;min-width:0;padding:10px;border:1px solid #e5e7eb;border-radius:9px;background:#fff;color:#111827;}
+.pr-root .pr-kit-complete{display:block;width:100%;margin-top:14px;min-height:44px;}
+.pr-root .pr-kit-complete:disabled{opacity:.52;cursor:not-allowed;}
+.pr-root .pr-kit-reference .pr-school-kit-lines{margin-top:12px;}
+html[data-theme="dark"] .pr-root .pr-school-kit-inspection .pr-kit-progress-head,
+html[data-theme="dark"] .pr-root .pr-kit-target-lines .pr-kit-target-line,
+html[data-theme="dark"] .pr-root .pr-kit-transfer,
+html[data-theme="dark"] .pr-root .pr-kit-reference{background:#242932;border-color:#404752;}
+html[data-theme="dark"] .pr-root .pr-kit-plan-intro{background:#352b26;border-color:#8a4b23;}
+html[data-theme="dark"] .pr-root .pr-kit-target-name strong,
+html[data-theme="dark"] .pr-root .pr-kit-target-numbers b,
+html[data-theme="dark"] .pr-root .pr-kit-transfer summary,
+html[data-theme="dark"] .pr-root .pr-kit-reference summary,
+html[data-theme="dark"] .pr-root .pr-kit-plan-intro>strong{color:#f3f4f6;}
+html[data-theme="dark"] .pr-root .pr-kit-target-editor input,
+html[data-theme="dark"] .pr-root .pr-kit-transfer-grid input,
+html[data-theme="dark"] .pr-root .pr-kit-transfer-grid select{background:#1d232d;color:#f3f4f6;border-color:#4b5563;}
+@media(max-width:650px){.pr-root .pr-kit-transfer-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.pr-root .pr-kit-transfer-grid>button{grid-column:1/-1;}.pr-root .pr-kit-target-numbers{width:100%;justify-content:space-between;}.pr-root .pr-school-kit-inspection{max-height:83dvh;}.pr-root .pr-kit-target-editor{flex-wrap:wrap;}}
+.pr-root .pr-kit-preplan-lines{display:grid;gap:6px;padding-top:5px;}
+.pr-root .pr-kit-preplan-row{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;border-top:1px solid #e8d6c9;padding:7px 0;font-size:12px;}
+.pr-root .pr-kit-preplan-row>span:last-child{display:inline-flex;gap:6px;}
+.pr-root .pr-kit-preplan-row button{padding:7px 10px;font-size:11px;}
