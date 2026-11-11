@@ -2,7 +2,7 @@
 import StageFilterTabs from "./StageFilterTabs";
 import StageQuantityInput from "./StageQuantityInput";
 import {useEffect,useMemo,useState} from "react";
-import {testingChange,testingCoverage,testingCoverageTotals} from "../../lib/preparing-project-testing-math.mjs";
+import {testingChange,testingCoverage,testingCoverageTotals,testingReadyToTest} from "../../lib/preparing-project-testing-math.mjs";
 import {testingGroups,TESTING_EXPORT_COLUMNS,testingExportValue} from "../../lib/preparing-project-testing-grouping.mjs";
 
 const n=value=>Number(value)||0;
@@ -65,9 +65,10 @@ export default function ProjectTesting({projectId,projectName,canTest,editTabs={
   return()=>{mounted=false;};
  },[projectId]);
  const totals=useMemo(()=>testingCoverageTotals(data.items||[]),[data.items]);
+ const readyToTest=useMemo(()=>(data.items||[]).reduce((sum,row)=>sum+testingReadyToTest(row),0),[data.items]);
  const shown=useMemo(()=>(data.items||[])
   .filter(r=>`${r.name||""} ${r.code||""}`.toLowerCase().includes(search.trim().toLowerCase()))
-  .filter(r=>filter==="pending"?testingCoverage(r).remaining>0:filter==="done"?testingCoverage(r).required>0&&testingCoverage(r).remaining===0:true),
+  .filter(r=>filter==="pending"?testingReadyToTest(r)>0:filter==="done"?testingCoverage(r).required>0&&testingCoverage(r).remaining===0:true),
  [data.items,search,filter]);
  const allGroups=useMemo(()=>testingGroups(data.items,data.kitGroups),[data.items,data.kitGroups]);
  const groupedShown=useMemo(()=>testingGroups(shown,data.kitGroups).filter(group=>group.items.length),[shown,data.kitGroups]);
@@ -155,7 +156,7 @@ export default function ProjectTesting({projectId,projectName,canTest,editTabs={
    <div className="pr-wh-stats pr-pt-stat-grid pr-pt-coverage-grid" aria-label="Testing summary">{[
     {key:"required",label:"Project Required",value:totals.required,mark:"◆"},
     {key:"tested",label:"Tested",value:totals.tested,mark:"✓"},
-    {key:"remaining",label:"Remaining",value:totals.remaining,mark:"◷"},
+    {key:"remaining",label:"Ready to Test",value:readyToTest,mark:"◷"},
    ].map(stat=><div className={`pr-pt-stat pr-pt-stat--${stat.key}`} key={stat.key}>
     <span className="pr-pt-stat-icon" aria-hidden="true">{stat.key==="remaining"?<TestingIcon name="clock" size={25}/>:stat.mark}</span><span className="pr-pt-stat-copy"><span>{stat.label}</span><strong>{pretty(stat.value)}</strong></span>
    </div>)}</div>
@@ -178,7 +179,7 @@ export default function ProjectTesting({projectId,projectName,canTest,editTabs={
      return <article key={r.id} className={`pr-pt-row${isEditing?" is-editing":""}`}>
       <div className="pr-pt-heading">
        <div className="pr-pt-name"><div className="pr-pt-name-inline"><strong title={r.code?`Product code: ${r.code}`:undefined}>{r.name}</strong></div>{r.mismatch&&<small className="pr-pt-warning">Historical warehouse receipt exceeds tested quantity; review before handover.</small>}</div>
-       <div className="pr-pt-required"><span title="Received in the preceding stage">Available to Test: {pretty(Math.max(0,n(r.productionIntakeReceived)-coverage.tested))}</span><span>Required</span><strong>{pretty(coverage.required)}</strong></div>
+       <div className="pr-pt-required"><span title="Received in the preceding stage">Available to Test: {pretty(testingReadyToTest(r))}</span><span>Required</span><strong>{pretty(coverage.required)}</strong></div>
       </div>
       <div className="pr-pt-metrics">
        {isEditing?metrics.map(field=>{
@@ -188,7 +189,7 @@ export default function ProjectTesting({projectId,projectName,canTest,editTabs={
         </label>;
        }):<>
         <div className="pr-pt-metric pr-pt-metric--tested"><span>Tested</span><strong className="pr-pt-metric-value pr-pt-number pr-pt-pass">{pretty(coverage.tested)}</strong></div>
-        <div className="pr-pt-metric pr-pt-metric--remaining"><span>Remaining</span><strong className="pr-pt-metric-value pr-pt-number">{pretty(coverage.remaining)}</strong></div>
+        <div className="pr-pt-metric pr-pt-metric--remaining"><span>Ready to Test</span><strong className="pr-pt-metric-value pr-pt-number">{pretty(testingReadyToTest(r))}</strong></div>
        </>}
        {!isEditing&&<div className="pr-pt-metric pr-pt-metric--testedBy"><span>Tested By</span><div className="pr-pt-people">{(r.testedBy||[]).length?(r.testedBy||[]).map(person=><span className="pr-pt-person" title={person.name} key={person.id}>{person.name}</span>):<span className="pr-pt-person-empty">—</span>}</div></div>}
        <div className="pr-pt-actions">{canEditTab&&(isEditing?<><button type="button" className="pr-secondary" disabled={busy} onClick={()=>cancel(r.id)}>Cancel</button><button type="button" className="pr-primary" disabled={busy} onClick={()=>save([r.id])}>{busy?"Saving…":"Save"}</button></>:<button type="button" className="pr-secondary" disabled={busy} onClick={()=>edit(r)}>Edit</button>)}</div>

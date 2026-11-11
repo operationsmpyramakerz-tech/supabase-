@@ -1,3 +1,4 @@
+import { testingReadyToTest } from "./preparing-project-testing-math.mjs";
 // Shared, fixed registry for opt-in per-filter Edit grants in Projects Preparing.
 // Tabs are filters of the same ledger, so the API validates the current record
 // state instead of trusting the tab named by a client.
@@ -21,7 +22,7 @@ export function preparingRowMatchesTab(stage, tab, row) {
   if (stage === 'intake' || stage === 'testing') {
     const required = Math.max(0, num(row.projectTotalRequired ?? row.required));
     const received = Math.max(0, num(row.tested));
-    if (tab === 'pending') return Math.max(0, required - received) > 0;
+    if (tab === 'pending') return stage === 'testing' ? testingReadyToTest(row) > 0 : Math.max(0, required - received) > 0;
     if (tab === 'received') return received > 0;
     if (tab === 'done') return required > 0 && required <= received;
   }

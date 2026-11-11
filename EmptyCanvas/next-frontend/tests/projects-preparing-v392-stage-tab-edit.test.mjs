@@ -41,6 +41,9 @@ test('tab membership exactly matches current row status (including partial recei
   assert.equal(preparingRowMatchesTab('intake','pending',{required:5,tested:4}),true);
   assert.equal(preparingRowMatchesTab('intake','received',{required:5,tested:4}),true);
   assert.equal(preparingRowMatchesTab('intake','pending',{required:5,tested:5}),false);
+  assert.equal(preparingRowMatchesTab('testing','pending',{required:5,tested:0,productionIntakeReceived:0}),false);
+  assert.equal(preparingRowMatchesTab('testing','pending',{required:5,tested:0,productionIntakeReceived:4}),true);
+  assert.equal(preparingRowMatchesTab('testing','pending',{required:5,tested:4,productionIntakeReceived:4}),false);
   assert.equal(preparingRowMatchesTab('testing','done',{required:5,tested:5}),true);
   assert.equal(preparingRowMatchesTab('testing','done',{required:5,tested:4}),false);
   assert.equal(preparingRowMatchesTab('warehouse','short',{required_qty:5,accepted:4}),true);

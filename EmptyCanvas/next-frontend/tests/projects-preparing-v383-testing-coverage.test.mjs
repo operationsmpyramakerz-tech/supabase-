@@ -16,7 +16,7 @@ test('summary and read-only row use three quantities; tested-only editor remains
  const ui=read('components/preparing/ProjectTesting.jsx');
  const summary=ui.split('aria-label="Testing summary"')[1].split('pr-wh-navigation')[0];
  assert.deepEqual([...summary.matchAll(/key:"(\w+)"/g)].map(m=>m[1]),['required','tested','remaining']);
- assert.match(ui,/pretty\(coverage.required\)/);assert.match(ui,/pretty\(coverage.tested\)/);assert.match(ui,/pretty\(coverage.remaining\)/);
- assert.match(ui,/testingCoverage\(r\).remaining>0/);assert.match(ui,/isEditing\?metrics.map/);
+ assert.match(ui,/pretty\(coverage.required\)/);assert.match(ui,/pretty\(coverage.tested\)/);assert.match(ui,/pretty\(testingReadyToTest\(r\)\)/);
+ assert.match(ui,/testingReadyToTest\(r\)>0/);assert.match(ui,/isEditing\?metrics.map/);
  assert.equal(testingChange({id:'a',required:8},{tested:'4'}).testedDelta,4);
 });

@@ -10,6 +10,14 @@ export function testingChange(row, values) {
  if (Math.abs(testedDelta)>1000000) throw new Error("Maximum change per component is 1,000,000 units.");
  return testedDelta?{itemId:row.id,testedDelta,expectedTested:oldTested}:null;
 }
+// Production Receiving is the gate to Testing: only physically received,
+// not-yet-tested units are actionable in the "Remaining to Test" tab.
+// Keep overall project requirements separate for progress and reporting.
+export function testingReadyToTest(row={}) {
+ const received=Math.max(0,Number(row.productionIntakeReceived)||0);
+ const tested=Math.max(0,Number(row.tested)||0);
+ return Math.max(0,received-tested);
+}
 export function testingCoverage(row={}) {
  const required=Math.max(0,Number(row.projectTotalRequired??row.required)||0);
  const tested=Math.max(0,Number(row.tested)||0);
