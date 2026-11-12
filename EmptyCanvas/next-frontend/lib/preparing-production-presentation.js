@@ -8,10 +8,10 @@ import {getTeamMemberPublicProfile} from "./team-members-service";
 const safePhoto=value=>/^https?:\/\//i.test(String(value||"").trim())?String(value).trim():"";
 const productKey=value=>String(value||"").trim().toLowerCase();
 
-export async function productionPresentationWorkspace(projectId){
+export async function productionPresentationWorkspace(projectId,{includeReceivers=true}={}){
  const snapshot=await productionWorkspace(projectId);
  const productsPromise=getProductsList().catch(()=>[]);
- const users=[...new Map((snapshot.handoffs||[]).filter(row=>row.received_by_id&&row.received_by_name).map(row=>[String(row.received_by_id),row])).values()].slice(0,60);
+ const users=[...new Map((includeReceivers?snapshot.handoffs||[]:[]).filter(row=>row.received_by_id&&row.received_by_name).map(row=>[String(row.received_by_id),row])).values()].slice(0,60);
  const profiles=new Map();
  await Promise.all(Array.from({length:Math.min(6,users.length)},async(_,worker)=>{
   for(let i=worker;i<users.length;i+=6){
@@ -29,7 +29,7 @@ export async function productionPresentationWorkspace(projectId){
   if(key)byName.set(key,byName.has(key)?null:product);
  }
  return {...snapshot,
-  handoffs:(snapshot.handoffs||[]).map(row=>({...row,received_by_photo_url:profiles.get(String(row.received_by_id))||""})),
+  handoffs:(includeReceivers?snapshot.handoffs||[]:[]).map(row=>({...row,received_by_photo_url:profiles.get(String(row.received_by_id))||""})),
   items:(snapshot.items||[]).map(row=>{
    const product=byProductId.get(productKey(row.product_id))||byDisplayCode.get(productKey(row.product_id))||byName.get(productKey(row.product_name));
    const valid=product&&productKey(product.name)===productKey(row.product_name);

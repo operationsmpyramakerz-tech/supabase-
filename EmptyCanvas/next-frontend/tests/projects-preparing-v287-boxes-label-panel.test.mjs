@@ -10,17 +10,17 @@ const production=source('components/preparing/ProjectProductionReceiving.jsx');
 const boxes=source('components/preparing/ProjectBoxDistribution.jsx');
 const css=source('public/css/projects-preparing.css');
 
-test('Box Distribution navigation is below its three KPI blocks; Operations Receiving uses the same stage tabs',()=>{
- const stats=boxes.indexOf('aria-label="Box Distribution summary"');
- const navigation=boxes.indexOf('navigation(openBoxLabels,activeCartons.length,');
- const search=boxes.indexOf('aria-label="Search box distribution"');
- assert.ok(stats>=0 && stats<navigation && navigation<search);
- assert.match(production,/const renderBoxNavigation =/);
- assert.match(production,/navigation=\{renderBoxNavigation\}/);
- assert.match(production,/!boxView&&<><StageFilterTabs label="Operations component status"/);
+test('Stage 5 toolbar carries the Box Label action, History, Search and Download beside stage tabs',()=>{
+ const tabs=boxes.indexOf('label="Box component status"');
+ const search=boxes.indexOf('id="pr-box-distribution-search"');
+ const labels=boxes.indexOf('aria-label="Boxes Label"');
+ assert.ok(tabs>=0 && tabs<search && search<labels);
+ assert.match(boxes,/onClick=\{openBoxLabels\}/);
+ assert.match(boxes,/onClick=\{onDownload\}/);
+ assert.match(boxes,/onHistoryToggle\?\.\(\)/);
+ assert.match(production,/onDownload=\{openExport\}/);
  assert.match(production,/aria-label="Download Operations Receiving report"/);
- assert.match(production,/aria-label="Box History"/);
- assert.match(production,/aria-label="Boxes Label"/);
+ assert.match(production,/mode=\{tab==="box-history"\?"history":"boxes"\}/);
 });
 
 test('Box labels panel generates school-specific Kits in groups instead of inline manual creation',()=>{

@@ -22,7 +22,8 @@ test('Stage 4 matches the Stage 1–3 layout while isolating Stage 5 Box Distrib
  assert.match(stage,/pr-intake-signoff">\{closurePanel\}/);
  assert.match(stage,/totals\.production\/totals\.required/);
  assert.match(stage,/ProjectBoxDistribution/);
- assert.match(stage,/isBoxTab&&<ProjectBoxDistribution/);
+ assert.match(stage,/<ProjectBoxDistribution/);
+ assert.match(stage,/if\(!boxView\)return/);
  assert.match(css,/\.pr-production-v408 \.pr-pt-kit-list/);
  assert.match(css,/Scoped to Stage 4 so Stage 5 Box Distribution is unchanged/);
 });
@@ -70,13 +71,13 @@ test('Stage 4 uses one custom X with an expandable global-style Search',()=>{
  assert.match(stage,/pr-intake-image-overlay/);
 });
 
-test('GET enriches only Operations Receiving with media; Box GET remains private and unmodified',()=>{
+test('GET enriches both stage views with product images, while keeping private receiving history scoped',()=>{
  assert.match(route,/preparingStageReadable\(auth\.account,stage\)/);
- assert.match(route,/stage==="production"\?productionPresentationWorkspace\(params\.get\("projectId"\)\):productionWorkspace\(params\.get\("projectId"\)\)/);
+ assert.match(route,/productionPresentationWorkspace\(params\.get\("projectId"\),\{includeReceivers:stage==="production"\}\)/);
  assert.match(route,/stage==="production"\?\{\.\.\.data,cartons:\[\],cartonLines:\[\]\}/);
  assert.match(route,/\{\.\.\.data,handoffs:\[\]\}/);
  assert.match(route,/requirePreparingTabWrite\(auth\.account,target,body/);
- assert.match(server,/export async function productionPresentationWorkspace\(projectId\)/);
+ assert.match(server,/export async function productionPresentationWorkspace\(projectId,\{includeReceivers=true\}/);
  assert.match(server,/productionWorkspace\(projectId\)/);
  assert.match(server,/getProductsList\(\)\.catch/);
  assert.match(server,/getTeamMemberPublicProfile\(person\.received_by_id\)/);

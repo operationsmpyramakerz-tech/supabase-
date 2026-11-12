@@ -1,0 +1,20 @@
+v409 — Stage 5 Box Distribution UI parity
+Baseline: user uploaded supabase--main-406.zip (internal files include v408 updates)
+
+PRODUCTION FILES
+components/preparing/ProjectProductionReceiving.jsx
+components/preparing/ProjectBoxDistribution.jsx
+lib/preparing-production-presentation.js
+app/api/projects-preparing/production/route.js
+public/css/projects-preparing.css
+app/projects-preparing/page.jsx
+
+TESTS + NOTES
+tests/projects-preparing-v409-box-distribution-ui.test.mjs
+tests/projects-preparing-v408-operations-stage-ui.test.mjs
+tests/projects-preparing-v285-box-distribution-parity.test.mjs
+tests/projects-preparing-v287-boxes-label-panel.test.mjs
+README_v409_BOX_DISTRIBUTION_UI.md
+MODIFIED_FILES_v409.txt
+
+No SQL or dependency updates.

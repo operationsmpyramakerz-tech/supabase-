@@ -5207,3 +5207,41 @@ html[data-theme="dark"] .pr-warehouse-v407 .pr-pt-kit-group .pr-pt-kit-body {bac
 }
 html[data-theme="dark"] .pr-production-v408 .pr-pt-kit-body,
 html[data-theme="dark"] .pr-production-v408 .pr-pt-kit-body .pr-intake-component {background:#202633;border-color:#414b5a;}
+
+/* v409 — Stage 5 Box Distribution aligned with Stages 1–4.
+   Scoped so the existing Box Label modal and School Equal Packing Editor keep their workflows. */
+.pr-root .pr-box-v409 {gap:16px;}
+.pr-root .pr-box-v409 .pr-box-distribution {display:flex;flex-direction:column;gap:15px;min-width:0;}
+.pr-root .pr-box-v409 .pr-intake-tabs-toolbar {margin:0;}
+.pr-root .pr-box-v409 .pr-pt-kit-list {max-height:none;min-height:0;overflow:visible;gap:15px;}
+.pr-root .pr-box-v409 .pr-pt-kit-body {padding:0 13px 12px;gap:7px;border-top:1px solid #eceff5;background:#fff;}
+.pr-root .pr-box-v409 .pr-pt-kit-body .pr-intake-component {min-width:0;background:#fff;border:1px solid #e3e6ee;border-radius:12px;box-shadow:none;margin-top:7px;}
+.pr-root .pr-box-v409 .pr-intake-component-main {grid-template-columns:minmax(190px,1.85fr) repeat(3,minmax(75px,.7fr)) minmax(75px,.9fr) auto;}
+.pr-root .pr-box-v409 .pr-intake-row-actions {min-width:42px;}
+.pr-root .pr-box-v409 .pr-box-v409-label-button {position:relative;box-sizing:border-box;display:grid;place-items:center;flex:0 0 42px;width:42px;height:42px;min-height:42px;padding:0;background:#fff;color:#172033;border:1px solid #dce3ed;border-radius:50%;cursor:pointer;}
+.pr-root .pr-box-v409 .pr-box-v409-label-button:hover {background:#f2f5f9;border-color:#aab6c7;}
+.pr-root .pr-box-v409 .pr-box-v409-label-button:focus-visible {outline:3px solid #93a2b6;outline-offset:2px;}
+.pr-box-v409-label-count {position:absolute;top:-6px;right:-6px;min-width:16px;height:16px;display:grid;place-items:center;padding:0 3px;border-radius:10px;background:#f76b13;color:#fff;font-weight:800;font-size:9px;line-height:1;}
+.pr-root .pr-box-v409 .pr-box-v409-equal-editor {border-top:1px solid #e8ecf1;padding:14px;min-width:0;}
+.pr-root .pr-box-v409 .pr-box-v409-equal-editor .pr-equal-packing {margin:0;max-width:100%;}
+.pr-root .pr-box-v409 .pr-box-v409-row.is-editing {border-color:#a5b1c3;background:#fbfcfe;}
+@media(max-width:1050px) {
+ .pr-root .pr-box-v409 .pr-pt-kit-body {overflow-x:auto;overscroll-behavior-inline:contain;}
+ .pr-root .pr-box-v409 .pr-intake-component {min-width:585px;}
+ .pr-root .pr-box-v409 .pr-intake-component-main {grid-template-columns:minmax(155px,1.7fr) repeat(3,80px) 65px 44px;gap:8px;}
+}
+@media(max-width:800px) {
+ .pr-root .pr-box-v409 .pr-intake-tabs-toolbar {gap:7px;}
+ .pr-root .pr-box-v409 .pr-intake-tabs-actions {gap:6px;}
+ .pr-root .pr-box-v409 .pr-box-v409-label-button {flex-basis:38px;width:38px;height:38px;min-height:38px;}
+}
+@media(max-width:590px) {
+ .pr-root .pr-box-v409 .pr-intake-tabs-toolbar {flex-wrap:wrap;}
+ .pr-root .pr-box-v409 .pr-intake-tabs-toolbar .pr-stage-filter-tabs {flex:1 1 100%;width:100%;}
+ .pr-root .pr-box-v409 .pr-intake-tabs-actions {width:100%;justify-content:flex-end;}
+ .pr-root .pr-box-v409 .pr-intake-search-control.is-open {width:clamp(180px,57vw,280px);}
+ .pr-root .pr-box-v409 .pr-box-v409-equal-editor {min-width:585px;}
+}
+html[data-theme="dark"] .pr-root .pr-box-v409 .pr-pt-kit-body,html[data-theme="dark"] .pr-root .pr-box-v409 .pr-pt-kit-body .pr-intake-component {background:#202633;border-color:#414b5a;}
+html[data-theme="dark"] .pr-root .pr-box-v409 .pr-box-v409-equal-editor {border-top-color:#414b5a;}
+html[data-theme="dark"] .pr-root .pr-box-v409 .pr-box-v409-label-button {background:#283141;color:#fff;border-color:#465166;}

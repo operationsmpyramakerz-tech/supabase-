@@ -2,6 +2,7 @@
 import StageFilterTabs from "./StageFilterTabs";
 import PreparingSelect from "./PreparingSelect";
 import {useEffect,useMemo,useRef,useState} from "react";
+import {createPortal} from "react-dom";
 import {warehouseGroups} from "../../lib/preparing-warehouse-view.mjs";
 import SchoolEqualPackingEditor from "./SchoolEqualPackingEditor";
 import {filterBoxDistributionRows} from "../../lib/preparing-box-visibility.mjs";
@@ -34,11 +35,21 @@ function BoxIcon({name="box",size=21}){
   packed:<><path d="M3 7 12 2l9 5v10l-9 5-9-5V7Z"/><path d="m3 7 9 5 9-5M12 12v10m-3-13 6-3"/></>,
   search:<><circle cx="10.8" cy="10.8" r="7"/><path d="m16 16 5 5"/></>,
   close:<path d="M5 5 19 19M19 5 5 19"/>,
+  history:<><path d="M3 12a9 9 0 1 0 2.3-6"/><path d="M3 4v5h5M12 7v5l3.5 2"/></>,
+  download:<><path d="M12 3v12m-5-5 5 5 5-5"/><path d="M4 17v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></>,
+  edit:<><path d="m4 20 4.5-1.1L20 7.4a2.2 2.2 0 0 0-3.1-3.1L5.4 15.8 4 20ZM14.6 6.6l2.8 2.8"/></>,
+  expand:<><path d="M14 4h6v6M20 4l-8 8M20 14v6H4V4h6"/></>,
+  previous:<path d="m14 5-7 7 7 7"/>,
+  next:<path d="m10 5 7 7-7 7"/>,
   more:<><circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none"/></>,
   rename:<><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L9 17l-4 1 1-4 10.5-10.5Z"/></>,
   trash:<><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M5 6l1 15h12l1-15M10 10v7m4-7v7"/></>
  };
  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{shapes[name]||shapes.box}</svg>;
+}
+function BoxComponentPhoto({row,onOpen}){
+ const url=row.imageUrls?.[0];
+ return url?<button type="button" className="pr-intake-thumb" aria-label={`View image of ${row.name}`} title={`View photo: ${row.name}`} onClick={onOpen}><img src={url} alt="" loading="lazy" referrerPolicy="no-referrer" onError={event=>{event.currentTarget.hidden=true;event.currentTarget.parentElement?.classList.add("is-broken");}}/><span className="pr-intake-thumb-expand"><BoxIcon name="expand" size={12}/></span></button>:<span className="pr-intake-thumb pr-intake-thumb-empty" aria-label="No component photo available"><BoxIcon name="box" size={18}/></span>;
 }
 const count=x=>Number(x)||0;
 const formatted=x=>count(x).toLocaleString("en-US");
@@ -46,9 +57,14 @@ const norm=x=>String(x??"").trim().toLowerCase();
 const same=(a,b)=>norm(a.product_id)===norm(b.product_id)&&norm(a.product_name)===norm(b.product_name);
 const matchesKit=(c,kit)=>kit==="General"?!(c.source_kits||[]).length:(c.source_kits||[]).some(x=>x.kitName===kit);
 const readableDate=x=>{try{return new Date(x).toLocaleString("en-GB",{dateStyle:"medium",timeStyle:"short"});}catch{return "—";}};
-export default function ProjectBoxDistribution({projectId,rows,kitGroups,request,allowed,editTabs={},mode="boxes",navigation,onChanged,filter,setFilter,onReturnToBoxes}){
+export default function ProjectBoxDistribution({projectId,rows,kitGroups,request,allowed,editTabs={},mode="boxes",historyActive=false,onHistoryToggle,onDownload,downloadDisabled=false,onChanged,filter,setFilter,onReturnToBoxes}){
  const [data,setData]=useState(null),[loading,setLoading]=useState(true),[error,setError]=useState(""),[notice,setNotice]=useState(""),[busy,setBusy]=useState(false);
- const [search,setSearch]=useState(""),[opened,setOpened]=useState(null),[editing,setEditing]=useState(""),[rowError,setRowError]=useState("");
+ const [search,setSearch]=useState(""),[searchOpen,setSearchOpen]=useState(false),searchInputRef=useRef(null),[opened,setOpened]=useState(null),[editing,setEditing]=useState(""),[rowError,setRowError]=useState("");
+ const closeSearch=()=>{setSearchOpen(false);setSearch("");};
+ useEffect(()=>{if(searchOpen&&mode==="boxes")searchInputRef.current?.focus();},[searchOpen,mode]);
+ useEffect(()=>{if(mode!=="boxes")closeSearch();},[mode]);
+ const [preview,setPreview]=useState(null),[previewIndex,setPreviewIndex]=useState(0);
+ useEffect(()=>{if(!preview)return;const key=event=>{if(event.key==="Escape")setPreview(null);else if(event.key==="ArrowRight")setPreviewIndex(v=>(v+1)%(preview.imageUrls?.length||1));else if(event.key==="ArrowLeft")setPreviewIndex(v=>(v+(preview.imageUrls?.length||1)-1)%(preview.imageUrls?.length||1));};window.addEventListener("keydown",key);return()=>window.removeEventListener("keydown",key);},[preview]);
  const canEditTab=allowed && editTabs[filter] !== false;
  const canManageLabels=allowed && editTabs.all !== false;
  const [labelSchool,setLabelSchool]=useState(""),[labelKit,setLabelKit]=useState(""),[labelCount,setLabelCount]=useState("1");
@@ -179,15 +195,39 @@ export default function ProjectBoxDistribution({projectId,rows,kitGroups,request
    return {...h,delta:now-prior};
   }).reverse();
  },[data]);
+ const packActors=useMemo(()=>{const map=new Map();for(const event of data?.audit||[]){if(event.action!=="set_line"||!event.changed_by_name||!event.details?.component)continue;const name=norm(event.details.component);if(!map.has(name))map.set(name,[]);const list=map.get(name);if(!list.includes(event.changed_by_name))list.push(event.changed_by_name);}return map;},[data]);
  return <div className="pr-box-distribution">
   {error&&<div className="pr-alert" role="alert">{error}</div>}{notice&&<div className="pr-manifest-success" role="status">{notice}</div>}
   {loading?<p className="pr-muted">Loading box distribution…</p>:<>
-   <div className="pr-production-summary pr-box-summary pr-pt-stat-grid" aria-label="Box Distribution summary">{[["Operations Received",totals.production,"required","inbox"],["Packed",totals.packed,"received","packed"],["Available to Pack / Unpacked",totals.unpacked,"available","box"]].map(([name,n,tone,icon])=><div className={`pr-pt-stat pr-pt-stat--${tone}`} key={tone}><span className="pr-pt-stat-icon"><BoxIcon name={icon} size={22}/></span><span className="pr-pt-stat-copy"><span>{name}</span><strong>{formatted(n)}</strong></span></div>)}</div>
-   <StageFilterTabs label="Box component status" options={[...filterOptions].sort((a,b)=>Number(b.value==="all")-Number(a.value==="all"))} value={mode==="boxes"?filter:""} onChange={value=>{setFilter(value);setOpened(null);setEditing("");setRowError("");if(mode!=="boxes")onReturnToBoxes?.();}}/>
-   {typeof navigation==="function"&&navigation(openBoxLabels,activeCartons.length,mode==="boxes"?<label className="pr-search pr-pt-search"><BoxIcon name="search" size={18}/><input type="search" aria-label="Search box distribution" placeholder="Search component or code…" value={search} onChange={e=>setSearch(e.target.value)}/>{search&&<button type="button" className="pr-pt-clear-search" aria-label="Clear box search" title="Clear search" onClick={()=>setSearch("")}><BoxIcon name="close" size={16}/></button>}</label>:<span className="pr-stage-history-label">Box History</span>)}
+   <div className="pr-intake-tabs-toolbar">
+    <StageFilterTabs label="Box component status" options={[{value:"all",label:"All Components"},{value:"available",label:"Remaining to Pack"},{value:"packed",label:"Packed"}]} value={mode==="boxes"?filter:""} onChange={value=>{setFilter(value);setOpened(null);setEditing("");setRowError("");if(mode!=="boxes")onReturnToBoxes?.();}}/>
+    <div className="pr-intake-tabs-actions" aria-label="Box Distribution toolbar">
+     <div className="pr-intake-search-slot"><div className={`pr-intake-search-control${searchOpen?" is-open":""}`} role="search">
+      <button type="button" className="pr-intake-search-toggle" aria-label={searchOpen?"Close box search":"Search box distribution"} aria-expanded={searchOpen} aria-controls="pr-box-distribution-search" title={searchOpen?"Close search":"Search components"} onClick={()=>{if(searchOpen)closeSearch();else{onReturnToBoxes?.();setSearchOpen(true);}}}><BoxIcon name="search" size={17}/></button>
+      <div className="pr-intake-search-expand"><input ref={searchInputRef} id="pr-box-distribution-search" type="search" aria-label="Search box distribution" placeholder="Search component or code…" disabled={!searchOpen} tabIndex={searchOpen?0:-1} value={search} onChange={event=>setSearch(event.target.value)} onKeyDown={event=>{if(event.key==="Escape"){event.preventDefault();closeSearch();}}}/><button type="button" className="pr-intake-search-clear" aria-label="Close box search" title="Close search" disabled={!searchOpen} tabIndex={searchOpen?0:-1} onClick={closeSearch}><BoxIcon name="close" size={17}/></button></div>
+     </div></div>
+     <button type="button" className="pr-box-v409-label-button" aria-label="Boxes Label" title="Manage box labels" onClick={openBoxLabels}><BoxIcon name="box" size={20}/>{activeCartons.length>0&&<span className="pr-box-v409-label-count">{activeCartons.length}</span>}</button>
+     <button type="button" aria-label="Box History" aria-pressed={historyActive} title="Box History" className={`pr-pt-history-button${historyActive?" is-active":""}`} onClick={()=>{closeSearch();onHistoryToggle?.();}}><BoxIcon name="history" size={20}/></button>
+     <button type="button" className="pr-pt-download-button" aria-label="Download Box Distribution report" title="Download Box Distribution report" onClick={onDownload} disabled={downloadDisabled}><BoxIcon name="download" size={20}/></button>
+    </div>
+   </div>
    {mode==="boxes"&&<>
-    <div className="pr-pt-kits pr-pt-kit-list pr-box-kit-list">{groups.map(g=>{const appearance=boxKitAppearance(g.name),open=Boolean(search.trim())||opened===g.key;return <section className={`pr-pt-kit-group pr-pt-kit--${appearance.tone}${open?" is-open":""}`} key={g.key}><button type="button" className="pr-pt-kit-heading" aria-expanded={open} onClick={()=>setOpened(open?"__none__":g.key)}><span className="pr-pt-kit-emblem" aria-hidden="true"><BoxIcon name={appearance.icon} size={21}/></span><span className="pr-pt-kit-title"><strong>{g.name}</strong><small>{g.items.length} components</small></span><span className="pr-pt-kit-arrow" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg></span></button>{open&&<div className="pr-pt-kit-body">{g.items.map(row=><article className="pr-production-row" key={g.key+row.id}><div className="pr-production-item-head"><div><strong>{row.name}</strong></div><span className="pr-production-badge">Operations Received {formatted(row.productionReceived)}</span></div><div className="pr-production-metrics pr-box-metrics"><div><small>Available to Pack</small><strong>{formatted(row.unpacked)}</strong></div><div><small>Packed</small><strong className="pr-box-purple">{formatted(row.packedQty)}</strong></div><div><small>Unpacked</small><strong>{formatted(row.unpacked)}</strong></div><div className="pr-production-actions">{editing===`${g.name}::${row.id}`?<button className="pr-secondary" disabled={busy} onClick={()=>{setEditing("");setRowError("");}}>Cancel</button>:<button className="pr-secondary" disabled={!canEditTab||busy} onClick={()=>begin(row,g.name)}>Edit</button>}</div></div>{editing===`${g.name}::${row.id}`&&<SchoolEqualPackingEditor key={`${g.name}-${row.id}`} row={row} kitName={g.name} data={data} busy={busy} error={rowError} onCancel={()=>{setEditing("");setRowError("");}} onSave={selections=>saveSchoolPacking(row,g.name,selections)}/>}</article>)}</div>}</section>;})}{!groups.length&&<p className="pr-wh-empty">No components match this filter. Try All Components to review previously packed stock.</p>}</div>
+    <div className="pr-pt-kits pr-pt-kit-list pr-box-kit-list">{groups.map(g=>{const appearance=boxKitAppearance(g.name),open=Boolean(search.trim())||opened===g.key;return <section className={`pr-pt-kit-group pr-pt-kit--${appearance.tone}${open?" is-open":""}`} key={g.key}>
+     <button type="button" className="pr-pt-kit-heading" aria-expanded={open} onClick={()=>setOpened(open?"__none__":g.key)}><span className="pr-pt-kit-emblem" aria-hidden="true"><BoxIcon name={appearance.icon} size={21}/></span><span className="pr-pt-kit-title"><strong>{g.name}</strong><small>{g.items.length} components</small></span><span className="pr-pt-kit-arrow" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg></span></button>
+     {open&&<div className="pr-pt-kit-body">{g.items.map(row=>{const active=editing===`${g.name}::${row.id}`,actors=packActors.get(norm(row.name))||[];return <article className={`pr-pt-row pr-intake-component pr-box-v409-row${active?" is-editing":""}`} key={`${g.key}-${row.id}`}>
+      <div className="pr-intake-component-main">
+       <div className="pr-intake-component-product"><BoxComponentPhoto row={row} onOpen={()=>{setPreview(row);setPreviewIndex(0);}}/><div className="pr-pt-name"><strong>{row.name}</strong>{row.code&&<small>{row.code}</small>}</div></div>
+       <div className="pr-intake-cell"><span>Operations Received</span><strong>{formatted(row.productionReceived)}</strong></div>
+       <div className="pr-intake-cell pr-intake-cell--received"><span>Packed</span><strong>{formatted(row.packedQty)}</strong></div>
+       <div className="pr-intake-cell"><span>Remaining</span><strong>{formatted(row.unpacked)}</strong></div>
+       <div className="pr-intake-editors" aria-label={actors.length?`Packed by ${actors.join(", ")}`:"No recorded packers"}>{actors.length?actors.slice(0,3).map(person=><span className="pr-intake-avatar" key={person} title={person}>{String(person).slice(0,1).toUpperCase()}</span>):<span className="pr-intake-no-editors">—</span>}</div>
+       <div className="pr-intake-row-actions">{canEditTab&&(active?<button type="button" className="pr-intake-action pr-intake-action--cancel" aria-label={`Cancel packing edit for ${row.name}`} disabled={busy} title="Cancel" onClick={()=>{setEditing("");setRowError("");}}><BoxIcon name="close" size={17}/></button>:<button type="button" className="pr-intake-edit-icon" disabled={busy} aria-label={`Edit packing for ${row.name}`} title="Pack by School" onClick={()=>begin(row,g.name)}><BoxIcon name="edit" size={18}/></button>)}</div>
+      </div>
+      {active&&<div className="pr-box-v409-equal-editor"><SchoolEqualPackingEditor key={`${g.name}-${row.id}`} row={row} kitName={g.name} data={data} busy={busy} error={rowError} onCancel={()=>{setEditing("");setRowError("");}} onSave={selections=>saveSchoolPacking(row,g.name,selections)}/></div>}
+     </article>;})}</div>}
+    </section>;})}{!groups.length&&<p className="pr-wh-empty">No components match this filter. Try All Components to review previously packed stock.</p>}</div>
    </>}
+   {preview&&typeof document!=="undefined"&&createPortal(<div className="pr-intake-image-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setPreview(null);}}><section className="pr-intake-image-modal" role="dialog" aria-modal="true" aria-label={`Component image: ${preview.name}`}><header className="pr-intake-image-header"><div><strong>{preview.name}</strong>{(preview.imageUrls?.length||0)>1&&<small>{previewIndex+1} / {preview.imageUrls.length}</small>}</div><button type="button" autoFocus aria-label="Close image preview" onClick={()=>setPreview(null)}><BoxIcon name="close" size={20}/></button></header><div className="pr-intake-image-content">{(preview.imageUrls?.length||0)>1&&<button type="button" aria-label="Previous image" onClick={()=>setPreviewIndex(i=>(i+preview.imageUrls.length-1)%preview.imageUrls.length)}><BoxIcon name="previous" size={22}/></button>}<img src={preview.imageUrls[previewIndex]} alt={preview.name}/>{(preview.imageUrls?.length||0)>1&&<button type="button" aria-label="Next image" onClick={()=>setPreviewIndex(i=>(i+1)%preview.imageUrls.length)}><BoxIcon name="next" size={22}/></button>}</div></section></div>,document.body)}
    {boxesOpen&&<div className="pr-box-labels-overlay" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget)closeBoxLabels();}}><section ref={boxesModalRef} className="pr-box-labels-sheet" role="dialog" aria-modal="true" aria-label="Boxes Label">
       <header className="pr-box-labels-head"><div className="pr-box-labels-head-icon"><BoxIcon name="box" size={23}/></div><div className="pr-box-labels-heading"><h4>Boxes Label</h4><p>School Kit labels, packing contents and verification</p></div><span className="pr-box-labels-total">{activeCartons.length} boxes</span><button type="button" ref={boxesCloseRef} className="pr-box-labels-close" aria-label="Close Boxes Label" onClick={closeBoxLabels}><BoxIcon name="close" size={19}/></button></header>
       <div className="pr-box-labels-body">
