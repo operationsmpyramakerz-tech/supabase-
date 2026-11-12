@@ -4,12 +4,13 @@ import {NextResponse} from "next/server";
 import {getDirectAccountGate} from "../../../../lib/products-auth";
 import {featureGate} from "../../../../lib/feature-permissions-server";
 import {productionWorkspace,saveProductionHandoff,saveProductionBox,saveEqualSchoolKitPacking} from "../../../../lib/preparing-production";
+import {productionPresentationWorkspace} from "../../../../lib/preparing-production-presentation";
 export const dynamic="force-dynamic";
 export const revalidate=0;
 const reply=(body,status=200)=>NextResponse.json(body,{status,headers:{"Cache-Control":"private, no-store"}});
 const gate=async feature=>featureGate(await getDirectAccountGate(["Projects Preparing"]),`preparing.${feature}`);
 const handle=e=>{console.error("[preparing:production]",e?.message||e);return reply({ok:false,error:e?.message||"Production workflow failed."},e?.status||500);};
-export async function GET(req){const auth=await gate("view");if(!auth.ok)return reply({ok:false,error:auth.error||"Access denied."},auth.status||403);const params=new URL(req.url).searchParams;const stage=params.get("scope")==="boxes"?"boxes":"production";if(!preparingStageReadable(auth.account,stage))return reply({ok:false,error:`${stage} stage access is not allowed.`},403);try{const data=await productionWorkspace(params.get("projectId"));
+export async function GET(req){const auth=await gate("view");if(!auth.ok)return reply({ok:false,error:auth.error||"Access denied."},auth.status||403);const params=new URL(req.url).searchParams;const stage=params.get("scope")==="boxes"?"boxes":"production";if(!preparingStageReadable(auth.account,stage))return reply({ok:false,error:`${stage} stage access is not allowed.`},403);try{const data=await (stage==="production"?productionPresentationWorkspace(params.get("projectId")):productionWorkspace(params.get("projectId")));
   // Both screens need aggregate balances, but their private history lists are
   // separate: do not return carton details to Receiving-only users, or actor
   // handoff history to Box Distribution-only users.

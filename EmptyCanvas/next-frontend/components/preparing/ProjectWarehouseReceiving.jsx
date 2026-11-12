@@ -1,7 +1,8 @@
 "use client";
 import StageFilterTabs from "./StageFilterTabs";
 import StageQuantityInput from "./StageQuantityInput";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { warehouseTotals,warehouseReceivingBalances,warehouseReceiptLimit,projectRequired } from "../../lib/preparing-warehouse-math.mjs";
 import {WAREHOUSE_COLUMNS,warehouseGroups,warehouseExportValue,filterWarehouseReceivingRows} from "../../lib/preparing-warehouse-view.mjs";
 const number=v=>Number(v)||0;
@@ -38,13 +39,41 @@ function WarehouseIcon({name="box",size=20}){
   download:<><path d="M12 3v12m-5-5 5 5 5-5"/><path d="M4 17v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></>,
   clock:<><circle cx="12" cy="12" r="9"/><path d="M12 6.5V12l3.5 2"/></>,
   inbox:<><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 13h5l2 3h4l2-3h5"/></>,
+  edit:<><path d="m4 20 4.5-1.1L20 7.4a2.2 2.2 0 0 0-3.1-3.1L5.4 15.8 4 20ZM14.6 6.6l2.8 2.8"/></>,
+  check:<path d="m5 12 4 4L19 6"/>,
+  expand:<><path d="M14 4h6v6M20 4l-8 8M20 14v6H4V4h6"/></>,
+  arrowLeft:<path d="m14 5-7 7 7 7"/>,
+  arrowRight:<path d="m10 5 7 7-7 7"/>,
+  warehouse:<><path d="M3 10 12 3l9 7v11H3V10Z"/><path d="M9 21v-8h6v8M3 10h18"/></>,
  };
  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{shapes[name]||shapes.box}</svg>;
 }
 
+// The shared Stage 1/2 visual primitives; images and avatars are read-only.
+function EditorAvatars({people=[]}){
+ if(!people.length)return <span className="pr-intake-no-editors" aria-label="No recorded editors">—</span>;
+ const visible=people.slice(0,3);
+ return <div className="pr-intake-editors" aria-label={`Recorded by ${people.map(person=>person.name).join(", ")}`}>
+  {visible.map(person=><span className="pr-intake-avatar" key={person.id||person.name} title={person.name}>
+   <span aria-hidden="true">{String(person.name||"?").trim().slice(0,1).toUpperCase()}</span>
+   {person.photoUrl&&<img src={person.photoUrl} alt="" loading="lazy" referrerPolicy="no-referrer" onError={event=>{event.currentTarget.hidden=true;}}/>}
+  </span>)}
+  {people.length>3&&<span className="pr-intake-avatar pr-intake-avatar-more" title={people.slice(3).map(person=>person.name).join(", ")}>+{people.length-3}</span>}
+ </div>;
+}
+function ComponentThumbnail({row,onOpen}){
+ const image=row.imageUrls?.[0];
+ return image?<button type="button" className="pr-intake-thumb" title={`View photo: ${row.name}`} aria-label={`View image of ${row.name}`} onClick={()=>onOpen(row)}><img src={image} alt="" loading="lazy" referrerPolicy="no-referrer" onError={event=>{event.currentTarget.hidden=true;event.currentTarget.parentElement?.classList.add("is-broken");}}/><span className="pr-intake-thumb-expand"><WarehouseIcon name="expand" size={12}/></span></button>:
+ <span className="pr-intake-thumb pr-intake-thumb-empty" title="No component photo available" aria-label="No component photo available"><WarehouseIcon name="box" size={18}/></span>;
+}
 export default function ProjectWarehouseReceiving({projectId,projectName,canReceive,editTabs={},request,onClose,closurePanel}) {
  const [state,setState]=useState(empty),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false);
- const [tab,setTab]=useState("receiving"),[search,setSearch]=useState(""),[filter,setFilter]=useState("available");
+ const [tab,setTab]=useState("receiving"),[search,setSearch]=useState(""),[filter,setFilter]=useState("all");
+ const [searchOpen,setSearchOpen]=useState(false);
+ const searchInputRef=useRef(null);
+ const [preview,setPreview]=useState(null),[previewIndex,setPreviewIndex]=useState(0);
+ useEffect(()=>{if(searchOpen&&tab==="receiving")searchInputRef.current?.focus();},[searchOpen,tab]);
+ const closeSearch=()=>{setSearchOpen(false);setSearch("");};
  const canEditTab=canReceive && editTabs[filter] !== false;
  const [showExport,setShowExport]=useState(false),[exportColumns,setExportColumns]=useState(WAREHOUSE_COLUMNS.map(c=>c.key)),[exportGroups,setExportGroups]=useState([]),[exportBusy,setExportBusy]=useState(false);
  const [expandedKit,setExpandedKit]=useState(null);
@@ -56,12 +85,16 @@ export default function ProjectWarehouseReceiving({projectId,projectName,canRece
  const summaries=useMemo(()=>warehouseReceivingBalances(warehouseTotals((state.items||[]).map(row=>({...row,required_qty:projectRequired(Number(row.required_qty||0),(state.schools||[]).length)})),state.receiptLines||[],state.allocations||[]),state.testingBalances||[]),[state]);
  const nameById=useMemo(()=>new Map(state.items.map(row=>[row.id,row.product_name])),[state]);
  const receivedById=useMemo(()=>{
-  const result=new Map();
+  const result=new Map(),linesByReceipt=new Map();
+  for(const line of state.receiptLines){
+   if(!linesByReceipt.has(line.receipt_id))linesByReceipt.set(line.receipt_id,[]);
+   linesByReceipt.get(line.receipt_id).push(line);
+  }
   for(const receipt of [...state.receipts].reverse()){
    if(!receipt.created_by_name)continue;
-   for(const line of state.receiptLines.filter(l=>l.receipt_id===receipt.id)){
+   for(const line of linesByReceipt.get(receipt.id)||[]){
     if(!result.has(line.item_id))result.set(line.item_id,new Map());
-    result.get(line.item_id).set(receipt.created_by_id,{id:receipt.created_by_id,name:receipt.created_by_name});
+    result.get(line.item_id).set(receipt.created_by_id||receipt.created_by_name,{id:receipt.created_by_id||receipt.created_by_name,name:receipt.created_by_name,photoUrl:receipt.created_by_photo_url||""});
    }
   }
   return result;
@@ -70,13 +103,30 @@ export default function ProjectWarehouseReceiving({projectId,projectName,canRece
  const shown=useMemo(()=>filterWarehouseReceivingRows(summaries.filter(row=>`${row.product_name} ${row.product_id}`.toLowerCase().includes(search.toLowerCase().trim())),filter),[summaries,search,filter]);
  const allGroups=useMemo(()=>warehouseGroups(filterWarehouseReceivingRows(summaries,"all"),state.kitGroups),[summaries,state.kitGroups]);
  const shownGroups=useMemo(()=>warehouseGroups(shown,state.kitGroups),[shown,state.kitGroups]);
+ const percent=totals.required>0?Math.min(100,Math.max(0,totals.accepted/totals.required*100)):0;
+ useEffect(()=>{
+  if(!preview)return;
+  const onKey=event=>{
+   if(event.key==="Escape")setPreview(null);
+   if(event.key==="ArrowRight")setPreviewIndex(index=>(index+1)%(preview.imageUrls?.length||1));
+   if(event.key==="ArrowLeft")setPreviewIndex(index=>(index+(preview.imageUrls?.length||1)-1)%(preview.imageUrls?.length||1));
+  };
+  window.addEventListener("keydown",onKey);
+  return()=>window.removeEventListener("keydown",onKey);
+ },[preview]);
+ const showPreview=row=>{setPreview(row);setPreviewIndex(0);};
  const historyEntries=useMemo(()=>state.receipts.flatMap(receipt=>state.receiptLines.filter(line=>line.receipt_id===receipt.id).map(line=>({key:line.id,receipt,line,component:nameById.get(line.item_id)||"Component"}))),[state.receipts,state.receiptLines,nameById]);
  async function execute(action,payload) {
   if(busy)return;setBusy(true);setError("");setSuccess("");
-  try {await request("/warehouse","POST",{action,projectId,editTab:action==="receive"?filter:"all",...payload});await reload();setSuccess(action==="capture"?"Project BOM captured.":"Warehouse return recorded.");return true;}
-  catch(e){setError(e.message||"Unable to save.");return false;}finally{setBusy(false);}
+  try {
+   await request("/warehouse","POST",{action,projectId,editTab:action==="receive"?filter:"all",...payload});
+   setSuccess(action==="capture"?"Project BOM captured.":"Warehouse return recorded.");
+   try{await reload();}catch{setError("Saved successfully, but the latest values could not be refreshed. Reopen Warehouse Return to reload them.");}
+   return true;
+  }catch(e){setError(e.message||"Unable to save.");return false;}finally{setBusy(false);}
  }
  function enableReceipt(row){
+  if(!canEditTab||busy)return;
   setError("");setClearConfirm(null);
   setDraft(prev=>({...prev,[row.id]:String(row.accepted)}));
   setEditing(prev=>({...prev,[row.id]:true}));
@@ -86,7 +136,7 @@ export default function ProjectWarehouseReceiving({projectId,projectName,canRece
   setDraft(prev=>{const next={...prev};delete next[row.id];return next;});
  }
  async function saveReceipt(row){
-  if(busy)return;
+  if(busy||!canEditTab)return;
   let acceptedDelta;
   try{acceptedDelta=warehouseReceiptLimit(row.accepted,draft[row.id],row.tested,row.allocated);}
   catch(e){setRowError(old=>({...old,[row.id]:e.message}));return;}
@@ -95,6 +145,7 @@ export default function ProjectWarehouseReceiving({projectId,projectName,canRece
   if(ok){cancelReceipt(row);setRowError(old=>({...old,[row.id]:""}));}
  }
  async function clearReceipt(row){
+  if(busy||!canEditTab)return;
   if(row.accepted<=0){setClearConfirm(null);return;}
   if(await execute("receive",{kind:"adjustment",lines:[{itemId:row.id,accepted:-row.accepted}]})){
    cancelReceipt(row);setClearConfirm(null);
@@ -120,33 +171,67 @@ export default function ProjectWarehouseReceiving({projectId,projectName,canRece
  }
  const toggleColumn=key=>{if(key==="name")return;setExportColumns(old=>old.includes(key)?old.filter(v=>v!==key):WAREHOUSE_COLUMNS.filter(c=>old.includes(c.key)||c.key===key).map(c=>c.key));};
  const toggleGroup=key=>setExportGroups(old=>{const all=allGroups.map(g=>g.key),current=old.length?old:all,updated=current.includes(key)?current.filter(k=>k!==key):all.filter(k=>current.includes(k)||k===key);return !updated.length?old:updated.length===all.length?[]:updated;});
- return <div className="pr-wh pr-wr-modern pr-pt-modern pr-warehouse-parity">
-  <header className="pr-manifest-title pr-wh-title pr-pt-title"><div><span className="pr-wh-overline">TESTED COMPONENTS · {projectName}</span><h3>Warehouse Return</h3></div><button type="button" className="pr-pt-close" aria-label="Close Warehouse Return" title="Close" onClick={onClose}><WarehouseIcon name="close" size={19}/></button></header>
-  {closurePanel}
+ return <div className="pr-wh pr-wr-modern pr-pt pr-pt-modern pr-warehouse-parity pr-intake-v401 pr-warehouse-v407">
+  <header className="pr-manifest-title pr-wh-title pr-pt-title">
+   <div className="pr-intake-heading"><WarehouseIcon name="warehouse" size={48}/><div><h3>Warehouse Return</h3></div></div>
+   <button type="button" className="pr-pt-close" aria-label="Close Warehouse Return" title="Close" onClick={onClose}><WarehouseIcon name="close" size={19}/></button>
+  </header>
   {error&&<div className="pr-alert" role="alert">{error}<button type="button" onClick={()=>setError("")} aria-label="Dismiss">×</button></div>}
   {success&&<div className="pr-manifest-success" role="status">{success}</div>}
   {loading?<p className="pr-muted">Loading warehouse return records…</p>:<>
-   <div className="pr-wh-stats pr-pt-stat-grid" aria-label="Warehouse Return summary">{[["Tested",totals.tested,"required","◆"],["Returned",totals.accepted,"received","↓"],["Ready to Return",totals.readyToReceive,"available","inbox"]].map(([label,value,key,mark])=><div className={`pr-pt-stat pr-pt-stat--${key}`} key={key}><span className="pr-pt-stat-icon" aria-hidden="true">{mark==="inbox"?<WarehouseIcon name="inbox" size={23}/>:mark}</span><span className="pr-pt-stat-copy"><span>{label}</span><strong>{pretty(value)}</strong></span></div>)}</div>
-   <StageFilterTabs label="Warehouse return status" options={[{value:"all",label:"Tested Components"},{value:"available",label:"Ready to Return"},{value:"received",label:"Returned"}]} value={tab==="receiving"?filter:""} onChange={value=>{setFilter(value);setTab("receiving");setEditing({});setClearConfirm(null);setError("");}}/>
-   <div className="pr-stage-filter-toolbar pr-pt-toolbar">{tab==="receiving"?<label className="pr-search pr-pt-search"><WarehouseIcon name="search" size={18}/><input type="search" aria-label="Search tested components" placeholder="Search component or code…" value={search} onChange={e=>setSearch(e.target.value)}/>{search&&<button type="button" className="pr-pt-clear-search" onClick={()=>setSearch("")} aria-label="Clear search" title="Clear search"><WarehouseIcon name="close" size={16}/></button>}</label>:<span className="pr-stage-history-label">Return History</span>}
-    <div className="pr-stage-filter-actions"><button type="button" aria-pressed={tab==="history"} className={`pr-pt-history-button${tab==="history"?" is-active":""}`} aria-label={`Return History (${historyEntries.length} changes)`} title={`Movement History (${historyEntries.length})`} onClick={()=>{setTab(tab==="history"?"receiving":"history");setError("");}}><WarehouseIcon name="history" size={19}/></button><button type="button" className="pr-pt-download-button" aria-label="Download warehouse return report" onClick={()=>setShowExport(true)} disabled={!state.items.length}><WarehouseIcon name="download" size={18}/><span>Download</span></button></div>
+   <div className="pr-intake-summary">
+    <div className="pr-intake-progress" aria-label={`Project warehouse return progress ${percent.toFixed(2)}%`}>
+     <div className="pr-intake-progress-title"><span>Project Progress</span><strong>{percent.toFixed(2)}%</strong></div>
+     <div className="pr-intake-progress-track" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Number(percent.toFixed(2))} aria-label="Returned quantities"><span style={{width:`${percent}%`}}/></div>
+     <strong className="pr-intake-progress-numbers">{pretty(totals.accepted)} / {pretty(totals.required)}</strong>
+    </div>
+    <div className="pr-intake-signoff">{closurePanel}</div>
    </div>
-   {tab==="receiving"&&<div className="pr-wh-list pr-wr-list pr-pt-kit-list" aria-label="Tested components ready for warehouse return by Kit">{shownGroups.map(group=>{
+   <div className="pr-intake-tabs-toolbar">
+    <StageFilterTabs label="Warehouse return status" options={[{value:"all",label:"All Components"},{value:"available",label:"Remaining to Return"},{value:"received",label:"Returned"}]} value={tab==="receiving"?filter:""} onChange={value=>{setFilter(value);setTab("receiving");setEditing({});setDraft({});setClearConfirm(null);setError("");}}/>
+    <div className="pr-intake-tabs-actions" aria-label="Warehouse Return toolbar">
+     <div className="pr-intake-search-slot">
+      <div className={`pr-intake-search-control${searchOpen?" is-open":""}`} role="search">
+       <button type="button" className="pr-intake-search-toggle" aria-label={searchOpen?"Close component search":"Search components"} aria-controls="pr-warehouse-component-search" aria-expanded={searchOpen} title={searchOpen?"Close search":"Search components"} onClick={()=>{if(searchOpen)closeSearch();else{setTab("receiving");setSearchOpen(true);}}}><WarehouseIcon name="search" size={17}/></button>
+       <div className="pr-intake-search-expand">
+        <input ref={searchInputRef} id="pr-warehouse-component-search" type="search" aria-label="Search warehouse return components" placeholder="Search component or code…" disabled={!searchOpen} tabIndex={searchOpen?0:-1} value={search} onChange={event=>setSearch(event.target.value)} onKeyDown={event=>{if(event.key==="Escape"){event.preventDefault();closeSearch();}}}/>
+        <button type="button" className="pr-intake-search-clear" onClick={closeSearch} aria-label="Close component search" title="Close search" tabIndex={searchOpen?0:-1} disabled={!searchOpen}><WarehouseIcon name="close" size={17}/></button>
+       </div>
+      </div>
+     </div>
+     <button type="button" aria-pressed={tab==="history"} className={`pr-pt-history-button${tab==="history"?" is-active":""}`} aria-label={`Return History (${historyEntries.length} changes)`} title={`Return History (${historyEntries.length})`} onClick={()=>{setTab(tab==="history"?"receiving":"history");if(tab!=="history")closeSearch();setError("");}}><WarehouseIcon name="history" size={19}/></button>
+     <button type="button" className="pr-pt-download-button" aria-label="Download warehouse return report" title="Download warehouse return report" onClick={()=>setShowExport(true)} disabled={!state.items.length}><WarehouseIcon name="download" size={21}/></button>
+    </div>
+   </div>
+   {tab==="receiving"&&<div className="pr-wh-list pr-wr-list pr-pt-list pr-pt-kit-list" aria-label="Tested components ready for warehouse return by Kit">{shownGroups.map(group=>{
     const open=!!search.trim()||expandedKit===group.key;
     const appearance=warehouseKitAppearance(group.name);
     return <section className={`pr-pt-kit-group pr-pt-kit--${appearance.tone}${open?" is-open":""}`} key={group.key}>
-     <button type="button" className="pr-pt-kit-heading" aria-expanded={open} onClick={()=>setExpandedKit(open?"__none__":group.key)}><span className="pr-pt-kit-emblem" aria-hidden="true"><WarehouseIcon name={appearance.icon} size={21}/></span><span className="pr-pt-kit-title"><strong>{group.name}</strong><small>{group.items.length} components</small></span><span className="pr-pt-kit-arrow" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg></span></button>
+     <button type="button" className="pr-pt-kit-heading" aria-expanded={open} onClick={()=>setExpandedKit(open?"__none__":group.key)}><span className="pr-pt-kit-emblem" aria-hidden="true"><WarehouseIcon name={appearance.icon} size={21}/></span><span className="pr-pt-kit-title"><strong>{group.name}</strong></span><span className="pr-pt-kit-arrow" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg></span></button>
      {open&&<div className="pr-pt-kit-body">{group.items.map(row=>{
       const active=!!editing[row.id],people=[...(receivedById.get(row.id)?.values()||[])];
-      return <article className={`pr-wr-row${active?" is-editing":""}`} key={`${group.key}-${row.id}`}>
-       <div className="pr-wr-heading"><div className="pr-wr-name"><strong title={row.product_id?`Product code: ${row.product_id}`:undefined}>{row.product_name}</strong>{row.kitQuantity>0&&<small>Kit Qty: {pretty(row.kitQuantity)}</small>}</div><span className="pr-wr-required">Tested <b>{pretty(row.tested)}</b></span></div>
-       <div className="pr-wr-metrics">
-        <div className="pr-wr-stat pr-wr-stat-available"><span>Ready to Return</span><strong>{pretty(active?Math.max(0,row.tested-(Number(draft[row.id])||0)):row.readyToReceive)}</strong></div>
-        <div className="pr-wr-stat pr-wr-stat-received"><span>Returned</span>{active?<StageQuantityInput step="1" min="0" aria-label={`Returned ${row.product_name}`} disabled={busy} value={draft[row.id]??""} max={Math.max(row.accepted,row.tested)} onValueChange={value=>{setDraft(prev=>({...prev,[row.id]:value}));setRowError(prev=>({...prev,[row.id]:""}));}}/>:<strong>{pretty(row.accepted)}</strong>}</div>
-        <div className="pr-wr-stat pr-wr-person"><span>Recorded By</span><div className="pr-wr-people">{people.length?people.map(person=><span key={person.id}>{person.name}</span>):<em>—</em>}</div></div>
-        <div className="pr-wr-actions">{active?<><button className="pr-secondary" type="button" disabled={busy} onClick={()=>cancelReceipt(row)}>Cancel</button><button className="pr-primary" type="button" disabled={busy} onClick={()=>saveReceipt(row)}>Save</button></>:<><button className="pr-secondary" type="button" disabled={busy||!canEditTab} title={!canEditTab?"Enable Warehouse Return permission in Users Center":"Edit returned quantity"} onClick={()=>{if(!canEditTab){setRowError(old=>({...old,[row.id]:"Warehouse Return access is required. Ask an administrator to enable the Warehouse Return stage in Users Center → Advanced Permissions."}));return;}enableReceipt(row);}}>Edit</button>{canEditTab&&row.accepted>0&&<button className="pr-wr-erase" type="button" disabled={busy} title="Reverse returned balance without deleting audit history" onClick={()=>setClearConfirm(row)}>Clear</button>}</>}</div>
+      const editableDraft=draft[row.id]??"";
+      const pendingQuantity=active&&/^(0|[1-9]\d*)$/.test(String(editableDraft))?Math.max(0,row.tested-Number(editableDraft)):row.readyToReceive;
+      return <article className={`pr-pt-row pr-intake-component pr-intake-item--${filter==="available"?"pending":filter}${active?" is-editing":""}`} key={`${group.key}-${row.id}`}>
+       <div className={`pr-intake-component-main pr-intake-cols--${filter==="available"?"pending":filter}`}>
+        <div className="pr-intake-component-product"><ComponentThumbnail row={{...row,name:row.product_name}} onOpen={showPreview}/><div className="pr-pt-name"><strong title={row.product_id?`Product code: ${row.product_id}`:undefined}>{row.product_name}</strong>{row.product_id&&<small>{row.product_id}</small>}{row.accepted>row.tested&&<small className="pr-pt-warning">Historical returned quantity exceeds tested quantity; review this record.</small>}</div></div>
+        {filter!=="available"&&<div className="pr-intake-cell"><span>Tested</span><strong>{pretty(row.tested)}</strong></div>}
+        {filter==="available"&&<div className="pr-intake-cell"><span>Ready to Return</span><strong>{pretty(pendingQuantity)}</strong></div>}
+        <div className={`pr-intake-cell pr-intake-cell--received${active?" is-inline-edit":""}`}>
+         <span>Returned</span>
+         {active?<StageQuantityInput id={`pr-warehouse-qty-${row.id}`} step="1" min="0" inputMode="numeric" aria-label={`Returned quantity ${row.product_name}`} disabled={busy} value={editableDraft} max={Math.max(row.accepted,row.tested)} onValueChange={value=>{setDraft(prev=>({...prev,[row.id]:value}));setRowError(prev=>({...prev,[row.id]:""}));}} onKeyDown={event=>{if(event.key==="Enter"){event.preventDefault();saveReceipt(row);}else if(event.key==="Escape"){event.preventDefault();cancelReceipt(row);}}}/>:<strong>{pretty(row.accepted)}</strong>}
+        </div>
+        {filter==="all"&&<div className="pr-intake-cell"><span>Remaining</span><strong>{pretty(pendingQuantity)}</strong></div>}
+        <EditorAvatars people={people}/>
+        <div className="pr-intake-row-actions">{canEditTab&&(active?<>
+         <button type="button" className="pr-intake-action pr-intake-action--cancel" aria-label={`Cancel edit for ${row.product_name}`} title="Cancel" disabled={busy} onClick={()=>cancelReceipt(row)}><WarehouseIcon name="close" size={16}/></button>
+         <button type="button" className="pr-intake-action pr-intake-action--save" aria-label={`Save returned quantity for ${row.product_name}`} title="Save" disabled={busy} onClick={()=>saveReceipt(row)}><WarehouseIcon name="check" size={18}/></button>
+        </>:<>
+         <button type="button" className="pr-intake-edit-icon" aria-label={`Edit ${row.product_name}`} title="Edit returned quantity" disabled={busy} onClick={()=>enableReceipt(row)}><WarehouseIcon name="edit" size={17}/></button>
+         {row.accepted>0&&<button type="button" className="pr-intake-edit-icon" aria-label={`Reverse returned quantity for ${row.product_name}`} title="Reverse returned balance (audit retained)" disabled={busy} onClick={()=>setClearConfirm(row)}><WarehouseIcon name="history" size={17}/></button>}
+        </>)}</div>
        </div>
-       {rowError[row.id]&&<p className="pr-wr-inline-error" role="alert">{rowError[row.id]}</p>}
+       {rowError[row.id]&&<p className="pr-pt-inline-error" role="alert">{rowError[row.id]}</p>}
        {clearConfirm?.id===row.id&&<div className="pr-wr-confirm"><strong>Reverse all Returned units?</strong><small>This records a signed correction without deleting history. Units already handed to Operations or allocated cannot be reversed.</small><button type="button" className="pr-secondary" onClick={()=>setClearConfirm(null)}>Cancel</button><button type="button" className="pr-wr-erase" disabled={busy} onClick={()=>clearReceipt(row)}>Confirm reversal</button></div>}
       </article>;
      })}</div>}
@@ -155,7 +240,7 @@ export default function ProjectWarehouseReceiving({projectId,projectName,canRece
    {tab==="history"&&<section className="pr-wr-history" aria-label="Warehouse return audit history">
     <div className="pr-pt-history-heading"><div><h4>Return History</h4><p>Every change is retained as a separate transaction.</p></div><span className="pr-pt-history-count">{historyEntries.length} changes</span></div>
     <div className="pr-pt-history-grid">{historyEntries.map(({key,receipt,line,component})=><article className="pr-pt-history-card" key={key}>
-     <div className="pr-pt-history-top"><span className="pr-pt-history-avatar" aria-hidden="true">{(receipt.created_by_name||"?").slice(0,1).toUpperCase()}</span><div className="pr-pt-history-person"><strong>{receipt.created_by_name||"Historical record (name not available)"}</strong><span>{date(receipt.created_at)}</span></div><span className="pr-pt-history-label">{receipt.kind==="adjustment"?"Corrected":"Returned"}</span></div>
+     <div className="pr-pt-history-top"><span className="pr-pt-history-avatar" aria-hidden="true">{(receipt.created_by_name||"?").slice(0,1).toUpperCase()}{receipt.created_by_photo_url&&<img className="pr-warehouse-history-photo" src={receipt.created_by_photo_url} alt="" loading="lazy" referrerPolicy="no-referrer" onError={event=>{event.currentTarget.hidden=true;}}/>}</span><div className="pr-pt-history-person"><strong>{receipt.created_by_name||"Historical record (name not available)"}</strong><span>{date(receipt.created_at)}</span></div><span className="pr-pt-history-label">{receipt.kind==="adjustment"?"Corrected":"Returned"}</span></div>
      <div className="pr-pt-history-component"><strong>{component}</strong><span>{receipt.reference}</span></div>
      <div className="pr-pt-history-deltas"><span>Returned change<strong>{line.accepted_delta>0?"+":""}{pretty(line.accepted_delta)}</strong></span><span>Transaction<strong>{receipt.kind}</strong></span></div>
      {line.damaged_delta!==0&&<p className="pr-pt-history-note">Historical damaged entry: {pretty(line.damaged_delta)} (read-only)</p>}
@@ -163,6 +248,18 @@ export default function ProjectWarehouseReceiving({projectId,projectName,canRece
     </article>)}{!historyEntries.length&&<div className="pr-wh-empty">No warehouse return movements recorded yet.</div>}</div>
    </section>}
   </>}
+  {preview&&typeof document!=="undefined"&&createPortal(
+   <div className="pr-intake-image-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setPreview(null);}}>
+    <section className="pr-intake-image-modal" role="dialog" aria-modal="true" aria-label={`Component image: ${preview.name}`}>
+     <header className="pr-intake-image-header"><div><strong>{preview.name}</strong>{(preview.imageUrls?.length||0)>1&&<small>{previewIndex+1} / {preview.imageUrls.length}</small>}</div><button type="button" autoFocus aria-label="Close image preview" onClick={()=>setPreview(null)}><WarehouseIcon name="close" size={20}/></button></header>
+     <div className="pr-intake-image-content">
+      {(preview.imageUrls?.length||0)>1&&<button type="button" aria-label="Previous image" onClick={()=>setPreviewIndex(i=>(i+preview.imageUrls.length-1)%preview.imageUrls.length)}><WarehouseIcon name="arrowLeft" size={23}/></button>}
+      <img src={preview.imageUrls[previewIndex]} alt={preview.name}/>
+      {(preview.imageUrls?.length||0)>1&&<button type="button" aria-label="Next image" onClick={()=>setPreviewIndex(i=>(i+1)%preview.imageUrls.length)}><WarehouseIcon name="arrowRight" size={23}/></button>}
+     </div>
+    </section>
+   </div>,document.body
+  )}
   {showExport&&<div className="pr-pt-export-overlay" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget&&!exportBusy)setShowExport(false);}}><section className="pr-pt-export-modal" role="dialog" aria-modal="true" aria-label="Export warehouse return">
    <header className="pr-pt-export-head"><div><strong>Export Warehouse Return</strong><small>Choose columns, Kits, and format</small></div><button type="button" className="pr-secondary" disabled={exportBusy} onClick={()=>setShowExport(false)}>×</button></header>
    <div className="pr-pt-export-body"><div className="pr-pt-export-summary">{exportColumns.length} columns selected <span aria-hidden="true">·</span> {exportGroups.length||allGroups.length} kit groups</div><div className="pr-pt-export-section-head"><strong>Columns</strong><button type="button" className="pr-pt-export-link" onClick={()=>setExportColumns(WAREHOUSE_COLUMNS.map(c=>c.key))}>Select all</button></div><div className="pr-pt-export-checks">{WAREHOUSE_COLUMNS.map(c=><label key={c.key} className="pr-pt-export-check"><input type="checkbox" checked={exportColumns.includes(c.key)} disabled={c.fixed} onChange={()=>toggleColumn(c.key)}/><span>{c.label}</span></label>)}</div>

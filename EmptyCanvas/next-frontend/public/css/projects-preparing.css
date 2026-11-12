@@ -5168,3 +5168,42 @@ html[data-theme="dark"] .pr-intake-v401 .pr-intake-cell--received.is-inline-edit
  .pr-intake-v401 .pr-intake-search-toggle,
  .pr-intake-v401 .pr-intake-search-expand {transition:none;}
 }
+
+/* v407 — Warehouse Return uses the shared approved v401/v405 stage UI. */
+.pr-warehouse-v407 .pr-wh-list.pr-wr-list {max-height:none;min-height:0;overflow:visible;gap:15px;}
+.pr-warehouse-v407 .pr-pt-kit-group .pr-pt-kit-body {padding:0 13px 12px;gap:7px;border-top:1px solid #eceff5;background:#fff;}
+.pr-warehouse-v407 .pr-pt-kit-body .pr-intake-component {min-width:0;}
+.pr-warehouse-v407 .pr-pt-kit-body .pr-intake-item--pending .pr-intake-component-main {grid-template-columns:minmax(190px,1.85fr) repeat(2,minmax(80px,.7fr)) minmax(75px,.9fr) auto;}
+.pr-warehouse-v407 .pr-pt-kit-body .pr-intake-item--received .pr-intake-component-main {grid-template-columns:minmax(190px,1.85fr) repeat(2,minmax(80px,.7fr)) minmax(75px,.9fr) auto;}
+.pr-warehouse-v407 .pr-pt-kit-body .pr-intake-component.is-editing .pr-intake-component-main {grid-template-columns:minmax(190px,1.85fr) repeat(3,minmax(72px,.65fr)) minmax(75px,.9fr) auto;}
+.pr-warehouse-v407 .pr-wr-confirm {margin:8px 12px 12px;}
+.pr-warehouse-v407 .pr-pt-history-avatar {position:relative;overflow:hidden;}
+.pr-warehouse-history-photo {display:block;position:absolute;inset:0;width:100%;height:100%;border-radius:50%;object-fit:cover;}
+@media(max-width:800px){
+ .pr-warehouse-v407 .pr-pt-kit-body .pr-intake-component {min-width:540px;}
+ .pr-warehouse-v407 .pr-pt-kit-body .pr-intake-item--pending .pr-intake-component-main,
+ .pr-warehouse-v407 .pr-pt-kit-body .pr-intake-item--received .pr-intake-component-main {grid-template-columns:minmax(150px,1.7fr) 80px 92px 56px auto;}
+}
+html[data-theme="dark"] .pr-warehouse-v407 .pr-pt-kit-body .pr-intake-component {background:#202633;border-color:#414b5a;}
+html[data-theme="dark"] .pr-warehouse-v407 .pr-pt-kit-group .pr-pt-kit-body {background:#202633;border-top-color:#414b5a;}
+
+/* v408 — Stage 4 Operations Receiving parity with the Production Intake UI.
+   Scoped to Stage 4 so Stage 5 Box Distribution is unchanged. */
+.pr-production-v408 .pr-pt-kit-list {max-height:none;min-height:0;overflow:visible;gap:15px;}
+.pr-production-v408 .pr-pt-kit-body {padding:0 13px 12px;gap:7px;border-top:1px solid #eceff5;background:#fff;}
+.pr-production-v408 .pr-pt-kit-body .pr-intake-component {min-width:0;}
+.pr-production-v408 .pr-pt-kit-body .pr-intake-component-main.pr-intake-cols--pending,
+.pr-production-v408 .pr-pt-kit-body .pr-intake-component-main.pr-intake-cols--received,
+.pr-production-v408 .pr-pt-kit-body .pr-intake-component-main.pr-intake-cols--not-received {grid-template-columns:minmax(190px,1.85fr) repeat(2,minmax(80px,.7fr)) minmax(75px,.9fr) auto;}
+.pr-production-v408 .pr-pt-kit-body .pr-intake-component.is-editing .pr-intake-component-main {grid-template-columns:minmax(190px,1.85fr) repeat(3,minmax(72px,.65fr)) minmax(75px,.9fr) auto;}
+.pr-production-v408 .pr-pt-history-avatar {position:relative;overflow:hidden;}
+.pr-production-v408 .pr-pt-history-avatar img {position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
+@media(max-width:800px) {
+ .pr-production-v408 .pr-pt-kit-body {overflow-x:auto;overscroll-behavior-inline:contain;}
+ .pr-production-v408 .pr-pt-kit-body .pr-intake-component {min-width:540px;}
+ .pr-production-v408 .pr-pt-kit-body .pr-intake-component-main.pr-intake-cols--pending,
+ .pr-production-v408 .pr-pt-kit-body .pr-intake-component-main.pr-intake-cols--received,
+ .pr-production-v408 .pr-pt-kit-body .pr-intake-component-main.pr-intake-cols--not-received {grid-template-columns:minmax(150px,1.7fr) 80px 92px 56px auto;}
+}
+html[data-theme="dark"] .pr-production-v408 .pr-pt-kit-body,
+html[data-theme="dark"] .pr-production-v408 .pr-pt-kit-body .pr-intake-component {background:#202633;border-color:#414b5a;}

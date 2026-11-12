@@ -1,0 +1,16 @@
+v407 — Stage 3 Warehouse Return UI parity with Stages 1 and 2.
+
+PRODUCTION FILES MODIFIED:
+components/preparing/ProjectWarehouseReceiving.jsx
+lib/preparing-warehouse-presentation.js (NEW)
+app/api/projects-preparing/warehouse/route.js
+public/css/projects-preparing.css
+
+TEST ADDED:
+tests/projects-preparing-v407-warehouse-stage-ui.test.mjs
+
+DOCUMENTATION ADDED:
+README_v407_WAREHOUSE_RETURN_UI.md
+MODIFIED_FILES_v407.txt
+
+Other stages, database structure, SQL and warehouse write semantics were not changed.
