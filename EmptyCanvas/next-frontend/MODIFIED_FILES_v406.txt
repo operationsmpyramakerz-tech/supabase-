@@ -1,0 +1,15 @@
+v406 — Stage 2 Components Testing UI
+
+PRODUCTION FILES MODIFIED:
+components/preparing/ProjectTesting.jsx
+lib/preparing-project-testing.js
+app/api/projects-preparing/testing/route.js
+
+TEST ADDED:
+tests/projects-preparing-v406-testing-stage-ui.test.mjs
+
+DOCUMENTATION ADDED:
+README_v406_COMPONENTS_TESTING_UI.md
+MODIFIED_FILES_v406.txt
+
+No CSS or SQL files changed. Existing v405 Stage 1 UI is untouched.

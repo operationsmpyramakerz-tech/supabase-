@@ -1,7 +1,8 @@
 "use client";
 import StageFilterTabs from "./StageFilterTabs";
 import StageQuantityInput from "./StageQuantityInput";
-import {useEffect,useMemo,useState} from "react";
+import {useEffect,useMemo,useRef,useState} from "react";
+import {createPortal} from "react-dom";
 import {testingChange,testingCoverage,testingCoverageTotals,testingReadyToTest} from "../../lib/preparing-project-testing-math.mjs";
 import {testingGroups,TESTING_EXPORT_COLUMNS,testingExportValue} from "../../lib/preparing-project-testing-grouping.mjs";
 
@@ -43,19 +44,50 @@ function TestingIcon({name="box",size=20}){
   history:<><path d="M3 12a9 9 0 1 0 2.3-6"/><path d="M3 4v5h5M12 7v5l3.5 2"/></>,
   download:<><path d="M12 3v12m-5-5 5 5 5-5"/><path d="M4 17v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></>,
   clock:<><circle cx="12" cy="12" r="9"/><path d="M12 6.5V12l3.5 2"/></>,
+  engineer:<><path d="M4 10h16M7 10V8a5 5 0 0 1 10 0v2M12 3v4M8 11.5a4 4 0 0 0 8 0M8 16l-4 2v4h16v-4l-4-2M9 17l3 3 3-3"/></>,
+  flask:<><path d="M9 2h6M10 2v7l-5.4 8.4A3 3 0 0 0 7.2 22h9.6a3 3 0 0 0 2.6-4.6L14 9V2M7.5 16h9"/></>,
+  document:<><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Zm0 0v6h6M8 13h8M8 17h6"/></>,
+  edit:<><path d="m4 20 4.5-1.1L20 7.4a2.2 2.2 0 0 0-3.1-3.1L5.4 15.8 4 20ZM14.6 6.6l2.8 2.8"/></>,
+  check:<path d="m5 12 4 4L19 6"/>,
+  expand:<><path d="M14 4h6v6M20 4l-8 8M20 14v6H4V4h6"/></>,
+  arrowLeft:<path d="m14 5-7 7 7 7"/>,
+  arrowRight:<path d="m10 5 7 7-7 7"/>,
  };
  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{shapes[name]||shapes.box}</svg>;
 }
 
+function EditorAvatars({people=[]}){
+ if(!people.length)return <span className="pr-intake-no-editors" aria-label="No recorded editors">—</span>;
+ const visible=people.slice(0,3);
+ return <div className="pr-intake-editors" aria-label={`Edited by ${people.map(person=>person.name).join(", ")}`}>
+  {visible.map(person=><span className="pr-intake-avatar" key={person.id} title={person.name}>
+   <span aria-hidden="true">{String(person.name||"?").trim().slice(0,1).toUpperCase()}</span>
+   {person.photoUrl&&<img src={person.photoUrl} alt="" loading="lazy" referrerPolicy="no-referrer" onError={event=>{event.currentTarget.hidden=true;}}/>}
+  </span>)}
+  {people.length>3&&<span className="pr-intake-avatar pr-intake-avatar-more" title={people.slice(3).map(person=>person.name).join(", ")}>+{people.length-3}</span>}
+ </div>;
+}
+function ComponentThumbnail({row,onOpen}){
+ const image=row.imageUrls?.[0];
+ return image?<button type="button" className="pr-intake-thumb" title={`View photo: ${row.name}`} aria-label={`View image of ${row.name}`} onClick={()=>onOpen(row)}><img src={image} alt="" loading="lazy" referrerPolicy="no-referrer" onError={event=>{event.currentTarget.hidden=true;event.currentTarget.parentElement?.classList.add("is-broken");}}/><span className="pr-intake-thumb-expand"><TestingIcon name="expand" size={12}/></span></button>:
+ <span className="pr-intake-thumb pr-intake-thumb-empty" title="No component photo available" aria-label="No component photo available"><TestingIcon name="box" size={18}/></span>;
+}
 export default function ProjectTesting({projectId,projectName,canTest,editTabs={},request,onClose,closurePanel}) {
  const [data,setData]=useState(initial),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false);
  const [tab,setTab]=useState("testing"),[search,setSearch]=useState(""),[filter,setFilter]=useState("all");
+ const [searchOpen,setSearchOpen]=useState(false);
+ const searchInputRef=useRef(null);
+ // Keep the existing Testing edit rules for all tabs, including All Components.
+ // Only the visual presentation is shared with Production Receiving.
  const canEditTab = canTest && editTabs[filter] !== false;
  const [expandedKit,setExpandedKit]=useState(null),[showExport,setShowExport]=useState(false);
+ const [preview,setPreview]=useState(null),[previewIndex,setPreviewIndex]=useState(0);
  const [exportColumns,setExportColumns]=useState(TESTING_EXPORT_COLUMNS.map(c=>c.key));
  const [exportGroups,setExportGroups]=useState([]),[exportBusy,setExportBusy]=useState(false);
  const [draft,setDraft]=useState({}),[editing,setEditing]=useState({});
  const [error,setError]=useState(""),[success,setSuccess]=useState(""),[rowError,setRowError]=useState({});
+ useEffect(()=>{if(searchOpen&&tab==="testing")searchInputRef.current?.focus();},[searchOpen,tab]);
+ const closeSearch=()=>{setSearchOpen(false);setSearch("");};
  const load=async()=>{const result=await request(`/testing?projectId=${encodeURIComponent(projectId)}`);setData({items:result.items||[],history:result.history||[],kitGroups:result.kitGroups||[]});};
  useEffect(()=>{let mounted=true;
   request(`/testing?projectId=${encodeURIComponent(projectId)}`)
@@ -65,7 +97,6 @@ export default function ProjectTesting({projectId,projectName,canTest,editTabs={
   return()=>{mounted=false;};
  },[projectId]);
  const totals=useMemo(()=>testingCoverageTotals(data.items||[]),[data.items]);
- const readyToTest=useMemo(()=>(data.items||[]).reduce((sum,row)=>sum+testingReadyToTest(row),0),[data.items]);
  const shown=useMemo(()=>(data.items||[])
   .filter(r=>`${r.name||""} ${r.code||""}`.toLowerCase().includes(search.trim().toLowerCase()))
   .filter(r=>filter==="pending"?testingReadyToTest(r)>0:filter==="done"?testingCoverage(r).required>0&&testingCoverage(r).remaining===0:true),
@@ -87,14 +118,14 @@ export default function ProjectTesting({projectId,projectName,canTest,editTabs={
   setRowError(old=>({...old,[id]:""}));
  };
  async function save(ids) {
-  if(busy)return;
+  if(busy||!canEditTab)return;
   const rowId=ids.length===1?ids[0]:null;
   const fail=message=>{setError(message);if(rowId)setRowError(old=>({...old,[rowId]:message}));};
   const lines=[];
   try{for(const itemId of ids){const row=data.items.find(r=>r.id===itemId),values=draft[itemId];if(!row||!values)continue;
    const line=testingChange(row,values);if(line)lines.push(line);
   }}catch(e){fail(e.message);return;}
-  if(!lines.length){fail("Change at least one testing quantity before saving.");return;}
+  if(!lines.length){fail("Change at least one tested quantity before saving.");return;}
   setBusy(true);setError("");setSuccess("");setRowError({});
   try{
    await request("/testing","POST",{projectId,editTab:filter,lines});
@@ -138,32 +169,55 @@ export default function ProjectTesting({projectId,projectName,canTest,editTabs={
   const updated=current.includes(key)?current.filter(k=>k!==key):all.filter(k=>current.includes(k)||k===key);
   return !updated.length?old:updated.length===all.length?[]:updated;
  });};
+ useEffect(()=>{
+  if(!preview)return;
+  const onKey=event=>{
+   if(event.key==="Escape")setPreview(null);
+   if(event.key==="ArrowRight")setPreviewIndex(index=>(index+1)%(preview.imageUrls?.length||1));
+   if(event.key==="ArrowLeft")setPreviewIndex(index=>(index+(preview.imageUrls?.length||1)-1)%(preview.imageUrls?.length||1));
+  };
+  window.addEventListener("keydown",onKey);
+  return()=>window.removeEventListener("keydown",onKey);
+ },[preview]);
+ const showPreview=row=>{setPreview(row);setPreviewIndex(0);};
+ const percent=totals.required>0?Math.min(100,Math.max(0,(totals.tested/totals.required)*100)):0;
  const byId=useMemo(()=>new Map(data.items.map(r=>[r.id,r.name])),[data.items]);
  const entries=useMemo(()=>(data.history||[]).flatMap(batch=>(batch.lines||[]).map((line,index)=>({
   key:`${batch.id}-${line.itemId}-${index}`,reference:batch.reference,createdAt:batch.createdAt,
   editor:batch.createdByName||"",legacy:!batch.createdByName,notes:batch.notes,
   component:byId.get(line.itemId)||"Component",line,
  }))),[data.history,byId]);
- return <div className="pr-wh pr-pt pr-pt-modern">
+ return <div className="pr-wh pr-pt pr-pt-modern pr-intake-v401 pr-testing-v406">
   <header className="pr-manifest-title pr-wh-title pr-pt-title">
-   <div><span className="pr-wh-overline">PROJECT QUALITY CONTROL <span className="pr-pt-overline-sep">/</span> {projectName}</span><h3>Components Testing</h3></div>
+   <div className="pr-intake-heading"><TestingIcon name="flask" size={48}/><div><h3>Components Testing</h3></div></div>
    <button type="button" className="pr-pt-close" onClick={onClose} aria-label="Close Components Testing" title="Close"><TestingIcon name="close" size={19}/></button>
   </header>
-  {closurePanel}
   {error&&<div className="pr-alert" role="alert">{error}<button type="button" onClick={()=>setError("")} aria-label="Dismiss">×</button></div>}
   {success&&<div className="pr-manifest-success" role="status">{success}</div>}
   {loading?<p className="pr-muted">Loading testing records…</p>:<>
-   <div className="pr-wh-stats pr-pt-stat-grid pr-pt-coverage-grid" aria-label="Testing summary">{[
-    {key:"required",label:"Project Required",value:totals.required,mark:"◆"},
-    {key:"tested",label:"Tested",value:totals.tested,mark:"✓"},
-    {key:"remaining",label:"Ready to Test",value:readyToTest,mark:"◷"},
-   ].map(stat=><div className={`pr-pt-stat pr-pt-stat--${stat.key}`} key={stat.key}>
-    <span className="pr-pt-stat-icon" aria-hidden="true">{stat.key==="remaining"?<TestingIcon name="clock" size={25}/>:stat.mark}</span><span className="pr-pt-stat-copy"><span>{stat.label}</span><strong>{pretty(stat.value)}</strong></span>
-   </div>)}</div>
-   <StageFilterTabs label="Testing component status" options={[{value:"all",label:"All Components"},{value:"pending",label:"Remaining to Test"},{value:"done",label:"Fully Tested"}]} value={tab==="testing"?filter:""} onChange={value=>{setFilter(value);setTab("testing");setEditing({});setDraft({});}}/>
-   <div className="pr-stage-filter-toolbar pr-pt-toolbar">
-    {tab==="testing"?<label className="pr-search pr-pt-search"><TestingIcon name="search" size={18}/><input type="search" aria-label="Search testing components" placeholder="Search component or code…" value={search} onChange={e=>setSearch(e.target.value)}/>{search&&<button type="button" className="pr-pt-clear-search" onClick={()=>setSearch("")} aria-label="Clear search" title="Clear search"><TestingIcon name="close" size={16}/></button>}</label>:<span className="pr-stage-history-label">Testing History</span>}
-    <div className="pr-stage-filter-actions"><button type="button" aria-pressed={tab==="history"} aria-label={`Testing History (${entries.length} changes)`} title={`Testing History (${entries.length})`} className={`pr-pt-history-button${tab==="history"?" is-active":""}`} onClick={()=>setTab(tab==="history"?"testing":"history")}><TestingIcon name="history" size={19}/></button><button type="button" className="pr-pt-download-button" aria-label="Download testing report" onClick={()=>setShowExport(true)} disabled={!data.items.length}><TestingIcon name="download" size={18}/><span>Download</span></button></div>
+   <div className="pr-intake-summary">
+    <div className="pr-intake-progress" aria-label={`Project testing progress ${percent.toFixed(2)}%`}>
+     <div className="pr-intake-progress-title"><span>Project Progress</span><strong>{percent.toFixed(2)}%</strong></div>
+     <div className="pr-intake-progress-track" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Number(percent.toFixed(2))} aria-label="Tested quantities"><span style={{width:`${percent}%`}}/></div>
+     <strong className="pr-intake-progress-numbers">{pretty(totals.tested)} / {pretty(totals.required)}</strong>
+    </div>
+    <div className="pr-intake-signoff">{closurePanel}</div>
+   </div>
+   <div className="pr-intake-tabs-toolbar">
+    <StageFilterTabs label="Testing component status" options={[{value:"all",label:"All Components"},{value:"pending",label:"Remaining to Test"},{value:"done",label:"Fully Tested"}]} value={tab==="testing"?filter:""} onChange={value=>{setFilter(value);setTab("testing");setEditing({});setDraft({});}}/>
+    <div className="pr-intake-tabs-actions" aria-label="Testing toolbar">
+     <div className="pr-intake-search-slot">
+      <div className={`pr-intake-search-control${searchOpen?" is-open":""}`} role="search">
+       <button type="button" className="pr-intake-search-toggle" aria-label={searchOpen?"Close component search":"Search components"} aria-controls="pr-testing-component-search" aria-expanded={searchOpen} title={searchOpen?"Close search":"Search components"} onClick={()=>{if(searchOpen)closeSearch();else{setTab("testing");setSearchOpen(true);}}}><TestingIcon name="search" size={17}/></button>
+       <div className="pr-intake-search-expand">
+        <input ref={searchInputRef} id="pr-testing-component-search" type="search" aria-label="Search testing components" placeholder="Search component or code…" disabled={!searchOpen} tabIndex={searchOpen?0:-1} value={search} onChange={event=>setSearch(event.target.value)} onKeyDown={event=>{if(event.key==="Escape"){event.preventDefault();closeSearch();}}}/>
+        <button type="button" className="pr-intake-search-clear" onClick={closeSearch} aria-label="Close component search" title="Close search" tabIndex={searchOpen?0:-1} disabled={!searchOpen}><TestingIcon name="close" size={17}/></button>
+       </div>
+      </div>
+     </div>
+     <button type="button" aria-pressed={tab==="history"} aria-label={`Testing History (${entries.length} changes)`} title={`Testing History (${entries.length})`} className={`pr-pt-history-button${tab==="history"?" is-active":""}`} onClick={()=>{setTab(tab==="history"?"testing":"history");if(tab!=="history")closeSearch();}}><TestingIcon name="history" size={19}/></button>
+     <button type="button" className="pr-pt-download-button" aria-label="Download testing report" title="Download testing report" onClick={()=>setShowExport(true)} disabled={!data.items.length}><TestingIcon name="download" size={21}/></button>
+    </div>
    </div>
    {tab==="testing"&&<>
     <div className="pr-wh-list pr-pt-list pr-pt-kit-list" aria-label="Project component testing">{groupedShown.map(group=>{
@@ -171,28 +225,31 @@ export default function ProjectTesting({projectId,projectName,canTest,editTabs={
      const appearance=testingKitAppearance(group.name);
      return <section className={`pr-pt-kit-group pr-pt-kit--${appearance.tone}${open?" is-open":""}`} key={group.key}>
       <button type="button" className="pr-pt-kit-heading" onClick={()=>setExpandedKit(open?"__none__":group.key)} aria-expanded={open}>
-       <span className="pr-pt-kit-emblem" aria-hidden="true"><TestingIcon name={appearance.icon} size={21}/></span><span className="pr-pt-kit-title"><strong>{group.name}</strong><small>{group.items.length} components</small></span>
+       <span className="pr-pt-kit-emblem" aria-hidden="true"><TestingIcon name={appearance.icon} size={21}/></span><span className="pr-pt-kit-title"><strong>{group.name}</strong></span>
        <span className="pr-pt-kit-arrow" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
       </button>
       {open&&<div className="pr-pt-kit-body">{group.items.map(r=>{
      const isEditing=!!editing[r.id],v=draft[r.id]||{},coverage=testingCoverage(r);
-     return <article key={r.id} className={`pr-pt-row${isEditing?" is-editing":""}`}>
-      <div className="pr-pt-heading">
-       <div className="pr-pt-name"><div className="pr-pt-name-inline"><strong title={r.code?`Product code: ${r.code}`:undefined}>{r.name}</strong></div>{r.mismatch&&<small className="pr-pt-warning">Historical warehouse return exceeds tested quantity; review before handover.</small>}</div>
-       <div className="pr-pt-required"><span title="Received in the preceding stage">Available to Test: {pretty(testingReadyToTest(r))}</span><span>Required</span><strong>{pretty(coverage.required)}</strong></div>
-      </div>
-      <div className="pr-pt-metrics">
-       {isEditing?metrics.map(field=>{
-        return <label key={field.key} className={`pr-pt-metric pr-pt-metric--${field.key}`}>
-         <span>{field.label}</span>
-         <StageQuantityInput min="0" max={r.productionIntakeReceived} step="1" aria-label={`${field.aria} ${r.name}`} disabled={busy} value={v[field.key]??""} onValueChange={value=>change(r.id,field.key,value)}/>
-        </label>;
-       }):<>
-        <div className="pr-pt-metric pr-pt-metric--tested"><span>Tested</span><strong className="pr-pt-metric-value pr-pt-number pr-pt-pass">{pretty(coverage.tested)}</strong></div>
-        <div className="pr-pt-metric pr-pt-metric--remaining"><span>Ready to Test</span><strong className="pr-pt-metric-value pr-pt-number">{pretty(testingReadyToTest(r))}</strong></div>
-       </>}
-       {!isEditing&&<div className="pr-pt-metric pr-pt-metric--testedBy"><span>Tested By</span><div className="pr-pt-people">{(r.testedBy||[]).length?(r.testedBy||[]).map(person=><span className="pr-pt-person" title={person.name} key={person.id}>{person.name}</span>):<span className="pr-pt-person-empty">—</span>}</div></div>}
-       <div className="pr-pt-actions">{canEditTab&&(isEditing?<><button type="button" className="pr-secondary" disabled={busy} onClick={()=>cancel(r.id)}>Cancel</button><button type="button" className="pr-primary" disabled={busy} onClick={()=>save([r.id])}>{busy?"Saving…":"Save"}</button></>:<button type="button" className="pr-secondary" disabled={busy} onClick={()=>edit(r)}>Edit</button>)}</div>
+     return <article key={r.id} className={`pr-pt-row pr-intake-component pr-intake-item--${filter==="done"?"received":filter}${isEditing?" is-editing":""}`}>
+      <div className={`pr-intake-component-main pr-intake-cols--${filter==="done"?"received":filter}`}>
+       <div className="pr-intake-component-product">
+        <ComponentThumbnail row={r} onOpen={showPreview}/>
+        <div className="pr-pt-name"><strong title={r.code?`Product code: ${r.code}`:undefined}>{r.name}</strong>{r.code&&<small>{r.code}</small>}{r.mismatch&&<small className="pr-pt-warning">Historical warehouse return exceeds tested quantity; review before handover.</small>}</div>
+       </div>
+       {filter!=="pending"&&<div className="pr-intake-cell"><span>Required</span><strong>{pretty(coverage.required)}</strong></div>}
+       {filter==="pending"&&<div className="pr-intake-cell"><span>Ready to Test</span><strong>{isEditing&&/^(0|[1-9]\d*)$/.test(String(v.tested??""))?pretty(Math.max(0,n(r.productionIntakeReceived)-Number(v.tested))):pretty(testingReadyToTest(r))}</strong></div>}
+       <div className={`pr-intake-cell pr-intake-cell--received${isEditing?" is-inline-edit":""}`}>
+        {isEditing?<>
+         <span>Tested</span>
+         <StageQuantityInput id={`pr-testing-qty-${r.id}`} min="0" max={r.productionIntakeReceived} step="1" inputMode="numeric" aria-label={`Tested quantity ${r.name}`} disabled={busy} value={v.tested??""} onValueChange={value=>change(r.id,"tested",value)} onKeyDown={event=>{if(event.key==="Enter"){event.preventDefault();save([r.id]);}else if(event.key==="Escape"){event.preventDefault();cancel(r.id);}}}/>
+        </>:<><span>Tested</span><strong>{pretty(coverage.tested)}</strong></>}
+       </div>
+       {filter==="all"&&<div className="pr-intake-cell"><span>Remaining</span><strong>{pretty(coverage.remaining)}</strong></div>}
+       <EditorAvatars people={r.testedBy||[]}/>
+       <div className="pr-intake-row-actions">{canEditTab&&(isEditing?<>
+        <button type="button" className="pr-intake-action pr-intake-action--cancel" aria-label={`Cancel edit for ${r.name}`} title="Cancel" disabled={busy} onClick={()=>cancel(r.id)}><TestingIcon name="close" size={16}/></button>
+        <button type="button" className="pr-intake-action pr-intake-action--save" aria-label={`Save tested quantity for ${r.name}`} title="Save" disabled={busy} onClick={()=>save([r.id])}><TestingIcon name="check" size={18}/></button>
+       </>:<button type="button" className="pr-intake-edit-icon" aria-label={`Edit ${r.name}`} title={`Edit ${r.name}`} disabled={busy} onClick={()=>edit(r)}><TestingIcon name="edit" size={17}/></button>)}</div>
       </div>
       {rowError[r.id]&&<p className="pr-pt-inline-error" role="alert">{rowError[r.id]}</p>}
      </article>;
@@ -210,6 +267,18 @@ export default function ProjectTesting({projectId,projectName,canTest,editTabs={
     </article>)}{!entries.length&&<div className="pr-wh-empty">No testing records yet.</div>}</div>
    </section>}
   </>}
+  {preview&&typeof document!=="undefined"&&createPortal(
+   <div className="pr-intake-image-overlay" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setPreview(null);}}>
+    <section className="pr-intake-image-modal" role="dialog" aria-modal="true" aria-label={`Component image: ${preview.name}`}>
+     <header className="pr-intake-image-header"><div><strong>{preview.name}</strong>{(preview.imageUrls?.length||0)>1&&<small>{previewIndex+1} / {preview.imageUrls.length}</small>}</div><button type="button" autoFocus aria-label="Close image preview" onClick={()=>setPreview(null)}><TestingIcon name="close" size={20}/></button></header>
+     <div className="pr-intake-image-content">
+      {(preview.imageUrls?.length||0)>1&&<button type="button" aria-label="Previous image" onClick={()=>setPreviewIndex(i=>(i+preview.imageUrls.length-1)%preview.imageUrls.length)}><TestingIcon name="arrowLeft" size={23}/></button>}
+      <img src={preview.imageUrls[previewIndex]} alt={preview.name} />
+      {(preview.imageUrls?.length||0)>1&&<button type="button" aria-label="Next image" onClick={()=>setPreviewIndex(i=>(i+1)%preview.imageUrls.length)}><TestingIcon name="arrowRight" size={23}/></button>}
+     </div>
+    </section>
+   </div>, document.body
+  )}
   {showExport&&<div className="pr-pt-export-overlay" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget&&!exportBusy)setShowExport(false);}}>
    <section className="pr-pt-export-modal" role="dialog" aria-modal="true" aria-label="Export components testing">
     <header className="pr-pt-export-head"><div><strong>Export Testing</strong><small>Choose columns, Kits and report format</small></div><button type="button" className="pr-secondary" disabled={exportBusy} onClick={()=>setShowExport(false)} aria-label="Close export">×</button></header>
