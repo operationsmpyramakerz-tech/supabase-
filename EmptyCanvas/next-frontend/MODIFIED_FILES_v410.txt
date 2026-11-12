@@ -1,0 +1,15 @@
+v410 — Stage 6 Project Kit Cartons UI parity
+Baseline: user-uploaded supabase--main-407.zip (internally includes v409)
+
+PRODUCTION FILES
+components/preparing/SchoolKitCartons.jsx
+components/preparing/StageFilterTabs.jsx
+public/css/projects-preparing.css
+app/projects-preparing/page.jsx
+
+TESTS + NOTES
+tests/projects-preparing-v410-project-kit-cartons-ui.test.mjs
+README_v410_PROJECT_KIT_CARTONS_UI.md
+MODIFIED_FILES_v410.txt
+
+No SQL, server route, or dependency updates.

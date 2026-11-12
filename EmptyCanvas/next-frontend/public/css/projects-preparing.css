@@ -5245,3 +5245,87 @@ html[data-theme="dark"] .pr-production-v408 .pr-pt-kit-body .pr-intake-component
 html[data-theme="dark"] .pr-root .pr-box-v409 .pr-pt-kit-body,html[data-theme="dark"] .pr-root .pr-box-v409 .pr-pt-kit-body .pr-intake-component {background:#202633;border-color:#414b5a;}
 html[data-theme="dark"] .pr-root .pr-box-v409 .pr-box-v409-equal-editor {border-top-color:#414b5a;}
 html[data-theme="dark"] .pr-root .pr-box-v409 .pr-box-v409-label-button {background:#283141;color:#fff;border-color:#465166;}
+
+
+/* v410 — Stage 6 Project Kit Cartons visual parity with Stages 1–5.
+   The verified Kit selection, immutable outer carton RPC and printable QR
+   manifests remain owned by SchoolKitCartons.jsx. */
+.pr-root .pr-carton-v410 {display:flex;flex-direction:column;gap:16px;min-width:0;}
+.pr-root .pr-carton-v410 .pr-manifest-title.pr-pt-title {margin:0;}
+.pr-root .pr-carton-v410 .pr-intake-summary {margin:0;}
+.pr-root .pr-carton-v410 .pr-carton-v410-schoolbar {display:grid;grid-template-columns:minmax(220px,2.1fr) repeat(3,minmax(105px,1fr));gap:10px;margin:0;align-items:stretch;min-width:0;}
+.pr-root .pr-carton-v410 .pr-carton-v410-schoolbar .pr-field {display:flex;flex-direction:column;gap:7px;min-width:0;margin:0;font-size:11px;font-weight:740;color:#52617a;}
+.pr-root .pr-carton-v410 .pr-carton-v410-schoolbar .pr-modern-select {width:100%;max-width:100%;}
+.pr-root .pr-carton-v410 .pr-carton-v410-schoolbar .pr-modern-select-trigger {min-height:46px;background:#fff;border:1px solid #dfe4ed;border-radius:12px;}
+.pr-carton-v410-stat {display:flex;flex-direction:column;justify-content:center;gap:5px;min-width:0;padding:11px 14px;border:1px solid #e1e6ee;border-radius:13px;background:#fff;}
+.pr-carton-v410-stat small {font-size:10.5px;font-weight:740;color:#617087;white-space:nowrap;}
+.pr-carton-v410-stat strong {font-size:22px;font-weight:850;line-height:1.1;color:#111827;font-variant-numeric:tabular-nums;}
+.pr-root .pr-carton-v410 .pr-intake-tabs-toolbar {margin:0;}
+.pr-root .pr-carton-v410 .pr-intake-tabs-toolbar .pr-stage-filter-tabs {min-width:0;}
+.pr-root .pr-carton-v410 .pr-intake-tabs-actions {gap:8px;}
+.pr-root .pr-carton-v410 .pr-carton-v410-legacy-button {display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:42px;padding:0 13px;border-radius:12px;border:1px solid #dce3ed;background:#fff;color:#172033;font-size:12px;font-weight:760;cursor:pointer;white-space:nowrap;}
+.pr-root .pr-carton-v410 .pr-carton-v410-legacy-button:hover {background:#f4f6f9;border-color:#aab6c7;}
+.pr-root .pr-carton-v410 .pr-carton-v410-legacy-button:focus-visible,.pr-root .pr-carton-v410 .pr-carton-v410-print:focus-visible {outline:3px solid #94a3b8;outline-offset:2px;}
+.pr-root .pr-carton-v410 .pr-carton-v410-print {text-decoration:none;}
+.pr-root .pr-carton-v410 .pr-carton-v410-available-heading {display:flex;align-items:center;justify-content:space-between;gap:12px;color:#5c6679;font-size:12px;font-weight:690;}
+.pr-root .pr-carton-v410 .pr-carton-v410-available-heading strong {color:#151b26;font-weight:810;white-space:nowrap;}
+.pr-root .pr-carton-v410 .pr-pt-kit-list {max-height:none;overflow:visible;min-height:0;gap:14px;}
+.pr-root .pr-carton-v410 .pr-pt-kit-group {flex-shrink:0;border:1.5px solid var(--pt-kit-solid);box-shadow:none;border-radius:15px;}
+.pr-root .pr-carton-v410 .pr-carton-v410-group-top {display:flex;align-items:center;background:color-mix(in srgb,var(--pt-kit-solid) 9%,white);}
+.pr-root .pr-carton-v410 .pr-pt-kit-heading,.pr-root .pr-carton-v410 .pr-pt-kit-group.is-open .pr-pt-kit-heading {min-width:0;min-height:66px;padding:10px 14px;background:color-mix(in srgb,var(--pt-kit-solid) 9%,white);}
+.pr-root .pr-carton-v410 .pr-pt-kit-heading:hover {background:color-mix(in srgb,var(--pt-kit-solid) 12%,white);}
+.pr-root .pr-carton-v410 .pr-carton-v410-group-top .pr-pt-kit-heading {flex:1;}
+.pr-root .pr-carton-v410 .pr-pt-kit-emblem {flex:0 0 47px;width:47px;height:47px;box-shadow:none;}
+.pr-root .pr-carton-v410 .pr-pt-kit-title strong {font-size:16px;color:#161a24;}
+.pr-root .pr-carton-v410 .pr-pt-kit-title small {font-size:11px;color:#59677b;}
+.pr-root .pr-carton-v410 .pr-pt-kit-arrow {background:#fff;}
+.pr-root .pr-carton-v410 .pr-carton-v410-group-select {flex:0 0 auto;min-height:35px;padding:7px 13px;margin-right:12px;border:1px solid #d9e0e9;border-radius:10px;background:#fff;color:#1d2939;font-size:11px;font-weight:800;cursor:pointer;}
+.pr-root .pr-carton-v410 .pr-carton-v410-group-select:hover:not(:disabled) {border-color:#abb8c9;background:#f4f6f9;}
+.pr-root .pr-carton-v410 .pr-carton-v410-group-select:disabled {opacity:.55;cursor:not-allowed;}
+.pr-root .pr-carton-v410 .pr-pt-kit-body {gap:7px;padding:0 13px 12px;border-top:1px solid #eceff5;background:#fff;}
+.pr-root .pr-carton-v410 .pr-carton-v410-kit-row {display:flex;align-items:center;min-height:69px;gap:12px;padding:10px 13px;margin-top:7px;border:1px solid #e1e6ee;border-radius:12px;background:#fff;cursor:pointer;}
+.pr-root .pr-carton-v410 .pr-carton-v410-kit-row.is-selected {background:#fff8f2;border-color:#ffae70;}
+.pr-root .pr-carton-v410 .pr-carton-v410-kit-row>input {flex:none;width:18px;height:18px;accent-color:#ee6b10;cursor:pointer;}
+.pr-root .pr-carton-v410 .pr-carton-v410-kit-row>input:disabled {cursor:not-allowed;}
+.pr-root .pr-carton-v410 .pr-carton-v410-kit-row .pr-intake-thumb {flex:0 0 42px;width:42px;height:42px;cursor:inherit;}
+.pr-root .pr-carton-v410 .pr-carton-v410-item-name {display:flex;flex:1;flex-direction:column;gap:5px;min-width:0;overflow-wrap:anywhere;}
+.pr-root .pr-carton-v410 .pr-carton-v410-item-name strong {font-size:13px;font-weight:810;color:#1a2231;}
+.pr-root .pr-carton-v410 .pr-carton-v410-item-name small {font-size:10px;color:#67768a;}
+.pr-root .pr-carton-v410 .pr-carton-v410-status,.pr-root .pr-carton-v410 .pr-carton-v410-packed-badge {display:inline-flex;align-items:center;gap:5px;flex:none;padding:7px 10px;border:1px solid #d6efe1;border-radius:30px;background:#eaf9f0;color:#14793e;font-size:10px;font-weight:800;white-space:nowrap;}
+.pr-root .pr-carton-v410 .pr-carton-v410-pack-action {margin:0;border-color:#e1e5eb;background:#fafbfc;}
+.pr-root .pr-carton-v410 .pr-carton-v410-pack-action .pr-primary {background:#111;border-color:#111;color:#fff;border-radius:12px;}
+.pr-root .pr-carton-v410 .pr-carton-v410-pack-action .pr-primary:hover:not(:disabled) {background:#282828;border-color:#282828;}
+.pr-root .pr-carton-v410 .pr-carton-v410-carton-body {display:flex;flex-direction:column;gap:9px;padding:14px;border-top:1px solid #e6eaf0;background:#fff;}
+.pr-root .pr-carton-v410 .pr-carton-v410-manifest-head {display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:9px;padding-bottom:6px;}
+.pr-root .pr-carton-v410 .pr-carton-v410-manifest-head>strong {font-size:14px;color:#111827;}
+.pr-root .pr-carton-v410 .pr-carton-v410-manifest-head .pr-primary {display:inline-flex;align-items:center;gap:7px;text-decoration:none;font-size:11px!important;min-height:38px;border-radius:11px;background:#111;border-color:#111;color:#fff;}
+.pr-root .pr-carton-v410 .pr-carton-v410-qr-note {font-size:11px;line-height:1.55;color:#617089;margin:4px 0 0;}
+.pr-root .pr-carton-v410 .pr-school-cartons-kit-details {background:#fff;}
+.pr-root .pr-carton-v410 .pr-school-cartons-kit-details summary {font-size:12px;}
+@media(max-width:1050px){.pr-root .pr-carton-v410 .pr-carton-v410-schoolbar {grid-template-columns:repeat(3,minmax(0,1fr));}.pr-root .pr-carton-v410 .pr-carton-v410-schoolbar .pr-field {grid-column:1/-1;}}
+@media(max-width:800px){.pr-root .pr-carton-v410 .pr-intake-tabs-toolbar {position:relative;}.pr-root .pr-carton-v410 .pr-intake-search-control.is-open {right:0;}.pr-root .pr-carton-v410 .pr-intake-tabs-actions {gap:6px;}.pr-root .pr-carton-v410 .pr-carton-v410-legacy-button {min-height:38px;padding:0 10px;}}
+@media(max-width:600px){
+ .pr-root .pr-carton-v410 .pr-intake-tabs-toolbar {flex-wrap:wrap;}
+ .pr-root .pr-carton-v410 .pr-intake-tabs-toolbar .pr-stage-filter-tabs {width:100%;flex:1 1 100%;}
+ .pr-root .pr-carton-v410 .pr-intake-tabs-actions {justify-content:flex-end;width:100%;}
+ .pr-root .pr-carton-v410 .pr-intake-search-control.is-open {right:0;}
+ .pr-root .pr-carton-v410 .pr-carton-v410-schoolbar {gap:7px;}
+ .pr-carton-v410-stat {padding:9px;}
+ .pr-carton-v410-stat strong {font-size:20px;}
+ .pr-carton-v410-stat small {font-size:9.5px;white-space:normal;}
+ .pr-root .pr-carton-v410 .pr-carton-v410-group-select {padding:7px 8px;margin-right:8px;font-size:10px;}
+ .pr-root .pr-carton-v410 .pr-pt-kit-heading {gap:8px;padding:9px;}
+ .pr-root .pr-carton-v410 .pr-pt-kit-emblem {flex-basis:37px;width:37px;height:37px;}
+ .pr-root .pr-carton-v410 .pr-pt-kit-title strong {font-size:13px;}
+ .pr-root .pr-carton-v410 .pr-carton-v410-kit-row {gap:9px;padding:10px 9px;flex-wrap:wrap;}
+ .pr-root .pr-carton-v410 .pr-carton-v410-status {margin-left:30px;}
+ .pr-root .pr-carton-v410 .pr-carton-v410-packed-badge {display:none;}
+}
+html[data-theme="dark"] .pr-root .pr-carton-v410 .pr-carton-v410-schoolbar .pr-modern-select-trigger,html[data-theme="dark"] .pr-carton-v410-stat,html[data-theme="dark"] .pr-root .pr-carton-v410 .pr-carton-v410-legacy-button,html[data-theme="dark"] .pr-root .pr-carton-v410 .pr-carton-v410-kit-row,html[data-theme="dark"] .pr-root .pr-carton-v410 .pr-carton-v410-carton-body {background:#202633;color:#f2f5fa;border-color:#414b5a;}
+html[data-theme="dark"] .pr-root .pr-carton-v410 .pr-pt-kit-body {background:#202633;border-color:#414b5a;}
+html[data-theme="dark"] .pr-root .pr-carton-v410 .pr-pt-kit-heading,html[data-theme="dark"] .pr-root .pr-carton-v410 .pr-pt-kit-group.is-open .pr-pt-kit-heading,html[data-theme="dark"] .pr-root .pr-carton-v410 .pr-carton-v410-group-top {background:#273142;}
+html[data-theme="dark"] .pr-root .pr-carton-v410 .pr-pt-kit-title strong,html[data-theme="dark"] .pr-root .pr-carton-v410 .pr-carton-v410-item-name strong,html[data-theme="dark"] .pr-root .pr-carton-v410 .pr-carton-v410-manifest-head>strong,html[data-theme="dark"] .pr-carton-v410-stat strong,html[data-theme="dark"] .pr-root .pr-carton-v410 .pr-carton-v410-available-heading strong {color:#f3f6fb;}
+html[data-theme="dark"] .pr-root .pr-carton-v410 .pr-carton-v410-kit-row.is-selected {background:#3a2e28;border-color:#a5663e;}
+html[data-theme="dark"] .pr-root .pr-carton-v410 .pr-school-cartons-kit-details {background:#283142;border-color:#414b5a;}
+html[data-theme="dark"] .pr-root .pr-carton-v410 .pr-carton-v410-group-select {background:#202633;border-color:#414b5a;color:#fff;}
+html[data-theme="dark"] .pr-root .pr-carton-v410 .pr-carton-v410-group-select:hover:not(:disabled) {background:#323b4a;}
