@@ -247,7 +247,7 @@ function DirectoryPreferences({ sortMode, onSortChange, sortOptions, canSelect, 
       <UAIcon name="preferences"/>
     </button>
     {open ? <div className="ua-directory-preferences__panel" role="dialog" aria-label="Select and sort preferences">
-      <div className="ua-directory-preferences__heading"><strong>Preferences</strong><button type="button" aria-label="Close preferences" onClick={() => setOpen(false)}><UAIcon name="close"/></button></div>
+      <div className="ua-directory-preferences__heading"><strong>Preferences</strong><button type="button" aria-label="Close preferences" onClick={() => setOpen(false)} title="Close"><UAIcon name="close"/></button></div>
       <div className="ua-directory-preferences__tabs" role="group" aria-label="Preferences category">
         <button type="button" className={section === "select" ? "is-active" : ""} aria-pressed={section === "select"} onClick={() => setSection("select")}><UAIcon name="checkCircle"/>Select</button>
         <button type="button" className={section === "sort" ? "is-active" : ""} aria-pressed={section === "sort"} onClick={() => setSection("sort")}><UAIcon name="filter"/>Sort</button>
@@ -256,7 +256,7 @@ function DirectoryPreferences({ sortMode, onSortChange, sortOptions, canSelect, 
         {canSelect ? <button type="button" onClick={() => { onToggleSelect?.(); setOpen(false); }}><UAIcon name="checkCircle"/><span>{selecting ? "Cancel selection" : "Select users"}</span>{selecting ? <UAIcon name="check"/> : null}</button>
           : <p>{selectionHint || "Open a department to select and edit access for its members."}</p>}
       </div> : <div className="ua-directory-preferences__options" aria-label="Sort options">
-        {sortOptions.map((option) => <button type="button" key={option.value} className={sortMode === option.value ? "is-active" : ""} onClick={() => { onSortChange(option.value); setOpen(false); }}><UAIcon name="filter"/><span>{option.label}</span>{sortMode === option.value ? <UAIcon name="check"/> : null}</button>)}
+        {sortOptions.map((option) => <button type="button" key={option.value} className={sortMode === option.value ? "is-active" : ""} onClick={() => { onSortChange(option.value); setOpen(false); }}><UAIcon name="filter"/><span>{option.label}</span>{sortMode === option.value ? <span className="ua-directory-preferences__check"><UAIcon name="check"/></span> : null}</button>)}
       </div>}
     </div> : null}
   </div>;
@@ -385,7 +385,23 @@ export default function UsersCenterClient({ account, initialDirectory, initialSi
   function backDepartments(push = true) { setSelectionMode(false); setSelectedMemberIds([]); setMemberMenu(""); setDepartmentActions(""); setSelectedDepartmentId(""); setSearch(""); writeDepartmentUrl("", push); }
 
   useEffect(() => { const read = () => { const id = new URLSearchParams(window.location.search).get("department") || ""; setSelectionMode(false); setSelectedMemberIds([]); if (id && directory.departments.some((department) => department.id === id)) setSelectedDepartmentId(id); else setSelectedDepartmentId(""); }; read(); window.addEventListener("popstate", read); return () => window.removeEventListener("popstate", read); }, [directory.departments.length]);
-  useEffect(() => { const input = document.querySelector(".classic-app-shell .main-header .searchbar input"); if (!input) return undefined; input.value = search; input.placeholder = selectedDepartment ? "Search users inside this department..." : "Search departments, users, emails..."; const handle = (event) => setSearch(event.target.value || ""); input.addEventListener("input", handle); return () => input.removeEventListener("input", handle); }, [selectedDepartmentId]);
+  // Users Center uses the shared HeaderSearch control. Delegate the input event so
+  // filtering also works when the persistent shell mounts/reuses its header.
+  useEffect(() => {
+    const handleHeaderSearch = (event) => {
+      if (event.target?.matches?.(".classic-app-shell .main-header .system-header-search__input")) {
+        setSearch(event.target.value || "");
+      }
+    };
+    document.addEventListener("input", handleHeaderSearch);
+    return () => document.removeEventListener("input", handleHeaderSearch);
+  }, []);
+  useEffect(() => {
+    const input = document.querySelector(".classic-app-shell .main-header .system-header-search__input");
+    if (!input) return;
+    if (input.value !== search) input.value = search;
+    input.placeholder = selectedDepartment ? "Search users in this department..." : "Search users, departments or emails...";
+  }, [search, selectedDepartmentId, directoryTab]);
   useEffect(() => { function close(event) { if (!event.target.closest(".ua-member-menu-wrap")) setMemberMenu(""); } document.addEventListener("click", close); return () => document.removeEventListener("click", close); }, []);
   useEffect(() => { function closeDepartmentActions(event) { if (!event.target.closest(".ua-folder")) setDepartmentActions(""); } document.addEventListener("pointerdown", closeDepartmentActions); return () => document.removeEventListener("pointerdown", closeDepartmentActions); }, []);
 
@@ -491,13 +507,9 @@ export default function UsersCenterClient({ account, initialDirectory, initialSi
           <div className="ua-directory-tabs" role="group" aria-label="Directory view">
             {[{id:"users",label:"All Users",icon:"users"},{id:"departments",label:"Departments",icon:"grid"},{id:"teams",label:"Teams",icon:"folder"},{id:"active",label:"Active",icon:"checkCircle"},{id:"archived",label:"Inactive",icon:"lock"}].map((item) => <button key={item.id} type="button" className={`ua-directory-tab${directoryTab === item.id ? " is-active" : ""}`} onClick={() => changeDirectoryTab(item.id)} aria-pressed={directoryTab === item.id} disabled={(item.id === "active" || item.id === "archived") && !statusAvailable} title={(item.id === "active" || item.id === "archived") && !statusAvailable ? "Account status isn't available in this directory" : undefined}><UAIcon name={item.icon}/><span>{item.label}</span></button>)}
           </div>
-        </div>
-        <div className="ua-directory-filter-row">
-          <label className="ua-directory-search"><UAIcon name="search"/><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={isMemberDirectoryTab ? "Search users, departments or emails..." : "Search departments..."} aria-label={isMemberDirectoryTab ? "Search all users" : "Search departments or members"} /></label>
           <DirectoryPreferences key={directoryTab} sortMode={sortMode} onSortChange={setSortMode} sortOptions={isMemberDirectoryTab ? [{value:"name",label:"Name A–Z"},{value:"name-desc",label:"Name Z–A"},{value:"department",label:"Department A–Z"}] : [{value:"name",label:"Name A–Z"},{value:"members",label:"Most members"},{value:"fewest",label:"Fewest members"}]} canSelect={isMemberDirectoryTab && (access.pageAccess || access.featureAccess)} selecting={selectionMode} onToggleSelect={() => { setSelectionMode((current) => !current); setSelectedMemberIds([]); setMemberMenu(""); }} selectionHint="Open a department to select and edit access for members in that department."/>
         </div>
         {isMemberDirectoryTab ? <div className="ua-directory-users" aria-label={directoryTab === "users" ? "All users" : directoryTab === "active" ? "Active users" : "Inactive users"}>
-          <div className="ua-directory-users__heading"><div><h3>{directoryTab === "users" ? "All Users" : directoryTab === "active" ? "Active Users" : "Inactive Users"}</h3><p>Browse and manage individual accounts</p></div><div className="ua-directory-users__heading-actions"><span className="ua-directory-users__count">{visibleUsers.length} {visibleUsers.length === 1 ? "user" : "users"}</span></div></div>
           {selectionMode && (access.pageAccess || access.featureAccess) ? <div className="ua-directory-bulkbar"><label><input type="checkbox" checked={visibleUsers.length > 0 && visibleUsers.every((member) => selectedMemberSet.has(member.id))} onChange={(event) => { const ids = visibleUsers.map((member) => member.id).filter(Boolean); setSelectedMemberIds((current) => event.target.checked ? [...new Set([...current, ...ids])] : current.filter((id) => !ids.includes(id))); }} disabled={!visibleUsers.length}/> Select all visible</label><strong>{selectedMemberIds.length} selected</strong><button type="button" disabled={!selectedMemberIds.length} onClick={() => protectedOpen({ title: "Bulk access editing", message: `Edit access for ${selectedMemberIds.length} selected users?` }, () => setBulkAccessOpen(true))}><UAIcon name="shield"/> Edit Access</button></div> : null}
           {(visibleUsers.length || (access.memberCreate && directoryTab !== "archived" && !selectionMode)) ? <div className="ua-directory-users__grid">
             {access.memberCreate && directoryTab !== "archived" && !selectionMode ? <AddMemberCard onClick={() => protectedOpen({ title: "Add team member", message: "Create a new user account?" }, () => openMember("create"))}/> : null}

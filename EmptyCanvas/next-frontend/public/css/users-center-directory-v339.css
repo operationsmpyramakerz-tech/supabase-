@@ -1217,3 +1217,182 @@ html[data-theme="dark"] body.user-access-page .ua-directory-v339 .ua-add-member-
     height: 46px;
   }
 }
+
+/* v420 / Chat 01 — Header-only search, one-row tabs + compact preferences.
+   The native header search is reused; there is no second search row or user
+   heading between the tabs and the cards. These rules are Users Center-only. */
+.user-access-page .ua-directory-v339 .ua-directory-toolbar {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 13px;
+  min-width: 0;
+}
+.user-access-page .ua-directory-v339 .ua-directory-tabs {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 2px;
+  width: auto;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+  border-radius: 15px;
+}
+.user-access-page .ua-directory-v339 .ua-directory-tabs::-webkit-scrollbar { display: none; }
+.user-access-page .ua-directory-v339 .ua-directory-tab {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.user-access-page .ua-directory-v339 .ua-directory-toolbar > .ua-directory-preferences { margin-left: auto; }
+.user-access-page .ua-directory-v339 .ua-directory-preferences__trigger {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid #e1e5eb;
+  border-radius: 13px;
+  background: #fff;
+  color: #192234;
+  box-shadow: 0 3px 11px rgba(16,24,40,.045);
+}
+.user-access-page .ua-directory-v339 .ua-directory-preferences__trigger:hover,
+.user-access-page .ua-directory-v339 .ua-directory-preferences__trigger[aria-expanded="true"] {
+  border-color: #f5a260;
+  background: #fffaf6;
+}
+.user-access-page .ua-directory-v339 .ua-directory-preferences__trigger:focus-visible,
+.user-access-page .ua-directory-v339 .ua-directory-preferences__panel button:focus-visible {
+  outline: 2px solid #f47617;
+  outline-offset: 2px;
+}
+.user-access-page .ua-directory-v339 .ua-directory-preferences__trigger > svg {
+  display: block;
+  width: 19px;
+  height: 19px;
+}
+.user-access-page .ua-directory-v339 .ua-directory-preferences__panel {
+  top: calc(100% + 7px);
+  right: 0;
+  width: min(268px, calc(100vw - 26px));
+  max-height: min(356px, 65dvh);
+  overflow-y: auto;
+  padding: 9px;
+  border-radius: 15px;
+  box-shadow: 0 18px 38px rgba(16,24,40,.14);
+}
+.user-access-page .ua-directory-v339 .ua-directory-preferences__heading {
+  min-height: 33px;
+  gap: 10px;
+  padding: 1px 2px 8px 5px;
+}
+.user-access-page .ua-directory-v339 .ua-directory-preferences__heading strong {
+  font-size: 13px;
+  line-height: 1.2;
+}
+.user-access-page .ua-directory-v339 .ua-directory-preferences__heading button {
+  display: grid;
+  place-items: center;
+  flex: 0 0 27px;
+  width: 27px;
+  height: 27px;
+  padding: 0;
+  border-radius: 8px;
+}
+.user-access-page .ua-directory-v339 .ua-directory-preferences__heading svg { width: 14px; height: 14px; }
+.user-access-page .ua-directory-v339 .ua-directory-preferences__tabs {
+  gap: 3px;
+  padding: 3px;
+  border-radius: 10px;
+}
+.user-access-page .ua-directory-v339 .ua-directory-preferences__tabs button {
+  min-width: 0;
+  min-height: 34px;
+  gap: 6px;
+  padding: 0 6px;
+  border-radius: 8px;
+  font-size: 11.5px;
+  line-height: 1;
+}
+.user-access-page .ua-directory-v339 .ua-directory-preferences__tabs button > svg {
+  flex: 0 0 15px;
+  width: 15px;
+  height: 15px;
+}
+.user-access-page .ua-directory-v339 .ua-directory-preferences__options {
+  gap: 3px;
+  padding-top: 7px;
+}
+.user-access-page .ua-directory-v339 .ua-directory-preferences__options button {
+  min-height: 36px;
+  gap: 9px;
+  padding: 8px 9px;
+  border-radius: 9px;
+  font-size: 11.5px;
+  line-height: 1.25;
+  text-align: left;
+}
+.user-access-page .ua-directory-v339 .ua-directory-preferences__options button > svg {
+  flex: 0 0 15px;
+  width: 15px;
+  height: 15px;
+}
+.user-access-page .ua-directory-v339 .ua-directory-preferences__options button > span:not(.ua-directory-preferences__check) {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.user-access-page .ua-directory-v339 .ua-directory-preferences__check {
+  display: inline-grid;
+  flex: 0 0 21px;
+  width: 21px;
+  height: 21px;
+  place-items: center;
+  border-radius: 7px;
+  color: #c95b09;
+  background: #ffead9;
+}
+.user-access-page .ua-directory-v339 .ua-directory-preferences__check svg { width: 13px; height: 13px; }
+.user-access-page .ua-directory-v339 .ua-directory-preferences__options p { padding: 8px; font-size: 11px; }
+html[data-theme="dark"] body.user-access-page .ua-directory-v339 .ua-directory-preferences__trigger:hover,
+html[data-theme="dark"] body.user-access-page .ua-directory-v339 .ua-directory-preferences__trigger[aria-expanded="true"] {
+  border-color: #f08d42;
+  background: #30291f;
+}
+@media (max-width: 640px) {
+  .user-access-page .ua-directory-v339 .ua-directory-toolbar {
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 7px;
+  }
+  .user-access-page .ua-directory-v339 .ua-directory-tabs {
+    display: flex;
+    flex-wrap: nowrap;
+    width: auto;
+    min-width: 0;
+    padding: 4px;
+  }
+  .user-access-page .ua-directory-v339 .ua-directory-tab {
+    min-width: max-content;
+    min-height: 40px;
+    padding: 0 8px;
+    gap: 5px;
+    font-size: 11px;
+  }
+  .user-access-page .ua-directory-v339 .ua-directory-tab svg { width: 14px; height: 14px; }
+  .user-access-page .ua-directory-v339 .ua-directory-preferences__trigger {
+    width: 42px;
+    min-width: 42px;
+    height: 42px;
+    border-radius: 12px;
+  }
+  .user-access-page .ua-directory-v339 .ua-directory-preferences__panel {
+    width: min(258px, calc(100vw - 22px));
+    max-height: min(330px, 62dvh);
+  }
+}

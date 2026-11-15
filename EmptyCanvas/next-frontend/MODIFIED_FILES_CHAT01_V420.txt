@@ -1,0 +1,38 @@
+ERP Pyramakerz — Chat 01 / Users Center v420
+Source baseline: user-uploaded supabase--main.zip (2026-11-15)
+Base Commit SHA: Not available from this ZIP; verify commit before merging into main.
+Scope: Chat 01 — Core System, Users & Permissions ONLY
+
+IMPLEMENTATION
+1. Removed internal Users Center search box. Search now listens to the shared header search input (including persistent shell) and synchronizes tab/department resets.
+2. Removed redundant All Users / Active Users / Inactive Users headings, supporting description, and count pill below the tabs.
+3. Moved Preferences button to the right of the tabs bar, on the same row, with horizontally scrollable tabs on narrow screens.
+4. Redesigned compact Preferences panel (smaller width/height, consistent Select/Sort control alignment, highlighted selected option, responsive and dark-mode styles).
+5. Bumped the Users Center directory CSS cache version to v420.
+
+DATABASE / API / PERMISSIONS
+No SQL migration. No API or database schema changes. No global shell / HeaderSearch component changes. No changes to feature permissions or server enforcement.
+
+VALIDATION
+node --test tests/users-center-*.test.mjs: PASS, 59/59 tests.
+JSX parsing via TypeScript: PASS.
+CSS stylesheet syntax via tinycss2: PASS.
+Live/browser visual test and full Next.js build: NOT RUN (dependencies absent from ZIP).
+
+DEPLOYMENT
+Copy changed files using their original relative paths under:
+supabase--main/EmptyCanvas/next-frontend/
+Do not replace unrelated files or the entire repository. Merge onto the correct base commit/branch.
+The source-only archive contains exactly the 3 production files; the full archive also contains the updated/new regression tests.
+
+CHANGES
+MODIFIED: components/users-center/UsersCenterClient.jsx
+MODIFIED: public/css/users-center-directory-v339.css
+MODIFIED: app/users-center/page.jsx
+MODIFIED: tests/users-center-add-member-card-v343.test.mjs
+MODIFIED: tests/users-center-all-users-v340.test.mjs
+MODIFIED: tests/users-center-department-select-v342.test.mjs
+MODIFIED: tests/users-center-directory-v339.test.mjs
+MODIFIED: tests/users-center-invite-preferences-v344.test.mjs
+MODIFIED: tests/users-center-preferences-icon-v345.test.mjs
+NEW: tests/users-center-header-search-toolbar-v420.test.mjs
