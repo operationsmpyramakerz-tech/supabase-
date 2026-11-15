@@ -445,11 +445,6 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
     <ProjectHeaderPath project={project} school={school} onProjects={goToProjectsIndex} onProject={backToParent}/>
     {error && <div className="pr-alert" role="alert"><span>{error}</span><button onClick={() => setError("")} aria-label="Dismiss"><Ico name="close" size={16}/></button></div>}
     {!project && <>
-      <section className="pr-index-hero" aria-label="Projects workflow">
-        <div className="pr-index-hero-icon" aria-hidden="true"><Ico name="layers" size={30}/></div>
-        <div className="pr-index-hero-copy"><span>PROJECTS WORKFLOW</span><strong>Prepare, Test, Receive, Produce &amp; Pack</strong></div>
-        <div className="pr-index-hero-parcels" aria-hidden="true"><span className="pr-index-parcel pr-index-parcel--back"/><span className="pr-index-parcel pr-index-parcel--left"/><span className="pr-index-parcel pr-index-parcel--right"/></div>
-      </section>
       <section className="pr-index-stats" aria-label="Project status overview">
         {[
           { key:"all", label:"Total Projects", icon:"folder", count:projectTabs[0].count },
@@ -468,7 +463,6 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
             aria-pressed={projectFilter === tab.key} onClick={() => setProjectFilter(tab.key)}><Ico name={tab.icon} size={17}/>{tab.label}
           </button>)}
         </div>
-        <span className="pr-index-result-count" role="status">{projectFiltered.length} {projectFiltered.length === 1 ? "project" : "projects"}</span>
       </div>
     </>}
     {project && !school && <>
@@ -488,7 +482,7 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
         <div className="pr-project-detail-left">
           <section className="pr-summary-card pr-summary-card--project pr-summary-card--overview pr-project-overview-tile" aria-label="Project overview">
             <div className="pr-overview-intro">
-              <div><h2>Project Overview</h2><p>Key project information and status.</p></div>
+              <div><h2>Project Overview</h2></div>
               <span className="pr-overview-parcels" aria-hidden="true"><span/><span/><span/></span>
             </div>
             <div className="pr-summary-metrics">
@@ -497,7 +491,7 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
             </div>
           </section>
           <section className="pr-project-overall-card" aria-label="Overall preparation progress">
-            <div className="pr-project-overall-head"><div><h2>Overall Progress</h2><p>Project completion across all six preparation stages.</p></div>
+            <div className="pr-project-overall-head"><div><h2>Overall Progress</h2></div>
               <strong aria-label={overallPercent === null ? "Progress not available" : `${overallPercent}% complete`}>{overallPercent === null ? "—" : `${overallPercent}%`}</strong></div>
             <div className="pr-project-overall-track" role="progressbar" aria-label="Overall project completion" aria-valuemin={0} aria-valuemax={100} aria-valuenow={overallPercent === null ? undefined : overallPercent} aria-valuetext={overallPercent === null ? "Unavailable" : `${overallPercent}%`}>
               <span style={{width:`${overallPercent ?? 0}%`}}/></div>

@@ -5140,10 +5140,10 @@ html[data-theme="dark"] .pr-intake-v401 .pr-intake-action--save {background:#080
  .pr-intake-v401 .pr-intake-tabs-actions .pr-pt-download-button {
   flex-basis:38px;width:38px;height:38px;min-width:38px;min-height:38px;
  }
- /* Full search pill appears below the actions rather than crushing status tabs. */
+ /* Keep search anchored to its icon and expand it left over the tabs. */
  .pr-intake-v401 .pr-intake-search-control.is-open {
-  top:calc(100% + 8px);right:-88px;
-  width:min(320px,calc(100vw - 32px));
+  top:0;right:0;
+  width:min(320px,calc(100vw - 132px));
  }
  .pr-intake-v401 .pr-intake-search-control.is-open .pr-intake-search-toggle {
   flex-basis:32px;width:32px;height:32px;min-width:32px;min-height:32px;
@@ -5356,3 +5356,92 @@ html[data-theme="dark"] .pr-root .pr-label-schools-option{color:#f2f5fa;}
 html[data-theme="dark"] .pr-root .pr-label-schools-option:hover{background:#2b3340;}
 html[data-theme="dark"] .pr-root .pr-label-schools-all button{background:#303948;color:#f2f5fa;}
 @media(max-width:520px){.pr-root .pr-label-schools-popover{min-width:0;}}
+
+
+/* v416 — compact, single-row Stage toolbar across all six preparation stages.
+   The search pill is anchored on the search icon and grows LEFT over the tabs;
+   it must never push History / Download down or change their positions. */
+.pr-root .pr-intake-v401 {gap:11px;}
+.pr-root .pr-intake-v401 .pr-intake-summary {gap:10px;}
+.pr-root .pr-intake-v401 .pr-intake-signoff {align-items:stretch;}
+.pr-root .pr-intake-v401 .pr-intake-signoff .pr-stage-closure {
+ height:auto;min-height:0;margin:0;padding:11px 13px;
+}
+.pr-root .pr-intake-v401 .pr-intake-signoff .pr-sc-header {gap:9px;}
+.pr-root .pr-intake-v401 .pr-intake-signoff .pr-sc-state {gap:8px;}
+.pr-root .pr-intake-v401 .pr-intake-signoff .pr-sc-symbol {width:33px;height:34px;flex-basis:33px;}
+.pr-root .pr-intake-v401 .pr-intake-signoff .pr-sc-symbol svg {width:21px;height:21px;}
+.pr-root .pr-intake-v401 .pr-intake-signoff .pr-sc-card-action {min-height:36px;padding:7px 10px;font-size:11px;}
+.pr-root .pr-intake-v401 .pr-intake-signoff .pr-sc-state strong {font-size:13px;}
+.pr-root .pr-intake-v401 .pr-intake-signoff .pr-sc-state small {font-size:10px;line-height:1.35;}
+.pr-root .pr-intake-v401 .pr-intake-tabs-toolbar {
+ position:relative;z-index:6;display:flex;align-items:center;
+ flex-wrap:nowrap;gap:6px;min-width:0;margin-bottom:10px;
+ overflow:visible;
+}
+.pr-root .pr-intake-v401 .pr-intake-tabs-toolbar .pr-stage-filter-tabs {
+ flex:1 1 0%;width:0;min-width:0;max-width:none;
+ margin:0;padding:3px;gap:2px;border-radius:12px;
+ overflow-x:auto;overscroll-behavior-inline:contain;
+}
+.pr-root .pr-intake-v401 .pr-stage-filter-tabs>button {
+ min-height:36px;padding:7px 10px;gap:6px;
+ border-radius:9px;font-size:11px;
+}
+.pr-root .pr-intake-v401 .pr-stage-filter-tabs>button svg {width:16px;height:16px;}
+.pr-root .pr-intake-v401 .pr-intake-tabs-actions {
+ position:relative;z-index:7;display:flex;align-items:center;justify-content:flex-end;
+ flex:0 0 auto;width:auto;gap:5px;min-width:0;
+}
+.pr-root .pr-intake-v401 .pr-intake-search-slot {
+ position:relative;z-index:8;flex:0 0 36px;width:36px;height:36px;
+ min-width:36px;
+}
+.pr-root .pr-intake-v401 .pr-intake-search-control {
+ --intake-search-size:36px;
+ position:absolute;top:0;right:0;left:auto;z-index:9;
+ display:flex;flex-direction:row-reverse;align-items:center;
+ flex:initial;width:36px;min-width:36px;height:36px;
+ border-radius:999px;overflow:hidden;
+}
+.pr-root .pr-intake-v401 .pr-intake-search-control.is-open {
+ top:0;right:0;left:auto;z-index:10;
+ width:min(320px,calc(100vw - 132px));
+}
+.pr-root .pr-intake-v401 .pr-intake-search-toggle,
+.pr-root .pr-intake-v401 .pr-intake-tabs-actions .pr-pt-history-button,
+.pr-root .pr-intake-v401 .pr-intake-tabs-actions .pr-pt-download-button,
+.pr-root .pr-box-v409 .pr-box-v409-label-button {
+ flex:0 0 36px;width:36px;height:36px;min-width:36px;min-height:36px;
+ padding:0;border-radius:50%;
+}
+.pr-root .pr-intake-v401 .pr-intake-search-control.is-open .pr-intake-search-toggle {
+ flex:0 0 36px;width:36px;height:36px;min-width:36px;min-height:36px;
+ margin:0;
+}
+.pr-root .pr-intake-v401 .pr-intake-search-expand {flex:1 1 auto;width:0;min-width:0;}
+.pr-root .pr-intake-v401 .pr-intake-search-clear {
+ flex:0 0 25px;width:25px;min-width:25px;height:25px;margin:0 3px 0 0;
+}
+.pr-root .pr-box-v409 .pr-box-distribution {gap:10px;}
+.pr-root .pr-intake-v401 .pr-pt-kit-list {gap:12px;}
+@media (max-width: 800px) {
+ .pr-root .pr-intake-v401 .pr-intake-tabs-toolbar {flex-wrap:nowrap;gap:5px;margin-bottom:9px;}
+ .pr-root .pr-intake-v401 .pr-intake-tabs-toolbar .pr-stage-filter-tabs {
+  flex:1 1 0%;width:0;min-width:0;max-width:none;overflow-x:auto;
+ }
+ .pr-root .pr-intake-v401 .pr-intake-tabs-actions {
+  flex:0 0 auto;width:auto;gap:4px;justify-content:flex-end;
+ }
+ .pr-root .pr-intake-v401 .pr-intake-search-control.is-open {
+  top:0;right:0;width:min(320px,calc(100vw - 132px));
+ }
+ .pr-root .pr-intake-v401 .pr-intake-summary {gap:8px;}
+ .pr-root .pr-intake-v401 .pr-intake-signoff .pr-stage-closure {padding:9px 11px;}
+ .pr-root .pr-intake-v401 .pr-intake-signoff .pr-sc-card-action {padding:7px 9px;min-height:35px;}
+}
+@media (max-width: 400px) {
+ .pr-root .pr-intake-v401 .pr-stage-filter-tabs>button {padding:7px 8px;font-size:10.5px;gap:5px;}
+ .pr-root .pr-intake-v401 .pr-stage-filter-tabs>button svg {width:15px;height:15px;}
+ .pr-root .pr-intake-v401 .pr-intake-tabs-toolbar {gap:4px;}
+}

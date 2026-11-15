@@ -1,0 +1,10 @@
+ERP Pyramakerz v416 — changed relative to supplied supabase--main.zip
+
+components/preparing/PreparingClient.jsx
+public/css/projects-preparing.css
+app/projects-preparing/page.jsx
+tests/projects-preparing-v416-compact-mobile-toolbar.test.mjs (added)
+README_v416_COMPACT_STAGE_MOBILE_UI.md (added)
+MODIFIED_FILES_v416.txt (added)
+
+No database migrations; not a change to permissions or stage workflow data.
