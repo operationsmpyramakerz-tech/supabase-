@@ -3,6 +3,7 @@ const path = require("path");
 const { attachPageNumbers } = require("./pdfPageNumbers");
 const { drawStocktakingHeader } = require("./pdfHeader");
 const { enableArabicPdf, ensurePdfArabicSupport, withNativeArabicPdfText } = require("./pdfArabicSupport");
+const { isMixedArabicReason, prepareMixedArabicReason } = require("./pdfMixedArabicReason");
 
 function moneyGBP(n) {
   const num = Number(n) || 0;
@@ -566,18 +567,41 @@ async function pipeDeliveryReceiptPDF(
   const infoW = (contentW - infoGap) / 2;
   const infoH = 38;
   const infoPadX = 10;
-  const drawInfoBox = (x, y, title, value) => {
+  // Reason can mix Arabic with English product/course names. PDFKit's normal
+  // Arabic fallback reverses visual runs in a way that can scramble such text.
+  // Use native letter shaping and reorder the *words* (not the Latin phrase).
+  const drawReasonText = (value, x, y, width, options = {}) => {
+    const raw = String(value || "—");
+    if (!isMixedArabicReason(raw)) {
+      doc.text(raw, x, y, { width, ...options });
+      return;
+    }
+    withNativeArabicPdfText(doc, () => {
+      const prepared = prepareMixedArabicReason(raw);
+      doc.text(prepared.text, x, y, { width, ...options, align: prepared.align });
+    });
+  };
+
+  const drawInfoBox = (x, y, title, value, { isReason = false } = {}) => {
     doc.roundedRect(x, y, infoW, infoH, 8).fillColor(COLORS.headerBg).fill();
     doc.roundedRect(x, y, infoW, infoH, 8).lineWidth(0.8).strokeColor(COLORS.border).stroke();
     doc.fillColor(COLORS.muted).font("Helvetica-Bold").fontSize(8.5).text(String(title || ""), x + infoPadX, y + 6, {
       width: infoW - infoPadX * 2,
       align: "left",
     });
-    doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(10).text(String(value || "—"), x + infoPadX, y + 20, {
-      width: infoW - infoPadX * 2,
-      align: "left",
-      ellipsis: true,
-    });
+    doc.fillColor(COLORS.text).font("Helvetica-Bold").fontSize(10);
+    if (isReason) {
+      drawReasonText(value, x + infoPadX, y + 20, infoW - infoPadX * 2, {
+        ellipsis: true,
+        height: 16, // Keep a long mixed-language reason inside the summary card.
+      });
+    } else {
+      doc.text(String(value || "—"), x + infoPadX, y + 20, {
+        width: infoW - infoPadX * 2,
+        align: "left",
+        ellipsis: true,
+      });
+    }
   };
 
   const infoY1 = doc.y;
@@ -587,7 +611,7 @@ async function pipeDeliveryReceiptPDF(
   // PDF layout without referring to a stock folder as an order or team member.
   const summaryLabel = (key, fallback) => String(summaryLabels?.[key] || fallback);
   drawInfoBox(mL, infoY1, summaryLabel("teamMember", "Team member"), teamLabel);
-  drawInfoBox(mL + infoW + infoGap, infoY1, summaryLabel("reason", "Reason"), reasonLabel);
+  drawInfoBox(mL + infoW + infoGap, infoY1, summaryLabel("reason", "Reason"), reasonLabel, { isReason: true });
   const infoY2 = infoY1 + infoH + 8;
   drawInfoBox(mL, infoY2, summaryLabel("orderId", "Order ID"), String(orderId || "—"));
   drawInfoBox(mL + infoW + infoGap, infoY2, summaryLabel("date", "Date"), formatDateTime(generatedAt));
@@ -729,10 +753,10 @@ async function pipeDeliveryReceiptPDF(
     const y = doc.y;
     doc.rect(tableX, y, tableW, 24).fillColor("#F5F3FF").fill();
     doc.rect(tableX, y, tableW, 24).lineWidth(0.5).strokeColor("#DDD6FE").stroke();
-    doc.fillColor("#5B21B6").font("Helvetica-Bold").fontSize(9.3).text(String(reason || "No Reason"), tableX + cellPadX, y + 7, {
-      width: tableW - 110,
-      align: "left",
+    doc.fillColor("#5B21B6").font("Helvetica-Bold").fontSize(9.3);
+    drawReasonText(reason || "No Reason", tableX + cellPadX, y + 7, tableW - 110, {
       ellipsis: true,
+      height: 13,
     });
     doc.fillColor("#6D28D9").font("Helvetica-Bold").fontSize(8).text(`${Number(count) || 0} item${Number(count) === 1 ? "" : "s"}`, tableX + tableW - 100, y + 8, {
       width: 93,
@@ -765,11 +789,26 @@ async function pipeDeliveryReceiptPDF(
     });
 
     doc.font("Helvetica").fontSize(9);
-    const measuredHeights = columns.map((c) => doc.heightOfString(String(rowData[c.key] || ""), {
-      width: Math.max(1, c.width - cellPadX * 2),
-      align: c.align,
-      lineGap: 1,
-    }));
+    const preparedRows = columns.map((c) => {
+      const raw = String(rowData[c.key] || "");
+      const width = Math.max(1, c.width - cellPadX * 2);
+      if (c.key !== "reason" || !isMixedArabicReason(raw)) {
+        return { text: raw, align: c.align, native: false };
+      }
+      return withNativeArabicPdfText(doc, () => ({
+        ...prepareMixedArabicReason(raw, { width, measure: (line) => doc.widthOfString(line) }),
+        native: true,
+      }));
+    });
+    const measuredHeights = columns.map((c, index) => {
+      const value = preparedRows[index];
+      const measure = () => doc.heightOfString(value.text, {
+        width: Math.max(1, c.width - cellPadX * 2),
+        align: value.align,
+        lineGap: 1,
+      });
+      return value.native ? withNativeArabicPdfText(doc, measure) : measure();
+    });
     const rowH = Math.max(20, ...measuredHeights) + 8;
     ensureSpace(rowH + 4, { onNewPage: repeatHeader });
 
@@ -782,14 +821,17 @@ async function pipeDeliveryReceiptPDF(
     });
 
     doc.fillColor(COLORS.text).font("Helvetica").fontSize(9);
-    columns.forEach((c) => {
+    columns.forEach((c, index) => {
+      const value = preparedRows[index];
       const opts = {
         width: c.width - cellPadX * 2,
-        align: c.align,
+        align: value.align,
         lineGap: 1,
       };
       if ((c.key === "component" || c.key === "link") && componentLink) opts.link = componentLink;
-      doc.text(String(rowData[c.key] || ""), c.x + cellPadX, y + 6, opts);
+      const draw = () => doc.text(value.text, c.x + cellPadX, y + 6, opts);
+      if (value.native) withNativeArabicPdfText(doc, draw);
+      else draw();
     });
     doc.y = y + rowH;
   }
