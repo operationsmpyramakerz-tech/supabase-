@@ -80,7 +80,7 @@ const NEXT_ROUTE_MAP = [
   ["/proposals", "/next/proposals"],
   ["/products", "/next/products"],
   ["/expenses", "/next/expenses"],
-  ["/events", "/next/events"],
+  ["/events", "/next/events-calendar"],
   ["/history", "/next/history"],
   ["/backup", "/next/backup"],
   ["/user-access", "/next/users-center"],

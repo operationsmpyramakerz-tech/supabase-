@@ -1,0 +1,17 @@
+ERP Pyramakerz v418 — Event Requests list merged into Calendar
+
+Files changed/added:
+- MODIFIED_FILES_v418.txt
+- README_v418_EVENTS_CALENDAR_ONLY.md
+- app/events/new/page.jsx
+- app/events/page.jsx
+- components/events/EventRequestFormClient.jsx
+- components/events/EventsCalendarClient.jsx
+- components/events/EventsDialogs.jsx
+- components/events/EventsSidebarFlyout.jsx
+- components/how-it-works/HowItWorksClient.jsx
+- components/notifications/notification-utils.js
+- lib/navigation-config.js
+- tests/events-calendar-only-v418.test.mjs
+
+No SQL required.

@@ -104,14 +104,14 @@ function StatusPill({ status }) {
   return <span className={`agenda-status agenda-status--${key}`}><EventIcon name={key === "confirmed" ? "check-circle" : key === "cancelled" ? "x-circle" : "clock"} />{eventConfirmationLabel(status)}</span>;
 }
 
-function DetailsModal({ event, canOpenRequests, canExport = true, canConfirm, onConfirmEvent, onClose, busy }) {
+function DetailsModal({ event, canOpenRequests, canEdit = false, canCancel = false, canExport = true, canConfirm, onConfirmEvent, onRequestAction, onClose, busy }) {
   useEffect(() => {
     if (!event) return undefined;
     const onKey = (keyEvent) => { if (keyEvent.key === "Escape") onClose(); };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [event, onClose]);
-  return <EventsDetailsModal event={event} calendarMode canOpenRequests={canOpenRequests} canExport={canExport} canWorkflow={canConfirm} onConfirmEvent={onConfirmEvent} onClose={onClose} busy={busy} />;
+  return <EventsDetailsModal event={event} calendarMode canOpenRequests={canOpenRequests} canEdit={canEdit} canCancel={canCancel} canExport={canExport} canWorkflow={canConfirm} onConfirmEvent={onConfirmEvent} onRequestAction={onRequestAction} onClose={onClose} busy={busy} />;
 }
 
 export default function EventsCalendarClient({ account, initialEvents = [], canMutateRequests = false }) {
@@ -119,6 +119,8 @@ export default function EventsCalendarClient({ account, initialEvents = [], canM
   const canCreate = canMutateRequests && access.has("event requests") && featureAllowed(account, "events.requests.view") && featureAllowed(account, "events.requests.create");
   const canOpenRequests = access.has("event requests") && featureAllowed(account, "events.requests.view")
     && !["own", "team", "none"].includes(eventRequestScopeFor(account, "events.requests.view"));
+  const canEdit = canMutateRequests && canOpenRequests && featureAllowed(account, "events.requests.edit");
+  const canCancel = canMutateRequests && canOpenRequests && featureAllowed(account, "events.requests.cancel");
   const canExport = canOpenRequests && featureAllowed(account, "events.requests.pdf")
     && !["own", "team", "none"].includes(eventRequestScopeFor(account, "events.requests.pdf"));
   const canConfirm = canMutateRequests && canOpenRequests && featureAllowed(account, "events.requests.workflow")
@@ -135,6 +137,7 @@ export default function EventsCalendarClient({ account, initialEvents = [], canM
   const [search, setSearch] = useState("");
   const [activeEvent, setActiveEvent] = useState(null);
   const detailRequest = useRef(0);
+  const deepLinkOpened = useRef(false);
   const today = useMemo(() => startOfDay(new Date()), []);
   const selectedDate = useMemo(() => localDay(selectedKey) || today, [selectedKey, today]);
   const scheduled = useMemo(() => events.filter(event => !event.isArchived && eventConfirmation(event.status) !== "cancelled"), [events]);
@@ -175,6 +178,15 @@ export default function EventsCalendarClient({ account, initialEvents = [], canM
       if (body?.event && detailRequest.current === requestId) setActiveEvent(body.event);
     } catch { /* Keep the permitted summary visible. */ }
   }
+  useEffect(() => {
+    if (deepLinkOpened.current || typeof window === "undefined") return;
+    deepLinkOpened.current = true;
+    const eventId = new URLSearchParams(window.location.search).get("event");
+    const selected = events.find(item => item.id === eventId);
+    if (selected) void openEventDetails(selected);
+    // Only run once for legacy bookmark/notification deep links.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   function openNewEvent() {
     const params = new URLSearchParams({ startDate: selectedKey });
     const codes = [...new Set(scheduled.filter(event => eventOnDate(event,selectedDate)).map(event => text(event.eventCode)).filter(Boolean))];
@@ -186,13 +198,35 @@ export default function EventsCalendarClient({ account, initialEvents = [], canM
     setActionError("");
     setAuthorization({ title: "Confirm Event", eventId: activeEvent.id, password: "" });
   }
+  function beginRequestAction(action) {
+    if (!activeEvent || !["edit", "cancel"].includes(action)) return;
+    if (action === "edit" && !canEdit || action === "cancel" && !canCancel) return;
+    setActionError("");
+    setAuthorization({ intent: "request_action", action, title: action === "edit" ? "Edit Event" : "Cancel Event", eventId: activeEvent.id, password: "" });
+  }
   async function authorizeConfirmation(e) {
     e.preventDefault();
     if (!authorization || busy) return;
     setBusy(true); setActionError("");
     try {
-      const verified = await requestJson("/next/api/events/admin/verify", { method: "POST", body: JSON.stringify({ intent: "request_workflow", targetStatus: "in_progress", eventId: authorization.eventId, password: authorization.password }) });
-      setConfirmation({ eventId: authorization.eventId, token: verified.authorizationToken, title: "Confirm event?", message: "The event will move from Pending Confirmation to Confirmed.", label: "Confirm Event" });
+      const action = authorization.intent === "request_action" ? authorization.action : "";
+      const verified = await requestJson("/next/api/events/admin/verify", {
+        method: "POST",
+        body: JSON.stringify(action
+          ? { intent: "request_action", action, eventId: authorization.eventId, password: authorization.password }
+          : { intent: "request_workflow", targetStatus: "in_progress", eventId: authorization.eventId, password: authorization.password }),
+      });
+      if (action === "edit") {
+        try { window.sessionStorage.setItem(`erp.events.editAuth.${authorization.eventId}`, text(verified.authorizationToken)); } catch {}
+        navigateWithinApp(`/next/events/new?edit=${encodeURIComponent(authorization.eventId)}`);
+        setAuthorization(null);
+        return;
+      }
+      if (action === "cancel") {
+        setConfirmation({ kind: "cancel", eventId: authorization.eventId, token: verified.authorizationToken, title: "Cancel event?", message: "This event will be marked as Cancelled.", label: "Confirm Cancellation" });
+      } else {
+        setConfirmation({ kind: "confirm", eventId: authorization.eventId, token: verified.authorizationToken, title: "Confirm event?", message: "The event will move from Pending Confirmation to Confirmed.", label: "Confirm Event" });
+      }
       setAuthorization(null);
     } catch (error) { setActionError(error.message); }
     finally { setBusy(false); }
@@ -201,7 +235,9 @@ export default function EventsCalendarClient({ account, initialEvents = [], canM
     if (!confirmation || busy) return;
     setBusy(true); setActionError("");
     try {
-      const body = await requestJson("/next/api/events/mutations-direct", { method: "POST", body: JSON.stringify({ action: "workflow-transition", eventId: confirmation.eventId, targetStatus: "in_progress", authorizationToken: confirmation.token }) });
+      const body = await requestJson("/next/api/events/mutations-direct", { method: "POST", body: JSON.stringify(confirmation.kind === "cancel"
+        ? { action: "request-action", requestAction: "cancel", eventId: confirmation.eventId, authorizationToken: confirmation.token }
+        : { action: "workflow-transition", eventId: confirmation.eventId, targetStatus: "in_progress", authorizationToken: confirmation.token }) });
       if (!body.event?.id) throw new Error("The event could not be refreshed.");
       detailRequest.current++;
       setEvents(current => current.map(event => event.id === body.event.id ? { ...event, status: body.event.status } : event));
@@ -239,7 +275,7 @@ export default function EventsCalendarClient({ account, initialEvents = [], canM
           <div className="agenda-rows" role="tabpanel">{list.length ? list.map(event => <button type="button" key={event.id} className={`agenda-row agenda-row--${eventConfirmation(event.status)}`} onClick={() => openEventDetails(event)}><span className="agenda-row-date"><small>{formatDate(startDate(event),{weekday:"short"})}</small><strong>{formatDate(startDate(event),{day:"2-digit",month:"short"})}</strong></span><span className="agenda-row-main"><strong>{event.eventName || "Untitled Event"}</strong><span><span><EventIcon name="map-pin"/>{event.venueName || event.organizationName || event.governorate || "Venue to be confirmed"}</span>{event.expectedAttendees != null ? <span><EventIcon name="user"/>{event.expectedAttendees} Attendees</span> : null}</span></span><StatusPill status={event.status}/><span className="agenda-row-more"><EventIcon name="more-horizontal"/></span></button>) : <div className="agenda-empty"><EventIcon name="calendar"/><strong>No {activeList} events</strong><span>{search || filter !== "all" ? "Try changing your search or filter." : "Events will appear here when available."}</span></div>}</div>
         </section>
       </div>
-      {!authorization && !confirmation ? <DetailsModal busy={busy} event={activeEvent} canOpenRequests={canOpenRequests} canExport={canExport} canConfirm={canConfirm} onConfirmEvent={beginConfirmation} onClose={() => {detailRequest.current++;setActiveEvent(null);setActionError("");}} /> : null}
+      {!authorization && !confirmation ? <DetailsModal busy={busy} event={activeEvent} canOpenRequests={canOpenRequests} canEdit={canEdit} canCancel={canCancel} canExport={canExport} canConfirm={canConfirm} onConfirmEvent={beginConfirmation} onRequestAction={beginRequestAction} onClose={() => {detailRequest.current++;setActiveEvent(null);setActionError("");}} /> : null}
       {authorization ? <AuthorizationModal authorization={authorization} busy={busy} error={actionError} onClose={() => { if (!busy) {setAuthorization(null);setActionError("");} }} onPassword={password=>setAuthorization(current=>({...current,password}))} onSubmit={authorizeConfirmation}/> : null}
       {confirmation ? <ConfirmationModal confirmation={confirmation} busy={busy} onClose={() => {if(!busy)setConfirmation(null);}} onConfirm={confirmEvent}/> : null}
       {actionError && !authorization ? <div className="agenda-action-error" role="alert">{actionError}<button type="button" aria-label="Dismiss error" onClick={()=>setActionError("")}>×</button></div> : null}

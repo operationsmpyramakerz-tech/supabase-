@@ -1,52 +1,9 @@
 import { redirect } from "next/navigation";
-import AppShell from "../../components/AppShell";
-import EventsClient from "../../components/events/EventsClient";
-import { loadDirectEventsPageData } from "../../lib/events-data";
-import { featureAllowed } from "../../lib/feature-permissions-registry";
 
-export const dynamic = "force-dynamic";
-
-export default async function EventsPage() {
-  const pageData = await loadDirectEventsPageData({ mode: "events" }).catch(() => null);
-
-  if (pageData?.status === 401) redirect("/login?next=/next/events");
-  if (pageData?.status === 403 || (pageData?.ok && !featureAllowed(pageData.account, "events.requests.view"))) {
-    return (
-      <main className="standalone-state">
-        <section className="state-card">
-          <span className="status-dot warning" />
-          <h1>Events is not available</h1>
-          <p>Your account does not have access to Event Requests or the Event Calendar.</p>
-          <a className="primary-button" href="/next/home">Return to Home</a>
-        </section>
-      </main>
-    );
-  }
-
-  if (!pageData?.ok) {
-    return (
-      <main className="standalone-state">
-        <section className="state-card">
-          <span className="status-dot warning" />
-          <h1>The Events page could not load</h1>
-          <p>{pageData?.error || "The Events data service is temporarily unavailable."}</p>
-          <div className="actions">
-            <a className="primary-button" href="/next/events">Try again</a>
-            <a className="secondary-button" href="/next/home">Return to Home</a>
-          </div>
-        </section>
-      </main>
-    );
-  }
-
-  return (
-    <AppShell account={pageData.account} title="Events" eyebrow="Event execution requests" activePath="/next/events" bodyClass="events-page events-requests-page" pageStyles={["/next/css/events.css?v=details-20261111"]}>
-      <EventsClient
-        account={pageData.account}
-        initialEvents={Array.isArray(pageData.events) ? pageData.events : []}
-        eventScopePolicy={pageData.eventScopePolicy || null}
-        bootstrapWarnings={pageData.warnings || []}
-      />
-    </AppShell>
-  );
+// Event Requests was consolidated into the Calendar. Keep legacy bookmarks and
+// notifications working without retaining a second request-list UI.
+export default async function EventsPage({ searchParams }) {
+  const search = await Promise.resolve(searchParams);
+  const eventId = typeof search?.event === "string" ? search.event.trim() : "";
+  redirect(eventId ? `/events-calendar?event=${encodeURIComponent(eventId)}` : "/events-calendar");
 }

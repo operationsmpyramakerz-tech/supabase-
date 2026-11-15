@@ -11,8 +11,6 @@ export const MODULE_LINKS = [
   { label: "Maintenance Orders", href: "/next/maintenance-orders", permissions: ["Maintenance Orders", "/maintenance-orders"] },
   { label: "Shopping Cart", href: "/next/orders/new", permissions: ["Create New Order", "Shopping Cart", "Cart", "/orders/new"] },
   { label: "Stocktaking", href: "/next/stocktaking", permissions: ["Stocktaking", "/stocktaking"] },
-  { label: "Events", href: "/next/events", permissions: ["Event Requests", "Events", "/events", "/events/requests"] },
-  { label: "New Event Request", href: "/next/events/new", permissions: ["Event Requests", "Events", "/events", "/events/requests"] },
   { label: "Event Calendar", href: "/next/events-calendar", permissions: ["Event Calendar", "Events", "/events/calendar"] },
   { label: "Event Components", href: "/next/event-components", permissions: ["Event Components", "Events", "/events/components"] },
   { label: "Event Team", href: "/next/event-team", permissions: ["Event Team", "Event Requests", "Event Calendar", "Event Components", "Events", "/events/team"] },

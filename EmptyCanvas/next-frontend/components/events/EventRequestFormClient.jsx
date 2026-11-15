@@ -854,7 +854,7 @@ export default function EventRequestFormClient({
         try { window.sessionStorage.removeItem(`erp.events.editAuth.${editingId}`); } catch {}
       }
       notify("success", "Events", editingId ? "Event request updated successfully." : "Event request submitted successfully.");
-      window.setTimeout(() => { navigateWithinApp("/next/events"); }, 550);
+      window.setTimeout(() => { navigateWithinApp("/next/events-calendar"); }, 550);
     } catch (submitError) {
       setError(submitError?.message || "Could not save the event request.");
       setSubmitting(false);
@@ -957,7 +957,7 @@ export default function EventRequestFormClient({
       <header className="event-wizard-intro" ref={wizardHeadingRef} tabIndex={-1}>
         <div className="event-wizard-intro-icon"><EventIcon name="calendar" /></div>
         <div><h1>{editingId ? "Edit Event Request" : "Add New Event"}</h1><p>{editingId ? "Update your event details and resources." : "Create an event request for confirmation."}</p></div>
-        <a href="/next/events" className="event-wizard-back" aria-label="Back to Events"><EventIcon name="chevron-left" /> <span>Events</span></a>
+        <a href="/next/events-calendar" className="event-wizard-back" aria-label="Back to Events"><EventIcon name="chevron-left" /> <span>Events</span></a>
       </header>
       <nav className="event-wizard-steps" aria-label="Event request progress">
         {EVENT_FORM_STEPS.map((label, index) => (
@@ -1125,7 +1125,7 @@ export default function EventRequestFormClient({
         </> : null}
         {error ? <div className="events-form-error next-event-form-error" role="alert">{error}</div> : null}
         <footer className="event-wizard-actions">
-          <a href="/next/events" className="event-wizard-cancel">Cancel</a>
+          <a href="/next/events-calendar" className="event-wizard-cancel">Cancel</a>
           <span className="event-wizard-step-count">Step {step + 1} of {EVENT_FORM_STEPS.length}</span>
           <div className="event-wizard-action-buttons">
             <button type="button" className="event-wizard-previous" disabled={step === 0 || submitting} onClick={() => goToStep(step - 1)}><EventIcon name="chevron-left" /> Previous</button>

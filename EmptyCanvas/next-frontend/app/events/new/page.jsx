@@ -40,7 +40,7 @@ export default async function NewEventRequestPage({ searchParams }) {
           <p>{pageData?.error || "The Events data service is temporarily unavailable."}</p>
           <div className="actions">
             <a className="primary-button" href={editId ? `/next/events/new?edit=${encodeURIComponent(editId)}` : "/next/events/new"}>Try again</a>
-            <a className="secondary-button" href="/next/events">Return to Events</a>
+            <a className="secondary-button" href="/next/events-calendar">Return to Events</a>
           </div>
         </section>
       </main>
@@ -51,7 +51,7 @@ export default async function NewEventRequestPage({ searchParams }) {
     return (
       <AppShell
         account={pageData.account}
-        title="Edit Event Request"
+        title="Edit Event"
         eyebrow="Event planning and execution brief"
         activePath="/next/events/new"
         bodyClass="events-page events-new-page"
@@ -62,7 +62,7 @@ export default async function NewEventRequestPage({ searchParams }) {
             <span className="status-dot warning" />
             <h1>Event request not found</h1>
             <p>The selected request could not be loaded or is no longer available.</p>
-            <div className="actions"><a className="primary-button" href="/next/events">Return to Events</a></div>
+            <div className="actions"><a className="primary-button" href="/next/events-calendar">Return to Events</a></div>
           </section>
         </main>
       </AppShell>
@@ -72,7 +72,7 @@ export default async function NewEventRequestPage({ searchParams }) {
   return (
     <AppShell
       account={pageData.account}
-      title={editId ? "Edit Event Request" : "New Event Request"}
+      title={editId ? "Edit Event" : "Add New Event"}
       eyebrow="Event planning and execution brief"
       activePath="/next/events/new"
       bodyClass="events-page events-new-page"

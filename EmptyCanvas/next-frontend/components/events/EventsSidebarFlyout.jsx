@@ -14,14 +14,6 @@ const PAGES = Object.freeze([
     icon: "calendar",
   },
   {
-    key: "requests",
-    name: "Event Requests",
-    route: "/next/events",
-    legacyRoute: "/events/requests",
-    label: "Event Requests",
-    icon: "clipboard",
-  },
-  {
     key: "components",
     name: "Event Components",
     route: "/next/event-components",
@@ -72,7 +64,8 @@ function allowedEventPages(allowedPages) {
   };
   // Event Team is a shared Events workforce page. Existing Events users should
   // see it immediately without requiring a new page-access row in Supabase.
-  const inheritedTeamAccess = broad || PAGES.filter((page) => page.key !== "team").some(matches);
+  const inheritedTeamAccess = broad || values.has("event requests") || values.has("/events/requests")
+    || PAGES.filter((page) => page.key !== "team").some(matches);
   return PAGES.filter((page) => broad || matches(page) || (page.key === "team" && inheritedTeamAccess));
 }
 
@@ -100,7 +93,7 @@ function toNextClientRoute(value) {
 export default function EventsSidebarFlyout({ allowedPages = [], account = {}, activePath = "" }) {
   const router = useRouter();
   useEffect(() => {
-    const modules = { calendar: "events.calendar.view", requests: "events.requests.view", components: "events.components.view", team: "events.team.view" };
+    const modules = { calendar: "events.calendar.view", components: "events.components.view", team: "events.team.view" };
     const pages = allowedEventPages(allowedPages).filter(page => featureAllowed(account, modules[page.key]));
     const parent = document.querySelector('.classic-app-shell a.nav-link[href="/next/events"]');
     if (!(parent instanceof HTMLAnchorElement)) return undefined;
