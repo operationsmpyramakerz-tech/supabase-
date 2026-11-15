@@ -1,0 +1,10 @@
+ERP Pyramakerz v419 — files changed / added
+
+components/events/EventsSidebarFlyout.jsx
+components/task-management/TaskManagementSidebarFlyout.jsx
+components/orders/ShoppingCartSidebarFlyout.jsx
+components/AppShell.jsx
+public/css/unified-white-workspace.css
+tests/secondary-sidebar-autofit-v419.test.mjs
+README_v419_SECONDARY_SIDEBAR_AUTOFIT.md
+MODIFIED_FILES_v419.txt

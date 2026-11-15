@@ -461,3 +461,14 @@ body.persistent-app-shell .classic-app-shell > .main-content > main.next-classic
     stroke: var(--ops-sidebar-active-text) !important;
   }
 }
+
+/* v419 — Secondary sidebar auto-fit (Events, Tasks, Shopping Cart).
+   The individual flyouts set --secondary-page-count after applying page access
+   and feature permissions; all visible links share the whole available rail.
+   Override historical hardcoded 3/4-column mobile grids without affecting
+   desktop single-column flyouts or the underlying bottom dock. */
+@media (max-width: 768px) {
+  html[data-theme] body .task-management-secondary-sidebar .task-management-secondary-sidebar__rail {
+    grid-template-columns: repeat(var(--secondary-page-count, 3), minmax(0, 1fr)) !important;
+  }
+}

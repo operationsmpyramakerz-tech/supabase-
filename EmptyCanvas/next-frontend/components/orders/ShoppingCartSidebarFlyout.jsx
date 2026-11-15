@@ -116,6 +116,10 @@ export default function ShoppingCartSidebarFlyout({ allowedPages = [], activePat
       document.body.appendChild(panel);
     }
 
+    // Fit the mobile secondary dock to the visible, permission-filtered pages.
+    // One column per link: removing or denying a page never leaves a blank slot.
+    panel.style.setProperty("--secondary-page-count", String(pages.length));
+
     const renderPanel = () => {
       const latestPath = String(window.location.pathname || currentPath).replace(/\/+$/, "");
       panel.innerHTML = `<div class="task-management-secondary-sidebar__rail shopping-cart-secondary-sidebar__rail">${pages.map((page) => {

@@ -193,7 +193,7 @@ export default function AppShell({
     return (
       <>
         {pageStyles.map((href) => <link rel="stylesheet" href={href} key={href} precedence="erp-detail" />)}
-        <link rel="stylesheet" href="/next/css/unified-white-workspace.css?v=sidebar-inner-ring-main47-v2" precedence="erp-workspace" />
+        <link rel="stylesheet" href="/next/css/unified-white-workspace.css?v=sidebar-autofit-v419" precedence="erp-workspace" />
         <link rel="stylesheet" href="/next/css/scrollbar-hidden.css?v=global-hidden-v1" precedence="erp-workspace" />
         <link rel="stylesheet" href="/next/css/erp-inner-frame.css?v=v329-white-frame-dark-divider" precedence="erp-inner-frame" />
         <link rel="stylesheet" href="/next/css/erp-global-title-chevron.css?v=v332-folder-paths" precedence="erp-page-title" />
@@ -208,7 +208,7 @@ export default function AppShell({
     <>
       <ShellStyleLinks />
       {pageStyles.map((href) => <link rel="stylesheet" href={href} key={href} precedence="erp-performance" />)}
-      <link rel="stylesheet" href="/next/css/unified-white-workspace.css?v=sidebar-inner-ring-main47-v2" precedence="erp-workspace" />
+      <link rel="stylesheet" href="/next/css/unified-white-workspace.css?v=sidebar-autofit-v419" precedence="erp-workspace" />
       <link rel="stylesheet" href="/next/css/scrollbar-hidden.css?v=global-hidden-v1" precedence="erp-workspace" />
       <link rel="stylesheet" href="/next/css/erp-inner-frame.css?v=v329-white-frame-dark-divider" precedence="erp-inner-frame" />
       <link rel="stylesheet" href="/next/css/erp-global-title-chevron.css?v=v332-folder-paths" precedence="erp-page-title" />
