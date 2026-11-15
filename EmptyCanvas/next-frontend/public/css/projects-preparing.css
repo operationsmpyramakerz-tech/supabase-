@@ -5542,3 +5542,49 @@ html[data-theme="dark"] .pr-root .pr-intake-v401 .pr-pt-title .pr-intake-header-
   border-radius:12px;
  }
 }
+
+
+/* Chat 03 — New Project modal: centered floating Add badge and dark save action. */
+.pr-root .pr-new-project-sheet {
+  position: relative;
+  overflow: visible;
+}
+.pr-root .pr-new-project-sheet .pr-sheet-floating-badge {
+  position: absolute;
+  z-index: 2;
+  top: -46px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: grid;
+  place-items: center;
+  width: 92px;
+  height: 92px;
+  border-radius: 26px;
+  background: #111827;
+  color: #fff;
+  box-shadow: 0 14px 30px rgba(17, 24, 39, .19);
+  pointer-events: none;
+}
+.pr-root .pr-new-project-sheet .pr-sheet-head {
+  padding-top: 54px;
+}
+.pr-root .pr-new-project-sheet .pr-sheet-foot .pr-primary.pr-new-project-save {
+  background: #111827;
+  border-color: #111827;
+  color: #fff;
+}
+.pr-root .pr-new-project-sheet .pr-sheet-foot .pr-primary.pr-new-project-save:hover:not(:disabled) {
+  background: #252f40;
+  border-color: #252f40;
+}
+@media (max-width: 600px) {
+  .pr-root .pr-new-project-sheet .pr-sheet-floating-badge {
+    width: 88px;
+    height: 88px;
+    top: -44px;
+    border-radius: 25px;
+  }
+  .pr-root .pr-new-project-sheet .pr-sheet-head {
+    padding-top: 50px;
+  }
+}

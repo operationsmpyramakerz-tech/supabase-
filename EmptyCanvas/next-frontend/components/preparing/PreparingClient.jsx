@@ -74,9 +74,10 @@ function StepAccessAvatars({ access, loading, unavailable }) {
     {access.count > access.users.length && <span className="pr-step-access-extra" title={`${access.count} users have access`}>+{access.count - access.users.length}</span>}
   </span>;
 }
-function Sheet({ title, onClose, children, footer, className = "", icon }) {
+function Sheet({ title, onClose, children, footer, className = "", icon, topBadgeIcon }) {
   return <div className="pr-overlay" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
     <section className={`pr-sheet ${className}`} role="dialog" aria-modal="true" aria-label={title}>
+      {topBadgeIcon && <span className="pr-sheet-floating-badge" aria-hidden="true"><Ico name={topBadgeIcon} size={38}/></span>}
       <header className="pr-sheet-head"><div className={icon ? "pr-sheet-title-with-icon" : undefined}>{icon && <span className="pr-sheet-title-icon"><Ico name={icon} size={21}/></span>}<h2>{title}</h2></div><button type="button" className="pr-icon" onClick={onClose} aria-label="Close"><Ico name="close"/></button></header>
       <div className="pr-sheet-body">{children}</div>{footer && <footer className="pr-sheet-foot">{footer}</footer>}
     </section>
@@ -651,10 +652,10 @@ export default function PreparingClient({ account, initialData = EMPTY_DATA, boo
         </div>}
       </div>
     </> : null}
-    {sheet === "project" && <Sheet title="New Project" onClose={()=>setSheet("")}
-      footer={<><button className="pr-secondary" onClick={()=>setSheet("")}>Cancel</button><button className="pr-primary" disabled={busy || projectName.trim().length < 2 || !projectSourceId} onClick={()=>save(async()=>api("", "POST", {action:"create_project", name:projectName, description:projectDescription, proposalId:projectSourceId}))}>{busy ? "Saving…" : "Save Project"}</button></> }>
+    {sheet === "project" && <Sheet title="New Project" className="pr-new-project-sheet" topBadgeIcon="plus" onClose={()=>setSheet("")}
+      footer={<><button className="pr-secondary" onClick={()=>setSheet("")}>Cancel</button><button className="pr-primary pr-new-project-save" disabled={busy || projectName.trim().length < 2 || !projectSourceId} onClick={()=>save(async()=>api("", "POST", {action:"create_project", name:projectName, description:projectDescription, proposalId:projectSourceId}))}>{busy ? "Saving…" : "Save Project"}</button></> }>
       <label className="pr-field">Project name<input autoFocus maxLength={160} value={projectName} placeholder="30 June Schools" onChange={event=>setProjectName(event.target.value)}/></label>
-      <label className="pr-field">Source Proposal<PreparingSelect required value={projectSourceId} onChange={event=>setProjectSourceId(event.target.value)}><option value="">Select project Proposal…</option>{asArray(data.proposals).map(row=><option key={row.id} value={row.id}>{row.name} ({row.itemsCount} components)</option>)}</PreparingSelect><span className="pr-form-meta">The selected Proposal creates the project's component list and warehouse required quantities immediately.</span></label>
+      <label className="pr-field">Source Proposal<PreparingSelect required value={projectSourceId} onChange={event=>setProjectSourceId(event.target.value)}><option value="">Select project Proposal…</option>{asArray(data.proposals).map(row=><option key={row.id} value={row.id}>{row.name} ({row.itemsCount} components)</option>)}</PreparingSelect></label>
       <label className="pr-field">Description<textarea rows={4} maxLength={1000} value={projectDescription} placeholder="STEAM Labs · 11 schools" onChange={event=>setProjectDescription(event.target.value)}/></label>
     </Sheet>}
     {sheet === "rename_project" && <Sheet title="Rename Project" onClose={()=>setSheet("")}
