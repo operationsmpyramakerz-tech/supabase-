@@ -30,8 +30,9 @@ test('Box labels panel generates school-specific Kits in groups instead of inlin
  const main=boxes.slice(mainStart,modalStart);
  assert.doesNotMatch(main,/pr-box-toolbar|pr-box-pills|pr-box-create|New box label|Kit for new box/);
  const modal=boxes.slice(modalStart);
- for(const label of ['role="dialog"','aria-modal="true"','aria-label="Boxes Label"','aria-label="Close Boxes Label"','Generate School Kit Labels','Kit Groups','boxGroups.map','group.cartons.map','School for new Kit labels','Kit group for new labels','Number of kits for selected school','Rename','Delete'])assert.ok(modal.includes(label),label);
+ for(const label of ['role="dialog"','aria-modal="true"','aria-label="Boxes Label"','aria-label="Close Boxes Label"','Generate School Kit Labels','Kit Groups','boxGroups.map','group.cartons.map','LabelSchoolsPicker','Kit group for new labels','Number of kits per selected school','Rename','Delete'])assert.ok(modal.includes(label),label);
  assert.match(boxes,/groupBoxLabels\(data\?\.kits,data\?\.cartons\)/);
+ assert.match(boxes,/aria-label="Schools for new Kit labels"/);
  assert.match(boxes,/canManageLabels&&<section className="pr-box-labels-create/);
  assert.match(boxes,/canManageLabels&&<button type="button" className="pr-box-labels-box-menu"/);
 });

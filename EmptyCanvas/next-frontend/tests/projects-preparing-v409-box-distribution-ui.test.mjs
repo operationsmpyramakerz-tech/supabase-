@@ -39,7 +39,7 @@ test('Box rows use the same kit cards, thumbnails and inline action without repl
  assert.match(boxes,/onSave=\{selections=>saveSchoolPacking\(row,g\.name,selections\)\}/);
  assert.match(boxes,/action:"pack_schools"/);
  assert.match(boxes,/action:"generate_school_kits"/);
- assert.match(boxes,/action:"complete_school_kit"/);
+ assert.doesNotMatch(boxes,/action:"complete_school_kit"/);
  assert.match(boxes,/onChanged\?\.\(\)/);
  assert.match(boxes,/createPortal\(/);
  const shown=filterBoxDistributionRows([{id:'a',productionReceived:3,packedQty:1,unpacked:2},{id:'b',productionReceived:5,packedQty:5,unpacked:0}], 'available');
@@ -49,7 +49,7 @@ test('Box rows use the same kit cards, thumbnails and inline action without repl
 });
 
 test('Box labels, packing history and export remain separate from receiving data',()=>{
- for(const token of ['openBoxLabels','Boxes Label','boxGroups','completeManifestKit','mode==="history"','Box Distribution History','onHistoryToggle','onDownload','onChanged={reload}']) assert.ok((boxes+parent).includes(token),token);
+ for(const token of ['openBoxLabels','Boxes Label','boxGroups','LabelSchoolsPicker','mode==="history"','Box Distribution History','onHistoryToggle','onDownload','onChanged={reload}']) assert.ok((boxes+parent).includes(token),token);
  for(const token of ['CSV · Values','CSV · Blank','PDF · Values','PDF · Blank','scope:isBoxTab?"boxes":"receiving"']) assert.ok(parent.includes(token),token);
  assert.match(route,/preparingStageReadable\(auth\.account,stage\)/);
  assert.match(route,/includeReceivers:stage==="production"/);

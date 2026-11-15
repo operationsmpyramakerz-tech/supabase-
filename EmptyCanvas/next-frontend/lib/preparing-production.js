@@ -65,7 +65,7 @@ export async function saveEqualSchoolKitPacking(body,account){
    fail("Packed total for each school must be a whole number between 0 and 1,000,000.");
   return {schoolId,totalQuantity};
  });
- return rpc("erp_preparing_pack_school_boxes_v399",{
+ return rpc("erp_preparing_pack_school_boxes_auto_v413",{
   p_project_id:project,p_item_id:item,p_kit_name:kitName,
   p_school_packs:schools,p_member_id:member,p_actor_name:name,
  },{profileName:"preparing.production.equal-school-pack"});

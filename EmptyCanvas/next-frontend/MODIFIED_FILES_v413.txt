@@ -1,0 +1,24 @@
+ERP Pyramakerz — Box Distribution / Boxes Label v413
+Based on supabase--main-410.zip
+
+MODIFIED
+app/projects-preparing/page.jsx
+components/preparing/ProjectBoxDistribution.jsx
+lib/preparing-production.js
+lib/preparing-project-cartons.js
+public/css/projects-preparing.css
+tests/projects-preparing-v287-boxes-label-panel.test.mjs
+tests/projects-preparing-v395-school-kit-labels.test.mjs
+tests/projects-preparing-v396-kit-packing.test.mjs
+tests/projects-preparing-v399-equal-school-packing.test.mjs
+tests/projects-preparing-v409-box-distribution-ui.test.mjs
+
+NEW
+lib/preparing-kit-label-schools.mjs
+sql/2026-11-15-preparing-school-kits-auto-complete-multischool-v413.sql
+tests/projects-preparing-v413-auto-kit-multischool.test.mjs
+README_v413_AUTO_KIT_CLOSURE_MULTI_SCHOOL_LABELS.md
+MODIFIED_FILES_v413.txt
+
+IMPORTANT: Run v413 SQL migration after a production DB backup, BEFORE deploying modified code.
+The migration verifies and auto-closes already-fully-packed legacy draft generated Kits.

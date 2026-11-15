@@ -62,11 +62,11 @@ test('API actions scoped to Box Distribution, all-components edit and verified a
  assert.match(svc,/p_member_id:actor\(account\)/);
  assert.match(api,/kitTargets:\[\]/);
 });
-test('v399 simplifies physical packing while keeping verified Kit completion',()=>{
+test('v413 auto-completes physical kits through verified SQL on save',()=>{
  assert.match(ui,/Equal school Kit manifest/);
  assert.match(ui,/SchoolEqualPackingEditor/);
- assert.match(ui,/Mark Kit as Packed/);
+ assert.doesNotMatch(ui,/Mark Kit as Packed/);
  assert.match(ui,/action:"pack_schools"/);
- assert.match(ui,/action:"complete_school_kit"/);
+ assert.match(load('sql/2026-11-15-preparing-school-kits-auto-complete-multischool-v413.sql'),/erp_preparing_complete_school_kit_v396/);
  assert.doesNotMatch(ui,/saveManifestLine|transferManifestTarget|Prepare Kit Packing Plan/);
 });

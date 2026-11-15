@@ -40,7 +40,7 @@ test('endpoints keep writes gated and use a single batch RPC for school selectio
  const service=read('lib/preparing-production.js');
  const sql=read('sql/2026-11-11-preparing-equal-school-packing-v399.sql');
  assert.match(api,/pack_schools/);assert.match(api,/requirePreparingTabWrite/);
- assert.match(service,/erp_preparing_pack_school_boxes_v399/);
+ assert.match(service,/erp_preparing_pack_school_boxes_auto_v413/);
  assert.match(sql,/FOR UPDATE/);assert.match(sql,/mod\(/i);assert.match(sql,/erp_preparing_production_pack_v249/);
  assert.match(sql,/incoming_qty/);assert.match(sql,/GRANT EXECUTE[\s\S]*service_role/);
 });

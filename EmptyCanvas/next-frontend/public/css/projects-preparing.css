@@ -5333,3 +5333,26 @@ html[data-theme="dark"] .pr-root .pr-carton-v410 .pr-carton-v410-group-select:ho
 /* v411 - Stage 3 Production Received tab also shows the independently tested total. */
 .pr-warehouse-v407 .pr-warehouse-intake-count small {font-size:10px;line-height:1.25;color:#69758b;font-weight:650;white-space:nowrap;}
 html[data-theme="dark"] .pr-warehouse-v407 .pr-warehouse-intake-count small {color:#aab6ca;}
+
+/* v413 — multi-school Kit label picker, styled consistently with Preparing selects. */
+.pr-root .pr-label-schools-picker {position:relative;min-width:0;width:100%;z-index:28;}
+.pr-root .pr-label-schools-trigger {display:flex;align-items:center;justify-content:space-between;gap:9px;width:100%;min-height:44px;padding:10px 13px;border:1px solid #dfe4eb;border-radius:13px;background:#fff;color:#273346;font:inherit;font-size:12px;font-weight:670;text-align:left;cursor:pointer;}
+.pr-root .pr-label-schools-trigger>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.pr-root .pr-label-schools-trigger>svg{flex-shrink:0;color:#728095;}
+.pr-root .pr-label-schools-trigger[aria-expanded="true"],.pr-root .pr-label-schools-trigger:focus-visible{outline:none;border-color:#d3975f;box-shadow:0 0 0 3px rgba(213,151,95,.13);}
+.pr-root .pr-label-schools-popover{position:absolute;left:0;right:0;top:calc(100% + 6px);z-index:40;display:flex;flex-direction:column;gap:7px;min-width:210px;padding:9px;border:1px solid #dfe4ec;border-radius:14px;background:#fff;box-shadow:0 15px 42px rgba(18,27,42,.16);}
+.pr-root .pr-label-schools-popover>input{width:100%;min-width:0;min-height:38px;padding:8px 11px;border:1px solid #e2e6ed;border-radius:9px;font-size:12px;}
+.pr-root .pr-label-schools-all{display:flex;align-items:center;justify-content:space-between;padding:1px 4px;font-size:11px;color:#7c8797;}
+.pr-root .pr-label-schools-all button{min-height:30px;padding:5px 9px;color:#172033;background:#f0f2f6;border:0;border-radius:8px;font-size:11px;font-weight:750;cursor:pointer;}
+.pr-root .pr-label-schools-options{display:flex;flex-direction:column;gap:3px;max-height:210px;overflow-y:auto;overscroll-behavior:contain;}
+.pr-root .pr-label-schools-option{display:flex;align-items:center;gap:9px;padding:9px 7px;border-radius:9px;cursor:pointer;color:#253146;font-size:12px;}
+.pr-root .pr-label-schools-option:hover{background:#f4f6f9;}
+.pr-root .pr-label-schools-option input{appearance:auto;accent-color:#ff6900;min-width:17px;width:17px;height:17px;margin:0;}
+.pr-root .pr-label-schools-option span{overflow-wrap:anywhere;}
+.pr-root .pr-label-schools-options>p{margin:8px;color:#77849a;font-size:11px;}
+.pr-root .pr-label-schools-done{min-height:34px;padding:7px 10px;border:0;border-radius:9px;background:#111827;color:white;font-size:12px;font-weight:800;cursor:pointer;}
+html[data-theme="dark"] .pr-root .pr-label-schools-trigger,html[data-theme="dark"] .pr-root .pr-label-schools-popover{background:#202633;border-color:#414b5a;color:#f2f5fa;}
+html[data-theme="dark"] .pr-root .pr-label-schools-option{color:#f2f5fa;}
+html[data-theme="dark"] .pr-root .pr-label-schools-option:hover{background:#2b3340;}
+html[data-theme="dark"] .pr-root .pr-label-schools-all button{background:#303948;color:#f2f5fa;}
+@media(max-width:520px){.pr-root .pr-label-schools-popover{min-width:0;}}

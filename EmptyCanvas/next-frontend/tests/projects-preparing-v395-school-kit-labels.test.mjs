@@ -41,12 +41,12 @@ test('school-specific boxes cannot pack components from other schools',()=>{
 });
 test('school+kit+quantity UI and honest contents inspection; old pool view stays separate',()=>{
   assert.match(ui,/Generate School Kit Labels/);
-  assert.match(ui,/School for new Kit labels/);
+  assert.match(ui,/Schools for new Kit labels/);
   assert.match(ui,/Kit group for new labels/);
-  assert.match(ui,/Number of kits for selected school/);
+  assert.match(ui,/Number of kits per selected school/);
   assert.match(ui,/action:"generate_school_kits"/);
   assert.match(ui,/Packed contents \(/);
-  assert.match(ui,/reference only; not proof of packed contents/);
+  assert.doesNotMatch(ui,/reference only; not proof of packed contents/);
   assert.match(api,/if\(scope==="cartons"\)/);
   assert.match(api,/!c\.generated_kit_label/);
 });
