@@ -1,0 +1,306 @@
+/* Chat 01 v421 — Add/Edit Team Member redesign
+   Single ownership: Users Center only. Modal lives in a body portal so it can
+   cover the app navigation; other dialogs retain their existing styling. */
+body.user-access-page .ua-modal--member-sheet {
+  width: min(860px, calc(100vw - 36px));
+  max-height: min(900px, 92dvh);
+  border: 1px solid rgba(225, 229, 236, .96);
+  border-radius: 26px;
+  background: #fff;
+  box-shadow: 0 32px 100px rgba(7, 13, 26, .28);
+}
+body.user-access-page .ua-modal--member-sheet .ua-modal__header {
+  align-items: center;
+  gap: 14px;
+  flex: 0 0 auto;
+  padding: 23px 76px 21px 26px;
+  background: #fff;
+}
+body.user-access-page .ua-modal--member-sheet .ua-modal__avatar {
+  width: 56px;
+  height: 56px;
+  border: 1px solid rgba(235, 114, 35, .18);
+  border-radius: 17px;
+  background: #fff2e8;
+  box-shadow: none;
+  color: #e76717;
+}
+body.user-access-page .ua-modal--member-sheet .ua-modal__avatar svg { width: 25px; height: 25px; stroke-width: 2.3; }
+body.user-access-page .ua-modal--member-sheet .ua-modal__header h2 {
+  font-size: clamp(22px, 3vw, 28px);
+  line-height: 1.15;
+  font-weight: 900;
+  letter-spacing: -.035em;
+}
+body.user-access-page .ua-modal--member-sheet .ua-modal__header p {
+  max-width: 580px;
+  margin-top: 5px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #818a98;
+  font-weight: 600;
+}
+body.user-access-page .ua-modal--member-sheet .ua-modal__close {
+  top: 25px;
+  right: 25px;
+  width: 38px;
+  height: 38px;
+  background: #f2f3f6;
+  border-radius: 12px;
+  z-index: 2;
+}
+body.user-access-page .ua-modal--member-sheet .ua-modal__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 20px 26px 26px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  background: #f8f9fb;
+  scrollbar-gutter: stable;
+}
+body.user-access-page .ua-member-form { display: grid; gap: 14px; }
+body.user-access-page .ua-member-form-section {
+  min-width: 0;
+  padding: 20px;
+  background: #fff;
+  border: 1px solid #e8ebef;
+  border-radius: 19px;
+  box-shadow: 0 4px 14px rgba(18, 27, 43, .025);
+}
+body.user-access-page .ua-member-form-section__heading {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding-bottom: 15px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid #edf0f3;
+}
+body.user-access-page .ua-member-form-section__icon {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  display: grid;
+  place-items: center;
+  color: #e66b22;
+  background: #fff3eb;
+  border-radius: 11px;
+}
+body.user-access-page .ua-member-form-section__icon svg { width: 18px; height: 18px; stroke-width: 2.1; }
+body.user-access-page .ua-member-form-section__intro { flex: 1; min-width: 0; }
+body.user-access-page .ua-member-form-section__intro h3 {
+  color: #111827;
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.25;
+  font-weight: 850;
+  letter-spacing: -.015em;
+}
+body.user-access-page .ua-member-form-section__intro p {
+  color: #929ba8;
+  margin: 3px 0 0;
+  font-size: 12px;
+  line-height: 1.35;
+  font-weight: 550;
+}
+body.user-access-page .ua-member-form-section__number {
+  flex: 0 0 auto;
+  color: #adb4c0;
+  font-size: 11px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+body.user-access-page .ua-member-form-section__fields { gap: 14px 16px; }
+body.user-access-page .ua-member-form-section .ua-form-field { gap: 7px; }
+body.user-access-page .ua-member-form-section .ua-form-field > span,
+body.user-access-page .ua-member-form-section .ua-form-field > label > span {
+  color: #525c6c;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: none;
+}
+body.user-access-page .ua-member-form-section .ua-form-field > input,
+body.user-access-page .ua-member-form-section .ua-form-field > textarea,
+body.user-access-page .ua-member-form-section .ua-modern-select-button,
+body.user-access-page .ua-member-form-section .ua-media-add-card input,
+body.user-access-page .ua-member-form-section .ua-media-entry__name input {
+  min-height: 45px;
+  border-radius: 11px;
+  border: 1px solid #dfe4ea;
+  background: #fafbfc;
+  box-shadow: none;
+  color: #111827;
+  padding: 10px 12px;
+  font-size: 14px;
+  font-weight: 650;
+}
+body.user-access-page .ua-member-form-section .ua-modern-select-button {
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+}
+body.user-access-page .ua-member-form-section .ua-form-field input:focus,
+body.user-access-page .ua-member-form-section .ua-form-field textarea:focus,
+body.user-access-page .ua-member-form-section .ua-modern-select.is-open .ua-modern-select-button {
+  border-color: #ed8b4f;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(234, 109, 32, .09);
+}
+body.user-access-page .ua-member-form-section .ua-form-field > input::placeholder,
+body.user-access-page .ua-member-form-section .ua-form-field > textarea::placeholder { color: #a2aab6; font-weight: 500; }
+body.user-access-page .ua-member-form-section--profile .ua-profile-uploader--upload-only {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+body.user-access-page .ua-member-form-section--profile .ua-profile-preview {
+  width: 62px;
+  height: 62px;
+  flex: 0 0 62px;
+  border-radius: 16px;
+  box-shadow: none;
+}
+body.user-access-page .ua-member-form-section--profile .ua-upload-actions--profile-only { display: flex; flex: 0 1 auto; }
+body.user-access-page .ua-member-form-section--profile .ua-profile-pick {
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 11px;
+  background: #fff3e9;
+  color: #d55d17;
+}
+body.user-access-page .ua-member-form-section .ua-page-access-card {
+  padding: 14px;
+  gap: 12px;
+  border-radius: 13px;
+  background: #fafbfc;
+  border: 1px solid #e2e6ec;
+}
+body.user-access-page .ua-member-form-section .ua-page-access-card > div { min-width: 0; }
+body.user-access-page .ua-member-form-section .ua-page-access-card strong { font-size: 13px; }
+body.user-access-page .ua-member-form-section .ua-page-access-card small {
+  font-size: 12px;
+  font-weight: 500;
+  color: #8892a0;
+}
+body.user-access-page .ua-member-form-section .ua-page-access-open {
+  flex: 0 0 auto;
+  min-height: 41px;
+  padding: 0 14px;
+  border-radius: 11px;
+  background: #0d1524;
+  box-shadow: none;
+  font-size: 12px;
+}
+body.user-access-page .ua-member-form-section .ua-page-access-open span { color: #fff; font-weight: 800; text-transform: none; letter-spacing: 0; }
+body.user-access-page .ua-member-form-section .ua-media-add-grid { gap: 12px; }
+body.user-access-page .ua-member-form-section .ua-media-add-card {
+  padding: 14px;
+  background: #fafbfc;
+  border: 1px solid #e6e9ee;
+  border-radius: 14px;
+}
+body.user-access-page .ua-member-form-section .ua-file-pick--wide { min-height: 42px; border-radius: 11px; }
+body.user-access-page .ua-member-form-section .ua-media-link-row { gap: 8px; }
+body.user-access-page .ua-member-form-section .ua-media-link-row .ua-mini-btn { border-radius: 11px; }
+body.user-access-page .ua-modal--member-sheet .ua-modal__actions {
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 26px;
+  background: #fff;
+  box-shadow: 0 -8px 24px rgba(17,24,39,.035);
+}
+body.user-access-page .ua-modal--member-sheet .ua-modal__actions .ua-btn {
+  min-height: 45px;
+  padding: 0 18px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 850;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+body.user-access-page .ua-modal--member-sheet .ua-modal__actions .ua-btn svg { width: 17px; height: 17px; }
+body.user-access-page .ua-modal--member-sheet .ua-modal__actions .ua-btn--dark { color: #fff; background: #0c1525; }
+body.user-access-page .ua-member-form__error {
+  margin: 0;
+  padding: 11px 14px;
+  border-radius: 11px;
+  background: #fff1f1;
+  border: 1px solid #ffdada;
+}
+/* The quick-open mobile dock can otherwise render at an extreme z-index
+   (2147482940) over dialogs. Lower it *only* while a Users Center modal is open;
+   nested access dialogs and security confirmation windows keep their order. */
+body.user-access-page.ua-modal-open.next-classic-shell-active .classic-app-shell > .sidebar.ops-mobile-dock-forced-open,
+body.user-access-page.ua-modal-open.next-classic-shell-active .classic-app-shell > .sidebar {
+  z-index: 8000 !important;
+}
+body.user-access-page.ua-modal-open.next-classic-shell-active .ops-mobile-dock-quick-open {
+  z-index: 8000 !important;
+  pointer-events: none !important;
+}
+@media (max-width: 700px) {
+  /* Shopping Cart-style bottom sheet: rendered above the sidebar, not
+     constrained by the 128px dock clearance used by older floating cards. */
+  body.user-access-page .ua-modal-overlay--member-sheet {
+    padding: 0 !important;
+    align-items: flex-end !important;
+    justify-content: center !important;
+  }
+  body.user-access-page .ua-modal--member-sheet {
+    width: 100% !important;
+    max-width: 100vw !important;
+    height: min(92dvh, 980px);
+    max-height: min(92dvh, 980px) !important;
+    border-radius: 26px 26px 0 0 !important;
+    border-bottom: 0;
+    margin: 0 !important;
+  }
+  body.user-access-page .ua-modal--member-sheet .ua-modal__header { padding: 17px 64px 15px 17px; gap: 11px; }
+  body.user-access-page .ua-modal--member-sheet .ua-modal__avatar { width: 45px; height: 45px; border-radius: 13px; }
+  body.user-access-page .ua-modal--member-sheet .ua-modal__avatar svg { width: 22px; height: 22px; }
+  body.user-access-page .ua-modal--member-sheet .ua-modal__header h2 { font-size: 21px; }
+  body.user-access-page .ua-modal--member-sheet .ua-modal__header p { font-size: 11.5px; line-height: 1.3; }
+  body.user-access-page .ua-modal--member-sheet .ua-modal__close { top: 17px; right: 17px; width: 34px; height: 34px; }
+  body.user-access-page .ua-modal--member-sheet .ua-modal__body {
+    padding: 14px 13px 20px;
+    scrollbar-gutter: auto;
+  }
+  body.user-access-page .ua-member-form { gap: 11px; }
+  body.user-access-page .ua-member-form-section { padding: 15px; border-radius: 16px; }
+  body.user-access-page .ua-member-form-section__heading { gap: 10px; padding-bottom: 12px; margin-bottom: 13px; }
+  body.user-access-page .ua-member-form-section__icon { width: 32px; height: 32px; flex-basis: 32px; border-radius: 10px; }
+  body.user-access-page .ua-member-form-section__intro h3 { font-size: 14px; }
+  body.user-access-page .ua-member-form-section__intro p { font-size: 11px; }
+  body.user-access-page .ua-member-form-section__fields { grid-template-columns: 1fr; gap: 12px; }
+  body.user-access-page .ua-member-form-section .ua-page-access-card { flex-direction: column; align-items: stretch; gap: 11px; }
+  body.user-access-page .ua-member-form-section .ua-page-access-open { width: 100%; }
+  body.user-access-page .ua-member-form-section--profile .ua-profile-uploader--upload-only { display: flex; gap: 13px; }
+  body.user-access-page .ua-member-form-section--profile .ua-upload-actions--profile-only { display: flex; min-width: 0; }
+  body.user-access-page .ua-member-form-section--profile .ua-profile-pick { width: auto; min-height: 43px; }
+  body.user-access-page .ua-modal--member-sheet .ua-modal__actions {
+    padding: 11px 13px max(12px, env(safe-area-inset-bottom, 0px));
+    gap: 9px;
+  }
+  body.user-access-page .ua-modal--member-sheet .ua-modal__actions .ua-btn--light { flex: 0 0 auto; min-width: 90px; }
+  body.user-access-page .ua-modal--member-sheet .ua-modal__actions .ua-btn--dark { flex: 1 1 auto; }
+}
+@media (max-width: 360px) {
+  body.user-access-page .ua-modal--member-sheet .ua-modal__header p { max-width: 205px; }
+  body.user-access-page .ua-member-form-section__number { display: none; }
+  body.user-access-page .ua-modal--member-sheet .ua-modal__actions .ua-btn { padding: 0 11px; }
+}
+/* The page has a dedicated dark theme. Keep the new section surfaces legible. */
+html[data-theme="dark"] body.user-access-page .ua-modal--member-sheet .ua-modal__header,
+html[data-theme="dark"] body.user-access-page .ua-modal--member-sheet .ua-modal__actions,
+html[data-theme="dark"] body.user-access-page .ua-member-form-section { background: #11161f !important; border-color: #2b3544 !important; }
+html[data-theme="dark"] body.user-access-page .ua-modal--member-sheet .ua-modal__body { background: #0b111a; }
+html[data-theme="dark"] body.user-access-page .ua-member-form-section__heading { border-color: #2b3544; }
+html[data-theme="dark"] body.user-access-page .ua-member-form-section__intro h3 { color: #f8fafc; }
+html[data-theme="dark"] body.user-access-page .ua-member-form-section .ua-form-field > span { color: #c7d0dc; }
+html[data-theme="dark"] body.user-access-page .ua-member-form-section .ua-page-access-card { background: #181f2a; border-color: #344052; }
+html[data-theme="dark"] body.user-access-page .ua-member-form-section .ua-page-access-card strong { color: #f8fafc; }
