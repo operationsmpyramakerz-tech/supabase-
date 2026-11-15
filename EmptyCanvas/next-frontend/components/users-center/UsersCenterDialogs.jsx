@@ -17,6 +17,14 @@ import { resolveExternalMediaLink } from "../../lib/user-media-external-link.mjs
 function text(value) { return String(value ?? "").trim(); }
 function lower(value) { return text(value).toLowerCase(); }
 function fieldKey(value) { return lower(value).replace(/[^a-z0-9]/g, ""); }
+function memberFieldIcon(name) {
+  const key = fieldKey(name);
+  return ({ employeecode: "badge", name: "user", password: "lock", phone: "phone", email: "mail", department: "folder", position: "briefcase", profilepicture: "image", school: "school", filesmedia: "file", allowedpages: "shield", svschools: "users" })[key] || (/date/.test(key) ? "calendar" : /file|document/.test(key) ? "file" : /link|url/.test(key) ? "link" : /id|code/.test(key) ? "badge" : "tag");
+}
+function memberInputWithIcon(name, control, className = "") { return <div className={`ua-member-icon-input ${className}`}><UAIcon name={memberFieldIcon(name)}/>{control}</div>; }
+function memberSelectWithIcon(name, control) { return <div className="ua-member-icon-select"><UAIcon name={memberFieldIcon(name)}/>{control}</div>; }
+function memberMediaInput(icon, control) { return <div className="ua-member-icon-input ua-member-media-input"><UAIcon name={icon}/>{control}</div>; }
+function pageAccessFingerprint(rows) { return JSON.stringify(normalizeAccessRows(rows).map((row) => [row.pageId, row.pageKey, !!row.isEnabled, row.accessLevel])); }
 function initials(value) { const parts = text(value || "User").split(/\s+/).filter(Boolean).slice(0, 2); return (parts.map((part) => part[0]).join("") || "U").toUpperCase(); }
 function unique(values) { const out = []; const seen = new Set(); for (const value of values || []) { const clean = text(value); const key = lower(clean); if (!clean || seen.has(key)) continue; seen.add(key); out.push(clean); } return out; }
 function splitValues(value) { const raw = text(value); if (!raw) return []; try { const parsed = JSON.parse(raw); if (Array.isArray(parsed)) return unique(parsed); } catch {} return unique(raw.split(/[,\n]+/)); }
@@ -162,6 +170,14 @@ function UAIcon({ name }) {
     eyeOff: <><path d="M3 3l18 18"/><path d="M10.6 5.2A10.4 10.4 0 0 1 12 5c6.4 0 10 7 10 7a14 14 0 0 1-3.4 4.1M6.3 6.3C3.6 8.1 2 12 2 12s3.6 7 10 7c1.5 0 2.9-.4 4-1"/><path d="M10 10a3 3 0 0 0 4 4"/></>,
     calendar: <><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></>,
     branch: <><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M6 9c0 0 2 0 4 0s3-3 5-3"/></>,
+    badge: <><rect x="3" y="5" width="18" height="15" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M6 16c.5-2 5.5-2 6 0M15 10h4M15 14h4"/></>,
+    mail: <><rect x="2" y="5" width="20" height="14" rx="2"/><path d="m3 7 9 7 9-7"/></>,
+    phone: <path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.7 19.7 0 0 1-8.6-3.1 19.4 19.4 0 0 1-6-6A19.7 19.7 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7l.5 3a2 2 0 0 1-.6 1.7L7 10.2a16 16 0 0 0 6.8 6.8l1.8-2a2 2 0 0 1 1.7-.6l3 .5A2 2 0 0 1 22 16.9z"/>,
+    briefcase: <><rect x="3" y="7" width="18" height="14" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 13h18"/></>,
+    link: <><path d="M10 13a5 5 0 0 0 7.1 0l3-3a5 5 0 0 0-7.1-7.1l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.1 0l-3 3a5 5 0 0 0 7.1 7.1l1.7-1.7"/></>,
+    file: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M8 13h8M8 17h8"/></>,
+    school: <><path d="m3 10 9-7 9 7v11H3z"/><path d="M9 21v-7h6v7M3 11h18"/></>,
+    tag: <><path d="M2 12V4a2 2 0 0 1 2-2h8l10 10-10 10L2 12z"/><circle cx="7.5" cy="7.5" r="1"/></>,
   };
   return <svg {...common}>{paths[name] || paths.user}</svg>;
 }
@@ -291,7 +307,7 @@ function MultiSelectField({ field, value, onChange }) {
   const [custom, setCustom] = useState(""); const selected = splitValues(value); const options = unique([...selected, ...(Array.isArray(field.options) ? field.options : [])]); const allowCustom = field.allowCustom !== false;
   function toggle(option) { const has = selected.some((item) => lower(item) === lower(option)); onChange((has ? selected.filter((item) => lower(item) !== lower(option)) : [...selected, option]).join(", ")); }
   function add() { const clean = text(custom); if (!clean) return; onChange(unique([...selected, clean]).join(", ")); setCustom(""); }
-  return <div className="ua-form-field ua-form-field--wide ua-form-field--tokens"><span>{field.name}</span><div className="ua-multiselect"><div className="ua-token-list">{selected.length ? selected.map((item) => <span className="ua-token" key={item}>{item}</span>) : <span className="ua-token ua-token--muted">No values selected</span>}</div><div className="ua-ms-options">{options.length ? options.map((option) => <label className="ua-ms-option" key={option}><input type="checkbox" checked={selected.some((item) => lower(item) === lower(option))} onChange={() => toggle(option)}/><span>{option}</span></label>) : <div className="ua-ms-empty">No options yet.</div>}</div>{allowCustom ? <div className="ua-inline-add"><input type="text" value={custom} onChange={(event) => setCustom(event.target.value)} placeholder="Add new option then press Add"/><button type="button" className="ua-mini-btn" onClick={add}>Add</button></div> : null}</div></div>;
+  return <div className="ua-form-field ua-form-field--wide ua-form-field--tokens"><span className="ua-member-icon-label"><UAIcon name={memberFieldIcon(field.name)}/>{field.name}</span><div className="ua-multiselect"><div className="ua-token-list">{selected.length ? selected.map((item) => <span className="ua-token" key={item}>{item}</span>) : <span className="ua-token ua-token--muted">No values selected</span>}</div><div className="ua-ms-options">{options.length ? options.map((option) => <label className="ua-ms-option" key={option}><input type="checkbox" checked={selected.some((item) => lower(item) === lower(option))} onChange={() => toggle(option)}/><span>{option}</span></label>) : <div className="ua-ms-empty">No options yet.</div>}</div>{allowCustom ? <div className="ua-inline-add">{memberInputWithIcon(field.name, <input type="text" value={custom} onChange={(event) => setCustom(event.target.value)} placeholder="Add new option"/>)}<button type="button" className="ua-mini-btn" onClick={add}>Add</button></div> : null}</div></div>;
 }
 
 function ProfileUploadField({ field, value, onChange, notify, memberName = "" }) {
@@ -321,7 +337,6 @@ function ProfileUploadField({ field, value, onChange, notify, memberName = "" })
       </div>
       <div className="ua-member-photo-controls">
         <strong>Profile photo</strong>
-        <p>Show a recognizable photo on the member's profile.</p>
         <div className="ua-member-photo-action-row">
           <label className={`ua-file-pick ua-member-photo-upload ${uploading ? "is-uploading" : ""}`}>
             <UAIcon name="upload"/><span>{uploading ? "Uploading..." : value ? "Change photo" : "Upload photo"}</span>
@@ -329,16 +344,15 @@ function ProfileUploadField({ field, value, onChange, notify, memberName = "" })
           </label>
           {value ? <button type="button" className="ua-member-photo-remove" disabled={uploading} onClick={() => { onChange(""); setStatus("Photo removed. Save changes to apply it."); }}>Remove</button> : null}
         </div>
-        <small>JPG, PNG or WebP · Maximum 12 MB</small>
       </div>
     </div>
-    {status ? <small role="status" className={/fail|error|too large/i.test(status) ? "is-error" : ""}>{status}</small> : null}
+    {status && /fail|error|too large|expired|invalid/i.test(status) ? <small role="alert" className="is-error">{status}</small> : null}
   </div>;
 }
 
 function FileLinksField({ field, value, onChange, notify }) {
   const [uploading, setUploading] = useState(false);
-  const [status, setStatus] = useState("Add a clear display name so this file or link is easy to recognize everywhere the user profile appears.");
+  const [status, setStatus] = useState("");
   const [fileName, setFileName] = useState("");
   const [linkName, setLinkName] = useState("");
   const [link, setLink] = useState("");
@@ -390,9 +404,9 @@ function FileLinksField({ field, value, onChange, notify }) {
     <textarea className="ua-files-raw" rows="4" value={value} readOnly aria-label={`${field.name} structured data`}/>
     <div className="ua-file-chip-list ua-media-entry-list">
       {entries.length ? entries.map((item, index) => <div className="ua-media-entry" key={`${item.url}-${index}`}>
-        <div className="ua-media-entry__icon"><UAIcon name="paperclip"/></div>
+        <div className="ua-media-entry__icon"><UAIcon name="file"/></div>
         <div className="ua-media-entry__body">
-          <label className="ua-media-entry__name"><span>Display name</span><input type="text" value={item.name} onChange={(event) => patchEntry(index, { name: event.target.value })} onBlur={(event) => { if (!text(event.target.value)) patchEntry(index, { name: fileLabel(item.url, index) }); }} placeholder="e.g. Location"/></label>
+          <label className="ua-media-entry__name"><span>Display name</span>{memberMediaInput("tag", <input type="text" value={item.name} onChange={(event) => patchEntry(index, { name: event.target.value })} onBlur={(event) => { if (!text(event.target.value)) patchEntry(index, { name: fileLabel(item.url, index) }); }} placeholder="e.g. Location"/>)}</label>
           <a className="ua-media-entry__url" href={item.url} target="_blank" rel="noopener noreferrer" title={item.url}>{item.url}</a>
         </div>
         <button type="button" className="ua-media-entry__remove" onClick={() => removeEntry(index)} aria-label={`Remove ${item.name || "file"}`} title="Remove"><UAIcon name="trash"/></button>
@@ -400,33 +414,30 @@ function FileLinksField({ field, value, onChange, notify }) {
     </div>
     <div className="ua-media-add-grid">
       <div className="ua-media-add-card">
-        <div className="ua-media-add-card__heading"><UAIcon name="upload"/><div><strong>Upload file</strong><small>Add a custom name before choosing the file.</small></div></div>
-        <input type="text" value={fileName} onChange={(event) => setFileName(event.target.value)} placeholder="File name (optional)"/>
+        <div className="ua-media-add-card__heading"><UAIcon name="upload"/><strong>Upload file</strong></div>
+        {memberMediaInput("file", <input type="text" value={fileName} onChange={(event) => setFileName(event.target.value)} placeholder="File name (optional)"/>)}
         <label className="ua-file-pick ua-file-pick--small ua-file-pick--wide"><UAIcon name="paperclip"/><span>{uploading ? "Uploading..." : "Choose file"}</span><input type="file" multiple disabled={uploading} onChange={(event) => { choose(event.target.files); event.target.value = ""; }}/></label>
       </div>
       <div className="ua-media-add-card">
-        <div className="ua-media-add-card__heading"><UAIcon name="paperclip"/><div><strong>External link</strong><small>Paste a full link, then give it a display name.</small></div></div>
-        <input type="url" aria-label="External link URL" value={link} onChange={(event) => setLink(event.target.value)} placeholder="Link URL (https://...)"/>
-        <div className="ua-media-link-row"><input type="text" aria-label="External link display name" value={linkName} onChange={(event) => setLinkName(event.target.value)} placeholder="Link name (e.g. Location)"/><button type="button" className="ua-mini-btn" onClick={insert}>Add link</button></div>
+        <div className="ua-media-add-card__heading"><UAIcon name="link"/><strong>External link</strong></div>
+        {memberMediaInput("link", <input type="url" aria-label="External link URL" value={link} onChange={(event) => setLink(event.target.value)} placeholder="Link URL (https://...)"/>)}
+        <div className="ua-media-link-row">{memberMediaInput("tag", <input type="text" aria-label="External link display name" value={linkName} onChange={(event) => setLinkName(event.target.value)} placeholder="Link name (e.g. Location)"/>)}<button type="button" className="ua-mini-btn" onClick={insert}><UAIcon name="link"/>Add link</button></div>
       </div>
     </div>
-    <small>{status}</small>
+    {status && /fail|error|invalid|expired/i.test(status) ? <small className="is-error" role="alert">{status}</small> : null}
   </div>;
 }
 
-function PageAccessManager({ summary, onOpen }) {
-  return <div className="ua-form-field ua-form-field--wide ua-page-access-field"><span>Allowed Pages</span><div className="ua-page-access-card"><div><strong>Page access</strong><small>{summary}</small></div><button type="button" className="ua-page-access-open" onClick={onOpen}><UAIcon name="shield"/><span>Manage Access</span></button></div></div>;
-}
-function SvAccessManager({ summary, onOpen, hidden }) {
+function SvAccessManager({ onOpen, hidden }) {
   if (hidden) return null;
-  return <div className="ua-form-field ua-form-field--wide ua-sv-access-field"><span>Orders Supervision</span><div className="ua-page-access-card ua-sv-access-card"><div><strong>Orders Supervision</strong><small>{summary}</small></div><button type="button" className="ua-page-access-open" onClick={onOpen}><UAIcon name="users"/><span>Manage Users</span></button></div></div>;
+  return <div className="ua-form-field ua-form-field--wide ua-sv-access-field"><span>Orders Supervision</span><div className="ua-page-access-card ua-sv-access-card"><div><strong>Orders Supervision</strong></div><button type="button" className="ua-page-access-open" onClick={onOpen}><UAIcon name="users"/><span>Manage Users</span></button></div></div>;
 }
 
 function SchoolField({ field, value, onChange, notify }) {
   const [newName, setNewName] = useState(""); const [busy, setBusy] = useState(false); const [localOptions, setLocalOptions] = useState(() => unique([value, ...(field.options || [])].filter(Boolean)));
   async function addSchool() { const clean = text(newName); if (!clean) return notify("warning", "Missing school", "Enter the new school / column name first."); setBusy(true); try { const body = await usersCenterMutation("stocktaking-column-create", { name: clean }); const label = body.label || clean; setLocalOptions((current) => unique([label, ...current])); onChange(label); setNewName(""); notify("success", "School added", `${label} was added to Stocktaking.`); } catch (err) { notify("error", "Could not add school", err.message); } finally { setBusy(false); } }
-  const footer = <div className="ua-inline-add ua-modern-select-add" onClick={(event) => event.stopPropagation()}><input type="text" value={newName} onChange={(event) => setNewName(event.target.value)} placeholder="Add new Stocktaking column"/><button type="button" className="ua-mini-btn" onClick={addSchool} disabled={busy}>{busy ? "Adding..." : "Add column"}</button><small>All Stocktaking table columns are shown here.</small></div>;
-  return <div className="ua-form-field ua-form-field--wide ua-form-field--modern-select ua-form-field--school"><span>Stocktaking</span><ModernSelect value={value} onChange={onChange} options={localOptions} placeholder="Select stocktaking column" footer={footer}/></div>;
+  const footer = <div className="ua-inline-add ua-modern-select-add" onClick={(event) => event.stopPropagation()}>{memberInputWithIcon("school", <input type="text" value={newName} onChange={(event) => setNewName(event.target.value)} placeholder="Add new Stocktaking column"/>)}<button type="button" className="ua-mini-btn" onClick={addSchool} disabled={busy}>{busy ? "Adding..." : "Add column"}</button></div>;
+  return <div className="ua-form-field ua-form-field--wide ua-form-field--modern-select ua-form-field--school"><span>Stocktaking</span>{memberSelectWithIcon("school", <ModernSelect value={value} onChange={onChange} options={localOptions} placeholder="Select stocktaking column" footer={footer}/>)}</div>;
 }
 
 function generatedStocktakingColumnName(name = "") {
@@ -435,14 +446,8 @@ function generatedStocktakingColumnName(name = "") {
 }
 
 function AutoStocktakingField({ value }) {
-  return <label className="ua-form-field ua-form-field--wide ua-form-field--stock-auto"><span>Stocktaking</span><input type="text" value={value} readOnly aria-readonly="true"/><small>Created automatically from the user name.</small></label>;
+  return <label className="ua-form-field ua-form-field--wide ua-form-field--stock-auto"><span>Stocktaking</span>{memberInputWithIcon("school", <input type="text" value={value} readOnly aria-readonly="true"/>)}</label>;
 }
-
-function accessSummaryText(rows, member) {
-  if (rows?.length) { const enabled = rows.filter((row) => row.isEnabled); const admins = enabled.filter((row) => row.accessLevel === "admin"); if (!enabled.length) return "No pages enabled yet. Open the access window to configure permissions."; return `${enabled.length} enabled page${enabled.length === 1 ? "" : "s"}${admins.length ? ` • ${admins.length} admin` : ""}`; }
-  const count = Number(member?.pageAccessSummary?.accessCount || 0); const admins = Number(member?.pageAccessSummary?.adminCount || 0); if (!count) return "No pages enabled yet. Open the access window to configure permissions."; return `${count} enabled page${count === 1 ? "" : "s"}${admins ? ` • ${admins} admin` : ""}`;
-}
-function svSummaryText(rows, member) { const count = rows?.length ? rows.filter((row) => row.isEnabled).length : Number(member?.svAccessSummary?.enabledCount || member?.svAccessSummary?.accessCount || splitValues(fieldValue(member, "S.V Schools")).length || 0); return count ? `${count} visible team member${count === 1 ? "" : "s"} for Orders Review` : "No team members enabled yet. Orders Review will not show orders for this user."; }
 
 function memberHasPage(member, rows, pageName) {
   if (rows?.length) return rows.some((row) => row.isEnabled && accessRowMatchesPage(row, pageName));
@@ -450,7 +455,7 @@ function memberHasPage(member, rows, pageName) {
   return allowed.some((item) => pageToken(item) === pageToken(pageName));
 }
 
-function MemberForm({ member, selectedDepartment, editableFields, departments, pageAccessRows, svRows, onOpenPageAccess, onOpenSvAccess, onClose, onSaved, notify, access = {} }) {
+function MemberForm({ member, selectedDepartment, editableFields, departments, pageAccessRows, onPageAccessRowsChange, svRows, onOpenSvAccess, protect, onClose, onSaved, notify, access = {} }) {
   const schema = useMemo(() => orderEditableFieldsForForm(editableFields.length ? editableFields : [
     { name: "Profile picture", type: "ua_profile_upload" }, { name: "Employee Code", type: "text" }, { name: "Name", type: "title", required: true }, { name: "Password", type: "rich_text" }, { name: "Phone", type: "phone_number" }, { name: "Email", type: "email" }, { name: "Department", type: "select" }, { name: "Position", type: "text" }, { name: "Files & media", type: "ua_file_links" }, { name: "S.V Schools", type: "ua_sv_access_manager" }, { name: "Allowed Pages", type: "ua_page_access_manager" }, { name: "School", type: "school_select" },
   ]), [editableFields]);
@@ -458,84 +463,115 @@ function MemberForm({ member, selectedDepartment, editableFields, departments, p
   const [busy, setBusy] = useState(false); const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState("basic");
   const [showPassword, setShowPassword] = useState(false);
+  const [accessLoading, setAccessLoading] = useState(false);
+  const [accessError, setAccessError] = useState("");
+  const [preferencesIndex, setPreferencesIndex] = useState(null);
+  const originalPageAccessRef = useRef(null);
   const contentRef = useRef(null);
   const { actionLoading, startActionLoading, finishActionLoading } = useActionLoading();
   const isEdit = !!member; const hasOrdersReview = memberHasPage(member, pageAccessRows, "Orders Review"); const hasStocktaking = memberHasPage(member, pageAccessRows, "Stocktaking"); const hasSchoolPages = ["Stocktaking", "Current Orders", "Shopping Cart"].some((name) => memberHasPage(member, pageAccessRows, name));
   const nameFieldName = schema.find((field) => fieldKey(field.name) === "name")?.name || "Name";
   const autoStocktakingColumn = generatedStocktakingColumnName(values[nameFieldName]);
+  // New members load the page catalogue before saving; edits use the already-loaded member matrix.
+  // Retain the original matrix so a change cannot accidentally skip the Admin verification flow.
+  useEffect(() => {
+    if (!access.pageAccess || originalPageAccessRef.current !== null || !pageAccessRows?.length) return;
+    originalPageAccessRef.current = pageAccessFingerprint(pageAccessRows);
+  }, [access.pageAccess, pageAccessRows]);
+  useEffect(() => {
+    if (!access.pageAccess || pageAccessRows?.length) return;
+    let live = true;
+    setAccessLoading(true); setAccessError("");
+    (async () => {
+      try {
+        const payload = member?.id
+          ? await requestJson(`/next/api/users-center/page-access?id=${encodeURIComponent(member.id)}`)
+          : await requestJson("/next/api/users-center/pages");
+        if (!live) return;
+        const pages = member?.id ? (payload.pages || []) : (payload.pages || []).map((page) => ({ ...page, accessLevel: "view", isEnabled: false }));
+        onPageAccessRowsChange(normalizeAccessRows(pages));
+      } catch (err) { if (live) setAccessError(err.message || "Page access could not be loaded."); }
+      finally { if (live) setAccessLoading(false); }
+    })();
+    return () => { live = false; };
+  }, [member?.id, access.pageAccess, onPageAccessRowsChange]);
+  const pageAccessChanged = !!member && !!access.pageAccess && originalPageAccessRef.current !== null && pageAccessFingerprint(pageAccessRows) !== originalPageAccessRef.current;
   function setField(name, value) { setValues((current) => ({ ...current, [name]: value })); }
   async function submit(event) {
     event.preventDefault();
-    const nameField = nameFieldName;
-    if (!text(values[nameField])) { setActiveTab("basic"); return setError("Please enter the team member name."); }
+    if (!text(values[nameFieldName])) { setActiveTab("basic"); return setError("Please enter the team member name."); }
+    if (access.pageAccess && (accessLoading || accessError)) {
+      setActiveTab("access");
+      return setError(accessError || "Page permissions are loading. Try again when the list appears.");
+    }
 
-    setBusy(true);
-    setError("");
-    startActionLoading({
-      title: isEdit ? "Saving team member" : "Creating team member",
-      message: isEdit ? "Updating the user record…" : "Creating the account and applying access settings…",
-    });
-
-    try {
-      const fields = { ...values };
-      if (hasStocktaking && autoStocktakingColumn) {
-        const schoolField = schema.find((field) => fieldKey(field.name) === "school");
-        if (schoolField) fields[schoolField.name] = autoStocktakingColumn;
-      }
-      for (const field of schema) {
-        if (["ua_page_access_manager", "ua_sv_access_manager"].includes(field.type) || ["allowedpages", "svschools"].includes(fieldKey(field.name))) delete fields[field.name];
-      }
-
-      const payload = { fields };
-      if (!isEdit) {
-        payload.pageAccess = (pageAccessRows || []).map((row) => ({
-          pageId: row.pageId,
-          pageKey: row.pageKey,
-          isEnabled: !!row.isEnabled,
-          accessLevel: row.accessLevel,
-        }));
-        payload.svAccess = hasOrdersReview
-          ? (svRows || []).filter((row) => row.isEnabled).map((row) => ({ memberId: row.memberId }))
-          : [];
-      }
-
-      const body = await usersCenterMutation(isEdit ? "member-update" : "member-create", { ...(isEdit ? { memberId: member.id } : {}), ...payload });
-
-      // Refresh the directory in the background. It should not keep the user
-      // waiting after the member and permissions have already been saved.
-      try { onSaved?.(body); } catch {}
-
-      await finishActionLoading(
-        "done",
-        isEdit ? "Team member updated successfully." : "Team member created successfully.",
-      );
-      onClose();
-    } catch (err) {
-      setError(err.message);
-      await finishActionLoading("failed", err.message || "The team member could not be saved.");
-    } finally {
-      setBusy(false);
+    async function saveMemberAndAccess() {
+      setBusy(true);
+      setError("");
+      startActionLoading({
+        title: isEdit ? "Saving team member" : "Creating team member",
+        message: isEdit ? "Updating the user and page access…" : "Creating the account and applying access settings…",
+      });
+      try {
+        const fields = { ...values };
+        if (hasStocktaking && autoStocktakingColumn) {
+          const schoolField = schema.find((field) => fieldKey(field.name) === "school");
+          if (schoolField) fields[schoolField.name] = autoStocktakingColumn;
+        }
+        for (const field of schema) {
+          if (["ua_page_access_manager", "ua_sv_access_manager"].includes(field.type) || ["allowedpages", "svschools"].includes(fieldKey(field.name))) delete fields[field.name];
+        }
+        // Existing accounts must use the separate privileged page-access endpoint.
+        // Saving first also avoids a password/name edit revoking auth before access is committed.
+        if (isEdit && pageAccessChanged) {
+          const savedAccess = await usersCenterMutation("page-access-save", {
+            memberId: member.id,
+            pages: pageAccessRows.map((row) => ({ pageId: row.pageId, pageKey: row.pageKey, isEnabled: !!row.isEnabled, accessLevel: row.accessLevel })),
+          });
+          const normalized = normalizeAccessRows(savedAccess.pages || pageAccessRows);
+          originalPageAccessRef.current = pageAccessFingerprint(normalized);
+          onPageAccessRowsChange(normalized);
+        }
+        const payload = { fields };
+        if (!isEdit) {
+          payload.pageAccess = access.pageAccess ? pageAccessRows.map((row) => ({
+            pageId: row.pageId, pageKey: row.pageKey, isEnabled: !!row.isEnabled, accessLevel: row.accessLevel,
+          })) : [];
+          payload.svAccess = hasOrdersReview
+            ? (svRows || []).filter((row) => row.isEnabled).map((row) => ({ memberId: row.memberId }))
+            : [];
+        }
+        const body = await usersCenterMutation(isEdit ? "member-update" : "member-create", { ...(isEdit ? { memberId: member.id } : {}), ...payload });
+        try { onSaved?.(body); } catch {}
+        await finishActionLoading("done", isEdit ? "Team member updated successfully." : "Team member created successfully.");
+        onClose();
+      } catch (err) {
+        setError(err.message);
+        await finishActionLoading("failed", err.message || "The team member could not be saved.");
+      } finally { setBusy(false); }
+    }
+    if (pageAccessChanged) {
+      await protect({ title: "Save page access", message: `Apply changed page permissions to ${member.name}?` }, saveMemberAndAccess);
+    } else {
+      await saveMemberAndAccess();
     }
   }
   function renderField(field) {
     const key = fieldKey(field.name); const value = values[field.name] ?? ""; const type = field.type || "rich_text";
-    if (type === "ua_page_access_manager" || key === "allowedpages") {
-      if (access.pageAccess) return <PageAccessManager key={field.name} summary={accessSummaryText(pageAccessRows, member)} onOpen={onOpenPageAccess}/>;
-      return null;
-    }
-    if (type === "ua_sv_access_manager" || key === "svschools") return access.svAccess ? <SvAccessManager key={field.name} summary={svSummaryText(svRows, member)} onOpen={onOpenSvAccess} hidden={!hasOrdersReview}/> : null;
+    if (type === "ua_page_access_manager" || key === "allowedpages") return null;
+    if (type === "ua_sv_access_manager" || key === "svschools") return access.svAccess ? <SvAccessManager key={field.name} onOpen={onOpenSvAccess} hidden={!hasOrdersReview}/> : null;
     if (type === "school_select" || key === "school") { if (hasStocktaking) return <AutoStocktakingField key={field.name} value={autoStocktakingColumn}/>; return hasSchoolPages ? <SchoolField key={field.name} field={field} value={value} onChange={(next) => setField(field.name, next)} notify={notify}/> : null; }
     if (type === "ua_profile_upload" || key === "profilepicture") return <ProfileUploadField key={field.name} field={field} memberName={values[nameFieldName]} value={value} onChange={(next) => setField(field.name, next)} notify={notify}/>;
     if (type === "ua_file_links" || key === "filesmedia" || type === "files") return <FileLinksField key={field.name} field={field} value={value} onChange={(next) => setField(field.name, next)} notify={notify}/>;
     if (type === "ua_multi_select" || type === "multi_select" || type === "relation") return <MultiSelectField key={field.name} field={{ ...field, allowCustom: type === "relation" ? false : field.allowCustom }} value={value} onChange={(next) => setField(field.name, next)}/>;
-    if (key === "department" || ((type === "select" || type === "status") && Array.isArray(field.options) && field.options.length)) { const options = key === "department" ? departments.map((item) => item.name) : field.options; return <div className="ua-form-field ua-form-field--modern-select" key={field.name}><span>{field.name}</span><ModernSelect value={value} onChange={(next) => setField(field.name, next)} options={options} placeholder={`Select ${field.name}`}/></div>; }
-    if (type === "checkbox") return <div className="ua-form-field ua-form-field--modern-select" key={field.name}><span>{field.name}</span><ModernSelect value={/^(yes|true|1)$/i.test(String(value)) ? "Yes" : "No"} onChange={(next) => setField(field.name, next)} options={["No", "Yes"]} placeholder={`Select ${field.name}`}/></div>;
-    if (key === "position") return <label className="ua-form-field ua-form-field--position-text" key={field.name}><span>{field.name}</span><input type="text" value={value} placeholder="Enter position" onChange={(event) => setField(field.name, event.target.value)}/></label>;
+    if (key === "department" || ((type === "select" || type === "status") && Array.isArray(field.options) && field.options.length)) { const options = key === "department" ? departments.map((item) => item.name) : field.options; return <div className="ua-form-field ua-form-field--modern-select" key={field.name}><span>{field.name}</span>{memberSelectWithIcon(field.name, <ModernSelect value={value} onChange={(next) => setField(field.name, next)} options={options} placeholder={`Select ${field.name}`}/>)}</div>; }
+    if (type === "checkbox") return <div className="ua-form-field ua-form-field--modern-select" key={field.name}><span>{field.name}</span>{memberSelectWithIcon(field.name, <ModernSelect value={/^(yes|true|1)$/i.test(String(value)) ? "Yes" : "No"} onChange={(next) => setField(field.name, next)} options={["No", "Yes"]} placeholder={`Select ${field.name}`}/>)}</div>;
+    if (key === "position") return <label className="ua-form-field ua-form-field--position-text" key={field.name}><span>{field.name}</span>{memberInputWithIcon(field.name, <input type="text" value={value} placeholder="Enter position" onChange={(event) => setField(field.name, event.target.value)}/>)}</label>;
     const isLong = (type === "rich_text" || type === "text") && (String(value).length > 90 || /notes?|comment|address|description/i.test(field.name));
-    if (isLong) return <label className="ua-form-field ua-form-field--wide" key={field.name}><span>{field.name}</span><textarea rows="3" value={value} onChange={(event) => setField(field.name, event.target.value)}/></label>;
+    if (isLong) return <label className="ua-form-field ua-form-field--wide" key={field.name}><span>{field.name}</span>{memberInputWithIcon(field.name, <textarea rows="3" value={value} onChange={(event) => setField(field.name, event.target.value)}/>)}</label>;
     const inputType = key === "password" ? showPassword ? "text" : "password" : type === "email" ? "email" : type === "number" ? "number" : type === "phone_number" ? "tel" : type === "date" ? "date" : "text";
-    if (key === "password") return <div className="ua-form-field ua-member-password-field" key={field.name}><label htmlFor="ua-member-password">{field.name}</label><div className="ua-member-password-input"><input id="ua-member-password" type={inputType} value={value} autoComplete={isEdit ? "new-password" : "new-password"} onChange={(event) => setField(field.name, event.target.value)}/><button type="button" aria-label={showPassword ? "Hide password" : "Show password"} title={showPassword ? "Hide password" : "Show password"} onClick={() => setShowPassword((current) => !current)}><UAIcon name={showPassword ? "eyeOff" : "eye"}/></button></div></div>;
-    return <label className="ua-form-field" key={field.name}><span>{field.name}</span><input type={inputType} required={!!field.required || type === "title"} value={value} onChange={(event) => setField(field.name, event.target.value)}/></label>;
+    if (key === "password") return <div className="ua-form-field ua-member-password-field" key={field.name}><label htmlFor="ua-member-password">{field.name}</label><div className="ua-member-password-input ua-member-icon-input"><UAIcon name="lock"/><input id="ua-member-password" type={inputType} value={value} autoComplete="new-password" onChange={(event) => setField(field.name, event.target.value)}/><button type="button" aria-label={showPassword ? "Hide password" : "Show password"} title={showPassword ? "Hide password" : "Show password"} onClick={() => setShowPassword((current) => !current)}><UAIcon name={showPassword ? "eyeOff" : "eye"}/></button></div></div>;
+    return <label className="ua-form-field" key={field.name}><span>{field.name}</span>{memberInputWithIcon(field.name, <input type={inputType} required={!!field.required || type === "title"} value={value} onChange={(event) => setField(field.name, event.target.value)}/>)}</label>;
   }
   const grouped = {
     basicProfile: schema.filter((field) => fieldKey(field.name) === "profilepicture" || field.type === "ua_profile_upload"),
@@ -545,14 +581,13 @@ function MemberForm({ member, selectedDepartment, editableFields, departments, p
     files: schema.filter((field) => fieldKey(field.name) === "filesmedia" || ["ua_file_links", "files"].includes(field.type)),
   };
   const visibleKeys = new Set(Object.values(grouped).flat().map((field) => field.name));
-  grouped.settings = schema.filter((field) => !visibleKeys.has(field.name));
+  grouped.basicExtra = schema.filter((field) => !visibleKeys.has(field.name));
   const tabs = [
     { id: "basic", label: "Basic Info", icon: "user" },
     { id: "access", label: "Access", icon: "shield" },
     { id: "files", label: "Links & Files", icon: "paperclip" },
-    { id: "settings", label: "Settings", icon: "preferences" },
   ];
-  const selectTab = (id) => { setActiveTab(id); if (contentRef.current) contentRef.current.scrollTop = 0; };
+  const selectTab = (id) => { setActiveTab(id); setPreferencesIndex(null); if (contentRef.current) contentRef.current.scrollTop = 0; };
   const section = (title, icon, fields, options = {}) => fields.length ? <section className="ua-member-editor-section" key={title}>
     <div className="ua-member-editor-section__heading"><span className="ua-member-editor-section__accent"/><UAIcon name={icon}/><h3>{title}</h3></div>
     <div className={`ua-member-editor-fields ${options.profile ? "ua-member-editor-fields--profile" : ""} ${options.access ? "ua-member-editor-fields--access" : ""}`}>
@@ -562,7 +597,7 @@ function MemberForm({ member, selectedDepartment, editableFields, departments, p
   return <>
     <Modal
       title={isEdit ? "Edit Team Member" : "Add Team Member"}
-      subtitle={isEdit ? `Update ${member?.name || "this account"} and manage access.` : "Create a user account and set their access."}
+      subtitle=""
       onClose={onClose}
       modalClass="ua-modal--form ua-modal--member-editor"
       bodyClass="ua-member-editor-body"
@@ -585,22 +620,25 @@ function MemberForm({ member, selectedDepartment, editableFields, departments, p
             {section("Profile picture", "image", grouped.basicProfile, { profile: true })}
             {section("Personal details", "user", grouped.basicPersonal)}
             {section("Work details", "folder", grouped.basicWork)}
+            {section("Additional details", "tag", grouped.basicExtra)}
           </> : null}
           {activeTab === "access" ? <>
-            {section("Page access & permissions", "shield", grouped.access, { access: true })}
-            {!grouped.access.length ? <p className="ua-member-editor-empty">No additional access settings available for this account.</p> : null}
+            {access.pageAccess ? <section className="ua-member-editor-section ua-member-editor-section--pages">
+              <div className="ua-member-editor-section__heading"><span className="ua-member-editor-section__accent"/><UAIcon name="shield"/><h3>Page Access</h3></div>
+              <div className="ua-inline-page-access-list">
+                {accessLoading ? <div className="ua-page-access-loading"><span/> Loading pages...</div> : null}
+                {accessError ? <div className="ua-form-error" role="alert">{accessError}</div> : null}
+                {!accessLoading ? pageAccessRows.map((row, index) => <PageAccessRow key={row.pageId || row.pageKey} row={row} onChange={(patch) => onPageAccessRowsChange((current) => current.map((item, rowIndex) => rowIndex === index ? { ...item, ...patch } : item))} onPreferences={() => setPreferencesIndex(index)} preferenceDisabled={!isEdit || !access.featureAccess}/>) : null}
+              </div>
+            </section> : null}
+            {section("Other access", "users", grouped.access.filter((field) => !["allowedpages"].includes(fieldKey(field.name)) && field.type !== "ua_page_access_manager"), { access: true })}
           </> : null}
-          {activeTab === "files" ? <>
-            {section("Documents & external links", "paperclip", grouped.files)}
-            {!grouped.files.length ? <p className="ua-member-editor-empty">No file fields are configured for this account.</p> : null}
-          </> : null}
-          {activeTab === "settings" ? <>
-            {section("Other account settings", "preferences", grouped.settings)}
-            <div className="ua-member-editor-settings-note"><UAIcon name="shield"/><div><strong>{isEdit ? "Ready to update" : "Ready to create"}</strong><p>Review the details, permissions and attachments, then use {isEdit ? "Save Changes" : "Create Member"} to apply everything.</p></div></div>
-          </> : null}
+          {activeTab === "files" ? section("Documents & external links", "paperclip", grouped.files) : null}
         </div>
       </form>
     </Modal>
+    {preferencesIndex !== null && isEdit && access.featureAccess && pageAccessRows[preferencesIndex] ?
+      <FeatureAccessModal key={pageAccessRows[preferencesIndex].pageId || pageAccessRows[preferencesIndex].pageKey} member={member} pageRow={pageAccessRows[preferencesIndex]} allPageRows={pageAccessRows} onClose={() => setPreferencesIndex(null)} protect={protect}/> : null}
     <ActionLoadingModal state={actionLoading} zIndex={12050} />
   </>;
 }
@@ -611,10 +649,10 @@ function MoveMemberModal({ member, departments, onClose, onSaved }) {
   return <Modal title="Move Member" subtitle={`Move ${member.name || "this user"} to another department.`} onClose={onClose} modalClass="ua-modal--small" compact icon="move" closeDisabled={busy} bodyClass="ua-modal__body--compact" footer={<><button type="button" className="ua-btn ua-btn--light" onClick={onClose} disabled={busy}>Cancel</button><button type="submit" form="ua-next-move-member" className="ua-btn ua-btn--dark" disabled={busy}><UAIcon name="move"/><span>{busy ? "Moving..." : "Move"}</span></button></>}><form id="ua-next-move-member" onSubmit={submit}><div className="ua-form-field ua-form-field--wide ua-form-field--modern-select"><span>Target Department</span><ModernSelect value={selected?.name || ""} onChange={(name) => setDepartmentId(departments.find((department) => department.name === name)?.id || "")} options={departments.map((department) => department.name)} placeholder="Choose department"/></div><div className="ua-form-error">{error}</div></form></Modal>;
 }
 
-function PageAccessRow({ row, onChange, onPreferences, subpage = false }) {
+function PageAccessRow({ row, onChange, onPreferences, subpage = false, preferenceDisabled = false }) {
   return <div className={`ua-page-access-row ua-page-access-row--page ${row.isEnabled ? "" : "is-disabled"}${subpage ? " ua-page-access-row--subpage" : ""}`}>
     <div className="ua-page-access-name"><strong>{subpage ? <span className="ua-page-access-branch" aria-hidden="true"/> : null}{row.pageName}</strong><small>{row.moduleName}{row.routePath ? ` • ${row.routePath}` : ""}</small></div>
-    <button type="button" className="ua-page-preferences-btn" onClick={onPreferences} aria-label={`Preferences for ${row.pageName}`} title={`Manage ${row.pageName} permissions`}><UAIcon name="preferences"/></button>
+    <button type="button" className="ua-page-preferences-btn" onClick={onPreferences} disabled={preferenceDisabled} aria-label={`Preferences for ${row.pageName}`} title={preferenceDisabled ? "Detailed actions are available when editing an existing user with feature access permission" : `Manage ${row.pageName} permissions`}><UAIcon name="preferences"/></button>
     <div className="ua-page-access-enable"><label className="ua-switch" title={`Enable ${row.pageName}`}><input type="checkbox" checked={!!row.isEnabled} onChange={(event) => onChange({ isEnabled: event.target.checked })}/><span/></label></div>
   </div>;
 }
@@ -1085,7 +1123,7 @@ export default function UsersCenterDialogs({
     {passwordAction ? <PasswordModal action={passwordAction} onClose={onPasswordClose} onVerified={onPasswordVerified}/> : null}
     {confirm ? <ConfirmModal value={confirm} onClose={onConfirmClose}/> : null}
     {departmentForm ? <DepartmentForm department={departmentForm.department} onClose={onDepartmentFormClose} onSaved={onDepartmentSaved}/> : null}
-    {memberForm ? <MemberForm member={memberForm.member} selectedDepartment={selectedDepartment} editableFields={editableFields} departments={departments} pageAccessRows={pageAccessRows} svRows={svRows} notify={notify} access={access} onOpenPageAccess={onOpenPageAccess} onOpenSvAccess={onOpenSvAccess} onClose={onMemberFormClose} onSaved={onMemberSaved}/> : null}
+    {memberForm ? <MemberForm member={memberForm.member} selectedDepartment={selectedDepartment} editableFields={editableFields} departments={departments} pageAccessRows={pageAccessRows} onPageAccessRowsChange={setPageAccessRows} svRows={svRows} notify={notify} access={access} protect={protect} onOpenSvAccess={onOpenSvAccess} onClose={onMemberFormClose} onSaved={onMemberSaved}/> : null}
     {moveMember ? <MoveMemberModal member={moveMember} departments={departments} onClose={onMoveMemberClose} onSaved={onMoveMemberSaved}/> : null}
     {pageAccessOpen && memberForm ? <PageAccessModal member={memberForm.member} draftRows={pageAccessRows} onDraftRows={setPageAccessRows} onClose={onPageAccessClose} protect={protect} allowAdvanced={access.featureAccess} onSaved={onPageAccessSaved}/> : null}
     {svAccessOpen && memberForm ? <SvAccessModal member={memberForm.member} allMembers={allMembers} draftRows={svRows} onDraftRows={setSvRows} onClose={onSvAccessClose} protect={protect} onSaved={onSvAccessSaved}/> : null}
