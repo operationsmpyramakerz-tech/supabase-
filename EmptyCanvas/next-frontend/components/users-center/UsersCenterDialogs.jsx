@@ -158,6 +158,8 @@ function UAIcon({ name }) {
     upload: <><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.4 17.5A5 5 0 0 0 18 8.1 7 7 0 0 0 4.3 9.7 4.5 4.5 0 0 0 5.5 18H7"/></>,
     paperclip: <path d="M21.4 11.6l-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7L9.4 18a2 2 0 1 1-2.8-2.8l8.5-8.5"/>,
     image: <><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></>,
+    eye: <><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></>,
+    eyeOff: <><path d="M3 3l18 18"/><path d="M10.6 5.2A10.4 10.4 0 0 1 12 5c6.4 0 10 7 10 7a14 14 0 0 1-3.4 4.1M6.3 6.3C3.6 8.1 2 12 2 12s3.6 7 10 7c1.5 0 2.9-.4 4-1"/><path d="M10 10a3 3 0 0 0 4 4"/></>,
     calendar: <><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></>,
     branch: <><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M6 9c0 0 2 0 4 0s3-3 5-3"/></>,
   };
@@ -173,16 +175,17 @@ function useModalBodyLock() {
   }, []);
 }
 
-function Modal({ title, subtitle = "", onClose, children, modalClass = "", overlayClass = "", compact = false, icon = "user", footer = null, dangerIcon = false, bodyClass = "", closeDisabled = false, beforeBody = null, zIndex = 9999 }) {
+function Modal({ title, subtitle = "", onClose, children, modalClass = "", compact = false, icon = "user", footer = null, dangerIcon = false, bodyClass = "", closeDisabled = false, beforeBody = null, centerBadge = false, zIndex = 9999 }) {
   const [mounted, setMounted] = useState(false); useModalBodyLock();
   useEffect(() => setMounted(true), []);
   if (!mounted) return null;
   return createPortal(
-    <div className={`ua-modal-overlay ${overlayClass}`.trim()} style={{ zIndex }} onMouseDown={(event) => { if (event.target === event.currentTarget && !closeDisabled) onClose?.(); }}>
+    <div className="ua-modal-overlay" style={{ zIndex }} onMouseDown={(event) => { if (event.target === event.currentTarget && !closeDisabled) onClose?.(); }}>
       <section className={`ua-modal ${modalClass}`} role="dialog" aria-modal="true">
         <button type="button" className="ua-modal__close" onClick={onClose} disabled={closeDisabled} aria-label="Close"><UAIcon name="close"/></button>
-        <div className={`ua-modal__header ${compact ? "ua-modal__header--compact" : ""}`}>
-          <div className={`ua-modal__avatar ua-modal__avatar--icon ${dangerIcon ? "ua-modal__avatar--danger" : ""}`}><UAIcon name={icon}/></div>
+        {centerBadge ? <div className="ua-modal__center-badge" aria-hidden="true"><UAIcon name={icon}/></div> : null}
+        <div className={`ua-modal__header ${compact ? "ua-modal__header--compact" : ""} ${centerBadge ? "ua-modal__header--centered" : ""}`}>
+          {!centerBadge ? <div className={`ua-modal__avatar ua-modal__avatar--icon ${dangerIcon ? "ua-modal__avatar--danger" : ""}`}><UAIcon name={icon}/></div> : null}
           <div><h2>{title}</h2>{subtitle ? <p>{subtitle}</p> : null}</div>
         </div>
         {beforeBody}
@@ -291,15 +294,51 @@ function MultiSelectField({ field, value, onChange }) {
   return <div className="ua-form-field ua-form-field--wide ua-form-field--tokens"><span>{field.name}</span><div className="ua-multiselect"><div className="ua-token-list">{selected.length ? selected.map((item) => <span className="ua-token" key={item}>{item}</span>) : <span className="ua-token ua-token--muted">No values selected</span>}</div><div className="ua-ms-options">{options.length ? options.map((option) => <label className="ua-ms-option" key={option}><input type="checkbox" checked={selected.some((item) => lower(item) === lower(option))} onChange={() => toggle(option)}/><span>{option}</span></label>) : <div className="ua-ms-empty">No options yet.</div>}</div>{allowCustom ? <div className="ua-inline-add"><input type="text" value={custom} onChange={(event) => setCustom(event.target.value)} placeholder="Add new option then press Add"/><button type="button" className="ua-mini-btn" onClick={add}>Add</button></div> : null}</div></div>;
 }
 
-function ProfileUploadField({ field, value, onChange, notify }) {
-  const [uploading, setUploading] = useState(false); const [status, setStatus] = useState("");
-  async function choose(file) { if (!file) return; setUploading(true); setStatus("Uploading profile picture..."); try { const body = await uploadUserFile(file, "profile-picture"); onChange(body?.url || ""); setStatus("Profile picture uploaded. Save changes to apply it."); notify("success", "Uploaded", "Profile picture uploaded."); } catch (err) { setStatus(err.message); notify("error", "Upload failed", err.message); } finally { setUploading(false); } }
-  return <div className="ua-form-field ua-form-field--wide ua-upload-field"><span>{field.name}</span><div className="ua-profile-uploader ua-profile-uploader--upload-only"><div className="ua-profile-preview">{value ? <img src={value} alt="Profile picture"/> : <UAIcon name="image"/>}</div><div className="ua-upload-actions ua-upload-actions--profile-only"><label className="ua-file-pick ua-profile-pick"><UAIcon name="upload"/><span>{value ? "Replace image" : "Upload image"}</span><input type="file" accept="image/*" disabled={uploading} onChange={(event) => { choose(event.target.files?.[0]); event.target.value = ""; }}/></label></div></div>{status ? <small className={/fail|error|too large/i.test(status) ? "is-error" : ""}>{status}</small> : null}</div>;
+function ProfileUploadField({ field, value, onChange, notify, memberName = "" }) {
+  const [uploading, setUploading] = useState(false);
+  const [status, setStatus] = useState("");
+  async function choose(file) {
+    if (!file) return;
+    setUploading(true);
+    setStatus("Uploading your photo...");
+    try {
+      const body = await uploadUserFile(file, "profile-picture");
+      onChange(body?.url || "");
+      setStatus("Photo uploaded. Save the member to apply it.");
+      notify("success", "Uploaded", "Profile picture uploaded.");
+    } catch (err) {
+      setStatus(err.message);
+      notify("error", "Upload failed", err.message);
+    } finally { setUploading(false); }
+  }
+  return <div className="ua-form-field ua-form-field--wide ua-upload-field ua-member-photo-field">
+    <div className="ua-member-photo-layout">
+      <div className={`ua-member-photo-frame ${value ? "has-photo" : ""}`}>
+        <div className="ua-member-photo-avatar" aria-label="Current profile picture">
+          {value ? <img src={value} alt={`${memberName || "Team member"} profile`}/> : memberName ? <span>{initials(memberName)}</span> : <UAIcon name="user"/>}
+        </div>
+        <span className="ua-member-photo-mark" aria-hidden="true"><UAIcon name="edit"/></span>
+      </div>
+      <div className="ua-member-photo-controls">
+        <strong>Profile photo</strong>
+        <p>Show a recognizable photo on the member's profile.</p>
+        <div className="ua-member-photo-action-row">
+          <label className={`ua-file-pick ua-member-photo-upload ${uploading ? "is-uploading" : ""}`}>
+            <UAIcon name="upload"/><span>{uploading ? "Uploading..." : value ? "Change photo" : "Upload photo"}</span>
+            <input type="file" accept="image/*" disabled={uploading} aria-label="Upload profile photo" onChange={(event) => { choose(event.target.files?.[0]); event.target.value = ""; }}/>
+          </label>
+          {value ? <button type="button" className="ua-member-photo-remove" disabled={uploading} onClick={() => { onChange(""); setStatus("Photo removed. Save changes to apply it."); }}>Remove</button> : null}
+        </div>
+        <small>JPG, PNG or WebP · Maximum 12 MB</small>
+      </div>
+    </div>
+    {status ? <small role="status" className={/fail|error|too large/i.test(status) ? "is-error" : ""}>{status}</small> : null}
+  </div>;
 }
 
 function FileLinksField({ field, value, onChange, notify }) {
   const [uploading, setUploading] = useState(false);
-  const [status, setStatus] = useState("");
+  const [status, setStatus] = useState("Add a clear display name so this file or link is easy to recognize everywhere the user profile appears.");
   const [fileName, setFileName] = useState("");
   const [linkName, setLinkName] = useState("");
   const [link, setLink] = useState("");
@@ -371,7 +410,7 @@ function FileLinksField({ field, value, onChange, notify }) {
         <div className="ua-media-link-row"><input type="text" aria-label="External link display name" value={linkName} onChange={(event) => setLinkName(event.target.value)} placeholder="Link name (e.g. Location)"/><button type="button" className="ua-mini-btn" onClick={insert}>Add link</button></div>
       </div>
     </div>
-    {status ? <small role="status">{status}</small> : null}
+    <small>{status}</small>
   </div>;
 }
 
@@ -417,33 +456,18 @@ function MemberForm({ member, selectedDepartment, editableFields, departments, p
   ]), [editableFields]);
   const [values, setValues] = useState(() => Object.fromEntries(schema.map((field) => [field.name, member ? fieldValue(member, field.name) : (fieldKey(field.name) === "department" ? selectedDepartment?.name || "" : "")])));
   const [busy, setBusy] = useState(false); const [error, setError] = useState("");
+  const [activeTab, setActiveTab] = useState("basic");
+  const [showPassword, setShowPassword] = useState(false);
+  const contentRef = useRef(null);
   const { actionLoading, startActionLoading, finishActionLoading } = useActionLoading();
   const isEdit = !!member; const hasOrdersReview = memberHasPage(member, pageAccessRows, "Orders Review"); const hasStocktaking = memberHasPage(member, pageAccessRows, "Stocktaking"); const hasSchoolPages = ["Stocktaking", "Current Orders", "Shopping Cart"].some((name) => memberHasPage(member, pageAccessRows, name));
   const nameFieldName = schema.find((field) => fieldKey(field.name) === "name")?.name || "Name";
   const autoStocktakingColumn = generatedStocktakingColumnName(values[nameFieldName]);
-  // Keep the backend's dynamic schema intact while presenting its fields in
-  // small, predictable sections instead of one long, unstructured grid.
-  const sections = useMemo(() => {
-    const groups = [
-      { id: "profile", title: "Profile photo", description: "The picture shown across your ERP workspace.", icon: "image", keys: ["profilepicture"], fields: [] },
-      { id: "personal", title: "Personal details", description: "Account identity and contact information.", icon: "user", keys: ["employeecode", "name", "password", "phone", "email"], fields: [] },
-      { id: "work", title: "Work details", description: "Department, position and school assignment.", icon: "folder", keys: ["department", "position", "school"], fields: [] },
-      { id: "access", title: "Access & visibility", description: "Choose which pages and orders this member can access.", icon: "shield", keys: ["allowedpages", "svschools"], fields: [] },
-      { id: "files", title: "Files & links", description: "Attach documents or useful external links.", icon: "paperclip", keys: ["filesmedia"], fields: [] },
-      { id: "other", title: "Additional information", description: "Other account fields.", icon: "edit", keys: [], fields: [] },
-    ];
-    for (const field of schema) {
-      const key = fieldKey(field.name);
-      const group = groups.find((item) => item.keys.includes(key)) || (field.type === "files" ? groups[4] : groups[5]);
-      group.fields.push(field);
-    }
-    return groups.filter((group) => group.fields.length);
-  }, [schema]);
   function setField(name, value) { setValues((current) => ({ ...current, [name]: value })); }
   async function submit(event) {
     event.preventDefault();
     const nameField = nameFieldName;
-    if (!text(values[nameField])) return setError("Please enter the team member name.");
+    if (!text(values[nameField])) { setActiveTab("basic"); return setError("Please enter the team member name."); }
 
     setBusy(true);
     setError("");
@@ -501,7 +525,7 @@ function MemberForm({ member, selectedDepartment, editableFields, departments, p
     }
     if (type === "ua_sv_access_manager" || key === "svschools") return access.svAccess ? <SvAccessManager key={field.name} summary={svSummaryText(svRows, member)} onOpen={onOpenSvAccess} hidden={!hasOrdersReview}/> : null;
     if (type === "school_select" || key === "school") { if (hasStocktaking) return <AutoStocktakingField key={field.name} value={autoStocktakingColumn}/>; return hasSchoolPages ? <SchoolField key={field.name} field={field} value={value} onChange={(next) => setField(field.name, next)} notify={notify}/> : null; }
-    if (type === "ua_profile_upload" || key === "profilepicture") return <ProfileUploadField key={field.name} field={field} value={value} onChange={(next) => setField(field.name, next)} notify={notify}/>;
+    if (type === "ua_profile_upload" || key === "profilepicture") return <ProfileUploadField key={field.name} field={field} memberName={values[nameFieldName]} value={value} onChange={(next) => setField(field.name, next)} notify={notify}/>;
     if (type === "ua_file_links" || key === "filesmedia" || type === "files") return <FileLinksField key={field.name} field={field} value={value} onChange={(next) => setField(field.name, next)} notify={notify}/>;
     if (type === "ua_multi_select" || type === "multi_select" || type === "relation") return <MultiSelectField key={field.name} field={{ ...field, allowCustom: type === "relation" ? false : field.allowCustom }} value={value} onChange={(next) => setField(field.name, next)}/>;
     if (key === "department" || ((type === "select" || type === "status") && Array.isArray(field.options) && field.options.length)) { const options = key === "department" ? departments.map((item) => item.name) : field.options; return <div className="ua-form-field ua-form-field--modern-select" key={field.name}><span>{field.name}</span><ModernSelect value={value} onChange={(next) => setField(field.name, next)} options={options} placeholder={`Select ${field.name}`}/></div>; }
@@ -509,39 +533,72 @@ function MemberForm({ member, selectedDepartment, editableFields, departments, p
     if (key === "position") return <label className="ua-form-field ua-form-field--position-text" key={field.name}><span>{field.name}</span><input type="text" value={value} placeholder="Enter position" onChange={(event) => setField(field.name, event.target.value)}/></label>;
     const isLong = (type === "rich_text" || type === "text") && (String(value).length > 90 || /notes?|comment|address|description/i.test(field.name));
     if (isLong) return <label className="ua-form-field ua-form-field--wide" key={field.name}><span>{field.name}</span><textarea rows="3" value={value} onChange={(event) => setField(field.name, event.target.value)}/></label>;
-    const inputType = key === "password" ? "password" : type === "email" ? "email" : type === "number" ? "number" : type === "phone_number" ? "tel" : type === "date" ? "date" : "text";
+    const inputType = key === "password" ? showPassword ? "text" : "password" : type === "email" ? "email" : type === "number" ? "number" : type === "phone_number" ? "tel" : type === "date" ? "date" : "text";
+    if (key === "password") return <div className="ua-form-field ua-member-password-field" key={field.name}><label htmlFor="ua-member-password">{field.name}</label><div className="ua-member-password-input"><input id="ua-member-password" type={inputType} value={value} autoComplete={isEdit ? "new-password" : "new-password"} onChange={(event) => setField(field.name, event.target.value)}/><button type="button" aria-label={showPassword ? "Hide password" : "Show password"} title={showPassword ? "Hide password" : "Show password"} onClick={() => setShowPassword((current) => !current)}><UAIcon name={showPassword ? "eyeOff" : "eye"}/></button></div></div>;
     return <label className="ua-form-field" key={field.name}><span>{field.name}</span><input type={inputType} required={!!field.required || type === "title"} value={value} onChange={(event) => setField(field.name, event.target.value)}/></label>;
   }
+  const grouped = {
+    basicProfile: schema.filter((field) => fieldKey(field.name) === "profilepicture" || field.type === "ua_profile_upload"),
+    basicPersonal: schema.filter((field) => ["employeecode", "name", "email", "phone", "password"].includes(fieldKey(field.name))),
+    basicWork: schema.filter((field) => ["department", "position"].includes(fieldKey(field.name))),
+    access: schema.filter((field) => ["allowedpages", "svschools", "school"].includes(fieldKey(field.name)) || ["ua_page_access_manager", "ua_sv_access_manager", "school_select"].includes(field.type)),
+    files: schema.filter((field) => fieldKey(field.name) === "filesmedia" || ["ua_file_links", "files"].includes(field.type)),
+  };
+  const visibleKeys = new Set(Object.values(grouped).flat().map((field) => field.name));
+  grouped.settings = schema.filter((field) => !visibleKeys.has(field.name));
+  const tabs = [
+    { id: "basic", label: "Basic Info", icon: "user" },
+    { id: "access", label: "Access", icon: "shield" },
+    { id: "files", label: "Links & Files", icon: "paperclip" },
+    { id: "settings", label: "Settings", icon: "preferences" },
+  ];
+  const selectTab = (id) => { setActiveTab(id); if (contentRef.current) contentRef.current.scrollTop = 0; };
+  const section = (title, icon, fields, options = {}) => fields.length ? <section className="ua-member-editor-section" key={title}>
+    <div className="ua-member-editor-section__heading"><span className="ua-member-editor-section__accent"/><UAIcon name={icon}/><h3>{title}</h3></div>
+    <div className={`ua-member-editor-fields ${options.profile ? "ua-member-editor-fields--profile" : ""} ${options.access ? "ua-member-editor-fields--access" : ""}`}>
+      {fields.map(renderField)}
+    </div>
+  </section> : null;
   return <>
     <Modal
-      title={isEdit ? "Edit team member" : "Add team member"}
-      subtitle={isEdit ? `Update ${member?.name || "this team member"}'s profile and access.` : `Add an account${selectedDepartment?.name ? ` to ${selectedDepartment.name}` : ""}.`}
+      title={isEdit ? "Edit Team Member" : "Add Team Member"}
+      subtitle={isEdit ? `Update ${member?.name || "this account"} and manage access.` : "Create a user account and set their access."}
       onClose={onClose}
-      modalClass="ua-modal--form ua-modal--member-sheet"
-      overlayClass="ua-modal-overlay--member-sheet"
-      icon={isEdit ? "edit" : "addUser"}
+      modalClass="ua-modal--form ua-modal--member-editor"
+      bodyClass="ua-member-editor-body"
+      centerBadge
+      icon="addUser"
       closeDisabled={busy}
       zIndex={10000}
       footer={<>
-        <button type="button" className="ua-btn ua-btn--light" onClick={onClose} disabled={busy}>Cancel</button>
-        <button type="submit" form="ua-next-member-form" className="ua-btn ua-btn--dark" disabled={busy}>
-          <UAIcon name="save"/><span>{busy ? "Saving..." : isEdit ? "Save changes" : "Create member"}</span>
-        </button>
+        <button type="button" className="ua-btn ua-btn--light ua-member-editor-cancel" onClick={onClose} disabled={busy}>Cancel</button>
+        <button type="submit" form="ua-next-member-form" className="ua-btn ua-btn--dark ua-member-editor-save" disabled={busy}><UAIcon name="save"/><span>{busy ? "Saving..." : isEdit ? "Save Changes" : "Create Member"}</span></button>
       </>}
     >
-      <form id="ua-next-member-form" className="ua-member-form" onSubmit={submit}>
-        {sections.map((section, index) => <section className={`ua-member-form-section ua-member-form-section--${section.id}`} key={section.id} aria-labelledby={`ua-member-section-${section.id}`}>
-          <div className="ua-member-form-section__heading">
-            <span className="ua-member-form-section__icon"><UAIcon name={section.icon}/></span>
-            <div className="ua-member-form-section__intro">
-              <h3 id={`ua-member-section-${section.id}`}>{section.title}</h3>
-              <p>{section.description}</p>
-            </div>
-            <span className="ua-member-form-section__number">{String(index + 1).padStart(2, "0")}</span>
-          </div>
-          <div className="ua-form-grid ua-member-form-section__fields">{section.fields.map(renderField)}</div>
-        </section>)}
-        {error ? <div className="ua-form-error ua-member-form__error" role="alert">{error}</div> : null}
+      <form id="ua-next-member-form" onSubmit={submit} className="ua-member-editor-form">
+        <nav className="ua-member-editor-nav" aria-label="Member form sections">
+          {tabs.map((tab) => <button type="button" key={tab.id} className={`ua-member-editor-tab ${activeTab === tab.id ? "is-active" : ""}`} aria-current={activeTab === tab.id ? "step" : undefined} onClick={() => selectTab(tab.id)}><UAIcon name={tab.icon}/><span>{tab.label}</span></button>)}
+        </nav>
+        <div className="ua-member-editor-content" ref={contentRef}>
+          {error ? <div className="ua-form-error" role="alert">{error}</div> : null}
+          {activeTab === "basic" ? <>
+            {section("Profile picture", "image", grouped.basicProfile, { profile: true })}
+            {section("Personal details", "user", grouped.basicPersonal)}
+            {section("Work details", "folder", grouped.basicWork)}
+          </> : null}
+          {activeTab === "access" ? <>
+            {section("Page access & permissions", "shield", grouped.access, { access: true })}
+            {!grouped.access.length ? <p className="ua-member-editor-empty">No additional access settings available for this account.</p> : null}
+          </> : null}
+          {activeTab === "files" ? <>
+            {section("Documents & external links", "paperclip", grouped.files)}
+            {!grouped.files.length ? <p className="ua-member-editor-empty">No file fields are configured for this account.</p> : null}
+          </> : null}
+          {activeTab === "settings" ? <>
+            {section("Other account settings", "preferences", grouped.settings)}
+            <div className="ua-member-editor-settings-note"><UAIcon name="shield"/><div><strong>{isEdit ? "Ready to update" : "Ready to create"}</strong><p>Review the details, permissions and attachments, then use {isEdit ? "Save Changes" : "Create Member"} to apply everything.</p></div></div>
+          </> : null}
+        </div>
       </form>
     </Modal>
     <ActionLoadingModal state={actionLoading} zIndex={12050} />

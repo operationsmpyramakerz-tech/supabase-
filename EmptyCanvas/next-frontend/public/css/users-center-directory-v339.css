@@ -1396,3 +1396,291 @@ html[data-theme="dark"] body.user-access-page .ua-directory-v339 .ua-directory-p
     max-height: min(330px, 62dvh);
   }
 }
+
+/* Chat 01 / v422 — Add & Edit Team Member, centered Shopping Cart-style badge.
+   Isolated to the member editor; shared dialogs and global shell are untouched. */
+.ua-modal-overlay:has(> .ua-modal--member-editor) {
+  z-index: 10000;
+  padding: 50px 18px 22px;
+}
+.ua-modal.ua-modal--member-editor {
+  box-sizing: border-box;
+  width: min(1000px, 100%);
+  max-height: min(850px, calc(100dvh - 90px));
+  min-height: min(550px, calc(100dvh - 100px));
+  overflow: visible;
+  border-radius: 32px;
+  background: #fff;
+  box-shadow: 0 26px 90px rgba(8, 13, 24, .28);
+  isolation: isolate;
+  color: #121722;
+}
+.ua-modal--member-editor .ua-modal__center-badge {
+  position: absolute;
+  top: -35px;
+  left: 50%;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  width: 76px;
+  height: 76px;
+  border: 6px solid #fff;
+  border-radius: 25px;
+  color: #fff;
+  background: #ff6b0b;
+  box-shadow: 0 12px 30px rgba(217, 86, 5, .2);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+.ua-modal--member-editor .ua-modal__center-badge svg { width: 33px; height: 33px; stroke-width: 2.1; }
+.ua-modal--member-editor .ua-modal__header.ua-modal__header--centered {
+  display: block;
+  flex: 0 0 auto;
+  padding: 58px 76px 21px;
+  text-align: center;
+  border-bottom: 1px solid #ebedf1;
+}
+.ua-modal--member-editor .ua-modal__header h2 {
+  font-size: clamp(24px, 3vw, 31px);
+  line-height: 1.18;
+  letter-spacing: -.045em;
+  font-weight: 850;
+  color: #101522;
+}
+.ua-modal--member-editor .ua-modal__header p {
+  margin-top: 6px;
+  color: #68707f;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+.ua-modal--member-editor .ua-modal__close {
+  top: 36px;
+  right: 23px;
+  z-index: 5;
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  background: #f3f4f6;
+  color: #171d2b;
+}
+.ua-modal--member-editor .ua-modal__close:hover { background: #e7e9ed; }
+.ua-modal--member-editor .ua-modal__body.ua-member-editor-body {
+  flex: 1 1 auto;
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+}
+.ua-member-editor-form {
+  display: grid;
+  grid-template-columns: 210px minmax(0, 1fr);
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+.ua-member-editor-nav {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 9px;
+  padding: 24px 12px;
+  overflow: auto;
+  background: #f8f9fb;
+  border-right: 1px solid #ebedf2;
+  border-bottom-left-radius: 18px;
+}
+.ua-member-editor-tab {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 0 auto;
+  min-height: 49px;
+  padding: 12px 14px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  background: transparent;
+  color: #333a47;
+  font: inherit;
+  font-weight: 760;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease;
+}
+.ua-member-editor-tab svg { width: 20px; height: 20px; flex: 0 0 auto; }
+.ua-member-editor-tab:hover:not(.is-active) { background: #eceef2; }
+.ua-member-editor-tab.is-active { background: #ff6b0b; color: #fff; box-shadow: 0 8px 20px rgba(255, 107, 11, .17); }
+.ua-member-editor-tab:focus-visible { outline: 3px solid #ffac72; outline-offset: 2px; }
+.ua-member-editor-content {
+  min-width: 0;
+  min-height: 0;
+  padding: 23px 23px 26px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #d0d4dd transparent;
+  background: #fff;
+}
+.ua-member-editor-section {
+  padding: 17px 18px 20px;
+  margin-bottom: 15px;
+  border: 1px solid #e5e7ec;
+  border-radius: 19px;
+  background: #fff;
+}
+.ua-member-editor-section__heading { display: flex; align-items: center; gap: 9px; margin-bottom: 17px; }
+.ua-member-editor-section__heading .ua-member-editor-section__accent { display: block; width: 4px; height: 22px; border-radius: 99px; background: #ff6b0b; }
+.ua-member-editor-section__heading > svg { width: 18px; height: 18px; color: #282e38; }
+.ua-member-editor-section__heading h3 { margin: 0; color: #121722; font-size: 16px; line-height: 1.25; font-weight: 850; letter-spacing: -.02em; }
+.ua-member-editor-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.ua-member-editor-fields--profile, .ua-member-editor-fields--access { grid-template-columns: 1fr; }
+.ua-modal--member-editor .ua-form-field { gap: 7px; }
+.ua-modal--member-editor .ua-form-field--wide { grid-column: 1 / -1; }
+.ua-modal--member-editor .ua-form-field > span,
+.ua-modal--member-editor .ua-member-password-field > label {
+  font-size: 12px;
+  color: #454d5b;
+  font-weight: 750;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.ua-modal--member-editor .ua-form-field input:not([type="file"]),
+.ua-modal--member-editor .ua-form-field textarea,
+.ua-modal--member-editor .ua-form-field select,
+.ua-modal--member-editor .ua-modern-select-button {
+  min-height: 46px;
+  border: 1px solid #dfe2e8;
+  border-radius: 12px;
+  background: #fafbfc;
+  color: #121722;
+  box-shadow: none;
+  padding: 11px 13px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.ua-modal--member-editor .ua-form-field input:focus,
+.ua-modal--member-editor .ua-form-field textarea:focus { border-color: #ff9145; box-shadow: 0 0 0 3px rgba(255,107,11,.13); outline: none; }
+.ua-modal--member-editor .ua-modern-select-button { display: flex; justify-content: space-between; width: 100%; text-align: left; }
+.ua-modal--member-editor .ua-modern-select-button svg { width: 17px; height: 17px; }
+.ua-modal--member-editor .ua-form-field--modern-select { min-width: 0; }
+.ua-modal--member-editor .ua-member-password-input { position: relative; }
+.ua-modal--member-editor .ua-member-password-input input { padding-right: 48px !important; }
+.ua-modal--member-editor .ua-member-password-input button {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  width: 36px;
+  height: 36px;
+  padding: 7px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 9px;
+  color: #697382;
+  background: transparent;
+  cursor: pointer;
+  transform: translateY(-50%);
+}
+.ua-modal--member-editor .ua-member-password-input button:hover { background: #eef0f4; }
+.ua-modal--member-editor .ua-member-password-input button svg { width: 19px; height: 19px; }
+/* Profile picker — circular avatar with a clean dark upload CTA */
+.ua-modal--member-editor .ua-member-photo-field { gap: 0; }
+.ua-member-photo-layout { display: flex; align-items: center; gap: 22px; min-width: 0; }
+.ua-member-photo-frame { position: relative; flex: 0 0 112px; width: 112px; height: 112px; padding: 5px; border-radius: 50%; background: #fff; border: 2px solid #f2b07c; box-shadow: 0 5px 22px rgba(13, 21, 35, .08); }
+.ua-member-photo-avatar { width: 100%; height: 100%; display: grid; place-items: center; overflow: hidden; border-radius: 50%; background: #f6f7f9; color: #f26a12; }
+.ua-member-photo-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.ua-member-photo-avatar svg { width: 44px; height: 44px; stroke-width: 1.8; }
+.ua-member-photo-avatar > span { color: #db5b10; font-weight: 850; font-size: 28px; }
+.ua-member-photo-mark { position: absolute; right: -4px; bottom: 6px; width: 29px; height: 29px; display: grid; place-items: center; color: #fff; background: #ff6b0b; border: 3px solid white; border-radius: 50%; }
+.ua-member-photo-mark svg { width: 14px; height: 14px; }
+.ua-member-photo-controls { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.ua-member-photo-controls strong { font-size: 14px; font-weight: 800; color: #171d2b; }
+.ua-member-photo-controls p { margin: 0; color: #747c89; font-size: 12px; line-height: 1.45; }
+.ua-member-photo-action-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 8px 0 2px; }
+.ua-modal--member-editor .ua-member-photo-upload { display: inline-flex; width: auto; min-width: 168px; min-height: 43px; padding: 10px 15px; border: 1px solid #161b27; border-radius: 12px; background: #121824; color: #fff; font-weight: 760; font-size: 12px; box-shadow: 0 5px 15px rgba(10, 15, 26, .12); }
+.ua-modal--member-editor .ua-member-photo-upload:hover { background: #242b38; }
+.ua-modal--member-editor .ua-member-photo-upload svg { color: #ff8732; width: 19px; height: 19px; }
+.ua-modal--member-editor .ua-member-photo-upload span { color: #fff; font-size: 12px; font-weight: 750; text-transform: none; letter-spacing: 0; }
+.ua-modal--member-editor .ua-member-photo-upload input[type="file"] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.ua-member-photo-upload.is-uploading { opacity: .65; cursor: wait; }
+.ua-member-photo-remove { min-height: 40px; border: 1px solid #e2e5ea; border-radius: 11px; background: #fff; color: #666d7a; font-size: 12px; font-weight: 750; padding: 0 12px; cursor: pointer; }
+.ua-member-photo-remove:hover { border-color: #f8ad8a; color: #cb4e16; }
+.ua-member-photo-controls > small { color: #959dab; font-weight: 600; font-size: 11px; }
+.ua-modal--member-editor .ua-member-photo-field > small { padding-top: 10px; }
+/* Access and Files keep the existing working controls; only their presentation is updated. */
+.ua-modal--member-editor .ua-page-access-card { border-radius: 14px; background: #f8f9fb; }
+.ua-modal--member-editor .ua-page-access-open { border-radius: 12px; }
+.ua-modal--member-editor .ua-media-add-card { border-radius: 14px; }
+.ua-modal--member-editor .ua-file-pick--small { border-radius: 12px; }
+.ua-member-editor-empty { padding: 16px; color: #828b99; text-align: center; font-size: 13px; }
+.ua-member-editor-settings-note { display: flex; align-items: flex-start; gap: 12px; padding: 18px; border: 1px solid #e4e7ec; border-radius: 16px; background: #f8f9fb; }
+.ua-member-editor-settings-note > svg { flex: 0 0 23px; width: 23px; height: 23px; color: #e86a1d; }
+.ua-member-editor-settings-note strong { color: #121824; font-size: 14px; }
+.ua-member-editor-settings-note p { margin: 4px 0 0; color: #727b89; font-size: 12px; line-height: 1.5; }
+.ua-modal--member-editor .ua-modal__actions { flex: 0 0 auto; justify-content: flex-end; gap: 10px; padding: 15px 22px; border-top: 1px solid #eceef1; border-radius: 0 0 32px 32px; background: #fff; }
+.ua-modal--member-editor .ua-member-editor-cancel, .ua-modal--member-editor .ua-member-editor-save { min-width: 150px; min-height: 48px; border-radius: 13px; font-size: 14px; font-weight: 800; }
+.ua-modal--member-editor .ua-member-editor-cancel { background: #fff; border: 1px solid #dfe2e9; color: #222835; }
+.ua-modal--member-editor .ua-member-editor-save { background: #ff6b0b; color: white; border: 1px solid #ff6b0b; box-shadow: 0 5px 16px rgba(255,107,11,.2); }
+.ua-modal--member-editor .ua-member-editor-save:hover { background: #e95d00; }
+.ua-modal--member-editor .ua-member-editor-save svg { width: 18px; height: 18px; }
+@media (max-width: 700px) {
+  .ua-modal-overlay:has(> .ua-modal--member-editor) { align-items: flex-end; justify-content: center; padding: 65px 0 0; }
+  .ua-modal.ua-modal--member-editor { width: 100%; max-width: 100%; max-height: calc(100dvh - 76px); min-height: 0; height: min(89dvh, 850px); margin: 0; border-radius: 30px 30px 0 0; }
+  .ua-modal--member-editor .ua-modal__center-badge { width: 70px; height: 70px; top: -32px; border-radius: 23px; }
+  .ua-modal--member-editor .ua-modal__header.ua-modal__header--centered { padding: 52px 54px 15px; }
+  .ua-modal--member-editor .ua-modal__header h2 { font-size: 22px; }
+  .ua-modal--member-editor .ua-modal__header p { font-size: 11.5px; }
+  .ua-modal--member-editor .ua-modal__close { top: 15px; right: 13px; width: 38px; height: 38px; border-radius: 13px; }
+  .ua-member-editor-form { display: flex; flex-direction: column; }
+  .ua-member-editor-nav { flex: 0 0 auto; flex-direction: row; gap: 6px; width: 100%; max-width: 100%; overflow-x: auto; overflow-y: hidden; padding: 10px 12px; border-right: 0; border-bottom: 1px solid #e7eaf0; border-radius: 0; background: #f9fafb; scrollbar-width: none; }
+  .ua-member-editor-nav::-webkit-scrollbar { display: none; }
+  .ua-member-editor-tab { flex: 0 0 auto; min-height: 42px; padding: 9px 11px; gap: 6px; border-radius: 11px; font-size: 11.5px; white-space: nowrap; }
+  .ua-member-editor-tab svg { width: 16px; height: 16px; }
+  .ua-member-editor-content { flex: 1 1 auto; min-height: 0; padding: 16px 14px 20px; }
+  .ua-member-editor-section { padding: 15px 14px 17px; margin-bottom: 12px; border-radius: 16px; }
+  .ua-member-editor-fields { grid-template-columns: 1fr; gap: 12px; }
+  .ua-member-editor-section__heading { margin-bottom: 13px; }
+  .ua-member-editor-section__heading h3 { font-size: 15px; }
+  .ua-modal--member-editor .ua-modal__actions { padding: 11px 14px max(15px, env(safe-area-inset-bottom, 0px)); gap: 9px; border-radius: 0; }
+  .ua-modal--member-editor .ua-member-editor-cancel { flex: 0 0 34%; min-width: 0; }
+  .ua-modal--member-editor .ua-member-editor-save { flex: 1 1 auto; min-width: 0; }
+  .ua-modal--member-editor .ua-member-editor-cancel, .ua-modal--member-editor .ua-member-editor-save { min-height: 45px; font-size: 12.5px; }
+  .ua-member-photo-layout { gap: 16px; }
+  .ua-member-photo-frame { flex-basis: 88px; width: 88px; height: 88px; }
+  .ua-member-photo-avatar svg { width: 34px; height: 34px; }
+  .ua-member-photo-controls strong { font-size: 13px; }
+  .ua-member-photo-controls p { font-size: 11px; }
+  .ua-member-photo-action-row { margin: 5px 0 1px; }
+  .ua-modal--member-editor .ua-member-photo-upload { min-height: 40px; min-width: 138px; padding: 8px 11px; }
+}
+@media (max-width: 360px) {
+  .ua-member-editor-tab { padding: 8px 9px; }
+  .ua-member-photo-layout { gap: 11px; }
+  .ua-member-photo-frame { width: 78px; height: 78px; flex-basis: 78px; }
+  .ua-member-photo-controls p { display: none; }
+  .ua-member-photo-controls > small { font-size: 10px; }
+}
+@media (max-height: 620px) and (min-width: 701px) {
+  .ua-modal.ua-modal--member-editor { max-height: calc(100dvh - 66px); min-height: 0; }
+  .ua-modal--member-editor .ua-modal__header.ua-modal__header--centered { padding-top: 48px; padding-bottom: 12px; }
+}
+html[data-theme="dark"] .ua-modal--member-editor,
+html[data-theme="dark"] .ua-member-editor-content { background: #171b23; color: #f1f3f6; }
+html[data-theme="dark"] .ua-modal--member-editor .ua-modal__header,
+html[data-theme="dark"] .ua-modal--member-editor .ua-modal__actions { background: #171b23; border-color: #353c48; }
+html[data-theme="dark"] .ua-member-editor-nav { background: #202530; border-color: #353c48; }
+html[data-theme="dark"] .ua-member-editor-tab { color: #d9dee7; }
+html[data-theme="dark"] .ua-member-editor-tab.is-active { color: #fff; }
+html[data-theme="dark"] .ua-member-editor-section { background: #1b2029; border-color: #39414e; }
+html[data-theme="dark"] .ua-modal--member-editor .ua-modal__header h2,
+html[data-theme="dark"] .ua-member-editor-section__heading h3,
+html[data-theme="dark"] .ua-member-photo-controls strong { color: #f6f7fa; }
+html[data-theme="dark"] .ua-modal--member-editor .ua-form-field > span,
+html[data-theme="dark"] .ua-modal--member-editor .ua-member-password-field > label { color: #cbd1db; }
+html[data-theme="dark"] .ua-modal--member-editor .ua-form-field input:not([type="file"]),
+html[data-theme="dark"] .ua-modal--member-editor .ua-form-field textarea,
+html[data-theme="dark"] .ua-modal--member-editor .ua-modern-select-button { background: #252b36; color: #f6f7fa; border-color: #444c59; }
+html[data-theme="dark"] .ua-member-editor-settings-note { background: #222833; border-color: #444c59; }
+html[data-theme="dark"] .ua-member-editor-settings-note strong { color: #fff; }
